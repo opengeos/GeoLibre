@@ -1,0 +1,54 @@
+{
+  "name": "Basic GeoLibre Project",
+  "version": "0.1.0",
+  "layers": [
+    {
+      "type": "vector",
+      "common": {
+        "id": "sample-geojson",
+        "name": "Sample GeoJSON",
+        "visible": true,
+        "opacity": 1.0,
+        "metadata": {}
+      },
+      "source": {
+        "type": "geo_json",
+        "path": "examples/data/sample.geojson"
+      },
+      "style": {
+        "stroke_color": {
+          "r": 42,
+          "g": 104,
+          "b": 186,
+          "a": 255
+        },
+        "fill_color": {
+          "r": 80,
+          "g": 160,
+          "b": 220,
+          "a": 96
+        },
+        "stroke_width": 1.5,
+        "fill_opacity": 0.35
+      }
+    },
+    {
+      "type": "tile",
+      "common": {
+        "id": "osm-basemap",
+        "name": "OpenStreetMap",
+        "visible": true,
+        "opacity": 1.0,
+        "metadata": {}
+      },
+      "source": {
+        "type": "xyz",
+        "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "tile_type": "raster"
+      },
+      "maplibre_style_json": null
+    }
+  ],
+  "active_layer_id": "sample-geojson",
+  "maplibre_style_json": null
+}

@@ -1,0 +1,51 @@
+[workspace]
+members = [
+    "apps/geolibre-desktop",
+    "crates/geolibre-core",
+    "crates/geolibre-io",
+    "crates/geolibre-plugins",
+    "crates/geolibre-processing",
+    "crates/geolibre-render",
+    "crates/geolibre-ui",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/opengeos/GeoLibre"
+rust-version = "1.88"
+
+[workspace.dependencies]
+egui = "0.29.1"
+egui-wgpu = { version = "0.29.1", default-features = false }
+egui-winit = { version = "0.29.1", default-features = false, features = [
+    "clipboard",
+    "links",
+    "wayland",
+    "x11",
+] }
+geo = { version = "0.33.1", features = ["serde"] }
+geo-types = { version = "0.7.17", features = ["serde"] }
+geojson = "0.24.2"
+geozero = "0.15.1"
+gtk = "0.18.2"
+reqwest = { version = "0.12.24", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+thiserror = "2.0.17"
+tokio = { version = "1.48.0", features = ["rt-multi-thread", "macros"] }
+winit = { version = "0.30.5", default-features = false, features = [
+    "rwh_06",
+    "wayland",
+    "x11",
+] }
+wry = "0.55.1"
+x11-dl = "2.21.0"
+
+geolibre-core = { path = "crates/geolibre-core" }
+geolibre-io = { path = "crates/geolibre-io" }
+geolibre-plugins = { path = "crates/geolibre-plugins" }
+geolibre-processing = { path = "crates/geolibre-processing" }
+geolibre-render = { path = "crates/geolibre-render" }
+geolibre-ui = { path = "crates/geolibre-ui" }

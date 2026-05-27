@@ -1,0 +1,15 @@
+[package]
+name = "geolibre-ui"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+egui.workspace = true
+geolibre-core.workspace = true
+geolibre-io.workspace = true
+geolibre-plugins.workspace = true
+geolibre-processing.workspace = true
+geolibre-render.workspace = true

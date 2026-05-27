@@ -1,0 +1,51 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "point-1",
+      "properties": {
+        "name": "Sample point"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-95.0, 39.0]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "line-1",
+      "properties": {
+        "name": "Sample line"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-101.0, 36.5],
+          [-98.5, 40.0],
+          [-93.0, 41.5],
+          [-90.0, 38.0]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "polygon-1",
+      "properties": {
+        "name": "Sample polygon"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-98.0, 36.0],
+            [-91.0, 36.0],
+            [-91.0, 42.0],
+            [-98.0, 42.0],
+            [-98.0, 36.0]
+          ]
+        ]
+      }
+    }
+  ]
+}

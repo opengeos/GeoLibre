@@ -1,0 +1,803 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GeoLibre Desktop</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@__MAPLIBRE_GL_JS_VERSION__/dist/maplibre-gl.css">
+  <script src="https://unpkg.com/maplibre-gl@__MAPLIBRE_GL_JS_VERSION__/dist/maplibre-gl.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --panel: #f8fafc;
+      --panel-strong: #eef2f7;
+      --border: #c8d1dc;
+      --text: #17202a;
+      --muted: #5d6b7a;
+      --accent: #2374ab;
+      --danger: #b42318;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body,
+    #app {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+    }
+
+    body {
+      background: #dce5ee;
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    #app {
+      display: grid;
+      grid-template-rows: 42px 1fr 30px;
+      grid-template-columns: 270px 1fr 310px;
+    }
+
+    header,
+    aside,
+    footer {
+      background: var(--panel);
+      border-color: var(--border);
+      border-style: solid;
+    }
+
+    header {
+      grid-column: 1 / 4;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 10px;
+      border-width: 0 0 1px;
+      white-space: nowrap;
+    }
+
+    header h1 {
+      margin: 0 8px 0 0;
+      font-size: 17px;
+      font-weight: 650;
+    }
+
+    #layers {
+      grid-column: 1;
+      border-width: 0 1px 0 0;
+      overflow: auto;
+    }
+
+    #properties {
+      grid-column: 3;
+      border-width: 0 0 0 1px;
+      overflow: auto;
+    }
+
+    main {
+      grid-column: 2;
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+    }
+
+    #map {
+      position: absolute;
+      inset: 0;
+      background: #9bb9e9;
+    }
+
+    footer {
+      grid-column: 1 / 4;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 0 10px;
+      border-width: 1px 0 0;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .panel {
+      padding: 12px;
+    }
+
+    .panel h2 {
+      margin: 0 0 10px;
+      font-size: 14px;
+      font-weight: 650;
+    }
+
+    .section {
+      padding: 12px 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .section:first-child {
+      border-top: 0;
+      padding-top: 0;
+    }
+
+    button,
+    select {
+      height: 28px;
+      border: 1px solid #9ba8b7;
+      border-radius: 5px;
+      background: #ffffff;
+      color: var(--text);
+      font: inherit;
+    }
+
+    button {
+      padding: 0 10px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      border-color: var(--accent);
+    }
+
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+    }
+
+    button.danger {
+      color: var(--danger);
+    }
+
+    .tool {
+      min-width: 64px;
+    }
+
+    .layer-item {
+      padding: 9px;
+      margin-bottom: 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #ffffff;
+    }
+
+    .layer-title {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .layer-title span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 600;
+    }
+
+    .layer-meta,
+    .small {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .row input[type="range"] {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .stack {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .property-grid {
+      display: grid;
+      grid-template-columns: 90px 1fr;
+      gap: 6px 10px;
+      align-items: center;
+    }
+
+    .property-grid div:nth-child(odd) {
+      color: var(--muted);
+    }
+
+    .maplibregl-ctrl-bottom-left,
+    .maplibregl-ctrl-bottom-right {
+      z-index: 2;
+    }
+
+    @media (max-width: 980px) {
+      #app {
+        grid-template-columns: 220px 1fr;
+      }
+
+      #properties {
+        display: none;
+      }
+
+      header,
+      footer {
+        grid-column: 1 / 3;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>GeoLibre Desktop</h1>
+      <button class="tool primary" id="pan-tool">Pan</button>
+      <button class="tool" id="identify-tool">Identify</button>
+      <button id="fit-world">Fit World</button>
+      <button id="add-sample">Add Sample GeoJSON</button>
+      <button id="add-osm">Add OSM Basemap</button>
+      <button id="add-placeholders">Add Placeholders</button>
+    </header>
+
+    <aside id="layers" class="panel">
+      <h2>Layers</h2>
+      <div id="layer-list"></div>
+    </aside>
+
+    <main>
+      <div id="map"></div>
+    </main>
+
+    <aside id="properties" class="panel">
+      <div class="section">
+        <h2>Properties</h2>
+        <div class="property-grid" id="project-properties"></div>
+      </div>
+      <div class="section">
+        <h2>Selected Layer</h2>
+        <div class="property-grid" id="layer-properties"></div>
+      </div>
+      <div class="section">
+        <h2>Processing</h2>
+        <div class="stack">
+          <button id="bbox-tool">Bounding Box</button>
+          <button id="buffer-tool">Buffer Placeholder</button>
+          <button id="reproject-tool">Reproject Placeholder</button>
+        </div>
+      </div>
+      <div class="section">
+        <h2>Renderer</h2>
+        <div class="small">
+          MapLibre GL JS renders the OpenFreeMap Liberty vector style with globe projection in this webview.
+        </div>
+      </div>
+    </aside>
+
+    <footer>
+      <span id="message">Ready</span>
+      <span id="coords">lng: -, lat: -</span>
+      <span id="zoom">zoom: -</span>
+      <span id="extent">extent: -</span>
+    </footer>
+  </div>
+
+  <script type="application/json" id="project-json">__PROJECT_JSON__</script>
+  <script type="application/json" id="sample-geojson">__SAMPLE_GEOJSON__</script>
+  <script>
+    const OPENFREEMAP_LIBERTY_STYLE_URL = "__OPENFREEMAP_LIBERTY_STYLE_URL__";
+    const project = JSON.parse(document.getElementById("project-json").textContent);
+    const sampleGeojson = JSON.parse(document.getElementById("sample-geojson").textContent);
+    let selectedLayerId = project.active_layer_id || null;
+    let nextLayerNumber = project.layers.length + 1;
+    let identifyMode = false;
+    let mapReady = false;
+
+    const map = new maplibregl.Map({
+      container: "map",
+      style: OPENFREEMAP_LIBERTY_STYLE_URL,
+      center: [20, 0],
+      zoom: 2,
+      attributionControl: true
+    });
+
+    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+    map.addControl(new maplibregl.GlobeControl(), "top-right");
+    map.addControl(new maplibregl.ScaleControl({ maxWidth: 160, unit: "metric" }), "bottom-left");
+
+    map.on("style.load", () => {
+      map.setProjection({ type: "globe" });
+      mapReady = true;
+      syncProjectLayersToMap();
+      updateStatus();
+      setMessage("OpenFreeMap Liberty loaded with MapLibre GL JS globe projection");
+    });
+
+    map.on("mousemove", (event) => {
+      document.getElementById("coords").textContent =
+        `lng: ${event.lngLat.lng.toFixed(5)}, lat: ${event.lngLat.lat.toFixed(5)}`;
+    });
+
+    map.on("move", updateStatus);
+    map.on("zoom", updateStatus);
+    map.on("click", (event) => {
+      if (!identifyMode) {
+        return;
+      }
+      const features = map.queryRenderedFeatures(event.point);
+      setMessage(`Identify placeholder: ${features.length} rendered feature(s) under cursor`);
+    });
+
+    map.on("error", (event) => {
+      const message = event && event.error ? event.error.message : "MapLibre GL JS error";
+      setMessage(message);
+      console.error(event.error || event);
+    });
+
+    function sourceLabel(layer) {
+      if (layer.type === "vector" && layer.source.type === "geo_json") return "GeoJSON";
+      if (layer.type === "vector" && layer.source.type === "flat_geobuf") return "FlatGeobuf placeholder";
+      if (layer.type === "vector" && layer.source.type === "duck_db_geo_parquet") return "DuckDB/GeoParquet placeholder";
+      if (layer.type === "raster" && layer.source.type === "cog") return "COG placeholder";
+      if (layer.type === "tile" && layer.source.type === "xyz") return "XYZ tiles";
+      if (layer.type === "tile" && (layer.source.type === "pm_tiles" || layer.source.type === "p_m_tiles")) return "PMTiles placeholder";
+      if (layer.type === "database") return "Database placeholder";
+      return "Layer";
+    }
+
+    function layerName(layer) {
+      return layer.common.name;
+    }
+
+    function layerId(layer) {
+      return layer.common.id;
+    }
+
+    function renderLayerPanel() {
+      const list = document.getElementById("layer-list");
+      list.textContent = "";
+
+      [...project.layers].reverse().forEach((layer) => {
+        const id = layerId(layer);
+        const item = document.createElement("div");
+        item.className = "layer-item";
+        item.dataset.layerId = id;
+
+        const title = document.createElement("div");
+        title.className = "layer-title";
+
+        const visible = document.createElement("input");
+        visible.type = "checkbox";
+        visible.checked = layer.common.visible;
+        visible.addEventListener("change", () => {
+          layer.common.visible = visible.checked;
+          setMapLayerVisibility(layer, visible.checked);
+          renderProperties();
+        });
+
+        const name = document.createElement("span");
+        name.textContent = layerName(layer);
+        name.title = layerName(layer);
+        name.addEventListener("click", () => {
+          selectedLayerId = id;
+          project.active_layer_id = id;
+          renderUi();
+        });
+
+        const remove = document.createElement("button");
+        remove.className = "danger";
+        remove.textContent = "Remove";
+        remove.addEventListener("click", () => removeLayer(id));
+
+        title.append(visible, name, remove);
+
+        const meta = document.createElement("div");
+        meta.className = "layer-meta";
+        meta.textContent = sourceLabel(layer);
+
+        const opacityRow = document.createElement("div");
+        opacityRow.className = "row";
+        const opacityLabel = document.createElement("span");
+        opacityLabel.textContent = "opacity";
+        const opacity = document.createElement("input");
+        opacity.type = "range";
+        opacity.min = "0";
+        opacity.max = "1";
+        opacity.step = "0.05";
+        opacity.value = layer.common.opacity;
+        opacity.addEventListener("input", () => {
+          layer.common.opacity = Number(opacity.value);
+          setMapLayerOpacity(layer, layer.common.opacity);
+          renderProperties();
+        });
+        opacityRow.append(opacityLabel, opacity);
+
+        const reorder = document.createElement("div");
+        reorder.className = "small";
+        reorder.textContent = "Layer reorder placeholder";
+
+        item.append(title, meta, opacityRow, reorder);
+        if (selectedLayerId === id) {
+          item.style.borderColor = "var(--accent)";
+        }
+        list.append(item);
+      });
+    }
+
+    function renderProperties() {
+      const projectProperties = document.getElementById("project-properties");
+      projectProperties.textContent = "";
+      appendProperty(projectProperties, "Project", project.name);
+      appendProperty(projectProperties, "Layers", String(project.layers.length));
+      appendProperty(projectProperties, "Projection", "globe");
+      appendProperty(projectProperties, "Basemap", "OpenFreeMap Liberty");
+
+      const layerProperties = document.getElementById("layer-properties");
+      layerProperties.textContent = "";
+      const layer = project.layers.find((item) => layerId(item) === selectedLayerId);
+      if (!layer) {
+        appendProperty(layerProperties, "Layer", "None");
+        return;
+      }
+      appendProperty(layerProperties, "Name", layerName(layer));
+      appendProperty(layerProperties, "ID", layerId(layer));
+      appendProperty(layerProperties, "Source", sourceLabel(layer));
+      appendProperty(layerProperties, "Visible", layer.common.visible ? "yes" : "no");
+      appendProperty(layerProperties, "Opacity", layer.common.opacity.toFixed(2));
+      if (layer.type === "vector" && layer.source.type === "geo_json") {
+        appendProperty(layerProperties, "Features", String(sampleGeojson.features.length));
+      }
+    }
+
+    function appendProperty(parent, key, value) {
+      const label = document.createElement("div");
+      label.textContent = key;
+      const content = document.createElement("div");
+      content.textContent = value;
+      parent.append(label, content);
+    }
+
+    function renderUi() {
+      renderLayerPanel();
+      renderProperties();
+    }
+
+    function syncProjectLayersToMap() {
+      if (!mapReady) {
+        return;
+      }
+      for (const layer of project.layers) {
+        addLayerToMap(layer);
+      }
+    }
+
+    function addLayerToMap(layer) {
+      if (layer.type === "vector" && layer.source.type === "geo_json") {
+        addGeoJsonLayer(layer);
+      } else if (layer.type === "tile" && layer.source.type === "xyz") {
+        addXyzTileLayer(layer);
+      }
+    }
+
+    function addGeoJsonLayer(layer) {
+      const id = layerId(layer);
+      const sourceId = `${id}-source`;
+      if (!map.getSource(sourceId)) {
+        map.addSource(sourceId, {
+          type: "geojson",
+          data: sampleGeojson
+        });
+      }
+
+      const strokeColor = layer.style ? cssColor(layer.style.stroke_color) : "#1976d2";
+      const fillColor = layer.style ? cssColor(layer.style.fill_color) : "#66bb6a";
+      const fillOpacity = layer.style ? layer.style.fill_opacity : 0.25;
+      const strokeWidth = layer.style ? layer.style.stroke_width : 2;
+
+      addLayerIfMissing({
+        id: `${id}-fill`,
+        type: "fill",
+        source: sourceId,
+        filter: ["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]],
+        paint: {
+          "fill-color": fillColor,
+          "fill-opacity": fillOpacity * layer.common.opacity
+        }
+      });
+      addLayerIfMissing({
+        id: `${id}-line`,
+        type: "line",
+        source: sourceId,
+        filter: ["in", ["geometry-type"], ["literal", ["LineString", "MultiLineString", "Polygon", "MultiPolygon"]]],
+        paint: {
+          "line-color": strokeColor,
+          "line-width": strokeWidth,
+          "line-opacity": layer.common.opacity
+        }
+      });
+      addLayerIfMissing({
+        id: `${id}-circle`,
+        type: "circle",
+        source: sourceId,
+        filter: ["in", ["geometry-type"], ["literal", ["Point", "MultiPoint"]]],
+        paint: {
+          "circle-radius": 5,
+          "circle-color": strokeColor,
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 1,
+          "circle-opacity": layer.common.opacity
+        }
+      });
+      setMapLayerVisibility(layer, layer.common.visible);
+    }
+
+    function addXyzTileLayer(layer) {
+      const id = layerId(layer);
+      if (layer.source.tile_type !== "raster") {
+        return;
+      }
+      const sourceId = `${id}-source`;
+      if (!map.getSource(sourceId)) {
+        map.addSource(sourceId, {
+          type: "raster",
+          tiles: [layer.source.url],
+          tileSize: 256
+        });
+      }
+      addLayerIfMissing({
+        id: `${id}-raster`,
+        type: "raster",
+        source: sourceId,
+        paint: {
+          "raster-opacity": layer.common.opacity
+        }
+      });
+      setMapLayerVisibility(layer, layer.common.visible);
+    }
+
+    function addLayerIfMissing(definition) {
+      if (!map.getLayer(definition.id)) {
+        map.addLayer(definition);
+      }
+    }
+
+    function mapLayerIds(layer) {
+      const id = layerId(layer);
+      return [`${id}-fill`, `${id}-line`, `${id}-circle`, `${id}-raster`];
+    }
+
+    function setMapLayerVisibility(layer, visible) {
+      if (!mapReady) {
+        return;
+      }
+      for (const id of mapLayerIds(layer)) {
+        if (map.getLayer(id)) {
+          map.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
+        }
+      }
+    }
+
+    function setMapLayerOpacity(layer, opacity) {
+      if (!mapReady) {
+        return;
+      }
+      const id = layerId(layer);
+      if (map.getLayer(`${id}-fill`)) map.setPaintProperty(`${id}-fill`, "fill-opacity", opacity * (layer.style ? layer.style.fill_opacity : 0.25));
+      if (map.getLayer(`${id}-line`)) map.setPaintProperty(`${id}-line`, "line-opacity", opacity);
+      if (map.getLayer(`${id}-circle`)) map.setPaintProperty(`${id}-circle`, "circle-opacity", opacity);
+      if (map.getLayer(`${id}-raster`)) map.setPaintProperty(`${id}-raster`, "raster-opacity", opacity);
+    }
+
+    function removeLayer(id) {
+      const index = project.layers.findIndex((layer) => layerId(layer) === id);
+      if (index < 0) {
+        return;
+      }
+      const layer = project.layers[index];
+      if (mapReady) {
+        for (const mapLayerId of mapLayerIds(layer)) {
+          if (map.getLayer(mapLayerId)) {
+            map.removeLayer(mapLayerId);
+          }
+        }
+        const sourceId = `${id}-source`;
+        if (map.getSource(sourceId)) {
+          map.removeSource(sourceId);
+        }
+      }
+      project.layers.splice(index, 1);
+      if (selectedLayerId === id) {
+        selectedLayerId = project.layers.length ? layerId(project.layers[project.layers.length - 1]) : null;
+        project.active_layer_id = selectedLayerId;
+      }
+      setMessage(`Removed layer ${id}`);
+      renderUi();
+    }
+
+    function cssColor(values) {
+      if (!values) {
+        return "#1976d2";
+      }
+      if (Array.isArray(values) && values.length >= 3) {
+        return `rgba(${values[0]}, ${values[1]}, ${values[2]}, ${(values[3] ?? 255) / 255})`;
+      }
+      return `rgba(${values.r ?? 25}, ${values.g ?? 118}, ${values.b ?? 210}, ${(values.a ?? 255) / 255})`;
+    }
+
+    function addSampleGeojson() {
+      const id = `sample-geojson-${nextLayerNumber++}`;
+      const layer = {
+        type: "vector",
+        common: {
+          id,
+          name: "Sample GeoJSON",
+          visible: true,
+          opacity: 1,
+          metadata: {}
+        },
+        source: {
+          type: "geo_json",
+          path: "examples/data/sample.geojson"
+        },
+        style: {
+          stroke_color: { r: 25, g: 118, b: 210, a: 255 },
+          fill_color: { r: 102, g: 187, b: 106, a: 255 },
+          stroke_width: 2,
+          fill_opacity: 0.25
+        }
+      };
+      project.layers.push(layer);
+      selectedLayerId = id;
+      project.active_layer_id = id;
+      addLayerToMap(layer);
+      setMessage("Loaded sample GeoJSON");
+      renderUi();
+    }
+
+    function addOsmBasemapPlaceholder() {
+      const id = `osm-basemap-${nextLayerNumber++}`;
+      const layer = {
+        type: "tile",
+        common: {
+          id,
+          name: "OpenStreetMap raster basemap",
+          visible: false,
+          opacity: 1,
+          metadata: { "geolibre:placeholder": "Use as an XYZ layer record. Liberty remains the active vector basemap." }
+        },
+        source: {
+          type: "xyz",
+          url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+          tile_type: "raster"
+        },
+        maplibre_style_json: null
+      };
+      project.layers.push(layer);
+      selectedLayerId = id;
+      project.active_layer_id = id;
+      addLayerToMap(layer);
+      setMessage("Added OpenStreetMap XYZ layer record");
+      renderUi();
+    }
+
+    function addPlaceholders() {
+      const placeholders = [
+        ["flatgeobuf", "FlatGeobuf placeholder", "vector", { type: "flat_geobuf", path: "data/example.fgb" }],
+        ["pmtiles", "PMTiles placeholder", "tile", { type: "pm_tiles", path: "data/example.pmtiles" }],
+        ["cog", "COG placeholder", "raster", { type: "cog", path: "data/example.tif" }],
+        ["duckdb", "DuckDB placeholder", "database", { type: "duck_db", path: "data/example.duckdb", table: "features" }],
+        ["geoparquet", "GeoParquet placeholder", "vector", { type: "duck_db_geo_parquet", path: "data/example.parquet", table: null }]
+      ];
+
+      for (const [prefix, name, type, source] of placeholders) {
+        const id = `${prefix}-${nextLayerNumber++}`;
+        project.layers.push({
+          type,
+          common: {
+            id,
+            name,
+            visible: true,
+            opacity: 1,
+            metadata: { "geolibre:placeholder": "Renderer support pending" }
+          },
+          source
+        });
+        selectedLayerId = id;
+        project.active_layer_id = id;
+      }
+      setMessage("Added placeholder layers");
+      renderUi();
+    }
+
+    function runBoundingBox() {
+      const layer = project.layers.find((item) => layerId(item) === selectedLayerId);
+      if (!layer) {
+        setMessage("Select a layer to run Bounding Box");
+        return;
+      }
+      if (layer.type === "vector" && layer.source.type === "geo_json") {
+        const bounds = new maplibregl.LngLatBounds();
+        forEachPosition(sampleGeojson, (position) => bounds.extend(position));
+        if (!bounds.isEmpty()) {
+          map.fitBounds(bounds, { padding: 40, duration: 500 });
+          setMessage(`Bounding Box: ${formatBounds(bounds)}`);
+        }
+      } else {
+        setMessage("Bounding Box currently supports GeoJSON sample layers");
+      }
+    }
+
+    function forEachPosition(geojson, callback) {
+      for (const feature of geojson.features || []) {
+        walkCoordinates(feature.geometry ? feature.geometry.coordinates : null, callback);
+      }
+    }
+
+    function walkCoordinates(coordinates, callback) {
+      if (!coordinates) {
+        return;
+      }
+      if (typeof coordinates[0] === "number") {
+        callback(coordinates);
+        return;
+      }
+      for (const item of coordinates) {
+        walkCoordinates(item, callback);
+      }
+    }
+
+    function formatBounds(bounds) {
+      const west = bounds.getWest().toFixed(4);
+      const south = bounds.getSouth().toFixed(4);
+      const east = bounds.getEast().toFixed(4);
+      const north = bounds.getNorth().toFixed(4);
+      return `${west}, ${south}, ${east}, ${north}`;
+    }
+
+    function updateStatus() {
+      const bounds = map.getBounds();
+      document.getElementById("zoom").textContent = `zoom: ${map.getZoom().toFixed(2)}`;
+      document.getElementById("extent").textContent = `extent: ${formatBounds(bounds)}`;
+    }
+
+    function setMessage(message) {
+      document.getElementById("message").textContent = message;
+    }
+
+    document.getElementById("fit-world").addEventListener("click", () => {
+      map.easeTo({ center: [20, 0], zoom: 2, pitch: 0, bearing: 0, duration: 500 });
+    });
+    document.getElementById("add-sample").addEventListener("click", addSampleGeojson);
+    document.getElementById("add-osm").addEventListener("click", addOsmBasemapPlaceholder);
+    document.getElementById("add-placeholders").addEventListener("click", addPlaceholders);
+    document.getElementById("identify-tool").addEventListener("click", () => {
+      identifyMode = !identifyMode;
+      document.getElementById("identify-tool").classList.toggle("primary", identifyMode);
+      document.getElementById("pan-tool").classList.toggle("primary", !identifyMode);
+      setMessage(identifyMode ? "Identify placeholder enabled" : "Pan tool enabled");
+    });
+    document.getElementById("pan-tool").addEventListener("click", () => {
+      identifyMode = false;
+      document.getElementById("identify-tool").classList.remove("primary");
+      document.getElementById("pan-tool").classList.add("primary");
+      setMessage("Pan tool enabled");
+    });
+    document.getElementById("bbox-tool").addEventListener("click", runBoundingBox);
+    document.getElementById("buffer-tool").addEventListener("click", () => {
+      setMessage("Buffer placeholder: processing framework hook pending for webview backend");
+    });
+    document.getElementById("reproject-tool").addEventListener("click", () => {
+      setMessage("Reproject placeholder: processing framework hook pending for webview backend");
+    });
+
+    renderUi();
+  </script>
+</body>
+</html>
