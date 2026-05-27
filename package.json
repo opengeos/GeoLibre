@@ -1,0 +1,20 @@
+{
+  "name": "geolibre",
+  "private": true,
+  "version": "0.1.0",
+  "description": "GeoLibre Desktop — lightweight cloud-native desktop GIS",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w geolibre-desktop",
+    "build": "npm run build -w geolibre-desktop",
+    "tauri": "npm run tauri -w geolibre-desktop",
+    "tauri:dev": "npm run tauri dev -w geolibre-desktop",
+    "tauri:build": "npm run tauri build -w geolibre-desktop"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

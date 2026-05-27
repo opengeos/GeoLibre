@@ -1,0 +1,31 @@
+[project]
+name = "geolibre-server"
+version = "0.1.0"
+description = "Optional Python processing sidecar for GeoLibre Desktop"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.32.0",
+]
+
+[project.optional-dependencies]
+# Future geospatial stack (not required for MVP UI):
+# geo = [
+#   "gdal",
+#   "geopandas",
+#   "rasterio",
+#   "whitebox",
+#   "leafmap",
+#   "duckdb",
+# ]
+
+[project.scripts]
+geolibre-server = "geolibre_server.app.main:run"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["geolibre_server"]

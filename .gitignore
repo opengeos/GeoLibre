@@ -1,0 +1,15 @@
+node_modules/
+dist/
+target/
+.tauri/
+*.log
+.DS_Store
+.env
+.env.local
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+.idea/
+.vscode/

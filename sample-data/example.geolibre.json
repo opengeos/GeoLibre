@@ -1,0 +1,17 @@
+{
+  "version": "0.1.0",
+  "name": "Example Project",
+  "mapView": {
+    "center": [-105.27, 39.95],
+    "zoom": 8,
+    "bearing": 0,
+    "pitch": 0
+  },
+  "basemapStyleUrl": "https://tiles.openfreemap.org/styles/liberty",
+  "layers": [],
+  "styles": {},
+  "metadata": {
+    "author": "GeoLibre",
+    "description": "Example project file"
+  }
+}
