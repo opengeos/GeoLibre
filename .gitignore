@@ -13,3 +13,5 @@ __pycache__/
 .pytest_cache/
 .idea/
 .vscode/
+*.tsbuildinfo
+**/src-tauri/gen/

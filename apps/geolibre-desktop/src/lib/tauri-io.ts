@@ -32,7 +32,7 @@ export async function openProjectFile(): Promise<{
   if (!isTauri()) return null;
   const selected = await open({
     multiple: false,
-    filters: [{ name: "GeoLibre Project", extensions: ["geolibre.json", "json"] }],
+    filters: [{ name: "GeoLibre Project", extensions: ["geolibre", "json"] }],
   });
   if (!selected || typeof selected !== "string") return null;
   const text = await readTextFile(selected);
@@ -46,7 +46,7 @@ export async function saveProjectFile(
 ): Promise<string | null> {
   if (!isTauri()) return null;
   const path = await save({
-    filters: [{ name: "GeoLibre Project", extensions: ["geolibre.json"] }],
+    filters: [{ name: "GeoLibre Project", extensions: ["geolibre", "json"] }],
     defaultPath: defaultName ?? "project.geolibre.json",
   });
   if (!path) return null;

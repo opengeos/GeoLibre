@@ -199,34 +199,3 @@ export function removeLayerFromMap(
   if (map.getSource(src)) map.removeSource(src);
 }
 
-export function syncAllLayers(
-  map: maplibregl.Map,
-  layers: GeoLibreLayer[],
-): void {
-  const existingIds = new Set(layers.map((l) => l.id));
-  const style = map.getStyle();
-  if (style?.layers) {
-    for (const ml of style.layers) {
-      if (
-        ml.id.startsWith("layer-") &&
-        ml.id.includes("-fill") === false &&
-        ml.id.includes("-line") === false &&
-        ml.id.includes("-circle") === false
-      ) {
-        /* handled per-layer */
-      }
-    }
-  }
-
-  for (const layer of layers) {
-    syncLayer(map, layer);
-  }
-
-  const styleLayers = map.getStyle()?.layers ?? [];
-  for (const ml of styleLayers) {
-    const match = /^layer-(.+)-(fill|line|circle|raster|vector)$/.exec(ml.id);
-    if (match && !existingIds.has(match[1])) {
-      removeLayerFromMap(map, match[1]);
-    }
-  }
-}

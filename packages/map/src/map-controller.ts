@@ -2,7 +2,7 @@ import { DEFAULT_BASEMAP } from "@geolibre/core";
 import type { GeoLibreLayer, MapViewState } from "@geolibre/core";
 import maplibregl from "maplibre-gl";
 import { getLayerBounds } from "./geojson-loader";
-import { removeLayerFromMap, syncAllLayers, syncLayer } from "./layer-sync";
+import { removeLayerFromMap, syncLayer } from "./layer-sync";
 
 export class MapController {
   private map: maplibregl.Map | null = null;
@@ -92,9 +92,18 @@ export class MapController {
     this.layerIds = nextIds;
   }
 
+  private styleLoadHandler: (() => void) | null = null;
+
   waitAndSyncLayers(layers: GeoLibreLayer[]): void {
     if (!this.map) return;
+
+    if (this.styleLoadHandler) {
+      this.map.off("style.load", this.styleLoadHandler);
+    }
+
     const run = () => this.syncLayers(layers);
+    this.styleLoadHandler = run;
+
     if (this.map.isStyleLoaded()) {
       run();
     } else {

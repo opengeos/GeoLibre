@@ -1,8 +1,15 @@
+import { useState } from "react";
 import { useAppStore } from "@geolibre/core";
+import type { GeoLibreLayer } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import { isPlaceholderLayer, placeholderMessage } from "@geolibre/map";
 import {
   Button,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
   ScrollArea,
   Separator,
   Slider,
@@ -29,6 +36,7 @@ export function LayerPanel({ mapControllerRef }: LayerPanelProps) {
   const setLayerOpacity = useAppStore((s) => s.setLayerOpacity);
   const reorderLayer = useAppStore((s) => s.reorderLayer);
   const removeLayer = useAppStore((s) => s.removeLayer);
+  const [metadataLayer, setMetadataLayer] = useState<GeoLibreLayer | null>(null);
 
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r bg-card">
@@ -145,13 +153,7 @@ export function LayerPanel({ mapControllerRef }: LayerPanelProps) {
                   title="Metadata"
                   onClick={(e) => {
                     e.stopPropagation();
-                    alert(
-                      JSON.stringify(
-                        { ...layer.metadata, sourcePath: layer.sourcePath },
-                        null,
-                        2,
-                      ),
-                    );
+                    setMetadataLayer(layer);
                   }}
                 >
                   <Info className="h-3.5 w-3.5" />
@@ -177,6 +179,23 @@ export function LayerPanel({ mapControllerRef }: LayerPanelProps) {
         {/* TODO(v0.3): Add PMTiles, COG, FlatGeobuf, GeoParquet layer types */}
         Advanced formats: see docs/roadmap.md
       </p>
+      <Dialog open={!!metadataLayer} onOpenChange={(open) => { if (!open) setMetadataLayer(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{metadataLayer?.name} Metadata</DialogTitle>
+            <DialogDescription>Layer metadata and source information</DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-80">
+            <pre className="whitespace-pre-wrap break-all text-xs">
+              {metadataLayer && JSON.stringify(
+                { ...metadataLayer.metadata, sourcePath: metadataLayer.sourcePath },
+                null,
+                2,
+              )}
+            </pre>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </aside>
   );
 }
