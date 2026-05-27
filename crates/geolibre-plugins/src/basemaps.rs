@@ -3,6 +3,20 @@ use geolibre_io::xyz_tile_layer;
 
 use crate::{GeoLibrePlugin, Result};
 
+fn unique_layer_id(base: &str, project: &GeoLibreProject) -> String {
+    if project.layer(base).is_none() {
+        return base.to_string();
+    }
+    let mut counter = 2u32;
+    loop {
+        let candidate = format!("{base}-{counter}");
+        if project.layer(&candidate).is_none() {
+            return candidate;
+        }
+        counter += 1;
+    }
+}
+
 pub struct AddOpenStreetMapBasemapPlugin;
 
 impl GeoLibrePlugin for AddOpenStreetMapBasemapPlugin {
@@ -19,8 +33,10 @@ impl GeoLibrePlugin for AddOpenStreetMapBasemapPlugin {
     }
 
     fn activate(&self, project: &mut GeoLibreProject) -> Result<()> {
+        let base_id = "osm-basemap";
+        let id = unique_layer_id(base_id, project);
         let layer = xyz_tile_layer(
-            "osm-basemap",
+            &id,
             "OpenStreetMap",
             "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
             TileType::Raster,

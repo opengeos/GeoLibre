@@ -7,5 +7,6 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+earcutr.workspace = true
 egui.workspace = true
 geolibre-core.workspace = true

@@ -162,12 +162,15 @@ fn build_initial_html() -> String {
     let sample_geojson = std::fs::read_to_string("examples/data/sample.geojson")
         .unwrap_or_else(|_| "{\"type\":\"FeatureCollection\",\"features\":[]}".to_string());
 
+    let safe_project_json = project_json.replace("</", "<\\/");
+    let safe_sample_geojson = sample_geojson.replace("</", "<\\/");
+
     include_str!("../assets/maplibre_gl_app.html")
         .replace("__MAPLIBRE_GL_JS_VERSION__", MAPLIBRE_GL_JS_VERSION)
         .replace(
             "__OPENFREEMAP_LIBERTY_STYLE_URL__",
             OPENFREEMAP_LIBERTY_STYLE_URL,
         )
-        .replace("__PROJECT_JSON__", &project_json)
-        .replace("__SAMPLE_GEOJSON__", &sample_geojson)
+        .replace("__PROJECT_JSON__", &safe_project_json)
+        .replace("__SAMPLE_GEOJSON__", &safe_sample_geojson)
 }

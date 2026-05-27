@@ -217,7 +217,20 @@ impl EguiMapCanvas {
                 .map(|coord| self.pos_for_coord(*coord, rect))
                 .collect();
             if points.len() >= 3 {
-                painter.add(Shape::convex_polygon(points.clone(), fill, stroke));
+                let flat: Vec<f64> = points
+                    .iter()
+                    .flat_map(|p| [p.x as f64, p.y as f64])
+                    .collect();
+                let indices = earcutr::earcut(&flat, &[], 2).unwrap_or_default();
+                for tri in indices.chunks(3) {
+                    if tri.len() == 3 {
+                        painter.add(Shape::convex_polygon(
+                            vec![points[tri[0]], points[tri[1]], points[tri[2]]],
+                            fill,
+                            Stroke::NONE,
+                        ));
+                    }
+                }
             }
             for segment in outer.windows(2) {
                 painter.line_segment(

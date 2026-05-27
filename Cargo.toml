@@ -17,6 +17,7 @@ repository = "https://github.com/opengeos/GeoLibre"
 rust-version = "1.88"
 
 [workspace.dependencies]
+earcutr = "0.5.0"
 egui = "0.29.1"
 egui-wgpu = { version = "0.29.1", default-features = false }
 egui-winit = { version = "0.29.1", default-features = false, features = [
