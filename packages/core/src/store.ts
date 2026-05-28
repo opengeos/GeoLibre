@@ -36,7 +36,7 @@ export interface AppState {
   };
 
   setPointerCoords: (coords: [number, number] | null) => void;
-  setMapView: (view: Partial<MapViewState>) => void;
+  setMapView: (view: Partial<MapViewState>, markDirty?: boolean) => void;
   setBasemapStyleUrl: (url: string) => void;
   selectLayer: (id: string | null) => void;
   selectFeature: (id: string | null) => void;
@@ -83,8 +83,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setPointerCoords: (coords) => set({ pointerCoords: coords }),
-  setMapView: (view) =>
-    set((s) => ({ mapView: { ...s.mapView, ...view } })),
+  setMapView: (view, markDirty = false) =>
+    set((s) => ({
+      mapView: { ...s.mapView, ...view },
+      isDirty: markDirty || s.isDirty,
+    })),
   setBasemapStyleUrl: (url) => set({ basemapStyleUrl: url, isDirty: true }),
   selectLayer: (id) => set({ selectedLayerId: id, selectedFeatureId: null }),
   selectFeature: (id) => set({ selectedFeatureId: id }),

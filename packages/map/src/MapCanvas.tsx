@@ -36,7 +36,8 @@ export function MapCanvas({ controllerRef }: MapCanvasProps) {
     });
     map.on("mouseout", () => setPointerCoords(null));
 
-    const updateView = () => setMapView(mc.readView());
+    const updateView = (event?: { originalEvent?: unknown }) =>
+      setMapView(mc.readView(), Boolean(event?.originalEvent));
     map.on("moveend", updateView);
     map.on("load", () => {
       mc.waitAndSyncLayers(useAppStore.getState().layers);
