@@ -27,8 +27,8 @@ export class MapController {
     this.map = new maplibregl.Map({
       container,
       style: this.basemapStyleUrl,
-      center: view?.center ?? [-98.5795, 39.8283],
-      zoom: view?.zoom ?? 3,
+      center: view?.center ?? [-100, 40],
+      zoom: view?.zoom ?? 2,
       bearing: view?.bearing ?? 0,
       pitch: view?.pitch ?? 0,
     });
@@ -77,8 +77,8 @@ export class MapController {
   readView(): MapViewState {
     if (!this.map) {
       return {
-        center: [-98.5795, 39.8283],
-        zoom: 3,
+        center: [-100, 40],
+        zoom: 2,
         bearing: 0,
         pitch: 0,
       };

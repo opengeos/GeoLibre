@@ -10,8 +10,8 @@ import {
 
 export function createDefaultMapView(): MapViewState {
   return {
-    center: [-98.5795, 39.8283],
-    zoom: 3,
+    center: [-100, 40],
+    zoom: 2,
     bearing: 0,
     pitch: 0,
   };
