@@ -20,7 +20,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' https://tiles.openfreemap.org https://*.openfreemap.org https://basemaps.cartocdn.com https://*.cartocdn.com https://tile.openstreetmap.org https://*.openstreetmap.org; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval'; worker-src blob: 'self'",
+      "csp": "default-src 'self'; connect-src 'self' https://tiles.openfreemap.org https://*.openfreemap.org https://basemaps.cartocdn.com https://*.cartocdn.com https://tile.openstreetmap.org https://*.openstreetmap.org https://s3.amazonaws.com; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval'; worker-src blob: 'self'",
       "capabilities": ["default"]
     }
   },

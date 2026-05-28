@@ -10,7 +10,12 @@ export type GeoLibreMapControlPosition =
 export type GeoLibreBuiltInMapControl =
   | "navigation"
   | "fullscreen"
+  | "geolocate"
   | "globe"
+  | "terrain"
+  | "scale"
+  | "attribution"
+  | "logo"
   | "layer-control";
 
 export interface GeoLibreAppAPI {
