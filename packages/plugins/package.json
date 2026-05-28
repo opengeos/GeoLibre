@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@geolibre/core": "*",
-    "@geoman-io/maplibre-geoman-free": "^0.5.9",
+    "@geoman-io/maplibre-geoman-free": "^0.7.1",
     "maplibre-gl-geo-editor": "^0.7.3",
     "maplibre-gl-geoagent": "^0.4.2"
   },

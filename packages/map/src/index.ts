@@ -3,6 +3,7 @@ export {
   MapController,
   createMapController,
   type BuiltInMapControl,
+  DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
 } from "./map-controller";
 export {
   detectGeometryProfile,

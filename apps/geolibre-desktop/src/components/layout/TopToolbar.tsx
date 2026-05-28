@@ -1,5 +1,9 @@
 import { projectFromStore, serializeProject, useAppStore } from "@geolibre/core";
-import type { BuiltInMapControl, MapController } from "@geolibre/map";
+import {
+  type BuiltInMapControl,
+  DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
+  type MapController,
+} from "@geolibre/map";
 import {
   Button,
   DropdownMenu,
@@ -55,11 +59,15 @@ export function TopToolbar({ mapControllerRef }: TopToolbarProps) {
   const markSaved = useAppStore((s) => s.markSaved);
   const [controlsVisible, setControlsVisible] = useState<
     Record<ToolbarMapControl, boolean>
-  >({
-    navigation: true,
-    fullscreen: true,
-    globe: true,
-  });
+  >(() =>
+    MAP_CONTROL_ITEMS.reduce(
+      (acc, { id }) => {
+        acc[id] = DEFAULT_BUILT_IN_CONTROL_VISIBILITY[id];
+        return acc;
+      },
+      {} as Record<ToolbarMapControl, boolean>,
+    ),
+  );
 
   const handleOpen = async () => {
     const result = await openProjectFile();

@@ -9,6 +9,10 @@ export class PluginManager {
   register(plugin: GeoLibrePlugin): void {
     const previous = this.plugins.get(plugin.id);
     this.plugins.set(plugin.id, plugin);
+    // activeByDefault only marks the plugin active; activate() is not called
+    // here because no app API is available at registration time. Such plugins
+    // must apply their initial side effects idempotently elsewhere (e.g. the
+    // layer control is added by MapController.init regardless of plugin state).
     if (plugin.activeByDefault) this.active.add(plugin.id);
     if (previous !== plugin) this.notify();
   }

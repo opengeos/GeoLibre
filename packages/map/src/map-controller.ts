@@ -16,6 +16,16 @@ export type BuiltInMapControl =
   | "globe"
   | "layer-control";
 
+export const DEFAULT_BUILT_IN_CONTROL_VISIBILITY: Record<
+  BuiltInMapControl,
+  boolean
+> = {
+  navigation: true,
+  fullscreen: true,
+  globe: true,
+  "layer-control": true,
+};
+
 export class MapController {
   private map: maplibregl.Map | null = null;
   private navigationControl: maplibregl.NavigationControl | null = null;
@@ -25,10 +35,7 @@ export class MapController {
   private basemapStyleUrl = DEFAULT_BASEMAP;
   private layerIds: string[] = [];
   private controlVisibility: Record<BuiltInMapControl, boolean> = {
-    navigation: true,
-    fullscreen: true,
-    globe: true,
-    "layer-control": true,
+    ...DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
   };
 
   init(
