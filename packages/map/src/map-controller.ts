@@ -1,11 +1,18 @@
 import { DEFAULT_BASEMAP } from "@geolibre/core";
 import type { GeoLibreLayer, MapViewState } from "@geolibre/core";
 import maplibregl from "maplibre-gl";
+import { LayerControl } from "maplibre-gl-layer-control";
 import { getLayerBounds } from "./geojson-loader";
 import { removeLayerFromMap, syncLayer } from "./layer-sync";
 
+const DEFAULT_PROJECTION: maplibregl.ProjectionSpecification = {
+  type: "globe",
+};
+
 export class MapController {
   private map: maplibregl.Map | null = null;
+  private layerControl: LayerControl | null = null;
+  private basemapStyleUrl = DEFAULT_BASEMAP;
   private layerIds: string[] = [];
 
   init(
@@ -16,15 +23,27 @@ export class MapController {
     },
   ): maplibregl.Map {
     const view = options.mapView;
+    this.basemapStyleUrl = options.styleUrl ?? DEFAULT_BASEMAP;
     this.map = new maplibregl.Map({
       container,
-      style: options.styleUrl ?? DEFAULT_BASEMAP,
+      style: this.basemapStyleUrl,
       center: view?.center ?? [-98.5795, 39.8283],
       zoom: view?.zoom ?? 3,
       bearing: view?.bearing ?? 0,
       pitch: view?.pitch ?? 0,
     });
+    this.map.on("style.load", () => {
+      this.enforceDefaultProjection();
+      this.addLayerControl();
+    });
+    this.map.once("load", () => {
+      this.enforceDefaultProjection();
+      this.addLayerControl();
+    });
+    this.map.once("idle", () => this.enforceDefaultProjection());
     this.map.addControl(new maplibregl.NavigationControl(), "top-right");
+    this.map.addControl(new maplibregl.FullscreenControl(), "top-right");
+    this.map.addControl(new maplibregl.GlobeControl(), "top-right");
     return this.map;
   }
 
@@ -33,12 +52,16 @@ export class MapController {
   }
 
   destroy(): void {
+    this.removeLayerControl();
     this.map?.remove();
     this.map = null;
   }
 
   setStyle(url: string): void {
-    this.map?.setStyle(url);
+    if (!this.map) return;
+    this.basemapStyleUrl = url;
+    this.removeLayerControl();
+    this.map.setStyle(url);
   }
 
   applyView(view: MapViewState): void {
@@ -133,6 +156,34 @@ export class MapController {
       ],
       { padding: 40, duration: 800 },
     );
+  }
+
+  private enforceDefaultProjection(): void {
+    if (!this.map) return;
+    try {
+      if (this.map.getProjection()?.type === DEFAULT_PROJECTION.type) return;
+      this.map.setProjection(DEFAULT_PROJECTION);
+    } catch {
+      this.map.once("idle", () => this.enforceDefaultProjection());
+    }
+  }
+
+  private addLayerControl(): void {
+    if (!this.map || this.layerControl) return;
+    this.layerControl = new LayerControl({
+      basemapStyleUrl: this.basemapStyleUrl,
+      collapsed: true,
+      panelWidth: 340,
+      panelMinWidth: 240,
+      panelMaxWidth: 450,
+    });
+    this.map.addControl(this.layerControl, "top-right");
+  }
+
+  private removeLayerControl(): void {
+    if (!this.map || !this.layerControl) return;
+    this.map.removeControl(this.layerControl);
+    this.layerControl = null;
   }
 }
 

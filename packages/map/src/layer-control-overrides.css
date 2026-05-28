@@ -1,0 +1,48 @@
+.layer-control-panel .layer-control-checkbox,
+.layer-control-panel .background-legend-checkbox,
+.layer-control-panel .background-legend-filter-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-grid;
+  place-content: center;
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  flex: 0 0 13px;
+  border: 1px solid #c9d2df;
+  border-radius: 2px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.layer-control-panel .layer-control-checkbox::before,
+.layer-control-panel .background-legend-checkbox::before,
+.layer-control-panel .background-legend-filter-checkbox::before {
+  width: 7px;
+  height: 5px;
+  content: "";
+  transform: scale(0);
+  transform-origin: center;
+  background: #fff;
+  clip-path: polygon(14% 44%, 0 58%, 39% 100%, 100% 15%, 86% 0, 37% 67%);
+}
+
+.layer-control-panel .layer-control-checkbox:checked,
+.layer-control-panel .background-legend-checkbox:checked,
+.layer-control-panel .background-legend-filter-checkbox:checked {
+  border-color: #2f6fed;
+  background: #2f6fed;
+}
+
+.layer-control-panel .layer-control-checkbox:checked::before,
+.layer-control-panel .background-legend-checkbox:checked::before,
+.layer-control-panel .background-legend-filter-checkbox:checked::before {
+  transform: scale(1);
+}
+
+.layer-control-panel .layer-control-checkbox:focus-visible,
+.layer-control-panel .background-legend-checkbox:focus-visible,
+.layer-control-panel .background-legend-filter-checkbox:focus-visible {
+  outline: 2px solid rgba(47, 111, 237, 0.35);
+  outline-offset: 1px;
+}

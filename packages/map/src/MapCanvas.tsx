@@ -3,6 +3,8 @@ import maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { createMapController, type MapController } from "./map-controller";
 import "maplibre-gl/dist/maplibre-gl.css";
+import "maplibre-gl-layer-control/style.css";
+import "./layer-control-overrides.css";
 
 export interface MapCanvasProps {
   controllerRef?: React.MutableRefObject<MapController | null>;
@@ -54,10 +56,10 @@ export function MapCanvas({ controllerRef }: MapCanvasProps) {
     const map = controller.current?.getMap();
     if (!map || prevBasemap.current === basemapStyleUrl) return;
     prevBasemap.current = basemapStyleUrl;
-    map.setStyle(basemapStyleUrl);
     map.once("style.load", () => {
       controller.current?.waitAndSyncLayers(useAppStore.getState().layers);
     });
+    controller.current?.setStyle(basemapStyleUrl);
   }, [basemapStyleUrl]);
 
   useEffect(() => {
