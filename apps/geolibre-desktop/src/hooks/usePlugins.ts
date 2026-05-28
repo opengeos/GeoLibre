@@ -1,23 +1,19 @@
 import { useAppStore } from "@geolibre/core";
 import {
-  cartoLightPlugin,
   maplibreGeoAgentPlugin,
-  osmBasemapPlugin,
+  maplibreGeoEditorPlugin,
+  maplibreLayerControlPlugin,
   PluginManager,
-  sampleGeoJsonPlugin,
-  setSampleGeoJson,
 } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
 import type { RefObject } from "react";
-import { useEffect, useRef, useSyncExternalStore } from "react";
-import sampleGeojson from "../../../../sample-data/sample.geojson?url";
+import { useSyncExternalStore } from "react";
 
 const manager = new PluginManager();
 manager.registerAll([
-  osmBasemapPlugin,
-  cartoLightPlugin,
-  sampleGeoJsonPlugin,
+  maplibreLayerControlPlugin,
   maplibreGeoAgentPlugin,
+  maplibreGeoEditorPlugin,
 ]);
 
 export function getPluginManager(): PluginManager {
@@ -40,17 +36,8 @@ export function usePluginRegistry() {
 }
 
 export function usePlugins() {
-  const initialized = useRef(false);
-
-  useEffect(() => {
-    if (initialized.current) return;
-    initialized.current = true;
-
-    fetch(sampleGeojson)
-      .then((r) => r.json())
-      .then((data) => setSampleGeoJson(data as GeoJSON.FeatureCollection))
-      .catch(console.error);
-  }, []);
+  // Built-in plugin registration happens at module load so the toolbar can
+  // render plugin menu items on the first pass.
 }
 
 export function createAppAPI(
@@ -74,5 +61,11 @@ export function createAppAPI(
     ) => mapControllerRef?.current?.addControl(control, position) ?? false,
     removeMapControl: (control: Parameters<MapController["removeControl"]>[0]) =>
       mapControllerRef?.current?.removeControl(control),
+    setBuiltInMapControlVisible: (
+      control: Parameters<MapController["setBuiltInControlVisible"]>[0],
+      visible: boolean,
+    ) =>
+      mapControllerRef?.current?.setBuiltInControlVisible(control, visible) ??
+      false,
   };
 }

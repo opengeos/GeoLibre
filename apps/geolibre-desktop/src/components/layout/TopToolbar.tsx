@@ -1,5 +1,5 @@
 import { projectFromStore, serializeProject, useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { BuiltInMapControl, MapController } from "@geolibre/map";
 import {
   Button,
   DropdownMenu,
@@ -17,8 +17,10 @@ import {
   Map,
   Puzzle,
   Save,
+  SlidersHorizontal,
   Wrench,
 } from "lucide-react";
+import { useState } from "react";
 import { createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
 import {
   openGeoJsonFileWithFallback,
@@ -31,6 +33,17 @@ interface TopToolbarProps {
   mapControllerRef: React.RefObject<MapController | null>;
 }
 
+type ToolbarMapControl = Exclude<BuiltInMapControl, "layer-control">;
+
+const MAP_CONTROL_ITEMS: Array<{
+  id: ToolbarMapControl;
+  label: string;
+}> = [
+  { id: "navigation", label: "Navigation" },
+  { id: "fullscreen", label: "Fullscreen" },
+  { id: "globe", label: "Globe" },
+];
+
 export function TopToolbar({ mapControllerRef }: TopToolbarProps) {
   const loadProject = useAppStore((s) => s.loadProject);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
@@ -40,6 +53,13 @@ export function TopToolbar({ mapControllerRef }: TopToolbarProps) {
   const setProjectPath = useAppStore((s) => s.setProjectPath);
   const setProjectName = useAppStore((s) => s.setProjectName);
   const markSaved = useAppStore((s) => s.markSaved);
+  const [controlsVisible, setControlsVisible] = useState<
+    Record<ToolbarMapControl, boolean>
+  >({
+    navigation: true,
+    fullscreen: true,
+    globe: true,
+  });
 
   const handleOpen = async () => {
     const result = await openProjectFile();
@@ -81,6 +101,15 @@ export function TopToolbar({ mapControllerRef }: TopToolbarProps) {
 
   const { plugins, isActive, toggle } = usePluginRegistry();
   const appApi = createAppAPI(mapControllerRef);
+  const toggleMapControl = (control: ToolbarMapControl) => {
+    setControlsVisible((current) => {
+      const visible = !current[control];
+      const updated =
+        mapControllerRef.current?.setBuiltInControlVisible(control, visible) ??
+        false;
+      return updated ? { ...current, [control]: visible } : current;
+    });
+  };
 
   return (
     <header className="flex h-11 shrink-0 items-center gap-1 border-b bg-card px-2">
@@ -109,6 +138,27 @@ export function TopToolbar({ mapControllerRef }: TopToolbarProps) {
         <Wrench className="mr-1 h-3.5 w-3.5" />
         Processing
       </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm">
+            <SlidersHorizontal className="mr-1 h-3.5 w-3.5" />
+            Controls
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuLabel>Map controls</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {MAP_CONTROL_ITEMS.map((control) => (
+            <DropdownMenuItem
+              key={control.id}
+              onClick={() => toggleMapControl(control.id)}
+            >
+              {control.label}
+              {controlsVisible[control.id] ? " ✓" : ""}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="sm">

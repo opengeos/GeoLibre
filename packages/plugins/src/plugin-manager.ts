@@ -9,6 +9,7 @@ export class PluginManager {
   register(plugin: GeoLibrePlugin): void {
     const previous = this.plugins.get(plugin.id);
     this.plugins.set(plugin.id, plugin);
+    if (plugin.activeByDefault) this.active.add(plugin.id);
     if (previous !== plugin) this.notify();
   }
 

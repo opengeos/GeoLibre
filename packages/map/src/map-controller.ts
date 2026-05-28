@@ -10,11 +10,26 @@ const DEFAULT_PROJECTION: maplibregl.ProjectionSpecification = {
 };
 const DEFAULT_MAX_PITCH = 85;
 
+export type BuiltInMapControl =
+  | "navigation"
+  | "fullscreen"
+  | "globe"
+  | "layer-control";
+
 export class MapController {
   private map: maplibregl.Map | null = null;
+  private navigationControl: maplibregl.NavigationControl | null = null;
+  private fullscreenControl: maplibregl.FullscreenControl | null = null;
+  private globeControl: maplibregl.GlobeControl | null = null;
   private layerControl: LayerControl | null = null;
   private basemapStyleUrl = DEFAULT_BASEMAP;
   private layerIds: string[] = [];
+  private controlVisibility: Record<BuiltInMapControl, boolean> = {
+    navigation: true,
+    fullscreen: true,
+    globe: true,
+    "layer-control": true,
+  };
 
   init(
     container: HTMLElement,
@@ -43,9 +58,9 @@ export class MapController {
       this.addLayerControl();
     });
     this.map.once("idle", () => this.enforceDefaultProjection());
-    this.map.addControl(new maplibregl.NavigationControl(), "top-right");
-    this.map.addControl(new maplibregl.FullscreenControl(), "top-right");
-    this.map.addControl(new maplibregl.GlobeControl(), "top-right");
+    this.addNavigationControl();
+    this.addFullscreenControl();
+    this.addGlobeControl();
     return this.map;
   }
 
@@ -71,7 +86,30 @@ export class MapController {
     }
   }
 
+  setBuiltInControlVisible(
+    control: BuiltInMapControl,
+    visible: boolean,
+  ): boolean {
+    this.controlVisibility[control] = visible;
+
+    if (visible) {
+      if (control === "navigation") return this.addNavigationControl();
+      if (control === "fullscreen") return this.addFullscreenControl();
+      if (control === "globe") return this.addGlobeControl();
+      return this.addLayerControl();
+    }
+
+    if (control === "navigation") this.removeNavigationControl();
+    else if (control === "fullscreen") this.removeFullscreenControl();
+    else if (control === "globe") this.removeGlobeControl();
+    else this.removeLayerControl();
+    return true;
+  }
+
   destroy(): void {
+    this.removeNavigationControl();
+    this.removeFullscreenControl();
+    this.removeGlobeControl();
     this.removeLayerControl();
     this.map?.remove();
     this.map = null;
@@ -188,8 +226,14 @@ export class MapController {
     }
   }
 
-  private addLayerControl(): void {
-    if (!this.map || this.layerControl) return;
+  private addLayerControl(): boolean {
+    if (
+      !this.map ||
+      this.layerControl ||
+      !this.controlVisibility["layer-control"]
+    ) {
+      return false;
+    }
     this.layerControl = new LayerControl({
       basemapStyleUrl: this.basemapStyleUrl,
       collapsed: true,
@@ -198,12 +242,66 @@ export class MapController {
       panelMaxWidth: 450,
     });
     this.map.addControl(this.layerControl, "top-right");
+    return true;
   }
 
   private removeLayerControl(): void {
     if (!this.map || !this.layerControl) return;
-    this.map.removeControl(this.layerControl);
+    this.removeControl(this.layerControl);
     this.layerControl = null;
+  }
+
+  private addNavigationControl(): boolean {
+    if (
+      !this.map ||
+      this.navigationControl ||
+      !this.controlVisibility.navigation
+    ) {
+      return false;
+    }
+    this.navigationControl = new maplibregl.NavigationControl();
+    this.map.addControl(this.navigationControl, "top-right");
+    return true;
+  }
+
+  private removeNavigationControl(): void {
+    if (!this.navigationControl) return;
+    this.removeControl(this.navigationControl);
+    this.navigationControl = null;
+  }
+
+  private addFullscreenControl(): boolean {
+    if (
+      !this.map ||
+      this.fullscreenControl ||
+      !this.controlVisibility.fullscreen
+    ) {
+      return false;
+    }
+    this.fullscreenControl = new maplibregl.FullscreenControl();
+    this.map.addControl(this.fullscreenControl, "top-right");
+    return true;
+  }
+
+  private removeFullscreenControl(): void {
+    if (!this.fullscreenControl) return;
+    this.removeControl(this.fullscreenControl);
+    this.fullscreenControl = null;
+  }
+
+  private addGlobeControl(): boolean {
+    if (!this.map || this.globeControl || !this.controlVisibility.globe) {
+      return false;
+    }
+    this.globeControl = new maplibregl.GlobeControl();
+    this.map.addControl(this.globeControl, "top-right");
+    return true;
+  }
+
+  private removeGlobeControl(): void {
+    if (!this.globeControl) return;
+    this.removeControl(this.globeControl);
+    this.globeControl = null;
   }
 }
 

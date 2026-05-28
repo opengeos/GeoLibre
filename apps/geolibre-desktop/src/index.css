@@ -36,3 +36,18 @@ body,
   box-shadow: inset 0 0 0 1px #2f8f85;
   outline: none;
 }
+
+.geo-editor-control .geo-editor-tool-button {
+  align-items: center;
+  box-sizing: border-box;
+  display: flex !important;
+  justify-content: center;
+  line-height: 0;
+  padding: 0;
+}
+
+.geo-editor-control .geo-editor-tool-button svg {
+  display: block;
+  flex: 0 0 auto;
+  margin: 0;
+}

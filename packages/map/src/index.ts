@@ -1,5 +1,9 @@
 export { MapCanvas, type MapCanvasProps } from "./MapCanvas";
-export { MapController, createMapController } from "./map-controller";
+export {
+  MapController,
+  createMapController,
+  type BuiltInMapControl,
+} from "./map-controller";
 export {
   detectGeometryProfile,
   getLayerBounds,
