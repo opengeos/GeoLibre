@@ -18,7 +18,7 @@ let geoAgentControl: GeoAgentControl | null = null;
 
 export const maplibreGeoAgentPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-geoagent",
-  name: "MapLibre GeoAgent",
+  name: "GeoAgent",
   version: "0.4.2",
   activate: (app: GeoLibreAppAPI) => {
     if (!geoAgentControl) {

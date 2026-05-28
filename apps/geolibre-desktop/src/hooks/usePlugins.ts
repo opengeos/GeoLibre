@@ -1,5 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import {
+  maplibreBasemapControlPlugin,
   maplibreGeoAgentPlugin,
   maplibreGeoEditorPlugin,
   maplibreLayerControlPlugin,
@@ -12,6 +13,7 @@ import { useSyncExternalStore } from "react";
 const manager = new PluginManager();
 manager.registerAll([
   maplibreLayerControlPlugin,
+  maplibreBasemapControlPlugin,
   maplibreGeoAgentPlugin,
   maplibreGeoEditorPlugin,
 ]);

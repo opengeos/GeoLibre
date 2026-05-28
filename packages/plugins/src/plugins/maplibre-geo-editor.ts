@@ -32,7 +32,7 @@ let geoEditorControl: GeoEditor | null = null;
 
 export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-geo-editor",
-  name: "MapLibre GeoEditor",
+  name: "GeoEditor",
   version: "0.7.3",
   activate: (app: GeoLibreAppAPI) => {
     if (!geoEditorControl) {
