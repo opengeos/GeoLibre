@@ -1,17 +1,59 @@
 import { useAppStore } from "@geolibre/core";
-import { Input, Label, ScrollArea, Separator } from "@geolibre/ui";
+import { Button, Input, Label, ScrollArea, Separator } from "@geolibre/ui";
+import {
+  PanelRightClose,
+  PanelRightOpen,
+  SlidersHorizontal,
+} from "lucide-react";
+import { useState } from "react";
 
 export function StylePanel() {
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const layers = useAppStore((s) => s.layers);
   const setLayerStyle = useAppStore((s) => s.setLayerStyle);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   const layer = layers.find((l) => l.id === selectedLayerId);
+
+  if (isCollapsed) {
+    return (
+      <aside className="flex w-11 shrink-0 flex-col items-center border-l bg-card py-2">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          title="Expand style"
+          aria-label="Expand style"
+          onClick={() => setIsCollapsed(false)}
+        >
+          <PanelRightOpen className="h-4 w-4" />
+        </Button>
+        <div className="mt-3 flex flex-col items-center gap-2 text-muted-foreground">
+          <SlidersHorizontal className="h-4 w-4" />
+          <span className="[writing-mode:vertical-rl] rotate-180 text-[10px] font-semibold uppercase tracking-wide">
+            Style
+          </span>
+        </div>
+      </aside>
+    );
+  }
 
   if (!layer) {
     return (
       <aside className="flex w-64 shrink-0 flex-col border-l bg-card">
-        <div className="border-b px-3 py-2 text-sm font-semibold">Style</div>
+        <div className="flex items-center justify-between border-b px-3 py-1.5">
+          <span className="text-sm font-semibold">Style</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            title="Collapse style"
+            aria-label="Collapse style"
+            onClick={() => setIsCollapsed(true)}
+          >
+            <PanelRightClose className="h-4 w-4" />
+          </Button>
+        </div>
         <p className="p-4 text-xs text-muted-foreground">
           Select a layer to edit its style.
         </p>
@@ -23,8 +65,20 @@ export function StylePanel() {
 
   return (
     <aside className="flex w-64 shrink-0 flex-col border-l bg-card">
-      <div className="border-b px-3 py-2 text-sm font-semibold">
-        Style — {layer.name}
+      <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
+        <span className="truncate text-sm font-semibold">
+          Style — {layer.name}
+        </span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0"
+          title="Collapse style"
+          aria-label="Collapse style"
+          onClick={() => setIsCollapsed(true)}
+        >
+          <PanelRightClose className="h-4 w-4" />
+        </Button>
       </div>
       <ScrollArea className="flex-1 p-3">
         <div className="space-y-4">

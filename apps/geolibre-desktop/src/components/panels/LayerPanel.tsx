@@ -20,6 +20,9 @@ import {
   Eye,
   EyeOff,
   Info,
+  Layers,
+  PanelLeftClose,
+  PanelLeftOpen,
   Trash2,
   ZoomIn,
 } from "lucide-react";
@@ -37,10 +40,46 @@ export function LayerPanel({ mapControllerRef }: LayerPanelProps) {
   const reorderLayer = useAppStore((s) => s.reorderLayer);
   const removeLayer = useAppStore((s) => s.removeLayer);
   const [metadataLayer, setMetadataLayer] = useState<GeoLibreLayer | null>(null);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  if (isCollapsed) {
+    return (
+      <aside className="flex w-11 shrink-0 flex-col items-center border-r bg-card py-2">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          title="Expand layers"
+          aria-label="Expand layers"
+          onClick={() => setIsCollapsed(false)}
+        >
+          <PanelLeftOpen className="h-4 w-4" />
+        </Button>
+        <div className="mt-3 flex flex-col items-center gap-2 text-muted-foreground">
+          <Layers className="h-4 w-4" />
+          <span className="[writing-mode:vertical-rl] rotate-180 text-[10px] font-semibold uppercase tracking-wide">
+            Layers
+          </span>
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r bg-card">
-      <div className="border-b px-3 py-2 text-sm font-semibold">Layers</div>
+      <div className="flex items-center justify-between border-b px-3 py-1.5">
+        <span className="text-sm font-semibold">Layers</span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          title="Collapse layers"
+          aria-label="Collapse layers"
+          onClick={() => setIsCollapsed(true)}
+        >
+          <PanelLeftClose className="h-4 w-4" />
+        </Button>
+      </div>
       <ScrollArea className="flex-1">
         <div className="space-y-1 p-2">
           {layers.length === 0 && (

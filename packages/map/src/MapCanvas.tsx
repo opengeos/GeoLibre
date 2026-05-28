@@ -44,7 +44,25 @@ export function MapCanvas({ controllerRef }: MapCanvasProps) {
       updateView();
     });
 
+    let resizeFrame: number | null = null;
+    const resizeMap = () => {
+      if (resizeFrame !== null) {
+        window.cancelAnimationFrame(resizeFrame);
+      }
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = null;
+        mc.getMap()?.resize();
+      });
+    };
+    const resizeObserver = new ResizeObserver(resizeMap);
+    resizeObserver.observe(containerRef.current);
+    resizeMap();
+
     return () => {
+      resizeObserver.disconnect();
+      if (resizeFrame !== null) {
+        window.cancelAnimationFrame(resizeFrame);
+      }
       mc.destroy();
       controller.current = null;
       if (controllerRef) controllerRef.current = null;

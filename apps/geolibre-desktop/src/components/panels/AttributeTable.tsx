@@ -1,5 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import {
+  Button,
   Input,
   ScrollArea,
   Table,
@@ -9,6 +10,11 @@ import {
   TableHeader,
   TableRow,
 } from "@geolibre/ui";
+import {
+  PanelBottomClose,
+  PanelBottomOpen,
+  TableProperties,
+} from "lucide-react";
 
 export function AttributeTable() {
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
@@ -41,13 +47,22 @@ export function AttributeTable() {
 
   if (!attributeTableOpen) {
     return (
-      <button
-        type="button"
-        className="h-6 shrink-0 border-t bg-muted/30 text-center text-xs text-muted-foreground hover:bg-muted/50"
-        onClick={() => setAttributeTableOpen(true)}
-      >
-        Show attribute table
-      </button>
+      <section className="flex h-11 shrink-0 items-center gap-2 border-t bg-card px-3">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          title="Expand attribute table"
+          aria-label="Expand attribute table"
+          onClick={() => setAttributeTableOpen(true)}
+        >
+          <PanelBottomOpen className="h-4 w-4" />
+        </Button>
+        <TableProperties className="h-4 w-4 text-muted-foreground" />
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Attribute table
+        </span>
+      </section>
     );
   }
 
@@ -68,13 +83,16 @@ export function AttributeTable() {
           value={attributeFilter}
           onChange={(e) => setAttributeFilter(e.target.value)}
         />
-        <button
-          type="button"
-          className="text-xs text-muted-foreground hover:underline"
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          title="Collapse attribute table"
+          aria-label="Collapse attribute table"
           onClick={() => setAttributeTableOpen(false)}
         >
-          Hide
-        </button>
+          <PanelBottomClose className="h-4 w-4" />
+        </Button>
       </div>
       <ScrollArea className="flex-1">
         {!layer?.geojson ? (
