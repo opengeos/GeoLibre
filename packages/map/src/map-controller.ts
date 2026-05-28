@@ -9,11 +9,32 @@ const DEFAULT_PROJECTION: maplibregl.ProjectionSpecification = {
   type: "globe",
 };
 const DEFAULT_MAX_PITCH = 85;
+const TERRAIN_SOURCE_ID = "geolibre-terrain-dem";
+const TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = {
+  type: "raster-dem",
+  tiles: [
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
+  ],
+  tileSize: 256,
+  maxzoom: 15,
+  encoding: "terrarium",
+  attribution:
+    'Elevation tiles by <a href="https://registry.opendata.aws/terrain-tiles/">AWS Open Data Terrain Tiles</a>',
+};
+const TERRAIN_OPTIONS: maplibregl.TerrainSpecification = {
+  source: TERRAIN_SOURCE_ID,
+  exaggeration: 1,
+};
 
 export type BuiltInMapControl =
   | "navigation"
   | "fullscreen"
+  | "geolocate"
   | "globe"
+  | "terrain"
+  | "scale"
+  | "attribution"
+  | "logo"
   | "layer-control";
 
 export const DEFAULT_BUILT_IN_CONTROL_VISIBILITY: Record<
@@ -22,7 +43,12 @@ export const DEFAULT_BUILT_IN_CONTROL_VISIBILITY: Record<
 > = {
   navigation: true,
   fullscreen: true,
+  geolocate: false,
   globe: true,
+  terrain: false,
+  scale: true,
+  attribution: true,
+  logo: false,
   "layer-control": true,
 };
 
@@ -30,7 +56,12 @@ export class MapController {
   private map: maplibregl.Map | null = null;
   private navigationControl: maplibregl.NavigationControl | null = null;
   private fullscreenControl: maplibregl.FullscreenControl | null = null;
+  private geolocateControl: maplibregl.GeolocateControl | null = null;
   private globeControl: maplibregl.GlobeControl | null = null;
+  private terrainControl: maplibregl.TerrainControl | null = null;
+  private scaleControl: maplibregl.ScaleControl | null = null;
+  private attributionControl: maplibregl.AttributionControl | null = null;
+  private logoControl: maplibregl.LogoControl | null = null;
   private layerControl: LayerControl | null = null;
   private basemapStyleUrl = DEFAULT_BASEMAP;
   private layerIds: string[] = [];
@@ -55,19 +86,28 @@ export class MapController {
       bearing: view?.bearing ?? 0,
       pitch: view?.pitch ?? 0,
       maxPitch: DEFAULT_MAX_PITCH,
+      attributionControl: false,
+      maplibreLogo: false,
     });
     this.map.on("style.load", () => {
       this.enforceDefaultProjection();
+      this.addTerrainSource();
       this.addLayerControl();
     });
     this.map.once("load", () => {
       this.enforceDefaultProjection();
+      this.addTerrainSource();
       this.addLayerControl();
     });
     this.map.once("idle", () => this.enforceDefaultProjection());
     this.addNavigationControl();
     this.addFullscreenControl();
+    this.addGeolocateControl();
     this.addGlobeControl();
+    this.addTerrainControl();
+    this.addScaleControl();
+    this.addAttributionControl();
+    this.addLogoControl();
     return this.map;
   }
 
@@ -102,13 +142,23 @@ export class MapController {
     if (visible) {
       if (control === "navigation") return this.addNavigationControl();
       if (control === "fullscreen") return this.addFullscreenControl();
+      if (control === "geolocate") return this.addGeolocateControl();
       if (control === "globe") return this.addGlobeControl();
+      if (control === "terrain") return this.addTerrainControl();
+      if (control === "scale") return this.addScaleControl();
+      if (control === "attribution") return this.addAttributionControl();
+      if (control === "logo") return this.addLogoControl();
       return this.addLayerControl();
     }
 
     if (control === "navigation") this.removeNavigationControl();
     else if (control === "fullscreen") this.removeFullscreenControl();
+    else if (control === "geolocate") this.removeGeolocateControl();
     else if (control === "globe") this.removeGlobeControl();
+    else if (control === "terrain") this.removeTerrainControl();
+    else if (control === "scale") this.removeScaleControl();
+    else if (control === "attribution") this.removeAttributionControl();
+    else if (control === "logo") this.removeLogoControl();
     else this.removeLayerControl();
     return true;
   }
@@ -116,7 +166,12 @@ export class MapController {
   destroy(): void {
     this.removeNavigationControl();
     this.removeFullscreenControl();
+    this.removeGeolocateControl();
     this.removeGlobeControl();
+    this.removeTerrainControl();
+    this.removeScaleControl();
+    this.removeAttributionControl();
+    this.removeLogoControl();
     this.removeLayerControl();
     this.map?.remove();
     this.map = null;
@@ -233,6 +288,19 @@ export class MapController {
     }
   }
 
+  private addTerrainSource(): boolean {
+    if (
+      !this.map ||
+      !this.controlVisibility.terrain ||
+      !this.map.isStyleLoaded()
+    ) {
+      return false;
+    }
+    if (this.map.getSource(TERRAIN_SOURCE_ID)) return true;
+    this.map.addSource(TERRAIN_SOURCE_ID, TERRAIN_SOURCE);
+    return true;
+  }
+
   private addLayerControl(): boolean {
     if (
       !this.map ||
@@ -296,6 +364,30 @@ export class MapController {
     this.fullscreenControl = null;
   }
 
+  private addGeolocateControl(): boolean {
+    if (
+      !this.map ||
+      this.geolocateControl ||
+      !this.controlVisibility.geolocate
+    ) {
+      return false;
+    }
+    this.geolocateControl = new maplibregl.GeolocateControl({
+      positionOptions: {
+        enableHighAccuracy: true,
+      },
+      trackUserLocation: true,
+    });
+    this.map.addControl(this.geolocateControl, "top-right");
+    return true;
+  }
+
+  private removeGeolocateControl(): void {
+    if (!this.geolocateControl) return;
+    this.removeControl(this.geolocateControl);
+    this.geolocateControl = null;
+  }
+
   private addGlobeControl(): boolean {
     if (!this.map || this.globeControl || !this.controlVisibility.globe) {
       return false;
@@ -309,6 +401,79 @@ export class MapController {
     if (!this.globeControl) return;
     this.removeControl(this.globeControl);
     this.globeControl = null;
+  }
+
+  private addTerrainControl(): boolean {
+    if (!this.map || this.terrainControl || !this.controlVisibility.terrain) {
+      return false;
+    }
+    this.addTerrainSource();
+    this.terrainControl = new maplibregl.TerrainControl(TERRAIN_OPTIONS);
+    this.map.addControl(this.terrainControl, "top-right");
+    return true;
+  }
+
+  private removeTerrainControl(): void {
+    if (this.map?.getTerrain()?.source === TERRAIN_SOURCE_ID) {
+      this.map.setTerrain(null);
+    }
+    if (!this.terrainControl) return;
+    this.removeControl(this.terrainControl);
+    this.terrainControl = null;
+  }
+
+  private addScaleControl(): boolean {
+    if (!this.map || this.scaleControl || !this.controlVisibility.scale) {
+      return false;
+    }
+    this.scaleControl = new maplibregl.ScaleControl({
+      maxWidth: 120,
+      unit: "metric",
+    });
+    this.map.addControl(this.scaleControl, "bottom-left");
+    return true;
+  }
+
+  private removeScaleControl(): void {
+    if (!this.scaleControl) return;
+    this.removeControl(this.scaleControl);
+    this.scaleControl = null;
+  }
+
+  private addAttributionControl(): boolean {
+    if (
+      !this.map ||
+      this.attributionControl ||
+      !this.controlVisibility.attribution
+    ) {
+      return false;
+    }
+    this.attributionControl = new maplibregl.AttributionControl({
+      compact: true,
+    });
+    this.map.addControl(this.attributionControl, "bottom-right");
+    return true;
+  }
+
+  private removeAttributionControl(): void {
+    if (!this.attributionControl) return;
+    this.removeControl(this.attributionControl);
+    this.attributionControl = null;
+  }
+
+  private addLogoControl(): boolean {
+    if (!this.map || this.logoControl || !this.controlVisibility.logo) {
+      return false;
+    }
+    this.logoControl = new maplibregl.LogoControl();
+    this.map.addControl(this.logoControl, "bottom-left");
+    return true;
+  }
+
+  private removeLogoControl(): void {
+    if (!this.logoControl) return;
+    this.removeControl(this.logoControl);
+    this.logoControl = null;
   }
 }
 

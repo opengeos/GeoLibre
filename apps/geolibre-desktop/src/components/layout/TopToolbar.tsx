@@ -45,7 +45,12 @@ const MAP_CONTROL_ITEMS: Array<{
 }> = [
   { id: "navigation", label: "Navigation" },
   { id: "fullscreen", label: "Fullscreen" },
+  { id: "geolocate", label: "Geolocate" },
   { id: "globe", label: "Globe" },
+  { id: "terrain", label: "Terrain" },
+  { id: "scale", label: "Scale" },
+  { id: "attribution", label: "Attribution" },
+  { id: "logo", label: "MapLibre logo" },
 ];
 
 export function TopToolbar({ mapControllerRef }: TopToolbarProps) {

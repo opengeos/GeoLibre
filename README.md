@@ -113,7 +113,7 @@ manager.registerAll([
 
 Plugins can use the app API to change basemaps, add GeoJSON layers, or attach MapLibre controls. For a MapLibre control plugin, add the package dependency, import its CSS in `apps/geolibre-desktop/src/main.tsx`, then call `app.addMapControl(control, "top-left")` in `activate()` and `app.removeMapControl(control)` in `deactivate()`.
 
-Built-in MapLibre controls such as Navigation, Fullscreen, and Globe are toggled from the desktop app's Controls menu. Keep project-specific controls such as Layer Control in the plugin menu when they use the plugin API or need plugin lifecycle behavior.
+Built-in MapLibre controls such as Navigation, Fullscreen, Geolocate, Globe, Terrain, Scale, Attribution, and Logo are toggled from the desktop app's Controls menu. Keep project-specific controls such as Layer Control in the plugin menu when they use the plugin API or need plugin lifecycle behavior.
 
 If a third-party MapLibre control needs app-specific styling fixes, add scoped overrides in `apps/geolibre-desktop/src/index.css` instead of editing files in `node_modules`. Keep selectors limited to the plugin control class. For example, GeoEditor toolbar buttons need a local override because MapLibre's default control button CSS can override their flex centering:
 
