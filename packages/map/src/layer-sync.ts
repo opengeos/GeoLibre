@@ -198,4 +198,3 @@ export function removeLayerFromMap(
   const src = sourceId(layerId);
   if (map.getSource(src)) map.removeSource(src);
 }
-

@@ -8,6 +8,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  Input,
 } from "@geolibre/ui";
 import {
   FileJson,
@@ -24,31 +25,31 @@ import {
   openProjectFile,
   saveProjectFile,
 } from "../../lib/tauri-io";
+import { NewProjectDialog } from "./NewProjectDialog";
 
 interface TopToolbarProps {
   mapControllerRef: React.RefObject<MapController | null>;
 }
 
 export function TopToolbar({ mapControllerRef }: TopToolbarProps) {
-  const newProject = useAppStore((s) => s.newProject);
   const loadProject = useAppStore((s) => s.loadProject);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
   const projectName = useAppStore((s) => s.projectName);
   const projectPath = useAppStore((s) => s.projectPath);
   const setProjectPath = useAppStore((s) => s.setProjectPath);
-
-  const handleNew = () => newProject();
+  const setProjectName = useAppStore((s) => s.setProjectName);
 
   const handleOpen = async () => {
     const result = await openProjectFile();
     if (result) loadProject(result.project, result.path);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (): Promise<boolean> => {
     const state = useAppStore.getState();
+    const defaultProjectName = state.projectName.trim() || "Untitled Project";
     const project = projectFromStore({
-      projectName: state.projectName,
+      projectName: defaultProjectName,
       mapView: mapControllerRef.current?.readView() ?? state.mapView,
       basemapStyleUrl: state.basemapStyleUrl,
       layers: state.layers,
@@ -57,9 +58,11 @@ export function TopToolbar({ mapControllerRef }: TopToolbarProps) {
     const content = serializeProject(project);
     const path = await saveProjectFile(
       content,
-      projectPath ?? `${projectName}.geolibre.json`,
+      state.projectPath ?? `${defaultProjectName}.geolibre.json`,
     );
-    if (path) setProjectPath(path);
+    if (!path) return false;
+    setProjectPath(path);
+    return true;
   };
 
   const handleAddGeoJson = async () => {
@@ -83,9 +86,7 @@ export function TopToolbar({ mapControllerRef }: TopToolbarProps) {
         <Map className="h-4 w-4" />
         GeoLibre Desktop
       </span>
-      <Button variant="ghost" size="sm" onClick={handleNew}>
-        New
-      </Button>
+      <NewProjectDialog onSaveCurrentProject={handleSave} />
       <Button variant="ghost" size="sm" onClick={handleOpen}>
         <FolderOpen className="mr-1 h-3.5 w-3.5" />
         Open
@@ -127,11 +128,22 @@ export function TopToolbar({ mapControllerRef }: TopToolbarProps) {
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
-      <span className="ml-auto truncate text-xs text-muted-foreground">
+      <div className="ml-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
         <Layers className="mr-1 inline h-3 w-3" />
-        {projectName}
-        {projectPath ? ` — ${projectPath}` : ""}
-      </span>
+        <Input
+          aria-label="Project name"
+          className="h-7 w-44 border-transparent px-2 text-xs shadow-none focus-visible:border-input"
+          value={projectName}
+          onChange={(event) => setProjectName(event.target.value)}
+          onBlur={(event) => {
+            const nextName = event.target.value.trim();
+            if (!nextName) setProjectName("Untitled Project");
+          }}
+        />
+        {projectPath ? (
+          <span className="truncate">{projectPath}</span>
+        ) : null}
+      </div>
     </header>
   );
 }

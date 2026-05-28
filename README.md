@@ -23,7 +23,7 @@ Lightweight, cloud-native desktop GIS prototype built with **Tauri v2**, **React
 ## Install
 
 ```bash
-git clone https://github.com/giswqs/GeoLibre.git
+git clone https://github.com/opengeos/GeoLibre.git
 cd GeoLibre
 npm install
 ```

@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { create } from "zustand";
 import {
   applyProjectToStore,
+  type CreateProjectOptions,
   createDefaultMapView,
   createEmptyProject,
 } from "./project";
@@ -42,7 +43,7 @@ export interface AppState {
   setProcessingOpen: (open: boolean) => void;
   setAttributeTableOpen: (open: boolean) => void;
 
-  newProject: () => void;
+  newProject: (options?: CreateProjectOptions & { name?: string }) => void;
   loadProject: (project: GeoLibreProject, path?: string | null) => void;
   setProjectPath: (path: string | null) => void;
   setProjectName: (name: string) => void;
@@ -90,8 +91,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setAttributeTableOpen: (open) =>
     set((s) => ({ ui: { ...s.ui, attributeTableOpen: open } })),
 
-  newProject: () => {
-    const project = createEmptyProject();
+  newProject: (options = {}) => {
+    const project = createEmptyProject(options.name, options);
     const applied = applyProjectToStore(project);
     set({
       ...applied,

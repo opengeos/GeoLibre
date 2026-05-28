@@ -8,6 +8,7 @@ import { removeLayerFromMap, syncLayer } from "./layer-sync";
 const DEFAULT_PROJECTION: maplibregl.ProjectionSpecification = {
   type: "globe",
 };
+const DEFAULT_MAX_PITCH = 85;
 
 export class MapController {
   private map: maplibregl.Map | null = null;
@@ -31,6 +32,7 @@ export class MapController {
       zoom: view?.zoom ?? 2,
       bearing: view?.bearing ?? 0,
       pitch: view?.pitch ?? 0,
+      maxPitch: DEFAULT_MAX_PITCH,
     });
     this.map.on("style.load", () => {
       this.enforceDefaultProjection();

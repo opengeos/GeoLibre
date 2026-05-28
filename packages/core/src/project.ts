@@ -8,6 +8,11 @@ import {
   type MapViewState,
 } from "./types";
 
+export interface CreateProjectOptions {
+  basemapStyleUrl?: string;
+  mapView?: MapViewState;
+}
+
 export function createDefaultMapView(): MapViewState {
   return {
     center: [-100, 40],
@@ -17,12 +22,15 @@ export function createDefaultMapView(): MapViewState {
   };
 }
 
-export function createEmptyProject(name = "Untitled Project"): GeoLibreProject {
+export function createEmptyProject(
+  name = "Untitled Project",
+  options: CreateProjectOptions = {},
+): GeoLibreProject {
   return {
     version: PROJECT_VERSION,
     name,
-    mapView: createDefaultMapView(),
-    basemapStyleUrl: DEFAULT_BASEMAP,
+    mapView: options.mapView ?? createDefaultMapView(),
+    basemapStyleUrl: options.basemapStyleUrl ?? DEFAULT_BASEMAP,
     layers: [],
     styles: {},
     metadata: {},

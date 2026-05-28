@@ -1,5 +1,38 @@
 import type { FeatureCollection } from "geojson";
 
+export const OPENFREEMAP_BASEMAPS = [
+  {
+    id: "positron",
+    name: "Positron",
+    styleUrl: "https://tiles.openfreemap.org/styles/positron",
+  },
+  {
+    id: "bright",
+    name: "Bright",
+    styleUrl: "https://tiles.openfreemap.org/styles/bright",
+  },
+  {
+    id: "liberty",
+    name: "Liberty",
+    styleUrl: "https://tiles.openfreemap.org/styles/liberty",
+  },
+  {
+    id: "dark",
+    name: "Dark",
+    styleUrl: "https://tiles.openfreemap.org/styles/dark",
+  },
+  {
+    id: "fiord",
+    name: "Fiord",
+    styleUrl: "https://tiles.openfreemap.org/styles/fiord",
+  },
+  {
+    id: "liberty-3d",
+    name: "3D",
+    styleUrl: "https://tiles.openfreemap.org/styles/liberty",
+  },
+] as const;
+
 export const DEFAULT_BASEMAP =
   "https://tiles.openfreemap.org/styles/liberty";
 
