@@ -23,22 +23,21 @@ jobs:
             os: ubuntu-22.04
             args: --bundles deb,rpm,appimage
             rust-targets: ""
-            artifact-name: geolibre-linux-x64
+
           - name: Windows x64
-            os: windows-latest
+            os: windows-2025
             args: --no-sign
             rust-targets: ""
-            artifact-name: geolibre-windows-x64
+
           - name: macOS Apple Silicon
             os: macos-latest
             args: --target aarch64-apple-darwin --no-sign
             rust-targets: aarch64-apple-darwin
-            artifact-name: geolibre-macos-arm64
+
           - name: macOS Intel
             os: macos-latest
             args: --target x86_64-apple-darwin --no-sign
             rust-targets: x86_64-apple-darwin
-            artifact-name: geolibre-macos-x64
 
     steps:
       - name: Checkout repository
@@ -88,5 +87,4 @@ jobs:
           releaseId: ${{ github.event.release.id }}
           tagName: ${{ github.event.release.tag_name }}
           args: ${{ matrix.args }}
-          uploadWorkflowArtifacts: true
-          workflowArtifactNamePattern: ${{ matrix.artifact-name }}-[bundle]
+          uploadPlainBinary: true
