@@ -12,8 +12,11 @@ pub fn run() {
 #[cfg(target_os = "linux")]
 fn configure_linux_webkit() {
     // WebKitGTK's DMABUF renderer can fail to allocate GBM buffers on some
-    // Linux graphics stacks, leaving the Tauri window blank.
-    std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    // Linux graphics stacks, leaving the Tauri window blank. Only set the
+    // default when unset so an explicit user/distributor value wins.
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
 }
 
 #[cfg(not(target_os = "linux"))]
