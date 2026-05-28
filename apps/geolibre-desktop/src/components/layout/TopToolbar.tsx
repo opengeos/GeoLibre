@@ -19,7 +19,7 @@ import {
   Save,
   Wrench,
 } from "lucide-react";
-import { createAppAPI, getPluginManager } from "../../hooks/usePlugins";
+import { createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
 import {
   openGeoJsonFileWithFallback,
   openProjectFile,
@@ -79,7 +79,7 @@ export function TopToolbar({ mapControllerRef }: TopToolbarProps) {
     if (layer) mapControllerRef.current?.fitLayer(layer);
   };
 
-  const plugins = getPluginManager().list();
+  const { plugins, isActive, toggle } = usePluginRegistry();
   const appApi = createAppAPI();
 
   return (
@@ -122,10 +122,10 @@ export function TopToolbar({ mapControllerRef }: TopToolbarProps) {
           {plugins.map((p) => (
             <DropdownMenuItem
               key={p.id}
-              onClick={() => getPluginManager().toggle(p.id, appApi)}
+              onClick={() => toggle(p.id, appApi)}
             >
               {p.name}
-              {getPluginManager().isActive(p.id) ? " ✓" : ""}
+              {isActive(p.id) ? " ✓" : ""}
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>

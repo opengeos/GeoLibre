@@ -6,13 +6,29 @@ import {
   sampleGeoJsonPlugin,
   setSampleGeoJson,
 } from "@geolibre/plugins";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import sampleGeojson from "../../../../sample-data/sample.geojson?url";
 
 const manager = new PluginManager();
+manager.registerAll([osmBasemapPlugin, cartoLightPlugin, sampleGeoJsonPlugin]);
 
 export function getPluginManager(): PluginManager {
   return manager;
+}
+
+export function usePluginRegistry() {
+  useSyncExternalStore(
+    (listener) => manager.subscribe(listener),
+    () => manager.getVersion(),
+    () => manager.getVersion(),
+  );
+
+  return {
+    plugins: manager.list(),
+    isActive: (id: string) => manager.isActive(id),
+    toggle: (id: string, appApi: ReturnType<typeof createAppAPI>) =>
+      manager.toggle(id, appApi),
+  };
 }
 
 export function usePlugins() {
@@ -21,12 +37,6 @@ export function usePlugins() {
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
-
-    manager.registerAll([
-      osmBasemapPlugin,
-      cartoLightPlugin,
-      sampleGeoJsonPlugin,
-    ]);
 
     fetch(sampleGeojson)
       .then((r) => r.json())
