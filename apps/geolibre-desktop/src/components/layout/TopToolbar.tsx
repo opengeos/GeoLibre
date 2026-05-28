@@ -80,7 +80,7 @@ export function TopToolbar({ mapControllerRef }: TopToolbarProps) {
   };
 
   const { plugins, isActive, toggle } = usePluginRegistry();
-  const appApi = createAppAPI();
+  const appApi = createAppAPI(mapControllerRef);
 
   return (
     <header className="flex h-11 shrink-0 items-center gap-1 border-b bg-card px-2">

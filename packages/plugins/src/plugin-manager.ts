@@ -36,7 +36,8 @@ export class PluginManager {
   activate(id: string, app: GeoLibreAppAPI): void {
     const plugin = this.plugins.get(id);
     if (!plugin || this.active.has(id)) return;
-    plugin.activate(app);
+    const activated = plugin.activate(app);
+    if (activated === false) return;
     this.active.add(id);
     this.notify();
   }

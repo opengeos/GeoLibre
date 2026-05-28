@@ -1,16 +1,24 @@
 import { useAppStore } from "@geolibre/core";
 import {
   cartoLightPlugin,
+  maplibreGeoAgentPlugin,
   osmBasemapPlugin,
   PluginManager,
   sampleGeoJsonPlugin,
   setSampleGeoJson,
 } from "@geolibre/plugins";
+import type { MapController } from "@geolibre/map";
+import type { RefObject } from "react";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import sampleGeojson from "../../../../sample-data/sample.geojson?url";
 
 const manager = new PluginManager();
-manager.registerAll([osmBasemapPlugin, cartoLightPlugin, sampleGeoJsonPlugin]);
+manager.registerAll([
+  osmBasemapPlugin,
+  cartoLightPlugin,
+  sampleGeoJsonPlugin,
+  maplibreGeoAgentPlugin,
+]);
 
 export function getPluginManager(): PluginManager {
   return manager;
@@ -45,7 +53,9 @@ export function usePlugins() {
   }, []);
 }
 
-export function createAppAPI() {
+export function createAppAPI(
+  mapControllerRef?: RefObject<MapController | null>,
+) {
   const store = useAppStore.getState();
   return {
     setBasemap: (url: string) => store.setBasemapStyleUrl(url),
@@ -58,5 +68,11 @@ export function createAppAPI() {
       return id;
     },
     getActiveBasemap: () => useAppStore.getState().basemapStyleUrl,
+    addMapControl: (
+      control: Parameters<MapController["addControl"]>[0],
+      position?: Parameters<MapController["addControl"]>[1],
+    ) => mapControllerRef?.current?.addControl(control, position) ?? false,
+    removeMapControl: (control: Parameters<MapController["removeControl"]>[0]) =>
+      mapControllerRef?.current?.removeControl(control),
   };
 }

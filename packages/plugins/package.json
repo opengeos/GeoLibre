@@ -9,7 +9,8 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@geolibre/core": "*"
+    "@geolibre/core": "*",
+    "maplibre-gl-geoagent": "^0.4.2"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",

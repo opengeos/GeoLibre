@@ -53,6 +53,24 @@ export class MapController {
     return this.map;
   }
 
+  addControl(
+    control: maplibregl.IControl,
+    position: maplibregl.ControlPosition = "top-right",
+  ): boolean {
+    if (!this.map) return false;
+    this.map.addControl(control, position);
+    return true;
+  }
+
+  removeControl(control: maplibregl.IControl): void {
+    if (!this.map) return;
+    try {
+      this.map.removeControl(control);
+    } catch {
+      // MapLibre throws when a control has already been removed.
+    }
+  }
+
   destroy(): void {
     this.removeLayerControl();
     this.map?.remove();

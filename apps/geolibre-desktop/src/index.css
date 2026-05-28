@@ -7,3 +7,32 @@ body,
   margin: 0;
   overflow: hidden;
 }
+
+.geoagent-control .geoagent-control-toggle {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+}
+
+.geoagent-control .geoagent-control-icon {
+  align-items: center;
+  display: flex;
+  height: 100%;
+  justify-content: center;
+  width: 100%;
+}
+
+.geoagent-control .geoagent-control-icon svg {
+  transform: translateX(1px);
+}
+
+.geoagent-panel input:focus,
+.geoagent-panel select:focus,
+.geoagent-panel textarea:focus,
+.geoagent-panel input:focus-visible,
+.geoagent-panel select:focus-visible,
+.geoagent-panel textarea:focus-visible {
+  border-color: #2f8f85;
+  box-shadow: inset 0 0 0 1px #2f8f85;
+  outline: none;
+}
