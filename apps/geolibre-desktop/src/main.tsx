@@ -6,6 +6,8 @@ import "@geoman-io/maplibre-geoman-free/dist/maplibre-geoman.css";
 import "maplibre-gl-basemap-control/style.css";
 import "maplibre-gl-geo-editor/style.css";
 import "maplibre-gl-geoagent/style.css";
+import "maplibre-gl-streetview/style.css";
+import "mapillary-js/dist/mapillary.css";
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

@@ -22,10 +22,12 @@
     "@tauri-apps/api": "^2.2.0",
     "@tauri-apps/plugin-dialog": "^2.2.0",
     "@tauri-apps/plugin-fs": "^2.2.0",
+    "mapillary-js": "^4.1.2",
     "maplibre-gl": "^5.1.1",
-    "maplibre-gl-basemap-control": "^0.1.0",
+    "maplibre-gl-basemap-control": "^0.2.0",
     "maplibre-gl-geo-editor": "^0.7.3",
     "maplibre-gl-geoagent": "^0.4.2",
+    "maplibre-gl-streetview": "^0.3.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

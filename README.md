@@ -36,6 +36,19 @@ npm run dev
 
 Open http://localhost:1420 — map works; file dialogs require Tauri.
 
+## Environment variables
+
+The Street View plugin can use Google Street View and Mapillary imagery. Create `apps/geolibre-desktop/.env.local` and set one or both provider credentials:
+
+```env
+VITE_GOOGLE_MAPS_API_KEY=your_google_maps_api_key
+VITE_MAPILLARY_ACCESS_TOKEN=your_mapillary_access_token
+```
+
+For Google Street View, enable the Maps Embed API for the key in Google Cloud. For Mapillary, create an app in the Mapillary developer dashboard and use its client access token.
+
+Restart `npm run dev` or `npm run tauri:dev` after changing these values. Vite only exposes variables with the `VITE_` prefix to the frontend.
+
 ## Run (desktop)
 
 ```bash
