@@ -42,7 +42,7 @@ export function NewProjectDialog({
   onSaveCurrentProject,
 }: NewProjectDialogProps) {
   const newProject = useAppStore((s) => s.newProject);
-  const projectPath = useAppStore((s) => s.projectPath);
+  const isDirty = useAppStore((s) => s.isDirty);
   const [open, setOpen] = useState(false);
   const [selectedBasemapId, setSelectedBasemapId] =
     useState<BasemapChoice>(DEFAULT_BASEMAP_ID);
@@ -106,7 +106,7 @@ export function NewProjectDialog({
     event.preventDefault();
     if (!canCreate) return;
 
-    if (!projectPath) {
+    if (isDirty) {
       setShowSavePrompt(true);
       return;
     }
@@ -140,8 +140,8 @@ export function NewProjectDialog({
             <DialogHeader>
               <DialogTitle>Save current project?</DialogTitle>
               <DialogDescription>
-                The current project has not been saved. Save it before creating
-                a new map?
+                The current project has unsaved changes. Save them before
+                creating a new map?
               </DialogDescription>
             </DialogHeader>
             <div className="flex justify-end gap-2">
@@ -183,6 +183,7 @@ export function NewProjectDialog({
                 <Label htmlFor="new-project-name">Project name</Label>
                 <Input
                   id="new-project-name"
+                  autoFocus
                   value={projectName}
                   onChange={(event) => setProjectName(event.target.value)}
                 />
@@ -196,7 +197,6 @@ export function NewProjectDialog({
                       key={basemap.id}
                       type="button"
                       aria-pressed={selectedBasemapId === basemap.id}
-                      autoFocus={basemap.id === selectedBasemapId}
                       className={cn(
                         "h-10 rounded-md border px-3 text-sm font-medium transition-colors",
                         "hover:bg-accent hover:text-accent-foreground",

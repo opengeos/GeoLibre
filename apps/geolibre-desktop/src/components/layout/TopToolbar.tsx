@@ -39,6 +39,7 @@ export function TopToolbar({ mapControllerRef }: TopToolbarProps) {
   const projectPath = useAppStore((s) => s.projectPath);
   const setProjectPath = useAppStore((s) => s.setProjectPath);
   const setProjectName = useAppStore((s) => s.setProjectName);
+  const markSaved = useAppStore((s) => s.markSaved);
 
   const handleOpen = async () => {
     const result = await openProjectFile();
@@ -62,6 +63,7 @@ export function TopToolbar({ mapControllerRef }: TopToolbarProps) {
     );
     if (!path) return false;
     setProjectPath(path);
+    markSaved();
     return true;
   };
 

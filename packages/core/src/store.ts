@@ -20,6 +20,7 @@ import {
 export interface AppState {
   projectName: string;
   projectPath: string | null;
+  isDirty: boolean;
   mapView: MapViewState;
   basemapStyleUrl: string;
   layers: GeoLibreLayer[];
@@ -47,6 +48,7 @@ export interface AppState {
   loadProject: (project: GeoLibreProject, path?: string | null) => void;
   setProjectPath: (path: string | null) => void;
   setProjectName: (name: string) => void;
+  markSaved: () => void;
 
   addLayer: (layer: GeoLibreLayer) => void;
   removeLayer: (id: string) => void;
@@ -65,6 +67,7 @@ export interface AppState {
 export const useAppStore = create<AppState>((set, get) => ({
   projectName: "Untitled Project",
   projectPath: null,
+  isDirty: false,
   mapView: createDefaultMapView(),
   basemapStyleUrl: DEFAULT_BASEMAP,
   layers: [],
@@ -82,7 +85,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setPointerCoords: (coords) => set({ pointerCoords: coords }),
   setMapView: (view) =>
     set((s) => ({ mapView: { ...s.mapView, ...view } })),
-  setBasemapStyleUrl: (url) => set({ basemapStyleUrl: url }),
+  setBasemapStyleUrl: (url) => set({ basemapStyleUrl: url, isDirty: true }),
   selectLayer: (id) => set({ selectedLayerId: id, selectedFeatureId: null }),
   selectFeature: (id) => set({ selectedFeatureId: id }),
   setAttributeFilter: (filter) => set({ attributeFilter: filter }),
@@ -97,6 +100,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       ...applied,
       projectPath: null,
+      isDirty: false,
       selectedLayerId: null,
       selectedFeatureId: null,
       pointerCoords: null,
@@ -109,6 +113,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       ...applied,
       projectPath: path,
+      isDirty: false,
       selectedLayerId: applied.layers[0]?.id ?? null,
       selectedFeatureId: null,
     });
@@ -128,12 +133,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setProjectPath: (path) => set({ projectPath: path }),
-  setProjectName: (name) => set({ projectName: name }),
+  setProjectName: (name) => set({ projectName: name, isDirty: true }),
+  markSaved: () => set({ isDirty: false }),
 
   addLayer: (layer) =>
     set((s) => ({
       layers: [...s.layers, layer],
       selectedLayerId: layer.id,
+      isDirty: true,
     })),
 
   removeLayer: (id) =>
@@ -143,11 +150,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         s.selectedLayerId === id
           ? (s.layers.find((l) => l.id !== id)?.id ?? null)
           : s.selectedLayerId,
+      isDirty: true,
     })),
 
   updateLayer: (id, patch) =>
     set((s) => ({
       layers: s.layers.map((l) => (l.id === id ? { ...l, ...patch } : l)),
+      isDirty: true,
     })),
 
   setLayerVisibility: (id, visible) =>
@@ -161,6 +170,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       layers: s.layers.map((l) =>
         l.id === id ? { ...l, style: { ...l.style, ...style } } : l,
       ),
+      isDirty: true,
     })),
 
   reorderLayer: (id, direction) =>
@@ -172,7 +182,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const next = [...s.layers];
       const [item] = next.splice(idx, 1);
       next.splice(target, 0, item);
-      return { layers: next };
+      return { layers: next, isDirty: true };
     }),
 
   addGeoJsonLayer: (name, geojson, sourcePath) => {
