@@ -37,7 +37,7 @@ let streetViewControl: StreetViewControl | null = null;
 export const maplibreStreetViewPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-streetview",
   name: "Street View",
-  version: "0.3.1",
+  version: "0.4.0",
   activate: (app: GeoLibreAppAPI) => {
     if (!streetViewControl) {
       streetViewControl = new StreetViewControl(STREET_VIEW_OPTIONS);

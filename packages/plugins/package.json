@@ -14,7 +14,7 @@
     "maplibre-gl-basemap-control": "^0.2.0",
     "maplibre-gl-geo-editor": "^0.7.3",
     "maplibre-gl-geoagent": "^0.4.2",
-    "maplibre-gl-streetview": "^0.3.1"
+    "maplibre-gl-streetview": "^0.4.0"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",
