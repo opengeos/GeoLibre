@@ -20,7 +20,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' https:; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval'; worker-src blob: 'self'",
+      "csp": "default-src 'self'; connect-src 'self' https:; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval'; worker-src blob: 'self'; frame-src 'self' https://www.google.com",
       "capabilities": ["default"]
     }
   },

@@ -12,7 +12,7 @@ let basemapControl: BasemapControl | null = null;
 export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-basemap-control",
   name: "Basemap Control",
-  version: "0.1.0",
+  version: "0.2.0",
   activate: (app: GeoLibreAppAPI) => {
     if (!basemapControl) {
       basemapControl = new BasemapControl(getBasemapControlOptions(app));

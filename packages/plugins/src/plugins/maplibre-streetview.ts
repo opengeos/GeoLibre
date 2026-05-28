@@ -10,15 +10,26 @@ const streetViewEnv = (
   }
 ).env;
 
+const googleApiKey = streetViewEnv?.VITE_GOOGLE_MAPS_API_KEY;
+const mapillaryAccessToken = streetViewEnv?.VITE_MAPILLARY_ACCESS_TOKEN;
+
+// Pick a default provider that actually has credentials so the panel does not
+// open onto a provider it cannot authenticate. Google wins when both are set.
+const defaultProvider: StreetViewControlOptions["defaultProvider"] = googleApiKey
+  ? "google"
+  : mapillaryAccessToken
+    ? "mapillary"
+    : "google";
+
 const STREET_VIEW_OPTIONS = {
   collapsed: true,
   position: "top-right",
   title: "Street View",
   panelWidth: 420,
   panelHeight: 320,
-  defaultProvider: "google",
-  googleApiKey: streetViewEnv?.VITE_GOOGLE_MAPS_API_KEY,
-  mapillaryAccessToken: streetViewEnv?.VITE_MAPILLARY_ACCESS_TOKEN,
+  defaultProvider,
+  googleApiKey,
+  mapillaryAccessToken,
 } satisfies StreetViewControlOptions;
 
 let streetViewControl: StreetViewControl | null = null;
