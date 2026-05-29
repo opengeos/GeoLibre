@@ -1,9 +1,11 @@
 import { parseProject, type GeoLibreProject } from "@geolibre/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readFile, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import type { FeatureCollection } from "geojson";
+import shp from "shpjs";
+import type { DuckDbVectorFile } from "./duckdb-vector-loader";
 
-function isTauri(): boolean {
+export function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
@@ -64,8 +66,241 @@ const GEOLIBRE_PROJECT_FILE_TYPES: BrowserFilePickerType[] = [
   },
 ];
 
+const VECTOR_FILE_ACCEPT =
+  ".geojson,.json,.zip,.shp,.gpkg,.parquet,.geoparquet";
+
+const SHAPEFILE_SIDECAR_EXTENSIONS = ["dbf", "shx", "prj", "cpg"];
+
+const DROPPED_VECTOR_FILE_EXTENSIONS = new Set([
+  "geojson",
+  "json",
+  "zip",
+  "shp",
+  "shx",
+  "dbf",
+  "prj",
+  "cpg",
+  "gpkg",
+  "parquet",
+  "geoparquet",
+]);
+
+const VECTOR_FILE_FILTERS: FileDialogFilter[] = [
+  {
+    name: "Vector data",
+    extensions: [
+      "geojson",
+      "json",
+      "zip",
+      "shp",
+      "gpkg",
+      "parquet",
+      "geoparquet",
+    ],
+  },
+];
+
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
+}
+
+function fileExtension(path: string): string {
+  const name = browserSafeFileName(path).toLowerCase();
+  if (name.endsWith(".geoparquet")) return "geoparquet";
+  return name.split(".").pop() ?? "";
+}
+
+function pathWithoutExtension(path: string): string {
+  return path.replace(/\.[^.\\/]+$/, "");
+}
+
+function isVectorFileName(path: string): boolean {
+  return DROPPED_VECTOR_FILE_EXTENSIONS.has(fileExtension(path));
+}
+
+function assertFeatureCollection(value: unknown): FeatureCollection {
+  if (
+    value &&
+    typeof value === "object" &&
+    (value as { type?: unknown }).type === "FeatureCollection" &&
+    Array.isArray((value as { features?: unknown }).features)
+  ) {
+    return value as FeatureCollection;
+  }
+  throw new Error("The selected file did not produce a GeoJSON FeatureCollection.");
+}
+
+function mergeFeatureCollections(
+  collections: FeatureCollection[],
+): FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: collections.flatMap((collection) => collection.features),
+  };
+}
+
+function normalizeShapefileResult(value: unknown): FeatureCollection {
+  if (Array.isArray(value)) {
+    return mergeFeatureCollections(value.map(assertFeatureCollection));
+  }
+  return assertFeatureCollection(value);
+}
+
+async function parseGeoJsonText(
+  text: string,
+): Promise<FeatureCollection> {
+  return assertFeatureCollection(JSON.parse(text));
+}
+
+async function parseShapefileZip(
+  data: ArrayBuffer | Uint8Array,
+): Promise<FeatureCollection> {
+  return normalizeShapefileResult(await shp(data));
+}
+
+async function loadDuckDbVector(file: DuckDbVectorFile) {
+  const { loadDuckDbVectorFile } = await import("./duckdb-vector-loader");
+  return loadDuckDbVectorFile(file);
+}
+
+async function fileToDuckDbVectorFile(file: File): Promise<DuckDbVectorFile> {
+  return {
+    name: file.name,
+    extension: fileExtension(file.name),
+    data: new Uint8Array(await file.arrayBuffer()),
+  };
+}
+
+async function loadBrowserVectorFile(
+  file: File,
+  siblingFiles: DuckDbVectorFile[] = [],
+): Promise<{
+  data: FeatureCollection;
+  path: string;
+}> {
+  const extension = fileExtension(file.name);
+  if (extension === "geojson" || extension === "json") {
+    return {
+      data: await parseGeoJsonText(await file.text()),
+      path: file.name,
+    };
+  }
+
+  if (extension === "zip") {
+    return {
+      data: await parseShapefileZip(await file.arrayBuffer()),
+      path: file.name,
+    };
+  }
+
+  return {
+    data: await loadDuckDbVector({
+      name: file.name,
+      extension,
+      data: new Uint8Array(await file.arrayBuffer()),
+      siblingFiles,
+    }),
+    path: file.name,
+  };
+}
+
+async function openVectorFileBrowser(): Promise<{
+  data: FeatureCollection;
+  path: string;
+} | null> {
+  return new Promise((resolve, reject) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = VECTOR_FILE_ACCEPT;
+    input.onchange = async () => {
+      try {
+        const file = input.files?.[0];
+        if (!file) {
+          resolve(null);
+          return;
+        }
+
+        resolve(await loadBrowserVectorFile(file));
+      } catch (error) {
+        reject(error);
+      }
+    };
+    input.click();
+  });
+}
+
+async function openVectorFileTauri(): Promise<{
+  data: FeatureCollection;
+  path: string;
+} | null> {
+  const selected = await open({
+    multiple: false,
+    filters: VECTOR_FILE_FILTERS,
+  });
+  if (!selected || typeof selected !== "string") return null;
+  return loadTauriVectorFile(selected);
+}
+
+async function loadTauriVectorFile(path: string): Promise<{
+  data: FeatureCollection;
+  path: string;
+}> {
+  const extension = fileExtension(path);
+  if (extension === "geojson" || extension === "json") {
+    return {
+      data: await parseGeoJsonText(await readTextFile(path)),
+      path,
+    };
+  }
+
+  if (extension === "zip") {
+    return {
+      data: await parseShapefileZip(await readFile(path)),
+      path,
+    };
+  }
+
+  try {
+    const siblingFiles = extension === "shp" ? await readShapefileSiblings(path) : [];
+    return {
+      data: await loadDuckDbVector({
+        name: browserSafeFileName(path),
+        extension,
+        data: await readFile(path),
+        siblingFiles,
+      }),
+      path,
+    };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Unknown error";
+    throw new Error(
+      `Could not convert this vector file with DuckDB-WASM. ${detail}`,
+    );
+  }
+}
+
+async function readShapefileSiblings(
+  path: string,
+): Promise<DuckDbVectorFile[]> {
+  const basePath = pathWithoutExtension(path);
+  const siblings = await Promise.all(
+    SHAPEFILE_SIDECAR_EXTENSIONS.map(async (extension) => {
+      const siblingPath = `${basePath}.${extension}`;
+      try {
+        return {
+          name: browserSafeFileName(siblingPath),
+          extension,
+          data: await readFile(siblingPath),
+        };
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return siblings.filter(
+    (sibling): sibling is DuckDbVectorFile => sibling !== null,
+  );
 }
 
 async function openProjectFileBrowser(): Promise<{
@@ -188,7 +423,7 @@ export async function openGeoJsonFile(): Promise<{
   });
   if (!selected || typeof selected !== "string") return null;
   const text = await readTextFile(selected);
-  const data = JSON.parse(text) as FeatureCollection;
+  const data = await parseGeoJsonText(text);
   return { data, path: selected };
 }
 
@@ -244,7 +479,7 @@ export function openGeoJsonFileBrowser(): Promise<{
       }
       const text = await file.text();
       resolve({
-        data: JSON.parse(text) as FeatureCollection,
+        data: await parseGeoJsonText(text),
         path: file.name,
       });
     };
@@ -258,4 +493,64 @@ export async function openGeoJsonFileWithFallback(): Promise<{
 } | null> {
   if (isTauri()) return openGeoJsonFile();
   return openGeoJsonFileBrowser();
+}
+
+export async function openVectorFileWithFallback(): Promise<{
+  data: FeatureCollection;
+  path: string;
+} | null> {
+  if (isTauri()) return openVectorFileTauri();
+  return openVectorFileBrowser();
+}
+
+export async function loadDroppedVectorFiles(
+  droppedFiles: FileList | File[],
+): Promise<Array<{ data: FeatureCollection; path: string }>> {
+  const files = Array.from(droppedFiles).filter((file) =>
+    isVectorFileName(file.name),
+  );
+  if (!files.length) return [];
+
+  const filesByBaseName = new Map<string, File[]>();
+  for (const file of files) {
+    const baseName = pathWithoutExtension(file.name).toLowerCase();
+    filesByBaseName.set(baseName, [...(filesByBaseName.get(baseName) ?? []), file]);
+  }
+
+  const layers: Array<{ data: FeatureCollection; path: string }> = [];
+  for (const file of files) {
+    const extension = fileExtension(file.name);
+    if (SHAPEFILE_SIDECAR_EXTENSIONS.includes(extension)) continue;
+
+    const siblingFiles =
+      extension === "shp"
+        ? await Promise.all(
+            (filesByBaseName.get(pathWithoutExtension(file.name).toLowerCase()) ?? [])
+              .filter((candidate) =>
+                SHAPEFILE_SIDECAR_EXTENSIONS.includes(
+                  fileExtension(candidate.name),
+                ),
+              )
+              .map(fileToDuckDbVectorFile),
+          )
+        : [];
+    layers.push(await loadBrowserVectorFile(file, siblingFiles));
+  }
+
+  return layers;
+}
+
+export async function loadDroppedVectorPaths(
+  paths: string[],
+): Promise<Array<{ data: FeatureCollection; path: string }>> {
+  const vectorPaths = paths.filter(isVectorFileName);
+  if (!vectorPaths.length) return [];
+
+  const layers: Array<{ data: FeatureCollection; path: string }> = [];
+  for (const path of vectorPaths) {
+    if (SHAPEFILE_SIDECAR_EXTENSIONS.includes(fileExtension(path))) continue;
+    layers.push(await loadTauriVectorFile(path));
+  }
+
+  return layers;
 }

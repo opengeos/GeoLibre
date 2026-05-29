@@ -47,7 +47,7 @@ Projects are saved as **`.geolibre.json`** files.
 | `pmtiles` | Placeholder (v0.3) |
 | `cog` | Placeholder (v0.3) |
 | `flatgeobuf` | Placeholder (v0.3) |
-| `geoparquet` | Placeholder (v0.3) |
+| `geoparquet` | Imported as GeoJSON via DuckDB-WASM |
 | `duckdb-query` | Placeholder (v0.4) |
 
 ## Example

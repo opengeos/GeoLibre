@@ -24,8 +24,8 @@ import {
   useState,
 } from "react";
 import {
-  openGeoJsonFileWithFallback,
   openLocalDataFileWithFallback,
+  openVectorFileWithFallback,
 } from "../../lib/tauri-io";
 
 export type AddDataKind = "xyz" | "wms" | "vector" | "raster";
@@ -36,7 +36,7 @@ interface AddDataDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-type VectorMode = "geojson-file" | "geojson-url" | "vector-tiles";
+type VectorMode = "vector-file" | "geojson-url" | "vector-tiles";
 type RasterMode = "tiles" | "cog-url" | "file";
 
 const KIND_LABELS: Record<AddDataKind, string> = {
@@ -151,10 +151,10 @@ export function AddDataDialog({
   const [wmsTransparent, setWmsTransparent] = useState(true);
   const [wmsTileSize, setWmsTileSize] = useState("256");
 
-  const [vectorMode, setVectorMode] = useState<VectorMode>("geojson-file");
+  const [vectorMode, setVectorMode] = useState<VectorMode>("vector-file");
   const [vectorUrl, setVectorUrl] = useState("");
   const [vectorSourceLayer, setVectorSourceLayer] = useState("");
-  const [selectedGeoJson, setSelectedGeoJson] = useState<{
+  const [selectedVector, setSelectedVector] = useState<{
     data: FeatureCollection;
     path: string;
   } | null>(null);
@@ -187,10 +187,10 @@ export function AddDataDialog({
     setWmsFormat("image/png");
     setWmsTransparent(true);
     setWmsTileSize("256");
-    setVectorMode("geojson-file");
+    setVectorMode("vector-file");
     setVectorUrl("");
     setVectorSourceLayer("");
-    setSelectedGeoJson(null);
+    setSelectedVector(null);
     setRasterMode("tiles");
     setRasterUrl("");
     setRasterTileSize("256");
@@ -205,7 +205,7 @@ export function AddDataDialog({
       return "Add a WMS GetMap service as a tiled raster layer.";
     }
     if (kind === "vector") {
-      return "Add GeoJSON data or a MapLibre vector tile source.";
+      return "Add GeoJSON, GeoParquet, GeoPackage, Shapefile, or a MapLibre vector tile source.";
     }
     if (kind === "raster") {
       return "Add raster tiles now, or register raster files and COG URLs for project tracking.";
@@ -227,12 +227,12 @@ export function AddDataDialog({
     closeDialog();
   };
 
-  const handleChooseGeoJson = async () => {
+  const handleChooseVector = async () => {
     setError(null);
     try {
-      const result = await openGeoJsonFileWithFallback();
+      const result = await openVectorFileWithFallback();
       if (!result) return;
-      setSelectedGeoJson(result);
+      setSelectedVector(result);
       setLayerName((current) =>
         current.trim() && current !== "Vector Layer"
           ? current
@@ -319,12 +319,12 @@ export function AddDataDialog({
       }
 
       if (kind === "vector") {
-        if (vectorMode === "geojson-file") {
-          if (!selectedGeoJson) throw new Error("Choose a GeoJSON file.");
+        if (vectorMode === "vector-file") {
+          if (!selectedVector) throw new Error("Choose a vector file.");
           const id = addGeoJsonLayer(
             name,
-            selectedGeoJson.data,
-            selectedGeoJson.path,
+            selectedVector.data,
+            selectedVector.path,
             beforeLayer,
           );
           const layer = useAppStore.getState().layers.find((l) => l.id === id);
@@ -528,24 +528,24 @@ export function AddDataDialog({
                     setVectorMode(event.target.value as VectorMode)
                   }
                 >
-                  <option value="geojson-file">GeoJSON file</option>
+                  <option value="vector-file">Vector file</option>
                   <option value="geojson-url">GeoJSON URL</option>
                   <option value="vector-tiles">Vector tile source URL</option>
                 </select>
               </div>
-              {vectorMode === "geojson-file" ? (
+              {vectorMode === "vector-file" ? (
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={handleChooseGeoJson}
+                    onClick={handleChooseVector}
                   >
                     <FileUp className="mr-2 h-3.5 w-3.5" />
                     Choose file
                   </Button>
                   <span className="min-w-0 truncate text-xs text-muted-foreground">
-                    {selectedGeoJson
-                      ? fileNameFromPath(selectedGeoJson.path)
+                    {selectedVector
+                      ? fileNameFromPath(selectedVector.path)
                       : "No file selected"}
                   </span>
                 </div>

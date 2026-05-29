@@ -1,6 +1,18 @@
+import { useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import { MapCanvas } from "@geolibre/map";
-import { useRef } from "react";
+import {
+  type DragEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import {
+  isTauri,
+  loadDroppedVectorFiles,
+  loadDroppedVectorPaths,
+} from "../../lib/tauri-io";
 import { AttributeTable } from "../panels/AttributeTable";
 import { LayerPanel } from "../panels/LayerPanel";
 import { StylePanel } from "../panels/StylePanel";
@@ -14,14 +26,183 @@ interface DesktopShellProps {
   onToggleThemeMode: () => void;
 }
 
+function hasDroppedFiles(event: DragEvent<HTMLElement>): boolean {
+  return Array.from(event.dataTransfer.types).includes("Files");
+}
+
+function fileNameFromPath(path: string): string {
+  return path.split(/[/\\]/).pop() ?? path;
+}
+
+function layerNameFromPath(path: string): string {
+  return fileNameFromPath(path).replace(/\.[^.]+$/, "") || "Vector Layer";
+}
+
+type ImportedVectorLayer = Awaited<
+  ReturnType<typeof loadDroppedVectorFiles>
+>[number];
+
 export function DesktopShell({
   themeMode,
   onToggleThemeMode,
 }: DesktopShellProps) {
   const mapControllerRef = useRef<MapController | null>(null);
+  const dragDepthRef = useRef(0);
+  const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const [dropMessage, setDropMessage] = useState<string | null>(null);
+  const [dropError, setDropError] = useState<string | null>(null);
+
+  const clearDropMessageLater = useCallback(() => {
+    window.setTimeout(() => {
+      setDropMessage(null);
+      setDropError(null);
+    }, 4000);
+  }, []);
+
+  const addImportedVectorLayers = useCallback(
+    (importedLayers: ImportedVectorLayer[]) => {
+      let lastLayerId: string | null = null;
+      for (const layer of importedLayers) {
+        lastLayerId = addGeoJsonLayer(
+          layerNameFromPath(layer.path),
+          layer.data,
+          layer.path,
+        );
+      }
+
+      const importedLayer = useAppStore
+        .getState()
+        .layers.find((layer) => layer.id === lastLayerId);
+      if (importedLayer) mapControllerRef.current?.fitLayer(importedLayer);
+    },
+    [addGeoJsonLayer],
+  );
+
+  const finishVectorDrop = useCallback(
+    (importedLayers: ImportedVectorLayer[]) => {
+      if (!importedLayers.length) {
+        throw new Error("Drop a supported vector file.");
+      }
+      addImportedVectorLayers(importedLayers);
+      setDropMessage(
+        `Added ${importedLayers.length} vector layer${
+          importedLayers.length === 1 ? "" : "s"
+        }.`,
+      );
+    },
+    [addImportedVectorLayers],
+  );
+
+  useEffect(() => {
+    if (!isTauri()) return;
+
+    let unlisten: (() => void) | null = null;
+    let disposed = false;
+
+    void import("@tauri-apps/api/webview").then(({ getCurrentWebview }) => {
+      if (disposed) return;
+      void getCurrentWebview()
+        .onDragDropEvent(async (event) => {
+          if (event.payload.type === "enter" || event.payload.type === "over") {
+            setIsDraggingFiles(true);
+            return;
+          }
+
+          if (event.payload.type === "leave") {
+            setIsDraggingFiles(false);
+            return;
+          }
+
+          setIsDraggingFiles(false);
+          setDropError(null);
+          setDropMessage("Importing vector data...");
+
+          try {
+            finishVectorDrop(await loadDroppedVectorPaths(event.payload.paths));
+          } catch (error) {
+            setDropMessage(null);
+            setDropError(
+              error instanceof Error
+                ? error.message
+                : "Could not import files.",
+            );
+          } finally {
+            clearDropMessageLater();
+          }
+        })
+        .then((nextUnlisten) => {
+          if (disposed) {
+            nextUnlisten();
+          } else {
+            unlisten = nextUnlisten;
+          }
+        })
+        .catch((error) => {
+          console.warn("Could not attach Tauri drag and drop handler", error);
+        });
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [clearDropMessageLater, finishVectorDrop]);
+
+  const handleDragEnter = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (!hasDroppedFiles(event)) return;
+    event.preventDefault();
+    dragDepthRef.current += 1;
+    setIsDraggingFiles(true);
+  }, []);
+
+  const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (!hasDroppedFiles(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  }, []);
+
+  const handleDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (!hasDroppedFiles(event)) return;
+    event.preventDefault();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setIsDraggingFiles(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    async (event: DragEvent<HTMLDivElement>) => {
+      if (!hasDroppedFiles(event)) return;
+      event.preventDefault();
+      dragDepthRef.current = 0;
+      setIsDraggingFiles(false);
+      setDropError(null);
+      setDropMessage("Importing vector data...");
+
+      try {
+        const importedLayers = await loadDroppedVectorFiles(
+          event.dataTransfer.files,
+        );
+        finishVectorDrop(importedLayers);
+      } catch (error) {
+        setDropMessage(null);
+        setDropError(
+          error instanceof Error ? error.message : "Could not import files.",
+        );
+      } finally {
+        clearDropMessageLater();
+      }
+    },
+    [clearDropMessageLater, finishVectorDrop],
+  );
 
   return (
-    <div className="flex h-full flex-col bg-background">
+    <div
+      className="relative flex h-full flex-col bg-background"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       <TopToolbar
         mapControllerRef={mapControllerRef}
         themeMode={themeMode}
@@ -37,6 +218,22 @@ export function DesktopShell({
       <AttributeTable />
       <StatusBar />
       <ProcessingDialog mapControllerRef={mapControllerRef} />
+      {isDraggingFiles ? (
+        <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm">
+          <div className="rounded-md border bg-background px-4 py-3 text-sm font-medium shadow-lg">
+            Drop vector files to add layers
+          </div>
+        </div>
+      ) : null}
+      {dropMessage || dropError ? (
+        <div
+          className={`pointer-events-none absolute bottom-10 left-1/2 z-50 -translate-x-1/2 rounded-md border bg-background px-3 py-2 text-sm shadow-lg ${
+            dropError ? "text-destructive" : "text-foreground"
+          }`}
+        >
+          {dropError ?? dropMessage}
+        </div>
+      ) : null}
     </div>
   );
 }
