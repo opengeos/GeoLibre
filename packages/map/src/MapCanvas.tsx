@@ -252,18 +252,30 @@ export const MapCanvas = memo(function MapCanvas({
     map.getCanvas().style.cursor = "crosshair";
 
     const handleIdentifyClick = (event: maplibregl.MapMouseEvent) => {
+      const clearIdentifyResult = () => {
+        selectFeature(null);
+        identifyPopup.current?.remove();
+        identifyPopup.current = null;
+      };
+
       const queryLayerIds = identifyStyleLayerIds(layer.id).filter((id) =>
         map.getLayer(id),
       );
-      if (queryLayerIds.length === 0) return;
+      if (queryLayerIds.length === 0) {
+        clearIdentifyResult();
+        return;
+      }
 
       const [feature] = map.queryRenderedFeatures(event.point, {
         layers: queryLayerIds,
       });
-      if (!feature) return;
+      if (!feature) {
+        clearIdentifyResult();
+        return;
+      }
 
       const featureId = findFeatureId(layer, feature);
-      if (featureId != null) selectFeature(featureId);
+      selectFeature(featureId);
 
       identifyPopup.current?.remove();
       identifyPopup.current = new maplibregl.Popup({

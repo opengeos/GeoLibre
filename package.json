@@ -12,7 +12,7 @@
     "build": "npm run build -w geolibre-desktop",
     "tauri": "npm run tauri -w geolibre-desktop",
     "tauri:dev": "npm run tauri dev -w geolibre-desktop",
-    "tauri:build": "npm run tauri build -w geolibre-desktop"
+    "tauri:build": "node scripts/tauri-build.mjs"
   },
   "engines": {
     "node": ">=18"
