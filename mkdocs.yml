@@ -37,7 +37,7 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Downloads: downloads.md
-  - Live Demo: https://geolibre.app/demo/
+  - Live Demo: /demo/
   - Documentation:
       - Architecture: architecture.md
       - Project Format: project-format.md
