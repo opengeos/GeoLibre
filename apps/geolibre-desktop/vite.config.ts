@@ -12,6 +12,15 @@ const GEOAGENT_BROWSER_BUNDLE = "maplibre-gl-geoagent/dist/browser-";
 const GIS_CHUNK_WARNING_LIMIT_KB = 5000;
 const APP_BASE = process.env.GEOLIBRE_APP_BASE;
 const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
+const RADIX_OPTIMIZE_EXCLUDES = [
+  "@radix-ui/react-dialog",
+  "@radix-ui/react-dropdown-menu",
+  "@radix-ui/react-label",
+  "@radix-ui/react-scroll-area",
+  "@radix-ui/react-separator",
+  "@radix-ui/react-slider",
+  "@radix-ui/react-slot",
+];
 
 function manualChunks(id: string): string | undefined {
   if (!id.includes("node_modules")) return undefined;
@@ -91,6 +100,9 @@ export default defineConfig({
     strictPort: true,
   },
   envPrefix: ["VITE_", "TAURI_"],
+  optimizeDeps: {
+    exclude: RADIX_OPTIMIZE_EXCLUDES,
+  },
   build: {
     target: "esnext",
     minify: !process.env.TAURI_DEBUG ? "esbuild" : false,
