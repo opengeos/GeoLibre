@@ -9,6 +9,9 @@ import type {
   GeoLibrePlugin,
 } from "../types";
 
+type ControlGridConstructor =
+  (typeof import("maplibre-gl-components"))["ControlGrid"];
+
 let componentsControlPosition: GeoLibreMapControlPosition = "top-right";
 
 const COMPONENT_CONTROL_NAMES = [
@@ -60,6 +63,40 @@ const COMPONENTS_OPTIONS = {
 
 let componentsControl: ControlGrid | null = null;
 let pluginActive = false;
+let componentsControlRevision = 0;
+let controlGridConstructorPromise: Promise<ControlGridConstructor> | null =
+  null;
+
+const getControlGridConstructor = (): Promise<ControlGridConstructor> => {
+  controlGridConstructorPromise ??= import(
+    "maplibre-gl-components"
+  ).then(({ ControlGrid: ControlGridClass }) => ControlGridClass);
+  return controlGridConstructorPromise;
+};
+
+const createComponentsControl = async (
+  app: GeoLibreAppAPI,
+): Promise<ControlGrid | null> => {
+  const ControlGridClass = await getControlGridConstructor();
+  if (!pluginActive) return null;
+  return new ControlGridClass(getComponentsOptions(app));
+};
+
+const createAndMountComponentsControl = (app: GeoLibreAppAPI): void => {
+  const revision = ++componentsControlRevision;
+  void createComponentsControl(app).then((control) => {
+    if (
+      !pluginActive ||
+      componentsControl ||
+      !control ||
+      revision !== componentsControlRevision
+    ) {
+      return;
+    }
+    componentsControl = control;
+    mountComponentsControl(app);
+  });
+};
 
 const mountComponentsControl = (app: GeoLibreAppAPI): boolean => {
   if (!componentsControl) return false;
@@ -82,19 +119,11 @@ export const maplibreComponentsPlugin: GeoLibrePlugin = {
   activate: (app: GeoLibreAppAPI) => {
     pluginActive = true;
     if (componentsControl) return mountComponentsControl(app);
-
-    void import("maplibre-gl-components").then(
-      ({ ControlGrid: ControlGridClass }) => {
-        if (!pluginActive || componentsControl) return;
-        componentsControl = new ControlGridClass(
-          getComponentsOptions(app),
-        );
-        mountComponentsControl(app);
-      },
-    );
+    createAndMountComponentsControl(app);
   },
   deactivate: (app: GeoLibreAppAPI) => {
     pluginActive = false;
+    componentsControlRevision += 1;
     if (!componentsControl) return;
     app.removeMapControl(componentsControl);
     componentsControl = null;
@@ -107,12 +136,8 @@ export const maplibreComponentsPlugin: GeoLibrePlugin = {
     componentsControlPosition = position;
     if (!componentsControl) return;
     app.removeMapControl(componentsControl);
-    const added = app.addMapControl(
-      componentsControl,
-      componentsControlPosition,
-    );
-    if (!added) return false;
-    setTimeout(() => componentsControl?.expand(), 0);
+    componentsControl = null;
+    createAndMountComponentsControl(app);
   },
 };
 
