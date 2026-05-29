@@ -82,12 +82,12 @@ manager.activate("my-plugin", appApi);
 | `osm-basemap` | OpenFreeMap Liberty style |
 | `carto-light` | CARTO Positron GL style |
 | `sample-geojson` | Loads `sample-data/sample.geojson` |
-| `maplibre-basemap-control` | Adds a MapLibre basemap picker |
-| `maplibre-geo-editor` | Adds GeoEditor drawing controls |
-| `maplibre-geoagent` | Adds GeoAgent map assistant controls |
-| `maplibre-lidar` | Adds lidar controls |
-| `maplibre-streetview` | Adds street view controls |
-| `maplibre-swipe` | Adds map swipe controls |
+| `maplibre-gl-basemap-control` | Adds a MapLibre basemap picker |
+| `maplibre-gl-geo-editor` | Adds GeoEditor drawing controls |
+| `maplibre-gl-geoagent` | Adds GeoAgent map assistant controls |
+| `maplibre-gl-lidar` | Adds lidar controls |
+| `maplibre-gl-streetview` | Adds street view controls |
+| `maplibre-gl-swipe` | Adds map swipe controls |
 
 ## Example plugin
 
