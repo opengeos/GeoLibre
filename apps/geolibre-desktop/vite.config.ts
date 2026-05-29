@@ -9,6 +9,7 @@ import { defineConfig } from "vite";
 
 const GEOAGENT_BROWSER_BUNDLE = "maplibre-gl-geoagent/dist/browser-";
 const GIS_CHUNK_WARNING_LIMIT_KB = 5000;
+const APP_BASE = process.env.GEOLIBRE_APP_BASE;
 
 function manualChunks(id: string): string | undefined {
   if (!id.includes("node_modules")) return undefined;
@@ -36,6 +37,7 @@ function onwarn(
 }
 
 export default defineConfig({
+  base: APP_BASE,
   plugins: [react()],
   clearScreen: false,
   server: {

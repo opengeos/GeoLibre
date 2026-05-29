@@ -3,12 +3,38 @@
 ## Interface
 
 ```typescript
+import type { FeatureCollection } from "geojson";
+import type { IControl } from "maplibre-gl";
+
+export type GeoLibreMapControlPosition =
+  | "top-left"
+  | "top-right"
+  | "bottom-left"
+  | "bottom-right";
+
+export type GeoLibreBuiltInMapControl =
+  | "navigation"
+  | "fullscreen"
+  | "geolocate"
+  | "globe"
+  | "terrain"
+  | "scale"
+  | "attribution"
+  | "logo"
+  | "layer-control";
+
 export interface GeoLibrePlugin {
   id: string;
   name: string;
   version: string;
-  activate: (app: GeoLibreAppAPI) => void;
+  activeByDefault?: boolean;
+  activate: (app: GeoLibreAppAPI) => boolean | void;
   deactivate: (app: GeoLibreAppAPI) => void;
+  getMapControlPosition?: () => GeoLibreMapControlPosition;
+  setMapControlPosition?: (
+    app: GeoLibreAppAPI,
+    position: GeoLibreMapControlPosition,
+  ) => boolean | void;
 }
 
 export interface GeoLibreAppAPI {
@@ -19,6 +45,23 @@ export interface GeoLibreAppAPI {
     sourcePath?: string,
   ) => void;
   getActiveBasemap: () => string;
+  onBasemapChange: (callback: (styleUrl: string) => void) => () => void;
+  addMapControl: (
+    control: IControl,
+    position?: GeoLibreMapControlPosition,
+  ) => boolean;
+  removeMapControl: (control: IControl) => void;
+  setBuiltInMapControlVisible: (
+    control: GeoLibreBuiltInMapControl,
+    visible: boolean,
+  ) => boolean;
+  getBuiltInMapControlPosition: (
+    control: GeoLibreBuiltInMapControl,
+  ) => GeoLibreMapControlPosition;
+  setBuiltInMapControlPosition: (
+    control: GeoLibreBuiltInMapControl,
+    position: GeoLibreMapControlPosition,
+  ) => boolean;
 }
 ```
 
@@ -39,18 +82,28 @@ manager.activate("my-plugin", appApi);
 | `osm-basemap` | OpenFreeMap Liberty style |
 | `carto-light` | CARTO Positron GL style |
 | `sample-geojson` | Loads `sample-data/sample.geojson` |
+| `maplibre-basemap-control` | Adds a MapLibre basemap picker |
+| `maplibre-geo-editor` | Adds GeoEditor drawing controls |
+| `maplibre-geoagent` | Adds GeoAgent map assistant controls |
+| `maplibre-lidar` | Adds lidar controls |
+| `maplibre-streetview` | Adds street view controls |
+| `maplibre-swipe` | Adds map swipe controls |
 
 ## Example plugin
 
 ```typescript
+import type { GeoLibreAppAPI, GeoLibrePlugin } from "@geolibre/plugins";
+
 export const myPlugin: GeoLibrePlugin = {
   id: "my-plugin",
   name: "My Plugin",
   version: "0.1.0",
-  activate(app) {
+  activate(app: GeoLibreAppAPI) {
     app.setBasemap("https://example.com/style.json");
   },
-  deactivate() {},
+  deactivate() {
+    // Clean up controls, listeners, and plugin state here.
+  },
 };
 ```
 

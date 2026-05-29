@@ -1,0 +1,73 @@
+site_name: GeoLibre
+site_description: Lightweight, cloud-native desktop GIS built with Tauri, React, TypeScript, and MapLibre GL JS.
+site_url: https://geolibre.app
+repo_name: opengeos/GeoLibre
+repo_url: https://github.com/opengeos/GeoLibre
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  logo: assets/geolibre-icon.png
+  favicon: assets/geolibre-icon.png
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+    - search.share
+    - search.suggest
+    - toc.follow
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Downloads: downloads.md
+  - Live Demo: https://geolibre.app/demo/
+  - Documentation:
+      - Architecture: architecture.md
+      - Project Format: project-format.md
+      - Plugin API: plugin-api.md
+      - Roadmap: roadmap.md
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+
+extra_css:
+  - stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/opengeos/GeoLibre
+      name: GeoLibre on GitHub

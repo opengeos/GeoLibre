@@ -2,7 +2,7 @@
 
 Projects are saved as **`.geolibre.json`** files.
 
-## Schema (v0.1)
+## Schema
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -52,7 +52,7 @@ Projects are saved as **`.geolibre.json`** files.
 
 ## Example
 
-See [sample-data/example.geolibre.json](../sample-data/example.geolibre.json).
+See [`sample-data/example.geolibre.json`](https://github.com/opengeos/GeoLibre/blob/main/sample-data/example.geolibre.json).
 
 ## API
 

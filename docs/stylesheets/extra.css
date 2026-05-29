@@ -1,0 +1,74 @@
+.hero {
+  align-items: center;
+  display: grid;
+  gap: 2rem;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 1rem 0 2.5rem;
+}
+
+.md-grid {
+  max-width: 82rem;
+}
+
+.md-typeset .hero__content h1 {
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.05;
+  margin: 0.2rem 0 1rem;
+}
+
+.hero__lead {
+  color: var(--md-default-fg-color--light);
+  font-size: 1.05rem;
+  max-width: 46rem;
+}
+
+.hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1.3rem;
+}
+
+.hero__media {
+  margin: 0;
+}
+
+.hero__media img {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.5rem;
+  box-shadow: var(--md-shadow-z3);
+  display: block;
+  width: 100%;
+}
+
+.eyebrow {
+  color: var(--md-primary-fg-color);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.feature-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  margin: 1.5rem 0 2rem;
+}
+
+.feature-card {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+.feature-card h3 {
+  margin-top: 0;
+}
+
+@media screen and (min-width: 76.25em) {
+  .hero {
+    grid-template-columns: minmax(18rem, 0.9fr) minmax(20rem, 1.1fr);
+  }
+}

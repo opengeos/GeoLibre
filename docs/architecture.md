@@ -28,10 +28,11 @@ flowchart LR
 
 ## State flow
 
-1. User adds GeoJSON via Tauri dialog → parsed JSON → `addGeoJsonLayer` in store.
-2. `MapCanvas` subscribes to `layers` → `MapController.syncLayers` updates MapLibre sources/layers.
-3. Style panel mutates `layer.style` → sync updates paint properties.
-4. Save project → `projectFromStore` → `.geolibre.json` on disk.
+1. User adds GeoJSON through the Tauri dialog or browser file picker.
+2. Parsed GeoJSON is passed to `addGeoJsonLayer` in the store.
+3. `MapCanvas` subscribes to `layers`, then `MapController.syncLayers` updates MapLibre sources and layers.
+4. Style panel updates `layer.style`, then sync updates paint properties.
+5. Desktop save uses `projectFromStore` and writes `.geolibre.json` to disk.
 
 ## DuckDB-WASM
 
@@ -46,7 +47,7 @@ Query results will register as `duckdb-query` layer placeholders, then full laye
 
 ## Python sidecar (v0.5)
 
-The FastAPI app in `backend/geolibre_server` will run as a Tauri **external binary**:
+The FastAPI app in `backend/geolibre_server` is planned to run as a Tauri **external binary**:
 
 1. Bundle `geolibre-server` in `src-tauri/bin/`.
 2. Spawn on first processing request needing GDAL/GeoPandas.
