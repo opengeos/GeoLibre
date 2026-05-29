@@ -1,3 +1,5 @@
+/// <reference path="../earthengine.d.ts" />
+
 import {
   GeoAgentControl,
   type GeoAgentControlOptions,
