@@ -2,7 +2,9 @@ import { useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import { MapCanvas } from "@geolibre/map";
 import {
+  type CSSProperties,
   type DragEvent,
+  type MouseEvent as ReactMouseEvent,
   useCallback,
   useEffect,
   useRef,
@@ -42,16 +44,40 @@ type ImportedVectorLayer = Awaited<
   ReturnType<typeof loadDroppedVectorFiles>
 >[number];
 
+const DEFAULT_SIDE_PANEL_WIDTH = 256;
+const MIN_SIDE_PANEL_WIDTH = 180;
+const MAX_SIDE_PANEL_WIDTH = 460;
+const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
+const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+type ShellStyle = CSSProperties &
+  Record<"--layer-panel-width" | "--style-panel-width", string>;
+
 export function DesktopShell({
   themeMode,
   onToggleThemeMode,
 }: DesktopShellProps) {
+  const shellRef = useRef<HTMLDivElement>(null);
   const mapControllerRef = useRef<MapController | null>(null);
   const dragDepthRef = useRef(0);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [dropMessage, setDropMessage] = useState<string | null>(null);
   const [dropError, setDropError] = useState<string | null>(null);
+  const [layerPanelWidth, setLayerPanelWidth] = useState(
+    DEFAULT_SIDE_PANEL_WIDTH,
+  );
+  const [stylePanelWidth, setStylePanelWidth] = useState(
+    DEFAULT_SIDE_PANEL_WIDTH,
+  );
+  const shellStyle: ShellStyle = {
+    "--layer-panel-width": `${layerPanelWidth}px`,
+    "--style-panel-width": `${stylePanelWidth}px`,
+  };
 
   const clearDropMessageLater = useCallback(() => {
     window.setTimeout(() => {
@@ -195,9 +221,119 @@ export function DesktopShell({
     [clearDropMessageLater, finishVectorDrop],
   );
 
+  const startLayerPanelResize = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const startX = event.clientX;
+      const startWidth = layerPanelWidth;
+      let nextWidth = startWidth;
+      let resizeFrame: number | null = null;
+      const previousCursor = document.body.style.cursor;
+      const previousUserSelect = document.body.style.userSelect;
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      window.dispatchEvent(new Event(PANEL_RESIZE_START_EVENT));
+
+      const onMouseMove = (moveEvent: MouseEvent) => {
+        nextWidth = clamp(
+          startWidth + moveEvent.clientX - startX,
+          MIN_SIDE_PANEL_WIDTH,
+          MAX_SIDE_PANEL_WIDTH,
+        );
+        if (resizeFrame !== null) return;
+        resizeFrame = window.requestAnimationFrame(() => {
+          resizeFrame = null;
+          shellRef.current?.style.setProperty(
+            "--layer-panel-width",
+            `${nextWidth}px`,
+          );
+        });
+      };
+
+      const onMouseUp = () => {
+        window.removeEventListener("mousemove", onMouseMove);
+        window.removeEventListener("mouseup", onMouseUp);
+        if (resizeFrame !== null) {
+          window.cancelAnimationFrame(resizeFrame);
+          resizeFrame = null;
+        }
+        shellRef.current?.style.setProperty(
+          "--layer-panel-width",
+          `${nextWidth}px`,
+        );
+        setLayerPanelWidth(nextWidth);
+        window.dispatchEvent(new Event(PANEL_RESIZE_END_EVENT));
+        document.body.style.cursor = previousCursor;
+        document.body.style.userSelect = previousUserSelect;
+      };
+
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
+    },
+    [layerPanelWidth],
+  );
+
+  const startStylePanelResize = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const startX = event.clientX;
+      const startWidth = stylePanelWidth;
+      let nextWidth = startWidth;
+      let resizeFrame: number | null = null;
+      const previousCursor = document.body.style.cursor;
+      const previousUserSelect = document.body.style.userSelect;
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      window.dispatchEvent(new Event(PANEL_RESIZE_START_EVENT));
+
+      const onMouseMove = (moveEvent: MouseEvent) => {
+        nextWidth = clamp(
+          startWidth + startX - moveEvent.clientX,
+          MIN_SIDE_PANEL_WIDTH,
+          MAX_SIDE_PANEL_WIDTH,
+        );
+        if (resizeFrame !== null) return;
+        resizeFrame = window.requestAnimationFrame(() => {
+          resizeFrame = null;
+          shellRef.current?.style.setProperty(
+            "--style-panel-width",
+            `${nextWidth}px`,
+          );
+        });
+      };
+
+      const onMouseUp = () => {
+        window.removeEventListener("mousemove", onMouseMove);
+        window.removeEventListener("mouseup", onMouseUp);
+        if (resizeFrame !== null) {
+          window.cancelAnimationFrame(resizeFrame);
+          resizeFrame = null;
+        }
+        shellRef.current?.style.setProperty(
+          "--style-panel-width",
+          `${nextWidth}px`,
+        );
+        setStylePanelWidth(nextWidth);
+        window.dispatchEvent(new Event(PANEL_RESIZE_END_EVENT));
+        document.body.style.cursor = previousCursor;
+        document.body.style.userSelect = previousUserSelect;
+      };
+
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
+    },
+    [stylePanelWidth],
+  );
+
   return (
     <div
+      ref={shellRef}
       className="relative flex h-full flex-col bg-background"
+      style={shellStyle}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
@@ -209,11 +345,16 @@ export function DesktopShell({
         onToggleThemeMode={onToggleThemeMode}
       />
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <LayerPanel mapControllerRef={mapControllerRef} />
+        <LayerPanel
+          mapControllerRef={mapControllerRef}
+          onResizeStart={startLayerPanelResize}
+        />
         <main className="relative min-h-72 min-w-0 flex-1 md:min-h-0">
           <MapCanvas controllerRef={mapControllerRef} />
         </main>
-        <StylePanel />
+        <StylePanel
+          onResizeStart={startStylePanelResize}
+        />
       </div>
       <AttributeTable />
       <StatusBar />

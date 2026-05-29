@@ -68,3 +68,19 @@ export function lineLayerId(layerId: string): string {
 export function circleLayerId(layerId: string): string {
   return `layer-${layerId}-circle`;
 }
+
+export function highlightSourceId(): string {
+  return "geolibre-highlight-source";
+}
+
+export function highlightFillLayerId(): string {
+  return "geolibre-highlight-fill";
+}
+
+export function highlightLineLayerId(): string {
+  return "geolibre-highlight-line";
+}
+
+export function highlightCircleLayerId(): string {
+  return "geolibre-highlight-circle";
+}

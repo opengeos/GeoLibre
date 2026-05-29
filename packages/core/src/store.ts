@@ -33,6 +33,7 @@ export interface AppState {
   ui: {
     processingOpen: boolean;
     attributeTableOpen: boolean;
+    zoomToSelectedFeature: boolean;
   };
 
   setPointerCoords: (coords: [number, number] | null) => void;
@@ -43,6 +44,7 @@ export interface AppState {
   setAttributeFilter: (filter: string) => void;
   setProcessingOpen: (open: boolean) => void;
   setAttributeTableOpen: (open: boolean) => void;
+  setZoomToSelectedFeature: (enabled: boolean) => void;
 
   newProject: (options?: CreateProjectOptions & { name?: string }) => void;
   loadProject: (project: GeoLibreProject, path?: string | null) => void;
@@ -81,6 +83,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   ui: {
     processingOpen: false,
     attributeTableOpen: false,
+    zoomToSelectedFeature: false,
   },
 
   setPointerCoords: (coords) => set({ pointerCoords: coords }),
@@ -97,6 +100,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((s) => ({ ui: { ...s.ui, processingOpen: open } })),
   setAttributeTableOpen: (open) =>
     set((s) => ({ ui: { ...s.ui, attributeTableOpen: open } })),
+  setZoomToSelectedFeature: (enabled) =>
+    set((s) => ({ ui: { ...s.ui, zoomToSelectedFeature: enabled } })),
 
   newProject: (options = {}) => {
     const project = createEmptyProject(options.name, options);
@@ -169,6 +174,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         s.selectedLayerId === id
           ? (s.layers.find((l) => l.id !== id)?.id ?? null)
           : s.selectedLayerId,
+      selectedFeatureId: s.selectedLayerId === id ? null : s.selectedFeatureId,
       isDirty: true,
     })),
 

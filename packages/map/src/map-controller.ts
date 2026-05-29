@@ -1,11 +1,17 @@
 import { DEFAULT_BASEMAP } from "@geolibre/core";
 import type { GeoLibreLayer, MapViewState } from "@geolibre/core";
+import bbox from "@turf/bbox";
+import type { Feature, FeatureCollection, Geometry } from "geojson";
 import maplibregl from "maplibre-gl";
 import { LayerControl } from "maplibre-gl-layer-control";
 import {
   circleLayerId,
   fillLayerId,
   getLayerBounds,
+  highlightCircleLayerId,
+  highlightFillLayerId,
+  highlightLineLayerId,
+  highlightSourceId,
   lineLayerId,
 } from "./geojson-loader";
 import { removeLayerFromMap, syncLayer } from "./layer-sync";
@@ -29,6 +35,10 @@ const TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = {
 const TERRAIN_OPTIONS: maplibregl.TerrainSpecification = {
   source: TERRAIN_SOURCE_ID,
   exaggeration: 1,
+};
+const EMPTY_HIGHLIGHT: FeatureCollection = {
+  type: "FeatureCollection",
+  features: [],
 };
 
 interface NamedLayerState {
@@ -339,6 +349,39 @@ export class MapController {
     );
   }
 
+  highlightFeature(
+    layer: GeoLibreLayer | undefined,
+    featureId: string | null,
+    options: { fit?: boolean } = {},
+  ): void {
+    if (!this.map || !this.map.isStyleLoaded()) return;
+
+    if (!layer?.geojson || !featureId) {
+      this.syncHighlight(EMPTY_HIGHLIGHT);
+      return;
+    }
+
+    const feature = this.findFeature(layer, featureId);
+    if (!feature?.geometry) {
+      this.syncHighlight(EMPTY_HIGHLIGHT);
+      return;
+    }
+
+    const featureCollection: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [feature as Feature<Geometry>],
+    };
+    this.syncHighlight(featureCollection);
+
+    if (options.fit) {
+      this.fitFeature(featureCollection);
+    }
+  }
+
+  clearFeatureHighlight(): void {
+    this.syncHighlight(EMPTY_HIGHLIGHT);
+  }
+
   private enforceDefaultProjection(): void {
     if (!this.map) return;
     try {
@@ -346,6 +389,115 @@ export class MapController {
       this.map.setProjection(DEFAULT_PROJECTION);
     } catch {
       this.map.once("idle", () => this.enforceDefaultProjection());
+    }
+  }
+
+  private findFeature(
+    layer: GeoLibreLayer,
+    featureId: string,
+  ): Feature | undefined {
+    return layer.geojson?.features.find(
+      (feature, index) => String(feature.id ?? index) === featureId,
+    );
+  }
+
+  private fitFeature(featureCollection: FeatureCollection): void {
+    if (!this.map || featureCollection.features.length === 0) return;
+    const box = bbox(featureCollection) as [number, number, number, number];
+    if (box.some((value) => !Number.isFinite(value))) return;
+
+    if (box[0] === box[2] && box[1] === box[3]) {
+      this.map.flyTo({
+        center: [box[0], box[1]],
+        zoom: Math.max(this.map.getZoom(), 14),
+        duration: 800,
+      });
+      return;
+    }
+
+    this.fitBounds(box);
+  }
+
+  private syncHighlight(featureCollection: FeatureCollection): void {
+    if (!this.map || !this.map.isStyleLoaded()) return;
+
+    const source = this.map.getSource(highlightSourceId());
+    if (source) {
+      (source as maplibregl.GeoJSONSource).setData(featureCollection);
+    } else {
+      this.map.addSource(highlightSourceId(), {
+        type: "geojson",
+        data: featureCollection,
+      });
+    }
+
+    this.ensureHighlightLayer({
+      id: highlightFillLayerId(),
+      type: "fill",
+      source: highlightSourceId(),
+      filter: [
+        "match",
+        ["geometry-type"],
+        ["Polygon", "MultiPolygon"],
+        true,
+        false,
+      ],
+      paint: {
+        "fill-color": "#facc15",
+        "fill-opacity": 0.32,
+        "fill-outline-color": "#111827",
+      },
+    });
+
+    this.ensureHighlightLayer({
+      id: highlightLineLayerId(),
+      type: "line",
+      source: highlightSourceId(),
+      filter: [
+        "match",
+        ["geometry-type"],
+        ["LineString", "MultiLineString", "Polygon", "MultiPolygon"],
+        true,
+        false,
+      ],
+      paint: {
+        "line-color": "#facc15",
+        "line-width": 5,
+        "line-opacity": 0.9,
+      },
+    });
+
+    this.ensureHighlightLayer({
+      id: highlightCircleLayerId(),
+      type: "circle",
+      source: highlightSourceId(),
+      filter: [
+        "match",
+        ["geometry-type"],
+        ["Point", "MultiPoint"],
+        true,
+        false,
+      ],
+      paint: {
+        "circle-color": "#facc15",
+        "circle-radius": 9,
+        "circle-opacity": 0.95,
+        "circle-stroke-color": "#111827",
+        "circle-stroke-width": 3,
+      },
+    });
+  }
+
+  private ensureHighlightLayer(spec: maplibregl.AddLayerObject): void {
+    if (!this.map) return;
+    if (!this.map.getLayer(spec.id)) {
+      this.map.addLayer(spec);
+      return;
+    }
+    try {
+      this.map.moveLayer(spec.id);
+    } catch {
+      // Style reloads can remove layers while selection is syncing.
     }
   }
 

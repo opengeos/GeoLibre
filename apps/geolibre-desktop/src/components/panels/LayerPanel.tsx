@@ -1,4 +1,8 @@
-import { useState } from "react";
+import {
+  type MouseEvent as ReactMouseEvent,
+  type RefObject,
+  useState,
+} from "react";
 import { useAppStore } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
@@ -28,7 +32,8 @@ import {
 } from "lucide-react";
 
 interface LayerPanelProps {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapController | null>;
+  onResizeStart: (event: ReactMouseEvent<HTMLDivElement>) => void;
 }
 
 function isMobileViewport(): boolean {
@@ -38,7 +43,10 @@ function isMobileViewport(): boolean {
   );
 }
 
-export function LayerPanel({ mapControllerRef }: LayerPanelProps) {
+export function LayerPanel({
+  mapControllerRef,
+  onResizeStart,
+}: LayerPanelProps) {
   const layers = useAppStore((s) => s.layers);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const selectLayer = useAppStore((s) => s.selectLayer);
@@ -75,7 +83,16 @@ export function LayerPanel({ mapControllerRef }: LayerPanelProps) {
   }
 
   return (
-    <aside className="flex max-h-56 w-full shrink-0 flex-col border-b bg-card md:max-h-none md:w-64 md:border-b-0 md:border-r">
+    <aside
+      className="relative flex max-h-56 w-full shrink-0 flex-col border-b bg-card md:max-h-none md:w-[var(--layer-panel-width)] md:border-b-0 md:border-r"
+    >
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize Layers panel"
+        className="absolute -right-1 top-0 z-20 hidden h-full w-2 cursor-col-resize select-none border-r border-transparent hover:border-primary md:block"
+        onMouseDown={onResizeStart}
+      />
       <div className="flex items-center justify-between border-b px-3 py-1.5">
         <span className="text-sm font-semibold">Layers</span>
         <Button

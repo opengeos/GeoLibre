@@ -10,7 +10,14 @@ import {
   PanelRightOpen,
   SlidersHorizontal,
 } from "lucide-react";
-import { useState } from "react";
+import {
+  type MouseEvent as ReactMouseEvent,
+  useState,
+} from "react";
+
+interface StylePanelProps {
+  onResizeStart: (event: ReactMouseEvent<HTMLDivElement>) => void;
+}
 
 function isMobileViewport(): boolean {
   return (
@@ -70,7 +77,7 @@ function RasterStyleSlider({
   );
 }
 
-export function StylePanel() {
+export function StylePanel({ onResizeStart }: StylePanelProps) {
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const layers = useAppStore((s) => s.layers);
   const setLayerOpacity = useAppStore((s) => s.setLayerOpacity);
@@ -78,6 +85,16 @@ export function StylePanel() {
   const [isCollapsed, setIsCollapsed] = useState(isMobileViewport);
 
   const layer = layers.find((l) => l.id === selectedLayerId);
+
+  const resizeHandle = (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize Style panel"
+      className="absolute -left-1 top-0 z-20 hidden h-full w-2 cursor-col-resize select-none border-l border-transparent hover:border-primary md:block"
+      onMouseDown={onResizeStart}
+    />
+  );
 
   if (isCollapsed) {
     return (
@@ -104,7 +121,10 @@ export function StylePanel() {
 
   if (!layer) {
     return (
-      <aside className="flex max-h-56 w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-64 md:border-l md:border-t-0">
+      <aside
+        className="relative flex max-h-56 w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-[var(--style-panel-width)] md:border-l md:border-t-0"
+      >
+        {resizeHandle}
         <div className="flex items-center justify-between border-b px-3 py-1.5">
           <span className="text-sm font-semibold">Style</span>
           <Button
@@ -132,7 +152,10 @@ export function StylePanel() {
 
   if (hasRasterPaintControls) {
     return (
-      <aside className="flex max-h-56 w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-64 md:border-l md:border-t-0">
+      <aside
+        className="relative flex max-h-56 w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-[var(--style-panel-width)] md:border-l md:border-t-0"
+      >
+        {resizeHandle}
         <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
           <span className="truncate text-sm font-semibold">
             Style - {layer.name}
@@ -221,7 +244,10 @@ export function StylePanel() {
 
   if (!hasVectorPaintControls) {
     return (
-      <aside className="flex max-h-56 w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-64 md:border-l md:border-t-0">
+      <aside
+        className="relative flex max-h-56 w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-[var(--style-panel-width)] md:border-l md:border-t-0"
+      >
+        {resizeHandle}
         <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
           <span className="truncate text-sm font-semibold">
             Style - {layer.name}
@@ -249,7 +275,10 @@ export function StylePanel() {
   }
 
   return (
-    <aside className="flex max-h-56 w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-64 md:border-l md:border-t-0">
+    <aside
+      className="relative flex max-h-56 w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-[var(--style-panel-width)] md:border-l md:border-t-0"
+    >
+      {resizeHandle}
       <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
         <span className="truncate text-sm font-semibold">
           Style - {layer.name}
