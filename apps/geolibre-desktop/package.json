@@ -27,6 +27,7 @@
     "maplibre-gl-basemap-control": "^0.2.1",
     "maplibre-gl-geo-editor": "^0.7.3",
     "maplibre-gl-geoagent": "^0.4.2",
+    "maplibre-gl-lidar": "^0.14.1",
     "maplibre-gl-streetview": "^0.4.0",
     "maplibre-gl-swipe": "^0.7.1",
     "react": "^18.3.1",

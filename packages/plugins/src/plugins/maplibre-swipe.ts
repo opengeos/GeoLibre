@@ -5,7 +5,7 @@ import {
 } from "maplibre-gl-swipe";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
-const SWIPE_CONTROL_POSITION = "top-right";
+const SWIPE_CONTROL_POSITION = "top-left";
 
 let swipeControl: SwipeControl | null = null;
 let unsubscribeBasemap: (() => void) | null = null;
@@ -22,6 +22,7 @@ export const maplibreSwipePlugin: GeoLibrePlugin = {
       swipeControl = null;
       return false;
     }
+    setTimeout(() => swipeControl?.expand(), 0);
 
     // The control reads the basemap style only on construction, so recreate it
     // when the active basemap changes to keep its basemap-layer grouping in
@@ -53,7 +54,7 @@ function getSwipeControlOptions(
     orientation: previousState?.orientation ?? "vertical",
     position: previousState?.position ?? 50,
     showPanel: true,
-    collapsed: previousState?.collapsed ?? true,
+    collapsed: previousState?.collapsed ?? false,
     title: "Layer Swipe",
     panelWidth: 300,
     maxHeight: 480,

@@ -3,7 +3,7 @@ import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
 const GEO_EDITOR_OPTIONS = {
   position: "top-left",
-  collapsed: true,
+  collapsed: false,
   toolbarOrientation: "vertical",
   columns: 2,
   drawModes: ["polygon", "line", "rectangle", "circle", "marker", "freehand"],
@@ -47,6 +47,7 @@ export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
       geoEditorControl = null;
       return false;
     }
+    setTimeout(() => geoEditorControl?.expand(), 0);
   },
   deactivate: (app: GeoLibreAppAPI) => {
     if (!geoEditorControl) return;

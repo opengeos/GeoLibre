@@ -6,6 +6,7 @@ export { cartoLightPlugin } from "./plugins/carto-light";
 export { maplibreBasemapControlPlugin } from "./plugins/maplibre-basemap-control";
 export { maplibreGeoEditorPlugin } from "./plugins/maplibre-geo-editor";
 export { maplibreGeoAgentPlugin } from "./plugins/maplibre-geoagent";
+export { maplibreLidarPlugin } from "./plugins/maplibre-lidar";
 export { maplibreStreetViewPlugin } from "./plugins/maplibre-streetview";
 export { maplibreSwipePlugin } from "./plugins/maplibre-swipe";
 export {

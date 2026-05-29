@@ -6,7 +6,7 @@ import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
 const GEOAGENT_OPTIONS = {
   title: "GeoAgent",
-  collapsed: true,
+  collapsed: false,
   position: "top-left",
   allowCodeExecutionDefault: false,
   allowDestructiveToolsDefault: false,
@@ -33,6 +33,7 @@ export const maplibreGeoAgentPlugin: GeoLibrePlugin = {
       geoAgentControl = null;
       return false;
     }
+    setTimeout(() => geoAgentControl?.expand(), 0);
   },
   deactivate: (app: GeoLibreAppAPI) => {
     if (!geoAgentControl) return;

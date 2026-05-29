@@ -10,6 +10,9 @@ import "maplibre-gl-streetview/style.css";
 import "maplibre-gl-swipe/style.css";
 import "mapillary-js/dist/mapillary.css";
 import "./index.css";
+import "./lib/geoagent-style";
+import "./lib/lidar-style";
+import "./lib/swipe-style";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

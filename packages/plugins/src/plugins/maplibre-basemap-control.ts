@@ -5,7 +5,7 @@ import {
 } from "maplibre-gl-basemap-control";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
-const BASEMAP_CONTROL_POSITION = "top-right";
+const BASEMAP_CONTROL_POSITION = "top-left";
 
 let basemapControl: BasemapControl | null = null;
 
@@ -32,6 +32,7 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
     basemapControl.setState({
       activeBasemapId: getBasemapIdForStyleUrl(app.getActiveBasemap()),
     });
+    setTimeout(() => basemapControl?.expand(), 0);
   },
   deactivate: (app: GeoLibreAppAPI) => {
     if (!basemapControl) return;
@@ -44,7 +45,7 @@ function getBasemapControlOptions(
   app: GeoLibreAppAPI,
 ): BasemapControlOptions {
   return {
-    collapsed: true,
+    collapsed: false,
     position: BASEMAP_CONTROL_POSITION,
     title: "Basemaps",
   };

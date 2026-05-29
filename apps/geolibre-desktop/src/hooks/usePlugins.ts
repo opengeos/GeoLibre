@@ -4,6 +4,7 @@ import {
   maplibreGeoAgentPlugin,
   maplibreGeoEditorPlugin,
   maplibreLayerControlPlugin,
+  maplibreLidarPlugin,
   maplibreStreetViewPlugin,
   maplibreSwipePlugin,
   PluginManager,
@@ -18,6 +19,7 @@ manager.registerAll([
   maplibreBasemapControlPlugin,
   maplibreGeoAgentPlugin,
   maplibreGeoEditorPlugin,
+  maplibreLidarPlugin,
   maplibreStreetViewPlugin,
   maplibreSwipePlugin,
 ]);

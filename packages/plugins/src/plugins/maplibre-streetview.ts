@@ -22,7 +22,7 @@ const defaultProvider: StreetViewControlOptions["defaultProvider"] = googleApiKe
     : "google";
 
 const STREET_VIEW_OPTIONS = {
-  collapsed: true,
+  collapsed: false,
   position: "top-right",
   title: "Street View",
   panelWidth: 420,
@@ -51,6 +51,7 @@ export const maplibreStreetViewPlugin: GeoLibrePlugin = {
       streetViewControl = null;
       return false;
     }
+    setTimeout(() => streetViewControl?.expand(), 0);
   },
   deactivate: (app: GeoLibreAppAPI) => {
     if (!streetViewControl) return;
