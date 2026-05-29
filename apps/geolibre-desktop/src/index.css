@@ -94,6 +94,35 @@ body,
   overflow: visible;
 }
 
+.geolibre-components-control {
+  padding: 10px !important;
+}
+
+.geolibre-components-control.maplibre-gl-control-grid--collapsed {
+  height: 29px;
+  padding: 0 !important;
+  width: 29px;
+}
+
+.geolibre-components-control.maplibre-gl-control-grid--collapsed
+  .maplibre-gl-control-grid-header,
+.geolibre-components-control.maplibre-gl-control-grid--collapsed
+  .maplibre-gl-control-grid-wrench {
+  height: 29px !important;
+  width: 29px !important;
+}
+
+.geolibre-components-control.maplibre-gl-control-grid--collapsed
+  .maplibre-gl-control-grid-wrench
+  svg {
+  height: 16px;
+  width: 16px;
+}
+
+.geolibre-components-control .maplibre-gl-control-grid-content > * {
+  margin: 4px !important;
+}
+
 .geolibre-components-control .maplibre-gl-control-grid-floating-panel {
   box-sizing: border-box;
   max-width: min(340px, calc(100vw - 32px));
@@ -161,7 +190,13 @@ body,
 
 .maplibregl-ctrl-top-left
   .geolibre-components-control
+  .left[class*="panel"],
+.maplibregl-ctrl-top-left
+  .geolibre-components-control
   .right[class*="panel"],
+.maplibregl-ctrl-bottom-left
+  .geolibre-components-control
+  .left[class*="panel"],
 .maplibregl-ctrl-bottom-left
   .geolibre-components-control
   .right[class*="panel"] {
@@ -172,9 +207,15 @@ body,
 .maplibregl-ctrl-top-right
   .geolibre-components-control
   .left[class*="panel"],
+.maplibregl-ctrl-top-right
+  .geolibre-components-control
+  .right[class*="panel"],
 .maplibregl-ctrl-bottom-right
   .geolibre-components-control
-  .left[class*="panel"] {
+  .left[class*="panel"],
+.maplibregl-ctrl-bottom-right
+  .geolibre-components-control
+  .right[class*="panel"] {
   left: auto !important;
   right: 0 !important;
 }

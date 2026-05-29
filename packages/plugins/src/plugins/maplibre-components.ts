@@ -12,7 +12,6 @@ import type {
 let componentsControlPosition: GeoLibreMapControlPosition = "top-right";
 
 const COMPONENT_CONTROL_NAMES = [
-  "globe",
   "spinGlobe",
   "fullscreen",
   "north",
