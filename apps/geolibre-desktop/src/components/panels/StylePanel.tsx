@@ -69,12 +69,44 @@ export function StylePanel() {
   }
 
   const { style } = layer;
+  const hasVectorPaintControls =
+    layer.type === "geojson" || layer.type === "vector-tiles";
+
+  if (!hasVectorPaintControls) {
+    return (
+      <aside className="flex max-h-56 w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-64 md:border-l md:border-t-0">
+        <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
+          <span className="truncate text-sm font-semibold">
+            Style - {layer.name}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            title="Collapse style"
+            aria-label="Collapse style"
+            onClick={() => setIsCollapsed(true)}
+          >
+            <PanelRightClose className="h-4 w-4" />
+          </Button>
+        </div>
+        <p className="p-4 text-xs text-muted-foreground">
+          Paint controls are available for vector layers. Use layer opacity in
+          the Layers panel for this layer type.
+        </p>
+        <Separator />
+        <p className="p-2 text-[10px] text-muted-foreground">
+          Selected layer type: {layer.type}
+        </p>
+      </aside>
+    );
+  }
 
   return (
     <aside className="flex max-h-56 w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-64 md:border-l md:border-t-0">
       <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
         <span className="truncate text-sm font-semibold">
-          Style — {layer.name}
+          Style - {layer.name}
         </span>
         <Button
           variant="ghost"

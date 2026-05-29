@@ -50,7 +50,7 @@ export interface AppState {
   setProjectName: (name: string) => void;
   markSaved: () => void;
 
-  addLayer: (layer: GeoLibreLayer) => void;
+  addLayer: (layer: GeoLibreLayer, beforeLayerId?: string | null) => void;
   removeLayer: (id: string) => void;
   updateLayer: (id: string, patch: Partial<GeoLibreLayer>) => void;
   setLayerVisibility: (id: string, visible: boolean) => void;
@@ -61,6 +61,7 @@ export interface AppState {
     name: string,
     geojson: FeatureCollection,
     sourcePath?: string,
+    beforeLayerId?: string | null,
   ) => string;
 }
 
@@ -139,12 +140,27 @@ export const useAppStore = create<AppState>((set, get) => ({
   setProjectName: (name) => set({ projectName: name, isDirty: true }),
   markSaved: () => set({ isDirty: false }),
 
-  addLayer: (layer) =>
-    set((s) => ({
-      layers: [...s.layers, layer],
-      selectedLayerId: layer.id,
-      isDirty: true,
-    })),
+  addLayer: (layer, beforeLayerId = null) =>
+    set((s) => {
+      const layers = [...s.layers];
+      const beforeIndex = beforeLayerId
+        ? layers.findIndex((l) => l.id === beforeLayerId)
+        : -1;
+      const layerWithBeforeId =
+        beforeLayerId && beforeIndex < 0
+          ? { ...layer, beforeId: beforeLayerId }
+          : { ...layer, beforeId: layer.beforeId };
+      if (beforeIndex >= 0) {
+        layers.splice(beforeIndex, 0, layerWithBeforeId);
+      } else {
+        layers.push(layerWithBeforeId);
+      }
+      return {
+        layers,
+        selectedLayerId: layer.id,
+        isDirty: true,
+      };
+    }),
 
   removeLayer: (id) =>
     set((s) => ({
@@ -188,7 +204,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { layers: next, isDirty: true };
     }),
 
-  addGeoJsonLayer: (name, geojson, sourcePath) => {
+  addGeoJsonLayer: (name, geojson, sourcePath, beforeLayerId = null) => {
     const id = uuidv4();
     const layer: GeoLibreLayer = {
       id,
@@ -202,7 +218,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       geojson,
       sourcePath,
     };
-    get().addLayer(layer);
+    get().addLayer(layer, beforeLayerId);
     return id;
   },
 }));

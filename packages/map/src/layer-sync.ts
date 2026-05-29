@@ -195,14 +195,19 @@ function syncVectorTileLayer(
   }
   const styleLayerId = `layer-${layer.id}-vector`;
   const sourceLayer = (layer.source.sourceLayer as string) ?? "";
-  ensureLayer(map, styleLayerId, {
-    id: styleLayerId,
-    type: "fill",
-    source: src,
-    "source-layer": sourceLayer,
-    paint: fillPaint(layer.style, layer.opacity),
-    layout: { visibility: layer.visible ? "visible" : "none" },
-  }, beforeId);
+  ensureLayer(
+    map,
+    styleLayerId,
+    {
+      id: styleLayerId,
+      type: "fill",
+      source: src,
+      "source-layer": sourceLayer,
+      paint: fillPaint(layer.style, layer.opacity),
+      layout: { visibility: layer.visible ? "visible" : "none" },
+    },
+    beforeId,
+  );
 }
 
 function ensureLayer(
@@ -225,13 +230,31 @@ function ensureLayer(
         map.setLayoutProperty(id, key, value);
       }
     }
+    moveLayer(map, id, beforeId);
     return;
   }
-  map.addLayer(spec, beforeId);
+  const validBeforeId = beforeId && map.getLayer(beforeId) ? beforeId : undefined;
+  map.addLayer(spec, validBeforeId);
 }
 
 function removeIfExists(map: maplibregl.Map, id: string): void {
   if (map.getLayer(id)) map.removeLayer(id);
+}
+
+function moveLayer(
+  map: maplibregl.Map,
+  id: string,
+  beforeId?: string,
+): void {
+  try {
+    if (beforeId && beforeId !== id && map.getLayer(beforeId)) {
+      map.moveLayer(id, beforeId);
+      return;
+    }
+    map.moveLayer(id);
+  } catch {
+    // Reordering can race style reloads; the next sync pass will retry.
+  }
 }
 
 export function removeLayerFromMap(

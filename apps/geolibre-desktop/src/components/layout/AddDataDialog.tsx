@@ -137,6 +137,7 @@ export function AddDataDialog({
   const title = kind ? KIND_LABELS[kind] : "Add Data";
 
   const [layerName, setLayerName] = useState("");
+  const [beforeLayerId, setBeforeLayerId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -177,6 +178,7 @@ export function AddDataDialog({
         raster: "Raster Layer",
       }[kind],
     );
+    setBeforeLayerId("");
     setXyzUrl("");
     setXyzTileSize("256");
     setWmsEndpoint("");
@@ -218,8 +220,10 @@ export function AddDataDialog({
     onOpenChange(next);
   };
 
+  const beforeLayer = beforeLayerId.trim() || null;
+
   const addAndClose = (layer: GeoLibreLayer) => {
-    addLayer(layer);
+    addLayer(layer, beforeLayer);
     closeDialog();
   };
 
@@ -321,6 +325,7 @@ export function AddDataDialog({
             name,
             selectedGeoJson.data,
             selectedGeoJson.path,
+            beforeLayer,
           );
           const layer = useAppStore.getState().layers.find((l) => l.id === id);
           if (layer) mapControllerRef.current?.fitLayer(layer);
@@ -331,7 +336,7 @@ export function AddDataDialog({
         if (vectorMode === "geojson-url") {
           if (!vectorUrl.trim()) throw new Error("Enter a GeoJSON URL.");
           const data = await fetchGeoJson(vectorUrl.trim());
-          const id = addGeoJsonLayer(name, data, vectorUrl.trim());
+          const id = addGeoJsonLayer(name, data, vectorUrl.trim(), beforeLayer);
           const layer = useAppStore.getState().layers.find((l) => l.id === id);
           if (layer) mapControllerRef.current?.fitLayer(layer);
           closeDialog();
@@ -413,6 +418,16 @@ export function AddDataDialog({
               id="add-data-layer-name"
               value={layerName}
               onChange={(event) => setLayerName(event.target.value)}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="add-data-before-id">Before Id</Label>
+            <Input
+              id="add-data-before-id"
+              placeholder="Optional layer id"
+              value={beforeLayerId}
+              onChange={(event) => setBeforeLayerId(event.target.value)}
             />
           </div>
 

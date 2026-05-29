@@ -47,6 +47,8 @@ export function LayerPanel({ mapControllerRef }: LayerPanelProps) {
   const reorderLayer = useAppStore((s) => s.reorderLayer);
   const removeLayer = useAppStore((s) => s.removeLayer);
   const [metadataLayer, setMetadataLayer] = useState<GeoLibreLayer | null>(null);
+  const [layerPendingRemoval, setLayerPendingRemoval] =
+    useState<GeoLibreLayer | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(isMobileViewport);
 
   if (isCollapsed) {
@@ -208,9 +210,10 @@ export function LayerPanel({ mapControllerRef }: LayerPanelProps) {
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7 text-destructive"
+                  title="Remove layer"
                   onClick={(e) => {
                     e.stopPropagation();
-                    removeLayer(layer.id);
+                    setLayerPendingRemoval(layer);
                   }}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -225,21 +228,68 @@ export function LayerPanel({ mapControllerRef }: LayerPanelProps) {
         {/* TODO(v0.3): Add PMTiles, COG, FlatGeobuf, GeoParquet layer types */}
         Advanced formats: see docs/roadmap.md
       </p>
-      <Dialog open={!!metadataLayer} onOpenChange={(open) => { if (!open) setMetadataLayer(null); }}>
+      <Dialog
+        open={!!metadataLayer}
+        onOpenChange={(open) => {
+          if (!open) setMetadataLayer(null);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{metadataLayer?.name} Metadata</DialogTitle>
-            <DialogDescription>Layer metadata and source information</DialogDescription>
+            <DialogDescription>
+              Layer metadata and source information
+            </DialogDescription>
           </DialogHeader>
           <ScrollArea className="max-h-80">
             <pre className="whitespace-pre-wrap break-all text-xs">
-              {metadataLayer && JSON.stringify(
-                { ...metadataLayer.metadata, sourcePath: metadataLayer.sourcePath },
-                null,
-                2,
-              )}
+              {metadataLayer &&
+                JSON.stringify(
+                  {
+                    ...metadataLayer.metadata,
+                    sourcePath: metadataLayer.sourcePath,
+                  },
+                  null,
+                  2,
+                )}
             </pre>
           </ScrollArea>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={!!layerPendingRemoval}
+        onOpenChange={(open) => {
+          if (!open) setLayerPendingRemoval(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove layer?</DialogTitle>
+            <DialogDescription>
+              This removes {layerPendingRemoval?.name ?? "this layer"} from the
+              project and map.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setLayerPendingRemoval(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                if (!layerPendingRemoval) return;
+                removeLayer(layerPendingRemoval.id);
+                setLayerPendingRemoval(null);
+              }}
+            >
+              Remove
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </aside>

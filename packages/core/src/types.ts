@@ -75,6 +75,7 @@ export interface GeoLibreLayer {
   opacity: number;
   style: LayerStyle;
   metadata: Record<string, unknown>;
+  beforeId?: string;
   geojson?: FeatureCollection;
   sourcePath?: string;
 }

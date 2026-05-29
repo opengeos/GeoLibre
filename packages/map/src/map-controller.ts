@@ -287,8 +287,8 @@ export class MapController {
       }
     }
 
-    for (const layer of layers) {
-      syncLayer(this.map, layer);
+    for (const [index, layer] of layers.entries()) {
+      syncLayer(this.map, layer, this.getBeforeStyleLayerId(layers, index));
     }
     this.layerIds = nextIds;
     this.syncedLayers = layers;
@@ -454,25 +454,8 @@ export class MapController {
   }> {
     if (!this.map) return [];
 
-    const styleLayers: Array<{ id: string; suffix?: string }> = [];
-    if (layer.type === "geojson") {
-      styleLayers.push(
-        { id: fillLayerId(layer.id), suffix: "Polygons" },
-        { id: lineLayerId(layer.id), suffix: "Lines" },
-        { id: circleLayerId(layer.id), suffix: "Points" },
-      );
-    } else if (
-      layer.type === "raster" ||
-      layer.type === "wms" ||
-      layer.type === "xyz"
-    ) {
-      styleLayers.push({ id: `layer-${layer.id}-raster` });
-    } else if (layer.type === "vector-tiles") {
-      styleLayers.push({ id: `layer-${layer.id}-vector` });
-    }
-
-    const existingStyleLayers = styleLayers.filter(({ id }) =>
-      this.map?.getLayer(id),
+    const existingStyleLayers = this.getCandidateStyleLayers(layer).filter(
+      ({ id }) => this.map?.getLayer(id),
     );
     return existingStyleLayers.map(({ id, suffix }) => ({
       id,
@@ -482,6 +465,65 @@ export class MapController {
           : layer.name,
       layer,
     }));
+  }
+
+  private getBeforeStyleLayerId(
+    layers: GeoLibreLayer[],
+    layerIndex: number,
+  ): string | undefined {
+    if (!this.map) return undefined;
+
+    for (const layer of layers.slice(layerIndex + 1)) {
+      const beforeLayer = this.getCandidateStyleLayers(layer).find(({ id }) =>
+        this.map?.getLayer(id),
+      );
+      if (beforeLayer) return beforeLayer.id;
+    }
+
+    if (layerIndex >= 0) {
+      return this.getExternalBeforeStyleLayerId(layers[layerIndex]);
+    }
+
+    return undefined;
+  }
+
+  private getExternalBeforeStyleLayerId(
+    layer: GeoLibreLayer | undefined,
+  ): string | undefined {
+    if (!this.map || !layer?.beforeId) return undefined;
+    if (
+      this.getCandidateStyleLayers(layer).some(({ id }) => id === layer.beforeId)
+    ) {
+      return undefined;
+    }
+    return this.map.getLayer(layer.beforeId) ? layer.beforeId : undefined;
+  }
+
+  private getCandidateStyleLayers(layer: GeoLibreLayer): Array<{
+    id: string;
+    suffix?: string;
+  }> {
+    if (layer.type === "geojson") {
+      return [
+        { id: fillLayerId(layer.id), suffix: "Polygons" },
+        { id: lineLayerId(layer.id), suffix: "Lines" },
+        { id: circleLayerId(layer.id), suffix: "Points" },
+      ];
+    }
+
+    if (
+      layer.type === "raster" ||
+      layer.type === "wms" ||
+      layer.type === "xyz"
+    ) {
+      return [{ id: `layer-${layer.id}-raster` }];
+    }
+
+    if (layer.type === "vector-tiles") {
+      return [{ id: `layer-${layer.id}-vector` }];
+    }
+
+    return [];
   }
 
   private publishLayerDisplayNames(layers: GeoLibreLayer[]): void {
