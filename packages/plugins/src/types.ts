@@ -26,6 +26,7 @@ export interface GeoLibreAppAPI {
     sourcePath?: string,
   ) => void;
   getActiveBasemap: () => string;
+  onBasemapChange: (callback: (styleUrl: string) => void) => () => void;
   addMapControl: (
     control: IControl,
     position?: GeoLibreMapControlPosition,

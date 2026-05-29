@@ -61,6 +61,12 @@ export function createAppAPI(
       return id;
     },
     getActiveBasemap: () => useAppStore.getState().basemapStyleUrl,
+    onBasemapChange: (callback: (styleUrl: string) => void) =>
+      useAppStore.subscribe((state, prev) => {
+        if (state.basemapStyleUrl !== prev.basemapStyleUrl) {
+          callback(state.basemapStyleUrl);
+        }
+      }),
     addMapControl: (
       control: Parameters<MapController["addControl"]>[0],
       position?: Parameters<MapController["addControl"]>[1],
