@@ -40,6 +40,7 @@ import {
   openProjectFile,
   saveProjectFile,
 } from "../../lib/tauri-io";
+import { AboutDialog } from "./AboutDialog";
 import { NewProjectDialog } from "./NewProjectDialog";
 
 interface TopToolbarProps {
@@ -265,6 +266,7 @@ export function TopToolbar({
           })}
         </DropdownMenuContent>
       </DropdownMenu>
+      <AboutDialog />
       <div className="ml-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
         <Button
           aria-label={
