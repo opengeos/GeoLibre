@@ -91,7 +91,7 @@ export function LayerPanel({ mapControllerRef }: LayerPanelProps) {
         <div className="space-y-1 p-2">
           {layers.length === 0 && (
             <p className="px-2 py-4 text-xs text-muted-foreground">
-              No layers. Add GeoJSON from the toolbar.
+              No layers. Add data from the toolbar.
             </p>
           )}
           {[...layers].reverse().map((layer) => (

@@ -40,6 +40,8 @@ export const PROJECT_VERSION = "0.1.0";
 
 export type LayerType =
   | "geojson"
+  | "raster"
+  | "wms"
   | "xyz"
   | "vector-tiles"
   | "pmtiles"

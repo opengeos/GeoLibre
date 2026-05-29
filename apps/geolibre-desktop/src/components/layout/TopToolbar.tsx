@@ -21,7 +21,7 @@ import {
   Input,
 } from "@geolibre/ui";
 import {
-  FileJson,
+  Database,
   FolderOpen,
   Layers,
   Map,
@@ -35,11 +35,8 @@ import {
 import { useState } from "react";
 import { createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
 import type { ThemeMode } from "../../hooks/useThemeMode";
-import {
-  openGeoJsonFileWithFallback,
-  openProjectFile,
-  saveProjectFile,
-} from "../../lib/tauri-io";
+import { openProjectFile, saveProjectFile } from "../../lib/tauri-io";
+import { AddDataDialog, type AddDataKind } from "./AddDataDialog";
 import { AboutDialog } from "./AboutDialog";
 import { NewProjectDialog } from "./NewProjectDialog";
 
@@ -81,7 +78,6 @@ export function TopToolbar({
   onToggleThemeMode,
 }: TopToolbarProps) {
   const loadProject = useAppStore((s) => s.loadProject);
-  const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
   const projectName = useAppStore((s) => s.projectName);
   const projectPath = useAppStore((s) => s.projectPath);
@@ -99,6 +95,7 @@ export function TopToolbar({
       {} as Record<ToolbarMapControl, boolean>,
     ),
   );
+  const [addDataKind, setAddDataKind] = useState<AddDataKind | null>(null);
 
   const handleOpen = async () => {
     const result = await openProjectFile();
@@ -124,18 +121,6 @@ export function TopToolbar({
     setProjectPath(path);
     markSaved();
     return true;
-  };
-
-  const handleAddGeoJson = async () => {
-    const result = await openGeoJsonFileWithFallback();
-    if (!result) return;
-    const name =
-      result.path.split(/[/\\]/).pop()?.replace(/\.[^.]+$/, "") ?? "Layer";
-    addGeoJsonLayer(name, result.data, result.path);
-    const layer = useAppStore
-      .getState()
-      .layers.find((l) => l.sourcePath === result.path);
-    if (layer) mapControllerRef.current?.fitLayer(layer);
   };
 
   const {
@@ -171,15 +156,30 @@ export function TopToolbar({
         <Save className="h-3.5 w-3.5 sm:mr-1" />
         <span className="hidden sm:inline">Save</span>
       </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={handleAddGeoJson}
-        aria-label="Add GeoJSON"
-      >
-        <FileJson className="h-3.5 w-3.5 sm:mr-1" />
-        <span className="hidden sm:inline">Add GeoJSON</span>
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" aria-label="Add Data">
+            <Database className="h-3.5 w-3.5 sm:mr-1" />
+            <span className="hidden sm:inline">Add Data</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuLabel>Add data</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => setAddDataKind("xyz")}>
+            Add XYZ Layer
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setAddDataKind("wms")}>
+            Add WMS Layer
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setAddDataKind("vector")}>
+            Add Vector Layer
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setAddDataKind("raster")}>
+            Add Raster Layer
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <Button
         variant="ghost"
         size="sm"
@@ -272,6 +272,13 @@ export function TopToolbar({
           })}
         </DropdownMenuContent>
       </DropdownMenu>
+      <AddDataDialog
+        kind={addDataKind}
+        mapControllerRef={mapControllerRef}
+        onOpenChange={(open) => {
+          if (!open) setAddDataKind(null);
+        }}
+      />
       <AboutDialog />
       <div className="ml-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
         <Button

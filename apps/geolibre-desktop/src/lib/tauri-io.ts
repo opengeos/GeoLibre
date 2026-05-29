@@ -7,6 +7,50 @@ function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
+interface FileDialogFilter {
+  name: string;
+  extensions: string[];
+}
+
+interface LocalDataFileOptions {
+  filters: FileDialogFilter[];
+  accept: string;
+  readText?: boolean;
+}
+
+export async function openLocalDataFileWithFallback(
+  options: LocalDataFileOptions,
+): Promise<{
+  path: string;
+  text?: string;
+} | null> {
+  if (isTauri()) {
+    const selected = await open({
+      multiple: false,
+      filters: options.filters,
+    });
+    if (!selected || typeof selected !== "string") return null;
+    const text = options.readText ? await readTextFile(selected) : undefined;
+    return { path: selected, text };
+  }
+
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = options.accept;
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) {
+        resolve(null);
+        return;
+      }
+      const text = options.readText ? await file.text() : undefined;
+      resolve({ path: file.name, text });
+    };
+    input.click();
+  });
+}
+
 export async function openGeoJsonFile(): Promise<{
   data: FeatureCollection;
   path: string;
