@@ -6,6 +6,8 @@ import {
 } from "@geolibre/core";
 import { Button, Input, Label, ScrollArea, Separator, Slider } from "@geolibre/ui";
 import {
+  ChevronDown,
+  ChevronUp,
   PanelRightClose,
   PanelRightOpen,
   SlidersHorizontal,
@@ -35,6 +37,81 @@ function styleValue<K extends keyof LayerStyle>(
   key: K,
 ): LayerStyle[K] {
   return style[key] ?? DEFAULT_LAYER_STYLE[key];
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function stepPrecision(step: number): number {
+  const [, decimals = ""] = String(step).split(".");
+  return decimals.length;
+}
+
+interface NumericStyleInputProps {
+  id: string;
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (value: number) => void;
+}
+
+function NumericStyleInput({
+  id,
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: NumericStyleInputProps) {
+  const normalize = (next: number) =>
+    Number(clampNumber(next, min, max).toFixed(stepPrecision(step)));
+
+  const stepValue = (direction: 1 | -1) => {
+    onChange(normalize(value + direction * step));
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      <div className="relative">
+        <Input
+          id={id}
+          type="number"
+          min={min}
+          max={max}
+          step={step}
+          className="pr-9 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          value={value}
+          onChange={(event) => {
+            const next = Number(event.target.value);
+            if (Number.isFinite(next)) onChange(normalize(next));
+          }}
+        />
+        <div className="absolute right-1 top-0.5 flex h-8 w-7 flex-col overflow-hidden rounded border bg-background">
+          <button
+            type="button"
+            className="flex h-1/2 items-center justify-center text-foreground hover:bg-accent"
+            aria-label={`Increase ${label}`}
+            onClick={() => stepValue(1)}
+          >
+            <ChevronUp className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            className="flex h-1/2 items-center justify-center border-t text-foreground hover:bg-accent"
+            aria-label={`Decrease ${label}`}
+            onClick={() => stepValue(-1)}
+          >
+            <ChevronDown className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 interface RasterStyleSliderProps {
@@ -318,54 +395,39 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
               }
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="strokeWidth">Stroke width</Label>
-            <Input
-              id="strokeWidth"
-              type="number"
-              min={0}
-              max={20}
-              step={0.5}
-              value={style.strokeWidth}
-              onChange={(e) =>
-                setLayerStyle(layer.id, {
-                  strokeWidth: Number(e.target.value),
-                })
-              }
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="fillOpacity">Fill opacity</Label>
-            <Input
-              id="fillOpacity"
-              type="number"
-              min={0}
-              max={1}
-              step={0.05}
-              value={style.fillOpacity}
-              onChange={(e) =>
-                setLayerStyle(layer.id, {
-                  fillOpacity: Number(e.target.value),
-                })
-              }
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="circleRadius">Circle radius</Label>
-            <Input
-              id="circleRadius"
-              type="number"
-              min={1}
-              max={50}
-              step={1}
-              value={style.circleRadius}
-              onChange={(e) =>
-                setLayerStyle(layer.id, {
-                  circleRadius: Number(e.target.value),
-                })
-              }
-            />
-          </div>
+          <NumericStyleInput
+            id="strokeWidth"
+            label="Stroke width"
+            min={0}
+            max={20}
+            step={0.5}
+            value={style.strokeWidth}
+            onChange={(strokeWidth) =>
+              setLayerStyle(layer.id, { strokeWidth })
+            }
+          />
+          <NumericStyleInput
+            id="fillOpacity"
+            label="Fill opacity"
+            min={0}
+            max={1}
+            step={0.05}
+            value={style.fillOpacity}
+            onChange={(fillOpacity) =>
+              setLayerStyle(layer.id, { fillOpacity })
+            }
+          />
+          <NumericStyleInput
+            id="circleRadius"
+            label="Circle radius"
+            min={1}
+            max={50}
+            step={1}
+            value={style.circleRadius}
+            onChange={(circleRadius) =>
+              setLayerStyle(layer.id, { circleRadius })
+            }
+          />
         </div>
       </ScrollArea>
       <Separator />
