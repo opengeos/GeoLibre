@@ -97,4 +97,13 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PREVIEW_URL: ${{ steps.netlify.outputs.preview_url }}
         run: |
-          gh pr comment "$PR_NUMBER" --body "Netlify preview: $PREVIEW_URL"
+          existing_comment_id="$(
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+              --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("Netlify preview: "))) | .id' \
+              | head -n 1
+          )"
+          if [ -z "$existing_comment_id" ]; then
+            gh pr comment "$PR_NUMBER" --body "Netlify preview: $PREVIEW_URL"
+          else
+            echo "Netlify preview comment already exists: $existing_comment_id"
+          fi
