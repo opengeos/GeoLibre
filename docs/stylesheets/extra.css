@@ -139,4 +139,13 @@
     margin-left: 0;
     margin-top: 0.6rem;
   }
+
+  .hero__actions {
+    flex-direction: column;
+  }
+
+  .hero__actions .md-button {
+    text-align: center;
+    width: 100%;
+  }
 }

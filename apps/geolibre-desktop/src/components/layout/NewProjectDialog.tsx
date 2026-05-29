@@ -129,7 +129,7 @@ export function NewProjectDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="sm">
+        <Button variant="ghost" size="sm" aria-label="New project">
           <FilePlus2 className="h-3.5 w-3.5 sm:mr-1" />
           <span className="hidden sm:inline">New</span>
         </Button>

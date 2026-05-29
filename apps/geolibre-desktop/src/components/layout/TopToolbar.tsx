@@ -163,15 +163,20 @@ export function TopToolbar({
         <span className="hidden sm:inline">GeoLibre Desktop</span>
       </span>
       <NewProjectDialog onSaveCurrentProject={handleSave} />
-      <Button variant="ghost" size="sm" onClick={handleOpen}>
+      <Button variant="ghost" size="sm" onClick={handleOpen} aria-label="Open">
         <FolderOpen className="h-3.5 w-3.5 sm:mr-1" />
         <span className="hidden sm:inline">Open</span>
       </Button>
-      <Button variant="ghost" size="sm" onClick={handleSave}>
+      <Button variant="ghost" size="sm" onClick={handleSave} aria-label="Save">
         <Save className="h-3.5 w-3.5 sm:mr-1" />
         <span className="hidden sm:inline">Save</span>
       </Button>
-      <Button variant="ghost" size="sm" onClick={handleAddGeoJson}>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={handleAddGeoJson}
+        aria-label="Add GeoJSON"
+      >
         <FileJson className="h-3.5 w-3.5 sm:mr-1" />
         <span className="hidden sm:inline">Add GeoJSON</span>
       </Button>
@@ -179,13 +184,14 @@ export function TopToolbar({
         variant="ghost"
         size="sm"
         onClick={() => setProcessingOpen(true)}
+        aria-label="Processing"
       >
         <Wrench className="h-3.5 w-3.5 sm:mr-1" />
         <span className="hidden sm:inline">Processing</span>
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" aria-label="Controls">
             <SlidersHorizontal className="h-3.5 w-3.5 sm:mr-1" />
             <span className="hidden sm:inline">Controls</span>
           </Button>
@@ -206,7 +212,7 @@ export function TopToolbar({
       </DropdownMenu>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" aria-label="Plugins">
             <Puzzle className="h-3.5 w-3.5 sm:mr-1" />
             <span className="hidden sm:inline">Plugins</span>
           </Button>
