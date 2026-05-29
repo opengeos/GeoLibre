@@ -10,6 +10,8 @@ import {
 import { isPlaceholderLayer } from "./placeholders";
 import { circlePaint, fillPaint, linePaint } from "./style-mapper";
 
+const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
+
 export function syncLayer(
   map: maplibregl.Map,
   layer: GeoLibreLayer,
@@ -136,7 +138,7 @@ function syncRasterTileLayer(
 ): void {
   const src = sourceId(layer.id);
   const lid = `layer-${layer.id}-raster`;
-  const tiles = (layer.source.tiles as string[]) ?? [];
+  const tiles = getRenderableRasterTiles(layer);
   const tileSize = (layer.source.tileSize as number | undefined) ?? 256;
   if (tiles.length === 0) return;
   if (!map.getSource(src)) {
@@ -154,6 +156,30 @@ function syncRasterTileLayer(
     },
     beforeId,
   );
+}
+
+function getRenderableRasterTiles(layer: GeoLibreLayer): string[] {
+  const tiles = (layer.source.tiles as string[]) ?? [];
+  if (layer.type !== "wms" || !isViteDevServer()) return tiles;
+  return tiles.map(proxyWmsTileUrl);
+}
+
+function isViteDevServer(): boolean {
+  return Boolean(
+    (
+      import.meta as ImportMeta & {
+        env?: { DEV?: boolean };
+      }
+    ).env?.DEV,
+  );
+}
+
+function proxyWmsTileUrl(tileUrl: string): string {
+  const encodedUrl = encodeURIComponent(tileUrl).replaceAll(
+    "%7Bbbox-epsg-3857%7D",
+    "{bbox-epsg-3857}",
+  );
+  return `${WMS_PROXY_PATH}?url=${encodedUrl}`;
 }
 
 function syncVectorTileLayer(

@@ -2,6 +2,10 @@ const SWIPE_STYLE_ID = "maplibre-gl-swipe-style-fixes";
 const SWIPE_SELECT_PROXY_CLASS = "swipe-select-proxy";
 const SWIPE_SELECT_MENU_CLASS = "swipe-select-menu";
 
+interface GeoLibreLayerLabelWindow extends Window {
+  __GEOLIBRE_LAYER_LABELS__?: Record<string, string>;
+}
+
 const SWIPE_SELECT_FIXES = `
 .swipe-control-panel .swipe-control-select {
   color: #111827;
@@ -90,6 +94,40 @@ const SWIPE_SELECT_FIXES = `
 .swipe-select-menu button.is-selected {
   background: #4a90d9;
   color: #fff;
+}
+
+.swipe-control-panel .swipe-layer-item input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 2px;
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 14px;
+  justify-content: center;
+  margin: 0;
+  width: 14px;
+}
+
+.swipe-control-panel .swipe-layer-item input[type="checkbox"]:hover {
+  border-color: #4a90d9;
+}
+
+.swipe-control-panel .swipe-layer-item input[type="checkbox"]:focus-visible {
+  box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.18);
+  outline: none;
+}
+
+.swipe-control-panel .swipe-layer-item input[type="checkbox"]:checked {
+  background-color: #4a90d9;
+  border-color: #4a90d9;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10' fill='none'%3E%3Cpath d='M2 5 4 7 8 3' stroke='%23fff' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 10px 10px;
 }
 `;
 
@@ -219,9 +257,62 @@ const enhanceSwipeSelects = () => {
     .forEach(enhanceSwipeSelect);
 };
 
+let swipeEnhanceFrame: number | null = null;
+
+const getSwipeLayerLabel = (layerId: string): string => {
+  if (layerId === "__basemap__") return "Basemap";
+  return (
+    (window as GeoLibreLayerLabelWindow).__GEOLIBRE_LAYER_LABELS__?.[layerId] ??
+    layerId
+  );
+};
+
+const syncSwipeLayerLabels = () => {
+  document
+    .querySelectorAll<HTMLInputElement>(
+      '.swipe-control-panel .swipe-layer-item input[type="checkbox"][data-layer-id]',
+    )
+    .forEach((checkbox) => {
+      const layerId = checkbox.dataset.layerId;
+      if (!layerId) return;
+
+      const label = checkbox.parentElement?.querySelector<HTMLLabelElement>(
+        `label[for="${CSS.escape(checkbox.id)}"]`,
+      );
+      if (!label) return;
+
+      const displayName = getSwipeLayerLabel(layerId);
+      const title =
+        layerId === "__basemap__" ? "Basemap" : `${displayName} (${layerId})`;
+      if (label.textContent !== displayName) {
+        label.textContent = displayName;
+      }
+      if (label.title !== title) {
+        label.title = title;
+      }
+    });
+};
+
+const enhanceSwipePanel = () => {
+  enhanceSwipeSelects();
+  syncSwipeLayerLabels();
+};
+
+const scheduleEnhanceSwipePanel = () => {
+  if (swipeEnhanceFrame !== null) return;
+  swipeEnhanceFrame = window.requestAnimationFrame(() => {
+    swipeEnhanceFrame = null;
+    enhanceSwipePanel();
+  });
+};
+
 if (typeof document !== "undefined") {
   document.addEventListener("click", closeSwipeSelectMenu);
   window.addEventListener("resize", closeSwipeSelectMenu);
+  window.addEventListener(
+    "geolibre-layer-labels-change",
+    scheduleEnhanceSwipePanel,
+  );
   window.addEventListener(
     "scroll",
     (event) => {
@@ -234,7 +325,7 @@ if (typeof document !== "undefined") {
     true,
   );
 
-  const observer = new MutationObserver(enhanceSwipeSelects);
+  const observer = new MutationObserver(scheduleEnhanceSwipePanel);
   observer.observe(document.body, { childList: true, subtree: true });
-  enhanceSwipeSelects();
+  scheduleEnhanceSwipePanel();
 }

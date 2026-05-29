@@ -1,15 +1,17 @@
 import react from "@vitejs/plugin-react";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import type {
   RollupLog,
   RollupOptions,
   WarningHandlerWithDefault,
 } from "rollup";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 
 const GEOAGENT_BROWSER_BUNDLE = "maplibre-gl-geoagent/dist/browser-";
 const GIS_CHUNK_WARNING_LIMIT_KB = 5000;
 const APP_BASE = process.env.GEOLIBRE_APP_BASE;
+const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
 
 function manualChunks(id: string): string | undefined {
   if (!id.includes("node_modules")) return undefined;
@@ -36,9 +38,53 @@ function onwarn(
   defaultHandler(warning);
 }
 
+function wmsProxyPlugin(): Plugin {
+  return {
+    name: "geolibre-wms-proxy",
+    configureServer(server) {
+      server.middlewares.use(WMS_PROXY_PATH, async (req, res) => {
+        try {
+          await proxyWmsRequest(req, res);
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "WMS proxy request failed";
+          res.statusCode = 502;
+          res.setHeader("content-type", "text/plain");
+          res.end(message);
+        }
+      });
+    },
+  };
+}
+
+async function proxyWmsRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  const requestUrl = new URL(req.url ?? "", `http://localhost${WMS_PROXY_PATH}`);
+  const target = requestUrl.searchParams.get("url");
+  if (!target || !/^https?:\/\//i.test(target)) {
+    res.statusCode = 400;
+    res.setHeader("content-type", "text/plain");
+    res.end("Missing or invalid WMS target URL");
+    return;
+  }
+
+  const response = await fetch(target);
+  const contentType =
+    response.headers.get("content-type") ?? "application/octet-stream";
+  const body = Buffer.from(await response.arrayBuffer());
+
+  res.statusCode = response.status;
+  res.setHeader("access-control-allow-origin", "*");
+  res.setHeader("cache-control", "public, max-age=3600");
+  res.setHeader("content-type", contentType);
+  res.end(body);
+}
+
 export default defineConfig({
   base: APP_BASE,
-  plugins: [react()],
+  plugins: [react(), wmsProxyPlugin()],
   clearScreen: false,
   server: {
     port: 1420,
