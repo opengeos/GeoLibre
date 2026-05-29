@@ -64,6 +64,7 @@ jobs:
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          set -euo pipefail
           test -n "$NETLIFY_AUTH_TOKEN"
           test -n "$NETLIFY_SITE_ID"
           if [ -n "$PR_NUMBER" ]; then
@@ -73,8 +74,13 @@ jobs:
             deploy_alias="manual-$GITHUB_RUN_NUMBER"
             deploy_message="Manual preview for $GITHUB_REF_NAME"
           fi
+          deploy_dir="$RUNNER_TEMP/geolibre-netlify-site"
+          rm -rf "$deploy_dir"
+          mkdir -p "$deploy_dir"
+          cp -R site/. "$deploy_dir/"
+          cd "$deploy_dir"
           npx --yes netlify-cli@latest deploy \
-            --dir site \
+            --dir . \
             --site "$NETLIFY_SITE_ID" \
             --auth "$NETLIFY_AUTH_TOKEN" \
             --alias "$deploy_alias" \
