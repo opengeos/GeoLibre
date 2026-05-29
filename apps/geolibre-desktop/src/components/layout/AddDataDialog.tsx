@@ -213,6 +213,11 @@ export function AddDataDialog({
 
   const closeDialog = () => onOpenChange(false);
 
+  const handleOpenChange = (next: boolean) => {
+    if (!next && isSubmitting) return;
+    onOpenChange(next);
+  };
+
   const addAndClose = (layer: GeoLibreLayer) => {
     addLayer(layer);
     closeDialog();
@@ -220,14 +225,18 @@ export function AddDataDialog({
 
   const handleChooseGeoJson = async () => {
     setError(null);
-    const result = await openGeoJsonFileWithFallback();
-    if (!result) return;
-    setSelectedGeoJson(result);
-    setLayerName((current) =>
-      current.trim() && current !== "Vector Layer"
-        ? current
-        : layerNameFromPath(result.path, "Vector Layer"),
-    );
+    try {
+      const result = await openGeoJsonFileWithFallback();
+      if (!result) return;
+      setSelectedGeoJson(result);
+      setLayerName((current) =>
+        current.trim() && current !== "Vector Layer"
+          ? current
+          : layerNameFromPath(result.path, "Vector Layer"),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not read file.");
+    }
   };
 
   const handleChooseRasterFile = async () => {
@@ -387,7 +396,7 @@ export function AddDataDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -630,7 +639,12 @@ export function AddDataDialog({
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={closeDialog}>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={closeDialog}
+              disabled={isSubmitting}
+            >
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
