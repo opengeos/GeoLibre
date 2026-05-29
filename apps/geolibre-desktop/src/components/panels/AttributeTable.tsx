@@ -23,6 +23,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { isTauri } from "../../lib/tauri-io";
 
 type SortDirection = "asc" | "desc";
 type SortKey = "__featureId" | string;
@@ -61,6 +62,7 @@ function compareAttributeValues(a: unknown, b: unknown): number {
 
 export function AttributeTable() {
   const tableSectionRef = useRef<HTMLElement>(null);
+  const tableResizeGuideRef = useRef<HTMLDivElement>(null);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const layers = useAppStore((s) => s.layers);
   const attributeFilter = useAppStore((s) => s.attributeFilter);
@@ -84,6 +86,7 @@ export function AttributeTable() {
   });
   const [columnWidths, setColumnWidths] = useState<ColumnWidths>({});
   const [tableHeight, setTableHeight] = useState(DEFAULT_TABLE_HEIGHT);
+  const deferTableResize = isTauri();
 
   const layer = layers.find((l) => l.id === selectedLayerId);
   const features = layer?.geojson?.features ?? [];
@@ -192,6 +195,15 @@ export function AttributeTable() {
       if (resizeFrame !== null) return;
       resizeFrame = window.requestAnimationFrame(() => {
         resizeFrame = null;
+        if (deferTableResize) {
+          if (tableResizeGuideRef.current) {
+            tableResizeGuideRef.current.style.top = `${
+              startY + startHeight - nextHeight
+            }px`;
+            tableResizeGuideRef.current.classList.remove("hidden");
+          }
+          return;
+        }
         if (tableSectionRef.current) {
           tableSectionRef.current.style.height = `${nextHeight}px`;
         }
@@ -208,6 +220,7 @@ export function AttributeTable() {
       if (tableSectionRef.current) {
         tableSectionRef.current.style.height = `${nextHeight}px`;
       }
+      tableResizeGuideRef.current?.classList.add("hidden");
       setTableHeight(nextHeight);
       window.dispatchEvent(new Event(PANEL_RESIZE_END_EVENT));
       document.body.style.cursor = previousCursor;
@@ -288,6 +301,10 @@ export function AttributeTable() {
         aria-label="Resize attribute table"
         className="absolute -top-1 left-0 right-0 z-20 h-2 cursor-row-resize select-none border-t border-transparent hover:border-primary"
         onMouseDown={startTableResize}
+      />
+      <div
+        ref={tableResizeGuideRef}
+        className="pointer-events-none fixed left-0 right-0 z-50 hidden h-px bg-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.25)]"
       />
       <div className="flex items-center gap-2 border-b px-3 py-1.5">
         <Button

@@ -62,6 +62,7 @@ export function DesktopShell({
   onToggleThemeMode,
 }: DesktopShellProps) {
   const shellRef = useRef<HTMLDivElement>(null);
+  const verticalResizeGuideRef = useRef<HTMLDivElement>(null);
   const mapControllerRef = useRef<MapController | null>(null);
   const dragDepthRef = useRef(0);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
@@ -74,6 +75,7 @@ export function DesktopShell({
   const [stylePanelWidth, setStylePanelWidth] = useState(
     DEFAULT_SIDE_PANEL_WIDTH,
   );
+  const deferPanelResize = isTauri();
   const shellStyle: ShellStyle = {
     "--layer-panel-width": `${layerPanelWidth}px`,
     "--style-panel-width": `${stylePanelWidth}px`,
@@ -228,6 +230,7 @@ export function DesktopShell({
 
       const startX = event.clientX;
       const startWidth = layerPanelWidth;
+      const panelRect = event.currentTarget.parentElement?.getBoundingClientRect();
       let nextWidth = startWidth;
       let resizeFrame: number | null = null;
       const previousCursor = document.body.style.cursor;
@@ -245,6 +248,15 @@ export function DesktopShell({
         if (resizeFrame !== null) return;
         resizeFrame = window.requestAnimationFrame(() => {
           resizeFrame = null;
+          if (deferPanelResize) {
+            if (verticalResizeGuideRef.current && panelRect) {
+              verticalResizeGuideRef.current.style.left = `${
+                panelRect.left + nextWidth
+              }px`;
+              verticalResizeGuideRef.current.classList.remove("hidden");
+            }
+            return;
+          }
           shellRef.current?.style.setProperty(
             "--layer-panel-width",
             `${nextWidth}px`,
@@ -263,6 +275,7 @@ export function DesktopShell({
           "--layer-panel-width",
           `${nextWidth}px`,
         );
+        verticalResizeGuideRef.current?.classList.add("hidden");
         setLayerPanelWidth(nextWidth);
         window.dispatchEvent(new Event(PANEL_RESIZE_END_EVENT));
         document.body.style.cursor = previousCursor;
@@ -272,7 +285,7 @@ export function DesktopShell({
       window.addEventListener("mousemove", onMouseMove);
       window.addEventListener("mouseup", onMouseUp);
     },
-    [layerPanelWidth],
+    [deferPanelResize, layerPanelWidth],
   );
 
   const startStylePanelResize = useCallback(
@@ -282,6 +295,7 @@ export function DesktopShell({
 
       const startX = event.clientX;
       const startWidth = stylePanelWidth;
+      const panelRect = event.currentTarget.parentElement?.getBoundingClientRect();
       let nextWidth = startWidth;
       let resizeFrame: number | null = null;
       const previousCursor = document.body.style.cursor;
@@ -299,6 +313,15 @@ export function DesktopShell({
         if (resizeFrame !== null) return;
         resizeFrame = window.requestAnimationFrame(() => {
           resizeFrame = null;
+          if (deferPanelResize) {
+            if (verticalResizeGuideRef.current && panelRect) {
+              verticalResizeGuideRef.current.style.left = `${
+                panelRect.right - nextWidth
+              }px`;
+              verticalResizeGuideRef.current.classList.remove("hidden");
+            }
+            return;
+          }
           shellRef.current?.style.setProperty(
             "--style-panel-width",
             `${nextWidth}px`,
@@ -317,6 +340,7 @@ export function DesktopShell({
           "--style-panel-width",
           `${nextWidth}px`,
         );
+        verticalResizeGuideRef.current?.classList.add("hidden");
         setStylePanelWidth(nextWidth);
         window.dispatchEvent(new Event(PANEL_RESIZE_END_EVENT));
         document.body.style.cursor = previousCursor;
@@ -326,7 +350,7 @@ export function DesktopShell({
       window.addEventListener("mousemove", onMouseMove);
       window.addEventListener("mouseup", onMouseUp);
     },
-    [stylePanelWidth],
+    [deferPanelResize, stylePanelWidth],
   );
 
   return (
@@ -359,6 +383,10 @@ export function DesktopShell({
       <AttributeTable />
       <StatusBar />
       <ProcessingDialog mapControllerRef={mapControllerRef} />
+      <div
+        ref={verticalResizeGuideRef}
+        className="pointer-events-none fixed bottom-7 top-11 z-50 hidden w-px bg-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.25)]"
+      />
       {isDraggingFiles ? (
         <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm">
           <div className="rounded-md border bg-background px-4 py-3 text-sm font-medium shadow-lg">
