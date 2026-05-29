@@ -34,9 +34,6 @@ jobs:
       - name: Install documentation dependencies
         run: python -m pip install -r requirements-docs.txt
 
-      - name: Build documentation
-        run: mkdocs build --strict --site-dir site
-
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
@@ -52,10 +49,14 @@ jobs:
         env:
           GEOLIBRE_APP_BASE: ./
 
+      - name: Build documentation
+        run: mkdocs build --strict --site-dir site
+
       - name: Add web demo to site
         run: |
           mkdir -p site/demo
           cp -R apps/geolibre-desktop/dist/. site/demo/
+          test -f site/demo/index.html
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
