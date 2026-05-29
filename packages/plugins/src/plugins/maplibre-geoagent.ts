@@ -30,6 +30,18 @@ type GeoAgentControlInternals = {
   invalidateAgent?: () => void;
 };
 
+type TauriEarthEngineOAuthStart = {
+  url: string;
+  state: string;
+};
+
+type TauriEarthEngineOAuthToken = {
+  accessToken?: string;
+  tokenType?: string;
+  expiresIn?: number;
+  error?: string;
+};
+
 let geoAgentPosition: GeoLibreMapControlPosition = "top-left";
 
 const GEOAGENT_OPTIONS = {
@@ -47,6 +59,9 @@ const GEOAGENT_OPTIONS = {
 } satisfies Omit<GeoAgentControlOptions, "position">;
 
 let geoAgentControl: GeoAgentControl | null = null;
+let earthEngineAccessTokenOverride = "";
+let earthEngineTokenTypeOverride = "Bearer";
+let earthEngineTokenExpiresInOverride = 3600;
 
 export const maplibreGeoAgentPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-geoagent",
@@ -163,8 +178,7 @@ function enhanceEarthEngineSignIn(): void {
       void closeTauriOauthPopups();
       status.textContent = "Earth Engine sign-in complete.";
     } catch (error) {
-      status.textContent =
-        error instanceof Error ? error.message : "Earth Engine sign-in failed.";
+      status.textContent = errorMessage(error);
     } finally {
       button.disabled = false;
     }
@@ -187,8 +201,8 @@ function applyEarthEngineAccessToken(
     oauthClientId,
     projectId,
     accessToken,
-    tokenType: "Bearer",
-    tokenExpiresIn: 3600,
+    tokenType: earthEngineTokenTypeOverride,
+    tokenExpiresIn: earthEngineTokenExpiresInOverride,
   };
 
   if (control.options) {
@@ -199,12 +213,18 @@ function applyEarthEngineAccessToken(
 }
 
 function earthEngineAccessToken(): string {
+  if (earthEngineAccessTokenOverride) return earthEngineAccessTokenOverride;
   return (earthEngine.data?.getAuthToken?.() ?? "")
     .replace(/^Bearer\s+/i, "")
     .trim();
 }
 
-function authenticateEarthEngine(oauthClientId: string): Promise<void> {
+async function authenticateEarthEngine(oauthClientId: string): Promise<void> {
+  if (isTauriProductionOrigin()) {
+    await authenticateEarthEngineViaTauri(oauthClientId);
+    return;
+  }
+
   return new Promise((resolve, reject) => {
     const onSuccess = () => resolve();
     const onFailure = (error: unknown) => reject(new Error(errorMessage(error)));
@@ -232,6 +252,87 @@ function authenticateEarthEngine(oauthClientId: string): Promise<void> {
       onImmediateFailed,
     );
   });
+}
+
+function isTauriProductionOrigin(): boolean {
+  const { hostname, protocol } = window.location;
+  return (
+    protocol === "tauri:" ||
+    protocol === "file:" ||
+    (hostname.endsWith(".localhost") && hostname !== "localhost")
+  );
+}
+
+async function authenticateEarthEngineViaTauri(
+  oauthClientId: string,
+): Promise<void> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  const session = await invoke<TauriEarthEngineOAuthStart>(
+    "start_earth_engine_oauth",
+    { clientId: oauthClientId },
+  );
+  const popup = window.open(
+    session.url,
+    "geolibre-earth-engine-oauth",
+    "popup,width=520,height=680",
+  );
+  if (!popup) {
+    throw new Error("Earth Engine sign-in popup was blocked.");
+  }
+
+  const token = await waitForTauriEarthEngineToken(
+    invoke,
+    session.state,
+    popup,
+  );
+  if (token.error) throw new Error(token.error);
+  if (!token.accessToken) {
+    throw new Error("Earth Engine sign-in did not return an access token.");
+  }
+
+  const accessToken = token.accessToken.replace(/^Bearer\s+/i, "").trim();
+  const tokenType = token.tokenType || "Bearer";
+  const expiresIn = token.expiresIn || 3600;
+  earthEngineAccessTokenOverride = accessToken;
+  earthEngineTokenTypeOverride = tokenType;
+  earthEngineTokenExpiresInOverride = expiresIn;
+  earthEngine.apiclient?.setAuthToken?.(
+    oauthClientId,
+    tokenType,
+    accessToken,
+    expiresIn,
+    [],
+    () => undefined,
+    false,
+  );
+  popup.close();
+}
+
+async function waitForTauriEarthEngineToken(
+  invoke: <T>(command: string, args?: Record<string, unknown>) => Promise<T>,
+  state: string,
+  popup: Window,
+): Promise<TauriEarthEngineOAuthToken> {
+  let closedPolls = 0;
+  for (let poll = 0; poll < 300; poll += 1) {
+    const token = await invoke<TauriEarthEngineOAuthToken | null>(
+      "poll_earth_engine_oauth",
+      { stateId: state },
+    );
+    if (token) return token;
+    if (popup.closed) {
+      closedPolls += 1;
+      if (closedPolls > 2) {
+        throw new Error("Earth Engine sign-in was cancelled.");
+      }
+    }
+    await delay(1000);
+  }
+  throw new Error("Earth Engine sign-in timed out.");
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 async function closeTauriOauthPopups(): Promise<void> {
@@ -273,5 +374,14 @@ async function closeTauriOauthPopups(): Promise<void> {
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
+  try {
+    return JSON.stringify(error);
+  } catch {
+    // Fall back to the generic message below.
+  }
   return "Earth Engine sign-in failed.";
 }

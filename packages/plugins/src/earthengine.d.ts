@@ -2,6 +2,16 @@ declare module "@google/earthengine" {
   const earthEngine: {
     apiclient?: {
       ensureAuthLibLoaded?: (callback: () => void) => void;
+      setAuthToken?: (
+        clientId: string,
+        tokenType: string,
+        accessToken: string,
+        expiresIn: number,
+        extraScopes?: string[],
+        callback?: () => void,
+        updateAuthLibrary?: boolean,
+        suppressDefaultScopes?: boolean,
+      ) => void;
     };
     data?: {
       authenticateViaOauth?: (
