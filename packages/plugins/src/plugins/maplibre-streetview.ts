@@ -2,7 +2,11 @@ import {
   StreetViewControl,
   type StreetViewControlOptions,
 } from "maplibre-gl-streetview";
-import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import type {
+  GeoLibreAppAPI,
+  GeoLibreMapControlPosition,
+  GeoLibrePlugin,
+} from "../types";
 
 const streetViewEnv = (
   import.meta as ImportMeta & {
@@ -21,16 +25,17 @@ const defaultProvider: StreetViewControlOptions["defaultProvider"] = googleApiKe
     ? "mapillary"
     : "google";
 
+let streetViewPosition: GeoLibreMapControlPosition = "top-right";
+
 const STREET_VIEW_OPTIONS = {
   collapsed: false,
-  position: "top-right",
   title: "Street View",
   panelWidth: 420,
   panelHeight: 320,
   defaultProvider,
   googleApiKey,
   mapillaryAccessToken,
-} satisfies StreetViewControlOptions;
+} satisfies Omit<StreetViewControlOptions, "position">;
 
 let streetViewControl: StreetViewControl | null = null;
 
@@ -40,13 +45,10 @@ export const maplibreStreetViewPlugin: GeoLibrePlugin = {
   version: "0.4.0",
   activate: (app: GeoLibreAppAPI) => {
     if (!streetViewControl) {
-      streetViewControl = new StreetViewControl(STREET_VIEW_OPTIONS);
+      streetViewControl = new StreetViewControl(getStreetViewOptions());
     }
 
-    const added = app.addMapControl(
-      streetViewControl,
-      STREET_VIEW_OPTIONS.position,
-    );
+    const added = app.addMapControl(streetViewControl, streetViewPosition);
     if (!added) {
       streetViewControl = null;
       return false;
@@ -58,4 +60,23 @@ export const maplibreStreetViewPlugin: GeoLibrePlugin = {
     app.removeMapControl(streetViewControl);
     streetViewControl = null;
   },
+  getMapControlPosition: () => streetViewPosition,
+  setMapControlPosition: (
+    app: GeoLibreAppAPI,
+    position: GeoLibreMapControlPosition,
+  ) => {
+    streetViewPosition = position;
+    if (!streetViewControl) return;
+    app.removeMapControl(streetViewControl);
+    const added = app.addMapControl(streetViewControl, streetViewPosition);
+    if (!added) return false;
+    setTimeout(() => streetViewControl?.expand(), 0);
+  },
 };
+
+function getStreetViewOptions(): StreetViewControlOptions {
+  return {
+    ...STREET_VIEW_OPTIONS,
+    position: streetViewPosition,
+  };
+}

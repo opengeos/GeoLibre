@@ -1,4 +1,8 @@
-import type { GeoLibreAppAPI, GeoLibrePlugin } from "./types";
+import type {
+  GeoLibreAppAPI,
+  GeoLibreMapControlPosition,
+  GeoLibrePlugin,
+} from "./types";
 
 export class PluginManager {
   private plugins = new Map<string, GeoLibrePlugin>();
@@ -27,6 +31,12 @@ export class PluginManager {
 
   isActive(id: string): boolean {
     return this.active.has(id);
+  }
+
+  getMapControlPosition(
+    id: string,
+  ): GeoLibreMapControlPosition | undefined {
+    return this.plugins.get(id)?.getMapControlPosition?.();
   }
 
   getVersion(): number {
@@ -58,6 +68,18 @@ export class PluginManager {
   toggle(id: string, app: GeoLibreAppAPI): void {
     if (this.active.has(id)) this.deactivate(id, app);
     else this.activate(id, app);
+  }
+
+  setMapControlPosition(
+    id: string,
+    app: GeoLibreAppAPI,
+    position: GeoLibreMapControlPosition,
+  ): void {
+    const plugin = this.plugins.get(id);
+    if (!plugin?.setMapControlPosition) return;
+    const updated = plugin.setMapControlPosition(app, position);
+    if (updated === false) return;
+    this.notify();
   }
 
   private notify(): void {

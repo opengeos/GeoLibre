@@ -10,6 +10,7 @@ import {
   PluginManager,
 } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
+import type { GeoLibreMapControlPosition } from "@geolibre/plugins";
 import type { RefObject } from "react";
 import { useSyncExternalStore } from "react";
 
@@ -38,8 +39,14 @@ export function usePluginRegistry() {
   return {
     plugins: manager.list(),
     isActive: (id: string) => manager.isActive(id),
+    getMapControlPosition: (id: string) => manager.getMapControlPosition(id),
     toggle: (id: string, appApi: ReturnType<typeof createAppAPI>) =>
       manager.toggle(id, appApi),
+    setMapControlPosition: (
+      id: string,
+      appApi: ReturnType<typeof createAppAPI>,
+      position: GeoLibreMapControlPosition,
+    ) => manager.setMapControlPosition(id, appApi, position),
   };
 }
 
@@ -81,5 +88,18 @@ export function createAppAPI(
     ) =>
       mapControllerRef?.current?.setBuiltInControlVisible(control, visible) ??
       false,
+    getBuiltInMapControlPosition: (
+      control: Parameters<MapController["getBuiltInControlPosition"]>[0],
+    ) =>
+      mapControllerRef?.current?.getBuiltInControlPosition(control) ??
+      "top-right",
+    setBuiltInMapControlPosition: (
+      control: Parameters<MapController["setBuiltInControlPosition"]>[0],
+      position: Parameters<MapController["setBuiltInControlPosition"]>[1],
+    ) =>
+      mapControllerRef?.current?.setBuiltInControlPosition(
+        control,
+        position,
+      ) ?? false,
   };
 }

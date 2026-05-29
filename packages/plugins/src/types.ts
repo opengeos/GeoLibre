@@ -36,6 +36,13 @@ export interface GeoLibreAppAPI {
     control: GeoLibreBuiltInMapControl,
     visible: boolean,
   ) => boolean;
+  getBuiltInMapControlPosition: (
+    control: GeoLibreBuiltInMapControl,
+  ) => GeoLibreMapControlPosition;
+  setBuiltInMapControlPosition: (
+    control: GeoLibreBuiltInMapControl,
+    position: GeoLibreMapControlPosition,
+  ) => boolean;
 }
 
 export interface GeoLibrePlugin {
@@ -45,4 +52,9 @@ export interface GeoLibrePlugin {
   activeByDefault?: boolean;
   activate: (app: GeoLibreAppAPI) => boolean | void;
   deactivate: (app: GeoLibreAppAPI) => void;
+  getMapControlPosition?: () => GeoLibreMapControlPosition;
+  setMapControlPosition?: (
+    app: GeoLibreAppAPI,
+    position: GeoLibreMapControlPosition,
+  ) => boolean | void;
 }

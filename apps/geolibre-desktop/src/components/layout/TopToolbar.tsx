@@ -4,13 +4,19 @@ import {
   DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
   type MapController,
 } from "@geolibre/map";
+import type { GeoLibreMapControlPosition } from "@geolibre/plugins";
 import {
   Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
   Input,
 } from "@geolibre/ui";
@@ -51,6 +57,16 @@ const MAP_CONTROL_ITEMS: Array<{
   { id: "scale", label: "Scale" },
   { id: "attribution", label: "Attribution" },
   { id: "logo", label: "MapLibre logo" },
+];
+
+const PLUGIN_POSITION_ITEMS: Array<{
+  value: GeoLibreMapControlPosition;
+  label: string;
+}> = [
+  { value: "top-left", label: "Top left" },
+  { value: "top-right", label: "Top right" },
+  { value: "bottom-left", label: "Bottom left" },
+  { value: "bottom-right", label: "Bottom right" },
 ];
 
 export function TopToolbar({ mapControllerRef }: TopToolbarProps) {
@@ -112,7 +128,13 @@ export function TopToolbar({ mapControllerRef }: TopToolbarProps) {
     if (layer) mapControllerRef.current?.fitLayer(layer);
   };
 
-  const { plugins, isActive, toggle } = usePluginRegistry();
+  const {
+    plugins,
+    isActive,
+    getMapControlPosition,
+    toggle,
+    setMapControlPosition,
+  } = usePluginRegistry();
   const appApi = createAppAPI(mapControllerRef);
   const toggleMapControl = (control: ToolbarMapControl) => {
     setControlsVisible((current) => {
@@ -182,15 +204,56 @@ export function TopToolbar({ mapControllerRef }: TopToolbarProps) {
         <DropdownMenuContent align="start">
           <DropdownMenuLabel>Activate plugin</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {plugins.map((p) => (
-            <DropdownMenuItem
-              key={p.id}
-              onClick={() => toggle(p.id, appApi)}
-            >
-              {p.name}
-              {isActive(p.id) ? " ✓" : ""}
-            </DropdownMenuItem>
-          ))}
+          {plugins.map((p) => {
+            const pluginPosition = getMapControlPosition(p.id);
+            if (!pluginPosition) {
+              return (
+                <DropdownMenuItem
+                  key={p.id}
+                  onClick={() => toggle(p.id, appApi)}
+                >
+                  {p.name}
+                  {isActive(p.id) ? " ✓" : ""}
+                </DropdownMenuItem>
+              );
+            }
+
+            return (
+              <DropdownMenuSub key={p.id}>
+                <DropdownMenuSubTrigger>
+                  {p.name}
+                  {isActive(p.id) ? " ✓" : ""}
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem onClick={() => toggle(p.id, appApi)}>
+                    {isActive(p.id) ? "Deactivate" : "Activate"}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Position</DropdownMenuLabel>
+                  <DropdownMenuRadioGroup
+                    value={pluginPosition}
+                    onValueChange={(position: string) =>
+                      setMapControlPosition(
+                        p.id,
+                        appApi,
+                        position as GeoLibreMapControlPosition,
+                      )
+                    }
+                  >
+                    {PLUGIN_POSITION_ITEMS.map((position) => (
+                      <DropdownMenuRadioItem
+                        key={position.value}
+                        value={position.value}
+                        onSelect={(event) => event.preventDefault()}
+                      >
+                        {position.label}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            );
+          })}
         </DropdownMenuContent>
       </DropdownMenu>
       <div className="ml-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">

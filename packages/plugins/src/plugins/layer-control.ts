@@ -1,4 +1,10 @@
-import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import type {
+  GeoLibreAppAPI,
+  GeoLibreMapControlPosition,
+  GeoLibrePlugin,
+} from "../types";
+
+let layerControlPosition: GeoLibreMapControlPosition = "top-right";
 
 export const maplibreLayerControlPlugin: GeoLibrePlugin = {
   id: "maplibre-layer-control",
@@ -9,5 +15,13 @@ export const maplibreLayerControlPlugin: GeoLibrePlugin = {
     app.setBuiltInMapControlVisible("layer-control", true),
   deactivate: (app: GeoLibreAppAPI) => {
     app.setBuiltInMapControlVisible("layer-control", false);
+  },
+  getMapControlPosition: () => layerControlPosition,
+  setMapControlPosition: (
+    app: GeoLibreAppAPI,
+    position: GeoLibreMapControlPosition,
+  ) => {
+    layerControlPosition = position;
+    return app.setBuiltInMapControlPosition("layer-control", position);
   },
 };

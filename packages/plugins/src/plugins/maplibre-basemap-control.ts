@@ -3,15 +3,19 @@ import {
   type BasemapControlEventPayload,
   type BasemapControlOptions,
 } from "maplibre-gl-basemap-control";
-import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import type {
+  GeoLibreAppAPI,
+  GeoLibreMapControlPosition,
+  GeoLibrePlugin,
+} from "../types";
 
-const BASEMAP_CONTROL_POSITION = "top-left";
+let basemapControlPosition: GeoLibreMapControlPosition = "top-left";
 
 let basemapControl: BasemapControl | null = null;
 
 export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-basemap-control",
-  name: "Basemap Control",
+  name: "Basemaps",
   version: "0.2.1",
   activate: (app: GeoLibreAppAPI) => {
     if (!basemapControl) {
@@ -23,7 +27,7 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
 
     const added = app.addMapControl(
       basemapControl,
-      BASEMAP_CONTROL_POSITION,
+      basemapControlPosition,
     );
     if (!added) {
       basemapControl = null;
@@ -39,6 +43,21 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
     app.removeMapControl(basemapControl);
     basemapControl = null;
   },
+  getMapControlPosition: () => basemapControlPosition,
+  setMapControlPosition: (
+    app: GeoLibreAppAPI,
+    position: GeoLibreMapControlPosition,
+  ) => {
+    basemapControlPosition = position;
+    if (!basemapControl) return;
+    app.removeMapControl(basemapControl);
+    const added = app.addMapControl(basemapControl, basemapControlPosition);
+    if (!added) return false;
+    basemapControl.setState({
+      activeBasemapId: getBasemapIdForStyleUrl(app.getActiveBasemap()),
+    });
+    setTimeout(() => basemapControl?.expand(), 0);
+  },
 };
 
 function getBasemapControlOptions(
@@ -46,7 +65,7 @@ function getBasemapControlOptions(
 ): BasemapControlOptions {
   return {
     collapsed: false,
-    position: BASEMAP_CONTROL_POSITION,
+    position: basemapControlPosition,
     title: "Basemaps",
   };
 }

@@ -52,6 +52,21 @@ export const DEFAULT_BUILT_IN_CONTROL_VISIBILITY: Record<
   "layer-control": true,
 };
 
+export const DEFAULT_BUILT_IN_CONTROL_POSITIONS: Record<
+  BuiltInMapControl,
+  maplibregl.ControlPosition
+> = {
+  navigation: "top-right",
+  fullscreen: "top-right",
+  geolocate: "top-right",
+  globe: "top-right",
+  terrain: "top-right",
+  scale: "bottom-left",
+  attribution: "bottom-right",
+  logo: "bottom-left",
+  "layer-control": "top-right",
+};
+
 export class MapController {
   private map: maplibregl.Map | null = null;
   private navigationControl: maplibregl.NavigationControl | null = null;
@@ -67,6 +82,9 @@ export class MapController {
   private layerIds: string[] = [];
   private controlVisibility: Record<BuiltInMapControl, boolean> = {
     ...DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
+  };
+  private controlPositions: Record<BuiltInMapControl, maplibregl.ControlPosition> = {
+    ...DEFAULT_BUILT_IN_CONTROL_POSITIONS,
   };
 
   init(
@@ -161,6 +179,23 @@ export class MapController {
     else if (control === "logo") this.removeLogoControl();
     else this.removeLayerControl();
     return true;
+  }
+
+  getBuiltInControlPosition(
+    control: BuiltInMapControl,
+  ): maplibregl.ControlPosition {
+    return this.controlPositions[control];
+  }
+
+  setBuiltInControlPosition(
+    control: BuiltInMapControl,
+    position: maplibregl.ControlPosition,
+  ): boolean {
+    this.controlPositions[control] = position;
+    if (!this.controlVisibility[control]) return true;
+
+    this.removeBuiltInControl(control);
+    return this.addBuiltInControl(control);
   }
 
   destroy(): void {
@@ -316,7 +351,10 @@ export class MapController {
       panelMinWidth: 240,
       panelMaxWidth: 450,
     });
-    this.map.addControl(this.layerControl, "top-right");
+    this.map.addControl(
+      this.layerControl,
+      this.controlPositions["layer-control"],
+    );
     return true;
   }
 
@@ -335,7 +373,10 @@ export class MapController {
       return false;
     }
     this.navigationControl = new maplibregl.NavigationControl();
-    this.map.addControl(this.navigationControl, "top-right");
+    this.map.addControl(
+      this.navigationControl,
+      this.controlPositions.navigation,
+    );
     return true;
   }
 
@@ -354,7 +395,10 @@ export class MapController {
       return false;
     }
     this.fullscreenControl = new maplibregl.FullscreenControl();
-    this.map.addControl(this.fullscreenControl, "top-right");
+    this.map.addControl(
+      this.fullscreenControl,
+      this.controlPositions.fullscreen,
+    );
     return true;
   }
 
@@ -378,7 +422,10 @@ export class MapController {
       },
       trackUserLocation: true,
     });
-    this.map.addControl(this.geolocateControl, "top-right");
+    this.map.addControl(
+      this.geolocateControl,
+      this.controlPositions.geolocate,
+    );
     return true;
   }
 
@@ -393,7 +440,7 @@ export class MapController {
       return false;
     }
     this.globeControl = new maplibregl.GlobeControl();
-    this.map.addControl(this.globeControl, "top-right");
+    this.map.addControl(this.globeControl, this.controlPositions.globe);
     return true;
   }
 
@@ -409,7 +456,7 @@ export class MapController {
     }
     this.addTerrainSource();
     this.terrainControl = new maplibregl.TerrainControl(TERRAIN_OPTIONS);
-    this.map.addControl(this.terrainControl, "top-right");
+    this.map.addControl(this.terrainControl, this.controlPositions.terrain);
     return true;
   }
 
@@ -430,7 +477,7 @@ export class MapController {
       maxWidth: 120,
       unit: "metric",
     });
-    this.map.addControl(this.scaleControl, "bottom-left");
+    this.map.addControl(this.scaleControl, this.controlPositions.scale);
     return true;
   }
 
@@ -451,7 +498,10 @@ export class MapController {
     this.attributionControl = new maplibregl.AttributionControl({
       compact: true,
     });
-    this.map.addControl(this.attributionControl, "bottom-right");
+    this.map.addControl(
+      this.attributionControl,
+      this.controlPositions.attribution,
+    );
     return true;
   }
 
@@ -466,7 +516,7 @@ export class MapController {
       return false;
     }
     this.logoControl = new maplibregl.LogoControl();
-    this.map.addControl(this.logoControl, "bottom-left");
+    this.map.addControl(this.logoControl, this.controlPositions.logo);
     return true;
   }
 
@@ -474,6 +524,30 @@ export class MapController {
     if (!this.logoControl) return;
     this.removeControl(this.logoControl);
     this.logoControl = null;
+  }
+
+  private addBuiltInControl(control: BuiltInMapControl): boolean {
+    if (control === "navigation") return this.addNavigationControl();
+    if (control === "fullscreen") return this.addFullscreenControl();
+    if (control === "geolocate") return this.addGeolocateControl();
+    if (control === "globe") return this.addGlobeControl();
+    if (control === "terrain") return this.addTerrainControl();
+    if (control === "scale") return this.addScaleControl();
+    if (control === "attribution") return this.addAttributionControl();
+    if (control === "logo") return this.addLogoControl();
+    return this.addLayerControl();
+  }
+
+  private removeBuiltInControl(control: BuiltInMapControl): void {
+    if (control === "navigation") this.removeNavigationControl();
+    else if (control === "fullscreen") this.removeFullscreenControl();
+    else if (control === "geolocate") this.removeGeolocateControl();
+    else if (control === "globe") this.removeGlobeControl();
+    else if (control === "terrain") this.removeTerrainControl();
+    else if (control === "scale") this.removeScaleControl();
+    else if (control === "attribution") this.removeAttributionControl();
+    else if (control === "logo") this.removeLogoControl();
+    else this.removeLayerControl();
   }
 }
 
