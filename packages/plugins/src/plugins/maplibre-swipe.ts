@@ -58,8 +58,8 @@ function getSwipeControlOptions(
     panelWidth: 300,
     maxHeight: 480,
     active: previousState?.active ?? true,
-    leftLayers: previousState?.leftLayers,
-    rightLayers: previousState?.rightLayers,
+    leftLayers: previousState?.leftLayers ?? [],
+    rightLayers: previousState?.rightLayers ?? [],
     basemapStyle: app.getActiveBasemap(),
     excludeLayers: ["gl-draw-*", "measure-*"],
   };
