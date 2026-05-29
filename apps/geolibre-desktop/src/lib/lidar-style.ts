@@ -202,7 +202,10 @@ const closeLidarSelectMenu = () => {
   document.querySelector(`.${LIDAR_SELECT_MENU_CLASS}`)?.remove();
   document
     .querySelectorAll<HTMLButtonElement>(`.${LIDAR_SELECT_PROXY_CLASS}.is-open`)
-    .forEach((button) => button.classList.remove("is-open"));
+    .forEach((button) => {
+      button.classList.remove("is-open");
+      button.setAttribute("aria-expanded", "false");
+    });
 };
 
 const syncLidarSelectProxy = (
@@ -246,8 +249,34 @@ const openLidarSelectMenu = (
     menu.appendChild(item);
   });
 
+  const items = Array.from(
+    menu.querySelectorAll<HTMLButtonElement>("button"),
+  );
+  menu.addEventListener("keydown", (event) => {
+    const current = items.indexOf(document.activeElement as HTMLButtonElement);
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      items[Math.min(current + 1, items.length - 1)]?.focus();
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      items[Math.max(current - 1, 0)]?.focus();
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      items[0]?.focus();
+    } else if (event.key === "End") {
+      event.preventDefault();
+      items[items.length - 1]?.focus();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      closeLidarSelectMenu();
+      button.focus();
+    }
+  });
+
   button.classList.add("is-open");
+  button.setAttribute("aria-expanded", "true");
   document.body.appendChild(menu);
+  (menu.querySelector<HTMLButtonElement>("button.is-selected") ?? items[0])?.focus();
 };
 
 const enhanceLidarSelect = (select: HTMLSelectElement) => {
@@ -257,6 +286,7 @@ const enhanceLidarSelect = (select: HTMLSelectElement) => {
   button.type = "button";
   button.className = LIDAR_SELECT_PROXY_CLASS;
   button.setAttribute("aria-haspopup", "listbox");
+  button.setAttribute("aria-expanded", "false");
   syncLidarSelectProxy(select, button);
 
   button.addEventListener("click", (event) => {
@@ -290,7 +320,17 @@ const enhanceLidarSelects = () => {
 if (typeof document !== "undefined") {
   document.addEventListener("click", closeLidarSelectMenu);
   window.addEventListener("resize", closeLidarSelectMenu);
-  window.addEventListener("scroll", closeLidarSelectMenu, true);
+  window.addEventListener(
+    "scroll",
+    (event) => {
+      const menu = document.querySelector(`.${LIDAR_SELECT_MENU_CLASS}`);
+      if (menu && event.target instanceof Node && menu.contains(event.target)) {
+        return;
+      }
+      closeLidarSelectMenu();
+    },
+    true,
+  );
 
   const observer = new MutationObserver(enhanceLidarSelects);
   observer.observe(document.body, { childList: true, subtree: true });

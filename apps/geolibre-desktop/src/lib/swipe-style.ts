@@ -104,7 +104,10 @@ const closeSwipeSelectMenu = () => {
   document.querySelector(`.${SWIPE_SELECT_MENU_CLASS}`)?.remove();
   document
     .querySelectorAll<HTMLButtonElement>(`.${SWIPE_SELECT_PROXY_CLASS}.is-open`)
-    .forEach((button) => button.classList.remove("is-open"));
+    .forEach((button) => {
+      button.classList.remove("is-open");
+      button.setAttribute("aria-expanded", "false");
+    });
 };
 
 const syncSwipeSelectProxy = (
@@ -149,8 +152,34 @@ const openSwipeSelectMenu = (
     menu.appendChild(item);
   });
 
+  const items = Array.from(
+    menu.querySelectorAll<HTMLButtonElement>("button"),
+  );
+  menu.addEventListener("keydown", (event) => {
+    const current = items.indexOf(document.activeElement as HTMLButtonElement);
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      items[Math.min(current + 1, items.length - 1)]?.focus();
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      items[Math.max(current - 1, 0)]?.focus();
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      items[0]?.focus();
+    } else if (event.key === "End") {
+      event.preventDefault();
+      items[items.length - 1]?.focus();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      closeSwipeSelectMenu();
+      button.focus();
+    }
+  });
+
   button.classList.add("is-open");
+  button.setAttribute("aria-expanded", "true");
   document.body.appendChild(menu);
+  (menu.querySelector<HTMLButtonElement>("button.is-selected") ?? items[0])?.focus();
 };
 
 const enhanceSwipeSelect = (select: HTMLSelectElement) => {
@@ -160,6 +189,7 @@ const enhanceSwipeSelect = (select: HTMLSelectElement) => {
   button.type = "button";
   button.className = SWIPE_SELECT_PROXY_CLASS;
   button.setAttribute("aria-haspopup", "listbox");
+  button.setAttribute("aria-expanded", "false");
   syncSwipeSelectProxy(select, button);
 
   button.addEventListener("click", (event) => {
@@ -192,7 +222,17 @@ const enhanceSwipeSelects = () => {
 if (typeof document !== "undefined") {
   document.addEventListener("click", closeSwipeSelectMenu);
   window.addEventListener("resize", closeSwipeSelectMenu);
-  window.addEventListener("scroll", closeSwipeSelectMenu, true);
+  window.addEventListener(
+    "scroll",
+    (event) => {
+      const menu = document.querySelector(`.${SWIPE_SELECT_MENU_CLASS}`);
+      if (menu && event.target instanceof Node && menu.contains(event.target)) {
+        return;
+      }
+      closeSwipeSelectMenu();
+    },
+    true,
+  );
 
   const observer = new MutationObserver(enhanceSwipeSelects);
   observer.observe(document.body, { childList: true, subtree: true });

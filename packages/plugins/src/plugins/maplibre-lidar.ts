@@ -1,6 +1,6 @@
-import {
+import type {
   LidarControl,
-  type LidarControlOptions,
+  LidarControlOptions,
 } from "maplibre-gl-lidar";
 import type {
   GeoLibreAppAPI,
@@ -24,24 +24,39 @@ const LIDAR_OPTIONS = {
 } satisfies Omit<LidarControlOptions, "position">;
 
 let lidarControl: LidarControl | null = null;
+let pluginActive = false;
+
+const mountLidarControl = (app: GeoLibreAppAPI): boolean => {
+  if (!lidarControl) return false;
+  const added = app.addMapControl(lidarControl, lidarPosition);
+  if (!added) {
+    lidarControl = null;
+    return false;
+  }
+  setTimeout(() => lidarControl?.expand(), 0);
+  return true;
+};
 
 export const maplibreLidarPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-lidar",
   name: "LiDAR Viewer",
   version: "0.14.1",
   activate: (app: GeoLibreAppAPI) => {
-    if (!lidarControl) {
-      lidarControl = new LidarControl(getLidarOptions());
-    }
+    pluginActive = true;
+    if (lidarControl) return mountLidarControl(app);
 
-    const added = app.addMapControl(lidarControl, lidarPosition);
-    if (!added) {
-      lidarControl = null;
-      return false;
-    }
-    setTimeout(() => lidarControl?.expand(), 0);
+    // Defer the heavy deck.gl/loaders.gl dependency tree until the user first
+    // enables the viewer, so it stays out of the startup bundle.
+    void import("maplibre-gl-lidar").then(
+      ({ LidarControl: LidarControlClass }) => {
+        if (!pluginActive || lidarControl) return;
+        lidarControl = new LidarControlClass(getLidarOptions());
+        mountLidarControl(app);
+      },
+    );
   },
   deactivate: (app: GeoLibreAppAPI) => {
+    pluginActive = false;
     if (!lidarControl) return;
     app.removeMapControl(lidarControl);
     lidarControl = null;
