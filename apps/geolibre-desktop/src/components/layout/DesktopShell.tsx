@@ -7,13 +7,26 @@ import { StylePanel } from "../panels/StylePanel";
 import { ProcessingDialog } from "../processing/ProcessingDialog";
 import { StatusBar } from "./StatusBar";
 import { TopToolbar } from "./TopToolbar";
+import type { ThemeMode } from "../../hooks/useThemeMode";
 
-export function DesktopShell() {
+interface DesktopShellProps {
+  themeMode: ThemeMode;
+  onToggleThemeMode: () => void;
+}
+
+export function DesktopShell({
+  themeMode,
+  onToggleThemeMode,
+}: DesktopShellProps) {
   const mapControllerRef = useRef<MapController | null>(null);
 
   return (
     <div className="flex h-full flex-col bg-background">
-      <TopToolbar mapControllerRef={mapControllerRef} />
+      <TopToolbar
+        mapControllerRef={mapControllerRef}
+        themeMode={themeMode}
+        onToggleThemeMode={onToggleThemeMode}
+      />
       <div className="flex min-h-0 flex-1">
         <LayerPanel mapControllerRef={mapControllerRef} />
         <main className="relative min-w-0 flex-1">

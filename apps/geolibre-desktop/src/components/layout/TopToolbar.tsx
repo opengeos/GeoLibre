@@ -25,13 +25,16 @@ import {
   FolderOpen,
   Layers,
   Map,
+  Moon,
   Puzzle,
   Save,
   SlidersHorizontal,
+  Sun,
   Wrench,
 } from "lucide-react";
 import { useState } from "react";
 import { createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
+import type { ThemeMode } from "../../hooks/useThemeMode";
 import {
   openGeoJsonFileWithFallback,
   openProjectFile,
@@ -41,6 +44,8 @@ import { NewProjectDialog } from "./NewProjectDialog";
 
 interface TopToolbarProps {
   mapControllerRef: React.RefObject<MapController | null>;
+  themeMode: ThemeMode;
+  onToggleThemeMode: () => void;
 }
 
 type ToolbarMapControl = Exclude<BuiltInMapControl, "layer-control">;
@@ -69,7 +74,11 @@ const PLUGIN_POSITION_ITEMS: Array<{
   { value: "bottom-right", label: "Bottom right" },
 ];
 
-export function TopToolbar({ mapControllerRef }: TopToolbarProps) {
+export function TopToolbar({
+  mapControllerRef,
+  themeMode,
+  onToggleThemeMode,
+}: TopToolbarProps) {
   const loadProject = useAppStore((s) => s.loadProject);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
@@ -257,6 +266,24 @@ export function TopToolbar({ mapControllerRef }: TopToolbarProps) {
         </DropdownMenuContent>
       </DropdownMenu>
       <div className="ml-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+        <Button
+          aria-label={
+            themeMode === "dark" ? "Switch to light mode" : "Switch to dark mode"
+          }
+          className="h-7 w-7 shrink-0"
+          onClick={onToggleThemeMode}
+          size="icon"
+          title={
+            themeMode === "dark" ? "Switch to light mode" : "Switch to dark mode"
+          }
+          variant="ghost"
+        >
+          {themeMode === "dark" ? (
+            <Sun className="h-3.5 w-3.5" />
+          ) : (
+            <Moon className="h-3.5 w-3.5" />
+          )}
+        </Button>
         <Layers className="mr-1 inline h-3 w-3" />
         <Input
           aria-label="Project name"
