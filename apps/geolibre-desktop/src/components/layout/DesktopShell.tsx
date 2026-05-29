@@ -65,6 +65,7 @@ export function DesktopShell({
   const verticalResizeGuideRef = useRef<HTMLDivElement>(null);
   const mapControllerRef = useRef<MapController | null>(null);
   const dragDepthRef = useRef(0);
+  const dropMessageTimeoutRef = useRef<number | null>(null);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [dropMessage, setDropMessage] = useState<string | null>(null);
@@ -82,10 +83,22 @@ export function DesktopShell({
   };
 
   const clearDropMessageLater = useCallback(() => {
-    window.setTimeout(() => {
+    if (dropMessageTimeoutRef.current !== null) {
+      window.clearTimeout(dropMessageTimeoutRef.current);
+    }
+    dropMessageTimeoutRef.current = window.setTimeout(() => {
+      dropMessageTimeoutRef.current = null;
       setDropMessage(null);
       setDropError(null);
     }, 4000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (dropMessageTimeoutRef.current !== null) {
+        window.clearTimeout(dropMessageTimeoutRef.current);
+      }
+    };
   }, []);
 
   const addImportedVectorLayers = useCallback(

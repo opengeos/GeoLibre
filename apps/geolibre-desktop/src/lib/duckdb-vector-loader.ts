@@ -39,7 +39,7 @@ function getDatabase(): Promise<duckdb.AsyncDuckDB> {
 
 async function createDatabase(): Promise<duckdb.AsyncDuckDB> {
   const bundle = await duckdb.selectBundle(MANUAL_BUNDLES);
-  const worker = new Worker(bundle.mainWorker!);
+  const worker = new Worker(bundle.mainWorker!, { type: "module" });
   const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING);
   const db = new duckdb.AsyncDuckDB(logger, worker);
   await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
@@ -68,13 +68,17 @@ function sourceSql(fileName: string, extension: string): string {
   return `SELECT * FROM ST_Read(${quotedName})`;
 }
 
-function toFeatureCollection(rows: Record<string, unknown>[]): FeatureCollection {
+function toFeatureCollection(
+  rows: Record<string, unknown>[],
+): FeatureCollection<Geometry | null> {
   const features = rows.map((row) => {
     const rawGeometry = row[GEOMETRY_JSON_COLUMN];
-    if (typeof rawGeometry !== "string") {
-      throw new Error("DuckDB returned a feature without GeoJSON geometry.");
-    }
-    const geometry = JSON.parse(rawGeometry) as Geometry;
+    // ST_AsGeoJSON returns SQL NULL for rows with missing/NULL geometries.
+    // GeoJSON Features may legally have a null geometry, so keep the row.
+    const geometry =
+      typeof rawGeometry === "string"
+        ? (JSON.parse(rawGeometry) as Geometry)
+        : null;
     const properties: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(row)) {
@@ -86,7 +90,7 @@ function toFeatureCollection(rows: Record<string, unknown>[]): FeatureCollection
       type: "Feature",
       geometry,
       properties,
-    } satisfies Feature;
+    } satisfies Feature<Geometry | null>;
   });
 
   return {
@@ -146,7 +150,9 @@ export async function loadDuckDbVectorFile(
         geometryColumn,
       )}) AS ${quoteIdentifier(GEOMETRY_JSON_COLUMN)} FROM (${sql}) AS data`,
     );
-    return toFeatureCollection(rowsFromResult(result));
+    // Features may carry a null geometry; the app's layer model treats them as
+    // a regular FeatureCollection and the map ignores null geometries.
+    return toFeatureCollection(rowsFromResult(result)) as FeatureCollection;
   } finally {
     await connection.close();
   }
