@@ -34,7 +34,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:1420. The map and browser vector import work for GeoJSON, GeoParquet, GeoPackage, and zipped Shapefiles. You can choose files from Add Vector Layer or drag them onto the app. Desktop filesystem dialogs require Tauri.
+Open http://localhost:5173. The map and browser vector import work for GeoJSON, GeoParquet, GeoPackage, and zipped Shapefiles. You can choose files from Add Vector Layer or drag them onto the app. Desktop filesystem dialogs require Tauri.
 
 ## Environment variables
 

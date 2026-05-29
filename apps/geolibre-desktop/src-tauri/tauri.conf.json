@@ -5,13 +5,14 @@
   "identifier": "org.geolibre.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:5173",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
   "app": {
     "windows": [
       {
+        "create": false,
         "title": "GeoLibre Desktop",
         "width": 1280,
         "height": 800,
@@ -20,7 +21,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' https:; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval'; worker-src blob: 'self'; frame-src 'self' https://www.google.com",
+      "csp": "default-src 'self'; connect-src 'self' https:; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval' https://accounts.google.com; child-src 'self' https://accounts.google.com https://www.google.com; frame-src 'self' https://accounts.google.com https://www.google.com; worker-src blob: 'self'",
       "capabilities": ["default"]
     }
   },

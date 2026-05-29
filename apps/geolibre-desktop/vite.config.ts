@@ -9,6 +9,7 @@ import type {
 import { defineConfig, type Plugin } from "vite";
 
 const GEOAGENT_BROWSER_BUNDLE = "maplibre-gl-geoagent/dist/browser-";
+const EARTH_ENGINE_BROWSER_BUNDLE = "@google/earthengine/build/browser.js";
 const GIS_CHUNK_WARNING_LIMIT_KB = 5000;
 const APP_BASE = process.env.GEOLIBRE_APP_BASE;
 const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
@@ -25,7 +26,12 @@ const RADIX_OPTIMIZE_EXCLUDES = [
 function manualChunks(id: string): string | undefined {
   if (!id.includes("node_modules")) return undefined;
   if (id.includes("@duckdb/duckdb-wasm")) return "duckdb";
-  if (id.includes("maplibre-gl-geoagent")) return "maplibre-geoagent";
+  if (
+    id.includes("maplibre-gl-geoagent") ||
+    id.includes("@google/earthengine")
+  ) {
+    return "maplibre-geoagent";
+  }
   if (id.includes("mapillary-js")) return "mapillary";
   if (id.includes("@geoman-io/maplibre-geoman-free")) return "maplibre-geoman";
   if (id.includes("maplibre-gl")) return "maplibre";
@@ -39,7 +45,8 @@ function onwarn(
   if (
     warning.code === "EVAL" &&
     typeof warning.id === "string" &&
-    warning.id.includes(GEOAGENT_BROWSER_BUNDLE)
+    (warning.id.includes(GEOAGENT_BROWSER_BUNDLE) ||
+      warning.id.includes(EARTH_ENGINE_BROWSER_BUNDLE))
   ) {
     return;
   }
@@ -96,7 +103,7 @@ export default defineConfig({
   plugins: [react(), wmsProxyPlugin()],
   clearScreen: false,
   server: {
-    port: 1420,
+    port: 5173,
     strictPort: true,
   },
   envPrefix: ["VITE_", "TAURI_"],
