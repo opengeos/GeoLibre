@@ -51,3 +51,11 @@ body,
   flex: 0 0 auto;
   margin: 0;
 }
+
+.swipe-control-panel .swipe-control-select {
+  height: 28px;
+  line-height: 28px;
+  min-height: 0;
+  padding-bottom: 0;
+  padding-top: 0;
+}
