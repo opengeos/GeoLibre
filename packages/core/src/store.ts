@@ -79,7 +79,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   attributeFilter: "",
   ui: {
     processingOpen: false,
-    attributeTableOpen: true,
+    attributeTableOpen: false,
   },
 
   setPointerCoords: (coords) => set({ pointerCoords: coords }),

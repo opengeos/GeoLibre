@@ -157,37 +157,37 @@ export function TopToolbar({
   };
 
   return (
-    <header className="flex h-11 shrink-0 items-center gap-1 border-b bg-card px-2">
-      <span className="mr-2 flex items-center gap-1.5 text-sm font-semibold text-primary">
+    <header className="flex min-h-11 shrink-0 flex-wrap items-center gap-1 border-b bg-card px-2 py-1 md:flex-nowrap">
+      <span className="mr-1 flex shrink-0 items-center gap-1.5 text-sm font-semibold text-primary md:mr-2">
         <Map className="h-4 w-4" />
-        GeoLibre Desktop
+        <span className="hidden sm:inline">GeoLibre Desktop</span>
       </span>
       <NewProjectDialog onSaveCurrentProject={handleSave} />
       <Button variant="ghost" size="sm" onClick={handleOpen}>
-        <FolderOpen className="mr-1 h-3.5 w-3.5" />
-        Open
+        <FolderOpen className="h-3.5 w-3.5 sm:mr-1" />
+        <span className="hidden sm:inline">Open</span>
       </Button>
       <Button variant="ghost" size="sm" onClick={handleSave}>
-        <Save className="mr-1 h-3.5 w-3.5" />
-        Save
+        <Save className="h-3.5 w-3.5 sm:mr-1" />
+        <span className="hidden sm:inline">Save</span>
       </Button>
       <Button variant="ghost" size="sm" onClick={handleAddGeoJson}>
-        <FileJson className="mr-1 h-3.5 w-3.5" />
-        Add GeoJSON
+        <FileJson className="h-3.5 w-3.5 sm:mr-1" />
+        <span className="hidden sm:inline">Add GeoJSON</span>
       </Button>
       <Button
         variant="ghost"
         size="sm"
         onClick={() => setProcessingOpen(true)}
       >
-        <Wrench className="mr-1 h-3.5 w-3.5" />
-        Processing
+        <Wrench className="h-3.5 w-3.5 sm:mr-1" />
+        <span className="hidden sm:inline">Processing</span>
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="sm">
-            <SlidersHorizontal className="mr-1 h-3.5 w-3.5" />
-            Controls
+            <SlidersHorizontal className="h-3.5 w-3.5 sm:mr-1" />
+            <span className="hidden sm:inline">Controls</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
@@ -207,8 +207,8 @@ export function TopToolbar({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="sm">
-            <Puzzle className="mr-1 h-3.5 w-3.5" />
-            Plugins
+            <Puzzle className="h-3.5 w-3.5 sm:mr-1" />
+            <span className="hidden sm:inline">Plugins</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
@@ -286,10 +286,10 @@ export function TopToolbar({
             <Moon className="h-3.5 w-3.5" />
           )}
         </Button>
-        <Layers className="mr-1 inline h-3 w-3" />
+        <Layers className="mr-1 hidden h-3 w-3 md:inline" />
         <Input
           aria-label="Project name"
-          className="h-7 w-44 border-transparent px-2 text-xs shadow-none focus-visible:border-input"
+          className="hidden h-7 w-44 border-transparent px-2 text-xs shadow-none focus-visible:border-input md:block"
           value={projectName}
           onChange={(event) => setProjectName(event.target.value)}
           onBlur={(event) => {
@@ -298,7 +298,7 @@ export function TopToolbar({
           }}
         />
         {projectPath ? (
-          <span className="truncate">{projectPath}</span>
+          <span className="hidden truncate lg:inline">{projectPath}</span>
         ) : null}
       </div>
     </header>

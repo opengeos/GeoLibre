@@ -13,11 +13,15 @@ export function StatusBar() {
     : "—";
 
   return (
-    <footer className="flex h-7 shrink-0 items-center gap-4 border-t bg-muted/40 px-3 font-mono text-xs text-muted-foreground">
+    <footer className="flex h-7 shrink-0 items-center gap-4 overflow-x-auto border-t bg-muted/40 px-3 font-mono text-xs text-muted-foreground">
       <span>Coords: {coordText}</span>
-      <span>Zoom: {mapView.zoom.toFixed(2)}</span>
-      <span>Bearing: {mapView.bearing.toFixed(1)}°</span>
-      <span>Pitch: {mapView.pitch.toFixed(1)}°</span>
+      <span className="whitespace-nowrap">Zoom: {mapView.zoom.toFixed(2)}</span>
+      <span className="whitespace-nowrap">
+        Bearing: {mapView.bearing.toFixed(1)}°
+      </span>
+      <span className="whitespace-nowrap">
+        Pitch: {mapView.pitch.toFixed(1)}°
+      </span>
       <span className="truncate">BBox: {bboxText}</span>
     </footer>
   );

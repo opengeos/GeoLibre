@@ -27,9 +27,9 @@ export function DesktopShell({
         themeMode={themeMode}
         onToggleThemeMode={onToggleThemeMode}
       />
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <LayerPanel mapControllerRef={mapControllerRef} />
-        <main className="relative min-w-0 flex-1">
+        <main className="relative min-h-72 min-w-0 flex-1 md:min-h-0">
           <MapCanvas controllerRef={mapControllerRef} />
         </main>
         <StylePanel />

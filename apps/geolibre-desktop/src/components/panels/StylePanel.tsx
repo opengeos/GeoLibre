@@ -7,17 +7,24 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+function isMobileViewport(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia("(max-width: 767px)").matches
+  );
+}
+
 export function StylePanel() {
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const layers = useAppStore((s) => s.layers);
   const setLayerStyle = useAppStore((s) => s.setLayerStyle);
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(isMobileViewport);
 
   const layer = layers.find((l) => l.id === selectedLayerId);
 
   if (isCollapsed) {
     return (
-      <aside className="flex w-11 shrink-0 flex-col items-center border-l bg-card py-2">
+      <aside className="flex h-11 w-full shrink-0 items-center gap-2 border-t bg-card px-2 md:h-auto md:w-11 md:flex-col md:border-l md:border-t-0 md:py-2">
         <Button
           variant="ghost"
           size="icon"
@@ -28,9 +35,9 @@ export function StylePanel() {
         >
           <PanelRightOpen className="h-4 w-4" />
         </Button>
-        <div className="mt-3 flex flex-col items-center gap-2 text-muted-foreground">
+        <div className="flex items-center gap-2 text-muted-foreground md:mt-3 md:flex-col">
           <SlidersHorizontal className="h-4 w-4" />
-          <span className="[writing-mode:vertical-rl] rotate-180 text-[10px] font-semibold uppercase tracking-wide">
+          <span className="text-[10px] font-semibold uppercase tracking-wide md:[writing-mode:vertical-rl] md:rotate-180">
             Style
           </span>
         </div>
@@ -40,7 +47,7 @@ export function StylePanel() {
 
   if (!layer) {
     return (
-      <aside className="flex w-64 shrink-0 flex-col border-l bg-card">
+      <aside className="flex max-h-56 w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-64 md:border-l md:border-t-0">
         <div className="flex items-center justify-between border-b px-3 py-1.5">
           <span className="text-sm font-semibold">Style</span>
           <Button
@@ -64,7 +71,7 @@ export function StylePanel() {
   const { style } = layer;
 
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-l bg-card">
+    <aside className="flex max-h-56 w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-64 md:border-l md:border-t-0">
       <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
         <span className="truncate text-sm font-semibold">
           Style — {layer.name}

@@ -38,8 +38,8 @@ export function AboutDialog() {
     <Dialog>
       <DialogTrigger asChild>
         <Button variant="ghost" size="sm">
-          <Info className="mr-1 h-3.5 w-3.5" />
-          About
+          <Info className="h-3.5 w-3.5 sm:mr-1" />
+          <span className="hidden sm:inline">About</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-md">

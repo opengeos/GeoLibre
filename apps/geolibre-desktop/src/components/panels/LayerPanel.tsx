@@ -31,6 +31,13 @@ interface LayerPanelProps {
   mapControllerRef: React.RefObject<MapController | null>;
 }
 
+function isMobileViewport(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia("(max-width: 767px)").matches
+  );
+}
+
 export function LayerPanel({ mapControllerRef }: LayerPanelProps) {
   const layers = useAppStore((s) => s.layers);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
@@ -40,11 +47,11 @@ export function LayerPanel({ mapControllerRef }: LayerPanelProps) {
   const reorderLayer = useAppStore((s) => s.reorderLayer);
   const removeLayer = useAppStore((s) => s.removeLayer);
   const [metadataLayer, setMetadataLayer] = useState<GeoLibreLayer | null>(null);
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(isMobileViewport);
 
   if (isCollapsed) {
     return (
-      <aside className="flex w-11 shrink-0 flex-col items-center border-r bg-card py-2">
+      <aside className="flex h-11 w-full shrink-0 items-center gap-2 border-b bg-card px-2 md:h-auto md:w-11 md:flex-col md:border-b-0 md:border-r md:py-2">
         <Button
           variant="ghost"
           size="icon"
@@ -55,9 +62,9 @@ export function LayerPanel({ mapControllerRef }: LayerPanelProps) {
         >
           <PanelLeftOpen className="h-4 w-4" />
         </Button>
-        <div className="mt-3 flex flex-col items-center gap-2 text-muted-foreground">
+        <div className="flex items-center gap-2 text-muted-foreground md:mt-3 md:flex-col">
           <Layers className="h-4 w-4" />
-          <span className="[writing-mode:vertical-rl] rotate-180 text-[10px] font-semibold uppercase tracking-wide">
+          <span className="text-[10px] font-semibold uppercase tracking-wide md:[writing-mode:vertical-rl] md:rotate-180">
             Layers
           </span>
         </div>
@@ -66,7 +73,7 @@ export function LayerPanel({ mapControllerRef }: LayerPanelProps) {
   }
 
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-r bg-card">
+    <aside className="flex max-h-56 w-full shrink-0 flex-col border-b bg-card md:max-h-none md:w-64 md:border-b-0 md:border-r">
       <div className="flex items-center justify-between border-b px-3 py-1.5">
         <span className="text-sm font-semibold">Layers</span>
         <Button

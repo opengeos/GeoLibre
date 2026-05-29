@@ -80,6 +80,10 @@
   margin-top: 1.3rem;
 }
 
+.md-typeset > p > .md-button + .md-button {
+  margin-left: 0.6rem;
+}
+
 .hero__media {
   margin: 0;
 }
@@ -121,5 +125,18 @@
 @media screen and (min-width: 76.25em) {
   .hero {
     grid-template-columns: minmax(18rem, 0.9fr) minmax(20rem, 1.1fr);
+  }
+}
+
+@media screen and (max-width: 30em) {
+  .md-typeset > p > .md-button {
+    display: block;
+    text-align: center;
+    width: 100%;
+  }
+
+  .md-typeset > p > .md-button + .md-button {
+    margin-left: 0;
+    margin-top: 0.6rem;
   }
 }
