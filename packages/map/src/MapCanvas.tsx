@@ -306,14 +306,7 @@ export const MapCanvas = memo(function MapCanvas({
   }, [identifyLayerId, layers, selectFeature]);
 
   useEffect(() => {
-    const map = controller.current?.getMap();
-    if (!map || !map.isStyleLoaded()) return;
-    map.jumpTo({
-      center: mapView.center,
-      zoom: mapView.zoom,
-      bearing: mapView.bearing,
-      pitch: mapView.pitch,
-    });
+    controller.current?.applyView(mapView);
   }, [
     mapView.center[0],
     mapView.center[1],
