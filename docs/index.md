@@ -9,9 +9,9 @@ hide:
     <h1>MapLibre-powered GIS for local projects and modern geospatial workflows.</h1>
     <p class="hero__lead">
       GeoLibre is a lightweight desktop GIS prototype built with Tauri, React,
-      TypeScript, and MapLibre GL JS. It focuses on fast local GeoJSON work,
-      project files, styling, plugins, and a practical path toward cloud-native
-      formats.
+      TypeScript, MapLibre GL JS, and DuckDB-WASM Spatial. It focuses on fast
+      local vector data work, project files, styling, plugins, and a practical
+      path toward cloud-native geospatial workflows.
     </p>
     <div class="hero__actions">
       <a class="md-button md-button--primary" href="/demo/">Open live demo</a>
@@ -35,9 +35,9 @@ Use an OpenFreeMap basemap, pan and zoom smoothly, and toggle built-in map contr
 </div>
 
 <div class="feature-card" markdown>
-### Local GeoJSON projects
+### Local vector projects
 
-Load GeoJSON, inspect attributes, style layers, reorder visibility, and save or reopen `.geolibre.json` projects from the desktop app.
+Load GeoJSON, GeoParquet, GeoPackage, and Shapefile data, inspect attributes, style layers, reorder visibility, and save or reopen `.geolibre.json` projects from the desktop app.
 </div>
 
 <div class="feature-card" markdown>
@@ -56,11 +56,11 @@ The processing toolbox includes client-side algorithms now, with a roadmap towar
 
 ## Try it in the browser
 
-The live demo is the browser-capable version of the GeoLibre desktop UI. It is useful for exploring the map, loading browser-selected GeoJSON files, styling layers, and testing plugins. Desktop-only file dialogs and filesystem save/open operations still require the installed Tauri app.
+The live demo is the browser-capable version of the GeoLibre desktop UI. It is useful for exploring the map, loading browser-selected GeoJSON, GeoParquet, GeoPackage, and zipped Shapefile data, styling layers, and testing plugins. Desktop-only file dialogs and filesystem save/open operations still require the installed Tauri app.
 
 [Open the live demo](/demo/){ .md-button .md-button--primary }
 [Read the architecture](architecture.md){ .md-button }
 
 ## Project status
 
-GeoLibre is an active prototype. The current implementation includes the map workspace, project format, plugin API, and core UI patterns. See the [roadmap](roadmap.md) for planned work on cloud-native formats, DuckDB Spatial, the Python processing sidecar, and external plugin loading.
+GeoLibre is an active prototype. Version 0.4.0 includes the map workspace, project format, plugin API, browser vector import, DuckDB-WASM Spatial loading, and core UI patterns. See the [roadmap](roadmap.md) for planned work on PMTiles, COGs, SQL workflows, the Python processing sidecar, and external plugin loading.

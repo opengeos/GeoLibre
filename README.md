@@ -1,8 +1,8 @@
 # GeoLibre Desktop
 
-Lightweight, cloud-native desktop GIS prototype built with **Tauri v2**, **React**, **TypeScript**, and **MapLibre GL JS**.
+Lightweight, cloud-native desktop GIS prototype built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS**, and **DuckDB-WASM Spatial**.
 
-## Features (v0.1 MVP)
+## Features (v0.4.0)
 
 - MapLibre map with OpenFreeMap Liberty basemap
 - Load local GeoJSON, GeoParquet, GeoPackage, and Shapefile layers
@@ -10,9 +10,9 @@ Lightweight, cloud-native desktop GIS prototype built with **Tauri v2**, **React
 - Live style panel (fill, stroke, opacity, circle radius)
 - Attribute table for imported vector layers
 - Save/open `.geolibre.json` projects
-- Processing toolbox (bounds, count + placeholders)
-- Plugin system (basemap + sample GeoJSON plugins)
-- Optional Python FastAPI sidecar (design only)
+- Processing toolbox with local bounds and feature count algorithms
+- Plugin system with basemap, layer control, swipe, street view, lidar, GeoAgent, and GeoEditor integrations
+- Optional Python FastAPI sidecar for heavier processing workflows
 
 ## Prerequisites
 
