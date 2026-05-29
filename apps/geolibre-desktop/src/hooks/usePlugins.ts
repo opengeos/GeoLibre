@@ -5,6 +5,7 @@ import {
   maplibreGeoEditorPlugin,
   maplibreLayerControlPlugin,
   maplibreStreetViewPlugin,
+  maplibreSwipePlugin,
   PluginManager,
 } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
@@ -18,6 +19,7 @@ manager.registerAll([
   maplibreGeoAgentPlugin,
   maplibreGeoEditorPlugin,
   maplibreStreetViewPlugin,
+  maplibreSwipePlugin,
 ]);
 
 export function getPluginManager(): PluginManager {
