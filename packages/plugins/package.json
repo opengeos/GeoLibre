@@ -9,14 +9,26 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@carbonplan/zarr-layer": "^0.3.1",
+    "@deck.gl/core": "^9.3.2",
+    "@deck.gl/layers": "^9.3.2",
+    "@deck.gl/mapbox": "^9.3.2",
+    "@developmentseed/deck.gl-geotiff": "^0.2.0",
+    "@developmentseed/deck.gl-raster": "^0.7.0",
+    "@dvt3d/maplibre-three-plugin": "^1.6.0",
     "@geolibre/core": "*",
     "@geoman-io/maplibre-geoman-free": "^0.7.1",
+    "jspdf": "^2.5.2",
+    "maplibre-gl": "^5.24.0",
     "maplibre-gl-basemap-control": "^0.2.1",
+    "maplibre-gl-components": "^0.16.3",
     "maplibre-gl-geo-editor": "^0.7.3",
     "maplibre-gl-geoagent": "^0.4.2",
     "maplibre-gl-lidar": "^0.14.1",
     "maplibre-gl-streetview": "^0.4.0",
-    "maplibre-gl-swipe": "^0.7.1"
+    "maplibre-gl-swipe": "^0.7.1",
+    "shpjs": "^6.2.0",
+    "three": "^0.178.0"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",

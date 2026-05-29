@@ -4,6 +4,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import "@geoman-io/maplibre-geoman-free/dist/maplibre-geoman.css";
 import "maplibre-gl-basemap-control/style.css";
+import "maplibre-gl-components/style.css";
 import "maplibre-gl-geo-editor/style.css";
 import "maplibre-gl-geoagent/style.css";
 import "maplibre-gl-streetview/style.css";

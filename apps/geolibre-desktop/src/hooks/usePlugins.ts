@@ -1,6 +1,7 @@
 import { useAppStore } from "@geolibre/core";
 import {
   maplibreBasemapControlPlugin,
+  maplibreComponentsPlugin,
   maplibreGeoAgentPlugin,
   maplibreGeoEditorPlugin,
   maplibreLayerControlPlugin,
@@ -23,6 +24,7 @@ manager.registerAll([
   maplibreLidarPlugin,
   maplibreStreetViewPlugin,
   maplibreSwipePlugin,
+  maplibreComponentsPlugin,
 ]);
 
 export function getPluginManager(): PluginManager {

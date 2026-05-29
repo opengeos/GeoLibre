@@ -12,7 +12,7 @@
     "@geolibre/core": "*",
     "@turf/bbox": "^7.2.0",
     "@turf/helpers": "^7.2.0",
-    "maplibre-gl": "^5.1.1",
+    "maplibre-gl": "^5.24.0",
     "maplibre-gl-layer-control": "^0.14.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
