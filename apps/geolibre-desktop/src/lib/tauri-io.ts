@@ -7,6 +7,10 @@ function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
+function browserSafeFileName(path: string): string {
+  return path.split(/[/\\]/).pop() || "project.geolibre.json";
+}
+
 interface FileDialogFilter {
   name: string;
   extensions: string[];
@@ -16,6 +20,125 @@ interface LocalDataFileOptions {
   filters: FileDialogFilter[];
   accept: string;
   readText?: boolean;
+}
+
+interface BrowserFilePickerType {
+  description: string;
+  accept: Record<string, string[]>;
+}
+
+interface BrowserOpenFileHandle {
+  name: string;
+  getFile: () => Promise<File>;
+}
+
+interface BrowserWritableFileStream {
+  write: (data: string | Blob) => Promise<void>;
+  close: () => Promise<void>;
+}
+
+interface BrowserSaveFileHandle {
+  name: string;
+  createWritable: () => Promise<BrowserWritableFileStream>;
+}
+
+interface BrowserFilePickerWindow extends Window {
+  showOpenFilePicker?: (options: {
+    multiple?: boolean;
+    types?: BrowserFilePickerType[];
+    excludeAcceptAllOption?: boolean;
+  }) => Promise<BrowserOpenFileHandle[]>;
+  showSaveFilePicker?: (options: {
+    suggestedName?: string;
+    types?: BrowserFilePickerType[];
+    excludeAcceptAllOption?: boolean;
+  }) => Promise<BrowserSaveFileHandle>;
+}
+
+const GEOLIBRE_PROJECT_FILE_TYPES: BrowserFilePickerType[] = [
+  {
+    description: "GeoLibre Project",
+    accept: {
+      "application/json": [".geolibre", ".json"],
+    },
+  },
+];
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+async function openProjectFileBrowser(): Promise<{
+  project: GeoLibreProject;
+  path: string;
+} | null> {
+  const pickerWindow = window as BrowserFilePickerWindow;
+  if (pickerWindow.showOpenFilePicker) {
+    try {
+      const [handle] = await pickerWindow.showOpenFilePicker({
+        multiple: false,
+        types: GEOLIBRE_PROJECT_FILE_TYPES,
+        excludeAcceptAllOption: false,
+      });
+      if (!handle) return null;
+      const file = await handle.getFile();
+      return {
+        project: parseProject(await file.text()),
+        path: handle.name || file.name,
+      };
+    } catch (error) {
+      if (isAbortError(error)) return null;
+      console.warn("Browser project file picker failed", error);
+    }
+  }
+
+  const result = await openLocalDataFileWithFallback({
+    filters: [{ name: "GeoLibre Project", extensions: ["geolibre", "json"] }],
+    accept: ".geolibre,.json,.geolibre.json",
+    readText: true,
+  });
+  if (!result?.text) return null;
+  return {
+    project: parseProject(result.text),
+    path: result.path,
+  };
+}
+
+async function saveProjectFileBrowser(
+  content: string,
+  defaultName?: string,
+): Promise<string | null> {
+  const fileName = browserSafeFileName(defaultName ?? "project.geolibre.json");
+  const pickerWindow = window as BrowserFilePickerWindow;
+
+  if (pickerWindow.showSaveFilePicker) {
+    try {
+      const handle = await pickerWindow.showSaveFilePicker({
+        suggestedName: fileName,
+        types: GEOLIBRE_PROJECT_FILE_TYPES,
+        excludeAcceptAllOption: false,
+      });
+      const writable = await handle.createWritable();
+      await writable.write(content);
+      await writable.close();
+      return handle.name || fileName;
+    } catch (error) {
+      if (isAbortError(error)) return null;
+      console.warn("Browser project save picker failed", error);
+    }
+  }
+
+  const blob = new Blob([content], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  return fileName;
 }
 
 export async function openLocalDataFileWithFallback(
@@ -73,7 +196,10 @@ export async function openProjectFile(): Promise<{
   project: GeoLibreProject;
   path: string;
 } | null> {
-  if (!isTauri()) return null;
+  if (!isTauri()) {
+    return openProjectFileBrowser();
+  }
+
   const selected = await open({
     multiple: false,
     filters: [{ name: "GeoLibre Project", extensions: ["geolibre", "json"] }],
@@ -88,7 +214,10 @@ export async function saveProjectFile(
   content: string,
   defaultName?: string,
 ): Promise<string | null> {
-  if (!isTauri()) return null;
+  if (!isTauri()) {
+    return saveProjectFileBrowser(content, defaultName);
+  }
+
   const path = await save({
     filters: [{ name: "GeoLibre Project", extensions: ["geolibre", "json"] }],
     defaultPath: defaultName ?? "project.geolibre.json",
