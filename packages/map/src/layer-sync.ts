@@ -8,7 +8,7 @@ import {
   sourceId,
 } from "./geojson-loader";
 import { isPlaceholderLayer } from "./placeholders";
-import { circlePaint, fillPaint, linePaint } from "./style-mapper";
+import { circlePaint, fillPaint, linePaint, rasterPaint } from "./style-mapper";
 
 const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
 
@@ -151,7 +151,7 @@ function syncRasterTileLayer(
       id: lid,
       type: "raster",
       source: src,
-      paint: { "raster-opacity": layer.opacity },
+      paint: rasterPaint(layer.style, layer.opacity),
       layout: { visibility: layer.visible ? "visible" : "none" },
     },
     beforeId,

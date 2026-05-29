@@ -1,5 +1,10 @@
-import { useAppStore } from "@geolibre/core";
-import { Button, Input, Label, ScrollArea, Separator } from "@geolibre/ui";
+import {
+  DEFAULT_LAYER_STYLE,
+  type LayerStyle,
+  type LayerType,
+  useAppStore,
+} from "@geolibre/core";
+import { Button, Input, Label, ScrollArea, Separator, Slider } from "@geolibre/ui";
 import {
   PanelRightClose,
   PanelRightOpen,
@@ -14,9 +19,61 @@ function isMobileViewport(): boolean {
   );
 }
 
+function isRasterPaintLayer(type: LayerType): boolean {
+  return type === "raster" || type === "wms" || type === "xyz";
+}
+
+function styleValue<K extends keyof LayerStyle>(
+  style: LayerStyle,
+  key: K,
+): LayerStyle[K] {
+  return style[key] ?? DEFAULT_LAYER_STYLE[key];
+}
+
+interface RasterStyleSliderProps {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (value: number) => void;
+  format?: (value: number) => string;
+}
+
+function RasterStyleSlider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+  format = (next) => next.toFixed(2),
+}: RasterStyleSliderProps) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <Label className="text-xs">{label}</Label>
+        <span className="shrink-0 font-mono text-xs text-muted-foreground">
+          {format(value)}
+        </span>
+      </div>
+      <Slider
+        min={min}
+        max={max}
+        step={step}
+        value={[value]}
+        onValueChange={([next]) => {
+          if (typeof next === "number") onChange(next);
+        }}
+      />
+    </div>
+  );
+}
+
 export function StylePanel() {
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const layers = useAppStore((s) => s.layers);
+  const setLayerOpacity = useAppStore((s) => s.setLayerOpacity);
   const setLayerStyle = useAppStore((s) => s.setLayerStyle);
   const [isCollapsed, setIsCollapsed] = useState(isMobileViewport);
 
@@ -71,6 +128,96 @@ export function StylePanel() {
   const { style } = layer;
   const hasVectorPaintControls =
     layer.type === "geojson" || layer.type === "vector-tiles";
+  const hasRasterPaintControls = isRasterPaintLayer(layer.type);
+
+  if (hasRasterPaintControls) {
+    return (
+      <aside className="flex max-h-56 w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-64 md:border-l md:border-t-0">
+        <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
+          <span className="truncate text-sm font-semibold">
+            Style - {layer.name}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            title="Collapse style"
+            aria-label="Collapse style"
+            onClick={() => setIsCollapsed(true)}
+          >
+            <PanelRightClose className="h-4 w-4" />
+          </Button>
+        </div>
+        <ScrollArea className="flex-1 p-3">
+          <div className="space-y-4">
+            <RasterStyleSlider
+              label="Opacity"
+              value={layer.opacity}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={(value) => setLayerOpacity(layer.id, value)}
+            />
+            <RasterStyleSlider
+              label="Brightness Min"
+              value={styleValue(style, "rasterBrightnessMin")}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={(value) =>
+                setLayerStyle(layer.id, { rasterBrightnessMin: value })
+              }
+            />
+            <RasterStyleSlider
+              label="Brightness Max"
+              value={styleValue(style, "rasterBrightnessMax")}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={(value) =>
+                setLayerStyle(layer.id, { rasterBrightnessMax: value })
+              }
+            />
+            <RasterStyleSlider
+              label="Saturation"
+              value={styleValue(style, "rasterSaturation")}
+              min={-1}
+              max={1}
+              step={0.05}
+              onChange={(value) =>
+                setLayerStyle(layer.id, { rasterSaturation: value })
+              }
+            />
+            <RasterStyleSlider
+              label="Contrast"
+              value={styleValue(style, "rasterContrast")}
+              min={-1}
+              max={1}
+              step={0.05}
+              onChange={(value) =>
+                setLayerStyle(layer.id, { rasterContrast: value })
+              }
+            />
+            <RasterStyleSlider
+              label="Hue Rotate"
+              value={styleValue(style, "rasterHueRotate")}
+              min={0}
+              max={360}
+              step={1}
+              onChange={(value) =>
+                setLayerStyle(layer.id, { rasterHueRotate: value })
+              }
+              format={(value) => value.toFixed(0)}
+            />
+          </div>
+        </ScrollArea>
+        <Separator />
+        <p className="p-2 text-[10px] text-muted-foreground">
+          Changes apply live to MapLibre raster paint properties.
+        </p>
+      </aside>
+    );
+  }
 
   if (!hasVectorPaintControls) {
     return (
@@ -91,8 +238,7 @@ export function StylePanel() {
           </Button>
         </div>
         <p className="p-4 text-xs text-muted-foreground">
-          Paint controls are available for vector layers. Use layer opacity in
-          the Layers panel for this layer type.
+          Style controls are not available for this layer type yet.
         </p>
         <Separator />
         <p className="p-2 text-[10px] text-muted-foreground">
