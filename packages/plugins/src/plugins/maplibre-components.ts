@@ -73,6 +73,10 @@ interface LidarControlClickOutsideState {
   _clickOutsideHandler?: ((event: MouseEvent) => void) | null;
 }
 
+interface SplattingControlVisibilityState {
+  _container?: HTMLElement | null;
+}
+
 interface ComponentsConstructors {
   AddVectorControl: AddVectorControlConstructor;
   CogLayerControl: CogLayerControlConstructor;
@@ -102,7 +106,7 @@ const ZARR_SAMPLE_URL =
 const LIDAR_SAMPLE_URL =
   "https://s3.amazonaws.com/hobu-lidar/autzen-classified.copc.laz";
 const SPLATTING_SAMPLE_URL =
-  "https://huggingface.co/datasets/VAST-AI/3DGS/resolve/main/Truck/truck.splat";
+  "https://maplibre.org/maplibre-gl-js/docs/assets/34M_17/34M_17.gltf";
 
 const COMPONENT_CONTROL_NAMES = [
   "spinGlobe",
@@ -227,11 +231,16 @@ const LIDAR_OPTIONS = {
 const SPLATTING_OPTIONS = {
   className: "geolibre-splatting-control",
   collapsed: false,
+  defaultAltitude: 0,
+  defaultLatitude: -35.39847,
+  defaultLongitude: 148.9819,
+  defaultRotation: [-90, 90, 0],
+  defaultScale: 0.03,
   defaultUrl: SPLATTING_SAMPLE_URL,
   flyTo: true,
   maxHeight: 520,
   panelWidth: 365,
-  title: "Add Splatting Layer",
+  title: "Gaussian Splats",
 } satisfies ConstructorParameters<GaussianSplatControlConstructor>[0];
 
 let componentsControl: ControlGrid | null = null;
@@ -636,6 +645,7 @@ async function openStandaloneSplattingControl(
   }
 
   setTimeout(() => {
+    showSplattingControl(splattingControl);
     splattingControl?.expand();
   }, 0);
   return true;
@@ -766,6 +776,7 @@ function createSplattingControl(
 ): GaussianSplatControl {
   const control = new GaussianSplatControlClass(SPLATTING_OPTIONS);
   splattingLayerAdapter = new GaussianSplatLayerAdapterClass(control);
+  control.on("collapse", () => hideSplattingControl(control));
   control.on("splatload", createSplattingLoadHandler("splat"));
   control.on("modelload", createSplattingLoadHandler("model"));
   control.on("splatremove", createSplattingRemoveHandler());
@@ -1977,6 +1988,24 @@ function hideLidarControl(control: LidarControl | null): void {
 function showLidarControl(control: LidarControl | null): void {
   const container = control?.getContainer();
   if (container) container.style.display = "";
+}
+
+function hideSplattingControl(control: GaussianSplatControl | null): void {
+  const container = getSplattingControlContainer(control);
+  if (container) container.style.display = "none";
+}
+
+function showSplattingControl(control: GaussianSplatControl | null): void {
+  const container = getSplattingControlContainer(control);
+  if (container) container.style.display = "";
+}
+
+function getSplattingControlContainer(
+  control: GaussianSplatControl | null,
+): HTMLElement | null {
+  return (
+    (control as SplattingControlVisibilityState | null)?._container ?? null
+  );
 }
 
 function disableLidarClickOutsideCollapse(control: LidarControl | null): void {

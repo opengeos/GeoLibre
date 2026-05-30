@@ -708,9 +708,50 @@ body,
 }
 
 .geolibre-splatting-control .maplibre-gl-splat-panel label,
-.geolibre-splatting-control .maplibre-gl-splat-panel span,
-.geolibre-splatting-control .maplibre-gl-splat-panel div {
-  color: hsl(var(--popover-foreground));
+.geolibre-splatting-control .maplibre-gl-splat-panel > div > span,
+.geolibre-splatting-control .maplibre-gl-splat-panel > div > div:first-child {
+  color: hsl(var(--popover-foreground)) !important;
+}
+
+.geolibre-splatting-control .maplibre-gl-splat-panel > div:first-child {
+  border-bottom-color: hsl(var(--border)) !important;
+}
+
+.geolibre-splatting-control .maplibre-gl-splat-panel > div:first-child button {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.geolibre-splatting-control
+  .maplibre-gl-splat-panel
+  > div:first-child
+  button:hover {
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-splatting-control .maplibre-gl-splat-panel > button {
+  background: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+}
+
+.geolibre-splatting-control
+  .maplibre-gl-splat-panel
+  div[style*="background: #f8f8f8"],
+.geolibre-splatting-control
+  .maplibre-gl-splat-panel
+  div[style*="background: rgb(248, 248, 248)"] {
+  background: hsl(var(--secondary)) !important;
+  border: 1px solid hsl(var(--border));
+}
+
+.geolibre-splatting-control
+  .maplibre-gl-splat-panel
+  div[style*="background: #f8f8f8"]
+  span,
+.geolibre-splatting-control
+  .maplibre-gl-splat-panel
+  div[style*="background: rgb(248, 248, 248)"]
+  span {
+  color: hsl(var(--secondary-foreground)) !important;
 }
 
 .geolibre-splatting-control .maplibre-gl-splat-panel > button {
