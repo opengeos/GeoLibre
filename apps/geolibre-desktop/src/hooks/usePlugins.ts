@@ -15,6 +15,12 @@ import type { GeoLibreMapControlPosition } from "@geolibre/plugins";
 import type { RefObject } from "react";
 import { useSyncExternalStore } from "react";
 
+const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
+
+interface TauriRuntimeWindow extends Window {
+  __TAURI_INTERNALS__?: unknown;
+}
+
 const manager = new PluginManager();
 manager.registerAll([
   maplibreLayerControlPlugin,
@@ -78,15 +84,15 @@ export function createAppAPI(
           callback(state.basemapStyleUrl);
         }
       }),
+    fetchArrayBuffer: fetchRemoteArrayBuffer,
+    fitBounds: (bounds: [number, number, number, number]) =>
+      mapControllerRef?.current?.fitBounds(bounds),
     addMapControl: (
       control: Parameters<MapController["addControl"]>[0],
       position?: Parameters<MapController["addControl"]>[1],
     ) => mapControllerRef?.current?.addControl(control, position) ?? false,
     removeMapControl: (control: Parameters<MapController["removeControl"]>[0]) =>
       mapControllerRef?.current?.removeControl(control),
-    setMapProjection: (
-      projection: Parameters<MapController["setProjection"]>[0],
-    ) => mapControllerRef?.current?.setProjection(projection) ?? false,
     setBuiltInMapControlVisible: (
       control: Parameters<MapController["setBuiltInControlVisible"]>[0],
       visible: boolean,
@@ -107,4 +113,70 @@ export function createAppAPI(
         position,
       ) ?? false,
   };
+}
+
+async function fetchRemoteArrayBuffer(url: string): Promise<ArrayBuffer> {
+  if (isTauriRuntime()) {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const bytes = await invoke<number[] | Uint8Array>("fetch_url_bytes", {
+        url,
+      });
+      return normalizeBytes(bytes);
+    } catch {
+      // Fall back to browser fetch for web builds and during local development.
+    }
+  }
+
+  if (isLocalDevHost() && shouldUseDevRasterProxy(url)) {
+    return fetchDevRasterProxy(url);
+  }
+
+  try {
+    return await fetchArrayBuffer(url);
+  } catch (error) {
+    if (!isLocalDevHost()) throw error;
+    return fetchDevRasterProxy(url);
+  }
+}
+
+function fetchDevRasterProxy(url: string): Promise<ArrayBuffer> {
+  return fetchArrayBuffer(`${RASTER_PROXY_PATH}?url=${encodeURIComponent(url)}`);
+}
+
+async function fetchArrayBuffer(url: string): Promise<ArrayBuffer> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} ${response.statusText}`);
+  }
+  return response.arrayBuffer();
+}
+
+function isTauriRuntime(): boolean {
+  if (typeof window === "undefined") return false;
+  return Boolean((window as TauriRuntimeWindow).__TAURI_INTERNALS__);
+}
+
+function isLocalDevHost(): boolean {
+  if (typeof window === "undefined") return false;
+  return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+}
+
+function shouldUseDevRasterProxy(url: string): boolean {
+  try {
+    const parsedUrl = new URL(url);
+    return (
+      parsedUrl.hostname === "github.com" &&
+      parsedUrl.pathname.includes("/releases/download/")
+    );
+  } catch {
+    return false;
+  }
+}
+
+function normalizeBytes(bytes: number[] | Uint8Array): ArrayBuffer {
+  const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const copy = new Uint8Array(view.byteLength);
+  copy.set(view);
+  return copy.buffer;
 }

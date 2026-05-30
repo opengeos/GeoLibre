@@ -230,7 +230,9 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
   }
 
   const { style } = layer;
-  const isCogRasterLayer = layer.metadata.sourceKind === "cog-url";
+  const isDeckRasterLayer =
+    layer.metadata.sourceKind === "cog-url" ||
+    layer.metadata.sourceKind === "geotiff-url";
   const isRasterTileLayer = layer.metadata.tileType === "raster";
   const hasVectorPaintControls =
     !isRasterTileLayer &&
@@ -271,7 +273,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
               step={0.05}
               onChange={(value) => setLayerOpacity(layer.id, value)}
             />
-            {!isCogRasterLayer && (
+            {!isDeckRasterLayer && (
               <>
                 <RasterStyleSlider
                   label="Brightness Min"
@@ -330,8 +332,8 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
         </ScrollArea>
         <Separator />
         <p className="p-2 text-[10px] text-muted-foreground">
-          {isCogRasterLayer
-            ? "Changes apply live to the COG layer opacity."
+          {isDeckRasterLayer
+            ? "Changes apply live to the raster layer opacity."
             : "Changes apply live to MapLibre raster paint properties."}
         </p>
       </aside>

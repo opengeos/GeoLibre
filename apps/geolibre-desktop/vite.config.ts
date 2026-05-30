@@ -13,6 +13,7 @@ const EARTH_ENGINE_BROWSER_BUNDLE = "@google/earthengine/build/browser.js";
 const GIS_CHUNK_WARNING_LIMIT_KB = 5000;
 const APP_BASE = process.env.GEOLIBRE_APP_BASE;
 const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
+const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
 const RADIX_OPTIMIZE_EXCLUDES = [
   "@radix-ui/react-dialog",
   "@radix-ui/react-dropdown-menu",
@@ -69,6 +70,19 @@ function wmsProxyPlugin(): Plugin {
           res.end(message);
         }
       });
+      server.middlewares.use(RASTER_PROXY_PATH, async (req, res) => {
+        try {
+          await proxyBinaryRequest(req, res, RASTER_PROXY_PATH);
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Raster proxy request failed";
+          res.statusCode = 502;
+          res.setHeader("content-type", "text/plain");
+          res.end(message);
+        }
+      });
     },
   };
 }
@@ -77,12 +91,20 @@ async function proxyWmsRequest(
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  const requestUrl = new URL(req.url ?? "", `http://localhost${WMS_PROXY_PATH}`);
+  await proxyBinaryRequest(req, res, WMS_PROXY_PATH);
+}
+
+async function proxyBinaryRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  proxyPath: string,
+): Promise<void> {
+  const requestUrl = new URL(req.url ?? "", `http://localhost${proxyPath}`);
   const target = requestUrl.searchParams.get("url");
   if (!target || !/^https?:\/\//i.test(target)) {
     res.statusCode = 400;
     res.setHeader("content-type", "text/plain");
-    res.end("Missing or invalid WMS target URL");
+    res.end("Missing or invalid target URL");
     return;
   }
 

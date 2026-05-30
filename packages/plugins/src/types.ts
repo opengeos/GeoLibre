@@ -27,12 +27,13 @@ export interface GeoLibreAppAPI {
   ) => void;
   getActiveBasemap: () => string;
   onBasemapChange: (callback: (styleUrl: string) => void) => () => void;
+  fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;
+  fitBounds?: (bounds: [number, number, number, number]) => void;
   addMapControl: (
     control: IControl,
     position?: GeoLibreMapControlPosition,
   ) => boolean;
   removeMapControl: (control: IControl) => void;
-  setMapProjection: (projection: "globe" | "mercator") => boolean;
   setBuiltInMapControlVisible: (
     control: GeoLibreBuiltInMapControl,
     visible: boolean,

@@ -338,12 +338,7 @@ export function LayerPanel({
                     title="Zoom to layer"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (layer.geojson) {
-                        mapControllerRef.current?.fitLayer(layer);
-                      } else {
-                        // TODO(v0.3): zoom to layer for non-GeoJSON types
-                        console.info("Zoom to layer not available for this type");
-                      }
+                      mapControllerRef.current?.fitLayer(layer);
                     }}
                   >
                     <ZoomIn className="h-3.5 w-3.5" />
