@@ -4,7 +4,6 @@ use earth_engine_oauth::{
     poll_earth_engine_oauth, start_earth_engine_oauth, EarthEngineOAuthState,
 };
 use std::sync::atomic::{AtomicU64, Ordering};
-use tauri::menu::{MenuBuilder, SubmenuBuilder};
 use tauri::Manager;
 
 static POPUP_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -24,7 +23,6 @@ pub fn run() {
             poll_earth_engine_oauth
         ])
         .setup(|app| {
-            configure_app_menu(app)?;
             create_main_window(app)?;
             Ok(())
         })
@@ -56,22 +54,6 @@ fn create_main_window(app: &mut tauri::App) -> tauri::Result<()> {
             create_oauth_popup_window(app_handle.clone(), url, features)
         })
         .build()?;
-
-    Ok(())
-}
-
-fn configure_app_menu(app: &mut tauri::App) -> tauri::Result<()> {
-    let edit_menu = SubmenuBuilder::new(app, "Edit")
-        .undo()
-        .redo()
-        .separator()
-        .cut()
-        .copy()
-        .paste()
-        .select_all()
-        .build()?;
-    let menu = MenuBuilder::new(app).item(&edit_menu).build()?;
-    app.set_menu(menu)?;
 
     Ok(())
 }
