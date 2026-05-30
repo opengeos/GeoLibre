@@ -4,7 +4,10 @@ import {
   DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
   type MapController,
 } from "@geolibre/map";
-import type { GeoLibreMapControlPosition } from "@geolibre/plugins";
+import {
+  openFlatGeobufAddVectorLayerPanel,
+  type GeoLibreMapControlPosition,
+} from "@geolibre/plugins";
 import {
   Button,
   DropdownMenu,
@@ -133,6 +136,9 @@ export function TopToolbar({
     setMapControlPosition,
   } = usePluginRegistry();
   const appApi = createAppAPI(mapControllerRef);
+  const handleAddFlatGeobufLayer = () => {
+    openFlatGeobufAddVectorLayerPanel(appApi);
+  };
   const toggleMapControl = (control: ToolbarMapControl) => {
     setControlsVisible((current) => {
       const visible = !current[control];
@@ -176,6 +182,9 @@ export function TopToolbar({
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setAddDataKind("vector")}>
             Add Vector Layer
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleAddFlatGeobufLayer}>
+            Add FlatGeobuf Layer
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setAddDataKind("raster")}>
             Add Raster Layer

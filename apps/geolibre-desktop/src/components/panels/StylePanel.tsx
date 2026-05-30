@@ -32,6 +32,13 @@ function isRasterPaintLayer(type: LayerType): boolean {
   return type === "raster" || type === "wms" || type === "xyz";
 }
 
+function hasExternalNativeLayers(layer: { metadata: Record<string, unknown> }) {
+  return (
+    Array.isArray(layer.metadata.nativeLayerIds) &&
+    layer.metadata.nativeLayerIds.length > 0
+  );
+}
+
 function styleValue<K extends keyof LayerStyle>(
   style: LayerStyle,
   key: K,
@@ -224,7 +231,9 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
 
   const { style } = layer;
   const hasVectorPaintControls =
-    layer.type === "geojson" || layer.type === "vector-tiles";
+    layer.type === "geojson" ||
+    layer.type === "vector-tiles" ||
+    hasExternalNativeLayers(layer);
   const hasRasterPaintControls = isRasterPaintLayer(layer.type);
 
   if (hasRasterPaintControls) {

@@ -48,6 +48,13 @@ function layerTypeLabel(layer: GeoLibreLayer): string {
   return layer.type;
 }
 
+function hasNativeIdentifyLayers(layer: GeoLibreLayer): boolean {
+  return (
+    Array.isArray(layer.metadata.nativeLayerIds) &&
+    layer.metadata.nativeLayerIds.length > 0
+  );
+}
+
 function isMobileViewport(): boolean {
   return (
     typeof window !== "undefined" &&
@@ -211,7 +218,9 @@ export function LayerPanel({
           )}
           {visibleLayers.map((layer, displayIndex) => {
             const canIdentify =
-              layer.type === "geojson" || layer.type === "vector-tiles";
+              layer.type === "geojson" ||
+              layer.type === "vector-tiles" ||
+              hasNativeIdentifyLayers(layer);
             const identifyActive = identifyLayerId === layer.id;
             return (
               <div
