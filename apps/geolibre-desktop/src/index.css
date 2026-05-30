@@ -405,6 +405,8 @@ body,
   .maplibre-gl-zarr-layer-input[type="number"]::-webkit-outer-spin-button {
   cursor: pointer;
   opacity: 1;
+  transform: scale(1.15);
+  transform-origin: center;
 }
 
 .geolibre-zarr-control .maplibre-gl-zarr-layer-input:focus,
