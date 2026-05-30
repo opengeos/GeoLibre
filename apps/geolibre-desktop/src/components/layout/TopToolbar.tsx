@@ -1,4 +1,8 @@
-import { projectFromStore, serializeProject, useAppStore } from "@geolibre/core";
+import {
+  projectFromStore,
+  serializeProject,
+  useAppStore,
+} from "@geolibre/core";
 import {
   type BuiltInMapControl,
   DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
@@ -204,6 +208,9 @@ export function TopToolbar({
           <DropdownMenuItem onSelect={handleAddPMTilesLayer}>
             Add PMTiles Layer
           </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setAddDataKind("mbtiles")}>
+            Add MBTiles Layer
+          </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddZarrLayer}>
             Add Zarr Layer
           </DropdownMenuItem>
@@ -315,13 +322,17 @@ export function TopToolbar({
       <div className="ml-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
         <Button
           aria-label={
-            themeMode === "dark" ? "Switch to light mode" : "Switch to dark mode"
+            themeMode === "dark"
+              ? "Switch to light mode"
+              : "Switch to dark mode"
           }
           className="h-7 w-7 shrink-0"
           onClick={onToggleThemeMode}
           size="icon"
           title={
-            themeMode === "dark" ? "Switch to light mode" : "Switch to dark mode"
+            themeMode === "dark"
+              ? "Switch to light mode"
+              : "Switch to dark mode"
           }
           variant="ghost"
         >

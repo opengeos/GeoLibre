@@ -82,7 +82,9 @@ export function LayerPanel({
   const reorderLayer = useAppStore((s) => s.reorderLayer);
   const moveLayer = useAppStore((s) => s.moveLayer);
   const removeLayer = useAppStore((s) => s.removeLayer);
-  const [metadataLayer, setMetadataLayer] = useState<GeoLibreLayer | null>(null);
+  const [metadataLayer, setMetadataLayer] = useState<GeoLibreLayer | null>(
+    null,
+  );
   const [layerPendingRemoval, setLayerPendingRemoval] =
     useState<GeoLibreLayer | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(isMobileViewport);
@@ -170,9 +172,7 @@ export function LayerPanel({
   }
 
   return (
-    <aside
-      className="relative flex max-h-56 w-full shrink-0 flex-col border-b bg-card md:max-h-none md:w-[var(--layer-panel-width)] md:border-b-0 md:border-r"
-    >
+    <aside className="relative flex max-h-56 w-full shrink-0 flex-col border-b bg-card md:max-h-none md:w-[var(--layer-panel-width)] md:border-b-0 md:border-r">
       <div
         role="separator"
         aria-orientation="vertical"
@@ -222,6 +222,8 @@ export function LayerPanel({
             const canIdentify =
               layer.type === "geojson" ||
               layer.type === "vector-tiles" ||
+              (layer.type === "mbtiles" &&
+                layer.metadata.tileType === "vector") ||
               hasNativeIdentifyLayers(layer);
             const identifyActive = identifyLayerId === layer.id;
             return (
@@ -231,9 +233,7 @@ export function LayerPanel({
                   selectedLayerId === layer.id
                     ? "border-primary bg-primary/5"
                     : "border-border bg-background hover:border-muted-foreground/40 hover:bg-muted/20"
-                } ${
-                  draggedLayerId === layer.id ? "opacity-50" : ""
-                }`}
+                } ${draggedLayerId === layer.id ? "opacity-50" : ""}`}
                 onDragOver={(e) => handleLayerDragOver(e, layer.id)}
                 onDrop={(e) => handleLayerDrop(e, layer.id, displayIndex)}
                 onDragEnd={resetDragState}
@@ -293,7 +293,9 @@ export function LayerPanel({
                   </p>
                 )}
                 <div className="mt-2 flex items-center gap-1">
-                  <span className="text-[10px] text-muted-foreground">Opacity</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    Opacity
+                  </span>
                   <Slider
                     className="flex-1"
                     min={0}
@@ -419,9 +421,7 @@ export function LayerPanel({
               <button
                 type="button"
                 className="rounded p-0.5 hover:bg-muted"
-                title={
-                  basemapVisible ? "Hide background" : "Show background"
-                }
+                title={basemapVisible ? "Hide background" : "Show background"}
                 aria-label={
                   basemapVisible ? "Hide background" : "Show background"
                 }
@@ -445,18 +445,14 @@ export function LayerPanel({
               </span>
             </div>
             <div className="mt-2 flex items-center gap-1">
-              <span className="text-[10px] text-muted-foreground">
-                Opacity
-              </span>
+              <span className="text-[10px] text-muted-foreground">Opacity</span>
               <Slider
                 className="flex-1"
                 min={0}
                 max={1}
                 step={0.05}
                 value={[basemapOpacity]}
-                onValueChange={([v]) =>
-                  setBasemapOpacity(v ?? basemapOpacity)
-                }
+                onValueChange={([v]) => setBasemapOpacity(v ?? basemapOpacity)}
                 onClick={(e) => e.stopPropagation()}
               />
             </div>

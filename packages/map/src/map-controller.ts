@@ -19,7 +19,11 @@ import {
   lineLayerId,
   sourceId,
 } from "./geojson-loader";
-import { removeLayerFromMap, syncLayer } from "./layer-sync";
+import {
+  mbtilesStyleLayerIds,
+  removeLayerFromMap,
+  syncLayer,
+} from "./layer-sync";
 
 const DEFAULT_PROJECTION: maplibregl.ProjectionSpecification = {
   type: "globe",
@@ -189,7 +193,10 @@ export class MapController {
   private controlVisibility: Record<BuiltInMapControl, boolean> = {
     ...DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
   };
-  private controlPositions: Record<BuiltInMapControl, maplibregl.ControlPosition> = {
+  private controlPositions: Record<
+    BuiltInMapControl,
+    maplibregl.ControlPosition
+  > = {
     ...DEFAULT_BUILT_IN_CONTROL_POSITIONS,
   };
 
@@ -371,12 +378,7 @@ export class MapController {
       zoom: this.map.getZoom(),
       bearing: this.map.getBearing(),
       pitch: this.map.getPitch(),
-      bbox: [
-        b.getWest(),
-        b.getSouth(),
-        b.getEast(),
-        b.getNorth(),
-      ],
+      bbox: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
     };
   }
 
@@ -686,11 +688,7 @@ export class MapController {
   }
 
   private addTerrainSource(): boolean {
-    if (
-      !this.map ||
-      !this.controlVisibility.terrain ||
-      !this.isStyleReady()
-    ) {
+    if (!this.map || !this.controlVisibility.terrain || !this.isStyleReady()) {
       return false;
     }
     if (this.map.getSource(TERRAIN_SOURCE_ID)) return true;
@@ -707,9 +705,8 @@ export class MapController {
       return false;
     }
     const layerControlConfig = this.createLayerControlConfig(this.syncedLayers);
-    this.layerControlSignature = this.createLayerControlSignature(
-      layerControlConfig,
-    );
+    this.layerControlSignature =
+      this.createLayerControlSignature(layerControlConfig);
     this.layerControl = new LayerControl({
       basemapStyleUrl: this.basemapStyleUrl,
       collapsed: true,
@@ -777,7 +774,9 @@ export class MapController {
 
     return {
       excludeLayers,
-      customLayerAdapters: [this.createGeoLibreLayerAdapter(controllableLayers)],
+      customLayerAdapters: [
+        this.createGeoLibreLayerAdapter(controllableLayers),
+      ],
     };
   }
 
@@ -856,10 +855,10 @@ export class MapController {
     const control = this.layerControl as unknown as LayerControlInternalState;
     const items = control.panel?.querySelectorAll(".layer-control-item") ?? [];
     return (
-      Array.from(items).find(
+      (Array.from(items).find(
         (item) => (item as HTMLElement).dataset.layerId === layerId,
-      ) as HTMLElement | undefined
-    ) ?? null;
+      ) as HTMLElement | undefined) ?? null
+    );
   }
 
   private updateLayerControlItem(
@@ -879,7 +878,9 @@ export class MapController {
       opacity.title = `Opacity: ${Math.round(state.opacity * 100)}%`;
     }
 
-    const name = item.querySelector(".layer-control-name") as HTMLElement | null;
+    const name = item.querySelector(
+      ".layer-control-name",
+    ) as HTMLElement | null;
     if (name) {
       name.textContent = state.name;
       name.title = state.name;
@@ -1042,7 +1043,9 @@ export class MapController {
   ): string | undefined {
     if (!this.map || !layer?.beforeId) return undefined;
     if (
-      this.getCandidateStyleLayers(layer).some(({ id }) => id === layer.beforeId)
+      this.getCandidateStyleLayers(layer).some(
+        ({ id }) => id === layer.beforeId,
+      )
     ) {
       return undefined;
     }
@@ -1078,6 +1081,13 @@ export class MapController {
 
     if (layer.type === "vector-tiles") {
       return [{ id: `layer-${layer.id}-vector` }];
+    }
+
+    if (layer.type === "mbtiles") {
+      return mbtilesStyleLayerIds(layer).map((id) => ({
+        id,
+        suffix: nativeLayerSuffix(id),
+      }));
     }
 
     return [];
@@ -1153,10 +1163,7 @@ export class MapController {
       },
       trackUserLocation: true,
     });
-    this.map.addControl(
-      this.geolocateControl,
-      this.controlPositions.geolocate,
-    );
+    this.map.addControl(this.geolocateControl, this.controlPositions.geolocate);
     return true;
   }
 

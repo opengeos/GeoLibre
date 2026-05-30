@@ -1,11 +1,8 @@
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import maplibregl from "maplibre-gl";
 import { memo, useEffect, useRef } from "react";
-import {
-  circleLayerId,
-  fillLayerId,
-  lineLayerId,
-} from "./geojson-loader";
+import { circleLayerId, fillLayerId, lineLayerId } from "./geojson-loader";
+import { mbtilesStyleLayerIds } from "./layer-sync";
 import { createMapController, type MapController } from "./map-controller";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "maplibre-gl-layer-control/style.css";
@@ -44,7 +41,8 @@ function createIdentifyPopupElement(
 
   const appendRow = (key: string, value: unknown) => {
     const row = document.createElement("div");
-    row.className = "grid grid-cols-[minmax(5rem,0.45fr)_1fr] gap-2 border-t py-1";
+    row.className =
+      "grid grid-cols-[minmax(5rem,0.45fr)_1fr] gap-2 border-t py-1";
 
     const keyCell = document.createElement("div");
     keyCell.className = "break-words font-medium text-muted-foreground";
@@ -83,6 +81,7 @@ function nativeIdentifyLayerIds(layer: GeoLibreLayer): string[] {
 function identifyStyleLayerIds(layer: GeoLibreLayer): string[] {
   return [
     ...nativeIdentifyLayerIds(layer),
+    ...mbtilesStyleLayerIds(layer),
     circleLayerId(layer.id),
     lineLayerId(layer.id),
     fillLayerId(layer.id),
@@ -123,9 +122,7 @@ export const MapCanvas = memo(function MapCanvas({
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const selectedFeatureId = useAppStore((s) => s.selectedFeatureId);
   const identifyLayerId = useAppStore((s) => s.identifyLayerId);
-  const zoomToSelectedFeature = useAppStore(
-    (s) => s.ui.zoomToSelectedFeature,
-  );
+  const zoomToSelectedFeature = useAppStore((s) => s.ui.zoomToSelectedFeature);
   const selectFeature = useAppStore((s) => s.selectFeature);
   const setMapView = useAppStore((s) => s.setMapView);
   const setPointerCoords = useAppStore((s) => s.setPointerCoords);
@@ -257,7 +254,8 @@ export const MapCanvas = memo(function MapCanvas({
         : null;
     const shouldFit = Boolean(
       zoomToSelectedFeature &&
-      nextKey && nextKey !== previousSelectedFeatureKey.current,
+      nextKey &&
+      nextKey !== previousSelectedFeatureKey.current,
     );
     previousSelectedFeatureKey.current = nextKey;
     controller.current?.highlightFeature(layer, selectedFeatureId, {

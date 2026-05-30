@@ -4,7 +4,14 @@ import {
   type LayerType,
   useAppStore,
 } from "@geolibre/core";
-import { Button, Input, Label, ScrollArea, Separator, Slider } from "@geolibre/ui";
+import {
+  Button,
+  Input,
+  Label,
+  ScrollArea,
+  Separator,
+  Slider,
+} from "@geolibre/ui";
 import {
   ChevronDown,
   ChevronUp,
@@ -12,10 +19,7 @@ import {
   PanelRightOpen,
   SlidersHorizontal,
 } from "lucide-react";
-import {
-  type MouseEvent as ReactMouseEvent,
-  useState,
-} from "react";
+import { type MouseEvent as ReactMouseEvent, useState } from "react";
 
 interface StylePanelProps {
   onResizeStart: (event: ReactMouseEvent<HTMLDivElement>) => void;
@@ -205,9 +209,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
 
   if (!layer) {
     return (
-      <aside
-        className="relative flex max-h-56 w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-[var(--style-panel-width)] md:border-l md:border-t-0"
-      >
+      <aside className="relative flex max-h-56 w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-[var(--style-panel-width)] md:border-l md:border-t-0">
         {resizeHandle}
         <div className="flex items-center justify-between border-b px-3 py-1.5">
           <span className="text-sm font-semibold">Style</span>
@@ -238,15 +240,14 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
     !isRasterTileLayer &&
     (layer.type === "geojson" ||
       layer.type === "vector-tiles" ||
+      layer.type === "mbtiles" ||
       hasExternalNativeLayers(layer));
   const hasRasterPaintControls =
     isRasterPaintLayer(layer.type) || isRasterTileLayer;
 
   if (hasRasterPaintControls) {
     return (
-      <aside
-        className="relative flex max-h-56 w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-[var(--style-panel-width)] md:border-l md:border-t-0"
-      >
+      <aside className="relative flex max-h-56 w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-[var(--style-panel-width)] md:border-l md:border-t-0">
         {resizeHandle}
         <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
           <span className="truncate text-sm font-semibold">
@@ -342,9 +343,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
 
   if (!hasVectorPaintControls) {
     return (
-      <aside
-        className="relative flex max-h-56 w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-[var(--style-panel-width)] md:border-l md:border-t-0"
-      >
+      <aside className="relative flex max-h-56 w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-[var(--style-panel-width)] md:border-l md:border-t-0">
         {resizeHandle}
         <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
           <span className="truncate text-sm font-semibold">
@@ -373,9 +372,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
   }
 
   return (
-    <aside
-      className="relative flex max-h-56 w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-[var(--style-panel-width)] md:border-l md:border-t-0"
-    >
+    <aside className="relative flex max-h-56 w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-[var(--style-panel-width)] md:border-l md:border-t-0">
       {resizeHandle}
       <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
         <span className="truncate text-sm font-semibold">
@@ -423,9 +420,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
             max={20}
             step={0.5}
             value={style.strokeWidth}
-            onChange={(strokeWidth) =>
-              setLayerStyle(layer.id, { strokeWidth })
-            }
+            onChange={(strokeWidth) => setLayerStyle(layer.id, { strokeWidth })}
           />
           <NumericStyleInput
             id="fillOpacity"
@@ -434,9 +429,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
             max={1}
             step={0.05}
             value={style.fillOpacity}
-            onChange={(fillOpacity) =>
-              setLayerStyle(layer.id, { fillOpacity })
-            }
+            onChange={(fillOpacity) => setLayerStyle(layer.id, { fillOpacity })}
           />
           <NumericStyleInput
             id="circleRadius"

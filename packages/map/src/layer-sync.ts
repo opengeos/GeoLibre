@@ -28,17 +28,18 @@ export function syncLayer(
     return;
   }
 
-  if (
-    layer.type === "raster" ||
-    layer.type === "wms" ||
-    layer.type === "xyz"
-  ) {
+  if (layer.type === "raster" || layer.type === "wms" || layer.type === "xyz") {
     syncRasterTileLayer(map, layer, beforeId);
     return;
   }
 
   if (layer.type === "vector-tiles") {
     syncVectorTileLayer(map, layer, beforeId);
+    return;
+  }
+
+  if (layer.type === "mbtiles") {
+    syncMbtilesLayer(map, layer, beforeId);
   }
 }
 
@@ -273,6 +274,174 @@ function syncVectorTileLayer(
   );
 }
 
+function syncMbtilesLayer(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+  beforeId?: string,
+): void {
+  if (layer.metadata.tileType === "raster" || layer.source.type === "raster") {
+    syncRasterTileLayer(map, layer, beforeId);
+    return;
+  }
+
+  syncMbtilesVectorLayer(map, layer, beforeId);
+}
+
+function syncMbtilesVectorLayer(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+  beforeId?: string,
+): void {
+  const src = sourceId(layer.id);
+  const tiles = (layer.source.tiles as string[] | undefined) ?? [];
+  if (tiles.length === 0) return;
+
+  if (!map.getSource(src)) {
+    map.addSource(src, {
+      type: "vector",
+      tiles,
+      bounds: layer.source.bounds as
+        | [number, number, number, number]
+        | undefined,
+      maxzoom: layer.source.maxzoom as number | undefined,
+      minzoom: layer.source.minzoom as number | undefined,
+    });
+  }
+
+  const visibility = layer.visible ? "visible" : "none";
+  const sourceLayers = getMbtilesSourceLayers(layer);
+  const currentLayerIds = new Set(mbtilesStyleLayerIds(layer));
+
+  for (const sourceLayer of sourceLayers) {
+    ensureLayer(
+      map,
+      mbtilesFillLayerId(layer.id, sourceLayer),
+      {
+        id: mbtilesFillLayerId(layer.id, sourceLayer),
+        type: "fill",
+        source: src,
+        "source-layer": sourceLayer,
+        filter: [
+          "match",
+          ["geometry-type"],
+          ["Polygon", "MultiPolygon"],
+          true,
+          false,
+        ],
+        paint: fillPaint(layer.style, layer.opacity),
+        layout: { visibility },
+      },
+      beforeId,
+    );
+    ensureLayer(
+      map,
+      mbtilesLineLayerId(layer.id, sourceLayer),
+      {
+        id: mbtilesLineLayerId(layer.id, sourceLayer),
+        type: "line",
+        source: src,
+        "source-layer": sourceLayer,
+        filter: [
+          "match",
+          ["geometry-type"],
+          ["LineString", "MultiLineString", "Polygon", "MultiPolygon"],
+          true,
+          false,
+        ],
+        paint: linePaint(layer.style, layer.opacity),
+        layout: { visibility },
+      },
+      beforeId,
+    );
+    ensureLayer(
+      map,
+      mbtilesCircleLayerId(layer.id, sourceLayer),
+      {
+        id: mbtilesCircleLayerId(layer.id, sourceLayer),
+        type: "circle",
+        source: src,
+        "source-layer": sourceLayer,
+        filter: [
+          "match",
+          ["geometry-type"],
+          ["Point", "MultiPoint"],
+          true,
+          false,
+        ],
+        paint: circlePaint(layer.style, layer.opacity),
+        layout: { visibility },
+      },
+      beforeId,
+    );
+  }
+
+  removeStaleMbtilesLayers(map, layer.id, currentLayerIds);
+}
+
+function getMbtilesSourceLayers(layer: GeoLibreLayer): string[] {
+  const sourceLayers = layer.source.sourceLayers ?? layer.metadata.sourceLayers;
+  return Array.isArray(sourceLayers)
+    ? sourceLayers.filter(
+        (sourceLayer): sourceLayer is string =>
+          typeof sourceLayer === "string" && sourceLayer.length > 0,
+      )
+    : [];
+}
+
+function removeStaleMbtilesLayers(
+  map: maplibregl.Map,
+  layerId: string,
+  currentLayerIds: Set<string>,
+): void {
+  const prefix = `layer-${layerId}-mbtiles-`;
+  for (const styleLayer of map.getStyle().layers ?? []) {
+    if (
+      styleLayer.id.startsWith(prefix) &&
+      !currentLayerIds.has(styleLayer.id)
+    ) {
+      removeIfExists(map, styleLayer.id);
+    }
+  }
+}
+
+function encodeMbtilesLayerPart(value: string): string {
+  return encodeURIComponent(value).replaceAll("%", "_");
+}
+
+export function mbtilesFillLayerId(
+  layerId: string,
+  sourceLayer: string,
+): string {
+  return `layer-${layerId}-mbtiles-${encodeMbtilesLayerPart(sourceLayer)}-fill`;
+}
+
+export function mbtilesLineLayerId(
+  layerId: string,
+  sourceLayer: string,
+): string {
+  return `layer-${layerId}-mbtiles-${encodeMbtilesLayerPart(sourceLayer)}-line`;
+}
+
+export function mbtilesCircleLayerId(
+  layerId: string,
+  sourceLayer: string,
+): string {
+  return `layer-${layerId}-mbtiles-${encodeMbtilesLayerPart(sourceLayer)}-circle`;
+}
+
+export function mbtilesStyleLayerIds(layer: GeoLibreLayer): string[] {
+  if (layer.type !== "mbtiles") return [];
+  if (layer.metadata.tileType === "raster" || layer.source.type === "raster") {
+    return [`layer-${layer.id}-raster`];
+  }
+
+  return getMbtilesSourceLayers(layer).flatMap((sourceLayer) => [
+    mbtilesCircleLayerId(layer.id, sourceLayer),
+    mbtilesLineLayerId(layer.id, sourceLayer),
+    mbtilesFillLayerId(layer.id, sourceLayer),
+  ]);
+}
+
 function ensureLayer(
   map: maplibregl.Map,
   id: string,
@@ -296,7 +465,8 @@ function ensureLayer(
     moveLayer(map, id, beforeId);
     return;
   }
-  const validBeforeId = beforeId && map.getLayer(beforeId) ? beforeId : undefined;
+  const validBeforeId =
+    beforeId && map.getLayer(beforeId) ? beforeId : undefined;
   map.addLayer(spec, validBeforeId);
 }
 
@@ -304,11 +474,7 @@ function removeIfExists(map: maplibregl.Map, id: string): void {
   if (map.getLayer(id)) map.removeLayer(id);
 }
 
-function moveLayer(
-  map: maplibregl.Map,
-  id: string,
-  beforeId?: string,
-): void {
+function moveLayer(map: maplibregl.Map, id: string, beforeId?: string): void {
   try {
     if (beforeId && beforeId !== id && map.getLayer(beforeId)) {
       map.moveLayer(id, beforeId);
@@ -327,6 +493,7 @@ export function removeLayerFromMap(
 ): void {
   for (const id of [
     ...getExternalNativeLayerIds(layer),
+    ...(layer ? mbtilesStyleLayerIds(layer) : []),
     fillLayerId(layerId),
     lineLayerId(layerId),
     circleLayerId(layerId),

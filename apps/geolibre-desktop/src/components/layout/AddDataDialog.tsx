@@ -32,8 +32,14 @@ import {
   openVectorFileWithFallback,
 } from "../../lib/tauri-io";
 import { createAppAPI } from "../../hooks/usePlugins";
+import {
+  mbtilesTileUrl,
+  readMbtilesMetadata,
+  registerMbtilesProtocol,
+  type MbtilesMetadata,
+} from "../../lib/mbtiles";
 
-export type AddDataKind = "xyz" | "wms" | "vector" | "raster";
+export type AddDataKind = "xyz" | "wms" | "vector" | "raster" | "mbtiles";
 
 interface AddDataDialogProps {
   kind: AddDataKind | null;
@@ -50,6 +56,7 @@ const KIND_LABELS: Record<AddDataKind, string> = {
   wms: "Add WMS Layer",
   vector: "Add Vector Layer",
   raster: "Add Raster Layer",
+  mbtiles: "Add MBTiles Layer",
 };
 
 const SELECT_CLASS =
@@ -101,7 +108,10 @@ function createBaseLayer(
   };
 }
 
-function appendQuery(endpoint: string, params: Array<[string, string]>): string {
+function appendQuery(
+  endpoint: string,
+  params: Array<[string, string]>,
+): string {
   const separator = endpoint.includes("?")
     ? endpoint.endsWith("?") || endpoint.endsWith("&")
       ? ""
@@ -198,14 +208,18 @@ export function AddDataDialog({
   const [rasterUrl, setRasterUrl] = useState(DEFAULT_RASTER_URL);
   const [rasterTileSize, setRasterTileSize] = useState("256");
   const [rasterBands, setRasterBands] = useState("1");
-  const [rasterColormap, setRasterColormap] =
-    useState<RasterColormap>("none");
+  const [rasterColormap, setRasterColormap] = useState<RasterColormap>("none");
   const [rasterMin, setRasterMin] = useState("0");
   const [rasterMax, setRasterMax] = useState("255");
   const [rasterNodata, setRasterNodata] = useState("");
   const [selectedRasterPath, setSelectedRasterPath] = useState<string | null>(
     null,
   );
+  const [selectedMbtiles, setSelectedMbtiles] = useState<{
+    metadata: MbtilesMetadata;
+    path: string;
+  } | null>(null);
+  const [mbtilesSourceLayers, setMbtilesSourceLayers] = useState("");
 
   useEffect(() => {
     if (!kind) return;
@@ -217,6 +231,7 @@ export function AddDataDialog({
         wms: "WMS Layer",
         vector: "Vector Layer",
         raster: "Raster Layer",
+        mbtiles: "MBTiles Layer",
       }[kind],
     );
     setBeforeLayerId("");
@@ -241,6 +256,8 @@ export function AddDataDialog({
     setRasterMax("255");
     setRasterNodata("");
     setSelectedRasterPath(null);
+    setSelectedMbtiles(null);
+    setMbtilesSourceLayers("");
   }, [kind]);
 
   const description = useMemo(() => {
@@ -255,6 +272,9 @@ export function AddDataDialog({
     }
     if (kind === "raster") {
       return "Add a Cloud Optimized GeoTIFF or raster URL, or use a raster tile template.";
+    }
+    if (kind === "mbtiles") {
+      return "Add a local MBTiles file as a raster or vector tile layer.";
     }
     return "";
   }, [kind]);
@@ -307,6 +327,34 @@ export function AddDataDialog({
         ? current
         : layerNameFromPath(result.path, "Raster Layer"),
     );
+  };
+
+  const handleChooseMbtilesFile = async () => {
+    setError(null);
+    try {
+      const result = await openLocalDataFileWithFallback({
+        filters: [
+          {
+            name: "MBTiles",
+            extensions: ["mbtiles"],
+          },
+        ],
+        accept: ".mbtiles",
+      });
+      if (!result) return;
+      const metadata = await readMbtilesMetadata(result.path);
+      setSelectedMbtiles({ metadata, path: result.path });
+      setMbtilesSourceLayers(metadata.sourceLayers.join(", "));
+      setLayerName((current) =>
+        current.trim() && current !== "MBTiles Layer"
+          ? current
+          : metadata.name || layerNameFromPath(result.path, "MBTiles Layer"),
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not read MBTiles file.",
+      );
+    }
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -389,7 +437,8 @@ export function AddDataDialog({
           return;
         }
 
-        if (!vectorUrl.trim()) throw new Error("Enter a vector tile source URL.");
+        if (!vectorUrl.trim())
+          throw new Error("Enter a vector tile source URL.");
         if (!vectorSourceLayer.trim()) {
           throw new Error("Enter the vector tile source layer name.");
         }
@@ -399,6 +448,50 @@ export function AddDataDialog({
             url: vectorUrl.trim(),
             sourceLayer: vectorSourceLayer.trim(),
           }),
+        );
+        return;
+      }
+
+      if (kind === "mbtiles") {
+        if (!selectedMbtiles) throw new Error("Choose an MBTiles file.");
+        registerMbtilesProtocol();
+
+        const { metadata, path } = selectedMbtiles;
+        const sourceLayers = mbtilesSourceLayers
+          .split(",")
+          .map((sourceLayer) => sourceLayer.trim())
+          .filter(Boolean);
+        if (metadata.tileType === "vector" && sourceLayers.length === 0) {
+          throw new Error("Enter at least one vector source layer.");
+        }
+
+        const minzoom = metadata.minZoom ?? undefined;
+        const maxzoom = metadata.maxZoom ?? undefined;
+        addAndClose(
+          createBaseLayer(
+            name,
+            "mbtiles",
+            {
+              bounds: metadata.bounds ?? undefined,
+              maxzoom,
+              minzoom,
+              sourceLayers,
+              tileSize: 256,
+              tiles: [mbtilesTileUrl(path)],
+              type: metadata.tileType,
+            },
+            {
+              bounds: metadata.bounds,
+              center: metadata.center,
+              format: metadata.format,
+              maxzoom,
+              minzoom,
+              scheme: metadata.scheme,
+              sourceKind: "mbtiles-file",
+              sourceLayers,
+              tileType: metadata.tileType,
+            },
+          ),
         );
         return;
       }
@@ -638,7 +731,58 @@ export function AddDataDialog({
                   <Input
                     id="vector-source-layer"
                     value={vectorSourceLayer}
-                    onChange={(event) => setVectorSourceLayer(event.target.value)}
+                    onChange={(event) =>
+                      setVectorSourceLayer(event.target.value)
+                    }
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {kind === "mbtiles" && (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleChooseMbtilesFile}
+                >
+                  <FileUp className="mr-2 h-3.5 w-3.5" />
+                  Choose file
+                </Button>
+                <span className="min-w-0 truncate text-xs text-muted-foreground">
+                  {selectedMbtiles
+                    ? fileNameFromPath(selectedMbtiles.path)
+                    : "No file selected"}
+                </span>
+              </div>
+              {selectedMbtiles && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>Tile type</Label>
+                    <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                      {selectedMbtiles.metadata.tileType}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Format</Label>
+                    <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                      {selectedMbtiles.metadata.format}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {selectedMbtiles?.metadata.tileType === "vector" && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="mbtiles-source-layers">Source layers</Label>
+                  <Input
+                    id="mbtiles-source-layers"
+                    placeholder="building, place, water"
+                    value={mbtilesSourceLayers}
+                    onChange={(event) =>
+                      setMbtilesSourceLayers(event.target.value)
+                    }
                   />
                 </div>
               )}
@@ -730,9 +874,7 @@ export function AddDataDialog({
                       className={SELECT_CLASS}
                       value={rasterColormap}
                       onChange={(event) =>
-                        setRasterColormap(
-                          event.target.value as RasterColormap,
-                        )
+                        setRasterColormap(event.target.value as RasterColormap)
                       }
                     >
                       {COG_COLORMAPS.map((colormap) => (

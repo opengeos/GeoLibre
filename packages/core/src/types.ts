@@ -33,8 +33,7 @@ export const OPENFREEMAP_BASEMAPS = [
   },
 ] as const;
 
-export const DEFAULT_BASEMAP =
-  "https://tiles.openfreemap.org/styles/liberty";
+export const DEFAULT_BASEMAP = "https://tiles.openfreemap.org/styles/liberty";
 
 export const BLANK_BASEMAP = "";
 
@@ -47,6 +46,7 @@ export type LayerType =
   | "xyz"
   | "vector-tiles"
   | "pmtiles"
+  | "mbtiles"
   | "zarr"
   | "lidar"
   | "cog"

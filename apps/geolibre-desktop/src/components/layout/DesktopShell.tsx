@@ -15,6 +15,7 @@ import {
   loadDroppedVectorFiles,
   loadDroppedVectorPaths,
 } from "../../lib/tauri-io";
+import { registerMbtilesProtocol } from "../../lib/mbtiles";
 import { AttributeTable } from "../panels/AttributeTable";
 import { LayerPanel } from "../panels/LayerPanel";
 import { StylePanel } from "../panels/StylePanel";
@@ -91,6 +92,10 @@ export function DesktopShell({
       setDropMessage(null);
       setDropError(null);
     }, 4000);
+  }, []);
+
+  useEffect(() => {
+    if (isTauri()) registerMbtilesProtocol();
   }, []);
 
   useEffect(() => {
@@ -243,7 +248,8 @@ export function DesktopShell({
 
       const startX = event.clientX;
       const startWidth = layerPanelWidth;
-      const panelRect = event.currentTarget.parentElement?.getBoundingClientRect();
+      const panelRect =
+        event.currentTarget.parentElement?.getBoundingClientRect();
       let nextWidth = startWidth;
       let resizeFrame: number | null = null;
       const previousCursor = document.body.style.cursor;
@@ -308,7 +314,8 @@ export function DesktopShell({
 
       const startX = event.clientX;
       const startWidth = stylePanelWidth;
-      const panelRect = event.currentTarget.parentElement?.getBoundingClientRect();
+      const panelRect =
+        event.currentTarget.parentElement?.getBoundingClientRect();
       let nextWidth = startWidth;
       let resizeFrame: number | null = null;
       const previousCursor = document.body.style.cursor;
@@ -389,9 +396,7 @@ export function DesktopShell({
         <main className="relative min-h-72 min-w-0 flex-1 md:min-h-0">
           <MapCanvas controllerRef={mapControllerRef} />
         </main>
-        <StylePanel
-          onResizeStart={startStylePanelResize}
-        />
+        <StylePanel onResizeStart={startStylePanelResize} />
       </div>
       <AttributeTable />
       <StatusBar />
