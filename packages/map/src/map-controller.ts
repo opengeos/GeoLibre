@@ -746,6 +746,11 @@ export class MapController {
   }
 
   private createLayerControlSignature(config: LayerControlConfig): string {
+    // Only structural attributes belong in the signature. Opacity and
+    // visibility are managed in place by the control and persisted to the
+    // store; including them here would destroy and recreate the control
+    // (collapsing it and interrupting the drag) on every slider or checkbox
+    // interaction.
     return JSON.stringify({
       excluded: config.excludeLayers ?? [],
       layers: config.customLayerAdapters?.flatMap((adapter) =>
@@ -754,8 +759,6 @@ export class MapController {
           return {
             id,
             name: state?.name,
-            opacity: state?.opacity,
-            visible: state?.visible,
             symbol: adapter.getSymbolType?.(id),
           };
         }),
