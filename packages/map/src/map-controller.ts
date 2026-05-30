@@ -3,7 +3,11 @@ import type { GeoLibreLayer, MapViewState } from "@geolibre/core";
 import bbox from "@turf/bbox";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import maplibregl from "maplibre-gl";
-import { LayerControl } from "maplibre-gl-layer-control";
+import {
+  LayerControl,
+  type CustomLayerAdapter,
+  type LayerState,
+} from "maplibre-gl-layer-control";
 import {
   circleLayerId,
   fillLayerId,
@@ -72,16 +76,9 @@ function resolveMapStyle(
   return styleUrl ?? DEFAULT_BASEMAP;
 }
 
-interface NamedLayerState {
-  visible: boolean;
-  opacity: number;
-  name: string;
-}
-
 interface LayerControlConfig {
-  layers?: string[];
-  layerStates?: Record<string, NamedLayerState>;
   excludeLayers?: string[];
+  customLayerAdapters?: CustomLayerAdapter[];
 }
 
 interface GeoLibreLayerLabelWindow extends Window {
@@ -599,39 +596,149 @@ export class MapController {
   private createLayerControlConfig(
     layers: GeoLibreLayer[],
   ): LayerControlConfig {
-    const namedStyleLayers = layers.flatMap((layer) =>
-      this.getNamedStyleLayers(layer),
+    const nativeStyleLayerIds = layers.flatMap((layer) =>
+      this.getCandidateStyleLayers(layer).map(({ id }) => id),
     );
-    if (namedStyleLayers.length === 0) {
-      return { excludeLayers: LAYER_CONTROL_EXCLUDED_LAYERS };
+    const excludeLayers = [
+      ...LAYER_CONTROL_EXCLUDED_LAYERS,
+      ...nativeStyleLayerIds,
+    ];
+    const controllableLayers = layers.filter(
+      (layer) => this.getNativeLayerIds(layer).length > 0,
+    );
+
+    if (controllableLayers.length === 0) {
+      return { excludeLayers };
     }
 
     return {
-      excludeLayers: LAYER_CONTROL_EXCLUDED_LAYERS,
-      layers: namedStyleLayers.map(({ id }) => id),
-      layerStates: Object.fromEntries(
-        namedStyleLayers.map(({ id, name, layer }) => [
-          id,
-          {
-            visible: layer.visible,
-            opacity: layer.opacity,
-            name,
-          },
-        ]),
-      ),
+      excludeLayers,
+      customLayerAdapters: [this.createGeoLibreLayerAdapter(controllableLayers)],
     };
   }
 
   private createLayerControlSignature(config: LayerControlConfig): string {
     return JSON.stringify({
-      layers: config.layers ?? [],
-      names: Object.fromEntries(
-        Object.entries(config.layerStates ?? {}).map(([id, state]) => [
-          id,
-          state.name,
-        ]),
+      excluded: config.excludeLayers ?? [],
+      layers: config.customLayerAdapters?.flatMap((adapter) =>
+        adapter.getLayerIds().map((id) => {
+          const state = adapter.getLayerState(id);
+          return {
+            id,
+            name: state?.name,
+            opacity: state?.opacity,
+            visible: state?.visible,
+            symbol: adapter.getSymbolType?.(id),
+          };
+        }),
       ),
     });
+  }
+
+  private createGeoLibreLayerAdapter(
+    layers: GeoLibreLayer[],
+  ): CustomLayerAdapter {
+    const layerById = new Map(layers.map((layer) => [layer.id, layer]));
+
+    return {
+      type: "geolibre",
+      getLayerIds: () => layers.map((layer) => layer.id),
+      getLayerState: (layerId) => {
+        const layer = layerById.get(layerId);
+        if (!layer) return null;
+        return {
+          visible: layer.visible,
+          opacity: layer.opacity,
+          name: layer.name,
+          isCustomLayer: true,
+          customLayerType: this.getLayerSymbolType(layer),
+        } satisfies LayerState;
+      },
+      setVisibility: (layerId, visible) => {
+        for (const nativeId of this.getNativeLayerIdsByLayerId(layerId)) {
+          this.map?.setLayoutProperty(
+            nativeId,
+            "visibility",
+            visible ? "visible" : "none",
+          );
+        }
+      },
+      setOpacity: (layerId, opacity) => {
+        const layer = layerById.get(layerId);
+        if (!layer) return;
+        for (const nativeId of this.getNativeLayerIds(layer)) {
+          this.setNativeLayerOpacity(nativeId, layer, opacity);
+        }
+      },
+      getName: (layerId) => layerById.get(layerId)?.name ?? layerId,
+      getSymbolType: (layerId) => {
+        const layer = layerById.get(layerId);
+        return layer ? this.getLayerSymbolType(layer) : "custom";
+      },
+      getBounds: (layerId) => {
+        const layer = layerById.get(layerId);
+        return layer ? getLayerBounds(layer) : null;
+      },
+      getNativeLayerIds: (layerId) => this.getNativeLayerIdsByLayerId(layerId),
+      removeLayer: (layerId) => {
+        if (this.map) removeLayerFromMap(this.map, layerId);
+      },
+    };
+  }
+
+  private getNativeLayerIdsByLayerId(layerId: string): string[] {
+    const layer = this.syncedLayers.find((item) => item.id === layerId);
+    return layer ? this.getNativeLayerIds(layer) : [];
+  }
+
+  private getNativeLayerIds(layer: GeoLibreLayer): string[] {
+    return this.getCandidateStyleLayers(layer)
+      .map(({ id }) => id)
+      .filter((id) => this.map?.getLayer(id));
+  }
+
+  private getLayerSymbolType(layer: GeoLibreLayer): string {
+    const nativeLayer = this.getNativeLayerIds(layer)
+      .map((id) => this.map?.getLayer(id))
+      .find((item): item is maplibregl.LayerSpecification => Boolean(item));
+
+    return nativeLayer?.type ?? "custom";
+  }
+
+  private setNativeLayerOpacity(
+    nativeLayerId: string,
+    layer: GeoLibreLayer,
+    opacity: number,
+  ): void {
+    const nativeLayer = this.map?.getLayer(nativeLayerId);
+    if (!nativeLayer || !this.map) return;
+
+    if (nativeLayer.type === "fill") {
+      this.map.setPaintProperty(
+        nativeLayerId,
+        "fill-opacity",
+        layer.style.fillOpacity * opacity,
+      );
+      return;
+    }
+
+    if (nativeLayer.type === "line") {
+      this.map.setPaintProperty(nativeLayerId, "line-opacity", opacity);
+      return;
+    }
+
+    if (nativeLayer.type === "circle") {
+      this.map.setPaintProperty(
+        nativeLayerId,
+        "circle-opacity",
+        layer.style.fillOpacity * opacity,
+      );
+      return;
+    }
+
+    if (nativeLayer.type === "raster") {
+      this.map.setPaintProperty(nativeLayerId, "raster-opacity", opacity);
+    }
   }
 
   private getNamedStyleLayers(layer: GeoLibreLayer): Array<{
