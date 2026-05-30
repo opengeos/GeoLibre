@@ -1,4 +1,13 @@
 {
   "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "maplibre-gl-components": [
+        "./node_modules/maplibre-gl-components/dist/types/index.d.ts",
+        "./node_modules/maplibre-gl-components/dist/src/index.d.ts"
+      ]
+    }
+  },
   "include": ["src"]
 }
