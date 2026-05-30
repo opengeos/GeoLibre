@@ -24,7 +24,7 @@ Bun users can run `bun install`. The root `trustedDependencies` list allows the 
 npm run dev
 ```
 
-Open `http://localhost:5173`. The map and browser vector import work in this mode for GeoJSON, GeoParquet, GeoPackage, and zipped Shapefiles. Use Add Vector Layer or drag files onto the app. Desktop filesystem dialogs require Tauri.
+Open `http://localhost:5173`. The map and browser vector import support local vector files that DuckDB-WASM Spatial can read, with direct handling for GeoJSON and zipped Shapefiles. Use Add Vector Layer or drag files onto the app. Desktop filesystem dialogs require Tauri.
 
 ## Run the desktop app
 

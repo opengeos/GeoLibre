@@ -66,39 +66,7 @@ const GEOLIBRE_PROJECT_FILE_TYPES: BrowserFilePickerType[] = [
   },
 ];
 
-const VECTOR_FILE_ACCEPT =
-  ".geojson,.json,.zip,.shp,.gpkg,.parquet,.geoparquet";
-
 const SHAPEFILE_SIDECAR_EXTENSIONS = ["dbf", "shx", "prj", "cpg"];
-
-const DROPPED_VECTOR_FILE_EXTENSIONS = new Set([
-  "geojson",
-  "json",
-  "zip",
-  "shp",
-  "shx",
-  "dbf",
-  "prj",
-  "cpg",
-  "gpkg",
-  "parquet",
-  "geoparquet",
-]);
-
-const VECTOR_FILE_FILTERS: FileDialogFilter[] = [
-  {
-    name: "Vector data",
-    extensions: [
-      "geojson",
-      "json",
-      "zip",
-      "shp",
-      "gpkg",
-      "parquet",
-      "geoparquet",
-    ],
-  },
-];
 
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
@@ -115,7 +83,7 @@ function pathWithoutExtension(path: string): string {
 }
 
 function isVectorFileName(path: string): boolean {
-  return DROPPED_VECTOR_FILE_EXTENSIONS.has(fileExtension(path));
+  return !SHAPEFILE_SIDECAR_EXTENSIONS.includes(fileExtension(path));
 }
 
 function assertFeatureCollection(value: unknown): FeatureCollection {
@@ -180,17 +148,26 @@ async function loadBrowserVectorFile(
 }> {
   const extension = fileExtension(file.name);
   if (extension === "geojson" || extension === "json") {
-    return {
-      data: await parseGeoJsonText(await file.text()),
-      path: file.name,
-    };
+    try {
+      return {
+        data: await parseGeoJsonText(await file.text()),
+        path: file.name,
+      };
+    } catch {
+      // Some GDAL-backed vector formats use .json but are not GeoJSON
+      // FeatureCollections. Let DuckDB Spatial try them before failing.
+    }
   }
 
   if (extension === "zip") {
-    return {
-      data: await parseShapefileZip(await file.arrayBuffer()),
-      path: file.name,
-    };
+    try {
+      return {
+        data: await parseShapefileZip(await file.arrayBuffer()),
+        path: file.name,
+      };
+    } catch {
+      // DuckDB Spatial may be able to read zipped vector data that shpjs cannot.
+    }
   }
 
   return {
@@ -211,7 +188,6 @@ async function openVectorFileBrowser(): Promise<{
   return new Promise((resolve, reject) => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = VECTOR_FILE_ACCEPT;
     input.onchange = async () => {
       try {
         const file = input.files?.[0];
@@ -235,7 +211,6 @@ async function openVectorFileTauri(): Promise<{
 } | null> {
   const selected = await open({
     multiple: false,
-    filters: VECTOR_FILE_FILTERS,
   });
   if (!selected || typeof selected !== "string") return null;
   return loadTauriVectorFile(selected);
@@ -247,21 +222,31 @@ async function loadTauriVectorFile(path: string): Promise<{
 }> {
   const extension = fileExtension(path);
   if (extension === "geojson" || extension === "json") {
-    return {
-      data: await parseGeoJsonText(await readTextFile(path)),
-      path,
-    };
+    try {
+      return {
+        data: await parseGeoJsonText(await readTextFile(path)),
+        path,
+      };
+    } catch {
+      // Some GDAL-backed vector formats use .json but are not GeoJSON
+      // FeatureCollections. Let DuckDB Spatial try them before failing.
+    }
   }
 
   if (extension === "zip") {
-    return {
-      data: await parseShapefileZip(await readFile(path)),
-      path,
-    };
+    try {
+      return {
+        data: await parseShapefileZip(await readFile(path)),
+        path,
+      };
+    } catch {
+      // DuckDB Spatial may be able to read zipped vector data that shpjs cannot.
+    }
   }
 
   try {
-    const siblingFiles = extension === "shp" ? await readShapefileSiblings(path) : [];
+    const siblingFiles =
+      extension === "shp" ? await readShapefileSiblings(path) : [];
     return {
       data: await loadDuckDbVector({
         name: browserSafeFileName(path),
@@ -506,15 +491,19 @@ export async function openVectorFileWithFallback(): Promise<{
 export async function loadDroppedVectorFiles(
   droppedFiles: FileList | File[],
 ): Promise<Array<{ data: FeatureCollection; path: string }>> {
-  const files = Array.from(droppedFiles).filter((file) =>
+  const droppedFileArray = Array.from(droppedFiles);
+  const files = droppedFileArray.filter((file) =>
     isVectorFileName(file.name),
   );
   if (!files.length) return [];
 
   const filesByBaseName = new Map<string, File[]>();
-  for (const file of files) {
+  for (const file of droppedFileArray) {
     const baseName = pathWithoutExtension(file.name).toLowerCase();
-    filesByBaseName.set(baseName, [...(filesByBaseName.get(baseName) ?? []), file]);
+    filesByBaseName.set(baseName, [
+      ...(filesByBaseName.get(baseName) ?? []),
+      file,
+    ]);
   }
 
   const layers: Array<{ data: FeatureCollection; path: string }> = [];
@@ -525,7 +514,10 @@ export async function loadDroppedVectorFiles(
     const siblingFiles =
       extension === "shp"
         ? await Promise.all(
-            (filesByBaseName.get(pathWithoutExtension(file.name).toLowerCase()) ?? [])
+            (
+              filesByBaseName.get(pathWithoutExtension(file.name).toLowerCase()) ??
+              []
+            )
               .filter((candidate) =>
                 SHAPEFILE_SIDECAR_EXTENSIONS.includes(
                   fileExtension(candidate.name),

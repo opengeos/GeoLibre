@@ -205,7 +205,7 @@ export function AddDataDialog({
       return "Add a WMS GetMap service as a tiled raster layer.";
     }
     if (kind === "vector") {
-      return "Add GeoJSON, GeoParquet, GeoPackage, Shapefile, or a MapLibre vector tile source.";
+      return "Add local vector files supported by DuckDB Spatial, GeoJSON URLs, or MapLibre vector tile sources.";
     }
     if (kind === "raster") {
       return "Add raster tiles now, or register raster files and COG URLs for project tracking.";

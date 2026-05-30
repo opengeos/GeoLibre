@@ -37,7 +37,7 @@ Use an OpenFreeMap basemap, pan and zoom smoothly, and toggle built-in map contr
 <div class="feature-card" markdown>
 ### Local vector projects
 
-Load GeoJSON, GeoParquet, GeoPackage, and Shapefile data, inspect attributes, style layers, reorder visibility, and save or reopen `.geolibre.json` projects from the desktop app.
+Load local vector data supported by DuckDB-WASM Spatial, inspect attributes, style layers, reorder visibility, and save or reopen `.geolibre.json` projects from the desktop app.
 </div>
 
 <div class="feature-card" markdown>
@@ -56,7 +56,7 @@ The processing toolbox includes client-side algorithms now, with a roadmap towar
 
 ## Try it in the browser
 
-The live demo is the browser-capable version of the GeoLibre desktop UI. It is useful for exploring the map, loading browser-selected GeoJSON, GeoParquet, GeoPackage, and zipped Shapefile data, styling layers, and testing plugins. Desktop-only file dialogs and filesystem save/open operations still require the installed Tauri app.
+The live demo is the browser-capable version of the GeoLibre desktop UI. It is useful for exploring the map, loading browser-selected vector data supported by DuckDB-WASM Spatial, styling layers, and testing plugins. Desktop-only file dialogs and filesystem save/open operations still require the installed Tauri app.
 
 [Open the live demo](/demo/){ .md-button .md-button--primary }
 [Read the architecture](architecture.md){ .md-button }

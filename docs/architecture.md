@@ -28,7 +28,7 @@ flowchart LR
 
 ## State flow
 
-1. User adds GeoJSON, GeoParquet, GeoPackage, or Shapefile data through the Tauri dialog, browser file picker, or drag and drop.
+1. User adds local vector data supported by DuckDB-WASM Spatial through the Tauri dialog, browser file picker, or drag and drop.
 2. The selected vector data is parsed directly or converted to GeoJSON with DuckDB-WASM Spatial, then passed to `addGeoJsonLayer` in the store.
 3. `MapCanvas` subscribes to `layers`, then `MapController.syncLayers` updates MapLibre sources and layers.
 4. Style panel updates `layer.style`, then sync updates paint properties.
@@ -43,7 +43,7 @@ INSTALL spatial;
 LOAD spatial;
 ```
 
-GeoParquet is read with DuckDB's Parquet reader after loading Spatial. GeoPackage and loose Shapefile paths are read through Spatial `ST_Read` when the WebAssembly extension can load the GDAL-backed reader. Zipped Shapefiles are parsed in the browser with `shpjs`.
+GeoParquet is read with DuckDB's Parquet reader after loading Spatial. Other local vector formats are passed to Spatial `ST_Read` when the WebAssembly extension can load the GDAL-backed reader. Zipped Shapefiles are parsed with `shpjs` first, then DuckDB Spatial is tried if that parser cannot read the file.
 
 ## Python sidecar (v0.5)
 

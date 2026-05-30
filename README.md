@@ -5,7 +5,7 @@ Lightweight, cloud-native desktop GIS prototype built with **Tauri v2**, **React
 ## Features (v0.4.0)
 
 - MapLibre map with OpenFreeMap Liberty basemap
-- Load local GeoJSON, GeoParquet, GeoPackage, and Shapefile layers
+- Load local vector layers supported by DuckDB-WASM Spatial, including common formats such as GeoJSON, GeoParquet, GeoPackage, Shapefile, FlatGeobuf, KML, and GML
 - Layer panel (visibility, opacity, reorder, remove)
 - Live style panel (fill, stroke, opacity, circle radius)
 - Attribute table for imported vector layers
@@ -36,7 +36,7 @@ Bun users can run `bun install`. The root `trustedDependencies` list allows the 
 npm run dev
 ```
 
-Open http://localhost:5173. The map and browser vector import work for GeoJSON, GeoParquet, GeoPackage, and zipped Shapefiles. You can choose files from Add Vector Layer or drag them onto the app. Desktop filesystem dialogs require Tauri.
+Open http://localhost:5173. The map and browser vector import support local vector files that DuckDB-WASM Spatial can read, including common formats such as GeoJSON, GeoParquet, GeoPackage, Shapefile, FlatGeobuf, KML, and GML, with direct handling for GeoJSON and zipped Shapefiles. You can choose files from Add Vector Layer or drag them onto the app. Desktop filesystem dialogs require Tauri.
 
 ## Environment variables
 
