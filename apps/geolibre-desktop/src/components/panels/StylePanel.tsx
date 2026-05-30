@@ -241,6 +241,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
     (layer.type === "geojson" ||
       layer.type === "vector-tiles" ||
       layer.type === "mbtiles" ||
+      layer.type === "comtiles" ||
       hasExternalNativeLayers(layer));
   const hasRasterPaintControls =
     isRasterPaintLayer(layer.type) || isRasterTileLayer;

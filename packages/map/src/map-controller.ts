@@ -20,6 +20,7 @@ import {
   sourceId,
 } from "./geojson-loader";
 import {
+  comtilesStyleLayerIds,
   mbtilesStyleLayerIds,
   removeLayerFromMap,
   syncLayer,
@@ -1085,6 +1086,13 @@ export class MapController {
 
     if (layer.type === "mbtiles") {
       return mbtilesStyleLayerIds(layer).map((id) => ({
+        id,
+        suffix: nativeLayerSuffix(id),
+      }));
+    }
+
+    if (layer.type === "comtiles") {
+      return comtilesStyleLayerIds(layer).map((id) => ({
         id,
         suffix: nativeLayerSuffix(id),
       }));

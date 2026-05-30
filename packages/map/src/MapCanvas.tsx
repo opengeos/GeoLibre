@@ -2,7 +2,7 @@ import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import maplibregl from "maplibre-gl";
 import { memo, useEffect, useRef } from "react";
 import { circleLayerId, fillLayerId, lineLayerId } from "./geojson-loader";
-import { mbtilesStyleLayerIds } from "./layer-sync";
+import { comtilesStyleLayerIds, mbtilesStyleLayerIds } from "./layer-sync";
 import { createMapController, type MapController } from "./map-controller";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "maplibre-gl-layer-control/style.css";
@@ -82,6 +82,7 @@ function identifyStyleLayerIds(layer: GeoLibreLayer): string[] {
   return [
     ...nativeIdentifyLayerIds(layer),
     ...mbtilesStyleLayerIds(layer),
+    ...comtilesStyleLayerIds(layer),
     circleLayerId(layer.id),
     lineLayerId(layer.id),
     fillLayerId(layer.id),

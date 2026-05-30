@@ -15,6 +15,7 @@ import {
   loadDroppedVectorFiles,
   loadDroppedVectorPaths,
 } from "../../lib/tauri-io";
+import { registerComtilesProtocol } from "../../lib/comtiles";
 import { registerMbtilesProtocol } from "../../lib/mbtiles";
 import { AttributeTable } from "../panels/AttributeTable";
 import { LayerPanel } from "../panels/LayerPanel";
@@ -96,6 +97,7 @@ export function DesktopShell({
 
   useEffect(() => {
     if (isTauri()) registerMbtilesProtocol();
+    registerComtilesProtocol();
   }, []);
 
   useEffect(() => {

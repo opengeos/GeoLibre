@@ -40,6 +40,11 @@ export function syncLayer(
 
   if (layer.type === "mbtiles") {
     syncMbtilesLayer(map, layer, beforeId);
+    return;
+  }
+
+  if (layer.type === "comtiles") {
+    syncComtilesLayer(map, layer, beforeId);
   }
 }
 
@@ -292,6 +297,23 @@ function syncMbtilesVectorLayer(
   layer: GeoLibreLayer,
   beforeId?: string,
 ): void {
+  syncTiledVectorLayer(map, layer, "mbtiles", beforeId);
+}
+
+function syncComtilesLayer(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+  beforeId?: string,
+): void {
+  syncTiledVectorLayer(map, layer, "comtiles", beforeId);
+}
+
+function syncTiledVectorLayer(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+  kind: "mbtiles" | "comtiles",
+  beforeId?: string,
+): void {
   const src = sourceId(layer.id);
   const tiles = (layer.source.tiles as string[] | undefined) ?? [];
   if (tiles.length === 0) return;
@@ -309,15 +331,15 @@ function syncMbtilesVectorLayer(
   }
 
   const visibility = layer.visible ? "visible" : "none";
-  const sourceLayers = getMbtilesSourceLayers(layer);
-  const currentLayerIds = new Set(mbtilesStyleLayerIds(layer));
+  const sourceLayers = getTiledVectorSourceLayers(layer);
+  const currentLayerIds = new Set(tiledVectorStyleLayerIds(layer, kind));
 
   for (const sourceLayer of sourceLayers) {
     ensureLayer(
       map,
-      mbtilesFillLayerId(layer.id, sourceLayer),
+      tiledVectorFillLayerId(layer.id, kind, sourceLayer),
       {
-        id: mbtilesFillLayerId(layer.id, sourceLayer),
+        id: tiledVectorFillLayerId(layer.id, kind, sourceLayer),
         type: "fill",
         source: src,
         "source-layer": sourceLayer,
@@ -335,9 +357,9 @@ function syncMbtilesVectorLayer(
     );
     ensureLayer(
       map,
-      mbtilesLineLayerId(layer.id, sourceLayer),
+      tiledVectorLineLayerId(layer.id, kind, sourceLayer),
       {
-        id: mbtilesLineLayerId(layer.id, sourceLayer),
+        id: tiledVectorLineLayerId(layer.id, kind, sourceLayer),
         type: "line",
         source: src,
         "source-layer": sourceLayer,
@@ -355,9 +377,9 @@ function syncMbtilesVectorLayer(
     );
     ensureLayer(
       map,
-      mbtilesCircleLayerId(layer.id, sourceLayer),
+      tiledVectorCircleLayerId(layer.id, kind, sourceLayer),
       {
-        id: mbtilesCircleLayerId(layer.id, sourceLayer),
+        id: tiledVectorCircleLayerId(layer.id, kind, sourceLayer),
         type: "circle",
         source: src,
         "source-layer": sourceLayer,
@@ -375,10 +397,10 @@ function syncMbtilesVectorLayer(
     );
   }
 
-  removeStaleMbtilesLayers(map, layer.id, currentLayerIds);
+  removeStaleTiledVectorLayers(map, layer.id, kind, currentLayerIds);
 }
 
-function getMbtilesSourceLayers(layer: GeoLibreLayer): string[] {
+function getTiledVectorSourceLayers(layer: GeoLibreLayer): string[] {
   const sourceLayers = layer.source.sourceLayers ?? layer.metadata.sourceLayers;
   return Array.isArray(sourceLayers)
     ? sourceLayers.filter(
@@ -388,12 +410,13 @@ function getMbtilesSourceLayers(layer: GeoLibreLayer): string[] {
     : [];
 }
 
-function removeStaleMbtilesLayers(
+function removeStaleTiledVectorLayers(
   map: maplibregl.Map,
   layerId: string,
+  kind: "mbtiles" | "comtiles",
   currentLayerIds: Set<string>,
 ): void {
-  const prefix = `layer-${layerId}-mbtiles-`;
+  const prefix = `layer-${layerId}-${kind}-`;
   for (const styleLayer of map.getStyle().layers ?? []) {
     if (
       styleLayer.id.startsWith(prefix) &&
@@ -404,7 +427,7 @@ function removeStaleMbtilesLayers(
   }
 }
 
-function encodeMbtilesLayerPart(value: string): string {
+function encodeTiledVectorLayerPart(value: string): string {
   return encodeURIComponent(value).replaceAll("%", "_");
 }
 
@@ -412,21 +435,21 @@ export function mbtilesFillLayerId(
   layerId: string,
   sourceLayer: string,
 ): string {
-  return `layer-${layerId}-mbtiles-${encodeMbtilesLayerPart(sourceLayer)}-fill`;
+  return tiledVectorFillLayerId(layerId, "mbtiles", sourceLayer);
 }
 
 export function mbtilesLineLayerId(
   layerId: string,
   sourceLayer: string,
 ): string {
-  return `layer-${layerId}-mbtiles-${encodeMbtilesLayerPart(sourceLayer)}-line`;
+  return tiledVectorLineLayerId(layerId, "mbtiles", sourceLayer);
 }
 
 export function mbtilesCircleLayerId(
   layerId: string,
   sourceLayer: string,
 ): string {
-  return `layer-${layerId}-mbtiles-${encodeMbtilesLayerPart(sourceLayer)}-circle`;
+  return tiledVectorCircleLayerId(layerId, "mbtiles", sourceLayer);
 }
 
 export function mbtilesStyleLayerIds(layer: GeoLibreLayer): string[] {
@@ -435,10 +458,46 @@ export function mbtilesStyleLayerIds(layer: GeoLibreLayer): string[] {
     return [`layer-${layer.id}-raster`];
   }
 
-  return getMbtilesSourceLayers(layer).flatMap((sourceLayer) => [
-    mbtilesCircleLayerId(layer.id, sourceLayer),
-    mbtilesLineLayerId(layer.id, sourceLayer),
-    mbtilesFillLayerId(layer.id, sourceLayer),
+  return tiledVectorStyleLayerIds(layer, "mbtiles");
+}
+
+export function comtilesStyleLayerIds(layer: GeoLibreLayer): string[] {
+  if (layer.type !== "comtiles") return [];
+  return tiledVectorStyleLayerIds(layer, "comtiles");
+}
+
+function tiledVectorFillLayerId(
+  layerId: string,
+  kind: "mbtiles" | "comtiles",
+  sourceLayer: string,
+): string {
+  return `layer-${layerId}-${kind}-${encodeTiledVectorLayerPart(sourceLayer)}-fill`;
+}
+
+function tiledVectorLineLayerId(
+  layerId: string,
+  kind: "mbtiles" | "comtiles",
+  sourceLayer: string,
+): string {
+  return `layer-${layerId}-${kind}-${encodeTiledVectorLayerPart(sourceLayer)}-line`;
+}
+
+function tiledVectorCircleLayerId(
+  layerId: string,
+  kind: "mbtiles" | "comtiles",
+  sourceLayer: string,
+): string {
+  return `layer-${layerId}-${kind}-${encodeTiledVectorLayerPart(sourceLayer)}-circle`;
+}
+
+function tiledVectorStyleLayerIds(
+  layer: GeoLibreLayer,
+  kind: "mbtiles" | "comtiles",
+): string[] {
+  return getTiledVectorSourceLayers(layer).flatMap((sourceLayer) => [
+    tiledVectorCircleLayerId(layer.id, kind, sourceLayer),
+    tiledVectorLineLayerId(layer.id, kind, sourceLayer),
+    tiledVectorFillLayerId(layer.id, kind, sourceLayer),
   ]);
 }
 
@@ -494,6 +553,7 @@ export function removeLayerFromMap(
   for (const id of [
     ...getExternalNativeLayerIds(layer),
     ...(layer ? mbtilesStyleLayerIds(layer) : []),
+    ...(layer ? comtilesStyleLayerIds(layer) : []),
     fillLayerId(layerId),
     lineLayerId(layerId),
     circleLayerId(layerId),

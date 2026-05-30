@@ -38,8 +38,15 @@ import {
   registerMbtilesProtocol,
   type MbtilesMetadata,
 } from "../../lib/mbtiles";
+import { comtilesTileUrl, registerComtilesProtocol } from "../../lib/comtiles";
 
-export type AddDataKind = "xyz" | "wms" | "vector" | "raster" | "mbtiles";
+export type AddDataKind =
+  | "xyz"
+  | "wms"
+  | "vector"
+  | "raster"
+  | "mbtiles"
+  | "comtiles";
 
 interface AddDataDialogProps {
   kind: AddDataKind | null;
@@ -57,6 +64,7 @@ const KIND_LABELS: Record<AddDataKind, string> = {
   vector: "Add Vector Layer",
   raster: "Add Raster Layer",
   mbtiles: "Add MBTiles Layer",
+  comtiles: "Add COMTiles Layer",
 };
 
 const SELECT_CLASS =
@@ -163,6 +171,15 @@ function parseOptionalNumber(value: string, label: string): number | undefined {
   return parseRequiredNumber(value, label);
 }
 
+function parseOptionalInteger(value: string, label: string): number | undefined {
+  if (!value.trim()) return undefined;
+  const parsed = parseRequiredNumber(value, label);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(`Enter a non-negative integer ${label}.`);
+  }
+  return parsed;
+}
+
 async function fetchGeoJson(url: string): Promise<FeatureCollection> {
   const response = await fetch(url);
   if (!response.ok) {
@@ -220,6 +237,10 @@ export function AddDataDialog({
     path: string;
   } | null>(null);
   const [mbtilesSourceLayers, setMbtilesSourceLayers] = useState("");
+  const [comtilesUrl, setComtilesUrl] = useState("");
+  const [comtilesSourceLayers, setComtilesSourceLayers] = useState("");
+  const [comtilesMinZoom, setComtilesMinZoom] = useState("");
+  const [comtilesMaxZoom, setComtilesMaxZoom] = useState("14");
 
   useEffect(() => {
     if (!kind) return;
@@ -232,6 +253,7 @@ export function AddDataDialog({
         vector: "Vector Layer",
         raster: "Raster Layer",
         mbtiles: "MBTiles Layer",
+        comtiles: "COMTiles Layer",
       }[kind],
     );
     setBeforeLayerId("");
@@ -258,6 +280,10 @@ export function AddDataDialog({
     setSelectedRasterPath(null);
     setSelectedMbtiles(null);
     setMbtilesSourceLayers("");
+    setComtilesUrl("");
+    setComtilesSourceLayers("");
+    setComtilesMinZoom("");
+    setComtilesMaxZoom("14");
   }, [kind]);
 
   const description = useMemo(() => {
@@ -275,6 +301,9 @@ export function AddDataDialog({
     }
     if (kind === "mbtiles") {
       return "Add a local MBTiles file as a raster or vector tile layer.";
+    }
+    if (kind === "comtiles") {
+      return "Add a cloud-hosted COMTiles archive as a vector tile layer.";
     }
     return "";
   }, [kind]);
@@ -490,6 +519,47 @@ export function AddDataDialog({
               sourceKind: "mbtiles-file",
               sourceLayers,
               tileType: metadata.tileType,
+            },
+          ),
+        );
+        return;
+      }
+
+      if (kind === "comtiles") {
+        const url = comtilesUrl.trim();
+        if (!url) throw new Error("Enter a COMTiles archive URL.");
+        const sourceLayers = comtilesSourceLayers
+          .split(",")
+          .map((sourceLayer) => sourceLayer.trim())
+          .filter(Boolean);
+        if (sourceLayers.length === 0) {
+          throw new Error("Enter at least one vector source layer.");
+        }
+        const minzoom = parseOptionalInteger(comtilesMinZoom, "minimum zoom");
+        const maxzoom = parseOptionalInteger(comtilesMaxZoom, "maximum zoom");
+        if (minzoom !== undefined && maxzoom !== undefined && maxzoom < minzoom) {
+          throw new Error("Maximum zoom must be greater than or equal to minimum zoom.");
+        }
+
+        registerComtilesProtocol();
+        addAndClose(
+          createBaseLayer(
+            name,
+            "comtiles",
+            {
+              maxzoom,
+              minzoom,
+              sourceLayers,
+              tiles: [comtilesTileUrl(url)],
+              type: "vector",
+            },
+            {
+              format: "comt",
+              maxzoom,
+              minzoom,
+              sourceKind: "comtiles-url",
+              sourceLayers,
+              tileType: "vector",
             },
           ),
         );
@@ -786,6 +856,52 @@ export function AddDataDialog({
                   />
                 </div>
               )}
+            </div>
+          )}
+
+          {kind === "comtiles" && (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="comtiles-url">Archive URL</Label>
+                <Input
+                  id="comtiles-url"
+                  placeholder="https://example.com/tiles.comt"
+                  value={comtilesUrl}
+                  onChange={(event) => setComtilesUrl(event.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="comtiles-source-layers">Source layers</Label>
+                <Input
+                  id="comtiles-source-layers"
+                  placeholder="building, place, water"
+                  value={comtilesSourceLayers}
+                  onChange={(event) =>
+                    setComtilesSourceLayers(event.target.value)
+                  }
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="comtiles-minzoom">Min zoom</Label>
+                  <Input
+                    id="comtiles-minzoom"
+                    inputMode="numeric"
+                    placeholder="Optional"
+                    value={comtilesMinZoom}
+                    onChange={(event) => setComtilesMinZoom(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="comtiles-maxzoom">Max zoom</Label>
+                  <Input
+                    id="comtiles-maxzoom"
+                    inputMode="numeric"
+                    value={comtilesMaxZoom}
+                    onChange={(event) => setComtilesMaxZoom(event.target.value)}
+                  />
+                </div>
+              </div>
             </div>
           )}
 

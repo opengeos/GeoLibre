@@ -45,6 +45,9 @@ function layerTypeLabel(layer: GeoLibreLayer): string {
   if (layer.type === "geojson" || layer.type === "vector-tiles") {
     return "vector";
   }
+  if (layer.type === "comtiles") {
+    return "COMTiles";
+  }
   return layer.type;
 }
 
@@ -222,6 +225,7 @@ export function LayerPanel({
             const canIdentify =
               layer.type === "geojson" ||
               layer.type === "vector-tiles" ||
+              layer.type === "comtiles" ||
               (layer.type === "mbtiles" &&
                 layer.metadata.tileType === "vector") ||
               hasNativeIdentifyLayers(layer);

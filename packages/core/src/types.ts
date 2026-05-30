@@ -47,6 +47,7 @@ export type LayerType =
   | "vector-tiles"
   | "pmtiles"
   | "mbtiles"
+  | "comtiles"
   | "zarr"
   | "lidar"
   | "cog"
