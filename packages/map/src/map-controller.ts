@@ -22,6 +22,12 @@ const DEFAULT_PROJECTION: maplibregl.ProjectionSpecification = {
 const DEFAULT_MAX_PITCH = 85;
 const BLANK_BACKGROUND_LAYER_ID = "geolibre-blank-background";
 const BLANK_BACKGROUND_COLOR = "#ffffff";
+const LAYER_CONTROL_EXCLUDED_LAYERS = [
+  BLANK_BACKGROUND_LAYER_ID,
+  highlightFillLayerId(),
+  highlightLineLayerId(),
+  highlightCircleLayerId(),
+];
 const TERRAIN_SOURCE_ID = "geolibre-terrain-dem";
 const TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = {
   type: "raster-dem",
@@ -597,11 +603,11 @@ export class MapController {
       this.getNamedStyleLayers(layer),
     );
     if (namedStyleLayers.length === 0) {
-      return { excludeLayers: [BLANK_BACKGROUND_LAYER_ID] };
+      return { excludeLayers: LAYER_CONTROL_EXCLUDED_LAYERS };
     }
 
     return {
-      excludeLayers: [BLANK_BACKGROUND_LAYER_ID],
+      excludeLayers: LAYER_CONTROL_EXCLUDED_LAYERS,
       layers: namedStyleLayers.map(({ id }) => id),
       layerStates: Object.fromEntries(
         namedStyleLayers.map(({ id, name, layer }) => [
