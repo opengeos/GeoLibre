@@ -98,7 +98,7 @@ interface LayerControlConfig {
   customLayerAdapters?: CustomLayerAdapter[];
 }
 
-interface LayerControlBackgroundState {
+interface LayerControlInternalState {
   panel?: HTMLElement;
   state?: {
     layerStates?: Record<
@@ -175,6 +175,7 @@ export class MapController {
   private basemapOriginalPaintValues = new Map<string, Map<string, unknown>>();
   private syncedLayers: GeoLibreLayer[] = [];
   private layerIds: string[] = [];
+  private styleReady = false;
   private controlVisibility: Record<BuiltInMapControl, boolean> = {
     ...DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
   };
@@ -202,20 +203,16 @@ export class MapController {
       attributionControl: false,
       maplibreLogo: false,
     });
-    this.map.on("style.load", () => {
+    const handleStyleReady = () => {
+      this.styleReady = true;
       this.enforceDefaultProjection();
       this.addTerrainSource();
       this.applyBasemapVisibility();
       this.applyBasemapOpacity();
       this.addLayerControl();
-    });
-    this.map.once("load", () => {
-      this.enforceDefaultProjection();
-      this.addTerrainSource();
-      this.applyBasemapVisibility();
-      this.applyBasemapOpacity();
-      this.addLayerControl();
-    });
+    };
+    this.map.on("style.load", handleStyleReady);
+    this.map.once("load", handleStyleReady);
     this.map.once("idle", () => this.enforceDefaultProjection());
     this.addNavigationControl();
     this.addFullscreenControl();
@@ -230,6 +227,10 @@ export class MapController {
 
   getMap(): maplibregl.Map | null {
     return this.map;
+  }
+
+  private isStyleReady(): boolean {
+    return Boolean(this.map && this.styleReady);
   }
 
   addControl(
@@ -309,12 +310,14 @@ export class MapController {
     this.removeLayerControl();
     this.map?.remove();
     this.map = null;
+    this.styleReady = false;
     this.publishLayerDisplayNames([]);
   }
 
   setStyle(url: string): void {
     if (!this.map) return;
     this.basemapStyleUrl = url;
+    this.styleReady = false;
     this.basemapOriginalPaintValues.clear();
     this.removeLayerControl();
     this.map.setStyle(resolveMapStyle(url));
@@ -323,13 +326,13 @@ export class MapController {
   setBasemapVisible(visible: boolean): void {
     this.basemapVisible = visible;
     this.applyBasemapVisibility();
-    this.syncLayerControlBackgroundState();
+    this.syncLayerControlState();
   }
 
   setBasemapOpacity(opacity: number): void {
     this.basemapOpacity = opacity;
     this.applyBasemapOpacity();
-    this.syncLayerControlBackgroundState();
+    this.syncLayerControlState();
   }
 
   applyView(view: MapViewState): void {
@@ -368,7 +371,7 @@ export class MapController {
   }
 
   syncLayers(layers: GeoLibreLayer[]): void {
-    if (!this.map || !this.map.isStyleLoaded()) return;
+    if (!this.isStyleReady()) return;
 
     const nextIds = layers.map((l) => l.id);
     for (const id of this.layerIds) {
@@ -386,6 +389,7 @@ export class MapController {
     this.applyBasemapOpacity();
     this.publishLayerDisplayNames(layers);
     this.refreshLayerControl(layers);
+    this.syncLayerControlState();
   }
 
   private styleLoadHandler: (() => void) | null = null;
@@ -395,12 +399,16 @@ export class MapController {
 
     if (this.styleLoadHandler) {
       this.map.off("style.load", this.styleLoadHandler);
+      this.map.off("load", this.styleLoadHandler);
     }
 
-    const run = () => this.syncLayers(layers);
+    const run = () => {
+      if (this.styleLoadHandler !== run) return;
+      this.syncLayers(layers);
+    };
     this.styleLoadHandler = run;
 
-    if (this.map.isStyleLoaded()) {
+    if (this.isStyleReady()) {
       run();
     } else {
       this.map.once("load", run);
@@ -409,7 +417,7 @@ export class MapController {
   }
 
   private applyBasemapVisibility(): void {
-    if (!this.map || !this.map.isStyleLoaded()) return;
+    if (!this.isStyleReady()) return;
 
     for (const layer of this.getBasemapStyleLayers()) {
       try {
@@ -425,7 +433,7 @@ export class MapController {
   }
 
   private applyBasemapOpacity(): void {
-    if (!this.map || !this.map.isStyleLoaded()) return;
+    if (!this.isStyleReady()) return;
 
     for (const layer of this.getBasemapStyleLayers()) {
       const properties = OPACITY_PAINT_PROPERTIES[layer.type] ?? [];
@@ -436,7 +444,7 @@ export class MapController {
   }
 
   private getBasemapStyleLayers(): maplibregl.LayerSpecification[] {
-    if (!this.map || !this.map.isStyleLoaded()) return [];
+    if (!this.isStyleReady()) return [];
 
     const userStyleLayerIds = new Set(
       this.syncedLayers.flatMap((layer) =>
@@ -509,7 +517,7 @@ export class MapController {
     featureId: string | null,
     options: { fit?: boolean } = {},
   ): void {
-    if (!this.map || !this.map.isStyleLoaded()) return;
+    if (!this.isStyleReady()) return;
 
     if (!layer?.geojson || !featureId) {
       this.syncHighlight(EMPTY_HIGHLIGHT);
@@ -574,7 +582,7 @@ export class MapController {
   }
 
   private syncHighlight(featureCollection: FeatureCollection): void {
-    if (!this.map || !this.map.isStyleLoaded()) return;
+    if (!this.isStyleReady()) return;
 
     const source = this.map.getSource(highlightSourceId());
     if (source) {
@@ -660,7 +668,7 @@ export class MapController {
     if (
       !this.map ||
       !this.controlVisibility.terrain ||
-      !this.map.isStyleLoaded()
+      !this.isStyleReady()
     ) {
       return false;
     }
@@ -693,8 +701,8 @@ export class MapController {
       this.layerControl,
       this.controlPositions["layer-control"],
     );
-    this.syncLayerControlBackgroundState();
-    window.setTimeout(() => this.syncLayerControlBackgroundState(), 100);
+    this.syncLayerControlState();
+    window.setTimeout(() => this.syncLayerControlState(), 100);
     return true;
   }
 
@@ -719,6 +727,11 @@ export class MapController {
 
     this.removeLayerControl();
     this.addLayerControl();
+  }
+
+  private syncLayerControlState(): void {
+    this.syncLayerControlBackgroundState();
+    this.syncLayerControlLayerStates(this.syncedLayers);
   }
 
   private createLayerControlConfig(
@@ -768,7 +781,7 @@ export class MapController {
 
   private syncLayerControlBackgroundState(): void {
     if (!this.layerControl) return;
-    const control = this.layerControl as unknown as LayerControlBackgroundState;
+    const control = this.layerControl as unknown as LayerControlInternalState;
 
     const backgroundState =
       control.state?.layerStates?.Background ??
@@ -784,22 +797,69 @@ export class MapController {
       backgroundState.opacity = this.basemapOpacity;
     }
 
-    const backgroundItem = control.panel?.querySelector(
-      '[data-layer-id="Background"]',
-    );
+    const backgroundItem = this.getLayerControlItem("Background");
     if (!backgroundItem) return;
 
-    const checkbox = backgroundItem.querySelector(
+    this.updateLayerControlItem(backgroundItem, {
+      name: "Background",
+      visible: this.basemapVisible,
+      opacity: this.basemapOpacity,
+    });
+  }
+
+  private syncLayerControlLayerStates(layers: GeoLibreLayer[]): void {
+    if (!this.layerControl) return;
+    const control = this.layerControl as unknown as LayerControlInternalState;
+
+    for (const layer of layers) {
+      const layerState = control.state?.layerStates?.[layer.id];
+      if (layerState) {
+        layerState.visible = layer.visible;
+        layerState.opacity = layer.opacity;
+        layerState.name = layer.name;
+      }
+
+      const layerItem = this.getLayerControlItem(layer.id);
+      if (!layerItem) continue;
+      this.updateLayerControlItem(layerItem, {
+        name: layer.name,
+        visible: layer.visible,
+        opacity: layer.opacity,
+      });
+    }
+  }
+
+  private getLayerControlItem(layerId: string): HTMLElement | null {
+    const control = this.layerControl as unknown as LayerControlInternalState;
+    const items = control.panel?.querySelectorAll(".layer-control-item") ?? [];
+    return (
+      Array.from(items).find(
+        (item) => (item as HTMLElement).dataset.layerId === layerId,
+      ) as HTMLElement | undefined
+    ) ?? null;
+  }
+
+  private updateLayerControlItem(
+    item: HTMLElement,
+    state: { name: string; visible: boolean; opacity: number },
+  ): void {
+    const checkbox = item.querySelector(
       ".layer-control-checkbox",
     ) as HTMLInputElement | null;
-    if (checkbox) checkbox.checked = this.basemapVisible;
+    if (checkbox) checkbox.checked = state.visible;
 
-    const opacity = backgroundItem.querySelector(
+    const opacity = item.querySelector(
       ".layer-control-opacity",
     ) as HTMLInputElement | null;
     if (opacity) {
-      opacity.value = String(this.basemapOpacity);
-      opacity.title = `Opacity: ${Math.round(this.basemapOpacity * 100)}%`;
+      opacity.value = String(state.opacity);
+      opacity.title = `Opacity: ${Math.round(state.opacity * 100)}%`;
+    }
+
+    const name = item.querySelector(".layer-control-name") as HTMLElement | null;
+    if (name) {
+      name.textContent = state.name;
+      name.title = state.name;
     }
   }
 

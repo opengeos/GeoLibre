@@ -83,6 +83,15 @@ export function LayerPanel({
   );
   const visibleLayers = [...layers].reverse();
   const backgroundSelected = selectedLayerId === BACKGROUND_SELECTION_ID;
+  const allLayersVisible =
+    basemapVisible && layers.every((layer) => layer.visible);
+  const toggleAllLayers = () => {
+    const nextVisible = !allLayersVisible;
+    for (const layer of layers) {
+      setLayerVisibility(layer.id, nextVisible);
+    }
+    setBasemapVisible(nextVisible);
+  };
   const draggedDisplayIndex = draggedLayerId
     ? visibleLayers.findIndex((layer) => layer.id === draggedLayerId)
     : -1;
@@ -164,16 +173,34 @@ export function LayerPanel({
       />
       <div className="flex items-center justify-between border-b px-3 py-1.5">
         <span className="text-sm font-semibold">Layers</span>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          title="Collapse layers"
-          aria-label="Collapse layers"
-          onClick={() => setIsCollapsed(true)}
-        >
-          <PanelLeftClose className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            title={allLayersVisible ? "Hide all layers" : "Show all layers"}
+            aria-label={
+              allLayersVisible ? "Hide all layers" : "Show all layers"
+            }
+            onClick={toggleAllLayers}
+          >
+            {allLayersVisible ? (
+              <Eye className="h-4 w-4" />
+            ) : (
+              <EyeOff className="h-4 w-4 text-muted-foreground" />
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            title="Collapse layers"
+            aria-label="Collapse layers"
+            onClick={() => setIsCollapsed(true)}
+          >
+            <PanelLeftClose className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
       <ScrollArea className="flex-1">
         <div className="space-y-1 p-2">
