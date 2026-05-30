@@ -116,6 +116,11 @@ export function createAppAPI(
 }
 
 async function fetchRemoteArrayBuffer(url: string): Promise<ArrayBuffer> {
+  if (isTauriRuntime() && isLocalFileReference(url)) {
+    const { readFile } = await import("@tauri-apps/plugin-fs");
+    return normalizeBytes(await readFile(localPathFromReference(url)));
+  }
+
   if (isTauriRuntime()) {
     try {
       const { invoke } = await import("@tauri-apps/api/core");
@@ -138,6 +143,16 @@ async function fetchRemoteArrayBuffer(url: string): Promise<ArrayBuffer> {
     if (!isLocalDevHost()) throw error;
     return fetchDevRasterProxy(url);
   }
+}
+
+function isLocalFileReference(value: string): boolean {
+  if (value.startsWith("file://")) return true;
+  return !/^[a-z][a-z\d+.-]*:/i.test(value);
+}
+
+function localPathFromReference(value: string): string {
+  if (!value.startsWith("file://")) return value;
+  return decodeURIComponent(new URL(value).pathname);
 }
 
 function fetchDevRasterProxy(url: string): Promise<ArrayBuffer> {

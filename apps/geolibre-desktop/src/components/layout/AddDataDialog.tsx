@@ -294,11 +294,11 @@ export function AddDataDialog({
     const result = await openLocalDataFileWithFallback({
       filters: [
         {
-          name: "Raster",
-          extensions: ["tif", "tiff", "png", "jpg", "jpeg"],
+          name: "GeoTIFF raster",
+          extensions: ["tif", "tiff"],
         },
       ],
-      accept: ".tif,.tiff,.png,.jpg,.jpeg",
+      accept: ".tif,.tiff",
     });
     if (!result) return;
     setSelectedRasterPath(result.path);
@@ -440,14 +440,23 @@ export function AddDataDialog({
       }
 
       if (!selectedRasterPath) throw new Error("Choose a raster file.");
-      const layer = createBaseLayer(
+      const rescaleMin = parseRequiredNumber(rasterMin, "minimum value");
+      const rescaleMax = parseRequiredNumber(rasterMax, "maximum value");
+      if (rescaleMax <= rescaleMin) {
+        throw new Error("Maximum value must be greater than minimum value.");
+      }
+      await addCogRasterLayer(createAppAPI(mapControllerRef), {
+        bands: rasterBands.trim() || "1",
+        beforeLayerId: beforeLayer,
+        colormap: rasterColormap,
         name,
-        "cog",
-        { type: "raster", path: selectedRasterPath },
-        { placeholder: true, sourceKind: "raster-file" },
-      );
-      layer.sourcePath = selectedRasterPath;
-      addAndClose(layer);
+        nodata: parseOptionalNumber(rasterNodata, "nodata value"),
+        opacity: 1,
+        rescaleMax,
+        rescaleMin,
+        url: selectedRasterPath,
+      });
+      closeDialog();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not add layer.");
     } finally {
@@ -703,7 +712,7 @@ export function AddDataDialog({
                   )}
                 </div>
               )}
-              {rasterMode === "cog-url" && (
+              {rasterMode !== "tiles" && (
                 <div className="grid gap-3 sm:grid-cols-4">
                   <div className="space-y-1.5">
                     <Label htmlFor="raster-bands">Bands</Label>

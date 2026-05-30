@@ -1757,15 +1757,19 @@ function createGeoTiffRasterLayerId(): string {
 }
 
 function shouldUseGenericGeoTiffRenderer(url: string): boolean {
+  const isTiffPath = /\.tiff?$/i.test(url);
+  const hasScheme = /^[a-z][a-z\d+.-]*:/i.test(url);
+  if (!hasScheme) return isTiffPath;
+
   try {
     const parsedUrl = new URL(url);
     const isGitHubRelease =
       parsedUrl.hostname === "github.com" &&
       parsedUrl.pathname.includes("/releases/download/");
     const isTiff = /\.tiff?$/i.test(parsedUrl.pathname);
-    return isGitHubRelease && isTiff;
+    return isTiff && (isGitHubRelease || parsedUrl.protocol === "file:");
   } catch {
-    return false;
+    return isTiffPath;
   }
 }
 
