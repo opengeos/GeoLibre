@@ -191,6 +191,9 @@ export function TopToolbar({
           <DropdownMenuItem onSelect={() => setAddDataKind("vector")}>
             Add Vector Layer
           </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setAddDataKind("raster")}>
+            Add Raster Layer
+          </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddFlatGeobufLayer}>
             Add FlatGeobuf Layer
           </DropdownMenuItem>
@@ -199,9 +202,6 @@ export function TopToolbar({
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddZarrLayer}>
             Add Zarr Layer
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setAddDataKind("raster")}>
-            Add Raster Layer
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
