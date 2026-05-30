@@ -21,6 +21,8 @@ const LINKS = [
   },
 ];
 
+const APP_VERSION = __GEOLIBRE_VERSION__;
+
 function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
@@ -53,6 +55,10 @@ export function AboutDialog() {
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 text-sm">
+          <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+            <span className="text-muted-foreground">Version</span>
+            <span className="font-mono text-foreground">v{APP_VERSION}</span>
+          </div>
           {LINKS.map((link) => (
             <a
               key={link.href}

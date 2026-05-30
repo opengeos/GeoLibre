@@ -1,6 +1,6 @@
 [project]
 name = "geolibre-server"
-version = "0.4.0"
+version = "0.5.0"
 description = "Optional Python processing sidecar for GeoLibre Desktop"
 readme = "README.md"
 requires-python = ">=3.10"

@@ -1,4 +1,5 @@
 import react from "@vitejs/plugin-react";
+import { readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import type {
@@ -12,6 +13,9 @@ const GEOAGENT_BROWSER_BUNDLE = "maplibre-gl-geoagent/dist/browser-";
 const EARTH_ENGINE_BROWSER_BUNDLE = "@google/earthengine/build/browser.js";
 const GIS_CHUNK_WARNING_LIMIT_KB = 5000;
 const APP_BASE = process.env.GEOLIBRE_APP_BASE;
+const APP_VERSION = JSON.parse(
+  readFileSync(new URL("./package.json", import.meta.url), "utf8"),
+).version as string;
 const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
 const RADIX_OPTIMIZE_EXCLUDES = [
@@ -124,6 +128,9 @@ export default defineConfig({
   base: APP_BASE,
   plugins: [react(), wmsProxyPlugin()],
   clearScreen: false,
+  define: {
+    __GEOLIBRE_VERSION__: JSON.stringify(APP_VERSION),
+  },
   server: {
     port: 5173,
     strictPort: true,
