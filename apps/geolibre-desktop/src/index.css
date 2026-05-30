@@ -178,6 +178,95 @@ body,
   max-width: min(340px, calc(100vw - 32px)) !important;
 }
 
+.geolibre-flatgeobuf-control {
+  background-color: hsl(var(--popover)) !important;
+  color: hsl(var(--popover-foreground)) !important;
+  overflow: visible;
+}
+
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-button {
+  display: none !important;
+}
+
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-panel {
+  background-color: hsl(var(--popover)) !important;
+  border: 1px solid hsl(var(--border));
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.28);
+  color: hsl(var(--popover-foreground)) !important;
+}
+
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-header {
+  border-bottom-color: hsl(var(--border)) !important;
+}
+
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-title,
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-form-group label,
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-checkbox-label,
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-slider-value,
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-list-header,
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-list-label {
+  color: hsl(var(--popover-foreground)) !important;
+}
+
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-close,
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-list-remove {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-close:hover,
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-list-remove:hover {
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-input,
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-select,
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-textarea,
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-minzoom-input {
+  background-color: hsl(var(--background)) !important;
+  border: 1px solid hsl(var(--input)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-input::placeholder,
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-textarea::placeholder {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-input:focus,
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-select:focus,
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-textarea:focus,
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-minzoom-input:focus {
+  border-color: hsl(var(--ring)) !important;
+  box-shadow: 0 0 0 1px hsl(var(--ring));
+  outline: none;
+}
+
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-select option {
+  background-color: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+}
+
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-format-hint {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-mode-btn {
+  background-color: hsl(var(--secondary)) !important;
+  border-color: hsl(var(--border)) !important;
+  color: hsl(var(--secondary-foreground)) !important;
+}
+
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-mode-btn--active,
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-btn--primary {
+  background-color: hsl(var(--primary)) !important;
+  border-color: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+}
+
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-slider {
+  accent-color: hsl(var(--primary));
+}
+
 .maplibregl-ctrl-top-left
   .geolibre-components-control
   .maplibre-gl-control-grid-relocated,

@@ -70,6 +70,12 @@ const EMPTY_HIGHLIGHT: FeatureCollection = {
   features: [],
 };
 
+function nativeLayerSuffix(layerId: string): string | undefined {
+  const suffix = layerId.split("-").pop();
+  if (!suffix) return undefined;
+  return suffix.charAt(0).toUpperCase() + suffix.slice(1);
+}
+
 function createBlankMapStyle(): maplibregl.StyleSpecification {
   return {
     version: 8,
@@ -377,7 +383,11 @@ export class MapController {
     const nextIds = layers.map((l) => l.id);
     for (const id of this.layerIds) {
       if (!nextIds.includes(id)) {
-        removeLayerFromMap(map, id);
+        removeLayerFromMap(
+          map,
+          id,
+          this.syncedLayers.find((layer) => layer.id === id),
+        );
       }
     }
 
@@ -1011,6 +1021,13 @@ export class MapController {
     id: string;
     suffix?: string;
   }> {
+    const nativeLayerIds = layer.metadata.nativeLayerIds;
+    if (Array.isArray(nativeLayerIds) && nativeLayerIds.length > 0) {
+      return nativeLayerIds
+        .filter((id): id is string => typeof id === "string")
+        .map((id) => ({ id, suffix: nativeLayerSuffix(id) }));
+    }
+
     if (layer.type === "geojson") {
       return [
         { id: fillLayerId(layer.id), suffix: "Polygons" },

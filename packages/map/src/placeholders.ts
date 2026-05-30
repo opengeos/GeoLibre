@@ -10,6 +10,13 @@ export const PLACEHOLDER_LAYER_TYPES = new Set([
 ]);
 
 export function isPlaceholderLayer(layer: GeoLibreLayer): boolean {
+  if (
+    Array.isArray(layer.metadata.nativeLayerIds) &&
+    layer.metadata.nativeLayerIds.length > 0
+  ) {
+    return false;
+  }
+
   return (
     PLACEHOLDER_LAYER_TYPES.has(layer.type) ||
     layer.metadata.placeholder === true

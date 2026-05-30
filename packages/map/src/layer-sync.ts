@@ -11,12 +11,16 @@ import { isPlaceholderLayer } from "./placeholders";
 import { circlePaint, fillPaint, linePaint, rasterPaint } from "./style-mapper";
 
 const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
-
 export function syncLayer(
   map: maplibregl.Map,
   layer: GeoLibreLayer,
   beforeId?: string,
 ): void {
+  if (isExternalNativeLayer(layer)) {
+    syncExternalNativeLayer(map, layer, beforeId);
+    return;
+  }
+
   if (isPlaceholderLayer(layer)) return;
 
   if (layer.type === "geojson" && layer.geojson) {
@@ -35,6 +39,64 @@ export function syncLayer(
 
   if (layer.type === "vector-tiles") {
     syncVectorTileLayer(map, layer, beforeId);
+  }
+}
+
+function isExternalNativeLayer(layer: GeoLibreLayer): boolean {
+  return (
+    Array.isArray(layer.metadata.nativeLayerIds) &&
+    layer.metadata.nativeLayerIds.length > 0
+  );
+}
+
+function syncExternalNativeLayer(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+  beforeId?: string,
+): void {
+  const nativeLayerIds = getExternalNativeLayerIds(layer);
+  for (const nativeLayerId of nativeLayerIds) {
+    const nativeLayer = map.getLayer(nativeLayerId);
+    if (!nativeLayer) continue;
+
+    map.setLayoutProperty(
+      nativeLayerId,
+      "visibility",
+      layer.visible ? "visible" : "none",
+    );
+
+    setExternalNativeLayerPaint(map, nativeLayerId, nativeLayer.type, layer);
+
+    moveLayer(map, nativeLayerId, beforeId);
+  }
+}
+
+function setExternalNativeLayerPaint(
+  map: maplibregl.Map,
+  nativeLayerId: string,
+  nativeLayerType: string,
+  layer: GeoLibreLayer,
+): void {
+  const paint =
+    nativeLayerType === "fill"
+      ? fillPaint(layer.style, layer.opacity)
+      : nativeLayerType === "line"
+        ? linePaint(layer.style, layer.opacity)
+        : nativeLayerType === "circle"
+          ? circlePaint(layer.style, layer.opacity)
+          : nativeLayerType === "raster"
+            ? rasterPaint(layer.style, layer.opacity)
+            : null;
+
+  if (!paint) return;
+
+  for (const [property, value] of Object.entries(paint)) {
+    try {
+      map.setPaintProperty(nativeLayerId, property, value);
+    } catch {
+      // External controls can create heterogeneous style layers. Ignore paint
+      // properties that do not apply to a specific native layer type.
+    }
   }
 }
 
@@ -260,8 +322,10 @@ function moveLayer(
 export function removeLayerFromMap(
   map: maplibregl.Map,
   layerId: string,
+  layer?: GeoLibreLayer,
 ): void {
   for (const id of [
+    ...getExternalNativeLayerIds(layer),
     fillLayerId(layerId),
     lineLayerId(layerId),
     circleLayerId(layerId),
@@ -270,6 +334,20 @@ export function removeLayerFromMap(
   ]) {
     if (map.getLayer(id)) map.removeLayer(id);
   }
-  const src = sourceId(layerId);
-  if (map.getSource(src)) map.removeSource(src);
+  for (const src of [getExternalSourceId(layer), sourceId(layerId)]) {
+    if (src && map.getSource(src)) map.removeSource(src);
+  }
+}
+
+function getExternalNativeLayerIds(layer?: GeoLibreLayer): string[] {
+  const nativeLayerIds = layer?.metadata.nativeLayerIds;
+  return Array.isArray(nativeLayerIds)
+    ? nativeLayerIds.filter((id): id is string => typeof id === "string")
+    : [];
+}
+
+function getExternalSourceId(layer?: GeoLibreLayer): string | undefined {
+  return typeof layer?.metadata.sourceId === "string"
+    ? layer.metadata.sourceId
+    : undefined;
 }

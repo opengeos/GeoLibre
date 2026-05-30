@@ -73,12 +73,20 @@ function createIdentifyPopupElement(
   return root;
 }
 
-function identifyStyleLayerIds(layerId: string): string[] {
+function nativeIdentifyLayerIds(layer: GeoLibreLayer): string[] {
+  const nativeLayerIds = layer.metadata.nativeLayerIds;
+  return Array.isArray(nativeLayerIds)
+    ? nativeLayerIds.filter((id): id is string => typeof id === "string")
+    : [];
+}
+
+function identifyStyleLayerIds(layer: GeoLibreLayer): string[] {
   return [
-    circleLayerId(layerId),
-    lineLayerId(layerId),
-    fillLayerId(layerId),
-    `layer-${layerId}-vector`,
+    ...nativeIdentifyLayerIds(layer),
+    circleLayerId(layer.id),
+    lineLayerId(layer.id),
+    fillLayerId(layer.id),
+    `layer-${layer.id}-vector`,
   ];
 }
 
@@ -276,7 +284,7 @@ export const MapCanvas = memo(function MapCanvas({
         identifyPopup.current = null;
       };
 
-      const queryLayerIds = identifyStyleLayerIds(layer.id).filter((id) =>
+      const queryLayerIds = identifyStyleLayerIds(layer).filter((id) =>
         map.getLayer(id),
       );
       if (queryLayerIds.length === 0) {
