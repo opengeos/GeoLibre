@@ -16,6 +16,8 @@ cd GeoLibre
 npm install
 ```
 
+Bun users can run `bun install`. The root `trustedDependencies` list allows the known install scripts for `core-js`, `@google/genai`, and `protobufjs`.
+
 ## Run the browser UI
 
 ```bash
