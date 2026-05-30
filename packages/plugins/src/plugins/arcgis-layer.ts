@@ -26,6 +26,7 @@ export interface ArcGISLayerOptions {
 
 interface ArcGISFeatureLayerInfo {
   copyrightText?: string;
+  extent?: ArcGISExtent;
   geometryType?: string;
   name?: string;
 }
@@ -37,11 +38,36 @@ interface ArcGISFeatureServiceInfo {
   }>;
 }
 
+interface ArcGISServiceInfo {
+  extent?: ArcGISExtent;
+  fullExtent?: ArcGISExtent;
+  initialExtent?: ArcGISExtent;
+}
+
+interface ArcGISPortalItemInfo {
+  extent?: [[number, number], [number, number]];
+  url?: string;
+}
+
+interface ArcGISExtent {
+  spatialReference?: {
+    latestWkid?: number;
+    wkid?: number;
+  };
+  xmax: number;
+  xmin: number;
+  ymax: number;
+  ymin: number;
+}
+
 type ArcGISLayerModule = typeof import("@esri/maplibre-arcgis");
-type ArcGISRuntimeLayer = Pick<
-  HostedLayer,
-  "addSourcesAndLayersTo" | "layers" | "setSourceId" | "sources"
->;
+interface ArcGISRuntimeLayer {
+  readonly bounds?: [number, number, number, number];
+  readonly layers: Readonly<maplibregl.LayerSpecification[]>;
+  readonly sources: Readonly<Record<string, maplibregl.SourceSpecification>>;
+  addSourcesAndLayersTo(map: maplibregl.Map): ArcGISRuntimeLayer;
+  setSourceId(oldId: string, newId: string): void;
+}
 
 let arcgisLayerSequence = 0;
 const arcgisLayerInstances = new Map<string, ArcGISRuntimeLayer>();
@@ -62,8 +88,9 @@ export async function addArcGISLayer(
   const id = createArcGISLayerId();
   const sourceIds = prefixArcGISSourceIds(hostedLayer, id);
   const nativeLayerIds = prefixArcGISStyleLayerIds(hostedLayer, id);
+  const bounds = await resolveArcGISLayerBounds(input, options, hostedLayer);
 
-  hostedLayer.addSourcesAndLayersTo(map);
+  addArcGISRuntimeLayerToMap(hostedLayer, map);
   ensureArcGISStoreCleanup();
   arcgisLayerInstances.set(id, hostedLayer);
 
@@ -72,10 +99,12 @@ export async function addArcGISLayer(
     input,
     nativeLayerIds,
     options,
+    bounds,
     sourceIds,
   });
   const store = useAppStore.getState();
   store.addLayer(layer, options.beforeLayerId);
+  if (bounds) app.fitBounds?.(bounds);
   return id;
 }
 
@@ -102,7 +131,9 @@ async function createArcGISHostedLayer(
     token: options.token?.trim() || undefined,
   };
 
-  if (options.layerType === "feature") return createFallbackFeatureLayer(input, options);
+  if (options.layerType === "feature") {
+    return createFallbackFeatureLayer(input, options);
+  }
 
   return options.sourceType === "url"
     ? (arcgis.VectorTileLayer as typeof VectorTileLayer).fromUrl(
@@ -154,6 +185,23 @@ function prefixArcGISStyleLayerIds(
   });
 }
 
+function addArcGISRuntimeLayerToMap(
+  hostedLayer: ArcGISRuntimeLayer,
+  map: maplibregl.Map,
+): void {
+  for (const [sourceId, source] of Object.entries(hostedLayer.sources)) {
+    if (!map.getSource(sourceId)) {
+      map.addSource(sourceId, source);
+    }
+  }
+
+  for (const layer of hostedLayer.layers) {
+    if (!map.getLayer(layer.id)) {
+      map.addLayer(layer);
+    }
+  }
+}
+
 async function createFallbackFeatureLayer(
   input: string,
   options: ArcGISLayerOptions,
@@ -186,6 +234,7 @@ async function createFallbackFeatureLayer(
   });
 
   return createStaticArcGISRuntimeLayer({
+    bounds: arcgisExtentToBounds(layerInfo.extent),
     layers: [
       {
         id: styleLayerId,
@@ -233,6 +282,20 @@ async function resolvePortalFeatureLayerUrl(
   options: ArcGISLayerOptions,
   cause: unknown,
 ): Promise<string> {
+  const itemInfo = await fetchArcGISPortalItemInfo(itemId, options, cause);
+  if (!itemInfo.url) {
+    throw new Error("The ArcGIS portal item does not include a service URL.", {
+      cause,
+    });
+  }
+  return resolveFeatureLayerUrl(itemInfo.url, options, cause);
+}
+
+async function fetchArcGISPortalItemInfo(
+  itemId: string,
+  options: ArcGISLayerOptions,
+  cause: unknown,
+): Promise<ArcGISPortalItemInfo> {
   const portalUrl =
     options.portalUrl?.trim() || "https://www.arcgis.com/sharing/rest";
   const itemUrl = appendArcGISParams(
@@ -245,13 +308,7 @@ async function resolvePortalFeatureLayerUrl(
       cause,
     });
   }
-  const itemInfo = (await response.json()) as { url?: string };
-  if (!itemInfo.url) {
-    throw new Error("The ArcGIS portal item does not include a service URL.", {
-      cause,
-    });
-  }
-  return resolveFeatureLayerUrl(itemInfo.url, options, cause);
+  return (await response.json()) as ArcGISPortalItemInfo;
 }
 
 async function fetchArcGISJson<T>(
@@ -282,10 +339,14 @@ async function fetchArcGISJson<T>(
 }
 
 function createStaticArcGISRuntimeLayer(args: {
+  bounds?: [number, number, number, number];
   layers: maplibregl.LayerSpecification[];
-  sources: Record<string, maplibregl.AnySourceData>;
+  sources: Record<string, maplibregl.SourceSpecification>;
 }): ArcGISRuntimeLayer {
   return {
+    get bounds() {
+      return args.bounds;
+    },
     get layers() {
       return args.layers;
     },
@@ -311,6 +372,115 @@ function createStaticArcGISRuntimeLayer(args: {
       return this;
     },
   };
+}
+
+async function resolveArcGISLayerBounds(
+  input: string,
+  options: ArcGISLayerOptions,
+  hostedLayer: ArcGISRuntimeLayer,
+): Promise<[number, number, number, number] | undefined> {
+  const sourceBounds = getArcGISSourceBounds(hostedLayer);
+  if (sourceBounds) return sourceBounds;
+  if (hostedLayer.bounds) return hostedLayer.bounds;
+
+  try {
+    if (options.sourceType === "portal-item") {
+      const itemInfo = await fetchArcGISPortalItemInfo(input, options, undefined);
+      const itemBounds = arcgisPortalItemExtentToBounds(itemInfo.extent);
+      if (itemBounds) return itemBounds;
+      if (itemInfo.url) {
+        return resolveArcGISServiceBounds(itemInfo.url, options);
+      }
+      return undefined;
+    }
+
+    return resolveArcGISServiceBounds(input, options);
+  } catch {
+    return undefined;
+  }
+}
+
+async function resolveArcGISServiceBounds(
+  url: string,
+  options: ArcGISLayerOptions,
+): Promise<[number, number, number, number] | undefined> {
+  const serviceInfo = await fetchArcGISJson<ArcGISServiceInfo>(
+    url,
+    options,
+    undefined,
+  );
+  return arcgisExtentToBounds(
+    serviceInfo.fullExtent ?? serviceInfo.initialExtent ?? serviceInfo.extent,
+  );
+}
+
+function getArcGISSourceBounds(
+  hostedLayer: ArcGISRuntimeLayer,
+): [number, number, number, number] | undefined {
+  for (const source of Object.values(hostedLayer.sources)) {
+    const bounds = "bounds" in source ? source.bounds : undefined;
+    if (isGeoBounds(bounds)) return bounds;
+  }
+  return undefined;
+}
+
+function arcgisPortalItemExtentToBounds(
+  extent: ArcGISPortalItemInfo["extent"],
+): [number, number, number, number] | undefined {
+  if (!Array.isArray(extent) || extent.length !== 2) return undefined;
+  const [[west, south], [east, north]] = extent;
+  return isGeoBounds([west, south, east, north])
+    ? [west, south, east, north]
+    : undefined;
+}
+
+function arcgisExtentToBounds(
+  extent: ArcGISExtent | undefined,
+): [number, number, number, number] | undefined {
+  if (!extent) return undefined;
+  const wkid = extent.spatialReference?.latestWkid ?? extent.spatialReference?.wkid;
+  if (wkid === 102100 || wkid === 102113 || wkid === 3857) {
+    return [
+      mercatorXToLongitude(extent.xmin),
+      mercatorYToLatitude(extent.ymin),
+      mercatorXToLongitude(extent.xmax),
+      mercatorYToLatitude(extent.ymax),
+    ];
+  }
+
+  const bounds: [number, number, number, number] = [
+    extent.xmin,
+    extent.ymin,
+    extent.xmax,
+    extent.ymax,
+  ];
+  return isGeoBounds(bounds) ? bounds : undefined;
+}
+
+function mercatorXToLongitude(x: number): number {
+  return (x / 20037508.34) * 180;
+}
+
+function mercatorYToLatitude(y: number): number {
+  const latitude = (y / 20037508.34) * 180;
+  return (
+    (180 / Math.PI) *
+    (2 * Math.atan(Math.exp((latitude * Math.PI) / 180)) - Math.PI / 2)
+  );
+}
+
+function isGeoBounds(value: unknown): value is [number, number, number, number] {
+  return (
+    Array.isArray(value) &&
+    value.length === 4 &&
+    value.every((item) => typeof item === "number" && Number.isFinite(item)) &&
+    value[0] >= -180 &&
+    value[2] <= 180 &&
+    value[1] >= -90 &&
+    value[3] <= 90 &&
+    value[0] < value[2] &&
+    value[1] < value[3]
+  );
 }
 
 function arcgisGeometryLayerType(
@@ -362,13 +532,14 @@ function trimTrailingSlash(value: string): string {
 }
 
 function createArcGISStoreLayer(args: {
+  bounds?: [number, number, number, number];
   id: string;
   input: string;
   nativeLayerIds: string[];
   options: ArcGISLayerOptions;
   sourceIds: string[];
 }): GeoLibreLayer {
-  const { id, input, nativeLayerIds, options, sourceIds } = args;
+  const { bounds, id, input, nativeLayerIds, options, sourceIds } = args;
   const sourceKind = `arcgis-${options.layerType}-${options.sourceType}`;
   const sourceType = options.layerType === "feature" ? "geojson" : "vector";
   const name = options.name?.trim() || layerNameFromArcGISInput(input, id);
@@ -379,6 +550,7 @@ function createArcGISStoreLayer(args: {
     type: "arcgis",
     source: {
       itemId: options.sourceType === "portal-item" ? input : undefined,
+      bounds,
       layerType: options.layerType,
       portalUrl: options.portalUrl?.trim() || undefined,
       sourceId: sourceIds[0],
@@ -397,6 +569,7 @@ function createArcGISStoreLayer(args: {
     metadata: {
       arcgisLayerType: options.layerType,
       arcgisSourceType: options.sourceType,
+      bounds,
       externalNativeLayer: true,
       hasAccessToken: Boolean(options.token?.trim()),
       nativeLayerIds,

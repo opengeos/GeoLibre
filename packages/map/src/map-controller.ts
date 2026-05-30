@@ -970,30 +970,48 @@ export class MapController {
   private getLayerMetadataBounds(
     layer: GeoLibreLayer,
   ): [number, number, number, number] | null {
-    const bounds = layer.source.bounds;
+    return (
+      this.normalizeLayerBounds(layer.source.bounds) ??
+      this.normalizeLayerBounds(layer.metadata.bounds)
+    );
+  }
+
+  private getLayerSourceBounds(
+    layer: GeoLibreLayer,
+  ): [number, number, number, number] | null {
+    for (const id of this.getLayerSourceIds(layer)) {
+      const source = this.map?.getSource(id) as
+        | { bounds?: [number, number, number, number] }
+        | undefined;
+      const bounds = this.normalizeLayerBounds(source?.bounds);
+      if (bounds) return bounds;
+    }
+    return null;
+  }
+
+  private getLayerSourceIds(layer: GeoLibreLayer): string[] {
+    const ids = new Set<string>([sourceId(layer.id)]);
+    const sourceIds = layer.metadata.sourceIds;
+    if (Array.isArray(sourceIds)) {
+      for (const id of sourceIds) {
+        if (typeof id === "string") ids.add(id);
+      }
+    }
+    if (typeof layer.metadata.sourceId === "string") {
+      ids.add(layer.metadata.sourceId);
+    }
+    return Array.from(ids);
+  }
+
+  private normalizeLayerBounds(
+    bounds: unknown,
+  ): [number, number, number, number] | null {
     if (
       Array.isArray(bounds) &&
       bounds.length === 4 &&
       bounds.every((value) => Number.isFinite(value))
     ) {
       return bounds as [number, number, number, number];
-    }
-    return null;
-  }
-
-  private getLayerSourceBounds(
-    layer: GeoLibreLayer,
-  ): [number, number, number, number] | null {
-    const source = this.map?.getSource(sourceId(layer.id)) as
-      | { bounds?: [number, number, number, number] }
-      | undefined;
-    const bounds = source?.bounds;
-    if (
-      Array.isArray(bounds) &&
-      bounds.length === 4 &&
-      bounds.every((value) => Number.isFinite(value))
-    ) {
-      return bounds;
     }
     return null;
   }

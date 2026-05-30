@@ -87,6 +87,14 @@ const COG_COLORMAPS = [
 
 const DEFAULT_RASTER_URL =
   "https://data.source.coop/giswqs/opengeos/nlcd_2021_land_cover_30m.tif";
+const DEFAULT_ARCGIS_FEATURE_URL =
+  "https://services3.arcgis.com/GVgbJbqm8hXASVYi/arcgis/rest/services/USA_Major_Cities/FeatureServer/0";
+const DEFAULT_ARCGIS_VECTOR_TILE_URL =
+  "https://vectortileservices3.arcgis.com/GVgbJbqm8hXASVYi/arcgis/rest/services/Santa_Monica_parcels_VTL/VectorTileServer";
+const DEFAULT_ARCGIS_URLS: Record<ArcGISLayerType, string> = {
+  feature: DEFAULT_ARCGIS_FEATURE_URL,
+  "vector-tile": DEFAULT_ARCGIS_VECTOR_TILE_URL,
+};
 
 function createLayerId(): string {
   return crypto.randomUUID();
@@ -234,7 +242,7 @@ export function AddDataDialog({
     useState<ArcGISLayerType>("feature");
   const [arcgisSourceType, setArcgisSourceType] =
     useState<ArcGISSourceType>("url");
-  const [arcgisUrl, setArcgisUrl] = useState("");
+  const [arcgisUrl, setArcgisUrl] = useState(DEFAULT_ARCGIS_FEATURE_URL);
   const [arcgisItemId, setArcgisItemId] = useState("");
   const [arcgisPortalUrl, setArcgisPortalUrl] = useState("");
   const [arcgisAccessToken, setArcgisAccessToken] = useState("");
@@ -279,7 +287,7 @@ export function AddDataDialog({
     setMbtilesSourceLayers("");
     setArcgisLayerType("feature");
     setArcgisSourceType("url");
-    setArcgisUrl("");
+    setArcgisUrl(DEFAULT_ARCGIS_FEATURE_URL);
     setArcgisItemId("");
     setArcgisPortalUrl("");
     setArcgisAccessToken("");
@@ -315,6 +323,17 @@ export function AddDataDialog({
   };
 
   const beforeLayer = beforeLayerId.trim() || null;
+
+  const handleArcgisLayerTypeChange = (nextLayerType: ArcGISLayerType) => {
+    const currentUrl = arcgisUrl.trim();
+    setArcgisLayerType(nextLayerType);
+    if (
+      !currentUrl ||
+      Object.values(DEFAULT_ARCGIS_URLS).includes(currentUrl)
+    ) {
+      setArcgisUrl(DEFAULT_ARCGIS_URLS[nextLayerType]);
+    }
+  };
 
   const addAndClose = (layer: GeoLibreLayer) => {
     addLayer(layer, beforeLayer);
@@ -842,7 +861,9 @@ export function AddDataDialog({
                     className={SELECT_CLASS}
                     value={arcgisLayerType}
                     onChange={(event) =>
-                      setArcgisLayerType(event.target.value as ArcGISLayerType)
+                      handleArcgisLayerTypeChange(
+                        event.target.value as ArcGISLayerType,
+                      )
                     }
                   >
                     <option value="feature">Feature layer</option>
