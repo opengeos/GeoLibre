@@ -68,6 +68,24 @@ const GEOLIBRE_PROJECT_FILE_TYPES: BrowserFilePickerType[] = [
 
 const SHAPEFILE_SIDECAR_EXTENSIONS = ["dbf", "shx", "prj", "cpg"];
 
+// Auxiliary files that accompany Shapefiles (spatial indexes, metadata, etc.)
+// but are never standalone vector layers. Skipping them keeps a single such
+// file from aborting an otherwise valid drag-and-drop import.
+const NON_VECTOR_SIDECAR_EXTENSIONS = [
+  ...SHAPEFILE_SIDECAR_EXTENSIONS,
+  "sbn",
+  "sbx",
+  "qix",
+  "qpj",
+  "aih",
+  "ain",
+  "atx",
+  "fbn",
+  "fbx",
+  "ixs",
+  "mxs",
+];
+
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }
@@ -82,8 +100,15 @@ function pathWithoutExtension(path: string): string {
   return path.replace(/\.[^.\\/]+$/, "");
 }
 
+function isGeoLibreProjectFile(path: string): boolean {
+  const name = browserSafeFileName(path).toLowerCase();
+  return name.endsWith(".geolibre") || name.endsWith(".geolibre.json");
+}
+
 function isVectorFileName(path: string): boolean {
-  return !SHAPEFILE_SIDECAR_EXTENSIONS.includes(fileExtension(path));
+  if (isGeoLibreProjectFile(path)) return false;
+  if (browserSafeFileName(path).toLowerCase().endsWith(".shp.xml")) return false;
+  return !NON_VECTOR_SIDECAR_EXTENSIONS.includes(fileExtension(path));
 }
 
 function assertFeatureCollection(value: unknown): FeatureCollection {
