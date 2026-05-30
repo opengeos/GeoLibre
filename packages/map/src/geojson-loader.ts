@@ -61,6 +61,10 @@ export function fillLayerId(layerId: string): string {
   return `layer-${layerId}-fill`;
 }
 
+export function fillExtrusionLayerId(layerId: string): string {
+  return `layer-${layerId}-extrusion`;
+}
+
 export function lineLayerId(layerId: string): string {
   return `layer-${layerId}-line`;
 }

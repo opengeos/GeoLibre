@@ -10,6 +10,7 @@ import {
 } from "maplibre-gl-layer-control";
 import {
   circleLayerId,
+  fillExtrusionLayerId,
   fillLayerId,
   getLayerBounds,
   highlightCircleLayerId,
@@ -23,6 +24,7 @@ import {
   mbtilesStyleLayerIds,
   removeLayerFromMap,
   syncLayer,
+  vectorTileLayerId,
 } from "./layer-sync";
 
 const DEFAULT_PROJECTION: maplibregl.ProjectionSpecification = {
@@ -1083,6 +1085,7 @@ export class MapController {
 
     if (layer.type === "geojson") {
       return [
+        { id: fillExtrusionLayerId(layer.id), suffix: "Extrusions" },
         { id: fillLayerId(layer.id), suffix: "Polygons" },
         { id: lineLayerId(layer.id), suffix: "Lines" },
         { id: circleLayerId(layer.id), suffix: "Points" },
@@ -1098,7 +1101,10 @@ export class MapController {
     }
 
     if (layer.type === "vector-tiles") {
-      return [{ id: `layer-${layer.id}-vector` }];
+      return [
+        { id: vectorTileLayerId(layer.id, true), suffix: "Extrusions" },
+        { id: vectorTileLayerId(layer.id), suffix: "Polygons" },
+      ];
     }
 
     if (layer.type === "mbtiles") {

@@ -1,8 +1,17 @@
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import maplibregl from "maplibre-gl";
 import { memo, useEffect, useRef } from "react";
-import { circleLayerId, fillLayerId, lineLayerId } from "./geojson-loader";
-import { mbtilesStyleLayerIds } from "./layer-sync";
+import {
+  circleLayerId,
+  fillExtrusionLayerId,
+  fillLayerId,
+  lineLayerId,
+} from "./geojson-loader";
+import {
+  externalExtrusionLayerId,
+  mbtilesStyleLayerIds,
+  vectorTileLayerId,
+} from "./layer-sync";
 import { createMapController, type MapController } from "./map-controller";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "maplibre-gl-layer-control/style.css";
@@ -81,11 +90,14 @@ function nativeIdentifyLayerIds(layer: GeoLibreLayer): string[] {
 function identifyStyleLayerIds(layer: GeoLibreLayer): string[] {
   return [
     ...nativeIdentifyLayerIds(layer),
+    ...nativeIdentifyLayerIds(layer).map(externalExtrusionLayerId),
     ...mbtilesStyleLayerIds(layer),
     circleLayerId(layer.id),
     lineLayerId(layer.id),
+    fillExtrusionLayerId(layer.id),
     fillLayerId(layer.id),
-    `layer-${layer.id}-vector`,
+    vectorTileLayerId(layer.id, true),
+    vectorTileLayerId(layer.id),
   ];
 }
 

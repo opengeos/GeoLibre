@@ -62,6 +62,15 @@ export interface LayerStyle {
   strokeWidth: number;
   fillOpacity: number;
   circleRadius: number;
+  extrusionEnabled: boolean;
+  extrusionColor: string;
+  extrusionOpacity: number;
+  extrusionHeightProperty: string;
+  extrusionHeightScale: number;
+  extrusionBase: number;
+  extrusionAdvancedStyleEnabled: boolean;
+  extrusionColorExpression: string;
+  extrusionHeightExpression: string;
   rasterBrightnessMin: number;
   rasterBrightnessMax: number;
   rasterSaturation: number;
@@ -75,6 +84,15 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
   strokeWidth: 2,
   fillOpacity: 0.6,
   circleRadius: 6,
+  extrusionEnabled: false,
+  extrusionColor: "#3b82f6",
+  extrusionOpacity: 0.8,
+  extrusionHeightProperty: "height",
+  extrusionHeightScale: 1,
+  extrusionBase: 0,
+  extrusionAdvancedStyleEnabled: false,
+  extrusionColorExpression: "",
+  extrusionHeightExpression: "",
   rasterBrightnessMin: 0,
   rasterBrightnessMax: 1,
   rasterSaturation: 0,

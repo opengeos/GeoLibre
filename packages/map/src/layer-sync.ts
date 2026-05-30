@@ -3,12 +3,19 @@ import type maplibregl from "maplibre-gl";
 import {
   circleLayerId,
   detectGeometryProfile,
+  fillExtrusionLayerId,
   fillLayerId,
   lineLayerId,
   sourceId,
 } from "./geojson-loader";
 import { isPlaceholderLayer } from "./placeholders";
-import { circlePaint, fillPaint, linePaint, rasterPaint } from "./style-mapper";
+import {
+  circlePaint,
+  fillExtrusionPaint,
+  fillPaint,
+  linePaint,
+  rasterPaint,
+} from "./style-mapper";
 
 const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
 export function syncLayer(
@@ -53,24 +60,86 @@ function syncExternalNativeLayer(
   beforeId?: string,
 ): void {
   const nativeLayerIds = getExternalNativeLayerIds(layer);
+  const nativeFillLayerSpecs = nativeLayerIds
+    .map((nativeLayerId) => getStyleLayerSpec(map, nativeLayerId))
+    .filter(isFillStyleLayerSpec);
+
+  if (layer.style.extrusionEnabled && nativeFillLayerSpecs.length > 0) {
+    for (const nativeLayerId of nativeLayerIds) {
+      setNativeLayerVisibility(map, nativeLayerId, "none");
+    }
+
+    for (const fillLayerSpec of nativeFillLayerSpecs) {
+      const extrusionLayerId = externalExtrusionLayerId(fillLayerSpec.id);
+      ensureLayer(
+        map,
+        extrusionLayerId,
+        {
+          id: extrusionLayerId,
+          type: "fill-extrusion",
+          source: fillLayerSpec.source,
+          "source-layer": fillLayerSpec["source-layer"],
+          filter: fillLayerSpec.filter,
+          minzoom: fillLayerSpec.minzoom,
+          maxzoom: fillLayerSpec.maxzoom,
+          paint: fillExtrusionPaint(layer.style, layer.opacity),
+          layout: { visibility: layer.visible ? "visible" : "none" },
+        },
+        beforeId,
+      );
+    }
+    return;
+  }
+
+  for (const nativeLayerId of nativeLayerIds) {
+    removeIfExists(map, externalExtrusionLayerId(nativeLayerId));
+  }
+
   for (const nativeLayerId of nativeLayerIds) {
     const nativeLayer = map.getLayer(nativeLayerId);
     if (!nativeLayer) continue;
 
-    try {
-      map.setLayoutProperty(
-        nativeLayerId,
-        "visibility",
-        layer.visible ? "visible" : "none",
-      );
-    } catch {
-      // Custom layers from external controls may not accept layout updates.
-    }
+    setNativeLayerVisibility(
+      map,
+      nativeLayerId,
+      layer.visible ? "visible" : "none",
+    );
 
     setExternalNativeLayerPaint(map, nativeLayerId, nativeLayer.type, layer);
 
     moveLayer(map, nativeLayerId, beforeId);
   }
+}
+
+function setNativeLayerVisibility(
+  map: maplibregl.Map,
+  nativeLayerId: string,
+  visibility: "visible" | "none",
+): void {
+  try {
+    map.setLayoutProperty(nativeLayerId, "visibility", visibility);
+  } catch {
+    // Custom layers from external controls may not accept layout updates.
+  }
+}
+
+function getStyleLayerSpec(
+  map: maplibregl.Map,
+  layerId: string,
+): maplibregl.LayerSpecification | null {
+  return (
+    map.getStyle().layers?.find((layer) => layer.id === layerId) ?? null
+  );
+}
+
+function isFillStyleLayerSpec(
+  layer: maplibregl.LayerSpecification | null,
+): layer is maplibregl.FillLayerSpecification {
+  return layer?.type === "fill";
+}
+
+export function externalExtrusionLayerId(nativeLayerId: string): string {
+  return `${nativeLayerId}-geolibre-extrusion`;
 }
 
 function setExternalNativeLayerPaint(
@@ -123,30 +192,58 @@ function syncGeoJsonLayer(
   const opacity = layer.opacity;
 
   if (profile.hasPolygon) {
-    ensureLayer(
-      map,
-      fillLayerId(layer.id),
-      {
-        id: fillLayerId(layer.id),
-        type: "fill",
-        source: src,
-        filter: [
-          "match",
-          ["geometry-type"],
-          ["Polygon", "MultiPolygon"],
-          true,
-          false,
-        ],
-        paint: fillPaint(layer.style, opacity),
-        layout: { visibility },
-      },
-      beforeId,
-    );
+    if (layer.style.extrusionEnabled) {
+      removeIfExists(map, fillLayerId(layer.id));
+      ensureLayer(
+        map,
+        fillExtrusionLayerId(layer.id),
+        {
+          id: fillExtrusionLayerId(layer.id),
+          type: "fill-extrusion",
+          source: src,
+          filter: [
+            "match",
+            ["geometry-type"],
+            ["Polygon", "MultiPolygon"],
+            true,
+            false,
+          ],
+          paint: fillExtrusionPaint(layer.style, opacity),
+          layout: { visibility },
+        },
+        beforeId,
+      );
+    } else {
+      removeIfExists(map, fillExtrusionLayerId(layer.id));
+      ensureLayer(
+        map,
+        fillLayerId(layer.id),
+        {
+          id: fillLayerId(layer.id),
+          type: "fill",
+          source: src,
+          filter: [
+            "match",
+            ["geometry-type"],
+            ["Polygon", "MultiPolygon"],
+            true,
+            false,
+          ],
+          paint: fillPaint(layer.style, opacity),
+          layout: { visibility },
+        },
+        beforeId,
+      );
+    }
   } else {
     removeIfExists(map, fillLayerId(layer.id));
+    removeIfExists(map, fillExtrusionLayerId(layer.id));
   }
 
-  if (profile.hasLine || profile.hasPolygon) {
+  if (
+    !layer.style.extrusionEnabled &&
+    (profile.hasLine || profile.hasPolygon)
+  ) {
     ensureLayer(
       map,
       lineLayerId(layer.id),
@@ -170,7 +267,7 @@ function syncGeoJsonLayer(
     removeIfExists(map, lineLayerId(layer.id));
   }
 
-  if (profile.hasPoint) {
+  if (!layer.style.extrusionEnabled && profile.hasPoint) {
     ensureLayer(
       map,
       circleLayerId(layer.id),
@@ -257,21 +354,39 @@ function syncVectorTileLayer(
   if (!map.getSource(src)) {
     map.addSource(src, { type: "vector", url });
   }
-  const styleLayerId = `layer-${layer.id}-vector`;
   const sourceLayer = (layer.source.sourceLayer as string) ?? "";
-  ensureLayer(
-    map,
-    styleLayerId,
-    {
-      id: styleLayerId,
-      type: "fill",
-      source: src,
-      "source-layer": sourceLayer,
-      paint: fillPaint(layer.style, layer.opacity),
-      layout: { visibility: layer.visible ? "visible" : "none" },
-    },
-    beforeId,
-  );
+  const visibility = layer.visible ? "visible" : "none";
+  if (layer.style.extrusionEnabled) {
+    removeIfExists(map, vectorTileLayerId(layer.id));
+    ensureLayer(
+      map,
+      vectorTileLayerId(layer.id, true),
+      {
+        id: vectorTileLayerId(layer.id, true),
+        type: "fill-extrusion",
+        source: src,
+        "source-layer": sourceLayer,
+        paint: fillExtrusionPaint(layer.style, layer.opacity),
+        layout: { visibility },
+      },
+      beforeId,
+    );
+  } else {
+    removeIfExists(map, vectorTileLayerId(layer.id, true));
+    ensureLayer(
+      map,
+      vectorTileLayerId(layer.id),
+      {
+        id: vectorTileLayerId(layer.id),
+        type: "fill",
+        source: src,
+        "source-layer": sourceLayer,
+        paint: fillPaint(layer.style, layer.opacity),
+        layout: { visibility },
+      },
+      beforeId,
+    );
+  }
 }
 
 function syncMbtilesLayer(
@@ -313,66 +428,99 @@ function syncMbtilesVectorLayer(
   const currentLayerIds = new Set(mbtilesStyleLayerIds(layer));
 
   for (const sourceLayer of sourceLayers) {
-    ensureLayer(
-      map,
-      mbtilesFillLayerId(layer.id, sourceLayer),
-      {
-        id: mbtilesFillLayerId(layer.id, sourceLayer),
-        type: "fill",
-        source: src,
-        "source-layer": sourceLayer,
-        filter: [
-          "match",
-          ["geometry-type"],
-          ["Polygon", "MultiPolygon"],
-          true,
-          false,
-        ],
-        paint: fillPaint(layer.style, layer.opacity),
-        layout: { visibility },
-      },
-      beforeId,
-    );
-    ensureLayer(
-      map,
-      mbtilesLineLayerId(layer.id, sourceLayer),
-      {
-        id: mbtilesLineLayerId(layer.id, sourceLayer),
-        type: "line",
-        source: src,
-        "source-layer": sourceLayer,
-        filter: [
-          "match",
-          ["geometry-type"],
-          ["LineString", "MultiLineString", "Polygon", "MultiPolygon"],
-          true,
-          false,
-        ],
-        paint: linePaint(layer.style, layer.opacity),
-        layout: { visibility },
-      },
-      beforeId,
-    );
-    ensureLayer(
-      map,
-      mbtilesCircleLayerId(layer.id, sourceLayer),
-      {
-        id: mbtilesCircleLayerId(layer.id, sourceLayer),
-        type: "circle",
-        source: src,
-        "source-layer": sourceLayer,
-        filter: [
-          "match",
-          ["geometry-type"],
-          ["Point", "MultiPoint"],
-          true,
-          false,
-        ],
-        paint: circlePaint(layer.style, layer.opacity),
-        layout: { visibility },
-      },
-      beforeId,
-    );
+    const fillId = mbtilesFillLayerId(layer.id, sourceLayer);
+    const extrusionId = mbtilesExtrusionLayerId(layer.id, sourceLayer);
+
+    if (layer.style.extrusionEnabled) {
+      removeIfExists(map, fillId);
+      ensureLayer(
+        map,
+        extrusionId,
+        {
+          id: extrusionId,
+          type: "fill-extrusion",
+          source: src,
+          "source-layer": sourceLayer,
+          filter: [
+            "match",
+            ["geometry-type"],
+            ["Polygon", "MultiPolygon"],
+            true,
+            false,
+          ],
+          paint: fillExtrusionPaint(layer.style, layer.opacity),
+          layout: { visibility },
+        },
+        beforeId,
+      );
+    } else {
+      removeIfExists(map, extrusionId);
+      ensureLayer(
+        map,
+        fillId,
+        {
+          id: fillId,
+          type: "fill",
+          source: src,
+          "source-layer": sourceLayer,
+          filter: [
+            "match",
+            ["geometry-type"],
+            ["Polygon", "MultiPolygon"],
+            true,
+            false,
+          ],
+          paint: fillPaint(layer.style, layer.opacity),
+          layout: { visibility },
+        },
+        beforeId,
+      );
+    }
+    if (layer.style.extrusionEnabled) {
+      removeIfExists(map, mbtilesLineLayerId(layer.id, sourceLayer));
+      removeIfExists(map, mbtilesCircleLayerId(layer.id, sourceLayer));
+    } else {
+      ensureLayer(
+        map,
+        mbtilesLineLayerId(layer.id, sourceLayer),
+        {
+          id: mbtilesLineLayerId(layer.id, sourceLayer),
+          type: "line",
+          source: src,
+          "source-layer": sourceLayer,
+          filter: [
+            "match",
+            ["geometry-type"],
+            ["LineString", "MultiLineString", "Polygon", "MultiPolygon"],
+            true,
+            false,
+          ],
+          paint: linePaint(layer.style, layer.opacity),
+          layout: { visibility },
+        },
+        beforeId,
+      );
+      ensureLayer(
+        map,
+        mbtilesCircleLayerId(layer.id, sourceLayer),
+        {
+          id: mbtilesCircleLayerId(layer.id, sourceLayer),
+          type: "circle",
+          source: src,
+          "source-layer": sourceLayer,
+          filter: [
+            "match",
+            ["geometry-type"],
+            ["Point", "MultiPoint"],
+            true,
+            false,
+          ],
+          paint: circlePaint(layer.style, layer.opacity),
+          layout: { visibility },
+        },
+        beforeId,
+      );
+    }
   }
 
   removeStaleMbtilesLayers(map, layer.id, currentLayerIds);
@@ -415,6 +563,13 @@ export function mbtilesFillLayerId(
   return `layer-${layerId}-mbtiles-${encodeMbtilesLayerPart(sourceLayer)}-fill`;
 }
 
+export function mbtilesExtrusionLayerId(
+  layerId: string,
+  sourceLayer: string,
+): string {
+  return `layer-${layerId}-mbtiles-${encodeMbtilesLayerPart(sourceLayer)}-extrusion`;
+}
+
 export function mbtilesLineLayerId(
   layerId: string,
   sourceLayer: string,
@@ -438,8 +593,31 @@ export function mbtilesStyleLayerIds(layer: GeoLibreLayer): string[] {
   return getMbtilesSourceLayers(layer).flatMap((sourceLayer) => [
     mbtilesCircleLayerId(layer.id, sourceLayer),
     mbtilesLineLayerId(layer.id, sourceLayer),
-    mbtilesFillLayerId(layer.id, sourceLayer),
+    layer.style.extrusionEnabled
+      ? mbtilesExtrusionLayerId(layer.id, sourceLayer)
+      : mbtilesFillLayerId(layer.id, sourceLayer),
   ]);
+}
+
+export function mbtilesAllStyleLayerIds(layer: GeoLibreLayer): string[] {
+  if (layer.type !== "mbtiles") return [];
+  if (layer.metadata.tileType === "raster" || layer.source.type === "raster") {
+    return [`layer-${layer.id}-raster`];
+  }
+
+  return getMbtilesSourceLayers(layer).flatMap((sourceLayer) => [
+    mbtilesCircleLayerId(layer.id, sourceLayer),
+    mbtilesLineLayerId(layer.id, sourceLayer),
+    mbtilesFillLayerId(layer.id, sourceLayer),
+    mbtilesExtrusionLayerId(layer.id, sourceLayer),
+  ]);
+}
+
+export function vectorTileLayerId(
+  layerId: string,
+  extrusionEnabled = false,
+): string {
+  return `layer-${layerId}-${extrusionEnabled ? "vector-extrusion" : "vector"}`;
 }
 
 function ensureLayer(
@@ -493,12 +671,15 @@ export function removeLayerFromMap(
 ): void {
   for (const id of [
     ...getExternalNativeLayerIds(layer),
-    ...(layer ? mbtilesStyleLayerIds(layer) : []),
+    ...getExternalNativeLayerIds(layer).map(externalExtrusionLayerId),
+    ...(layer ? mbtilesAllStyleLayerIds(layer) : []),
     fillLayerId(layerId),
+    fillExtrusionLayerId(layerId),
     lineLayerId(layerId),
     circleLayerId(layerId),
     `layer-${layerId}-raster`,
-    `layer-${layerId}-vector`,
+    vectorTileLayerId(layerId),
+    vectorTileLayerId(layerId, true),
   ]) {
     if (map.getLayer(id)) map.removeLayer(id);
   }
