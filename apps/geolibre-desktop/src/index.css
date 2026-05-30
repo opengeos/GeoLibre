@@ -273,19 +273,18 @@ body,
 }
 
 .geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-input {
-  background-color: #fff !important;
-  border: 1px solid #d1d5db !important;
-  color: #111827 !important;
-  color-scheme: light;
+  background-color: hsl(var(--background)) !important;
+  border: 1px solid hsl(var(--input)) !important;
+  color: hsl(var(--foreground)) !important;
 }
 
 .geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-input::placeholder {
-  color: #6b7280 !important;
+  color: hsl(var(--muted-foreground)) !important;
 }
 
 .geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-input:focus {
-  border-color: #2f8f85 !important;
-  box-shadow: 0 0 0 2px rgba(47, 143, 133, 0.16) !important;
+  border-color: hsl(var(--ring)) !important;
+  box-shadow: 0 0 0 1px hsl(var(--ring)) !important;
   outline: none;
 }
 

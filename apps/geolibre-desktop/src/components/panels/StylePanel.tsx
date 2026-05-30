@@ -230,11 +230,14 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
   }
 
   const { style } = layer;
+  const isRasterTileLayer = layer.metadata.tileType === "raster";
   const hasVectorPaintControls =
-    layer.type === "geojson" ||
-    layer.type === "vector-tiles" ||
-    hasExternalNativeLayers(layer);
-  const hasRasterPaintControls = isRasterPaintLayer(layer.type);
+    !isRasterTileLayer &&
+    (layer.type === "geojson" ||
+      layer.type === "vector-tiles" ||
+      hasExternalNativeLayers(layer));
+  const hasRasterPaintControls =
+    isRasterPaintLayer(layer.type) || isRasterTileLayer;
 
   if (hasRasterPaintControls) {
     return (
