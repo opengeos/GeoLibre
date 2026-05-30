@@ -184,7 +184,7 @@ export function TopToolbar({
             Add Vector Layer
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddFlatGeobufLayer}>
-            Add Flatgeobuf Layer
+            Add FlatGeobuf Layer
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setAddDataKind("raster")}>
             Add Raster Layer

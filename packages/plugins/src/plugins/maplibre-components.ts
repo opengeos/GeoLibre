@@ -163,6 +163,7 @@ export const maplibreComponentsPlugin: GeoLibrePlugin = {
   deactivate: (app: GeoLibreAppAPI) => {
     pluginActive = false;
     componentsControlRevision += 1;
+    teardownFlatGeobufControl(app);
     if (!componentsControl) return;
     app.removeMapControl(componentsControl);
     componentsControl = null;
@@ -247,6 +248,16 @@ function createFlatGeobufControl(
     }
   });
   return control;
+}
+
+function teardownFlatGeobufControl(app: GeoLibreAppAPI): void {
+  flatGeobufStoreUnsubscribe?.();
+  flatGeobufStoreUnsubscribe = null;
+  if (flatGeobufControl && flatGeobufControlMounted) {
+    app.removeMapControl(flatGeobufControl);
+  }
+  flatGeobufControl = null;
+  flatGeobufControlMounted = false;
 }
 
 function createFlatGeobufLayerAddHandler(

@@ -43,10 +43,7 @@ export function syncLayer(
 }
 
 function isExternalNativeLayer(layer: GeoLibreLayer): boolean {
-  return (
-    Array.isArray(layer.metadata.nativeLayerIds) &&
-    layer.metadata.nativeLayerIds.length > 0
-  );
+  return getExternalNativeLayerIds(layer).length > 0;
 }
 
 function syncExternalNativeLayer(
