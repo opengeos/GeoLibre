@@ -188,6 +188,133 @@ body,
   display: none !important;
 }
 
+.geolibre-pmtiles-control {
+  background-color: hsl(var(--popover)) !important;
+  color: hsl(var(--popover-foreground)) !important;
+  overflow: visible;
+}
+
+.geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-button {
+  display: none !important;
+}
+
+.geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-panel {
+  background-color: hsl(var(--popover)) !important;
+  border: 1px solid hsl(var(--border));
+  color: hsl(var(--popover-foreground)) !important;
+  max-width: min(340px, calc(100vw - 32px));
+}
+
+.geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-header {
+  background-color: hsl(var(--card)) !important;
+  border-bottom-color: hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-title,
+.geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-form-group > label {
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-close {
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-close:hover {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+.geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-list {
+  background-color: hsl(var(--card)) !important;
+  border-color: hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-list-item {
+  border-bottom-color: hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-list-label,
+.geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-list-header {
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-badge {
+  background-color: hsl(var(--secondary)) !important;
+  color: hsl(var(--secondary-foreground)) !important;
+}
+
+.geolibre-pmtiles-control
+  .maplibre-gl-pmtiles-layer-form-group
+  > div[style*="background"] {
+  background-color: hsl(var(--background)) !important;
+  border-color: hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-pmtiles-control
+  .maplibre-gl-pmtiles-layer-form-group
+  > div[style*="background"]
+  label,
+.geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-form-group > div span {
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-pmtiles-control
+  .maplibre-gl-pmtiles-layer-form-group
+  > span {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.geolibre-pmtiles-control input[type="checkbox"] {
+  accent-color: hsl(var(--primary));
+}
+
+.geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-input {
+  background-color: #fff !important;
+  border: 1px solid #d1d5db !important;
+  color: #111827 !important;
+  color-scheme: light;
+}
+
+.geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-input::placeholder {
+  color: #6b7280 !important;
+}
+
+.geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-input:focus {
+  border-color: #2f8f85 !important;
+  box-shadow: 0 0 0 2px rgba(47, 143, 133, 0.16) !important;
+  outline: none;
+}
+
+.geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-btn {
+  background-color: hsl(var(--card)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-btn:hover:not(:disabled) {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+.geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-btn:disabled {
+  color: hsl(var(--muted-foreground)) !important;
+  opacity: 0.65;
+}
+
+.geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-btn--primary {
+  background-color: hsl(var(--primary)) !important;
+  border-color: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+}
+
+.geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-status--error {
+  color: hsl(var(--destructive)) !important;
+}
+
 .geolibre-flatgeobuf-control .maplibre-gl-add-vector-panel {
   background-color: hsl(var(--popover)) !important;
   border: 1px solid hsl(var(--border));

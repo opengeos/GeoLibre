@@ -6,6 +6,7 @@ import {
 } from "@geolibre/map";
 import {
   openFlatGeobufAddVectorLayerPanel,
+  openPMTilesLayerPanel,
   type GeoLibreMapControlPosition,
 } from "@geolibre/plugins";
 import {
@@ -139,6 +140,9 @@ export function TopToolbar({
   const handleAddFlatGeobufLayer = () => {
     openFlatGeobufAddVectorLayerPanel(appApi);
   };
+  const handleAddPMTilesLayer = () => {
+    openPMTilesLayerPanel(appApi);
+  };
   const toggleMapControl = (control: ToolbarMapControl) => {
     setControlsVisible((current) => {
       const visible = !current[control];
@@ -185,6 +189,9 @@ export function TopToolbar({
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddFlatGeobufLayer}>
             Add FlatGeobuf Layer
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleAddPMTilesLayer}>
+            Add PMTiles Layer
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setAddDataKind("raster")}>
             Add Raster Layer

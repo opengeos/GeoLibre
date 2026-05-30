@@ -11,6 +11,10 @@ import type {
   ControlGrid,
   ControlGridOptions,
   DefaultControlName,
+  PMTilesLayerControl,
+  PMTilesLayerControlOptions,
+  PMTilesLayerEventHandler,
+  PMTilesLayerInfo,
 } from "maplibre-gl-components";
 import type {
   GeoLibreAppAPI,
@@ -22,17 +26,23 @@ type ControlGridConstructor =
   (typeof import("maplibre-gl-components"))["ControlGrid"];
 type AddVectorControlConstructor =
   (typeof import("maplibre-gl-components"))["AddVectorControl"];
+type PMTilesLayerControlConstructor =
+  (typeof import("maplibre-gl-components"))["PMTilesLayerControl"];
 
 interface ComponentsConstructors {
   AddVectorControl: AddVectorControlConstructor;
   ControlGrid: ControlGridConstructor;
+  PMTilesLayerControl: PMTilesLayerControlConstructor;
 }
 
 let componentsControlPosition: GeoLibreMapControlPosition = "top-right";
 const flatGeobufControlPosition: GeoLibreMapControlPosition = "top-left";
+const pmtilesControlPosition: GeoLibreMapControlPosition = "top-left";
 
 const FLATGEOBUF_SAMPLE_URL =
   "https://flatgeobuf.org/test/data/UScounties.fgb";
+const PMTILES_SAMPLE_URL =
+  "https://overturemaps-extras-us-west-2.s3.us-west-2.amazonaws.com/tiles/2026-05-20.0/buildings.pmtiles";
 
 const COMPONENT_CONTROL_NAMES = [
   "spinGlobe",
@@ -91,10 +101,26 @@ const ADD_VECTOR_OPTIONS = {
   fontColor: "hsl(var(--popover-foreground))",
 } satisfies AddVectorControlOptions;
 
+const PMTILES_OPTIONS = {
+  backgroundColor: "hsl(var(--popover))",
+  className: "geolibre-pmtiles-control",
+  collapsed: false,
+  defaultCircleColor: DEFAULT_LAYER_STYLE.fillColor,
+  defaultFillColor: DEFAULT_LAYER_STYLE.fillColor,
+  defaultLineColor: DEFAULT_LAYER_STYLE.strokeColor,
+  defaultOpacity: 0.8,
+  defaultPickable: false,
+  defaultUrl: PMTILES_SAMPLE_URL,
+  fontColor: "hsl(var(--popover-foreground))",
+} satisfies PMTilesLayerControlOptions;
+
 let componentsControl: ControlGrid | null = null;
 let flatGeobufControl: AddVectorControl | null = null;
+let pmtilesControl: PMTilesLayerControl | null = null;
 let flatGeobufControlMounted = false;
+let pmtilesControlMounted = false;
 let flatGeobufStoreUnsubscribe: (() => void) | null = null;
+let pmtilesStoreUnsubscribe: (() => void) | null = null;
 let pluginActive = false;
 let componentsControlRevision = 0;
 let componentsConstructorsPromise: Promise<ComponentsConstructors> | null =
@@ -105,9 +131,11 @@ const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
     ({
       AddVectorControl: AddVectorControlClass,
       ControlGrid: ControlGridClass,
+      PMTilesLayerControl: PMTilesLayerControlClass,
     }) => ({
       AddVectorControl: AddVectorControlClass,
       ControlGrid: ControlGridClass,
+      PMTilesLayerControl: PMTilesLayerControlClass,
     }),
   );
   return componentsConstructorsPromise;
@@ -164,6 +192,7 @@ export const maplibreComponentsPlugin: GeoLibrePlugin = {
     pluginActive = false;
     componentsControlRevision += 1;
     teardownFlatGeobufControl(app);
+    teardownPMTilesControl(app);
     if (!componentsControl) return;
     app.removeMapControl(componentsControl);
     componentsControl = null;
@@ -185,6 +214,10 @@ export function openFlatGeobufAddVectorLayerPanel(
   app: GeoLibreAppAPI,
 ): void {
   void openStandaloneFlatGeobufControl(app);
+}
+
+export function openPMTilesLayerPanel(app: GeoLibreAppAPI): void {
+  void openStandalonePMTilesControl(app);
 }
 
 function getComponentsOptions(
@@ -224,6 +257,30 @@ async function openStandaloneFlatGeobufControl(
   return true;
 }
 
+async function openStandalonePMTilesControl(
+  app: GeoLibreAppAPI,
+): Promise<boolean> {
+  const { PMTilesLayerControl: PMTilesLayerControlClass } =
+    await getComponentsConstructors();
+
+  pmtilesControl ??= createPMTilesControl(PMTilesLayerControlClass);
+
+  if (!pmtilesControlMounted) {
+    const added = app.addMapControl(pmtilesControl, pmtilesControlPosition);
+    if (!added) {
+      pmtilesControl = null;
+      return false;
+    }
+    pmtilesControlMounted = true;
+  }
+
+  setTimeout(() => {
+    pmtilesControl?.show();
+    pmtilesControl?.expand();
+  }, 0);
+  return true;
+}
+
 function createFlatGeobufControl(
   AddVectorControlClass: AddVectorControlConstructor,
 ): AddVectorControl {
@@ -250,6 +307,38 @@ function createFlatGeobufControl(
   return control;
 }
 
+function createPMTilesControl(
+  PMTilesLayerControlClass: PMTilesLayerControlConstructor,
+): PMTilesLayerControl {
+  const control = new PMTilesLayerControlClass(PMTILES_OPTIONS);
+  control.on("collapse", () => control.hide());
+  control.on("layeradd", createPMTilesLayerAddHandler());
+  control.on("layerremove", (event) => {
+    const store = useAppStore.getState();
+    const activeLayerIds = new Set(event.state.layers.map((layer) => layer.id));
+    for (const layer of store.layers) {
+      if (!isPMTilesControlLayer(layer)) continue;
+      const shouldRemove = event.layerId
+        ? layer.id === event.layerId
+        : !activeLayerIds.has(layer.id);
+      if (shouldRemove) {
+        store.removeLayer(layer.id);
+      }
+    }
+  });
+  pmtilesStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
+    const removedLayers = previous.layers.filter(
+      (layer) =>
+        isPMTilesControlLayer(layer) &&
+        !state.layers.some((current) => current.id === layer.id),
+    );
+    for (const layer of removedLayers) {
+      pmtilesControl?.removeLayer(layer.id);
+    }
+  });
+  return control;
+}
+
 function teardownFlatGeobufControl(app: GeoLibreAppAPI): void {
   flatGeobufStoreUnsubscribe?.();
   flatGeobufStoreUnsubscribe = null;
@@ -258,6 +347,16 @@ function teardownFlatGeobufControl(app: GeoLibreAppAPI): void {
   }
   flatGeobufControl = null;
   flatGeobufControlMounted = false;
+}
+
+function teardownPMTilesControl(app: GeoLibreAppAPI): void {
+  pmtilesStoreUnsubscribe?.();
+  pmtilesStoreUnsubscribe = null;
+  if (pmtilesControl && pmtilesControlMounted) {
+    app.removeMapControl(pmtilesControl);
+  }
+  pmtilesControl = null;
+  pmtilesControlMounted = false;
 }
 
 function createFlatGeobufLayerAddHandler(
@@ -277,6 +376,30 @@ function createFlatGeobufLayerAddHandler(
         metadata: layer.metadata,
         opacity: layer.opacity,
         source: layer.source,
+        visible: layer.visible,
+      });
+      return;
+    }
+    store.addLayer(layer);
+  };
+}
+
+function createPMTilesLayerAddHandler(): PMTilesLayerEventHandler {
+  return (event) => {
+    if (!event.layerId) return;
+    const layerInfo = event.state.layers.find(
+      (layer) => layer.id === event.layerId,
+    );
+    if (!layerInfo) return;
+
+    const store = useAppStore.getState();
+    const layer = createPMTilesStoreLayer(event.layerId, layerInfo);
+    if (store.layers.some((item) => item.id === layer.id)) {
+      store.updateLayer(layer.id, {
+        metadata: layer.metadata,
+        opacity: layer.opacity,
+        source: layer.source,
+        style: layer.style,
         visible: layer.visible,
       });
       return;
@@ -325,10 +448,60 @@ function createFlatGeobufStoreLayer(
   };
 }
 
+function createPMTilesStoreLayer(
+  id: string,
+  layerInfo: PMTilesLayerInfo,
+): GeoLibreLayer {
+  const firstSourceLayer = layerInfo.sourceLayers[0];
+  const fillColor =
+    (firstSourceLayer && layerInfo.sourceLayerColors?.[firstSourceLayer]) ??
+    DEFAULT_LAYER_STYLE.fillColor;
+
+  return {
+    id,
+    name: layerInfo.name || layerNameFromUrl(layerInfo.url, id),
+    type: "pmtiles",
+    source: {
+      sourceId: layerInfo.id,
+      sourceLayers: layerInfo.sourceLayers,
+      tileType: layerInfo.tileType,
+      type: layerInfo.tileType === "raster" ? "raster" : "vector",
+      url: layerInfo.url,
+    },
+    visible: true,
+    opacity: layerInfo.opacity,
+    style: {
+      ...DEFAULT_LAYER_STYLE,
+      fillOpacity: layerInfo.tileType === "raster" ? 0.6 : 1,
+      fillColor,
+      strokeColor: fillColor,
+    },
+    metadata: {
+      externalNativeLayer: true,
+      nativeLayerIds: layerInfo.layerIds,
+      pickable: layerInfo.pickable,
+      sourceId: layerInfo.id,
+      sourceKind: "pmtiles-url",
+      sourceLayerColors: layerInfo.sourceLayerColors,
+      sourceLayers: layerInfo.sourceLayers,
+      tileType: layerInfo.tileType,
+    },
+    sourcePath: layerInfo.url,
+  };
+}
+
 function isFlatGeobufControlLayer(layer: GeoLibreLayer): boolean {
   return (
     layer.type === "flatgeobuf" &&
     layer.metadata.sourceKind === "flatgeobuf-url" &&
+    layer.metadata.externalNativeLayer === true
+  );
+}
+
+function isPMTilesControlLayer(layer: GeoLibreLayer): boolean {
+  return (
+    layer.type === "pmtiles" &&
+    layer.metadata.sourceKind === "pmtiles-url" &&
     layer.metadata.externalNativeLayer === true
   );
 }

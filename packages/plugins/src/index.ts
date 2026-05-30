@@ -7,6 +7,7 @@ export { maplibreBasemapControlPlugin } from "./plugins/maplibre-basemap-control
 export {
   maplibreComponentsPlugin,
   openFlatGeobufAddVectorLayerPanel,
+  openPMTilesLayerPanel,
 } from "./plugins/maplibre-components";
 export { maplibreGeoEditorPlugin } from "./plugins/maplibre-geo-editor";
 export { maplibreGeoAgentPlugin } from "./plugins/maplibre-geoagent";
