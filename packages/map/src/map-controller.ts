@@ -371,17 +371,18 @@ export class MapController {
   }
 
   syncLayers(layers: GeoLibreLayer[]): void {
-    if (!this.isStyleReady()) return;
+    if (!this.isStyleReady() || !this.map) return;
+    const map = this.map;
 
     const nextIds = layers.map((l) => l.id);
     for (const id of this.layerIds) {
       if (!nextIds.includes(id)) {
-        removeLayerFromMap(this.map, id);
+        removeLayerFromMap(map, id);
       }
     }
 
     for (const [index, layer] of layers.entries()) {
-      syncLayer(this.map, layer, this.getBeforeStyleLayerId(layers, index));
+      syncLayer(map, layer, this.getBeforeStyleLayerId(layers, index));
     }
     this.layerIds = nextIds;
     this.syncedLayers = layers;
@@ -417,11 +418,12 @@ export class MapController {
   }
 
   private applyBasemapVisibility(): void {
-    if (!this.isStyleReady()) return;
+    if (!this.isStyleReady() || !this.map) return;
+    const map = this.map;
 
     for (const layer of this.getBasemapStyleLayers()) {
       try {
-        this.map.setLayoutProperty(
+        map.setLayoutProperty(
           layer.id,
           "visibility",
           this.basemapVisible ? "visible" : "none",
@@ -444,7 +446,8 @@ export class MapController {
   }
 
   private getBasemapStyleLayers(): maplibregl.LayerSpecification[] {
-    if (!this.isStyleReady()) return [];
+    if (!this.isStyleReady() || !this.map) return [];
+    const map = this.map;
 
     const userStyleLayerIds = new Set(
       this.syncedLayers.flatMap((layer) =>
@@ -453,7 +456,7 @@ export class MapController {
     );
     const nonBasemapStyleLayerIds = new Set(NON_BASEMAP_STYLE_LAYER_IDS);
 
-    return (this.map.getStyle().layers ?? []).filter(
+    return (map.getStyle().layers ?? []).filter(
       (layer) =>
         !userStyleLayerIds.has(layer.id) &&
         !nonBasemapStyleLayerIds.has(layer.id),
@@ -582,13 +585,14 @@ export class MapController {
   }
 
   private syncHighlight(featureCollection: FeatureCollection): void {
-    if (!this.isStyleReady()) return;
+    if (!this.isStyleReady() || !this.map) return;
+    const map = this.map;
 
-    const source = this.map.getSource(highlightSourceId());
+    const source = map.getSource(highlightSourceId());
     if (source) {
       (source as maplibregl.GeoJSONSource).setData(featureCollection);
     } else {
-      this.map.addSource(highlightSourceId(), {
+      map.addSource(highlightSourceId(), {
         type: "geojson",
         data: featureCollection,
       });
