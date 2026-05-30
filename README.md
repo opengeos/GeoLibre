@@ -1,17 +1,18 @@
 # GeoLibre Desktop
 
-Lightweight, cloud-native desktop GIS prototype built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS**, and **DuckDB-WASM Spatial**.
+Lightweight, cloud-native desktop GIS prototype built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS**, **DuckDB-WASM Spatial**, and **deck.gl**.
 
-## Features (v0.4.0)
+## Features (v0.5.0)
 
-- MapLibre map with OpenFreeMap Liberty basemap
+- MapLibre map workspace with OpenFreeMap basemaps, blank background support, and toggleable navigation, fullscreen, geolocation, globe, terrain, scale, attribution, and logo controls
 - Load local vector layers supported by DuckDB-WASM Spatial, including common formats such as GeoJSON, GeoParquet, GeoPackage, Shapefile, FlatGeobuf, KML/KMZ, and GML
-- Layer panel (visibility, opacity, reorder, remove)
+- Add Data menu for XYZ tiles, WMS, GeoJSON URLs, vector tiles, COG and GeoTIFF rasters, MBTiles, ArcGIS FeatureServer and VectorTileServer layers, PMTiles, Zarr, LiDAR, and Gaussian splats
+- Layer panel for visibility, opacity, reordering, zoom-to-layer, identify, and remove actions
 - Live style panel (fill, stroke, opacity, circle radius)
-- Attribute table for imported vector layers
+- Attribute table with filtering, sorting, resize controls, feature highlighting, and optional zoom to selected features
 - Save/open `.geolibre.json` projects
 - Processing toolbox with local bounds and feature count algorithms
-- Plugin system with basemap, layer control, swipe, street view, lidar, GeoAgent, and GeoEditor integrations
+- Plugin system with basemap, layer control, MapLibre components, swipe, street view, LiDAR, GeoAgent, and GeoEditor integrations, including configurable control positions
 - Optional Python FastAPI sidecar for heavier processing workflows
 
 ## Prerequisites
@@ -30,13 +31,13 @@ npm install
 
 Bun users can run `bun install`. The root `trustedDependencies` list allows the known install scripts for `core-js`, `@google/genai`, and `protobufjs`.
 
-## Run (web dev — map in browser)
+## Run (web dev, map in browser)
 
 ```bash
 npm run dev
 ```
 
-Open http://localhost:5173. The map and browser vector import support local vector files that DuckDB-WASM Spatial can read, including common formats such as GeoJSON, GeoParquet, GeoPackage, Shapefile, FlatGeobuf, KML/KMZ, and GML, with direct handling for GeoJSON, zipped Shapefiles, and KMZ archives. You can choose files from Add Vector Layer or drag them onto the app. Desktop filesystem dialogs require Tauri.
+Open http://localhost:5173. The map and browser vector import support local vector files that DuckDB-WASM Spatial can read, including common formats such as GeoJSON, GeoParquet, GeoPackage, Shapefile, FlatGeobuf, KML/KMZ, and GML, with direct handling for GeoJSON, zipped Shapefiles, and KMZ archives. You can choose files from Add Vector Layer or drag them onto the app. Desktop filesystem dialogs, local MBTiles, and local raster file reads require Tauri.
 
 ## Environment variables
 
@@ -89,7 +90,7 @@ docs/                   # Architecture & API docs
 
 ## Add a plugin
 
-Built-in plugins live in `packages/plugins/src/plugins/` and are registered by the desktop app in `apps/geolibre-desktop/src/hooks/usePlugins.ts`.
+Built-in plugins live in `packages/plugins/src/plugins/` and are registered by the desktop app in `apps/geolibre-desktop/src/hooks/usePlugins.ts`. Map control plugins can expose a control position through `getMapControlPosition()` and `setMapControlPosition()` so the Plugins menu can move them between map corners.
 
 1. Create a plugin file in `packages/plugins/src/plugins/`.
 
@@ -128,7 +129,9 @@ manager.registerAll([
 
 Plugins can use the app API to change basemaps, add GeoJSON layers, or attach MapLibre controls. For a MapLibre control plugin, add the package dependency, import its CSS in `apps/geolibre-desktop/src/main.tsx`, then call `app.addMapControl(control, "top-left")` in `activate()` and `app.removeMapControl(control)` in `deactivate()`.
 
-Built-in MapLibre controls such as Navigation, Fullscreen, Geolocate, Globe, Terrain, Scale, Attribution, and Logo are toggled from the desktop app's Controls menu. Keep project-specific controls such as Layer Control in the plugin menu when they use the plugin API or need plugin lifecycle behavior.
+Built-in MapLibre controls such as Navigation, Fullscreen, Geolocate, Globe, Terrain, Scale, Attribution, and Logo are toggled from the desktop app's Controls menu. Keep project-specific controls such as Layer Control and Components in the plugin menu when they use the plugin API or need plugin lifecycle behavior.
+
+The v0.5.0 Components plugin wraps `maplibre-gl-components` controls and wires their layer events into the GeoLibre store. It provides Add Data shortcuts for FlatGeobuf, PMTiles, Zarr, LiDAR, and Gaussian splats, while raster COG and GeoTIFF layers can also be added through the standard Add Raster Layer dialog.
 
 If a third-party MapLibre control needs app-specific styling fixes, add scoped overrides in `apps/geolibre-desktop/src/index.css` instead of editing files in `node_modules`. Keep selectors limited to the plugin control class. For example, GeoEditor toolbar buttons need a local override because MapLibre's default control button CSS can override their flex centering:
 

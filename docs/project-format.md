@@ -31,7 +31,12 @@ Projects are saved as **`.geolibre.json`** files.
     "strokeColor": "#1e40af",
     "strokeWidth": 2,
     "fillOpacity": 0.6,
-    "circleRadius": 6
+    "circleRadius": 6,
+    "rasterBrightnessMin": 0,
+    "rasterBrightnessMax": 1,
+    "rasterSaturation": 0,
+    "rasterContrast": 0,
+    "rasterHueRotate": 0
   },
   "metadata": {},
   "geojson": { "type": "FeatureCollection", "features": [] },
@@ -41,16 +46,23 @@ Projects are saved as **`.geolibre.json`** files.
 
 ## Layer types
 
-| Type | MVP status |
-|------|------------|
-| `geojson` | Supported |
-| `xyz` | Partial (raster tiles) |
-| `vector-tiles` | Partial |
-| `pmtiles` | Placeholder (v0.3) |
-| `cog` | Placeholder (v0.3) |
-| `flatgeobuf` | Placeholder (v0.3) |
+| Type | v0.5.0 status |
+|------|---------------|
+| `geojson` | Supported for imported files and GeoJSON URLs |
+| `xyz` | Supported for raster tile templates |
+| `wms` | Supported as tiled WMS GetMap layers |
+| `raster` | Supported for raster tile templates |
+| `vector-tiles` | Supported for MapLibre vector tile sources |
+| `mbtiles` | Supported in the desktop app through a local MapLibre protocol |
+| `arcgis` | Supported for ArcGIS FeatureServer and VectorTileServer layers |
+| `pmtiles` | Supported through the Components plugin |
+| `cog` | Supported for COG and GeoTIFF raster layers |
+| `flatgeobuf` | Supported through the Components plugin and imported as GeoJSON when loaded as a local vector file |
+| `zarr` | Supported through the Components plugin |
+| `lidar` | Supported through the Components plugin |
+| `gaussian-splat` | Supported through the Components plugin |
 | `geoparquet` | Imported as GeoJSON via DuckDB-WASM |
-| `duckdb-query` | Placeholder (v0.4) |
+| `duckdb-query` | Reserved for SQL query-result layers |
 
 ## Example
 

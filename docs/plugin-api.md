@@ -46,6 +46,9 @@ export interface GeoLibreAppAPI {
   ) => void;
   getActiveBasemap: () => string;
   onBasemapChange: (callback: (styleUrl: string) => void) => () => void;
+  fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;
+  fitBounds?: (bounds: [number, number, number, number]) => void;
+  getMap?: () => import("maplibre-gl").Map | null;
   addMapControl: (
     control: IControl,
     position?: GeoLibreMapControlPosition,
@@ -83,9 +86,10 @@ manager.activate("my-plugin", appApi);
 | `carto-light` | CARTO Positron GL style |
 | `sample-geojson` | Loads `sample-data/sample.geojson` |
 | `maplibre-gl-basemap-control` | Adds a MapLibre basemap picker |
+| `maplibre-gl-components` | Adds the MapLibre Components control grid and panels for FlatGeobuf, COG, PMTiles, Zarr, LiDAR, and Gaussian splats |
 | `maplibre-gl-geo-editor` | Adds GeoEditor drawing controls |
 | `maplibre-gl-geoagent` | Adds GeoAgent map assistant controls |
-| `maplibre-gl-lidar` | Adds lidar controls |
+| `maplibre-gl-lidar` | Adds LiDAR controls |
 | `maplibre-gl-streetview` | Adds street view controls |
 | `maplibre-gl-swipe` | Adds map swipe controls |
 
@@ -107,8 +111,10 @@ export const myPlugin: GeoLibrePlugin = {
 };
 ```
 
-## Roadmap (v0.6)
+Map control plugins can optionally expose `getMapControlPosition()` and `setMapControlPosition()` so the desktop Plugins menu can move the control between map corners. Position-aware plugins should remove and recreate or re-add their control when the position changes.
 
-- Dynamic plugin loading from `plugins/` directory
+## Roadmap (v0.7)
+
+- Dynamic plugin loading from a `plugins/` directory
 - Plugin manifest (`plugin.json`)
 - Sandboxed worker plugins
