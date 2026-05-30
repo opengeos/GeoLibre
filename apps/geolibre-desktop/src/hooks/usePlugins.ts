@@ -87,6 +87,7 @@ export function createAppAPI(
     fetchArrayBuffer: fetchRemoteArrayBuffer,
     fitBounds: (bounds: [number, number, number, number]) =>
       mapControllerRef?.current?.fitBounds(bounds),
+    getMap: () => mapControllerRef?.current?.getMap() ?? null,
     addMapControl: (
       control: Parameters<MapController["addControl"]>[0],
       position?: Parameters<MapController["addControl"]>[1],

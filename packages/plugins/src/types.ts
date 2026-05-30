@@ -1,5 +1,5 @@
 import type { FeatureCollection } from "geojson";
-import type { IControl } from "maplibre-gl";
+import type { IControl, Map as MapLibreMap } from "maplibre-gl";
 
 export type GeoLibreMapControlPosition =
   | "top-left"
@@ -29,6 +29,7 @@ export interface GeoLibreAppAPI {
   onBasemapChange: (callback: (styleUrl: string) => void) => () => void;
   fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;
   fitBounds?: (bounds: [number, number, number, number]) => void;
+  getMap?: () => MapLibreMap | null;
   addMapControl: (
     control: IControl,
     position?: GeoLibreMapControlPosition,

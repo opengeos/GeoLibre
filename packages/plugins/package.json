@@ -19,6 +19,7 @@
     "@developmentseed/deck.gl-raster": "^0.7.0",
     "@developmentseed/morecantile": "^0.7.0",
     "@dvt3d/maplibre-three-plugin": "^1.6.0",
+    "@esri/maplibre-arcgis": "^1.2.0",
     "@geolibre/core": "*",
     "@geoman-io/maplibre-geoman-free": "^0.7.1",
     "geotiff": "^3.0.5",

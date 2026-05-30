@@ -45,6 +45,7 @@ export type LayerType =
   | "wms"
   | "xyz"
   | "vector-tiles"
+  | "arcgis"
   | "pmtiles"
   | "mbtiles"
   | "zarr"

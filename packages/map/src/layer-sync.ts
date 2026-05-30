@@ -502,7 +502,7 @@ export function removeLayerFromMap(
   ]) {
     if (map.getLayer(id)) map.removeLayer(id);
   }
-  for (const src of [getExternalSourceId(layer), sourceId(layerId)]) {
+  for (const src of [...getExternalSourceIds(layer), sourceId(layerId)]) {
     if (src && map.getSource(src)) map.removeSource(src);
   }
 }
@@ -514,8 +514,13 @@ function getExternalNativeLayerIds(layer?: GeoLibreLayer): string[] {
     : [];
 }
 
-function getExternalSourceId(layer?: GeoLibreLayer): string | undefined {
+function getExternalSourceIds(layer?: GeoLibreLayer): string[] {
+  const sourceIds = layer?.metadata.sourceIds;
+  if (Array.isArray(sourceIds)) {
+    return sourceIds.filter((id): id is string => typeof id === "string");
+  }
+
   return typeof layer?.metadata.sourceId === "string"
-    ? layer.metadata.sourceId
-    : undefined;
+    ? [layer.metadata.sourceId]
+    : [];
 }

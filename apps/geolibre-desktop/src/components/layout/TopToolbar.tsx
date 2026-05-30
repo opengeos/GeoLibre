@@ -215,6 +215,9 @@ export function TopToolbar({
           <DropdownMenuItem onSelect={() => setAddDataKind("mbtiles")}>
             Add MBTiles Layer
           </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setAddDataKind("arcgis")}>
+            Add ArcGIS Layer
+          </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddZarrLayer}>
             Add Zarr Layer
           </DropdownMenuItem>

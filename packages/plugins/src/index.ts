@@ -5,6 +5,12 @@ export { osmBasemapPlugin } from "./plugins/osm-basemap";
 export { cartoLightPlugin } from "./plugins/carto-light";
 export { maplibreBasemapControlPlugin } from "./plugins/maplibre-basemap-control";
 export {
+  addArcGISLayer,
+  type ArcGISLayerOptions,
+  type ArcGISLayerType,
+  type ArcGISSourceType,
+} from "./plugins/arcgis-layer";
+export {
   addCogRasterLayer,
   maplibreComponentsPlugin,
   openFlatGeobufAddVectorLayerPanel,
