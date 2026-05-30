@@ -85,6 +85,11 @@ const COG_COLORMAPS = [
   "gray",
 ] satisfies RasterColormap[];
 
+const DEFAULT_XYZ_URL =
+  "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}";
+const DEFAULT_WMS_ENDPOINT =
+  "https://imagery.nationalmap.gov/arcgis/services/USGSNAIPImagery/ImageServer/WMSServer";
+const DEFAULT_WMS_LAYERS = "USGSNAIPImagery:FalseColorComposite";
 const DEFAULT_RASTER_URL =
   "https://data.source.coop/giswqs/opengeos/nlcd_2021_land_cover_30m.tif";
 const DEFAULT_ARCGIS_FEATURE_URL =
@@ -204,11 +209,11 @@ export function AddDataDialog({
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [xyzUrl, setXyzUrl] = useState("");
+  const [xyzUrl, setXyzUrl] = useState(DEFAULT_XYZ_URL);
   const [xyzTileSize, setXyzTileSize] = useState("256");
 
-  const [wmsEndpoint, setWmsEndpoint] = useState("");
-  const [wmsLayers, setWmsLayers] = useState("");
+  const [wmsEndpoint, setWmsEndpoint] = useState(DEFAULT_WMS_ENDPOINT);
+  const [wmsLayers, setWmsLayers] = useState(DEFAULT_WMS_LAYERS);
   const [wmsStyles, setWmsStyles] = useState("");
   const [wmsFormat, setWmsFormat] = useState("image/png");
   const [wmsTransparent, setWmsTransparent] = useState(true);
@@ -262,10 +267,10 @@ export function AddDataDialog({
       }[kind],
     );
     setBeforeLayerId("");
-    setXyzUrl("");
+    setXyzUrl(DEFAULT_XYZ_URL);
     setXyzTileSize("256");
-    setWmsEndpoint("");
-    setWmsLayers("");
+    setWmsEndpoint(DEFAULT_WMS_ENDPOINT);
+    setWmsLayers(DEFAULT_WMS_LAYERS);
     setWmsStyles("");
     setWmsFormat("image/png");
     setWmsTransparent(true);
