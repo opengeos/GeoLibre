@@ -1,3 +1,5 @@
+/// <reference path="../arcgis-maplibre.d.ts" />
+
 import {
   DEFAULT_LAYER_STYLE,
   type GeoLibreLayer,
