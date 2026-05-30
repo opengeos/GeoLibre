@@ -2,6 +2,11 @@ import type { FeatureCollection } from "geojson";
 
 export const OPENFREEMAP_BASEMAPS = [
   {
+    id: "liberty",
+    name: "Liberty",
+    styleUrl: "https://tiles.openfreemap.org/styles/liberty",
+  },
+  {
     id: "positron",
     name: "Positron",
     styleUrl: "https://tiles.openfreemap.org/styles/positron",
@@ -10,11 +15,6 @@ export const OPENFREEMAP_BASEMAPS = [
     id: "bright",
     name: "Bright",
     styleUrl: "https://tiles.openfreemap.org/styles/bright",
-  },
-  {
-    id: "liberty",
-    name: "Liberty",
-    styleUrl: "https://tiles.openfreemap.org/styles/liberty",
   },
   {
     id: "dark",
@@ -35,6 +35,8 @@ export const OPENFREEMAP_BASEMAPS = [
 
 export const DEFAULT_BASEMAP =
   "https://tiles.openfreemap.org/styles/liberty";
+
+export const BLANK_BASEMAP = "";
 
 export const PROJECT_VERSION = "0.1.0";
 

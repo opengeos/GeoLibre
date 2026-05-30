@@ -1,4 +1,5 @@
 import {
+  BLANK_BASEMAP,
   createDefaultMapView,
   OPENFREEMAP_BASEMAPS,
   useAppStore,
@@ -22,6 +23,7 @@ import { useMemo, useState } from "react";
 
 const DEFAULT_BASEMAP_ID = "liberty";
 const CUSTOM_BASEMAP_ID = "custom";
+const BLANK_BASEMAP_ID = "blank";
 const DEFAULT_PROJECT_NAME = "Untitled Project";
 
 const THREE_D_MAP_VIEW: MapViewState = {
@@ -32,7 +34,10 @@ const THREE_D_MAP_VIEW: MapViewState = {
 };
 
 type PresetBasemapId = (typeof OPENFREEMAP_BASEMAPS)[number]["id"];
-type BasemapChoice = PresetBasemapId | typeof CUSTOM_BASEMAP_ID;
+type BasemapChoice =
+  | PresetBasemapId
+  | typeof CUSTOM_BASEMAP_ID
+  | typeof BLANK_BASEMAP_ID;
 
 interface NewProjectDialogProps {
   onSaveCurrentProject: () => Promise<boolean>;
@@ -53,6 +58,7 @@ export function NewProjectDialog({
 
   const customStyleUrl = customUrl.trim();
   const isCustomSelected = selectedBasemapId === CUSTOM_BASEMAP_ID;
+  const isBlankSelected = selectedBasemapId === BLANK_BASEMAP_ID;
   const selectedPreset = OPENFREEMAP_BASEMAPS.find(
     (basemap) => basemap.id === selectedBasemapId,
   );
@@ -67,7 +73,7 @@ export function NewProjectDialog({
   }, [customStyleUrl]);
   const canCreate = isCustomSelected
     ? isCustomUrlValid
-    : Boolean(selectedPreset);
+    : isBlankSelected || Boolean(selectedPreset);
 
   const resetForm = () => {
     setSelectedBasemapId(DEFAULT_BASEMAP_ID);
@@ -87,8 +93,10 @@ export function NewProjectDialog({
 
     const basemapStyleUrl = isCustomSelected
       ? customStyleUrl
+      : isBlankSelected
+        ? BLANK_BASEMAP
       : selectedPreset?.styleUrl;
-    if (!basemapStyleUrl) return;
+    if (basemapStyleUrl == null) return;
 
     newProject({
       name: projectName.trim() || DEFAULT_PROJECT_NAME,
@@ -175,7 +183,8 @@ export function NewProjectDialog({
             <DialogHeader>
               <DialogTitle>New map</DialogTitle>
               <DialogDescription>
-                Choose an OpenFreeMap basemap or provide a MapLibre style URL.
+                Choose a blank background, an OpenFreeMap basemap, or a
+                MapLibre style URL.
               </DialogDescription>
             </DialogHeader>
             <form className="space-y-5" onSubmit={handleCreate}>
@@ -209,6 +218,20 @@ export function NewProjectDialog({
                       {basemap.name}
                     </button>
                   ))}
+                  <button
+                    type="button"
+                    aria-pressed={isBlankSelected}
+                    className={cn(
+                      "h-10 rounded-md border px-3 text-sm font-medium transition-colors",
+                      "hover:bg-accent hover:text-accent-foreground",
+                      isBlankSelected
+                        ? "border-primary bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+                        : "border-input bg-background",
+                    )}
+                    onClick={() => setSelectedBasemapId(BLANK_BASEMAP_ID)}
+                  >
+                    Blank
+                  </button>
                 </div>
               </div>
 
