@@ -1,6 +1,7 @@
 import { parseProject, type GeoLibreProject } from "@geolibre/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readFile, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { unzip } from "fflate";
 import type { FeatureCollection } from "geojson";
 import shp from "shpjs";
 import type { DuckDbVectorFile } from "./duckdb-vector-loader";
@@ -151,6 +152,63 @@ async function parseShapefileZip(
   return normalizeShapefileResult(await shp(data));
 }
 
+function unzipArchive(
+  data: ArrayBuffer | Uint8Array,
+): Promise<Record<string, Uint8Array>> {
+  const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+  return new Promise<Record<string, Uint8Array>>((resolve, reject) => {
+    unzip(bytes, (error, entries) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(entries);
+    });
+  });
+}
+
+function toDuckDbVectorData(data: Uint8Array): Uint8Array<ArrayBuffer> {
+  return new Uint8Array(data);
+}
+
+async function readKmzKmlFiles(
+  data: ArrayBuffer | Uint8Array,
+): Promise<DuckDbVectorFile[]> {
+  const entries = await unzipArchive(data);
+  const kmlEntries = Object.entries(entries)
+    .filter(([entryName]) => entryName.toLowerCase().endsWith(".kml"))
+    .sort(([leftName], [rightName]) => {
+      if (browserSafeFileName(leftName).toLowerCase() === "doc.kml") return -1;
+      if (browserSafeFileName(rightName).toLowerCase() === "doc.kml") return 1;
+      return leftName.localeCompare(rightName);
+    });
+
+  if (!kmlEntries.length) {
+    throw new Error("The KMZ archive did not contain a KML file.");
+  }
+
+  return kmlEntries.map(([entryName, data], index) => {
+    const entryBaseName =
+      browserSafeFileName(entryName) || `document-${index + 1}.kml`;
+    return {
+      name:
+        kmlEntries.length === 1
+          ? entryBaseName
+          : `${index + 1}-${entryBaseName}`,
+      extension: "kml",
+      data: toDuckDbVectorData(data),
+    };
+  });
+}
+
+async function parseKmz(
+  data: ArrayBuffer | Uint8Array,
+): Promise<FeatureCollection> {
+  const kmlFiles = await readKmzKmlFiles(data);
+  const collections = await Promise.all(kmlFiles.map(loadDuckDbVector));
+  return mergeFeatureCollections(collections);
+}
+
 async function loadDuckDbVector(file: DuckDbVectorFile) {
   const { loadDuckDbVectorFile } = await import("./duckdb-vector-loader");
   return loadDuckDbVectorFile(file);
@@ -193,6 +251,13 @@ async function loadBrowserVectorFile(
     } catch {
       // DuckDB Spatial may be able to read zipped vector data that shpjs cannot.
     }
+  }
+
+  if (extension === "kmz") {
+    return {
+      data: await parseKmz(await file.arrayBuffer()),
+      path: file.name,
+    };
   }
 
   return {
@@ -266,6 +331,18 @@ async function loadTauriVectorFile(path: string): Promise<{
       };
     } catch {
       // DuckDB Spatial may be able to read zipped vector data that shpjs cannot.
+    }
+  }
+
+  if (extension === "kmz") {
+    try {
+      return {
+        data: await parseKmz(await readFile(path)),
+        path,
+      };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Unknown error";
+      throw new Error(`Could not read this KMZ file. ${detail}`);
     }
   }
 
