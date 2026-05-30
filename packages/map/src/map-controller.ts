@@ -70,6 +70,10 @@ const EMPTY_HIGHLIGHT: FeatureCollection = {
   features: [],
 };
 
+function isCustomControllableLayer(layer: GeoLibreLayer): boolean {
+  return typeof layer.metadata.customLayerType === "string";
+}
+
 function nativeLayerSuffix(layerId: string): string | undefined {
   const suffix = layerId.split("-").pop();
   if (!suffix) return undefined;
@@ -759,7 +763,9 @@ export class MapController {
       ...nativeStyleLayerIds,
     ];
     const controllableLayers = layers.filter(
-      (layer) => this.getNativeLayerIds(layer).length > 0,
+      (layer) =>
+        this.getNativeLayerIds(layer).length > 0 ||
+        isCustomControllableLayer(layer),
     );
 
     if (controllableLayers.length === 0) {
@@ -918,7 +924,11 @@ export class MapController {
         // GeoJSON-backed layers derive bounds from their features; other
         // layer types fall back to their source bounds (TileJSON) when
         // advertised, and return null (no zoom-to-bounds) otherwise.
-        return getLayerBounds(layer) ?? this.getLayerSourceBounds(layer);
+        return (
+          getLayerBounds(layer) ??
+          this.getLayerMetadataBounds(layer) ??
+          this.getLayerSourceBounds(layer)
+        );
       },
       getNativeLayerIds: (layerId) => this.getNativeLayerIdsByLayerId(layerId),
       removeLayer: (layerId) => {
@@ -945,7 +955,26 @@ export class MapController {
       .map((id) => this.map?.getLayer(id))
       .find((item) => Boolean(item));
 
-    return nativeLayer?.type ?? "custom";
+    return (
+      nativeLayer?.type ??
+      (typeof layer.metadata.customLayerType === "string"
+        ? layer.metadata.customLayerType
+        : "custom")
+    );
+  }
+
+  private getLayerMetadataBounds(
+    layer: GeoLibreLayer,
+  ): [number, number, number, number] | null {
+    const bounds = layer.source.bounds;
+    if (
+      Array.isArray(bounds) &&
+      bounds.length === 4 &&
+      bounds.every((value) => Number.isFinite(value))
+    ) {
+      return bounds as [number, number, number, number];
+    }
+    return null;
   }
 
   private getLayerSourceBounds(

@@ -11,6 +11,8 @@ import type {
   ControlGrid,
   ControlGridOptions,
   DefaultControlName,
+  LidarControl,
+  LidarLayerAdapter,
   PMTilesLayerControl,
   PMTilesLayerControlOptions,
   PMTilesLayerEventHandler,
@@ -20,6 +22,10 @@ import type {
   ZarrLayerEventHandler,
   ZarrLayerInfo,
 } from "maplibre-gl-components";
+import type {
+  LidarControlEventHandler,
+  PointCloudInfo,
+} from "maplibre-gl-lidar";
 import type {
   GeoLibreAppAPI,
   GeoLibreMapControlPosition,
@@ -34,10 +40,20 @@ type PMTilesLayerControlConstructor =
   (typeof import("maplibre-gl-components"))["PMTilesLayerControl"];
 type ZarrLayerControlConstructor =
   (typeof import("maplibre-gl-components"))["ZarrLayerControl"];
+type LidarControlConstructor =
+  (typeof import("maplibre-gl-components"))["LidarControl"];
+type LidarLayerAdapterConstructor =
+  (typeof import("maplibre-gl-components"))["LidarLayerAdapter"];
+
+interface LidarControlClickOutsideState {
+  _clickOutsideHandler?: ((event: MouseEvent) => void) | null;
+}
 
 interface ComponentsConstructors {
   AddVectorControl: AddVectorControlConstructor;
   ControlGrid: ControlGridConstructor;
+  LidarControl: LidarControlConstructor;
+  LidarLayerAdapter: LidarLayerAdapterConstructor;
   PMTilesLayerControl: PMTilesLayerControlConstructor;
   ZarrLayerControl: ZarrLayerControlConstructor;
 }
@@ -46,6 +62,7 @@ let componentsControlPosition: GeoLibreMapControlPosition = "top-right";
 const flatGeobufControlPosition: GeoLibreMapControlPosition = "top-left";
 const pmtilesControlPosition: GeoLibreMapControlPosition = "top-left";
 const zarrControlPosition: GeoLibreMapControlPosition = "top-left";
+const lidarControlPosition: GeoLibreMapControlPosition = "top-left";
 
 const FLATGEOBUF_SAMPLE_URL =
   "https://flatgeobuf.org/test/data/UScounties.fgb";
@@ -53,6 +70,8 @@ const PMTILES_SAMPLE_URL =
   "https://overturemaps-extras-us-west-2.s3.us-west-2.amazonaws.com/tiles/2026-05-20.0/buildings.pmtiles";
 const ZARR_SAMPLE_URL =
   "https://carbonplan-maps.s3.us-west-2.amazonaws.com/v2/demo/4d/tavg-prec-month";
+const LIDAR_SAMPLE_URL =
+  "https://s3.amazonaws.com/hobu-lidar/autzen-classified.copc.laz";
 
 const COMPONENT_CONTROL_NAMES = [
   "spinGlobe",
@@ -148,16 +167,32 @@ const ZARR_OPTIONS = {
   fontColor: "hsl(var(--popover-foreground))",
 } satisfies ZarrLayerControlOptions;
 
+const LIDAR_OPTIONS = {
+  title: "Add LiDAR Layer",
+  collapsed: false,
+  className: "geolibre-lidar-layer-control",
+  panelWidth: 365,
+  maxHeight: 520,
+  pointSize: 2,
+  colorScheme: "elevation",
+  pickable: false,
+  autoZoom: true,
+} satisfies ConstructorParameters<LidarControlConstructor>[0];
+
 let componentsControl: ControlGrid | null = null;
 let flatGeobufControl: AddVectorControl | null = null;
 let pmtilesControl: PMTilesLayerControl | null = null;
 let zarrControl: ZarrLayerControl | null = null;
+let lidarControl: LidarControl | null = null;
+let lidarLayerAdapter: LidarLayerAdapter | null = null;
 let flatGeobufControlMounted = false;
 let pmtilesControlMounted = false;
 let zarrControlMounted = false;
+let lidarControlMounted = false;
 let flatGeobufStoreUnsubscribe: (() => void) | null = null;
 let pmtilesStoreUnsubscribe: (() => void) | null = null;
 let zarrStoreUnsubscribe: (() => void) | null = null;
+let lidarStoreUnsubscribe: (() => void) | null = null;
 let pluginActive = false;
 let componentsControlRevision = 0;
 let componentsConstructorsPromise: Promise<ComponentsConstructors> | null =
@@ -168,11 +203,15 @@ const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
     ({
       AddVectorControl: AddVectorControlClass,
       ControlGrid: ControlGridClass,
+      LidarControl: LidarControlClass,
+      LidarLayerAdapter: LidarLayerAdapterClass,
       PMTilesLayerControl: PMTilesLayerControlClass,
       ZarrLayerControl: ZarrLayerControlClass,
     }) => ({
       AddVectorControl: AddVectorControlClass,
       ControlGrid: ControlGridClass,
+      LidarControl: LidarControlClass,
+      LidarLayerAdapter: LidarLayerAdapterClass,
       PMTilesLayerControl: PMTilesLayerControlClass,
       ZarrLayerControl: ZarrLayerControlClass,
     }),
@@ -233,6 +272,7 @@ export const maplibreComponentsPlugin: GeoLibrePlugin = {
     teardownFlatGeobufControl(app);
     teardownPMTilesControl(app);
     teardownZarrControl(app);
+    teardownLidarControl(app);
     if (!componentsControl) return;
     app.removeMapControl(componentsControl);
     componentsControl = null;
@@ -262,6 +302,10 @@ export function openPMTilesLayerPanel(app: GeoLibreAppAPI): void {
 
 export function openZarrLayerPanel(app: GeoLibreAppAPI): void {
   void openStandaloneZarrControl(app);
+}
+
+export function openLidarLayerPanel(app: GeoLibreAppAPI): void {
+  void openStandaloneLidarControl(app);
 }
 
 function getComponentsOptions(
@@ -349,6 +393,38 @@ async function openStandaloneZarrControl(
   return true;
 }
 
+async function openStandaloneLidarControl(
+  app: GeoLibreAppAPI,
+): Promise<boolean> {
+  const {
+    LidarControl: LidarControlClass,
+    LidarLayerAdapter: LidarLayerAdapterClass,
+  } =
+    await getComponentsConstructors();
+
+  lidarControl ??= createLidarControl(
+    LidarControlClass,
+    LidarLayerAdapterClass,
+  );
+
+  if (!lidarControlMounted) {
+    const added = app.addMapControl(lidarControl, lidarControlPosition);
+    if (!added) {
+      lidarControl = null;
+      return false;
+    }
+    lidarControlMounted = true;
+  }
+
+  setTimeout(() => {
+    disableLidarClickOutsideCollapse(lidarControl);
+    showLidarControl(lidarControl);
+    lidarControl?.expand();
+    seedLidarDefaultUrl(lidarControl);
+  }, 0);
+  return true;
+}
+
 function createFlatGeobufControl(
   AddVectorControlClass: AddVectorControlConstructor,
 ): AddVectorControl {
@@ -370,6 +446,43 @@ function createFlatGeobufControl(
     );
     for (const layer of removedLayers) {
       flatGeobufControl?.removeLayer(layer.id);
+    }
+  });
+  return control;
+}
+
+function createLidarControl(
+  LidarControlClass: LidarControlConstructor,
+  LidarLayerAdapterClass: LidarLayerAdapterConstructor,
+): LidarControl {
+  const control = new LidarControlClass(LIDAR_OPTIONS);
+  lidarLayerAdapter = new LidarLayerAdapterClass(control);
+  control.on("collapse", () => hideLidarControl(control));
+  control.on("load", createLidarLoadHandler());
+  control.on("unload", createLidarUnloadHandler());
+  lidarStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
+    const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
+
+    for (const layer of previous.layers) {
+      if (!isLidarControlLayer(layer)) continue;
+
+      const currentLayer = currentById.get(layer.id);
+      if (!currentLayer) {
+        if (hasLidarPointCloud(layer.id)) {
+          lidarLayerAdapter?.removeLayer(layer.id);
+        }
+        continue;
+      }
+
+      if (!isLidarControlLayer(currentLayer)) continue;
+
+      if (currentLayer.visible !== layer.visible) {
+        lidarLayerAdapter?.setVisibility(currentLayer.id, currentLayer.visible);
+      }
+
+      if (currentLayer.opacity !== layer.opacity) {
+        lidarLayerAdapter?.setOpacity(currentLayer.id, currentLayer.opacity);
+      }
     }
   });
   return control;
@@ -492,6 +605,50 @@ function teardownZarrControl(app: GeoLibreAppAPI): void {
   }
   zarrControl = null;
   zarrControlMounted = false;
+}
+
+function teardownLidarControl(app: GeoLibreAppAPI): void {
+  lidarStoreUnsubscribe?.();
+  lidarStoreUnsubscribe = null;
+  lidarLayerAdapter?.destroy();
+  lidarLayerAdapter = null;
+  if (lidarControl && lidarControlMounted) {
+    app.removeMapControl(lidarControl);
+  }
+  lidarControl = null;
+  lidarControlMounted = false;
+}
+
+function createLidarLoadHandler(): LidarControlEventHandler {
+  return (event) => {
+    if (!event.pointCloud || !("source" in event.pointCloud)) return;
+
+    const store = useAppStore.getState();
+    const layer = createLidarStoreLayer(event.pointCloud);
+    if (store.layers.some((item) => item.id === layer.id)) {
+      store.updateLayer(layer.id, {
+        metadata: layer.metadata,
+        opacity: layer.opacity,
+        source: layer.source,
+        visible: layer.visible,
+      });
+      return;
+    }
+    store.addLayer(layer);
+  };
+}
+
+function createLidarUnloadHandler(): LidarControlEventHandler {
+  return (event) => {
+    const pointCloudId = event.pointCloud?.id;
+    if (!pointCloudId) return;
+
+    const store = useAppStore.getState();
+    const layer = store.layers.find((item) => item.id === pointCloudId);
+    if (layer && isLidarControlLayer(layer)) {
+      store.removeLayer(pointCloudId);
+    }
+  };
 }
 
 function createFlatGeobufLayerAddHandler(
@@ -694,6 +851,41 @@ function createZarrStoreLayer(
   };
 }
 
+function createLidarStoreLayer(pointCloud: PointCloudInfo): GeoLibreLayer {
+  return {
+    id: pointCloud.id,
+    name: pointCloud.name || layerNameFromUrl(pointCloud.source, pointCloud.id),
+    type: "lidar",
+    source: {
+      bounds: [
+        pointCloud.bounds.minX,
+        pointCloud.bounds.minY,
+        pointCloud.bounds.maxX,
+        pointCloud.bounds.maxY,
+      ],
+      sourceId: pointCloud.id,
+      type: "lidar",
+      url: pointCloud.source,
+    },
+    visible: true,
+    opacity: 1,
+    style: { ...DEFAULT_LAYER_STYLE },
+    metadata: {
+      customLayerType: "lidar",
+      externalNativeLayer: true,
+      hasClassification: pointCloud.hasClassification,
+      hasIntensity: pointCloud.hasIntensity,
+      hasRGB: pointCloud.hasRGB,
+      identifiable: false,
+      pointCount: pointCloud.pointCount,
+      sourceId: pointCloud.id,
+      sourceKind: "lidar-url",
+      wkt: pointCloud.wkt,
+    },
+    sourcePath: pointCloud.source,
+  };
+}
+
 function isFlatGeobufControlLayer(layer: GeoLibreLayer): boolean {
   return (
     layer.type === "flatgeobuf" &&
@@ -718,6 +910,14 @@ function isZarrControlLayer(layer: GeoLibreLayer): boolean {
   );
 }
 
+function isLidarControlLayer(layer: GeoLibreLayer): boolean {
+  return (
+    layer.type === "lidar" &&
+    layer.metadata.sourceKind === "lidar-url" &&
+    layer.metadata.externalNativeLayer === true
+  );
+}
+
 function layerNameFromUrl(url: string, fallback: string): string {
   try {
     const fileName = new URL(url).pathname.split("/").pop() ?? fallback;
@@ -725,4 +925,55 @@ function layerNameFromUrl(url: string, fallback: string): string {
   } catch {
     return fallback;
   }
+}
+
+function seedLidarDefaultUrl(control: LidarControl | null): void {
+  const panel = findLidarPanel(control);
+  const input = panel?.querySelector<HTMLInputElement>(".lidar-control-input");
+  if (!input || input.value.trim()) return;
+  input.value = LIDAR_SAMPLE_URL;
+}
+
+function hideLidarControl(control: LidarControl | null): void {
+  const container = control?.getContainer();
+  if (container) container.style.display = "none";
+}
+
+function showLidarControl(control: LidarControl | null): void {
+  const container = control?.getContainer();
+  if (container) container.style.display = "";
+}
+
+function disableLidarClickOutsideCollapse(control: LidarControl | null): void {
+  const clickOutsideState = control as unknown as
+    | LidarControlClickOutsideState
+    | null;
+  const handler = clickOutsideState?._clickOutsideHandler;
+  if (!handler) return;
+  document.removeEventListener("click", handler);
+  clickOutsideState._clickOutsideHandler = null;
+}
+
+function hasLidarPointCloud(id: string): boolean {
+  return lidarControl?.getPointClouds().some((pointCloud) => pointCloud.id === id)
+    ?? false;
+}
+
+function findLidarPanel(control: LidarControl | null): HTMLElement | null {
+  const mapContainer = control?.getMap()?.getContainer();
+  if (!mapContainer) return null;
+
+  const panels = Array.from(
+    mapContainer.querySelectorAll<HTMLElement>(".lidar-control-panel"),
+  );
+
+  return (
+    panels.find(
+      (panel) =>
+        panel.querySelector(".lidar-control-title")?.textContent ===
+        LIDAR_OPTIONS.title,
+    ) ??
+    panels[panels.length - 1] ??
+    null
+  );
 }

@@ -6,6 +6,7 @@ import {
 } from "@geolibre/map";
 import {
   openFlatGeobufAddVectorLayerPanel,
+  openLidarLayerPanel,
   openPMTilesLayerPanel,
   openZarrLayerPanel,
   type GeoLibreMapControlPosition,
@@ -147,6 +148,9 @@ export function TopToolbar({
   const handleAddZarrLayer = () => {
     openZarrLayerPanel(appApi);
   };
+  const handleAddLidarLayer = () => {
+    openLidarLayerPanel(appApi);
+  };
   const toggleMapControl = (control: ToolbarMapControl) => {
     setControlsVisible((current) => {
       const visible = !current[control];
@@ -202,6 +206,9 @@ export function TopToolbar({
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddZarrLayer}>
             Add Zarr Layer
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleAddLidarLayer}>
+            Add LiDAR Layer
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

@@ -48,6 +48,7 @@ export type LayerType =
   | "vector-tiles"
   | "pmtiles"
   | "zarr"
+  | "lidar"
   | "cog"
   | "flatgeobuf"
   | "geoparquet"

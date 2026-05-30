@@ -17,7 +17,7 @@ const LIDAR_OPTIONS = {
   maxHeight: 520,
   pointSize: 2,
   colorScheme: "elevation",
-  pickable: true,
+  pickable: false,
   autoZoom: true,
   shareUrl: true,
   restoreFromUrl: true,
@@ -26,6 +26,10 @@ const LIDAR_OPTIONS = {
 let lidarControl: LidarControl | null = null;
 let pluginActive = false;
 
+interface LidarControlClickOutsideState {
+  _clickOutsideHandler?: ((event: MouseEvent) => void) | null;
+}
+
 const mountLidarControl = (app: GeoLibreAppAPI): boolean => {
   if (!lidarControl) return false;
   const added = app.addMapControl(lidarControl, lidarPosition);
@@ -33,7 +37,10 @@ const mountLidarControl = (app: GeoLibreAppAPI): boolean => {
     lidarControl = null;
     return false;
   }
-  setTimeout(() => lidarControl?.expand(), 0);
+  setTimeout(() => {
+    disableLidarClickOutsideCollapse(lidarControl);
+    lidarControl?.expand();
+  }, 0);
   return true;
 };
 
@@ -71,7 +78,10 @@ export const maplibreLidarPlugin: GeoLibrePlugin = {
     app.removeMapControl(lidarControl);
     const added = app.addMapControl(lidarControl, lidarPosition);
     if (!added) return false;
-    setTimeout(() => lidarControl?.expand(), 0);
+    setTimeout(() => {
+      disableLidarClickOutsideCollapse(lidarControl);
+      lidarControl?.expand();
+    }, 0);
   },
 };
 
@@ -80,4 +90,14 @@ function getLidarOptions(): LidarControlOptions {
     ...LIDAR_OPTIONS,
     position: lidarPosition,
   };
+}
+
+function disableLidarClickOutsideCollapse(control: LidarControl | null): void {
+  const clickOutsideState = control as unknown as
+    | LidarControlClickOutsideState
+    | null;
+  const handler = clickOutsideState?._clickOutsideHandler;
+  if (!handler) return;
+  document.removeEventListener("click", handler);
+  clickOutsideState._clickOutsideHandler = null;
 }

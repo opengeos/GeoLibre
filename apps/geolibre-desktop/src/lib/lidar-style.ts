@@ -239,7 +239,8 @@ const openLidarSelectMenu = (
       item.classList.add("is-selected", "is-active");
       item.setAttribute("aria-selected", "true");
     }
-    item.addEventListener("click", () => {
+    item.addEventListener("click", (event) => {
+      event.stopPropagation();
       select.value = option.value;
       select.dispatchEvent(new Event("change", { bubbles: true }));
       syncLidarSelectProxy(select, button);
@@ -252,6 +253,7 @@ const openLidarSelectMenu = (
   const items = Array.from(
     menu.querySelectorAll<HTMLButtonElement>("button"),
   );
+  menu.addEventListener("click", (event) => event.stopPropagation());
   menu.addEventListener("keydown", (event) => {
     const current = items.indexOf(document.activeElement as HTMLButtonElement);
     if (event.key === "ArrowDown") {
