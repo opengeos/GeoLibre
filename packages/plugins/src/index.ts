@@ -5,11 +5,13 @@ export { osmBasemapPlugin } from "./plugins/osm-basemap";
 export { cartoLightPlugin } from "./plugins/carto-light";
 export { maplibreBasemapControlPlugin } from "./plugins/maplibre-basemap-control";
 export {
+  addCogRasterLayer,
   maplibreComponentsPlugin,
   openFlatGeobufAddVectorLayerPanel,
   openLidarLayerPanel,
   openPMTilesLayerPanel,
   openZarrLayerPanel,
+  type CogRasterLayerOptions,
 } from "./plugins/maplibre-components";
 export { maplibreGeoEditorPlugin } from "./plugins/maplibre-geo-editor";
 export { maplibreGeoAgentPlugin } from "./plugins/maplibre-geoagent";

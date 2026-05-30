@@ -5,6 +5,10 @@ import {
 } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import {
+  addCogRasterLayer,
+  type CogRasterLayerOptions,
+} from "@geolibre/plugins";
+import {
   Button,
   Dialog,
   DialogContent,
@@ -27,6 +31,7 @@ import {
   openLocalDataFileWithFallback,
   openVectorFileWithFallback,
 } from "../../lib/tauri-io";
+import { createAppAPI } from "../../hooks/usePlugins";
 
 export type AddDataKind = "xyz" | "wms" | "vector" | "raster";
 
@@ -38,6 +43,7 @@ interface AddDataDialogProps {
 
 type VectorMode = "vector-file" | "geojson-url" | "vector-tiles";
 type RasterMode = "tiles" | "cog-url" | "file";
+type RasterColormap = NonNullable<CogRasterLayerOptions["colormap"]>;
 
 const KIND_LABELS: Record<AddDataKind, string> = {
   xyz: "Add XYZ Layer",
@@ -48,6 +54,19 @@ const KIND_LABELS: Record<AddDataKind, string> = {
 
 const SELECT_CLASS =
   "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+
+const COG_COLORMAPS = [
+  "none",
+  "viridis",
+  "plasma",
+  "inferno",
+  "magma",
+  "cividis",
+  "terrain",
+  "turbo",
+  "jet",
+  "gray",
+] satisfies RasterColormap[];
 
 function createLayerId(): string {
   return crypto.randomUUID();
@@ -118,6 +137,19 @@ function createWmsTileUrl(options: {
   ]);
 }
 
+function parseRequiredNumber(value: string, label: string): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`Enter a numeric ${label}.`);
+  }
+  return parsed;
+}
+
+function parseOptionalNumber(value: string, label: string): number | undefined {
+  if (!value.trim()) return undefined;
+  return parseRequiredNumber(value, label);
+}
+
 async function fetchGeoJson(url: string): Promise<FeatureCollection> {
   const response = await fetch(url);
   if (!response.ok) {
@@ -159,9 +191,15 @@ export function AddDataDialog({
     path: string;
   } | null>(null);
 
-  const [rasterMode, setRasterMode] = useState<RasterMode>("tiles");
+  const [rasterMode, setRasterMode] = useState<RasterMode>("cog-url");
   const [rasterUrl, setRasterUrl] = useState("");
   const [rasterTileSize, setRasterTileSize] = useState("256");
+  const [rasterBands, setRasterBands] = useState("1");
+  const [rasterColormap, setRasterColormap] =
+    useState<RasterColormap>("none");
+  const [rasterMin, setRasterMin] = useState("0");
+  const [rasterMax, setRasterMax] = useState("255");
+  const [rasterNodata, setRasterNodata] = useState("");
   const [selectedRasterPath, setSelectedRasterPath] = useState<string | null>(
     null,
   );
@@ -191,9 +229,14 @@ export function AddDataDialog({
     setVectorUrl("");
     setVectorSourceLayer("");
     setSelectedVector(null);
-    setRasterMode("tiles");
+    setRasterMode("cog-url");
     setRasterUrl("");
     setRasterTileSize("256");
+    setRasterBands("1");
+    setRasterColormap("none");
+    setRasterMin("0");
+    setRasterMax("255");
+    setRasterNodata("");
     setSelectedRasterPath(null);
   }, [kind]);
 
@@ -208,7 +251,7 @@ export function AddDataDialog({
       return "Add local vector files supported by DuckDB Spatial, GeoJSON URLs, or MapLibre vector tile sources.";
     }
     if (kind === "raster") {
-      return "Add raster tiles now, or register raster files and COG URLs for project tracking.";
+      return "Add a Cloud Optimized GeoTIFF or raster URL, or use a raster tile template.";
     }
     return "";
   }, [kind]);
@@ -373,14 +416,23 @@ export function AddDataDialog({
 
       if (rasterMode === "cog-url") {
         if (!rasterUrl.trim()) throw new Error("Enter a raster URL.");
-        addAndClose(
-          createBaseLayer(
-            name,
-            "cog",
-            { type: "raster", url: rasterUrl.trim() },
-            { placeholder: true, sourceKind: "cog-url" },
-          ),
-        );
+        const rescaleMin = parseRequiredNumber(rasterMin, "minimum value");
+        const rescaleMax = parseRequiredNumber(rasterMax, "maximum value");
+        if (rescaleMax <= rescaleMin) {
+          throw new Error("Maximum value must be greater than minimum value.");
+        }
+        await addCogRasterLayer(createAppAPI(mapControllerRef), {
+          bands: rasterBands.trim() || "1",
+          beforeLayerId: beforeLayer,
+          colormap: rasterColormap,
+          name,
+          nodata: parseOptionalNumber(rasterNodata, "nodata value"),
+          opacity: 1,
+          rescaleMax,
+          rescaleMin,
+          url: rasterUrl.trim(),
+        });
+        closeDialog();
         return;
       }
 
@@ -593,8 +645,8 @@ export function AddDataDialog({
                     setRasterMode(event.target.value as RasterMode)
                   }
                 >
-                  <option value="tiles">Raster tile URL template</option>
                   <option value="cog-url">COG or raster URL</option>
+                  <option value="tiles">Raster tile URL template</option>
                   <option value="file">Raster file</option>
                 </select>
               </div>
@@ -646,6 +698,66 @@ export function AddDataDialog({
                       />
                     </div>
                   )}
+                </div>
+              )}
+              {rasterMode === "cog-url" && (
+                <div className="grid gap-3 sm:grid-cols-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="raster-bands">Bands</Label>
+                    <Input
+                      id="raster-bands"
+                      placeholder="1 or 1,2,3"
+                      value={rasterBands}
+                      onChange={(event) => setRasterBands(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="raster-colormap">Colormap</Label>
+                    <select
+                      id="raster-colormap"
+                      className={SELECT_CLASS}
+                      value={rasterColormap}
+                      onChange={(event) =>
+                        setRasterColormap(
+                          event.target.value as RasterColormap,
+                        )
+                      }
+                    >
+                      {COG_COLORMAPS.map((colormap) => (
+                        <option key={colormap} value={colormap}>
+                          {colormap}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="raster-min">Min</Label>
+                    <Input
+                      id="raster-min"
+                      inputMode="decimal"
+                      value={rasterMin}
+                      onChange={(event) => setRasterMin(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="raster-max">Max</Label>
+                    <Input
+                      id="raster-max"
+                      inputMode="decimal"
+                      value={rasterMax}
+                      onChange={(event) => setRasterMax(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label htmlFor="raster-nodata">Nodata</Label>
+                    <Input
+                      id="raster-nodata"
+                      inputMode="decimal"
+                      placeholder="Optional"
+                      value={rasterNodata}
+                      onChange={(event) => setRasterNodata(event.target.value)}
+                    />
+                  </div>
                 </div>
               )}
             </div>

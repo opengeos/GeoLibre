@@ -84,6 +84,9 @@ export function createAppAPI(
     ) => mapControllerRef?.current?.addControl(control, position) ?? false,
     removeMapControl: (control: Parameters<MapController["removeControl"]>[0]) =>
       mapControllerRef?.current?.removeControl(control),
+    setMapProjection: (
+      projection: Parameters<MapController["setProjection"]>[0],
+    ) => mapControllerRef?.current?.setProjection(projection) ?? false,
     setBuiltInMapControlVisible: (
       control: Parameters<MapController["setBuiltInControlVisible"]>[0],
       visible: boolean,

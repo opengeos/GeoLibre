@@ -230,6 +230,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
   }
 
   const { style } = layer;
+  const isCogRasterLayer = layer.metadata.sourceKind === "cog-url";
   const isRasterTileLayer = layer.metadata.tileType === "raster";
   const hasVectorPaintControls =
     !isRasterTileLayer &&
@@ -270,62 +271,68 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
               step={0.05}
               onChange={(value) => setLayerOpacity(layer.id, value)}
             />
-            <RasterStyleSlider
-              label="Brightness Min"
-              value={styleValue(style, "rasterBrightnessMin")}
-              min={0}
-              max={1}
-              step={0.05}
-              onChange={(value) =>
-                setLayerStyle(layer.id, { rasterBrightnessMin: value })
-              }
-            />
-            <RasterStyleSlider
-              label="Brightness Max"
-              value={styleValue(style, "rasterBrightnessMax")}
-              min={0}
-              max={1}
-              step={0.05}
-              onChange={(value) =>
-                setLayerStyle(layer.id, { rasterBrightnessMax: value })
-              }
-            />
-            <RasterStyleSlider
-              label="Saturation"
-              value={styleValue(style, "rasterSaturation")}
-              min={-1}
-              max={1}
-              step={0.05}
-              onChange={(value) =>
-                setLayerStyle(layer.id, { rasterSaturation: value })
-              }
-            />
-            <RasterStyleSlider
-              label="Contrast"
-              value={styleValue(style, "rasterContrast")}
-              min={-1}
-              max={1}
-              step={0.05}
-              onChange={(value) =>
-                setLayerStyle(layer.id, { rasterContrast: value })
-              }
-            />
-            <RasterStyleSlider
-              label="Hue Rotate"
-              value={styleValue(style, "rasterHueRotate")}
-              min={0}
-              max={360}
-              step={1}
-              onChange={(value) =>
-                setLayerStyle(layer.id, { rasterHueRotate: value })
-              }
-              format={(value) => value.toFixed(0)}
-            />
+            {!isCogRasterLayer && (
+              <>
+                <RasterStyleSlider
+                  label="Brightness Min"
+                  value={styleValue(style, "rasterBrightnessMin")}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  onChange={(value) =>
+                    setLayerStyle(layer.id, { rasterBrightnessMin: value })
+                  }
+                />
+                <RasterStyleSlider
+                  label="Brightness Max"
+                  value={styleValue(style, "rasterBrightnessMax")}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  onChange={(value) =>
+                    setLayerStyle(layer.id, { rasterBrightnessMax: value })
+                  }
+                />
+                <RasterStyleSlider
+                  label="Saturation"
+                  value={styleValue(style, "rasterSaturation")}
+                  min={-1}
+                  max={1}
+                  step={0.05}
+                  onChange={(value) =>
+                    setLayerStyle(layer.id, { rasterSaturation: value })
+                  }
+                />
+                <RasterStyleSlider
+                  label="Contrast"
+                  value={styleValue(style, "rasterContrast")}
+                  min={-1}
+                  max={1}
+                  step={0.05}
+                  onChange={(value) =>
+                    setLayerStyle(layer.id, { rasterContrast: value })
+                  }
+                />
+                <RasterStyleSlider
+                  label="Hue Rotate"
+                  value={styleValue(style, "rasterHueRotate")}
+                  min={0}
+                  max={360}
+                  step={1}
+                  onChange={(value) =>
+                    setLayerStyle(layer.id, { rasterHueRotate: value })
+                  }
+                  format={(value) => value.toFixed(0)}
+                />
+              </>
+            )}
           </div>
         </ScrollArea>
         <Separator />
         <p className="p-2 text-[10px] text-muted-foreground">
-          Changes apply live to MapLibre raster paint properties.
+          {isCogRasterLayer
+            ? "Changes apply live to the COG layer opacity."
+            : "Changes apply live to MapLibre raster paint properties."}
         </p>
       </aside>
     );

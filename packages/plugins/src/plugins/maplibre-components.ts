@@ -8,6 +8,10 @@ import type {
   AddVectorEventHandler,
   AddVectorLayerInfo,
   AddVectorControlOptions,
+  CogLayerControl,
+  CogLayerControlOptions,
+  CogLayerEventHandler,
+  CogLayerInfo,
   ControlGrid,
   ControlGridOptions,
   DefaultControlName,
@@ -36,6 +40,8 @@ type ControlGridConstructor =
   (typeof import("maplibre-gl-components"))["ControlGrid"];
 type AddVectorControlConstructor =
   (typeof import("maplibre-gl-components"))["AddVectorControl"];
+type CogLayerControlConstructor =
+  (typeof import("maplibre-gl-components"))["CogLayerControl"];
 type PMTilesLayerControlConstructor =
   (typeof import("maplibre-gl-components"))["PMTilesLayerControl"];
 type ZarrLayerControlConstructor =
@@ -51,6 +57,7 @@ interface LidarControlClickOutsideState {
 
 interface ComponentsConstructors {
   AddVectorControl: AddVectorControlConstructor;
+  CogLayerControl: CogLayerControlConstructor;
   ControlGrid: ControlGridConstructor;
   LidarControl: LidarControlConstructor;
   LidarLayerAdapter: LidarLayerAdapterConstructor;
@@ -59,6 +66,7 @@ interface ComponentsConstructors {
 }
 
 let componentsControlPosition: GeoLibreMapControlPosition = "top-right";
+const cogRasterControlPosition: GeoLibreMapControlPosition = "top-left";
 const flatGeobufControlPosition: GeoLibreMapControlPosition = "top-left";
 const pmtilesControlPosition: GeoLibreMapControlPosition = "top-left";
 const zarrControlPosition: GeoLibreMapControlPosition = "top-left";
@@ -130,6 +138,20 @@ const ADD_VECTOR_OPTIONS = {
   fontColor: "hsl(var(--popover-foreground))",
 } satisfies AddVectorControlOptions;
 
+const COG_RASTER_OPTIONS = {
+  backgroundColor: "hsl(var(--popover))",
+  className: "geolibre-cog-raster-control",
+  collapsed: true,
+  defaultBands: "1",
+  defaultColormap: "none",
+  defaultOpacity: 1,
+  defaultPickable: false,
+  defaultRescaleMax: 255,
+  defaultRescaleMin: 0,
+  fontColor: "hsl(var(--popover-foreground))",
+  visible: false,
+} satisfies CogLayerControlOptions;
+
 const PMTILES_OPTIONS = {
   backgroundColor: "hsl(var(--popover))",
   className: "geolibre-pmtiles-control",
@@ -180,16 +202,19 @@ const LIDAR_OPTIONS = {
 } satisfies ConstructorParameters<LidarControlConstructor>[0];
 
 let componentsControl: ControlGrid | null = null;
+let cogRasterControl: CogLayerControl | null = null;
 let flatGeobufControl: AddVectorControl | null = null;
 let pmtilesControl: PMTilesLayerControl | null = null;
 let zarrControl: ZarrLayerControl | null = null;
 let lidarControl: LidarControl | null = null;
 let lidarLayerAdapter: LidarLayerAdapter | null = null;
 let flatGeobufControlMounted = false;
+let cogRasterControlMounted = false;
 let pmtilesControlMounted = false;
 let zarrControlMounted = false;
 let lidarControlMounted = false;
 let flatGeobufStoreUnsubscribe: (() => void) | null = null;
+let cogRasterStoreUnsubscribe: (() => void) | null = null;
 let pmtilesStoreUnsubscribe: (() => void) | null = null;
 let zarrStoreUnsubscribe: (() => void) | null = null;
 let lidarStoreUnsubscribe: (() => void) | null = null;
@@ -198,10 +223,41 @@ let componentsControlRevision = 0;
 let componentsConstructorsPromise: Promise<ComponentsConstructors> | null =
   null;
 
+export interface CogRasterLayerOptions {
+  url: string;
+  name?: string;
+  bands?: string;
+  colormap?: CogLayerControlOptions["defaultColormap"];
+  rescaleMin?: number;
+  rescaleMax?: number;
+  nodata?: number;
+  opacity?: number;
+  beforeLayerId?: string | null;
+}
+
+type MutableCogLayerControl = {
+  _options?: CogLayerControlOptions;
+  _render?: () => void;
+  _state?: {
+    bands: string;
+    colormap: CogLayerControlOptions["defaultColormap"];
+    layerName: string;
+    layerOpacity: number;
+    nodata: number | undefined;
+    pickable: boolean;
+    rescaleMax: number;
+    rescaleMin: number;
+    url: string;
+  };
+};
+
+const pendingCogRasterLayerOptions: CogRasterLayerOptions[] = [];
+
 const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
   componentsConstructorsPromise ??= import("maplibre-gl-components").then(
     ({
       AddVectorControl: AddVectorControlClass,
+      CogLayerControl: CogLayerControlClass,
       ControlGrid: ControlGridClass,
       LidarControl: LidarControlClass,
       LidarLayerAdapter: LidarLayerAdapterClass,
@@ -209,6 +265,7 @@ const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
       ZarrLayerControl: ZarrLayerControlClass,
     }) => ({
       AddVectorControl: AddVectorControlClass,
+      CogLayerControl: CogLayerControlClass,
       ControlGrid: ControlGridClass,
       LidarControl: LidarControlClass,
       LidarLayerAdapter: LidarLayerAdapterClass,
@@ -269,6 +326,7 @@ export const maplibreComponentsPlugin: GeoLibrePlugin = {
   deactivate: (app: GeoLibreAppAPI) => {
     pluginActive = false;
     componentsControlRevision += 1;
+    teardownCogRasterControl(app);
     teardownFlatGeobufControl(app);
     teardownPMTilesControl(app);
     teardownZarrControl(app);
@@ -294,6 +352,24 @@ export function openFlatGeobufAddVectorLayerPanel(
   app: GeoLibreAppAPI,
 ): void {
   void openStandaloneFlatGeobufControl(app);
+}
+
+export async function addCogRasterLayer(
+  app: GeoLibreAppAPI,
+  options: CogRasterLayerOptions,
+): Promise<string> {
+  prepareMapForCogRasterLayer(app);
+  const control = await ensureCogRasterControl(app);
+  if (!control) {
+    throw new Error("The COG raster layer control could not be added to the map.");
+  }
+
+  return addLayerWithCogRasterControl(control, options);
+}
+
+function prepareMapForCogRasterLayer(app: GeoLibreAppAPI): void {
+  app.setBuiltInMapControlVisible("globe", false);
+  app.setMapProjection("mercator");
 }
 
 export function openPMTilesLayerPanel(app: GeoLibreAppAPI): void {
@@ -343,6 +419,30 @@ async function openStandaloneFlatGeobufControl(
     flatGeobufControl?.expand();
   }, 0);
   return true;
+}
+
+async function ensureCogRasterControl(
+  app: GeoLibreAppAPI,
+): Promise<CogLayerControl | null> {
+  const { CogLayerControl: CogLayerControlClass } =
+    await getComponentsConstructors();
+
+  cogRasterControl ??= createCogRasterControl(CogLayerControlClass);
+
+  if (!cogRasterControlMounted) {
+    const added = app.addMapControl(cogRasterControl, cogRasterControlPosition);
+    if (!added) {
+      cogRasterControl = null;
+      return null;
+    }
+    cogRasterControlMounted = true;
+  }
+
+  setTimeout(() => {
+    cogRasterControl?.hide();
+    cogRasterControl?.collapse();
+  }, 0);
+  return cogRasterControl;
 }
 
 async function openStandalonePMTilesControl(
@@ -446,6 +546,62 @@ function createFlatGeobufControl(
     );
     for (const layer of removedLayers) {
       flatGeobufControl?.removeLayer(layer.id);
+    }
+  });
+  return control;
+}
+
+function createCogRasterControl(
+  CogLayerControlClass: CogLayerControlConstructor,
+): CogLayerControl {
+  const control = new CogLayerControlClass(COG_RASTER_OPTIONS);
+  control.on("layeradd", createCogRasterLayerAddHandler());
+  control.on("layerremove", (event) => {
+    const store = useAppStore.getState();
+    const activeLayerIds = new Set(event.state.layers.map((layer) => layer.id));
+    for (const layer of store.layers) {
+      if (!isCogRasterControlLayer(layer)) continue;
+      const shouldRemove = event.layerId
+        ? layer.id === event.layerId
+        : !activeLayerIds.has(layer.id);
+      if (shouldRemove) {
+        store.removeLayer(layer.id);
+      }
+    }
+  });
+  cogRasterStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
+    const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
+
+    for (const layer of previous.layers) {
+      if (!isCogRasterControlLayer(layer)) continue;
+
+      const currentLayer = currentById.get(layer.id);
+      if (!currentLayer) {
+        cogRasterControl?.removeLayer(layer.id);
+        continue;
+      }
+
+      if (!isCogRasterControlLayer(currentLayer)) continue;
+
+      if (currentLayer.visible !== layer.visible) {
+        cogRasterControl?.setLayerVisibility(
+          currentLayer.id,
+          currentLayer.visible,
+          currentLayer.opacity,
+        );
+      }
+
+      if (currentLayer.opacity !== layer.opacity) {
+        if (currentLayer.visible) {
+          cogRasterControl?.setLayerOpacity(currentLayer.id, currentLayer.opacity);
+        } else {
+          cogRasterControl?.setLayerVisibility(
+            currentLayer.id,
+            false,
+            currentLayer.opacity,
+          );
+        }
+      }
     }
   });
   return control;
@@ -587,6 +743,16 @@ function teardownFlatGeobufControl(app: GeoLibreAppAPI): void {
   flatGeobufControlMounted = false;
 }
 
+function teardownCogRasterControl(app: GeoLibreAppAPI): void {
+  cogRasterStoreUnsubscribe?.();
+  cogRasterStoreUnsubscribe = null;
+  if (cogRasterControl && cogRasterControlMounted) {
+    app.removeMapControl(cogRasterControl);
+  }
+  cogRasterControl = null;
+  cogRasterControlMounted = false;
+}
+
 function teardownPMTilesControl(app: GeoLibreAppAPI): void {
   pmtilesStoreUnsubscribe?.();
   pmtilesStoreUnsubscribe = null;
@@ -676,6 +842,35 @@ function createFlatGeobufLayerAddHandler(
   };
 }
 
+function createCogRasterLayerAddHandler(): CogLayerEventHandler {
+  return (event) => {
+    if (!event.layerId) return;
+    const layerInfo = event.state.layers.find(
+      (layer) => layer.id === event.layerId,
+    );
+    if (!layerInfo) return;
+
+    const pendingOptions = pendingCogRasterLayerOptions.shift();
+    const store = useAppStore.getState();
+    const layer = createCogRasterStoreLayer(
+      event.layerId,
+      layerInfo,
+      pendingOptions,
+    );
+    if (store.layers.some((item) => item.id === layer.id)) {
+      store.updateLayer(layer.id, {
+        metadata: layer.metadata,
+        opacity: layer.opacity,
+        source: layer.source,
+        style: layer.style,
+        visible: layer.visible,
+      });
+      return;
+    }
+    store.addLayer(layer, pendingOptions?.beforeLayerId);
+  };
+}
+
 function createZarrLayerAddHandler(): ZarrLayerEventHandler {
   return (event) => {
     if (!event.layerId) return;
@@ -724,6 +919,74 @@ function createPMTilesLayerAddHandler(): PMTilesLayerEventHandler {
   };
 }
 
+function addLayerWithCogRasterControl(
+  control: CogLayerControl,
+  options: CogRasterLayerOptions,
+): Promise<string> {
+  configureCogRasterControl(control, options);
+  pendingCogRasterLayerOptions.push(options);
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => {
+      control.off("layeradd", handleLayerAdd);
+      control.off("error", handleError);
+      const pendingIndex = pendingCogRasterLayerOptions.indexOf(options);
+      if (pendingIndex >= 0) {
+        pendingCogRasterLayerOptions.splice(pendingIndex, 1);
+      }
+    };
+    const settle = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      callback();
+    };
+    const handleLayerAdd: CogLayerEventHandler = (event) => {
+      if (!event.layerId || event.url !== options.url) return;
+      settle(() => resolve(event.layerId!));
+    };
+    const handleError: CogLayerEventHandler = (event) => {
+      settle(() =>
+        reject(new Error(event.error || "Failed to load the COG raster layer.")),
+      );
+    };
+
+    control.on("layeradd", handleLayerAdd);
+    control.on("error", handleError);
+
+    void control.addLayer(options.url).then(() => {
+      const state = control.getState();
+      if (!settled && state.error) {
+        settle(() => reject(new Error(state.error || "Failed to load COG.")));
+      }
+    });
+  });
+}
+
+function configureCogRasterControl(
+  control: CogLayerControl,
+  options: CogRasterLayerOptions,
+): void {
+  const mutableControl = control as unknown as MutableCogLayerControl;
+  const state = mutableControl._state;
+  if (state) {
+    state.url = options.url;
+    state.bands = options.bands?.trim() || "1";
+    state.colormap = options.colormap ?? "none";
+    state.rescaleMin = options.rescaleMin ?? 0;
+    state.rescaleMax = options.rescaleMax ?? 255;
+    state.nodata = options.nodata;
+    state.layerName = options.name?.trim() || "";
+    state.layerOpacity = options.opacity ?? 1;
+    state.pickable = false;
+  }
+  if (mutableControl._options) {
+    mutableControl._options.beforeId = options.beforeLayerId || "";
+  }
+  mutableControl._render?.();
+}
+
 function createFlatGeobufStoreLayer(
   id: string,
   layerInfo: AddVectorLayerInfo,
@@ -759,6 +1022,56 @@ function createFlatGeobufStoreLayer(
       nativeLayerIds,
       sourceId: layerInfo.sourceId,
       sourceKind: "flatgeobuf-url",
+    },
+    sourcePath: url,
+  };
+}
+
+function createCogRasterStoreLayer(
+  id: string,
+  layerInfo: CogLayerInfo,
+  options?: CogRasterLayerOptions,
+): GeoLibreLayer {
+  const url = options?.url ?? layerInfo.url;
+  const bands = options?.bands?.trim() || layerInfo.bands || "1";
+  const colormap = options?.colormap ?? layerInfo.colormap;
+  const rescaleMin = options?.rescaleMin ?? layerInfo.rescaleMin;
+  const rescaleMax = options?.rescaleMax ?? layerInfo.rescaleMax;
+  const nodata = options?.nodata ?? layerInfo.nodata;
+
+  return {
+    id,
+    name: options?.name?.trim() || layerInfo.name || layerNameFromUrl(url, id),
+    type: "cog",
+    source: {
+      bands,
+      colormap,
+      nodata,
+      rescaleMax,
+      rescaleMin,
+      sourceId: id,
+      type: "raster",
+      url,
+    },
+    visible: true,
+    opacity: options?.opacity ?? layerInfo.opacity,
+    style: {
+      ...DEFAULT_LAYER_STYLE,
+      fillOpacity: 1,
+    },
+    metadata: {
+      bands,
+      colormap,
+      customLayerType: "raster",
+      externalNativeLayer: true,
+      identifiable: false,
+      nativeLayerIds: [id],
+      nodata,
+      rescaleMax,
+      rescaleMin,
+      sourceId: id,
+      sourceKind: "cog-url",
+      tileType: "raster",
     },
     sourcePath: url,
   };
@@ -890,6 +1203,14 @@ function isFlatGeobufControlLayer(layer: GeoLibreLayer): boolean {
   return (
     layer.type === "flatgeobuf" &&
     layer.metadata.sourceKind === "flatgeobuf-url" &&
+    layer.metadata.externalNativeLayer === true
+  );
+}
+
+function isCogRasterControlLayer(layer: GeoLibreLayer): boolean {
+  return (
+    layer.type === "cog" &&
+    layer.metadata.sourceKind === "cog-url" &&
     layer.metadata.externalNativeLayer === true
   );
 }

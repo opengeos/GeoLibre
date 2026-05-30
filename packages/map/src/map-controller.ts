@@ -261,6 +261,16 @@ export class MapController {
     }
   }
 
+  setProjection(type: "globe" | "mercator"): boolean {
+    if (!this.map) return false;
+    try {
+      this.map.setProjection({ type });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   setBuiltInControlVisible(
     control: BuiltInMapControl,
     visible: boolean,

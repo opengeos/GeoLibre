@@ -32,6 +32,7 @@ export interface GeoLibreAppAPI {
     position?: GeoLibreMapControlPosition,
   ) => boolean;
   removeMapControl: (control: IControl) => void;
+  setMapProjection: (projection: "globe" | "mercator") => boolean;
   setBuiltInMapControlVisible: (
     control: GeoLibreBuiltInMapControl,
     visible: boolean,
