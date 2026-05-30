@@ -56,11 +56,15 @@ function syncExternalNativeLayer(
     const nativeLayer = map.getLayer(nativeLayerId);
     if (!nativeLayer) continue;
 
-    map.setLayoutProperty(
-      nativeLayerId,
-      "visibility",
-      layer.visible ? "visible" : "none",
-    );
+    try {
+      map.setLayoutProperty(
+        nativeLayerId,
+        "visibility",
+        layer.visible ? "visible" : "none",
+      );
+    } catch {
+      // Custom layers from external controls may not accept layout updates.
+    }
 
     setExternalNativeLayerPaint(map, nativeLayerId, nativeLayer.type, layer);
 

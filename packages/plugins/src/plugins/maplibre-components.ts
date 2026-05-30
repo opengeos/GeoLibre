@@ -15,6 +15,10 @@ import type {
   PMTilesLayerControlOptions,
   PMTilesLayerEventHandler,
   PMTilesLayerInfo,
+  ZarrLayerControl,
+  ZarrLayerControlOptions,
+  ZarrLayerEventHandler,
+  ZarrLayerInfo,
 } from "maplibre-gl-components";
 import type {
   GeoLibreAppAPI,
@@ -28,21 +32,27 @@ type AddVectorControlConstructor =
   (typeof import("maplibre-gl-components"))["AddVectorControl"];
 type PMTilesLayerControlConstructor =
   (typeof import("maplibre-gl-components"))["PMTilesLayerControl"];
+type ZarrLayerControlConstructor =
+  (typeof import("maplibre-gl-components"))["ZarrLayerControl"];
 
 interface ComponentsConstructors {
   AddVectorControl: AddVectorControlConstructor;
   ControlGrid: ControlGridConstructor;
   PMTilesLayerControl: PMTilesLayerControlConstructor;
+  ZarrLayerControl: ZarrLayerControlConstructor;
 }
 
 let componentsControlPosition: GeoLibreMapControlPosition = "top-right";
 const flatGeobufControlPosition: GeoLibreMapControlPosition = "top-left";
 const pmtilesControlPosition: GeoLibreMapControlPosition = "top-left";
+const zarrControlPosition: GeoLibreMapControlPosition = "top-left";
 
 const FLATGEOBUF_SAMPLE_URL =
   "https://flatgeobuf.org/test/data/UScounties.fgb";
 const PMTILES_SAMPLE_URL =
   "https://overturemaps-extras-us-west-2.s3.us-west-2.amazonaws.com/tiles/2026-05-20.0/buildings.pmtiles";
+const ZARR_SAMPLE_URL =
+  "https://carbonplan-maps.s3.us-west-2.amazonaws.com/v2/demo/4d/tavg-prec-month";
 
 const COMPONENT_CONTROL_NAMES = [
   "spinGlobe",
@@ -114,13 +124,40 @@ const PMTILES_OPTIONS = {
   fontColor: "hsl(var(--popover-foreground))",
 } satisfies PMTilesLayerControlOptions;
 
+const ZARR_OPTIONS = {
+  backgroundColor: "hsl(var(--popover))",
+  className: "geolibre-zarr-control",
+  collapsed: false,
+  defaultClim: [0, 300],
+  defaultColormap: [
+    "#f7fbff",
+    "#deebf7",
+    "#c6dbef",
+    "#9ecae1",
+    "#6baed6",
+    "#4292c6",
+    "#2171b5",
+    "#08519c",
+    "#08306b",
+  ],
+  defaultOpacity: 0.85,
+  defaultPickable: false,
+  defaultSelector: { band: "prec", month: 1 },
+  defaultUrl: ZARR_SAMPLE_URL,
+  defaultVariable: "climate",
+  fontColor: "hsl(var(--popover-foreground))",
+} satisfies ZarrLayerControlOptions;
+
 let componentsControl: ControlGrid | null = null;
 let flatGeobufControl: AddVectorControl | null = null;
 let pmtilesControl: PMTilesLayerControl | null = null;
+let zarrControl: ZarrLayerControl | null = null;
 let flatGeobufControlMounted = false;
 let pmtilesControlMounted = false;
+let zarrControlMounted = false;
 let flatGeobufStoreUnsubscribe: (() => void) | null = null;
 let pmtilesStoreUnsubscribe: (() => void) | null = null;
+let zarrStoreUnsubscribe: (() => void) | null = null;
 let pluginActive = false;
 let componentsControlRevision = 0;
 let componentsConstructorsPromise: Promise<ComponentsConstructors> | null =
@@ -132,10 +169,12 @@ const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
       AddVectorControl: AddVectorControlClass,
       ControlGrid: ControlGridClass,
       PMTilesLayerControl: PMTilesLayerControlClass,
+      ZarrLayerControl: ZarrLayerControlClass,
     }) => ({
       AddVectorControl: AddVectorControlClass,
       ControlGrid: ControlGridClass,
       PMTilesLayerControl: PMTilesLayerControlClass,
+      ZarrLayerControl: ZarrLayerControlClass,
     }),
   );
   return componentsConstructorsPromise;
@@ -193,6 +232,7 @@ export const maplibreComponentsPlugin: GeoLibrePlugin = {
     componentsControlRevision += 1;
     teardownFlatGeobufControl(app);
     teardownPMTilesControl(app);
+    teardownZarrControl(app);
     if (!componentsControl) return;
     app.removeMapControl(componentsControl);
     componentsControl = null;
@@ -218,6 +258,10 @@ export function openFlatGeobufAddVectorLayerPanel(
 
 export function openPMTilesLayerPanel(app: GeoLibreAppAPI): void {
   void openStandalonePMTilesControl(app);
+}
+
+export function openZarrLayerPanel(app: GeoLibreAppAPI): void {
+  void openStandaloneZarrControl(app);
 }
 
 function getComponentsOptions(
@@ -281,6 +325,30 @@ async function openStandalonePMTilesControl(
   return true;
 }
 
+async function openStandaloneZarrControl(
+  app: GeoLibreAppAPI,
+): Promise<boolean> {
+  const { ZarrLayerControl: ZarrLayerControlClass } =
+    await getComponentsConstructors();
+
+  zarrControl ??= createZarrControl(ZarrLayerControlClass);
+
+  if (!zarrControlMounted) {
+    const added = app.addMapControl(zarrControl, zarrControlPosition);
+    if (!added) {
+      zarrControl = null;
+      return false;
+    }
+    zarrControlMounted = true;
+  }
+
+  setTimeout(() => {
+    zarrControl?.show();
+    zarrControl?.expand();
+  }, 0);
+  return true;
+}
+
 function createFlatGeobufControl(
   AddVectorControlClass: AddVectorControlConstructor,
 ): AddVectorControl {
@@ -302,6 +370,63 @@ function createFlatGeobufControl(
     );
     for (const layer of removedLayers) {
       flatGeobufControl?.removeLayer(layer.id);
+    }
+  });
+  return control;
+}
+
+function createZarrControl(
+  ZarrLayerControlClass: ZarrLayerControlConstructor,
+): ZarrLayerControl {
+  const control = new ZarrLayerControlClass(ZARR_OPTIONS);
+  control.on("collapse", () => control.hide());
+  control.on("layeradd", createZarrLayerAddHandler());
+  control.on("layerremove", (event) => {
+    const store = useAppStore.getState();
+    const activeLayerIds = new Set(event.state.layers.map((layer) => layer.id));
+    for (const layer of store.layers) {
+      if (!isZarrControlLayer(layer)) continue;
+      const shouldRemove = event.layerId
+        ? layer.id === event.layerId
+        : !activeLayerIds.has(layer.id);
+      if (shouldRemove) {
+        store.removeLayer(layer.id);
+      }
+    }
+  });
+  zarrStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
+    const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
+
+    for (const layer of previous.layers) {
+      if (!isZarrControlLayer(layer)) continue;
+
+      const currentLayer = currentById.get(layer.id);
+      if (!currentLayer) {
+        zarrControl?.removeLayer(layer.id);
+        continue;
+      }
+
+      if (!isZarrControlLayer(currentLayer)) continue;
+
+      if (currentLayer.visible !== layer.visible) {
+        zarrControl?.setLayerVisibility(
+          currentLayer.id,
+          currentLayer.visible,
+          currentLayer.opacity,
+        );
+      }
+
+      if (currentLayer.opacity !== layer.opacity) {
+        if (currentLayer.visible) {
+          zarrControl?.setLayerOpacity(currentLayer.id, currentLayer.opacity);
+        } else {
+          zarrControl?.setLayerVisibility(
+            currentLayer.id,
+            false,
+            currentLayer.opacity,
+          );
+        }
+      }
     }
   });
   return control;
@@ -359,6 +484,16 @@ function teardownPMTilesControl(app: GeoLibreAppAPI): void {
   pmtilesControlMounted = false;
 }
 
+function teardownZarrControl(app: GeoLibreAppAPI): void {
+  zarrStoreUnsubscribe?.();
+  zarrStoreUnsubscribe = null;
+  if (zarrControl && zarrControlMounted) {
+    app.removeMapControl(zarrControl);
+  }
+  zarrControl = null;
+  zarrControlMounted = false;
+}
+
 function createFlatGeobufLayerAddHandler(
   control: AddVectorControl,
 ): AddVectorEventHandler {
@@ -376,6 +511,30 @@ function createFlatGeobufLayerAddHandler(
         metadata: layer.metadata,
         opacity: layer.opacity,
         source: layer.source,
+        visible: layer.visible,
+      });
+      return;
+    }
+    store.addLayer(layer);
+  };
+}
+
+function createZarrLayerAddHandler(): ZarrLayerEventHandler {
+  return (event) => {
+    if (!event.layerId) return;
+    const layerInfo = event.state.layers.find(
+      (layer) => layer.id === event.layerId,
+    );
+    if (!layerInfo) return;
+
+    const store = useAppStore.getState();
+    const layer = createZarrStoreLayer(event.layerId, layerInfo);
+    if (store.layers.some((item) => item.id === layer.id)) {
+      store.updateLayer(layer.id, {
+        metadata: layer.metadata,
+        opacity: layer.opacity,
+        source: layer.source,
+        style: layer.style,
         visible: layer.visible,
       });
       return;
@@ -490,6 +649,51 @@ function createPMTilesStoreLayer(
   };
 }
 
+function createZarrStoreLayer(
+  id: string,
+  layerInfo: ZarrLayerInfo,
+): GeoLibreLayer {
+  const name =
+    layerInfo.name ||
+    [layerNameFromUrl(layerInfo.url, id), layerInfo.variable]
+      .filter(Boolean)
+      .join(" - ");
+
+  return {
+    id,
+    name,
+    type: "zarr",
+    source: {
+      clim: layerInfo.clim,
+      colormap: layerInfo.colormap,
+      selector: layerInfo.selector,
+      sourceId: layerInfo.id,
+      type: "raster",
+      url: layerInfo.url,
+      variable: layerInfo.variable,
+    },
+    visible: true,
+    opacity: layerInfo.opacity,
+    style: {
+      ...DEFAULT_LAYER_STYLE,
+      fillOpacity: 1,
+    },
+    metadata: {
+      clim: layerInfo.clim,
+      colormap: layerInfo.colormap,
+      externalNativeLayer: true,
+      identifiable: false,
+      nativeLayerIds: [layerInfo.id],
+      selector: layerInfo.selector,
+      sourceId: layerInfo.id,
+      sourceKind: "zarr-url",
+      tileType: "raster",
+      variable: layerInfo.variable,
+    },
+    sourcePath: layerInfo.url,
+  };
+}
+
 function isFlatGeobufControlLayer(layer: GeoLibreLayer): boolean {
   return (
     layer.type === "flatgeobuf" &&
@@ -502,6 +706,14 @@ function isPMTilesControlLayer(layer: GeoLibreLayer): boolean {
   return (
     layer.type === "pmtiles" &&
     layer.metadata.sourceKind === "pmtiles-url" &&
+    layer.metadata.externalNativeLayer === true
+  );
+}
+
+function isZarrControlLayer(layer: GeoLibreLayer): boolean {
+  return (
+    layer.type === "zarr" &&
+    layer.metadata.sourceKind === "zarr-url" &&
     layer.metadata.externalNativeLayer === true
   );
 }

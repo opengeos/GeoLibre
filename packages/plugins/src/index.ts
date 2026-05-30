@@ -8,6 +8,7 @@ export {
   maplibreComponentsPlugin,
   openFlatGeobufAddVectorLayerPanel,
   openPMTilesLayerPanel,
+  openZarrLayerPanel,
 } from "./plugins/maplibre-components";
 export { maplibreGeoEditorPlugin } from "./plugins/maplibre-geo-editor";
 export { maplibreGeoAgentPlugin } from "./plugins/maplibre-geoagent";

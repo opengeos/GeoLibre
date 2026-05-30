@@ -314,6 +314,146 @@ body,
   color: hsl(var(--destructive)) !important;
 }
 
+.geolibre-zarr-control {
+  background-color: hsl(var(--popover)) !important;
+  color: hsl(var(--popover-foreground)) !important;
+  overflow: visible;
+}
+
+.geolibre-zarr-control .maplibre-gl-zarr-layer-button {
+  display: none !important;
+}
+
+.geolibre-zarr-control .maplibre-gl-zarr-layer-panel {
+  background-color: hsl(var(--popover)) !important;
+  border: 1px solid hsl(var(--border));
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.28);
+  color: hsl(var(--popover-foreground)) !important;
+  max-width: min(340px, calc(100vw - 32px));
+}
+
+.geolibre-zarr-control .maplibre-gl-zarr-layer-header {
+  background-color: hsl(var(--card)) !important;
+  border-bottom-color: hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-zarr-control .maplibre-gl-zarr-layer-title,
+.geolibre-zarr-control .maplibre-gl-zarr-layer-form-group > label,
+.geolibre-zarr-control .maplibre-gl-zarr-layer-checkbox-label,
+.geolibre-zarr-control .maplibre-gl-zarr-layer-slider-value,
+.geolibre-zarr-control .maplibre-gl-zarr-layer-list-header,
+.geolibre-zarr-control .maplibre-gl-zarr-layer-list-label {
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-zarr-control .maplibre-gl-zarr-layer-close,
+.geolibre-zarr-control .maplibre-gl-zarr-layer-list-remove {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.geolibre-zarr-control .maplibre-gl-zarr-layer-close:hover,
+.geolibre-zarr-control .maplibre-gl-zarr-layer-list-remove:hover {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+.geolibre-zarr-control .maplibre-gl-zarr-layer-list {
+  background-color: hsl(var(--card)) !important;
+  border-color: hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-zarr-control .maplibre-gl-zarr-layer-list-item {
+  border-bottom-color: hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-zarr-control .maplibre-gl-zarr-layer-input,
+.geolibre-zarr-control .maplibre-gl-zarr-layer-select {
+  background-color: hsl(var(--background)) !important;
+  border: 1px solid hsl(var(--input)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-zarr-control .maplibre-gl-zarr-layer-select {
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, hsl(var(--foreground)) 50%),
+    linear-gradient(135deg, hsl(var(--foreground)) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 9px) 50%;
+  background-repeat: no-repeat;
+  background-size: 5px 5px;
+  color-scheme: light dark;
+  padding-right: 2rem !important;
+}
+
+.geolibre-zarr-control .maplibre-gl-zarr-layer-input::placeholder {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.geolibre-zarr-control .maplibre-gl-zarr-layer-input[type="number"] {
+  min-height: 2rem;
+  padding-right: 0.5rem !important;
+}
+
+.geolibre-zarr-control
+  .maplibre-gl-zarr-layer-input[type="number"]::-webkit-inner-spin-button,
+.geolibre-zarr-control
+  .maplibre-gl-zarr-layer-input[type="number"]::-webkit-outer-spin-button {
+  cursor: pointer;
+  height: 1.75rem;
+  opacity: 1;
+  transform: scale(1.45);
+  transform-origin: center;
+  width: 1.125rem;
+}
+
+.geolibre-zarr-control .maplibre-gl-zarr-layer-input:focus,
+.geolibre-zarr-control .maplibre-gl-zarr-layer-select:focus {
+  border-color: hsl(var(--ring)) !important;
+  box-shadow: 0 0 0 1px hsl(var(--ring)) !important;
+  outline: none;
+}
+
+.geolibre-zarr-control .maplibre-gl-zarr-layer-select option {
+  background-color: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+}
+
+.geolibre-zarr-control .maplibre-gl-zarr-layer-btn {
+  background-color: hsl(var(--card)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-zarr-control .maplibre-gl-zarr-layer-btn:hover:not(:disabled) {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+.geolibre-zarr-control .maplibre-gl-zarr-layer-btn:disabled {
+  color: hsl(var(--muted-foreground)) !important;
+  opacity: 0.65;
+}
+
+.geolibre-zarr-control .maplibre-gl-zarr-layer-btn--primary {
+  background-color: hsl(var(--primary)) !important;
+  border-color: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+}
+
+.geolibre-zarr-control .maplibre-gl-zarr-layer-status--error {
+  color: hsl(var(--destructive)) !important;
+}
+
+.geolibre-zarr-control .maplibre-gl-zarr-layer-checkbox,
+.geolibre-zarr-control .maplibre-gl-zarr-layer-slider {
+  accent-color: hsl(var(--primary));
+}
+
 .geolibre-flatgeobuf-control .maplibre-gl-add-vector-panel {
   background-color: hsl(var(--popover)) !important;
   border: 1px solid hsl(var(--border));

@@ -49,6 +49,8 @@ function layerTypeLabel(layer: GeoLibreLayer): string {
 }
 
 function hasNativeIdentifyLayers(layer: GeoLibreLayer): boolean {
+  if (layer.metadata.identifiable === false) return false;
+
   return (
     Array.isArray(layer.metadata.nativeLayerIds) &&
     layer.metadata.nativeLayerIds.length > 0
