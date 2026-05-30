@@ -1,4 +1,4 @@
-import { BLANK_BASEMAP, DEFAULT_BASEMAP } from "@geolibre/core";
+import { BLANK_BASEMAP, DEFAULT_BASEMAP, useAppStore } from "@geolibre/core";
 import type { GeoLibreLayer, MapViewState } from "@geolibre/core";
 import bbox from "@turf/bbox";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
@@ -17,6 +17,7 @@ import {
   highlightLineLayerId,
   highlightSourceId,
   lineLayerId,
+  sourceId,
 } from "./geojson-loader";
 import { removeLayerFromMap, syncLayer } from "./layer-sync";
 
@@ -819,20 +820,15 @@ export class MapController {
         } satisfies LayerState;
       },
       setVisibility: (layerId, visible) => {
-        for (const nativeId of this.getNativeLayerIdsByLayerId(layerId)) {
-          this.map?.setLayoutProperty(
-            nativeId,
-            "visibility",
-            visible ? "visible" : "none",
-          );
-        }
+        // Update the store (the source of truth) and let the layer sync
+        // pass apply the visibility change to the map, so it is not undone
+        // by the next syncLayers.
+        useAppStore.getState().setLayerVisibility(layerId, visible);
       },
       setOpacity: (layerId, opacity) => {
-        const layer = layerById.get(layerId);
-        if (!layer) return;
-        for (const nativeId of this.getNativeLayerIds(layer)) {
-          this.setNativeLayerOpacity(nativeId, layer, opacity);
-        }
+        // Persist opacity to the layer model; syncLayer derives paint from
+        // layer.opacity, so updating the store keeps the map and UI in sync.
+        useAppStore.getState().setLayerOpacity(layerId, opacity);
       },
       getName: (layerId) => layerById.get(layerId)?.name ?? layerId,
       getSymbolType: (layerId) => {
@@ -841,11 +837,17 @@ export class MapController {
       },
       getBounds: (layerId) => {
         const layer = layerById.get(layerId);
-        return layer ? getLayerBounds(layer) : null;
+        if (!layer) return null;
+        // GeoJSON-backed layers derive bounds from their features; other
+        // layer types fall back to their source bounds (TileJSON) when
+        // advertised, and return null (no zoom-to-bounds) otherwise.
+        return getLayerBounds(layer) ?? this.getLayerSourceBounds(layer);
       },
       getNativeLayerIds: (layerId) => this.getNativeLayerIdsByLayerId(layerId),
       removeLayer: (layerId) => {
-        if (this.map) removeLayerFromMap(this.map, layerId);
+        // Remove the logical layer from the store; syncLayers then tears
+        // down the native sources/layers, keeping project state in sync.
+        useAppStore.getState().removeLayer(layerId);
       },
     };
   }
@@ -869,40 +871,21 @@ export class MapController {
     return nativeLayer?.type ?? "custom";
   }
 
-  private setNativeLayerOpacity(
-    nativeLayerId: string,
+  private getLayerSourceBounds(
     layer: GeoLibreLayer,
-    opacity: number,
-  ): void {
-    const nativeLayer = this.map?.getLayer(nativeLayerId);
-    if (!nativeLayer || !this.map) return;
-
-    if (nativeLayer.type === "fill") {
-      this.map.setPaintProperty(
-        nativeLayerId,
-        "fill-opacity",
-        layer.style.fillOpacity * opacity,
-      );
-      return;
+  ): [number, number, number, number] | null {
+    const source = this.map?.getSource(sourceId(layer.id)) as
+      | { bounds?: [number, number, number, number] }
+      | undefined;
+    const bounds = source?.bounds;
+    if (
+      Array.isArray(bounds) &&
+      bounds.length === 4 &&
+      bounds.every((value) => Number.isFinite(value))
+    ) {
+      return bounds;
     }
-
-    if (nativeLayer.type === "line") {
-      this.map.setPaintProperty(nativeLayerId, "line-opacity", opacity);
-      return;
-    }
-
-    if (nativeLayer.type === "circle") {
-      this.map.setPaintProperty(
-        nativeLayerId,
-        "circle-opacity",
-        layer.style.fillOpacity * opacity,
-      );
-      return;
-    }
-
-    if (nativeLayer.type === "raster") {
-      this.map.setPaintProperty(nativeLayerId, "raster-opacity", opacity);
-    }
+    return null;
   }
 
   private getNamedStyleLayers(layer: GeoLibreLayer): Array<{
