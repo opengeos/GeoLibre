@@ -10,6 +10,7 @@ export {
   openFlatGeobufAddVectorLayerPanel,
   openLidarLayerPanel,
   openPMTilesLayerPanel,
+  openSplattingLayerPanel,
   openZarrLayerPanel,
   type CogRasterLayerOptions,
 } from "./plugins/maplibre-components";

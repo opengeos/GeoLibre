@@ -12,6 +12,7 @@ import {
   openFlatGeobufAddVectorLayerPanel,
   openLidarLayerPanel,
   openPMTilesLayerPanel,
+  openSplattingLayerPanel,
   openZarrLayerPanel,
   type GeoLibreMapControlPosition,
 } from "@geolibre/plugins";
@@ -155,6 +156,9 @@ export function TopToolbar({
   const handleAddLidarLayer = () => {
     openLidarLayerPanel(appApi);
   };
+  const handleAddSplattingLayer = () => {
+    openSplattingLayerPanel(appApi);
+  };
   const toggleMapControl = (control: ToolbarMapControl) => {
     setControlsVisible((current) => {
       const visible = !current[control];
@@ -216,6 +220,9 @@ export function TopToolbar({
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddLidarLayer}>
             Add LiDAR Layer
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleAddSplattingLayer}>
+            Add Splatting Layer
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

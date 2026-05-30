@@ -687,6 +687,81 @@ body,
   min-height: 30px;
 }
 
+.geolibre-splatting-control .maplibre-gl-splat-panel {
+  background: hsl(var(--popover)) !important;
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  box-shadow:
+    0 10px 15px -3px rgb(0 0 0 / 0.18),
+    0 4px 6px -4px rgb(0 0 0 / 0.18);
+  color: hsl(var(--popover-foreground)) !important;
+}
+
+.geolibre-splatting-control .maplibre-gl-splat-panel input {
+  background: hsl(var(--background)) !important;
+  border-color: hsl(var(--input)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-splatting-control .maplibre-gl-splat-panel input::placeholder {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.geolibre-splatting-control .maplibre-gl-splat-panel label,
+.geolibre-splatting-control .maplibre-gl-splat-panel > div > span,
+.geolibre-splatting-control .maplibre-gl-splat-panel > div > div:first-child {
+  color: hsl(var(--popover-foreground)) !important;
+}
+
+.geolibre-splatting-control .maplibre-gl-splat-panel > div:first-child {
+  border-bottom-color: hsl(var(--border)) !important;
+}
+
+.geolibre-splatting-control .maplibre-gl-splat-panel > div:first-child button {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.geolibre-splatting-control
+  .maplibre-gl-splat-panel
+  > div:first-child
+  button:hover {
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-splatting-control .maplibre-gl-splat-panel > button {
+  background: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+}
+
+.geolibre-splatting-control
+  .maplibre-gl-splat-panel
+  div[style*="background: #f8f8f8"],
+.geolibre-splatting-control
+  .maplibre-gl-splat-panel
+  div[style*="background: rgb(248, 248, 248)"] {
+  background: hsl(var(--secondary)) !important;
+  border: 1px solid hsl(var(--border));
+}
+
+.geolibre-splatting-control
+  .maplibre-gl-splat-panel
+  div[style*="background: #f8f8f8"]
+  span,
+.geolibre-splatting-control
+  .maplibre-gl-splat-panel
+  div[style*="background: rgb(248, 248, 248)"]
+  span {
+  color: hsl(var(--secondary-foreground)) !important;
+}
+
+.geolibre-splatting-control .maplibre-gl-splat-panel > button {
+  align-items: center !important;
+  display: flex !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  min-height: 30px;
+}
+
 .geolibre-components-control input:not([type="checkbox"]):not([type="radio"]):not(
     [type="range"]
   ):focus,
