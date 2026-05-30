@@ -27,6 +27,8 @@ import type {
   ControlGrid,
   ControlGridOptions,
   DefaultControlName,
+  GaussianSplatControl,
+  GaussianSplatLayerAdapter,
   LidarControl,
   LidarLayerAdapter,
   PMTilesLayerControl,
@@ -62,6 +64,10 @@ type LidarControlConstructor =
   (typeof import("maplibre-gl-components"))["LidarControl"];
 type LidarLayerAdapterConstructor =
   (typeof import("maplibre-gl-components"))["LidarLayerAdapter"];
+type GaussianSplatControlConstructor =
+  (typeof import("maplibre-gl-components"))["GaussianSplatControl"];
+type GaussianSplatLayerAdapterConstructor =
+  (typeof import("maplibre-gl-components"))["GaussianSplatLayerAdapter"];
 
 interface LidarControlClickOutsideState {
   _clickOutsideHandler?: ((event: MouseEvent) => void) | null;
@@ -71,6 +77,8 @@ interface ComponentsConstructors {
   AddVectorControl: AddVectorControlConstructor;
   CogLayerControl: CogLayerControlConstructor;
   ControlGrid: ControlGridConstructor;
+  GaussianSplatControl: GaussianSplatControlConstructor;
+  GaussianSplatLayerAdapter: GaussianSplatLayerAdapterConstructor;
   LidarControl: LidarControlConstructor;
   LidarLayerAdapter: LidarLayerAdapterConstructor;
   PMTilesLayerControl: PMTilesLayerControlConstructor;
@@ -83,6 +91,7 @@ const flatGeobufControlPosition: GeoLibreMapControlPosition = "top-left";
 const pmtilesControlPosition: GeoLibreMapControlPosition = "top-left";
 const zarrControlPosition: GeoLibreMapControlPosition = "top-left";
 const lidarControlPosition: GeoLibreMapControlPosition = "top-left";
+const splattingControlPosition: GeoLibreMapControlPosition = "top-left";
 
 const FLATGEOBUF_SAMPLE_URL =
   "https://flatgeobuf.org/test/data/UScounties.fgb";
@@ -92,6 +101,8 @@ const ZARR_SAMPLE_URL =
   "https://carbonplan-maps.s3.us-west-2.amazonaws.com/v2/demo/4d/tavg-prec-month";
 const LIDAR_SAMPLE_URL =
   "https://s3.amazonaws.com/hobu-lidar/autzen-classified.copc.laz";
+const SPLATTING_SAMPLE_URL =
+  "https://huggingface.co/datasets/VAST-AI/3DGS/resolve/main/Truck/truck.splat";
 
 const COMPONENT_CONTROL_NAMES = [
   "spinGlobe",
@@ -213,6 +224,16 @@ const LIDAR_OPTIONS = {
   autoZoom: true,
 } satisfies ConstructorParameters<LidarControlConstructor>[0];
 
+const SPLATTING_OPTIONS = {
+  className: "geolibre-splatting-control",
+  collapsed: false,
+  defaultUrl: SPLATTING_SAMPLE_URL,
+  flyTo: true,
+  maxHeight: 520,
+  panelWidth: 365,
+  title: "Add Splatting Layer",
+} satisfies ConstructorParameters<GaussianSplatControlConstructor>[0];
+
 let componentsControl: ControlGrid | null = null;
 let cogRasterControl: CogLayerControl | null = null;
 let flatGeobufControl: AddVectorControl | null = null;
@@ -220,6 +241,8 @@ let pmtilesControl: PMTilesLayerControl | null = null;
 let zarrControl: ZarrLayerControl | null = null;
 let lidarControl: LidarControl | null = null;
 let lidarLayerAdapter: LidarLayerAdapter | null = null;
+let splattingControl: GaussianSplatControl | null = null;
+let splattingLayerAdapter: GaussianSplatLayerAdapter | null = null;
 let geoTiffRasterOverlay: MapboxOverlay | null = null;
 let flatGeobufControlMounted = false;
 let cogRasterControlMounted = false;
@@ -227,12 +250,14 @@ let geoTiffRasterOverlayMounted = false;
 let pmtilesControlMounted = false;
 let zarrControlMounted = false;
 let lidarControlMounted = false;
+let splattingControlMounted = false;
 let flatGeobufStoreUnsubscribe: (() => void) | null = null;
 let cogRasterStoreUnsubscribe: (() => void) | null = null;
 let geoTiffRasterStoreUnsubscribe: (() => void) | null = null;
 let pmtilesStoreUnsubscribe: (() => void) | null = null;
 let zarrStoreUnsubscribe: (() => void) | null = null;
 let lidarStoreUnsubscribe: (() => void) | null = null;
+let splattingStoreUnsubscribe: (() => void) | null = null;
 let pluginActive = false;
 let componentsControlRevision = 0;
 let componentsConstructorsPromise: Promise<ComponentsConstructors> | null =
@@ -307,6 +332,8 @@ const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
       AddVectorControl: AddVectorControlClass,
       CogLayerControl: CogLayerControlClass,
       ControlGrid: ControlGridClass,
+      GaussianSplatControl: GaussianSplatControlClass,
+      GaussianSplatLayerAdapter: GaussianSplatLayerAdapterClass,
       LidarControl: LidarControlClass,
       LidarLayerAdapter: LidarLayerAdapterClass,
       PMTilesLayerControl: PMTilesLayerControlClass,
@@ -315,6 +342,8 @@ const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
       AddVectorControl: AddVectorControlClass,
       CogLayerControl: CogLayerControlClass,
       ControlGrid: ControlGridClass,
+      GaussianSplatControl: GaussianSplatControlClass,
+      GaussianSplatLayerAdapter: GaussianSplatLayerAdapterClass,
       LidarControl: LidarControlClass,
       LidarLayerAdapter: LidarLayerAdapterClass,
       PMTilesLayerControl: PMTilesLayerControlClass,
@@ -380,6 +409,7 @@ export const maplibreComponentsPlugin: GeoLibrePlugin = {
     teardownPMTilesControl(app);
     teardownZarrControl(app);
     teardownLidarControl(app);
+    teardownSplattingControl(app);
     if (!componentsControl) return;
     app.removeMapControl(componentsControl);
     componentsControl = null;
@@ -433,6 +463,10 @@ export function openZarrLayerPanel(app: GeoLibreAppAPI): void {
 
 export function openLidarLayerPanel(app: GeoLibreAppAPI): void {
   void openStandaloneLidarControl(app);
+}
+
+export function openSplattingLayerPanel(app: GeoLibreAppAPI): void {
+  void openStandaloneSplattingControl(app);
 }
 
 function getComponentsOptions(
@@ -576,6 +610,37 @@ async function openStandaloneLidarControl(
   return true;
 }
 
+async function openStandaloneSplattingControl(
+  app: GeoLibreAppAPI,
+): Promise<boolean> {
+  const {
+    GaussianSplatControl: GaussianSplatControlClass,
+    GaussianSplatLayerAdapter: GaussianSplatLayerAdapterClass,
+  } = await getComponentsConstructors();
+
+  splattingControl ??= createSplattingControl(
+    GaussianSplatControlClass,
+    GaussianSplatLayerAdapterClass,
+  );
+
+  if (!splattingControlMounted) {
+    const added = app.addMapControl(
+      splattingControl,
+      splattingControlPosition,
+    );
+    if (!added) {
+      splattingControl = null;
+      return false;
+    }
+    splattingControlMounted = true;
+  }
+
+  setTimeout(() => {
+    splattingControl?.expand();
+  }, 0);
+  return true;
+}
+
 function createFlatGeobufControl(
   AddVectorControlClass: AddVectorControlConstructor,
 ): AddVectorControl {
@@ -689,6 +754,45 @@ function createLidarControl(
 
       if (currentLayer.opacity !== layer.opacity) {
         lidarLayerAdapter?.setOpacity(currentLayer.id, currentLayer.opacity);
+      }
+    }
+  });
+  return control;
+}
+
+function createSplattingControl(
+  GaussianSplatControlClass: GaussianSplatControlConstructor,
+  GaussianSplatLayerAdapterClass: GaussianSplatLayerAdapterConstructor,
+): GaussianSplatControl {
+  const control = new GaussianSplatControlClass(SPLATTING_OPTIONS);
+  splattingLayerAdapter = new GaussianSplatLayerAdapterClass(control);
+  control.on("splatload", createSplattingLoadHandler("splat"));
+  control.on("modelload", createSplattingLoadHandler("model"));
+  control.on("splatremove", createSplattingRemoveHandler());
+  control.on("modelremove", createSplattingRemoveHandler());
+  splattingStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
+    const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
+
+    for (const layer of previous.layers) {
+      if (!isSplattingControlLayer(layer)) continue;
+
+      const currentLayer = currentById.get(layer.id);
+      if (!currentLayer) {
+        splattingLayerAdapter?.removeLayer(layer.id);
+        continue;
+      }
+
+      if (!isSplattingControlLayer(currentLayer)) continue;
+
+      if (currentLayer.visible !== layer.visible) {
+        splattingLayerAdapter?.setVisibility(
+          currentLayer.id,
+          currentLayer.visible,
+        );
+      }
+
+      if (currentLayer.opacity !== layer.opacity) {
+        splattingLayerAdapter?.setOpacity(currentLayer.id, currentLayer.opacity);
       }
     }
   });
@@ -849,6 +953,18 @@ function teardownLidarControl(app: GeoLibreAppAPI): void {
   lidarControlMounted = false;
 }
 
+function teardownSplattingControl(app: GeoLibreAppAPI): void {
+  splattingStoreUnsubscribe?.();
+  splattingStoreUnsubscribe = null;
+  splattingLayerAdapter?.destroy();
+  splattingLayerAdapter = null;
+  if (splattingControl && splattingControlMounted) {
+    app.removeMapControl(splattingControl);
+  }
+  splattingControl = null;
+  splattingControlMounted = false;
+}
+
 function createLidarLoadHandler(): LidarControlEventHandler {
   return (event) => {
     if (!event.pointCloud || !("source" in event.pointCloud)) return;
@@ -865,6 +981,41 @@ function createLidarLoadHandler(): LidarControlEventHandler {
       return;
     }
     store.addLayer(layer);
+  };
+}
+
+function createSplattingLoadHandler(
+  assetType: "model" | "splat",
+): Parameters<GaussianSplatControl["on"]>[1] {
+  return (event) => {
+    const id = assetType === "splat" ? event.splatId : event.modelId;
+    if (!id || !event.url) return;
+
+    const store = useAppStore.getState();
+    const layer = createSplattingStoreLayer(id, event.url, assetType);
+    if (store.layers.some((item) => item.id === layer.id)) {
+      store.updateLayer(layer.id, {
+        metadata: layer.metadata,
+        opacity: layer.opacity,
+        source: layer.source,
+        visible: layer.visible,
+      });
+      return;
+    }
+    store.addLayer(layer);
+  };
+}
+
+function createSplattingRemoveHandler(): Parameters<GaussianSplatControl["on"]>[1] {
+  return (event) => {
+    const id = event.splatId ?? event.modelId;
+    if (!id) return;
+
+    const store = useAppStore.getState();
+    const layer = store.layers.find((item) => item.id === id);
+    if (layer && isSplattingControlLayer(layer)) {
+      store.removeLayer(id);
+    }
   };
 }
 
@@ -1694,6 +1845,36 @@ function createLidarStoreLayer(pointCloud: PointCloudInfo): GeoLibreLayer {
   };
 }
 
+function createSplattingStoreLayer(
+  id: string,
+  url: string,
+  assetType: "model" | "splat",
+): GeoLibreLayer {
+  return {
+    id,
+    name: layerNameFromUrl(url, id),
+    type: "gaussian-splat",
+    source: {
+      assetType,
+      sourceId: id,
+      type: "gaussian-splat",
+      url,
+    },
+    visible: true,
+    opacity: splattingLayerAdapter?.getLayerState(id)?.opacity ?? 1,
+    style: { ...DEFAULT_LAYER_STYLE },
+    metadata: {
+      assetType,
+      customLayerType: "gaussian-splat",
+      externalNativeLayer: true,
+      identifiable: false,
+      sourceId: id,
+      sourceKind: "splatting-url",
+    },
+    sourcePath: url,
+  };
+}
+
 function isFlatGeobufControlLayer(layer: GeoLibreLayer): boolean {
   return (
     layer.type === "flatgeobuf" &&
@@ -1738,6 +1919,14 @@ function isLidarControlLayer(layer: GeoLibreLayer): boolean {
   return (
     layer.type === "lidar" &&
     layer.metadata.sourceKind === "lidar-url" &&
+    layer.metadata.externalNativeLayer === true
+  );
+}
+
+function isSplattingControlLayer(layer: GeoLibreLayer): boolean {
+  return (
+    layer.type === "gaussian-splat" &&
+    layer.metadata.sourceKind === "splatting-url" &&
     layer.metadata.externalNativeLayer === true
   );
 }
