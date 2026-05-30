@@ -23,6 +23,7 @@ export interface AppState {
   isDirty: boolean;
   mapView: MapViewState;
   basemapStyleUrl: string;
+  basemapVisible: boolean;
   layers: GeoLibreLayer[];
   selectedLayerId: string | null;
   selectedFeatureId: string | null;
@@ -40,6 +41,7 @@ export interface AppState {
   setPointerCoords: (coords: [number, number] | null) => void;
   setMapView: (view: Partial<MapViewState>, markDirty?: boolean) => void;
   setBasemapStyleUrl: (url: string) => void;
+  setBasemapVisible: (visible: boolean) => void;
   selectLayer: (id: string | null) => void;
   selectFeature: (id: string | null) => void;
   setIdentifyLayer: (id: string | null) => void;
@@ -61,6 +63,7 @@ export interface AppState {
   setLayerOpacity: (id: string, opacity: number) => void;
   setLayerStyle: (id: string, style: Partial<LayerStyle>) => void;
   reorderLayer: (id: string, direction: "up" | "down") => void;
+  moveLayer: (id: string, targetIndex: number) => void;
   addGeoJsonLayer: (
     name: string,
     geojson: FeatureCollection,
@@ -75,6 +78,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   isDirty: false,
   mapView: createDefaultMapView(),
   basemapStyleUrl: DEFAULT_BASEMAP,
+  basemapVisible: true,
   layers: [],
   selectedLayerId: null,
   selectedFeatureId: null,
@@ -96,6 +100,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       isDirty: markDirty || s.isDirty,
     })),
   setBasemapStyleUrl: (url) => set({ basemapStyleUrl: url, isDirty: true }),
+  setBasemapVisible: (visible) =>
+    set({ basemapVisible: visible, isDirty: true }),
   selectLayer: (id) => set({ selectedLayerId: id, selectedFeatureId: null }),
   selectFeature: (id) => set({ selectedFeatureId: id }),
   setIdentifyLayer: (id) => set({ identifyLayerId: id }),
@@ -214,6 +220,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       const next = [...s.layers];
       const [item] = next.splice(idx, 1);
       next.splice(target, 0, item);
+      return { layers: next, isDirty: true };
+    }),
+
+  moveLayer: (id, targetIndex) =>
+    set((s) => {
+      const currentIndex = s.layers.findIndex((layer) => layer.id === id);
+      if (currentIndex < 0) return s;
+      const next = [...s.layers];
+      const [layer] = next.splice(currentIndex, 1);
+      const nextIndex = Math.min(Math.max(targetIndex, 0), next.length);
+      next.splice(nextIndex, 0, layer);
+      if (next.every((item, index) => item.id === s.layers[index]?.id)) {
+        return s;
+      }
       return { layers: next, isDirty: true };
     }),
 

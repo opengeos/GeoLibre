@@ -32,6 +32,11 @@ const LAYER_CONTROL_EXCLUDED_LAYERS = [
   highlightLineLayerId(),
   highlightCircleLayerId(),
 ];
+const NON_BASEMAP_STYLE_LAYER_IDS = [
+  highlightFillLayerId(),
+  highlightLineLayerId(),
+  highlightCircleLayerId(),
+];
 const TERRAIN_SOURCE_ID = "geolibre-terrain-dem";
 const TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = {
   type: "raster-dem",
@@ -139,6 +144,7 @@ export class MapController {
   private layerControl: LayerControl | null = null;
   private layerControlSignature = "";
   private basemapStyleUrl = DEFAULT_BASEMAP;
+  private basemapVisible = true;
   private syncedLayers: GeoLibreLayer[] = [];
   private layerIds: string[] = [];
   private controlVisibility: Record<BuiltInMapControl, boolean> = {
@@ -171,11 +177,13 @@ export class MapController {
     this.map.on("style.load", () => {
       this.enforceDefaultProjection();
       this.addTerrainSource();
+      this.applyBasemapVisibility();
       this.addLayerControl();
     });
     this.map.once("load", () => {
       this.enforceDefaultProjection();
       this.addTerrainSource();
+      this.applyBasemapVisibility();
       this.addLayerControl();
     });
     this.map.once("idle", () => this.enforceDefaultProjection());
@@ -281,6 +289,11 @@ export class MapController {
     this.map.setStyle(resolveMapStyle(url));
   }
 
+  setBasemapVisible(visible: boolean): void {
+    this.basemapVisible = visible;
+    this.applyBasemapVisibility();
+  }
+
   applyView(view: MapViewState): void {
     if (!this.map) return;
     this.map.jumpTo({
@@ -331,6 +344,7 @@ export class MapController {
     }
     this.layerIds = nextIds;
     this.syncedLayers = layers;
+    this.applyBasemapVisibility();
     this.publishLayerDisplayNames(layers);
     this.refreshLayerControl(layers);
   }
@@ -353,6 +367,35 @@ export class MapController {
       this.map.once("load", run);
     }
     this.map.on("style.load", run);
+  }
+
+  private applyBasemapVisibility(): void {
+    if (!this.map || !this.map.isStyleLoaded()) return;
+
+    const userStyleLayerIds = new Set(
+      this.syncedLayers.flatMap((layer) =>
+        this.getCandidateStyleLayers(layer).map(({ id }) => id),
+      ),
+    );
+    const nonBasemapStyleLayerIds = new Set(NON_BASEMAP_STYLE_LAYER_IDS);
+
+    for (const layer of this.map.getStyle().layers ?? []) {
+      if (
+        userStyleLayerIds.has(layer.id) ||
+        nonBasemapStyleLayerIds.has(layer.id)
+      ) {
+        continue;
+      }
+      try {
+        this.map.setLayoutProperty(
+          layer.id,
+          "visibility",
+          this.basemapVisible ? "visible" : "none",
+        );
+      } catch {
+        // Some third-party custom style layers may not expose layout properties.
+      }
+    }
   }
 
   fitLayer(layer: GeoLibreLayer): void {
@@ -700,7 +743,7 @@ export class MapController {
   private getLayerSymbolType(layer: GeoLibreLayer): string {
     const nativeLayer = this.getNativeLayerIds(layer)
       .map((id) => this.map?.getLayer(id))
-      .find((item): item is maplibregl.LayerSpecification => Boolean(item));
+      .find((item) => Boolean(item));
 
     return nativeLayer?.type ?? "custom";
   }

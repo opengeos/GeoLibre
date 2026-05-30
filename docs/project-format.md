@@ -10,6 +10,7 @@ Projects are saved as **`.geolibre.json`** files.
 | `name` | string | Project display name |
 | `mapView` | object | `center`, `zoom`, `bearing`, `pitch`, optional `bbox` |
 | `basemapStyleUrl` | string | MapLibre style JSON URL, or an empty string for a blank background |
+| `basemapVisible` | boolean | Whether the Background layer is visible |
 | `layers` | array | Layer definitions (see below) |
 | `styles` | object | Map of layer id → `LayerStyle` |
 | `metadata` | object | Free-form project metadata |
