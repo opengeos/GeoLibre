@@ -68,6 +68,9 @@ const COG_COLORMAPS = [
   "gray",
 ] satisfies RasterColormap[];
 
+const DEFAULT_RASTER_URL =
+  "https://data.source.coop/giswqs/opengeos/nlcd_2021_land_cover_30m.tif";
+
 function createLayerId(): string {
   return crypto.randomUUID();
 }
@@ -192,7 +195,7 @@ export function AddDataDialog({
   } | null>(null);
 
   const [rasterMode, setRasterMode] = useState<RasterMode>("cog-url");
-  const [rasterUrl, setRasterUrl] = useState("");
+  const [rasterUrl, setRasterUrl] = useState(DEFAULT_RASTER_URL);
   const [rasterTileSize, setRasterTileSize] = useState("256");
   const [rasterBands, setRasterBands] = useState("1");
   const [rasterColormap, setRasterColormap] =
@@ -230,7 +233,7 @@ export function AddDataDialog({
     setVectorSourceLayer("");
     setSelectedVector(null);
     setRasterMode("cog-url");
-    setRasterUrl("");
+    setRasterUrl(DEFAULT_RASTER_URL);
     setRasterTileSize("256");
     setRasterBands("1");
     setRasterColormap("none");

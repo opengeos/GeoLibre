@@ -24,6 +24,8 @@ import { removeLayerFromMap, syncLayer } from "./layer-sync";
 const DEFAULT_PROJECTION: maplibregl.ProjectionSpecification = {
   type: "globe",
 };
+type GeoLibreProjectionType = "globe" | "mercator";
+const DEFAULT_PROJECTION_TYPE: GeoLibreProjectionType = "globe";
 const DEFAULT_MAX_PITCH = 85;
 const BLANK_BACKGROUND_LAYER_ID = "geolibre-blank-background";
 const BLANK_BACKGROUND_COLOR = "#ffffff";
@@ -186,6 +188,7 @@ export class MapController {
   private syncedLayers: GeoLibreLayer[] = [];
   private layerIds: string[] = [];
   private styleReady = false;
+  private projectionType: GeoLibreProjectionType = DEFAULT_PROJECTION_TYPE;
   private controlVisibility: Record<BuiltInMapControl, boolean> = {
     ...DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
   };
@@ -261,8 +264,9 @@ export class MapController {
     }
   }
 
-  setProjection(type: "globe" | "mercator"): boolean {
+  setProjection(type: GeoLibreProjectionType): boolean {
     if (!this.map) return false;
+    this.projectionType = type;
     try {
       this.map.setProjection({ type });
       return true;
@@ -575,8 +579,8 @@ export class MapController {
   private enforceDefaultProjection(): void {
     if (!this.map) return;
     try {
-      if (this.map.getProjection()?.type === DEFAULT_PROJECTION.type) return;
-      this.map.setProjection(DEFAULT_PROJECTION);
+      if (this.map.getProjection()?.type === this.projectionType) return;
+      this.map.setProjection({ type: this.projectionType });
     } catch {
       this.map.once("idle", () => this.enforceDefaultProjection());
     }
