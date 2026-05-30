@@ -37,6 +37,17 @@ const NON_BASEMAP_STYLE_LAYER_IDS = [
   highlightLineLayerId(),
   highlightCircleLayerId(),
 ];
+const OPACITY_PAINT_PROPERTIES: Record<string, string[]> = {
+  background: ["background-opacity"],
+  circle: ["circle-opacity"],
+  fill: ["fill-opacity"],
+  "fill-extrusion": ["fill-extrusion-opacity"],
+  heatmap: ["heatmap-opacity"],
+  hillshade: ["hillshade-exaggeration"],
+  line: ["line-opacity"],
+  raster: ["raster-opacity"],
+  symbol: ["icon-opacity", "text-opacity"],
+};
 const TERRAIN_SOURCE_ID = "geolibre-terrain-dem";
 const TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = {
   type: "raster-dem",
@@ -84,6 +95,20 @@ function resolveMapStyle(
 interface LayerControlConfig {
   excludeLayers?: string[];
   customLayerAdapters?: CustomLayerAdapter[];
+}
+
+interface LayerControlBackgroundState {
+  panel?: HTMLElement;
+  state?: {
+    layerStates?: Record<
+      string,
+      {
+        visible: boolean;
+        opacity: number;
+        name: string;
+      }
+    >;
+  };
 }
 
 interface GeoLibreLayerLabelWindow extends Window {
@@ -145,6 +170,8 @@ export class MapController {
   private layerControlSignature = "";
   private basemapStyleUrl = DEFAULT_BASEMAP;
   private basemapVisible = true;
+  private basemapOpacity = 1;
+  private basemapOriginalPaintValues = new Map<string, Map<string, unknown>>();
   private syncedLayers: GeoLibreLayer[] = [];
   private layerIds: string[] = [];
   private controlVisibility: Record<BuiltInMapControl, boolean> = {
@@ -178,12 +205,14 @@ export class MapController {
       this.enforceDefaultProjection();
       this.addTerrainSource();
       this.applyBasemapVisibility();
+      this.applyBasemapOpacity();
       this.addLayerControl();
     });
     this.map.once("load", () => {
       this.enforceDefaultProjection();
       this.addTerrainSource();
       this.applyBasemapVisibility();
+      this.applyBasemapOpacity();
       this.addLayerControl();
     });
     this.map.once("idle", () => this.enforceDefaultProjection());
@@ -285,6 +314,7 @@ export class MapController {
   setStyle(url: string): void {
     if (!this.map) return;
     this.basemapStyleUrl = url;
+    this.basemapOriginalPaintValues.clear();
     this.removeLayerControl();
     this.map.setStyle(resolveMapStyle(url));
   }
@@ -292,6 +322,13 @@ export class MapController {
   setBasemapVisible(visible: boolean): void {
     this.basemapVisible = visible;
     this.applyBasemapVisibility();
+    this.syncLayerControlBackgroundState();
+  }
+
+  setBasemapOpacity(opacity: number): void {
+    this.basemapOpacity = opacity;
+    this.applyBasemapOpacity();
+    this.syncLayerControlBackgroundState();
   }
 
   applyView(view: MapViewState): void {
@@ -345,6 +382,7 @@ export class MapController {
     this.layerIds = nextIds;
     this.syncedLayers = layers;
     this.applyBasemapVisibility();
+    this.applyBasemapOpacity();
     this.publishLayerDisplayNames(layers);
     this.refreshLayerControl(layers);
   }
@@ -372,20 +410,7 @@ export class MapController {
   private applyBasemapVisibility(): void {
     if (!this.map || !this.map.isStyleLoaded()) return;
 
-    const userStyleLayerIds = new Set(
-      this.syncedLayers.flatMap((layer) =>
-        this.getCandidateStyleLayers(layer).map(({ id }) => id),
-      ),
-    );
-    const nonBasemapStyleLayerIds = new Set(NON_BASEMAP_STYLE_LAYER_IDS);
-
-    for (const layer of this.map.getStyle().layers ?? []) {
-      if (
-        userStyleLayerIds.has(layer.id) ||
-        nonBasemapStyleLayerIds.has(layer.id)
-      ) {
-        continue;
-      }
+    for (const layer of this.getBasemapStyleLayers()) {
       try {
         this.map.setLayoutProperty(
           layer.id,
@@ -395,6 +420,63 @@ export class MapController {
       } catch {
         // Some third-party custom style layers may not expose layout properties.
       }
+    }
+  }
+
+  private applyBasemapOpacity(): void {
+    if (!this.map || !this.map.isStyleLoaded()) return;
+
+    for (const layer of this.getBasemapStyleLayers()) {
+      const properties = OPACITY_PAINT_PROPERTIES[layer.type] ?? [];
+      for (const property of properties) {
+        this.setBasemapPaintOpacity(layer.id, property);
+      }
+    }
+  }
+
+  private getBasemapStyleLayers(): maplibregl.LayerSpecification[] {
+    if (!this.map || !this.map.isStyleLoaded()) return [];
+
+    const userStyleLayerIds = new Set(
+      this.syncedLayers.flatMap((layer) =>
+        this.getCandidateStyleLayers(layer).map(({ id }) => id),
+      ),
+    );
+    const nonBasemapStyleLayerIds = new Set(NON_BASEMAP_STYLE_LAYER_IDS);
+
+    return (this.map.getStyle().layers ?? []).filter(
+      (layer) =>
+        !userStyleLayerIds.has(layer.id) &&
+        !nonBasemapStyleLayerIds.has(layer.id),
+    );
+  }
+
+  private setBasemapPaintOpacity(layerId: string, property: string): void {
+    if (!this.map) return;
+
+    let originalPaintValues = this.basemapOriginalPaintValues.get(layerId);
+    if (!originalPaintValues) {
+      originalPaintValues = new Map<string, unknown>();
+      this.basemapOriginalPaintValues.set(layerId, originalPaintValues);
+    }
+    if (!originalPaintValues.has(property)) {
+      originalPaintValues.set(
+        property,
+        this.map.getPaintProperty(layerId, property),
+      );
+    }
+
+    const original = originalPaintValues.get(property);
+    const opacity =
+      this.basemapOpacity >= 1
+        ? original
+        : typeof original === "number"
+          ? original * this.basemapOpacity
+          : this.basemapOpacity;
+    try {
+      this.map.setPaintProperty(layerId, property, opacity);
+    } catch {
+      // Some third-party custom style layers may not expose paint properties.
     }
   }
 
@@ -610,6 +692,8 @@ export class MapController {
       this.layerControl,
       this.controlPositions["layer-control"],
     );
+    this.syncLayerControlBackgroundState();
+    window.setTimeout(() => this.syncLayerControlBackgroundState(), 100);
     return true;
   }
 
@@ -676,6 +760,43 @@ export class MapController {
         }),
       ),
     });
+  }
+
+  private syncLayerControlBackgroundState(): void {
+    if (!this.layerControl) return;
+    const control = this.layerControl as unknown as LayerControlBackgroundState;
+
+    const backgroundState =
+      control.state?.layerStates?.Background ??
+      (control.state?.layerStates
+        ? (control.state.layerStates.Background = {
+            visible: this.basemapVisible,
+            opacity: this.basemapOpacity,
+            name: "Background",
+          })
+        : null);
+    if (backgroundState) {
+      backgroundState.visible = this.basemapVisible;
+      backgroundState.opacity = this.basemapOpacity;
+    }
+
+    const backgroundItem = control.panel?.querySelector(
+      '[data-layer-id="Background"]',
+    );
+    if (!backgroundItem) return;
+
+    const checkbox = backgroundItem.querySelector(
+      ".layer-control-checkbox",
+    ) as HTMLInputElement | null;
+    if (checkbox) checkbox.checked = this.basemapVisible;
+
+    const opacity = backgroundItem.querySelector(
+      ".layer-control-opacity",
+    ) as HTMLInputElement | null;
+    if (opacity) {
+      opacity.value = String(this.basemapOpacity);
+      opacity.title = `Opacity: ${Math.round(this.basemapOpacity * 100)}%`;
+    }
   }
 
   private createGeoLibreLayerAdapter(

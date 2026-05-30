@@ -9,6 +9,7 @@
   },
   "basemapStyleUrl": "https://tiles.openfreemap.org/styles/liberty",
   "basemapVisible": true,
+  "basemapOpacity": 1,
   "layers": [],
   "styles": {},
   "metadata": {

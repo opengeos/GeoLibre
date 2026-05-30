@@ -110,6 +110,7 @@ export function TopToolbar({
       mapView: mapControllerRef.current?.readView() ?? state.mapView,
       basemapStyleUrl: state.basemapStyleUrl,
       basemapVisible: state.basemapVisible,
+      basemapOpacity: state.basemapOpacity,
       layers: state.layers,
       metadata: state.metadata,
     });

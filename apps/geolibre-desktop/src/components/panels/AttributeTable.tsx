@@ -323,7 +323,7 @@ export function AttributeTable() {
           <span className="text-xs text-muted-foreground">— {layer.name}</span>
         ) : (
           <span className="text-xs text-muted-foreground">
-            — select a GeoJSON layer
+            — select a vector layer
           </span>
         )}
         <Input
@@ -360,7 +360,7 @@ export function AttributeTable() {
       >
         {!layer?.geojson ? (
           <p className="p-4 text-xs text-muted-foreground">
-            Attribute table requires a GeoJSON layer.
+            Attribute table requires a vector layer.
           </p>
         ) : (
           <table className="min-w-full table-fixed caption-bottom text-sm">

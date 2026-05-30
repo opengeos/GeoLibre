@@ -39,6 +39,15 @@ interface LayerPanelProps {
   onResizeStart: (event: ReactMouseEvent<HTMLDivElement>) => void;
 }
 
+const BACKGROUND_SELECTION_ID = "__geolibre-background__";
+
+function layerTypeLabel(layer: GeoLibreLayer): string {
+  if (layer.type === "geojson" || layer.type === "vector-tiles") {
+    return "vector";
+  }
+  return layer.type;
+}
+
 function isMobileViewport(): boolean {
   return (
     typeof window !== "undefined" &&
@@ -56,7 +65,9 @@ export function LayerPanel({
   const identifyLayerId = useAppStore((s) => s.identifyLayerId);
   const setIdentifyLayer = useAppStore((s) => s.setIdentifyLayer);
   const basemapVisible = useAppStore((s) => s.basemapVisible);
+  const basemapOpacity = useAppStore((s) => s.basemapOpacity);
   const setBasemapVisible = useAppStore((s) => s.setBasemapVisible);
+  const setBasemapOpacity = useAppStore((s) => s.setBasemapOpacity);
   const setLayerVisibility = useAppStore((s) => s.setLayerVisibility);
   const setLayerOpacity = useAppStore((s) => s.setLayerOpacity);
   const reorderLayer = useAppStore((s) => s.reorderLayer);
@@ -71,6 +82,10 @@ export function LayerPanel({
     null,
   );
   const visibleLayers = [...layers].reverse();
+  const backgroundSelected = selectedLayerId === BACKGROUND_SELECTION_ID;
+  const draggedDisplayIndex = draggedLayerId
+    ? visibleLayers.findIndex((layer) => layer.id === draggedLayerId)
+    : -1;
 
   const resetDragState = () => {
     setDraggedLayerId(null);
@@ -174,16 +189,12 @@ export function LayerPanel({
             return (
               <div
                 key={layer.id}
-                className={`rounded-md border p-2 transition-colors ${
+                className={`relative rounded-md border p-2 transition-colors ${
                   selectedLayerId === layer.id
                     ? "border-primary bg-primary/5"
-                    : "border-transparent bg-muted/30"
+                    : "border-border bg-background hover:border-muted-foreground/40 hover:bg-muted/20"
                 } ${
                   draggedLayerId === layer.id ? "opacity-50" : ""
-                } ${
-                  dropTargetLayerId === layer.id
-                    ? "border-primary bg-primary/10"
-                    : ""
                 }`}
                 onDragOver={(e) => handleLayerDragOver(e, layer.id)}
                 onDrop={(e) => handleLayerDrop(e, layer.id, displayIndex)}
@@ -195,6 +206,15 @@ export function LayerPanel({
                 role="button"
                 tabIndex={0}
               >
+                {dropTargetLayerId === layer.id &&
+                  draggedDisplayIndex > displayIndex && (
+                    <div className="pointer-events-none absolute -top-1 left-2 right-2 h-1 rounded-full bg-primary shadow-[0_0_0_2px_hsl(var(--background))]" />
+                  )}
+                {dropTargetLayerId === layer.id &&
+                  draggedDisplayIndex >= 0 &&
+                  draggedDisplayIndex < displayIndex && (
+                    <div className="pointer-events-none absolute -bottom-1 left-2 right-2 h-1 rounded-full bg-primary shadow-[0_0_0_2px_hsl(var(--background))]" />
+                  )}
                 <div className="flex items-center gap-1">
                   <span
                     role="button"
@@ -226,7 +246,7 @@ export function LayerPanel({
                     {layer.name}
                   </span>
                   <span className="text-[10px] uppercase text-muted-foreground">
-                    {layer.type}
+                    {layerTypeLabel(layer)}
                   </span>
                 </div>
                 {isPlaceholderLayer(layer) && (
@@ -343,7 +363,19 @@ export function LayerPanel({
               </div>
             );
           })}
-          <div className="rounded-md border border-border bg-muted/20 p-2">
+          <div
+            className={`rounded-md border p-2 transition-colors ${
+              backgroundSelected
+                ? "border-primary bg-primary/5"
+                : "border-border bg-background hover:border-muted-foreground/40 hover:bg-muted/20"
+            }`}
+            onClick={() => selectLayer(BACKGROUND_SELECTION_ID)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") selectLayer(BACKGROUND_SELECTION_ID);
+            }}
+            role="button"
+            tabIndex={0}
+          >
             <div className="flex items-center gap-1">
               <span
                 title="Background cannot be reordered"
@@ -360,7 +392,10 @@ export function LayerPanel({
                 aria-label={
                   basemapVisible ? "Hide background" : "Show background"
                 }
-                onClick={() => setBasemapVisible(!basemapVisible)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setBasemapVisible(!basemapVisible);
+                }}
               >
                 {basemapVisible ? (
                   <Eye className="h-3.5 w-3.5" />
@@ -375,6 +410,22 @@ export function LayerPanel({
               <span className="text-[10px] uppercase text-muted-foreground">
                 basemap
               </span>
+            </div>
+            <div className="mt-2 flex items-center gap-1">
+              <span className="text-[10px] text-muted-foreground">
+                Opacity
+              </span>
+              <Slider
+                className="flex-1"
+                min={0}
+                max={1}
+                step={0.05}
+                value={[basemapOpacity]}
+                onValueChange={([v]) =>
+                  setBasemapOpacity(v ?? basemapOpacity)
+                }
+                onClick={(e) => e.stopPropagation()}
+              />
             </div>
           </div>
         </div>

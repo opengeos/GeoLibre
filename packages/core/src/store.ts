@@ -24,6 +24,7 @@ export interface AppState {
   mapView: MapViewState;
   basemapStyleUrl: string;
   basemapVisible: boolean;
+  basemapOpacity: number;
   layers: GeoLibreLayer[];
   selectedLayerId: string | null;
   selectedFeatureId: string | null;
@@ -42,6 +43,7 @@ export interface AppState {
   setMapView: (view: Partial<MapViewState>, markDirty?: boolean) => void;
   setBasemapStyleUrl: (url: string) => void;
   setBasemapVisible: (visible: boolean) => void;
+  setBasemapOpacity: (opacity: number) => void;
   selectLayer: (id: string | null) => void;
   selectFeature: (id: string | null) => void;
   setIdentifyLayer: (id: string | null) => void;
@@ -79,6 +81,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   mapView: createDefaultMapView(),
   basemapStyleUrl: DEFAULT_BASEMAP,
   basemapVisible: true,
+  basemapOpacity: 1,
   layers: [],
   selectedLayerId: null,
   selectedFeatureId: null,
@@ -102,6 +105,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setBasemapStyleUrl: (url) => set({ basemapStyleUrl: url, isDirty: true }),
   setBasemapVisible: (visible) =>
     set({ basemapVisible: visible, isDirty: true }),
+  setBasemapOpacity: (opacity) =>
+    set({ basemapOpacity: opacity, isDirty: true }),
   selectLayer: (id) => set({ selectedLayerId: id, selectedFeatureId: null }),
   selectFeature: (id) => set({ selectedFeatureId: id }),
   setIdentifyLayer: (id) => set({ identifyLayerId: id }),
