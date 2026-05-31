@@ -53,7 +53,7 @@ import {
 import { useState, useSyncExternalStore } from "react";
 import { createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
 import type { ThemeMode } from "../../hooks/useThemeMode";
-import { openProjectFile, saveProjectFile } from "../../lib/tauri-io";
+import { isTauri, openProjectFile, saveProjectFile } from "../../lib/tauri-io";
 import { AddDataDialog, type AddDataKind } from "./AddDataDialog";
 import { AboutDialog } from "./AboutDialog";
 import { NewProjectDialog } from "./NewProjectDialog";
@@ -264,9 +264,11 @@ export function TopToolbar({
           <DropdownMenuItem onSelect={handleAddDuckDBLayer}>
             Add DuckDB Layer
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setAddDataKind("postgres")}>
-            Add PostgreSQL Layer
-          </DropdownMenuItem>
+          {isTauri() && (
+            <DropdownMenuItem onSelect={() => setAddDataKind("postgres")}>
+              Add PostgreSQL Layer
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       <Button
