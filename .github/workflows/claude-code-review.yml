@@ -36,8 +36,26 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
-          plugins: 'code-review@claude-code-plugins'
-          prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }} --comment'
+          prompt: |
+            Perform a thorough code review of pull request ${{ github.repository }}/pull/${{ github.event.pull_request.number }}.
+
+            Inspect the changes with `gh pr diff` and `gh pr view`. When the diff alone is not enough to judge correctness, read the surrounding source files for context.
+
+            Review the changed code for:
+            - Bugs and logic errors, including edge cases, race conditions, and missing error handling
+            - Security issues such as injection, unsafe input handling, and leaked secrets
+            - Performance problems and obvious inefficiencies
+            - Code quality, readability, naming, and maintainability
+            - Adherence to any CLAUDE.md guidelines that apply to the changed files
+
+            Concentrate on the changed lines, but use repository context to judge whether they are correct. Report findings across a range of confidence levels, not only near-certain ones. It is fine to raise a well-reasoned concern even when you are not fully certain, as long as you state your confidence and reasoning. Skip pre-existing issues unrelated to this change.
+
+            Post specific findings as inline review comments on the relevant lines using the create_inline_comment tool. For each comment, briefly explain the issue and, when the fix is small and self-contained, include a committable suggestion block. Group minor nits together rather than posting many separate inline comments.
+
+            After posting inline comments, post exactly one summary comment with `gh pr comment` that starts with the heading "## Code review" and lists the findings grouped by category (Bugs, Security, Performance, Quality, CLAUDE.md), each with a one-line description and confidence. If you genuinely find nothing worth raising, say so and note what you checked.
+
+            Do not approve, merge, or modify any code. Only review and comment. Do not use web fetch; use the gh CLI for all GitHub interactions.
+          claude_args: |
+            --allowedTools "Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment"
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
