@@ -45,7 +45,6 @@ type StyledDeckLayerLike = {
 
 interface DuckDBRenderedStyle {
   opacity: number;
-  rows: Record<number, Record<string, unknown>>;
   style: LayerStyle;
 }
 
@@ -76,6 +75,7 @@ let duckdbConstructorsPromise: Promise<{
   DuckDBControl: DuckDBControlConstructor;
 }> | null = null;
 const duckdbRenderedStyles = new Map<string, DuckDBRenderedStyle>();
+const warnedMissingRowsLayerIds = new Set<string>();
 
 export function openDuckDBLayerPanel(app: GeoLibreAppAPI): void {
   void openStandaloneDuckDBControl(app);
@@ -261,7 +261,6 @@ function setDuckDBRenderedLayerVisible(visible: boolean): void {
 function setDuckDBRenderedLayerStyle(layer: GeoLibreLayer): void {
   duckdbRenderedStyles.set(layer.id, {
     opacity: layer.opacity,
-    rows: getDuckDBRenderedRows(layer.id),
     style: layer.style,
   });
   void renderStyledDuckDBLayer();
@@ -300,13 +299,14 @@ function patchDuckDBRenderer(renderer: DuckDBRendererLike | null | undefined) {
     if (!renderedStyle) return originalLayers;
 
     return originalLayers.map((deckLayer) =>
-      cloneStyledDeckLayer(deckLayer, result.geometryType, renderedStyle),
+      cloneStyledDeckLayer(layerId, deckLayer, result.geometryType, renderedStyle),
     );
   };
   renderer.__geolibreStylePatched = true;
 }
 
 function cloneStyledDeckLayer(
+  layerId: string,
   deckLayer: StyledDeckLayerLike,
   geometryType: string | undefined,
   renderedStyle: DuckDBRenderedStyle,
@@ -352,7 +352,7 @@ function cloneStyledDeckLayer(
     elevationScale: style.extrusionHeightScale,
     extruded: style.extrusionEnabled,
     getFillColor: fillColor,
-    getElevation: createDuckDBElevationAccessor(renderedStyle),
+    getElevation: createDuckDBElevationAccessor(layerId, renderedStyle),
     getLineColor: strokeColor,
     getLineWidth: style.strokeWidth,
     lineWidthMinPixels: Math.max(1, style.strokeWidth),
@@ -370,11 +370,15 @@ function cloneStyledDeckLayer(
   });
 }
 
-function createDuckDBElevationAccessor(renderedStyle: DuckDBRenderedStyle) {
+function createDuckDBElevationAccessor(
+  layerId: string,
+  renderedStyle: DuckDBRenderedStyle,
+) {
   return (objectInfo: { data?: unknown; index?: number }): number => {
-    const { style, rows } = renderedStyle;
-    const fallbackHeight = style.extrusionBase || 100;
+    const { style } = renderedStyle;
+    const fallbackHeight = style.extrusionBase ?? 100;
     const rowIndex = getGeoArrowRowIndex(objectInfo);
+    const rows = getDuckDBRenderedRows(layerId);
     const row = rowIndex === null ? undefined : rows[rowIndex];
     const rawValue =
       row && style.extrusionHeightProperty
@@ -407,7 +411,9 @@ function getGeoArrowRowIndex(objectInfo: {
   if (typeof rawIndex === "number" && Number.isFinite(rawIndex)) {
     return rawIndex;
   }
-  if (typeof rawIndex === "bigint") return Number(rawIndex);
+  if (typeof rawIndex === "bigint") {
+    return rawIndex <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(rawIndex) : index;
+  }
   return index;
 }
 
@@ -415,7 +421,23 @@ function getDuckDBRenderedRows(layerId: string): Record<number, Record<string, u
   const control = duckdbControl as unknown as MutableDuckDBControl | null;
   const stateLayerId = duckdbControl?.getState().layer?.id;
   if (stateLayerId !== layerId) return {};
-  return control?.layer?.rows ?? {};
+  const rows = control?.layer?.rows;
+  if (!rows) {
+    warnMissingDuckDBRows(layerId);
+    return {};
+  }
+  return rows;
+}
+
+function warnMissingDuckDBRows(layerId: string): void {
+  if (warnedMissingRowsLayerIds.has(layerId)) return;
+  warnedMissingRowsLayerIds.add(layerId);
+
+  if (import.meta.env.DEV) {
+    console.warn(
+      `DuckDB layer ${layerId} did not expose row data for extrusion heights.`,
+    );
+  }
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
