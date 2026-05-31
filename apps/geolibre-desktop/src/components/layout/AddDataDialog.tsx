@@ -1142,6 +1142,13 @@ export function AddDataDialog({
 
           {kind === "postgres" && (
             <div className="space-y-3">
+              {!isTauri() ? (
+                <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                  PostgreSQL layers are only available in GeoLibre Desktop. This
+                  feature runs a local Martin tile server, which the web app
+                  cannot launch.
+                </p>
+              ) : null}
               {savedPostgresConnections.length > 0 ? (
                 <div className="space-y-1.5">
                   <Label htmlFor="postgres-saved-connection">
@@ -1212,7 +1219,7 @@ export function AddDataDialog({
                       type="button"
                       variant="outline"
                       onClick={handleConnectPostgres}
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || !isTauri()}
                     >
                       Connect
                     </Button>
