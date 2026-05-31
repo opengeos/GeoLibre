@@ -698,9 +698,9 @@ body,
 }
 
 .geolibre-search-control {
-  background-color: #fff !important;
+  background-color: hsl(var(--card)) !important;
   box-shadow: 0 12px 32px rgb(0 0 0 / 0.28);
-  color: #333 !important;
+  color: hsl(var(--foreground)) !important;
   max-width: min(320px, calc(100vw - 32px));
   overflow: visible;
   position: relative;
@@ -708,20 +708,20 @@ body,
 }
 
 .geolibre-search-control .maplibre-gl-search-input-wrapper {
-  background-color: #fff !important;
-  border-bottom: 1px solid #d9d9d9 !important;
+  background-color: hsl(var(--card)) !important;
+  border-bottom: 1px solid hsl(var(--border)) !important;
   box-sizing: border-box;
   width: 100% !important;
 }
 
 .geolibre-search-control .maplibre-gl-search-input {
-  background-color: #fff !important;
-  caret-color: #111;
-  color: #111 !important;
+  background-color: hsl(var(--card)) !important;
+  caret-color: hsl(var(--foreground));
+  color: hsl(var(--foreground)) !important;
 }
 
 .geolibre-search-control .maplibre-gl-search-input::placeholder {
-  color: #333 !important;
+  color: hsl(var(--foreground)) !important;
   opacity: 1;
 }
 
@@ -730,9 +730,9 @@ body,
 }
 
 .geolibre-search-control .maplibre-gl-search-toggle {
-  background: #fff !important;
+  background: hsl(var(--card)) !important;
   border-radius: 4px;
-  color: #333 !important;
+  color: hsl(var(--foreground)) !important;
   height: 29px !important;
   opacity: 1;
   width: 29px !important;
@@ -744,48 +744,48 @@ body,
 }
 
 .geolibre-search-control .maplibre-gl-search-toggle:hover {
-  background: #f2f2f2 !important;
-  color: #000 !important;
+  background: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
   opacity: 1;
 }
 
 .geolibre-search-control .maplibre-gl-search-icon,
 .geolibre-search-control .maplibre-gl-search-clear,
 .geolibre-search-control .maplibre-gl-search-collapse {
-  color: #333 !important;
+  color: hsl(var(--foreground)) !important;
   opacity: 1;
 }
 
 .geolibre-search-control .maplibre-gl-search-clear:hover,
 .geolibre-search-control .maplibre-gl-search-collapse:hover {
-  color: #000 !important;
+  color: hsl(var(--accent-foreground)) !important;
   opacity: 1;
 }
 
 .geolibre-search-control .maplibre-gl-search-results {
-  background-color: #fff !important;
-  border: 1px solid #d9d9d9;
+  background-color: hsl(var(--card)) !important;
+  border: 1px solid hsl(var(--border));
   border-top: 0;
-  color: #111 !important;
+  color: hsl(var(--foreground)) !important;
   max-width: min(320px, calc(100vw - 32px));
 }
 
 .geolibre-search-control .maplibre-gl-search-result {
-  border-bottom-color: #e5e5e5 !important;
-  color: #111 !important;
+  border-bottom-color: hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
 }
 
 .geolibre-search-control .maplibre-gl-search-result:hover {
-  background-color: #f2f2f2 !important;
-  color: #000 !important;
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
 }
 
 .geolibre-search-control .maplibre-gl-search-result:hover * {
-  color: #000 !important;
+  color: hsl(var(--accent-foreground)) !important;
 }
 
 .geolibre-search-control .maplibre-gl-search-result-detail {
-  color: #555 !important;
+  color: hsl(var(--muted-foreground)) !important;
   opacity: 1;
 }
 

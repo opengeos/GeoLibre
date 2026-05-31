@@ -434,6 +434,8 @@ let pluginActive = false;
 let componentsControlRevision = 0;
 let componentsConstructorsPromise: Promise<ComponentsConstructors> | null =
   null;
+let searchPlacesPanelVisible = false;
+const searchPlacesPanelListeners = new Set<() => void>();
 
 export interface CogRasterLayerOptions {
   url: string;
@@ -767,8 +769,25 @@ export function openPMTilesLayerPanel(app: GeoLibreAppAPI): void {
   void openStandalonePMTilesControl(app);
 }
 
+// The standalone Search panel is intentionally independent from the
+// ControlGrid search sub-control so it can be used from the Controls menu.
 export function openSearchPlacesPanel(app: GeoLibreAppAPI): void {
   void openStandaloneSearchControl(app);
+}
+
+export function closeSearchPlacesPanel(): void {
+  hideSearchControl();
+}
+
+export function isSearchPlacesPanelVisible(): boolean {
+  return searchPlacesPanelVisible;
+}
+
+export function subscribeSearchPlacesPanel(
+  listener: () => void,
+): () => void {
+  searchPlacesPanelListeners.add(listener);
+  return () => searchPlacesPanelListeners.delete(listener);
 }
 
 export function openStacSearchLayerPanel(app: GeoLibreAppAPI): void {
@@ -877,7 +896,7 @@ async function openStandaloneSearchControl(
 ): Promise<boolean> {
   const { SearchControl: SearchControlClass } = await getComponentsConstructors();
 
-  searchControl ??= new SearchControlClass(SEARCH_OPTIONS);
+  searchControl ??= createSearchControl(SearchControlClass);
 
   if (!searchControlMounted) {
     const added = app.addMapControl(searchControl, searchControlPosition);
@@ -891,6 +910,7 @@ async function openStandaloneSearchControl(
   setTimeout(() => {
     searchControl?.show();
     searchControl?.expand();
+    setSearchPlacesPanelVisible(true);
   }, 0);
   return true;
 }
@@ -1255,6 +1275,14 @@ function createPMTilesControl(
   return control;
 }
 
+function createSearchControl(
+  SearchControlClass: SearchControlConstructor,
+): SearchControl {
+  const control = new SearchControlClass(SEARCH_OPTIONS);
+  control.on("collapse", hideSearchControl);
+  return control;
+}
+
 function createStacSearchControl(
   StacSearchControlClass: StacSearchControlConstructor,
 ): StacSearchControl {
@@ -1342,6 +1370,7 @@ function teardownSearchControl(app: GeoLibreAppAPI): void {
   }
   searchControl = null;
   searchControlMounted = false;
+  setSearchPlacesPanelVisible(false);
 }
 
 function teardownStacSearchControl(app: GeoLibreAppAPI): void {
@@ -1352,6 +1381,19 @@ function teardownStacSearchControl(app: GeoLibreAppAPI): void {
   }
   stacSearchControl = null;
   stacSearchControlMounted = false;
+}
+
+function hideSearchControl(): void {
+  searchControl?.hide();
+  setSearchPlacesPanelVisible(false);
+}
+
+function setSearchPlacesPanelVisible(visible: boolean): void {
+  if (searchPlacesPanelVisible === visible) return;
+  searchPlacesPanelVisible = visible;
+  for (const listener of searchPlacesPanelListeners) {
+    listener();
+  }
 }
 
 function teardownZarrControl(app: GeoLibreAppAPI): void {
