@@ -20,8 +20,10 @@ use tauri::Manager;
 
 static POPUP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-const MARTIN_LATEST_BASE_URL: &str = "https://github.com/maplibre/martin/releases/latest/download";
-const MARTIN_CACHE_VERSION: &str = "latest";
+const MARTIN_VERSION: &str = "martin-v1.10.1";
+const MARTIN_RELEASE_BASE_URL: &str = "https://github.com/maplibre/martin/releases/download";
+const MARTIN_START_ATTEMPTS: usize = 3;
+const MARTIN_HEALTH_ATTEMPTS: usize = 30;
 
 struct MartinServerState {
     process: Mutex<Option<MartinProcess>>,
@@ -120,9 +122,20 @@ fn ensure_martin_binary(app: tauri::AppHandle) -> Result<MartinBinaryInfo, Strin
 }
 
 #[tauri::command]
-fn start_martin_server(
+async fn start_martin_server(
     app: tauri::AppHandle,
-    state: tauri::State<MartinServerState>,
+    connection_string: String,
+    default_srid: Option<String>,
+) -> Result<MartinServerInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        start_martin_server_blocking(app, connection_string, default_srid)
+    })
+    .await
+    .map_err(|error| format!("Could not join Martin startup task: {error}"))?
+}
+
+fn start_martin_server_blocking(
+    app: tauri::AppHandle,
     connection_string: String,
     default_srid: Option<String>,
 ) -> Result<MartinServerInfo, String> {
@@ -131,47 +144,53 @@ fn start_martin_server(
     }
 
     let binary = ensure_martin_binary_path(&app)?;
-    let port = reserve_local_port()?;
-    let listen_address = format!("127.0.0.1:{port}");
-    let base_url = format!("http://127.0.0.1:{port}");
-    let mut command = Command::new(&binary.path);
-    command
-        .arg("-l")
-        .arg(&listen_address)
-        .env("DATABASE_URL", connection_string.trim())
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-
-    if let Some(default_srid) = default_srid
-        .as_ref()
-        .map(|value| value.trim())
-        .filter(|value| !value.is_empty())
+    let state = app.state::<MartinServerState>();
     {
-        command.env("DEFAULT_SRID", default_srid);
+        let process = state
+            .process
+            .lock()
+            .map_err(|_| "Could not lock Martin process state.".to_string())?;
+        if process.is_some() {
+            return Err(
+                "A Martin server is already running. Stop it before starting a new one."
+                    .to_string(),
+            );
+        }
     }
 
-    let mut child = command
-        .spawn()
-        .map_err(|error| format!("Could not start Martin: {error}"))?;
-
-    if let Err(error) = wait_for_martin_health(&base_url, &mut child) {
-        let _ = child.kill();
-        let _ = child.wait();
-        return Err(error);
+    let mut last_error = "Could not start Martin.".to_string();
+    for _ in 0..MARTIN_START_ATTEMPTS {
+        match spawn_martin_server(
+            &binary.path,
+            connection_string.trim(),
+            default_srid.as_deref(),
+        ) {
+            Ok(info) => {
+                let mut process = state
+                    .process
+                    .lock()
+                    .map_err(|_| "Could not lock Martin process state.".to_string())?;
+                if process.is_some() {
+                    drop(info.process);
+                    return Err(
+                        "A Martin server is already running. Stop it before starting a new one."
+                            .to_string(),
+                    );
+                }
+                *process = Some(info.process);
+                return Ok(MartinServerInfo {
+                    base_url: info.base_url,
+                    binary_path: binary.path,
+                    port: info.port,
+                });
+            }
+            Err(error) => {
+                last_error = error;
+            }
+        }
     }
 
-    let mut process = state
-        .process
-        .lock()
-        .map_err(|_| "Could not lock Martin process state.".to_string())?;
-    *process = Some(MartinProcess { child });
-
-    Ok(MartinServerInfo {
-        base_url,
-        binary_path: binary.path,
-        port,
-    })
+    Err(last_error)
 }
 
 #[tauri::command]
@@ -192,13 +211,14 @@ fn ensure_martin_binary_path(app: &tauri::AppHandle) -> Result<MartinBinaryInfo,
         .app_data_dir()
         .map_err(|error| format!("Could not resolve app data directory: {error}"))?
         .join("martin")
-        .join(MARTIN_CACHE_VERSION)
+        .join(MARTIN_VERSION)
         .join(
             asset_name
                 .trim_end_matches(".tar.gz")
                 .trim_end_matches(".zip"),
         );
     let binary_path = martin_dir.join(executable_name);
+    let temp_binary_path = martin_dir.join(format!("{executable_name}.download"));
 
     if binary_path.exists() {
         return Ok(MartinBinaryInfo {
@@ -209,9 +229,18 @@ fn ensure_martin_binary_path(app: &tauri::AppHandle) -> Result<MartinBinaryInfo,
 
     fs::create_dir_all(&martin_dir)
         .map_err(|error| format!("Could not create Martin cache directory: {error}"))?;
+    let _ = fs::remove_file(&temp_binary_path);
     let archive = download_martin_asset(asset_name)?;
-    extract_martin_binary(&archive, asset_name, &binary_path)?;
-    make_executable(&binary_path)?;
+    if let Err(error) = extract_martin_binary(&archive, asset_name, &temp_binary_path)
+        .and_then(|_| make_executable(&temp_binary_path))
+        .and_then(|_| {
+            fs::rename(&temp_binary_path, &binary_path)
+                .map_err(|error| format!("Could not install Martin binary: {error}"))
+        })
+    {
+        let _ = fs::remove_file(&temp_binary_path);
+        return Err(error);
+    }
 
     Ok(MartinBinaryInfo {
         path: binary_path.to_string_lossy().to_string(),
@@ -229,6 +258,9 @@ fn martin_asset_name() -> Result<&'static str, String> {
     if cfg!(target_os = "macos") && cfg!(target_arch = "aarch64") {
         return Ok("martin-aarch64-apple-darwin.tar.gz");
     }
+    if cfg!(target_os = "macos") && cfg!(target_arch = "x86_64") {
+        return Ok("martin-x86_64-apple-darwin.tar.gz");
+    }
     if cfg!(target_os = "windows") && cfg!(target_arch = "x86_64") {
         return Ok("martin-x86_64-pc-windows-msvc.zip");
     }
@@ -245,7 +277,7 @@ fn martin_executable_name() -> &'static str {
 }
 
 fn download_martin_asset(asset_name: &str) -> Result<Vec<u8>, String> {
-    let url = format!("{MARTIN_LATEST_BASE_URL}/{asset_name}");
+    let url = format!("{MARTIN_RELEASE_BASE_URL}/{MARTIN_VERSION}/{asset_name}");
     let response = reqwest::blocking::Client::builder()
         .user_agent("GeoLibre Desktop")
         .build()
@@ -293,10 +325,7 @@ fn extract_martin_binary_from_tar_gz(archive: &[u8], binary_path: &Path) -> Resu
             continue;
         }
 
-        let mut output = File::create(binary_path)
-            .map_err(|error| format!("Could not create Martin binary: {error}"))?;
-        std::io::copy(&mut entry, &mut output)
-            .map_err(|error| format!("Could not extract Martin binary: {error}"))?;
+        copy_archive_entry_to_path(&mut entry, binary_path)?;
         return Ok(());
     }
 
@@ -318,14 +347,21 @@ fn extract_martin_binary_from_zip(archive: &[u8], binary_path: &Path) -> Result<
             continue;
         }
 
-        let mut output = File::create(binary_path)
-            .map_err(|error| format!("Could not create Martin binary: {error}"))?;
-        std::io::copy(&mut file, &mut output)
-            .map_err(|error| format!("Could not extract Martin binary: {error}"))?;
+        copy_archive_entry_to_path(&mut file, binary_path)?;
         return Ok(());
     }
 
     Err("Martin zip did not contain the expected executable.".to_string())
+}
+
+fn copy_archive_entry_to_path<R: Read>(reader: &mut R, path: &Path) -> Result<(), String> {
+    let mut output =
+        File::create(path).map_err(|error| format!("Could not create Martin binary: {error}"))?;
+    if let Err(error) = std::io::copy(reader, &mut output) {
+        let _ = fs::remove_file(path);
+        return Err(format!("Could not extract Martin binary: {error}"));
+    }
+    Ok(())
 }
 
 #[cfg(unix)]
@@ -345,28 +381,80 @@ fn make_executable(_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn reserve_local_port() -> Result<u16, String> {
+struct SpawnedMartinServer {
+    base_url: String,
+    port: u16,
+    process: MartinProcess,
+}
+
+fn spawn_martin_server(
+    binary_path: &str,
+    connection_string: &str,
+    default_srid: Option<&str>,
+) -> Result<SpawnedMartinServer, String> {
     let listener = TcpListener::bind("127.0.0.1:0")
         .map_err(|error| format!("Could not reserve a local Martin port: {error}"))?;
-    listener
+    let port = listener
         .local_addr()
         .map(|address| address.port())
-        .map_err(|error| format!("Could not read local Martin port: {error}"))
+        .map_err(|error| format!("Could not read local Martin port: {error}"))?;
+    let listen_address = format!("127.0.0.1:{port}");
+    let base_url = format!("http://127.0.0.1:{port}");
+    let mut command = Command::new(binary_path);
+    command
+        .arg("-l")
+        .arg(&listen_address)
+        .env("DATABASE_URL", connection_string)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    if let Some(default_srid) = default_srid
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        command.env("DEFAULT_SRID", default_srid);
+    }
+
+    drop(listener);
+    let mut child = command
+        .spawn()
+        .map_err(|error| format!("Could not start Martin: {error}"))?;
+
+    if let Err(error) = wait_for_martin_health(&base_url, &mut child) {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(error);
+    }
+
+    let _ = child.stdout.take();
+    let _ = child.stderr.take();
+
+    Ok(SpawnedMartinServer {
+        base_url,
+        port,
+        process: MartinProcess { child },
+    })
 }
 
 fn wait_for_martin_health(base_url: &str, child: &mut Child) -> Result<(), String> {
     let health_url = format!("{base_url}/health");
     let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_millis(750))
+        .timeout(Duration::from_millis(500))
         .build()
         .map_err(|error| format!("Could not create HTTP client: {error}"))?;
 
-    for _ in 0..80 {
+    for _ in 0..MARTIN_HEALTH_ATTEMPTS {
         if let Some(status) = child
             .try_wait()
             .map_err(|error| format!("Could not inspect Martin process: {error}"))?
         {
-            return Err(format!("Martin exited before it was ready: {status}"));
+            let output = read_child_output(child);
+            return Err(if output.trim().is_empty() {
+                format!("Martin exited before it was ready: {status}")
+            } else {
+                format!("Martin exited before it was ready: {output}")
+            });
         }
 
         if client
@@ -382,6 +470,17 @@ fn wait_for_martin_health(base_url: &str, child: &mut Child) -> Result<(), Strin
     }
 
     Err("Martin did not become ready in time.".to_string())
+}
+
+fn read_child_output(child: &mut Child) -> String {
+    let mut output = String::new();
+    if let Some(mut stdout) = child.stdout.take() {
+        let _ = stdout.read_to_string(&mut output);
+    }
+    if let Some(mut stderr) = child.stderr.take() {
+        let _ = stderr.read_to_string(&mut output);
+    }
+    output
 }
 
 #[derive(Serialize)]

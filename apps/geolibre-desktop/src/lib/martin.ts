@@ -83,6 +83,7 @@ export async function fetchMartinCatalog(
       name: tile.name?.trim() || id,
       contentType: tile.contentType ?? tile.content_type ?? "",
     }))
+    .filter((source) => isVectorTileContentType(source.contentType))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -108,4 +109,12 @@ function assertTauri(): void {
   if (!isTauri()) {
     throw new Error("PostgreSQL layers require GeoLibre Desktop.");
   }
+}
+
+function isVectorTileContentType(contentType: string): boolean {
+  const normalized = contentType.toLowerCase();
+  return (
+    normalized.includes("protobuf") ||
+    normalized.includes("mapbox-vector-tile")
+  );
 }

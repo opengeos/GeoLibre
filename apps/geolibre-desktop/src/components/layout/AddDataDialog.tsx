@@ -28,6 +28,7 @@ import {
   type RefObject,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -209,7 +210,9 @@ function readSavedPostgresConnections(): string[] {
     if (!value) return [];
     const parsed = JSON.parse(value);
     return Array.isArray(parsed)
-      ? parsed.filter((item): item is string => typeof item === "string")
+      ? uniquePostgresConnections(
+          parsed.filter((item): item is string => typeof item === "string"),
+        )
       : [];
   } catch {
     return [];
@@ -220,10 +223,10 @@ function rememberPostgresConnection(connectionString: string): string[] {
   const trimmed = connectionString.trim();
   if (!trimmed || typeof window === "undefined") return [];
 
-  const connections = [
+  const connections = uniquePostgresConnections([
     trimmed,
     ...readSavedPostgresConnections().filter((value) => value !== trimmed),
-  ].slice(0, MAX_SAVED_POSTGRES_CONNECTIONS);
+  ]).slice(0, MAX_SAVED_POSTGRES_CONNECTIONS);
 
   window.localStorage.setItem(
     POSTGRES_CONNECTIONS_STORAGE_KEY,
@@ -232,13 +235,19 @@ function rememberPostgresConnection(connectionString: string): string[] {
   return connections;
 }
 
+function uniquePostgresConnections(connections: string[]): string[] {
+  return Array.from(new Set(connections));
+}
+
 function savedPostgresConnectionLabel(connectionString: string): string {
   try {
     const url = new URL(connectionString);
     if (url.password) url.password = "****";
     return url.toString();
   } catch {
-    return connectionString.replace(/(:\/\/[^:\s/@]+:)[^@\s]+@/, "$1****@");
+    return connectionString
+      .replace(/(:\/\/[^:\s/@]+:)[^@\s]+@/, "$1****@")
+      .replace(/(password\s*=\s*)('[^']*'|[^\s]+)/i, "$1****");
   }
 }
 
@@ -324,9 +333,11 @@ export function AddDataDialog({
   const [martinSources, setMartinSources] = useState<MartinSourceSummary[]>([]);
   const [selectedMartinSourceId, setSelectedMartinSourceId] = useState("");
   const [martinStatus, setMartinStatus] = useState<string | null>(null);
+  const martinLayerAddedRef = useRef(false);
 
   useEffect(() => {
     if (!kind) return;
+    if (kind === "postgres" && !martinServer) martinLayerAddedRef.current = false;
     setError(null);
     setIsSubmitting(false);
     setLayerName(
@@ -376,10 +387,12 @@ export function AddDataDialog({
       kind === "postgres" ? (savedConnections[0] ?? "") : "",
     );
     setPostgresDefaultSrid("");
-    setMartinServer(null);
-    setMartinSources([]);
-    setSelectedMartinSourceId("");
-    setMartinStatus(null);
+    if (!martinLayerAddedRef.current) {
+      setMartinServer(null);
+      setMartinSources([]);
+      setSelectedMartinSourceId("");
+      setMartinStatus(null);
+    }
   }, [kind]);
 
   const description = useMemo(() => {
@@ -407,10 +420,23 @@ export function AddDataDialog({
     return "";
   }, [kind]);
 
-  const closeDialog = () => onOpenChange(false);
+  const stopTransientMartinServer = () => {
+    if (!martinServer || martinLayerAddedRef.current) return;
+    void stopMartinServer();
+    setMartinServer(null);
+    setMartinSources([]);
+    setSelectedMartinSourceId("");
+    setMartinStatus(null);
+  };
+
+  const closeDialog = () => {
+    stopTransientMartinServer();
+    onOpenChange(false);
+  };
 
   const handleOpenChange = (next: boolean) => {
     if (!next && isSubmitting) return;
+    if (!next) stopTransientMartinServer();
     onOpenChange(next);
   };
 
@@ -450,6 +476,7 @@ export function AddDataDialog({
       if (!postgresConnectionString.trim()) {
         throw new Error("Enter a PostgreSQL connection string.");
       }
+      const connectionString = postgresConnectionString.trim();
 
       setMartinStatus("Checking Martin binary...");
       const binary = await ensureMartinBinary();
@@ -459,11 +486,11 @@ export function AddDataDialog({
           : "Starting local Martin server...",
       );
       const server = await startMartinServer({
-        connectionString: postgresConnectionString,
+        connectionString,
         defaultSrid: postgresDefaultSrid,
       });
       setSavedPostgresConnections(
-        rememberPostgresConnection(postgresConnectionString),
+        rememberPostgresConnection(connectionString),
       );
       setMartinServer(server);
       setMartinStatus("Reading Martin catalog...");
@@ -490,6 +517,7 @@ export function AddDataDialog({
     setIsSubmitting(true);
     try {
       await stopMartinServer();
+      martinLayerAddedRef.current = false;
       setMartinServer(null);
       setMartinSources([]);
       setSelectedMartinSourceId("");
@@ -512,6 +540,7 @@ export function AddDataDialog({
 
     const source = martinSources.find((candidate) => candidate.id === sourceId);
     const tilejsonUrl = martinTileJsonUrl(martinServer, sourceId);
+    martinLayerAddedRef.current = true;
     addAndClose(
       createBaseLayer(
         layerName.trim() || tilejson.name || source?.name || sourceId,
@@ -520,6 +549,7 @@ export function AddDataDialog({
           type: "vector",
           url: tilejsonUrl,
           sourceLayer,
+          sourceLayers: vectorLayers.map((vectorLayer) => vectorLayer.id),
           bounds: tilejson.bounds,
           minzoom: tilejson.minzoom,
           maxzoom: tilejson.maxzoom,
@@ -757,6 +787,9 @@ export function AddDataDialog({
       }
 
       if (kind === "postgres") {
+        if (!martinServer) {
+          throw new Error("Connect to PostgreSQL first.");
+        }
         if (!selectedMartinSourceId) {
           throw new Error("Select a Martin source to add.");
         }
@@ -824,6 +857,10 @@ export function AddDataDialog({
       setIsSubmitting(false);
     }
   };
+
+  const addLayerDisabled =
+    isSubmitting ||
+    (kind === "postgres" && (!martinServer || !selectedMartinSourceId));
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -1185,20 +1222,12 @@ export function AddDataDialog({
                   id="postgres-connection"
                   type="password"
                   autoComplete="off"
-                  list="postgres-saved-connections"
                   placeholder="postgres://user:password@host:5432/database"
                   value={postgresConnectionString}
                   onChange={(event) =>
                     setPostgresConnectionString(event.target.value)
                   }
                 />
-                {savedPostgresConnections.length > 0 ? (
-                  <datalist id="postgres-saved-connections">
-                    {savedPostgresConnections.map((connection) => (
-                      <option key={connection} value={connection} />
-                    ))}
-                  </datalist>
-                ) : null}
               </div>
               <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
                 <div className="space-y-1.5">
@@ -1405,7 +1434,7 @@ export function AddDataDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button type="submit" disabled={addLayerDisabled}>
               {kind === "wms" ? (
                 <Globe2 className="mr-2 h-3.5 w-3.5" />
               ) : kind === "raster" ? (

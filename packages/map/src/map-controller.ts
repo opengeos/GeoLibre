@@ -86,6 +86,18 @@ function nativeLayerSuffix(layerId: string): string | undefined {
   return suffix.charAt(0).toUpperCase() + suffix.slice(1);
 }
 
+function vectorTileLayerSuffix(layerId: string): string | undefined {
+  if (layerId.endsWith("-vector") || layerId.endsWith("-fill")) {
+    return "Polygons";
+  }
+  if (layerId.endsWith("-vector-extrusion") || layerId.endsWith("-extrusion")) {
+    return "Extrusions";
+  }
+  if (layerId.endsWith("-line")) return "Lines";
+  if (layerId.endsWith("-circle")) return "Points";
+  return nativeLayerSuffix(layerId);
+}
+
 function createBlankMapStyle(): maplibregl.StyleSpecification {
   return {
     version: 8,
@@ -1103,7 +1115,7 @@ export class MapController {
     if (layer.type === "vector-tiles") {
       return vectorTileStyleLayerIds(layer).map((id) => ({
         id,
-        suffix: nativeLayerSuffix(id),
+        suffix: vectorTileLayerSuffix(id),
       }));
     }
 
