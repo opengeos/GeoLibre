@@ -463,7 +463,8 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
   const { style } = layer;
   const isDeckRasterLayer =
     layer.metadata.sourceKind === "cog-url" ||
-    layer.metadata.sourceKind === "geotiff-url";
+    layer.metadata.sourceKind === "geotiff-url" ||
+    layer.metadata.sourceKind === "stac-search-cog";
   const isRasterTileLayer = layer.metadata.tileType === "raster";
   const hasVectorPaintControls =
     !isRasterTileLayer &&

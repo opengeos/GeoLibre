@@ -17,6 +17,7 @@ export {
   openLidarLayerPanel,
   openPMTilesLayerPanel,
   openSplattingLayerPanel,
+  openStacSearchLayerPanel,
   openZarrLayerPanel,
   type CogRasterLayerOptions,
 } from "./plugins/maplibre-components";

@@ -452,6 +452,147 @@ body,
   accent-color: hsl(var(--primary));
 }
 
+.geolibre-stac-search-control {
+  background-color: hsl(var(--popover)) !important;
+  color: hsl(var(--popover-foreground)) !important;
+  overflow: visible;
+  position: relative;
+  z-index: 3;
+}
+
+.maplibregl-control-container {
+  position: relative;
+  z-index: 2;
+}
+
+#deckgl-overlay {
+  z-index: 1;
+}
+
+.geolibre-stac-search-control .maplibre-gl-stac-search-button {
+  display: none !important;
+}
+
+.geolibre-stac-search-control .maplibre-gl-stac-search-panel {
+  background-color: hsl(var(--popover)) !important;
+  border: 1px solid hsl(var(--border));
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.28);
+  color: hsl(var(--popover-foreground)) !important;
+  max-width: min(365px, calc(100vw - 32px));
+}
+
+.geolibre-stac-search-control .maplibre-gl-stac-search-header {
+  background-color: hsl(var(--card)) !important;
+  border-bottom-color: hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-stac-search-control .maplibre-gl-stac-search-title,
+.geolibre-stac-search-control .maplibre-gl-stac-search-form-group > label,
+.geolibre-stac-search-control .maplibre-gl-stac-search-hint,
+.geolibre-stac-search-control .maplibre-gl-stac-search-list-header,
+.geolibre-stac-search-control .maplibre-gl-stac-search-list-label,
+.geolibre-stac-search-control .maplibre-gl-stac-search-rgb-label {
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-stac-search-control .maplibre-gl-stac-search-close,
+.geolibre-stac-search-control .maplibre-gl-stac-search-list-remove {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.geolibre-stac-search-control .maplibre-gl-stac-search-close:hover,
+.geolibre-stac-search-control .maplibre-gl-stac-search-list-remove:hover {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+.geolibre-stac-search-control .maplibre-gl-stac-search-input,
+.geolibre-stac-search-control .maplibre-gl-stac-search-select {
+  background-color: hsl(var(--background)) !important;
+  border: 1px solid hsl(var(--input)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-stac-search-control .maplibre-gl-stac-search-input::placeholder {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.geolibre-stac-search-control .maplibre-gl-stac-search-input:focus,
+.geolibre-stac-search-control .maplibre-gl-stac-search-select:focus {
+  border-color: hsl(var(--ring)) !important;
+  box-shadow: 0 0 0 1px hsl(var(--ring)) !important;
+  outline: none;
+}
+
+.geolibre-stac-search-control .maplibre-gl-stac-search-select option {
+  background-color: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+}
+
+.geolibre-stac-search-control .maplibre-gl-stac-search-btn,
+.geolibre-stac-search-control .maplibre-gl-stac-search-btn-clear,
+.geolibre-stac-search-control .maplibre-gl-stac-search-btn-clear-footprints {
+  background-color: hsl(var(--card)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-stac-search-control
+  .maplibre-gl-stac-search-btn:hover:not(:disabled),
+.geolibre-stac-search-control .maplibre-gl-stac-search-btn-clear:hover,
+.geolibre-stac-search-control
+  .maplibre-gl-stac-search-btn-clear-footprints:hover {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+.geolibre-stac-search-control .maplibre-gl-stac-search-btn:disabled {
+  color: hsl(var(--muted-foreground)) !important;
+  opacity: 0.65;
+}
+
+.geolibre-stac-search-control .maplibre-gl-stac-search-btn--primary,
+.geolibre-stac-search-control
+  .maplibre-gl-stac-search-btn--toggle.active {
+  background-color: hsl(var(--primary)) !important;
+  border-color: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+}
+
+.geolibre-stac-search-control .maplibre-gl-stac-search-list {
+  background-color: hsl(var(--card)) !important;
+  border-color: hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-stac-search-control .maplibre-gl-stac-search-list-item {
+  background-color: hsl(var(--background)) !important;
+  border-bottom-color: hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-stac-search-control .maplibre-gl-stac-search-list-item:hover {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+.geolibre-stac-search-control
+  .maplibre-gl-stac-search-list-item:hover
+  .maplibre-gl-stac-search-list-label {
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+.geolibre-stac-search-control
+  .maplibre-gl-stac-search-list-item:hover
+  .maplibre-gl-stac-search-list-remove {
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+.geolibre-stac-search-control .maplibre-gl-stac-search-status--error {
+  color: hsl(var(--destructive)) !important;
+}
+
 .geolibre-flatgeobuf-control .maplibre-gl-add-vector-panel {
   background-color: hsl(var(--popover)) !important;
   border: 1px solid hsl(var(--border));

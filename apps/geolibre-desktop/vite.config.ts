@@ -19,6 +19,8 @@ const APP_VERSION = JSON.parse(
 const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
 const RADIX_OPTIMIZE_EXCLUDES = [
+  "@developmentseed/geotiff",
+  "@developmentseed/lzw-tiff-decoder",
   "@radix-ui/react-dialog",
   "@radix-ui/react-dropdown-menu",
   "@radix-ui/react-label",
@@ -112,7 +114,11 @@ async function proxyBinaryRequest(
     return;
   }
 
-  const response = await fetch(target);
+  const headers = new Headers();
+  const range = req.headers.range;
+  if (range) headers.set("range", range);
+
+  const response = await fetch(target, { headers });
   const contentType =
     response.headers.get("content-type") ?? "application/octet-stream";
   const body = Buffer.from(await response.arrayBuffer());
@@ -121,6 +127,10 @@ async function proxyBinaryRequest(
   res.setHeader("access-control-allow-origin", "*");
   res.setHeader("cache-control", "public, max-age=3600");
   res.setHeader("content-type", contentType);
+  for (const header of ["accept-ranges", "content-length", "content-range"]) {
+    const value = response.headers.get(header);
+    if (value) res.setHeader(header, value);
+  }
   res.end(body);
 }
 
@@ -135,8 +145,14 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
   },
+  worker: {
+    format: "es",
+  },
   envPrefix: ["VITE_", "TAURI_"],
   optimizeDeps: {
+    esbuildOptions: {
+      target: "esnext",
+    },
     exclude: RADIX_OPTIMIZE_EXCLUDES,
   },
   build: {

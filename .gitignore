@@ -17,3 +17,4 @@ __pycache__/
 *.tsbuildinfo
 **/src-tauri/gen/
 .playwright-cli/
+.claude/
