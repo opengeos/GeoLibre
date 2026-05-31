@@ -358,6 +358,8 @@ function syncVectorTileLayer(
   const visibility = layer.visible ? "visible" : "none";
   if (layer.style.extrusionEnabled) {
     removeIfExists(map, vectorTileLayerId(layer.id));
+    removeIfExists(map, vectorTileLineLayerId(layer.id));
+    removeIfExists(map, vectorTileCircleLayerId(layer.id));
     ensureLayer(
       map,
       vectorTileLayerId(layer.id, true),
@@ -366,6 +368,13 @@ function syncVectorTileLayer(
         type: "fill-extrusion",
         source: src,
         "source-layer": sourceLayer,
+        filter: [
+          "match",
+          ["geometry-type"],
+          ["Polygon", "MultiPolygon"],
+          true,
+          false,
+        ],
         paint: fillExtrusionPaint(layer.style, layer.opacity),
         layout: { visibility },
       },
@@ -381,7 +390,54 @@ function syncVectorTileLayer(
         type: "fill",
         source: src,
         "source-layer": sourceLayer,
+        filter: [
+          "match",
+          ["geometry-type"],
+          ["Polygon", "MultiPolygon"],
+          true,
+          false,
+        ],
         paint: fillPaint(layer.style, layer.opacity),
+        layout: { visibility },
+      },
+      beforeId,
+    );
+    ensureLayer(
+      map,
+      vectorTileLineLayerId(layer.id),
+      {
+        id: vectorTileLineLayerId(layer.id),
+        type: "line",
+        source: src,
+        "source-layer": sourceLayer,
+        filter: [
+          "match",
+          ["geometry-type"],
+          ["LineString", "MultiLineString", "Polygon", "MultiPolygon"],
+          true,
+          false,
+        ],
+        paint: linePaint(layer.style, layer.opacity),
+        layout: { visibility },
+      },
+      beforeId,
+    );
+    ensureLayer(
+      map,
+      vectorTileCircleLayerId(layer.id),
+      {
+        id: vectorTileCircleLayerId(layer.id),
+        type: "circle",
+        source: src,
+        "source-layer": sourceLayer,
+        filter: [
+          "match",
+          ["geometry-type"],
+          ["Point", "MultiPoint"],
+          true,
+          false,
+        ],
+        paint: circlePaint(layer.style, layer.opacity),
         layout: { visibility },
       },
       beforeId,
@@ -620,6 +676,26 @@ export function vectorTileLayerId(
   return `layer-${layerId}-${extrusionEnabled ? "vector-extrusion" : "vector"}`;
 }
 
+export function vectorTileLineLayerId(layerId: string): string {
+  return `layer-${layerId}-vector-line`;
+}
+
+export function vectorTileCircleLayerId(layerId: string): string {
+  return `layer-${layerId}-vector-circle`;
+}
+
+export function vectorTileStyleLayerIds(layer: GeoLibreLayer): string[] {
+  if (layer.type !== "vector-tiles") return [];
+  if (layer.style.extrusionEnabled) {
+    return [vectorTileLayerId(layer.id, true)];
+  }
+  return [
+    vectorTileCircleLayerId(layer.id),
+    vectorTileLineLayerId(layer.id),
+    vectorTileLayerId(layer.id),
+  ];
+}
+
 function ensureLayer(
   map: maplibregl.Map,
   id: string,
@@ -678,6 +754,8 @@ export function removeLayerFromMap(
     lineLayerId(layerId),
     circleLayerId(layerId),
     `layer-${layerId}-raster`,
+    vectorTileCircleLayerId(layerId),
+    vectorTileLineLayerId(layerId),
     vectorTileLayerId(layerId),
     vectorTileLayerId(layerId, true),
   ]) {

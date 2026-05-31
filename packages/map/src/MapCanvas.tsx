@@ -10,7 +10,7 @@ import {
 import {
   externalExtrusionLayerId,
   mbtilesStyleLayerIds,
-  vectorTileLayerId,
+  vectorTileStyleLayerIds,
 } from "./layer-sync";
 import { createMapController, type MapController } from "./map-controller";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -96,8 +96,7 @@ function identifyStyleLayerIds(layer: GeoLibreLayer): string[] {
     lineLayerId(layer.id),
     fillExtrusionLayerId(layer.id),
     fillLayerId(layer.id),
-    vectorTileLayerId(layer.id, true),
-    vectorTileLayerId(layer.id),
+    ...vectorTileStyleLayerIds(layer),
   ];
 }
 

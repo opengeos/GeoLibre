@@ -24,7 +24,7 @@ import {
   mbtilesStyleLayerIds,
   removeLayerFromMap,
   syncLayer,
-  vectorTileLayerId,
+  vectorTileStyleLayerIds,
 } from "./layer-sync";
 
 const DEFAULT_PROJECTION: maplibregl.ProjectionSpecification = {
@@ -1101,10 +1101,10 @@ export class MapController {
     }
 
     if (layer.type === "vector-tiles") {
-      return [
-        { id: vectorTileLayerId(layer.id, true), suffix: "Extrusions" },
-        { id: vectorTileLayerId(layer.id), suffix: "Polygons" },
-      ];
+      return vectorTileStyleLayerIds(layer).map((id) => ({
+        id,
+        suffix: nativeLayerSuffix(id),
+      }));
     }
 
     if (layer.type === "mbtiles") {

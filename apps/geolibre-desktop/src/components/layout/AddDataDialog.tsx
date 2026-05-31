@@ -41,6 +41,17 @@ import {
   registerMbtilesProtocol,
   type MbtilesMetadata,
 } from "../../lib/mbtiles";
+import {
+  ensureMartinBinary,
+  fetchMartinCatalog,
+  fetchMartinTileJson,
+  martinTileJsonUrl,
+  startMartinServer,
+  stopMartinServer,
+  type MartinServerInfo,
+  type MartinSourceSummary,
+} from "../../lib/martin";
+import { isTauri } from "../../lib/tauri-io";
 
 export type AddDataKind =
   | "xyz"
@@ -48,7 +59,8 @@ export type AddDataKind =
   | "vector"
   | "raster"
   | "mbtiles"
-  | "arcgis";
+  | "arcgis"
+  | "postgres";
 
 interface AddDataDialogProps {
   kind: AddDataKind | null;
@@ -67,6 +79,7 @@ const KIND_LABELS: Record<AddDataKind, string> = {
   raster: "Add Raster Layer",
   mbtiles: "Add MBTiles Layer",
   arcgis: "Add ArcGIS Layer",
+  postgres: "Add PostgreSQL Layer",
 };
 
 const SELECT_CLASS =
@@ -100,6 +113,9 @@ const DEFAULT_ARCGIS_URLS: Record<ArcGISLayerType, string> = {
   feature: DEFAULT_ARCGIS_FEATURE_URL,
   "vector-tile": DEFAULT_ARCGIS_VECTOR_TILE_URL,
 };
+const POSTGRES_CONNECTIONS_STORAGE_KEY =
+  "geolibre.postgres.connectionStrings";
+const MAX_SAVED_POSTGRES_CONNECTIONS = 10;
 
 function createLayerId(): string {
   return crypto.randomUUID();
@@ -186,6 +202,52 @@ function parseOptionalNumber(value: string, label: string): number | undefined {
   return parseRequiredNumber(value, label);
 }
 
+function readSavedPostgresConnections(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const value = window.localStorage.getItem(POSTGRES_CONNECTIONS_STORAGE_KEY);
+    if (!value) return [];
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberPostgresConnection(connectionString: string): string[] {
+  const trimmed = connectionString.trim();
+  if (!trimmed || typeof window === "undefined") return [];
+
+  const connections = [
+    trimmed,
+    ...readSavedPostgresConnections().filter((value) => value !== trimmed),
+  ].slice(0, MAX_SAVED_POSTGRES_CONNECTIONS);
+
+  window.localStorage.setItem(
+    POSTGRES_CONNECTIONS_STORAGE_KEY,
+    JSON.stringify(connections),
+  );
+  return connections;
+}
+
+function savedPostgresConnectionLabel(connectionString: string): string {
+  try {
+    const url = new URL(connectionString);
+    if (url.password) url.password = "****";
+    return url.toString();
+  } catch {
+    return connectionString.replace(/(:\/\/[^:\s/@]+:)[^@\s]+@/, "$1****@");
+  }
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string" && error.trim()) return error;
+  return fallback;
+}
+
 async function fetchGeoJson(url: string): Promise<FeatureCollection> {
   const response = await fetch(url);
   if (!response.ok) {
@@ -251,6 +313,17 @@ export function AddDataDialog({
   const [arcgisItemId, setArcgisItemId] = useState("");
   const [arcgisPortalUrl, setArcgisPortalUrl] = useState("");
   const [arcgisAccessToken, setArcgisAccessToken] = useState("");
+  const [postgresConnectionString, setPostgresConnectionString] = useState("");
+  const [savedPostgresConnections, setSavedPostgresConnections] = useState<
+    string[]
+  >(() => readSavedPostgresConnections());
+  const [postgresDefaultSrid, setPostgresDefaultSrid] = useState("");
+  const [martinServer, setMartinServer] = useState<MartinServerInfo | null>(
+    null,
+  );
+  const [martinSources, setMartinSources] = useState<MartinSourceSummary[]>([]);
+  const [selectedMartinSourceId, setSelectedMartinSourceId] = useState("");
+  const [martinStatus, setMartinStatus] = useState<string | null>(null);
 
   useEffect(() => {
     if (!kind) return;
@@ -264,6 +337,7 @@ export function AddDataDialog({
         raster: "Raster Layer",
         mbtiles: "MBTiles Layer",
         arcgis: "ArcGIS Layer",
+        postgres: "PostgreSQL Layer",
       }[kind],
     );
     setBeforeLayerId("");
@@ -296,6 +370,16 @@ export function AddDataDialog({
     setArcgisItemId("");
     setArcgisPortalUrl("");
     setArcgisAccessToken("");
+    const savedConnections = readSavedPostgresConnections();
+    setSavedPostgresConnections(savedConnections);
+    setPostgresConnectionString(
+      kind === "postgres" ? (savedConnections[0] ?? "") : "",
+    );
+    setPostgresDefaultSrid("");
+    setMartinServer(null);
+    setMartinSources([]);
+    setSelectedMartinSourceId("");
+    setMartinStatus(null);
   }, [kind]);
 
   const description = useMemo(() => {
@@ -316,6 +400,9 @@ export function AddDataDialog({
     }
     if (kind === "arcgis") {
       return "Add an ArcGIS FeatureServer layer, VectorTileServer layer, or portal item.";
+    }
+    if (kind === "postgres") {
+      return "Start Martin locally, discover PostGIS sources, and add a source as vector tiles.";
     }
     return "";
   }, [kind]);
@@ -340,9 +427,117 @@ export function AddDataDialog({
     }
   };
 
-  const addAndClose = (layer: GeoLibreLayer) => {
+  const addAndClose = (
+    layer: GeoLibreLayer,
+    options: { fit?: boolean } = {},
+  ) => {
     addLayer(layer, beforeLayer);
+    if (options.fit) mapControllerRef.current?.fitLayer(layer);
     closeDialog();
+  };
+
+  const handleConnectPostgres = async () => {
+    setError(null);
+    setMartinStatus(null);
+    setIsSubmitting(true);
+    setMartinSources([]);
+    setSelectedMartinSourceId("");
+
+    try {
+      if (!isTauri()) {
+        throw new Error("PostgreSQL layers require GeoLibre Desktop.");
+      }
+      if (!postgresConnectionString.trim()) {
+        throw new Error("Enter a PostgreSQL connection string.");
+      }
+
+      setMartinStatus("Checking Martin binary...");
+      const binary = await ensureMartinBinary();
+      setMartinStatus(
+        binary.downloaded
+          ? "Martin downloaded. Starting local server..."
+          : "Starting local Martin server...",
+      );
+      const server = await startMartinServer({
+        connectionString: postgresConnectionString,
+        defaultSrid: postgresDefaultSrid,
+      });
+      setSavedPostgresConnections(
+        rememberPostgresConnection(postgresConnectionString),
+      );
+      setMartinServer(server);
+      setMartinStatus("Reading Martin catalog...");
+
+      const sources = await fetchMartinCatalog(server);
+      setMartinSources(sources);
+      setSelectedMartinSourceId(sources[0]?.id ?? "");
+      setMartinStatus(
+        sources.length > 0
+          ? `Found ${sources.length} source${sources.length === 1 ? "" : "s"}.`
+          : "Martin is running, but no compatible PostGIS sources were found.",
+      );
+    } catch (err) {
+      setMartinServer(null);
+      setError(errorMessage(err, "Could not connect to PostgreSQL."));
+      setMartinStatus(null);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleStopMartin = async () => {
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      await stopMartinServer();
+      setMartinServer(null);
+      setMartinSources([]);
+      setSelectedMartinSourceId("");
+      setMartinStatus("Martin stopped.");
+    } catch (err) {
+      setError(errorMessage(err, "Could not stop Martin."));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const addMartinSource = async (sourceId: string) => {
+    if (!martinServer) throw new Error("Connect to PostgreSQL first.");
+    const tilejson = await fetchMartinTileJson(martinServer, sourceId);
+    const vectorLayers = tilejson.vector_layers ?? tilejson.vectorLayers ?? [];
+    const sourceLayer = vectorLayers[0]?.id;
+    if (!sourceLayer) {
+      throw new Error("The selected Martin source has no vector layers.");
+    }
+
+    const source = martinSources.find((candidate) => candidate.id === sourceId);
+    const tilejsonUrl = martinTileJsonUrl(martinServer, sourceId);
+    addAndClose(
+      createBaseLayer(
+        layerName.trim() || tilejson.name || source?.name || sourceId,
+        "vector-tiles",
+        {
+          type: "vector",
+          url: tilejsonUrl,
+          sourceLayer,
+          bounds: tilejson.bounds,
+          minzoom: tilejson.minzoom,
+          maxzoom: tilejson.maxzoom,
+        },
+        {
+          bounds: tilejson.bounds,
+          center: tilejson.center,
+          maxzoom: tilejson.maxzoom,
+          minzoom: tilejson.minzoom,
+          martinPort: martinServer.port,
+          martinSourceId: sourceId,
+          sourceKind: "martin-postgis",
+          sourceLayers: vectorLayers.map((vectorLayer) => vectorLayer.id),
+          tilejsonUrl,
+        },
+      ),
+      { fit: true },
+    );
   };
 
   const handleChooseVector = async () => {
@@ -357,7 +552,7 @@ export function AddDataDialog({
           : layerNameFromPath(result.path, "Vector Layer"),
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not read file.");
+      setError(errorMessage(err, "Could not read file."));
     }
   };
 
@@ -403,9 +598,7 @@ export function AddDataDialog({
           : metadata.name || layerNameFromPath(result.path, "MBTiles Layer"),
       );
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Could not read MBTiles file.",
-      );
+      setError(errorMessage(err, "Could not read MBTiles file."));
     }
   };
 
@@ -563,6 +756,14 @@ export function AddDataDialog({
         return;
       }
 
+      if (kind === "postgres") {
+        if (!selectedMartinSourceId) {
+          throw new Error("Select a Martin source to add.");
+        }
+        await addMartinSource(selectedMartinSourceId);
+        return;
+      }
+
       if (rasterMode === "tiles") {
         if (!rasterUrl.trim()) {
           throw new Error("Enter a raster tile URL template.");
@@ -618,7 +819,7 @@ export function AddDataDialog({
       });
       closeDialog();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not add layer.");
+      setError(errorMessage(err, "Could not add layer."));
     } finally {
       setIsSubmitting(false);
     }
@@ -936,6 +1137,125 @@ export function AddDataDialog({
                   }
                 />
               </div>
+            </div>
+          )}
+
+          {kind === "postgres" && (
+            <div className="space-y-3">
+              {savedPostgresConnections.length > 0 ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="postgres-saved-connection">
+                    Saved connection
+                  </Label>
+                  <select
+                    id="postgres-saved-connection"
+                    className={SELECT_CLASS}
+                    value={
+                      savedPostgresConnections.includes(
+                        postgresConnectionString,
+                      )
+                        ? postgresConnectionString
+                        : ""
+                    }
+                    onChange={(event) =>
+                      setPostgresConnectionString(event.target.value)
+                    }
+                  >
+                    <option value="">Select saved connection</option>
+                    {savedPostgresConnections.map((connection) => (
+                      <option key={connection} value={connection}>
+                        {savedPostgresConnectionLabel(connection)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+              <div className="space-y-1.5">
+                <Label htmlFor="postgres-connection">
+                  PostgreSQL connection string
+                </Label>
+                <Input
+                  id="postgres-connection"
+                  type="password"
+                  autoComplete="off"
+                  list="postgres-saved-connections"
+                  placeholder="postgres://user:password@host:5432/database"
+                  value={postgresConnectionString}
+                  onChange={(event) =>
+                    setPostgresConnectionString(event.target.value)
+                  }
+                />
+                {savedPostgresConnections.length > 0 ? (
+                  <datalist id="postgres-saved-connections">
+                    {savedPostgresConnections.map((connection) => (
+                      <option key={connection} value={connection} />
+                    ))}
+                  </datalist>
+                ) : null}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                <div className="space-y-1.5">
+                  <Label htmlFor="postgres-default-srid">Default SRID</Label>
+                  <Input
+                    id="postgres-default-srid"
+                    inputMode="numeric"
+                    placeholder="Optional"
+                    value={postgresDefaultSrid}
+                    onChange={(event) =>
+                      setPostgresDefaultSrid(event.target.value)
+                    }
+                  />
+                </div>
+                <div className="flex items-end">
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleConnectPostgres}
+                      disabled={isSubmitting}
+                    >
+                      Connect
+                    </Button>
+                    {martinServer ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleStopMartin}
+                        disabled={isSubmitting}
+                      >
+                        Stop
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+              {martinStatus ? (
+                <p className="text-xs text-muted-foreground">{martinStatus}</p>
+              ) : null}
+              {martinSources.length > 0 ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="martin-source">Martin source</Label>
+                  <select
+                    id="martin-source"
+                    className={SELECT_CLASS}
+                    value={selectedMartinSourceId}
+                    onChange={(event) =>
+                      setSelectedMartinSourceId(event.target.value)
+                    }
+                  >
+                    {martinSources.map((source) => (
+                      <option key={source.id} value={source.id}>
+                        {source.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+              {martinServer ? (
+                <p className="text-xs text-muted-foreground">
+                  Martin is running on port {martinServer.port}.
+                </p>
+              ) : null}
             </div>
           )}
 

@@ -264,6 +264,9 @@ export function TopToolbar({
           <DropdownMenuItem onSelect={handleAddDuckDBLayer}>
             Add DuckDB Layer
           </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setAddDataKind("postgres")}>
+            Add PostgreSQL Layer
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       <Button
