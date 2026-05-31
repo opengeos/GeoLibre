@@ -2,6 +2,7 @@ import { useAppStore } from "@geolibre/core";
 import {
   maplibreBasemapControlPlugin,
   maplibreComponentsPlugin,
+  maplibreEsriWaybackPlugin,
   maplibreGeoAgentPlugin,
   maplibreGeoEditorPlugin,
   maplibreLayerControlPlugin,
@@ -25,6 +26,7 @@ const manager = new PluginManager();
 manager.registerAll([
   maplibreLayerControlPlugin,
   maplibreBasemapControlPlugin,
+  maplibreEsriWaybackPlugin,
   maplibreGeoAgentPlugin,
   maplibreGeoEditorPlugin,
   maplibreLidarPlugin,

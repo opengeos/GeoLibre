@@ -27,6 +27,7 @@ export {
 } from "./plugins/maplibre-components";
 export { openDuckDBLayerPanel } from "./plugins/maplibre-duckdb";
 export { openGeoParquetLayerPanel } from "./plugins/maplibre-geoparquet";
+export { maplibreEsriWaybackPlugin } from "./plugins/maplibre-esri-wayback";
 export { maplibreGeoEditorPlugin } from "./plugins/maplibre-geo-editor";
 export { maplibreGeoAgentPlugin } from "./plugins/maplibre-geoagent";
 export { maplibreLidarPlugin } from "./plugins/maplibre-lidar";

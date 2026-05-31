@@ -52,6 +52,24 @@ body,
   margin: 0;
 }
 
+.geolibre-esri-wayback-control,
+.esri-wayback-control-panel {
+  color-scheme: light;
+}
+
+.esri-wayback-control-panel .esri-wayback-range {
+  accent-color: #2b7bb9;
+}
+
+.esri-wayback-control-panel .esri-wayback-input {
+  background-color: #fff !important;
+  color: #111827 !important;
+}
+
+.esri-wayback-control-panel .esri-wayback-input::placeholder {
+  color: #6b7280 !important;
+}
+
 .geolibre-components-control .maplibregl-ctrl-group,
 .geolibre-components-control .maplibregl-ctrl {
   align-items: center;
