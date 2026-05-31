@@ -12,6 +12,12 @@ import type {
   DuckDBState,
 } from "maplibre-gl-duckdb";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
+import {
+  asRecord,
+  colorToRgba,
+  pointRadiusMaxPixels,
+  type StyledDeckLayerLike,
+} from "./deck-style-utils";
 
 type DuckDBControlConstructor =
   (typeof import("maplibre-gl-duckdb"))["DuckDBControl"];
@@ -35,12 +41,6 @@ type MutableDuckDBControl = {
   } | null;
   renderLayer?: () => Promise<void>;
   renderer?: DuckDBRendererLike | null;
-};
-
-type StyledDeckLayerLike = {
-  id?: string;
-  clone?: (props: Record<string, unknown>) => StyledDeckLayerLike;
-  props?: Record<string, unknown>;
 };
 
 interface DuckDBRenderedStyle {
@@ -325,7 +325,7 @@ function cloneStyledDeckLayer(
     return deckLayer.clone({
       getFillColor: fillColor,
       getRadius: style.circleRadius,
-      radiusMaxPixels: Math.max(style.circleRadius * 2, style.circleRadius),
+      radiusMaxPixels: pointRadiusMaxPixels(style),
       radiusMinPixels: Math.max(1, Math.min(style.circleRadius, 4)),
       updateTriggers: {
         ...asRecord(deckLayer.props?.updateTriggers),
@@ -438,34 +438,6 @@ function warnMissingDuckDBRows(layerId: string): void {
       `DuckDB layer ${layerId} did not expose row data for extrusion heights.`,
     );
   }
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object"
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-function colorToRgba(color: string, alpha: number): [number, number, number, number] {
-  const normalized = color.trim();
-  const hex =
-    normalized.length === 4 && normalized.startsWith("#")
-      ? `#${normalized[1]}${normalized[1]}${normalized[2]}${normalized[2]}${normalized[3]}${normalized[3]}`
-      : normalized;
-  const match = /^#([0-9a-f]{6})$/i.exec(hex);
-  if (!match) return [59, 130, 246, Math.round(clamp(alpha, 0, 1) * 255)];
-
-  const value = Number.parseInt(match[1], 16);
-  return [
-    (value >> 16) & 255,
-    (value >> 8) & 255,
-    value & 255,
-    Math.round(clamp(alpha, 0, 1) * 255),
-  ];
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }
 
 function setDuckDBRenderedLayerBeforeId(beforeId: string | null): void {

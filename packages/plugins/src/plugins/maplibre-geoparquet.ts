@@ -11,6 +11,12 @@ import type {
   GeoParquetLayerState,
 } from "maplibre-gl-geoparquet";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
+import {
+  asRecord,
+  colorToRgba,
+  pointRadiusMaxPixels,
+  type StyledDeckLayerLike,
+} from "./deck-style-utils";
 
 type GeoParquetControlConstructor =
   (typeof import("maplibre-gl-geoparquet"))["GeoParquetControl"];
@@ -44,17 +50,21 @@ type MutableGeoParquetControl = {
 
 type GeoParquetRendererLike = {
   __geolibreOriginalCreateLayers?: GeoParquetRendererLike["createLayers"];
+  __geolibreOriginalSetData?: GeoParquetRendererLike["setData"];
   __geolibreStylePatched?: boolean;
   createLayers?: (
     layerId: string,
     result: GeoParquetResultLike,
     index: number,
   ) => StyledDeckLayerLike[];
+  setData?: (layers: GeoParquetRenderedLayerLike[]) => void;
 };
 
-type StyledDeckLayerLike = {
-  clone?: (props: Record<string, unknown>) => StyledDeckLayerLike;
-  props?: Record<string, unknown>;
+type GeoParquetRenderedLayerLike = {
+  beforeId?: string | null;
+  id: string;
+  name?: string;
+  results?: GeoParquetResultLike[];
 };
 
 const geoparquetControlPosition: GeoLibreMapControlPosition = "top-left";
@@ -75,6 +85,7 @@ let geoparquetConstructorsPromise: Promise<{
 }> | null = null;
 let geoparquetStoreUnsubscribe: (() => void) | null = null;
 const geoparquetRenderedStyles = new Map<string, GeoParquetRenderedStyle>();
+let geoparquetLayerOrder = new Map<string, number>();
 
 export function openGeoParquetLayerPanel(app: GeoLibreAppAPI): void {
   void openStandaloneGeoParquetControl(app);
@@ -98,7 +109,6 @@ async function openStandaloneGeoParquetControl(
       return false;
     }
     geoparquetControlMounted = true;
-    patchGeoParquetRenderer(getMutableGeoParquetControl().renderer);
   }
 
   setTimeout(() => {
@@ -124,12 +134,14 @@ function createGeoParquetControl(
   GeoParquetControlClass: GeoParquetControlConstructor,
 ): GeoParquetControl {
   const control = new GeoParquetControlClass(GEOPARQUET_OPTIONS);
+  patchGeoParquetControlOnRemove(control);
   control.on("collapse", () => hideGeoParquetControl(control));
   control.on("load", createGeoParquetStateChangeHandler(control));
   control.on("statechange", createGeoParquetStateChangeHandler(control));
 
   geoparquetStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
+    let shouldSyncControl = false;
 
     for (const layer of previous.layers) {
       if (!isGeoParquetControlLayer(layer)) continue;
@@ -150,12 +162,16 @@ function createGeoParquetControl(
         currentLayer.beforeId !== layer.beforeId ||
         currentLayer.name !== layer.name
       ) {
-        syncGeoParquetControlFromStore(state.layers);
+        shouldSyncControl = true;
       }
     }
 
     if (geoparquetLayerOrderSignature(state.layers) !==
       geoparquetLayerOrderSignature(previous.layers)) {
+      shouldSyncControl = true;
+    }
+
+    if (shouldSyncControl) {
       syncGeoParquetControlFromStore(state.layers);
     }
   });
@@ -260,10 +276,12 @@ function createGeoParquetLayerPatch(
   if (existingLayer.beforeId !== nextLayer.beforeId) {
     patch.beforeId = nextLayer.beforeId;
   }
-  if (!shallowEqualRecord(existingLayer.source, nextLayer.source)) {
+  if (hasGeoParquetSourceChanged(existingLayer.source, nextLayer.source)) {
     patch.source = nextLayer.source;
   }
-  if (!shallowEqualRecord(existingLayer.metadata, nextLayer.metadata)) {
+  if (
+    hasGeoParquetMetadataChanged(existingLayer.metadata, nextLayer.metadata)
+  ) {
     patch.metadata = nextLayer.metadata;
   }
   if (existingLayer.sourcePath !== nextLayer.sourcePath) {
@@ -279,12 +297,10 @@ function syncGeoParquetControlFromStore(layers: GeoLibreLayer[]): void {
   if (!controlLayers) return;
 
   const storeLayerById = new Map(layers.map((layer) => [layer.id, layer]));
-  const storeOrder = new Map(layers.map((layer, index) => [layer.id, index]));
-
-  controlLayers.sort(
-    (a, b) =>
-      (storeOrder.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
-      (storeOrder.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+  geoparquetLayerOrder = new Map(
+    layers
+      .filter(isGeoParquetControlLayer)
+      .map((layer, index) => [layer.id, index]),
   );
 
   for (const controlLayer of controlLayers) {
@@ -306,7 +322,25 @@ function syncGeoParquetControlFromStore(layers: GeoLibreLayer[]): void {
 function patchGeoParquetRenderer(
   renderer: GeoParquetRendererLike | null | undefined,
 ): void {
-  if (!renderer?.createLayers || renderer.__geolibreStylePatched) return;
+  if (!renderer || renderer.__geolibreStylePatched) return;
+
+  if (renderer.setData) {
+    renderer.__geolibreOriginalSetData = renderer.setData.bind(renderer);
+    renderer.setData = (layers: GeoParquetRenderedLayerLike[]) => {
+      renderer.__geolibreOriginalSetData?.(
+        [...layers].sort(
+          (first, second) =>
+            (geoparquetLayerOrder.get(first.id) ?? Number.MAX_SAFE_INTEGER) -
+            (geoparquetLayerOrder.get(second.id) ?? Number.MAX_SAFE_INTEGER),
+        ),
+      );
+    };
+  }
+
+  if (!renderer.createLayers) {
+    renderer.__geolibreStylePatched = true;
+    return;
+  }
 
   renderer.__geolibreOriginalCreateLayers = renderer.createLayers.bind(
     renderer,
@@ -353,7 +387,7 @@ function cloneStyledDeckLayer(
     return deckLayer.clone({
       getFillColor: fillColor,
       getRadius: style.circleRadius,
-      radiusMaxPixels: Math.max(style.circleRadius * 2, style.circleRadius),
+      radiusMaxPixels: pointRadiusMaxPixels(style),
       radiusMinPixels: Math.max(1, Math.min(style.circleRadius, 4)),
       updateTriggers: {
         ...asRecord(deckLayer.props?.updateTriggers),
@@ -450,6 +484,25 @@ function getMutableGeoParquetControl(
   return control as unknown as MutableGeoParquetControl;
 }
 
+function patchGeoParquetControlOnRemove(control: GeoParquetControl): void {
+  const originalOnRemove = control.onRemove.bind(control);
+  control.onRemove = () => {
+    originalOnRemove();
+    resetGeoParquetControl(control);
+  };
+}
+
+function resetGeoParquetControl(control: GeoParquetControl): void {
+  if (geoparquetControl !== control) return;
+
+  geoparquetStoreUnsubscribe?.();
+  geoparquetStoreUnsubscribe = null;
+  geoparquetRenderedStyles.clear();
+  geoparquetLayerOrder.clear();
+  geoparquetControlMounted = false;
+  geoparquetControl = null;
+}
+
 function getGeoParquetLayerBounds(
   layer: GeoParquetLayerState,
 ): [number, number, number, number] | undefined {
@@ -542,39 +595,70 @@ function layerNameFromUrl(url: string, fallback: string): string {
   }
 }
 
-function shallowEqualRecord(
-  first: Record<string, unknown>,
-  second: Record<string, unknown>,
+function hasGeoParquetSourceChanged(
+  current: Record<string, unknown>,
+  next: Record<string, unknown>,
 ): boolean {
-  return JSON.stringify(first) === JSON.stringify(second);
+  return (
+    current.displaySource !== next.displaySource ||
+    current.sourceId !== next.sourceId ||
+    current.type !== next.type ||
+    current.url !== next.url ||
+    !boundsEqual(current.bounds, next.bounds)
+  );
 }
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object"
-    ? (value as Record<string, unknown>)
-    : {};
+function hasGeoParquetMetadataChanged(
+  current: Record<string, unknown>,
+  next: Record<string, unknown>,
+): boolean {
+  return (
+    current.customLayerType !== next.customLayerType ||
+    current.deckLayerId !== next.deckLayerId ||
+    current.externalDeckLayer !== next.externalDeckLayer ||
+    current.fileInfo !== next.fileInfo ||
+    current.geoMetadata !== next.geoMetadata ||
+    current.identifiable !== next.identifiable ||
+    current.loadedRows !== next.loadedRows ||
+    current.pageSize !== next.pageSize ||
+    current.primaryGeoColumn !== next.primaryGeoColumn ||
+    current.sourceId !== next.sourceId ||
+    current.sourceKind !== next.sourceKind ||
+    current.totalRows !== next.totalRows ||
+    !boundsEqual(current.bounds, next.bounds) ||
+    !stringArrayEqual(current.geometryTypes, next.geometryTypes) ||
+    !stringArrayEqual(current.selectedColumns, next.selectedColumns) ||
+    !schemaEqual(current.columns, next.columns)
+  );
 }
 
-function colorToRgba(color: string, alpha: number): [number, number, number, number] {
-  const normalized = color.trim();
-  const hex =
-    normalized.length === 4 && normalized.startsWith("#")
-      ? `#${normalized[1]}${normalized[1]}${normalized[2]}${normalized[2]}${normalized[3]}${normalized[3]}`
-      : normalized;
-  const match = /^#([0-9a-f]{6})$/i.exec(hex);
-  if (!match) return [59, 130, 246, Math.round(clamp(alpha, 0, 1) * 255)];
-
-  const value = Number.parseInt(match[1], 16);
-  return [
-    (value >> 16) & 255,
-    (value >> 8) & 255,
-    value & 255,
-    Math.round(clamp(alpha, 0, 1) * 255),
-  ];
+function boundsEqual(first: unknown, second: unknown): boolean {
+  if (first === second) return true;
+  if (!isBounds(first) || !isBounds(second)) return false;
+  return first.every((value, index) => value === second[index]);
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
+function stringArrayEqual(first: unknown, second: unknown): boolean {
+  if (first === second) return true;
+  if (!Array.isArray(first) || !Array.isArray(second)) return false;
+  if (first.length !== second.length) return false;
+  return first.every((value, index) => value === second[index]);
+}
+
+function schemaEqual(first: unknown, second: unknown): boolean {
+  if (first === second) return true;
+  if (!Array.isArray(first) || !Array.isArray(second)) return false;
+  if (first.length !== second.length) return false;
+
+  return first.every((value, index) => {
+    const currentColumn = value as Record<string, unknown>;
+    const nextColumn = second[index] as Record<string, unknown>;
+    return (
+      currentColumn.name === nextColumn.name &&
+      currentColumn.nullable === nextColumn.nullable &&
+      currentColumn.type === nextColumn.type
+    );
+  });
 }
 
 function hideGeoParquetControl(control: GeoParquetControl | null): void {
