@@ -1,5 +1,5 @@
 import { type GeoLibreLayer, useAppStore } from "@geolibre/core";
-import type { FeatureCollection } from "geojson";
+import type { Feature, FeatureCollection } from "geojson";
 import type maplibregl from "maplibre-gl";
 import { GeoEditor, type GeoEditorOptions } from "maplibre-gl-geo-editor";
 import type {
@@ -63,6 +63,8 @@ let appApi: GeoLibreAppAPI | null = null;
 let sketchesMapLayerSuppressed = false;
 /** After a draw completes, show Sketches even if draw mode stays active for another shape. */
 let sketchesIdleDisplayOverride = false;
+/** Union store + editor on the next sync so a partial getAll cannot drop prior sketches. */
+let unionSketchesWithStoreOnNextSync = false;
 
 export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-geo-editor",
@@ -118,6 +120,7 @@ function getGeoEditorOptions(): GeoEditorOptions {
     position: geoEditorPosition,
     onFeatureCreate: () => {
       sketchesIdleDisplayOverride = true;
+      unionSketchesWithStoreOnNextSync = true;
       // Defer until Geoman commits the new feature to its feature store.
       queueMicrotask(() => {
         syncSketchesToStore();
@@ -175,14 +178,36 @@ function featureCollectionsEquivalent(
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+function sketchFeatureKey(feature: Feature, index: number): string {
+  const props = feature.properties as Record<string, unknown> | null;
+  return String(feature.id ?? props?.__gm_id ?? `feature-${index}`);
+}
+
+function unionFeatureCollections(
+  ...collections: FeatureCollection[]
+): FeatureCollection {
+  const byKey = new Map<string, Feature>();
+  for (const collection of collections) {
+    collection.features.forEach((feature, index) => {
+      byKey.set(sketchFeatureKey(feature, index), feature);
+    });
+  }
+  return { type: "FeatureCollection", features: [...byKey.values()] };
+}
+
 function syncSketchesToStore(): void {
   if (!geoEditorControl || restoringSketchesToEditor) return;
 
-  const collection = cloneFeatureCollection(
+  let collection = cloneFeatureCollection(
     geoEditorControl.getAllFeatureCollection(),
   );
   const store = useAppStore.getState();
   const existing = findSketchesLayer(store.layers);
+
+  if (unionSketchesWithStoreOnNextSync && existing?.geojson) {
+    collection = unionFeatureCollections(existing.geojson, collection);
+    unionSketchesWithStoreOnNextSync = false;
+  }
 
   pushingSketchesToStore = true;
   try {
