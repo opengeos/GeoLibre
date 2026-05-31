@@ -13,6 +13,7 @@ import {
   DialogTitle,
   Label,
   ScrollArea,
+  Select,
 } from "@geolibre/ui";
 import { useState } from "react";
 
@@ -62,8 +63,8 @@ export function ProcessingDialog({
         <div className="space-y-3">
           <div>
             <Label>Algorithm</Label>
-            <select
-              className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+            <Select
+              className="mt-1"
               value={algorithmId}
               onChange={(e) => setAlgorithmId(e.target.value)}
             >
@@ -72,7 +73,7 @@ export function ProcessingDialog({
                   {a.name}
                 </option>
               ))}
-            </select>
+            </Select>
             {algorithm && (
               <p className="mt-1 text-xs text-muted-foreground">
                 {algorithm.description}
@@ -81,8 +82,8 @@ export function ProcessingDialog({
           </div>
           <div>
             <Label>Layer</Label>
-            <select
-              className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+            <Select
+              className="mt-1"
               value={layerId || geojsonLayers[0]?.id || ""}
               onChange={(e) => setLayerId(e.target.value)}
             >
@@ -91,7 +92,7 @@ export function ProcessingDialog({
                   {l.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <Button onClick={run} disabled={geojsonLayers.length === 0}>
             Run

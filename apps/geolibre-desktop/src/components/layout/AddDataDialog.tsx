@@ -20,6 +20,7 @@ import {
   DialogTitle,
   Input,
   Label,
+  Select,
 } from "@geolibre/ui";
 import type { FeatureCollection } from "geojson";
 import { Database, FileUp, Globe2, Image, Map as MapIcon } from "lucide-react";
@@ -84,9 +85,6 @@ const KIND_LABELS: Record<AddDataKind, string> = {
   arcgis: "Add ArcGIS Layer",
   postgres: "Add PostgreSQL Layer",
 };
-
-const SELECT_CLASS =
-  "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
 const COG_COLORMAPS = [
   "none",
@@ -979,15 +977,14 @@ export function AddDataDialog({
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="wms-format">Format</Label>
-                  <select
+                  <Select
                     id="wms-format"
-                    className={SELECT_CLASS}
                     value={wmsFormat}
                     onChange={(event) => setWmsFormat(event.target.value)}
                   >
                     <option value="image/png">PNG</option>
                     <option value="image/jpeg">JPEG</option>
-                  </select>
+                  </Select>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="wms-tile-size">Tile size</Label>
@@ -1037,9 +1034,8 @@ export function AddDataDialog({
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <Label htmlFor="vector-mode">Source type</Label>
-                <select
+                <Select
                   id="vector-mode"
-                  className={SELECT_CLASS}
                   value={vectorMode}
                   onChange={(event) =>
                     setVectorMode(event.target.value as VectorMode)
@@ -1048,7 +1044,7 @@ export function AddDataDialog({
                   <option value="vector-file">Vector file</option>
                   <option value="geojson-url">GeoJSON URL</option>
                   <option value="vector-tiles">Vector tile source URL</option>
-                </select>
+                </Select>
               </div>
               {vectorMode === "vector-file" ? (
                 <div className="flex flex-wrap items-center gap-2">
@@ -1154,9 +1150,8 @@ export function AddDataDialog({
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="arcgis-layer-type">Layer type</Label>
-                  <select
+                  <Select
                     id="arcgis-layer-type"
-                    className={SELECT_CLASS}
                     value={arcgisLayerType}
                     onChange={(event) =>
                       handleArcgisLayerTypeChange(
@@ -1166,13 +1161,12 @@ export function AddDataDialog({
                   >
                     <option value="feature">Feature layer</option>
                     <option value="vector-tile">Vector tile layer</option>
-                  </select>
+                  </Select>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="arcgis-source-type">Source type</Label>
-                  <select
+                  <Select
                     id="arcgis-source-type"
-                    className={SELECT_CLASS}
                     value={arcgisSourceType}
                     onChange={(event) =>
                       setArcgisSourceType(event.target.value as ArcGISSourceType)
@@ -1180,7 +1174,7 @@ export function AddDataDialog({
                   >
                     <option value="url">Service URL</option>
                     <option value="portal-item">Portal item ID</option>
-                  </select>
+                  </Select>
                 </div>
               </div>
               {arcgisSourceType === "url" ? (
@@ -1246,9 +1240,8 @@ export function AddDataDialog({
                   <Label htmlFor="postgres-saved-connection">
                     Saved connection
                   </Label>
-                  <select
+                  <Select
                     id="postgres-saved-connection"
-                    className={SELECT_CLASS}
                     value={
                       savedPostgresConnections.includes(
                         postgresConnectionString,
@@ -1266,7 +1259,7 @@ export function AddDataDialog({
                         {savedPostgresConnectionLabel(connection)}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
               ) : null}
               <div className="space-y-1.5">
@@ -1326,9 +1319,8 @@ export function AddDataDialog({
               {martinSources.length > 0 ? (
                 <div className="space-y-1.5">
                   <Label htmlFor="martin-source">Martin source</Label>
-                  <select
+                  <Select
                     id="martin-source"
-                    className={SELECT_CLASS}
                     value={selectedMartinSourceId}
                     onChange={(event) =>
                       setSelectedMartinSourceId(event.target.value)
@@ -1339,7 +1331,7 @@ export function AddDataDialog({
                         {source.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
               ) : null}
               {martinServer ? (
@@ -1354,9 +1346,8 @@ export function AddDataDialog({
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <Label htmlFor="raster-mode">Source type</Label>
-                <select
+                <Select
                   id="raster-mode"
-                  className={SELECT_CLASS}
                   value={rasterMode}
                   onChange={(event) =>
                     setRasterMode(event.target.value as RasterMode)
@@ -1365,7 +1356,7 @@ export function AddDataDialog({
                   <option value="cog-url">COG or raster URL</option>
                   <option value="tiles">Raster tile URL template</option>
                   <option value="file">Raster file</option>
-                </select>
+                </Select>
               </div>
               {rasterMode === "file" ? (
                 <div className="flex flex-wrap items-center gap-2">
@@ -1430,9 +1421,8 @@ export function AddDataDialog({
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="raster-colormap">Colormap</Label>
-                    <select
+                    <Select
                       id="raster-colormap"
-                      className={SELECT_CLASS}
                       value={rasterColormap}
                       onChange={(event) =>
                         setRasterColormap(event.target.value as RasterColormap)
@@ -1443,7 +1433,7 @@ export function AddDataDialog({
                           {colormap}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="raster-min">Min</Label>

@@ -9,6 +9,7 @@ import {
   Input,
   Label,
   ScrollArea,
+  Select,
   Separator,
   Slider,
 } from "@geolibre/ui";
@@ -878,9 +879,8 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
                     <Label htmlFor="extrusionHeightProperty">
                       Height property
                     </Label>
-                    <select
+                    <Select
                       id="extrusionHeightProperty"
-                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
                       value={draftExtrusionHeightProperty}
                       onChange={(event) =>
                         setDraftExtrusionHeightProperty(event.target.value)
@@ -896,7 +896,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
                           </option>
                         ))
                       )}
-                    </select>
+                    </Select>
                   </div>
                   <NumericStyleInput
                     id="extrusionHeightScale"
