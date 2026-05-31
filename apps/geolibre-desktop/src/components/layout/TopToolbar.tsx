@@ -11,6 +11,7 @@ import {
 import {
   openFlatGeobufAddVectorLayerPanel,
   openDuckDBLayerPanel,
+  openGeoParquetLayerPanel,
   openLidarLayerPanel,
   openPMTilesLayerPanel,
   openSplattingLayerPanel,
@@ -152,6 +153,9 @@ export function TopToolbar({
   const handleAddDuckDBLayer = () => {
     openDuckDBLayerPanel(appApi);
   };
+  const handleAddGeoParquetLayer = () => {
+    openGeoParquetLayerPanel(appApi);
+  };
   const handleAddPMTilesLayer = () => {
     openPMTilesLayerPanel(appApi);
   };
@@ -213,6 +217,9 @@ export function TopToolbar({
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setAddDataKind("raster")}>
             Add Raster Layer
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleAddGeoParquetLayer}>
+            Add GeoParquet Layer
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddFlatGeobufLayer}>
             Add FlatGeobuf Layer

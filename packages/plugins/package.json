@@ -30,6 +30,7 @@
     "maplibre-gl-duckdb": "^0.2.0",
     "maplibre-gl-geo-editor": "^0.7.3",
     "maplibre-gl-geoagent": "^0.4.2",
+    "maplibre-gl-geoparquet": "^0.2.1",
     "maplibre-gl-lidar": "^0.14.1",
     "maplibre-gl-streetview": "^0.4.0",
     "maplibre-gl-swipe": "^0.7.1",

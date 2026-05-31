@@ -227,6 +227,140 @@ body,
   top: 10px !important;
 }
 
+.geolibre-geoparquet-control {
+  background-color: transparent !important;
+  box-shadow: none !important;
+  color: hsl(var(--popover-foreground)) !important;
+  height: 0 !important;
+  margin: 0 !important;
+  pointer-events: none;
+}
+
+.geolibre-geoparquet-control .geoparquet-control-toggle {
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.geoparquet-control-panel {
+  background-color: hsl(var(--popover)) !important;
+  border: 1px solid hsl(var(--border));
+  box-sizing: border-box;
+  color: hsl(var(--popover-foreground)) !important;
+  max-height: min(620px, calc(100% - 20px));
+  max-width: min(365px, calc(100vw - 32px));
+}
+
+.geoparquet-control-content {
+  max-height: min(560px, calc(100vh - 220px));
+}
+
+.geoparquet-control-header {
+  background-color: hsl(var(--card)) !important;
+  border-bottom-color: hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.geoparquet-control-title,
+.geoparquet-control-section-title,
+.geoparquet-control-label,
+.geoparquet-control-check,
+.geoparquet-control-summary-row strong,
+.geoparquet-control-properties dd {
+  color: hsl(var(--popover-foreground)) !important;
+}
+
+.geoparquet-control-close,
+.geoparquet-control-summary-row span,
+.geoparquet-control-properties dt {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.geoparquet-control-close:hover {
+  color: hsl(var(--foreground)) !important;
+}
+
+.geoparquet-control-section {
+  border-bottom-color: hsl(var(--border)) !important;
+}
+
+.geoparquet-control-input,
+.geoparquet-control-file {
+  background-color: hsl(var(--background)) !important;
+  border-color: hsl(var(--input)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.geoparquet-control-input::placeholder {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.geoparquet-control-input:focus {
+  border-color: hsl(var(--ring)) !important;
+  box-shadow: 0 0 0 1px hsl(var(--ring));
+  outline: none;
+}
+
+.geoparquet-control-button {
+  background-color: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+}
+
+.geoparquet-control-button:hover {
+  background-color: hsl(var(--primary) / 0.9) !important;
+}
+
+.geoparquet-control-secondary-button,
+.geoparquet-control-mini-button {
+  background-color: hsl(var(--secondary)) !important;
+  border-color: hsl(var(--border)) !important;
+  color: hsl(var(--secondary-foreground)) !important;
+}
+
+.geoparquet-control-secondary-button:hover,
+.geoparquet-control-mini-button:hover {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+.geoparquet-control-layer-list,
+.geoparquet-control-column-list {
+  border-color: hsl(var(--border)) !important;
+}
+
+.geoparquet-control-status {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+.geoparquet-control-error {
+  background-color: hsl(var(--destructive) / 0.12) !important;
+  color: hsl(var(--destructive)) !important;
+}
+
+.geoparquet-control-warning {
+  background-color: hsl(45 90% 55% / 0.14) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.geoparquet-popup {
+  color: hsl(var(--popover-foreground)) !important;
+}
+
+.maplibregl-popup.geoparquet-attribute-popup .maplibregl-popup-content {
+  background-color: hsl(var(--popover)) !important;
+  border: 1px solid hsl(var(--border));
+  color: hsl(var(--popover-foreground)) !important;
+}
+
+.geoparquet-popup th,
+.geoparquet-popup td {
+  border-top-color: hsl(var(--border)) !important;
+}
+
+.geoparquet-popup th {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
 .duckdb-control-content {
   max-height: min(560px, calc(100vh - 220px));
 }
