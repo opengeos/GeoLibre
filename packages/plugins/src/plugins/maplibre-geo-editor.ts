@@ -1,7 +1,12 @@
 import { type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import type maplibregl from "maplibre-gl";
-import { GeoEditor, type GeoEditorOptions } from "maplibre-gl-geo-editor";
+import {
+  GeoEditor,
+  type DrawMode,
+  type EditMode,
+  type GeoEditorOptions,
+} from "maplibre-gl-geo-editor";
 import type {
   GeoLibreAppAPI,
   GeoLibreMapControlPosition,
@@ -47,6 +52,7 @@ const GEO_EDITOR_OPTIONS = {
   | "onGeoJsonLoad"
   | "onAttributeChange"
   | "onHistoryChange"
+  | "onModeChange"
 >;
 
 let geoEditorControl: GeoEditor | null = null;
@@ -55,6 +61,8 @@ let geoEditorStoreUnsubscribe: (() => void) | null = null;
 let pluginActive = false;
 let restoringSketchesToEditor = false;
 let appApi: GeoLibreAppAPI | null = null;
+let currentGeoEditorMode: DrawMode | EditMode | null = null;
+let sketchesLayerDisplaySuppressed = false;
 
 export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-geo-editor",
@@ -80,6 +88,9 @@ export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
   },
   deactivate: (app: GeoLibreAppAPI) => {
     pluginActive = false;
+    currentGeoEditorMode = null;
+    setSketchesStoreLayerSuppressed(false);
+    showGeomanDisplayLayers();
     appApi = null;
     teardownSketchesStoreSync();
 
@@ -115,6 +126,10 @@ function getGeoEditorOptions(): GeoEditorOptions {
     },
     onAttributeChange: () => syncSketchesToStore(),
     onHistoryChange: () => syncSketchesToStore(),
+    onModeChange: (mode) => {
+      currentGeoEditorMode = mode;
+      updateSketchesDisplayForMode();
+    },
   };
 }
 
@@ -150,12 +165,12 @@ function syncSketchesToStore(): void {
   if (existing) {
     sketchesLayerId = existing.id;
     store.updateLayer(existing.id, { geojson: collection });
-    hideGeomanDisplayLayers();
+    updateSketchesDisplayForMode();
     return;
   }
 
   if (collection.features.length === 0) {
-    hideGeomanDisplayLayers();
+    updateSketchesDisplayForMode();
     return;
   }
 
@@ -171,7 +186,7 @@ function syncSketchesToStore(): void {
       sourceKind: SKETCHES_SOURCE_KIND,
     },
   });
-  hideGeomanDisplayLayers();
+  updateSketchesDisplayForMode();
 }
 
 function restoreSketchesLayerToEditor(): void {
@@ -195,7 +210,7 @@ function restoreSketchesLayerToEditor(): void {
   } finally {
     restoringSketchesToEditor = false;
   }
-  hideGeomanDisplayLayers();
+  updateSketchesDisplayForMode();
 }
 
 function clearSketchesFromEditor(): void {
@@ -249,7 +264,47 @@ function teardownSketchesStoreSync(): void {
   geoEditorStoreUnsubscribe = null;
 }
 
-function hideGeomanDisplayLayers(): void {
+function isGeoEditorInteractionMode(): boolean {
+  return currentGeoEditorMode !== null;
+}
+
+/**
+ * While GeoEditor has an active draw/edit mode, Geoman layers must stay visible
+ * for hit-testing and handles. When idle, hide Geoman and show the Sketches
+ * store layer to avoid duplicate rendering (PR #77).
+ */
+function updateSketchesDisplayForMode(): void {
+  if (isGeoEditorInteractionMode()) {
+    showGeomanDisplayLayers();
+    setSketchesStoreLayerSuppressed(true);
+    return;
+  }
+  hideGeomanDisplayLayers();
+  setSketchesStoreLayerSuppressed(false);
+}
+
+function setSketchesStoreLayerSuppressed(suppress: boolean): void {
+  const layer = findSketchesLayer(useAppStore.getState().layers);
+  if (!layer) {
+    sketchesLayerDisplaySuppressed = false;
+    return;
+  }
+
+  const store = useAppStore.getState();
+
+  if (suppress) {
+    if (sketchesLayerDisplaySuppressed || !layer.visible) return;
+    store.setLayerVisibility(layer.id, false);
+    sketchesLayerDisplaySuppressed = true;
+    return;
+  }
+
+  if (!sketchesLayerDisplaySuppressed) return;
+  store.setLayerVisibility(layer.id, true);
+  sketchesLayerDisplaySuppressed = false;
+}
+
+function setGeomanDisplayLayersVisibility(visibility: "visible" | "none"): void {
   const map = appApi?.getMap?.();
   if (!map) return;
 
@@ -259,11 +314,19 @@ function hideGeomanDisplayLayers(): void {
   for (const layer of style.layers) {
     if (!isGeomanDisplayLayer(layer)) continue;
     try {
-      map.setLayoutProperty(layer.id, "visibility", "none");
+      map.setLayoutProperty(layer.id, "visibility", visibility);
     } catch {
       // Layer may have been removed with the current style.
     }
   }
+}
+
+function hideGeomanDisplayLayers(): void {
+  setGeomanDisplayLayersVisibility("none");
+}
+
+function showGeomanDisplayLayers(): void {
+  setGeomanDisplayLayersVisibility("visible");
 }
 
 function isGeomanDisplayLayer(layer: maplibregl.LayerSpecification): boolean {
