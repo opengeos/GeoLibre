@@ -65,6 +65,11 @@ function syncExternalNativeLayer(
   beforeId?: string,
 ): void {
   const nativeLayerIds = getExternalNativeLayerIds(layer);
+  if (isWaybackExternalRasterLayer(layer)) {
+    syncWaybackExternalRasterLayer(map, layer, nativeLayerIds, beforeId);
+    return;
+  }
+
   const nativeFillLayerSpecs = nativeLayerIds
     .map((nativeLayerId) => getStyleLayerSpec(map, nativeLayerId))
     .filter(isFillStyleLayerSpec);
@@ -114,6 +119,69 @@ function syncExternalNativeLayer(
 
     moveLayer(map, nativeLayerId, beforeId);
   }
+}
+
+function isWaybackExternalRasterLayer(layer: GeoLibreLayer): boolean {
+  return (
+    layer.type === "raster" &&
+    (layer.metadata.sourceKind === "esri-wayback-current" ||
+      layer.metadata.sourceKind === "esri-wayback-persistent") &&
+    layer.metadata.externalNativeLayer === true
+  );
+}
+
+function syncWaybackExternalRasterLayer(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+  nativeLayerIds: string[],
+  beforeId?: string,
+): void {
+  const nativeLayerId = nativeLayerIds[0] ?? layer.id;
+  const sourceId = getExternalSourceIds(layer)[0] ?? `${nativeLayerId}-source`;
+  const tileUrl = getWaybackTileUrl(layer);
+  if (!tileUrl) return;
+
+  if (!map.getSource(sourceId)) {
+    map.addSource(sourceId, {
+      type: "raster",
+      tiles: [tileUrl],
+      tileSize: 256,
+      maxzoom: 23,
+    });
+  }
+
+  ensureLayer(
+    map,
+    nativeLayerId,
+    {
+      id: nativeLayerId,
+      type: "raster",
+      source: sourceId,
+      paint: rasterPaint(layer.style, layer.opacity),
+      layout: { visibility: layer.visible ? "visible" : "none" },
+    },
+    beforeId,
+  );
+}
+
+function getWaybackTileUrl(layer: GeoLibreLayer): string | null {
+  const rawUrl =
+    stringMetadata(layer.metadata.waybackItemUrl) ??
+    stringSource(layer.source.url) ??
+    layer.sourcePath;
+  if (!rawUrl) return null;
+  return rawUrl
+    .replace(/\{level\}/g, "{z}")
+    .replace(/\{row\}/g, "{y}")
+    .replace(/\{col\}/g, "{x}");
+}
+
+function stringMetadata(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function stringSource(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
 }
 
 function setNativeLayerVisibility(

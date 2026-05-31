@@ -74,7 +74,11 @@ export const maplibreEsriWaybackPlugin: GeoLibrePlugin = {
     if (!esriWaybackControl) return;
     app.removeMapControl(esriWaybackControl);
     const added = app.addMapControl(esriWaybackControl, esriWaybackPosition);
-    if (!added) return false;
+    if (!added) {
+      detachStoreSync(esriWaybackControl);
+      esriWaybackControl = null;
+      return false;
+    }
     setTimeout(() => esriWaybackControl?.expand(), 0);
   },
 };
@@ -120,14 +124,28 @@ function syncPersistentWaybackLayers(
   const state = control?.getState();
   if (!map || !state) return;
 
+  const activePersistentIds = new Set<string>();
   for (const styleLayer of map.getStyle().layers ?? []) {
     if (!styleLayer.id.startsWith(`${PERSISTENT_LAYER_PREFIX}-`)) continue;
+    activePersistentIds.add(styleLayer.id);
     const release = state.releases.find(
       (item) => getPersistentWaybackLayerId(item) === styleLayer.id,
     );
     addOrUpdateWaybackStoreLayer(
       createPersistentWaybackStoreLayer(styleLayer, release),
     );
+  }
+
+  const store = useAppStore.getState();
+  const stalePersistentIds = store.layers
+    .filter(
+      (layer) =>
+        layer.metadata.sourceKind === "esri-wayback-persistent" &&
+        !activePersistentIds.has(layer.id),
+    )
+    .map((layer) => layer.id);
+  for (const id of stalePersistentIds) {
+    store.removeLayer(id);
   }
 }
 
@@ -226,6 +244,7 @@ function createWaybackStoreLayer(options: {
       sourceIds: [options.sourceId],
       sourceKind: options.sourceKind,
       waybackItemId: options.release?.itemID,
+      waybackItemUrl: options.release?.itemURL,
       waybackMetadataLayerUrl: options.release?.metadataLayerUrl,
       waybackReleaseDate: options.release?.releaseDateLabel,
       waybackReleaseNumber: options.release?.releaseNum,
