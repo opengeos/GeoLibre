@@ -23,8 +23,10 @@ import { ProcessingDialog } from "../processing/ProcessingDialog";
 import { StatusBar } from "./StatusBar";
 import { TopToolbar } from "./TopToolbar";
 import type { ThemeMode } from "../../hooks/useThemeMode";
+import type { ProjectUrlLoadState } from "../../hooks/useProjectUrlLoader";
 
 interface DesktopShellProps {
+  projectUrlLoadState?: ProjectUrlLoadState;
   themeMode: ThemeMode;
   onToggleThemeMode: () => void;
 }
@@ -59,6 +61,7 @@ type ShellStyle = CSSProperties &
   Record<"--layer-panel-width" | "--style-panel-width", string>;
 
 export function DesktopShell({
+  projectUrlLoadState,
   themeMode,
   onToggleThemeMode,
 }: DesktopShellProps) {
@@ -410,6 +413,15 @@ export function DesktopShell({
           <div className="rounded-md border bg-background px-4 py-3 text-sm font-medium shadow-lg">
             Drop vector files to add layers
           </div>
+        </div>
+      ) : null}
+      {projectUrlLoadState?.message || projectUrlLoadState?.error ? (
+        <div
+          className={`pointer-events-none absolute left-1/2 top-14 z-50 max-w-[min(90vw,32rem)] -translate-x-1/2 rounded-md border bg-background px-3 py-2 text-center text-sm shadow-lg ${
+            projectUrlLoadState.error ? "text-destructive" : "text-foreground"
+          }`}
+        >
+          {projectUrlLoadState.error ?? projectUrlLoadState.message}
         </div>
       ) : null}
       {dropMessage || dropError ? (

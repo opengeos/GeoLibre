@@ -93,6 +93,49 @@ function wmsProxyPlugin(): Plugin {
   };
 }
 
+function projectUrlQueryPlugin(): Plugin {
+  return {
+    name: "geolibre-project-url-query",
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        if (isProjectUrlDocumentRequest(req)) {
+          const requestUrl = new URL(req.url ?? "/", "http://localhost");
+          req.url = requestUrl.pathname;
+        }
+        next();
+      });
+    },
+  };
+}
+
+function isProjectUrlDocumentRequest(req: IncomingMessage): boolean {
+  if (req.method !== "GET" && req.method !== "HEAD") return false;
+
+  const accept = req.headers.accept ?? "";
+  if (!accept.includes("text/html") && accept !== "*/*") return false;
+
+  const requestUrl = new URL(req.url ?? "/", "http://localhost");
+  if (requestUrl.pathname !== "/" && requestUrl.pathname !== "/index.html") {
+    return false;
+  }
+
+  return (
+    requestUrl.searchParams.has("url") ||
+    requestUrl.searchParams.has("project") ||
+    requestUrl.searchParams.has("projectUrl") ||
+    requestUrl.searchParams.has("project_url") ||
+    /^https?:\/\//i.test(safeDecodeURIComponent(requestUrl.search.slice(1)))
+  );
+}
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 async function proxyWmsRequest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -136,7 +179,7 @@ async function proxyBinaryRequest(
 
 export default defineConfig({
   base: APP_BASE,
-  plugins: [react(), wmsProxyPlugin()],
+  plugins: [projectUrlQueryPlugin(), react(), wmsProxyPlugin()],
   clearScreen: false,
   define: {
     __GEOLIBRE_VERSION__: JSON.stringify(APP_VERSION),
