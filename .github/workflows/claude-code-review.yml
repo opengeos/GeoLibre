@@ -1,7 +1,12 @@
 name: Claude Code Review
 
+# Uses pull_request_target so the workflow has access to repository secrets
+# (CLAUDE_CODE_OAUTH_TOKEN) even for PRs opened from forks, which lets Claude
+# review and comment on ALL PRs. This is safe here because the job only reads
+# the diff and posts comments. It never installs dependencies or executes the
+# PR's code, so untrusted fork code is never run with the elevated token.
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, ready_for_review, reopened]
     # Optional: Only run on specific file changes
     # paths:
@@ -26,9 +31,12 @@ jobs:
       id-token: write
 
     steps:
-      - name: Checkout repository
+      - name: Checkout PR head (read-only; code is reviewed, not executed)
         uses: actions/checkout@v6
         with:
+          # pull_request_target defaults to the base ref; explicitly check out
+          # the PR head so Claude reviews the proposed changes.
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 1
 
       - name: Run Claude Code Review
