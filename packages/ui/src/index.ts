@@ -1,6 +1,7 @@
 export { cn } from "./lib/utils";
 export { Button, type ButtonProps } from "./components/button";
 export { Input } from "./components/input";
+export { Select } from "./components/select";
 export { Label } from "./components/label";
 export { Slider } from "./components/slider";
 export { Separator } from "./components/separator";

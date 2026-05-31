@@ -56,6 +56,7 @@ pub fn run() {
             close_oauth_popups,
             ensure_martin_binary,
             fetch_url_bytes,
+            resolve_url_redirect,
             read_mbtiles_metadata,
             read_mbtiles_tile,
             start_martin_server,
@@ -99,6 +100,84 @@ fn fetch_url_bytes(url: String) -> Result<Vec<u8>, String> {
         .bytes()
         .map(|bytes| bytes.to_vec())
         .map_err(|error| format!("Could not read response body: {error}"))
+}
+
+#[tauri::command]
+fn resolve_url_redirect(url: String) -> Result<String, String> {
+    if !url.starts_with("https://") && !url.starts_with("http://") {
+        return Err("Only HTTP and HTTPS URLs can be resolved".to_string());
+    }
+
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|error| format!("Could not create HTTP client: {error}"))?;
+
+    if let Ok(head_response) = client.head(&url).send() {
+        if has_xyz_placeholders(head_response.url().as_str()) {
+            return Ok(head_response.url().to_string());
+        }
+    }
+
+    let response = client
+        .get(&url)
+        .header("accept", "application/json, text/plain;q=0.9, */*;q=0.8")
+        .send()
+        .map_err(|error| format!("Request failed: {error}"))?;
+    if has_xyz_placeholders(response.url().as_str()) {
+        return Ok(response.url().to_string());
+    }
+
+    let body = response
+        .text()
+        .map_err(|error| format!("Could not read response body: {error}"))?;
+
+    resolved_url_from_body(&body).ok_or_else(|| "Could not resolve URL".to_string())
+}
+
+fn has_xyz_placeholders(url: &str) -> bool {
+    let normalized = url.to_ascii_lowercase();
+    (normalized.contains("{z}") || normalized.contains("%7bz%7d"))
+        && (normalized.contains("{x}") || normalized.contains("%7bx%7d"))
+        && (normalized.contains("{y}") || normalized.contains("%7by%7d"))
+}
+
+fn resolved_url_from_body(body: &str) -> Option<String> {
+    let trimmed = body.trim();
+    if trimmed.starts_with("https://") || trimmed.starts_with("http://") {
+        return Some(trimmed.to_string());
+    }
+
+    let value: Value = serde_json::from_str(trimmed).ok()?;
+    resolved_url_from_json(&value)
+}
+
+fn resolved_url_from_json(value: &Value) -> Option<String> {
+    if let Some(url) = value.as_str() {
+        return http_url(url);
+    }
+
+    let object = value.as_object()?;
+    for key in ["url", "tileUrl", "tile_url"] {
+        if let Some(url) = object.get(key).and_then(Value::as_str).and_then(http_url) {
+            return Some(url);
+        }
+    }
+
+    object
+        .get("tiles")
+        .and_then(Value::as_array)
+        .and_then(|tiles| tiles.first())
+        .and_then(Value::as_str)
+        .and_then(http_url)
+}
+
+fn http_url(url: &str) -> Option<String> {
+    if url.starts_with("https://") || url.starts_with("http://") {
+        Some(url.to_string())
+    } else {
+        None
+    }
 }
 
 #[derive(Serialize)]

@@ -54,6 +54,7 @@ import { useState, useSyncExternalStore } from "react";
 import { createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import { openProjectFile, saveProjectFile } from "../../lib/tauri-io";
+import { resolveProjectXyzLayers } from "../../lib/xyz-url";
 import { AddDataDialog, type AddDataKind } from "./AddDataDialog";
 import { AboutDialog } from "./AboutDialog";
 import { NewProjectDialog } from "./NewProjectDialog";
@@ -117,7 +118,19 @@ export function TopToolbar({
 
   const handleOpen = async () => {
     const result = await openProjectFile();
-    if (result) loadProject(result.project, result.path);
+    if (result) {
+      try {
+        loadProject(
+          await resolveProjectXyzLayers(result.project),
+          result.path,
+        );
+      } catch (error) {
+        console.error("Failed to open project", error);
+        window.alert(
+          error instanceof Error ? error.message : "Could not open project.",
+        );
+      }
+    }
   };
 
   const handleSave = async (): Promise<boolean> => {

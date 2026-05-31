@@ -1,5 +1,6 @@
 import { parseProject, useAppStore } from "@geolibre/core";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { resolveProjectXyzLayers } from "../lib/xyz-url";
 
 export type ProjectUrlLoadState =
   | { error: null; message: null; status: "idle" }
@@ -29,7 +30,11 @@ export function useProjectUrlLoader(): ProjectUrlLoadState {
     });
 
     void loadProjectFromUrl(projectUrl, abortController.signal)
+      .then((project) =>
+        resolveProjectXyzLayers(project, abortController.signal),
+      )
       .then((project) => {
+        if (abortController.signal.aborted) return;
         loadProject(project, projectUrl);
         setState({
           error: null,
