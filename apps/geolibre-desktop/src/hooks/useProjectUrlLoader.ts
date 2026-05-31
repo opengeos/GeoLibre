@@ -30,8 +30,11 @@ export function useProjectUrlLoader(): ProjectUrlLoadState {
     });
 
     void loadProjectFromUrl(projectUrl, abortController.signal)
-      .then(resolveProjectXyzLayers)
+      .then((project) =>
+        resolveProjectXyzLayers(project, abortController.signal),
+      )
       .then((project) => {
+        if (abortController.signal.aborted) return;
         loadProject(project, projectUrl);
         setState({
           error: null,

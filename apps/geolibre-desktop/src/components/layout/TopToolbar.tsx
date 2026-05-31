@@ -119,7 +119,17 @@ export function TopToolbar({
   const handleOpen = async () => {
     const result = await openProjectFile();
     if (result) {
-      loadProject(await resolveProjectXyzLayers(result.project), result.path);
+      try {
+        loadProject(
+          await resolveProjectXyzLayers(result.project),
+          result.path,
+        );
+      } catch (error) {
+        console.error("Failed to open project", error);
+        window.alert(
+          error instanceof Error ? error.message : "Could not open project.",
+        );
+      }
     }
   };
 

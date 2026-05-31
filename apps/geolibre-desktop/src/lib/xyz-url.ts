@@ -47,6 +47,7 @@ export function createXyzTileUrlTemplate(url: string): ResolvedXyzTileUrl {
 
 export async function resolveXyzTileUrlTemplate(
   url: string,
+  signal?: AbortSignal,
 ): Promise<ResolvedXyzTileUrl> {
   const originalUrl = normalizeTileUrlTemplate(url.trim());
   if (hasXyzTilePlaceholders(originalUrl)) {
@@ -59,7 +60,7 @@ export async function resolveXyzTileUrlTemplate(
   }
 
   const resolvedUrl = normalizeTileUrlTemplate(
-    await resolveShortXyzUrl(originalUrl),
+    await resolveShortXyzUrl(originalUrl, signal),
   );
   if (!hasXyzTilePlaceholders(resolvedUrl)) {
     throw new Error(
@@ -97,13 +98,24 @@ export function registerXyzTileProtocol(): void {
 
 export async function resolveProjectXyzLayers(
   project: GeoLibreProject,
+  signal?: AbortSignal,
 ): Promise<GeoLibreProject> {
-  const layers = await Promise.all(project.layers.map(resolveProjectXyzLayer));
+  const results = await Promise.allSettled(
+    project.layers.map((layer) => resolveProjectXyzLayer(layer, signal)),
+  );
+  const layers = results.map((result, index) => {
+    if (result.status === "fulfilled") return result.value;
+    if (!signal?.aborted) {
+      console.warn("Could not resolve XYZ layer URL", result.reason);
+    }
+    return project.layers[index];
+  });
   return { ...project, layers };
 }
 
 async function resolveProjectXyzLayer(
   layer: GeoLibreLayer,
+  signal?: AbortSignal,
 ): Promise<GeoLibreLayer> {
   if (layer.type !== "xyz") return layer;
 
@@ -118,7 +130,7 @@ async function resolveProjectXyzLayer(
   const normalizedUrl = normalizeTileUrlTemplate(url);
   const tileUrl =
     hasShortUrlMetadata || !hasXyzTilePlaceholders(normalizedUrl)
-      ? await resolveXyzTileUrlTemplate(url)
+      ? await resolveXyzTileUrlTemplate(url, signal)
       : createXyzTileUrlTemplate(url);
   return {
     ...layer,
@@ -189,7 +201,10 @@ function isHttpUrl(url: string): boolean {
   return /^https?:\/\//i.test(url);
 }
 
-async function resolveShortXyzUrl(url: string): Promise<string> {
+async function resolveShortXyzUrl(
+  url: string,
+  signal?: AbortSignal,
+): Promise<string> {
   if (!isHttpUrl(url)) return url;
 
   if (isTauri()) {
@@ -200,6 +215,7 @@ async function resolveShortXyzUrl(url: string): Promise<string> {
   const response = await fetch(url, {
     headers: { Accept: "application/json, text/plain;q=0.9, */*;q=0.8" },
     redirect: "follow",
+    signal,
   });
   const resolvedUrl = urlFromResolverResponse(response);
   if (resolvedUrl) return resolvedUrl;

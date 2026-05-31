@@ -121,30 +121,18 @@ fn resolve_url_redirect(url: String) -> Result<String, String> {
 
     let response = client
         .get(&url)
-        .header(
-            "accept",
-            "application/json, text/plain;q=0.9, */*;q=0.8",
-        )
+        .header("accept", "application/json, text/plain;q=0.9, */*;q=0.8")
         .send()
         .map_err(|error| format!("Request failed: {error}"))?;
     if has_xyz_placeholders(response.url().as_str()) {
         return Ok(response.url().to_string());
     }
 
-    let response_url = response.url().to_string();
     let body = response
         .text()
         .map_err(|error| format!("Could not read response body: {error}"))?;
 
-    resolved_url_from_body(&body)
-        .or_else(|| {
-            if response_url.starts_with("https://") || response_url.starts_with("http://") {
-                Some(response_url)
-            } else {
-                None
-            }
-        })
-        .ok_or_else(|| "Could not resolve URL".to_string())
+    resolved_url_from_body(&body).ok_or_else(|| "Could not resolve URL".to_string())
 }
 
 fn has_xyz_placeholders(url: &str) -> bool {
