@@ -269,6 +269,8 @@ export function LayerPanel({
                   <button
                     type="button"
                     className="rounded p-0.5 hover:bg-muted"
+                    title={layer.visible ? "Hide layer" : "Show layer"}
+                    aria-label={layer.visible ? "Hide layer" : "Show layer"}
                     onClick={(e) => {
                       e.stopPropagation();
                       setLayerVisibility(layer.id, !layer.visible);
@@ -314,6 +316,7 @@ export function LayerPanel({
                     size="icon"
                     className="h-7 w-7"
                     title="Move up"
+                    aria-label="Move up"
                     onClick={(e) => {
                       e.stopPropagation();
                       reorderLayer(layer.id, "up");
@@ -326,6 +329,7 @@ export function LayerPanel({
                     size="icon"
                     className="h-7 w-7"
                     title="Move down"
+                    aria-label="Move down"
                     onClick={(e) => {
                       e.stopPropagation();
                       reorderLayer(layer.id, "down");
@@ -338,6 +342,7 @@ export function LayerPanel({
                     size="icon"
                     className="h-7 w-7"
                     title="Zoom to layer"
+                    aria-label="Zoom to layer"
                     onClick={(e) => {
                       e.stopPropagation();
                       mapControllerRef.current?.fitLayer(layer);
@@ -360,6 +365,13 @@ export function LayerPanel({
                           : "Identify features"
                         : "Identify is only available for vector layers"
                     }
+                    aria-label={
+                      canIdentify
+                        ? identifyActive
+                          ? "Deactivate identify"
+                          : "Identify features"
+                        : "Identify is only available for vector layers"
+                    }
                     disabled={!canIdentify}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -375,6 +387,7 @@ export function LayerPanel({
                     size="icon"
                     className="h-7 w-7"
                     title="Metadata"
+                    aria-label="Metadata"
                     onClick={(e) => {
                       e.stopPropagation();
                       setMetadataLayer(layer);
@@ -387,6 +400,7 @@ export function LayerPanel({
                     size="icon"
                     className="h-7 w-7 text-destructive"
                     title="Remove layer"
+                    aria-label="Remove layer"
                     onClick={(e) => {
                       e.stopPropagation();
                       setLayerPendingRemoval(layer);

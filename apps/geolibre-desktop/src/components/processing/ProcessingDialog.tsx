@@ -61,8 +61,9 @@ export function ProcessingDialog({
         </DialogHeader>
         <div className="space-y-3">
           <div>
-            <Label>Algorithm</Label>
+            <Label htmlFor="processing-algorithm">Algorithm</Label>
             <select
+              id="processing-algorithm"
               className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
               value={algorithmId}
               onChange={(e) => setAlgorithmId(e.target.value)}
@@ -80,8 +81,9 @@ export function ProcessingDialog({
             )}
           </div>
           <div>
-            <Label>Layer</Label>
+            <Label htmlFor="processing-layer">Layer</Label>
             <select
+              id="processing-layer"
               className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
               value={layerId || geojsonLayers[0]?.id || ""}
               onChange={(e) => setLayerId(e.target.value)}

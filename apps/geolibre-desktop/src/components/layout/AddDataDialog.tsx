@@ -1490,14 +1490,16 @@ export function AddDataDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={addLayerDisabled}>
-              {kind === "wms" || kind === "wmts" ? (
-                <Globe2 className="mr-2 h-3.5 w-3.5" />
-              ) : kind === "raster" ? (
-                <Image className="mr-2 h-3.5 w-3.5" />
-              ) : (
-                <MapIcon className="mr-2 h-3.5 w-3.5" />
-              )}
-              Add layer
+              {!isSubmitting ? (
+                kind === "wms" || kind === "wmts" ? (
+                  <Globe2 className="mr-2 h-3.5 w-3.5" />
+                ) : kind === "raster" ? (
+                  <Image className="mr-2 h-3.5 w-3.5" />
+                ) : (
+                  <MapIcon className="mr-2 h-3.5 w-3.5" />
+                )
+              ) : null}
+              {isSubmitting ? "Adding…" : "Add layer"}
             </Button>
           </div>
         </form>

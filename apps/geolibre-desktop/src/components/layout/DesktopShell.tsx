@@ -417,6 +417,7 @@ export function DesktopShell({
       ) : null}
       {projectUrlLoadState?.message || projectUrlLoadState?.error ? (
         <div
+          aria-live="polite"
           className={`pointer-events-none absolute left-1/2 top-14 z-50 max-w-[min(90vw,32rem)] -translate-x-1/2 rounded-md border bg-background px-3 py-2 text-center text-sm shadow-lg ${
             projectUrlLoadState.error ? "text-destructive" : "text-foreground"
           }`}
@@ -426,6 +427,7 @@ export function DesktopShell({
       ) : null}
       {dropMessage || dropError ? (
         <div
+          aria-live="polite"
           className={`pointer-events-none absolute bottom-10 left-1/2 z-50 -translate-x-1/2 rounded-md border bg-background px-3 py-2 text-sm shadow-lg ${
             dropError ? "text-destructive" : "text-foreground"
           }`}

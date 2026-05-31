@@ -329,6 +329,7 @@ export function AttributeTable() {
         <Input
           className="ml-auto h-7 max-w-xs text-xs"
           placeholder="Search attributes…"
+          aria-label="Search attributes"
           value={attributeFilter}
           onChange={(e) => setAttributeFilter(e.target.value)}
         />
