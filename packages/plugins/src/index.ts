@@ -16,6 +16,7 @@ export {
   openFlatGeobufAddVectorLayerPanel,
   openLidarLayerPanel,
   openPMTilesLayerPanel,
+  openSearchPlacesPanel,
   openSplattingLayerPanel,
   openStacSearchLayerPanel,
   openZarrLayerPanel,

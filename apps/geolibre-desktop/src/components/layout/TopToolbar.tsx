@@ -14,6 +14,7 @@ import {
   openGeoParquetLayerPanel,
   openLidarLayerPanel,
   openPMTilesLayerPanel,
+  openSearchPlacesPanel,
   openSplattingLayerPanel,
   openStacSearchLayerPanel,
   openZarrLayerPanel,
@@ -162,6 +163,9 @@ export function TopToolbar({
   const handleAddStacLayer = () => {
     openStacSearchLayerPanel(appApi);
   };
+  const handleSearchPlaces = () => {
+    openSearchPlacesPanel(appApi);
+  };
   const handleAddZarrLayer = () => {
     openZarrLayerPanel(appApi);
   };
@@ -278,6 +282,10 @@ export function TopToolbar({
               {controlsVisible[control.id] ? " ✓" : ""}
             </DropdownMenuItem>
           ))}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={handleSearchPlaces}>
+            Search
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       <DropdownMenu>
