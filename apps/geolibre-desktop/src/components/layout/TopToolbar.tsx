@@ -216,9 +216,6 @@ export function TopToolbar({
           <DropdownMenuItem onSelect={handleAddPMTilesLayer}>
             Add PMTiles Layer
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={handleAddStacLayer}>
-            Add STAC Layer
-          </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setAddDataKind("mbtiles")}>
             Add MBTiles Layer
           </DropdownMenuItem>
@@ -233,6 +230,9 @@ export function TopToolbar({
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddSplattingLayer}>
             Add Splatting Layer
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleAddStacLayer}>
+            Add STAC Layer
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

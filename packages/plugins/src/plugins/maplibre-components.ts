@@ -604,6 +604,14 @@ interface StacCogRenderOptions {
   rescaleMin: number;
 }
 
+interface StacCogTextureHelper {
+  inferTextureFormat?: (
+    samplesPerPixel: number,
+    bitsPerSample: unknown,
+    sampleFormat: unknown,
+  ) => string;
+}
+
 const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
   componentsConstructorsPromise ??= import("maplibre-gl-components").then(
     ({
@@ -2483,7 +2491,10 @@ function patchStacSearchCogLayer(control: StacSearchControl): void {
     const layerCounter = mutableControl._layerCounter ?? 0;
     mutableControl._layerCounter = layerCounter + 1;
     const id = `stac-search-${item.id}-${selectedAsset.key}-${layerCounter}`;
-    const layer = new COGLayerClass({
+    const CogLayerConstructor = COGLayerClass as unknown as {
+      new (props: Record<string, unknown>): Layer;
+    };
+    const layer = new CogLayerConstructor({
       geotiff: layerUrl,
       id,
       opacity: 1,
@@ -2491,7 +2502,7 @@ function patchStacSearchCogLayer(control: StacSearchControl): void {
     });
     mutableControl._cogLayers?.set(id, layer as unknown as Layer);
     mutableControl._deckOverlay?.setProps({
-      layers: Array.from(mutableControl._cogLayers?.values() ?? []),
+      layers: Array.from(mutableControl._cogLayers?.values() ?? []) as Layer[],
     });
     if (mutableControl._state) {
       mutableControl._state.hasLayer = true;
@@ -2543,13 +2554,7 @@ function getStacSearchRenderOptions(
   };
 }
 
-async function createStacCogRenderProps(texture: {
-  inferTextureFormat?: (
-    samplesPerPixel: number,
-    bitsPerSample: ArrayLike<number>,
-    sampleFormat: ArrayLike<number>,
-  ) => string;
-}, renderOptions: StacCogRenderOptions): Promise<{
+async function createStacCogRenderProps(texture: unknown, renderOptions: StacCogRenderOptions): Promise<{
   getTileData: (
     image: StacCogImageLike,
     options: StacCogTileOptions,
@@ -2567,7 +2572,8 @@ async function createStacCogRenderProps(texture: {
   const { getColormap } = (await import("maplibre-gl-components")) as {
     getColormap?: (name: string) => StacColorStop[];
   };
-  const inferTextureFormat = texture.inferTextureFormat;
+  const inferTextureFormat = (texture as StacCogTextureHelper)
+    .inferTextureFormat;
 
   return {
     getTileData: async (image, options) => {
@@ -2855,8 +2861,12 @@ async function patchStacSearchCOGLayerClass(
     CogLayerControl: CogLayerControlClass,
     StacLayerControl: StacLayerControlClass,
   } = await import("maplibre-gl-components");
-  const stacPatcher = new StacLayerControlClass({}) as StacLayerControlPatcher;
-  const cogPatcher = new CogLayerControlClass({}) as StacLayerControlPatcher;
+  const stacPatcher = new StacLayerControlClass(
+    {},
+  ) as unknown as StacLayerControlPatcher;
+  const cogPatcher = new CogLayerControlClass(
+    {},
+  ) as unknown as StacLayerControlPatcher;
   stacPatcher._patchCOGLayer?.(COGLayerClass);
   cogPatcher._patchCOGLayerForFloat?.(COGLayerClass);
   cogPatcher._patchCOGLayerForOpacity?.(COGLayerClass);
