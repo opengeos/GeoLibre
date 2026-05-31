@@ -35,7 +35,12 @@ export function syncLayer(
     return;
   }
 
-  if (layer.type === "raster" || layer.type === "wms" || layer.type === "xyz") {
+  if (
+    layer.type === "raster" ||
+    layer.type === "wms" ||
+    layer.type === "wmts" ||
+    layer.type === "xyz"
+  ) {
     syncRasterTileLayer(map, layer, beforeId);
     return;
   }

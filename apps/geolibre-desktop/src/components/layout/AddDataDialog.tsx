@@ -57,6 +57,7 @@ import { isTauri } from "../../lib/tauri-io";
 export type AddDataKind =
   | "xyz"
   | "wms"
+  | "wmts"
   | "vector"
   | "raster"
   | "mbtiles"
@@ -76,6 +77,7 @@ type RasterColormap = NonNullable<CogRasterLayerOptions["colormap"]>;
 const KIND_LABELS: Record<AddDataKind, string> = {
   xyz: "Add XYZ Layer",
   wms: "Add WMS Layer",
+  wmts: "Add WMTS Layer",
   vector: "Add Vector Layer",
   raster: "Add Raster Layer",
   mbtiles: "Add MBTiles Layer",
@@ -104,6 +106,8 @@ const DEFAULT_XYZ_URL =
 const DEFAULT_WMS_ENDPOINT =
   "https://imagery.nationalmap.gov/arcgis/services/USGSNAIPImagery/ImageServer/WMSServer";
 const DEFAULT_WMS_LAYERS = "USGSNAIPImagery:FalseColorComposite";
+const DEFAULT_WMTS_URL =
+  "https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/119/{z}/{y}/{x}";
 const DEFAULT_RASTER_URL =
   "https://data.source.coop/giswqs/opengeos/nlcd_2021_land_cover_30m.tif";
 const DEFAULT_ARCGIS_FEATURE_URL =
@@ -289,6 +293,8 @@ export function AddDataDialog({
   const [wmsFormat, setWmsFormat] = useState("image/png");
   const [wmsTransparent, setWmsTransparent] = useState(true);
   const [wmsTileSize, setWmsTileSize] = useState("256");
+  const [wmtsUrl, setWmtsUrl] = useState(DEFAULT_WMTS_URL);
+  const [wmtsTileSize, setWmtsTileSize] = useState("256");
 
   const [vectorMode, setVectorMode] = useState<VectorMode>("vector-file");
   const [vectorUrl, setVectorUrl] = useState("");
@@ -344,6 +350,7 @@ export function AddDataDialog({
       {
         xyz: "XYZ Layer",
         wms: "WMS Layer",
+        wmts: "WMTS Layer",
         vector: "Vector Layer",
         raster: "Raster Layer",
         mbtiles: "MBTiles Layer",
@@ -360,6 +367,8 @@ export function AddDataDialog({
     setWmsFormat("image/png");
     setWmsTransparent(true);
     setWmsTileSize("256");
+    setWmtsUrl(DEFAULT_WMTS_URL);
+    setWmtsTileSize("256");
     setVectorMode("vector-file");
     setVectorUrl("");
     setVectorSourceLayer("");
@@ -401,6 +410,9 @@ export function AddDataDialog({
     }
     if (kind === "wms") {
       return "Add a WMS GetMap service as a tiled raster layer.";
+    }
+    if (kind === "wmts") {
+      return "Add a WMTS tile URL template as a raster layer.";
     }
     if (kind === "vector") {
       return "Add local vector files supported by DuckDB Spatial, GeoJSON URLs, or MapLibre vector tile sources.";
@@ -682,6 +694,26 @@ export function AddDataDialog({
               transparent: wmsTransparent,
             },
             { service: "wms" },
+          ),
+        );
+        return;
+      }
+
+      if (kind === "wmts") {
+        if (!wmtsUrl.trim()) {
+          throw new Error("Enter a WMTS tile URL template.");
+        }
+        addAndClose(
+          createBaseLayer(
+            name,
+            "wmts",
+            {
+              type: "raster",
+              tiles: [wmtsUrl.trim()],
+              tileSize: Number(wmtsTileSize) || 256,
+              url: wmtsUrl.trim(),
+            },
+            { service: "wmts" },
           ),
         );
         return;
@@ -975,6 +1007,29 @@ export function AddDataDialog({
                 />
                 Transparent background
               </label>
+            </div>
+          )}
+
+          {kind === "wmts" && (
+            <div className="grid gap-3 sm:grid-cols-[1fr_7rem]">
+              <div className="space-y-1.5">
+                <Label htmlFor="wmts-url">Tile URL template</Label>
+                <Input
+                  id="wmts-url"
+                  placeholder="https://example.com/wmts/{z}/{y}/{x}.png"
+                  value={wmtsUrl}
+                  onChange={(event) => setWmtsUrl(event.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="wmts-tile-size">Tile size</Label>
+                <Input
+                  id="wmts-tile-size"
+                  inputMode="numeric"
+                  value={wmtsTileSize}
+                  onChange={(event) => setWmtsTileSize(event.target.value)}
+                />
+              </div>
             </div>
           )}
 
@@ -1435,7 +1490,7 @@ export function AddDataDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={addLayerDisabled}>
-              {kind === "wms" ? (
+              {kind === "wms" || kind === "wmts" ? (
                 <Globe2 className="mr-2 h-3.5 w-3.5" />
               ) : kind === "raster" ? (
                 <Image className="mr-2 h-3.5 w-3.5" />

@@ -43,6 +43,7 @@ export type LayerType =
   | "geojson"
   | "raster"
   | "wms"
+  | "wmts"
   | "xyz"
   | "vector-tiles"
   | "arcgis"

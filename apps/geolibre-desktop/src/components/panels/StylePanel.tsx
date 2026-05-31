@@ -37,7 +37,12 @@ function isMobileViewport(): boolean {
 }
 
 function isRasterPaintLayer(type: LayerType): boolean {
-  return type === "raster" || type === "wms" || type === "xyz";
+  return (
+    type === "raster" ||
+    type === "wms" ||
+    type === "wmts" ||
+    type === "xyz"
+  );
 }
 
 function hasExternalNativeLayers(layer: { metadata: Record<string, unknown> }) {

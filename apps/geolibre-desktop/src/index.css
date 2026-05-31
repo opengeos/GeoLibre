@@ -798,7 +798,9 @@ body,
 }
 
 .maplibregl-control-container {
-  position: relative;
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
   z-index: 2;
 }
 

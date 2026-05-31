@@ -1107,6 +1107,7 @@ export class MapController {
     if (
       layer.type === "raster" ||
       layer.type === "wms" ||
+      layer.type === "wmts" ||
       layer.type === "xyz"
     ) {
       return [{ id: `layer-${layer.id}-raster` }];
