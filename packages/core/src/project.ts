@@ -92,9 +92,35 @@ export function projectFromStore(state: {
     basemapStyleUrl: state.basemapStyleUrl,
     basemapVisible: state.basemapVisible,
     basemapOpacity: state.basemapOpacity,
-    layers: state.layers,
+    layers: state.layers.map(prepareLayerForSave),
     styles,
     metadata: state.metadata,
+  };
+}
+
+function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
+  if (layer.type !== "xyz") return layer;
+
+  const originalUrl =
+    typeof layer.metadata.originalUrl === "string" &&
+    layer.metadata.originalUrl.trim()
+      ? layer.metadata.originalUrl
+      : typeof layer.source.url === "string" && layer.source.url.trim()
+        ? layer.source.url
+        : null;
+  if (!originalUrl) return layer;
+
+  const metadata = { ...layer.metadata };
+  delete metadata.resolvedUrl;
+
+  return {
+    ...layer,
+    source: {
+      ...layer.source,
+      tiles: [originalUrl],
+      url: originalUrl,
+    },
+    metadata,
   };
 }
 

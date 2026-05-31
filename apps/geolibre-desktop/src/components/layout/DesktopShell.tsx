@@ -16,6 +16,7 @@ import {
   loadDroppedVectorPaths,
 } from "../../lib/tauri-io";
 import { registerMbtilesProtocol } from "../../lib/mbtiles";
+import { registerXyzTileProtocol } from "../../lib/xyz-url";
 import { AttributeTable } from "../panels/AttributeTable";
 import { LayerPanel } from "../panels/LayerPanel";
 import { StylePanel } from "../panels/StylePanel";
@@ -98,7 +99,10 @@ export function DesktopShell({
   }, []);
 
   useEffect(() => {
-    if (isTauri()) registerMbtilesProtocol();
+    if (isTauri()) {
+      registerMbtilesProtocol();
+      registerXyzTileProtocol();
+    }
   }, []);
 
   useEffect(() => {

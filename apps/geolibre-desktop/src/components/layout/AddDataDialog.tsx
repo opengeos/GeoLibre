@@ -53,6 +53,11 @@ import {
   type MartinSourceSummary,
 } from "../../lib/martin";
 import { isTauri } from "../../lib/tauri-io";
+import {
+  createXyzTileUrlTemplate,
+  registerXyzTileProtocol,
+  resolveXyzTileUrlTemplate,
+} from "../../lib/xyz-url";
 
 export type AddDataKind =
   | "xyz"
@@ -286,6 +291,7 @@ export function AddDataDialog({
 
   const [xyzUrl, setXyzUrl] = useState(DEFAULT_XYZ_URL);
   const [xyzTileSize, setXyzTileSize] = useState("256");
+  const [xyzShortUrl, setXyzShortUrl] = useState(false);
 
   const [wmsEndpoint, setWmsEndpoint] = useState(DEFAULT_WMS_ENDPOINT);
   const [wmsLayers, setWmsLayers] = useState(DEFAULT_WMS_LAYERS);
@@ -361,6 +367,7 @@ export function AddDataDialog({
     setBeforeLayerId("");
     setXyzUrl(DEFAULT_XYZ_URL);
     setXyzTileSize("256");
+    setXyzShortUrl(false);
     setWmsEndpoint(DEFAULT_WMS_ENDPOINT);
     setWmsLayers(DEFAULT_WMS_LAYERS);
     setWmsStyles("");
@@ -655,12 +662,26 @@ export function AddDataDialog({
 
       if (kind === "xyz") {
         if (!xyzUrl.trim()) throw new Error("Enter an XYZ tile URL template.");
+        if (xyzShortUrl) registerXyzTileProtocol();
+        const tileUrl = xyzShortUrl
+          ? await resolveXyzTileUrlTemplate(xyzUrl)
+          : createXyzTileUrlTemplate(xyzUrl);
         addAndClose(
-          createBaseLayer(name, "xyz", {
-            type: "raster",
-            tiles: [xyzUrl.trim()],
-            tileSize: Number(xyzTileSize) || 256,
-          }),
+          createBaseLayer(
+            name,
+            "xyz",
+            {
+              type: "raster",
+              tiles: [tileUrl.renderUrl],
+              tileSize: Number(xyzTileSize) || 256,
+              url: tileUrl.originalUrl,
+            },
+            {
+              originalUrl: xyzShortUrl ? tileUrl.originalUrl : undefined,
+              resolvedUrl: tileUrl.redirected ? tileUrl.url : undefined,
+              sourceKind: "xyz-url",
+            },
+          ),
         );
         return;
       }
@@ -926,25 +947,39 @@ export function AddDataDialog({
           </div>
 
           {kind === "xyz" && (
-            <div className="grid gap-3 sm:grid-cols-[1fr_7rem]">
-              <div className="space-y-1.5">
-                <Label htmlFor="xyz-url">Tile URL template</Label>
-                <Input
-                  id="xyz-url"
-                  placeholder="https://example.com/{z}/{x}/{y}.png"
-                  value={xyzUrl}
-                  onChange={(event) => setXyzUrl(event.target.value)}
-                />
+            <div className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-[1fr_7rem]">
+                <div className="space-y-1.5">
+                  <Label htmlFor="xyz-url">Tile URL template</Label>
+                  <Input
+                    id="xyz-url"
+                    placeholder={
+                      xyzShortUrl
+                        ? "https://go.example.com/layer"
+                        : "https://example.com/{z}/{x}/{y}.png"
+                    }
+                    value={xyzUrl}
+                    onChange={(event) => setXyzUrl(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="xyz-tile-size">Tile size</Label>
+                  <Input
+                    id="xyz-tile-size"
+                    inputMode="numeric"
+                    value={xyzTileSize}
+                    onChange={(event) => setXyzTileSize(event.target.value)}
+                  />
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="xyz-tile-size">Tile size</Label>
-                <Input
-                  id="xyz-tile-size"
-                  inputMode="numeric"
-                  value={xyzTileSize}
-                  onChange={(event) => setXyzTileSize(event.target.value)}
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={xyzShortUrl}
+                  onChange={(event) => setXyzShortUrl(event.target.checked)}
                 />
-              </div>
+                Short URL
+              </label>
             </div>
           )}
 
