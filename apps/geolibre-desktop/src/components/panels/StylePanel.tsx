@@ -78,6 +78,10 @@ function supportsExtrusionControls(layer: {
     return true;
   }
 
+  if (hasExternalDeckLayer(layer)) {
+    return true;
+  }
+
   return (
     hasExternalNativeLayers(layer) &&
     layer.metadata.tileType !== "raster" &&

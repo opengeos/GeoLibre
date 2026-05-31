@@ -31,6 +31,7 @@ type MutableDuckDBControl = {
   beforeId?: string;
   layer?: {
     beforeId: string | null;
+    rows?: Record<number, Record<string, unknown>>;
   } | null;
   renderLayer?: () => Promise<void>;
   renderer?: DuckDBRendererLike | null;
@@ -44,6 +45,7 @@ type StyledDeckLayerLike = {
 
 interface DuckDBRenderedStyle {
   opacity: number;
+  rows: Record<number, Record<string, unknown>>;
   style: LayerStyle;
 }
 
@@ -259,6 +261,7 @@ function setDuckDBRenderedLayerVisible(visible: boolean): void {
 function setDuckDBRenderedLayerStyle(layer: GeoLibreLayer): void {
   duckdbRenderedStyles.set(layer.id, {
     opacity: layer.opacity,
+    rows: getDuckDBRenderedRows(layer.id),
     style: layer.style,
   });
   void renderStyledDuckDBLayer();
@@ -346,17 +349,73 @@ function cloneStyledDeckLayer(
   }
 
   return deckLayer.clone({
+    elevationScale: style.extrusionHeightScale,
+    extruded: style.extrusionEnabled,
     getFillColor: fillColor,
+    getElevation: createDuckDBElevationAccessor(renderedStyle),
     getLineColor: strokeColor,
     getLineWidth: style.strokeWidth,
     lineWidthMinPixels: Math.max(1, style.strokeWidth),
     updateTriggers: {
       ...asRecord(deckLayer.props?.updateTriggers),
+      getElevation: [
+        style.extrusionBase,
+        style.extrusionHeightProperty,
+        style.extrusionHeightScale,
+      ],
       getFillColor: [style.fillColor, style.fillOpacity, opacity],
       getLineColor: [style.strokeColor, opacity],
       getLineWidth: [style.strokeWidth],
     },
   });
+}
+
+function createDuckDBElevationAccessor(renderedStyle: DuckDBRenderedStyle) {
+  return (objectInfo: { data?: unknown; index?: number }): number => {
+    const { style, rows } = renderedStyle;
+    const fallbackHeight = style.extrusionBase || 100;
+    const rowIndex = getGeoArrowRowIndex(objectInfo);
+    const row = rowIndex === null ? undefined : rows[rowIndex];
+    const rawValue =
+      row && style.extrusionHeightProperty
+        ? row[style.extrusionHeightProperty]
+        : undefined;
+    const value = Number(rawValue);
+
+    if (!Number.isFinite(value)) return fallbackHeight;
+    return Math.max(0, value + style.extrusionBase);
+  };
+}
+
+function getGeoArrowRowIndex(objectInfo: {
+  data?: unknown;
+  index?: number;
+}): number | null {
+  const table = (
+    objectInfo.data as
+      | {
+          data?: {
+            getChild?: (name: string) => { get?: (index: number) => unknown } | null;
+          };
+        }
+      | undefined
+  )?.data;
+  const index = objectInfo.index;
+  if (typeof index !== "number") return null;
+
+  const rawIndex = table?.getChild?.("__index")?.get?.(index);
+  if (typeof rawIndex === "number" && Number.isFinite(rawIndex)) {
+    return rawIndex;
+  }
+  if (typeof rawIndex === "bigint") return Number(rawIndex);
+  return index;
+}
+
+function getDuckDBRenderedRows(layerId: string): Record<number, Record<string, unknown>> {
+  const control = duckdbControl as unknown as MutableDuckDBControl | null;
+  const stateLayerId = duckdbControl?.getState().layer?.id;
+  if (stateLayerId !== layerId) return {};
+  return control?.layer?.rows ?? {};
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
