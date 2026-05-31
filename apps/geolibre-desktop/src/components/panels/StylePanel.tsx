@@ -47,6 +47,10 @@ function hasExternalNativeLayers(layer: { metadata: Record<string, unknown> }) {
   );
 }
 
+function hasExternalDeckLayer(layer: { metadata: Record<string, unknown> }) {
+  return layer.metadata.externalDeckLayer === true;
+}
+
 function supportsExtrusionControls(layer: {
   type: LayerType;
   source: Record<string, unknown>;
@@ -465,13 +469,15 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
     layer.metadata.sourceKind === "cog-url" ||
     layer.metadata.sourceKind === "geotiff-url" ||
     layer.metadata.sourceKind === "stac-search-cog";
+  const isDeckVectorLayer = hasExternalDeckLayer(layer);
   const isRasterTileLayer = layer.metadata.tileType === "raster";
   const hasVectorPaintControls =
     !isRasterTileLayer &&
     (layer.type === "geojson" ||
       layer.type === "vector-tiles" ||
       layer.type === "mbtiles" ||
-      hasExternalNativeLayers(layer));
+      hasExternalNativeLayers(layer) ||
+      hasExternalDeckLayer(layer));
   const hasExtrusionControls =
     !isRasterTileLayer &&
     supportsExtrusionControls(layer);
@@ -923,7 +929,9 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
       <p className="p-2 text-[10px] text-muted-foreground">
         {extrusionEnabled
           ? "3D extrusion settings apply when saved."
-          : "Changes apply live to MapLibre paint properties."}
+          : isDeckVectorLayer
+            ? "Changes apply live to DuckDB deck.gl layer styling."
+            : "Changes apply live to MapLibre paint properties."}
       </p>
     </aside>
   );

@@ -21,6 +21,7 @@ export {
   openZarrLayerPanel,
   type CogRasterLayerOptions,
 } from "./plugins/maplibre-components";
+export { openDuckDBLayerPanel } from "./plugins/maplibre-duckdb";
 export { maplibreGeoEditorPlugin } from "./plugins/maplibre-geo-editor";
 export { maplibreGeoAgentPlugin } from "./plugins/maplibre-geoagent";
 export { maplibreLidarPlugin } from "./plugins/maplibre-lidar";

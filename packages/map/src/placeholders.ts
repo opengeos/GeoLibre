@@ -17,6 +17,8 @@ export function isPlaceholderLayer(layer: GeoLibreLayer): boolean {
     return false;
   }
 
+  if (layer.metadata.externalDeckLayer === true) return false;
+
   return (
     PLACEHOLDER_LAYER_TYPES.has(layer.type) ||
     layer.metadata.placeholder === true

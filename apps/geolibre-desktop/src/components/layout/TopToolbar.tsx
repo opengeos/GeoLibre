@@ -10,6 +10,7 @@ import {
 } from "@geolibre/map";
 import {
   openFlatGeobufAddVectorLayerPanel,
+  openDuckDBLayerPanel,
   openLidarLayerPanel,
   openPMTilesLayerPanel,
   openSplattingLayerPanel,
@@ -148,6 +149,9 @@ export function TopToolbar({
   const handleAddFlatGeobufLayer = () => {
     openFlatGeobufAddVectorLayerPanel(appApi);
   };
+  const handleAddDuckDBLayer = () => {
+    openDuckDBLayerPanel(appApi);
+  };
   const handleAddPMTilesLayer = () => {
     openPMTilesLayerPanel(appApi);
   };
@@ -233,6 +237,9 @@ export function TopToolbar({
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddStacLayer}>
             Add STAC Layer
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleAddDuckDBLayer}>
+            Add DuckDB Layer
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

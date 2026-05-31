@@ -198,6 +198,117 @@ body,
   display: none !important;
 }
 
+.geolibre-duckdb-control {
+  background-color: transparent !important;
+  box-shadow: none !important;
+  color: hsl(var(--popover-foreground)) !important;
+  height: 0 !important;
+  margin: 0 !important;
+  pointer-events: none;
+}
+
+.geolibre-duckdb-control .duckdb-control-toggle {
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.duckdb-control-panel:has(+ .geolibre-duckdb-control),
+.duckdb-control-panel {
+  box-sizing: border-box;
+  max-height: min(620px, calc(100% - 20px));
+  max-width: min(365px, calc(100vw - 32px));
+}
+
+.duckdb-control-panel {
+  background-color: hsl(var(--popover)) !important;
+  border: 1px solid hsl(var(--border));
+  color: hsl(var(--popover-foreground)) !important;
+  left: 10px !important;
+  top: 10px !important;
+}
+
+.duckdb-control-content {
+  max-height: min(560px, calc(100vh - 220px));
+}
+
+.duckdb-control-header {
+  background-color: hsl(var(--card)) !important;
+  border-bottom-color: hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.duckdb-control-title,
+.duckdb-control-label,
+.duckdb-control-section-title,
+.duckdb-control-summary-row strong,
+.duckdb-control-properties dd {
+  color: hsl(var(--foreground)) !important;
+}
+
+.duckdb-control-summary-row span,
+.duckdb-control-properties dt,
+.duckdb-control-placeholder {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.duckdb-control-section,
+.duckdb-control-properties th,
+.duckdb-control-properties td {
+  border-color: hsl(var(--border)) !important;
+}
+
+.duckdb-control-input,
+.duckdb-control-file,
+.duckdb-control-textarea {
+  background-color: hsl(var(--background)) !important;
+  border-color: hsl(var(--input)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.duckdb-control-input:focus,
+.duckdb-control-file:focus,
+.duckdb-control-textarea:focus {
+  border-color: hsl(var(--ring)) !important;
+  box-shadow: 0 0 0 1px hsl(var(--ring));
+}
+
+.duckdb-control-button {
+  background-color: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+}
+
+.duckdb-control-button:hover {
+  background-color: hsl(var(--primary) / 0.9) !important;
+}
+
+.duckdb-control-secondary-button {
+  background-color: hsl(var(--secondary)) !important;
+  color: hsl(var(--secondary-foreground)) !important;
+}
+
+.duckdb-control-secondary-button:hover {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+.duckdb-control-status {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+.duckdb-control-error {
+  background-color: hsl(var(--destructive) / 0.12) !important;
+  color: hsl(var(--destructive)) !important;
+}
+
+.duckdb-control-close {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.duckdb-control-close:hover {
+  color: hsl(var(--foreground)) !important;
+}
+
 .geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-panel {
   background-color: hsl(var(--popover)) !important;
   border: 1px solid hsl(var(--border));
