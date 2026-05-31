@@ -43,6 +43,15 @@ jobs:
         id: claude-review
         uses: anthropics/claude-code-action@v1
         with:
+          # Use the workflow's GITHUB_TOKEN for GitHub API calls instead of the
+          # default OIDC -> Claude GitHub App token exchange. That exchange
+          # returns "401 Invalid OIDC token" for OIDC tokens minted in a
+          # pull_request_target context, which broke review on fork PRs. Under
+          # pull_request_target GITHUB_TOKEN already carries the pull-requests
+          # and issues write scopes this job declares, so it can post the review
+          # (as github-actions[bot]). claude_code_oauth_token still authenticates
+          # Claude to the model.
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             Perform a thorough code review of pull request ${{ github.repository }}/pull/${{ github.event.pull_request.number }}.
