@@ -1,12 +1,7 @@
 import { type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import type maplibregl from "maplibre-gl";
-import {
-  GeoEditor,
-  type DrawMode,
-  type EditMode,
-  type GeoEditorOptions,
-} from "maplibre-gl-geo-editor";
+import { GeoEditor, type GeoEditorOptions } from "maplibre-gl-geo-editor";
 import type {
   GeoLibreAppAPI,
   GeoLibreMapControlPosition,
@@ -42,7 +37,8 @@ const GEO_EDITOR_OPTIONS = {
   fileModes: ["open", "save"],
   hideGeomanControl: true,
   showFeatureProperties: true,
-  fitBoundsOnLoad: true,
+  // Avoid zoom/fit on Sketches restore — it retriggers style churn and races with draw.
+  fitBoundsOnLoad: false,
 } satisfies Omit<
   GeoEditorOptions,
   | "position"
@@ -53,6 +49,7 @@ const GEO_EDITOR_OPTIONS = {
   | "onAttributeChange"
   | "onHistoryChange"
   | "onModeChange"
+  | "onSelectionChange"
 >;
 
 let geoEditorControl: GeoEditor | null = null;
@@ -60,9 +57,12 @@ let sketchesLayerId: string | null = null;
 let geoEditorStoreUnsubscribe: (() => void) | null = null;
 let pluginActive = false;
 let restoringSketchesToEditor = false;
+let pushingSketchesToStore = false;
 let appApi: GeoLibreAppAPI | null = null;
-let currentGeoEditorMode: DrawMode | EditMode | null = null;
-let sketchesLayerDisplaySuppressed = false;
+/** Map-only hide of Sketches while GeoEditor interacts; does not touch store.visible. */
+let sketchesMapLayerSuppressed = false;
+/** After a draw completes, show Sketches even if draw mode stays active for another shape. */
+let sketchesIdleDisplayOverride = false;
 
 export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-geo-editor",
@@ -88,8 +88,8 @@ export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
   },
   deactivate: (app: GeoLibreAppAPI) => {
     pluginActive = false;
-    currentGeoEditorMode = null;
-    setSketchesStoreLayerSuppressed(false);
+    sketchesIdleDisplayOverride = false;
+    setSketchesMapLayerSuppressed(false);
     showGeomanDisplayLayers();
     appApi = null;
     teardownSketchesStoreSync();
@@ -116,9 +116,22 @@ function getGeoEditorOptions(): GeoEditorOptions {
   return {
     ...GEO_EDITOR_OPTIONS,
     position: geoEditorPosition,
-    onFeatureCreate: () => syncSketchesToStore(),
-    onFeatureEdit: () => syncSketchesToStore(),
-    onFeatureDelete: () => syncSketchesToStore(),
+    onFeatureCreate: () => {
+      sketchesIdleDisplayOverride = true;
+      // Defer until Geoman commits the new feature to its feature store.
+      queueMicrotask(() => {
+        syncSketchesToStore();
+        applySketchesMapDisplay();
+      });
+    },
+    onFeatureEdit: () => {
+      syncSketchesToStore();
+      applySketchesMapDisplay();
+    },
+    onFeatureDelete: () => {
+      syncSketchesToStore();
+      applySketchesMapDisplay();
+    },
     onGeoJsonLoad: () => {
       if (!restoringSketchesToEditor) {
         syncSketchesToStore();
@@ -126,10 +139,11 @@ function getGeoEditorOptions(): GeoEditorOptions {
     },
     onAttributeChange: () => syncSketchesToStore(),
     onHistoryChange: () => syncSketchesToStore(),
-    onModeChange: (mode) => {
-      currentGeoEditorMode = mode;
-      updateSketchesDisplayForMode();
+    onModeChange: () => {
+      sketchesIdleDisplayOverride = false;
+      applySketchesMapDisplay();
     },
+    onSelectionChange: () => applySketchesMapDisplay(),
   };
 }
 
@@ -153,6 +167,14 @@ function cloneFeatureCollection(
   return structuredClone(collection);
 }
 
+function featureCollectionsEquivalent(
+  a: FeatureCollection,
+  b: FeatureCollection,
+): boolean {
+  if (a.features.length !== b.features.length) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 function syncSketchesToStore(): void {
   if (!geoEditorControl || restoringSketchesToEditor) return;
 
@@ -162,31 +184,37 @@ function syncSketchesToStore(): void {
   const store = useAppStore.getState();
   const existing = findSketchesLayer(store.layers);
 
-  if (existing) {
-    sketchesLayerId = existing.id;
-    store.updateLayer(existing.id, { geojson: collection });
-    updateSketchesDisplayForMode();
-    return;
+  pushingSketchesToStore = true;
+  try {
+    if (existing) {
+      sketchesLayerId = existing.id;
+      store.updateLayer(existing.id, { geojson: collection });
+      return;
+    }
+
+    if (collection.features.length === 0) {
+      return;
+    }
+
+    const id = store.addGeoJsonLayer(
+      SKETCHES_LAYER_NAME,
+      collection,
+      SKETCHES_SOURCE_PATH,
+    );
+    sketchesLayerId = id;
+    store.updateLayer(id, {
+      metadata: {
+        ...store.layers.find((layer) => layer.id === id)?.metadata,
+        sourceKind: SKETCHES_SOURCE_KIND,
+      },
+    });
+  } finally {
+    pushingSketchesToStore = false;
   }
 
-  if (collection.features.length === 0) {
-    updateSketchesDisplayForMode();
-    return;
+  if (!sketchesIdleDisplayOverride) {
+    scheduleApplySketchesMapDisplay();
   }
-
-  const id = store.addGeoJsonLayer(
-    SKETCHES_LAYER_NAME,
-    collection,
-    SKETCHES_SOURCE_PATH,
-  );
-  sketchesLayerId = id;
-  store.updateLayer(id, {
-    metadata: {
-      ...store.layers.find((layer) => layer.id === id)?.metadata,
-      sourceKind: SKETCHES_SOURCE_KIND,
-    },
-  });
-  updateSketchesDisplayForMode();
 }
 
 function restoreSketchesLayerToEditor(): void {
@@ -199,18 +227,26 @@ function restoreSketchesLayerToEditor(): void {
   }
 
   sketchesLayerId = layer.id;
+  const storeCollection = cloneFeatureCollection(layer.geojson);
+  try {
+    const editorCollection = geoEditorControl.getAllFeatureCollection();
+    if (featureCollectionsEquivalent(editorCollection, storeCollection)) {
+      scheduleApplySketchesMapDisplay();
+      return;
+    }
+  } catch {
+    // Geoman may not be ready yet.
+  }
+
   restoringSketchesToEditor = true;
   try {
-    geoEditorControl.loadGeoJson(
-      cloneFeatureCollection(layer.geojson),
-      SKETCHES_SOURCE_PATH,
-    );
+    geoEditorControl.loadGeoJson(storeCollection, SKETCHES_SOURCE_PATH);
   } catch {
     // Geoman may not be ready until the map style finishes loading.
   } finally {
     restoringSketchesToEditor = false;
   }
-  updateSketchesDisplayForMode();
+  scheduleApplySketchesMapDisplay();
 }
 
 function clearSketchesFromEditor(): void {
@@ -252,9 +288,20 @@ function bindSketchesStoreSync(): void {
       previousSketches &&
       sketches.id === previousSketches.id &&
       sketches.geojson !== previousSketches.geojson &&
-      !restoringSketchesToEditor
+      !restoringSketchesToEditor &&
+      !pushingSketchesToStore
     ) {
       restoreSketchesLayerToEditor();
+      return;
+    }
+
+    if (
+      sketches &&
+      previousSketches &&
+      sketches.id === previousSketches.id &&
+      sketches.visible !== previousSketches.visible
+    ) {
+      scheduleApplySketchesMapDisplay();
     }
   });
 }
@@ -265,43 +312,81 @@ function teardownSketchesStoreSync(): void {
 }
 
 function isGeoEditorInteractionMode(): boolean {
-  return currentGeoEditorMode !== null;
+  if (!geoEditorControl) return false;
+  if (sketchesIdleDisplayOverride) return false;
+  const { activeDrawMode, activeEditMode } = geoEditorControl.getState();
+  return activeDrawMode !== null || activeEditMode !== null;
+}
+
+function sketchesMapLayerIds(layerId: string): string[] {
+  return [
+    `layer-${layerId}-fill`,
+    `layer-${layerId}-extrusion`,
+    `layer-${layerId}-line`,
+    `layer-${layerId}-circle`,
+  ];
 }
 
 /**
- * While GeoEditor has an active draw/edit mode, Geoman layers must stay visible
- * for hit-testing and handles. When idle, hide Geoman and show the Sketches
- * store layer to avoid duplicate rendering (PR #77).
+ * GeoEditor selection and edit handles use Geoman layers for hit-testing.
+ * While interacting, show Geoman and hide the Sketches store layer on the map only.
+ * When idle, hide Geoman and show Sketches according to the user's layer-panel toggle.
  */
-function updateSketchesDisplayForMode(): void {
+function applySketchesMapDisplay(): void {
   if (isGeoEditorInteractionMode()) {
     showGeomanDisplayLayers();
-    setSketchesStoreLayerSuppressed(true);
+    scheduleShowGeomanDisplayLayersOnStyleData();
+    setSketchesMapLayerSuppressed(true);
     return;
   }
+
   hideGeomanDisplayLayers();
-  setSketchesStoreLayerSuppressed(false);
+  setSketchesMapLayerSuppressed(false);
 }
 
-function setSketchesStoreLayerSuppressed(suppress: boolean): void {
+function scheduleApplySketchesMapDisplay(): void {
+  queueMicrotask(() => applySketchesMapDisplay());
+  window.setTimeout(() => applySketchesMapDisplay(), 0);
+}
+
+function scheduleShowGeomanDisplayLayersOnStyleData(): void {
+  const map = appApi?.getMap?.();
+  if (!map) return;
+
+  map.once("styledata", () => {
+    if (isGeoEditorInteractionMode()) {
+      showGeomanDisplayLayers();
+    }
+  });
+}
+
+function setSketchesMapLayerSuppressed(suppress: boolean): void {
   const layer = findSketchesLayer(useAppStore.getState().layers);
   if (!layer) {
-    sketchesLayerDisplaySuppressed = false;
+    sketchesMapLayerSuppressed = false;
     return;
   }
 
-  const store = useAppStore.getState();
+  sketchesMapLayerSuppressed = suppress;
+  setSketchesMapLayersVisibility(layer);
+}
 
-  if (suppress) {
-    if (sketchesLayerDisplaySuppressed || !layer.visible) return;
-    store.setLayerVisibility(layer.id, false);
-    sketchesLayerDisplaySuppressed = true;
-    return;
+function setSketchesMapLayersVisibility(layer: GeoLibreLayer): void {
+  const map = appApi?.getMap?.();
+  if (!map) return;
+
+  const visibility =
+    layer.visible && !sketchesMapLayerSuppressed ? "visible" : "none";
+
+  for (const mapLayerId of sketchesMapLayerIds(layer.id)) {
+    try {
+      if (map.getLayer(mapLayerId)) {
+        map.setLayoutProperty(mapLayerId, "visibility", visibility);
+      }
+    } catch {
+      // Layer may not exist yet for this geometry profile.
+    }
   }
-
-  if (!sketchesLayerDisplaySuppressed) return;
-  store.setLayerVisibility(layer.id, true);
-  sketchesLayerDisplaySuppressed = false;
 }
 
 function setGeomanDisplayLayersVisibility(visibility: "visible" | "none"): void {
@@ -330,8 +415,20 @@ function showGeomanDisplayLayers(): void {
 }
 
 function isGeomanDisplayLayer(layer: maplibregl.LayerSpecification): boolean {
-  if (layer.id.startsWith("gm_")) return true;
+  const id = layer.id.toLowerCase();
+  if (
+    id.startsWith("gm_") ||
+    id.startsWith("gm-") ||
+    id.includes("geoman")
+  ) {
+    return true;
+  }
   if (!("source" in layer)) return false;
   const source = layer.source;
-  return typeof source === "string" && source.startsWith("geoman");
+  return (
+    typeof source === "string" &&
+    (source.startsWith("gm_") ||
+      source.startsWith("gm-") ||
+      source.startsWith("geoman"))
+  );
 }
