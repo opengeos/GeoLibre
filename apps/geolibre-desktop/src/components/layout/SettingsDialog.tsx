@@ -26,6 +26,8 @@ import type { MapController } from "@geolibre/map";
 import {
   Braces,
   Crosshair,
+  Eye,
+  EyeOff,
   FolderCog,
   MapPinned,
   Plus,
@@ -168,6 +170,11 @@ export function SettingsDialog({
   );
   const [draftProjectName, setDraftProjectName] = useState(projectName);
   const [error, setError] = useState<string | null>(null);
+  // Ids of variables whose value is temporarily revealed; values are masked
+  // by default so secrets are not shown on screen.
+  const [revealedValueIds, setRevealedValueIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const enabledVariableCount = useMemo(
     () =>
       draftPreferences.environmentVariables.filter(
@@ -183,8 +190,21 @@ export function SettingsDialog({
     if (!open) return;
     setDraftPreferences(clonePreferences(useAppStore.getState().preferences));
     setDraftProjectName(useAppStore.getState().projectName);
+    setRevealedValueIds(new Set());
     setError(null);
   }, [open]);
+
+  const toggleValueVisibility = (id: string) => {
+    setRevealedValueIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   const updateMapPreferences = (patch: Partial<MapPreferences>) => {
     setDraftPreferences((current) => ({
@@ -198,6 +218,9 @@ export function SettingsDialog({
     index: number,
     value: number,
   ) => {
+    // Ignore a cleared field (valueAsNumber is NaN) so it does not silently
+    // become an edge-of-range value on save; the last valid value is kept.
+    if (!Number.isFinite(value)) return;
     setDraftPreferences((current) => {
       const bounds: MapPreferences["bounds"] = [...current.map.bounds];
       bounds[index] = value;
@@ -534,7 +557,7 @@ export function SettingsDialog({
                         (variable, index) => (
                           <div
                             key={variable.id}
-                            className="grid grid-cols-[1.25rem_minmax(7rem,1fr)_minmax(7rem,1fr)_2rem] items-center gap-2"
+                            className="grid grid-cols-[1.25rem_minmax(7rem,1fr)_minmax(7rem,1fr)_2rem_2rem] items-center gap-2"
                           >
                             <input
                               aria-label={`Enable ${variable.key || "variable"}`}
@@ -560,6 +583,12 @@ export function SettingsDialog({
                             <Input
                               aria-label="Variable value"
                               placeholder="Value"
+                              type={
+                                revealedValueIds.has(variable.id)
+                                  ? "text"
+                                  : "password"
+                              }
+                              autoComplete="off"
                               value={variable.value}
                               onChange={(event) =>
                                 updateEnvironmentVariable(index, {
@@ -567,6 +596,24 @@ export function SettingsDialog({
                                 })
                               }
                             />
+                            <Button
+                              aria-label={
+                                revealedValueIds.has(variable.id)
+                                  ? `Hide value for ${variable.key || "variable"}`
+                                  : `Show value for ${variable.key || "variable"}`
+                              }
+                              className="h-8 w-8"
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => toggleValueVisibility(variable.id)}
+                            >
+                              {revealedValueIds.has(variable.id) ? (
+                                <EyeOff className="h-3.5 w-3.5" />
+                              ) : (
+                                <Eye className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
                             <Button
                               aria-label={`Remove ${variable.key || "variable"}`}
                               className="h-8 w-8"
