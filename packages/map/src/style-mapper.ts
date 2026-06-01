@@ -73,14 +73,14 @@ function vectorColorPaintValue(
 
   if (mode === "categorized") {
     const stops = styleValue(style, "vectorStyleStops").filter(
-      (stop) => String(stop.value).length > 0 && isColor(stop.color),
+      (stop) => String(stop.value).trim().length > 0 && isColor(stop.color),
     );
     if (stops.length === 0) return fallbackColor;
 
     return [
       "match",
       ["to-string", ["get", property]],
-      ...stops.flatMap((stop) => [String(stop.value), stop.color]),
+      ...stops.flatMap((stop) => [String(stop.value).trim(), stop.color]),
       fallbackColor,
     ] as PropertyValueSpecification<string>;
   }
@@ -177,12 +177,14 @@ export function linePaint(style: LayerStyle, opacity: number) {
   const lineColor =
     vectorColor === strokeColor
       ? strokeColor
-      : ([
-          "case",
-          ["==", ["geometry-type"], "Polygon"],
-          strokeColor,
-          vectorColor,
-        ] as PropertyValueSpecification<string>);
+      : styleValue(style, "vectorStyleMode") === "expression"
+        ? vectorColor
+        : ([
+            "case",
+            ["==", ["geometry-type"], "Polygon"],
+            strokeColor,
+            vectorColor,
+          ] as PropertyValueSpecification<string>);
 
   return {
     "line-color": lineColor,

@@ -278,9 +278,16 @@ function createGraduatedStops(
         ? createNaturalBreaks(values, count)
         : createEqualIntervalBreaks(min, max, count);
 
+  // Natural breaks can yield fewer breaks than the requested count when the
+  // layer has fewer unique values; align the color count so none are dropped.
+  const stopColors =
+    breaks.length === count
+      ? colors
+      : interpolateRampColors(colorRamp, breaks.length);
+
   return breaks.map((value, index) => ({
     value: Number(value.toPrecision(8)),
-    color: colors[index] ?? colors.at(-1) ?? "#2563eb",
+    color: stopColors[index] ?? stopColors.at(-1) ?? "#2563eb",
   }));
 }
 
@@ -355,6 +362,7 @@ function createDefaultStops(
 }
 
 function clampClassCount(value: number, min: number): number {
+  if (!Number.isFinite(value)) return min;
   return Math.min(12, Math.max(min, Math.round(value)));
 }
 
@@ -451,8 +459,23 @@ function createQuantileBreaks(values: number[], count: number): number[] {
   });
 }
 
+const MAX_NATURAL_BREAK_SAMPLES = 1000;
+
+function downsampleSortedValues(values: number[], maxSamples: number): number[] {
+  if (values.length <= maxSamples) return values;
+  const result: number[] = [];
+  const step = (values.length - 1) / (maxSamples - 1);
+  for (let index = 0; index < maxSamples; index += 1) {
+    result.push(values[Math.round(index * step)]);
+  }
+  return result;
+}
+
 function createNaturalBreaks(values: number[], count: number): number[] {
-  const sorted = Array.from(new Set(values)).sort((a, b) => a - b);
+  const unique = Array.from(new Set(values)).sort((a, b) => a - b);
+  // The Jenks DP below is roughly O(n^2 * k); cap the input so large layers
+  // do not freeze the Style panel on the UI thread.
+  const sorted = downsampleSortedValues(unique, MAX_NATURAL_BREAK_SAMPLES);
   if (sorted.length <= count) return sorted;
 
   const lowerClassLimits = Array.from({ length: sorted.length + 1 }, () =>
@@ -590,8 +613,10 @@ function normalizeVectorStyleStops(
       value:
         mode === "graduated" && typeof stop.value === "string"
           ? Number.parseFloat(stop.value)
-          : stop.value,
-      color: stop.color,
+          : typeof stop.value === "string"
+            ? stop.value.trim()
+            : stop.value,
+      color: stop.color.trim(),
     }))
     .filter((stop) => {
       if (!/^#[0-9a-f]{6}$/i.test(stop.color)) return false;
@@ -889,7 +914,8 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
   );
   const [draftAdvancedExtrusionEnabled, setDraftAdvancedExtrusionEnabled] =
     useState(DEFAULT_LAYER_STYLE.extrusionAdvancedStyleEnabled);
-  const [expressionError, setExpressionError] = useState<string | null>(null);
+  const [vectorStyleError, setVectorStyleError] = useState<string | null>(null);
+  const [extrusionError, setExtrusionError] = useState<string | null>(null);
 
   const layer = layers.find((l) => l.id === selectedLayerId);
 
@@ -919,7 +945,8 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
       setDraftAdvancedExtrusionEnabled(
         DEFAULT_LAYER_STYLE.extrusionAdvancedStyleEnabled,
       );
-      setExpressionError(null);
+      setVectorStyleError(null);
+      setExtrusionError(null);
       return;
     }
 
@@ -964,7 +991,8 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
     setDraftAdvancedExtrusionEnabled(
       styleValue(layer.style, "extrusionAdvancedStyleEnabled"),
     );
-    setExpressionError(null);
+    setVectorStyleError(null);
+    setExtrusionError(null);
   }, [
     layer?.beforeId,
     layer?.id,
@@ -1113,7 +1141,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
     draftHeightExpression !== styleValue(style, "extrusionHeightExpression");
   const updateDraftVectorStyleMode = (mode: VectorStyleMode) => {
     setDraftVectorStyleMode(mode);
-    setExpressionError(null);
+    setVectorStyleError(null);
     if (mode === "graduated" || mode === "categorized") {
       const classCount = normalizeVectorStyleClassCount(
         mode,
@@ -1204,10 +1232,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
       ...stops,
       {
         value: draftVectorStyleMode === "graduated" ? stops.length : "",
-        color:
-          interpolateRampColors(draftVectorStyleColorRamp, stops.length + 1)[
-            stops.length
-          ] ?? nextStopColor(stops.length),
+        color: nextStopColor(stops.length),
       },
     ]);
   };
@@ -1223,7 +1248,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
         "Style expression",
       );
       if (expressionError) {
-        setExpressionError(expressionError);
+        setVectorStyleError(expressionError);
         return;
       }
     }
@@ -1237,19 +1262,21 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
         draftVectorStyleMode === "categorized") &&
       !draftVectorStyleProperty
     ) {
-      setExpressionError("Choose an attribute for this style mode.");
+      setVectorStyleError("Choose an attribute for this style mode.");
       return;
     }
     if (draftVectorStyleMode === "graduated" && stops.length < 2) {
-      setExpressionError("Graduated style requires at least two numeric stops.");
+      setVectorStyleError(
+        "Graduated style requires at least two numeric stops.",
+      );
       return;
     }
     if (draftVectorStyleMode === "categorized" && stops.length === 0) {
-      setExpressionError("Categorized style requires at least one category.");
+      setVectorStyleError("Categorized style requires at least one category.");
       return;
     }
 
-    setExpressionError(null);
+    setVectorStyleError(null);
     setLayerStyle(layer.id, {
       vectorStyleMode: draftVectorStyleMode,
       vectorStyleProperty: draftVectorStyleProperty,
@@ -1272,7 +1299,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
         "Color expression",
       );
       if (colorError) {
-        setExpressionError(colorError);
+        setExtrusionError(colorError);
         return;
       }
 
@@ -1281,12 +1308,12 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
         "Height expression",
       );
       if (heightError) {
-        setExpressionError(heightError);
+        setExtrusionError(heightError);
         return;
       }
     }
 
-    setExpressionError(null);
+    setExtrusionError(null);
     setLayerStyle(layer.id, {
       extrusionColor: draftExtrusionColor,
       extrusionOpacity: draftExtrusionOpacity,
@@ -1489,7 +1516,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
           <div className="space-y-2">
             {draftVectorStyleStops.map((stop, index) => (
               <div
-                key={`${index}-${stop.color}`}
+                key={index}
                 className="grid grid-cols-[2.25rem_1fr_2rem] items-center gap-2"
               >
                 <Input
@@ -1539,7 +1566,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
             value={draftVectorStyleExpression}
             onChange={(event) => {
               setDraftVectorStyleExpression(event.target.value);
-              setExpressionError(null);
+              setVectorStyleError(null);
             }}
           />
         </div>
@@ -1553,6 +1580,9 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
       >
         Apply style type
       </Button>
+      {vectorStyleError && (
+        <p className="text-xs text-destructive">{vectorStyleError}</p>
+      )}
     </div>
   );
   const twoDimensionalControls = (
@@ -1642,7 +1672,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
           checked={draftAdvancedExtrusionEnabled}
           onChange={(event) => {
             setDraftAdvancedExtrusionEnabled(event.target.checked);
-            setExpressionError(null);
+            setExtrusionError(null);
           }}
         />
         Advanced height expression
@@ -1656,7 +1686,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
             value={draftHeightExpression}
             onChange={(event) => {
               setDraftHeightExpression(event.target.value);
-              setExpressionError(null);
+              setExtrusionError(null);
             }}
           />
         </div>
@@ -1712,6 +1742,9 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
       >
         Apply 3D extrusion
       </Button>
+      {extrusionError && (
+        <p className="text-xs text-destructive">{extrusionError}</p>
+      )}
     </>
   );
 
@@ -1875,9 +1908,10 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
                     type="radio"
                     name={`style-mode-${layer.id}`}
                     checked={!extrusionEnabled}
-                    onChange={() =>
-                      setLayerStyle(layer.id, { extrusionEnabled: false })
-                    }
+                    onChange={() => {
+                      setExtrusionError(null);
+                      setLayerStyle(layer.id, { extrusionEnabled: false });
+                    }}
                   />
                   2D
                 </label>
@@ -1886,9 +1920,10 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
                     type="radio"
                     name={`style-mode-${layer.id}`}
                     checked={extrusionEnabled}
-                    onChange={() =>
-                      setLayerStyle(layer.id, { extrusionEnabled: true })
-                    }
+                    onChange={() => {
+                      setVectorStyleError(null);
+                      setLayerStyle(layer.id, { extrusionEnabled: true });
+                    }}
                   />
                   3D extrusion
                 </label>
@@ -1900,9 +1935,6 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
             twoDimensionalControls
           ) : (
             extrusionControls
-          )}
-          {expressionError && (
-            <p className="text-xs text-destructive">{expressionError}</p>
           )}
         </div>
       </ScrollArea>
