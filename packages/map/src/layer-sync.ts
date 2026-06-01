@@ -1,4 +1,8 @@
-import type { GeoLibreLayer } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  type GeoLibreLayer,
+  type LayerStyle,
+} from "@geolibre/core";
 import { addProtocol, config } from "maplibre-gl";
 import type maplibregl from "maplibre-gl";
 import { PMTiles, Protocol } from "pmtiles";
@@ -22,6 +26,31 @@ import {
 const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
 const PMTILES_PROTOCOL = "pmtiles";
 const PMTILES_PROTOCOL_GLOBAL_KEY = "__geolibrePMTilesProtocol";
+const MIN_LAYER_ZOOM = 0;
+const MAX_LAYER_ZOOM = 24;
+
+function styleValue<K extends keyof LayerStyle>(
+  style: LayerStyle,
+  key: K,
+): LayerStyle[K] {
+  return style[key] ?? DEFAULT_LAYER_STYLE[key];
+}
+
+function clampLayerZoom(value: number): number {
+  return Math.min(MAX_LAYER_ZOOM, Math.max(MIN_LAYER_ZOOM, value));
+}
+
+function styleLayerZoomRange(style: LayerStyle): {
+  maxzoom: number;
+  minzoom: number;
+} {
+  const minzoom = clampLayerZoom(styleValue(style, "minZoom"));
+  const maxzoom = clampLayerZoom(styleValue(style, "maxZoom"));
+  return {
+    minzoom: Math.min(minzoom, maxzoom),
+    maxzoom: Math.max(minzoom, maxzoom),
+  };
+}
 
 export function syncLayer(
   map: maplibregl.Map,
@@ -99,8 +128,7 @@ function syncExternalNativeLayer(
           source: fillLayerSpec.source,
           "source-layer": fillLayerSpec["source-layer"],
           filter: fillLayerSpec.filter,
-          minzoom: fillLayerSpec.minzoom,
-          maxzoom: fillLayerSpec.maxzoom,
+          ...styleLayerZoomRange(layer.style),
           paint: fillExtrusionPaint(layer.style, layer.opacity),
           layout: { visibility: layer.visible ? "visible" : "none" },
         },
@@ -125,6 +153,7 @@ function syncExternalNativeLayer(
     );
 
     setExternalNativeLayerPaint(map, nativeLayerId, nativeLayer.type, layer);
+    setLayerZoomRange(map, nativeLayerId, styleLayerZoomRange(layer.style));
 
     moveLayer(map, nativeLayerId, beforeId);
   }
@@ -174,6 +203,7 @@ function ensurePMTilesExternalLayer(
         id: nativeLayerIds[0] ?? `${sourceId}-raster`,
         type: "raster",
         source: sourceId,
+        ...styleLayerZoomRange(layer.style),
         paint: rasterPaint(layer.style, layer.opacity),
         layout: { visibility: layer.visible ? "visible" : "none" },
       },
@@ -217,6 +247,7 @@ function ensurePMTilesExternalLayer(
         type: "fill",
         source: sourceId,
         "source-layer": sourceLayer,
+        ...styleLayerZoomRange(layer.style),
         filter: ["==", ["geometry-type"], "Polygon"],
         paint: fillPaint(layer.style, layer.opacity),
         layout: { visibility: layer.visible ? "visible" : "none" },
@@ -232,6 +263,7 @@ function ensurePMTilesExternalLayer(
         type: "line",
         source: sourceId,
         "source-layer": sourceLayer,
+        ...styleLayerZoomRange(layer.style),
         filter: [
           "any",
           ["==", ["geometry-type"], "LineString"],
@@ -251,6 +283,7 @@ function ensurePMTilesExternalLayer(
         type: "circle",
         source: sourceId,
         "source-layer": sourceLayer,
+        ...styleLayerZoomRange(layer.style),
         filter: ["==", ["geometry-type"], "Point"],
         paint: circlePaint(layer.style, layer.opacity),
         layout: { visibility: layer.visible ? "visible" : "none" },
@@ -406,6 +439,7 @@ function syncWaybackExternalRasterLayer(
       id: nativeLayerId,
       type: "raster",
       source: sourceId,
+      ...styleLayerZoomRange(layer.style),
       paint: rasterPaint(layer.style, layer.opacity),
       layout: { visibility: layer.visible ? "visible" : "none" },
     },
@@ -449,9 +483,7 @@ function getStyleLayerSpec(
   map: maplibregl.Map,
   layerId: string,
 ): maplibregl.LayerSpecification | null {
-  return (
-    map.getStyle().layers?.find((layer) => layer.id === layerId) ?? null
-  );
+  return map.getStyle().layers?.find((layer) => layer.id === layerId) ?? null;
 }
 
 function isFillStyleLayerSpec(
@@ -523,6 +555,7 @@ function syncGeoJsonLayer(
           id: fillExtrusionLayerId(layer.id),
           type: "fill-extrusion",
           source: src,
+          ...styleLayerZoomRange(layer.style),
           filter: [
             "match",
             ["geometry-type"],
@@ -544,6 +577,7 @@ function syncGeoJsonLayer(
           id: fillLayerId(layer.id),
           type: "fill",
           source: src,
+          ...styleLayerZoomRange(layer.style),
           filter: [
             "match",
             ["geometry-type"],
@@ -573,6 +607,7 @@ function syncGeoJsonLayer(
         id: lineLayerId(layer.id),
         type: "line",
         source: src,
+        ...styleLayerZoomRange(layer.style),
         filter: [
           "match",
           ["geometry-type"],
@@ -597,6 +632,7 @@ function syncGeoJsonLayer(
         id: circleLayerId(layer.id),
         type: "circle",
         source: src,
+        ...styleLayerZoomRange(layer.style),
         filter: [
           "match",
           ["geometry-type"],
@@ -634,6 +670,7 @@ function syncRasterTileLayer(
       id: lid,
       type: "raster",
       source: src,
+      ...styleLayerZoomRange(layer.style),
       paint: rasterPaint(layer.style, layer.opacity),
       layout: { visibility: layer.visible ? "visible" : "none" },
     },
@@ -694,6 +731,7 @@ function syncVectorTileLayer(
           type: "fill-extrusion",
           source: src,
           "source-layer": sourceLayer,
+          ...styleLayerZoomRange(layer.style),
           filter: [
             "match",
             ["geometry-type"],
@@ -716,6 +754,7 @@ function syncVectorTileLayer(
           type: "fill",
           source: src,
           "source-layer": sourceLayer,
+          ...styleLayerZoomRange(layer.style),
           filter: [
             "match",
             ["geometry-type"],
@@ -736,6 +775,7 @@ function syncVectorTileLayer(
           type: "line",
           source: src,
           "source-layer": sourceLayer,
+          ...styleLayerZoomRange(layer.style),
           filter: [
             "match",
             ["geometry-type"],
@@ -756,6 +796,7 @@ function syncVectorTileLayer(
           type: "circle",
           source: src,
           "source-layer": sourceLayer,
+          ...styleLayerZoomRange(layer.style),
           filter: [
             "match",
             ["geometry-type"],
@@ -826,6 +867,7 @@ function syncMbtilesVectorLayer(
           type: "fill-extrusion",
           source: src,
           "source-layer": sourceLayer,
+          ...styleLayerZoomRange(layer.style),
           filter: [
             "match",
             ["geometry-type"],
@@ -848,6 +890,7 @@ function syncMbtilesVectorLayer(
           type: "fill",
           source: src,
           "source-layer": sourceLayer,
+          ...styleLayerZoomRange(layer.style),
           filter: [
             "match",
             ["geometry-type"],
@@ -873,6 +916,7 @@ function syncMbtilesVectorLayer(
           type: "line",
           source: src,
           "source-layer": sourceLayer,
+          ...styleLayerZoomRange(layer.style),
           filter: [
             "match",
             ["geometry-type"],
@@ -893,6 +937,7 @@ function syncMbtilesVectorLayer(
           type: "circle",
           source: src,
           "source-layer": sourceLayer,
+          ...styleLayerZoomRange(layer.style),
           filter: [
             "match",
             ["geometry-type"],
@@ -1103,6 +1148,8 @@ function ensureLayer(
   map: maplibregl.Map,
   id: string,
   spec: maplibregl.AddLayerObject & {
+    maxzoom?: number;
+    minzoom?: number;
     paint?: Record<string, unknown>;
     layout?: Record<string, unknown>;
   },
@@ -1119,12 +1166,32 @@ function ensureLayer(
         map.setLayoutProperty(id, key, value);
       }
     }
+    setLayerZoomRange(map, id, {
+      minzoom: spec.minzoom,
+      maxzoom: spec.maxzoom,
+    });
     moveLayer(map, id, beforeId);
     return;
   }
   const validBeforeId =
     beforeId && map.getLayer(beforeId) ? beforeId : undefined;
   map.addLayer(spec, validBeforeId);
+}
+
+function setLayerZoomRange(
+  map: maplibregl.Map,
+  id: string,
+  range: { minzoom?: number; maxzoom?: number },
+): void {
+  try {
+    map.setLayerZoomRange(
+      id,
+      range.minzoom ?? MIN_LAYER_ZOOM,
+      range.maxzoom ?? MAX_LAYER_ZOOM,
+    );
+  } catch {
+    // External controls can create custom layers that do not support zoom range updates.
+  }
 }
 
 function removeIfExists(map: maplibregl.Map, id: string): void {

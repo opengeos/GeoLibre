@@ -27,6 +27,8 @@ Projects are saved as **`.geolibre.json`** files.
   "visible": true,
   "opacity": 1,
   "style": {
+    "minZoom": 0,
+    "maxZoom": 24,
     "fillColor": "#3b82f6",
     "strokeColor": "#1e40af",
     "strokeWidth": 2,

@@ -20,11 +20,7 @@ import {
   PanelRightOpen,
   SlidersHorizontal,
 } from "lucide-react";
-import {
-  type MouseEvent as ReactMouseEvent,
-  useEffect,
-  useState,
-} from "react";
+import { type MouseEvent as ReactMouseEvent, useEffect, useState } from "react";
 
 interface StylePanelProps {
   onResizeStart: (event: ReactMouseEvent<HTMLDivElement>) => void;
@@ -39,10 +35,7 @@ function isMobileViewport(): boolean {
 
 function isRasterPaintLayer(type: LayerType): boolean {
   return (
-    type === "raster" ||
-    type === "wms" ||
-    type === "wmts" ||
-    type === "xyz"
+    type === "raster" || type === "wms" || type === "wmts" || type === "xyz"
   );
 }
 
@@ -223,6 +216,9 @@ function styleValue<K extends keyof LayerStyle>(
 function clampNumber(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
+
+const MIN_LAYER_ZOOM = 0;
+const MAX_LAYER_ZOOM = 24;
 
 function stepPrecision(step: number): number {
   const [, decimals = ""] = String(step).split(".");
@@ -489,8 +485,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
       hasExternalNativeLayers(layer) ||
       hasExternalDeckLayer(layer));
   const hasExtrusionControls =
-    !isRasterTileLayer &&
-    supportsExtrusionControls(layer);
+    !isRasterTileLayer && supportsExtrusionControls(layer);
   const hasRasterPaintControls =
     isRasterPaintLayer(layer.type) || isRasterTileLayer;
   const extrusionEnabled = styleValue(style, "extrusionEnabled");
@@ -499,10 +494,9 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
     draftExtrusionHeightProperty,
   )
     ? extrusionHeightPropertyOptions
-    : [
-        draftExtrusionHeightProperty,
-        ...extrusionHeightPropertyOptions,
-      ].filter(Boolean);
+    : [draftExtrusionHeightProperty, ...extrusionHeightPropertyOptions].filter(
+        Boolean,
+      );
   const extrusionSettingsChanged =
     draftExtrusionColor !== styleValue(style, "extrusionColor") ||
     draftExtrusionOpacity !== styleValue(style, "extrusionOpacity") ||
@@ -568,6 +562,40 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
       />
     </div>
   );
+  const minZoom = styleValue(style, "minZoom");
+  const maxZoom = styleValue(style, "maxZoom");
+  const setMinZoom = (value: number) =>
+    setLayerStyle(layer.id, {
+      minZoom: value,
+      maxZoom: Math.max(value, maxZoom),
+    });
+  const setMaxZoom = (value: number) =>
+    setLayerStyle(layer.id, {
+      minZoom: Math.min(value, minZoom),
+      maxZoom: value,
+    });
+  const zoomRangeControls = (
+    <div className="grid grid-cols-2 gap-3">
+      <NumericStyleInput
+        id="minZoom"
+        label="Min zoom"
+        min={MIN_LAYER_ZOOM}
+        max={MAX_LAYER_ZOOM}
+        step={1}
+        value={minZoom}
+        onChange={setMinZoom}
+      />
+      <NumericStyleInput
+        id="maxZoom"
+        label="Max zoom"
+        min={MIN_LAYER_ZOOM}
+        max={MAX_LAYER_ZOOM}
+        step={1}
+        value={maxZoom}
+        onChange={setMaxZoom}
+      />
+    </div>
+  );
 
   if (hasRasterPaintControls) {
     return (
@@ -591,6 +619,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
         <ScrollArea className="flex-1 p-3">
           <div className="space-y-4">
             {beforeIdControl}
+            {zoomRangeControls}
             <RasterStyleSlider
               label="Opacity"
               value={layer.opacity}
@@ -685,7 +714,10 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
             <PanelRightClose className="h-4 w-4" />
           </Button>
         </div>
-        <div className="p-3">{beforeIdControl}</div>
+        <div className="space-y-4 p-3">
+          {beforeIdControl}
+          {zoomRangeControls}
+        </div>
         <p className="p-4 text-xs text-muted-foreground">
           Style controls are not available for this layer type yet.
         </p>
@@ -718,6 +750,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
       <ScrollArea className="flex-1 p-3">
         <div className="space-y-4">
           {beforeIdControl}
+          {zoomRangeControls}
           {hasExtrusionControls && (
             <div className="space-y-2">
               <Label>Visualization</Label>
@@ -747,7 +780,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
               </div>
             </div>
           )}
-          {(!hasExtrusionControls || !extrusionEnabled) ? (
+          {!hasExtrusionControls || !extrusionEnabled ? (
             <>
               <div className="space-y-2">
                 <Label htmlFor="fillColor">Fill color</Label>

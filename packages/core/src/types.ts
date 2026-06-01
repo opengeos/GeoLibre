@@ -58,6 +58,8 @@ export type LayerType =
   | "duckdb-query";
 
 export interface LayerStyle {
+  minZoom: number;
+  maxZoom: number;
   fillColor: string;
   strokeColor: string;
   strokeWidth: number;
@@ -80,6 +82,8 @@ export interface LayerStyle {
 }
 
 export const DEFAULT_LAYER_STYLE: LayerStyle = {
+  minZoom: 0,
+  maxZoom: 24,
   fillColor: "#3b82f6",
   strokeColor: "#1e40af",
   strokeWidth: 2,
