@@ -65,6 +65,8 @@ let sketchesMapLayerSuppressed = false;
 let sketchesIdleDisplayOverride = false;
 /** Union store + editor on the next sync so a partial getAll cannot drop prior sketches. */
 let unionSketchesWithStoreOnNextSync = false;
+/** Pending one-shot `styledata` listener, so repeated draw events don't pile up listeners. */
+let pendingStyleDataListener: (() => void) | null = null;
 
 export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-geo-editor",
@@ -81,6 +83,8 @@ export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
     const added = app.addMapControl(geoEditorControl, geoEditorPosition);
     if (!added) {
       geoEditorControl = null;
+      pluginActive = false;
+      appApi = null;
       return false;
     }
 
@@ -91,6 +95,7 @@ export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
   deactivate: (app: GeoLibreAppAPI) => {
     pluginActive = false;
     sketchesIdleDisplayOverride = false;
+    unionSketchesWithStoreOnNextSync = false;
     setSketchesMapLayerSuppressed(false);
     showGeomanDisplayLayers();
     appApi = null;
@@ -178,9 +183,11 @@ function featureCollectionsEquivalent(
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-function sketchFeatureKey(feature: Feature, _index: number): string {
+function sketchFeatureKey(feature: Feature, index: number): string {
   const props = feature.properties as Record<string, unknown> | null;
-  return String(feature.id ?? props?.__gm_id ?? JSON.stringify(feature));
+  return String(
+    feature.id ?? props?.__gm_id ?? `${JSON.stringify(feature)}@${index}`,
+  );
 }
 
 function unionFeatureCollections(
@@ -263,6 +270,9 @@ function restoreSketchesLayerToEditor(): void {
     // Geoman may not be ready yet.
   }
 
+  // `loadGeoJson` invokes `onGeoJsonLoad` synchronously, so clearing the guard
+  // in `finally` is safe; if it ever became async the guard would already be
+  // false when the callback runs and `syncSketchesToStore` could loop.
   restoringSketchesToEditor = true;
   try {
     geoEditorControl.loadGeoJson(storeCollection, SKETCHES_SOURCE_PATH);
@@ -302,7 +312,7 @@ function bindSketchesStoreSync(): void {
       return;
     }
 
-    if (sketches && sketches.id !== sketchesLayerId) {
+    if (sketches && sketches.id !== sketchesLayerId && !pushingSketchesToStore) {
       sketchesLayerId = sketches.id;
       restoreSketchesLayerToEditor();
       return;
@@ -376,13 +386,15 @@ function scheduleApplySketchesMapDisplay(): void {
 
 function scheduleShowGeomanDisplayLayersOnStyleData(): void {
   const map = appApi?.getMap?.();
-  if (!map) return;
+  if (!map || pendingStyleDataListener) return;
 
-  map.once("styledata", () => {
+  pendingStyleDataListener = () => {
+    pendingStyleDataListener = null;
     if (isGeoEditorInteractionMode()) {
       showGeomanDisplayLayers();
     }
-  });
+  };
+  map.once("styledata", pendingStyleDataListener);
 }
 
 function setSketchesMapLayerSuppressed(suppress: boolean): void {
@@ -441,11 +453,7 @@ function showGeomanDisplayLayers(): void {
 
 function isGeomanDisplayLayer(layer: maplibregl.LayerSpecification): boolean {
   const id = layer.id.toLowerCase();
-  if (
-    id.startsWith("gm_") ||
-    id.startsWith("gm-") ||
-    id.includes("geoman")
-  ) {
+  if (id.startsWith("gm_") || id.startsWith("gm-")) {
     return true;
   }
   if (!("source" in layer)) return false;
