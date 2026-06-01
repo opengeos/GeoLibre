@@ -6,6 +6,8 @@ import mvpWorker from "@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 
 const GEOMETRY_JSON_COLUMN = "__geolibre_geometry_geojson";
+const EXPORT_GEOJSON_EXTENSION = "geojson";
+const EXPORT_GEOPARQUET_EXTENSION = "parquet";
 
 const MANUAL_BUNDLES: duckdb.DuckDBBundles = {
   mvp: {
@@ -52,6 +54,11 @@ function quoteSqlString(value: string): string {
 
 function quoteIdentifier(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
+}
+
+function exportBaseName(): string {
+  const suffix = Math.random().toString(36).slice(2);
+  return `__geolibre_export_${Date.now()}_${suffix}`;
 }
 
 function rowsFromResult(result: { toArray: () => DuckDbRow[] }) {
@@ -155,5 +162,50 @@ export async function loadDuckDbVectorFile(
     return toFeatureCollection(rowsFromResult(result)) as FeatureCollection;
   } finally {
     await connection.close();
+  }
+}
+
+async function dropFilesIfPresent(
+  db: duckdb.AsyncDuckDB,
+  fileNames: string[],
+): Promise<void> {
+  try {
+    await db.dropFiles(fileNames);
+  } catch {
+    // Some files are optional or may not have been created yet.
+  }
+}
+
+async function registerGeoJsonExportSource(
+  db: duckdb.AsyncDuckDB,
+  geojson: FeatureCollection,
+  sourceFile: string,
+): Promise<void> {
+  await db.registerFileText(sourceFile, JSON.stringify(geojson));
+}
+
+export async function exportDuckDbGeoParquet(
+  geojson: FeatureCollection,
+): Promise<Uint8Array> {
+  const db = await getDatabase();
+  const connection = await db.connect();
+  const baseName = exportBaseName();
+  const sourceFile = `${baseName}.${EXPORT_GEOJSON_EXTENSION}`;
+  const outputFile = `${baseName}.${EXPORT_GEOPARQUET_EXTENSION}`;
+
+  try {
+    await registerGeoJsonExportSource(db, geojson, sourceFile);
+    await connection.query("INSTALL spatial");
+    await connection.query("LOAD spatial");
+    await connection.query(
+      `COPY (SELECT * FROM ST_Read(${quoteSqlString(
+        sourceFile,
+      )})) TO ${quoteSqlString(outputFile)} (FORMAT PARQUET)`,
+    );
+    await db.flushFiles();
+    return await db.copyFileToBuffer(outputFile);
+  } finally {
+    await connection.close();
+    await dropFilesIfPresent(db, [sourceFile, outputFile]);
   }
 }

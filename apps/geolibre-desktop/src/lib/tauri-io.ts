@@ -1,6 +1,11 @@
 import { parseProject, type GeoLibreProject } from "@geolibre/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { readFile, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import {
+  readFile,
+  readTextFile,
+  writeFile,
+  writeTextFile,
+} from "@tauri-apps/plugin-fs";
 import { unzip } from "fflate";
 import type { FeatureCollection } from "geojson";
 import shp from "shpjs";
@@ -67,6 +72,15 @@ const GEOLIBRE_PROJECT_FILE_TYPES: BrowserFilePickerType[] = [
   },
 ];
 
+interface SaveTextFileOptions {
+  defaultName: string;
+  filters: FileDialogFilter[];
+  browserTypes: BrowserFilePickerType[];
+  mimeType: string;
+}
+
+interface SaveBinaryFileOptions extends SaveTextFileOptions {}
+
 const SHAPEFILE_SIDECAR_EXTENSIONS = ["dbf", "shx", "prj", "cpg"];
 
 // Auxiliary files that accompany Shapefiles (spatial indexes, metadata, etc.)
@@ -131,6 +145,12 @@ function assertFeatureCollection(value: unknown): FeatureCollection {
     return value as FeatureCollection;
   }
   throw new Error("The selected file did not produce a GeoJSON FeatureCollection.");
+}
+
+function toArrayBuffer(data: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(data.byteLength);
+  new Uint8Array(buffer).set(data);
+  return buffer;
 }
 
 function mergeFeatureCollections(
@@ -472,6 +492,80 @@ async function saveProjectFileBrowser(
   return fileName;
 }
 
+async function saveTextFileBrowser(
+  content: string,
+  options: SaveTextFileOptions,
+): Promise<string | null> {
+  const fileName = browserSafeFileName(options.defaultName);
+  const pickerWindow = window as BrowserFilePickerWindow;
+
+  if (pickerWindow.showSaveFilePicker) {
+    try {
+      const handle = await pickerWindow.showSaveFilePicker({
+        suggestedName: fileName,
+        types: options.browserTypes,
+        excludeAcceptAllOption: false,
+      });
+      const writable = await handle.createWritable();
+      await writable.write(content);
+      await writable.close();
+      return handle.name || fileName;
+    } catch (error) {
+      if (isAbortError(error)) return null;
+      console.warn("Browser file save picker failed", error);
+    }
+  }
+
+  const blob = new Blob([content], { type: options.mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  return fileName;
+}
+
+async function saveBinaryFileBrowser(
+  content: Uint8Array,
+  options: SaveBinaryFileOptions,
+): Promise<string | null> {
+  const fileName = browserSafeFileName(options.defaultName);
+  const pickerWindow = window as BrowserFilePickerWindow;
+  const blob = new Blob([toArrayBuffer(content)], { type: options.mimeType });
+
+  if (pickerWindow.showSaveFilePicker) {
+    try {
+      const handle = await pickerWindow.showSaveFilePicker({
+        suggestedName: fileName,
+        types: options.browserTypes,
+        excludeAcceptAllOption: false,
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return handle.name || fileName;
+    } catch (error) {
+      if (isAbortError(error)) return null;
+      console.warn("Browser binary file save picker failed", error);
+    }
+  }
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  return fileName;
+}
+
 export async function openLocalDataFileWithFallback(
   options: LocalDataFileOptions,
 ): Promise<{
@@ -637,6 +731,40 @@ export async function saveProjectFile(
   });
   if (!path) return null;
   await writeTextFile(path, content);
+  return path;
+}
+
+export async function saveTextFileWithFallback(
+  content: string,
+  options: SaveTextFileOptions,
+): Promise<string | null> {
+  if (!isTauri()) {
+    return saveTextFileBrowser(content, options);
+  }
+
+  const path = await save({
+    filters: options.filters,
+    defaultPath: options.defaultName,
+  });
+  if (!path) return null;
+  await writeTextFile(path, content);
+  return path;
+}
+
+export async function saveBinaryFileWithFallback(
+  content: Uint8Array,
+  options: SaveBinaryFileOptions,
+): Promise<string | null> {
+  if (!isTauri()) {
+    return saveBinaryFileBrowser(content, options);
+  }
+
+  const path = await save({
+    filters: options.filters,
+    defaultPath: options.defaultName,
+  });
+  if (!path) return null;
+  await writeFile(path, content);
   return path;
 }
 

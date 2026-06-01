@@ -18,6 +18,9 @@ const APP_VERSION = JSON.parse(
 ).version as string;
 const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
+const DUCKDB_WORKER_PATH_PART = "/@duckdb/duckdb-wasm/dist/";
+const DUCKDB_WORKER_SOURCE_MAP_RE =
+  /\n?\/\/# sourceMappingURL=duckdb-browser-(?:eh|mvp)\.worker\.js\.map\s*$/;
 const RADIX_OPTIMIZE_EXCLUDES = [
   "@developmentseed/geotiff",
   "@developmentseed/lzw-tiff-decoder",
@@ -91,6 +94,56 @@ function wmsProxyPlugin(): Plugin {
       });
     },
   };
+}
+
+function stripDuckDbWorkerSourcemapPlugin(): Plugin {
+  return {
+    name: "geolibre-strip-duckdb-worker-sourcemap",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const requestUrl = new URL(req.url ?? "/", "http://localhost");
+        const decodedPath = safeDecodeURIComponent(requestUrl.pathname);
+        if (!isDuckDbWorkerRequest(decodedPath)) {
+          next();
+          return;
+        }
+
+        const workerFile = path.join(
+          __dirname,
+          "../../node_modules",
+          decodedPath.slice(decodedPath.indexOf(DUCKDB_WORKER_PATH_PART) + 1),
+        );
+        const source = readFileSync(workerFile, "utf8").replace(
+          DUCKDB_WORKER_SOURCE_MAP_RE,
+          "",
+        );
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/javascript");
+        res.end(source);
+      });
+    },
+    generateBundle(_, bundle) {
+      for (const asset of Object.values(bundle)) {
+        if (
+          asset.type === "asset" &&
+          /duckdb-browser-(?:eh|mvp)\.worker-[\w-]+\.js$/.test(asset.fileName)
+        ) {
+          const source =
+            typeof asset.source === "string"
+              ? asset.source
+              : Buffer.from(asset.source).toString("utf8");
+          asset.source = source.replace(DUCKDB_WORKER_SOURCE_MAP_RE, "");
+        }
+      }
+    },
+  };
+}
+
+function isDuckDbWorkerRequest(pathname: string): boolean {
+  return (
+    pathname.includes(DUCKDB_WORKER_PATH_PART) &&
+    /duckdb-browser-(?:eh|mvp)\.worker\.js$/.test(pathname)
+  );
 }
 
 function projectUrlQueryPlugin(): Plugin {
@@ -179,7 +232,12 @@ async function proxyBinaryRequest(
 
 export default defineConfig({
   base: APP_BASE,
-  plugins: [projectUrlQueryPlugin(), react(), wmsProxyPlugin()],
+  plugins: [
+    stripDuckDbWorkerSourcemapPlugin(),
+    projectUrlQueryPlugin(),
+    react(),
+    wmsProxyPlugin(),
+  ],
   clearScreen: false,
   define: {
     __GEOLIBRE_VERSION__: JSON.stringify(APP_VERSION),
