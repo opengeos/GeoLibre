@@ -1872,18 +1872,16 @@ function createGeoTiffReprojectionFns(
 ): RasterLayerProps["reprojectionFns"] {
   const [originX, originY] = image.getOrigin();
   const [resolutionX, resolutionY] = image.getResolution();
-  const width = image.getWidth();
-  const height = image.getHeight();
   const converter = proj4(sourceProjection, "EPSG:4326");
 
   return {
     forwardTransform: (x, y) => [
-      originX + x * width * resolutionX,
-      originY + y * height * resolutionY,
+      originX + x * resolutionX,
+      originY + y * resolutionY,
     ],
     inverseTransform: (x, y) => [
-      (x - originX) / (width * resolutionX),
-      (y - originY) / (height * resolutionY),
+      (x - originX) / resolutionX,
+      (y - originY) / resolutionY,
     ],
     forwardReproject: (x, y) => converter.forward([x, y]),
     inverseReproject: (x, y) => converter.inverse([x, y]),
@@ -3176,11 +3174,8 @@ function shouldUseGenericGeoTiffRenderer(url: string): boolean {
 
   try {
     const parsedUrl = new URL(url);
-    const isGitHubRelease =
-      parsedUrl.hostname === "github.com" &&
-      parsedUrl.pathname.includes("/releases/download/");
     const isTiff = /\.tiff?$/i.test(parsedUrl.pathname);
-    return isTiff && (isGitHubRelease || parsedUrl.protocol === "file:");
+    return isTiff;
   } catch {
     return isTiffPath;
   }
