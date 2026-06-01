@@ -19,7 +19,6 @@ import "./layer-control-overrides.css";
 
 const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
 const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
-const MAX_IDENTIFY_PROPERTIES = 24;
 
 export interface MapCanvasProps {
   controllerRef?: React.MutableRefObject<MapController | null>;
@@ -38,7 +37,7 @@ function createIdentifyPopupElement(
 ): HTMLElement {
   const root = document.createElement("div");
   root.className =
-    "flex max-h-[min(380px,calc(100vh-128px))] min-w-48 max-w-80 flex-col text-xs";
+    "geolibre-identify-popup-root flex min-w-[min(18rem,calc(100vw-48px))] max-w-[min(520px,calc(100vw-48px))] flex-col text-xs";
 
   const title = document.createElement("div");
   title.className = "mb-2 font-semibold text-foreground";
@@ -46,7 +45,7 @@ function createIdentifyPopupElement(
   root.appendChild(title);
 
   const rows = document.createElement("div");
-  rows.className = "min-h-0 flex-1 overflow-y-auto";
+  rows.className = "geolibre-identify-popup-rows pr-2";
   root.appendChild(rows);
 
   const appendRow = (key: string, value: unknown) => {
@@ -68,7 +67,7 @@ function createIdentifyPopupElement(
 
   if (featureId != null) appendRow("id", featureId);
 
-  const entries = Object.entries(properties).slice(0, MAX_IDENTIFY_PROPERTIES);
+  const entries = Object.entries(properties);
   if (entries.length === 0 && featureId == null) {
     const empty = document.createElement("div");
     empty.className = "text-muted-foreground";
@@ -318,7 +317,7 @@ export const MapCanvas = memo(function MapCanvas({
         className: "geolibre-identify-popup",
         closeButton: true,
         closeOnClick: false,
-        maxWidth: "360px",
+        maxWidth: "560px",
       })
         .setLngLat(event.lngLat)
         .setDOMContent(

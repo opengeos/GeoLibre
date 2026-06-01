@@ -5,6 +5,7 @@ export default {
     "./index.html",
     "./src/**/*.{ts,tsx}",
     "../../packages/ui/src/**/*.{ts,tsx}",
+    "../../packages/map/src/**/*.{ts,tsx}",
   ],
   theme: {
     extend: {
