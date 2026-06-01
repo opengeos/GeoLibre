@@ -30,6 +30,12 @@ const PMTILES_PROTOCOL_GLOBAL_KEY = "__geolibrePMTilesProtocol";
 const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
 const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;
 
+// Native layer ids whose zoom range GeoLibre has taken over. A pristine external
+// layer keeps its source-declared range, but once the user sets a non-default
+// range we keep applying the style range on every sync, including a later reset
+// back to the full [0, 24] window.
+const managedZoomRangeLayerIds = new Set<string>();
+
 function clampLayerZoom(value: number, fallback: number): number {
   if (!Number.isFinite(value)) return fallback;
   return Math.min(MAX_LAYER_ZOOM, Math.max(MIN_LAYER_ZOOM, value));
@@ -47,18 +53,27 @@ function styleLayerZoomRange(style: LayerStyle): {
   };
 }
 
-// Combine a native layer's source-declared zoom range with the user-configured
+// Intersect a native layer's source-declared zoom range with the user-configured
 // style range, taking the tighter bound on each end. This keeps a tile
 // service's zoom floor/ceiling intact while still letting the user narrow the
-// window from the Style panel.
-function unionZoomRange(
+// window from the Style panel. When the two ranges do not overlap the bounds
+// are swapped so MapLibre never receives an inverted (minzoom > maxzoom) range.
+function intersectZoomRange(
   nativeSpec: { minzoom?: number; maxzoom?: number },
   style: LayerStyle,
 ): { minzoom: number; maxzoom: number } {
   const styleRange = styleLayerZoomRange(style);
+  const minzoom = Math.max(
+    nativeSpec.minzoom ?? MIN_LAYER_ZOOM,
+    styleRange.minzoom,
+  );
+  const maxzoom = Math.min(
+    nativeSpec.maxzoom ?? MAX_LAYER_ZOOM,
+    styleRange.maxzoom,
+  );
   return {
-    minzoom: Math.max(nativeSpec.minzoom ?? MIN_LAYER_ZOOM, styleRange.minzoom),
-    maxzoom: Math.min(nativeSpec.maxzoom ?? MAX_LAYER_ZOOM, styleRange.maxzoom),
+    minzoom: Math.min(minzoom, maxzoom),
+    maxzoom: Math.max(minzoom, maxzoom),
   };
 }
 
@@ -138,7 +153,7 @@ function syncExternalNativeLayer(
           source: fillLayerSpec.source,
           "source-layer": fillLayerSpec["source-layer"],
           filter: fillLayerSpec.filter,
-          ...unionZoomRange(fillLayerSpec, layer.style),
+          ...intersectZoomRange(fillLayerSpec, layer.style),
           paint: fillExtrusionPaint(layer.style, layer.opacity),
           layout: { visibility: layer.visible ? "visible" : "none" },
         },
@@ -164,14 +179,18 @@ function syncExternalNativeLayer(
 
     setExternalNativeLayerPaint(map, nativeLayerId, nativeLayer.type, layer);
     // External layers carry their own zoom range from the control or tile
-    // service that registered them. Only override it once the user has
-    // tightened the window, so we don't reset a source's native zoom range to
-    // the full [0, 24] default on every sync pass.
+    // service that registered them, so we leave a pristine layer's native range
+    // alone. Once the user moves off the defaults GeoLibre owns the range and
+    // keeps applying it, so a later reset to the full [0, 24] window still takes
+    // effect rather than stranding the layer at the narrowed range.
     const zoomRange = styleLayerZoomRange(layer.style);
-    if (
-      zoomRange.minzoom !== MIN_LAYER_ZOOM ||
-      zoomRange.maxzoom !== MAX_LAYER_ZOOM
-    ) {
+    const isDefaultRange =
+      zoomRange.minzoom === MIN_LAYER_ZOOM &&
+      zoomRange.maxzoom === MAX_LAYER_ZOOM;
+    if (!isDefaultRange) {
+      managedZoomRangeLayerIds.add(nativeLayerId);
+    }
+    if (managedZoomRangeLayerIds.has(nativeLayerId)) {
       setLayerZoomRange(map, nativeLayerId, zoomRange);
     }
 

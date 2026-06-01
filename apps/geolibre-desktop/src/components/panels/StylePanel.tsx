@@ -557,16 +557,20 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
   );
   const minZoom = styleValue(style, "minZoom");
   const maxZoom = styleValue(style, "maxZoom");
-  const setMinZoom = (value: number) =>
+  const setMinZoom = (value: number) => {
+    const next = clampNumber(value, MIN_LAYER_ZOOM, MAX_LAYER_ZOOM);
     setLayerStyle(layer.id, {
-      minZoom: value,
-      maxZoom: Math.max(value, maxZoom),
+      minZoom: next,
+      maxZoom: Math.max(next, maxZoom),
     });
-  const setMaxZoom = (value: number) =>
+  };
+  const setMaxZoom = (value: number) => {
+    const next = clampNumber(value, MIN_LAYER_ZOOM, MAX_LAYER_ZOOM);
     setLayerStyle(layer.id, {
-      minZoom: Math.min(value, minZoom),
-      maxZoom: value,
+      minZoom: Math.min(next, minZoom),
+      maxZoom: next,
     });
+  };
   const zoomRangeControls = (
     <div className="grid grid-cols-2 gap-3">
       <NumericStyleInput
