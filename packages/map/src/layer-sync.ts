@@ -1,5 +1,7 @@
 import type { GeoLibreLayer } from "@geolibre/core";
+import { addProtocol, config } from "maplibre-gl";
 import type maplibregl from "maplibre-gl";
+import { PMTiles, Protocol } from "pmtiles";
 import {
   circleLayerId,
   detectGeometryProfile,
@@ -18,6 +20,10 @@ import {
 } from "./style-mapper";
 
 const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
+const PMTILES_PROTOCOL = "pmtiles";
+let pmtilesProtocol: Protocol | null = null;
+let pmtilesProtocolRegistered = false;
+
 export function syncLayer(
   map: maplibregl.Map,
   layer: GeoLibreLayer,
@@ -65,6 +71,10 @@ function syncExternalNativeLayer(
   beforeId?: string,
 ): void {
   const nativeLayerIds = getExternalNativeLayerIds(layer);
+  if (isPMTilesExternalLayer(layer)) {
+    ensurePMTilesExternalLayer(map, layer, nativeLayerIds, beforeId);
+  }
+
   if (isWaybackExternalRasterLayer(layer)) {
     syncWaybackExternalRasterLayer(map, layer, nativeLayerIds, beforeId);
     return;
@@ -119,6 +129,253 @@ function syncExternalNativeLayer(
 
     moveLayer(map, nativeLayerId, beforeId);
   }
+}
+
+function isPMTilesExternalLayer(layer: GeoLibreLayer): boolean {
+  return (
+    layer.type === "pmtiles" &&
+    layer.metadata.sourceKind === "pmtiles-url" &&
+    layer.metadata.externalNativeLayer === true
+  );
+}
+
+function ensurePMTilesExternalLayer(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+  nativeLayerIds: string[],
+  beforeId?: string,
+): void {
+  const rawUrl = stringSource(layer.source.url) ?? layer.sourcePath;
+  const sourceId = getPMTilesSourceId(layer);
+  if (!rawUrl || !sourceId) return;
+
+  ensurePMTilesProtocol(rawUrl);
+
+  if (!map.getSource(sourceId)) {
+    const tileUrl = normalizePMTilesUrl(rawUrl);
+    if (getPMTilesTileType(layer) === "raster") {
+      map.addSource(sourceId, {
+        type: "raster",
+        url: tileUrl,
+        tileSize: 256,
+      });
+    } else {
+      map.addSource(sourceId, {
+        type: "vector",
+        url: tileUrl,
+      });
+    }
+  }
+
+  if (getPMTilesTileType(layer) === "raster") {
+    ensureLayer(
+      map,
+      nativeLayerIds[0] ?? `${sourceId}-raster`,
+      {
+        id: nativeLayerIds[0] ?? `${sourceId}-raster`,
+        type: "raster",
+        source: sourceId,
+        paint: rasterPaint(layer.style, layer.opacity),
+        layout: { visibility: layer.visible ? "visible" : "none" },
+      },
+      beforeId,
+    );
+    return;
+  }
+
+  const sourceLayers = getPMTilesRenderableSourceLayers(
+    layer,
+    sourceId,
+    nativeLayerIds,
+  );
+
+  if (sourceLayers.length === 0) {
+    const genericLayerId = getPMTilesNativeLayerId(
+      nativeLayerIds,
+      `${sourceId}-generic`,
+    );
+    ensureLayer(
+      map,
+      genericLayerId,
+      {
+        id: genericLayerId,
+        type: "fill",
+        source: sourceId,
+        paint: fillPaint(layer.style, layer.opacity),
+        layout: { visibility: layer.visible ? "visible" : "none" },
+      },
+      beforeId,
+    );
+    return;
+  }
+
+  for (const sourceLayer of sourceLayers) {
+    const fillId = getPMTilesNativeLayerId(
+      nativeLayerIds,
+      pmtilesVectorLayerId(sourceId, sourceLayer, "fill"),
+    );
+    const lineId = getPMTilesNativeLayerId(
+      nativeLayerIds,
+      pmtilesVectorLayerId(sourceId, sourceLayer, "line"),
+    );
+    const circleId = getPMTilesNativeLayerId(
+      nativeLayerIds,
+      pmtilesVectorLayerId(sourceId, sourceLayer, "circle"),
+    );
+
+    ensureLayer(
+      map,
+      fillId,
+      {
+        id: fillId,
+        type: "fill",
+        source: sourceId,
+        "source-layer": sourceLayer,
+        filter: ["==", ["geometry-type"], "Polygon"],
+        paint: fillPaint(layer.style, layer.opacity),
+        layout: { visibility: layer.visible ? "visible" : "none" },
+      },
+      beforeId,
+    );
+
+    ensureLayer(
+      map,
+      lineId,
+      {
+        id: lineId,
+        type: "line",
+        source: sourceId,
+        "source-layer": sourceLayer,
+        filter: [
+          "any",
+          ["==", ["geometry-type"], "LineString"],
+          ["==", ["geometry-type"], "Polygon"],
+        ],
+        paint: linePaint(layer.style, layer.opacity),
+        layout: { visibility: layer.visible ? "visible" : "none" },
+      },
+      beforeId,
+    );
+
+    ensureLayer(
+      map,
+      circleId,
+      {
+        id: circleId,
+        type: "circle",
+        source: sourceId,
+        "source-layer": sourceLayer,
+        filter: ["==", ["geometry-type"], "Point"],
+        paint: circlePaint(layer.style, layer.opacity),
+        layout: { visibility: layer.visible ? "visible" : "none" },
+      },
+      beforeId,
+    );
+  }
+}
+
+function ensurePMTilesProtocol(url: string): void {
+  if (!pmtilesProtocol) {
+    pmtilesProtocol = new Protocol();
+  }
+
+  if (!pmtilesProtocolRegistered && !isMapLibreProtocolRegistered()) {
+    try {
+      addProtocol(PMTILES_PROTOCOL, pmtilesProtocol.tile);
+    } catch {
+      // Another PMTiles control may have registered the protocol first.
+    }
+  }
+
+  pmtilesProtocol.add(new PMTiles(stripPMTilesProtocol(url)));
+  pmtilesProtocolRegistered = true;
+}
+
+function isMapLibreProtocolRegistered(): boolean {
+  return Boolean(
+    (
+      config as {
+        REGISTERED_PROTOCOLS?: Record<string, unknown>;
+      }
+    ).REGISTERED_PROTOCOLS?.[PMTILES_PROTOCOL],
+  );
+}
+
+function normalizePMTilesUrl(url: string): string {
+  return url.startsWith(`${PMTILES_PROTOCOL}://`)
+    ? url
+    : `${PMTILES_PROTOCOL}://${url}`;
+}
+
+function stripPMTilesProtocol(url: string): string {
+  return url.startsWith(`${PMTILES_PROTOCOL}://`)
+    ? url.slice(`${PMTILES_PROTOCOL}://`.length)
+    : url;
+}
+
+function getPMTilesSourceId(layer: GeoLibreLayer): string | undefined {
+  return (
+    stringMetadata(layer.metadata.sourceId) ??
+    stringSource(layer.source.sourceId) ??
+    layer.id
+  );
+}
+
+function getPMTilesTileType(layer: GeoLibreLayer): "raster" | "vector" {
+  return layer.metadata.tileType === "raster" || layer.source.type === "raster"
+    ? "raster"
+    : "vector";
+}
+
+function getPMTilesRenderableSourceLayers(
+  layer: GeoLibreLayer,
+  sourceId: string,
+  nativeLayerIds: string[],
+): string[] {
+  const sourceLayers = getPMTilesSourceLayers(layer);
+  const savedSourceLayers = sourceLayers.filter((sourceLayer) =>
+    hasPMTilesNativeSourceLayer(nativeLayerIds, sourceId, sourceLayer),
+  );
+
+  return savedSourceLayers.length > 0 ? savedSourceLayers : sourceLayers;
+}
+
+function hasPMTilesNativeSourceLayer(
+  nativeLayerIds: string[],
+  sourceId: string,
+  sourceLayer: string,
+): boolean {
+  return ["fill", "line", "circle"].some((kind) =>
+    nativeLayerIds.includes(pmtilesVectorLayerId(sourceId, sourceLayer, kind)),
+  );
+}
+
+function pmtilesVectorLayerId(
+  sourceId: string,
+  sourceLayer: string,
+  kind: string,
+): string {
+  return `${sourceId}-${sourceLayer}-${kind}`;
+}
+
+function getPMTilesSourceLayers(layer: GeoLibreLayer): string[] {
+  const sourceLayers = layer.source.sourceLayers ?? layer.metadata.sourceLayers;
+  return Array.isArray(sourceLayers)
+    ? sourceLayers.filter(
+        (sourceLayer): sourceLayer is string =>
+          typeof sourceLayer === "string" && sourceLayer.length > 0,
+      )
+    : [];
+}
+
+function getPMTilesNativeLayerId(
+  nativeLayerIds: string[],
+  fallbackId: string,
+): string {
+  return (
+    nativeLayerIds.find((nativeLayerId) => nativeLayerId === fallbackId) ??
+    fallbackId
+  );
 }
 
 function isWaybackExternalRasterLayer(layer: GeoLibreLayer): boolean {
