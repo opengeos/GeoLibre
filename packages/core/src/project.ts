@@ -118,11 +118,18 @@ function normalizeBounds(
   if (
     Array.isArray(bounds) &&
     bounds.length === 4 &&
-    bounds.every((value) => Number.isFinite(value)) &&
-    bounds[0] < bounds[2] &&
-    bounds[1] < bounds[3]
+    bounds.every((value) => Number.isFinite(value))
   ) {
-    return bounds as ProjectPreferences["map"]["bounds"];
+    // Clamp to valid lng/lat ranges so the stored bounds match what the map
+    // controller applies, then keep the ordering check so an empty or
+    // inverted region falls back to the default instead of being persisted.
+    const west = clampCoordinate(Number(bounds[0]), -180, 180);
+    const south = clampCoordinate(Number(bounds[1]), -85, 85);
+    const east = clampCoordinate(Number(bounds[2]), -180, 180);
+    const north = clampCoordinate(Number(bounds[3]), -85, 85);
+    if (west < east && south < north) {
+      return [west, south, east, north];
+    }
   }
 
   return DEFAULT_PROJECT_PREFERENCES.map.bounds;
@@ -130,6 +137,10 @@ function normalizeBounds(
 
 function normalizeNumber(value: unknown, fallback: number): number {
   return Number.isFinite(value) ? Number(value) : fallback;
+}
+
+function clampCoordinate(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 function normalizeBoolean(value: unknown, fallback: boolean): boolean {

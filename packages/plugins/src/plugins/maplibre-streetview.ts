@@ -111,16 +111,19 @@ function addRuntimeEnvListener(): void {
   if (removeRuntimeEnvListener || typeof window === "undefined") return;
 
   const handleRuntimeEnvChange = () => {
-    if (!activeApp || !streetViewControl) return;
-    activeApp.removeMapControl(streetViewControl);
+    if (!activeApp) return;
+    if (streetViewControl) activeApp.removeMapControl(streetViewControl);
     streetViewControl = new StreetViewControl(getStreetViewOptions());
     const added = activeApp.addMapControl(streetViewControl, streetViewPosition);
     if (!added) {
+      // Keep the listener registered so a later credential change can retry.
+      // addMapControl failures here are typically transient (e.g. the map is
+      // not fully initialized yet); the guard above only requires activeApp,
+      // so the next event re-attempts the add.
       streetViewControl = null;
-      // Tear down the listener too, otherwise it stays registered while
-      // streetViewControl is null and every later event short-circuits,
-      // silently breaking credential updates for the rest of the session.
-      cleanupRuntimeEnvListener();
+      console.warn(
+        "[maplibre-streetview] addMapControl failed during credential update; will retry on next env change.",
+      );
       return;
     }
     setTimeout(() => streetViewControl?.expand(), 0);

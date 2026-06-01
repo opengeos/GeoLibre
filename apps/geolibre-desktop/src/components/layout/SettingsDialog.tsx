@@ -32,6 +32,7 @@ import {
   RotateCcw,
   Settings,
   Trash2,
+  TriangleAlert,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type RefObject } from "react";
 
@@ -514,6 +515,14 @@ export function SettingsDialog({
                       <Plus className="h-3.5 w-3.5" />
                       Add
                     </Button>
+                  </div>
+                  <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+                    <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>
+                      Values are stored in plain text in the project file and
+                      may be exposed when the project is shared. Avoid putting
+                      secrets here unless the project file stays private.
+                    </span>
                   </div>
                   {draftPreferences.environmentVariables.length === 0 ? (
                     <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
