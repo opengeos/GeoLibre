@@ -97,8 +97,10 @@ function normalizeProjectPreferences(
       restrictBounds: Boolean(
         (map as Partial<ProjectPreferences["map"]>).restrictBounds,
       ),
-      renderWorldCopies:
-        (map as Partial<ProjectPreferences["map"]>).renderWorldCopies ?? true,
+      renderWorldCopies: normalizeBoolean(
+        (map as Partial<ProjectPreferences["map"]>).renderWorldCopies,
+        true,
+      ),
     },
     environmentVariables: Array.isArray(candidate.environmentVariables)
       ? candidate.environmentVariables
@@ -128,18 +130,24 @@ function normalizeNumber(value: unknown, fallback: number): number {
   return Number.isFinite(value) ? Number(value) : fallback;
 }
 
+function normalizeBoolean(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+const ENVIRONMENT_VARIABLE_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
 function normalizeEnvironmentVariable(
   variable: unknown,
 ): RuntimeEnvironmentVariable | null {
   if (!variable || typeof variable !== "object") return null;
   const candidate = variable as Partial<RuntimeEnvironmentVariable>;
   const key = typeof candidate.key === "string" ? candidate.key.trim() : "";
-  if (!key) return null;
+  if (!key || !ENVIRONMENT_VARIABLE_NAME_PATTERN.test(key)) return null;
 
   return {
     key,
     value: typeof candidate.value === "string" ? candidate.value : "",
-    enabled: candidate.enabled ?? true,
+    enabled: normalizeBoolean(candidate.enabled, true),
   };
 }
 
