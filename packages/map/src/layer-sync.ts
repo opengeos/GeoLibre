@@ -26,8 +26,8 @@ import {
 const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
 const PMTILES_PROTOCOL = "pmtiles";
 const PMTILES_PROTOCOL_GLOBAL_KEY = "__geolibrePMTilesProtocol";
-const MIN_LAYER_ZOOM = 0;
-const MAX_LAYER_ZOOM = 24;
+const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
+const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;
 
 function styleValue<K extends keyof LayerStyle>(
   style: LayerStyle,
@@ -36,7 +36,8 @@ function styleValue<K extends keyof LayerStyle>(
   return style[key] ?? DEFAULT_LAYER_STYLE[key];
 }
 
-function clampLayerZoom(value: number): number {
+function clampLayerZoom(value: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
   return Math.min(MAX_LAYER_ZOOM, Math.max(MIN_LAYER_ZOOM, value));
 }
 
@@ -44,8 +45,8 @@ function styleLayerZoomRange(style: LayerStyle): {
   maxzoom: number;
   minzoom: number;
 } {
-  const minzoom = clampLayerZoom(styleValue(style, "minZoom"));
-  const maxzoom = clampLayerZoom(styleValue(style, "maxZoom"));
+  const minzoom = clampLayerZoom(styleValue(style, "minZoom"), MIN_LAYER_ZOOM);
+  const maxzoom = clampLayerZoom(styleValue(style, "maxZoom"), MAX_LAYER_ZOOM);
   return {
     minzoom: Math.min(minzoom, maxzoom),
     maxzoom: Math.max(minzoom, maxzoom),

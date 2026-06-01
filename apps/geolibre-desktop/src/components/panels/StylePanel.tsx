@@ -217,8 +217,8 @@ function clampNumber(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-const MIN_LAYER_ZOOM = 0;
-const MAX_LAYER_ZOOM = 24;
+const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
+const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;
 
 function stepPrecision(step: number): number {
   const [, decimals = ""] = String(step).split(".");
