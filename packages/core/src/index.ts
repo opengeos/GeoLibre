@@ -1,3 +1,3 @@
 export * from "./types";
 export * from "./project";
-export { useAppStore, type AppState } from "./store";
+export { projectPathLabel, useAppStore, type AppState } from "./store";

@@ -84,6 +84,11 @@ export interface AppState {
 
 const MAX_RECENT_PROJECTS = 10;
 
+/** Derive a human-friendly display name from a file path or URL. */
+export function projectPathLabel(path: string): string {
+  return path.split(/[/\\]/).pop() || path;
+}
+
 function normalizeRecentProjects(
   projects: RecentProjectEntry[],
 ): RecentProjectEntry[] {
@@ -94,7 +99,7 @@ function normalizeRecentProjects(
     const path = project.path.trim();
     if (!path || seen.has(path)) continue;
 
-    const name = project.name.trim() || path.split(/[/\\]/).pop() || path;
+    const name = project.name.trim() || projectPathLabel(path);
     normalized.push({
       path,
       name,

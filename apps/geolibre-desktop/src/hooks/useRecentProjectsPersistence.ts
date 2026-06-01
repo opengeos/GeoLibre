@@ -14,22 +14,30 @@ function isRecentProjectEntry(value: unknown): value is RecentProjectEntry {
 }
 
 function loadRecentProjects(): RecentProjectEntry[] {
-  const stored = window.localStorage.getItem(RECENT_PROJECTS_STORAGE_KEY);
-  if (!stored) return [];
+  if (typeof window === "undefined") return [];
 
   try {
+    const stored = window.localStorage.getItem(RECENT_PROJECTS_STORAGE_KEY);
+    if (!stored) return [];
     const parsed = JSON.parse(stored) as unknown;
     return Array.isArray(parsed) ? parsed.filter(isRecentProjectEntry) : [];
   } catch {
+    // localStorage may be unavailable (SecurityError) or hold invalid JSON.
     return [];
   }
 }
 
 function saveRecentProjects(projects: RecentProjectEntry[]) {
-  window.localStorage.setItem(
-    RECENT_PROJECTS_STORAGE_KEY,
-    JSON.stringify(projects),
-  );
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(
+      RECENT_PROJECTS_STORAGE_KEY,
+      JSON.stringify(projects),
+    );
+  } catch {
+    // Persistence is best-effort; ignore quota or disabled-storage errors.
+  }
 }
 
 export function useRecentProjectsPersistence() {
@@ -43,5 +51,7 @@ export function useRecentProjectsPersistence() {
         saveRecentProjects(state.recentProjects);
       }
     });
-  }, [setRecentProjects]);
+    // `setRecentProjects` is a stable Zustand action, so this runs once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 }
