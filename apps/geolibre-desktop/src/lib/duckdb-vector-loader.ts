@@ -39,6 +39,22 @@ function getDatabase(): Promise<duckdb.AsyncDuckDB> {
   return dbPromise;
 }
 
+let spatialExtensionLoaded = false;
+
+/**
+ * Install and load the DuckDB spatial extension once per database instance.
+ * `getDatabase` returns a memoized singleton, so the extension persists across
+ * connections and the redundant INSTALL/LOAD queries are skipped on reuse.
+ */
+async function ensureSpatialExtension(
+  connection: duckdb.AsyncDuckDBConnection,
+): Promise<void> {
+  if (spatialExtensionLoaded) return;
+  await connection.query("INSTALL spatial");
+  await connection.query("LOAD spatial");
+  spatialExtensionLoaded = true;
+}
+
 async function createDatabase(): Promise<duckdb.AsyncDuckDB> {
   const bundle = await duckdb.selectBundle(MANUAL_BUNDLES);
   const worker = new Worker(bundle.mainWorker!, { type: "module" });
@@ -135,8 +151,7 @@ export async function loadDuckDbVectorFile(
     for (const sibling of file.siblingFiles ?? []) {
       await db.registerFileBuffer(sibling.name, sibling.data);
     }
-    await connection.query("INSTALL spatial");
-    await connection.query("LOAD spatial");
+    await ensureSpatialExtension(connection);
 
     const sql = sourceSql(file.name, file.extension);
     const description = rowsFromResult(
@@ -195,8 +210,7 @@ export async function exportDuckDbGeoParquet(
 
   try {
     await registerGeoJsonExportSource(db, geojson, sourceFile);
-    await connection.query("INSTALL spatial");
-    await connection.query("LOAD spatial");
+    await ensureSpatialExtension(connection);
     await connection.query(
       `COPY (SELECT * FROM ST_Read(${quoteSqlString(
         sourceFile,

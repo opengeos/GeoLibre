@@ -147,6 +147,9 @@ function assertFeatureCollection(value: unknown): FeatureCollection {
   throw new Error("The selected file did not produce a GeoJSON FeatureCollection.");
 }
 
+// DuckDB-wasm (pthreads build) can hand back a Uint8Array backed by a
+// SharedArrayBuffer, which `Blob`'s BlobPart type rejects. Copy into a plain
+// ArrayBuffer so the binary save path type-checks and stays portable.
 function toArrayBuffer(data: Uint8Array): ArrayBuffer {
   const buffer = new ArrayBuffer(data.byteLength);
   new Uint8Array(buffer).set(data);

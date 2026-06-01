@@ -85,6 +85,9 @@ function formatAttributeValue(value: unknown): string {
 function parseAttributeDraft(draft: string, previousValue: unknown): unknown {
   if (draft.trim() === "") return null;
 
+  // A null/undefined cell carries no original type to infer from, so the raw
+  // string is kept as-is: editing a previously-empty cell does not coerce to
+  // number/boolean/object.
   if (previousValue == null) return draft;
 
   if (typeof previousValue === "number") {
@@ -127,6 +130,28 @@ function hasDraftEdits(drafts: AttributeDrafts): boolean {
   );
 }
 
+function applyDraftsToFeatures(
+  features: Feature[],
+  drafts: AttributeDrafts,
+): Feature[] {
+  return features.map((feature, index) => {
+    const featureId = String(feature.id ?? index);
+    const rowDrafts = drafts[featureId];
+    if (!rowDrafts) return feature;
+
+    const properties = { ...(feature.properties ?? {}) };
+    for (const [column, draft] of Object.entries(rowDrafts)) {
+      const previousValue = feature.properties?.[column];
+      // Skip drafts that are invalid JSON for an object-typed cell so we never
+      // persist or export a type-corrupted value; the existing value is kept.
+      if (isInvalidObjectDraft(draft, previousValue)) continue;
+      properties[column] = parseAttributeDraft(draft, previousValue);
+    }
+
+    return { ...feature, properties };
+  });
+}
+
 function sanitizeExportFileName(name: string): string {
   const sanitized = name
     .trim()
@@ -142,16 +167,25 @@ function csvCell(value: unknown): string {
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-function exportFormatLabel(_format: BinaryVectorExportFormat): string {
-  return "GeoParquet";
+function exportFormatLabel(format: BinaryVectorExportFormat): string {
+  switch (format) {
+    case "geoparquet":
+      return "GeoParquet";
+  }
 }
 
-function exportFileExtension(_format: BinaryVectorExportFormat): string {
-  return "parquet";
+function exportFileExtension(format: BinaryVectorExportFormat): string {
+  switch (format) {
+    case "geoparquet":
+      return "parquet";
+  }
 }
 
-function exportMimeType(_format: BinaryVectorExportFormat): string {
-  return "application/vnd.apache.parquet";
+function exportMimeType(format: BinaryVectorExportFormat): string {
+  switch (format) {
+    case "geoparquet":
+      return "application/vnd.apache.parquet";
+  }
 }
 
 export function AttributeTable() {
@@ -397,7 +431,9 @@ export function AttributeTable() {
       return;
     }
 
-    setIsEditing(true);
+    if (!isEditing) {
+      setIsEditing(true);
+    }
   };
 
   const saveDrafts = () => {
@@ -405,24 +441,7 @@ export function AttributeTable() {
 
     const geojson = {
       ...layer.geojson,
-      features: layer.geojson.features.map((feature, index) => {
-        const featureId = String(feature.id ?? index);
-        const rowDrafts = drafts[featureId];
-        if (!rowDrafts) return feature;
-
-        const properties = { ...(feature.properties ?? {}) };
-        for (const [column, draft] of Object.entries(rowDrafts)) {
-          properties[column] = parseAttributeDraft(
-            draft,
-            feature.properties?.[column],
-          );
-        }
-
-        return {
-          ...feature,
-          properties,
-        };
-      }),
+      features: applyDraftsToFeatures(layer.geojson.features, drafts),
     };
 
     updateLayer(layer.id, { geojson });
@@ -435,24 +454,7 @@ export function AttributeTable() {
 
     return {
       ...layer.geojson,
-      features: layer.geojson.features.map((feature, index) => {
-        const featureId = String(feature.id ?? index);
-        const rowDrafts = drafts[featureId];
-        if (!rowDrafts) return feature;
-
-        const properties = { ...(feature.properties ?? {}) };
-        for (const [column, draft] of Object.entries(rowDrafts)) {
-          properties[column] = parseAttributeDraft(
-            draft,
-            feature.properties?.[column],
-          );
-        }
-
-        return {
-          ...feature,
-          properties,
-        };
-      }),
+      features: applyDraftsToFeatures(layer.geojson.features, drafts),
     };
   };
 
@@ -649,12 +651,16 @@ export function AttributeTable() {
           size="sm"
           className="ml-auto h-7 px-2"
           title={
-            isEditing && !hasEdits ? "Exit edit mode" : "Edit attribute values"
+            isEditing
+              ? hasEdits
+                ? "Use Save or Cancel to finish editing"
+                : "Exit edit mode"
+              : "Edit attribute values"
           }
           aria-label={
             isEditing && !hasEdits ? "Exit edit mode" : "Edit attribute values"
           }
-          disabled={!layer?.geojson}
+          disabled={!layer?.geojson || (isEditing && hasEdits)}
           onClick={toggleEditing}
         >
           <Pencil className="h-3.5 w-3.5" />
@@ -698,7 +704,7 @@ export function AttributeTable() {
               GeoParquet
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => void exportLayer("csv")}>
-              CSV
+              CSV (attributes only)
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
