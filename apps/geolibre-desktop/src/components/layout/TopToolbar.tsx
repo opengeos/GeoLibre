@@ -1,5 +1,6 @@
 import {
   projectFromStore,
+  projectPathLabel,
   serializeProject,
   useAppStore,
 } from "@geolibre/core";
@@ -26,6 +27,11 @@ import {
 import {
   Button,
   cn,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -38,11 +44,14 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
   Input,
+  Label,
 } from "@geolibre/ui";
 import {
   Database,
   FolderOpen,
+  History,
   Layers,
+  Link2,
   Map,
   Moon,
   Puzzle,
@@ -50,11 +59,24 @@ import {
   SlidersHorizontal,
   Sun,
   Wrench,
+  X,
 } from "lucide-react";
-import { useState, useSyncExternalStore } from "react";
+import {
+  type FormEvent,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
 import type { ThemeMode } from "../../hooks/useThemeMode";
-import { openProjectFile, saveProjectFile } from "../../lib/tauri-io";
+import {
+  isTauri,
+  openProjectFile,
+  openRecentProjectFile,
+  RecentProjectGoneError,
+  saveProjectFile,
+} from "../../lib/tauri-io";
+import { normalizeProjectUrl } from "../../lib/urls";
 import { resolveProjectXyzLayers } from "../../lib/xyz-url";
 import { AddDataDialog, type AddDataKind } from "./AddDataDialog";
 import { AboutDialog } from "./AboutDialog";
@@ -95,6 +117,19 @@ const PLUGIN_POSITION_ITEMS: Array<{
   { value: "bottom-right", label: "Bottom right" },
 ];
 
+function formatRecentProjectTime(openedAt: string): string {
+  const openedDate = new Date(openedAt);
+  if (Number.isNaN(openedDate.getTime())) return "";
+
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(openedDate);
+}
+
 export function TopToolbar({
   compact = false,
   mapControllerRef,
@@ -107,8 +142,12 @@ export function TopToolbar({
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
   const projectName = useAppStore((s) => s.projectName);
   const projectPath = useAppStore((s) => s.projectPath);
+  const recentProjects = useAppStore((s) => s.recentProjects);
   const setProjectPath = useAppStore((s) => s.setProjectPath);
   const setProjectName = useAppStore((s) => s.setProjectName);
+  const rememberRecentProject = useAppStore((s) => s.rememberRecentProject);
+  const forgetRecentProject = useAppStore((s) => s.forgetRecentProject);
+  const clearRecentProjects = useAppStore((s) => s.clearRecentProjects);
   const markSaved = useAppStore((s) => s.markSaved);
   const [controlsVisible, setControlsVisible] = useState<
     Record<ToolbarMapControl, boolean>
@@ -122,20 +161,119 @@ export function TopToolbar({
     ),
   );
   const [addDataKind, setAddDataKind] = useState<AddDataKind | null>(null);
+  const [projectUrlDialogOpen, setProjectUrlDialogOpen] = useState(false);
+  const [projectUrl, setProjectUrl] = useState("");
+  const [projectUrlError, setProjectUrlError] = useState<string | null>(null);
+  const [projectUrlLoading, setProjectUrlLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const projectUrlAbortRef = useRef<AbortController | null>(null);
+  const recentAbortRef = useRef<AbortController | null>(null);
 
-  const handleOpen = async () => {
+  const handleOpenFromFile = async () => {
     const result = await openProjectFile();
     if (result) {
       try {
         loadProject(
           await resolveProjectXyzLayers(result.project),
           result.path,
+          { rememberRecent: isTauri() },
         );
       } catch (error) {
         console.error("Failed to open project", error);
-        window.alert(
+        setActionError(
           error instanceof Error ? error.message : "Could not open project.",
         );
+      }
+    }
+  };
+
+  const handleOpenFromUrl = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const normalizedUrl = normalizeProjectUrl(projectUrl);
+    if (!normalizedUrl) {
+      setProjectUrlError("Enter a valid HTTP or HTTPS project URL.");
+      return;
+    }
+
+    projectUrlAbortRef.current?.abort();
+    const controller = new AbortController();
+    projectUrlAbortRef.current = controller;
+
+    setProjectUrlLoading(true);
+    setProjectUrlError(null);
+
+    try {
+      const result = await openRecentProjectFile(
+        normalizedUrl,
+        controller.signal,
+      );
+      const project = await resolveProjectXyzLayers(
+        result.project,
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
+      loadProject(project, result.path);
+      setProjectUrl("");
+      setProjectUrlDialogOpen(false);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      console.error("Failed to open project URL", error);
+      setProjectUrlError(
+        error instanceof Error ? error.message : "Could not open project URL.",
+      );
+    } finally {
+      if (projectUrlAbortRef.current === controller) {
+        projectUrlAbortRef.current = null;
+      }
+      setProjectUrlLoading(false);
+    }
+  };
+
+  const handleOpenRecent = async (path: string) => {
+    // Cancel any previous in-flight open so rapid clicks cannot race and let a
+    // stale fetch win by resolving last.
+    recentAbortRef.current?.abort();
+    const controller = new AbortController();
+    recentAbortRef.current = controller;
+
+    let result: Awaited<ReturnType<typeof openRecentProjectFile>>;
+
+    try {
+      result = await openRecentProjectFile(path, controller.signal);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      // Only drop the entry when the project is permanently gone; preserve it
+      // for transient failures (network timeout, 5xx, momentary IO error).
+      if (error instanceof RecentProjectGoneError) {
+        forgetRecentProject(path);
+      }
+      console.error("Failed to open recent project", error);
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "Could not open the recent project.",
+      );
+      return;
+    }
+
+    try {
+      const project = await resolveProjectXyzLayers(
+        result.project,
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
+      loadProject(project, result.path);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      console.error("Failed to load recent project", error);
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "Could not load the recent project.",
+      );
+    } finally {
+      if (recentAbortRef.current === controller) {
+        recentAbortRef.current = null;
       }
     }
   };
@@ -159,6 +297,11 @@ export function TopToolbar({
     );
     if (!path) return false;
     setProjectPath(path);
+    rememberRecentProject({
+      path,
+      name: project.name,
+      openedAt: new Date().toISOString(),
+    });
     markSaved();
     return true;
   };
@@ -244,16 +387,83 @@ export function TopToolbar({
         showLabels={showLabels}
         onSaveCurrentProject={handleSave}
       />
-      <Button
-        className={toolbarButtonClass}
-        variant="ghost"
-        size={toolbarButtonSize}
-        onClick={handleOpen}
-        aria-label="Open"
-      >
-        <FolderOpen className={toolbarIconClassName} />
-        {renderToolbarLabel("Open")}
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            className={toolbarButtonClass}
+            variant="ghost"
+            size={toolbarButtonSize}
+            aria-label="Open"
+          >
+            <FolderOpen className={toolbarIconClassName} />
+            {renderToolbarLabel("Open")}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-80">
+          <DropdownMenuLabel>Project</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => void handleOpenFromFile()}>
+            <FolderOpen className="mr-2 h-3.5 w-3.5" />
+            Open Project from File...
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setProjectUrlDialogOpen(true)}>
+            <Link2 className="mr-2 h-3.5 w-3.5" />
+            Open Project from URL...
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel>Recent projects</DropdownMenuLabel>
+          {recentProjects.length === 0 ? (
+            <DropdownMenuItem disabled>No recent projects</DropdownMenuItem>
+          ) : (
+            recentProjects.map((project) => {
+              const openedAt = formatRecentProjectTime(project.openedAt);
+              const label = project.name || projectPathLabel(project.path);
+              return (
+                <DropdownMenuItem
+                  key={project.path}
+                  className="flex items-start justify-between gap-2"
+                  onSelect={() => void handleOpenRecent(project.path)}
+                >
+                  <span className="flex min-w-0 flex-col items-start gap-0.5">
+                    <span className="max-w-full truncate font-medium">
+                      {label}
+                    </span>
+                    <span className="flex max-w-full items-center gap-1 text-xs text-muted-foreground">
+                      <History className="h-3 w-3 shrink-0" />
+                      <span className="truncate">
+                        {openedAt
+                          ? `${openedAt} - ${project.path}`
+                          : project.path}
+                      </span>
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${label} from recent projects`}
+                    className="mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+                    onClick={(event) => {
+                      // Keep the menu open and prevent the row's onSelect (which
+                      // would reopen the project) from firing.
+                      event.stopPropagation();
+                      event.preventDefault();
+                      forgetRecentProject(project.path);
+                    }}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </DropdownMenuItem>
+              );
+            })
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            disabled={recentProjects.length === 0}
+            onSelect={clearRecentProjects}
+          >
+            Clear Recent Projects
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <Button
         className={toolbarButtonClass}
         variant="ghost"
@@ -444,6 +654,74 @@ export function TopToolbar({
           if (!open) setAddDataKind(null);
         }}
       />
+      <Dialog
+        open={projectUrlDialogOpen}
+        onOpenChange={(open) => {
+          setProjectUrlDialogOpen(open);
+          if (!open) {
+            projectUrlAbortRef.current?.abort();
+            projectUrlAbortRef.current = null;
+            setProjectUrl("");
+            setProjectUrlError(null);
+            setProjectUrlLoading(false);
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Open project from URL</DialogTitle>
+            <DialogDescription>
+              Load a public `.geolibre.json` project and add it to recent
+              projects.
+            </DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={handleOpenFromUrl}>
+            <div className="space-y-2">
+              <Label htmlFor="project-url">Project URL</Label>
+              <Input
+                id="project-url"
+                placeholder="https://example.com/project.geolibre.json"
+                value={projectUrl}
+                onChange={(event) => {
+                  setProjectUrl(event.target.value);
+                  setProjectUrlError(null);
+                }}
+              />
+              {projectUrlError ? (
+                <p className="text-xs text-destructive">{projectUrlError}</p>
+              ) : null}
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setProjectUrlDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={projectUrlLoading}>
+                {projectUrlLoading ? "Opening..." : "Open"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={actionError !== null}
+        onOpenChange={(open) => {
+          if (!open) setActionError(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Could not open project</DialogTitle>
+            <DialogDescription>{actionError}</DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end">
+            <Button onClick={() => setActionError(null)}>Dismiss</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <AboutDialog
         buttonClassName={toolbarButtonClass}
         buttonSize={toolbarButtonSize}

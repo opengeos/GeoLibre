@@ -91,6 +91,15 @@ function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }
 
+function isHttpUrl(path: string): boolean {
+  try {
+    const url = new URL(path);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function fileExtension(path: string): string {
   const name = browserSafeFileName(path).toLowerCase();
   if (name.endsWith(".geoparquet")) return "geoparquet";
@@ -530,6 +539,88 @@ export async function openProjectFile(): Promise<{
   const text = await readTextFile(selected);
   const project = parseProject(text);
   return { project, path: selected };
+}
+
+/**
+ * Thrown when a recent project is permanently gone (HTTP 404/410 or a local
+ * file that no longer exists), signalling the caller that the entry can be
+ * safely forgotten. Transient failures throw a plain `Error` instead so the
+ * entry is preserved for a retry.
+ */
+export class RecentProjectGoneError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RecentProjectGoneError";
+  }
+}
+
+// Refuse to buffer absurdly large responses into memory (25 MB).
+const MAX_PROJECT_URL_BYTES = 25 * 1024 * 1024;
+
+function isFileMissingError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  // Match filesystem "missing file" signals only. Avoid broad substrings like
+  // "not found" / "cannot find" that also appear in transient IPC errors
+  // (e.g. "Command not found", Windows os error 3 for a disconnected drive).
+  return /no such file|os error 2|\benoent\b|cannot find the file|file not found|does not exist/i.test(
+    message,
+  );
+}
+
+export async function openRecentProjectFile(
+  path: string,
+  signal?: AbortSignal,
+): Promise<{
+  project: GeoLibreProject;
+  path: string;
+}> {
+  if (isHttpUrl(path)) {
+    const response = await fetch(path, {
+      headers: { Accept: "application/json, text/plain;q=0.9, */*;q=0.8" },
+      signal,
+    });
+    if (!response.ok) {
+      const message = `Could not load project URL: HTTP ${response.status} ${response.statusText}`;
+      if (response.status === 404 || response.status === 410) {
+        throw new RecentProjectGoneError(message);
+      }
+      throw new Error(message);
+    }
+
+    // Only a present Content-Length lets us guard up front. `Number(null)` is
+    // 0, which would silently pass for chunked/CDN responses that omit it.
+    const contentLength = response.headers.get("content-length");
+    if (contentLength !== null && Number(contentLength) > MAX_PROJECT_URL_BYTES) {
+      throw new Error("Project file is too large to load (over 25 MB).");
+    }
+
+    const contentType = response.headers.get("content-type") ?? "";
+    if (/\bhtml\b/i.test(contentType)) {
+      throw new Error(
+        `Unexpected content type "${contentType}" - the URL does not appear to be a project file.`,
+      );
+    }
+
+    return { project: parseProject(await response.text()), path };
+  }
+
+  if (!isTauri()) {
+    throw new Error(
+      "Recent local projects can only be reopened in GeoLibre Desktop.",
+    );
+  }
+
+  let text: string;
+  try {
+    text = await readTextFile(path);
+  } catch (error) {
+    if (isFileMissingError(error)) {
+      throw new RecentProjectGoneError(`Project file no longer exists: ${path}`);
+    }
+    throw error;
+  }
+
+  return { project: parseProject(text), path };
 }
 
 export async function saveProjectFile(

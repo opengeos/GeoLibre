@@ -53,9 +53,17 @@ export interface AppState {
   setZoomToSelectedFeature: (enabled: boolean) => void;
 
   newProject: (options?: CreateProjectOptions & { name?: string }) => void;
-  loadProject: (project: GeoLibreProject, path?: string | null) => void;
+  loadProject: (
+    project: GeoLibreProject,
+    path?: string | null,
+    options?: { rememberRecent?: boolean },
+  ) => void;
   setProjectPath: (path: string | null) => void;
   setProjectName: (name: string) => void;
+  setRecentProjects: (projects: RecentProjectEntry[]) => void;
+  rememberRecentProject: (entry: RecentProjectEntry) => void;
+  forgetRecentProject: (path: string) => void;
+  clearRecentProjects: () => void;
   markSaved: () => void;
 
   addLayer: (layer: GeoLibreLayer, beforeLayerId?: string | null) => void;
@@ -72,6 +80,35 @@ export interface AppState {
     sourcePath?: string,
     beforeLayerId?: string | null,
   ) => string;
+}
+
+const MAX_RECENT_PROJECTS = 10;
+
+/** Derive a human-friendly display name from a file path or URL. */
+export function projectPathLabel(path: string): string {
+  return path.split(/[/\\]/).pop() || path;
+}
+
+function normalizeRecentProjects(
+  projects: RecentProjectEntry[],
+): RecentProjectEntry[] {
+  const seen = new Set<string>();
+  const normalized: RecentProjectEntry[] = [];
+
+  for (const project of projects) {
+    const path = project.path.trim();
+    if (!path || seen.has(path)) continue;
+
+    const name = project.name.trim() || projectPathLabel(path);
+    normalized.push({
+      path,
+      name,
+      openedAt: project.openedAt || new Date().toISOString(),
+    });
+    seen.add(path);
+  }
+
+  return normalized.slice(0, MAX_RECENT_PROJECTS);
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -133,7 +170,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
   },
 
-  loadProject: (project, path = null) => {
+  loadProject: (project, path = null, options = {}) => {
     const applied = applyProjectToStore(project);
     set({
       ...applied,
@@ -143,23 +180,34 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectedFeatureId: null,
       identifyLayerId: null,
     });
-    if (path) {
-      const entry: RecentProjectEntry = {
+    if (path && options.rememberRecent !== false) {
+      get().rememberRecentProject({
         path,
         name: project.name,
         openedAt: new Date().toISOString(),
-      };
-      set((s) => ({
-        recentProjects: [
-          entry,
-          ...s.recentProjects.filter((r) => r.path !== path),
-        ].slice(0, 10),
-      }));
+      });
     }
   },
 
   setProjectPath: (path) => set({ projectPath: path }),
   setProjectName: (name) => set({ projectName: name, isDirty: true }),
+  setRecentProjects: (projects) =>
+    set({ recentProjects: normalizeRecentProjects(projects) }),
+  rememberRecentProject: (entry) =>
+    set((s) => ({
+      recentProjects: normalizeRecentProjects([entry, ...s.recentProjects]),
+    })),
+  forgetRecentProject: (path) => {
+    // Compare with separators normalized so a backslash/forward-slash mismatch
+    // on Windows does not leave a stale entry behind.
+    const normalized = path.replace(/\\/g, "/");
+    set((s) => ({
+      recentProjects: s.recentProjects.filter(
+        (project) => project.path.replace(/\\/g, "/") !== normalized,
+      ),
+    }));
+  },
+  clearRecentProjects: () => set({ recentProjects: [] }),
   markSaved: () => set({ isDirty: false }),
 
   addLayer: (layer, beforeLayerId = null) =>

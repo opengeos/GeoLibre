@@ -14,7 +14,7 @@
 - [x] In-session recent project tracking
 - [x] Feature highlight from attribute table
 - [x] Optional zoom to selected feature
-- [ ] Recent projects UI and persistence
+- [x] Recent projects UI and persistence
 
 ## v0.3: Cloud-native formats
 
@@ -30,7 +30,7 @@
 - [x] `INSTALL spatial` / `LOAD spatial`
 - [x] Shapefile, KMZ/KML, GeoPackage, GeoParquet, FlatGeobuf, GML, and related vector import paths
 
-## v0.5: Advanced Add Data and plugin-backed layers (current)
+## v0.5: Advanced Add Data and plugin-backed layers
 
 - [x] Add Data dialogs for XYZ, WMS, vector files, GeoJSON URLs, vector tiles, raster tile templates, COG and GeoTIFF rasters, MBTiles, and ArcGIS layers
 - [x] MapLibre Components plugin with FlatGeobuf, PMTiles, Zarr, LiDAR, and Gaussian splat panels
@@ -38,7 +38,16 @@
 - [x] Plugin control position controls in the Plugins menu
 - [x] Layer control integration for GeoLibre-managed layers
 
-## v0.6: SQL and processing sidecar
+## v0.6: Project access, web embeds, and expanded integrations (current)
+
+- [x] Persistent recent projects with desktop file recents and URL-backed web recents
+- [x] Separate Open Project from File and Open Project from URL flows
+- [x] Browser demo query options for compact layout, icon-only toolbar, and hidden panels
+- [x] PostgreSQL layer workflow through desktop Martin server integration
+- [x] STAC search workflow for adding catalog-backed raster layers
+- [x] Esri Wayback, GeoAgent, GeoEditor, Street View, and Swipe plugin integrations
+
+## v0.7: SQL and processing sidecar
 
 - [ ] Bundle FastAPI server as Tauri external bin
 - [ ] GDAL / Rasterio / GeoPandas pipelines
@@ -46,7 +55,7 @@
 - [ ] WhiteboxTools, Leafmap, GeoAI, SamGeo (selective)
 - [ ] SQL panel and query-result layers
 
-## v0.7: Plugin system
+## v0.8: External plugin system
 
 - [ ] External plugin packages
 - [ ] Plugin marketplace / registry (design)

@@ -1,5 +1,6 @@
 import { parseProject, useAppStore } from "@geolibre/core";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { normalizeProjectUrl } from "../lib/urls";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
 
 export type ProjectUrlLoadState =
@@ -35,7 +36,9 @@ export function useProjectUrlLoader(): ProjectUrlLoadState {
       )
       .then((project) => {
         if (abortController.signal.aborted) return;
-        loadProject(project, projectUrl);
+        // A `?url=` deep link is reloaded on every visit, so treat it as
+        // transient rather than persisting it to the recent-projects list.
+        loadProject(project, projectUrl, { rememberRecent: false });
         setState({
           error: null,
           message: `Loaded ${project.name}`,
@@ -102,19 +105,6 @@ function projectUrlFromLocation(): string | null {
   return /^https?:\/\//i.test(bareQuery)
     ? normalizeProjectUrl(bareQuery)
     : null;
-}
-
-function normalizeProjectUrl(value: string | null): string | null {
-  if (!value?.trim()) return null;
-
-  try {
-    const url = new URL(value.trim(), window.location.href);
-    return url.protocol === "http:" || url.protocol === "https:"
-      ? url.href
-      : null;
-  } catch {
-    return null;
-  }
 }
 
 function safeDecodeURIComponent(value: string): string {
