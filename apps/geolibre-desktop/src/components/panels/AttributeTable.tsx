@@ -270,7 +270,7 @@ export function AttributeTable() {
 
   if (!attributeTableOpen) {
     return (
-      <section className="flex h-11 shrink-0 items-center gap-2 border-t bg-card px-3">
+      <section className="flex h-11 shrink-0 items-center gap-2 border-t bg-card px-2">
         <Button
           variant="ghost"
           size="icon"

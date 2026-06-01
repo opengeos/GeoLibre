@@ -25,6 +25,7 @@ import {
 } from "@geolibre/plugins";
 import {
   Button,
+  cn,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -60,7 +61,10 @@ import { AboutDialog } from "./AboutDialog";
 import { NewProjectDialog } from "./NewProjectDialog";
 
 interface TopToolbarProps {
+  compact?: boolean;
   mapControllerRef: React.RefObject<MapController | null>;
+  showLabels?: boolean;
+  showProjectInfo?: boolean;
   themeMode: ThemeMode;
   onToggleThemeMode: () => void;
 }
@@ -92,7 +96,10 @@ const PLUGIN_POSITION_ITEMS: Array<{
 ];
 
 export function TopToolbar({
+  compact = false,
   mapControllerRef,
+  showLabels = true,
+  showProjectInfo = true,
   themeMode,
   onToggleThemeMode,
 }: TopToolbarProps) {
@@ -209,27 +216,64 @@ export function TopToolbar({
       return updated ? { ...current, [control]: visible } : current;
     });
   };
+  const toolbarButtonSize = compact ? "icon" : "sm";
+  const toolbarButtonClass = compact ? "h-8 w-8 shrink-0" : "shrink-0";
+  const toolbarIconClassName = cn("h-3.5 w-3.5", showLabels && "sm:mr-1");
+  const renderToolbarLabel = (label: string) =>
+    showLabels ? <span className="hidden sm:inline">{label}</span> : null;
 
   return (
-    <header className="flex min-h-11 shrink-0 flex-wrap items-center gap-1 border-b bg-card px-2 py-1 md:flex-nowrap">
+    <header
+      className={cn(
+        "flex min-h-11 min-w-0 shrink-0 items-center gap-1 border-b bg-card py-1",
+        compact
+          ? "flex-nowrap overflow-x-auto px-1.5"
+          : "flex-wrap px-2 md:flex-nowrap",
+      )}
+    >
       <span className="mr-1 flex shrink-0 items-center gap-1.5 text-sm font-semibold text-primary md:mr-2">
         <Map className="h-4 w-4" />
-        <span className="hidden sm:inline">GeoLibre Desktop</span>
+        {showLabels ? (
+          <span className="hidden sm:inline">GeoLibre Desktop</span>
+        ) : null}
       </span>
-      <NewProjectDialog onSaveCurrentProject={handleSave} />
-      <Button variant="ghost" size="sm" onClick={handleOpen} aria-label="Open">
-        <FolderOpen className="h-3.5 w-3.5 sm:mr-1" />
-        <span className="hidden sm:inline">Open</span>
+      <NewProjectDialog
+        buttonClassName={toolbarButtonClass}
+        buttonSize={toolbarButtonSize}
+        iconClassName={toolbarIconClassName}
+        showLabel={showLabels}
+        onSaveCurrentProject={handleSave}
+      />
+      <Button
+        className={toolbarButtonClass}
+        variant="ghost"
+        size={toolbarButtonSize}
+        onClick={handleOpen}
+        aria-label="Open"
+      >
+        <FolderOpen className={toolbarIconClassName} />
+        {renderToolbarLabel("Open")}
       </Button>
-      <Button variant="ghost" size="sm" onClick={handleSave} aria-label="Save">
-        <Save className="h-3.5 w-3.5 sm:mr-1" />
-        <span className="hidden sm:inline">Save</span>
+      <Button
+        className={toolbarButtonClass}
+        variant="ghost"
+        size={toolbarButtonSize}
+        onClick={handleSave}
+        aria-label="Save"
+      >
+        <Save className={toolbarIconClassName} />
+        {renderToolbarLabel("Save")}
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" aria-label="Add Data">
-            <Database className="h-3.5 w-3.5 sm:mr-1" />
-            <span className="hidden sm:inline">Add Data</span>
+          <Button
+            className={toolbarButtonClass}
+            variant="ghost"
+            size={toolbarButtonSize}
+            aria-label="Add Data"
+          >
+            <Database className={toolbarIconClassName} />
+            {renderToolbarLabel("Add Data")}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
@@ -286,19 +330,25 @@ export function TopToolbar({
         </DropdownMenuContent>
       </DropdownMenu>
       <Button
+        className={toolbarButtonClass}
         variant="ghost"
-        size="sm"
+        size={toolbarButtonSize}
         onClick={() => setProcessingOpen(true)}
         aria-label="Processing"
       >
-        <Wrench className="h-3.5 w-3.5 sm:mr-1" />
-        <span className="hidden sm:inline">Processing</span>
+        <Wrench className={toolbarIconClassName} />
+        {renderToolbarLabel("Processing")}
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" aria-label="Controls">
-            <SlidersHorizontal className="h-3.5 w-3.5 sm:mr-1" />
-            <span className="hidden sm:inline">Controls</span>
+          <Button
+            className={toolbarButtonClass}
+            variant="ghost"
+            size={toolbarButtonSize}
+            aria-label="Controls"
+          >
+            <SlidersHorizontal className={toolbarIconClassName} />
+            {renderToolbarLabel("Controls")}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
@@ -322,9 +372,14 @@ export function TopToolbar({
       </DropdownMenu>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" aria-label="Plugins">
-            <Puzzle className="h-3.5 w-3.5 sm:mr-1" />
-            <span className="hidden sm:inline">Plugins</span>
+          <Button
+            className={toolbarButtonClass}
+            variant="ghost"
+            size={toolbarButtonSize}
+            aria-label="Plugins"
+          >
+            <Puzzle className={toolbarIconClassName} />
+            {renderToolbarLabel("Plugins")}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
@@ -389,7 +444,12 @@ export function TopToolbar({
           if (!open) setAddDataKind(null);
         }}
       />
-      <AboutDialog />
+      <AboutDialog
+        buttonClassName={toolbarButtonClass}
+        buttonSize={toolbarButtonSize}
+        iconClassName={toolbarIconClassName}
+        showLabel={showLabels}
+      />
       <div className="ml-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
         <Button
           aria-label={
@@ -413,19 +473,23 @@ export function TopToolbar({
             <Moon className="h-3.5 w-3.5" />
           )}
         </Button>
-        <Layers className="mr-1 hidden h-3 w-3 md:inline" />
-        <Input
-          aria-label="Project name"
-          className="hidden h-7 w-44 border-transparent px-2 text-xs shadow-none focus-visible:border-input md:block"
-          value={projectName}
-          onChange={(event) => setProjectName(event.target.value)}
-          onBlur={(event) => {
-            const nextName = event.target.value.trim();
-            if (!nextName) setProjectName("Untitled Project");
-          }}
-        />
-        {projectPath ? (
-          <span className="hidden truncate lg:inline">{projectPath}</span>
+        {showProjectInfo ? (
+          <>
+            <Layers className="mr-1 hidden h-3 w-3 md:inline" />
+            <Input
+              aria-label="Project name"
+              className="hidden h-7 w-44 border-transparent px-2 text-xs shadow-none focus-visible:border-input md:block"
+              value={projectName}
+              onChange={(event) => setProjectName(event.target.value)}
+              onBlur={(event) => {
+                const nextName = event.target.value.trim();
+                if (!nextName) setProjectName("Untitled Project");
+              }}
+            />
+            {projectPath ? (
+              <span className="hidden truncate lg:inline">{projectPath}</span>
+            ) : null}
+          </>
         ) : null}
       </div>
     </header>

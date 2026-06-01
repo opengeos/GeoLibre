@@ -19,7 +19,7 @@ Lightweight, cloud-native desktop GIS prototype built with **Tauri v2**, **React
 
 ## Prerequisites
 
-- **Node.js** 18+
+- **Node.js** 22+
 - **Rust** toolchain ([rustup](https://rustup.rs/)) for Tauri desktop builds
 - Linux: `webkit2gtk`, `libayatana-appindicator` (see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/))
 
@@ -40,6 +40,38 @@ npm run dev
 ```
 
 Open http://localhost:5173. The map and browser vector import support local vector files that DuckDB-WASM Spatial can read, including common formats such as GeoJSON, GeoParquet, GeoPackage, Shapefile, FlatGeobuf, KML/KMZ, and GML, with direct handling for GeoJSON, zipped Shapefiles, and KMZ archives. You can choose files from Add Vector Layer or drag them onto the app. Desktop filesystem dialogs, local MBTiles, and local raster file reads require Tauri.
+
+## Embed the demo
+
+The browser demo supports URL parameters for iframe-friendly layouts.
+
+Open a project by URL:
+
+<https://geolibre.app/demo/?url=https://data.geolibre.app/opera-dswx.geolibre.json>
+
+Supported query parameters:
+
+| Parameter | Example | Description |
+| --- | --- | --- |
+| `url` | `url=https://data.geolibre.app/opera-dswx.geolibre.json` | Loads a `.geolibre.json` project from a public URL. |
+| `layout` | `layout=compact` | Uses the compact embed layout with icon-only toolbar buttons and hidden project metadata. `embed` and `iframe` are aliases. |
+| `toolbar` | `toolbar=icons` | Shows icon-only toolbar buttons without enabling the full compact layout. |
+| `panels` | `panels=none` | Hides the Layers, Style, and Attribute table panels. `hidden`, `hide`, and `off` are aliases. |
+| `hidePanels` | `hidePanels=true` | Alternative way to hide the Layers, Style, and Attribute table panels. |
+
+Use compact mode for narrow embeds. This shows icon-only toolbar buttons and hides project metadata:
+
+```text
+https://geolibre.app/demo/?url=https://data.geolibre.app/opera-dswx.geolibre.json&layout=compact
+```
+
+Hide the Layers, Style, and Attribute table panels for map-focused embeds:
+
+```text
+https://geolibre.app/demo/?url=https://data.geolibre.app/opera-dswx.geolibre.json&layout=compact&panels=none
+```
+
+Use `toolbar=icons` when you only want icon-only toolbar buttons. `panels=hidden`, `panels=hide`, `panels=off`, and `hidePanels=true` are accepted aliases for hiding panels.
 
 ## Environment variables
 

@@ -1,5 +1,6 @@
 import {
   Button,
+  type ButtonProps,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -23,6 +24,13 @@ const LINKS = [
 
 const APP_VERSION = __GEOLIBRE_VERSION__;
 
+interface AboutDialogProps {
+  buttonClassName?: string;
+  buttonSize?: ButtonProps["size"];
+  iconClassName?: string;
+  showLabel?: boolean;
+}
+
 function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
@@ -35,13 +43,23 @@ async function openExternalLink(url: string) {
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
-export function AboutDialog() {
+export function AboutDialog({
+  buttonClassName,
+  buttonSize = "sm",
+  iconClassName,
+  showLabel = true,
+}: AboutDialogProps) {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="sm" aria-label="About">
-          <Info className="h-3.5 w-3.5 sm:mr-1" />
-          <span className="hidden sm:inline">About</span>
+        <Button
+          className={buttonClassName}
+          variant="ghost"
+          size={buttonSize}
+          aria-label="About"
+        >
+          <Info className={iconClassName ?? "h-3.5 w-3.5 sm:mr-1"} />
+          {showLabel ? <span className="hidden sm:inline">About</span> : null}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-md">

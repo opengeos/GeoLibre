@@ -64,6 +64,34 @@ The processing toolbox includes client-side algorithms now, with a roadmap towar
 
 The live demo is the browser-capable version of the GeoLibre desktop UI. It is useful for exploring the map, loading browser-selected vector data supported by DuckDB-WASM Spatial, adding URL-based layers, styling layers, and testing plugins. Desktop-only file dialogs, local MBTiles, local raster reads, and filesystem save/open operations still require the installed Tauri app.
 
+Open a project by passing a public `.geolibre.json` URL with the `url` query parameter:
+
+```text
+https://geolibre.app/demo/?url=https://data.geolibre.app/opera-dswx.geolibre.json
+```
+
+For narrow embeds, add `?layout=compact` to the demo URL to use icon-only toolbar buttons and hide project metadata:
+
+```text
+https://geolibre.app/demo/?url=https://data.geolibre.app/opera-dswx.geolibre.json&layout=compact
+```
+
+For map-focused embeds, add `&panels=none` to hide the Layers, Style, and Attribute table panels:
+
+```text
+https://geolibre.app/demo/?url=https://data.geolibre.app/opera-dswx.geolibre.json&layout=compact&panels=none
+```
+
+Use `toolbar=icons` when you only want icon-only toolbar buttons. `panels=hidden`, `panels=hide`, `panels=off`, and `hidePanels=true` are accepted aliases for hiding panels.
+
+| Parameter | Example | Description |
+| --- | --- | --- |
+| `url` | `url=https://data.geolibre.app/opera-dswx.geolibre.json` | Loads a `.geolibre.json` project from a public URL. |
+| `layout` | `layout=compact` | Uses the compact embed layout with icon-only toolbar buttons and hidden project metadata. `embed` and `iframe` are aliases. |
+| `toolbar` | `toolbar=icons` | Shows icon-only toolbar buttons without enabling the full compact layout. |
+| `panels` | `panels=none` | Hides the Layers, Style, and Attribute table panels. `hidden`, `hide`, and `off` are aliases. |
+| `hidePanels` | `hidePanels=true` | Alternative way to hide the Layers, Style, and Attribute table panels. |
+
 [Open the live demo](/demo/){ .md-button .md-button--primary }
 [Read the architecture](architecture.md){ .md-button }
 

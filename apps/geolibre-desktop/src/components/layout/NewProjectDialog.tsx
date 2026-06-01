@@ -7,6 +7,7 @@ import {
 } from "@geolibre/core";
 import {
   Button,
+  type ButtonProps,
   cn,
   Dialog,
   DialogContent,
@@ -40,10 +41,18 @@ type BasemapChoice =
   | typeof BLANK_BASEMAP_ID;
 
 interface NewProjectDialogProps {
+  buttonClassName?: string;
+  buttonSize?: ButtonProps["size"];
+  iconClassName?: string;
+  showLabel?: boolean;
   onSaveCurrentProject: () => Promise<boolean>;
 }
 
 export function NewProjectDialog({
+  buttonClassName,
+  buttonSize = "sm",
+  iconClassName,
+  showLabel = true,
   onSaveCurrentProject,
 }: NewProjectDialogProps) {
   const newProject = useAppStore((s) => s.newProject);
@@ -137,9 +146,14 @@ export function NewProjectDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="sm" aria-label="New project">
-          <FilePlus2 className="h-3.5 w-3.5 sm:mr-1" />
-          <span className="hidden sm:inline">New</span>
+        <Button
+          className={buttonClassName}
+          variant="ghost"
+          size={buttonSize}
+          aria-label="New project"
+        >
+          <FilePlus2 className={iconClassName ?? "h-3.5 w-3.5 sm:mr-1"} />
+          {showLabel ? <span className="hidden sm:inline">New</span> : null}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-xl">

@@ -23,10 +23,12 @@ import { StylePanel } from "../panels/StylePanel";
 import { ProcessingDialog } from "../processing/ProcessingDialog";
 import { StatusBar } from "./StatusBar";
 import { TopToolbar } from "./TopToolbar";
+import type { LayoutOptions } from "../../hooks/useLayoutOptions";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import type { ProjectUrlLoadState } from "../../hooks/useProjectUrlLoader";
 
 interface DesktopShellProps {
+  layoutOptions: LayoutOptions;
   projectUrlLoadState?: ProjectUrlLoadState;
   themeMode: ThemeMode;
   onToggleThemeMode: () => void;
@@ -62,6 +64,7 @@ type ShellStyle = CSSProperties &
   Record<"--layer-panel-width" | "--style-panel-width", string>;
 
 export function DesktopShell({
+  layoutOptions,
   projectUrlLoadState,
   themeMode,
   onToggleThemeMode,
@@ -383,7 +386,7 @@ export function DesktopShell({
   return (
     <div
       ref={shellRef}
-      className="relative flex h-full flex-col bg-background"
+      className="relative flex h-full min-w-0 flex-col overflow-hidden bg-background"
       style={shellStyle}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
@@ -391,22 +394,33 @@ export function DesktopShell({
       onDrop={handleDrop}
     >
       <TopToolbar
+        compact={layoutOptions.compact}
         mapControllerRef={mapControllerRef}
+        showLabels={layoutOptions.toolbarLabels}
+        showProjectInfo={layoutOptions.showProjectInfo}
         themeMode={themeMode}
         onToggleThemeMode={onToggleThemeMode}
       />
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <LayerPanel
-          mapControllerRef={mapControllerRef}
-          onResizeStart={startLayerPanelResize}
-        />
-        <main className="relative min-h-72 min-w-0 flex-1 md:min-h-0">
+        {layoutOptions.panelsVisible ? (
+          <LayerPanel
+            mapControllerRef={mapControllerRef}
+            onResizeStart={startLayerPanelResize}
+          />
+        ) : null}
+        <main
+          className={`relative min-w-0 flex-1 overflow-hidden ${
+            layoutOptions.compact ? "min-h-0" : "min-h-72 md:min-h-0"
+          }`}
+        >
           <MapCanvas controllerRef={mapControllerRef} />
         </main>
-        <StylePanel onResizeStart={startStylePanelResize} />
+        {layoutOptions.panelsVisible ? (
+          <StylePanel onResizeStart={startStylePanelResize} />
+        ) : null}
       </div>
-      <AttributeTable />
-      <StatusBar />
+      {layoutOptions.panelsVisible ? <AttributeTable /> : null}
+      <StatusBar compact={layoutOptions.compact} />
       <ProcessingDialog mapControllerRef={mapControllerRef} />
       <div
         ref={verticalResizeGuideRef}
