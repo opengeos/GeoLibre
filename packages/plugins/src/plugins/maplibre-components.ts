@@ -439,6 +439,7 @@ const searchPlacesPanelListeners = new Set<() => void>();
 
 export interface CogRasterLayerOptions {
   url: string;
+  data?: ArrayBuffer;
   name?: string;
   bands?: string;
   colormap?: CogLayerControlOptions["defaultColormap"];
@@ -749,7 +750,7 @@ export async function addCogRasterLayer(
   app: GeoLibreAppAPI,
   options: CogRasterLayerOptions,
 ): Promise<string> {
-  if (shouldUseGenericGeoTiffRenderer(options.url)) {
+  if (options.data || shouldUseGenericGeoTiffRenderer(options.url)) {
     return addGeoTiffRasterLayer(app, options);
   }
 
@@ -1698,7 +1699,7 @@ async function addGeoTiffRasterLayer(
   const id = createGeoTiffRasterLayerId();
   const url = options.url.trim();
   const name = options.name?.trim() || layerNameFromUrl(url, id);
-  const rasterInput = await fetchGeoTiffRasterInput(app, url, cause);
+  const rasterInput = await fetchGeoTiffRasterInput(app, options, cause);
   const { bounds, raster } = await loadGeoTiffRasterData(rasterInput, options);
   const state: GeoTiffRasterLayerState = {
     bounds,
@@ -1781,9 +1782,12 @@ async function ensureGeoTiffRasterOverlay(
 
 async function fetchGeoTiffRasterInput(
   app: GeoLibreAppAPI,
-  url: string,
+  options: CogRasterLayerOptions,
   cause: unknown,
 ): Promise<ArrayBuffer> {
+  if (options.data) return options.data;
+
+  const url = options.url;
   if (app.fetchArrayBuffer) {
     try {
       return await app.fetchArrayBuffer(url);
