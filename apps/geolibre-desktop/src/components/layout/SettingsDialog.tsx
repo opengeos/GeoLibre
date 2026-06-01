@@ -175,12 +175,15 @@ export function SettingsDialog({
     [draftPreferences.environmentVariables],
   );
 
+  // Seed the draft from the store only when the dialog opens. Depending on
+  // preferences/projectName would reset in-progress edits if the store changed
+  // while the dialog is open (e.g. a slow ?url= project finishes loading).
   useEffect(() => {
     if (!open) return;
-    setDraftPreferences(clonePreferences(preferences));
-    setDraftProjectName(projectName);
+    setDraftPreferences(clonePreferences(useAppStore.getState().preferences));
+    setDraftProjectName(useAppStore.getState().projectName);
     setError(null);
-  }, [open, preferences, projectName]);
+  }, [open]);
 
   const updateMapPreferences = (patch: Partial<MapPreferences>) => {
     setDraftPreferences((current) => ({
