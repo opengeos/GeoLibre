@@ -388,7 +388,7 @@ export class MapController {
 
   applyView(view: MapViewState): void {
     if (!this.map) return;
-    this.map.jumpTo(constrainMapView(view, this.mapPreferences));
+    this.map.jumpTo(constrainMapView(view, this.mapPreferences, this.map));
   }
 
   applyMapPreferences(preferences: MapPreferences): void {
@@ -1412,8 +1412,15 @@ function createMapTransformConstraint(
 function constrainMapView(
   view: MapViewState,
   preferences: MapPreferences,
+  map: maplibregl.Map | null,
 ): maplibregl.JumpToOptions {
-  const minZoom = clampNumber(preferences.minZoom, 0, 24);
+  const requestedMinZoom = clampNumber(preferences.minZoom, 0, 24);
+  // Use the same effective floor the transform constraint enforces so the
+  // jumpTo does not land at a zoom the constraint would immediately correct,
+  // which would show as a snap when bounds are restricted.
+  const minZoom = map
+    ? effectiveMinZoomForPreferences(preferences, map, requestedMinZoom)
+    : requestedMinZoom;
   const maxZoom = Math.max(
     minZoom,
     clampNumber(preferences.maxZoom, 0, 24),

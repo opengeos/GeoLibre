@@ -14,16 +14,13 @@ const streetViewEnv = (
   }
 ).env;
 
-interface StreetViewRuntimeWindow extends Window {
-  __GEOLIBRE_RUNTIME_ENV__?: Record<string, string>;
-}
-
 function getRuntimeEnvironment(): Record<string, string | undefined> {
   if (typeof window === "undefined") return streetViewEnv ?? {};
 
+  // __GEOLIBRE_RUNTIME_ENV__ is declared globally in @geolibre/core.
   return {
     ...(streetViewEnv ?? {}),
-    ...((window as StreetViewRuntimeWindow).__GEOLIBRE_RUNTIME_ENV__ ?? {}),
+    ...(window.__GEOLIBRE_RUNTIME_ENV__ ?? {}),
   };
 }
 

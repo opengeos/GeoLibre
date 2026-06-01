@@ -183,6 +183,14 @@ export interface RuntimeEnvironmentVariable {
   enabled: boolean;
 }
 
+declare global {
+  interface Window {
+    // Runtime environment variables published from project preferences. Shared
+    // here so the desktop app and plugins type the global from one source.
+    __GEOLIBRE_RUNTIME_ENV__?: Record<string, string>;
+  }
+}
+
 export interface ProjectPreferences {
   map: MapPreferences;
   environmentVariables: RuntimeEnvironmentVariable[];

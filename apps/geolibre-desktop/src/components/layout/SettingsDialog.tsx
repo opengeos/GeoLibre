@@ -240,7 +240,7 @@ export function SettingsDialog({
     setError(null);
   };
 
-  const useCurrentViewBounds = () => {
+  const applyCurrentViewBounds = () => {
     const bounds = mapControllerRef.current?.readView().bbox;
     if (!bounds) {
       setError("The map bounds are not available yet.");
@@ -420,7 +420,7 @@ export function SettingsDialog({
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={useCurrentViewBounds}
+                    onClick={applyCurrentViewBounds}
                   >
                     <Crosshair className="h-3.5 w-3.5" />
                     Use Current View
