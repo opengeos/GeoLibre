@@ -13,13 +13,17 @@ import type { Feature } from "geojson";
 import {
   ArrowDown,
   ArrowUp,
+  Pencil,
   PanelBottomClose,
   PanelBottomOpen,
+  RotateCcw,
+  Save,
   TableProperties,
   X,
 } from "lucide-react";
 import {
   type MouseEvent as ReactMouseEvent,
+  useEffect,
   useRef,
   useState,
 } from "react";
@@ -28,6 +32,7 @@ import { isTauri } from "../../lib/tauri-io";
 type SortDirection = "asc" | "desc";
 type SortKey = "__featureId" | string;
 type ColumnWidths = Record<string, number>;
+type AttributeDrafts = Record<string, Record<string, string>>;
 
 const DEFAULT_FEATURE_ID_COLUMN_WIDTH = 72;
 const DEFAULT_ATTRIBUTE_COLUMN_WIDTH = 160;
@@ -60,6 +65,44 @@ function compareAttributeValues(a: unknown, b: unknown): number {
   });
 }
 
+function formatAttributeValue(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function parseAttributeDraft(draft: string, previousValue: unknown): unknown {
+  if (previousValue == null) return draft === "" ? null : draft;
+
+  if (typeof previousValue === "number") {
+    const nextValue = Number(draft);
+    return draft.trim() === "" || !Number.isFinite(nextValue)
+      ? draft
+      : nextValue;
+  }
+
+  if (typeof previousValue === "boolean") {
+    const normalized = draft.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+    return draft;
+  }
+
+  if (typeof previousValue === "object") {
+    try {
+      return JSON.parse(draft);
+    } catch {
+      return draft;
+    }
+  }
+
+  return draft;
+}
+
+function hasDraftEdits(drafts: AttributeDrafts): boolean {
+  return Object.values(drafts).some((columns) => Object.keys(columns).length > 0);
+}
+
 export function AttributeTable() {
   const tableSectionRef = useRef<HTMLElement>(null);
   const tableResizeGuideRef = useRef<HTMLDivElement>(null);
@@ -71,6 +114,7 @@ export function AttributeTable() {
   const selectFeature = useAppStore((s) => s.selectFeature);
   const attributeTableOpen = useAppStore((s) => s.ui.attributeTableOpen);
   const setAttributeTableOpen = useAppStore((s) => s.setAttributeTableOpen);
+  const updateLayer = useAppStore((s) => s.updateLayer);
   const zoomToSelectedFeature = useAppStore(
     (s) => s.ui.zoomToSelectedFeature,
   );
@@ -86,10 +130,18 @@ export function AttributeTable() {
   });
   const [columnWidths, setColumnWidths] = useState<ColumnWidths>({});
   const [tableHeight, setTableHeight] = useState(DEFAULT_TABLE_HEIGHT);
+  const [isEditing, setIsEditing] = useState(false);
+  const [drafts, setDrafts] = useState<AttributeDrafts>({});
   const deferTableResize = isTauri();
 
   const layer = layers.find((l) => l.id === selectedLayerId);
   const features = layer?.geojson?.features ?? [];
+  const hasEdits = hasDraftEdits(drafts);
+
+  useEffect(() => {
+    setIsEditing(false);
+    setDrafts({});
+  }, [selectedLayerId]);
 
   const filterLower = attributeFilter.toLowerCase();
   const indexedFeatures = features.map((feature, index) => ({
@@ -248,6 +300,67 @@ export function AttributeTable() {
     );
   };
 
+  const updateCellDraft = (
+    featureId: string,
+    column: string,
+    value: string,
+    previousValue: unknown,
+  ) => {
+    setDrafts((current) => {
+      const next = { ...current };
+      const row = { ...(next[featureId] ?? {}) };
+
+      if (value === formatAttributeValue(previousValue)) {
+        delete row[column];
+      } else {
+        row[column] = value;
+      }
+
+      if (Object.keys(row).length === 0) {
+        delete next[featureId];
+      } else {
+        next[featureId] = row;
+      }
+
+      return next;
+    });
+  };
+
+  const cancelEditing = () => {
+    setIsEditing(false);
+    setDrafts({});
+  };
+
+  const saveDrafts = () => {
+    if (!layer?.geojson || !hasEdits) return;
+
+    const geojson = {
+      ...layer.geojson,
+      features: layer.geojson.features.map((feature, index) => {
+        const featureId = String(feature.id ?? index);
+        const rowDrafts = drafts[featureId];
+        if (!rowDrafts) return feature;
+
+        const properties = { ...(feature.properties ?? {}) };
+        for (const [column, draft] of Object.entries(rowDrafts)) {
+          properties[column] = parseAttributeDraft(
+            draft,
+            feature.properties?.[column],
+          );
+        }
+
+        return {
+          ...feature,
+          properties,
+        };
+      }),
+    };
+
+    updateLayer(layer.id, { geojson });
+    setIsEditing(false);
+    setDrafts({});
+  };
+
   const sortableHeader = (key: SortKey, label: string) => (
     <div className="relative flex h-full min-h-10 items-center">
       <button
@@ -326,8 +439,44 @@ export function AttributeTable() {
             — select a vector layer
           </span>
         )}
+        <Button
+          variant={isEditing ? "secondary" : "outline"}
+          size="sm"
+          className="ml-auto h-7 px-2"
+          title="Edit attribute values"
+          aria-label="Edit attribute values"
+          disabled={!layer?.geojson}
+          onClick={() => setIsEditing(true)}
+        >
+          <Pencil className="h-3.5 w-3.5" />
+          Edit
+        </Button>
+        <Button
+          variant="default"
+          size="sm"
+          className="h-7 px-2"
+          title="Save attribute edits"
+          aria-label="Save attribute edits"
+          disabled={!isEditing || !hasEdits}
+          onClick={saveDrafts}
+        >
+          <Save className="h-3.5 w-3.5" />
+          Save
+        </Button>
+        {isEditing ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            title="Cancel attribute edits"
+            aria-label="Cancel attribute edits"
+            onClick={cancelEditing}
+          >
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+        ) : null}
         <Input
-          className="ml-auto h-7 max-w-xs text-xs"
+          className="h-7 max-w-xs text-xs"
           placeholder="Search attributes…"
           aria-label="Search attributes"
           value={attributeFilter}
@@ -398,11 +547,41 @@ export function AttributeTable() {
                     }}
                   >
                     <TableCell>{featureId}</TableCell>
-                    {columns.map((col) => (
-                      <TableCell key={col}>
-                        {String(feature.properties?.[col] ?? "")}
-                      </TableCell>
-                    ))}
+                    {columns.map((col) => {
+                      const value = feature.properties?.[col];
+                      const draft = drafts[featureId]?.[col];
+                      const changed = draft !== undefined;
+                      return (
+                        <TableCell
+                          key={col}
+                          data-state={changed ? "edited" : undefined}
+                          className="data-[state=edited]:bg-primary/10 data-[state=edited]:shadow-[inset_3px_0_0_hsl(var(--primary))]"
+                        >
+                          {isEditing ? (
+                            <Input
+                              className={
+                                changed
+                                  ? "h-7 min-w-0 border-primary/60 bg-primary/10 px-2 text-xs"
+                                  : "h-7 min-w-0 px-2 text-xs"
+                              }
+                              aria-label={`Edit ${col} for feature ${featureId}`}
+                              value={draft ?? formatAttributeValue(value)}
+                              onClick={(event) => event.stopPropagation()}
+                              onChange={(event) =>
+                                updateCellDraft(
+                                  featureId,
+                                  col,
+                                  event.target.value,
+                                  value,
+                                )
+                              }
+                            />
+                          ) : (
+                            formatAttributeValue(value)
+                          )}
+                        </TableCell>
+                      );
+                    })}
                   </TableRow>
                 );
               })}

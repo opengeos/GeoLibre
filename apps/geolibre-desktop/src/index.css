@@ -1281,6 +1281,20 @@ body,
     0 10px 15px -3px rgb(0 0 0 / 0.18),
     0 4px 6px -4px rgb(0 0 0 / 0.18);
   color: hsl(var(--popover-foreground));
+  max-height: min(420px, calc(100vh - 96px));
+  overflow: hidden;
+}
+
+.geolibre-identify-popup-root {
+  display: flex;
+  flex-direction: column;
+  max-height: min(380px, calc(100vh - 128px));
+}
+
+.geolibre-identify-popup-rows {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .geolibre-identify-popup .maplibregl-popup-close-button {

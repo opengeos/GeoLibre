@@ -37,7 +37,7 @@ function createIdentifyPopupElement(
   featureId?: string | number,
 ): HTMLElement {
   const root = document.createElement("div");
-  root.className = "min-w-48 max-w-80 text-xs";
+  root.className = "geolibre-identify-popup-root min-w-48 max-w-80 text-xs";
 
   const title = document.createElement("div");
   title.className = "mb-2 font-semibold text-foreground";
@@ -45,7 +45,7 @@ function createIdentifyPopupElement(
   root.appendChild(title);
 
   const rows = document.createElement("div");
-  rows.className = "max-h-64 overflow-auto";
+  rows.className = "geolibre-identify-popup-rows";
   root.appendChild(rows);
 
   const appendRow = (key: string, value: unknown) => {
