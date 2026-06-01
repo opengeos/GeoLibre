@@ -559,7 +559,10 @@ const MAX_PROJECT_URL_BYTES = 25 * 1024 * 1024;
 
 function isFileMissingError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /no such file|os error 2|enoent|cannot find|does not exist|not found/i.test(
+  // Match filesystem "missing file" signals only. Avoid broad substrings like
+  // "not found" / "cannot find" that also appear in transient IPC errors
+  // (e.g. "Command not found", Windows os error 3 for a disconnected drive).
+  return /no such file|os error 2|\benoent\b|cannot find the file|file not found|does not exist/i.test(
     message,
   );
 }
@@ -584,11 +587,11 @@ export async function openRecentProjectFile(
       throw new Error(message);
     }
 
-    const contentLength = Number(response.headers.get("content-length"));
-    if (Number.isFinite(contentLength) && contentLength > MAX_PROJECT_URL_BYTES) {
-      throw new Error(
-        "Project file is too large to load (over 25 MB).",
-      );
+    // Only a present Content-Length lets us guard up front. `Number(null)` is
+    // 0, which would silently pass for chunked/CDN responses that omit it.
+    const contentLength = response.headers.get("content-length");
+    if (contentLength !== null && Number(contentLength) > MAX_PROJECT_URL_BYTES) {
+      throw new Error("Project file is too large to load (over 25 MB).");
     }
 
     const contentType = response.headers.get("content-type") ?? "";

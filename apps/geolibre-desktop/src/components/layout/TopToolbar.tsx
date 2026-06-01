@@ -167,6 +167,7 @@ export function TopToolbar({
   const [projectUrlLoading, setProjectUrlLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const projectUrlAbortRef = useRef<AbortController | null>(null);
+  const recentAbortRef = useRef<AbortController | null>(null);
 
   const handleOpenFromFile = async () => {
     const result = await openProjectFile();
@@ -229,11 +230,18 @@ export function TopToolbar({
   };
 
   const handleOpenRecent = async (path: string) => {
+    // Cancel any previous in-flight open so rapid clicks cannot race and let a
+    // stale fetch win by resolving last.
+    recentAbortRef.current?.abort();
+    const controller = new AbortController();
+    recentAbortRef.current = controller;
+
     let result: Awaited<ReturnType<typeof openRecentProjectFile>>;
 
     try {
-      result = await openRecentProjectFile(path);
+      result = await openRecentProjectFile(path, controller.signal);
     } catch (error) {
+      if (controller.signal.aborted) return;
       // Only drop the entry when the project is permanently gone; preserve it
       // for transient failures (network timeout, 5xx, momentary IO error).
       if (error instanceof RecentProjectGoneError) {
@@ -249,14 +257,24 @@ export function TopToolbar({
     }
 
     try {
-      loadProject(await resolveProjectXyzLayers(result.project), result.path);
+      const project = await resolveProjectXyzLayers(
+        result.project,
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
+      loadProject(project, result.path);
     } catch (error) {
+      if (controller.signal.aborted) return;
       console.error("Failed to load recent project", error);
       setActionError(
         error instanceof Error
           ? error.message
           : "Could not load the recent project.",
       );
+    } finally {
+      if (recentAbortRef.current === controller) {
+        recentAbortRef.current = null;
+      }
     }
   };
 

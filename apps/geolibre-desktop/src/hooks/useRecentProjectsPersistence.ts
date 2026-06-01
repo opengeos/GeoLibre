@@ -45,6 +45,10 @@ export function useRecentProjectsPersistence() {
 
   useEffect(() => {
     setRecentProjects(loadRecentProjects());
+    // Persist the normalized form now: the subscriber below is attached after
+    // this first state change, so any dedup/trim done on load would otherwise
+    // never be written back and the raw entries would reappear next load.
+    saveRecentProjects(useAppStore.getState().recentProjects);
 
     return useAppStore.subscribe((state, previous) => {
       if (state.recentProjects !== previous.recentProjects) {

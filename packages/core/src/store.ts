@@ -197,10 +197,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((s) => ({
       recentProjects: normalizeRecentProjects([entry, ...s.recentProjects]),
     })),
-  forgetRecentProject: (path) =>
+  forgetRecentProject: (path) => {
+    // Compare with separators normalized so a backslash/forward-slash mismatch
+    // on Windows does not leave a stale entry behind.
+    const normalized = path.replace(/\\/g, "/");
     set((s) => ({
-      recentProjects: s.recentProjects.filter((project) => project.path !== path),
-    })),
+      recentProjects: s.recentProjects.filter(
+        (project) => project.path.replace(/\\/g, "/") !== normalized,
+      ),
+    }));
+  },
   clearRecentProjects: () => set({ recentProjects: [] }),
   markSaved: () => set({ isDirty: false }),
 
