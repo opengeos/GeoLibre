@@ -103,7 +103,7 @@ function stripDuckDbWorkerSourcemapPlugin(): Plugin {
       server.middlewares.use((req, res, next) => {
         const requestUrl = new URL(req.url ?? "/", "http://localhost");
         const decodedPath = safeDecodeURIComponent(requestUrl.pathname);
-        if (!isDuckDbWorkerRequest(decodedPath)) {
+        if (requestUrl.search || !isDuckDbWorkerRequest(decodedPath)) {
           next();
           return;
         }
