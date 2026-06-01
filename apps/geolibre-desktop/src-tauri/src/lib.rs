@@ -24,6 +24,9 @@ const MARTIN_VERSION: &str = "martin-v1.10.1";
 const MARTIN_RELEASE_BASE_URL: &str = "https://github.com/maplibre/martin/releases/download";
 const MARTIN_START_ATTEMPTS: usize = 3;
 const MARTIN_HEALTH_ATTEMPTS: usize = 30;
+const REMOTE_TILE_TIMEOUT_SECS: u64 = 8;
+const REMOTE_TILE_CONNECT_TIMEOUT_SECS: u64 = 4;
+const URL_RESOLVE_TIMEOUT_SECS: u64 = 15;
 
 struct MartinServerState {
     process: Mutex<Option<MartinProcess>>,
@@ -82,12 +85,25 @@ fn close_oauth_popups(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
-fn fetch_url_bytes(url: String) -> Result<Vec<u8>, String> {
+async fn fetch_url_bytes(url: String) -> Result<Vec<u8>, String> {
+    tauri::async_runtime::spawn_blocking(move || fetch_url_bytes_blocking(url))
+        .await
+        .map_err(|error| format!("Tile fetch task failed: {error}"))?
+}
+
+fn fetch_url_bytes_blocking(url: String) -> Result<Vec<u8>, String> {
     if !url.starts_with("https://") && !url.starts_with("http://") {
         return Err("Only HTTP and HTTPS URLs can be fetched".to_string());
     }
 
-    let response = reqwest::blocking::Client::new()
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(REMOTE_TILE_TIMEOUT_SECS))
+        .connect_timeout(Duration::from_secs(REMOTE_TILE_CONNECT_TIMEOUT_SECS))
+        .user_agent("GeoLibre Desktop")
+        .build()
+        .map_err(|error| format!("Could not create HTTP client: {error}"))?;
+
+    let response = client
         .get(&url)
         .send()
         .map_err(|error| format!("Request failed: {error}"))?;
@@ -103,13 +119,21 @@ fn fetch_url_bytes(url: String) -> Result<Vec<u8>, String> {
 }
 
 #[tauri::command]
-fn resolve_url_redirect(url: String) -> Result<String, String> {
+async fn resolve_url_redirect(url: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || resolve_url_redirect_blocking(url))
+        .await
+        .map_err(|error| format!("URL resolve task failed: {error}"))?
+}
+
+fn resolve_url_redirect_blocking(url: String) -> Result<String, String> {
     if !url.starts_with("https://") && !url.starts_with("http://") {
         return Err("Only HTTP and HTTPS URLs can be resolved".to_string());
     }
 
     let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(URL_RESOLVE_TIMEOUT_SECS))
+        .connect_timeout(Duration::from_secs(REMOTE_TILE_CONNECT_TIMEOUT_SECS))
+        .user_agent("GeoLibre Desktop")
         .build()
         .map_err(|error| format!("Could not create HTTP client: {error}"))?;
 

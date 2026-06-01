@@ -171,12 +171,10 @@ function getSavedXyzUrl(layer: GeoLibreLayer): string | null {
 }
 
 function renderableXyzTileUrl(url: string): string {
-  if (!isTauri() || !isHttpUrl(url)) return url;
-
-  registerXyzTileProtocol();
-  return `${XYZ_TILE_PROTOCOL}://tile/{z}/{x}/{y}?url=${encodeURIComponent(
-    url,
-  )}`;
+  // Tauri allows HTTPS image tiles via CSP, so keep the browser/WebView tile
+  // path. Routing every XYZ tile through IPC makes slow tile servers affect
+  // desktop responsiveness.
+  return url;
 }
 
 function parseXyzTileRequest(request: RequestParameters): string {
@@ -208,10 +206,24 @@ async function resolveShortXyzUrl(
   if (!isHttpUrl(url)) return url;
 
   if (isTauri()) {
+    try {
+      return await resolveShortXyzUrlWithFetch(url, signal);
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      console.warn("Falling back to desktop URL resolver", error);
+    }
+
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<string>("resolve_url_redirect", { url });
   }
 
+  return resolveShortXyzUrlWithFetch(url, signal);
+}
+
+async function resolveShortXyzUrlWithFetch(
+  url: string,
+  signal?: AbortSignal,
+): Promise<string> {
   const response = await fetch(url, {
     headers: { Accept: "application/json, text/plain;q=0.9, */*;q=0.8" },
     redirect: "follow",
@@ -227,6 +239,10 @@ async function resolveShortXyzUrl(
   }
 
   return response.url || url;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
 }
 
 function urlFromResolverResponse(response: Response): string | null {
