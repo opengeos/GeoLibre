@@ -6,6 +6,7 @@ export function useRuntimeEnvironmentVariables() {
     (s) => s.preferences.environmentVariables,
   );
   const lastSerializedEnv = useRef<string | null>(null);
+  const isFirstRender = useRef(true);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -16,15 +17,27 @@ export function useRuntimeEnvironmentVariables() {
         .map((variable) => [variable.key.trim(), variable.value]),
     );
 
-    // Skip the update when the derived env is unchanged. Saving unrelated
+    // Always keep the global env in sync so plugins can read it when they
+    // activate, even before the first change event.
+    window.__GEOLIBRE_RUNTIME_ENV__ = runtimeEnv;
+
+    // Skip the change event on the initial mount: plugins read the global
+    // directly when they activate, so dispatching here would only trigger a
+    // spurious Street View control remove/re-add on startup.
+    const serializedEnv = JSON.stringify(runtimeEnv);
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      lastSerializedEnv.current = serializedEnv;
+      return;
+    }
+
+    // Skip the dispatch when the derived env is unchanged. Saving unrelated
     // settings (e.g. map preferences) recreates the array reference without
     // changing its contents, and a redundant dispatch needlessly reinitializes
     // plugins such as Street View.
-    const serializedEnv = JSON.stringify(runtimeEnv);
     if (serializedEnv === lastSerializedEnv.current) return;
     lastSerializedEnv.current = serializedEnv;
 
-    window.__GEOLIBRE_RUNTIME_ENV__ = runtimeEnv;
     window.dispatchEvent(
       new CustomEvent("geolibre:runtime-env-change", { detail: runtimeEnv }),
     );

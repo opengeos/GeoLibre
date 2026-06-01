@@ -250,7 +250,10 @@ export class MapController {
       attributionControl: false,
       maplibreLogo: false,
     });
-    this.applyMapPreferences(mapPreferences);
+    // The constructor options above already apply the static constraints.
+    // The transform constraint is installed by the MapCanvas effect that
+    // fires on mount, so calling applyMapPreferences here would only add a
+    // redundant jumpTo that can interrupt the initial camera.
     const handleStyleReady = () => {
       this.styleReady = true;
       this.enforceDefaultProjection();

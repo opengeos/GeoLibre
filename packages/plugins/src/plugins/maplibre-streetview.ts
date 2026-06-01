@@ -120,6 +120,10 @@ function addRuntimeEnvListener(): void {
     const added = activeApp.addMapControl(streetViewControl, streetViewPosition);
     if (!added) {
       streetViewControl = null;
+      // Tear down the listener too, otherwise it stays registered while
+      // streetViewControl is null and every later event short-circuits,
+      // silently breaking credential updates for the rest of the session.
+      cleanupRuntimeEnvListener();
       return;
     }
     setTimeout(() => streetViewControl?.expand(), 0);
