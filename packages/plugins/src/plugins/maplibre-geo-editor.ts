@@ -178,9 +178,9 @@ function featureCollectionsEquivalent(
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-function sketchFeatureKey(feature: Feature, index: number): string {
+function sketchFeatureKey(feature: Feature, _index: number): string {
   const props = feature.properties as Record<string, unknown> | null;
-  return String(feature.id ?? props?.__gm_id ?? `feature-${index}`);
+  return String(feature.id ?? props?.__gm_id ?? JSON.stringify(feature));
 }
 
 function unionFeatureCollections(
@@ -214,25 +214,25 @@ function syncSketchesToStore(): void {
     if (existing) {
       sketchesLayerId = existing.id;
       store.updateLayer(existing.id, { geojson: collection });
-      return;
-    }
+    } else {
+      if (collection.features.length === 0) {
+        return;
+      }
 
-    if (collection.features.length === 0) {
-      return;
+      const id = store.addGeoJsonLayer(
+        SKETCHES_LAYER_NAME,
+        collection,
+        SKETCHES_SOURCE_PATH,
+      );
+      sketchesLayerId = id;
+      store.updateLayer(id, {
+        metadata: {
+          ...useAppStore.getState().layers.find((layer) => layer.id === id)
+            ?.metadata,
+          sourceKind: SKETCHES_SOURCE_KIND,
+        },
+      });
     }
-
-    const id = store.addGeoJsonLayer(
-      SKETCHES_LAYER_NAME,
-      collection,
-      SKETCHES_SOURCE_PATH,
-    );
-    sketchesLayerId = id;
-    store.updateLayer(id, {
-      metadata: {
-        ...store.layers.find((layer) => layer.id === id)?.metadata,
-        sourceKind: SKETCHES_SOURCE_KIND,
-      },
-    });
   } finally {
     pushingSketchesToStore = false;
   }
