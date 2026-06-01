@@ -105,6 +105,18 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
   rasterHueRotate: 0,
 };
 
+/**
+ * Read a layer style property, falling back to the shared default when the
+ * layer does not define it. Shared by `@geolibre/map` and the desktop app so
+ * the two consumers cannot drift.
+ */
+export function styleValue<K extends keyof LayerStyle>(
+  style: LayerStyle,
+  key: K,
+): LayerStyle[K] {
+  return style[key] ?? DEFAULT_LAYER_STYLE[key];
+}
+
 export interface GeoLibreLayer {
   id: string;
   name: string;

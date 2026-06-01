@@ -2,6 +2,7 @@ import {
   DEFAULT_LAYER_STYLE,
   type GeoLibreLayer,
   type LayerStyle,
+  styleValue,
 } from "@geolibre/core";
 import { addProtocol, config } from "maplibre-gl";
 import type maplibregl from "maplibre-gl";
@@ -28,13 +29,6 @@ const PMTILES_PROTOCOL = "pmtiles";
 const PMTILES_PROTOCOL_GLOBAL_KEY = "__geolibrePMTilesProtocol";
 const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
 const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;
-
-function styleValue<K extends keyof LayerStyle>(
-  style: LayerStyle,
-  key: K,
-): LayerStyle[K] {
-  return style[key] ?? DEFAULT_LAYER_STYLE[key];
-}
 
 function clampLayerZoom(value: number, fallback: number): number {
   if (!Number.isFinite(value)) return fallback;
@@ -1212,12 +1206,18 @@ function setLayerZoomRange(
   id: string,
   range: { minzoom?: number; maxzoom?: number },
 ): void {
+  const minzoom = range.minzoom ?? MIN_LAYER_ZOOM;
+  const maxzoom = range.maxzoom ?? MAX_LAYER_ZOOM;
+  const current = map.getLayer(id) as
+    | { minzoom?: number; maxzoom?: number }
+    | undefined;
+  // setLayerZoomRange invalidates MapLibre's style internally, so skip no-op
+  // calls. syncLayer runs this for every layer on every pass.
+  if (current?.minzoom === minzoom && current?.maxzoom === maxzoom) {
+    return;
+  }
   try {
-    map.setLayerZoomRange(
-      id,
-      range.minzoom ?? MIN_LAYER_ZOOM,
-      range.maxzoom ?? MAX_LAYER_ZOOM,
-    );
+    map.setLayerZoomRange(id, minzoom, maxzoom);
   } catch (error) {
     // Custom layers from external controls do not support zoom range updates,
     // so that failure is expected and ignored. Surface anything else (e.g. an

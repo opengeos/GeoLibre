@@ -1,7 +1,7 @@
 import {
   DEFAULT_LAYER_STYLE,
-  type LayerStyle,
   type LayerType,
+  styleValue,
   useAppStore,
 } from "@geolibre/core";
 import {
@@ -204,13 +204,6 @@ function removeTrailingJsonCommas(value: string): string {
   }
 
   return result;
-}
-
-function styleValue<K extends keyof LayerStyle>(
-  style: LayerStyle,
-  key: K,
-): LayerStyle[K] {
-  return style[key] ?? DEFAULT_LAYER_STYLE[key];
 }
 
 function clampNumber(value: number, min: number, max: number): number {
@@ -714,10 +707,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
             <PanelRightClose className="h-4 w-4" />
           </Button>
         </div>
-        <div className="space-y-4 p-3">
-          {beforeIdControl}
-          {zoomRangeControls}
-        </div>
+        <div className="space-y-4 p-3">{beforeIdControl}</div>
         <p className="p-4 text-xs text-muted-foreground">
           Style controls are not available for this layer type yet.
         </p>
