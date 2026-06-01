@@ -15,7 +15,7 @@ from __future__ import annotations
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-app = FastAPI(title="GeoLibre Server", version="0.1.0")
+app = FastAPI(title="GeoLibre Server", version="0.6.0")
 
 
 class RunRequest(BaseModel):

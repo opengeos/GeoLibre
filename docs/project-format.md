@@ -48,7 +48,7 @@ Projects are saved as **`.geolibre.json`** files.
 
 ## Layer types
 
-| Type | v0.5.0 status |
+| Type | v0.6.0 status |
 |------|---------------|
 | `geojson` | Supported for imported files and GeoJSON URLs |
 | `xyz` | Supported for raster tile templates |

@@ -97,4 +97,4 @@ Use `toolbar=icons` when you only want icon-only toolbar buttons. `panels=hidden
 
 ## Project status
 
-GeoLibre is an active prototype. Version 0.5.0 includes the map workspace, project format, plugin API, browser vector import, DuckDB-WASM Spatial loading, advanced Add Data workflows, MBTiles desktop support, ArcGIS layers, COG and GeoTIFF raster rendering, PMTiles, Zarr, LiDAR, Gaussian splats, and persisted recent projects. See the [roadmap](roadmap.md) for planned work on SQL workflows, the Python processing sidecar, and external plugin loading.
+GeoLibre is an active prototype. Version 0.6.0 includes the map workspace, project format, plugin API, browser vector import, DuckDB-WASM Spatial loading, advanced Add Data workflows, MBTiles desktop support, ArcGIS layers, COG and GeoTIFF raster rendering, PMTiles, Zarr, LiDAR, Gaussian splats, and persisted recent projects. See the [roadmap](roadmap.md) for planned work on SQL workflows, the Python processing sidecar, and external plugin loading.

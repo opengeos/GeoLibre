@@ -51,7 +51,7 @@ GeoParquet is read with DuckDB's Parquet reader after loading Spatial. Other loc
 
 ## Advanced Add Data workflows
 
-The v0.5.0 Add Data surface includes native dialogs for XYZ, WMS, vector files, GeoJSON URLs, vector tile sources, raster tile templates, COG and GeoTIFF rasters, MBTiles, and ArcGIS FeatureServer or VectorTileServer layers. The Components plugin wraps `maplibre-gl-components` panels for FlatGeobuf, PMTiles, Zarr, LiDAR, and Gaussian splats, then mirrors added layers into the GeoLibre store so the Layer panel, project format, and layer control can reason about them.
+The v0.6.0 Add Data surface includes native dialogs for XYZ, WMS, vector files, GeoJSON URLs, vector tile sources, raster tile templates, COG and GeoTIFF rasters, MBTiles, and ArcGIS FeatureServer or VectorTileServer layers. The Components plugin wraps `maplibre-gl-components` panels for FlatGeobuf, PMTiles, Zarr, LiDAR, and Gaussian splats, then mirrors added layers into the GeoLibre store so the Layer panel, project format, and layer control can reason about them.
 
 Local MBTiles tiles are read through a custom MapLibre protocol backed by Tauri commands. Remote rasters are fetched through the desktop backend when needed, and the local development server includes a raster proxy for selected release assets that need CORS handling.
 
