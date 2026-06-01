@@ -26,6 +26,11 @@ import {
 import {
   Button,
   cn,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -38,12 +43,14 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
   Input,
+  Label,
 } from "@geolibre/ui";
 import {
   Database,
   FolderOpen,
   History,
   Layers,
+  Link2,
   Map,
   Moon,
   Puzzle,
@@ -52,10 +59,11 @@ import {
   Sun,
   Wrench,
 } from "lucide-react";
-import { useState, useSyncExternalStore } from "react";
+import { type FormEvent, useState, useSyncExternalStore } from "react";
 import { createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import {
+  isTauri,
   openProjectFile,
   openRecentProjectFile,
   saveProjectFile,
@@ -116,6 +124,19 @@ function formatRecentProjectTime(openedAt: string): string {
   }).format(openedDate);
 }
 
+function normalizeProjectUrl(value: string): string | null {
+  if (!value.trim()) return null;
+
+  try {
+    const url = new URL(value.trim(), window.location.href);
+    return url.protocol === "http:" || url.protocol === "https:"
+      ? url.href
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export function TopToolbar({
   compact = false,
   mapControllerRef,
@@ -147,14 +168,19 @@ export function TopToolbar({
     ),
   );
   const [addDataKind, setAddDataKind] = useState<AddDataKind | null>(null);
+  const [projectUrlDialogOpen, setProjectUrlDialogOpen] = useState(false);
+  const [projectUrl, setProjectUrl] = useState("");
+  const [projectUrlError, setProjectUrlError] = useState<string | null>(null);
+  const [projectUrlLoading, setProjectUrlLoading] = useState(false);
 
-  const handleOpen = async () => {
+  const handleOpenFromFile = async () => {
     const result = await openProjectFile();
     if (result) {
       try {
         loadProject(
           await resolveProjectXyzLayers(result.project),
           result.path,
+          { rememberRecent: isTauri() },
         );
       } catch (error) {
         console.error("Failed to open project", error);
@@ -162,6 +188,32 @@ export function TopToolbar({
           error instanceof Error ? error.message : "Could not open project.",
         );
       }
+    }
+  };
+
+  const handleOpenFromUrl = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const normalizedUrl = normalizeProjectUrl(projectUrl);
+    if (!normalizedUrl) {
+      setProjectUrlError("Enter a valid HTTP or HTTPS project URL.");
+      return;
+    }
+
+    setProjectUrlLoading(true);
+    setProjectUrlError(null);
+
+    try {
+      const result = await openRecentProjectFile(normalizedUrl);
+      loadProject(await resolveProjectXyzLayers(result.project), result.path);
+      setProjectUrl("");
+      setProjectUrlDialogOpen(false);
+    } catch (error) {
+      console.error("Failed to open project URL", error);
+      setProjectUrlError(
+        error instanceof Error ? error.message : "Could not open project URL.",
+      );
+    } finally {
+      setProjectUrlLoading(false);
     }
   };
 
@@ -317,9 +369,13 @@ export function TopToolbar({
         <DropdownMenuContent align="start" className="w-80">
           <DropdownMenuLabel>Project</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => void handleOpen()}>
+          <DropdownMenuItem onSelect={() => void handleOpenFromFile()}>
             <FolderOpen className="mr-2 h-3.5 w-3.5" />
-            Open Project...
+            Open Project from File...
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setProjectUrlDialogOpen(true)}>
+            <Link2 className="mr-2 h-3.5 w-3.5" />
+            Open Project from URL...
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel>Recent projects</DropdownMenuLabel>
@@ -548,6 +604,56 @@ export function TopToolbar({
           if (!open) setAddDataKind(null);
         }}
       />
+      <Dialog
+        open={projectUrlDialogOpen}
+        onOpenChange={(open) => {
+          setProjectUrlDialogOpen(open);
+          if (!open) {
+            setProjectUrl("");
+            setProjectUrlError(null);
+            setProjectUrlLoading(false);
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Open project from URL</DialogTitle>
+            <DialogDescription>
+              Load a public `.geolibre.json` project and add it to recent
+              projects.
+            </DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={handleOpenFromUrl}>
+            <div className="space-y-2">
+              <Label htmlFor="project-url">Project URL</Label>
+              <Input
+                id="project-url"
+                placeholder="https://example.com/project.geolibre.json"
+                value={projectUrl}
+                onChange={(event) => {
+                  setProjectUrl(event.target.value);
+                  setProjectUrlError(null);
+                }}
+              />
+              {projectUrlError ? (
+                <p className="text-xs text-destructive">{projectUrlError}</p>
+              ) : null}
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setProjectUrlDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={projectUrlLoading}>
+                {projectUrlLoading ? "Opening..." : "Open"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
       <AboutDialog
         buttonClassName={toolbarButtonClass}
         buttonSize={toolbarButtonSize}

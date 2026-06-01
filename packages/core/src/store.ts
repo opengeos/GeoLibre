@@ -53,7 +53,11 @@ export interface AppState {
   setZoomToSelectedFeature: (enabled: boolean) => void;
 
   newProject: (options?: CreateProjectOptions & { name?: string }) => void;
-  loadProject: (project: GeoLibreProject, path?: string | null) => void;
+  loadProject: (
+    project: GeoLibreProject,
+    path?: string | null,
+    options?: { rememberRecent?: boolean },
+  ) => void;
   setProjectPath: (path: string | null) => void;
   setProjectName: (name: string) => void;
   setRecentProjects: (projects: RecentProjectEntry[]) => void;
@@ -161,7 +165,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
   },
 
-  loadProject: (project, path = null) => {
+  loadProject: (project, path = null, options = {}) => {
     const applied = applyProjectToStore(project);
     set({
       ...applied,
@@ -171,7 +175,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectedFeatureId: null,
       identifyLayerId: null,
     });
-    if (path) {
+    if (path && options.rememberRecent !== false) {
       get().rememberRecentProject({
         path,
         name: project.name,
