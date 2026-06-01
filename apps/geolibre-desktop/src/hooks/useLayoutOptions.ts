@@ -9,7 +9,7 @@ export interface LayoutOptions {
 
 const COMPACT_LAYOUT_VALUES = new Set(["compact", "embed", "iframe"]);
 const ICON_TOOLBAR_VALUES = new Set(["icon", "icons", "icon-only"]);
-const HIDDEN_PANEL_VALUES = new Set(["false", "hidden", "hide", "none", "off"]);
+const HIDDEN_PANEL_VALUES = new Set(["hidden", "hide", "none", "off"]);
 
 const DEFAULT_LAYOUT_OPTIONS: LayoutOptions = {
   compact: false,

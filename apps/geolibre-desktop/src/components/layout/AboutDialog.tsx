@@ -28,7 +28,7 @@ interface AboutDialogProps {
   buttonClassName?: string;
   buttonSize?: ButtonProps["size"];
   iconClassName?: string;
-  showLabel?: boolean;
+  showLabels?: boolean;
 }
 
 function isTauri(): boolean {
@@ -47,7 +47,7 @@ export function AboutDialog({
   buttonClassName,
   buttonSize = "sm",
   iconClassName,
-  showLabel = true,
+  showLabels = true,
 }: AboutDialogProps) {
   return (
     <Dialog>
@@ -59,7 +59,7 @@ export function AboutDialog({
           aria-label="About"
         >
           <Info className={iconClassName ?? "h-3.5 w-3.5 sm:mr-1"} />
-          {showLabel ? <span className="hidden sm:inline">About</span> : null}
+          {showLabels ? <span className="hidden sm:inline">About</span> : null}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-md">

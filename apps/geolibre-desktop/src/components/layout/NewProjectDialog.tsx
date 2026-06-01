@@ -44,7 +44,7 @@ interface NewProjectDialogProps {
   buttonClassName?: string;
   buttonSize?: ButtonProps["size"];
   iconClassName?: string;
-  showLabel?: boolean;
+  showLabels?: boolean;
   onSaveCurrentProject: () => Promise<boolean>;
 }
 
@@ -52,7 +52,7 @@ export function NewProjectDialog({
   buttonClassName,
   buttonSize = "sm",
   iconClassName,
-  showLabel = true,
+  showLabels = true,
   onSaveCurrentProject,
 }: NewProjectDialogProps) {
   const newProject = useAppStore((s) => s.newProject);
@@ -153,7 +153,7 @@ export function NewProjectDialog({
           aria-label="New project"
         >
           <FilePlus2 className={iconClassName ?? "h-3.5 w-3.5 sm:mr-1"} />
-          {showLabel ? <span className="hidden sm:inline">New</span> : null}
+          {showLabels ? <span className="hidden sm:inline">New</span> : null}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-xl">

@@ -4,7 +4,7 @@ GeoLibre Desktop is an npm workspaces monorepo. The main app lives in `apps/geol
 
 ## Prerequisites
 
-- Node.js 18 or newer
+- Node.js 22 or newer
 - Rust toolchain for desktop builds
 - Linux desktop build dependencies from the Tauri v2 prerequisites
 

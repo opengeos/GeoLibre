@@ -20,6 +20,6 @@
     "tauri:build": "node scripts/tauri-build.mjs"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   }
 }

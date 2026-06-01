@@ -233,7 +233,7 @@ export function TopToolbar({
     >
       <span className="mr-1 flex shrink-0 items-center gap-1.5 text-sm font-semibold text-primary md:mr-2">
         <Map className="h-4 w-4" />
-        {showLabels ? (
+        {showProjectInfo ? (
           <span className="hidden sm:inline">GeoLibre Desktop</span>
         ) : null}
       </span>
@@ -241,7 +241,7 @@ export function TopToolbar({
         buttonClassName={toolbarButtonClass}
         buttonSize={toolbarButtonSize}
         iconClassName={toolbarIconClassName}
-        showLabel={showLabels}
+        showLabels={showLabels}
         onSaveCurrentProject={handleSave}
       />
       <Button
@@ -448,7 +448,7 @@ export function TopToolbar({
         buttonClassName={toolbarButtonClass}
         buttonSize={toolbarButtonSize}
         iconClassName={toolbarIconClassName}
-        showLabel={showLabels}
+        showLabels={showLabels}
       />
       <div className="ml-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
         <Button
