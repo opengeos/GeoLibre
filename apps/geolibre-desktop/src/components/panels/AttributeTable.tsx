@@ -1,6 +1,10 @@
 import { useAppStore } from "@geolibre/core";
 import {
   Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   Input,
   ScrollArea,
   TableBody,
@@ -13,6 +17,7 @@ import type { Feature } from "geojson";
 import {
   ArrowDown,
   ArrowUp,
+  Download,
   Pencil,
   PanelBottomClose,
   PanelBottomOpen,
@@ -27,12 +32,18 @@ import {
   useRef,
   useState,
 } from "react";
-import { isTauri } from "../../lib/tauri-io";
+import {
+  isTauri,
+  saveBinaryFileWithFallback,
+  saveTextFileWithFallback,
+} from "../../lib/tauri-io";
+import type { BinaryVectorExportFormat } from "../../lib/vector-exporter";
 
 type SortDirection = "asc" | "desc";
 type SortKey = "__featureId" | string;
 type ColumnWidths = Record<string, number>;
 type AttributeDrafts = Record<string, Record<string, string>>;
+type ExportFormat = "geojson" | "csv" | BinaryVectorExportFormat;
 
 const DEFAULT_FEATURE_ID_COLUMN_WIDTH = 72;
 const DEFAULT_ATTRIBUTE_COLUMN_WIDTH = 160;
@@ -72,13 +83,13 @@ function formatAttributeValue(value: unknown): string {
 }
 
 function parseAttributeDraft(draft: string, previousValue: unknown): unknown {
-  if (previousValue == null) return draft === "" ? null : draft;
+  if (draft.trim() === "") return null;
+
+  if (previousValue == null) return draft;
 
   if (typeof previousValue === "number") {
     const nextValue = Number(draft);
-    return draft.trim() === "" || !Number.isFinite(nextValue)
-      ? draft
-      : nextValue;
+    return Number.isFinite(nextValue) ? nextValue : draft;
   }
 
   if (typeof previousValue === "boolean") {
@@ -99,8 +110,48 @@ function parseAttributeDraft(draft: string, previousValue: unknown): unknown {
   return draft;
 }
 
+function isInvalidObjectDraft(draft: string, previousValue: unknown): boolean {
+  if (typeof previousValue !== "object" || previousValue == null) return false;
+  if (draft.trim() === "") return false;
+  try {
+    JSON.parse(draft);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 function hasDraftEdits(drafts: AttributeDrafts): boolean {
-  return Object.values(drafts).some((columns) => Object.keys(columns).length > 0);
+  return Object.values(drafts).some(
+    (columns) => Object.keys(columns).length > 0,
+  );
+}
+
+function sanitizeExportFileName(name: string): string {
+  const sanitized = name
+    .trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  return sanitized || "layer";
+}
+
+function csvCell(value: unknown): string {
+  const text = formatAttributeValue(value);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function exportFormatLabel(_format: BinaryVectorExportFormat): string {
+  return "GeoParquet";
+}
+
+function exportFileExtension(_format: BinaryVectorExportFormat): string {
+  return "parquet";
+}
+
+function exportMimeType(_format: BinaryVectorExportFormat): string {
+  return "application/vnd.apache.parquet";
 }
 
 export function AttributeTable() {
@@ -132,16 +183,25 @@ export function AttributeTable() {
   const [tableHeight, setTableHeight] = useState(DEFAULT_TABLE_HEIGHT);
   const [isEditing, setIsEditing] = useState(false);
   const [drafts, setDrafts] = useState<AttributeDrafts>({});
+  const [exportError, setExportError] = useState<string | null>(null);
   const deferTableResize = isTauri();
 
   const layer = layers.find((l) => l.id === selectedLayerId);
+  const hasLayer = Boolean(layer);
   const features = layer?.geojson?.features ?? [];
   const hasEdits = hasDraftEdits(drafts);
+  const hasInvalidDrafts = features.some((feature, index) => {
+    const rowDrafts = drafts[String(feature.id ?? index)];
+    if (!rowDrafts) return false;
+    return Object.entries(rowDrafts).some(([column, draft]) =>
+      isInvalidObjectDraft(draft, feature.properties?.[column]),
+    );
+  });
 
   useEffect(() => {
     setIsEditing(false);
     setDrafts({});
-  }, [selectedLayerId]);
+  }, [selectedLayerId, hasLayer]);
 
   const filterLower = attributeFilter.toLowerCase();
   const indexedFeatures = features.map((feature, index) => ({
@@ -331,8 +391,17 @@ export function AttributeTable() {
     setDrafts({});
   };
 
+  const toggleEditing = () => {
+    if (isEditing && !hasEdits) {
+      setIsEditing(false);
+      return;
+    }
+
+    setIsEditing(true);
+  };
+
   const saveDrafts = () => {
-    if (!layer?.geojson || !hasEdits) return;
+    if (!layer?.geojson || !hasEdits || hasInvalidDrafts) return;
 
     const geojson = {
       ...layer.geojson,
@@ -359,6 +428,137 @@ export function AttributeTable() {
     updateLayer(layer.id, { geojson });
     setIsEditing(false);
     setDrafts({});
+  };
+
+  const geojsonWithDrafts = () => {
+    if (!layer?.geojson) return null;
+
+    return {
+      ...layer.geojson,
+      features: layer.geojson.features.map((feature, index) => {
+        const featureId = String(feature.id ?? index);
+        const rowDrafts = drafts[featureId];
+        if (!rowDrafts) return feature;
+
+        const properties = { ...(feature.properties ?? {}) };
+        for (const [column, draft] of Object.entries(rowDrafts)) {
+          properties[column] = parseAttributeDraft(
+            draft,
+            feature.properties?.[column],
+          );
+        }
+
+        return {
+          ...feature,
+          properties,
+        };
+      }),
+    };
+  };
+
+  const geojsonToCsv = (
+    geojson: NonNullable<ReturnType<typeof geojsonWithDrafts>>,
+  ) => {
+    const propertyKeys = new Set<string>();
+    for (const feature of geojson.features) {
+      for (const key of Object.keys(feature.properties ?? {})) {
+        propertyKeys.add(key);
+      }
+    }
+
+    const headers = ["feature_id", ...propertyKeys];
+    const rows = geojson.features.map((feature, index) => {
+      const featureId = String(feature.id ?? index);
+      const properties = feature.properties ?? {};
+      const values = [
+        featureId,
+        ...Array.from(propertyKeys).map((key) => properties[key]),
+      ];
+      return values
+        .map(csvCell)
+        .join(",");
+    });
+
+    return [headers.map(csvCell).join(","), ...rows].join("\n");
+  };
+
+  const exportTextLayer = async (
+    format: Extract<ExportFormat, "geojson" | "csv">,
+    exportGeojson: NonNullable<ReturnType<typeof geojsonWithDrafts>>,
+    baseName: string,
+  ) => {
+    const isCsv = format === "csv";
+    const content = isCsv
+      ? geojsonToCsv(exportGeojson)
+      : JSON.stringify(exportGeojson, null, 2);
+    await saveTextFileWithFallback(content, {
+      defaultName: `${baseName}.${isCsv ? "csv" : "geojson"}`,
+      filters: [
+        isCsv
+          ? { name: "CSV", extensions: ["csv"] }
+          : { name: "GeoJSON", extensions: ["geojson", "json"] },
+      ],
+      browserTypes: [
+        {
+          description: isCsv ? "CSV" : "GeoJSON",
+          accept: isCsv
+            ? { "text/csv": [".csv"] }
+            : { "application/geo+json": [".geojson", ".json"] },
+        },
+      ],
+      mimeType: isCsv ? "text/csv" : "application/geo+json",
+    });
+  };
+
+  const exportBinaryLayer = async (
+    format: BinaryVectorExportFormat,
+    exportGeojson: NonNullable<ReturnType<typeof geojsonWithDrafts>>,
+    baseName: string,
+  ) => {
+    const { exportBinaryVectorLayer } = await import("../../lib/vector-exporter");
+    const result = await exportBinaryVectorLayer(
+      exportGeojson,
+      format,
+      baseName,
+    );
+    const label = exportFormatLabel(format);
+    const extension = exportFileExtension(format);
+    await saveBinaryFileWithFallback(result.data, {
+      defaultName: `${baseName}.${extension}`,
+      filters: [{ name: label, extensions: [extension] }],
+      browserTypes: [
+        {
+          description: label,
+          accept: { [exportMimeType(format)]: [`.${extension}`] },
+        },
+      ],
+      mimeType: result.mimeType,
+    });
+  };
+
+  const exportLayer = async (format: ExportFormat) => {
+    if (!layer?.geojson) return;
+
+    try {
+      setExportError(null);
+      const exportGeojson = geojsonWithDrafts();
+      if (!exportGeojson) return;
+
+      const baseName = sanitizeExportFileName(layer.name);
+      if (format === "geojson" || format === "csv") {
+        await exportTextLayer(format, exportGeojson, baseName);
+        return;
+      }
+
+      await exportBinaryLayer(format, exportGeojson, baseName);
+    } catch (error) {
+      console.error("Failed to export attribute table", error);
+      setExportError(
+        error instanceof Error
+          ? error.message
+          : "Could not export the selected layer.",
+      );
+    }
   };
 
   const sortableHeader = (key: SortKey, label: string) => (
@@ -439,14 +639,23 @@ export function AttributeTable() {
             — select a vector layer
           </span>
         )}
+        {exportError ? (
+          <span className="max-w-48 truncate text-xs text-destructive">
+            {exportError}
+          </span>
+        ) : null}
         <Button
           variant={isEditing ? "secondary" : "outline"}
           size="sm"
           className="ml-auto h-7 px-2"
-          title="Edit attribute values"
-          aria-label="Edit attribute values"
+          title={
+            isEditing && !hasEdits ? "Exit edit mode" : "Edit attribute values"
+          }
+          aria-label={
+            isEditing && !hasEdits ? "Exit edit mode" : "Edit attribute values"
+          }
           disabled={!layer?.geojson}
-          onClick={() => setIsEditing(true)}
+          onClick={toggleEditing}
         >
           <Pencil className="h-3.5 w-3.5" />
           Edit
@@ -455,14 +664,44 @@ export function AttributeTable() {
           variant="default"
           size="sm"
           className="h-7 px-2"
-          title="Save attribute edits"
+          title={
+            hasInvalidDrafts
+              ? "Fix invalid JSON before saving"
+              : "Save attribute edits"
+          }
           aria-label="Save attribute edits"
-          disabled={!isEditing || !hasEdits}
+          disabled={!isEditing || !hasEdits || hasInvalidDrafts}
           onClick={saveDrafts}
         >
           <Save className="h-3.5 w-3.5" />
           Save
         </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2"
+              title="Export selected layer"
+              aria-label="Export selected layer"
+              disabled={!layer?.geojson}
+            >
+              <Download className="h-3.5 w-3.5" />
+              Export
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => void exportLayer("geojson")}>
+              GeoJSON
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void exportLayer("geoparquet")}>
+              GeoParquet
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void exportLayer("csv")}>
+              CSV
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         {isEditing ? (
           <Button
             variant="ghost"
@@ -551,6 +790,14 @@ export function AttributeTable() {
                       const value = feature.properties?.[col];
                       const draft = drafts[featureId]?.[col];
                       const changed = draft !== undefined;
+                      const invalid =
+                        draft !== undefined &&
+                        isInvalidObjectDraft(draft, value);
+                      const inputClassName = invalid
+                        ? "h-7 min-w-0 border-destructive bg-destructive/10 px-2 text-xs"
+                        : changed
+                          ? "h-7 min-w-0 border-primary/60 bg-primary/10 px-2 text-xs"
+                          : "h-7 min-w-0 px-2 text-xs";
                       return (
                         <TableCell
                           key={col}
@@ -559,10 +806,10 @@ export function AttributeTable() {
                         >
                           {isEditing ? (
                             <Input
-                              className={
-                                changed
-                                  ? "h-7 min-w-0 border-primary/60 bg-primary/10 px-2 text-xs"
-                                  : "h-7 min-w-0 px-2 text-xs"
+                              className={inputClassName}
+                              aria-invalid={invalid || undefined}
+                              title={
+                                invalid ? "Invalid JSON" : undefined
                               }
                               aria-label={`Edit ${col} for feature ${featureId}`}
                               value={draft ?? formatAttributeValue(value)}
