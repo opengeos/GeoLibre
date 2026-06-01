@@ -53,6 +53,21 @@ function styleLayerZoomRange(style: LayerStyle): {
   };
 }
 
+// Combine a native layer's source-declared zoom range with the user-configured
+// style range, taking the tighter bound on each end. This keeps a tile
+// service's zoom floor/ceiling intact while still letting the user narrow the
+// window from the Style panel.
+function unionZoomRange(
+  nativeSpec: { minzoom?: number; maxzoom?: number },
+  style: LayerStyle,
+): { minzoom: number; maxzoom: number } {
+  const styleRange = styleLayerZoomRange(style);
+  return {
+    minzoom: Math.max(nativeSpec.minzoom ?? MIN_LAYER_ZOOM, styleRange.minzoom),
+    maxzoom: Math.min(nativeSpec.maxzoom ?? MAX_LAYER_ZOOM, styleRange.maxzoom),
+  };
+}
+
 export function syncLayer(
   map: maplibregl.Map,
   layer: GeoLibreLayer,
@@ -129,7 +144,7 @@ function syncExternalNativeLayer(
           source: fillLayerSpec.source,
           "source-layer": fillLayerSpec["source-layer"],
           filter: fillLayerSpec.filter,
-          ...styleLayerZoomRange(layer.style),
+          ...unionZoomRange(fillLayerSpec, layer.style),
           paint: fillExtrusionPaint(layer.style, layer.opacity),
           layout: { visibility: layer.visible ? "visible" : "none" },
         },
@@ -154,7 +169,17 @@ function syncExternalNativeLayer(
     );
 
     setExternalNativeLayerPaint(map, nativeLayerId, nativeLayer.type, layer);
-    setLayerZoomRange(map, nativeLayerId, styleLayerZoomRange(layer.style));
+    // External layers carry their own zoom range from the control or tile
+    // service that registered them. Only override it once the user has
+    // tightened the window, so we don't reset a source's native zoom range to
+    // the full [0, 24] default on every sync pass.
+    const zoomRange = styleLayerZoomRange(layer.style);
+    if (
+      zoomRange.minzoom !== MIN_LAYER_ZOOM ||
+      zoomRange.maxzoom !== MAX_LAYER_ZOOM
+    ) {
+      setLayerZoomRange(map, nativeLayerId, zoomRange);
+    }
 
     moveLayer(map, nativeLayerId, beforeId);
   }
@@ -1149,8 +1174,11 @@ function ensureLayer(
   map: maplibregl.Map,
   id: string,
   spec: maplibregl.AddLayerObject & {
-    maxzoom?: number;
-    minzoom?: number;
+    // Required so every caller supplies an explicit zoom range; omitting it
+    // would silently reset an existing layer's range to the full [0, 24]
+    // window on the next sync.
+    maxzoom: number;
+    minzoom: number;
     paint?: Record<string, unknown>;
     layout?: Record<string, unknown>;
   },
@@ -1190,8 +1218,14 @@ function setLayerZoomRange(
       range.minzoom ?? MIN_LAYER_ZOOM,
       range.maxzoom ?? MAX_LAYER_ZOOM,
     );
-  } catch {
-    // External controls can create custom layers that do not support zoom range updates.
+  } catch (error) {
+    // Custom layers from external controls do not support zoom range updates,
+    // so that failure is expected and ignored. Surface anything else (e.g. an
+    // error on a GeoLibre-owned layer) so a real invariant violation is not
+    // silently swallowed.
+    if (map.getLayer(id)?.type !== "custom") {
+      console.warn("[GeoLibre] setLayerZoomRange failed for layer", id, error);
+    }
   }
 }
 

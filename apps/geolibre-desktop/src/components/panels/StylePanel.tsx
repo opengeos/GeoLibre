@@ -577,18 +577,18 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
   const zoomRangeControls = (
     <div className="grid grid-cols-2 gap-3">
       <NumericStyleInput
-        id="minZoom"
+        id={`${layer.id}-minZoom`}
         label="Min zoom"
         min={MIN_LAYER_ZOOM}
-        max={MAX_LAYER_ZOOM}
+        max={maxZoom}
         step={1}
         value={minZoom}
         onChange={setMinZoom}
       />
       <NumericStyleInput
-        id="maxZoom"
+        id={`${layer.id}-maxZoom`}
         label="Max zoom"
-        min={MIN_LAYER_ZOOM}
+        min={minZoom}
         max={MAX_LAYER_ZOOM}
         step={1}
         value={maxZoom}
