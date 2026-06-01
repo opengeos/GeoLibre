@@ -754,6 +754,7 @@ export async function addCogRasterLayer(
     return addGeoTiffRasterLayer(app, options);
   }
 
+  ensureCogRasterMercatorProjection(app);
   const control = await ensureCogRasterControl(app);
   if (!control) {
     throw new Error("The COG raster layer control could not be added to the map.");
@@ -762,6 +763,7 @@ export async function addCogRasterLayer(
   try {
     return await addLayerWithCogRasterControl(control, options);
   } catch (error) {
+    if (isRemoteHttpUrl(options.url)) throw error;
     return addGeoTiffRasterLayer(app, options, error);
   }
 }
@@ -2102,6 +2104,16 @@ function configureCogRasterControl(
   mutableControl._render?.();
 }
 
+function ensureCogRasterMercatorProjection(app: GeoLibreAppAPI): void {
+  try {
+    const map = app.getMap?.();
+    if (!map || map.getProjection()?.type === "mercator") return;
+    map.setProjection({ type: "mercator" });
+  } catch {
+    // MapLibre can reject projection changes while the style is still settling.
+  }
+}
+
 function createFlatGeobufStoreLayer(
   id: string,
   layerInfo: AddVectorLayerInfo,
@@ -3175,7 +3187,7 @@ function shouldUseGenericGeoTiffRenderer(url: string): boolean {
   try {
     const parsedUrl = new URL(url);
     const isTiff = /\.tiff?$/i.test(parsedUrl.pathname);
-    return isTiff;
+    return isTiff && parsedUrl.protocol === "file:";
   } catch {
     return isTiffPath;
   }
