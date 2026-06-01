@@ -128,6 +128,7 @@ export const MapCanvas = memo(function MapCanvas({
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
   const basemapVisible = useAppStore((s) => s.basemapVisible);
   const basemapOpacity = useAppStore((s) => s.basemapOpacity);
+  const mapPreferences = useAppStore((s) => s.preferences.map);
   const mapView = useAppStore((s) => s.mapView);
   const layers = useAppStore((s) => s.layers);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
@@ -147,6 +148,7 @@ export const MapCanvas = memo(function MapCanvas({
     const map = mc.init(containerRef.current, {
       styleUrl: basemapStyleUrl,
       mapView,
+      mapPreferences,
     });
     controller.current = mc;
     if (controllerRef) controllerRef.current = mc;
@@ -252,6 +254,10 @@ export const MapCanvas = memo(function MapCanvas({
   useEffect(() => {
     controller.current?.setBasemapOpacity(basemapOpacity);
   }, [basemapOpacity]);
+
+  useEffect(() => {
+    controller.current?.applyMapPreferences(mapPreferences);
+  }, [mapPreferences]);
 
   useEffect(() => {
     controller.current?.waitAndSyncLayers(layers);

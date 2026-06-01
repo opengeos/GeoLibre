@@ -10,10 +10,12 @@ import {
 import {
   DEFAULT_BASEMAP,
   DEFAULT_LAYER_STYLE,
+  DEFAULT_PROJECT_PREFERENCES,
   type GeoLibreLayer,
   type GeoLibreProject,
   type LayerStyle,
   type MapViewState,
+  type ProjectPreferences,
   type RecentProjectEntry,
 } from "./types";
 
@@ -26,6 +28,7 @@ export interface AppState {
   basemapVisible: boolean;
   basemapOpacity: number;
   layers: GeoLibreLayer[];
+  preferences: ProjectPreferences;
   selectedLayerId: string | null;
   selectedFeatureId: string | null;
   identifyLayerId: string | null;
@@ -44,6 +47,7 @@ export interface AppState {
   setBasemapStyleUrl: (url: string) => void;
   setBasemapVisible: (visible: boolean) => void;
   setBasemapOpacity: (opacity: number) => void;
+  setPreferences: (preferences: ProjectPreferences) => void;
   selectLayer: (id: string | null) => void;
   selectFeature: (id: string | null) => void;
   setIdentifyLayer: (id: string | null) => void;
@@ -120,6 +124,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   basemapVisible: true,
   basemapOpacity: 1,
   layers: [],
+  preferences: DEFAULT_PROJECT_PREFERENCES,
   selectedLayerId: null,
   selectedFeatureId: null,
   identifyLayerId: null,
@@ -144,6 +149,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ basemapVisible: visible, isDirty: true }),
   setBasemapOpacity: (opacity) =>
     set({ basemapOpacity: opacity, isDirty: true }),
+  setPreferences: (preferences) => set({ preferences, isDirty: true }),
   selectLayer: (id) => set({ selectedLayerId: id, selectedFeatureId: null }),
   selectFeature: (id) => set({ selectedFeatureId: id }),
   setIdentifyLayer: (id) => set({ identifyLayerId: id }),

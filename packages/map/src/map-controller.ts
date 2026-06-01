@@ -1,5 +1,10 @@
-import { BLANK_BASEMAP, DEFAULT_BASEMAP, useAppStore } from "@geolibre/core";
-import type { GeoLibreLayer, MapViewState } from "@geolibre/core";
+import {
+  BLANK_BASEMAP,
+  DEFAULT_BASEMAP,
+  DEFAULT_PROJECT_PREFERENCES,
+  useAppStore,
+} from "@geolibre/core";
+import type { GeoLibreLayer, MapPreferences, MapViewState } from "@geolibre/core";
 import bbox from "@turf/bbox";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import maplibregl from "maplibre-gl";
@@ -200,6 +205,7 @@ export class MapController {
   private basemapStyleUrl = DEFAULT_BASEMAP;
   private basemapVisible = true;
   private basemapOpacity = 1;
+  private mapPreferences: MapPreferences = DEFAULT_PROJECT_PREFERENCES.map;
   private basemapOriginalPaintValues = new Map<string, Map<string, unknown>>();
   private syncedLayers: GeoLibreLayer[] = [];
   private layerIds: string[] = [];
@@ -219,9 +225,15 @@ export class MapController {
     options: {
       styleUrl?: string;
       mapView?: MapViewState;
+      mapPreferences?: MapPreferences;
     },
   ): maplibregl.Map {
     const view = options.mapView;
+    const mapPreferences = options.mapPreferences ?? this.mapPreferences;
+    const minZoom = clampNumber(mapPreferences.minZoom, 0, 24);
+    const maxZoom = Math.max(minZoom, clampNumber(mapPreferences.maxZoom, 0, 24));
+    const maxPitch = clampNumber(mapPreferences.maxPitch, 0, DEFAULT_MAX_PITCH);
+    this.mapPreferences = mapPreferences;
     this.basemapStyleUrl = options.styleUrl ?? DEFAULT_BASEMAP;
     this.map = new maplibregl.Map({
       container,
@@ -230,10 +242,15 @@ export class MapController {
       zoom: view?.zoom ?? 2,
       bearing: view?.bearing ?? 0,
       pitch: view?.pitch ?? 0,
-      maxPitch: DEFAULT_MAX_PITCH,
+      minZoom,
+      maxZoom,
+      maxPitch,
+      maxBounds: mapBoundsForPreferences(mapPreferences) ?? undefined,
+      renderWorldCopies: mapPreferences.renderWorldCopies,
       attributionControl: false,
       maplibreLogo: false,
     });
+    this.applyMapPreferences(mapPreferences);
     const handleStyleReady = () => {
       this.styleReady = true;
       this.enforceDefaultProjection();
@@ -368,12 +385,37 @@ export class MapController {
 
   applyView(view: MapViewState): void {
     if (!this.map) return;
-    this.map.jumpTo({
-      center: view.center,
-      zoom: view.zoom,
-      bearing: view.bearing,
-      pitch: view.pitch,
-    });
+    this.map.jumpTo(constrainMapView(view, this.mapPreferences));
+  }
+
+  applyMapPreferences(preferences: MapPreferences): void {
+    if (!this.map) return;
+    this.mapPreferences = preferences;
+
+    const requestedMinZoom = clampNumber(preferences.minZoom, 0, 24);
+    const minZoom = effectiveMinZoomForPreferences(
+      preferences,
+      this.map,
+      requestedMinZoom,
+    );
+    const maxZoom = Math.max(
+      minZoom,
+      clampNumber(preferences.maxZoom, 0, 24),
+    );
+    const maxPitch = clampNumber(preferences.maxPitch, 0, DEFAULT_MAX_PITCH);
+
+    if (minZoom <= this.map.getMaxZoom()) {
+      this.map.setMinZoom(minZoom);
+    }
+    this.map.setMaxZoom(maxZoom);
+    this.map.setMinZoom(minZoom);
+    this.map.setMaxPitch(maxPitch);
+    this.map.setRenderWorldCopies(preferences.renderWorldCopies);
+    this.map.setMaxBounds(mapBoundsForPreferences(preferences));
+    this.map.setTransformConstrain(
+      createMapTransformConstraint(preferences, this.map, minZoom, maxZoom),
+    );
+    this.applyView(this.readView());
   }
 
   readView(): MapViewState {
@@ -1324,6 +1366,194 @@ export class MapController {
     else if (control === "logo") this.removeLogoControl();
     else this.removeLayerControl();
   }
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(max, Math.max(min, value));
+}
+
+function createMapTransformConstraint(
+  preferences: MapPreferences,
+  map: maplibregl.Map,
+  minZoom: number,
+  maxZoom: number,
+): Parameters<maplibregl.Map["setTransformConstrain"]>[0] {
+  return (lngLat, zoom) => {
+    const constrainedZoom = clampNumber(zoom, minZoom, maxZoom);
+    const bounds =
+      preferences.restrictBounds && normalizeMapBounds(preferences.bounds);
+    if (!bounds) {
+      return {
+        center: new maplibregl.LngLat(
+          preferences.renderWorldCopies
+            ? lngLat.lng
+            : clampNumber(lngLat.lng, -180, 180),
+          clampNumber(lngLat.lat, -85, 85),
+        ),
+        zoom: constrainedZoom,
+      };
+    }
+
+    return {
+      center: constrainCenterToVisibleBounds(
+        [lngLat.lng, lngLat.lat],
+        bounds,
+        map,
+        constrainedZoom,
+      ),
+      zoom: constrainedZoom,
+    };
+  };
+}
+
+function constrainMapView(
+  view: MapViewState,
+  preferences: MapPreferences,
+): maplibregl.JumpToOptions {
+  const minZoom = clampNumber(preferences.minZoom, 0, 24);
+  const maxZoom = Math.max(
+    minZoom,
+    clampNumber(preferences.maxZoom, 0, 24),
+  );
+
+  return {
+    center: [
+      preferences.renderWorldCopies
+        ? view.center[0]
+        : clampNumber(view.center[0], -180, 180),
+      clampNumber(view.center[1], -85, 85),
+    ],
+    zoom: clampNumber(view.zoom, minZoom, maxZoom),
+    bearing: view.bearing,
+    pitch: clampNumber(
+      view.pitch,
+      0,
+      clampNumber(preferences.maxPitch, 0, DEFAULT_MAX_PITCH),
+    ),
+  };
+}
+
+function effectiveMinZoomForPreferences(
+  preferences: MapPreferences,
+  map: maplibregl.Map,
+  requestedMinZoom: number,
+): number {
+  const bounds =
+    preferences.restrictBounds && normalizeMapBounds(preferences.bounds);
+  if (!bounds) return requestedMinZoom;
+
+  const mercatorBounds = mercatorBoundsForLngLatBounds(bounds);
+  const widthRatio = Math.abs(mercatorBounds.east - mercatorBounds.west);
+  const heightRatio = Math.abs(mercatorBounds.south - mercatorBounds.north);
+  if (widthRatio <= 0 || heightRatio <= 0) return requestedMinZoom;
+
+  const canvas = map.getCanvas();
+  const minZoomForWidth = Math.log2(canvas.clientWidth / (512 * widthRatio));
+  const minZoomForHeight = Math.log2(canvas.clientHeight / (512 * heightRatio));
+
+  return clampNumber(
+    Math.max(requestedMinZoom, minZoomForWidth, minZoomForHeight),
+    0,
+    24,
+  );
+}
+
+function constrainCenterToVisibleBounds(
+  center: [number, number],
+  bounds: MapPreferences["bounds"],
+  map: maplibregl.Map,
+  zoom: number,
+): maplibregl.LngLat {
+  const mercatorBounds = mercatorBoundsForLngLatBounds(bounds);
+  const worldSize = 512 * 2 ** zoom;
+  const halfWidth = map.getCanvas().clientWidth / (2 * worldSize);
+  const halfHeight = map.getCanvas().clientHeight / (2 * worldSize);
+  const centerMercator = {
+    x: mercatorXFromLng(center[0]),
+    y: mercatorYFromLat(center[1]),
+  };
+  const minX = mercatorBounds.west + halfWidth;
+  const maxX = mercatorBounds.east - halfWidth;
+  const minY = mercatorBounds.north + halfHeight;
+  const maxY = mercatorBounds.south - halfHeight;
+
+  return new maplibregl.LngLat(
+    lngFromMercatorX(
+      minX <= maxX
+        ? clampNumber(centerMercator.x, minX, maxX)
+        : (mercatorBounds.west + mercatorBounds.east) / 2,
+    ),
+    latFromMercatorY(
+      minY <= maxY
+        ? clampNumber(centerMercator.y, minY, maxY)
+        : (mercatorBounds.north + mercatorBounds.south) / 2,
+    ),
+  );
+}
+
+function mercatorBoundsForLngLatBounds(bounds: MapPreferences["bounds"]): {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+} {
+  return {
+    west: mercatorXFromLng(bounds[0]),
+    south: mercatorYFromLat(bounds[1]),
+    east: mercatorXFromLng(bounds[2]),
+    north: mercatorYFromLat(bounds[3]),
+  };
+}
+
+function mercatorXFromLng(lng: number): number {
+  return (lng + 180) / 360;
+}
+
+function lngFromMercatorX(x: number): number {
+  return x * 360 - 180;
+}
+
+function mercatorYFromLat(lat: number): number {
+  const radians = (clampNumber(lat, -85, 85) * Math.PI) / 180;
+  return (
+    (1 - Math.log(Math.tan(radians) + 1 / Math.cos(radians)) / Math.PI) / 2
+  );
+}
+
+function latFromMercatorY(y: number): number {
+  return (Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180) / Math.PI;
+}
+
+function normalizeMapBounds(
+  bounds: MapPreferences["bounds"],
+): MapPreferences["bounds"] | null {
+  const [west, south, east, north] = bounds;
+  if (![west, south, east, north].every(Number.isFinite)) return null;
+  const normalized: MapPreferences["bounds"] = [
+    clampNumber(west, -180, 180),
+    clampNumber(south, -85, 85),
+    clampNumber(east, -180, 180),
+    clampNumber(north, -85, 85),
+  ];
+  if (normalized[0] >= normalized[2] || normalized[1] >= normalized[3]) {
+    return null;
+  }
+
+  return normalized;
+}
+
+function mapBoundsForPreferences(
+  preferences: MapPreferences,
+): maplibregl.LngLatBoundsLike | null {
+  const bounds =
+    preferences.restrictBounds && normalizeMapBounds(preferences.bounds);
+  if (!bounds) return null;
+
+  return [
+    [bounds[0], bounds[1]],
+    [bounds[2], bounds[3]],
+  ];
 }
 
 export function createMapController(): MapController {

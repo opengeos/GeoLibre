@@ -14,16 +14,39 @@ const streetViewEnv = (
   }
 ).env;
 
-const googleApiKey = streetViewEnv?.VITE_GOOGLE_MAPS_API_KEY;
-const mapillaryAccessToken = streetViewEnv?.VITE_MAPILLARY_ACCESS_TOKEN;
+interface StreetViewRuntimeWindow extends Window {
+  __GEOLIBRE_RUNTIME_ENV__?: Record<string, string>;
+}
 
-// Pick a default provider that actually has credentials so the panel does not
-// open onto a provider it cannot authenticate. Google wins when both are set.
-const defaultProvider: StreetViewControlOptions["defaultProvider"] = googleApiKey
-  ? "google"
-  : mapillaryAccessToken
-    ? "mapillary"
-    : "google";
+function getRuntimeEnvironment(): Record<string, string | undefined> {
+  if (typeof window === "undefined") return streetViewEnv ?? {};
+
+  return {
+    ...(streetViewEnv ?? {}),
+    ...((window as StreetViewRuntimeWindow).__GEOLIBRE_RUNTIME_ENV__ ?? {}),
+  };
+}
+
+function getStreetViewCredentials(): Pick<
+  StreetViewControlOptions,
+  "defaultProvider" | "googleApiKey" | "mapillaryAccessToken"
+> {
+  const env = getRuntimeEnvironment();
+  const googleApiKey = env.VITE_GOOGLE_MAPS_API_KEY?.trim() || undefined;
+  const mapillaryAccessToken =
+    env.VITE_MAPILLARY_ACCESS_TOKEN?.trim() || undefined;
+
+  // Pick a default provider that actually has credentials so the panel does not
+  // open onto a provider it cannot authenticate. Google wins when both are set.
+  const defaultProvider: StreetViewControlOptions["defaultProvider"] =
+    googleApiKey ? "google" : mapillaryAccessToken ? "mapillary" : "google";
+
+  return {
+    defaultProvider,
+    googleApiKey,
+    mapillaryAccessToken,
+  };
+}
 
 let streetViewPosition: GeoLibreMapControlPosition = "top-right";
 
@@ -32,18 +55,22 @@ const STREET_VIEW_OPTIONS = {
   title: "Street View",
   panelWidth: 420,
   panelHeight: 320,
-  defaultProvider,
-  googleApiKey,
-  mapillaryAccessToken,
-} satisfies Omit<StreetViewControlOptions, "position">;
+} satisfies Omit<
+  StreetViewControlOptions,
+  "defaultProvider" | "googleApiKey" | "mapillaryAccessToken" | "position"
+>;
 
 let streetViewControl: StreetViewControl | null = null;
+let activeApp: GeoLibreAppAPI | null = null;
+let removeRuntimeEnvListener: (() => void) | null = null;
 
 export const maplibreStreetViewPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-streetview",
   name: "Street View",
   version: "0.4.0",
   activate: (app: GeoLibreAppAPI) => {
+    activeApp = app;
+    addRuntimeEnvListener();
     if (!streetViewControl) {
       streetViewControl = new StreetViewControl(getStreetViewOptions());
     }
@@ -51,14 +78,15 @@ export const maplibreStreetViewPlugin: GeoLibrePlugin = {
     const added = app.addMapControl(streetViewControl, streetViewPosition);
     if (!added) {
       streetViewControl = null;
+      cleanupRuntimeEnvListener();
       return false;
     }
     setTimeout(() => streetViewControl?.expand(), 0);
   },
   deactivate: (app: GeoLibreAppAPI) => {
-    if (!streetViewControl) return;
-    app.removeMapControl(streetViewControl);
+    if (streetViewControl) app.removeMapControl(streetViewControl);
     streetViewControl = null;
+    cleanupRuntimeEnvListener();
   },
   getMapControlPosition: () => streetViewPosition,
   setMapControlPosition: (
@@ -77,6 +105,40 @@ export const maplibreStreetViewPlugin: GeoLibrePlugin = {
 function getStreetViewOptions(): StreetViewControlOptions {
   return {
     ...STREET_VIEW_OPTIONS,
+    ...getStreetViewCredentials(),
     position: streetViewPosition,
   };
+}
+
+function addRuntimeEnvListener(): void {
+  if (removeRuntimeEnvListener || typeof window === "undefined") return;
+
+  const handleRuntimeEnvChange = () => {
+    if (!activeApp || !streetViewControl) return;
+    activeApp.removeMapControl(streetViewControl);
+    streetViewControl = new StreetViewControl(getStreetViewOptions());
+    const added = activeApp.addMapControl(streetViewControl, streetViewPosition);
+    if (!added) {
+      streetViewControl = null;
+      return;
+    }
+    setTimeout(() => streetViewControl?.expand(), 0);
+  };
+
+  window.addEventListener(
+    "geolibre:runtime-env-change",
+    handleRuntimeEnvChange,
+  );
+  removeRuntimeEnvListener = () => {
+    window.removeEventListener(
+      "geolibre:runtime-env-change",
+      handleRuntimeEnvChange,
+    );
+  };
+}
+
+function cleanupRuntimeEnvListener(): void {
+  activeApp = null;
+  removeRuntimeEnvListener?.();
+  removeRuntimeEnvListener = null;
 }

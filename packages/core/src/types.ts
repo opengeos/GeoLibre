@@ -168,6 +168,38 @@ export interface MapViewState {
   bbox?: [number, number, number, number];
 }
 
+export interface MapPreferences {
+  restrictBounds: boolean;
+  bounds: [number, number, number, number];
+  minZoom: number;
+  maxZoom: number;
+  maxPitch: number;
+  renderWorldCopies: boolean;
+}
+
+export interface RuntimeEnvironmentVariable {
+  key: string;
+  value: string;
+  enabled: boolean;
+}
+
+export interface ProjectPreferences {
+  map: MapPreferences;
+  environmentVariables: RuntimeEnvironmentVariable[];
+}
+
+export const DEFAULT_PROJECT_PREFERENCES: ProjectPreferences = {
+  map: {
+    restrictBounds: false,
+    bounds: [-180, -85, 180, 85],
+    minZoom: 0,
+    maxZoom: 24,
+    maxPitch: 85,
+    renderWorldCopies: true,
+  },
+  environmentVariables: [],
+};
+
 export interface GeoLibreProject {
   version: string;
   name: string;
@@ -177,6 +209,7 @@ export interface GeoLibreProject {
   basemapOpacity: number;
   layers: GeoLibreLayer[];
   styles: Record<string, LayerStyle>;
+  preferences: ProjectPreferences;
   metadata: Record<string, unknown>;
 }
 

@@ -81,6 +81,7 @@ import { resolveProjectXyzLayers } from "../../lib/xyz-url";
 import { AddDataDialog, type AddDataKind } from "./AddDataDialog";
 import { AboutDialog } from "./AboutDialog";
 import { NewProjectDialog } from "./NewProjectDialog";
+import { SettingsDialog } from "./SettingsDialog";
 
 interface TopToolbarProps {
   compact?: boolean;
@@ -288,6 +289,7 @@ export function TopToolbar({
       basemapVisible: state.basemapVisible,
       basemapOpacity: state.basemapOpacity,
       layers: state.layers,
+      preferences: state.preferences,
       metadata: state.metadata,
     });
     const content = serializeProject(project);
@@ -647,6 +649,13 @@ export function TopToolbar({
           })}
         </DropdownMenuContent>
       </DropdownMenu>
+      <SettingsDialog
+        buttonClassName={toolbarButtonClass}
+        buttonSize={toolbarButtonSize}
+        iconClassName={toolbarIconClassName}
+        mapControllerRef={mapControllerRef}
+        showLabels={showLabels}
+      />
       <AddDataDialog
         kind={addDataKind}
         mapControllerRef={mapControllerRef}
