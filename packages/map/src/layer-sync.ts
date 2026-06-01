@@ -21,8 +21,7 @@ import {
 
 const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
 const PMTILES_PROTOCOL = "pmtiles";
-let pmtilesProtocol: Protocol | null = null;
-let pmtilesProtocolRegistered = false;
+const PMTILES_PROTOCOL_GLOBAL_KEY = "__geolibrePMTilesProtocol";
 
 export function syncLayer(
   map: maplibregl.Map,
@@ -190,22 +189,9 @@ function ensurePMTilesExternalLayer(
   );
 
   if (sourceLayers.length === 0) {
-    const genericLayerId = getPMTilesNativeLayerId(
-      nativeLayerIds,
-      `${sourceId}-generic`,
-    );
-    ensureLayer(
-      map,
-      genericLayerId,
-      {
-        id: genericLayerId,
-        type: "fill",
-        source: sourceId,
-        paint: fillPaint(layer.style, layer.opacity),
-        layout: { visibility: layer.visible ? "visible" : "none" },
-      },
-      beforeId,
-    );
+    // Vector tile sources require a `source-layer` on every layer. With no
+    // known source layer there is nothing valid to render, so skip rather
+    // than add a layer MapLibre would reject at runtime.
     return;
   }
 
@@ -275,20 +261,26 @@ function ensurePMTilesExternalLayer(
 }
 
 function ensurePMTilesProtocol(url: string): void {
-  if (!pmtilesProtocol) {
-    pmtilesProtocol = new Protocol();
+  const protocol = getSharedPMTilesProtocol();
+
+  // Register the same instance we add archives to so MapLibre routes tile
+  // requests through it. isMapLibreProtocolRegistered() reflects MapLibre's
+  // live state, so this also re-registers after setStyle() clears protocols.
+  if (!isMapLibreProtocolRegistered()) {
+    addProtocol(PMTILES_PROTOCOL, protocol.tile);
   }
 
-  if (!pmtilesProtocolRegistered && !isMapLibreProtocolRegistered()) {
-    try {
-      addProtocol(PMTILES_PROTOCOL, pmtilesProtocol.tile);
-    } catch {
-      // Another PMTiles control may have registered the protocol first.
-    }
-  }
+  protocol.add(new PMTiles(stripPMTilesProtocol(url)));
+}
 
-  pmtilesProtocol.add(new PMTiles(stripPMTilesProtocol(url)));
-  pmtilesProtocolRegistered = true;
+function getSharedPMTilesProtocol(): Protocol {
+  const globalScope = globalThis as typeof globalThis & {
+    [PMTILES_PROTOCOL_GLOBAL_KEY]?: Protocol;
+  };
+  if (!globalScope[PMTILES_PROTOCOL_GLOBAL_KEY]) {
+    globalScope[PMTILES_PROTOCOL_GLOBAL_KEY] = new Protocol();
+  }
+  return globalScope[PMTILES_PROTOCOL_GLOBAL_KEY];
 }
 
 function isMapLibreProtocolRegistered(): boolean {
@@ -355,7 +347,7 @@ function pmtilesVectorLayerId(
   sourceLayer: string,
   kind: string,
 ): string {
-  return `${sourceId}-${sourceLayer}-${kind}`;
+  return `${sourceId}-${encodeVectorTileLayerPart(sourceLayer)}-${kind}`;
 }
 
 function getPMTilesSourceLayers(layer: GeoLibreLayer): string[] {
