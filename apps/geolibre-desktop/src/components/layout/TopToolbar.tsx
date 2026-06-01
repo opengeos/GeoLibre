@@ -423,8 +423,9 @@ export function TopToolbar({
                     type="button"
                     aria-label={`Remove ${label} from recent projects`}
                     className="mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
-                    onPointerDown={(event) => event.stopPropagation()}
                     onClick={(event) => {
+                      // Keep the menu open and prevent the row's onSelect (which
+                      // would reopen the project) from firing.
                       event.stopPropagation();
                       event.preventDefault();
                       forgetRecentProject(project.path);
