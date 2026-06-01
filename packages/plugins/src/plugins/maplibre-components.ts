@@ -1699,14 +1699,18 @@ async function addGeoTiffRasterLayer(
   const id = createGeoTiffRasterLayerId();
   const url = options.url.trim();
   const name = options.name?.trim() || layerNameFromUrl(url, id);
-  const rasterInput = await fetchGeoTiffRasterInput(app, options, cause);
+  const rasterInput = await fetchGeoTiffRasterInput(app, options, url, cause);
   const { bounds, raster } = await loadGeoTiffRasterData(rasterInput, options);
+  const { data: _data, ...stateOptions } = options;
   const state: GeoTiffRasterLayerState = {
     bounds,
     id,
     name,
     opacity: options.opacity ?? 1,
-    options,
+    options: {
+      ...stateOptions,
+      url,
+    },
     raster,
     url,
     visible: true,
@@ -1783,11 +1787,11 @@ async function ensureGeoTiffRasterOverlay(
 async function fetchGeoTiffRasterInput(
   app: GeoLibreAppAPI,
   options: CogRasterLayerOptions,
+  url: string,
   cause: unknown,
 ): Promise<ArrayBuffer> {
   if (options.data) return options.data;
 
-  const url = options.url;
   if (app.fetchArrayBuffer) {
     try {
       return await app.fetchArrayBuffer(url);

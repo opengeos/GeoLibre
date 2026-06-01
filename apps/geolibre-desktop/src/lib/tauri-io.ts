@@ -590,19 +590,23 @@ export async function openLocalDataFileWithFallback(
     return { data, path: selected, text };
   }
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = options.accept;
     input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) {
-        resolve(null);
-        return;
+      try {
+        const file = input.files?.[0];
+        if (!file) {
+          resolve(null);
+          return;
+        }
+        const data = options.readBinary ? await file.arrayBuffer() : undefined;
+        const text = options.readText ? await file.text() : undefined;
+        resolve({ data, path: file.name, text });
+      } catch (error) {
+        reject(error);
       }
-      const data = options.readBinary ? await file.arrayBuffer() : undefined;
-      const text = options.readText ? await file.text() : undefined;
-      resolve({ data, path: file.name, text });
     };
     input.click();
   });

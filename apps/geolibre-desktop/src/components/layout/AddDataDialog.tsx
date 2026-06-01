@@ -80,7 +80,7 @@ type VectorMode = "vector-file" | "geojson-url" | "vector-tiles";
 type RasterMode = "tiles" | "cog-url" | "file";
 type RasterColormap = NonNullable<CogRasterLayerOptions["colormap"]>;
 type SelectedRasterFile = {
-  data?: ArrayBuffer;
+  data: ArrayBuffer;
   path: string;
 };
 
@@ -608,26 +608,31 @@ export function AddDataDialog({
 
   const handleChooseRasterFile = async () => {
     setError(null);
-    const result = await openLocalDataFileWithFallback({
-      filters: [
-        {
-          name: "GeoTIFF raster",
-          extensions: ["tif", "tiff"],
-        },
-      ],
-      accept: ".tif,.tiff",
-      readBinary: true,
-    });
-    if (!result) return;
-    setSelectedRasterFile({
-      data: result.data,
-      path: result.path,
-    });
-    setLayerName((current) =>
-      current.trim() && current !== "Raster Layer"
-        ? current
-        : layerNameFromPath(result.path, "Raster Layer"),
-    );
+    try {
+      const result = await openLocalDataFileWithFallback({
+        filters: [
+          {
+            name: "GeoTIFF raster",
+            extensions: ["tif", "tiff"],
+          },
+        ],
+        accept: ".tif,.tiff",
+        readBinary: true,
+      });
+      if (!result) return;
+      if (!result.data) throw new Error("Raster file data is missing.");
+      setSelectedRasterFile({
+        data: result.data,
+        path: result.path,
+      });
+      setLayerName((current) =>
+        current.trim() && current !== "Raster Layer"
+          ? current
+          : layerNameFromPath(result.path, "Raster Layer"),
+      );
+    } catch (err) {
+      setError(errorMessage(err, "Could not read raster file."));
+    }
   };
 
   const handleChooseMbtilesFile = async () => {
