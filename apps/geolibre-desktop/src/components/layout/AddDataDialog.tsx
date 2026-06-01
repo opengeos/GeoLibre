@@ -117,6 +117,8 @@ const DEFAULT_WMTS_URL =
   "https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/119/{z}/{y}/{x}";
 const DEFAULT_RASTER_URL =
   "https://data.source.coop/giswqs/opengeos/nlcd_2021_land_cover_30m.tif";
+const DEFAULT_GEOJSON_URL =
+  "https://data.source.coop/giswqs/opengeos/countries.geojson";
 const DEFAULT_ARCGIS_FEATURE_URL =
   "https://services3.arcgis.com/GVgbJbqm8hXASVYi/arcgis/rest/services/USA_Major_Cities/FeatureServer/0";
 const DEFAULT_ARCGIS_VECTOR_TILE_URL =
@@ -304,8 +306,8 @@ export function AddDataDialog({
   const [wmtsUrl, setWmtsUrl] = useState(DEFAULT_WMTS_URL);
   const [wmtsTileSize, setWmtsTileSize] = useState("256");
 
-  const [vectorMode, setVectorMode] = useState<VectorMode>("vector-file");
-  const [vectorUrl, setVectorUrl] = useState("");
+  const [vectorMode, setVectorMode] = useState<VectorMode>("geojson-url");
+  const [vectorUrl, setVectorUrl] = useState(DEFAULT_GEOJSON_URL);
   const [vectorSourceLayer, setVectorSourceLayer] = useState("");
   const [selectedVector, setSelectedVector] = useState<{
     data: FeatureCollection;
@@ -377,8 +379,8 @@ export function AddDataDialog({
     setWmsTileSize("256");
     setWmtsUrl(DEFAULT_WMTS_URL);
     setWmtsTileSize("256");
-    setVectorMode("vector-file");
-    setVectorUrl("");
+    setVectorMode("geojson-url");
+    setVectorUrl(DEFAULT_GEOJSON_URL);
     setVectorSourceLayer("");
     setSelectedVector(null);
     setRasterMode("cog-url");
@@ -458,6 +460,13 @@ export function AddDataDialog({
     if (!next && isSubmitting) return;
     if (!next) stopTransientMartinServer();
     onOpenChange(next);
+  };
+
+  const handleVectorModeChange = (mode: VectorMode) => {
+    setVectorMode(mode);
+    setVectorSourceLayer("");
+    setSelectedVector(null);
+    setVectorUrl(mode === "geojson-url" ? DEFAULT_GEOJSON_URL : "");
   };
 
   const beforeLayer = beforeLayerId.trim() || null;
@@ -1086,7 +1095,7 @@ export function AddDataDialog({
                   id="vector-mode"
                   value={vectorMode}
                   onChange={(event) =>
-                    setVectorMode(event.target.value as VectorMode)
+                    handleVectorModeChange(event.target.value as VectorMode)
                   }
                 >
                   <option value="vector-file">Vector file</option>
