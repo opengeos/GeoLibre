@@ -75,10 +75,12 @@ function normalizeProjectPreferences(
 
   const candidate = preferences as Partial<ProjectPreferences>;
   const map = candidate.map ?? {};
+  // Every MapPreferences field is normalized explicitly below, so the map
+  // object is not spread in: that would forward unknown keys from a
+  // hand-edited project file straight into app state.
   return {
     map: {
       ...DEFAULT_PROJECT_PREFERENCES.map,
-      ...map,
       bounds: normalizeBounds(
         (map as Partial<ProjectPreferences["map"]>).bounds,
       ),

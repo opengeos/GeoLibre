@@ -314,7 +314,10 @@ export function SettingsDialog({
         size="sm"
         type="button"
         variant={section === item.id ? "secondary" : "ghost"}
-        onClick={() => setSection(item.id)}
+        onClick={() => {
+          setSection(item.id);
+          setError(null);
+        }}
       >
         <Icon className="h-4 w-4" />
         {item.label}

@@ -407,8 +407,11 @@ export class MapController {
     );
     const maxPitch = clampNumber(preferences.maxPitch, 0, DEFAULT_MAX_PITCH);
 
-    // Set maxZoom before minZoom so the new minZoom never exceeds the
-    // current maxZoom, which MapLibre would otherwise reject.
+    // Lower minZoom to an intermediate value first so neither setter ever
+    // violates the live min <= max relationship MapLibre validates: this
+    // covers both new minZoom > current maxZoom and new maxZoom < current
+    // minZoom. Then raise maxZoom and finally apply the real minZoom.
+    this.map.setMinZoom(Math.min(minZoom, this.map.getMinZoom()));
     this.map.setMaxZoom(maxZoom);
     this.map.setMinZoom(minZoom);
     this.map.setMaxPitch(maxPitch);
