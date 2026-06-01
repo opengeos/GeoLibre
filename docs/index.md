@@ -20,7 +20,7 @@ hide:
     </div>
   </div>
   <figure class="hero__media">
-    <img src="assets/geolibre-app.png" alt="GeoLibre map interface showing the desktop GIS workspace">
+    <img src="https://files.opengeos.org/GeoLibre-OPERA-demo.webp" alt="GeoLibre map interface showing the desktop GIS workspace">
   </figure>
 </section>
 

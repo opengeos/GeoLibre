@@ -2,6 +2,8 @@
 
 Lightweight, cloud-native desktop GIS prototype built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS**, **DuckDB-WASM Spatial**, and **deck.gl**.
 
+[![](https://files.opengeos.org/GeoLibre-OPERA-demo.webp)](https://geolibre.app/demo/?url=https://data.geolibre.app/opera-dswx.geolibre.json)
+
 ## Features (v0.5.0)
 
 - MapLibre map workspace with OpenFreeMap basemaps, blank background support, and toggleable navigation, fullscreen, geolocation, globe, terrain, scale, attribution, and logo controls
