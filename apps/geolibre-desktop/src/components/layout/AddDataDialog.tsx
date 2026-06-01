@@ -463,10 +463,15 @@ export function AddDataDialog({
   };
 
   const handleVectorModeChange = (mode: VectorMode) => {
+    const currentUrl = vectorUrl.trim();
     setVectorMode(mode);
     setVectorSourceLayer("");
     setSelectedVector(null);
-    setVectorUrl(mode === "geojson-url" ? DEFAULT_GEOJSON_URL : "");
+    if (mode === "geojson-url" && !currentUrl) {
+      setVectorUrl(DEFAULT_GEOJSON_URL);
+    } else if (mode !== "geojson-url" && currentUrl === DEFAULT_GEOJSON_URL) {
+      setVectorUrl("");
+    }
   };
 
   const beforeLayer = beforeLayerId.trim() || null;

@@ -37,7 +37,7 @@ function createIdentifyPopupElement(
 ): HTMLElement {
   const root = document.createElement("div");
   root.className =
-    "geolibre-identify-popup-root flex min-w-72 max-w-[min(520px,calc(100vw-48px))] flex-col text-xs";
+    "geolibre-identify-popup-root flex min-w-[min(18rem,calc(100vw-48px))] max-w-[min(520px,calc(100vw-48px))] flex-col text-xs";
 
   const title = document.createElement("div");
   title.className = "mb-2 font-semibold text-foreground";
