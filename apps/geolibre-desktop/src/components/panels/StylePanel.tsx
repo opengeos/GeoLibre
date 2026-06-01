@@ -1,6 +1,8 @@
 import {
   DEFAULT_LAYER_STYLE,
   type LayerType,
+  type VectorStyleMode,
+  type VectorStyleStop,
   styleValue,
   useAppStore,
 } from "@geolibre/core";
@@ -18,7 +20,9 @@ import {
   ChevronUp,
   PanelRightClose,
   PanelRightOpen,
+  Plus,
   SlidersHorizontal,
+  Trash2,
 } from "lucide-react";
 import { type MouseEvent as ReactMouseEvent, useEffect, useState } from "react";
 
@@ -150,6 +154,456 @@ function getAttributePropertyNames(layer: {
   return Array.from(names).sort((a, b) =>
     a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
   );
+}
+
+function getPropertyValues(
+  layer: {
+    geojson?: {
+      features?: Array<{
+        properties?: Record<string, unknown> | null;
+      }>;
+    };
+  },
+  property: string,
+): unknown[] {
+  if (!property) return [];
+
+  return (layer.geojson?.features ?? [])
+    .map((feature) => feature.properties?.[property])
+    .filter((value) => value !== null && value !== undefined);
+}
+
+const VECTOR_STYLE_COLORS = [
+  "#2563eb",
+  "#16a34a",
+  "#f59e0b",
+  "#dc2626",
+  "#7c3aed",
+  "#0891b2",
+];
+
+const VECTOR_STYLE_CLASS_COUNTS = Array.from({ length: 12 }, (_, index) =>
+  index + 1,
+);
+
+const VECTOR_COLOR_RAMPS = [
+  {
+    value: "viridis",
+    label: "Viridis",
+    colors: ["#440154", "#31688e", "#35b779", "#fde725"],
+  },
+  {
+    value: "plasma",
+    label: "Plasma",
+    colors: ["#0d0887", "#9c179e", "#ed7953", "#f0f921"],
+  },
+  {
+    value: "inferno",
+    label: "Inferno",
+    colors: ["#000004", "#781c6d", "#ed6925", "#fcffa4"],
+  },
+  {
+    value: "magma",
+    label: "Magma",
+    colors: ["#000004", "#721f81", "#f1605d", "#fcfdbf"],
+  },
+  {
+    value: "cividis",
+    label: "Cividis",
+    colors: ["#00204d", "#575d6d", "#a59c74", "#ffea46"],
+  },
+  {
+    value: "turbo",
+    label: "Turbo",
+    colors: ["#30123b", "#4777ef", "#1ccfd0", "#b9e642", "#fb8022", "#7a0403"],
+  },
+  {
+    value: "spectral",
+    label: "Spectral",
+    colors: ["#9e0142", "#f46d43", "#ffffbf", "#66c2a5", "#5e4fa2"],
+  },
+  {
+    value: "blues",
+    label: "Blues",
+    colors: ["#eff6ff", "#93c5fd", "#2563eb", "#1e3a8a"],
+  },
+  {
+    value: "greens",
+    label: "Greens",
+    colors: ["#f0fdf4", "#86efac", "#16a34a", "#14532d"],
+  },
+  {
+    value: "oranges",
+    label: "Oranges",
+    colors: ["#fff7ed", "#fdba74", "#f97316", "#7c2d12"],
+  },
+] as const;
+
+const GRADUATED_CLASSIFICATION_SCHEMES = [
+  { value: "equal-interval", label: "Equal interval" },
+  { value: "quantile", label: "Quantile" },
+  { value: "natural-breaks", label: "Natural breaks" },
+] as const;
+
+const CATEGORIZED_CLASSIFICATION_SCHEMES = [
+  { value: "top-values", label: "Most frequent" },
+  { value: "alphabetical", label: "Alphabetical" },
+  { value: "first-values", label: "First values" },
+] as const;
+
+function createGraduatedStops(
+  layer: Parameters<typeof getPropertyValues>[0],
+  property: string,
+  classCount: number,
+  colorRamp: string,
+  classificationScheme: string,
+): VectorStyleStop[] {
+  const values = getPropertyValues(layer, property)
+    .map((value) => Number(value))
+    .filter(Number.isFinite);
+  const count = clampClassCount(classCount, 2);
+  const colors = interpolateRampColors(colorRamp, count);
+  if (values.length === 0) {
+    return colors.map((color, index) => ({ value: index, color }));
+  }
+
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  if (min === max) return [{ value: min, color: colors.at(-1) ?? "#2563eb" }];
+
+  const breaks =
+    classificationScheme === "quantile"
+      ? createQuantileBreaks(values, count)
+      : classificationScheme === "natural-breaks"
+        ? createNaturalBreaks(values, count)
+        : createEqualIntervalBreaks(min, max, count);
+
+  return breaks.map((value, index) => ({
+    value: Number(value.toPrecision(8)),
+    color: colors[index] ?? colors.at(-1) ?? "#2563eb",
+  }));
+}
+
+function createCategorizedStops(
+  layer: Parameters<typeof getPropertyValues>[0],
+  property: string,
+  classCount: number,
+  colorRamp: string,
+  classificationScheme: string,
+): VectorStyleStop[] {
+  const counts = new Map<string, number>();
+  const firstSeen = new Map<string, number>();
+  for (const value of getPropertyValues(layer, property)) {
+    const key = String(value);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+    if (!firstSeen.has(key)) firstSeen.set(key, firstSeen.size);
+  }
+
+  const count = clampClassCount(classCount, 1);
+  const categories = Array.from(counts.entries()).sort((a, b) => {
+    if (classificationScheme === "alphabetical") {
+      return a[0].localeCompare(b[0], undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+    }
+    if (classificationScheme === "first-values") {
+      return (firstSeen.get(a[0]) ?? 0) - (firstSeen.get(b[0]) ?? 0);
+    }
+    return b[1] - a[1] || a[0].localeCompare(b[0]);
+  });
+  const colors = interpolateRampColors(
+    colorRamp,
+    Math.min(count, categories.length || count),
+  );
+
+  return categories
+    .slice(0, count)
+    .map(([value], index) => ({
+      value,
+      color: colors[index] ?? nextStopColor(index),
+    }));
+}
+
+function createDefaultStops(
+  layer: Parameters<typeof getPropertyValues>[0],
+  mode: VectorStyleMode,
+  property: string,
+  classCount: number,
+  colorRamp: string,
+  classificationScheme: string,
+): VectorStyleStop[] {
+  if (mode === "graduated") {
+    return createGraduatedStops(
+      layer,
+      property,
+      classCount,
+      colorRamp,
+      classificationScheme,
+    );
+  }
+  if (mode === "categorized") {
+    return createCategorizedStops(
+      layer,
+      property,
+      classCount,
+      colorRamp,
+      classificationScheme,
+    );
+  }
+  return styleValue(DEFAULT_LAYER_STYLE, "vectorStyleStops");
+}
+
+function clampClassCount(value: number, min: number): number {
+  return Math.min(12, Math.max(min, Math.round(value)));
+}
+
+function normalizeVectorStyleClassCount(
+  mode: VectorStyleMode,
+  value: number,
+): number {
+  return clampClassCount(value, mode === "categorized" ? 1 : 2);
+}
+
+function defaultClassificationScheme(mode: VectorStyleMode): string {
+  return mode === "categorized" ? "top-values" : "equal-interval";
+}
+
+function normalizeClassificationScheme(
+  mode: VectorStyleMode,
+  scheme: string,
+): string {
+  const options =
+    mode === "categorized"
+      ? CATEGORIZED_CLASSIFICATION_SCHEMES
+      : GRADUATED_CLASSIFICATION_SCHEMES;
+  return options.some((option) => option.value === scheme)
+    ? scheme
+    : defaultClassificationScheme(mode);
+}
+
+function getVectorColorRamp(value: string) {
+  return (
+    VECTOR_COLOR_RAMPS.find((colorRamp) => colorRamp.value === value) ??
+    VECTOR_COLOR_RAMPS[0]
+  );
+}
+
+function interpolateRampColors(colorRamp: string, count: number): string[] {
+  const colors = getVectorColorRamp(colorRamp).colors;
+  if (count <= 1) return [colors[colors.length - 1]];
+  return Array.from({ length: count }, (_, index) => {
+    const scaled = (index / (count - 1)) * (colors.length - 1);
+    const lowerIndex = Math.floor(scaled);
+    const upperIndex = Math.min(colors.length - 1, Math.ceil(scaled));
+    const ratio = scaled - lowerIndex;
+    return interpolateHexColor(colors[lowerIndex], colors[upperIndex], ratio);
+  });
+}
+
+function interpolateHexColor(from: string, to: string, ratio: number): string {
+  const start = parseHexColor(from);
+  const end = parseHexColor(to);
+  return rgbToHex({
+    r: Math.round(start.r + (end.r - start.r) * ratio),
+    g: Math.round(start.g + (end.g - start.g) * ratio),
+    b: Math.round(start.b + (end.b - start.b) * ratio),
+  });
+}
+
+function parseHexColor(value: string): { b: number; g: number; r: number } {
+  const numeric = Number.parseInt(value.slice(1), 16);
+  return {
+    r: (numeric >> 16) & 255,
+    g: (numeric >> 8) & 255,
+    b: numeric & 255,
+  };
+}
+
+function rgbToHex(color: { b: number; g: number; r: number }): string {
+  return `#${[color.r, color.g, color.b]
+    .map((channel) => channel.toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
+function createEqualIntervalBreaks(
+  min: number,
+  max: number,
+  count: number,
+): number[] {
+  return Array.from({ length: count }, (_, index) => {
+    const ratio = count === 1 ? 0 : index / (count - 1);
+    return min + (max - min) * ratio;
+  });
+}
+
+function createQuantileBreaks(values: number[], count: number): number[] {
+  const sorted = [...values].sort((a, b) => a - b);
+  return Array.from({ length: count }, (_, index) => {
+    const position =
+      count === 1 ? 0 : (index / (count - 1)) * (sorted.length - 1);
+    const lowerIndex = Math.floor(position);
+    const upperIndex = Math.min(sorted.length - 1, Math.ceil(position));
+    const ratio = position - lowerIndex;
+    return (
+      sorted[lowerIndex] + (sorted[upperIndex] - sorted[lowerIndex]) * ratio
+    );
+  });
+}
+
+function createNaturalBreaks(values: number[], count: number): number[] {
+  const sorted = Array.from(new Set(values)).sort((a, b) => a - b);
+  if (sorted.length <= count) return sorted;
+
+  const lowerClassLimits = Array.from({ length: sorted.length + 1 }, () =>
+    Array(count + 1).fill(0),
+  );
+  const varianceCombinations = Array.from({ length: sorted.length + 1 }, () =>
+    Array(count + 1).fill(Number.POSITIVE_INFINITY),
+  );
+
+  for (let classIndex = 1; classIndex <= count; classIndex += 1) {
+    lowerClassLimits[1][classIndex] = 1;
+    varianceCombinations[1][classIndex] = 0;
+  }
+
+  for (let valueIndex = 2; valueIndex <= sorted.length; valueIndex += 1) {
+    let sum = 0;
+    let sumSquares = 0;
+    let weight = 0;
+
+    for (let lowerIndex = 1; lowerIndex <= valueIndex; lowerIndex += 1) {
+      const currentIndex = valueIndex - lowerIndex + 1;
+      const value = sorted[currentIndex - 1];
+      weight += 1;
+      sum += value;
+      sumSquares += value * value;
+      const variance = sumSquares - (sum * sum) / weight;
+      const previousIndex = currentIndex - 1;
+      if (previousIndex === 0) continue;
+
+      for (let classIndex = 2; classIndex <= count; classIndex += 1) {
+        const candidate =
+          variance + varianceCombinations[previousIndex][classIndex - 1];
+        if (varianceCombinations[valueIndex][classIndex] >= candidate) {
+          lowerClassLimits[valueIndex][classIndex] = currentIndex;
+          varianceCombinations[valueIndex][classIndex] = candidate;
+        }
+      }
+    }
+
+    lowerClassLimits[valueIndex][1] = 1;
+    varianceCombinations[valueIndex][1] =
+      sumSquares - (sum * sum) / Math.max(1, weight);
+  }
+
+  const breaks = Array(count).fill(sorted[0]) as number[];
+  breaks[count - 1] = sorted[sorted.length - 1];
+  let valueIndex = sorted.length;
+  for (let classIndex = count; classIndex >= 2; classIndex -= 1) {
+    const lowerClassLimit = lowerClassLimits[valueIndex][classIndex] - 1;
+    breaks[classIndex - 2] = sorted[Math.max(0, lowerClassLimit)];
+    valueIndex = lowerClassLimit;
+  }
+  return breaks;
+}
+
+function chooseDefaultStyleProperty(
+  layer: Parameters<typeof getPropertyValues>[0],
+  mode: VectorStyleMode,
+  properties: string[],
+  currentProperty: string,
+): string {
+  if (mode === "graduated") {
+    if (currentProperty && isNumericProperty(layer, currentProperty)) {
+      return currentProperty;
+    }
+    return chooseGraduatedProperty(layer, properties);
+  }
+
+  if (mode === "categorized") {
+    if (currentProperty && isCategoricalProperty(layer, currentProperty)) {
+      return currentProperty;
+    }
+    return (
+      properties.find((property) => isCategoricalProperty(layer, property)) ??
+      properties[0] ??
+      ""
+    );
+  }
+
+  return currentProperty;
+}
+
+function isNumericProperty(
+  layer: Parameters<typeof getPropertyValues>[0],
+  property: string,
+): boolean {
+  const values = getPropertyValues(layer, property);
+  const numericValues = values
+    .map((value) => Number(value))
+    .filter(Number.isFinite);
+  return numericValues.length > 1;
+}
+
+function chooseGraduatedProperty(
+  layer: Parameters<typeof getPropertyValues>[0],
+  properties: string[],
+): string {
+  let bestProperty = "";
+  let bestScore = -1;
+
+  for (const property of properties) {
+    const values = getPropertyValues(layer, property)
+      .map((value) => Number(value))
+      .filter(Number.isFinite);
+    if (values.length < 2) continue;
+
+    const range = Math.max(...values) - Math.min(...values);
+    const score = new Set(values).size * Math.log10(Math.max(1, range) + 1);
+    if (score > bestScore) {
+      bestProperty = property;
+      bestScore = score;
+    }
+  }
+
+  return bestProperty;
+}
+
+function isCategoricalProperty(
+  layer: Parameters<typeof getPropertyValues>[0],
+  property: string,
+): boolean {
+  const values = getPropertyValues(layer, property).map((value) =>
+    String(value),
+  );
+  const uniqueCount = new Set(values).size;
+  return uniqueCount > 1 && uniqueCount <= 12;
+}
+
+function normalizeVectorStyleStops(
+  mode: VectorStyleMode,
+  stops: VectorStyleStop[],
+): VectorStyleStop[] {
+  return stops
+    .map((stop) => ({
+      value:
+        mode === "graduated" && typeof stop.value === "string"
+          ? Number.parseFloat(stop.value)
+          : stop.value,
+      color: stop.color,
+    }))
+    .filter((stop) => {
+      if (!/^#[0-9a-f]{6}$/i.test(stop.color)) return false;
+      if (mode === "graduated") {
+        return typeof stop.value === "number" && Number.isFinite(stop.value);
+      }
+      return String(stop.value).trim().length > 0;
+    });
+}
+
+function nextStopColor(index: number): string {
+  return VECTOR_STYLE_COLORS[index % VECTOR_STYLE_COLORS.length];
 }
 
 function validateExpressionJson(value: string, label: string): string | null {
@@ -284,6 +738,70 @@ function NumericStyleInput({
   );
 }
 
+interface StopValueInputProps {
+  index: number;
+  isNumeric: boolean;
+  value: string | number;
+  onChange: (value: string) => void;
+}
+
+function StopValueInput({
+  index,
+  isNumeric,
+  value,
+  onChange,
+}: StopValueInputProps) {
+  const label = `Class ${index + 1} value`;
+
+  if (!isNumeric) {
+    return (
+      <Input
+        type="text"
+        aria-label={label}
+        value={String(value)}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    );
+  }
+
+  const stepValue = (direction: 1 | -1) => {
+    const current = Number(value);
+    const next = Number.isFinite(current) ? current + direction : direction;
+    onChange(String(next));
+  };
+
+  return (
+    <div className="relative">
+      <Input
+        type="number"
+        step="any"
+        aria-label={label}
+        className="pr-9 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        value={String(value)}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      <div className="absolute right-1 top-0.5 flex h-8 w-7 flex-col overflow-hidden rounded border bg-background">
+        <button
+          type="button"
+          className="flex h-1/2 items-center justify-center text-foreground hover:bg-accent"
+          aria-label={`Increase ${label}`}
+          onClick={() => stepValue(1)}
+        >
+          <ChevronUp className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          className="flex h-1/2 items-center justify-center border-t text-foreground hover:bg-accent"
+          aria-label={`Decrease ${label}`}
+          onClick={() => stepValue(-1)}
+        >
+          <ChevronDown className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 interface RasterStyleSliderProps {
   label: string;
   value: number;
@@ -334,6 +852,27 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
   const [draftBeforeId, setDraftBeforeId] = useState("");
   const [draftColorExpression, setDraftColorExpression] = useState("");
   const [draftHeightExpression, setDraftHeightExpression] = useState("");
+  const [draftVectorStyleMode, setDraftVectorStyleMode] =
+    useState<VectorStyleMode>(DEFAULT_LAYER_STYLE.vectorStyleMode);
+  const [draftVectorStyleProperty, setDraftVectorStyleProperty] = useState(
+    DEFAULT_LAYER_STYLE.vectorStyleProperty,
+  );
+  const [draftVectorStyleClassCount, setDraftVectorStyleClassCount] = useState(
+    DEFAULT_LAYER_STYLE.vectorStyleClassCount,
+  );
+  const [draftVectorStyleColorRamp, setDraftVectorStyleColorRamp] = useState(
+    DEFAULT_LAYER_STYLE.vectorStyleColorRamp,
+  );
+  const [
+    draftVectorStyleClassificationScheme,
+    setDraftVectorStyleClassificationScheme,
+  ] = useState(DEFAULT_LAYER_STYLE.vectorStyleClassificationScheme);
+  const [draftVectorStyleStops, setDraftVectorStyleStops] = useState<
+    VectorStyleStop[]
+  >(DEFAULT_LAYER_STYLE.vectorStyleStops);
+  const [draftVectorStyleExpression, setDraftVectorStyleExpression] = useState(
+    DEFAULT_LAYER_STYLE.vectorStyleExpression,
+  );
   const [draftExtrusionColor, setDraftExtrusionColor] = useState(
     DEFAULT_LAYER_STYLE.extrusionColor,
   );
@@ -359,6 +898,17 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
       setDraftBeforeId("");
       setDraftColorExpression("");
       setDraftHeightExpression("");
+      setDraftVectorStyleMode(DEFAULT_LAYER_STYLE.vectorStyleMode);
+      setDraftVectorStyleProperty(DEFAULT_LAYER_STYLE.vectorStyleProperty);
+      setDraftVectorStyleClassCount(
+        DEFAULT_LAYER_STYLE.vectorStyleClassCount,
+      );
+      setDraftVectorStyleColorRamp(DEFAULT_LAYER_STYLE.vectorStyleColorRamp);
+      setDraftVectorStyleClassificationScheme(
+        DEFAULT_LAYER_STYLE.vectorStyleClassificationScheme,
+      );
+      setDraftVectorStyleStops(DEFAULT_LAYER_STYLE.vectorStyleStops);
+      setDraftVectorStyleExpression(DEFAULT_LAYER_STYLE.vectorStyleExpression);
       setDraftExtrusionColor(DEFAULT_LAYER_STYLE.extrusionColor);
       setDraftExtrusionOpacity(DEFAULT_LAYER_STYLE.extrusionOpacity);
       setDraftExtrusionHeightProperty(
@@ -379,6 +929,28 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
     );
     setDraftHeightExpression(
       styleValue(layer.style, "extrusionHeightExpression"),
+    );
+    const vectorStyleMode = styleValue(layer.style, "vectorStyleMode");
+    setDraftVectorStyleMode(vectorStyleMode);
+    setDraftVectorStyleProperty(styleValue(layer.style, "vectorStyleProperty"));
+    setDraftVectorStyleClassCount(
+      normalizeVectorStyleClassCount(
+        vectorStyleMode,
+        styleValue(layer.style, "vectorStyleClassCount"),
+      ),
+    );
+    setDraftVectorStyleColorRamp(
+      styleValue(layer.style, "vectorStyleColorRamp"),
+    );
+    setDraftVectorStyleClassificationScheme(
+      normalizeClassificationScheme(
+        vectorStyleMode,
+        styleValue(layer.style, "vectorStyleClassificationScheme"),
+      ),
+    );
+    setDraftVectorStyleStops(styleValue(layer.style, "vectorStyleStops"));
+    setDraftVectorStyleExpression(
+      styleValue(layer.style, "vectorStyleExpression"),
     );
     setDraftExtrusionColor(styleValue(layer.style, "extrusionColor"));
     setDraftExtrusionOpacity(styleValue(layer.style, "extrusionOpacity"));
@@ -404,6 +976,13 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
     layer?.style.extrusionHeightExpression,
     layer?.style.extrusionHeightScale,
     layer?.style.extrusionOpacity,
+    layer?.style.vectorStyleExpression,
+    layer?.style.vectorStyleClassCount,
+    layer?.style.vectorStyleClassificationScheme,
+    layer?.style.vectorStyleColorRamp,
+    layer?.style.vectorStyleMode,
+    layer?.style.vectorStyleProperty,
+    layer?.style.vectorStyleStops,
   ]);
 
   const resizeHandle = (
@@ -483,6 +1062,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
     isRasterPaintLayer(layer.type) || isRasterTileLayer;
   const extrusionEnabled = styleValue(style, "extrusionEnabled");
   const extrusionHeightPropertyOptions = getAttributePropertyNames(layer);
+  const vectorStylePropertyOptions = extrusionHeightPropertyOptions;
   const extrusionHeightProperties = extrusionHeightPropertyOptions.includes(
     draftExtrusionHeightProperty,
   )
@@ -490,6 +1070,36 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
     : [draftExtrusionHeightProperty, ...extrusionHeightPropertyOptions].filter(
         Boolean,
       );
+  const currentVectorStops = styleValue(style, "vectorStyleStops");
+  const vectorStyleSettingsChanged =
+    draftVectorStyleMode !== styleValue(style, "vectorStyleMode") ||
+    draftVectorStyleProperty !== styleValue(style, "vectorStyleProperty") ||
+    draftVectorStyleClassCount !==
+      styleValue(style, "vectorStyleClassCount") ||
+    draftVectorStyleColorRamp !== styleValue(style, "vectorStyleColorRamp") ||
+    draftVectorStyleClassificationScheme !==
+      styleValue(style, "vectorStyleClassificationScheme") ||
+    draftVectorStyleExpression !== styleValue(style, "vectorStyleExpression") ||
+    JSON.stringify(draftVectorStyleStops) !==
+      JSON.stringify(currentVectorStops);
+  const regenerateDraftVectorStyleStops = (
+    mode: VectorStyleMode,
+    property: string,
+    classCount: number,
+    colorRamp: string,
+    classificationScheme: string,
+  ) => {
+    setDraftVectorStyleStops(
+      createDefaultStops(
+        layer,
+        mode,
+        property,
+        classCount,
+        colorRamp,
+        classificationScheme,
+      ),
+    );
+  };
   const extrusionSettingsChanged =
     draftExtrusionColor !== styleValue(style, "extrusionColor") ||
     draftExtrusionOpacity !== styleValue(style, "extrusionOpacity") ||
@@ -501,6 +1111,155 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
       styleValue(style, "extrusionAdvancedStyleEnabled") ||
     draftColorExpression !== styleValue(style, "extrusionColorExpression") ||
     draftHeightExpression !== styleValue(style, "extrusionHeightExpression");
+  const updateDraftVectorStyleMode = (mode: VectorStyleMode) => {
+    setDraftVectorStyleMode(mode);
+    setExpressionError(null);
+    if (mode === "graduated" || mode === "categorized") {
+      const classCount = normalizeVectorStyleClassCount(
+        mode,
+        draftVectorStyleClassCount,
+      );
+      const classificationScheme = normalizeClassificationScheme(
+        mode,
+        draftVectorStyleClassificationScheme,
+      );
+      const property = chooseDefaultStyleProperty(
+        layer,
+        mode,
+        vectorStylePropertyOptions,
+        draftVectorStyleProperty,
+      );
+      setDraftVectorStyleProperty(property);
+      setDraftVectorStyleClassCount(classCount);
+      setDraftVectorStyleClassificationScheme(classificationScheme);
+      regenerateDraftVectorStyleStops(
+        mode,
+        property,
+        classCount,
+        draftVectorStyleColorRamp,
+        classificationScheme,
+      );
+    }
+  };
+  const updateDraftVectorStyleProperty = (property: string) => {
+    setDraftVectorStyleProperty(property);
+    regenerateDraftVectorStyleStops(
+      draftVectorStyleMode,
+      property,
+      draftVectorStyleClassCount,
+      draftVectorStyleColorRamp,
+      draftVectorStyleClassificationScheme,
+    );
+  };
+  const updateDraftVectorStyleClassCount = (value: number) => {
+    const classCount = normalizeVectorStyleClassCount(
+      draftVectorStyleMode,
+      value,
+    );
+    setDraftVectorStyleClassCount(classCount);
+    regenerateDraftVectorStyleStops(
+      draftVectorStyleMode,
+      draftVectorStyleProperty,
+      classCount,
+      draftVectorStyleColorRamp,
+      draftVectorStyleClassificationScheme,
+    );
+  };
+  const updateDraftVectorStyleColorRamp = (colorRamp: string) => {
+    setDraftVectorStyleColorRamp(colorRamp);
+    regenerateDraftVectorStyleStops(
+      draftVectorStyleMode,
+      draftVectorStyleProperty,
+      draftVectorStyleClassCount,
+      colorRamp,
+      draftVectorStyleClassificationScheme,
+    );
+  };
+  const updateDraftVectorStyleClassificationScheme = (scheme: string) => {
+    const classificationScheme = normalizeClassificationScheme(
+      draftVectorStyleMode,
+      scheme,
+    );
+    setDraftVectorStyleClassificationScheme(classificationScheme);
+    regenerateDraftVectorStyleStops(
+      draftVectorStyleMode,
+      draftVectorStyleProperty,
+      draftVectorStyleClassCount,
+      draftVectorStyleColorRamp,
+      classificationScheme,
+    );
+  };
+  const updateDraftVectorStyleStop = (
+    index: number,
+    patch: Partial<VectorStyleStop>,
+  ) => {
+    setDraftVectorStyleStops((stops) =>
+      stops.map((stop, stopIndex) =>
+        stopIndex === index ? { ...stop, ...patch } : stop,
+      ),
+    );
+  };
+  const addDraftVectorStyleStop = () => {
+    setDraftVectorStyleStops((stops) => [
+      ...stops,
+      {
+        value: draftVectorStyleMode === "graduated" ? stops.length : "",
+        color:
+          interpolateRampColors(draftVectorStyleColorRamp, stops.length + 1)[
+            stops.length
+          ] ?? nextStopColor(stops.length),
+      },
+    ]);
+  };
+  const removeDraftVectorStyleStop = (index: number) => {
+    setDraftVectorStyleStops((stops) =>
+      stops.filter((_, stopIndex) => stopIndex !== index),
+    );
+  };
+  const applyVectorStyleSettings = () => {
+    if (draftVectorStyleMode === "expression") {
+      const expressionError = validateExpressionJson(
+        draftVectorStyleExpression,
+        "Style expression",
+      );
+      if (expressionError) {
+        setExpressionError(expressionError);
+        return;
+      }
+    }
+
+    const stops = normalizeVectorStyleStops(
+      draftVectorStyleMode,
+      draftVectorStyleStops,
+    );
+    if (
+      (draftVectorStyleMode === "graduated" ||
+        draftVectorStyleMode === "categorized") &&
+      !draftVectorStyleProperty
+    ) {
+      setExpressionError("Choose an attribute for this style mode.");
+      return;
+    }
+    if (draftVectorStyleMode === "graduated" && stops.length < 2) {
+      setExpressionError("Graduated style requires at least two numeric stops.");
+      return;
+    }
+    if (draftVectorStyleMode === "categorized" && stops.length === 0) {
+      setExpressionError("Categorized style requires at least one category.");
+      return;
+    }
+
+    setExpressionError(null);
+    setLayerStyle(layer.id, {
+      vectorStyleMode: draftVectorStyleMode,
+      vectorStyleProperty: draftVectorStyleProperty,
+      vectorStyleClassCount: draftVectorStyleClassCount,
+      vectorStyleColorRamp: draftVectorStyleColorRamp,
+      vectorStyleClassificationScheme: draftVectorStyleClassificationScheme,
+      vectorStyleStops: stops,
+      vectorStyleExpression: draftVectorStyleExpression.trim(),
+    });
+  };
   const applyBeforeId = () => {
     updateLayer(layer.id, {
       beforeId: draftBeforeId.trim() || undefined,
@@ -592,6 +1351,368 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
         onChange={setMaxZoom}
       />
     </div>
+  );
+  const usesAttributeSymbology =
+    draftVectorStyleMode === "graduated" ||
+    draftVectorStyleMode === "categorized";
+  const vectorClassificationSchemeOptions =
+    draftVectorStyleMode === "categorized"
+      ? CATEGORIZED_CLASSIFICATION_SCHEMES
+      : GRADUATED_CLASSIFICATION_SCHEMES;
+  const vectorClassCountOptions = VECTOR_STYLE_CLASS_COUNTS.filter(
+    (classCount) =>
+      draftVectorStyleMode === "categorized" ? true : classCount >= 2,
+  );
+  const colorRampPreview =
+    getVectorColorRamp(draftVectorStyleColorRamp).colors;
+  const vectorSymbologyControls = (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <Label htmlFor="vectorStyleMode">Style type</Label>
+        <Select
+          id="vectorStyleMode"
+          value={draftVectorStyleMode}
+          onChange={(event) =>
+            updateDraftVectorStyleMode(event.target.value as VectorStyleMode)
+          }
+        >
+          <option value="single">Single symbology</option>
+          <option value="graduated">Graduated</option>
+          <option value="categorized">Categorized</option>
+          <option value="expression">Advanced expression</option>
+        </Select>
+      </div>
+      {usesAttributeSymbology && (
+        <div className="space-y-2">
+          <Label htmlFor="vectorStyleProperty">Attribute</Label>
+          <Select
+            id="vectorStyleProperty"
+            value={draftVectorStyleProperty}
+            onChange={(event) =>
+              updateDraftVectorStyleProperty(event.target.value)
+            }
+            disabled={vectorStylePropertyOptions.length === 0}
+          >
+            {vectorStylePropertyOptions.length === 0 ? (
+              <option value="">No attributes found</option>
+            ) : (
+              vectorStylePropertyOptions.map((property) => (
+                <option key={property} value={property}>
+                  {property}
+                </option>
+              ))
+            )}
+          </Select>
+        </div>
+      )}
+      {usesAttributeSymbology && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label htmlFor="vectorStyleClassCount">Classes</Label>
+            <Select
+              id="vectorStyleClassCount"
+              value={String(draftVectorStyleClassCount)}
+              onChange={(event) =>
+                updateDraftVectorStyleClassCount(Number(event.target.value))
+              }
+            >
+              {vectorClassCountOptions.map((classCount) => (
+                <option key={classCount} value={classCount}>
+                  {classCount}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="vectorStyleClassificationScheme">Scheme</Label>
+            <Select
+              id="vectorStyleClassificationScheme"
+              value={draftVectorStyleClassificationScheme}
+              onChange={(event) =>
+                updateDraftVectorStyleClassificationScheme(event.target.value)
+              }
+            >
+              {vectorClassificationSchemeOptions.map((scheme) => (
+                <option key={scheme.value} value={scheme.value}>
+                  {scheme.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+        </div>
+      )}
+      {usesAttributeSymbology && (
+        <div className="space-y-2">
+          <Label htmlFor="vectorStyleColorRamp">Colormap</Label>
+          <Select
+            id="vectorStyleColorRamp"
+            value={draftVectorStyleColorRamp}
+            onChange={(event) =>
+              updateDraftVectorStyleColorRamp(event.target.value)
+            }
+          >
+            {VECTOR_COLOR_RAMPS.map((colorRamp) => (
+              <option key={colorRamp.value} value={colorRamp.value}>
+                {colorRamp.label}
+              </option>
+            ))}
+          </Select>
+          <div
+            aria-hidden="true"
+            className="h-2 rounded-sm border"
+            style={{
+              background: `linear-gradient(90deg, ${colorRampPreview.join(
+                ", ",
+              )})`,
+            }}
+          />
+        </div>
+      )}
+      {usesAttributeSymbology && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <Label>
+              {draftVectorStyleMode === "graduated" ? "Stops" : "Categories"}
+            </Label>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-7 w-7"
+              title="Add class"
+              aria-label="Add class"
+              onClick={addDraftVectorStyleStop}
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          <div className="space-y-2">
+            {draftVectorStyleStops.map((stop, index) => (
+              <div
+                key={`${index}-${stop.color}`}
+                className="grid grid-cols-[2.25rem_1fr_2rem] items-center gap-2"
+              >
+                <Input
+                  type="color"
+                  aria-label={`Class ${index + 1} color`}
+                  className="h-9 p-1"
+                  value={stop.color}
+                  onChange={(event) =>
+                    updateDraftVectorStyleStop(index, {
+                      color: event.target.value,
+                    })
+                  }
+                />
+                <StopValueInput
+                  index={index}
+                  isNumeric={draftVectorStyleMode === "graduated"}
+                  value={stop.value}
+                  onChange={(value) =>
+                    updateDraftVectorStyleStop(index, {
+                      value,
+                    })
+                  }
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  title="Remove class"
+                  aria-label="Remove class"
+                  onClick={() => removeDraftVectorStyleStop(index)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {draftVectorStyleMode === "expression" && (
+        <div className="space-y-2">
+          <Label htmlFor="vectorStyleExpression">Color expression</Label>
+          <textarea
+            id="vectorStyleExpression"
+            className="min-h-28 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
+            placeholder='["match", ["get", "CONTINENT"], "Asia", "#2563eb", "#94a3b8"]'
+            value={draftVectorStyleExpression}
+            onChange={(event) => {
+              setDraftVectorStyleExpression(event.target.value);
+              setExpressionError(null);
+            }}
+          />
+        </div>
+      )}
+      <Button
+        type="button"
+        size="sm"
+        className="w-full"
+        disabled={!vectorStyleSettingsChanged}
+        onClick={applyVectorStyleSettings}
+      >
+        Apply style type
+      </Button>
+    </div>
+  );
+  const twoDimensionalControls = (
+    <>
+      {draftVectorStyleMode === "single" ? (
+        <div className="space-y-2">
+          <Label htmlFor="fillColor">Fill color</Label>
+          <Input
+            id="fillColor"
+            type="color"
+            value={style.fillColor}
+            onChange={(e) =>
+              setLayerStyle(layer.id, { fillColor: e.target.value })
+            }
+          />
+        </div>
+      ) : null}
+      <div className="space-y-2">
+        <Label htmlFor="strokeColor">Outline color</Label>
+        <Input
+          id="strokeColor"
+          type="color"
+          value={style.strokeColor}
+          onChange={(e) =>
+            setLayerStyle(layer.id, { strokeColor: e.target.value })
+          }
+        />
+      </div>
+      <NumericStyleInput
+        id="strokeWidth"
+        label="Stroke width"
+        min={0}
+        max={20}
+        step={0.5}
+        value={style.strokeWidth}
+        onChange={(strokeWidth) => setLayerStyle(layer.id, { strokeWidth })}
+      />
+      <NumericStyleInput
+        id="fillOpacity"
+        label="Fill opacity"
+        min={0}
+        max={1}
+        step={0.05}
+        value={style.fillOpacity}
+        onChange={(fillOpacity) => setLayerStyle(layer.id, { fillOpacity })}
+      />
+      <NumericStyleInput
+        id="circleRadius"
+        label="Circle radius"
+        min={1}
+        max={50}
+        step={1}
+        value={style.circleRadius}
+        onChange={(circleRadius) => setLayerStyle(layer.id, { circleRadius })}
+      />
+    </>
+  );
+  const extrusionControls = (
+    <>
+      {draftVectorStyleMode === "single" ? (
+        <div className="space-y-2">
+          <Label htmlFor="extrusionColor">Extrusion color</Label>
+          <Input
+            id="extrusionColor"
+            type="color"
+            value={draftExtrusionColor}
+            onChange={(event) => setDraftExtrusionColor(event.target.value)}
+          />
+        </div>
+      ) : null}
+      <NumericStyleInput
+        id="extrusionOpacity"
+        label="Extrusion opacity"
+        min={0}
+        max={1}
+        step={0.05}
+        value={draftExtrusionOpacity}
+        onChange={setDraftExtrusionOpacity}
+      />
+      <label
+        htmlFor="extrusionAdvancedStyleEnabled"
+        className="flex items-center gap-2 text-sm font-medium"
+      >
+        <input
+          id="extrusionAdvancedStyleEnabled"
+          type="checkbox"
+          checked={draftAdvancedExtrusionEnabled}
+          onChange={(event) => {
+            setDraftAdvancedExtrusionEnabled(event.target.checked);
+            setExpressionError(null);
+          }}
+        />
+        Advanced height expression
+      </label>
+      {draftAdvancedExtrusionEnabled ? (
+        <div className="space-y-2">
+          <Label htmlFor="extrusionHeightExpression">Height expression</Label>
+          <textarea
+            id="extrusionHeightExpression"
+            className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
+            value={draftHeightExpression}
+            onChange={(event) => {
+              setDraftHeightExpression(event.target.value);
+              setExpressionError(null);
+            }}
+          />
+        </div>
+      ) : (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="extrusionHeightProperty">Height property</Label>
+            <Select
+              id="extrusionHeightProperty"
+              value={draftExtrusionHeightProperty}
+              onChange={(event) =>
+                setDraftExtrusionHeightProperty(event.target.value)
+              }
+              disabled={extrusionHeightProperties.length === 0}
+            >
+              {extrusionHeightProperties.length === 0 ? (
+                <option value="">No attributes found</option>
+              ) : (
+                extrusionHeightProperties.map((property) => (
+                  <option key={property} value={property}>
+                    {property}
+                  </option>
+                ))
+              )}
+            </Select>
+          </div>
+          <NumericStyleInput
+            id="extrusionHeightScale"
+            label="Height scale"
+            min={0}
+            max={10000}
+            step={0.00001}
+            value={draftExtrusionHeightScale}
+            onChange={setDraftExtrusionHeightScale}
+          />
+          <NumericStyleInput
+            id="extrusionBase"
+            label="Base height"
+            min={0}
+            max={100000}
+            step={1}
+            value={draftExtrusionBase}
+            onChange={setDraftExtrusionBase}
+          />
+        </>
+      )}
+      <Button
+        type="button"
+        size="sm"
+        className="w-full"
+        disabled={!extrusionSettingsChanged}
+        onClick={applyExtrusionSettings}
+      >
+        Apply 3D extrusion
+      </Button>
+    </>
   );
 
   if (hasRasterPaintControls) {
@@ -774,190 +1895,14 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
               </div>
             </div>
           )}
+          {vectorSymbologyControls}
           {!hasExtrusionControls || !extrusionEnabled ? (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="fillColor">Fill color</Label>
-                <Input
-                  id="fillColor"
-                  type="color"
-                  value={style.fillColor}
-                  onChange={(e) =>
-                    setLayerStyle(layer.id, { fillColor: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="strokeColor">Stroke color</Label>
-                <Input
-                  id="strokeColor"
-                  type="color"
-                  value={style.strokeColor}
-                  onChange={(e) =>
-                    setLayerStyle(layer.id, { strokeColor: e.target.value })
-                  }
-                />
-              </div>
-              <NumericStyleInput
-                id="strokeWidth"
-                label="Stroke width"
-                min={0}
-                max={20}
-                step={0.5}
-                value={style.strokeWidth}
-                onChange={(strokeWidth) =>
-                  setLayerStyle(layer.id, { strokeWidth })
-                }
-              />
-              <NumericStyleInput
-                id="fillOpacity"
-                label="Fill opacity"
-                min={0}
-                max={1}
-                step={0.05}
-                value={style.fillOpacity}
-                onChange={(fillOpacity) =>
-                  setLayerStyle(layer.id, { fillOpacity })
-                }
-              />
-              <NumericStyleInput
-                id="circleRadius"
-                label="Circle radius"
-                min={1}
-                max={50}
-                step={1}
-                value={style.circleRadius}
-                onChange={(circleRadius) =>
-                  setLayerStyle(layer.id, { circleRadius })
-                }
-              />
-            </>
+            twoDimensionalControls
           ) : (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="extrusionColor">Extrusion color</Label>
-                <Input
-                  id="extrusionColor"
-                  type="color"
-                  value={draftExtrusionColor}
-                  onChange={(event) =>
-                    setDraftExtrusionColor(event.target.value)
-                  }
-                />
-              </div>
-              <NumericStyleInput
-                id="extrusionOpacity"
-                label="Extrusion opacity"
-                min={0}
-                max={1}
-                step={0.05}
-                value={draftExtrusionOpacity}
-                onChange={setDraftExtrusionOpacity}
-              />
-              <label
-                htmlFor="extrusionAdvancedStyleEnabled"
-                className="flex items-center gap-2 text-sm font-medium"
-              >
-                <input
-                  id="extrusionAdvancedStyleEnabled"
-                  type="checkbox"
-                  checked={draftAdvancedExtrusionEnabled}
-                  onChange={(event) => {
-                    setDraftAdvancedExtrusionEnabled(event.target.checked);
-                    setExpressionError(null);
-                  }}
-                />
-                Advanced expressions
-              </label>
-              {draftAdvancedExtrusionEnabled ? (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="extrusionColorExpression">
-                      Color expression
-                    </Label>
-                    <textarea
-                      id="extrusionColorExpression"
-                      className="min-h-28 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
-                      value={draftColorExpression}
-                      onChange={(event) => {
-                        setDraftColorExpression(event.target.value);
-                        setExpressionError(null);
-                      }}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="extrusionHeightExpression">
-                      Height expression
-                    </Label>
-                    <textarea
-                      id="extrusionHeightExpression"
-                      className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
-                      value={draftHeightExpression}
-                      onChange={(event) => {
-                        setDraftHeightExpression(event.target.value);
-                        setExpressionError(null);
-                      }}
-                    />
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="extrusionHeightProperty">
-                      Height property
-                    </Label>
-                    <Select
-                      id="extrusionHeightProperty"
-                      value={draftExtrusionHeightProperty}
-                      onChange={(event) =>
-                        setDraftExtrusionHeightProperty(event.target.value)
-                      }
-                      disabled={extrusionHeightProperties.length === 0}
-                    >
-                      {extrusionHeightProperties.length === 0 ? (
-                        <option value="">No attributes found</option>
-                      ) : (
-                        extrusionHeightProperties.map((property) => (
-                          <option key={property} value={property}>
-                            {property}
-                          </option>
-                        ))
-                      )}
-                    </Select>
-                  </div>
-                  <NumericStyleInput
-                    id="extrusionHeightScale"
-                    label="Height scale"
-                    min={0}
-                    max={10000}
-                    step={0.1}
-                    value={draftExtrusionHeightScale}
-                    onChange={setDraftExtrusionHeightScale}
-                  />
-                  <NumericStyleInput
-                    id="extrusionBase"
-                    label="Base height"
-                    min={0}
-                    max={100000}
-                    step={1}
-                    value={draftExtrusionBase}
-                    onChange={setDraftExtrusionBase}
-                  />
-                </>
-              )}
-              {expressionError && (
-                <p className="text-xs text-destructive">{expressionError}</p>
-              )}
-              <Button
-                type="button"
-                size="sm"
-                className="w-full"
-                disabled={!extrusionSettingsChanged}
-                onClick={applyExtrusionSettings}
-              >
-                Apply 3D extrusion
-              </Button>
-            </>
+            extrusionControls
+          )}
+          {expressionError && (
+            <p className="text-xs text-destructive">{expressionError}</p>
           )}
         </div>
       </ScrollArea>

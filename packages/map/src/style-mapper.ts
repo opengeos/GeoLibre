@@ -10,9 +10,12 @@ function styleValue<K extends keyof LayerStyle>(
 
 export function fillPaint(style: LayerStyle, opacity: number) {
   return {
-    "fill-color": style.fillColor,
-    "fill-opacity": style.fillOpacity * opacity,
-    "fill-outline-color": style.strokeColor,
+    "fill-color": vectorColorPaintValue(
+      style,
+      styleValue(style, "fillColor"),
+    ),
+    "fill-opacity": styleValue(style, "fillOpacity") * opacity,
+    "fill-outline-color": styleValue(style, "strokeColor"),
   };
 }
 
@@ -35,12 +38,75 @@ function extrusionHeightPaintValue(
 function extrusionColorPaintValue(
   style: LayerStyle,
 ): PropertyValueSpecification<string> {
+  const vectorExpression = vectorColorPaintValue(
+    style,
+    styleValue(style, "extrusionColor"),
+  );
+  if (vectorExpression !== styleValue(style, "extrusionColor")) {
+    return vectorExpression;
+  }
+
   const advancedExpression = parseJsonExpression<string>(
     styleValue(style, "extrusionAdvancedStyleEnabled")
       ? styleValue(style, "extrusionColorExpression")
       : "",
   );
   return advancedExpression ?? styleValue(style, "extrusionColor");
+}
+
+function vectorColorPaintValue(
+  style: LayerStyle,
+  fallbackColor: string,
+): PropertyValueSpecification<string> {
+  const mode = styleValue(style, "vectorStyleMode");
+  if (mode === "single") return fallbackColor;
+
+  if (mode === "expression") {
+    return (
+      parseJsonExpression<string>(styleValue(style, "vectorStyleExpression")) ??
+      fallbackColor
+    );
+  }
+
+  const property = styleValue(style, "vectorStyleProperty").trim();
+  if (!property) return fallbackColor;
+
+  if (mode === "categorized") {
+    const stops = styleValue(style, "vectorStyleStops").filter(
+      (stop) => String(stop.value).length > 0 && isColor(stop.color),
+    );
+    if (stops.length === 0) return fallbackColor;
+
+    return [
+      "match",
+      ["to-string", ["get", property]],
+      ...stops.flatMap((stop) => [String(stop.value), stop.color]),
+      fallbackColor,
+    ] as PropertyValueSpecification<string>;
+  }
+
+  const stops = styleValue(style, "vectorStyleStops")
+    .map((stop) => ({
+      color: stop.color,
+      value:
+        typeof stop.value === "number"
+          ? stop.value
+          : Number.parseFloat(stop.value),
+    }))
+    .filter((stop) => Number.isFinite(stop.value) && isColor(stop.color))
+    .sort((a, b) => a.value - b.value);
+  if (stops.length < 2) return fallbackColor;
+
+  return [
+    "interpolate",
+    ["linear"],
+    ["to-number", ["get", property], stops[0].value],
+    ...stops.flatMap((stop) => [stop.value, stop.color]),
+  ] as PropertyValueSpecification<string>;
+}
+
+function isColor(value: string): boolean {
+  return /^#[0-9a-f]{6}$/i.test(value.trim());
 }
 
 function parseJsonExpression<T>(
@@ -106,20 +172,35 @@ export function fillExtrusionPaint(style: LayerStyle, opacity: number) {
 }
 
 export function linePaint(style: LayerStyle, opacity: number) {
+  const strokeColor = styleValue(style, "strokeColor");
+  const vectorColor = vectorColorPaintValue(style, strokeColor);
+  const lineColor =
+    vectorColor === strokeColor
+      ? strokeColor
+      : ([
+          "case",
+          ["==", ["geometry-type"], "Polygon"],
+          strokeColor,
+          vectorColor,
+        ] as PropertyValueSpecification<string>);
+
   return {
-    "line-color": style.strokeColor,
-    "line-width": style.strokeWidth,
+    "line-color": lineColor,
+    "line-width": styleValue(style, "strokeWidth"),
     "line-opacity": opacity,
   };
 }
 
 export function circlePaint(style: LayerStyle, opacity: number) {
   return {
-    "circle-color": style.fillColor,
-    "circle-radius": style.circleRadius,
-    "circle-opacity": style.fillOpacity * opacity,
-    "circle-stroke-color": style.strokeColor,
-    "circle-stroke-width": style.strokeWidth,
+    "circle-color": vectorColorPaintValue(
+      style,
+      styleValue(style, "fillColor"),
+    ),
+    "circle-radius": styleValue(style, "circleRadius"),
+    "circle-opacity": styleValue(style, "fillOpacity") * opacity,
+    "circle-stroke-color": styleValue(style, "strokeColor"),
+    "circle-stroke-width": styleValue(style, "strokeWidth"),
   };
 }
 

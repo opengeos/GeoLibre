@@ -57,6 +57,18 @@ export type LayerType =
   | "geoparquet"
   | "duckdb-query";
 
+export type VectorStyleMode =
+  | "single"
+  | "graduated"
+  | "categorized"
+  | "expression";
+
+export interface VectorStyleStop {
+  value: string | number;
+  color: string;
+  label?: string;
+}
+
 export interface LayerStyle {
   minZoom: number;
   maxZoom: number;
@@ -74,6 +86,13 @@ export interface LayerStyle {
   extrusionAdvancedStyleEnabled: boolean;
   extrusionColorExpression: string;
   extrusionHeightExpression: string;
+  vectorStyleMode: VectorStyleMode;
+  vectorStyleProperty: string;
+  vectorStyleClassCount: number;
+  vectorStyleColorRamp: string;
+  vectorStyleClassificationScheme: string;
+  vectorStyleStops: VectorStyleStop[];
+  vectorStyleExpression: string;
   rasterBrightnessMin: number;
   rasterBrightnessMax: number;
   rasterSaturation: number;
@@ -98,6 +117,16 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
   extrusionAdvancedStyleEnabled: false,
   extrusionColorExpression: "",
   extrusionHeightExpression: "",
+  vectorStyleMode: "single",
+  vectorStyleProperty: "",
+  vectorStyleClassCount: 5,
+  vectorStyleColorRamp: "viridis",
+  vectorStyleClassificationScheme: "equal-interval",
+  vectorStyleStops: [
+    { value: 0, color: "#dbeafe" },
+    { value: 1, color: "#2563eb" },
+  ],
+  vectorStyleExpression: "",
   rasterBrightnessMin: 0,
   rasterBrightnessMax: 1,
   rasterSaturation: 0,
