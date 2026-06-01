@@ -118,7 +118,9 @@ function normalizeBounds(
   if (
     Array.isArray(bounds) &&
     bounds.length === 4 &&
-    bounds.every((value) => Number.isFinite(value))
+    bounds.every((value) => Number.isFinite(value)) &&
+    bounds[0] < bounds[2] &&
+    bounds[1] < bounds[3]
   ) {
     return bounds as ProjectPreferences["map"]["bounds"];
   }

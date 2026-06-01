@@ -57,11 +57,30 @@ const SECTION_ITEMS: Array<{
 
 const VARIABLE_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-function clonePreferences(preferences: ProjectPreferences): ProjectPreferences {
+// Draft env vars carry a stable client-side id so React can key the rows by
+// identity. Keying by array index reuses input DOM state (focus, cursor)
+// across the wrong item after a mid-list delete.
+interface DraftEnvironmentVariable extends RuntimeEnvironmentVariable {
+  id: string;
+}
+
+interface DraftPreferences {
+  map: MapPreferences;
+  environmentVariables: DraftEnvironmentVariable[];
+}
+
+function createDraftId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function clonePreferences(preferences: ProjectPreferences): DraftPreferences {
   return {
     map: { ...preferences.map },
     environmentVariables: preferences.environmentVariables.map((variable) => ({
       ...variable,
+      id: createDraftId(),
     })),
   };
 }
@@ -143,7 +162,7 @@ export function SettingsDialog({
   const setProjectName = useAppStore((s) => s.setProjectName);
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<SettingsSection>("map");
-  const [draftPreferences, setDraftPreferences] = useState<ProjectPreferences>(
+  const [draftPreferences, setDraftPreferences] = useState<DraftPreferences>(
     () => clonePreferences(preferences),
   );
   const [draftProjectName, setDraftProjectName] = useState(projectName);
@@ -204,7 +223,7 @@ export function SettingsDialog({
       ...current,
       environmentVariables: [
         ...current.environmentVariables,
-        { key: "", value: "", enabled: true },
+        { id: createDraftId(), key: "", value: "", enabled: true },
       ],
     }));
     setSection("environment");
@@ -502,7 +521,7 @@ export function SettingsDialog({
                       {draftPreferences.environmentVariables.map(
                         (variable, index) => (
                           <div
-                            key={index}
+                            key={variable.id}
                             className="grid grid-cols-[1.25rem_minmax(7rem,1fr)_minmax(7rem,1fr)_2rem] items-center gap-2"
                           >
                             <input
