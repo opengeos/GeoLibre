@@ -14,7 +14,7 @@
 - [x] In-session recent project tracking
 - [x] Feature highlight from attribute table
 - [x] Optional zoom to selected feature
-- [ ] Recent projects UI and persistence
+- [x] Recent projects UI and persistence
 
 ## v0.3: Cloud-native formats
 

@@ -91,6 +91,15 @@ function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }
 
+function isHttpUrl(path: string): boolean {
+  try {
+    const url = new URL(path);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function fileExtension(path: string): string {
   const name = browserSafeFileName(path).toLowerCase();
   if (name.endsWith(".geoparquet")) return "geoparquet";
@@ -530,6 +539,29 @@ export async function openProjectFile(): Promise<{
   const text = await readTextFile(selected);
   const project = parseProject(text);
   return { project, path: selected };
+}
+
+export async function openRecentProjectFile(path: string): Promise<{
+  project: GeoLibreProject;
+  path: string;
+}> {
+  if (isHttpUrl(path)) {
+    const response = await fetch(path);
+    if (!response.ok) {
+      throw new Error(
+        `Could not load project URL: HTTP ${response.status} ${response.statusText}`,
+      );
+    }
+    return { project: parseProject(await response.text()), path };
+  }
+
+  if (!isTauri()) {
+    throw new Error(
+      "Recent local projects can only be reopened in GeoLibre Desktop.",
+    );
+  }
+
+  return { project: parseProject(await readTextFile(path)), path };
 }
 
 export async function saveProjectFile(

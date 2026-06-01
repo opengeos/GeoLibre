@@ -42,6 +42,7 @@ import {
 import {
   Database,
   FolderOpen,
+  History,
   Layers,
   Map,
   Moon,
@@ -54,7 +55,11 @@ import {
 import { useState, useSyncExternalStore } from "react";
 import { createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
 import type { ThemeMode } from "../../hooks/useThemeMode";
-import { openProjectFile, saveProjectFile } from "../../lib/tauri-io";
+import {
+  openProjectFile,
+  openRecentProjectFile,
+  saveProjectFile,
+} from "../../lib/tauri-io";
 import { resolveProjectXyzLayers } from "../../lib/xyz-url";
 import { AddDataDialog, type AddDataKind } from "./AddDataDialog";
 import { AboutDialog } from "./AboutDialog";
@@ -95,6 +100,22 @@ const PLUGIN_POSITION_ITEMS: Array<{
   { value: "bottom-right", label: "Bottom right" },
 ];
 
+function projectPathLabel(path: string): string {
+  return path.split(/[/\\]/).pop() || path;
+}
+
+function formatRecentProjectTime(openedAt: string): string {
+  const openedDate = new Date(openedAt);
+  if (Number.isNaN(openedDate.getTime())) return "";
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(openedDate);
+}
+
 export function TopToolbar({
   compact = false,
   mapControllerRef,
@@ -107,8 +128,12 @@ export function TopToolbar({
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
   const projectName = useAppStore((s) => s.projectName);
   const projectPath = useAppStore((s) => s.projectPath);
+  const recentProjects = useAppStore((s) => s.recentProjects);
   const setProjectPath = useAppStore((s) => s.setProjectPath);
   const setProjectName = useAppStore((s) => s.setProjectName);
+  const rememberRecentProject = useAppStore((s) => s.rememberRecentProject);
+  const forgetRecentProject = useAppStore((s) => s.forgetRecentProject);
+  const clearRecentProjects = useAppStore((s) => s.clearRecentProjects);
   const markSaved = useAppStore((s) => s.markSaved);
   const [controlsVisible, setControlsVisible] = useState<
     Record<ToolbarMapControl, boolean>
@@ -140,6 +165,34 @@ export function TopToolbar({
     }
   };
 
+  const handleOpenRecent = async (path: string) => {
+    let result: Awaited<ReturnType<typeof openRecentProjectFile>>;
+
+    try {
+      result = await openRecentProjectFile(path);
+    } catch (error) {
+      forgetRecentProject(path);
+      console.error("Failed to open recent project", error);
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "Could not open the recent project.",
+      );
+      return;
+    }
+
+    try {
+      loadProject(await resolveProjectXyzLayers(result.project), result.path);
+    } catch (error) {
+      console.error("Failed to load recent project", error);
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "Could not load the recent project.",
+      );
+    }
+  };
+
   const handleSave = async (): Promise<boolean> => {
     const state = useAppStore.getState();
     const defaultProjectName = state.projectName.trim() || "Untitled Project";
@@ -159,6 +212,11 @@ export function TopToolbar({
     );
     if (!path) return false;
     setProjectPath(path);
+    rememberRecentProject({
+      path,
+      name: project.name,
+      openedAt: new Date().toISOString(),
+    });
     markSaved();
     return true;
   };
@@ -244,16 +302,62 @@ export function TopToolbar({
         showLabels={showLabels}
         onSaveCurrentProject={handleSave}
       />
-      <Button
-        className={toolbarButtonClass}
-        variant="ghost"
-        size={toolbarButtonSize}
-        onClick={handleOpen}
-        aria-label="Open"
-      >
-        <FolderOpen className={toolbarIconClassName} />
-        {renderToolbarLabel("Open")}
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            className={toolbarButtonClass}
+            variant="ghost"
+            size={toolbarButtonSize}
+            aria-label="Open"
+          >
+            <FolderOpen className={toolbarIconClassName} />
+            {renderToolbarLabel("Open")}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-80">
+          <DropdownMenuLabel>Project</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => void handleOpen()}>
+            <FolderOpen className="mr-2 h-3.5 w-3.5" />
+            Open Project...
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel>Recent projects</DropdownMenuLabel>
+          {recentProjects.length === 0 ? (
+            <DropdownMenuItem disabled>No recent projects</DropdownMenuItem>
+          ) : (
+            recentProjects.map((project) => {
+              const openedAt = formatRecentProjectTime(project.openedAt);
+              return (
+                <DropdownMenuItem
+                  key={project.path}
+                  className="flex-col items-start gap-0.5"
+                  onSelect={() => void handleOpenRecent(project.path)}
+                >
+                  <span className="max-w-full truncate font-medium">
+                    {project.name || projectPathLabel(project.path)}
+                  </span>
+                  <span className="flex max-w-full items-center gap-1 text-xs text-muted-foreground">
+                    <History className="h-3 w-3 shrink-0" />
+                    <span className="truncate">
+                      {openedAt
+                        ? `${openedAt} - ${project.path}`
+                        : project.path}
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+              );
+            })
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            disabled={recentProjects.length === 0}
+            onSelect={clearRecentProjects}
+          >
+            Clear Recent Projects
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <Button
         className={toolbarButtonClass}
         variant="ghost"

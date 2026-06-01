@@ -56,6 +56,10 @@ export interface AppState {
   loadProject: (project: GeoLibreProject, path?: string | null) => void;
   setProjectPath: (path: string | null) => void;
   setProjectName: (name: string) => void;
+  setRecentProjects: (projects: RecentProjectEntry[]) => void;
+  rememberRecentProject: (entry: RecentProjectEntry) => void;
+  forgetRecentProject: (path: string) => void;
+  clearRecentProjects: () => void;
   markSaved: () => void;
 
   addLayer: (layer: GeoLibreLayer, beforeLayerId?: string | null) => void;
@@ -72,6 +76,30 @@ export interface AppState {
     sourcePath?: string,
     beforeLayerId?: string | null,
   ) => string;
+}
+
+const MAX_RECENT_PROJECTS = 10;
+
+function normalizeRecentProjects(
+  projects: RecentProjectEntry[],
+): RecentProjectEntry[] {
+  const seen = new Set<string>();
+  const normalized: RecentProjectEntry[] = [];
+
+  for (const project of projects) {
+    const path = project.path.trim();
+    if (!path || seen.has(path)) continue;
+
+    const name = project.name.trim() || path.split(/[/\\]/).pop() || path;
+    normalized.push({
+      path,
+      name,
+      openedAt: project.openedAt || new Date().toISOString(),
+    });
+    seen.add(path);
+  }
+
+  return normalized.slice(0, MAX_RECENT_PROJECTS);
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -144,22 +172,27 @@ export const useAppStore = create<AppState>((set, get) => ({
       identifyLayerId: null,
     });
     if (path) {
-      const entry: RecentProjectEntry = {
+      get().rememberRecentProject({
         path,
         name: project.name,
         openedAt: new Date().toISOString(),
-      };
-      set((s) => ({
-        recentProjects: [
-          entry,
-          ...s.recentProjects.filter((r) => r.path !== path),
-        ].slice(0, 10),
-      }));
+      });
     }
   },
 
   setProjectPath: (path) => set({ projectPath: path }),
   setProjectName: (name) => set({ projectName: name, isDirty: true }),
+  setRecentProjects: (projects) =>
+    set({ recentProjects: normalizeRecentProjects(projects) }),
+  rememberRecentProject: (entry) =>
+    set((s) => ({
+      recentProjects: normalizeRecentProjects([entry, ...s.recentProjects]),
+    })),
+  forgetRecentProject: (path) =>
+    set((s) => ({
+      recentProjects: s.recentProjects.filter((project) => project.path !== path),
+    })),
+  clearRecentProjects: () => set({ recentProjects: [] }),
   markSaved: () => set({ isDirty: false }),
 
   addLayer: (layer, beforeLayerId = null) =>
