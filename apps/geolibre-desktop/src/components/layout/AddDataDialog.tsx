@@ -3,7 +3,7 @@ import {
   type GeoLibreLayer,
   useAppStore,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import { getLayerBounds, type MapController } from "@geolibre/map";
 import {
   addArcGISLayer,
   addCogRasterLayer,
@@ -643,7 +643,7 @@ export function AddDataDialog({
       return "Add local vector files supported by DuckDB Spatial, GeoJSON URLs, or MapLibre vector tile sources.";
     }
     if (kind === "gpx") {
-      return "Add GPX waypoints, routes, and tracks as a GeoJSON layer.";
+      return "Add GPX waypoints, routes, and tracks as one or more vector layers.";
     }
     if (kind === "delimited-text") {
       return "Add a delimited text file or URL as a point layer using longitude and latitude fields.";
@@ -1322,7 +1322,24 @@ export function AddDataDialog({
         for (const layer of layers) {
           addLayer(layer, beforeLayer);
         }
-        mapControllerRef.current?.fitLayer(layers[0]);
+        const combinedBounds = layers.reduce<
+          [number, number, number, number] | null
+        >((merged, layer) => {
+          const bounds = getLayerBounds(layer);
+          if (!bounds) return merged;
+          if (!merged) return [...bounds];
+          return [
+            Math.min(merged[0], bounds[0]),
+            Math.min(merged[1], bounds[1]),
+            Math.max(merged[2], bounds[2]),
+            Math.max(merged[3], bounds[3]),
+          ];
+        }, null);
+        if (combinedBounds) {
+          mapControllerRef.current?.fitBounds(combinedBounds);
+        } else {
+          mapControllerRef.current?.fitLayer(layers[0]);
+        }
         closeDialog();
         return;
       }

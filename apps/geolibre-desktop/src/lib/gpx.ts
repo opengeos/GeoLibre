@@ -46,6 +46,20 @@ const GPX_CONTAINER_PROPERTY_NAMES = [
   "type",
 ];
 
+// GPX fields defined as numeric types in the schema. Every other tag (name,
+// cmt, desc, src, sym, type, fix, time, ...) is textual and must stay a string
+// so values like a name of "0012" are not coerced into the number 12.
+const GPX_NUMERIC_PROPERTY_NAMES = new Set([
+  "ele",
+  "sat",
+  "hdop",
+  "vdop",
+  "pdop",
+  "ageofdgpsdata",
+  "dgpsid",
+  "number",
+]);
+
 export function parseGpxLayer(text: string): GpxLayerResult {
   const document = new DOMParser().parseFromString(text, "application/xml");
   const parserError = document.querySelector("parsererror");
@@ -144,17 +158,17 @@ export function parseGpxLayer(text: string): GpxLayerResult {
       type: "FeatureCollection",
       features: routeFeatures,
     },
-    routeCount: routes.length,
+    routeCount: routeFeatures.length,
     tracks: {
       type: "FeatureCollection",
       features: trackFeatures,
     },
-    trackCount: tracks.length,
+    trackCount: trackFeatures.length,
     waypoints: {
       type: "FeatureCollection",
       features: waypointFeatures,
     },
-    waypointCount: waypoints.length,
+    waypointCount: waypointFeatures.length,
   };
 }
 
@@ -174,7 +188,7 @@ function pointProperties(point: Element): GeoJsonProperties {
   const properties: GeoJsonProperties = {};
   for (const name of GPX_POINT_PROPERTY_NAMES) {
     const value = childText(point, name);
-    if (value !== undefined) properties[name] = numericValue(value);
+    if (value !== undefined) properties[name] = propertyValue(name, value);
   }
   return properties;
 }
@@ -183,14 +197,21 @@ function containerProperties(container: Element): GeoJsonProperties {
   const properties: GeoJsonProperties = {};
   for (const name of GPX_CONTAINER_PROPERTY_NAMES) {
     const value = childText(container, name);
-    if (value !== undefined) properties[name] = numericValue(value);
+    if (value !== undefined) properties[name] = propertyValue(name, value);
   }
   return properties;
 }
 
+function propertyValue(name: string, value: string): string | number {
+  return GPX_NUMERIC_PROPERTY_NAMES.has(name) ? numericValue(value) : value;
+}
+
 function coordinateFromPoint(point: GpxPointElement): Position | null {
-  const latitude = Number(point.getAttribute("lat"));
-  const longitude = Number(point.getAttribute("lon"));
+  const latitudeAttribute = point.getAttribute("lat");
+  const longitudeAttribute = point.getAttribute("lon");
+  if (!latitudeAttribute?.trim() || !longitudeAttribute?.trim()) return null;
+  const latitude = Number(latitudeAttribute);
+  const longitude = Number(longitudeAttribute);
   if (
     !Number.isFinite(latitude) ||
     !Number.isFinite(longitude) ||
