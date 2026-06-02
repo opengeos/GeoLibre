@@ -302,9 +302,22 @@ function parseWmsJsonProperties(value: unknown): {
   if (Array.isArray(value)) {
     // Some servers return a bare array of features instead of a FeatureCollection.
     if (value.length === 0) return { properties: {} };
+    const first = value[0];
+    // A plain property bag (no "properties"/"features" key) is not a GeoJSON
+    // Feature; delegate so the catch-all below returns its own keys rather than
+    // wrapping it into a feature whose properties resolve to {}.
+    if (
+      first &&
+      typeof first === "object" &&
+      !Array.isArray(first) &&
+      !("properties" in first) &&
+      !("features" in first)
+    ) {
+      return parseWmsJsonProperties(first);
+    }
     return parseWmsJsonProperties({
       type: "FeatureCollection",
-      features: [value[0]],
+      features: [first],
     });
   }
 
@@ -387,6 +400,9 @@ async function fetchWmsIdentifyProperties(
       try {
         const parsed = parseWmsJsonProperties(JSON.parse(text));
         if (parsed) return parsed;
+        // Valid JSON the parser couldn't map: keep the raw text as a fallback
+        // so an unrecognized-but-real response isn't silently discarded.
+        fallbackText = fallbackText || normalizeText(text);
       } catch {
         fallbackText = normalizeText(text);
       }
@@ -634,9 +650,13 @@ export const MapCanvas = memo(function MapCanvas({
         );
         // Closing the loading popup (the × button) must cancel the in-flight
         // request so its result does not reopen a popup the user dismissed.
-        // Guard the shared controller by identity so replacing this popup with
-        // the result popup does not clobber a newer request's controller.
+        // Track user dismissal with a flag rather than the abort signal: the
+        // result swap calls remove() on this popup, which also fires "close",
+        // and we must not treat that programmatic swap as a dismissal. Guard the
+        // shared controller by identity so a newer request is not clobbered.
+        let userDismissed = false;
         identifyPopup.current?.once("close", () => {
+          userDismissed = true;
           abortController.abort();
           if (wmsIdentifyAbortController === abortController) {
             wmsIdentifyAbortController = null;
@@ -650,7 +670,7 @@ export const MapCanvas = memo(function MapCanvas({
           abortController.signal,
         )
           .then((result) => {
-            if (abortController.signal.aborted) return;
+            if (userDismissed || abortController.signal.aborted) return;
             wmsIdentifyAbortController = null;
             showIdentifyPopup(
               createIdentifyPopupElement(
@@ -661,7 +681,8 @@ export const MapCanvas = memo(function MapCanvas({
             );
           })
           .catch((error: unknown) => {
-            if (isAbortError(error) || abortController.signal.aborted) return;
+            if (userDismissed || isAbortError(error) || abortController.signal.aborted)
+              return;
             wmsIdentifyAbortController = null;
             const message =
               error instanceof Error
