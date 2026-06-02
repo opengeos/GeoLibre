@@ -22,6 +22,10 @@ const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
 const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
 const WEB_MERCATOR_MAX_LATITUDE = 85.0511287798066;
 const WEB_MERCATOR_EARTH_RADIUS = 6378137;
+const WEB_MERCATOR_WORLD_SIZE = 2 * Math.PI * WEB_MERCATOR_EARTH_RADIUS;
+const MAPLIBRE_TILE_SIZE = 512;
+const WMS_IDENTIFY_QUERY_SIZE = 101;
+const WMS_IDENTIFY_QUERY_CENTER = Math.floor(WMS_IDENTIFY_QUERY_SIZE / 2);
 const WMS_IDENTIFY_INFO_FORMATS = [
   "application/json",
   "text/html",
@@ -136,21 +140,11 @@ function findFeatureId(
 }
 
 function isWmsLayer(layer: GeoLibreLayer): boolean {
-  return layer.type === "wms" || layer.metadata.service === "wms";
+  return layer.type === "wms";
 }
 
 function stringSource(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
-}
-
-function numberSource(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value)
-    ? value
-    : undefined;
-}
-
-function encodeWmsParamValue(value: string): string {
-  return value === "{bbox-epsg-3857}" ? value : encodeURIComponent(value);
 }
 
 function appendWmsQuery(
@@ -165,7 +159,7 @@ function appendWmsQuery(
   const query = params
     .map(
       ([key, value]) =>
-        `${encodeURIComponent(key)}=${encodeWmsParamValue(value)}`,
+        `${encodeURIComponent(key)}=${encodeURIComponent(value)}`,
     )
     .join("&");
   return `${endpoint}${separator}${query}`;
@@ -183,13 +177,24 @@ function lngLatToWebMercator(lng: number, lat: number): [number, number] {
   return [x, y];
 }
 
-function mapBbox3857(map: maplibregl.Map): string {
-  const bounds = map.getBounds();
-  const sw = bounds.getSouthWest();
-  const ne = bounds.getNorthEast();
-  const [minX, minY] = lngLatToWebMercator(sw.lng, sw.lat);
-  const [maxX, maxY] = lngLatToWebMercator(ne.lng, ne.lat);
-  return [minX, minY, maxX, maxY].join(",");
+function wmsIdentifyResolution(zoom: number): number {
+  const normalizedZoom = Number.isFinite(zoom) ? Math.max(0, zoom) : 0;
+  return WEB_MERCATOR_WORLD_SIZE / (MAPLIBRE_TILE_SIZE * 2 ** normalizedZoom);
+}
+
+function wmsIdentifyBbox3857(
+  map: maplibregl.Map,
+  lngLat: maplibregl.LngLat,
+): string {
+  const [centerX, centerY] = lngLatToWebMercator(lngLat.lng, lngLat.lat);
+  const halfSpan =
+    (WMS_IDENTIFY_QUERY_SIZE * wmsIdentifyResolution(map.getZoom())) / 2;
+  return [
+    centerX - halfSpan,
+    centerY - halfSpan,
+    centerX + halfSpan,
+    centerY + halfSpan,
+  ].join(",");
 }
 
 function isViteDevServer(): boolean {
@@ -202,6 +207,11 @@ function isViteDevServer(): boolean {
   );
 }
 
+// Only the Vite dev server proxies GetFeatureInfo requests (to dodge CORS in
+// the browser). Production builds target the Tauri webview, which does not
+// enforce same-origin restrictions, so the raw URL is used directly. A WMS
+// server lacking CORS headers would fail if this app were ever hosted as a
+// plain web page; such a deployment would need its own proxy.
 function proxyWmsRequestUrl(url: string): string {
   return isViteDevServer()
     ? `${WMS_PROXY_PATH}?url=${encodeURIComponent(url)}`
@@ -218,32 +228,30 @@ function createWmsGetFeatureInfoUrl(
   const layers = stringSource(layer.source.layers);
   if (!endpoint || !layers) return null;
 
-  const canvas = map.getCanvas();
-  const width = Math.max(1, Math.round(canvas.clientWidth));
-  const height = Math.max(1, Math.round(canvas.clientHeight));
-  const x = Math.max(0, Math.min(width - 1, Math.round(event.point.x)));
-  const y = Math.max(0, Math.min(height - 1, Math.round(event.point.y)));
-  const tileSize = numberSource(layer.source.tileSize) ?? 256;
   const styles = stringSource(layer.source.styles) ?? "";
   const format = stringSource(layer.source.format) ?? "image/png";
+  // WMS 1.3.0 renames the SRS parameter to CRS. EPSG:3857 keeps easting/
+  // northing axis order across both versions, so the BBOX layout is unchanged.
+  const version = stringSource(layer.source.version) ?? "1.1.1";
+  const crsParam = version.startsWith("1.3") ? "CRS" : "SRS";
 
   return appendWmsQuery(endpoint, [
     ["SERVICE", "WMS"],
     ["REQUEST", "GetFeatureInfo"],
-    ["VERSION", "1.1.1"],
+    ["VERSION", version],
     ["LAYERS", layers],
     ["QUERY_LAYERS", layers],
     ["STYLES", styles],
     ["FORMAT", format],
     ["TRANSPARENT", layer.source.transparent === false ? "FALSE" : "TRUE"],
-    ["SRS", "EPSG:3857"],
-    ["BBOX", mapBbox3857(map)],
-    ["WIDTH", String(width || tileSize)],
-    ["HEIGHT", String(height || tileSize)],
-    ["X", String(x)],
-    ["Y", String(y)],
+    [crsParam, "EPSG:3857"],
+    ["BBOX", wmsIdentifyBbox3857(map, event.lngLat)],
+    ["WIDTH", String(WMS_IDENTIFY_QUERY_SIZE)],
+    ["HEIGHT", String(WMS_IDENTIFY_QUERY_SIZE)],
+    ["X", String(WMS_IDENTIFY_QUERY_CENTER)],
+    ["Y", String(WMS_IDENTIFY_QUERY_CENTER)],
     ["INFO_FORMAT", infoFormat],
-    ["FEATURE_COUNT", "10"],
+    ["FEATURE_COUNT", "1"],
   ]);
 }
 
@@ -298,7 +306,14 @@ async function fetchWmsIdentifyProperties(
 } | null> {
   let fallbackText = "";
 
-  for (const infoFormat of WMS_IDENTIFY_INFO_FORMATS) {
+  // Honor an explicitly configured INFO_FORMAT so we issue a single request
+  // instead of probing JSON/HTML/plain-text in sequence.
+  const configuredFormat = stringSource(layer.source.infoFormat);
+  const infoFormats = configuredFormat
+    ? [configuredFormat]
+    : WMS_IDENTIFY_INFO_FORMATS;
+
+  for (const infoFormat of infoFormats) {
     const targetUrl = createWmsGetFeatureInfoUrl(layer, map, event, infoFormat);
     if (!targetUrl) return null;
 
@@ -339,7 +354,10 @@ async function fetchWmsIdentifyProperties(
 }
 
 function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === "AbortError";
+  return (
+    (error instanceof DOMException || error instanceof Error) &&
+    error.name === "AbortError"
+  );
 }
 
 export const MapCanvas = memo(function MapCanvas({

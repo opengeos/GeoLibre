@@ -221,7 +221,8 @@ export function LayerPanel({
           {visibleLayers.map((layer, displayIndex) => {
             const canIdentify =
               layer.type === "geojson" ||
-              layer.type === "wms" ||
+              (layer.type === "wms" &&
+                Boolean(layer.source.url || layer.sourcePath)) ||
               layer.type === "vector-tiles" ||
               (layer.type === "mbtiles" &&
                 layer.metadata.tileType === "vector") ||
