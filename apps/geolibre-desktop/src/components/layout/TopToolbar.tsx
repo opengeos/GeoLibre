@@ -550,6 +550,9 @@ export function TopToolbar({
           <DropdownMenuItem onSelect={() => setAddDataKind("delimited-text")}>
             Add Delimited Text Layer
           </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setAddDataKind("gpx")}>
+            Add GPX Layer
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       <DropdownMenu>

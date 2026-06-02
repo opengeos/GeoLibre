@@ -48,6 +48,7 @@ import {
   parseDelimitedTextFields,
   parseDelimitedTextLayer,
 } from "../../lib/delimited-text";
+import { parseGpxLayer } from "../../lib/gpx";
 import {
   mbtilesTileUrl,
   readMbtilesMetadata,
@@ -77,6 +78,7 @@ export type AddDataKind =
   | "wfs"
   | "wmts"
   | "vector"
+  | "gpx"
   | "delimited-text"
   | "raster"
   | "mbtiles"
@@ -90,6 +92,8 @@ interface AddDataDialogProps {
 }
 
 type VectorMode = "vector-file" | "geojson-url" | "vector-tiles";
+type GpxMode = "url" | "file";
+type GpxLayerKind = "waypoints" | "tracks" | "routes";
 type DelimitedTextMode = "url" | "file";
 type DelimitedTextDelimiter = "comma" | "tab" | "semicolon" | "pipe" | "custom";
 type RasterMode = "tiles" | "cog-url" | "file";
@@ -105,6 +109,7 @@ const KIND_LABELS: Record<AddDataKind, string> = {
   wfs: "Add WFS Layer",
   wmts: "Add WMTS Layer",
   vector: "Add Vector Layer",
+  gpx: "Add GPX Layer",
   "delimited-text": "Add Delimited Text Layer",
   raster: "Add Raster Layer",
   mbtiles: "Add MBTiles Layer",
@@ -138,6 +143,7 @@ const DEFAULT_RASTER_URL =
   "https://data.source.coop/giswqs/opengeos/nlcd_2021_land_cover_30m.tif";
 const DEFAULT_GEOJSON_URL =
   "https://data.source.coop/giswqs/opengeos/countries.geojson";
+const DEFAULT_GPX_URL = "https://www.topografix.com/fells_loop.gpx";
 const DEFAULT_DELIMITED_TEXT_URL =
   "https://data.source.coop/giswqs/opengeos/us_cities.csv";
 const DEFAULT_DELIMITED_TEXT_LATITUDE_FIELD = "latitude";
@@ -152,6 +158,8 @@ const DEFAULT_ARCGIS_URLS: Record<ArcGISLayerType, string> = {
 };
 // Keep in sync with WFS_PROXY_PATH in vite.config.ts (the dev proxy binds it there).
 const WFS_PROXY_PATH = "/__geolibre_wfs_proxy";
+// Keep in sync with GPX_PROXY_PATH in vite.config.ts (the dev proxy binds it there).
+const GPX_PROXY_PATH = "/__geolibre_gpx_proxy";
 const POSTGRES_CONNECTIONS_STORAGE_KEY =
   "geolibre.postgres.connectionStrings";
 const MAX_SAVED_POSTGRES_CONNECTIONS = 10;
@@ -345,6 +353,12 @@ function proxyWfsRequestUrl(url: string): string {
     : url;
 }
 
+function proxyGpxRequestUrl(url: string): string {
+  return isViteDevServer()
+    ? `${GPX_PROXY_PATH}?url=${encodeURIComponent(url)}`
+    : url;
+}
+
 function parseGeoJsonFeatureCollection(value: unknown): FeatureCollection {
   if (
     !value ||
@@ -448,6 +462,19 @@ export function AddDataDialog({
     data: FeatureCollection;
     path: string;
   } | null>(null);
+  const [gpxMode, setGpxMode] = useState<GpxMode>("url");
+  const [gpxUrl, setGpxUrl] = useState(DEFAULT_GPX_URL);
+  const [selectedGpx, setSelectedGpx] = useState<{
+    path: string;
+    text: string;
+  } | null>(null);
+  const [selectedGpxLayerKinds, setSelectedGpxLayerKinds] = useState<
+    Record<GpxLayerKind, boolean>
+  >({
+    routes: true,
+    tracks: true,
+    waypoints: true,
+  });
   const [delimitedTextMode, setDelimitedTextMode] =
     useState<DelimitedTextMode>("url");
   const [delimitedTextUrl, setDelimitedTextUrl] = useState(
@@ -520,6 +547,7 @@ export function AddDataDialog({
         wfs: "WFS Layer",
         wmts: "WMTS Layer",
         vector: "Vector Layer",
+        gpx: "GPX Layer",
         "delimited-text": "Delimited Text Layer",
         raster: "Raster Layer",
         mbtiles: "MBTiles Layer",
@@ -549,6 +577,14 @@ export function AddDataDialog({
     setVectorUrl(DEFAULT_GEOJSON_URL);
     setVectorSourceLayer("");
     setSelectedVector(null);
+    setGpxMode("url");
+    setGpxUrl(DEFAULT_GPX_URL);
+    setSelectedGpx(null);
+    setSelectedGpxLayerKinds({
+      routes: true,
+      tracks: true,
+      waypoints: true,
+    });
     setDelimitedTextMode("url");
     setDelimitedTextUrl(DEFAULT_DELIMITED_TEXT_URL);
     setDelimitedTextDelimiter("comma");
@@ -606,6 +642,9 @@ export function AddDataDialog({
     if (kind === "vector") {
       return "Add local vector files supported by DuckDB Spatial, GeoJSON URLs, or MapLibre vector tile sources.";
     }
+    if (kind === "gpx") {
+      return "Add GPX waypoints, routes, and tracks as a GeoJSON layer.";
+    }
     if (kind === "delimited-text") {
       return "Add a delimited text file or URL as a point layer using longitude and latitude fields.";
     }
@@ -656,6 +695,24 @@ export function AddDataDialog({
     }
   };
 
+  const handleGpxModeChange = (mode: GpxMode) => {
+    setGpxMode(mode);
+    setSelectedGpx(null);
+    if (mode === "url" && !gpxUrl.trim()) {
+      setGpxUrl(DEFAULT_GPX_URL);
+    }
+  };
+
+  const setGpxLayerKindSelected = (
+    layerKind: GpxLayerKind,
+    selected: boolean,
+  ) => {
+    setSelectedGpxLayerKinds((current) => ({
+      ...current,
+      [layerKind]: selected,
+    }));
+  };
+
   const resetDelimitedTextColumns = () => {
     setDelimitedTextFields([]);
     setDelimitedTextColumnsStatus(null);
@@ -688,6 +745,31 @@ export function AddDataDialog({
     if (!sourcePath) throw new Error("Enter a delimited text URL.");
 
     const response = await fetch(sourcePath);
+    if (!response.ok) {
+      throw new Error(`Request failed with status ${response.status}`);
+    }
+    return {
+      sourcePath,
+      text: await response.text(),
+    };
+  };
+
+  const readGpxSource = async (): Promise<{
+    sourcePath: string;
+    text: string;
+  }> => {
+    if (gpxMode === "file") {
+      if (!selectedGpx) throw new Error("Choose a GPX file.");
+      return {
+        sourcePath: selectedGpx.path,
+        text: selectedGpx.text,
+      };
+    }
+
+    const sourcePath = gpxUrl.trim();
+    if (!sourcePath) throw new Error("Enter a GPX URL.");
+
+    const response = await fetch(proxyGpxRequestUrl(sourcePath));
     if (!response.ok) {
       throw new Error(`Request failed with status ${response.status}`);
     }
@@ -914,6 +996,35 @@ export function AddDataDialog({
       );
     } catch (err) {
       setError(errorMessage(err, "Could not read delimited text file."));
+    }
+  };
+
+  const handleChooseGpx = async () => {
+    setError(null);
+    try {
+      const result = await openLocalDataFileWithFallback({
+        filters: [
+          {
+            name: "GPX",
+            extensions: ["gpx"],
+          },
+        ],
+        accept: ".gpx",
+        readText: true,
+      });
+      if (!result) return;
+      if (!result.text) throw new Error("GPX file data is missing.");
+      setSelectedGpx({
+        path: result.path,
+        text: result.text,
+      });
+      setLayerName((current) =>
+        current.trim() && current !== "GPX Layer"
+          ? current
+          : layerNameFromPath(result.path, "GPX Layer"),
+      );
+    } catch (err) {
+      setError(errorMessage(err, "Could not read GPX file."));
     }
   };
 
@@ -1149,6 +1260,73 @@ export function AddDataDialog({
         return;
       }
 
+      if (kind === "gpx") {
+        if (!hasSelectedGpxLayerKind) {
+          throw new Error("Select at least one GPX layer type.");
+        }
+
+        const { sourcePath, text } = await readGpxSource();
+        const result = parseGpxLayer(text);
+        const gpxLayerGroups: Array<{
+          featureCollection: FeatureCollection;
+          kind: GpxLayerKind;
+          label: string;
+        }> = [
+          {
+            featureCollection: result.waypoints,
+            kind: "waypoints",
+            label: "Waypoints",
+          },
+          {
+            featureCollection: result.tracks,
+            kind: "tracks",
+            label: "Tracks",
+          },
+          {
+            featureCollection: result.routes,
+            kind: "routes",
+            label: "Routes",
+          },
+        ];
+        const layers = gpxLayerGroups
+          .filter(
+            (group) =>
+              selectedGpxLayerKinds[group.kind] &&
+              group.featureCollection.features.length > 0,
+          )
+          .map((group) => ({
+            ...createBaseLayer(
+              `${name} ${group.label}`,
+              "geojson",
+              {
+                type: "geojson",
+                url: sourcePath,
+              },
+              {
+                featureCount: group.featureCollection.features.length,
+                gpxLayerKind: group.kind,
+                routeCount: result.routeCount,
+                sourceKind: "gpx",
+                trackCount: result.trackCount,
+                waypointCount: result.waypointCount,
+              },
+            ),
+            geojson: group.featureCollection,
+            sourcePath,
+          }));
+
+        if (layers.length === 0) {
+          throw new Error("The selected GPX layer types were not found.");
+        }
+
+        for (const layer of layers) {
+          addLayer(layer, beforeLayer);
+        }
+        mapControllerRef.current?.fitLayer(layers[0]);
+        closeDialog();
+        return;
+      }
+
       if (kind === "delimited-text") {
         const delimiter = resolveDelimitedTextDelimiter(
           delimitedTextDelimiter,
@@ -1343,10 +1521,14 @@ export function AddDataDialog({
   const missingCustomDelimiter =
     delimitedTextDelimiter === "custom" &&
     !delimitedTextCustomDelimiter.trim();
+  const hasSelectedGpxLayerKind = Object.values(selectedGpxLayerKinds).some(
+    Boolean,
+  );
 
   const addLayerDisabled =
     isSubmitting ||
     isRetrievingDelimitedTextColumns ||
+    (kind === "gpx" && !hasSelectedGpxLayerKind) ||
     (kind === "delimited-text" && missingCustomDelimiter) ||
     (kind === "postgres" && (!martinServer || !selectedMartinSourceId));
 
@@ -1631,6 +1813,91 @@ export function AddDataDialog({
                   />
                 </div>
               )}
+            </div>
+          )}
+
+          {kind === "gpx" && (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="gpx-mode">Source type</Label>
+                <Select
+                  id="gpx-mode"
+                  value={gpxMode}
+                  onChange={(event) =>
+                    handleGpxModeChange(event.target.value as GpxMode)
+                  }
+                >
+                  <option value="url">GPX URL</option>
+                  <option value="file">GPX file</option>
+                </Select>
+              </div>
+
+              {gpxMode === "file" ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleChooseGpx}
+                  >
+                    <FileUp className="mr-2 h-3.5 w-3.5" />
+                    Choose file
+                  </Button>
+                  <span className="min-w-0 truncate text-xs text-muted-foreground">
+                    {selectedGpx
+                      ? fileNameFromPath(selectedGpx.path)
+                      : "No file selected"}
+                  </span>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label htmlFor="gpx-url">GPX URL</Label>
+                  <Input
+                    id="gpx-url"
+                    placeholder="https://example.com/route.gpx"
+                    value={gpxUrl}
+                    onChange={(event) => setGpxUrl(event.target.value)}
+                  />
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label>Layer types</Label>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={selectedGpxLayerKinds.waypoints}
+                      onChange={(event) =>
+                        setGpxLayerKindSelected(
+                          "waypoints",
+                          event.target.checked,
+                        )
+                      }
+                    />
+                    Waypoints
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={selectedGpxLayerKinds.tracks}
+                      onChange={(event) =>
+                        setGpxLayerKindSelected("tracks", event.target.checked)
+                      }
+                    />
+                    Tracks
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={selectedGpxLayerKinds.routes}
+                      onChange={(event) =>
+                        setGpxLayerKindSelected("routes", event.target.checked)
+                      }
+                    />
+                    Routes
+                  </label>
+                </div>
+              </div>
             </div>
           )}
 
