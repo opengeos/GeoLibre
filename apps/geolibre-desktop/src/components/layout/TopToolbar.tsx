@@ -547,6 +547,9 @@ export function TopToolbar({
           <DropdownMenuItem onSelect={() => setAddDataKind("postgres")}>
             Add PostgreSQL Layer
           </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setAddDataKind("delimited-text")}>
+            Add Delimited Text Layer
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       <DropdownMenu>

@@ -23,7 +23,14 @@ import {
   Select,
 } from "@geolibre/ui";
 import type { FeatureCollection } from "geojson";
-import { Database, FileUp, Globe2, Image, Map as MapIcon } from "lucide-react";
+import {
+  Columns3,
+  Database,
+  FileUp,
+  Globe2,
+  Image,
+  Map as MapIcon,
+} from "lucide-react";
 import {
   type FormEvent,
   type RefObject,
@@ -37,6 +44,10 @@ import {
   openVectorFileWithFallback,
 } from "../../lib/tauri-io";
 import { createAppAPI } from "../../hooks/usePlugins";
+import {
+  parseDelimitedTextFields,
+  parseDelimitedTextLayer,
+} from "../../lib/delimited-text";
 import {
   mbtilesTileUrl,
   readMbtilesMetadata,
@@ -66,6 +77,7 @@ export type AddDataKind =
   | "wfs"
   | "wmts"
   | "vector"
+  | "delimited-text"
   | "raster"
   | "mbtiles"
   | "arcgis"
@@ -78,6 +90,8 @@ interface AddDataDialogProps {
 }
 
 type VectorMode = "vector-file" | "geojson-url" | "vector-tiles";
+type DelimitedTextMode = "url" | "file";
+type DelimitedTextDelimiter = "comma" | "tab" | "semicolon" | "pipe" | "custom";
 type RasterMode = "tiles" | "cog-url" | "file";
 type RasterColormap = NonNullable<CogRasterLayerOptions["colormap"]>;
 type SelectedRasterFile = {
@@ -91,6 +105,7 @@ const KIND_LABELS: Record<AddDataKind, string> = {
   wfs: "Add WFS Layer",
   wmts: "Add WMTS Layer",
   vector: "Add Vector Layer",
+  "delimited-text": "Add Delimited Text Layer",
   raster: "Add Raster Layer",
   mbtiles: "Add MBTiles Layer",
   arcgis: "Add ArcGIS Layer",
@@ -123,6 +138,10 @@ const DEFAULT_RASTER_URL =
   "https://data.source.coop/giswqs/opengeos/nlcd_2021_land_cover_30m.tif";
 const DEFAULT_GEOJSON_URL =
   "https://data.source.coop/giswqs/opengeos/countries.geojson";
+const DEFAULT_DELIMITED_TEXT_URL =
+  "https://data.source.coop/giswqs/opengeos/us_cities.csv";
+const DEFAULT_DELIMITED_TEXT_LATITUDE_FIELD = "latitude";
+const DEFAULT_DELIMITED_TEXT_LONGITUDE_FIELD = "longitude";
 const DEFAULT_ARCGIS_FEATURE_URL =
   "https://services3.arcgis.com/GVgbJbqm8hXASVYi/arcgis/rest/services/USA_Major_Cities/FeatureServer/0";
 const DEFAULT_ARCGIS_VECTOR_TILE_URL =
@@ -136,6 +155,15 @@ const WFS_PROXY_PATH = "/__geolibre_wfs_proxy";
 const POSTGRES_CONNECTIONS_STORAGE_KEY =
   "geolibre.postgres.connectionStrings";
 const MAX_SAVED_POSTGRES_CONNECTIONS = 10;
+const DELIMITED_TEXT_DELIMITERS: Record<
+  Exclude<DelimitedTextDelimiter, "custom">,
+  string
+> = {
+  comma: ",",
+  pipe: "|",
+  semicolon: ";",
+  tab: "\t",
+};
 
 function createLayerId(): string {
   return crypto.randomUUID();
@@ -332,6 +360,35 @@ function parseGeoJsonFeatureCollection(value: unknown): FeatureCollection {
   return value as FeatureCollection;
 }
 
+function resolveDelimitedTextDelimiter(
+  delimiter: DelimitedTextDelimiter,
+  customDelimiter: string,
+): string {
+  if (delimiter !== "custom") return DELIMITED_TEXT_DELIMITERS[delimiter];
+  return customDelimiter;
+}
+
+function inferDelimitedTextField(
+  fields: string[],
+  currentField: string,
+  candidates: string[],
+): string {
+  const current = currentField.trim().toLowerCase();
+  const currentMatch = fields.find(
+    (field) => field.trim().toLowerCase() === current,
+  );
+  if (currentMatch) return currentMatch;
+
+  for (const candidate of candidates) {
+    const match = fields.find(
+      (field) => field.trim().toLowerCase() === candidate,
+    );
+    if (match) return match;
+  }
+
+  return fields[0] ?? currentField;
+}
+
 async function fetchGeoJson(url: string): Promise<FeatureCollection> {
   const response = await fetch(url);
   const text = await response.text();
@@ -391,6 +448,29 @@ export function AddDataDialog({
     data: FeatureCollection;
     path: string;
   } | null>(null);
+  const [delimitedTextMode, setDelimitedTextMode] =
+    useState<DelimitedTextMode>("url");
+  const [delimitedTextUrl, setDelimitedTextUrl] = useState(
+    DEFAULT_DELIMITED_TEXT_URL,
+  );
+  const [delimitedTextDelimiter, setDelimitedTextDelimiter] =
+    useState<DelimitedTextDelimiter>("comma");
+  const [delimitedTextCustomDelimiter, setDelimitedTextCustomDelimiter] =
+    useState("");
+  const [delimitedTextLatitudeField, setDelimitedTextLatitudeField] =
+    useState(DEFAULT_DELIMITED_TEXT_LATITUDE_FIELD);
+  const [delimitedTextLongitudeField, setDelimitedTextLongitudeField] =
+    useState(DEFAULT_DELIMITED_TEXT_LONGITUDE_FIELD);
+  const [delimitedTextFields, setDelimitedTextFields] = useState<string[]>([]);
+  const [delimitedTextColumnsStatus, setDelimitedTextColumnsStatus] = useState<
+    string | null
+  >(null);
+  const [isRetrievingDelimitedTextColumns, setIsRetrievingDelimitedTextColumns] =
+    useState(false);
+  const [selectedDelimitedText, setSelectedDelimitedText] = useState<{
+    path: string;
+    text: string;
+  } | null>(null);
 
   const [rasterMode, setRasterMode] = useState<RasterMode>("cog-url");
   const [rasterUrl, setRasterUrl] = useState(DEFAULT_RASTER_URL);
@@ -440,6 +520,7 @@ export function AddDataDialog({
         wfs: "WFS Layer",
         wmts: "WMTS Layer",
         vector: "Vector Layer",
+        "delimited-text": "Delimited Text Layer",
         raster: "Raster Layer",
         mbtiles: "MBTiles Layer",
         arcgis: "ArcGIS Layer",
@@ -468,6 +549,16 @@ export function AddDataDialog({
     setVectorUrl(DEFAULT_GEOJSON_URL);
     setVectorSourceLayer("");
     setSelectedVector(null);
+    setDelimitedTextMode("url");
+    setDelimitedTextUrl(DEFAULT_DELIMITED_TEXT_URL);
+    setDelimitedTextDelimiter("comma");
+    setDelimitedTextCustomDelimiter("");
+    setDelimitedTextLatitudeField(DEFAULT_DELIMITED_TEXT_LATITUDE_FIELD);
+    setDelimitedTextLongitudeField(DEFAULT_DELIMITED_TEXT_LONGITUDE_FIELD);
+    setDelimitedTextFields([]);
+    setDelimitedTextColumnsStatus(null);
+    setIsRetrievingDelimitedTextColumns(false);
+    setSelectedDelimitedText(null);
     setRasterMode("cog-url");
     setRasterUrl(DEFAULT_RASTER_URL);
     setRasterTileSize("256");
@@ -515,6 +606,9 @@ export function AddDataDialog({
     if (kind === "vector") {
       return "Add local vector files supported by DuckDB Spatial, GeoJSON URLs, or MapLibre vector tile sources.";
     }
+    if (kind === "delimited-text") {
+      return "Add a delimited text file or URL as a point layer using longitude and latitude fields.";
+    }
     if (kind === "raster") {
       return "Add a Cloud Optimized GeoTIFF or raster URL, or use a raster tile template.";
     }
@@ -559,6 +653,91 @@ export function AddDataDialog({
       setVectorUrl(DEFAULT_GEOJSON_URL);
     } else if (mode !== "geojson-url" && currentUrl === DEFAULT_GEOJSON_URL) {
       setVectorUrl("");
+    }
+  };
+
+  const resetDelimitedTextColumns = () => {
+    setDelimitedTextFields([]);
+    setDelimitedTextColumnsStatus(null);
+  };
+
+  const handleDelimitedTextModeChange = (mode: DelimitedTextMode) => {
+    setDelimitedTextMode(mode);
+    setSelectedDelimitedText(null);
+    resetDelimitedTextColumns();
+    if (mode === "url" && !delimitedTextUrl.trim()) {
+      setDelimitedTextUrl(DEFAULT_DELIMITED_TEXT_URL);
+    }
+  };
+
+  const readDelimitedTextSource = async (): Promise<{
+    sourcePath: string;
+    text: string;
+  }> => {
+    if (delimitedTextMode === "file") {
+      if (!selectedDelimitedText) {
+        throw new Error("Choose a delimited text file.");
+      }
+      return {
+        sourcePath: selectedDelimitedText.path,
+        text: selectedDelimitedText.text,
+      };
+    }
+
+    const sourcePath = delimitedTextUrl.trim();
+    if (!sourcePath) throw new Error("Enter a delimited text URL.");
+
+    const response = await fetch(sourcePath);
+    if (!response.ok) {
+      throw new Error(`Request failed with status ${response.status}`);
+    }
+    return {
+      sourcePath,
+      text: await response.text(),
+    };
+  };
+
+  const handleRetrieveDelimitedTextColumns = async () => {
+    setError(null);
+    setDelimitedTextColumnsStatus(null);
+    setIsRetrievingDelimitedTextColumns(true);
+
+    try {
+      const delimiter = resolveDelimitedTextDelimiter(
+        delimitedTextDelimiter,
+        delimitedTextCustomDelimiter,
+      );
+      const { text } = await readDelimitedTextSource();
+      const fields = parseDelimitedTextFields(text, delimiter);
+      setDelimitedTextFields(fields);
+      setDelimitedTextLongitudeField((current) =>
+        inferDelimitedTextField(fields, current, [
+          "longitude",
+          "lon",
+          "lng",
+          "long",
+          "x",
+          "xcoord",
+          "x_coord",
+        ]),
+      );
+      setDelimitedTextLatitudeField((current) =>
+        inferDelimitedTextField(fields, current, [
+          "latitude",
+          "lat",
+          "y",
+          "ycoord",
+          "y_coord",
+        ]),
+      );
+      setDelimitedTextColumnsStatus(
+        `Retrieved ${fields.length} column${fields.length === 1 ? "" : "s"}.`,
+      );
+    } catch (err) {
+      setError(errorMessage(err, "Could not retrieve column names."));
+      setDelimitedTextFields([]);
+    } finally {
+      setIsRetrievingDelimitedTextColumns(false);
     }
   };
 
@@ -705,6 +884,36 @@ export function AddDataDialog({
       );
     } catch (err) {
       setError(errorMessage(err, "Could not read file."));
+    }
+  };
+
+  const handleChooseDelimitedText = async () => {
+    setError(null);
+    try {
+      const result = await openLocalDataFileWithFallback({
+        filters: [
+          {
+            name: "Delimited text",
+            extensions: ["csv", "tsv", "txt", "dat"],
+          },
+        ],
+        accept: ".csv,.tsv,.txt,.dat",
+        readText: true,
+      });
+      if (!result) return;
+      if (!result.text) throw new Error("Delimited text file data is missing.");
+      setSelectedDelimitedText({
+        path: result.path,
+        text: result.text,
+      });
+      resetDelimitedTextColumns();
+      setLayerName((current) =>
+        current.trim() && current !== "Delimited Text Layer"
+          ? current
+          : layerNameFromPath(result.path, "Delimited Text Layer"),
+      );
+    } catch (err) {
+      setError(errorMessage(err, "Could not read delimited text file."));
     }
   };
 
@@ -940,6 +1149,48 @@ export function AddDataDialog({
         return;
       }
 
+      if (kind === "delimited-text") {
+        const delimiter = resolveDelimitedTextDelimiter(
+          delimitedTextDelimiter,
+          delimitedTextCustomDelimiter,
+        );
+        const { sourcePath, text } = await readDelimitedTextSource();
+        if (!text) throw new Error("Delimited text data is missing.");
+
+        const result = parseDelimitedTextLayer(text, {
+          delimiter,
+          latitudeField: delimitedTextLatitudeField,
+          longitudeField: delimitedTextLongitudeField,
+        });
+        addAndClose(
+          {
+            ...createBaseLayer(
+              name,
+              "geojson",
+              {
+                type: "geojson",
+                url: sourcePath,
+              },
+              {
+                delimiter:
+                  delimitedTextDelimiter === "tab" ? "\\t" : delimiter,
+                featureCount: result.data.features.length,
+                fields: result.fields,
+                latitudeField: delimitedTextLatitudeField.trim(),
+                longitudeField: delimitedTextLongitudeField.trim(),
+                skippedRows: result.skippedRows,
+                sourceKind: "delimited-text",
+                totalRows: result.totalRows,
+              },
+            ),
+            geojson: result.data,
+            sourcePath,
+          },
+          { fit: true },
+        );
+        return;
+      }
+
       if (kind === "mbtiles") {
         if (!selectedMbtiles) throw new Error("Choose an MBTiles file.");
         registerMbtilesProtocol();
@@ -1072,8 +1323,27 @@ export function AddDataDialog({
     }
   };
 
+  const delimitedTextFieldOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          [
+            ...delimitedTextFields,
+            delimitedTextLongitudeField,
+            delimitedTextLatitudeField,
+          ].filter((field) => field.trim()),
+        ),
+      ),
+    [
+      delimitedTextFields,
+      delimitedTextLatitudeField,
+      delimitedTextLongitudeField,
+    ],
+  );
+
   const addLayerDisabled =
     isSubmitting ||
+    isRetrievingDelimitedTextColumns ||
     (kind === "postgres" && (!martinServer || !selectedMartinSourceId));
 
   return (
@@ -1357,6 +1627,157 @@ export function AddDataDialog({
                   />
                 </div>
               )}
+            </div>
+          )}
+
+          {kind === "delimited-text" && (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="delimited-text-mode">Source type</Label>
+                <Select
+                  id="delimited-text-mode"
+                  value={delimitedTextMode}
+                  onChange={(event) =>
+                    handleDelimitedTextModeChange(
+                      event.target.value as DelimitedTextMode,
+                    )
+                  }
+                >
+                  <option value="url">Delimited text URL</option>
+                  <option value="file">Delimited text file</option>
+                </Select>
+              </div>
+
+              {delimitedTextMode === "file" ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleChooseDelimitedText}
+                  >
+                    <FileUp className="mr-2 h-3.5 w-3.5" />
+                    Choose file
+                  </Button>
+                  <span className="min-w-0 truncate text-xs text-muted-foreground">
+                    {selectedDelimitedText
+                      ? fileNameFromPath(selectedDelimitedText.path)
+                      : "No file selected"}
+                  </span>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label htmlFor="delimited-text-url">
+                    Delimited text URL
+                  </Label>
+                  <Input
+                    id="delimited-text-url"
+                    placeholder="https://example.com/data.csv"
+                    value={delimitedTextUrl}
+                    onChange={(event) => {
+                      setDelimitedTextUrl(event.target.value);
+                      resetDelimitedTextColumns();
+                    }}
+                  />
+                </div>
+              )}
+
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleRetrieveDelimitedTextColumns}
+                disabled={
+                  isSubmitting ||
+                  isRetrievingDelimitedTextColumns ||
+                  (delimitedTextMode === "file" && !selectedDelimitedText) ||
+                  (delimitedTextMode === "url" && !delimitedTextUrl.trim())
+                }
+              >
+                <Columns3 className="mr-2 h-3.5 w-3.5" />
+                {isRetrievingDelimitedTextColumns
+                  ? "Retrieving..."
+                  : "Retrieve columns"}
+              </Button>
+              {delimitedTextColumnsStatus ? (
+                <p className="text-xs text-muted-foreground">
+                  {delimitedTextColumnsStatus}
+                </p>
+              ) : null}
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="delimited-text-delimiter">Delimiter</Label>
+                  <Select
+                    id="delimited-text-delimiter"
+                    value={delimitedTextDelimiter}
+                    onChange={(event) => {
+                      setDelimitedTextDelimiter(
+                        event.target.value as DelimitedTextDelimiter,
+                      );
+                      resetDelimitedTextColumns();
+                    }}
+                  >
+                    <option value="comma">Comma</option>
+                    <option value="tab">Tab</option>
+                    <option value="semicolon">Semicolon</option>
+                    <option value="pipe">Pipe</option>
+                    <option value="custom">Custom</option>
+                  </Select>
+                </div>
+                {delimitedTextDelimiter === "custom" ? (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="delimited-text-custom-delimiter">
+                      Custom delimiter
+                    </Label>
+                    <Input
+                      id="delimited-text-custom-delimiter"
+                      value={delimitedTextCustomDelimiter}
+                      onChange={(event) => {
+                        setDelimitedTextCustomDelimiter(event.target.value);
+                        resetDelimitedTextColumns();
+                      }}
+                    />
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="delimited-text-longitude">
+                    Longitude field
+                  </Label>
+                  <Select
+                    id="delimited-text-longitude"
+                    value={delimitedTextLongitudeField}
+                    onChange={(event) =>
+                      setDelimitedTextLongitudeField(event.target.value)
+                    }
+                  >
+                    {delimitedTextFieldOptions.map((field) => (
+                      <option key={field} value={field}>
+                        {field}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="delimited-text-latitude">
+                    Latitude field
+                  </Label>
+                  <Select
+                    id="delimited-text-latitude"
+                    value={delimitedTextLatitudeField}
+                    onChange={(event) =>
+                      setDelimitedTextLatitudeField(event.target.value)
+                    }
+                  >
+                    {delimitedTextFieldOptions.map((field) => (
+                      <option key={field} value={field}>
+                        {field}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
             </div>
           )}
 
