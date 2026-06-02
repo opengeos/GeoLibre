@@ -46,7 +46,7 @@ export function parseDelimitedTextLayer(
     throw new Error("The delimited text must include a header and data rows.");
   }
 
-  const fields = parseDelimitedTextFields(text, delimiter);
+  const fields = uniqueFieldNames(rows[0].map((field) => field.trim()));
   const latitudeIndex = findFieldIndex(fields, options.latitudeField);
   const longitudeIndex = findFieldIndex(fields, options.longitudeField);
 
@@ -119,8 +119,10 @@ function parseDelimitedRows(text: string, delimiter: string): string[][] {
       if (inQuotes && next === '"') {
         field += '"';
         index += 1;
-      } else {
+      } else if (inQuotes || field === "") {
         inQuotes = !inQuotes;
+      } else {
+        field += char;
       }
       continue;
     }
@@ -153,12 +155,21 @@ function parseDelimitedRows(text: string, delimiter: string): string[][] {
 }
 
 function uniqueFieldNames(fields: string[]): string[] {
-  const counts = new Map<string, number>();
+  const seen = new Set<string>();
   return fields.map((field, index) => {
     const baseName = field || `field_${index + 1}`;
-    const count = counts.get(baseName) ?? 0;
-    counts.set(baseName, count + 1);
-    return count === 0 ? baseName : `${baseName}_${count + 1}`;
+    if (!seen.has(baseName)) {
+      seen.add(baseName);
+      return baseName;
+    }
+    let suffix = 2;
+    let candidate = `${baseName}_${suffix}`;
+    while (seen.has(candidate)) {
+      suffix += 1;
+      candidate = `${baseName}_${suffix}`;
+    }
+    seen.add(candidate);
+    return candidate;
   });
 }
 

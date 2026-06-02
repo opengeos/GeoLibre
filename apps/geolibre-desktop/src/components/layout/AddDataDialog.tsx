@@ -1172,8 +1172,7 @@ export function AddDataDialog({
                 url: sourcePath,
               },
               {
-                delimiter:
-                  delimitedTextDelimiter === "tab" ? "\\t" : delimiter,
+                delimiter,
                 featureCount: result.data.features.length,
                 fields: result.fields,
                 latitudeField: delimitedTextLatitudeField.trim(),
@@ -1341,9 +1340,14 @@ export function AddDataDialog({
     ],
   );
 
+  const missingCustomDelimiter =
+    delimitedTextDelimiter === "custom" &&
+    !delimitedTextCustomDelimiter.trim();
+
   const addLayerDisabled =
     isSubmitting ||
     isRetrievingDelimitedTextColumns ||
+    (kind === "delimited-text" && missingCustomDelimiter) ||
     (kind === "postgres" && (!martinServer || !selectedMartinSourceId));
 
   return (
@@ -1688,6 +1692,7 @@ export function AddDataDialog({
                 disabled={
                   isSubmitting ||
                   isRetrievingDelimitedTextColumns ||
+                  missingCustomDelimiter ||
                   (delimitedTextMode === "file" && !selectedDelimitedText) ||
                   (delimitedTextMode === "url" && !delimitedTextUrl.trim())
                 }
