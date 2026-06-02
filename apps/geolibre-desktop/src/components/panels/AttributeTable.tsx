@@ -753,6 +753,11 @@ export function AttributeTable() {
           <X className="h-4 w-4" />
         </Button>
       </div>
+      {/*
+        Vertical scrollbar height reserves 3.625rem: 2.75rem for the sticky
+        header (top-11) plus 0.875rem for the horizontal scrollbar (h-3.5),
+        so the two scrollbars do not overlap.
+      */}
       <ScrollArea
         type="always"
         className="flex-1 [&_[data-orientation=vertical]]:!top-11 [&_[data-orientation=vertical]]:!h-[calc(100%-3.625rem)]"
