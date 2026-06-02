@@ -250,10 +250,15 @@ function createWmsGetFeatureInfoUrl(
 
   const styles = stringSource(layer.source.styles) ?? "";
   const format = stringSource(layer.source.format) ?? "image/png";
-  // WMS 1.3.0 renames the SRS parameter to CRS. EPSG:3857 keeps easting/
-  // northing axis order across both versions, so the BBOX layout is unchanged.
+  // WMS 1.3.0 renames the SRS parameter to CRS and the pixel coordinates from
+  // X/Y to I/J. EPSG:3857 keeps easting/northing axis order across both
+  // versions, so the BBOX layout is unchanged.
   const version = stringSource(layer.source.version) ?? "1.1.1";
-  const crsParam = version.startsWith("1.3") ? "CRS" : "SRS";
+  const isV13 = version.startsWith("1.3");
+  const crsParam = isV13 ? "CRS" : "SRS";
+  // Treat a deliberate featureCount of 0 ("all features" on some servers) as
+  // intentional; only fall back to 1 when it is unset or non-numeric.
+  const featureCount = Number(layer.source.featureCount);
 
   return appendWmsQuery(endpoint, [
     ["SERVICE", "WMS"],
@@ -268,10 +273,10 @@ function createWmsGetFeatureInfoUrl(
     ["BBOX", wmsIdentifyBbox3857(map, event.lngLat)],
     ["WIDTH", String(WMS_IDENTIFY_QUERY_SIZE)],
     ["HEIGHT", String(WMS_IDENTIFY_QUERY_SIZE)],
-    ["X", String(WMS_IDENTIFY_QUERY_CENTER)],
-    ["Y", String(WMS_IDENTIFY_QUERY_CENTER)],
+    [isV13 ? "I" : "X", String(WMS_IDENTIFY_QUERY_CENTER)],
+    [isV13 ? "J" : "Y", String(WMS_IDENTIFY_QUERY_CENTER)],
     ["INFO_FORMAT", infoFormat],
-    ["FEATURE_COUNT", String(Number(layer.source.featureCount) || 1)],
+    ["FEATURE_COUNT", String(Number.isFinite(featureCount) ? featureCount : 1)],
   ]);
 }
 
@@ -293,6 +298,15 @@ function parseWmsJsonProperties(value: unknown): {
   properties: Record<string, unknown>;
 } | null {
   if (!value || typeof value !== "object") return null;
+
+  if (Array.isArray(value)) {
+    // Some servers return a bare array of features instead of a FeatureCollection.
+    if (value.length === 0) return { properties: {} };
+    return parseWmsJsonProperties({
+      type: "FeatureCollection",
+      features: [value[0]],
+    });
+  }
 
   if ("features" in value && Array.isArray(value.features)) {
     // An empty collection is the standard "no hit" response: report success
@@ -348,20 +362,28 @@ async function fetchWmsIdentifyProperties(
     const text = await response.text();
     if (signal.aborted) return null;
     if (!response.ok) {
-      fallbackText = normalizeText(text) || response.statusText;
+      // HTTP/2 drops the reason phrase, so statusText is often "". Fall back to
+      // the status code so a failed request never surfaces as "No attributes".
+      fallbackText =
+        normalizeText(text) || response.statusText || `HTTP ${response.status}`;
       continue;
     }
-    if (isWmsExceptionResponse(text)) {
+
+    const trimmed = text.trim();
+    const looksLikeJson =
+      contentType.includes("json") ||
+      infoFormat.includes("json") ||
+      trimmed.startsWith("{") ||
+      trimmed.startsWith("[");
+
+    // Only run the XML exception check on bodies that are not JSON, so a JSON
+    // response that merely mentions "ServiceException" is not misread as one.
+    if (!looksLikeJson && isWmsExceptionResponse(text)) {
       fallbackText = normalizeText(text);
       continue;
     }
 
-    if (
-      contentType.includes("json") ||
-      infoFormat.includes("json") ||
-      text.trim().startsWith("{") ||
-      text.trim().startsWith("[")
-    ) {
+    if (looksLikeJson) {
       try {
         const parsed = parseWmsJsonProperties(JSON.parse(text));
         if (parsed) return parsed;
@@ -610,6 +632,16 @@ export const MapCanvas = memo(function MapCanvas({
         showIdentifyPopup(
           createIdentifyMessagePopupElement(layer.name, "Loading..."),
         );
+        // Closing the loading popup (the × button) must cancel the in-flight
+        // request so its result does not reopen a popup the user dismissed.
+        // Guard the shared controller by identity so replacing this popup with
+        // the result popup does not clobber a newer request's controller.
+        identifyPopup.current?.once("close", () => {
+          abortController.abort();
+          if (wmsIdentifyAbortController === abortController) {
+            wmsIdentifyAbortController = null;
+          }
+        });
 
         void fetchWmsIdentifyProperties(
           layer,
