@@ -6,6 +6,8 @@ repos:
     rev: v6.0.0
     hooks:
       - id: check-json
+      - id: check-added-large-files
+        args: ["--maxkb=1024", "--enforce-all"]
       - id: check-merge-conflict
       - id: check-toml
       - id: check-yaml
