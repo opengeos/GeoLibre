@@ -463,14 +463,29 @@ export function ProcessingDialog({
 
   useEffect(() => {
     if (!job || !RUNNING_JOB_STATUSES.has(job.status)) return;
-    const timer = window.setInterval(async () => {
+    // Schedule the next poll only after the current request resolves so a slow
+    // sidecar cannot accumulate overlapping, out-of-order in-flight requests.
+    let cancelled = false;
+    const poll = async () => {
+      if (cancelled) return;
       try {
-        setJob(await fetchWhiteboxJob(job.id));
+        const next = await fetchWhiteboxJob(job.id);
+        if (cancelled) return;
+        setJob(next);
+        if (RUNNING_JOB_STATUSES.has(next.status)) {
+          window.setTimeout(poll, 1000);
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not poll job.");
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Could not poll job.");
+        }
       }
-    }, 1000);
-    return () => window.clearInterval(timer);
+    };
+    const timer = window.setTimeout(poll, 1000);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [job]);
 
   const updateValue = (name: string, value: unknown) => {

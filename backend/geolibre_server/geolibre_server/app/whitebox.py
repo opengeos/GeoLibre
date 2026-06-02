@@ -503,7 +503,10 @@ class ExternalRuntimeSession:
             bufsize=1,
             **_subprocess_startup_kwargs(),
         )
-        assert process.stdout is not None
+        if process.stdout is None:
+            raise RuntimeBootstrapError(
+                "Whitebox subprocess stdout is unexpectedly None"
+            )
         for line in process.stdout:
             line = line.rstrip("\r\n")
             if line.startswith("__WBW_EVENT__"):
@@ -948,8 +951,20 @@ def whitebox_job(job_id: str):
     return job
 
 
+def _normalize_output_path(path: str) -> str:
+    """Return an absolute, lexically normalized path without following symlinks.
+
+    Symlinks are deliberately not resolved: resolving them would let a symlink
+    that points at an allowlisted target masquerade as that target during the
+    /output allowlist check. Lexical normalization still collapses ``..`` and
+    redundant separators so the comparison is robust.
+    """
+    expanded = os.path.expanduser(path)
+    return os.path.normpath(os.path.abspath(expanded))
+
+
 def _known_output_paths() -> set[str]:
-    """Return the set of resolved output paths produced by recorded jobs."""
+    """Return the set of output paths produced by recorded jobs."""
     paths: set[str] = set()
     with _JOBS_LOCK:
         jobs = list(_JOBS.values())
@@ -958,19 +973,20 @@ def _known_output_paths() -> set[str]:
             candidate = value.get("path") if isinstance(value, dict) else value
             if isinstance(candidate, str) and candidate.strip():
                 try:
-                    paths.add(str(Path(candidate).expanduser().resolve()))
+                    paths.add(_normalize_output_path(candidate))
                 except OSError:
                     continue
     return paths
 
 
-def _read_text_no_symlink(output_path: Path) -> str:
+def _read_text_no_symlink(output_path: str) -> str:
     """Read a file's text while rejecting a symlinked final path component.
 
-    Opening with ``O_NOFOLLOW`` closes the TOCTOU window in which an allowlisted
-    output file is swapped for a symlink to an arbitrary target between the
-    allowlist check and the read. On platforms without ``O_NOFOLLOW`` the flag
-    degrades to 0.
+    The path must be the literal (unresolved) output path so that opening with
+    ``O_NOFOLLOW`` rejects a final component that was swapped for a symlink
+    between the allowlist check and the read. On platforms without
+    ``O_NOFOLLOW`` (Windows) the flag degrades to 0 and the upfront
+    ``is_symlink`` check is the only mitigation.
     """
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
     with os.fdopen(os.open(output_path, flags), "r", encoding="utf-8") as handle:
@@ -980,12 +996,20 @@ def _read_text_no_symlink(output_path: Path) -> str:
 @router.get("/output")
 def whitebox_output(path: str):
     """Read a JSON or GeoJSON Whitebox output file."""
-    output_path = Path(path).expanduser().resolve()
-    if output_path.suffix.lower() not in {".json", ".geojson"}:
+    output_path = _normalize_output_path(path)
+    if Path(output_path).suffix.lower() not in {".json", ".geojson"}:
         raise HTTPException(status_code=400, detail="Only JSON outputs can be read")
-    if str(output_path) not in _known_output_paths():
+    if output_path not in _known_output_paths():
         raise HTTPException(
             status_code=403, detail="Path is not a known Whitebox output"
+        )
+    # Reject a symlinked final component before reading. Combined with the
+    # O_NOFOLLOW open this closes the symlink-swap TOCTOU on POSIX; on Windows
+    # it is the sole mitigation. A swapped intermediate directory is out of
+    # scope (it requires write access to the output's parent directory).
+    if os.path.islink(output_path):
+        raise HTTPException(
+            status_code=403, detail="Output path must not be a symbolic link"
         )
     try:
         return json.loads(_read_text_no_symlink(output_path))

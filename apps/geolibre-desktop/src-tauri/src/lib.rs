@@ -482,7 +482,9 @@ fn stop_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<(), String> {
         wait_for_sidecar_stop(&base_url);
     }
     if sidecar_health_is_ready(&base_url) {
-        return Err("GeoLibre sidecar is still running on port 8765.".to_string());
+        return Err(format!(
+            "GeoLibre sidecar is still running on port {SIDECAR_PORT}."
+        ));
     }
     Ok(())
 }
@@ -663,7 +665,9 @@ fn process_has_socket(pid: i32, inodes: &HashSet<String>) -> Result<bool, String
         return Ok(false);
     };
     for entry in entries {
-        let entry = entry.map_err(|error| format!("Could not read {fd_dir} entry: {error}"))?;
+        let Ok(entry) = entry else {
+            continue; // process may have exited between the /proc scan and this read
+        };
         let Ok(target) = fs::read_link(entry.path()) else {
             continue;
         };
@@ -688,7 +692,7 @@ fn is_geolibre_sidecar_process(pid: i32) -> bool {
     };
     let command_line = String::from_utf8_lossy(&command_line);
     command_line.contains("geolibre_server.app.main")
-        || command_line.contains("geolibre_server")
+        || command_line.contains("geolibre_server/app")
 }
 
 #[cfg(unix)]
@@ -851,7 +855,20 @@ fn find_executable_on_path(name: &str) -> Option<PathBuf> {
     let path = env::var_os("PATH")?;
     env::split_paths(&path)
         .map(|directory| directory.join(name))
-        .find(|candidate| candidate.exists())
+        .find(|candidate| candidate.is_file() && is_executable(candidate))
+}
+
+#[cfg(unix)]
+fn is_executable(path: &std::path::Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    path.metadata()
+        .map(|metadata| metadata.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false)
+}
+
+#[cfg(not(unix))]
+fn is_executable(_path: &std::path::Path) -> bool {
+    true
 }
 
 fn ensure_martin_binary_path(app: &tauri::AppHandle) -> Result<MartinBinaryInfo, String> {

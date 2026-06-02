@@ -655,19 +655,21 @@ export async function pickSavePathWithFallback(
   const pickerWindow = window as BrowserFilePickerWindow;
   if (pickerWindow.showSaveFilePicker) {
     try {
-      const handle = await pickerWindow.showSaveFilePicker({
+      await pickerWindow.showSaveFilePicker({
         suggestedName: options.defaultName,
         types: options.browserTypes,
         excludeAcceptAllOption: false,
       });
-      return handle.name || options.defaultName;
     } catch (error) {
       if (isAbortError(error)) return null;
       console.warn("Browser save path picker failed", error);
     }
   }
 
-  return options.defaultName;
+  // The browser only exposes a leaf file name, never a real filesystem path,
+  // so return null (matching pickLocalPathWithFallback) rather than handing a
+  // non-resolvable name to a Whitebox path parameter.
+  return null;
 }
 
 export async function openGeoJsonFile(): Promise<{

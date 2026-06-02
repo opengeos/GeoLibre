@@ -255,7 +255,7 @@ async function responseErrorMessage(
 }
 
 function sidecarConnectionError(baseUrl: string, error: unknown): Error {
-  void error;
+  console.debug("GeoLibre sidecar unreachable:", error);
   return new Error(
     `Could not connect to the GeoLibre sidecar at ${baseUrl}. ` +
       "Start the sidecar to run Whitebox tools.",

@@ -23,9 +23,15 @@ from pydantic import BaseModel
 from .whitebox import router as whitebox_router
 
 app = FastAPI(title="GeoLibre Server", version="0.6.0")
+# Restrict CORS to the Tauri webview origins and the pinned Vite dev server
+# (vite.config.ts sets strictPort on 5173) rather than any localhost port, so a
+# stray local web app cannot reach the Whitebox endpoints from a browser.
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"^(http://localhost:\d+|http://127\.0\.0\.1:\d+|tauri://localhost)$",
+    allow_origin_regex=(
+        r"^(http://localhost:5173|http://127\.0\.0\.1:5173"
+        r"|tauri://localhost|http://tauri\.localhost)$"
+    ),
     allow_credentials=False,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
