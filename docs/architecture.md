@@ -51,19 +51,15 @@ GeoParquet is read with DuckDB's Parquet reader after loading Spatial. Other loc
 
 ## Advanced Add Data workflows
 
-The v0.6.0 Add Data surface includes native dialogs for XYZ, WMS, vector files, GeoJSON URLs, vector tile sources, raster tile templates, COG and GeoTIFF rasters, MBTiles, and ArcGIS FeatureServer or VectorTileServer layers. The Components plugin wraps `maplibre-gl-components` panels for FlatGeobuf, PMTiles, Zarr, LiDAR, and Gaussian splats, then mirrors added layers into the GeoLibre store so the Layer panel, project format, and layer control can reason about them.
+The v0.7.0 Add Data surface includes native dialogs for XYZ, WMS, WFS, vector files, GeoJSON URLs, vector tile sources, delimited text, raster tile templates, COG and GeoTIFF rasters, MBTiles, ArcGIS FeatureServer or VectorTileServer layers, and GPX waypoints, tracks, and routes. The Components plugin wraps `maplibre-gl-components` panels for FlatGeobuf, PMTiles, Zarr, LiDAR, and Gaussian splats, then mirrors added layers into the GeoLibre store so the Layer panel, project format, and layer control can reason about them.
 
 Local MBTiles tiles are read through a custom MapLibre protocol backed by Tauri commands. Remote rasters are fetched through the desktop backend when needed, and the local development server includes a raster proxy for selected release assets that need CORS handling.
 
 ## Python sidecar
 
-The FastAPI app in `backend/geolibre_server` is reserved for heavier processing workflows and is planned to run as a Tauri **external binary**:
+The FastAPI app in `backend/geolibre_server` backs the v0.7 Whitebox toolbox through a managed local processing sidecar. The desktop app starts the sidecar on demand, communicates over `127.0.0.1`, and keeps the heavier Python processing stack outside the browser bundle.
 
-1. Bundle `geolibre-server` in `src-tauri/bin/`.
-2. Spawn on first processing request needing GDAL/GeoPandas.
-3. Communicate via HTTP on `127.0.0.1:8765`.
-
-Not required for the MVP UI.
+Future processing releases are expected to expand the same sidecar pattern for GDAL, Rasterio, GeoPandas, DuckDB Spatial SQL, Leafmap, GeoAI, and SamGeo workflows.
 
 ## Security
 

@@ -73,7 +73,7 @@ Projects without a `plugins` section open with the built-in default plugin state
 
 ## Layer types
 
-| Type | v0.6.0 status |
+| Type | v0.7.0 status |
 |------|---------------|
 | `geojson` | Supported for imported files and GeoJSON URLs |
 | `xyz` | Supported for raster tile templates |

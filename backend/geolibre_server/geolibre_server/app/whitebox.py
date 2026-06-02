@@ -193,7 +193,7 @@ def _download_to_temp(url: str, suffix: str) -> Path:
     )
     request = urllib.request.Request(
         url,
-        headers={"User-Agent": "GeoLibre/0.6 uv-bootstrap"},
+        headers={"User-Agent": "GeoLibre/0.7 uv-bootstrap"},
     )
     try:
         with urllib.request.urlopen(request, timeout=60) as response:

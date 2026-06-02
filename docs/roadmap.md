@@ -38,7 +38,7 @@
 - [x] Plugin control position controls in the Plugins menu
 - [x] Layer control integration for GeoLibre-managed layers
 
-## v0.6: Project access, web embeds, and expanded integrations (current)
+## v0.6: Project access, web embeds, and expanded integrations
 
 - [x] Persistent recent projects with desktop file recents and URL-backed web recents
 - [x] Separate Open Project from File and Open Project from URL flows
@@ -47,15 +47,28 @@
 - [x] STAC search workflow for adding catalog-backed raster layers
 - [x] Esri Wayback, GeoAgent, GeoEditor, Street View, and Swipe plugin integrations
 
-## v0.7: SQL and processing sidecar
+## v0.7: Add Data expansion, identify, settings, and processing (current)
 
-- [ ] Bundle FastAPI server as Tauri external bin
+- [x] GPX loading from URL or local file, with selectable waypoint, track, and route layers
+- [x] Delimited text loading from URL or local file using longitude and latitude fields
+- [x] WFS GetFeature loading through the Add Data dialog
+- [x] WMS GetFeatureInfo identify support with hardened popup handling
+- [x] Whitebox toolbox backed by a managed Python sidecar
+- [x] Inline attribute editing, horizontal table scrolling, and scrollable identify popups
+- [x] Settings dialog for map preferences and runtime environment variables
+- [x] Plugin state persistence in project files
+- [x] Default GeoJSON sample URL and larger identify popup
+- [x] Local raster file loading fix
+- [x] Large-file pre-commit guard
+
+## v0.8: SQL and processing sidecar
+
 - [ ] GDAL / Rasterio / GeoPandas pipelines
 - [ ] Buffer, reproject, export GeoJSON
-- [ ] WhiteboxTools, Leafmap, GeoAI, SamGeo (selective)
+- [ ] Expanded WhiteboxTools coverage, Leafmap, GeoAI, SamGeo (selective)
 - [ ] SQL panel and query-result layers
 
-## v0.8: External plugin system
+## v0.9: External plugin system
 
 - [ ] External plugin packages
 - [ ] Plugin marketplace / registry (design)
