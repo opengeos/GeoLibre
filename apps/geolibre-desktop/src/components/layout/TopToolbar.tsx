@@ -511,9 +511,6 @@ export function TopToolbar({
           <DropdownMenuItem onSelect={() => setAddDataKind("vector")}>
             Add Vector Layer
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setAddDataKind("gpx")}>
-            Add GPX Layer
-          </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setAddDataKind("raster")}>
             Add Raster Layer
           </DropdownMenuItem>
@@ -552,6 +549,9 @@ export function TopToolbar({
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setAddDataKind("delimited-text")}>
             Add Delimited Text Layer
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setAddDataKind("gpx")}>
+            Add GPX Layer
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

@@ -143,7 +143,8 @@ const DEFAULT_RASTER_URL =
   "https://data.source.coop/giswqs/opengeos/nlcd_2021_land_cover_30m.tif";
 const DEFAULT_GEOJSON_URL =
   "https://data.source.coop/giswqs/opengeos/countries.geojson";
-const DEFAULT_GPX_URL = "https://www.topografix.com/fells_loop.gpx";
+const DEFAULT_GPX_URL =
+  "https://data.source.coop/giswqs/opengeos/fells_loop.gpx";
 const DEFAULT_DELIMITED_TEXT_URL =
   "https://data.source.coop/giswqs/opengeos/us_cities.csv";
 const DEFAULT_DELIMITED_TEXT_LATITUDE_FIELD = "latitude";
