@@ -1,3 +1,4 @@
+import type { ProjectPluginState } from "@geolibre/core";
 import type {
   GeoLibreAppAPI,
   GeoLibreMapControlPosition,
@@ -7,17 +8,31 @@ import type {
 export class PluginManager {
   private plugins = new Map<string, GeoLibrePlugin>();
   private active = new Set<string>();
+  private defaultActive = new Set<string>();
+  private defaultMapControlPositions = new Map<
+    string,
+    GeoLibreMapControlPosition
+  >();
   private listeners = new Set<() => void>();
   private version = 0;
 
   register(plugin: GeoLibrePlugin): void {
     const previous = this.plugins.get(plugin.id);
     this.plugins.set(plugin.id, plugin);
+    const defaultPosition = plugin.getMapControlPosition?.();
+    if (defaultPosition) {
+      this.defaultMapControlPositions.set(plugin.id, defaultPosition);
+    }
     // activeByDefault only marks the plugin active; activate() is not called
     // here because no app API is available at registration time. Such plugins
     // must apply their initial side effects idempotently elsewhere (e.g. the
     // layer control is added by MapController.init regardless of plugin state).
-    if (plugin.activeByDefault) this.active.add(plugin.id);
+    if (plugin.activeByDefault) {
+      this.defaultActive.add(plugin.id);
+      this.active.add(plugin.id);
+    } else {
+      this.defaultActive.delete(plugin.id);
+    }
     if (previous !== plugin) this.notify();
   }
 
@@ -31,6 +46,25 @@ export class PluginManager {
 
   isActive(id: string): boolean {
     return this.active.has(id);
+  }
+
+  getProjectState(): ProjectPluginState {
+    const mapControlPositions: ProjectPluginState["mapControlPositions"] = {};
+    const settings: ProjectPluginState["settings"] = {};
+    for (const plugin of this.plugins.values()) {
+      const position = plugin.getMapControlPosition?.();
+      if (position) mapControlPositions[plugin.id] = position;
+      const pluginState = plugin.getProjectState?.();
+      if (pluginState !== undefined) settings[plugin.id] = pluginState;
+    }
+
+    return {
+      activePluginIds: Array.from(this.plugins.keys()).filter((id) =>
+        this.active.has(id),
+      ),
+      mapControlPositions,
+      settings,
+    };
   }
 
   getMapControlPosition(
@@ -80,6 +114,54 @@ export class PluginManager {
     const updated = plugin.setMapControlPosition(app, position);
     if (updated === false) return;
     this.notify();
+  }
+
+  restoreProjectState(
+    state: ProjectPluginState | null,
+    app: GeoLibreAppAPI,
+  ): void {
+    const targetActive = new Set(
+      state?.activePluginIds ?? Array.from(this.defaultActive),
+    );
+    let changed = false;
+
+    for (const [id, plugin] of this.plugins) {
+      const defaultPosition = this.defaultMapControlPositions.get(id);
+      const targetPosition = state?.mapControlPositions[id] ?? defaultPosition;
+      if (targetPosition && plugin.setMapControlPosition) {
+        const currentPosition = plugin.getMapControlPosition?.();
+        if (currentPosition !== targetPosition) {
+          const updated = plugin.setMapControlPosition(app, targetPosition);
+          if (updated !== false) changed = true;
+        }
+      }
+
+      if (plugin.applyProjectState) {
+        const updated = plugin.applyProjectState(app, state?.settings[id]);
+        if (updated !== false) changed = true;
+      }
+    }
+
+    for (const id of Array.from(this.active)) {
+      if (targetActive.has(id)) continue;
+      const plugin = this.plugins.get(id);
+      if (!plugin) continue;
+      plugin.deactivate(app);
+      this.active.delete(id);
+      changed = true;
+    }
+
+    for (const id of targetActive) {
+      if (this.active.has(id)) continue;
+      const plugin = this.plugins.get(id);
+      if (!plugin) continue;
+      const activated = plugin.activate(app);
+      if (activated === false) continue;
+      this.active.add(id);
+      changed = true;
+    }
+
+    if (changed) this.notify();
   }
 
   private notify(): void {

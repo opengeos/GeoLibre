@@ -67,7 +67,11 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
+import {
+  createAppAPI,
+  getPluginManager,
+  usePluginRegistry,
+} from "../../hooks/usePlugins";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import {
   isTauri,
@@ -290,6 +294,7 @@ export function TopToolbar({
       basemapOpacity: state.basemapOpacity,
       layers: state.layers,
       preferences: state.preferences,
+      plugins: getPluginManager().getProjectState(),
       metadata: state.metadata,
     });
     const content = serializeProject(project);

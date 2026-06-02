@@ -15,6 +15,7 @@ import {
   type GeoLibreProject,
   type LayerStyle,
   type MapViewState,
+  type ProjectPluginState,
   type ProjectPreferences,
   type RecentProjectEntry,
 } from "./types";
@@ -22,6 +23,7 @@ import {
 export interface AppState {
   projectName: string;
   projectPath: string | null;
+  projectGeneration: number;
   isDirty: boolean;
   mapView: MapViewState;
   basemapStyleUrl: string;
@@ -29,6 +31,7 @@ export interface AppState {
   basemapOpacity: number;
   layers: GeoLibreLayer[];
   preferences: ProjectPreferences;
+  projectPlugins: ProjectPluginState | null;
   selectedLayerId: string | null;
   selectedFeatureId: string | null;
   identifyLayerId: string | null;
@@ -48,6 +51,10 @@ export interface AppState {
   setBasemapVisible: (visible: boolean) => void;
   setBasemapOpacity: (opacity: number) => void;
   setPreferences: (preferences: ProjectPreferences) => void;
+  setProjectPlugins: (
+    projectPlugins: ProjectPluginState | null,
+    markDirty?: boolean,
+  ) => void;
   selectLayer: (id: string | null) => void;
   selectFeature: (id: string | null) => void;
   setIdentifyLayer: (id: string | null) => void;
@@ -118,6 +125,7 @@ function normalizeRecentProjects(
 export const useAppStore = create<AppState>((set, get) => ({
   projectName: "Untitled Project",
   projectPath: null,
+  projectGeneration: 0,
   isDirty: false,
   mapView: createDefaultMapView(),
   basemapStyleUrl: DEFAULT_BASEMAP,
@@ -125,6 +133,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   basemapOpacity: 1,
   layers: [],
   preferences: DEFAULT_PROJECT_PREFERENCES,
+  projectPlugins: null,
   selectedLayerId: null,
   selectedFeatureId: null,
   identifyLayerId: null,
@@ -150,6 +159,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   setBasemapOpacity: (opacity) =>
     set({ basemapOpacity: opacity, isDirty: true }),
   setPreferences: (preferences) => set({ preferences, isDirty: true }),
+  setProjectPlugins: (projectPlugins, markDirty = true) =>
+    set((s) => ({
+      projectPlugins,
+      isDirty: markDirty || s.isDirty,
+    })),
   selectLayer: (id) => set({ selectedLayerId: id, selectedFeatureId: null }),
   selectFeature: (id) => set({ selectedFeatureId: id }),
   setIdentifyLayer: (id) => set({ identifyLayerId: id }),
@@ -164,28 +178,30 @@ export const useAppStore = create<AppState>((set, get) => ({
   newProject: (options = {}) => {
     const project = createEmptyProject(options.name, options);
     const applied = applyProjectToStore(project);
-    set({
+    set((s) => ({
       ...applied,
       projectPath: null,
+      projectGeneration: s.projectGeneration + 1,
       isDirty: false,
       selectedLayerId: null,
       selectedFeatureId: null,
       identifyLayerId: null,
       pointerCoords: null,
       attributeFilter: "",
-    });
+    }));
   },
 
   loadProject: (project, path = null, options = {}) => {
     const applied = applyProjectToStore(project);
-    set({
+    set((s) => ({
       ...applied,
       projectPath: path,
+      projectGeneration: s.projectGeneration + 1,
       isDirty: false,
       selectedLayerId: applied.layers[0]?.id ?? null,
       selectedFeatureId: null,
       identifyLayerId: null,
-    });
+    }));
     if (path && options.rememberRecent !== false) {
       get().rememberRecentProject({
         path,

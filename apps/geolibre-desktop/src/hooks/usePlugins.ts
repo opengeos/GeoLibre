@@ -50,13 +50,21 @@ export function usePluginRegistry() {
     plugins: manager.list(),
     isActive: (id: string) => manager.isActive(id),
     getMapControlPosition: (id: string) => manager.getMapControlPosition(id),
-    toggle: (id: string, appApi: ReturnType<typeof createAppAPI>) =>
-      manager.toggle(id, appApi),
+    getProjectState: () => manager.getProjectState(),
+    toggle: (id: string, appApi: ReturnType<typeof createAppAPI>) => {
+      const before = JSON.stringify(manager.getProjectState());
+      manager.toggle(id, appApi);
+      persistProjectPluginState(before);
+    },
     setMapControlPosition: (
       id: string,
       appApi: ReturnType<typeof createAppAPI>,
       position: GeoLibreMapControlPosition,
-    ) => manager.setMapControlPosition(id, appApi, position),
+    ) => {
+      const before = JSON.stringify(manager.getProjectState());
+      manager.setMapControlPosition(id, appApi, position);
+      persistProjectPluginState(before);
+    },
   };
 }
 
@@ -197,4 +205,10 @@ function normalizeBytes(bytes: number[] | Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(view.byteLength);
   copy.set(view);
   return copy.buffer;
+}
+
+function persistProjectPluginState(previousJson: string): void {
+  const nextState = manager.getProjectState();
+  if (JSON.stringify(nextState) === previousJson) return;
+  useAppStore.getState().setProjectPlugins(nextState);
 }

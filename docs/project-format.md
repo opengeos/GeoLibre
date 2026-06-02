@@ -14,7 +14,32 @@ Projects are saved as **`.geolibre.json`** files.
 | `basemapOpacity` | number | Background layer opacity from `0` to `1` |
 | `layers` | array | Layer definitions (see below) |
 | `styles` | object | Map of layer id → `LayerStyle` |
+| `plugins` | object | Optional active plugin IDs, plugin map-control positions, and plugin settings |
 | `metadata` | object | Free-form project metadata |
+
+## Plugin state
+
+```json
+{
+  "activePluginIds": ["maplibre-layer-control", "maplibre-gl-swipe"],
+  "mapControlPositions": {
+    "maplibre-layer-control": "top-right",
+    "maplibre-gl-swipe": "top-left"
+  },
+  "settings": {
+    "maplibre-gl-swipe": {
+      "orientation": "vertical",
+      "position": 50,
+      "collapsed": false,
+      "active": true,
+      "leftLayers": ["layer-a"],
+      "rightLayers": ["layer-b"]
+    }
+  }
+}
+```
+
+Projects without a `plugins` section open with the built-in default plugin state.
 
 ## Layer object
 

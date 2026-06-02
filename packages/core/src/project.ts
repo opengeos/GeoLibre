@@ -7,6 +7,8 @@ import {
   type GeoLibreProject,
   type LayerStyle,
   type MapViewState,
+  type ProjectPluginControlPosition,
+  type ProjectPluginState,
   type ProjectPreferences,
   type RuntimeEnvironmentVariable,
 } from "./types";
@@ -62,6 +64,7 @@ export function parseProject(json: string): GeoLibreProject {
     layers: (data.layers ?? []).map(normalizeLayer),
     styles: data.styles ?? {},
     preferences: normalizeProjectPreferences(data.preferences),
+    plugins: normalizeProjectPlugins(data.plugins) ?? undefined,
     metadata: data.metadata ?? {},
   };
 }
@@ -166,6 +169,102 @@ function normalizeEnvironmentVariable(
   };
 }
 
+const PROJECT_PLUGIN_CONTROL_POSITIONS = new Set<ProjectPluginControlPosition>([
+  "top-left",
+  "top-right",
+  "bottom-left",
+  "bottom-right",
+]);
+
+function normalizeProjectPlugins(
+  plugins: unknown,
+): ProjectPluginState | null {
+  if (!plugins || typeof plugins !== "object") return null;
+
+  const candidate = plugins as Partial<ProjectPluginState>;
+  const activePluginIds = Array.isArray(candidate.activePluginIds)
+    ? uniqueStrings(candidate.activePluginIds)
+    : [];
+  const mapControlPositions: Record<string, ProjectPluginControlPosition> = {};
+  const settings: Record<string, unknown> = {};
+
+  if (
+    candidate.mapControlPositions &&
+    typeof candidate.mapControlPositions === "object"
+  ) {
+    for (const [pluginId, position] of Object.entries(
+      candidate.mapControlPositions,
+    )) {
+      if (
+        typeof pluginId === "string" &&
+        pluginId.trim() &&
+        PROJECT_PLUGIN_CONTROL_POSITIONS.has(
+          position as ProjectPluginControlPosition,
+        )
+      ) {
+        mapControlPositions[pluginId.trim()] =
+          position as ProjectPluginControlPosition;
+      }
+    }
+  }
+
+  if (candidate.settings && typeof candidate.settings === "object") {
+    for (const [pluginId, value] of Object.entries(candidate.settings)) {
+      if (
+        typeof pluginId === "string" &&
+        pluginId.trim() &&
+        isJsonCompatible(value)
+      ) {
+        settings[pluginId.trim()] = value;
+      }
+    }
+  }
+
+  return {
+    activePluginIds,
+    mapControlPositions,
+    settings,
+  };
+}
+
+function uniqueStrings(values: unknown[]): string[] {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    const id = value.trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    normalized.push(id);
+  }
+
+  return normalized;
+}
+
+function isJsonCompatible(value: unknown): boolean {
+  if (value === null) return true;
+
+  switch (typeof value) {
+    case "string":
+    case "boolean":
+      return true;
+    case "number":
+      return Number.isFinite(value);
+    case "object":
+      if (Array.isArray(value)) return value.every(isJsonCompatible);
+      if (!isPlainObject(value)) return false;
+      return Object.values(value).every(isJsonCompatible);
+    default:
+      return false;
+  }
+}
+
+function isPlainObject(value: object): boolean {
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
 function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
   return {
     ...layer,
@@ -185,12 +284,14 @@ export function projectFromStore(state: {
   basemapOpacity: number;
   layers: GeoLibreLayer[];
   preferences: ProjectPreferences;
+  plugins?: ProjectPluginState | null;
   metadata: Record<string, unknown>;
 }): GeoLibreProject {
   const styles: Record<string, LayerStyle> = {};
   for (const layer of state.layers) {
     styles[layer.id] = layer.style;
   }
+  const plugins = normalizeProjectPlugins(state.plugins);
   return {
     version: PROJECT_VERSION,
     name: state.projectName,
@@ -201,6 +302,7 @@ export function projectFromStore(state: {
     layers: state.layers.map(prepareLayerForSave),
     styles,
     preferences: state.preferences,
+    ...(plugins ? { plugins } : {}),
     metadata: state.metadata,
   };
 }
@@ -239,6 +341,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
   basemapOpacity: number;
   layers: GeoLibreLayer[];
   preferences: ProjectPreferences;
+  projectPlugins: ProjectPluginState | null;
   metadata: Record<string, unknown>;
 } {
   const layers = project.layers.map((layer) => ({
@@ -255,6 +358,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
     basemapOpacity: project.basemapOpacity ?? 1,
     layers,
     preferences: normalizeProjectPreferences(project.preferences),
+    projectPlugins: normalizeProjectPlugins(project.plugins),
     metadata: project.metadata,
   };
 }

@@ -35,6 +35,11 @@ export interface GeoLibrePlugin {
     app: GeoLibreAppAPI,
     position: GeoLibreMapControlPosition,
   ) => boolean | void;
+  getProjectState?: () => unknown;
+  applyProjectState?: (
+    app: GeoLibreAppAPI,
+    state: unknown,
+  ) => boolean | void;
 }
 
 export interface GeoLibreAppAPI {
@@ -112,6 +117,8 @@ export const myPlugin: GeoLibrePlugin = {
 ```
 
 Map control plugins can optionally expose `getMapControlPosition()` and `setMapControlPosition()` so the desktop Plugins menu can move the control between map corners. Position-aware plugins should remove and recreate or re-add their control when the position changes.
+
+Plugins with serializable runtime settings can expose `getProjectState()` and `applyProjectState()` so GeoLibre can save and restore those settings in the project file. A wrapper should use these hooks to adapt upstream control APIs such as `getState()` without requiring every upstream package to implement a GeoLibre-specific interface.
 
 ## Roadmap (v0.7)
 

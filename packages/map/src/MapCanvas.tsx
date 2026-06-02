@@ -22,6 +22,7 @@ const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
 
 export interface MapCanvasProps {
   controllerRef?: React.MutableRefObject<MapController | null>;
+  onControllerReady?: () => void;
 }
 
 function stringifyIdentifyValue(value: unknown): string {
@@ -121,6 +122,7 @@ function findFeatureId(
 
 export const MapCanvas = memo(function MapCanvas({
   controllerRef,
+  onControllerReady,
 }: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const controller = useRef<MapController | null>(null);
@@ -171,6 +173,7 @@ export const MapCanvas = memo(function MapCanvas({
         state.selectedFeatureId,
       );
       updateView();
+      onControllerReady?.();
     });
 
     let resizeFrame: number | null = null;
@@ -223,7 +226,7 @@ export const MapCanvas = memo(function MapCanvas({
       if (controllerRef) controllerRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [onControllerReady]);
 
   const prevBasemap = useRef(basemapStyleUrl);
   useEffect(() => {

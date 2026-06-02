@@ -196,6 +196,18 @@ export interface ProjectPreferences {
   environmentVariables: RuntimeEnvironmentVariable[];
 }
 
+export type ProjectPluginControlPosition =
+  | "top-left"
+  | "top-right"
+  | "bottom-left"
+  | "bottom-right";
+
+export interface ProjectPluginState {
+  activePluginIds: string[];
+  mapControlPositions: Record<string, ProjectPluginControlPosition>;
+  settings: Record<string, unknown>;
+}
+
 export const DEFAULT_PROJECT_PREFERENCES: ProjectPreferences = {
   map: {
     restrictBounds: false,
@@ -218,6 +230,7 @@ export interface GeoLibreProject {
   layers: GeoLibreLayer[];
   styles: Record<string, LayerStyle>;
   preferences: ProjectPreferences;
+  plugins?: ProjectPluginState;
   metadata: Record<string, unknown>;
 }
 
