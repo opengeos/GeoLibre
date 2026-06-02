@@ -1327,7 +1327,7 @@ export function AddDataDialog({
         >((merged, layer) => {
           const bounds = getLayerBounds(layer);
           if (!bounds) return merged;
-          if (!merged) return [...bounds];
+          if (!merged) return bounds;
           return [
             Math.min(merged[0], bounds[0]),
             Math.min(merged[1], bounds[1]),

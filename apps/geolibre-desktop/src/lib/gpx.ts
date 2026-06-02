@@ -8,12 +8,18 @@ import type {
 } from "geojson";
 
 export interface GpxLayerResult {
-  data: FeatureCollection;
   routes: FeatureCollection<LineString>;
+  /** Number of route features produced (routes with at least 2 valid points). */
   routeCount: number;
   tracks: FeatureCollection<LineString>;
+  /**
+   * Number of track features produced. Each `<trkseg>` becomes its own
+   * LineString, so a single `<trk>` with multiple segments contributes more
+   * than one to this count.
+   */
   trackCount: number;
   waypoints: FeatureCollection<Point>;
+  /** Number of waypoint features produced (waypoints with valid coordinates). */
   waypointCount: number;
 }
 
@@ -139,21 +145,15 @@ export function parseGpxLayer(text: string): GpxLayerResult {
     }
   }
 
-  const features: Feature[] = [
-    ...waypointFeatures,
-    ...routeFeatures,
-    ...trackFeatures,
-  ];
-
-  if (features.length === 0) {
+  if (
+    waypointFeatures.length === 0 &&
+    routeFeatures.length === 0 &&
+    trackFeatures.length === 0
+  ) {
     throw new Error("No valid GPX waypoints, routes, or tracks were found.");
   }
 
   return {
-    data: {
-      type: "FeatureCollection",
-      features,
-    },
     routes: {
       type: "FeatureCollection",
       features: routeFeatures,
