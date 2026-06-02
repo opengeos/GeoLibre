@@ -131,6 +131,7 @@ const DEFAULT_ARCGIS_URLS: Record<ArcGISLayerType, string> = {
   feature: DEFAULT_ARCGIS_FEATURE_URL,
   "vector-tile": DEFAULT_ARCGIS_VECTOR_TILE_URL,
 };
+// Keep in sync with WFS_PROXY_PATH in vite.config.ts (the dev proxy binds it there).
 const WFS_PROXY_PATH = "/__geolibre_wfs_proxy";
 const POSTGRES_CONNECTIONS_STORAGE_KEY =
   "geolibre.postgres.connectionStrings";
@@ -334,7 +335,7 @@ function parseGeoJsonFeatureCollection(value: unknown): FeatureCollection {
 async function fetchGeoJson(url: string): Promise<FeatureCollection> {
   const response = await fetch(url);
   const text = await response.text();
-  if (!response.ok) {
+  if (!response.ok && !/^\s*</.test(text)) {
     throw new Error(`Request failed with status ${response.status}`);
   }
   try {
@@ -839,6 +840,7 @@ export function AddDataDialog({
         if (!wfsOutputFormat.trim()) {
           throw new Error("Enter a WFS output format.");
         }
+        parseOptionalNumber(wfsMaxFeatures, "max features");
 
         const featureUrl = createWfsGetFeatureUrl({
           endpoint: wfsEndpoint.trim(),
