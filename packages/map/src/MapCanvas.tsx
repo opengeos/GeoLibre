@@ -257,8 +257,12 @@ function createWmsGetFeatureInfoUrl(
   const isV13 = version.startsWith("1.3");
   const crsParam = isV13 ? "CRS" : "SRS";
   // Treat a deliberate featureCount of 0 ("all features" on some servers) as
-  // intentional; only fall back to 1 when it is unset or non-numeric.
-  const featureCount = Number(layer.source.featureCount);
+  // intentional; only fall back to 1 when it is unset (null/undefined) or
+  // non-numeric. Number(null) is 0, so guard null explicitly.
+  const featureCount =
+    layer.source.featureCount != null
+      ? Number(layer.source.featureCount)
+      : NaN;
 
   return appendWmsQuery(endpoint, [
     ["SERVICE", "WMS"],
@@ -655,7 +659,8 @@ export const MapCanvas = memo(function MapCanvas({
         // and we must not treat that programmatic swap as a dismissal. Guard the
         // shared controller by identity so a newer request is not clobbered.
         let userDismissed = false;
-        identifyPopup.current?.once("close", () => {
+        // showIdentifyPopup just assigned identifyPopup.current, so it is set.
+        identifyPopup.current!.once("close", () => {
           userDismissed = true;
           abortController.abort();
           if (wmsIdentifyAbortController === abortController) {
