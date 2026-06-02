@@ -22,6 +22,7 @@ from pydantic import BaseModel
 
 router = APIRouter(prefix="/whitebox", tags=["whitebox"])
 RUNTIME_DISCOVERY_TIMEOUT_SECS = 5
+RUNTIME_CATALOG_TIMEOUT_SECS = 120
 RUNTIME_SETUP_TIMEOUT_SECS = 600
 WHITEBOX_RUNTIME_PACKAGE = os.environ.get(
     "GEOLIBRE_WHITEBOX_PACKAGE",
@@ -367,7 +368,12 @@ class ExternalRuntimeSession:
         self.include_pro = bool(include_pro)
         self.tier = str(tier or "open")
 
-    def _invoke(self, method: str, **kwargs: Any) -> str:
+    def _invoke(
+        self,
+        method: str,
+        timeout: int = RUNTIME_CATALOG_TIMEOUT_SECS,
+        **kwargs: Any,
+    ) -> str:
         """Invoke a JSON-oriented Whitebox runtime method."""
         payload = {
             "method": method,
@@ -410,13 +416,13 @@ class ExternalRuntimeSession:
                 encoding="utf-8",
                 errors="replace",
                 env=_clean_env(),
-                timeout=RUNTIME_DISCOVERY_TIMEOUT_SECS,
+                timeout=timeout,
                 **_subprocess_startup_kwargs(),
             )
         except subprocess.TimeoutExpired as exc:
             raise RuntimeBootstrapError(
                 f"{self.python_executable}: Whitebox runtime probe timed out "
-                f"after {RUNTIME_DISCOVERY_TIMEOUT_SECS} seconds"
+                f"after {timeout} seconds"
             ) from exc
         if completed.returncode != 0:
             detail = (
@@ -784,7 +790,7 @@ def _job_update(job_id: str, **patch: Any) -> None:
     """Update an in-memory Whitebox job."""
     with _JOBS_LOCK:
         job = _JOBS[job_id]
-        data = job.dict()
+        data = job.model_dump()
         data.update(patch)
         data["updated_at"] = _utc_now()
         _JOBS[job_id] = JobState(**data)
@@ -800,7 +806,7 @@ def _append_job_message(job_id: str, event: Any) -> None:
     with _JOBS_LOCK:
         job = _JOBS[job_id]
         messages = [*job.messages, message]
-        _JOBS[job_id] = job.copy(
+        _JOBS[job_id] = job.model_copy(
             update={"messages": messages, "updated_at": _utc_now()}
         )
 
@@ -828,12 +834,14 @@ def _run_job(job_id: str, request: WhiteboxRunRequest) -> None:
             outputs=_extract_outputs(result, args, request.tool),
         )
     except Exception as exc:
+        with _JOBS_LOCK:
+            current_messages = list(_JOBS[job_id].messages)
         _job_update(
             job_id,
             status="failed",
             error=str(exc),
             messages=[
-                *_JOBS[job_id].messages,
+                *current_messages,
                 traceback.format_exc(limit=8),
             ],
         )
@@ -917,12 +925,32 @@ def whitebox_job(job_id: str):
     return job
 
 
+def _known_output_paths() -> set[str]:
+    """Return the set of resolved output paths produced by recorded jobs."""
+    paths: set[str] = set()
+    with _JOBS_LOCK:
+        jobs = list(_JOBS.values())
+    for job in jobs:
+        for value in job.outputs.values():
+            candidate = value.get("path") if isinstance(value, dict) else value
+            if isinstance(candidate, str) and candidate.strip():
+                try:
+                    paths.add(str(Path(candidate).expanduser().resolve()))
+                except OSError:
+                    continue
+    return paths
+
+
 @router.get("/output")
 def whitebox_output(path: str):
     """Read a JSON or GeoJSON Whitebox output file."""
-    output_path = Path(path).expanduser()
+    output_path = Path(path).expanduser().resolve()
     if output_path.suffix.lower() not in {".json", ".geojson"}:
         raise HTTPException(status_code=400, detail="Only JSON outputs can be read")
+    if str(output_path) not in _known_output_paths():
+        raise HTTPException(
+            status_code=403, detail="Path is not a known Whitebox output"
+        )
     try:
         return json.loads(output_path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:

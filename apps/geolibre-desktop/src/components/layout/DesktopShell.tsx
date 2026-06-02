@@ -30,9 +30,18 @@ import type { ThemeMode } from "../../hooks/useThemeMode";
 import type { ProjectUrlLoadState } from "../../hooks/useProjectUrlLoader";
 
 const ProcessingDialog = lazy(() =>
-  import("../processing/ProcessingDialog").then((module) => ({
-    default: module.ProcessingDialog,
-  })),
+  import("../processing/ProcessingDialog")
+    .then((module) => ({
+      default: module.ProcessingDialog,
+    }))
+    .catch((error) => {
+      // A failed chunk load (network error, corrupted bundle) would otherwise
+      // throw during render and unmount the whole shell. Fall back to a
+      // no-op component so the rest of the app stays interactive.
+      console.error("Failed to load ProcessingDialog", error);
+      const Fallback = (() => null) as unknown as typeof import("../processing/ProcessingDialog").ProcessingDialog;
+      return { default: Fallback };
+    }),
 );
 
 interface DesktopShellProps {

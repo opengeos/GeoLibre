@@ -451,15 +451,23 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
 }
 
 #[tauri::command]
-fn stop_geolibre_sidecar(state: tauri::State<SidecarServerState>) -> Result<(), String> {
+async fn stop_geolibre_sidecar(app: tauri::AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || stop_geolibre_sidecar_blocking(app))
+        .await
+        .map_err(|error| format!("Could not join sidecar stop task: {error}"))?
+}
+
+fn stop_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<(), String> {
+    let state = app.state::<SidecarServerState>();
     {
         let mut process = state
             .process
             .lock()
             .map_err(|_| "Could not lock sidecar process state.".to_string())?;
-        if let Some(mut sidecar) = process.take() {
-            sidecar.terminate();
-        }
+        // SidecarProcess::Drop calls terminate() automatically, so taking the
+        // value out is enough to tear down the child. Calling terminate() here
+        // as well would double-signal the (possibly recycled) process group.
+        drop(process.take());
     }
 
     let base_url = sidecar_base_url();
@@ -670,7 +678,6 @@ fn is_geolibre_sidecar_process(pid: i32) -> bool {
     let command_line = String::from_utf8_lossy(&command_line);
     command_line.contains("geolibre_server.app.main")
         || command_line.contains("geolibre_server")
-        || command_line.contains("uvicorn")
 }
 
 #[cfg(unix)]

@@ -636,17 +636,10 @@ export async function pickLocalPathWithFallback(
     return typeof selected === "string" ? selected : null;
   }
 
-  if (options.directory) return null;
-  return new Promise((resolve) => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = options.accept ?? "";
-    input.onchange = () => {
-      const file = input.files?.[0];
-      resolve(file?.name ?? null);
-    };
-    input.click();
-  });
+  // Browsers cannot expose absolute filesystem paths, and Whitebox parameters
+  // require a real path. Return null so callers surface the desktop-only
+  // message rather than passing a non-resolvable bare file name.
+  return null;
 }
 
 export async function pickSavePathWithFallback(

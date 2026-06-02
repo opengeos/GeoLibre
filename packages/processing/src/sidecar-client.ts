@@ -167,15 +167,20 @@ export async function fetchRemoteWhiteboxCatalogSnapshot(
 ): Promise<WhiteboxTool[]> {
   remoteWhiteboxCatalogPromise ??= fetch(url, {
     headers: { accept: "application/json" },
-  }).then(async (response) => {
-    if (!response.ok) {
-      throw new Error(
-        `Could not load Whitebox catalog snapshot: HTTP ${response.status}`,
-      );
-    }
-    const data = (await response.json()) as WhiteboxCatalogSnapshot;
-    return data.tools ?? [];
-  });
+  })
+    .then(async (response) => {
+      if (!response.ok) {
+        throw new Error(
+          `Could not load Whitebox catalog snapshot: HTTP ${response.status}`,
+        );
+      }
+      const data = (await response.json()) as WhiteboxCatalogSnapshot;
+      return data.tools ?? [];
+    })
+    .catch((error) => {
+      remoteWhiteboxCatalogPromise = null; // allow retry on next call
+      throw error;
+    });
   return remoteWhiteboxCatalogPromise;
 }
 
