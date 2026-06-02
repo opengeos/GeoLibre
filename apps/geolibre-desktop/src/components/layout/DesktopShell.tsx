@@ -77,7 +77,6 @@ export function DesktopShell({
   const dropMessageTimeoutRef = useRef<number | null>(null);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
-  const projectPlugins = useAppStore((s) => s.projectPlugins);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [mapReadyGeneration, setMapReadyGeneration] = useState(0);
   const [dropMessage, setDropMessage] = useState<string | null>(null);
@@ -113,12 +112,16 @@ export function DesktopShell({
   }, []);
 
   useEffect(() => {
+    // Restoration should run only when a project is loaded (projectGeneration)
+    // or the map is reinitialised (mapReadyGeneration), not on every
+    // incremental plugin write-back. projectPlugins is read from the store
+    // snapshot at call time so it is always current without being a dependency.
     if (!mapReadyGeneration || !mapControllerRef.current) return;
     getPluginManager().restoreProjectState(
-      projectPlugins,
+      useAppStore.getState().projectPlugins,
       createAppAPI(mapControllerRef),
     );
-  }, [mapReadyGeneration, projectGeneration, projectPlugins]);
+  }, [mapReadyGeneration, projectGeneration]);
 
   useEffect(() => {
     return () => {

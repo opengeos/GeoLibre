@@ -53,7 +53,7 @@ export interface AppState {
   setPreferences: (preferences: ProjectPreferences) => void;
   setProjectPlugins: (
     projectPlugins: ProjectPluginState | null,
-    markDirty?: boolean,
+    shouldMarkDirty?: boolean,
   ) => void;
   selectLayer: (id: string | null) => void;
   selectFeature: (id: string | null) => void;
@@ -159,10 +159,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   setBasemapOpacity: (opacity) =>
     set({ basemapOpacity: opacity, isDirty: true }),
   setPreferences: (preferences) => set({ preferences, isDirty: true }),
-  setProjectPlugins: (projectPlugins, markDirty = true) =>
+  // When shouldMarkDirty is false the existing dirty flag is preserved rather
+  // than set; it cannot clear the flag (only markSaved() does that).
+  setProjectPlugins: (projectPlugins, shouldMarkDirty = true) =>
     set((s) => ({
       projectPlugins,
-      isDirty: markDirty || s.isDirty,
+      isDirty: shouldMarkDirty || s.isDirty,
     })),
   selectLayer: (id) => set({ selectedLayerId: id, selectedFeatureId: null }),
   selectFeature: (id) => set({ selectedFeatureId: id }),

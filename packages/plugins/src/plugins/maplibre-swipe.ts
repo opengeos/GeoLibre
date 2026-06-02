@@ -65,7 +65,10 @@ export const maplibreSwipePlugin: GeoLibrePlugin = {
     savedSwipeState = currentState;
     app.removeMapControl(swipeControl);
     const added = app.addMapControl(swipeControl, swipeControlPosition);
-    if (!added) return false;
+    if (!added) {
+      swipeControl = null;
+      return false;
+    }
     expandSwipeControl(currentState);
   },
   getProjectState: () => swipeControl?.getState() ?? savedSwipeState ?? undefined,

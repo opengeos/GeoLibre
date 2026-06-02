@@ -126,6 +126,12 @@ export const MapCanvas = memo(function MapCanvas({
 }: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const controller = useRef<MapController | null>(null);
+  // Read the latest callback through a ref so the setup effect can stay
+  // dependency-free. Adding onControllerReady to its deps would tear down and
+  // recreate the entire map (losing layers, plugins, and view) whenever a
+  // caller passes a non-memoized callback.
+  const onControllerReadyRef = useRef(onControllerReady);
+  onControllerReadyRef.current = onControllerReady;
 
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
   const basemapVisible = useAppStore((s) => s.basemapVisible);
@@ -173,7 +179,7 @@ export const MapCanvas = memo(function MapCanvas({
         state.selectedFeatureId,
       );
       updateView();
-      onControllerReady?.();
+      onControllerReadyRef.current?.();
     });
 
     let resizeFrame: number | null = null;
@@ -225,8 +231,10 @@ export const MapCanvas = memo(function MapCanvas({
       controller.current = null;
       if (controllerRef) controllerRef.current = null;
     };
+    // The map is initialised exactly once; onControllerReady is read via
+    // onControllerReadyRef so it is intentionally excluded from the deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onControllerReady]);
+  }, []);
 
   const prevBasemap = useRef(basemapStyleUrl);
   useEffect(() => {

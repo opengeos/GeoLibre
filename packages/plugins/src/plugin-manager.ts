@@ -125,6 +125,21 @@ export class PluginManager {
     );
     let changed = false;
 
+    // Deactivate first so plugins that should be inactive tear down their live
+    // controls before we touch positions or settings. This keeps the order of
+    // operations from rebuilding a control only to remove it on the next pass.
+    for (const id of Array.from(this.active)) {
+      if (targetActive.has(id)) continue;
+      const plugin = this.plugins.get(id);
+      if (!plugin) continue;
+      plugin.deactivate(app);
+      this.active.delete(id);
+      changed = true;
+    }
+
+    // Restore positions and settings. Plugins that will be (re)activated below
+    // are inactive at this point, so applyProjectState only caches their state
+    // for the upcoming activate() call rather than doing live DOM work.
     for (const [id, plugin] of this.plugins) {
       const defaultPosition = this.defaultMapControlPositions.get(id);
       const targetPosition = state?.mapControlPositions[id] ?? defaultPosition;
@@ -136,19 +151,13 @@ export class PluginManager {
         }
       }
 
-      if (plugin.applyProjectState) {
-        const updated = plugin.applyProjectState(app, state?.settings[id]);
+      // Only apply settings the loaded project actually carries for this
+      // plugin. A missing entry means "no change" rather than "reset", which
+      // avoids clobbering in-memory state for plugins absent from the project.
+      if (plugin.applyProjectState && state?.settings && id in state.settings) {
+        const updated = plugin.applyProjectState(app, state.settings[id]);
         if (updated !== false) changed = true;
       }
-    }
-
-    for (const id of Array.from(this.active)) {
-      if (targetActive.has(id)) continue;
-      const plugin = this.plugins.get(id);
-      if (!plugin) continue;
-      plugin.deactivate(app);
-      this.active.delete(id);
-      changed = true;
     }
 
     for (const id of targetActive) {
