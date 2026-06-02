@@ -127,6 +127,7 @@ function normalizeSwipeProjectState(state: unknown): SwipeState | null {
     active: normalizeBoolean(candidate.active, true),
     leftLayers: normalizeLayerIds(candidate.leftLayers),
     rightLayers: normalizeLayerIds(candidate.rightLayers),
+    isDragging: false,
   };
 }
 
