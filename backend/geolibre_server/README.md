@@ -23,6 +23,25 @@ Or:
 geolibre-server
 ```
 
+## Whitebox runtime
+
+Whitebox tools use a dedicated GeoLibre-managed Python environment. On first
+use, the sidecar looks for `uv`; if it is not available, it downloads the
+official uv standalone installer and installs uv into the GeoLibre runtime cache.
+It then creates a Whitebox virtual environment and installs
+`whitebox-workflows`.
+
+Useful overrides:
+
+```bash
+GEOLIBRE_RUNTIME_DIR=/path/to/cache
+GEOLIBRE_UV=/path/to/uv
+GEOLIBRE_UV_DIR=/path/to/managed-uv
+GEOLIBRE_WHITEBOX_ENV=/path/to/whitebox-venv
+GEOLIBRE_WHITEBOX_PACKAGE='whitebox-workflows>=2.0.2'
+WBW_EXTERNAL_PYTHON=/path/to/python
+```
+
 ## Endpoints
 
 | Method | Path | Description |

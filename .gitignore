@@ -18,3 +18,4 @@ __pycache__/
 **/src-tauri/gen/
 .playwright-cli/
 .claude/
+uv.lock

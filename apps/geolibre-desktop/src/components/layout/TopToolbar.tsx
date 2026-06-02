@@ -546,16 +546,31 @@ export function TopToolbar({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <Button
-        className={toolbarButtonClass}
-        variant="ghost"
-        size={toolbarButtonSize}
-        onClick={() => setProcessingOpen(true)}
-        aria-label="Processing"
-      >
-        <Wrench className={toolbarIconClassName} />
-        {renderToolbarLabel("Processing")}
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            className={toolbarButtonClass}
+            variant="ghost"
+            size={toolbarButtonSize}
+            aria-label="Processing"
+          >
+            <Wrench className={toolbarIconClassName} />
+            {renderToolbarLabel("Processing")}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuLabel>Processing</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>Whitebox</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuItem onSelect={() => setProcessingOpen(true)}>
+                Toolbox
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button

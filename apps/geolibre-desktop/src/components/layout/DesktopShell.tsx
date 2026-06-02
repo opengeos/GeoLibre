@@ -5,6 +5,8 @@ import {
   type CSSProperties,
   type DragEvent,
   type MouseEvent as ReactMouseEvent,
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useRef,
@@ -21,12 +23,17 @@ import { registerXyzTileProtocol } from "../../lib/xyz-url";
 import { AttributeTable } from "../panels/AttributeTable";
 import { LayerPanel } from "../panels/LayerPanel";
 import { StylePanel } from "../panels/StylePanel";
-import { ProcessingDialog } from "../processing/ProcessingDialog";
 import { StatusBar } from "./StatusBar";
 import { TopToolbar } from "./TopToolbar";
 import type { LayoutOptions } from "../../hooks/useLayoutOptions";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import type { ProjectUrlLoadState } from "../../hooks/useProjectUrlLoader";
+
+const ProcessingDialog = lazy(() =>
+  import("../processing/ProcessingDialog").then((module) => ({
+    default: module.ProcessingDialog,
+  })),
+);
 
 interface DesktopShellProps {
   layoutOptions: LayoutOptions;
@@ -443,7 +450,9 @@ export function DesktopShell({
       </div>
       {layoutOptions.panelsVisible ? <AttributeTable /> : null}
       <StatusBar compact={layoutOptions.compact} />
-      <ProcessingDialog mapControllerRef={mapControllerRef} />
+      <Suspense fallback={null}>
+        <ProcessingDialog mapControllerRef={mapControllerRef} />
+      </Suspense>
       <div
         ref={verticalResizeGuideRef}
         className="pointer-events-none fixed bottom-7 top-11 z-50 hidden w-px bg-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.25)]"

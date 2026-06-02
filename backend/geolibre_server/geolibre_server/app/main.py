@@ -12,10 +12,26 @@ Future integrations (v0.5+):
 
 from __future__ import annotations
 
+import os
+import signal
+import threading
+import time
+
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from .whitebox import router as whitebox_router
+
 app = FastAPI(title="GeoLibre Server", version="0.6.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"^(http://localhost:\d+|http://127\.0\.0\.1:\d+|tauri://localhost)$",
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
+app.include_router(whitebox_router)
 
 
 class RunRequest(BaseModel):
@@ -26,6 +42,19 @@ class RunRequest(BaseModel):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.post("/shutdown")
+def shutdown():
+    """Request graceful shutdown of the local sidecar process."""
+    threading.Thread(target=_terminate_current_process, daemon=True).start()
+    return {"status": "shutting_down"}
+
+
+def _terminate_current_process() -> None:
+    """Terminate the current process after the response is returned."""
+    time.sleep(0.2)
+    os.kill(os.getpid(), signal.SIGTERM)
 
 
 @app.get("/algorithms")

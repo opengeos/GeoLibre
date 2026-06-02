@@ -7,6 +7,8 @@ use flate2::read::{GzDecoder, ZlibDecoder};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use serde::Serialize;
 use serde_json::Value;
+use std::collections::HashSet;
+use std::env;
 use std::fs::{self, File};
 use std::io::{Cursor, Read};
 use std::net::TcpListener;
@@ -24,22 +26,55 @@ const MARTIN_VERSION: &str = "martin-v1.10.1";
 const MARTIN_RELEASE_BASE_URL: &str = "https://github.com/maplibre/martin/releases/download";
 const MARTIN_START_ATTEMPTS: usize = 3;
 const MARTIN_HEALTH_ATTEMPTS: usize = 30;
+const SIDECAR_HEALTH_ATTEMPTS: usize = 180;
+const SIDECAR_PORT: u16 = 8765;
+const UV_INSTALL_BASE_URL: &str = "https://astral.sh/uv";
 const REMOTE_TILE_TIMEOUT_SECS: u64 = 8;
 const REMOTE_TILE_CONNECT_TIMEOUT_SECS: u64 = 4;
 const URL_RESOLVE_TIMEOUT_SECS: u64 = 15;
 
+#[cfg(unix)]
+const SIGTERM: i32 = 15;
+#[cfg(unix)]
+const SIGKILL: i32 = 9;
+
+#[cfg(unix)]
+unsafe extern "C" {
+    fn kill(pid: i32, sig: i32) -> i32;
+}
+
 struct MartinServerState {
     process: Mutex<Option<MartinProcess>>,
+}
+
+struct SidecarServerState {
+    process: Mutex<Option<SidecarProcess>>,
 }
 
 struct MartinProcess {
     child: Child,
 }
 
+struct SidecarProcess {
+    child: Child,
+}
+
+impl SidecarProcess {
+    fn terminate(&mut self) {
+        terminate_sidecar_child(&mut self.child);
+    }
+}
+
 impl Drop for MartinProcess {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+    }
+}
+
+impl Drop for SidecarProcess {
+    fn drop(&mut self) {
+        self.terminate();
     }
 }
 
@@ -55,6 +90,9 @@ pub fn run() {
         .manage(MartinServerState {
             process: Mutex::new(None),
         })
+        .manage(SidecarServerState {
+            process: Mutex::new(None),
+        })
         .invoke_handler(tauri::generate_handler![
             close_oauth_popups,
             ensure_martin_binary,
@@ -64,6 +102,8 @@ pub fn run() {
             read_mbtiles_tile,
             start_martin_server,
             stop_martin_server,
+            start_geolibre_sidecar,
+            stop_geolibre_sidecar,
             start_earth_engine_oauth,
             poll_earth_engine_oauth
         ])
@@ -219,6 +259,13 @@ struct MartinServerInfo {
     port: u16,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SidecarServerInfo {
+    base_url: String,
+    port: u16,
+}
+
 #[tauri::command]
 fn ensure_martin_binary(app: tauri::AppHandle) -> Result<MartinBinaryInfo, String> {
     ensure_martin_binary_path(&app)
@@ -304,6 +351,489 @@ fn stop_martin_server(state: tauri::State<MartinServerState>) -> Result<(), Stri
         .map_err(|_| "Could not lock Martin process state.".to_string())?;
     *process = None;
     Ok(())
+}
+
+#[tauri::command]
+async fn start_geolibre_sidecar(app: tauri::AppHandle) -> Result<SidecarServerInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || start_geolibre_sidecar_blocking(app))
+        .await
+        .map_err(|error| format!("Could not join sidecar startup task: {error}"))?
+}
+
+fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServerInfo, String> {
+    let base_url = sidecar_base_url();
+    let state = app.state::<SidecarServerState>();
+    {
+        let mut process = state
+            .process
+            .lock()
+            .map_err(|_| "Could not lock sidecar process state.".to_string())?;
+        if let Some(sidecar) = process.as_mut() {
+            if sidecar
+                .child
+                .try_wait()
+                .map_err(|error| format!("Could not inspect sidecar process: {error}"))?
+                .is_none()
+            {
+                return Ok(SidecarServerInfo {
+                    base_url,
+                    port: SIDECAR_PORT,
+                });
+            }
+            *process = None;
+        }
+    }
+
+    if sidecar_health_is_ready(&base_url) {
+        return Ok(SidecarServerInfo {
+            base_url,
+            port: SIDECAR_PORT,
+        });
+    }
+
+    let uv = ensure_managed_uv(&app)?;
+    let project_dir = sidecar_project_dir(&app)?;
+    let runtime_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Could not resolve app data directory: {error}"))?
+        .join("runtime");
+
+    let mut command = Command::new(&uv);
+    command
+        .arg("run")
+        .arg("--project")
+        .arg(&project_dir)
+        .arg("uvicorn")
+        .arg("geolibre_server.app.main:app")
+        .arg("--host")
+        .arg("127.0.0.1")
+        .arg("--port")
+        .arg(SIDECAR_PORT.to_string())
+        .current_dir(&project_dir)
+        .env("GEOLIBRE_UV", &uv)
+        .env("GEOLIBRE_RUNTIME_DIR", &runtime_dir)
+        .env("UV_CACHE_DIR", runtime_dir.join("uv-cache"))
+        .env("UV_PYTHON_INSTALL_DIR", runtime_dir.join("uv-python"))
+        .env("UV_PROJECT_ENVIRONMENT", runtime_dir.join("sidecar-server"))
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    configure_sidecar_process(&mut command);
+
+    let mut child = command
+        .spawn()
+        .map_err(|error| format!("Could not start GeoLibre sidecar: {error}"))?;
+
+    if let Err(error) = wait_for_sidecar_health(&base_url, &mut child) {
+        terminate_sidecar_child(&mut child);
+        return Err(error);
+    }
+
+    let _ = child.stdout.take();
+    let _ = child.stderr.take();
+
+    let mut process = state
+        .process
+        .lock()
+        .map_err(|_| "Could not lock sidecar process state.".to_string())?;
+    if process.is_some() {
+        let mut duplicate = SidecarProcess { child };
+        duplicate.terminate();
+    } else {
+        *process = Some(SidecarProcess { child });
+    }
+
+    Ok(SidecarServerInfo {
+        base_url,
+        port: SIDECAR_PORT,
+    })
+}
+
+#[tauri::command]
+fn stop_geolibre_sidecar(state: tauri::State<SidecarServerState>) -> Result<(), String> {
+    {
+        let mut process = state
+            .process
+            .lock()
+            .map_err(|_| "Could not lock sidecar process state.".to_string())?;
+        if let Some(mut sidecar) = process.take() {
+            sidecar.terminate();
+        }
+    }
+
+    let base_url = sidecar_base_url();
+    if sidecar_health_is_ready(&base_url) {
+        request_sidecar_shutdown(&base_url);
+        wait_for_sidecar_stop(&base_url);
+    }
+    if sidecar_health_is_ready(&base_url) {
+        terminate_sidecar_listeners_on_port(SIDECAR_PORT)?;
+        wait_for_sidecar_stop(&base_url);
+    }
+    if sidecar_health_is_ready(&base_url) {
+        return Err("GeoLibre sidecar is still running on port 8765.".to_string());
+    }
+    Ok(())
+}
+
+fn sidecar_base_url() -> String {
+    format!("http://127.0.0.1:{SIDECAR_PORT}")
+}
+
+fn sidecar_health_is_ready(base_url: &str) -> bool {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_millis(500))
+        .build();
+    let Ok(client) = client else {
+        return false;
+    };
+    client
+        .get(format!("{base_url}/health"))
+        .send()
+        .map(|response| response.status().is_success())
+        .unwrap_or(false)
+}
+
+fn request_sidecar_shutdown(base_url: &str) {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_millis(500))
+        .build();
+    if let Ok(client) = client {
+        let _ = client.post(format!("{base_url}/shutdown")).send();
+    }
+}
+
+fn wait_for_sidecar_stop(base_url: &str) {
+    for _ in 0..20 {
+        if !sidecar_health_is_ready(base_url) {
+            return;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+}
+
+fn wait_for_sidecar_health(base_url: &str, child: &mut Child) -> Result<(), String> {
+    for _ in 0..SIDECAR_HEALTH_ATTEMPTS {
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|error| format!("Could not inspect sidecar process: {error}"))?
+        {
+            let output = read_child_output(child);
+            return Err(if output.trim().is_empty() {
+                format!("GeoLibre sidecar exited before it was ready: {status}")
+            } else {
+                format!("GeoLibre sidecar exited before it was ready: {output}")
+            });
+        }
+
+        if sidecar_health_is_ready(base_url) {
+            return Ok(());
+        }
+
+        thread::sleep(Duration::from_secs(1));
+    }
+
+    Err("GeoLibre sidecar did not become ready in time.".to_string())
+}
+
+fn configure_sidecar_process(command: &mut Command) {
+    configure_sidecar_process_impl(command);
+}
+
+#[cfg(unix)]
+fn configure_sidecar_process_impl(command: &mut Command) {
+    use std::os::unix::process::CommandExt;
+
+    command.process_group(0);
+}
+
+#[cfg(not(unix))]
+fn configure_sidecar_process_impl(_command: &mut Command) {}
+
+fn terminate_sidecar_child(child: &mut Child) {
+    terminate_sidecar_process_group(child);
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+#[cfg(unix)]
+fn terminate_sidecar_process_group(child: &mut Child) {
+    let process_group = -(child.id() as i32);
+    let _ = unsafe { kill(process_group, SIGTERM) };
+    thread::sleep(Duration::from_millis(250));
+    let _ = unsafe { kill(process_group, SIGKILL) };
+}
+
+#[cfg(not(unix))]
+fn terminate_sidecar_process_group(_child: &mut Child) {}
+
+#[cfg(target_os = "linux")]
+fn terminate_sidecar_listeners_on_port(port: u16) -> Result<(), String> {
+    let inodes = listening_tcp_inodes(port)?;
+    if inodes.is_empty() {
+        return Ok(());
+    }
+
+    let mut pids = HashSet::new();
+    for entry in fs::read_dir("/proc").map_err(|error| format!("Could not read /proc: {error}"))? {
+        let entry = entry.map_err(|error| format!("Could not read /proc entry: {error}"))?;
+        let Some(pid) = entry
+            .file_name()
+            .to_str()
+            .and_then(|value| value.parse::<i32>().ok())
+        else {
+            continue;
+        };
+        if process_has_socket(pid, &inodes)? && is_geolibre_sidecar_process(pid) {
+            pids.insert(pid);
+        }
+    }
+
+    for pid in &pids {
+        terminate_pid(*pid, SIGTERM);
+    }
+    thread::sleep(Duration::from_millis(250));
+    for pid in &pids {
+        terminate_pid(*pid, SIGKILL);
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn terminate_sidecar_listeners_on_port(_port: u16) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn listening_tcp_inodes(port: u16) -> Result<HashSet<String>, String> {
+    let mut inodes = HashSet::new();
+    collect_listening_tcp_inodes("/proc/net/tcp", port, &mut inodes)?;
+    collect_listening_tcp_inodes("/proc/net/tcp6", port, &mut inodes)?;
+    Ok(inodes)
+}
+
+#[cfg(target_os = "linux")]
+fn collect_listening_tcp_inodes(
+    path: &str,
+    port: u16,
+    inodes: &mut HashSet<String>,
+) -> Result<(), String> {
+    let content =
+        fs::read_to_string(path).map_err(|error| format!("Could not read {path}: {error}"))?;
+    let expected_port = format!("{port:04X}");
+    for line in content.lines().skip(1) {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        if fields.len() <= 9 || fields[3] != "0A" {
+            continue;
+        }
+        let Some(local_port) = fields[1].rsplit_once(':').map(|(_, value)| value) else {
+            continue;
+        };
+        if local_port.eq_ignore_ascii_case(&expected_port) {
+            inodes.insert(fields[9].to_string());
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn process_has_socket(pid: i32, inodes: &HashSet<String>) -> Result<bool, String> {
+    let fd_dir = format!("/proc/{pid}/fd");
+    let Ok(entries) = fs::read_dir(&fd_dir) else {
+        return Ok(false);
+    };
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("Could not read {fd_dir} entry: {error}"))?;
+        let Ok(target) = fs::read_link(entry.path()) else {
+            continue;
+        };
+        let target = target.to_string_lossy();
+        if let Some(inode) = target
+            .strip_prefix("socket:[")
+            .and_then(|value| value.strip_suffix(']'))
+        {
+            if inodes.contains(inode) {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
+#[cfg(target_os = "linux")]
+fn is_geolibre_sidecar_process(pid: i32) -> bool {
+    let path = format!("/proc/{pid}/cmdline");
+    let Ok(command_line) = fs::read(path) else {
+        return false;
+    };
+    let command_line = String::from_utf8_lossy(&command_line);
+    command_line.contains("geolibre_server.app.main")
+        || command_line.contains("geolibre_server")
+        || command_line.contains("uvicorn")
+}
+
+#[cfg(unix)]
+fn terminate_pid(pid: i32, signal: i32) {
+    let _ = unsafe { kill(pid, signal) };
+}
+
+fn sidecar_project_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    if let Ok(path) = env::var("GEOLIBRE_SIDECAR_PROJECT_DIR") {
+        return validate_sidecar_project_dir(PathBuf::from(path));
+    }
+
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        if let Ok(path) =
+            validate_sidecar_project_dir(resource_dir.join("backend").join("geolibre_server"))
+        {
+            return Ok(path);
+        }
+        if let Ok(path) = validate_sidecar_project_dir(resource_dir.join("geolibre_server")) {
+            return Ok(path);
+        }
+    }
+
+    validate_sidecar_project_dir(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("..")
+            .join("backend")
+            .join("geolibre_server"),
+    )
+}
+
+fn validate_sidecar_project_dir(path: PathBuf) -> Result<PathBuf, String> {
+    let path = path
+        .canonicalize()
+        .map_err(|error| format!("Could not resolve sidecar project path: {error}"))?;
+    if path.join("pyproject.toml").exists() {
+        Ok(path)
+    } else {
+        Err(format!(
+            "Could not find GeoLibre sidecar project at {}",
+            path.display()
+        ))
+    }
+}
+
+fn ensure_managed_uv(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    if let Ok(path) = env::var("GEOLIBRE_UV") {
+        let path = PathBuf::from(path);
+        if path.exists() {
+            return Ok(path);
+        }
+    }
+
+    if let Some(path) = find_executable_on_path(uv_executable_name()) {
+        return Ok(path);
+    }
+
+    install_managed_uv(app)
+}
+
+fn install_managed_uv(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let uv_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Could not resolve app data directory: {error}"))?
+        .join("runtime")
+        .join("uv-bin");
+    let uv = uv_dir.join(uv_executable_name());
+    if uv.exists() {
+        return Ok(uv);
+    }
+
+    fs::create_dir_all(&uv_dir)
+        .map_err(|error| format!("Could not create uv cache directory: {error}"))?;
+    let script = download_uv_installer(app)?;
+    let mut command = if cfg!(target_os = "windows") {
+        let mut command = Command::new("powershell");
+        command
+            .arg("-NoProfile")
+            .arg("-ExecutionPolicy")
+            .arg("Bypass")
+            .arg("-File")
+            .arg(&script);
+        command
+    } else {
+        let mut command = Command::new("sh");
+        command.arg(&script);
+        command
+    };
+    let output = command
+        .env("UV_UNMANAGED_INSTALL", &uv_dir)
+        .output()
+        .map_err(|error| format!("Could not run uv installer: {error}"))?;
+    let _ = fs::remove_file(script);
+    if !output.status.success() {
+        let detail = String::from_utf8_lossy(if output.stderr.is_empty() {
+            &output.stdout
+        } else {
+            &output.stderr
+        });
+        return Err(format!("uv installer failed: {detail}"));
+    }
+    if !uv.exists() {
+        return Err(format!("uv installer did not create {}", uv.display()));
+    }
+    Ok(uv)
+}
+
+fn download_uv_installer(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let url = if cfg!(target_os = "windows") {
+        format!("{UV_INSTALL_BASE_URL}/install.ps1")
+    } else {
+        format!("{UV_INSTALL_BASE_URL}/install.sh")
+    };
+    let response = reqwest::blocking::Client::builder()
+        .user_agent("GeoLibre Desktop")
+        .build()
+        .map_err(|error| format!("Could not create HTTP client: {error}"))?
+        .get(url)
+        .send()
+        .map_err(|error| format!("Could not download uv installer: {error}"))?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!("uv installer download failed with status {status}"));
+    }
+    let extension = if cfg!(target_os = "windows") {
+        "ps1"
+    } else {
+        "sh"
+    };
+    let installer_dir = app
+        .path()
+        .app_cache_dir()
+        .map_err(|error| format!("Could not resolve app cache directory: {error}"))?
+        .join("installers");
+    fs::create_dir_all(&installer_dir)
+        .map_err(|error| format!("Could not create installer cache directory: {error}"))?;
+    let script = installer_dir.join(format!("uv-install.{extension}"));
+    fs::write(
+        &script,
+        response
+            .bytes()
+            .map_err(|error| format!("Could not read uv installer: {error}"))?,
+    )
+    .map_err(|error| format!("Could not write uv installer: {error}"))?;
+    Ok(script)
+}
+
+fn uv_executable_name() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "uv.exe"
+    } else {
+        "uv"
+    }
+}
+
+fn find_executable_on_path(name: &str) -> Option<PathBuf> {
+    let path = env::var_os("PATH")?;
+    env::split_paths(&path)
+        .map(|directory| directory.join(name))
+        .find(|candidate| candidate.exists())
 }
 
 fn ensure_martin_binary_path(app: &tauri::AppHandle) -> Result<MartinBinaryInfo, String> {
@@ -833,6 +1363,11 @@ fn configure_linux_webkit() {
     // default when unset so an explicit user/distributor value wins.
     if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
         std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+    // Prefer portal-backed native dialogs on Linux. This avoids GTK/GIO file
+    // metadata warnings that can appear around file and folder pickers.
+    if std::env::var_os("GTK_USE_PORTAL").is_none() {
+        std::env::set_var("GTK_USE_PORTAL", "1");
     }
 }
 

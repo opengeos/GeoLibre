@@ -10,6 +10,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+whitebox = [
+  "whitebox-workflows>=2.0.2",
+]
 # Future geospatial stack (not required for MVP UI):
 # geo = [
 #   "gdal",
