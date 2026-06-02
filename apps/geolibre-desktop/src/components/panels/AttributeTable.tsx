@@ -755,7 +755,7 @@ export function AttributeTable() {
       </div>
       <ScrollArea
         type="always"
-        className="flex-1 [&_[data-orientation=vertical]]:!top-11 [&_[data-orientation=vertical]]:!h-[calc(100%-2.75rem)]"
+        className="flex-1 [&_[data-orientation=vertical]]:!top-11 [&_[data-orientation=vertical]]:!h-[calc(100%-3.625rem)]"
       >
         {!layer?.geojson ? (
           <p className="p-4 text-xs text-muted-foreground">
