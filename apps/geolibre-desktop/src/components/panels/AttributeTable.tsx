@@ -266,7 +266,7 @@ export function AttributeTable() {
       for (const k of Object.keys(f.properties)) propKeys.add(k);
     }
   }
-  const columns = Array.from(propKeys).slice(0, 8);
+  const columns = Array.from(propKeys);
   const tableColumns = ["__featureId", ...columns];
 
   const columnWidth = (key: SortKey) =>
@@ -274,6 +274,10 @@ export function AttributeTable() {
     (key === "__featureId"
       ? DEFAULT_FEATURE_ID_COLUMN_WIDTH
       : DEFAULT_ATTRIBUTE_COLUMN_WIDTH);
+  const tableWidth = tableColumns.reduce(
+    (width, column) => width + columnWidth(column),
+    0,
+  );
 
   const columnWidthLimits = (key: SortKey) =>
     key === "__featureId"
@@ -758,7 +762,10 @@ export function AttributeTable() {
             Attribute table requires a vector layer.
           </p>
         ) : (
-          <table className="min-w-full table-fixed caption-bottom text-sm">
+          <table
+            className="table-fixed caption-bottom text-sm"
+            style={{ minWidth: "100%", width: tableWidth }}
+          >
             <colgroup>
               {tableColumns.map((col) => (
                 <col key={col} style={{ width: columnWidth(col) }} />
