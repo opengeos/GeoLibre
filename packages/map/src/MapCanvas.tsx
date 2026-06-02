@@ -19,6 +19,14 @@ import "./layer-control-overrides.css";
 
 const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
 const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
+const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
+const WEB_MERCATOR_MAX_LATITUDE = 85.0511287798066;
+const WEB_MERCATOR_EARTH_RADIUS = 6378137;
+const WMS_IDENTIFY_INFO_FORMATS = [
+  "application/json",
+  "text/html",
+  "text/plain",
+];
 
 export interface MapCanvasProps {
   controllerRef?: React.MutableRefObject<MapController | null>;
@@ -81,6 +89,13 @@ function createIdentifyPopupElement(
   return root;
 }
 
+function createIdentifyMessagePopupElement(
+  layerName: string,
+  message: string,
+): HTMLElement {
+  return createIdentifyPopupElement(layerName, { status: message });
+}
+
 function nativeIdentifyLayerIds(layer: GeoLibreLayer): string[] {
   const nativeLayerIds = layer.metadata.nativeLayerIds;
   return Array.isArray(nativeLayerIds)
@@ -118,6 +133,213 @@ function findFeatureId(
   });
 
   return index >= 0 ? String(layer.geojson.features[index].id ?? index) : null;
+}
+
+function isWmsLayer(layer: GeoLibreLayer): boolean {
+  return layer.type === "wms" || layer.metadata.service === "wms";
+}
+
+function stringSource(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function numberSource(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+function encodeWmsParamValue(value: string): string {
+  return value === "{bbox-epsg-3857}" ? value : encodeURIComponent(value);
+}
+
+function appendWmsQuery(
+  endpoint: string,
+  params: Array<[string, string]>,
+): string {
+  const separator = endpoint.includes("?")
+    ? endpoint.endsWith("?") || endpoint.endsWith("&")
+      ? ""
+      : "&"
+    : "?";
+  const query = params
+    .map(
+      ([key, value]) =>
+        `${encodeURIComponent(key)}=${encodeWmsParamValue(value)}`,
+    )
+    .join("&");
+  return `${endpoint}${separator}${query}`;
+}
+
+function lngLatToWebMercator(lng: number, lat: number): [number, number] {
+  const clampedLat = Math.max(
+    -WEB_MERCATOR_MAX_LATITUDE,
+    Math.min(WEB_MERCATOR_MAX_LATITUDE, lat),
+  );
+  const x = WEB_MERCATOR_EARTH_RADIUS * (lng * Math.PI) / 180;
+  const y =
+    WEB_MERCATOR_EARTH_RADIUS *
+    Math.log(Math.tan(Math.PI / 4 + (clampedLat * Math.PI) / 360));
+  return [x, y];
+}
+
+function mapBbox3857(map: maplibregl.Map): string {
+  const bounds = map.getBounds();
+  const sw = bounds.getSouthWest();
+  const ne = bounds.getNorthEast();
+  const [minX, minY] = lngLatToWebMercator(sw.lng, sw.lat);
+  const [maxX, maxY] = lngLatToWebMercator(ne.lng, ne.lat);
+  return [minX, minY, maxX, maxY].join(",");
+}
+
+function isViteDevServer(): boolean {
+  return Boolean(
+    (
+      import.meta as ImportMeta & {
+        env?: { DEV?: boolean };
+      }
+    ).env?.DEV,
+  );
+}
+
+function proxyWmsRequestUrl(url: string): string {
+  return isViteDevServer()
+    ? `${WMS_PROXY_PATH}?url=${encodeURIComponent(url)}`
+    : url;
+}
+
+function createWmsGetFeatureInfoUrl(
+  layer: GeoLibreLayer,
+  map: maplibregl.Map,
+  event: maplibregl.MapMouseEvent,
+  infoFormat: string,
+): string | null {
+  const endpoint = stringSource(layer.source.url) ?? layer.sourcePath;
+  const layers = stringSource(layer.source.layers);
+  if (!endpoint || !layers) return null;
+
+  const canvas = map.getCanvas();
+  const width = Math.max(1, Math.round(canvas.clientWidth));
+  const height = Math.max(1, Math.round(canvas.clientHeight));
+  const x = Math.max(0, Math.min(width - 1, Math.round(event.point.x)));
+  const y = Math.max(0, Math.min(height - 1, Math.round(event.point.y)));
+  const tileSize = numberSource(layer.source.tileSize) ?? 256;
+  const styles = stringSource(layer.source.styles) ?? "";
+  const format = stringSource(layer.source.format) ?? "image/png";
+
+  return appendWmsQuery(endpoint, [
+    ["SERVICE", "WMS"],
+    ["REQUEST", "GetFeatureInfo"],
+    ["VERSION", "1.1.1"],
+    ["LAYERS", layers],
+    ["QUERY_LAYERS", layers],
+    ["STYLES", styles],
+    ["FORMAT", format],
+    ["TRANSPARENT", layer.source.transparent === false ? "FALSE" : "TRUE"],
+    ["SRS", "EPSG:3857"],
+    ["BBOX", mapBbox3857(map)],
+    ["WIDTH", String(width || tileSize)],
+    ["HEIGHT", String(height || tileSize)],
+    ["X", String(x)],
+    ["Y", String(y)],
+    ["INFO_FORMAT", infoFormat],
+    ["FEATURE_COUNT", "10"],
+  ]);
+}
+
+function normalizeText(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function textFromHtml(value: string): string {
+  const document = new DOMParser().parseFromString(value, "text/html");
+  return normalizeText(document.body.textContent ?? "");
+}
+
+function isWmsExceptionResponse(value: string): boolean {
+  return /<([\w:]+)?(ServiceException|ExceptionReport)\b/i.test(value);
+}
+
+function parseWmsJsonProperties(value: unknown): {
+  featureId?: string | number;
+  properties: Record<string, unknown>;
+} | null {
+  if (!value || typeof value !== "object") return null;
+
+  if ("features" in value && Array.isArray(value.features)) {
+    const [feature] = value.features;
+    if (!feature || typeof feature !== "object") return null;
+    const properties =
+      "properties" in feature &&
+      feature.properties &&
+      typeof feature.properties === "object" &&
+      !Array.isArray(feature.properties)
+        ? (feature.properties as Record<string, unknown>)
+        : {};
+    const featureId =
+      "id" in feature &&
+      (typeof feature.id === "string" || typeof feature.id === "number")
+        ? feature.id
+        : undefined;
+    return { featureId, properties };
+  }
+
+  return { properties: value as Record<string, unknown> };
+}
+
+async function fetchWmsIdentifyProperties(
+  layer: GeoLibreLayer,
+  map: maplibregl.Map,
+  event: maplibregl.MapMouseEvent,
+  signal: AbortSignal,
+): Promise<{
+  featureId?: string | number;
+  properties: Record<string, unknown>;
+} | null> {
+  let fallbackText = "";
+
+  for (const infoFormat of WMS_IDENTIFY_INFO_FORMATS) {
+    const targetUrl = createWmsGetFeatureInfoUrl(layer, map, event, infoFormat);
+    if (!targetUrl) return null;
+
+    const response = await fetch(proxyWmsRequestUrl(targetUrl), { signal });
+    const contentType =
+      response.headers.get("content-type")?.toLowerCase() ?? infoFormat;
+    const text = await response.text();
+    if (!response.ok) {
+      fallbackText = normalizeText(text) || response.statusText;
+      continue;
+    }
+    if (isWmsExceptionResponse(text)) {
+      fallbackText = normalizeText(text);
+      continue;
+    }
+
+    if (
+      contentType.includes("json") ||
+      infoFormat.includes("json") ||
+      text.trim().startsWith("{")
+    ) {
+      try {
+        const parsed = parseWmsJsonProperties(JSON.parse(text));
+        if (parsed) return parsed;
+      } catch {
+        fallbackText = normalizeText(text);
+      }
+      continue;
+    }
+
+    const resultText = contentType.includes("html")
+      ? textFromHtml(text)
+      : normalizeText(text);
+    if (resultText) return { properties: { result: resultText } };
+  }
+
+  return fallbackText ? { properties: { result: fallbackText } } : null;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
 }
 
 export const MapCanvas = memo(function MapCanvas({
@@ -303,12 +525,68 @@ export const MapCanvas = memo(function MapCanvas({
 
     map.getCanvas().style.cursor = "crosshair";
 
+    let wmsIdentifyAbortController: AbortController | null = null;
+
     const handleIdentifyClick = (event: maplibregl.MapMouseEvent) => {
       const clearIdentifyResult = () => {
+        wmsIdentifyAbortController?.abort();
+        wmsIdentifyAbortController = null;
         selectFeature(null);
         identifyPopup.current?.remove();
         identifyPopup.current = null;
       };
+      const showIdentifyPopup = (content: HTMLElement) => {
+        identifyPopup.current?.remove();
+        identifyPopup.current = new maplibregl.Popup({
+          className: "geolibre-identify-popup",
+          closeButton: true,
+          closeOnClick: false,
+          maxWidth: "560px",
+        })
+          .setLngLat(event.lngLat)
+          .setDOMContent(content)
+          .addTo(map);
+      };
+
+      if (isWmsLayer(layer)) {
+        wmsIdentifyAbortController?.abort();
+        const abortController = new AbortController();
+        wmsIdentifyAbortController = abortController;
+        selectFeature(null);
+        showIdentifyPopup(
+          createIdentifyMessagePopupElement(layer.name, "Loading..."),
+        );
+
+        void fetchWmsIdentifyProperties(
+          layer,
+          map,
+          event,
+          abortController.signal,
+        )
+          .then((result) => {
+            if (abortController.signal.aborted) return;
+            wmsIdentifyAbortController = null;
+            showIdentifyPopup(
+              createIdentifyPopupElement(
+                layer.name,
+                result?.properties ?? {},
+                result?.featureId,
+              ),
+            );
+          })
+          .catch((error: unknown) => {
+            if (isAbortError(error)) return;
+            wmsIdentifyAbortController = null;
+            const message =
+              error instanceof Error
+                ? error.message
+                : "The WMS GetFeatureInfo request failed.";
+            showIdentifyPopup(
+              createIdentifyMessagePopupElement(layer.name, message),
+            );
+          });
+        return;
+      }
 
       const queryLayerIds = identifyStyleLayerIds(layer).filter((id) =>
         map.getLayer(id),
@@ -329,27 +607,19 @@ export const MapCanvas = memo(function MapCanvas({
       const featureId = findFeatureId(layer, feature);
       selectFeature(featureId);
 
-      identifyPopup.current?.remove();
-      identifyPopup.current = new maplibregl.Popup({
-        className: "geolibre-identify-popup",
-        closeButton: true,
-        closeOnClick: false,
-        maxWidth: "560px",
-      })
-        .setLngLat(event.lngLat)
-        .setDOMContent(
-          createIdentifyPopupElement(
-            layer.name,
-            feature.properties ?? {},
-            featureId ?? feature.id,
-          ),
-        )
-        .addTo(map);
+      showIdentifyPopup(
+        createIdentifyPopupElement(
+          layer.name,
+          feature.properties ?? {},
+          featureId ?? feature.id,
+        ),
+      );
     };
 
     map.on("click", handleIdentifyClick);
 
     return () => {
+      wmsIdentifyAbortController?.abort();
       map.off("click", handleIdentifyClick);
       identifyPopup.current?.remove();
       identifyPopup.current = null;
