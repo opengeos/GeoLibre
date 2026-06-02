@@ -63,6 +63,7 @@ import {
 export type AddDataKind =
   | "xyz"
   | "wms"
+  | "wfs"
   | "wmts"
   | "vector"
   | "raster"
@@ -87,6 +88,7 @@ type SelectedRasterFile = {
 const KIND_LABELS: Record<AddDataKind, string> = {
   xyz: "Add XYZ Layer",
   wms: "Add WMS Layer",
+  wfs: "Add WFS Layer",
   wmts: "Add WMTS Layer",
   vector: "Add Vector Layer",
   raster: "Add Raster Layer",
@@ -113,6 +115,8 @@ const DEFAULT_XYZ_URL =
 const DEFAULT_WMS_ENDPOINT =
   "https://imagery.nationalmap.gov/arcgis/services/USGSNAIPImagery/ImageServer/WMSServer";
 const DEFAULT_WMS_LAYERS = "USGSNAIPImagery:FalseColorComposite";
+const DEFAULT_WFS_ENDPOINT = "https://ahocevar.com/geoserver/wfs";
+const DEFAULT_WFS_TYPE_NAME = "topp:states";
 const DEFAULT_WMTS_URL =
   "https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/119/{z}/{y}/{x}";
 const DEFAULT_RASTER_URL =
@@ -127,6 +131,7 @@ const DEFAULT_ARCGIS_URLS: Record<ArcGISLayerType, string> = {
   feature: DEFAULT_ARCGIS_FEATURE_URL,
   "vector-tile": DEFAULT_ARCGIS_VECTOR_TILE_URL,
 };
+const WFS_PROXY_PATH = "/__geolibre_wfs_proxy";
 const POSTGRES_CONNECTIONS_STORAGE_KEY =
   "geolibre.postgres.connectionStrings";
 const MAX_SAVED_POSTGRES_CONNECTIONS = 10;
@@ -203,6 +208,31 @@ function createWmsTileUrl(options: {
   ]);
 }
 
+function createWfsGetFeatureUrl(options: {
+  endpoint: string;
+  typeName: string;
+  version: string;
+  outputFormat: string;
+  srsName: string;
+  maxFeatures?: string;
+}): string {
+  const isWfs2 = options.version.startsWith("2");
+  const params: Array<[string, string]> = [
+    ["service", "WFS"],
+    ["request", "GetFeature"],
+    ["version", options.version],
+    [isWfs2 ? "typeNames" : "typeName", options.typeName],
+    ["outputFormat", options.outputFormat],
+  ];
+
+  if (options.srsName) params.push(["srsName", options.srsName]);
+  if (options.maxFeatures) {
+    params.push([isWfs2 ? "count" : "maxFeatures", options.maxFeatures]);
+  }
+
+  return appendQuery(options.endpoint, params);
+}
+
 function parseRequiredNumber(value: string, label: string): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
@@ -270,12 +300,53 @@ function errorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+function isViteDevServer(): boolean {
+  return Boolean(
+    (
+      import.meta as ImportMeta & {
+        env?: { DEV?: boolean };
+      }
+    ).env?.DEV,
+  );
+}
+
+function proxyWfsRequestUrl(url: string): string {
+  return isViteDevServer()
+    ? `${WFS_PROXY_PATH}?url=${encodeURIComponent(url)}`
+    : url;
+}
+
+function parseGeoJsonFeatureCollection(value: unknown): FeatureCollection {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("type" in value) ||
+    value.type !== "FeatureCollection" ||
+    !("features" in value) ||
+    !Array.isArray(value.features)
+  ) {
+    throw new Error("The response is not a GeoJSON FeatureCollection.");
+  }
+
+  return value as FeatureCollection;
+}
+
 async function fetchGeoJson(url: string): Promise<FeatureCollection> {
   const response = await fetch(url);
+  const text = await response.text();
   if (!response.ok) {
     throw new Error(`Request failed with status ${response.status}`);
   }
-  return (await response.json()) as FeatureCollection;
+  try {
+    return parseGeoJsonFeatureCollection(JSON.parse(text));
+  } catch (error) {
+    if (/^\s*</.test(text)) {
+      throw new Error(
+        "The service returned XML instead of GeoJSON. Check the layer name and output format.",
+      );
+    }
+    throw error;
+  }
 }
 
 export function AddDataDialog({
@@ -303,6 +374,12 @@ export function AddDataDialog({
   const [wmsFormat, setWmsFormat] = useState("image/png");
   const [wmsTransparent, setWmsTransparent] = useState(true);
   const [wmsTileSize, setWmsTileSize] = useState("256");
+  const [wfsEndpoint, setWfsEndpoint] = useState(DEFAULT_WFS_ENDPOINT);
+  const [wfsTypeName, setWfsTypeName] = useState(DEFAULT_WFS_TYPE_NAME);
+  const [wfsVersion, setWfsVersion] = useState("2.0.0");
+  const [wfsOutputFormat, setWfsOutputFormat] = useState("application/json");
+  const [wfsSrsName, setWfsSrsName] = useState("EPSG:4326");
+  const [wfsMaxFeatures, setWfsMaxFeatures] = useState("1000");
   const [wmtsUrl, setWmtsUrl] = useState(DEFAULT_WMTS_URL);
   const [wmtsTileSize, setWmtsTileSize] = useState("256");
 
@@ -359,6 +436,7 @@ export function AddDataDialog({
       {
         xyz: "XYZ Layer",
         wms: "WMS Layer",
+        wfs: "WFS Layer",
         wmts: "WMTS Layer",
         vector: "Vector Layer",
         raster: "Raster Layer",
@@ -377,6 +455,12 @@ export function AddDataDialog({
     setWmsFormat("image/png");
     setWmsTransparent(true);
     setWmsTileSize("256");
+    setWfsEndpoint(DEFAULT_WFS_ENDPOINT);
+    setWfsTypeName(DEFAULT_WFS_TYPE_NAME);
+    setWfsVersion("2.0.0");
+    setWfsOutputFormat("application/json");
+    setWfsSrsName("EPSG:4326");
+    setWfsMaxFeatures("1000");
     setWmtsUrl(DEFAULT_WMTS_URL);
     setWmtsTileSize("256");
     setVectorMode("geojson-url");
@@ -420,6 +504,9 @@ export function AddDataDialog({
     }
     if (kind === "wms") {
       return "Add a WMS GetMap service as a tiled raster layer.";
+    }
+    if (kind === "wfs") {
+      return "Add WFS features by requesting GeoJSON from a GetFeature service.";
     }
     if (kind === "wmts") {
       return "Add a WMTS tile URL template as a raster layer.";
@@ -740,6 +827,53 @@ export function AddDataDialog({
             },
             { service: "wms" },
           ),
+        );
+        return;
+      }
+
+      if (kind === "wfs") {
+        if (!wfsEndpoint.trim()) throw new Error("Enter a WFS service URL.");
+        if (!wfsTypeName.trim()) {
+          throw new Error("Enter a WFS feature type name.");
+        }
+        if (!wfsOutputFormat.trim()) {
+          throw new Error("Enter a WFS output format.");
+        }
+
+        const featureUrl = createWfsGetFeatureUrl({
+          endpoint: wfsEndpoint.trim(),
+          typeName: wfsTypeName.trim(),
+          version: wfsVersion,
+          outputFormat: wfsOutputFormat.trim(),
+          srsName: wfsSrsName.trim(),
+          maxFeatures: wfsMaxFeatures.trim() || undefined,
+        });
+        const data = await fetchGeoJson(proxyWfsRequestUrl(featureUrl));
+        addAndClose(
+          {
+            ...createBaseLayer(
+              name,
+              "geojson",
+              {
+                type: "geojson",
+                url: featureUrl,
+                service: "wfs",
+                typeName: wfsTypeName.trim(),
+                version: wfsVersion,
+                outputFormat: wfsOutputFormat.trim(),
+                srsName: wfsSrsName.trim() || undefined,
+              },
+              {
+                featureCount: data.features.length,
+                service: "wfs",
+                sourceKind: "wfs-getfeature",
+                typeName: wfsTypeName.trim(),
+              },
+            ),
+            geojson: data,
+            sourcePath: featureUrl,
+          },
+          { fit: true },
         );
         return;
       }
@@ -1066,6 +1200,72 @@ export function AddDataDialog({
                 />
                 Transparent background
               </label>
+            </div>
+          )}
+
+          {kind === "wfs" && (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="wfs-endpoint">Service URL</Label>
+                <Input
+                  id="wfs-endpoint"
+                  placeholder="https://example.com/geoserver/wfs"
+                  value={wfsEndpoint}
+                  onChange={(event) => setWfsEndpoint(event.target.value)}
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="wfs-type-name">Feature type</Label>
+                  <Input
+                    id="wfs-type-name"
+                    placeholder="workspace:layer"
+                    value={wfsTypeName}
+                    onChange={(event) => setWfsTypeName(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="wfs-version">Version</Label>
+                  <Select
+                    id="wfs-version"
+                    value={wfsVersion}
+                    onChange={(event) => setWfsVersion(event.target.value)}
+                  >
+                    <option value="2.0.0">2.0.0</option>
+                    <option value="1.1.0">1.1.0</option>
+                    <option value="1.0.0">1.0.0</option>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="wfs-output-format">Output format</Label>
+                  <Input
+                    id="wfs-output-format"
+                    value={wfsOutputFormat}
+                    onChange={(event) =>
+                      setWfsOutputFormat(event.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="wfs-srs-name">SRS name</Label>
+                  <Input
+                    id="wfs-srs-name"
+                    placeholder="Optional"
+                    value={wfsSrsName}
+                    onChange={(event) => setWfsSrsName(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="wfs-max-features">Max features</Label>
+                  <Input
+                    id="wfs-max-features"
+                    inputMode="numeric"
+                    placeholder="Optional"
+                    value={wfsMaxFeatures}
+                    onChange={(event) => setWfsMaxFeatures(event.target.value)}
+                  />
+                </div>
+              </div>
             </div>
           )}
 
@@ -1543,7 +1743,7 @@ export function AddDataDialog({
             </Button>
             <Button type="submit" disabled={addLayerDisabled}>
               {!isSubmitting ? (
-                kind === "wms" || kind === "wmts" ? (
+                kind === "wms" || kind === "wfs" || kind === "wmts" ? (
                   <Globe2 className="mr-2 h-3.5 w-3.5" />
                 ) : kind === "raster" ? (
                   <Image className="mr-2 h-3.5 w-3.5" />

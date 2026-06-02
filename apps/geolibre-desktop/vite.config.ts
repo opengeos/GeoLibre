@@ -17,6 +17,7 @@ const APP_VERSION = JSON.parse(
   readFileSync(new URL("./package.json", import.meta.url), "utf8"),
 ).version as string;
 const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
+const WFS_PROXY_PATH = "/__geolibre_wfs_proxy";
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
 const DUCKDB_WORKER_PATH_PART = "/@duckdb/duckdb-wasm/dist/";
 const DUCKDB_WORKER_SOURCE_MAP_RE =
@@ -74,6 +75,17 @@ function wmsProxyPlugin(): Plugin {
         } catch (error) {
           const message =
             error instanceof Error ? error.message : "WMS proxy request failed";
+          res.statusCode = 502;
+          res.setHeader("content-type", "text/plain");
+          res.end(message);
+        }
+      });
+      server.middlewares.use(WFS_PROXY_PATH, async (req, res) => {
+        try {
+          await proxyBinaryRequest(req, res, WFS_PROXY_PATH);
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "WFS proxy request failed";
           res.statusCode = 502;
           res.setHeader("content-type", "text/plain");
           res.end(message);

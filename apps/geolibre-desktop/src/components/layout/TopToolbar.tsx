@@ -502,6 +502,9 @@ export function TopToolbar({
           <DropdownMenuItem onSelect={() => setAddDataKind("wms")}>
             Add WMS Layer
           </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setAddDataKind("wfs")}>
+            Add WFS Layer
+          </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setAddDataKind("wmts")}>
             Add WMTS Layer
           </DropdownMenuItem>
