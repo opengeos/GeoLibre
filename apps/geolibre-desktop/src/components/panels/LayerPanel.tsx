@@ -222,6 +222,8 @@ export function LayerPanel({
             const canIdentify =
               layer.type === "geojson" ||
               (layer.type === "wms" &&
+                typeof layer.source.layers === "string" &&
+                Boolean(layer.source.layers.trim()) &&
                 Boolean(
                   (typeof layer.source.url === "string" &&
                     layer.source.url.trim()) ||

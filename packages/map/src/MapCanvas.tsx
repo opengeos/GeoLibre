@@ -271,7 +271,7 @@ function createWmsGetFeatureInfoUrl(
     ["X", String(WMS_IDENTIFY_QUERY_CENTER)],
     ["Y", String(WMS_IDENTIFY_QUERY_CENTER)],
     ["INFO_FORMAT", infoFormat],
-    ["FEATURE_COUNT", "1"],
+    ["FEATURE_COUNT", String(Number(layer.source.featureCount) || 1)],
   ]);
 }
 
@@ -359,7 +359,8 @@ async function fetchWmsIdentifyProperties(
     if (
       contentType.includes("json") ||
       infoFormat.includes("json") ||
-      text.trim().startsWith("{")
+      text.trim().startsWith("{") ||
+      text.trim().startsWith("[")
     ) {
       try {
         const parsed = parseWmsJsonProperties(JSON.parse(text));
@@ -370,10 +371,19 @@ async function fetchWmsIdentifyProperties(
       continue;
     }
 
-    const resultText = contentType.includes("html")
-      ? textFromHtml(text)
-      : normalizeText(text);
-    if (resultText) return { properties: { result: resultText } };
+    if (contentType.includes("html")) {
+      const resultText = textFromHtml(text);
+      if (resultText) return { properties: { result: resultText } };
+      continue;
+    }
+
+    const resultText = normalizeText(text);
+    if (!resultText) continue;
+    // Only treat plain text as the final answer when we actually probed a
+    // text format; a body that arrived in an unexpected format is stashed as
+    // a fallback so the remaining info formats are still tried.
+    if (infoFormat.includes("plain")) return { properties: { result: resultText } };
+    fallbackText = resultText;
   }
 
   return fallbackText ? { properties: { result: fallbackText } } : null;
