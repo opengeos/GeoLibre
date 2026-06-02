@@ -1,6 +1,7 @@
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import {
+  clearRemoteWhiteboxCatalogSnapshotCache,
   fetchWhiteboxJob,
   fetchWhiteboxJsonOutput,
   fetchRemoteWhiteboxCatalogSnapshot,
@@ -363,6 +364,9 @@ export function ProcessingDialog({
   const loadWhitebox = useCallback(async () => {
     setLoadingTools(true);
     setError(null);
+    // Drop the in-memory snapshot so a fresh load reflects upstream catalog
+    // changes; calls within this load still dedup once it is repopulated.
+    clearRemoteWhiteboxCatalogSnapshotCache();
 
     const useRemoteCatalogSnapshot = async (
       message: string,
@@ -414,7 +418,13 @@ export function ProcessingDialog({
         );
         return;
       }
-      if (nextTools.length === 0) return;
+      if (nextTools.length === 0) {
+        await useRemoteCatalogSnapshot(
+          "Live catalog is empty. Showing GitHub catalog only.",
+          true,
+        );
+        return;
+      }
       try {
         const snapshotTools = await fetchRemoteWhiteboxCatalogSnapshot();
         nextTools = mergeCatalogParameterFallbacks(nextTools, snapshotTools);
@@ -476,11 +486,18 @@ export function ProcessingDialog({
         .filter((entry): entry is readonly [string, string] =>
           Boolean(entry[1] && isJsonOutputPath(entry[1])),
         );
+      // Resolve the producing tool from the job itself, not the live
+      // `selectedTool`, so switching tools while a job finishes does not
+      // mislabel the imported layer.
+      const jobTool = tools.find((item) => item.id === nextJob.tool_id);
+      const jobToolLabel = jobTool
+        ? toolLabel(jobTool)
+        : humanize(nextJob.tool_id);
       for (const [name, path] of entries) {
         const data = await fetchWhiteboxJsonOutput(path);
         if (!isFeatureCollection(data)) continue;
         const layerId = addGeoJsonLayer(
-          `${toolLabel(selectedTool ?? { id: nextJob.tool_id })} ${humanize(name)}`,
+          `${jobToolLabel} ${humanize(name)}`,
           data,
           path,
         );
@@ -490,7 +507,7 @@ export function ProcessingDialog({
         if (layer) mapControllerRef.current?.fitLayer(layer);
       }
     },
-    [addGeoJsonLayer, mapControllerRef, selectedTool],
+    [addGeoJsonLayer, mapControllerRef, tools],
   );
 
   useEffect(() => {

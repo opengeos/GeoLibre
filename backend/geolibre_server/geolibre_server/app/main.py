@@ -12,7 +12,6 @@ Future integrations (v0.5+):
 
 from __future__ import annotations
 
-import os
 import signal
 import threading
 import time
@@ -52,9 +51,14 @@ def shutdown():
 
 
 def _terminate_current_process() -> None:
-    """Terminate the current process after the response is returned."""
+    """Terminate the current process after the response is returned.
+
+    Raises ``SIGINT`` rather than ``SIGTERM`` so uvicorn runs its graceful
+    shutdown on every platform. On Windows ``os.kill`` with ``SIGTERM`` maps to
+    an uncatchable ``TerminateProcess`` that would bypass lifespan shutdown.
+    """
     time.sleep(0.2)
-    os.kill(os.getpid(), signal.SIGTERM)
+    signal.raise_signal(signal.SIGINT)
 
 
 @app.get("/algorithms")

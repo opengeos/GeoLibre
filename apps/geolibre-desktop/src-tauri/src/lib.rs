@@ -467,7 +467,9 @@ fn stop_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<(), String> {
         // SidecarProcess::Drop calls terminate() automatically, so taking the
         // value out is enough to tear down the child. Calling terminate() here
         // as well would double-signal the (possibly recycled) process group.
-        drop(process.take());
+        let taken = process.take();
+        drop(process); // release the MutexGuard before the 250 ms SIGTERM grace
+        drop(taken); // terminate() runs here, outside the lock
     }
 
     let base_url = sidecar_base_url();
@@ -567,7 +569,16 @@ fn terminate_sidecar_child(child: &mut Child) {
 
 #[cfg(unix)]
 fn terminate_sidecar_process_group(child: &mut Child) {
-    let process_group = -(child.id() as i32);
+    // Guard the negation: a PID that wrapped to a non-positive i32 would make
+    // `kill` target process group 0 (the caller's own group, including the
+    // Tauri parent) or overflow on i32::MIN.
+    let Some(process_group) = i32::try_from(child.id())
+        .ok()
+        .filter(|pid| *pid > 0)
+        .and_then(|pid| pid.checked_neg())
+    else {
+        return;
+    };
     let _ = unsafe { kill(process_group, SIGTERM) };
     thread::sleep(Duration::from_millis(250));
     let _ = unsafe { kill(process_group, SIGKILL) };

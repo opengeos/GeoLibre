@@ -67,6 +67,7 @@ class JobState(BaseModel):
 _JOBS: dict[str, JobState] = {}
 _JOBS_LOCK = threading.Lock()
 _RUNTIME_SETUP_LOCK = threading.Lock()
+MAX_RETAINED_JOBS = 100
 
 
 def _utc_now() -> str:
@@ -694,7 +695,9 @@ def _default_output_path(tool_id: str, parameter_name: str, kind: str) -> str:
     ext = _output_extension(kind)
     folder = Path(tempfile.gettempdir()) / "geolibre-whitebox"
     folder.mkdir(parents=True, exist_ok=True)
-    return str(folder / f"{_safe_output_stem(tool_id, parameter_name)}{ext}")
+    unique = uuid.uuid4().hex[:8]
+    stem = _safe_output_stem(tool_id, parameter_name)
+    return str(folder / f"{stem}_{unique}{ext}")
 
 
 def _coerce_value(value: Any, kind: str) -> Any:
@@ -894,6 +897,24 @@ def whitebox_tool(tool_id: str, include_pro: bool = False, tier: str = "open"):
     return metadata
 
 
+def _evict_finished_jobs_locked() -> None:
+    """Drop the oldest finished jobs once the retention cap is exceeded.
+
+    The caller must hold ``_JOBS_LOCK``. Running and pending jobs are never
+    evicted; only ``succeeded``/``failed`` jobs are removed, oldest first.
+    """
+    excess = len(_JOBS) - MAX_RETAINED_JOBS
+    if excess <= 0:
+        return
+    finished = [
+        job_id
+        for job_id, job in _JOBS.items()
+        if job.status in {"succeeded", "failed"}
+    ]
+    for job_id in finished[:excess]:
+        _JOBS.pop(job_id, None)
+
+
 @router.post("/run")
 def whitebox_run(request: WhiteboxRunRequest):
     """Start a background Whitebox tool run."""
@@ -910,9 +931,11 @@ def whitebox_run(request: WhiteboxRunRequest):
             created_at=now,
             updated_at=now,
         )
+        _evict_finished_jobs_locked()
     thread = threading.Thread(target=_run_job, args=(job_id, request), daemon=True)
     thread.start()
-    return _JOBS[job_id]
+    with _JOBS_LOCK:
+        return _JOBS[job_id]
 
 
 @router.get("/jobs/{job_id}")
@@ -941,6 +964,19 @@ def _known_output_paths() -> set[str]:
     return paths
 
 
+def _read_text_no_symlink(output_path: Path) -> str:
+    """Read a file's text while rejecting a symlinked final path component.
+
+    Opening with ``O_NOFOLLOW`` closes the TOCTOU window in which an allowlisted
+    output file is swapped for a symlink to an arbitrary target between the
+    allowlist check and the read. On platforms without ``O_NOFOLLOW`` the flag
+    degrades to 0.
+    """
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    with os.fdopen(os.open(output_path, flags), "r", encoding="utf-8") as handle:
+        return handle.read()
+
+
 @router.get("/output")
 def whitebox_output(path: str):
     """Read a JSON or GeoJSON Whitebox output file."""
@@ -952,7 +988,7 @@ def whitebox_output(path: str):
             status_code=403, detail="Path is not a known Whitebox output"
         )
     try:
-        return json.loads(output_path.read_text(encoding="utf-8"))
+        return json.loads(_read_text_no_symlink(output_path))
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Output file not found") from exc
     except Exception as exc:

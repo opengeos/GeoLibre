@@ -7,6 +7,7 @@ export {
 } from "./registry";
 export {
   checkSidecarHealth,
+  clearRemoteWhiteboxCatalogSnapshotCache,
   fetchSidecarAlgorithms,
   fetchWhiteboxJob,
   fetchWhiteboxJsonOutput,
