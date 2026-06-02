@@ -151,18 +151,38 @@ function appendWmsQuery(
   endpoint: string,
   params: Array<[string, string]>,
 ): string {
-  const separator = endpoint.includes("?")
-    ? endpoint.endsWith("?") || endpoint.endsWith("&")
-      ? ""
-      : "&"
-    : "?";
-  const query = params
-    .map(
-      ([key, value]) =>
-        `${encodeURIComponent(key)}=${encodeURIComponent(value)}`,
-    )
-    .join("&");
-  return `${endpoint}${separator}${query}`;
+  // Prefer URL parsing so our control parameters override any duplicates the
+  // endpoint already carries (e.g. a pasted GetMap URL) and land before any
+  // fragment, which the browser would otherwise strip along with the query.
+  try {
+    const url = new URL(endpoint);
+    const controlKeys = new Set(params.map(([key]) => key.toLowerCase()));
+    for (const existing of [...url.searchParams.keys()]) {
+      if (controlKeys.has(existing.toLowerCase())) {
+        url.searchParams.delete(existing);
+      }
+    }
+    for (const [key, value] of params) {
+      url.searchParams.append(key, value);
+    }
+    return url.toString();
+  } catch {
+    // Fall back to plain concatenation for non-absolute endpoints.
+    const fragIdx = endpoint.indexOf("#");
+    const base = fragIdx >= 0 ? endpoint.slice(0, fragIdx) : endpoint;
+    const separator = base.includes("?")
+      ? base.endsWith("?") || base.endsWith("&")
+        ? ""
+        : "&"
+      : "?";
+    const query = params
+      .map(
+        ([key, value]) =>
+          `${encodeURIComponent(key)}=${encodeURIComponent(value)}`,
+      )
+      .join("&");
+    return `${base}${separator}${query}`;
+  }
 }
 
 function lngLatToWebMercator(lng: number, lat: number): [number, number] {
@@ -275,6 +295,9 @@ function parseWmsJsonProperties(value: unknown): {
   if (!value || typeof value !== "object") return null;
 
   if ("features" in value && Array.isArray(value.features)) {
+    // An empty collection is the standard "no hit" response: report success
+    // with no properties rather than null, so we don't probe other formats.
+    if (value.features.length === 0) return { properties: {} };
     const [feature] = value.features;
     if (!feature || typeof feature !== "object") return null;
     const properties =
@@ -320,7 +343,10 @@ async function fetchWmsIdentifyProperties(
     const response = await fetch(proxyWmsRequestUrl(targetUrl), { signal });
     const contentType =
       response.headers.get("content-type")?.toLowerCase() ?? infoFormat;
+    // Response.text() cannot take a signal, so bail out as soon as the read
+    // resolves if the request was aborted meanwhile, skipping parsing.
     const text = await response.text();
+    if (signal.aborted) return null;
     if (!response.ok) {
       fallbackText = normalizeText(text) || response.statusText;
       continue;
@@ -593,7 +619,7 @@ export const MapCanvas = memo(function MapCanvas({
             );
           })
           .catch((error: unknown) => {
-            if (isAbortError(error)) return;
+            if (isAbortError(error) || abortController.signal.aborted) return;
             wmsIdentifyAbortController = null;
             const message =
               error instanceof Error
