@@ -257,10 +257,10 @@ function createWmsGetFeatureInfoUrl(
   const isV13 = version.startsWith("1.3");
   const crsParam = isV13 ? "CRS" : "SRS";
   // Treat a deliberate featureCount of 0 ("all features" on some servers) as
-  // intentional; only fall back to 1 when it is unset (null/undefined) or
-  // non-numeric. Number(null) is 0, so guard null explicitly.
+  // intentional; only fall back to 1 when it is unset (null/undefined), blank,
+  // or non-numeric. Number(null) and Number("") are both 0, so guard those.
   const featureCount =
-    layer.source.featureCount != null
+    layer.source.featureCount != null && layer.source.featureCount !== ""
       ? Number(layer.source.featureCount)
       : NaN;
 
@@ -315,7 +315,10 @@ function parseWmsJsonProperties(value: unknown): {
       typeof first === "object" &&
       !Array.isArray(first) &&
       !("properties" in first) &&
-      !("features" in first)
+      !(
+        "features" in first &&
+        Array.isArray((first as Record<string, unknown>).features)
+      )
     ) {
       return parseWmsJsonProperties(first);
     }
@@ -659,14 +662,16 @@ export const MapCanvas = memo(function MapCanvas({
         // and we must not treat that programmatic swap as a dismissal. Guard the
         // shared controller by identity so a newer request is not clobbered.
         let userDismissed = false;
-        // showIdentifyPopup just assigned identifyPopup.current, so it is set.
-        identifyPopup.current!.once("close", () => {
+        const loadingPopup = identifyPopup.current;
+        const onLoadingClose = () => {
           userDismissed = true;
           abortController.abort();
           if (wmsIdentifyAbortController === abortController) {
             wmsIdentifyAbortController = null;
           }
-        });
+        };
+        // showIdentifyPopup just assigned identifyPopup.current, so it is set.
+        loadingPopup!.once("close", onLoadingClose);
 
         void fetchWmsIdentifyProperties(
           layer,
@@ -677,6 +682,9 @@ export const MapCanvas = memo(function MapCanvas({
           .then((result) => {
             if (userDismissed || abortController.signal.aborted) return;
             wmsIdentifyAbortController = null;
+            // Detach before the swap so remove()'s synchronous "close" does not
+            // spuriously abort the request that just succeeded.
+            loadingPopup?.off("close", onLoadingClose);
             showIdentifyPopup(
               createIdentifyPopupElement(
                 layer.name,
@@ -689,6 +697,7 @@ export const MapCanvas = memo(function MapCanvas({
             if (userDismissed || isAbortError(error) || abortController.signal.aborted)
               return;
             wmsIdentifyAbortController = null;
+            loadingPopup?.off("close", onLoadingClose);
             const message =
               error instanceof Error
                 ? error.message
