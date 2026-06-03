@@ -1,0 +1,24 @@
+name: Deploy viewer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "workers/viewer/**"
+      - ".github/workflows/deploy-viewer.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy viewer proxy to Cloudflare Workers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: workers/viewer
