@@ -167,7 +167,7 @@ async function loadPluginUrlBundles(
 async function loadPluginUrlBundle(
   manifestUrl: string,
 ): Promise<ExternalPluginBundle> {
-  const manifestResponse = await fetch(manifestUrl);
+  const manifestResponse = await fetch(manifestUrl, { cache: "no-cache" });
   if (!manifestResponse.ok) {
     throw new Error(
       `Could not fetch plugin manifest: HTTP ${manifestResponse.status}`,
@@ -203,7 +203,7 @@ async function loadPluginUrlBundle(
 const MAX_PLUGIN_ASSET_BYTES = 50 * 1024 * 1024;
 
 async function fetchPluginText(url: string, label: string): Promise<string> {
-  const response = await fetch(url);
+  const response = await fetch(url, { cache: "no-cache" });
   if (!response.ok) {
     throw new Error(`Could not fetch ${label}: HTTP ${response.status}`);
   }
@@ -211,7 +211,10 @@ async function fetchPluginText(url: string, label: string): Promise<string> {
   // Fast-fail when the server declares the size; the streaming reader below
   // is the real enforcement for responses without a content-length header.
   const declaredLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_PLUGIN_ASSET_BYTES) {
+  if (
+    Number.isFinite(declaredLength) &&
+    declaredLength > MAX_PLUGIN_ASSET_BYTES
+  ) {
     throw new Error(`Could not fetch ${label}: exceeds the 50 MB size limit.`);
   }
 
