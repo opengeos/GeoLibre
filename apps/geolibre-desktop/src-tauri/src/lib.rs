@@ -402,17 +402,27 @@ fn read_zip_text_entry<R: Read + std::io::Seek>(
     entry_name: &str,
     label: &str,
 ) -> Result<String, String> {
-    let mut entry = archive
+    const MAX_ENTRY_BYTES: u64 = 50 * 1024 * 1024;
+    let entry = archive
         .by_name(entry_name)
         .map_err(|error| format!("Could not read {label} '{entry_name}': {error}"))?;
     if entry.is_dir() {
         return Err(format!("{label} '{entry_name}' must be a file"));
     }
 
+    // Cap the actual bytes read instead of trusting the zip header size,
+    // which a hand-crafted archive can spoof.
     let mut text = String::new();
     entry
+        .take(MAX_ENTRY_BYTES + 1)
         .read_to_string(&mut text)
         .map_err(|error| format!("Could not read {label} '{entry_name}' as UTF-8: {error}"))?;
+    if text.len() as u64 > MAX_ENTRY_BYTES {
+        return Err(format!(
+            "{label} '{entry_name}' exceeds the {}-MB size limit",
+            MAX_ENTRY_BYTES / (1024 * 1024)
+        ));
+    }
     Ok(text)
 }
 
@@ -462,11 +472,16 @@ fn validate_optional_manifest_string(field: &str, value: &str) -> Result<(), Str
 }
 
 fn validate_external_plugin_path(field: &str, value: &str) -> Result<(), String> {
-    if value.starts_with('/') || value.starts_with('\\') {
+    if value.starts_with('/') {
         return Err(format!("{field} must be a relative path"));
     }
     if value.contains('\\') {
         return Err(format!("{field} must use forward slashes"));
+    }
+    if value.contains(':') {
+        return Err(format!(
+            "{field} must not contain drive letters or ':' characters"
+        ));
     }
     if value
         .split('/')

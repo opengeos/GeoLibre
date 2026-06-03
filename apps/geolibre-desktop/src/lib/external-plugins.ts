@@ -73,14 +73,6 @@ export async function loadExternalPlugins(
       }
 
       const plugin = await importExternalPlugin(bundle);
-      if (registeredPluginIds.has(plugin.id)) {
-        issues.push({
-          archiveName: bundle.archiveName,
-          message: `Plugin id '${plugin.id}' is already registered.`,
-        });
-        continue;
-      }
-
       if (bundle.styleSource) {
         injectExternalPluginStyle(bundle.manifest.id, bundle.styleSource);
       }

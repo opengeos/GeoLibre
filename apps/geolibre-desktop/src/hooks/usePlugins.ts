@@ -40,7 +40,6 @@ manager.registerAll([
 let externalPluginsLoaded = false;
 let externalPluginsLoadPromise: Promise<void> | null = null;
 let externalPluginsLoadKey: string | null = null;
-let externalPluginsVersion = 0;
 const externalPluginsListeners = new Set<() => void>();
 
 export function getPluginManager(): PluginManager {
@@ -91,16 +90,14 @@ export function useExternalPluginsReady(): boolean {
     );
   }, [additionalPluginDirectories]);
 
-  useSyncExternalStore(
+  return useSyncExternalStore(
     (listener) => {
       externalPluginsListeners.add(listener);
       return () => externalPluginsListeners.delete(listener);
     },
-    () => externalPluginsVersion,
-    () => externalPluginsVersion,
+    () => externalPluginsLoaded,
+    () => externalPluginsLoaded,
   );
-
-  return externalPluginsLoaded;
 }
 
 export function ensureExternalPluginsLoaded(): Promise<void> {
@@ -111,7 +108,7 @@ function ensureExternalPluginsLoadedWithDirectories(
   additionalPluginDirectories: string[],
 ): Promise<void> {
   if (!isTauriRuntime()) {
-    markExternalPluginsLoaded();
+    setExternalPluginsLoaded(true);
     return Promise.resolve();
   }
 
@@ -123,7 +120,7 @@ function ensureExternalPluginsLoadedWithDirectories(
     return externalPluginsLoadPromise;
   }
 
-  externalPluginsLoaded = false;
+  setExternalPluginsLoaded(false);
   externalPluginsLoadKey = loadKey;
   externalPluginsLoadPromise = loadExternalPlugins(
     manager,
@@ -148,7 +145,7 @@ function ensureExternalPluginsLoadedWithDirectories(
     })
     .finally(() => {
       externalPluginsLoadPromise = null;
-      markExternalPluginsLoaded();
+      setExternalPluginsLoaded(true);
     });
 
   return externalPluginsLoadPromise;
@@ -265,10 +262,9 @@ function isTauriRuntime(): boolean {
   return Boolean((window as TauriRuntimeWindow).__TAURI_INTERNALS__);
 }
 
-function markExternalPluginsLoaded(): void {
-  if (externalPluginsLoaded) return;
-  externalPluginsLoaded = true;
-  externalPluginsVersion += 1;
+function setExternalPluginsLoaded(loaded: boolean): void {
+  if (externalPluginsLoaded === loaded) return;
+  externalPluginsLoaded = loaded;
   for (const listener of externalPluginsListeners) listener();
 }
 
