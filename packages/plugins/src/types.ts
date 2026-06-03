@@ -61,8 +61,14 @@ export interface GeoLibrePlugin {
     position: GeoLibreMapControlPosition,
   ) => boolean | void;
   getProjectState?: () => unknown;
-  applyProjectState?: (
-    app: GeoLibreAppAPI,
-    state: unknown,
-  ) => boolean | void;
+  applyProjectState?: (app: GeoLibreAppAPI, state: unknown) => boolean | void;
+}
+
+export interface GeoLibreExternalPluginManifest {
+  id: string;
+  name: string;
+  version: string;
+  entry: string;
+  description?: string;
+  style?: string;
 }

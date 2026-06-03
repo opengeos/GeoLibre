@@ -72,8 +72,8 @@
 
 - [ ] External plugin packages
 - [ ] Plugin marketplace / registry (design)
-- [ ] Dynamic plugin loading from a `plugins/` directory
-- [ ] Plugin manifest (`plugin.json`)
+- [x] Dynamic plugin loading from a `plugins/` directory
+- [x] Plugin manifest (`plugin.json`)
 - [ ] Sandboxed worker plugins
 
 ## v1.0: Stable prototype

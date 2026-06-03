@@ -5,7 +5,7 @@ use earth_engine_oauth::{
 };
 use flate2::read::{GzDecoder, ZlibDecoder};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashSet;
 use std::env;
@@ -59,6 +59,43 @@ struct SidecarProcess {
     child: Child,
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExternalPluginManifest {
+    id: String,
+    name: String,
+    version: String,
+    entry: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    style: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExternalPluginBundle {
+    archive_name: String,
+    manifest: ExternalPluginManifest,
+    entry_source: String,
+    style_source: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExternalPluginBundleError {
+    archive_name: String,
+    message: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExternalPluginBundleLoadResult {
+    plugins_directory: String,
+    bundles: Vec<ExternalPluginBundle>,
+    errors: Vec<ExternalPluginBundleError>,
+}
+
 impl SidecarProcess {
     fn terminate(&mut self) {
         terminate_sidecar_child(&mut self.child);
@@ -97,6 +134,7 @@ pub fn run() {
             close_oauth_popups,
             ensure_martin_binary,
             fetch_url_bytes,
+            load_external_plugin_bundles,
             resolve_url_redirect,
             read_mbtiles_metadata,
             read_mbtiles_tile,
@@ -156,6 +194,174 @@ fn fetch_url_bytes_blocking(url: String) -> Result<Vec<u8>, String> {
         .bytes()
         .map(|bytes| bytes.to_vec())
         .map_err(|error| format!("Could not read response body: {error}"))
+}
+
+#[tauri::command]
+async fn load_external_plugin_bundles(
+    app: tauri::AppHandle,
+) -> Result<ExternalPluginBundleLoadResult, String> {
+    tauri::async_runtime::spawn_blocking(move || load_external_plugin_bundles_blocking(&app))
+        .await
+        .map_err(|error| format!("External plugin scan task failed: {error}"))?
+}
+
+fn load_external_plugin_bundles_blocking(
+    app: &tauri::AppHandle,
+) -> Result<ExternalPluginBundleLoadResult, String> {
+    let plugins_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Could not resolve app data directory: {error}"))?
+        .join("plugins");
+
+    fs::create_dir_all(&plugins_dir)
+        .map_err(|error| format!("Could not create plugins directory: {error}"))?;
+
+    let mut archives = fs::read_dir(&plugins_dir)
+        .map_err(|error| format!("Could not read plugins directory: {error}"))?
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            entry
+                .file_type()
+                .map(|file_type| file_type.is_file())
+                .unwrap_or(false)
+        })
+        .filter(|entry| {
+            entry
+                .path()
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("zip"))
+        })
+        .collect::<Vec<_>>();
+    archives.sort_by_key(|entry| entry.file_name().to_string_lossy().to_string());
+
+    let mut bundles = Vec::new();
+    let mut errors = Vec::new();
+    for archive in archives {
+        let archive_name = archive.file_name().to_string_lossy().to_string();
+        match load_external_plugin_archive(&archive.path(), &archive_name) {
+            Ok(bundle) => bundles.push(bundle),
+            Err(message) => errors.push(ExternalPluginBundleError {
+                archive_name,
+                message,
+            }),
+        }
+    }
+
+    Ok(ExternalPluginBundleLoadResult {
+        plugins_directory: plugins_dir.to_string_lossy().to_string(),
+        bundles,
+        errors,
+    })
+}
+
+fn load_external_plugin_archive(
+    path: &Path,
+    archive_name: &str,
+) -> Result<ExternalPluginBundle, String> {
+    let file = File::open(path).map_err(|error| format!("Could not open zip: {error}"))?;
+    let mut archive =
+        zip::ZipArchive::new(file).map_err(|error| format!("Could not read zip: {error}"))?;
+    let manifest_text = read_zip_text_entry(&mut archive, "plugin.json", "plugin manifest")?;
+    let manifest: ExternalPluginManifest = serde_json::from_str(&manifest_text)
+        .map_err(|error| format!("Could not parse plugin.json: {error}"))?;
+    validate_external_plugin_manifest(&manifest)?;
+
+    let entry_source = read_zip_text_entry(&mut archive, &manifest.entry, "plugin entry")?;
+    let style_source = match manifest.style.as_deref() {
+        Some(style) => Some(read_zip_text_entry(&mut archive, style, "plugin style")?),
+        None => None,
+    };
+
+    Ok(ExternalPluginBundle {
+        archive_name: archive_name.to_string(),
+        manifest,
+        entry_source,
+        style_source,
+    })
+}
+
+fn read_zip_text_entry<R: Read + std::io::Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    entry_name: &str,
+    label: &str,
+) -> Result<String, String> {
+    let mut entry = archive
+        .by_name(entry_name)
+        .map_err(|error| format!("Could not read {label} '{entry_name}': {error}"))?;
+    if entry.is_dir() {
+        return Err(format!("{label} '{entry_name}' must be a file"));
+    }
+
+    let mut text = String::new();
+    entry
+        .read_to_string(&mut text)
+        .map_err(|error| format!("Could not read {label} '{entry_name}' as UTF-8: {error}"))?;
+    Ok(text)
+}
+
+fn validate_external_plugin_manifest(manifest: &ExternalPluginManifest) -> Result<(), String> {
+    validate_required_manifest_string("id", &manifest.id)?;
+    validate_required_manifest_string("name", &manifest.name)?;
+    validate_required_manifest_string("version", &manifest.version)?;
+    validate_required_manifest_string("entry", &manifest.entry)?;
+    validate_external_plugin_path("entry", &manifest.entry)?;
+    if !manifest.entry.ends_with(".js") && !manifest.entry.ends_with(".mjs") {
+        return Err("entry must point to a .js or .mjs file".to_string());
+    }
+
+    if let Some(description) = manifest.description.as_deref() {
+        validate_optional_manifest_string("description", description)?;
+    }
+    if let Some(style) = manifest.style.as_deref() {
+        validate_optional_manifest_string("style", style)?;
+        validate_external_plugin_path("style", style)?;
+        if !style.ends_with(".css") {
+            return Err("style must point to a .css file".to_string());
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_required_manifest_string(field: &str, value: &str) -> Result<(), String> {
+    if value.trim().is_empty() {
+        return Err(format!("{field} must not be empty"));
+    }
+    if value.trim() != value {
+        return Err(format!(
+            "{field} must not have leading or trailing whitespace"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_optional_manifest_string(field: &str, value: &str) -> Result<(), String> {
+    if value.trim() != value {
+        return Err(format!(
+            "{field} must not have leading or trailing whitespace"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_external_plugin_path(field: &str, value: &str) -> Result<(), String> {
+    if value.starts_with('/') || value.starts_with('\\') {
+        return Err(format!("{field} must be a relative path"));
+    }
+    if value.contains('\\') {
+        return Err(format!("{field} must use forward slashes"));
+    }
+    if value
+        .split('/')
+        .any(|part| part.is_empty() || part == "." || part == "..")
+    {
+        return Err(format!(
+            "{field} must not contain empty, '.', or '..' segments"
+        ));
+    }
+    Ok(())
 }
 
 #[tauri::command]

@@ -21,7 +21,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' https: http://127.0.0.1:*; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval' https://accounts.google.com; child-src 'self' https://accounts.google.com https://www.google.com; frame-src 'self' https://accounts.google.com https://www.google.com; worker-src blob: 'self'",
+      "csp": "default-src 'self'; connect-src 'self' https: http://127.0.0.1:*; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self' blob: 'unsafe-eval' https://accounts.google.com; child-src 'self' https://accounts.google.com https://www.google.com; frame-src 'self' https://accounts.google.com https://www.google.com; worker-src blob: 'self'",
       "capabilities": ["default"]
     }
   },

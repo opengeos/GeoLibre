@@ -14,7 +14,8 @@ import {
 import type { MapController } from "@geolibre/map";
 import type { GeoLibreMapControlPosition } from "@geolibre/plugins";
 import type { RefObject } from "react";
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
+import { loadExternalPlugins } from "../lib/external-plugins";
 
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
 
@@ -34,6 +35,11 @@ manager.registerAll([
   maplibreSwipePlugin,
   maplibreComponentsPlugin,
 ]);
+
+let externalPluginsLoaded = false;
+let externalPluginsLoadPromise: Promise<void> | null = null;
+let externalPluginsVersion = 0;
+const externalPluginsListeners = new Set<() => void>();
 
 export function getPluginManager(): PluginManager {
   return manager;
@@ -69,8 +75,53 @@ export function usePluginRegistry() {
 }
 
 export function usePlugins() {
-  // Built-in plugin registration happens at module load so the toolbar can
-  // render plugin menu items on the first pass.
+  return useExternalPluginsReady();
+}
+
+export function useExternalPluginsReady(): boolean {
+  useEffect(() => {
+    void ensureExternalPluginsLoaded();
+  }, []);
+
+  useSyncExternalStore(
+    (listener) => {
+      externalPluginsListeners.add(listener);
+      return () => externalPluginsListeners.delete(listener);
+    },
+    () => externalPluginsVersion,
+    () => externalPluginsVersion,
+  );
+
+  return externalPluginsLoaded;
+}
+
+export function ensureExternalPluginsLoaded(): Promise<void> {
+  if (!isTauriRuntime()) {
+    markExternalPluginsLoaded();
+    return Promise.resolve();
+  }
+
+  externalPluginsLoadPromise ??= loadExternalPlugins(manager)
+    .then((result) => {
+      if (result.loadedPluginIds.length) {
+        console.info(
+          `Loaded external GeoLibre plugins from ${result.pluginsDirectory}: ${result.loadedPluginIds.join(
+            ", ",
+          )}`,
+        );
+      }
+      for (const issue of result.issues) {
+        console.warn(
+          `Skipped external plugin archive '${issue.archiveName}': ${issue.message}`,
+        );
+      }
+    })
+    .catch((error) => {
+      console.warn("Could not load external GeoLibre plugins.", error);
+    })
+    .finally(markExternalPluginsLoaded);
+
+  return externalPluginsLoadPromise;
 }
 
 export function createAppAPI(
@@ -102,8 +153,9 @@ export function createAppAPI(
       control: Parameters<MapController["addControl"]>[0],
       position?: Parameters<MapController["addControl"]>[1],
     ) => mapControllerRef?.current?.addControl(control, position) ?? false,
-    removeMapControl: (control: Parameters<MapController["removeControl"]>[0]) =>
-      mapControllerRef?.current?.removeControl(control),
+    removeMapControl: (
+      control: Parameters<MapController["removeControl"]>[0],
+    ) => mapControllerRef?.current?.removeControl(control),
     setBuiltInMapControlVisible: (
       control: Parameters<MapController["setBuiltInControlVisible"]>[0],
       visible: boolean,
@@ -119,10 +171,8 @@ export function createAppAPI(
       control: Parameters<MapController["setBuiltInControlPosition"]>[0],
       position: Parameters<MapController["setBuiltInControlPosition"]>[1],
     ) =>
-      mapControllerRef?.current?.setBuiltInControlPosition(
-        control,
-        position,
-      ) ?? false,
+      mapControllerRef?.current?.setBuiltInControlPosition(control, position) ??
+      false,
   };
 }
 
@@ -167,7 +217,9 @@ function localPathFromReference(value: string): string {
 }
 
 function fetchDevRasterProxy(url: string): Promise<ArrayBuffer> {
-  return fetchArrayBuffer(`${RASTER_PROXY_PATH}?url=${encodeURIComponent(url)}`);
+  return fetchArrayBuffer(
+    `${RASTER_PROXY_PATH}?url=${encodeURIComponent(url)}`,
+  );
 }
 
 async function fetchArrayBuffer(url: string): Promise<ArrayBuffer> {
@@ -181,6 +233,13 @@ async function fetchArrayBuffer(url: string): Promise<ArrayBuffer> {
 function isTauriRuntime(): boolean {
   if (typeof window === "undefined") return false;
   return Boolean((window as TauriRuntimeWindow).__TAURI_INTERNALS__);
+}
+
+function markExternalPluginsLoaded(): void {
+  if (externalPluginsLoaded) return;
+  externalPluginsLoaded = true;
+  externalPluginsVersion += 1;
+  for (const listener of externalPluginsListeners) listener();
 }
 
 function isLocalDevHost(): boolean {

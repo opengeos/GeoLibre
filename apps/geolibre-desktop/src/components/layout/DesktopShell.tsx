@@ -17,7 +17,11 @@ import {
   loadDroppedVectorFiles,
   loadDroppedVectorPaths,
 } from "../../lib/tauri-io";
-import { createAppAPI, getPluginManager } from "../../hooks/usePlugins";
+import {
+  createAppAPI,
+  getPluginManager,
+  useExternalPluginsReady,
+} from "../../hooks/usePlugins";
 import { registerMbtilesProtocol } from "../../lib/mbtiles";
 import { registerXyzTileProtocol } from "../../lib/xyz-url";
 import { AttributeTable } from "../panels/AttributeTable";
@@ -39,7 +43,8 @@ const ProcessingDialog = lazy(() =>
       // throw during render and unmount the whole shell. Fall back to a
       // no-op component so the rest of the app stays interactive.
       console.error("Failed to load ProcessingDialog", error);
-      const Fallback = (() => null) as unknown as typeof import("../processing/ProcessingDialog").ProcessingDialog;
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/ProcessingDialog").ProcessingDialog;
       return { default: Fallback };
     }),
 );
@@ -97,6 +102,7 @@ export function DesktopShell({
   const [mapReadyGeneration, setMapReadyGeneration] = useState(0);
   const [dropMessage, setDropMessage] = useState<string | null>(null);
   const [dropError, setDropError] = useState<string | null>(null);
+  const externalPluginsReady = useExternalPluginsReady();
   const [layerPanelWidth, setLayerPanelWidth] = useState(
     DEFAULT_SIDE_PANEL_WIDTH,
   );
@@ -132,12 +138,17 @@ export function DesktopShell({
     // or the map is reinitialised (mapReadyGeneration), not on every
     // incremental plugin write-back. projectPlugins is read from the store
     // snapshot at call time so it is always current without being a dependency.
-    if (!mapReadyGeneration || !mapControllerRef.current) return;
+    if (
+      !externalPluginsReady ||
+      !mapReadyGeneration ||
+      !mapControllerRef.current
+    )
+      return;
     getPluginManager().restoreProjectState(
       useAppStore.getState().projectPlugins,
       createAppAPI(mapControllerRef),
     );
-  }, [mapReadyGeneration, projectGeneration]);
+  }, [externalPluginsReady, mapReadyGeneration, projectGeneration]);
 
   useEffect(() => {
     return () => {
