@@ -10,7 +10,7 @@ import {
 } from "@geolibre/ui";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { CheckCircle2, ExternalLink, Info, Map, RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 const LINKS = [
   {
@@ -54,20 +54,16 @@ async function openExternalLink(url: string) {
 }
 
 function parseVersion(version: string): [number, number, number] | null {
-  const match = version.trim().match(/^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?/i);
+  const match = version.trim().match(/^v?(\d+)\.(\d+)\.(\d+)$/);
   if (!match) return null;
 
-  return [
-    Number(match[1]),
-    Number(match[2] ?? 0),
-    Number(match[3] ?? 0),
-  ];
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
 }
 
 function compareVersions(currentVersion: string, latestVersion: string): number {
   const current = parseVersion(currentVersion);
   const latest = parseVersion(latestVersion);
-  if (!current || !latest) return currentVersion.localeCompare(latestVersion);
+  if (!current || !latest) return 0;
 
   for (let index = 0; index < current.length; index += 1) {
     if (current[index] !== latest[index]) return current[index] - latest[index];
@@ -90,8 +86,12 @@ export function AboutDialog({
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>("idle");
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const handleCheckForUpdates = async () => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setUpdateStatus("checking");
     setLatestVersion(null);
     setUpdateError(null);
@@ -99,6 +99,7 @@ export function AboutDialog({
     try {
       const response = await fetch(LATEST_RELEASE_URL, {
         headers: { Accept: "application/vnd.github+json" },
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -119,6 +120,7 @@ export function AboutDialog({
           : "current",
       );
     } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") return;
       console.error("Failed to check for updates", error);
       setUpdateStatus("error");
       setUpdateError(
@@ -189,8 +191,8 @@ export function AboutDialog({
               {updateStatus === "available" ? (
                 <div className="space-y-2">
                   <div className="text-foreground">
-                    {latestVersion} is available. You are running v
-                    {APP_VERSION}.
+                    {latestVersion ?? "A new version"} is available. You are
+                    running {`v${APP_VERSION}`}.
                   </div>
                   <Button
                     className="w-full justify-between"
