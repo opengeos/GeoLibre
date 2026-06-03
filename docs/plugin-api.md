@@ -119,7 +119,7 @@ Plugins with serializable runtime settings can expose `getProjectState()` and `a
 
 ## External plugin zip files
 
-Use the [GeoLibre plugin template](https://github.com/giswqs/geolibre-plugin-template) as the recommended starting point for external plugin development. The template includes a MapLibre control wrapper, a `plugin.json` manifest, a GeoLibre plugin entry point, and a `package:geolibre` script that builds the zip layout GeoLibre Desktop expects.
+Use the [GeoLibre plugin template](https://github.com/opengeos/geolibre-plugin-template) as the recommended starting point for external plugin development. The template includes a MapLibre control wrapper, a `plugin.json` manifest, a GeoLibre plugin entry point, and a `package:geolibre` script that builds the zip layout GeoLibre Desktop expects.
 
 GeoLibre Desktop loads external plugins from the app data `plugins/` directory at startup. Browser builds keep built-in plugins only. External plugins are trusted local code and can be installed as either:
 
