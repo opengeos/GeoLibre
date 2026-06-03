@@ -1,0 +1,9 @@
+{
+  "name": "geolibre-viewer-worker",
+  "version": "0.0.0",
+  "private": true,
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.0.0",
+    "wrangler": "^4.0.0"
+  }
+}

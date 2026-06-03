@@ -8,6 +8,13 @@ on:
       - ".github/workflows/deploy-viewer.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-viewer-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   deploy:
     name: Deploy viewer proxy to Cloudflare Workers

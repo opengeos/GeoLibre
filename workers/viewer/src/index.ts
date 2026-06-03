@@ -14,10 +14,29 @@
 
 const ORIGIN = "https://geolibre.app/demo";
 
+interface Env {}
+
 export default {
-  async fetch(request: Request): Promise<Response> {
+  async fetch(
+    request: Request,
+    _env: Env,
+    _ctx: ExecutionContext,
+  ): Promise<Response> {
     const url = new URL(request.url);
     const target = `${ORIGIN}${url.pathname}${url.search}`;
-    return fetch(target, request);
+
+    // Drop credential headers a public static-asset proxy never needs; keep the
+    // rest (e.g. Range, Accept-Encoding) so large-asset requests work. Follow
+    // origin redirects server-side to preserve the public URL.
+    const headers = new Headers(request.headers);
+    headers.delete("cookie");
+    headers.delete("authorization");
+
+    return fetch(target, {
+      method: request.method,
+      headers,
+      body: request.body,
+      redirect: "follow",
+    });
   },
 };
