@@ -3,6 +3,7 @@ import {
   PROJECT_VERSION,
   useAppStore,
   type MapPreferences,
+  type ProjectPluginState,
   type ProjectPreferences,
   type RuntimeEnvironmentVariable,
 } from "@geolibre/core";
@@ -44,6 +45,7 @@ import {
   useDesktopSettingsStore,
   type DesktopSettings,
 } from "../../hooks/useDesktopSettings";
+import { getPluginManager } from "../../hooks/usePlugins";
 import { pickLocalPathWithFallback } from "../../lib/tauri-io";
 
 type SettingsSection = "map" | "environment" | "plugins" | "project";
@@ -97,11 +99,21 @@ function clonePreferences(preferences: ProjectPreferences): DraftPreferences {
   };
 }
 
-function cloneDesktopSettings(settings: DesktopSettings): DesktopSettings {
+function cloneDesktopSettings(
+  settings: DesktopSettings,
+  projectPlugins: ProjectPluginState | null,
+): DesktopSettings {
   return {
     additionalPluginDirectories: [...settings.additionalPluginDirectories],
-    pluginManifestUrls: [...settings.pluginManifestUrls],
+    pluginManifestUrls: mergeStringLists(
+      projectPlugins?.manifestUrls ?? [],
+      settings.pluginManifestUrls,
+    ),
   };
+}
+
+function mergeStringLists(...lists: string[][]): string[] {
+  return normalizeStringList(lists.flat());
 }
 
 function normalizeBounds(
@@ -201,6 +213,8 @@ export function SettingsDialog({
   const setDesktopSettings = useDesktopSettingsStore(
     (s) => s.setDesktopSettings,
   );
+  const projectPlugins = useAppStore((s) => s.projectPlugins);
+  const setProjectPlugins = useAppStore((s) => s.setProjectPlugins);
   const projectName = useAppStore((s) => s.projectName);
   const projectPath = useAppStore((s) => s.projectPath);
   const setProjectName = useAppStore((s) => s.setProjectName);
@@ -210,7 +224,9 @@ export function SettingsDialog({
     () => clonePreferences(preferences),
   );
   const [draftDesktopSettings, setDraftDesktopSettings] =
-    useState<DesktopSettings>(() => cloneDesktopSettings(desktopSettings));
+    useState<DesktopSettings>(() =>
+      cloneDesktopSettings(desktopSettings, projectPlugins),
+    );
   const [draftProjectName, setDraftProjectName] = useState(projectName);
   const [error, setError] = useState<string | null>(null);
   // Ids of variables whose value is temporarily revealed; values are masked
@@ -233,7 +249,10 @@ export function SettingsDialog({
     if (!open) return;
     setDraftPreferences(clonePreferences(useAppStore.getState().preferences));
     setDraftDesktopSettings(
-      cloneDesktopSettings(useDesktopSettingsStore.getState().desktopSettings),
+      cloneDesktopSettings(
+        useDesktopSettingsStore.getState().desktopSettings,
+        useAppStore.getState().projectPlugins,
+      ),
     );
     setDraftProjectName(useAppStore.getState().projectName);
     setRevealedValueIds(new Set());
@@ -433,6 +452,10 @@ export function SettingsDialog({
         draftDesktopSettings.additionalPluginDirectories,
       ),
       pluginManifestUrls,
+    });
+    setProjectPlugins({
+      ...getPluginManager().getProjectState(),
+      manifestUrls: pluginManifestUrls,
     });
     setOpen(false);
   };
@@ -788,12 +811,13 @@ export function SettingsDialog({
                   </div>
                   <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
                     GeoLibre always scans its app data plugins directory. These
-                    additional sources are local settings and are not saved into
-                    project files. Desktop directories can contain `.zip` plugin
-                    bundles, unpacked plugin bundle folders, or be an unpacked
-                    plugin bundle with a root `plugin.json`. Manifest URLs also
-                    work in the web app by resolving `entry` and `style`
-                    relative to `plugin.json`.
+                    local directories are desktop-only settings and are not
+                    saved into project files. Manifest URLs are saved with the
+                    project so reloading a project can fetch its external
+                    plugins before restoring active plugin state. Desktop
+                    directories can contain `.zip` plugin bundles, unpacked
+                    plugin bundle folders, or be an unpacked plugin bundle with
+                    a root `plugin.json`.
                   </div>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-3">

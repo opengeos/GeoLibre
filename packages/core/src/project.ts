@@ -69,9 +69,7 @@ export function parseProject(json: string): GeoLibreProject {
   };
 }
 
-function normalizeProjectPreferences(
-  preferences: unknown,
-): ProjectPreferences {
+function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
   if (!preferences || typeof preferences !== "object") {
     return DEFAULT_PROJECT_PREFERENCES;
   }
@@ -117,9 +115,7 @@ function normalizeProjectPreferences(
   };
 }
 
-function normalizeBounds(
-  bounds: unknown,
-): ProjectPreferences["map"]["bounds"] {
+function normalizeBounds(bounds: unknown): ProjectPreferences["map"]["bounds"] {
   if (
     Array.isArray(bounds) &&
     bounds.length === 4 &&
@@ -176,12 +172,13 @@ const PROJECT_PLUGIN_CONTROL_POSITIONS = new Set<ProjectPluginControlPosition>([
   "bottom-right",
 ]);
 
-function normalizeProjectPlugins(
-  plugins: unknown,
-): ProjectPluginState | null {
+function normalizeProjectPlugins(plugins: unknown): ProjectPluginState | null {
   if (!plugins || typeof plugins !== "object") return null;
 
   const candidate = plugins as Partial<ProjectPluginState>;
+  const manifestUrls = Array.isArray(candidate.manifestUrls)
+    ? uniqueStrings(candidate.manifestUrls)
+    : [];
   const activePluginIds = Array.isArray(candidate.activePluginIds)
     ? uniqueStrings(candidate.activePluginIds)
     : [];
@@ -221,6 +218,7 @@ function normalizeProjectPlugins(
   }
 
   return {
+    manifestUrls,
     activePluginIds,
     mapControlPositions,
     settings,

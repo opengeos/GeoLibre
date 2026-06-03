@@ -146,7 +146,7 @@ Vite copies files from `public/` into the final web build, so the manifest URL b
 /plugins/example-plugin/plugin.json
 ```
 
-This works in both development and production web builds. The browser still cannot scan `/plugins/` at runtime, so each bundled plugin must be loaded by an explicit manifest URL, such as one entered in Settings > Plugins. For plugins that should always ship as part of GeoLibre without user configuration, prefer registering them as built-in plugins.
+This works in both development and production web builds. The browser still cannot scan `/plugins/` at runtime, so each bundled plugin must be loaded by an explicit manifest URL, such as one entered in Settings > Plugins. Manifest URLs are saved in the project `plugins.manifestUrls` array so reloading a shared project can fetch its external plugins before restoring active plugin state. For plugins that should always ship as part of GeoLibre without user configuration, prefer registering them as built-in plugins.
 
 ```json
 {

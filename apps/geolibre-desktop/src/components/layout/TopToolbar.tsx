@@ -61,17 +61,13 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import {
-  type FormEvent,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { type FormEvent, useRef, useState, useSyncExternalStore } from "react";
 import {
   createAppAPI,
   getPluginManager,
   usePluginRegistry,
 } from "../../hooks/usePlugins";
+import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import {
   isTauri,
@@ -286,6 +282,10 @@ export function TopToolbar({
   const handleSave = async (): Promise<boolean> => {
     const state = useAppStore.getState();
     const defaultProjectName = state.projectName.trim() || "Untitled Project";
+    const pluginManifestUrls = mergeStringLists(
+      state.projectPlugins?.manifestUrls ?? [],
+      useDesktopSettingsStore.getState().desktopSettings.pluginManifestUrls,
+    );
     const project = projectFromStore({
       projectName: defaultProjectName,
       mapView: mapControllerRef.current?.readView() ?? state.mapView,
@@ -294,7 +294,10 @@ export function TopToolbar({
       basemapOpacity: state.basemapOpacity,
       layers: state.layers,
       preferences: state.preferences,
-      plugins: getPluginManager().getProjectState(),
+      plugins: {
+        ...getPluginManager().getProjectState(),
+        manifestUrls: pluginManifestUrls,
+      },
       metadata: state.metadata,
     });
     const content = serializeProject(project);
@@ -810,4 +813,18 @@ export function TopToolbar({
       </div>
     </header>
   );
+}
+
+function mergeStringLists(...lists: string[][]): string[] {
+  const seen = new Set<string>();
+  const merged: string[] = [];
+  for (const list of lists) {
+    for (const value of list) {
+      const normalized = value.trim();
+      if (!normalized || seen.has(normalized)) continue;
+      seen.add(normalized);
+      merged.push(normalized);
+    }
+  }
+  return merged;
 }

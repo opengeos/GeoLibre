@@ -203,6 +203,7 @@ export type ProjectPluginControlPosition =
   | "bottom-right";
 
 export interface ProjectPluginState {
+  manifestUrls: string[];
   activePluginIds: string[];
   mapControlPositions: Record<string, ProjectPluginControlPosition>;
   settings: Record<string, unknown>;

@@ -59,6 +59,7 @@ export class PluginManager {
     }
 
     return {
+      manifestUrls: [],
       activePluginIds: Array.from(this.plugins.keys()).filter((id) =>
         this.active.has(id),
       ),
@@ -67,9 +68,7 @@ export class PluginManager {
     };
   }
 
-  getMapControlPosition(
-    id: string,
-  ): GeoLibreMapControlPosition | undefined {
+  getMapControlPosition(id: string): GeoLibreMapControlPosition | undefined {
     return this.plugins.get(id)?.getMapControlPosition?.();
   }
 

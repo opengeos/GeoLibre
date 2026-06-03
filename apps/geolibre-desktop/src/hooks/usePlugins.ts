@@ -41,6 +41,7 @@ let externalPluginsLoaded = false;
 let externalPluginsLoadPromise: Promise<void> | null = null;
 let externalPluginsLoadKey: string | null = null;
 const externalPluginsListeners = new Set<() => void>();
+const EMPTY_PLUGIN_MANIFEST_URLS: string[] = [];
 
 export function getPluginManager(): PluginManager {
   return manager;
@@ -82,10 +83,16 @@ export function useExternalPluginsReady(): boolean {
   const desktopSettings = useDesktopSettingsStore(
     (state) => state.desktopSettings,
   );
+  const projectPluginManifestUrls = useAppStore(
+    (state) => state.projectPlugins?.manifestUrls ?? EMPTY_PLUGIN_MANIFEST_URLS,
+  );
 
   useEffect(() => {
-    void ensureExternalPluginsLoadedWithSettings(desktopSettings);
-  }, [desktopSettings]);
+    void ensureExternalPluginsLoadedWithSettings(
+      desktopSettings,
+      projectPluginManifestUrls,
+    );
+  }, [desktopSettings, projectPluginManifestUrls]);
 
   return useSyncExternalStore(
     (listener) => {
@@ -101,8 +108,16 @@ function ensureExternalPluginsLoadedWithSettings(
   desktopSettings: ReturnType<
     typeof useDesktopSettingsStore.getState
   >["desktopSettings"],
+  projectPluginManifestUrls: string[],
 ): Promise<void> {
-  const loadKey = JSON.stringify(desktopSettings);
+  const pluginManifestUrls = mergeStringLists(
+    desktopSettings.pluginManifestUrls,
+    projectPluginManifestUrls,
+  );
+  const loadKey = JSON.stringify({
+    additionalPluginDirectories: desktopSettings.additionalPluginDirectories,
+    pluginManifestUrls,
+  });
   if (externalPluginsLoaded && externalPluginsLoadKey === loadKey) {
     return Promise.resolve();
   }
@@ -115,7 +130,7 @@ function ensureExternalPluginsLoadedWithSettings(
   const loadPromise = loadExternalPlugins(
     manager,
     desktopSettings.additionalPluginDirectories,
-    desktopSettings.pluginManifestUrls,
+    pluginManifestUrls,
   )
     .then((result) => {
       if (result.loadedPluginIds.length) {
@@ -288,7 +303,26 @@ function normalizeBytes(bytes: number[] | Uint8Array): ArrayBuffer {
 }
 
 function persistProjectPluginState(previousJson: string): void {
-  const nextState = manager.getProjectState();
+  const nextState = {
+    ...manager.getProjectState(),
+    manifestUrls:
+      useAppStore.getState().projectPlugins?.manifestUrls ??
+      EMPTY_PLUGIN_MANIFEST_URLS,
+  };
   if (JSON.stringify(nextState) === previousJson) return;
   useAppStore.getState().setProjectPlugins(nextState);
+}
+
+function mergeStringLists(...lists: string[][]): string[] {
+  const seen = new Set<string>();
+  const merged: string[] = [];
+  for (const list of lists) {
+    for (const value of list) {
+      const normalized = value.trim();
+      if (!normalized || seen.has(normalized)) continue;
+      seen.add(normalized);
+      merged.push(normalized);
+    }
+  }
+  return merged;
 }
