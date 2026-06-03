@@ -1,3 +1,4 @@
+import { isAllowedPluginManifestUrl } from "@geolibre/core";
 import { useEffect } from "react";
 import { create } from "zustand";
 import { normalizeStringList } from "../lib/string-lists";
@@ -29,7 +30,11 @@ function normalizeDesktopSettings(settings: unknown): DesktopSettings {
     additionalPluginDirectories: normalizeStringList(
       candidate.additionalPluginDirectories,
     ),
-    pluginManifestUrls: normalizeStringList(candidate.pluginManifestUrls),
+    // Apply the same scheme rule as project-file loading so stale or edited
+    // localStorage values cannot smuggle in disallowed URL schemes.
+    pluginManifestUrls: normalizeStringList(candidate.pluginManifestUrls).filter(
+      isAllowedPluginManifestUrl,
+    ),
   };
 }
 

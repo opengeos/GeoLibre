@@ -61,7 +61,7 @@ export function usePluginRegistry() {
     getMapControlPosition: (id: string) => manager.getMapControlPosition(id),
     getProjectState: () => manager.getProjectState(),
     toggle: (id: string, appApi: ReturnType<typeof createAppAPI>) => {
-      const before = JSON.stringify(manager.getProjectState());
+      const before = JSON.stringify(projectPluginStateSnapshot());
       manager.toggle(id, appApi);
       persistProjectPluginState(before);
     },
@@ -70,7 +70,7 @@ export function usePluginRegistry() {
       appApi: ReturnType<typeof createAppAPI>,
       position: GeoLibreMapControlPosition,
     ) => {
-      const before = JSON.stringify(manager.getProjectState());
+      const before = JSON.stringify(projectPluginStateSnapshot());
       manager.setMapControlPosition(id, appApi, position);
       persistProjectPluginState(before);
     },
@@ -311,13 +311,20 @@ function normalizeBytes(bytes: number[] | Uint8Array): ArrayBuffer {
   return copy.buffer;
 }
 
-function persistProjectPluginState(previousJson: string): void {
-  const nextState = {
+// The manager's getProjectState always returns an empty manifestUrls list,
+// so the before/after snapshots both graft on the store's real list to keep
+// the no-change comparison meaningful.
+function projectPluginStateSnapshot() {
+  return {
     ...manager.getProjectState(),
     manifestUrls:
       useAppStore.getState().projectPlugins?.manifestUrls ??
       EMPTY_PLUGIN_MANIFEST_URLS,
   };
+}
+
+function persistProjectPluginState(previousJson: string): void {
+  const nextState = projectPluginStateSnapshot();
   if (JSON.stringify(nextState) === previousJson) return;
   useAppStore.getState().setProjectPlugins(nextState);
 }

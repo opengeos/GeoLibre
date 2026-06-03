@@ -1,5 +1,7 @@
 // Shared helpers for the trimmed, deduplicated string lists used by the
-// plugin-source settings (directories and manifest URLs).
+// plugin-source settings (directories and manifest URLs). normalizeStringList
+// intentionally mirrors uniqueStrings in packages/core/src/project.ts, which
+// stays private to core's project parsing; update both if the rules change.
 
 export function normalizeStringList(values: unknown): string[] {
   if (!Array.isArray(values)) return [];

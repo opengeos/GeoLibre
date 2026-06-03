@@ -48,20 +48,25 @@ export async function loadExternalPlugins(
   additionalPluginDirectories: string[] = [],
   pluginManifestUrls: string[] = [],
 ): Promise<ExternalPluginLoadResult> {
-  const filesystemResult = isTauri()
-    ? await loadFilesystemPluginBundles(additionalPluginDirectories)
-    : {
-        pluginsDirectories: [],
-        bundles: [],
-        errors: [],
-      };
-  const issues: ExternalPluginLoadIssue[] = filesystemResult.errors.map(
-    (error) => ({
+  const issues: ExternalPluginLoadIssue[] = [];
+  // The filesystem scan (Tauri IPC + disk) and the manifest URL fetches
+  // (network) are independent, so overlap them.
+  const [filesystemResult, urlBundles] = await Promise.all([
+    isTauri()
+      ? loadFilesystemPluginBundles(additionalPluginDirectories)
+      : Promise.resolve<ExternalPluginBundleLoadResult>({
+          pluginsDirectories: [],
+          bundles: [],
+          errors: [],
+        }),
+    loadPluginUrlBundles(pluginManifestUrls, issues),
+  ]);
+  for (const error of filesystemResult.errors) {
+    issues.push({
       archiveName: error.archiveName,
       message: error.message,
-    }),
-  );
-  const urlBundles = await loadPluginUrlBundles(pluginManifestUrls, issues);
+    });
+  }
   const loadedPluginIds: string[] = [];
   const registeredPluginIds = new Set(
     manager.list().map((plugin) => plugin.id),
@@ -175,13 +180,15 @@ async function loadPluginUrlBundle(
   }
 
   const entryUrl = resolvePluginAssetUrl(manifestUrl, manifest.entry);
-  const entrySource = await fetchPluginText(entryUrl, "plugin entry");
-  const styleSource = manifest.style
-    ? await fetchPluginText(
-        resolvePluginAssetUrl(manifestUrl, manifest.style),
-        "plugin style",
-      )
+  const styleUrl = manifest.style
+    ? resolvePluginAssetUrl(manifestUrl, manifest.style)
     : null;
+  const [entrySource, styleSource] = await Promise.all([
+    fetchPluginText(entryUrl, "plugin entry"),
+    styleUrl
+      ? fetchPluginText(styleUrl, "plugin style")
+      : Promise.resolve(null),
+  ]);
 
   return {
     archiveName: manifestUrl,
@@ -203,11 +210,8 @@ async function fetchPluginText(url: string, label: string): Promise<string> {
 
   // Fast-fail when the server declares the size; the streaming reader below
   // is the real enforcement for responses without a content-length header.
-  const contentLengthHeader = response.headers.get("content-length");
-  if (
-    contentLengthHeader !== null &&
-    Number(contentLengthHeader) > MAX_PLUGIN_ASSET_BYTES
-  ) {
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_PLUGIN_ASSET_BYTES) {
     throw new Error(`Could not fetch ${label}: exceeds the 50 MB size limit.`);
   }
 
