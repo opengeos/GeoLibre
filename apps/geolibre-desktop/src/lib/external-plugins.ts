@@ -140,15 +140,18 @@ async function loadPluginUrlBundles(
   issues: ExternalPluginLoadIssue[],
 ): Promise<ExternalPluginBundle[]> {
   const bundles: ExternalPluginBundle[] = [];
-  for (const manifestUrl of manifestUrls) {
-    try {
-      bundles.push(await loadPluginUrlBundle(manifestUrl));
-    } catch (error) {
+  const results = await Promise.allSettled(
+    manifestUrls.map((manifestUrl) => loadPluginUrlBundle(manifestUrl)),
+  );
+  for (const [index, result] of results.entries()) {
+    if (result.status === "fulfilled") {
+      bundles.push(result.value);
+    } else {
       issues.push({
-        archiveName: manifestUrl,
+        archiveName: manifestUrls[index],
         message:
-          error instanceof Error
-            ? error.message
+          result.reason instanceof Error
+            ? result.reason.message
             : "Could not load plugin manifest URL.",
       });
     }

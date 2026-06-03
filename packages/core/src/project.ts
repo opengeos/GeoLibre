@@ -177,7 +177,7 @@ function normalizeProjectPlugins(plugins: unknown): ProjectPluginState | null {
 
   const candidate = plugins as Partial<ProjectPluginState>;
   const manifestUrls = Array.isArray(candidate.manifestUrls)
-    ? uniqueStrings(candidate.manifestUrls)
+    ? uniqueStrings(candidate.manifestUrls).filter(isAllowedPluginManifestUrl)
     : [];
   const activePluginIds = Array.isArray(candidate.activePluginIds)
     ? uniqueStrings(candidate.activePluginIds)
@@ -223,6 +223,22 @@ function normalizeProjectPlugins(plugins: unknown): ProjectPluginState | null {
     mapControlPositions,
     settings,
   };
+}
+
+// Plugin manifest URLs lead to fetched and executed code, so both the
+// Settings dialog and project-file loading enforce the same scheme rule:
+// HTTPS, or HTTP on a loopback host for local development.
+export function isAllowedPluginManifestUrl(url: string): boolean {
+  try {
+    const { protocol, hostname } = new URL(url);
+    return (
+      protocol === "https:" ||
+      (protocol === "http:" &&
+        ["localhost", "127.0.0.1", "[::1]"].includes(hostname))
+    );
+  } catch {
+    return false;
+  }
 }
 
 function uniqueStrings(values: unknown[]): string[] {

@@ -1,5 +1,6 @@
 import {
   DEFAULT_PROJECT_PREFERENCES,
+  isAllowedPluginManifestUrl,
   PROJECT_VERSION,
   useAppStore,
   type MapPreferences,
@@ -199,16 +200,12 @@ function validatePluginManifestUrls(urls: string[]): string | null {
   for (const url of urls) {
     if (!url.trim()) continue;
     try {
-      const parsed = new URL(url.trim());
-      const isHttps = parsed.protocol === "https:";
-      const isLocalHttp =
-        parsed.protocol === "http:" &&
-        ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
-      if (!isHttps && !isLocalHttp) {
-        return "Plugin manifest URLs must use HTTPS, or HTTP on localhost, 127.0.0.1, or [::1].";
-      }
+      new URL(url.trim());
     } catch {
       return "Plugin manifest URLs must be valid absolute URLs.";
+    }
+    if (!isAllowedPluginManifestUrl(url.trim())) {
+      return "Plugin manifest URLs must use HTTPS, or HTTP on localhost, 127.0.0.1, or [::1].";
     }
   }
   return null;
