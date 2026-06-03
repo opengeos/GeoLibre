@@ -10,7 +10,7 @@ import {
 } from "@geolibre/ui";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { CheckCircle2, ExternalLink, Info, Map, RefreshCw } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const LINKS = [
   {
@@ -88,6 +88,14 @@ export function AboutDialog({
   const [updateError, setUpdateError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  const resetUpdateState = () => {
+    setUpdateStatus("idle");
+    setLatestVersion(null);
+    setUpdateError(null);
+  };
+
   const handleCheckForUpdates = async () => {
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -98,11 +106,22 @@ export function AboutDialog({
 
     try {
       const response = await fetch(LATEST_RELEASE_URL, {
-        headers: { Accept: "application/vnd.github+json" },
+        headers: {
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
         signal: controller.signal,
       });
 
       if (!response.ok) {
+        if (
+          response.status === 403 &&
+          response.headers.get("X-RateLimit-Remaining") === "0"
+        ) {
+          throw new Error(
+            "GitHub rate limit exceeded. Please try again later.",
+          );
+        }
         throw new Error(`GitHub returned ${response.status}.`);
       }
 
@@ -115,7 +134,7 @@ export function AboutDialog({
 
       setLatestVersion(nextLatestVersion);
       setUpdateStatus(
-        compareVersions(APP_VERSION, release.tag_name) < 0
+        compareVersions(APP_VERSION, nextLatestVersion) < 0
           ? "available"
           : "current",
       );
@@ -132,7 +151,11 @@ export function AboutDialog({
   };
 
   return (
-    <Dialog>
+    <Dialog
+      onOpenChange={(open) => {
+        if (open) resetUpdateState();
+      }}
+    >
       <DialogTrigger asChild>
         <Button
           className={buttonClassName}
