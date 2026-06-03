@@ -175,7 +175,9 @@ const DELIMITED_TEXT_DELIMITERS: Record<
 };
 
 function createLayerId(): string {
-  return crypto.randomUUID();
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function fileNameFromPath(path: string): string {
