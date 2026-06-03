@@ -14,7 +14,7 @@ hide:
       path toward cloud-native geospatial workflows.
     </p>
     <div class="hero__actions">
-      <a class="md-button md-button--primary" href="/demo/">Open live demo</a>
+      <a class="md-button md-button--primary" href="https://viewer.geolibre.app/">Open live demo</a>
       <a class="md-button" href="getting-started/">Get started</a>
       <a class="md-button" href="downloads/">Download app</a>
     </div>
@@ -92,7 +92,7 @@ Use `toolbar=icons` when you only want icon-only toolbar buttons. `panels=hidden
 | `panels` | `panels=none` | Hides the Layers, Style, and Attribute table panels. `hidden`, `hide`, and `off` are aliases. |
 | `hidePanels` | `hidePanels=true` | Alternative way to hide the Layers, Style, and Attribute table panels. |
 
-[Open the live demo](/demo/){ .md-button .md-button--primary }
+[Open the live demo](https://viewer.geolibre.app/){ .md-button .md-button--primary }
 [Read the architecture](architecture.md){ .md-button }
 
 ## Project status
