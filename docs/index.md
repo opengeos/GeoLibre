@@ -67,19 +67,19 @@ The live demo is the browser-capable version of the GeoLibre desktop UI. It is u
 Open a project by passing a public `.geolibre.json` URL with the `url` query parameter:
 
 ```text
-https://geolibre.app/demo/?url=https://data.geolibre.app/opera-dswx.geolibre.json
+https://viewer.geolibre.app/?url=https://data.geolibre.app/opera-dswx.geolibre.json
 ```
 
 For narrow embeds, add `?layout=compact` to the demo URL to use icon-only toolbar buttons and hide project metadata:
 
 ```text
-https://geolibre.app/demo/?url=https://data.geolibre.app/opera-dswx.geolibre.json&layout=compact
+https://viewer.geolibre.app/?url=https://data.geolibre.app/opera-dswx.geolibre.json&layout=compact
 ```
 
 For map-focused embeds, add `&panels=none` to hide the Layers, Style, and Attribute table panels:
 
 ```text
-https://geolibre.app/demo/?url=https://data.geolibre.app/opera-dswx.geolibre.json&layout=compact&panels=none
+https://viewer.geolibre.app/?url=https://data.geolibre.app/opera-dswx.geolibre.json&layout=compact&panels=none
 ```
 
 Use `toolbar=icons` when you only want icon-only toolbar buttons. `panels=hidden`, `panels=hide`, `panels=off`, and `hidePanels=true` are accepted aliases for hiding panels.
