@@ -35,11 +35,13 @@ export interface ExternalPluginLoadResult {
   issues: ExternalPluginLoadIssue[];
 }
 
-// IDs registered by previous loadExternalPlugins calls. A settings change
-// triggers a re-scan; plugins already loaded externally are skipped silently
-// instead of being reported as duplicate-ID issues. Removing a plugin
-// directory does not unregister its plugins until the app restarts.
-const externallyLoadedPluginIds = new Set<string>();
+// Plugin IDs registered by previous loadExternalPlugins calls, mapped to the
+// source that loaded them. A settings change triggers a re-scan; plugins
+// already loaded from the same source are skipped silently, while the same ID
+// arriving from a different source is reported so the user knows a restart is
+// needed to pick it up. Removing a plugin source does not unregister its
+// plugins until the app restarts.
+const externallyLoadedPluginSources = new Map<string, string>();
 
 export async function loadExternalPlugins(
   manager: PluginManager,
@@ -65,11 +67,19 @@ export async function loadExternalPlugins(
     manager.list().map((plugin) => plugin.id),
   );
 
-  for (const bundle of [...urlBundles, ...filesystemResult.bundles]) {
+  for (const bundle of [...filesystemResult.bundles, ...urlBundles]) {
     try {
-      if (externallyLoadedPluginIds.has(bundle.manifest.id)) {
+      const loadedFrom = externallyLoadedPluginSources.get(bundle.manifest.id);
+      if (loadedFrom !== undefined) {
         // Already loaded by a previous scan; a settings change re-runs the
-        // scan and should not warn about plugins it loaded itself.
+        // scan and should not warn about plugins it loaded itself. A copy
+        // from a different source needs a restart to replace the loaded one.
+        if (loadedFrom !== bundle.archiveName) {
+          issues.push({
+            archiveName: bundle.archiveName,
+            message: `Plugin id '${bundle.manifest.id}' is already loaded from '${loadedFrom}'. Restart GeoLibre to load this copy.`,
+          });
+        }
         continue;
       }
       if (registeredPluginIds.has(bundle.manifest.id)) {
@@ -86,7 +96,7 @@ export async function loadExternalPlugins(
       }
       manager.register(plugin);
       registeredPluginIds.add(plugin.id);
-      externallyLoadedPluginIds.add(plugin.id);
+      externallyLoadedPluginSources.set(plugin.id, bundle.archiveName);
       loadedPluginIds.push(plugin.id);
     } catch (error) {
       issues.push({

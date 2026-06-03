@@ -75,10 +75,9 @@ export function usePluginRegistry() {
   };
 }
 
-export function usePlugins() {
-  return useExternalPluginsReady();
-}
-
+// Built-in plugins are registered at module load so the toolbar can render
+// plugin menu items on the first pass. This hook additionally kicks off the
+// external plugin scan and reports whether it has finished.
 export function useExternalPluginsReady(): boolean {
   const desktopSettings = useDesktopSettingsStore(
     (state) => state.desktopSettings,

@@ -18,7 +18,7 @@ const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   pluginManifestUrls: [],
 };
 
-function normalizeStringList(values: unknown): string[] {
+export function normalizeStringList(values: unknown): string[] {
   if (!Array.isArray(values)) return [];
 
   const seen = new Set<string>();

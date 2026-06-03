@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState, type RefObject } from "react";
 import {
+  normalizeStringList,
   useDesktopSettingsStore,
   type DesktopSettings,
 } from "../../hooks/useDesktopSettings";
@@ -101,18 +102,6 @@ function cloneDesktopSettings(settings: DesktopSettings): DesktopSettings {
     additionalPluginDirectories: [...settings.additionalPluginDirectories],
     pluginManifestUrls: [...settings.pluginManifestUrls],
   };
-}
-
-function normalizeStringList(values: string[]): string[] {
-  const seen = new Set<string>();
-  const normalized: string[] = [];
-  for (const value of values) {
-    const normalizedValue = value.trim();
-    if (!normalizedValue || seen.has(normalizedValue)) continue;
-    seen.add(normalizedValue);
-    normalized.push(normalizedValue);
-  }
-  return normalized;
 }
 
 function normalizeBounds(
@@ -185,12 +174,12 @@ function validatePluginManifestUrls(urls: string[]): string | null {
     if (!url.trim()) continue;
     try {
       const parsed = new URL(url.trim());
-      if (
-        parsed.protocol !== "https:" &&
-        parsed.hostname !== "localhost" &&
-        parsed.hostname !== "127.0.0.1"
-      ) {
-        return "Plugin manifest URLs must use HTTPS, localhost, or 127.0.0.1.";
+      const isHttps = parsed.protocol === "https:";
+      const isLocalHttp =
+        parsed.protocol === "http:" &&
+        (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1");
+      if (!isHttps && !isLocalHttp) {
+        return "Plugin manifest URLs must use HTTPS, or HTTP on localhost or 127.0.0.1.";
       }
     } catch {
       return "Plugin manifest URLs must be valid absolute URLs.";
@@ -341,9 +330,17 @@ export function SettingsDialog({
   };
 
   const browsePluginDirectory = async (index: number) => {
-    const path = await pickLocalPathWithFallback({ directory: true });
-    if (!path) return;
-    updatePluginDirectory(index, path);
+    try {
+      const path = await pickLocalPathWithFallback({ directory: true });
+      if (!path) return;
+      updatePluginDirectory(index, path);
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Could not open the directory picker.",
+      );
+    }
   };
 
   const removePluginDirectory = (index: number) => {

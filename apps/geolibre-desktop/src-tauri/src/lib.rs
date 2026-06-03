@@ -296,8 +296,10 @@ fn scan_external_plugin_directory(
 
     for entry in entries {
         let path = entry.path();
-        let file_type = match entry.file_type() {
-            Ok(file_type) => file_type,
+        // Resolve through path metadata rather than the directory entry so
+        // symlinked zips and plugin directories are followed, not skipped.
+        let metadata = match path.metadata() {
+            Ok(metadata) => metadata,
             Err(error) => {
                 errors.push(ExternalPluginBundleError {
                     archive_name: path.to_string_lossy().to_string(),
@@ -307,7 +309,7 @@ fn scan_external_plugin_directory(
             }
         };
 
-        if file_type.is_file() && is_zip_path(&path) {
+        if metadata.is_file() && is_zip_path(&path) {
             let bundle_name = path.to_string_lossy().to_string();
             match load_external_plugin_archive(&path, &bundle_name) {
                 Ok(bundle) => bundles.push(bundle),
@@ -316,7 +318,7 @@ fn scan_external_plugin_directory(
                     message,
                 }),
             }
-        } else if file_type.is_dir() && path.join("plugin.json").is_file() {
+        } else if metadata.is_dir() && path.join("plugin.json").is_file() {
             let bundle_name = path.to_string_lossy().to_string();
             match load_external_plugin_directory(&path, &bundle_name) {
                 Ok(bundle) => bundles.push(bundle),
