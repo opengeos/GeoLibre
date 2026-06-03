@@ -35,10 +35,17 @@ import {
   Settings,
   Trash2,
   TriangleAlert,
+  Puzzle,
+  FolderOpen,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type RefObject } from "react";
+import {
+  useDesktopSettingsStore,
+  type DesktopSettings,
+} from "../../hooks/useDesktopSettings";
+import { pickLocalPathWithFallback } from "../../lib/tauri-io";
 
-type SettingsSection = "map" | "environment" | "project";
+type SettingsSection = "map" | "environment" | "plugins" | "project";
 
 interface SettingsDialogProps {
   buttonClassName?: string;
@@ -55,6 +62,7 @@ const SECTION_ITEMS: Array<{
 }> = [
   { id: "map", label: "Map", icon: MapPinned },
   { id: "environment", label: "Environment", icon: Braces },
+  { id: "plugins", label: "Plugins", icon: Puzzle },
   { id: "project", label: "Project", icon: FolderCog },
 ];
 
@@ -88,7 +96,27 @@ function clonePreferences(preferences: ProjectPreferences): DraftPreferences {
   };
 }
 
-function normalizeBounds(bounds: MapPreferences["bounds"]): MapPreferences["bounds"] {
+function cloneDesktopSettings(settings: DesktopSettings): DesktopSettings {
+  return {
+    additionalPluginDirectories: [...settings.additionalPluginDirectories],
+  };
+}
+
+function normalizePluginDirectories(paths: string[]): string[] {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const value of paths) {
+    const path = value.trim();
+    if (!path || seen.has(path)) continue;
+    seen.add(path);
+    normalized.push(path);
+  }
+  return normalized;
+}
+
+function normalizeBounds(
+  bounds: MapPreferences["bounds"],
+): MapPreferences["bounds"] {
   const west = clamp(bounds[0], -180, 180);
   const south = clamp(bounds[1], -85, 85);
   const east = clamp(bounds[2], -180, 180);
@@ -160,6 +188,10 @@ export function SettingsDialog({
 }: SettingsDialogProps) {
   const preferences = useAppStore((s) => s.preferences);
   const setPreferences = useAppStore((s) => s.setPreferences);
+  const desktopSettings = useDesktopSettingsStore((s) => s.desktopSettings);
+  const setDesktopSettings = useDesktopSettingsStore(
+    (s) => s.setDesktopSettings,
+  );
   const projectName = useAppStore((s) => s.projectName);
   const projectPath = useAppStore((s) => s.projectPath);
   const setProjectName = useAppStore((s) => s.setProjectName);
@@ -168,6 +200,8 @@ export function SettingsDialog({
   const [draftPreferences, setDraftPreferences] = useState<DraftPreferences>(
     () => clonePreferences(preferences),
   );
+  const [draftDesktopSettings, setDraftDesktopSettings] =
+    useState<DesktopSettings>(() => cloneDesktopSettings(desktopSettings));
   const [draftProjectName, setDraftProjectName] = useState(projectName);
   const [error, setError] = useState<string | null>(null);
   // Ids of variables whose value is temporarily revealed; values are masked
@@ -189,6 +223,9 @@ export function SettingsDialog({
   useEffect(() => {
     if (!open) return;
     setDraftPreferences(clonePreferences(useAppStore.getState().preferences));
+    setDraftDesktopSettings(
+      cloneDesktopSettings(useDesktopSettingsStore.getState().desktopSettings),
+    );
     setDraftProjectName(useAppStore.getState().projectName);
     setRevealedValueIds(new Set());
     setError(null);
@@ -214,10 +251,7 @@ export function SettingsDialog({
     setError(null);
   };
 
-  const updateBoundsValue = (
-    index: number,
-    value: number,
-  ) => {
+  const updateBoundsValue = (index: number, value: number) => {
     // Ignore a cleared field (valueAsNumber is NaN) so it does not silently
     // become an edge-of-range value on save; the last valid value is kept.
     if (!Number.isFinite(value)) return;
@@ -267,6 +301,41 @@ export function SettingsDialog({
     setError(null);
   };
 
+  const updatePluginDirectory = (index: number, path: string) => {
+    setDraftDesktopSettings((current) => ({
+      ...current,
+      additionalPluginDirectories: current.additionalPluginDirectories.map(
+        (directory, i) => (i === index ? path : directory),
+      ),
+    }));
+    setError(null);
+  };
+
+  const addPluginDirectory = () => {
+    setDraftDesktopSettings((current) => ({
+      ...current,
+      additionalPluginDirectories: [...current.additionalPluginDirectories, ""],
+    }));
+    setSection("plugins");
+    setError(null);
+  };
+
+  const browsePluginDirectory = async (index: number) => {
+    const path = await pickLocalPathWithFallback({ directory: true });
+    if (!path) return;
+    updatePluginDirectory(index, path);
+  };
+
+  const removePluginDirectory = (index: number) => {
+    setDraftDesktopSettings((current) => ({
+      ...current,
+      additionalPluginDirectories: current.additionalPluginDirectories.filter(
+        (_, i) => i !== index,
+      ),
+    }));
+    setError(null);
+  };
+
   const applyCurrentViewBounds = () => {
     const bounds = mapControllerRef.current?.readView().bbox;
     if (!bounds) {
@@ -302,6 +371,11 @@ export function SettingsDialog({
     const nextProjectName = draftProjectName.trim() || "Untitled Project";
     if (nextProjectName !== projectName) setProjectName(nextProjectName);
     setPreferences(normalized);
+    setDesktopSettings({
+      additionalPluginDirectories: normalizePluginDirectories(
+        draftDesktopSettings.additionalPluginDirectories,
+      ),
+    });
     setOpen(false);
   };
 
@@ -361,6 +435,15 @@ export function SettingsDialog({
           >
             <Braces className="mr-2 h-3.5 w-3.5" />
             Environment Variables
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => {
+              setSection("plugins");
+              setOpen(true);
+            }}
+          >
+            <Puzzle className="mr-2 h-3.5 w-3.5" />
+            Plugin Directories
           </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={() => {
@@ -624,6 +707,83 @@ export function SettingsDialog({
                               size="icon"
                               variant="ghost"
                               onClick={() => removeEnvironmentVariable(index)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+              {section === "plugins" ? (
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold">
+                        Plugin directories
+                      </h3>
+                      <p className="text-xs text-muted-foreground">
+                        Extra local directories scanned for plugin zips or
+                        unpacked plugin bundles.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={addPluginDirectory}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add
+                    </Button>
+                  </div>
+                  <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+                    GeoLibre always scans its app data plugins directory. These
+                    additional paths are local desktop settings and are not
+                    saved into project files. Each directory can contain `.zip`
+                    plugin bundles, unpacked plugin bundle folders, or be an
+                    unpacked plugin bundle with a root `plugin.json`.
+                  </div>
+                  {draftDesktopSettings.additionalPluginDirectories.length ===
+                  0 ? (
+                    <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                      No additional plugin directories configured.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {draftDesktopSettings.additionalPluginDirectories.map(
+                        (directory, index) => (
+                          <div
+                            key={`${index}-${directory}`}
+                            className="grid grid-cols-[minmax(10rem,1fr)_2rem_2rem] items-center gap-2"
+                          >
+                            <Input
+                              aria-label="Plugin directory"
+                              placeholder="/path/to/geolibre-plugin"
+                              value={directory}
+                              onChange={(event) =>
+                                updatePluginDirectory(index, event.target.value)
+                              }
+                            />
+                            <Button
+                              aria-label="Browse plugin directory"
+                              className="h-8 w-8"
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => void browsePluginDirectory(index)}
+                            >
+                              <FolderOpen className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              aria-label="Remove plugin directory"
+                              className="h-8 w-8"
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => removePluginDirectory(index)}
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>

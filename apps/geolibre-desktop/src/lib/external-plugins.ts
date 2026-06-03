@@ -18,7 +18,7 @@ interface ExternalPluginBundleError {
 }
 
 interface ExternalPluginBundleLoadResult {
-  pluginsDirectory: string;
+  pluginsDirectories: string[];
   bundles: ExternalPluginBundle[];
   errors: ExternalPluginBundleError[];
 }
@@ -29,16 +29,18 @@ export interface ExternalPluginLoadIssue {
 }
 
 export interface ExternalPluginLoadResult {
-  pluginsDirectory?: string;
+  pluginsDirectories: string[];
   loadedPluginIds: string[];
   issues: ExternalPluginLoadIssue[];
 }
 
 export async function loadExternalPlugins(
   manager: PluginManager,
+  additionalPluginDirectories: string[] = [],
 ): Promise<ExternalPluginLoadResult> {
   if (!isTauri()) {
     return {
+      pluginsDirectories: [],
       loadedPluginIds: [],
       issues: [],
     };
@@ -47,6 +49,9 @@ export async function loadExternalPlugins(
   const { invoke } = await import("@tauri-apps/api/core");
   const result = await invoke<ExternalPluginBundleLoadResult>(
     "load_external_plugin_bundles",
+    {
+      additionalPluginDirectories,
+    },
   );
   const issues: ExternalPluginLoadIssue[] = result.errors.map((error) => ({
     archiveName: error.archiveName,
@@ -94,7 +99,7 @@ export async function loadExternalPlugins(
   }
 
   return {
-    pluginsDirectory: result.pluginsDirectory,
+    pluginsDirectories: result.pluginsDirectories,
     loadedPluginIds,
     issues,
   };

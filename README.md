@@ -126,7 +126,7 @@ docs/                   # Architecture & API docs
 
 Built-in plugins live in `packages/plugins/src/plugins/` and are registered by the desktop app in `apps/geolibre-desktop/src/hooks/usePlugins.ts`. Map control plugins can expose a control position through `getMapControlPosition()` and `setMapControlPosition()` so the Plugins menu can move them between map corners.
 
-For external plugin development, start from the [GeoLibre plugin template](https://github.com/giswqs/geolibre-plugin-template). It includes a `plugin.json` manifest, a GeoLibre plugin wrapper entry point, and a `package:geolibre` script that creates a zip file for the desktop app data `plugins/` directory. See the [Plugin API](docs/plugin-api.md) for the external zip contract.
+For external plugin development, start from the [GeoLibre plugin template](https://github.com/giswqs/geolibre-plugin-template). It includes a `plugin.json` manifest, a GeoLibre plugin wrapper entry point, and a `package:geolibre` script that creates a zip file for the desktop app data `plugins/` directory. During development, Settings > Plugins can scan an additional local plugin directory, including an unpacked bundle folder such as the template's `geolibre-plugin/` directory. See the [Plugin API](docs/plugin-api.md) for the external plugin contract.
 
 1. Create a plugin file in `packages/plugins/src/plugins/`.
 

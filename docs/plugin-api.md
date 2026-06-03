@@ -121,7 +121,12 @@ Plugins with serializable runtime settings can expose `getProjectState()` and `a
 
 Use the [GeoLibre plugin template](https://github.com/giswqs/geolibre-plugin-template) as the recommended starting point for external plugin development. The template includes a MapLibre control wrapper, a `plugin.json` manifest, a GeoLibre plugin entry point, and a `package:geolibre` script that builds the zip layout GeoLibre Desktop expects.
 
-GeoLibre Desktop loads external plugin zip files from the app data `plugins/` directory at startup. Browser builds keep built-in plugins only. Each zip is trusted local code and must contain a bundled ESM entry file plus a root `plugin.json` manifest.
+GeoLibre Desktop loads external plugins from the app data `plugins/` directory at startup. Browser builds keep built-in plugins only. External plugins are trusted local code and can be installed as either:
+
+- A `.zip` file with a root `plugin.json`.
+- An unpacked directory with a root `plugin.json`.
+
+The Plugins settings section can also add local development directories outside the app data folder. Each configured directory can contain plugin zips, unpacked plugin bundle folders, or be a single unpacked plugin bundle itself. Configured development directories are scanned before the app data `plugins/` directory, so a development copy can override an installed external plugin with the same ID. Built-in plugins still take precedence over all external plugins.
 
 ```json
 {
@@ -138,7 +143,7 @@ The `entry` file must export a `GeoLibrePlugin` as either the default export or 
 
 Manifest paths must be relative zip paths with forward slashes, no leading slash, no backslashes, and no `..` segments. External plugins cannot use `activeByDefault`; saved project state can still reactivate an external plugin by ID after the zip is loaded.
 
-When using the template, update `geolibre-plugin/plugin.json` and `src/geolibre.ts` together so `id`, `name`, and `version` stay in sync. Run `npm run package:geolibre`, then copy the generated zip into the desktop app data `plugins/` directory and restart GeoLibre.
+When using the template, update `geolibre-plugin/plugin.json` and `src/geolibre.ts` together so `id`, `name`, and `version` stay in sync. Run `npm run package:geolibre`, then either copy the generated zip into the desktop app data `plugins/` directory or add the template's `geolibre-plugin/` directory in Settings > Plugins for local development.
 
 ## Future plugin work
 

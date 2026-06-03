@@ -16,6 +16,7 @@ import type { GeoLibreMapControlPosition } from "@geolibre/plugins";
 import type { RefObject } from "react";
 import { useEffect, useSyncExternalStore } from "react";
 import { loadExternalPlugins } from "../lib/external-plugins";
+import { useDesktopSettingsStore } from "./useDesktopSettings";
 
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
 
@@ -38,6 +39,7 @@ manager.registerAll([
 
 let externalPluginsLoaded = false;
 let externalPluginsLoadPromise: Promise<void> | null = null;
+let externalPluginsLoadKey: string | null = null;
 let externalPluginsVersion = 0;
 const externalPluginsListeners = new Set<() => void>();
 
@@ -79,9 +81,15 @@ export function usePlugins() {
 }
 
 export function useExternalPluginsReady(): boolean {
+  const additionalPluginDirectories = useDesktopSettingsStore(
+    (state) => state.desktopSettings.additionalPluginDirectories,
+  );
+
   useEffect(() => {
-    void ensureExternalPluginsLoaded();
-  }, []);
+    void ensureExternalPluginsLoadedWithDirectories(
+      additionalPluginDirectories,
+    );
+  }, [additionalPluginDirectories]);
 
   useSyncExternalStore(
     (listener) => {
@@ -96,18 +104,37 @@ export function useExternalPluginsReady(): boolean {
 }
 
 export function ensureExternalPluginsLoaded(): Promise<void> {
+  return ensureExternalPluginsLoadedWithDirectories([]);
+}
+
+function ensureExternalPluginsLoadedWithDirectories(
+  additionalPluginDirectories: string[],
+): Promise<void> {
   if (!isTauriRuntime()) {
     markExternalPluginsLoaded();
     return Promise.resolve();
   }
 
-  externalPluginsLoadPromise ??= loadExternalPlugins(manager)
+  const loadKey = JSON.stringify(additionalPluginDirectories);
+  if (externalPluginsLoaded && externalPluginsLoadKey === loadKey) {
+    return Promise.resolve();
+  }
+  if (externalPluginsLoadPromise && externalPluginsLoadKey === loadKey) {
+    return externalPluginsLoadPromise;
+  }
+
+  externalPluginsLoaded = false;
+  externalPluginsLoadKey = loadKey;
+  externalPluginsLoadPromise = loadExternalPlugins(
+    manager,
+    additionalPluginDirectories,
+  )
     .then((result) => {
       if (result.loadedPluginIds.length) {
         console.info(
-          `Loaded external GeoLibre plugins from ${result.pluginsDirectory}: ${result.loadedPluginIds.join(
+          `Loaded external GeoLibre plugins from ${result.pluginsDirectories.join(
             ", ",
-          )}`,
+          )}: ${result.loadedPluginIds.join(", ")}`,
         );
       }
       for (const issue of result.issues) {
@@ -119,7 +146,10 @@ export function ensureExternalPluginsLoaded(): Promise<void> {
     .catch((error) => {
       console.warn("Could not load external GeoLibre plugins.", error);
     })
-    .finally(markExternalPluginsLoaded);
+    .finally(() => {
+      externalPluginsLoadPromise = null;
+      markExternalPluginsLoaded();
+    });
 
   return externalPluginsLoadPromise;
 }

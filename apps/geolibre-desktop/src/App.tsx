@@ -1,4 +1,5 @@
 import { DesktopShell } from "./components/layout/DesktopShell";
+import { useDesktopSettingsPersistence } from "./hooks/useDesktopSettings";
 import { useLayoutOptions } from "./hooks/useLayoutOptions";
 import { usePlugins } from "./hooks/usePlugins";
 import { useProjectUrlLoader } from "./hooks/useProjectUrlLoader";
@@ -11,6 +12,7 @@ export default function App() {
   const { themeMode, toggleThemeMode } = useThemeMode();
   const projectUrlLoadState = useProjectUrlLoader();
 
+  useDesktopSettingsPersistence();
   usePlugins();
   useRecentProjectsPersistence();
   useRuntimeEnvironmentVariables();

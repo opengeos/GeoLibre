@@ -91,7 +91,7 @@ struct ExternalPluginBundleError {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ExternalPluginBundleLoadResult {
-    plugins_directory: String,
+    plugins_directories: Vec<String>,
     bundles: Vec<ExternalPluginBundle>,
     errors: Vec<ExternalPluginBundleError>,
 }
@@ -199,14 +199,18 @@ fn fetch_url_bytes_blocking(url: String) -> Result<Vec<u8>, String> {
 #[tauri::command]
 async fn load_external_plugin_bundles(
     app: tauri::AppHandle,
+    additional_plugin_directories: Vec<String>,
 ) -> Result<ExternalPluginBundleLoadResult, String> {
-    tauri::async_runtime::spawn_blocking(move || load_external_plugin_bundles_blocking(&app))
-        .await
-        .map_err(|error| format!("External plugin scan task failed: {error}"))?
+    tauri::async_runtime::spawn_blocking(move || {
+        load_external_plugin_bundles_blocking(&app, additional_plugin_directories)
+    })
+    .await
+    .map_err(|error| format!("External plugin scan task failed: {error}"))?
 }
 
 fn load_external_plugin_bundles_blocking(
     app: &tauri::AppHandle,
+    additional_plugin_directories: Vec<String>,
 ) -> Result<ExternalPluginBundleLoadResult, String> {
     let plugins_dir = app
         .path()
@@ -217,43 +221,119 @@ fn load_external_plugin_bundles_blocking(
     fs::create_dir_all(&plugins_dir)
         .map_err(|error| format!("Could not create plugins directory: {error}"))?;
 
-    let mut archives = fs::read_dir(&plugins_dir)
-        .map_err(|error| format!("Could not read plugins directory: {error}"))?
-        .filter_map(Result::ok)
-        .filter(|entry| {
-            entry
-                .file_type()
-                .map(|file_type| file_type.is_file())
-                .unwrap_or(false)
-        })
-        .filter(|entry| {
-            entry
-                .path()
-                .extension()
-                .and_then(|extension| extension.to_str())
-                .is_some_and(|extension| extension.eq_ignore_ascii_case("zip"))
-        })
-        .collect::<Vec<_>>();
-    archives.sort_by_key(|entry| entry.file_name().to_string_lossy().to_string());
+    let mut plugin_dirs = Vec::new();
+    let mut seen_dirs = HashSet::new();
+    for directory in additional_plugin_directories {
+        let directory = directory.trim();
+        if directory.is_empty() {
+            continue;
+        }
+        let path = PathBuf::from(directory);
+        let key = normalize_path_key(&path);
+        if seen_dirs.insert(key) {
+            plugin_dirs.push(path);
+        }
+    }
+    if seen_dirs.insert(normalize_path_key(&plugins_dir)) {
+        plugin_dirs.push(plugins_dir);
+    }
 
     let mut bundles = Vec::new();
     let mut errors = Vec::new();
-    for archive in archives {
-        let archive_name = archive.file_name().to_string_lossy().to_string();
-        match load_external_plugin_archive(&archive.path(), &archive_name) {
-            Ok(bundle) => bundles.push(bundle),
-            Err(message) => errors.push(ExternalPluginBundleError {
-                archive_name,
-                message,
-            }),
-        }
+    for plugin_dir in &plugin_dirs {
+        scan_external_plugin_directory(plugin_dir, &mut bundles, &mut errors);
     }
 
     Ok(ExternalPluginBundleLoadResult {
-        plugins_directory: plugins_dir.to_string_lossy().to_string(),
+        plugins_directories: plugin_dirs
+            .iter()
+            .map(|path| path.to_string_lossy().to_string())
+            .collect(),
         bundles,
         errors,
     })
+}
+
+fn normalize_path_key(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+fn scan_external_plugin_directory(
+    plugin_dir: &Path,
+    bundles: &mut Vec<ExternalPluginBundle>,
+    errors: &mut Vec<ExternalPluginBundleError>,
+) {
+    if !plugin_dir.exists() {
+        errors.push(ExternalPluginBundleError {
+            archive_name: plugin_dir.to_string_lossy().to_string(),
+            message: "Plugin directory does not exist.".to_string(),
+        });
+        return;
+    }
+
+    if plugin_dir.join("plugin.json").is_file() {
+        let bundle_name = plugin_dir.to_string_lossy().to_string();
+        match load_external_plugin_directory(plugin_dir, &bundle_name) {
+            Ok(bundle) => bundles.push(bundle),
+            Err(message) => errors.push(ExternalPluginBundleError {
+                archive_name: bundle_name,
+                message,
+            }),
+        }
+        return;
+    }
+
+    let mut entries = match fs::read_dir(plugin_dir) {
+        Ok(entries) => entries.filter_map(Result::ok).collect::<Vec<_>>(),
+        Err(error) => {
+            errors.push(ExternalPluginBundleError {
+                archive_name: plugin_dir.to_string_lossy().to_string(),
+                message: format!("Could not read plugins directory: {error}"),
+            });
+            return;
+        }
+    };
+    entries.sort_by_key(|entry| entry.file_name().to_string_lossy().to_string());
+
+    for entry in entries {
+        let path = entry.path();
+        let file_type = match entry.file_type() {
+            Ok(file_type) => file_type,
+            Err(error) => {
+                errors.push(ExternalPluginBundleError {
+                    archive_name: path.to_string_lossy().to_string(),
+                    message: format!("Could not inspect plugin entry: {error}"),
+                });
+                continue;
+            }
+        };
+
+        if file_type.is_file() && is_zip_path(&path) {
+            let bundle_name = path.to_string_lossy().to_string();
+            match load_external_plugin_archive(&path, &bundle_name) {
+                Ok(bundle) => bundles.push(bundle),
+                Err(message) => errors.push(ExternalPluginBundleError {
+                    archive_name: bundle_name,
+                    message,
+                }),
+            }
+        } else if file_type.is_dir() && path.join("plugin.json").is_file() {
+            let bundle_name = path.to_string_lossy().to_string();
+            match load_external_plugin_directory(&path, &bundle_name) {
+                Ok(bundle) => bundles.push(bundle),
+                Err(message) => errors.push(ExternalPluginBundleError {
+                    archive_name: bundle_name,
+                    message,
+                }),
+            }
+        }
+    }
+}
+
+fn is_zip_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("zip"))
 }
 
 fn load_external_plugin_archive(
@@ -280,6 +360,41 @@ fn load_external_plugin_archive(
         entry_source,
         style_source,
     })
+}
+
+fn load_external_plugin_directory(
+    path: &Path,
+    archive_name: &str,
+) -> Result<ExternalPluginBundle, String> {
+    let manifest_text = read_fs_text_entry(path, "plugin.json", "plugin manifest")?;
+    let manifest: ExternalPluginManifest = serde_json::from_str(&manifest_text)
+        .map_err(|error| format!("Could not parse plugin.json: {error}"))?;
+    validate_external_plugin_manifest(&manifest)?;
+
+    let entry_source = read_fs_text_entry(path, &manifest.entry, "plugin entry")?;
+    let style_source = match manifest.style.as_deref() {
+        Some(style) => Some(read_fs_text_entry(path, style, "plugin style")?),
+        None => None,
+    };
+
+    Ok(ExternalPluginBundle {
+        archive_name: archive_name.to_string(),
+        manifest,
+        entry_source,
+        style_source,
+    })
+}
+
+fn read_fs_text_entry(root: &Path, entry_name: &str, label: &str) -> Result<String, String> {
+    let entry_path = root.join(entry_name);
+    if !entry_path.is_file() {
+        return Err(format!(
+            "Could not read {label} '{entry_name}': file does not exist"
+        ));
+    }
+
+    fs::read_to_string(&entry_path)
+        .map_err(|error| format!("Could not read {label} '{entry_name}' as UTF-8: {error}"))
 }
 
 fn read_zip_text_entry<R: Read + std::io::Seek>(
