@@ -255,7 +255,11 @@ fn load_external_plugin_bundles_blocking(
 }
 
 fn normalize_path_key(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
+    // Canonicalize so symlinks and case differences on case-insensitive file
+    // systems (Windows, macOS) dedupe to one key; fall back to the raw path
+    // when it does not exist yet.
+    let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    canonical.to_string_lossy().replace('\\', "/")
 }
 
 fn scan_external_plugin_directory(

@@ -201,15 +201,20 @@ async function fetchPluginText(url: string, label: string): Promise<string> {
     throw new Error(`Could not fetch ${label}: HTTP ${response.status}`);
   }
 
-  const contentLength = Number(response.headers.get("content-length"));
-  if (contentLength > MAX_PLUGIN_ASSET_BYTES) {
+  // Fast-fail when the server declares the size; the streaming reader below
+  // is the real enforcement for responses without a content-length header.
+  const contentLengthHeader = response.headers.get("content-length");
+  if (
+    contentLengthHeader !== null &&
+    Number(contentLengthHeader) > MAX_PLUGIN_ASSET_BYTES
+  ) {
     throw new Error(`Could not fetch ${label}: exceeds the 50 MB size limit.`);
   }
 
   const reader = response.body?.getReader();
   if (!reader) {
     const text = await response.text();
-    if (text.length > MAX_PLUGIN_ASSET_BYTES) {
+    if (new TextEncoder().encode(text).byteLength > MAX_PLUGIN_ASSET_BYTES) {
       throw new Error(
         `Could not fetch ${label}: exceeds the 50 MB size limit.`,
       );
@@ -250,7 +255,15 @@ function resolvePluginAssetUrl(manifestUrl: string, path: string): string {
   ) {
     throw new Error("Plugin manifest paths must be relative safe paths.");
   }
-  return new URL(path, manifestUrl).toString();
+  // Percent-encoded dot segments ("%2e%2e") pass the textual check above but
+  // the URL parser still normalizes them, so confirm the resolved URL stays
+  // under the manifest directory.
+  const resolved = new URL(path, manifestUrl);
+  const manifestDirectory = new URL(".", manifestUrl);
+  if (!resolved.href.startsWith(manifestDirectory.href)) {
+    throw new Error("Plugin manifest paths must be relative safe paths.");
+  }
+  return resolved.toString();
 }
 
 // Matches the Rust validate_required_manifest_string: non-empty with no
