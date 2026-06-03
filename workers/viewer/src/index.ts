@@ -26,17 +26,26 @@ export default {
     const target = `${ORIGIN}${url.pathname}${url.search}`;
 
     // Drop credential headers a public static-asset proxy never needs; keep the
-    // rest (e.g. Range, Accept-Encoding) so large-asset requests work. Follow
-    // origin redirects server-side to preserve the public URL.
+    // rest (e.g. Range, Accept-Encoding) so large-asset requests work.
     const headers = new Headers(request.headers);
     headers.delete("cookie");
     headers.delete("authorization");
 
-    return fetch(target, {
-      method: request.method,
-      headers,
-      body: request.body,
-      redirect: "follow",
-    });
+    // Follow origin redirects (e.g. trailing slash) server-side to preserve the
+    // public URL. This assumes geolibre.app/demo never redirects back to
+    // viewer.geolibre.app, which would otherwise make the worker loop on itself.
+    try {
+      return await fetch(target, {
+        method: request.method,
+        headers,
+        body:
+          request.method === "GET" || request.method === "HEAD"
+            ? null
+            : request.body,
+        redirect: "follow",
+      });
+    } catch {
+      return new Response("Bad Gateway", { status: 502 });
+    }
   },
 };
