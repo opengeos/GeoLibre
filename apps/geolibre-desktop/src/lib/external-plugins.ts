@@ -30,6 +30,7 @@ export interface ExternalPluginLoadIssue {
 
 export interface ExternalPluginLoadResult {
   pluginsDirectories: string[];
+  pluginSources: string[];
   loadedPluginIds: string[];
   issues: ExternalPluginLoadIssue[];
 }
@@ -43,32 +44,28 @@ const externallyLoadedPluginIds = new Set<string>();
 export async function loadExternalPlugins(
   manager: PluginManager,
   additionalPluginDirectories: string[] = [],
+  pluginManifestUrls: string[] = [],
 ): Promise<ExternalPluginLoadResult> {
-  if (!isTauri()) {
-    return {
-      pluginsDirectories: [],
-      loadedPluginIds: [],
-      issues: [],
-    };
-  }
-
-  const { invoke } = await import("@tauri-apps/api/core");
-  const result = await invoke<ExternalPluginBundleLoadResult>(
-    "load_external_plugin_bundles",
-    {
-      additionalPluginDirectories,
-    },
+  const filesystemResult = isTauri()
+    ? await loadFilesystemPluginBundles(additionalPluginDirectories)
+    : {
+        pluginsDirectories: [],
+        bundles: [],
+        errors: [],
+      };
+  const issues: ExternalPluginLoadIssue[] = filesystemResult.errors.map(
+    (error) => ({
+      archiveName: error.archiveName,
+      message: error.message,
+    }),
   );
-  const issues: ExternalPluginLoadIssue[] = result.errors.map((error) => ({
-    archiveName: error.archiveName,
-    message: error.message,
-  }));
+  const urlBundles = await loadPluginUrlBundles(pluginManifestUrls, issues);
   const loadedPluginIds: string[] = [];
   const registeredPluginIds = new Set(
     manager.list().map((plugin) => plugin.id),
   );
 
-  for (const bundle of result.bundles) {
+  for (const bundle of [...urlBundles, ...filesystemResult.bundles]) {
     try {
       if (externallyLoadedPluginIds.has(bundle.manifest.id)) {
         // Already loaded by a previous scan; a settings change re-runs the
@@ -103,10 +100,117 @@ export async function loadExternalPlugins(
   }
 
   return {
-    pluginsDirectories: result.pluginsDirectories,
+    pluginsDirectories: filesystemResult.pluginsDirectories,
+    pluginSources: [
+      ...pluginManifestUrls,
+      ...filesystemResult.pluginsDirectories,
+    ],
     loadedPluginIds,
     issues,
   };
+}
+
+async function loadFilesystemPluginBundles(
+  additionalPluginDirectories: string[],
+): Promise<ExternalPluginBundleLoadResult> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<ExternalPluginBundleLoadResult>(
+    "load_external_plugin_bundles",
+    {
+      additionalPluginDirectories,
+    },
+  );
+}
+
+async function loadPluginUrlBundles(
+  manifestUrls: string[],
+  issues: ExternalPluginLoadIssue[],
+): Promise<ExternalPluginBundle[]> {
+  const bundles: ExternalPluginBundle[] = [];
+  for (const manifestUrl of manifestUrls) {
+    try {
+      bundles.push(await loadPluginUrlBundle(manifestUrl));
+    } catch (error) {
+      issues.push({
+        archiveName: manifestUrl,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Could not load plugin manifest URL.",
+      });
+    }
+  }
+  return bundles;
+}
+
+async function loadPluginUrlBundle(
+  manifestUrl: string,
+): Promise<ExternalPluginBundle> {
+  const manifestResponse = await fetch(manifestUrl);
+  if (!manifestResponse.ok) {
+    throw new Error(
+      `Could not fetch plugin manifest: HTTP ${manifestResponse.status}`,
+    );
+  }
+
+  const manifest = (await manifestResponse.json()) as unknown;
+  if (!isExternalPluginManifest(manifest)) {
+    throw new Error("Plugin manifest is invalid.");
+  }
+
+  const entryUrl = resolvePluginAssetUrl(manifestUrl, manifest.entry);
+  const entrySource = await fetchPluginText(entryUrl, "plugin entry");
+  const styleSource = manifest.style
+    ? await fetchPluginText(
+        resolvePluginAssetUrl(manifestUrl, manifest.style),
+        "plugin style",
+      )
+    : null;
+
+  return {
+    archiveName: manifestUrl,
+    manifest,
+    entrySource,
+    styleSource,
+  };
+}
+
+async function fetchPluginText(url: string, label: string): Promise<string> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Could not fetch ${label}: HTTP ${response.status}`);
+  }
+  return response.text();
+}
+
+function resolvePluginAssetUrl(manifestUrl: string, path: string): string {
+  if (
+    path.startsWith("/") ||
+    path.includes("\\") ||
+    /^[a-z][a-z\d+.-]*:/i.test(path) ||
+    path.split("/").some((part) => !part || part === "." || part === "..")
+  ) {
+    throw new Error("Plugin manifest paths must be relative safe paths.");
+  }
+  return new URL(path, manifestUrl).toString();
+}
+
+function isExternalPluginManifest(
+  value: unknown,
+): value is GeoLibreExternalPluginManifest {
+  if (!value || typeof value !== "object") return false;
+  const manifest = value as Partial<GeoLibreExternalPluginManifest>;
+  return (
+    typeof manifest.id === "string" &&
+    typeof manifest.name === "string" &&
+    typeof manifest.version === "string" &&
+    typeof manifest.entry === "string" &&
+    (manifest.entry.endsWith(".js") || manifest.entry.endsWith(".mjs")) &&
+    (manifest.description === undefined ||
+      typeof manifest.description === "string") &&
+    (manifest.style === undefined ||
+      (typeof manifest.style === "string" && manifest.style.endsWith(".css")))
+  );
 }
 
 async function importExternalPlugin(

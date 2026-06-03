@@ -99,17 +99,18 @@ function clonePreferences(preferences: ProjectPreferences): DraftPreferences {
 function cloneDesktopSettings(settings: DesktopSettings): DesktopSettings {
   return {
     additionalPluginDirectories: [...settings.additionalPluginDirectories],
+    pluginManifestUrls: [...settings.pluginManifestUrls],
   };
 }
 
-function normalizePluginDirectories(paths: string[]): string[] {
+function normalizeStringList(values: string[]): string[] {
   const seen = new Set<string>();
   const normalized: string[] = [];
-  for (const value of paths) {
-    const path = value.trim();
-    if (!path || seen.has(path)) continue;
-    seen.add(path);
-    normalized.push(path);
+  for (const value of values) {
+    const normalizedValue = value.trim();
+    if (!normalizedValue || seen.has(normalizedValue)) continue;
+    seen.add(normalizedValue);
+    normalized.push(normalizedValue);
   }
   return normalized;
 }
@@ -176,6 +177,25 @@ function validateEnvironmentVariables(
     keys.add(variable.key.trim());
   }
 
+  return null;
+}
+
+function validatePluginManifestUrls(urls: string[]): string | null {
+  for (const url of urls) {
+    if (!url.trim()) continue;
+    try {
+      const parsed = new URL(url.trim());
+      if (
+        parsed.protocol !== "https:" &&
+        parsed.hostname !== "localhost" &&
+        parsed.hostname !== "127.0.0.1"
+      ) {
+        return "Plugin manifest URLs must use HTTPS, localhost, or 127.0.0.1.";
+      }
+    } catch {
+      return "Plugin manifest URLs must be valid absolute URLs.";
+    }
+  }
   return null;
 }
 
@@ -336,6 +356,35 @@ export function SettingsDialog({
     setError(null);
   };
 
+  const updatePluginManifestUrl = (index: number, url: string) => {
+    setDraftDesktopSettings((current) => ({
+      ...current,
+      pluginManifestUrls: current.pluginManifestUrls.map((currentUrl, i) =>
+        i === index ? url : currentUrl,
+      ),
+    }));
+    setError(null);
+  };
+
+  const addPluginManifestUrl = () => {
+    setDraftDesktopSettings((current) => ({
+      ...current,
+      pluginManifestUrls: [...current.pluginManifestUrls, ""],
+    }));
+    setSection("plugins");
+    setError(null);
+  };
+
+  const removePluginManifestUrl = (index: number) => {
+    setDraftDesktopSettings((current) => ({
+      ...current,
+      pluginManifestUrls: current.pluginManifestUrls.filter(
+        (_, i) => i !== index,
+      ),
+    }));
+    setError(null);
+  };
+
   const applyCurrentViewBounds = () => {
     const bounds = mapControllerRef.current?.readView().bbox;
     if (!bounds) {
@@ -368,13 +417,25 @@ export function SettingsDialog({
       return;
     }
 
+    const pluginManifestUrls = normalizeStringList(
+      draftDesktopSettings.pluginManifestUrls,
+    );
+    const manifestUrlValidationError =
+      validatePluginManifestUrls(pluginManifestUrls);
+    if (manifestUrlValidationError) {
+      setError(manifestUrlValidationError);
+      setSection("plugins");
+      return;
+    }
+
     const nextProjectName = draftProjectName.trim() || "Untitled Project";
     if (nextProjectName !== projectName) setProjectName(nextProjectName);
     setPreferences(normalized);
     setDesktopSettings({
-      additionalPluginDirectories: normalizePluginDirectories(
+      additionalPluginDirectories: normalizeStringList(
         draftDesktopSettings.additionalPluginDirectories,
       ),
+      pluginManifestUrls,
     });
     setOpen(false);
   };
@@ -721,77 +782,143 @@ export function SettingsDialog({
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <h3 className="text-sm font-semibold">
-                        Plugin directories
-                      </h3>
+                      <h3 className="text-sm font-semibold">Plugin sources</h3>
                       <p className="text-xs text-muted-foreground">
-                        Extra local directories scanned for plugin zips or
-                        unpacked plugin bundles.
+                        Extra local directories and web manifest URLs scanned
+                        for external plugins.
                       </p>
                     </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={addPluginDirectory}
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Add
-                    </Button>
                   </div>
                   <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
                     GeoLibre always scans its app data plugins directory. These
-                    additional paths are local desktop settings and are not
-                    saved into project files. Each directory can contain `.zip`
-                    plugin bundles, unpacked plugin bundle folders, or be an
-                    unpacked plugin bundle with a root `plugin.json`.
+                    additional sources are local settings and are not saved into
+                    project files. Desktop directories can contain `.zip` plugin
+                    bundles, unpacked plugin bundle folders, or be an unpacked
+                    plugin bundle with a root `plugin.json`. Manifest URLs also
+                    work in the web app by resolving `entry` and `style`
+                    relative to `plugin.json`.
                   </div>
-                  {draftDesktopSettings.additionalPluginDirectories.length ===
-                  0 ? (
-                    <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                      No additional plugin directories configured.
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Local directories
+                      </h4>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={addPluginDirectory}
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Add
+                      </Button>
                     </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {draftDesktopSettings.additionalPluginDirectories.map(
-                        (directory, index) => (
-                          <div
-                            key={index}
-                            className="grid grid-cols-[minmax(10rem,1fr)_2rem_2rem] items-center gap-2"
-                          >
-                            <Input
-                              aria-label="Plugin directory"
-                              placeholder="/path/to/geolibre-plugin"
-                              value={directory}
-                              onChange={(event) =>
-                                updatePluginDirectory(index, event.target.value)
-                              }
-                            />
-                            <Button
-                              aria-label="Browse plugin directory"
-                              className="h-8 w-8"
-                              type="button"
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => void browsePluginDirectory(index)}
+                    {draftDesktopSettings.additionalPluginDirectories.length ===
+                    0 ? (
+                      <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                        No additional plugin directories configured.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {draftDesktopSettings.additionalPluginDirectories.map(
+                          (directory, index) => (
+                            <div
+                              key={index}
+                              className="grid grid-cols-[minmax(10rem,1fr)_2rem_2rem] items-center gap-2"
                             >
-                              <FolderOpen className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              aria-label="Remove plugin directory"
-                              className="h-8 w-8"
-                              type="button"
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => removePluginDirectory(index)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        ),
-                      )}
+                              <Input
+                                aria-label="Plugin directory"
+                                placeholder="/path/to/geolibre-plugin"
+                                value={directory}
+                                onChange={(event) =>
+                                  updatePluginDirectory(
+                                    index,
+                                    event.target.value,
+                                  )
+                                }
+                              />
+                              <Button
+                                aria-label="Browse plugin directory"
+                                className="h-8 w-8"
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                onClick={() =>
+                                  void browsePluginDirectory(index)
+                                }
+                              >
+                                <FolderOpen className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                aria-label="Remove plugin directory"
+                                className="h-8 w-8"
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => removePluginDirectory(index)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          ),
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Manifest URLs
+                      </h4>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={addPluginManifestUrl}
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Add
+                      </Button>
                     </div>
-                  )}
+                    {draftDesktopSettings.pluginManifestUrls.length === 0 ? (
+                      <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                        No plugin manifest URLs configured.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {draftDesktopSettings.pluginManifestUrls.map(
+                          (url, index) => (
+                            <div
+                              key={index}
+                              className="grid grid-cols-[minmax(10rem,1fr)_2rem] items-center gap-2"
+                            >
+                              <Input
+                                aria-label="Plugin manifest URL"
+                                placeholder="https://example.com/plugin/plugin.json"
+                                value={url}
+                                onChange={(event) =>
+                                  updatePluginManifestUrl(
+                                    index,
+                                    event.target.value,
+                                  )
+                                }
+                              />
+                              <Button
+                                aria-label="Remove plugin manifest URL"
+                                className="h-8 w-8"
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => removePluginManifestUrl(index)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          ),
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               ) : null}
               {section === "project" ? (

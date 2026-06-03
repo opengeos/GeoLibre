@@ -80,15 +80,13 @@ export function usePlugins() {
 }
 
 export function useExternalPluginsReady(): boolean {
-  const additionalPluginDirectories = useDesktopSettingsStore(
-    (state) => state.desktopSettings.additionalPluginDirectories,
+  const desktopSettings = useDesktopSettingsStore(
+    (state) => state.desktopSettings,
   );
 
   useEffect(() => {
-    void ensureExternalPluginsLoadedWithDirectories(
-      additionalPluginDirectories,
-    );
-  }, [additionalPluginDirectories]);
+    void ensureExternalPluginsLoadedWithSettings(desktopSettings);
+  }, [desktopSettings]);
 
   return useSyncExternalStore(
     (listener) => {
@@ -100,15 +98,12 @@ export function useExternalPluginsReady(): boolean {
   );
 }
 
-function ensureExternalPluginsLoadedWithDirectories(
-  additionalPluginDirectories: string[],
+function ensureExternalPluginsLoadedWithSettings(
+  desktopSettings: ReturnType<
+    typeof useDesktopSettingsStore.getState
+  >["desktopSettings"],
 ): Promise<void> {
-  if (!isTauriRuntime()) {
-    setExternalPluginsLoaded(true);
-    return Promise.resolve();
-  }
-
-  const loadKey = JSON.stringify(additionalPluginDirectories);
+  const loadKey = JSON.stringify(desktopSettings);
   if (externalPluginsLoaded && externalPluginsLoadKey === loadKey) {
     return Promise.resolve();
   }
@@ -118,11 +113,15 @@ function ensureExternalPluginsLoadedWithDirectories(
 
   setExternalPluginsLoaded(false);
   externalPluginsLoadKey = loadKey;
-  const loadPromise = loadExternalPlugins(manager, additionalPluginDirectories)
+  const loadPromise = loadExternalPlugins(
+    manager,
+    desktopSettings.additionalPluginDirectories,
+    desktopSettings.pluginManifestUrls,
+  )
     .then((result) => {
       if (result.loadedPluginIds.length) {
         console.info(
-          `Loaded external GeoLibre plugins from ${result.pluginsDirectories.join(
+          `Loaded external GeoLibre plugins from ${result.pluginSources.join(
             ", ",
           )}: ${result.loadedPluginIds.join(", ")}`,
         );

@@ -117,16 +117,36 @@ Map control plugins can optionally expose `getMapControlPosition()` and `setMapC
 
 Plugins with serializable runtime settings can expose `getProjectState()` and `applyProjectState()` so GeoLibre can save and restore those settings in the project file. A wrapper should use these hooks to adapt upstream control APIs such as `getState()` without requiring every upstream package to implement a GeoLibre-specific interface.
 
-## External plugin zip files
+## External plugins
 
 Use the [GeoLibre plugin template](https://github.com/opengeos/geolibre-plugin-template) as the recommended starting point for external plugin development. The template includes a MapLibre control wrapper, a `plugin.json` manifest, a GeoLibre plugin entry point, and a `package:geolibre` script that builds the zip layout GeoLibre Desktop expects.
 
-GeoLibre Desktop loads external plugins from the app data `plugins/` directory at startup. Browser builds keep built-in plugins only. External plugins are trusted local code and can be installed as either:
+GeoLibre Desktop loads external plugins from the app data `plugins/` directory at startup. External plugins are trusted code and can be installed as:
 
 - A `.zip` file with a root `plugin.json`.
 - An unpacked directory with a root `plugin.json`.
+- A HTTPS `plugin.json` manifest URL.
 
 The Plugins settings section can also add local development directories outside the app data folder. Each configured directory can contain plugin zips, unpacked plugin bundle folders, or be a single unpacked plugin bundle itself. Configured development directories are scanned before the app data `plugins/` directory, so a development copy can override an installed external plugin with the same ID. Built-in plugins still take precedence over all external plugins.
+
+For the web app, use manifest URLs. GeoLibre fetches the manifest, resolves `entry` and `style` relative to the manifest URL, then loads the bundled ESM entry. Browser loading requires HTTPS except for `localhost` and depends on the host allowing CORS.
+
+To include an external plugin folder in a GeoLibre web build, place the built plugin bundle under the Vite public directory:
+
+```text
+apps/geolibre-desktop/public/plugins/example-plugin/
+  plugin.json
+  dist/index.js
+  dist/style.css
+```
+
+Vite copies files from `public/` into the final web build, so the manifest URL becomes:
+
+```text
+/plugins/example-plugin/plugin.json
+```
+
+This works in both development and production web builds. The browser still cannot scan `/plugins/` at runtime, so each bundled plugin must be loaded by an explicit manifest URL, such as one entered in Settings > Plugins. For plugins that should always ship as part of GeoLibre without user configuration, prefer registering them as built-in plugins.
 
 ```json
 {
@@ -145,7 +165,7 @@ External plugin entries are executed with `import(URL.createObjectURL(...))`, wh
 
 Manifest paths must be relative zip paths with forward slashes, no leading slash, no backslashes, and no `..` segments. External plugins cannot use `activeByDefault`; saved project state can still reactivate an external plugin by ID after the zip is loaded.
 
-When using the template, update `geolibre-plugin/plugin.json` and `src/geolibre.ts` together so `id`, `name`, and `version` stay in sync. Run `npm run package:geolibre`, then either copy the generated zip into the desktop app data `plugins/` directory or add the template's `geolibre-plugin/` directory in Settings > Plugins for local development.
+When using the template, update `geolibre-plugin/plugin.json` and `src/geolibre.ts` together so `id`, `name`, and `version` stay in sync. Run `npm run package:geolibre`, then either copy the generated zip into the desktop app data `plugins/` directory, add the template's `geolibre-plugin/` directory in Settings > Plugins for local development, or host the `geolibre-plugin/` directory and add its `plugin.json` URL.
 
 ## Future plugin work
 

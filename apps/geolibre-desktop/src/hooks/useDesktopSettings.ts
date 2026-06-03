@@ -5,6 +5,7 @@ const DESKTOP_SETTINGS_STORAGE_KEY = "geolibre.desktopSettings";
 
 export interface DesktopSettings {
   additionalPluginDirectories: string[];
+  pluginManifestUrls: string[];
 }
 
 interface DesktopSettingsState {
@@ -14,19 +15,20 @@ interface DesktopSettingsState {
 
 const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   additionalPluginDirectories: [],
+  pluginManifestUrls: [],
 };
 
-function normalizePathList(paths: unknown): string[] {
-  if (!Array.isArray(paths)) return [];
+function normalizeStringList(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
 
   const seen = new Set<string>();
   const normalized: string[] = [];
-  for (const value of paths) {
+  for (const value of values) {
     if (typeof value !== "string") continue;
-    const path = value.trim();
-    if (!path || seen.has(path)) continue;
-    seen.add(path);
-    normalized.push(path);
+    const normalizedValue = value.trim();
+    if (!normalizedValue || seen.has(normalizedValue)) continue;
+    seen.add(normalizedValue);
+    normalized.push(normalizedValue);
   }
   return normalized;
 }
@@ -38,9 +40,10 @@ function normalizeDesktopSettings(settings: unknown): DesktopSettings {
 
   const candidate = settings as Partial<DesktopSettings>;
   return {
-    additionalPluginDirectories: normalizePathList(
+    additionalPluginDirectories: normalizeStringList(
       candidate.additionalPluginDirectories,
     ),
+    pluginManifestUrls: normalizeStringList(candidate.pluginManifestUrls),
   };
 }
 
