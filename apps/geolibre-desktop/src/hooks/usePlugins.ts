@@ -100,10 +100,6 @@ export function useExternalPluginsReady(): boolean {
   );
 }
 
-export function ensureExternalPluginsLoaded(): Promise<void> {
-  return ensureExternalPluginsLoadedWithDirectories([]);
-}
-
 function ensureExternalPluginsLoadedWithDirectories(
   additionalPluginDirectories: string[],
 ): Promise<void> {
@@ -122,10 +118,7 @@ function ensureExternalPluginsLoadedWithDirectories(
 
   setExternalPluginsLoaded(false);
   externalPluginsLoadKey = loadKey;
-  externalPluginsLoadPromise = loadExternalPlugins(
-    manager,
-    additionalPluginDirectories,
-  )
+  const loadPromise = loadExternalPlugins(manager, additionalPluginDirectories)
     .then((result) => {
       if (result.loadedPluginIds.length) {
         console.info(
@@ -144,11 +137,15 @@ function ensureExternalPluginsLoadedWithDirectories(
       console.warn("Could not load external GeoLibre plugins.", error);
     })
     .finally(() => {
+      // A settings change can start a new load while this one is in flight.
+      // Only the load that still owns the current key may mark plugins ready.
+      if (externalPluginsLoadKey !== loadKey) return;
       externalPluginsLoadPromise = null;
       setExternalPluginsLoaded(true);
     });
 
-  return externalPluginsLoadPromise;
+  externalPluginsLoadPromise = loadPromise;
+  return loadPromise;
 }
 
 export function createAppAPI(

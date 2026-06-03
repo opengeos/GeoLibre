@@ -264,10 +264,9 @@ fn scan_external_plugin_directory(
     errors: &mut Vec<ExternalPluginBundleError>,
 ) {
     if !plugin_dir.exists() {
-        errors.push(ExternalPluginBundleError {
-            archive_name: plugin_dir.to_string_lossy().to_string(),
-            message: "Plugin directory does not exist.".to_string(),
-        });
+        // User-configured development directories may not exist yet; the app
+        // data plugins directory is always created before scanning. Skip
+        // silently instead of warning on every startup.
         return;
     }
 
@@ -393,16 +392,28 @@ fn read_fs_text_entry(root: &Path, entry_name: &str, label: &str) -> Result<Stri
         ));
     }
 
-    fs::read_to_string(&entry_path)
-        .map_err(|error| format!("Could not read {label} '{entry_name}' as UTF-8: {error}"))
+    let file = File::open(&entry_path)
+        .map_err(|error| format!("Could not read {label} '{entry_name}': {error}"))?;
+    let mut text = String::new();
+    file.take(MAX_PLUGIN_ENTRY_BYTES + 1)
+        .read_to_string(&mut text)
+        .map_err(|error| format!("Could not read {label} '{entry_name}' as UTF-8: {error}"))?;
+    if text.len() as u64 > MAX_PLUGIN_ENTRY_BYTES {
+        return Err(format!(
+            "{label} '{entry_name}' exceeds the {}-MB size limit",
+            MAX_PLUGIN_ENTRY_BYTES / (1024 * 1024)
+        ));
+    }
+    Ok(text)
 }
+
+const MAX_PLUGIN_ENTRY_BYTES: u64 = 50 * 1024 * 1024;
 
 fn read_zip_text_entry<R: Read + std::io::Seek>(
     archive: &mut zip::ZipArchive<R>,
     entry_name: &str,
     label: &str,
 ) -> Result<String, String> {
-    const MAX_ENTRY_BYTES: u64 = 50 * 1024 * 1024;
     let entry = archive
         .by_name(entry_name)
         .map_err(|error| format!("Could not read {label} '{entry_name}': {error}"))?;
@@ -414,13 +425,13 @@ fn read_zip_text_entry<R: Read + std::io::Seek>(
     // which a hand-crafted archive can spoof.
     let mut text = String::new();
     entry
-        .take(MAX_ENTRY_BYTES + 1)
+        .take(MAX_PLUGIN_ENTRY_BYTES + 1)
         .read_to_string(&mut text)
         .map_err(|error| format!("Could not read {label} '{entry_name}' as UTF-8: {error}"))?;
-    if text.len() as u64 > MAX_ENTRY_BYTES {
+    if text.len() as u64 > MAX_PLUGIN_ENTRY_BYTES {
         return Err(format!(
             "{label} '{entry_name}' exceeds the {}-MB size limit",
-            MAX_ENTRY_BYTES / (1024 * 1024)
+            MAX_PLUGIN_ENTRY_BYTES / (1024 * 1024)
         ));
     }
     Ok(text)

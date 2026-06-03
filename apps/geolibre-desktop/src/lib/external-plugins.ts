@@ -34,6 +34,12 @@ export interface ExternalPluginLoadResult {
   issues: ExternalPluginLoadIssue[];
 }
 
+// IDs registered by previous loadExternalPlugins calls. A settings change
+// triggers a re-scan; plugins already loaded externally are skipped silently
+// instead of being reported as duplicate-ID issues. Removing a plugin
+// directory does not unregister its plugins until the app restarts.
+const externallyLoadedPluginIds = new Set<string>();
+
 export async function loadExternalPlugins(
   manager: PluginManager,
   additionalPluginDirectories: string[] = [],
@@ -64,6 +70,11 @@ export async function loadExternalPlugins(
 
   for (const bundle of result.bundles) {
     try {
+      if (externallyLoadedPluginIds.has(bundle.manifest.id)) {
+        // Already loaded by a previous scan; a settings change re-runs the
+        // scan and should not warn about plugins it loaded itself.
+        continue;
+      }
       if (registeredPluginIds.has(bundle.manifest.id)) {
         issues.push({
           archiveName: bundle.archiveName,
@@ -78,6 +89,7 @@ export async function loadExternalPlugins(
       }
       manager.register(plugin);
       registeredPluginIds.add(plugin.id);
+      externallyLoadedPluginIds.add(plugin.id);
       loadedPluginIds.push(plugin.id);
     } catch (error) {
       issues.push({

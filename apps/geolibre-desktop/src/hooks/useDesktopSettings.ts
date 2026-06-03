@@ -76,10 +76,6 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set) => ({
 }));
 
 export function useDesktopSettingsPersistence() {
-  const setDesktopSettings = useDesktopSettingsStore(
-    (state) => state.setDesktopSettings,
-  );
-
   useEffect(() => {
     saveDesktopSettings(useDesktopSettingsStore.getState().desktopSettings);
 
@@ -88,5 +84,5 @@ export function useDesktopSettingsPersistence() {
         saveDesktopSettings(state.desktopSettings);
       }
     });
-  }, [setDesktopSettings]);
+  }, []);
 }

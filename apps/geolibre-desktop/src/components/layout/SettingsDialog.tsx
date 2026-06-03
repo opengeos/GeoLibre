@@ -756,7 +756,7 @@ export function SettingsDialog({
                       {draftDesktopSettings.additionalPluginDirectories.map(
                         (directory, index) => (
                           <div
-                            key={`${index}-${directory}`}
+                            key={index}
                             className="grid grid-cols-[minmax(10rem,1fr)_2rem_2rem] items-center gap-2"
                           >
                             <Input
