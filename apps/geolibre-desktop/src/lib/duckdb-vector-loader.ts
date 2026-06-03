@@ -84,9 +84,13 @@ function rowsFromResult(result: { toArray: () => DuckDbRow[] }) {
   );
 }
 
+function isParquetExtension(extension: string): boolean {
+  return extension === "parquet" || extension === "geoparquet";
+}
+
 function sourceSql(fileName: string, extension: string): string {
   const quotedName = quoteSqlString(fileName);
-  if (extension === "parquet" || extension === "geoparquet") {
+  if (isParquetExtension(extension)) {
     return `SELECT * FROM read_parquet(${quotedName})`;
   }
   return `SELECT * FROM ST_Read(${quotedName})`;
@@ -95,6 +99,9 @@ function sourceSql(fileName: string, extension: string): string {
 function crsSql(fileName: string): string {
   return `
     SELECT
+      -- Always reads the first layer's first geometry field. This matches
+      -- ST_Read's default (no layer= argument) but would be wrong for
+      -- multi-layer or multi-geometry-column files if layer selection is added.
       layers[1].geometry_fields[1].crs.auth_name AS auth_name,
       layers[1].geometry_fields[1].crs.auth_code AS auth_code
     FROM ST_Read_Meta(${quoteSqlString(fileName)})
@@ -105,7 +112,10 @@ async function readSourceCrs(
   connection: duckdb.AsyncDuckDBConnection,
   file: DuckDbVectorFile,
 ): Promise<string | null> {
-  if (file.extension === "parquet" || file.extension === "geoparquet") {
+  // GeoParquet CRS is not read via ST_Read_Meta, so reprojection is skipped.
+  // A spec-valid GeoParquet file not stored in WGS84 will render with wrong
+  // coordinates; revisit if/when DuckDB exposes its CRS metadata here.
+  if (isParquetExtension(file.extension)) {
     return null;
   }
 
@@ -114,17 +124,14 @@ async function readSourceCrs(
     if (!row) return null;
     const authName =
       typeof row.auth_name === "string" ? row.auth_name.trim() : "";
-    const authCode =
-      typeof row.auth_code === "bigint"
-        ? row.auth_code.toString()
-        : typeof row.auth_code === "number"
-          ? String(row.auth_code)
-          : typeof row.auth_code === "string"
-            ? row.auth_code.trim()
-            : "";
+    const authCode = row.auth_code != null ? String(row.auth_code).trim() : "";
     if (!authName || !authCode) return null;
     return `${authName.toUpperCase()}:${authCode}`;
-  } catch {
+  } catch (err) {
+    console.warn(
+      "[GeoLibre] Could not read CRS metadata; reprojection skipped.",
+      err,
+    );
     return null;
   }
 }
@@ -134,9 +141,12 @@ function geometryGeoJsonSql(
   sourceCrs: string | null,
 ): string {
   const geometrySql = quoteIdentifier(geometryColumn);
-  if (!sourceCrs || sourceCrs.toUpperCase() === TARGET_CRS) {
+  if (!sourceCrs) {
     return `ST_AsGeoJSON(${geometrySql})`;
   }
+  // Transform even for EPSG:4326 sources: always_xy=true normalises axis order
+  // to lon/lat, which a no-op EPSG:4326 -> EPSG:4326 transform guarantees for
+  // formats that may store data as lat/lon.
   return `ST_AsGeoJSON(ST_Transform(${geometrySql}, ${quoteSqlString(
     sourceCrs,
   )}, ${quoteSqlString(TARGET_CRS)}, true))`;
