@@ -10,6 +10,7 @@ import { unzip } from "fflate";
 import type { FeatureCollection } from "geojson";
 import shp from "shpjs";
 import type { DuckDbVectorFile } from "./duckdb-vector-loader";
+import { parseGpxLayer } from "./gpx";
 
 export function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -95,6 +96,12 @@ interface SaveTextFileOptions {
 interface SaveBinaryFileOptions extends SaveTextFileOptions {}
 
 const SHAPEFILE_SIDECAR_EXTENSIONS = ["dbf", "shx", "prj", "cpg"];
+
+export interface LoadedVectorLayer {
+  data: FeatureCollection;
+  name?: string;
+  path: string;
+}
 
 // Auxiliary files that accompany Shapefiles (spatial indexes, metadata, etc.)
 // but are never standalone vector layers. Skipping them keeps a single such
@@ -191,6 +198,31 @@ async function parseGeoJsonText(
   return assertFeatureCollection(JSON.parse(text));
 }
 
+function parseGpxText(text: string): FeatureCollection {
+  const result = parseGpxLayer(text);
+  return mergeFeatureCollections([
+    result.waypoints,
+    result.tracks,
+    result.routes,
+  ]);
+}
+
+function parseGpxTextLayers(text: string, path: string): LoadedVectorLayer[] {
+  const result = parseGpxLayer(text);
+  const baseName = pathWithoutExtension(browserSafeFileName(path)) || "GPX";
+  return [
+    { data: result.waypoints, label: "Waypoints" },
+    { data: result.tracks, label: "Tracks" },
+    { data: result.routes, label: "Routes" },
+  ]
+    .filter((layer) => layer.data.features.length > 0)
+    .map((layer) => ({
+      data: layer.data,
+      name: `${baseName} ${layer.label}`,
+      path,
+    }));
+}
+
 async function parseShapefileZip(
   data: ArrayBuffer | Uint8Array,
 ): Promise<FeatureCollection> {
@@ -270,10 +302,7 @@ async function fileToDuckDbVectorFile(file: File): Promise<DuckDbVectorFile> {
 async function loadBrowserVectorFile(
   file: File,
   siblingFiles: DuckDbVectorFile[] = [],
-): Promise<{
-  data: FeatureCollection;
-  path: string;
-}> {
+): Promise<LoadedVectorLayer> {
   const extension = fileExtension(file.name);
   if (extension === "geojson" || extension === "json") {
     try {
@@ -301,6 +330,13 @@ async function loadBrowserVectorFile(
   if (extension === "kmz") {
     return {
       data: await parseKmz(await file.arrayBuffer()),
+      path: file.name,
+    };
+  }
+
+  if (extension === "gpx") {
+    return {
+      data: parseGpxText(await file.text()),
       path: file.name,
     };
   }
@@ -388,6 +424,18 @@ async function loadTauriVectorFile(path: string): Promise<{
     } catch (error) {
       const detail = error instanceof Error ? error.message : "Unknown error";
       throw new Error(`Could not read this KMZ file. ${detail}`);
+    }
+  }
+
+  if (extension === "gpx") {
+    try {
+      return {
+        data: parseGpxText(await readTextFile(path)),
+        path,
+      };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Unknown error";
+      throw new Error(`Could not read this GPX file. ${detail}`);
     }
   }
 
@@ -884,7 +932,7 @@ export async function openVectorFileWithFallback(): Promise<{
 
 export async function loadDroppedVectorFiles(
   droppedFiles: FileList | File[],
-): Promise<Array<{ data: FeatureCollection; path: string }>> {
+): Promise<LoadedVectorLayer[]> {
   const droppedFileArray = Array.from(droppedFiles);
   const files = droppedFileArray.filter((file) =>
     isVectorFileName(file.name),
@@ -900,10 +948,15 @@ export async function loadDroppedVectorFiles(
     ]);
   }
 
-  const layers: Array<{ data: FeatureCollection; path: string }> = [];
+  const layers: LoadedVectorLayer[] = [];
   for (const file of files) {
     const extension = fileExtension(file.name);
     if (SHAPEFILE_SIDECAR_EXTENSIONS.includes(extension)) continue;
+
+    if (extension === "gpx") {
+      layers.push(...parseGpxTextLayers(await file.text(), file.name));
+      continue;
+    }
 
     const siblingFiles =
       extension === "shp"
@@ -928,13 +981,23 @@ export async function loadDroppedVectorFiles(
 
 export async function loadDroppedVectorPaths(
   paths: string[],
-): Promise<Array<{ data: FeatureCollection; path: string }>> {
+): Promise<LoadedVectorLayer[]> {
   const vectorPaths = paths.filter(isVectorFileName);
   if (!vectorPaths.length) return [];
 
-  const layers: Array<{ data: FeatureCollection; path: string }> = [];
+  const layers: LoadedVectorLayer[] = [];
   for (const path of vectorPaths) {
-    if (SHAPEFILE_SIDECAR_EXTENSIONS.includes(fileExtension(path))) continue;
+    const extension = fileExtension(path);
+    if (SHAPEFILE_SIDECAR_EXTENSIONS.includes(extension)) continue;
+    if (extension === "gpx") {
+      try {
+        layers.push(...parseGpxTextLayers(await readTextFile(path), path));
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : "Unknown error";
+        throw new Error(`Could not read this GPX file. ${detail}`);
+      }
+      continue;
+    }
     layers.push(await loadTauriVectorFile(path));
   }
 

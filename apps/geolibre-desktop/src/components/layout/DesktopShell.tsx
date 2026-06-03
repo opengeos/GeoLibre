@@ -156,7 +156,7 @@ export function DesktopShell({
       let lastLayerId: string | null = null;
       for (const layer of importedLayers) {
         lastLayerId = addGeoJsonLayer(
-          layerNameFromPath(layer.path),
+          layer.name ?? layerNameFromPath(layer.path),
           layer.data,
           layer.path,
         );
