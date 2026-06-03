@@ -91,12 +91,15 @@ export async function loadExternalPlugins(
       }
 
       const plugin = await importExternalPlugin(bundle);
-      if (bundle.styleSource) {
-        injectExternalPluginStyle(bundle.manifest.id, bundle.styleSource);
-      }
       manager.register(plugin);
       registeredPluginIds.add(plugin.id);
       externallyLoadedPluginSources.set(plugin.id, bundle.archiveName);
+      // Inject the style only after registration succeeds; an orphaned
+      // <style> element would block re-injection on a later scan because
+      // injectExternalPluginStyle skips existing style ids.
+      if (bundle.styleSource) {
+        injectExternalPluginStyle(bundle.manifest.id, bundle.styleSource);
+      }
       loadedPluginIds.push(plugin.id);
     } catch (error) {
       issues.push({
@@ -185,12 +188,54 @@ async function loadPluginUrlBundle(
   };
 }
 
+// Mirrors MAX_PLUGIN_ENTRY_BYTES in the Rust filesystem loader so URL-loaded
+// plugin assets cannot buffer an unbounded response into memory.
+const MAX_PLUGIN_ASSET_BYTES = 50 * 1024 * 1024;
+
 async function fetchPluginText(url: string, label: string): Promise<string> {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Could not fetch ${label}: HTTP ${response.status}`);
   }
-  return response.text();
+
+  const contentLength = Number(response.headers.get("content-length"));
+  if (contentLength > MAX_PLUGIN_ASSET_BYTES) {
+    throw new Error(`Could not fetch ${label}: exceeds the 50 MB size limit.`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    const text = await response.text();
+    if (text.length > MAX_PLUGIN_ASSET_BYTES) {
+      throw new Error(
+        `Could not fetch ${label}: exceeds the 50 MB size limit.`,
+      );
+    }
+    return text;
+  }
+
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalBytes += value.byteLength;
+    if (totalBytes > MAX_PLUGIN_ASSET_BYTES) {
+      await reader.cancel();
+      throw new Error(
+        `Could not fetch ${label}: exceeds the 50 MB size limit.`,
+      );
+    }
+    chunks.push(value);
+  }
+
+  const merged = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(merged);
 }
 
 function resolvePluginAssetUrl(manifestUrl: string, path: string): string {
@@ -205,16 +250,24 @@ function resolvePluginAssetUrl(manifestUrl: string, path: string): string {
   return new URL(path, manifestUrl).toString();
 }
 
+// Matches the Rust validate_required_manifest_string: non-empty with no
+// leading or trailing whitespace.
+function isRequiredManifestString(value: unknown): value is string {
+  return (
+    typeof value === "string" && value.length > 0 && value.trim() === value
+  );
+}
+
 function isExternalPluginManifest(
   value: unknown,
 ): value is GeoLibreExternalPluginManifest {
   if (!value || typeof value !== "object") return false;
   const manifest = value as Partial<GeoLibreExternalPluginManifest>;
   return (
-    typeof manifest.id === "string" &&
-    typeof manifest.name === "string" &&
-    typeof manifest.version === "string" &&
-    typeof manifest.entry === "string" &&
+    isRequiredManifestString(manifest.id) &&
+    isRequiredManifestString(manifest.name) &&
+    isRequiredManifestString(manifest.version) &&
+    isRequiredManifestString(manifest.entry) &&
     (manifest.entry.endsWith(".js") || manifest.entry.endsWith(".mjs")) &&
     (manifest.description === undefined ||
       typeof manifest.description === "string") &&

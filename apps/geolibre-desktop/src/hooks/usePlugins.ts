@@ -16,6 +16,7 @@ import type { GeoLibreMapControlPosition } from "@geolibre/plugins";
 import type { RefObject } from "react";
 import { useEffect, useSyncExternalStore } from "react";
 import { loadExternalPlugins } from "../lib/external-plugins";
+import { mergeStringLists } from "../lib/string-lists";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
 
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
@@ -127,11 +128,19 @@ function ensureExternalPluginsLoadedWithSettings(
 
   setExternalPluginsLoaded(false);
   externalPluginsLoadKey = loadKey;
-  const loadPromise = loadExternalPlugins(
-    manager,
-    desktopSettings.additionalPluginDirectories,
-    pluginManifestUrls,
-  )
+  // Serialize scans: loadExternalPlugins reads and writes module-level state
+  // (the loaded-plugin map) across awaits, so two in-flight scans could both
+  // pass the dedup check and double-register the same plugin. Waiting for the
+  // previous scan (which never rejects) keeps at most one scan running.
+  const previousLoad = externalPluginsLoadPromise ?? Promise.resolve();
+  const loadPromise = previousLoad
+    .then(() =>
+      loadExternalPlugins(
+        manager,
+        desktopSettings.additionalPluginDirectories,
+        pluginManifestUrls,
+      ),
+    )
     .then((result) => {
       if (result.loadedPluginIds.length) {
         console.info(
@@ -311,18 +320,4 @@ function persistProjectPluginState(previousJson: string): void {
   };
   if (JSON.stringify(nextState) === previousJson) return;
   useAppStore.getState().setProjectPlugins(nextState);
-}
-
-function mergeStringLists(...lists: string[][]): string[] {
-  const seen = new Set<string>();
-  const merged: string[] = [];
-  for (const list of lists) {
-    for (const value of list) {
-      const normalized = value.trim();
-      if (!normalized || seen.has(normalized)) continue;
-      seen.add(normalized);
-      merged.push(normalized);
-    }
-  }
-  return merged;
 }

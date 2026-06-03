@@ -76,6 +76,7 @@ import {
   RecentProjectGoneError,
   saveProjectFile,
 } from "../../lib/tauri-io";
+import { mergeStringLists } from "../../lib/string-lists";
 import { normalizeProjectUrl } from "../../lib/urls";
 import { resolveProjectXyzLayers } from "../../lib/xyz-url";
 import { AddDataDialog, type AddDataKind } from "./AddDataDialog";
@@ -813,18 +814,4 @@ export function TopToolbar({
       </div>
     </header>
   );
-}
-
-function mergeStringLists(...lists: string[][]): string[] {
-  const seen = new Set<string>();
-  const merged: string[] = [];
-  for (const list of lists) {
-    for (const value of list) {
-      const normalized = value.trim();
-      if (!normalized || seen.has(normalized)) continue;
-      seen.add(normalized);
-      merged.push(normalized);
-    }
-  }
-  return merged;
 }

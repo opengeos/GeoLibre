@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { create } from "zustand";
+import { normalizeStringList } from "../lib/string-lists";
 
 const DESKTOP_SETTINGS_STORAGE_KEY = "geolibre.desktopSettings";
 
@@ -17,21 +18,6 @@ const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   additionalPluginDirectories: [],
   pluginManifestUrls: [],
 };
-
-export function normalizeStringList(values: unknown): string[] {
-  if (!Array.isArray(values)) return [];
-
-  const seen = new Set<string>();
-  const normalized: string[] = [];
-  for (const value of values) {
-    if (typeof value !== "string") continue;
-    const normalizedValue = value.trim();
-    if (!normalizedValue || seen.has(normalizedValue)) continue;
-    seen.add(normalizedValue);
-    normalized.push(normalizedValue);
-  }
-  return normalized;
-}
 
 function normalizeDesktopSettings(settings: unknown): DesktopSettings {
   if (!settings || typeof settings !== "object") {

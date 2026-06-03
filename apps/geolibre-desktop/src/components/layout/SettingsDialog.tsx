@@ -41,11 +41,11 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState, type RefObject } from "react";
 import {
-  normalizeStringList,
   useDesktopSettingsStore,
   type DesktopSettings,
 } from "../../hooks/useDesktopSettings";
 import { getPluginManager } from "../../hooks/usePlugins";
+import { mergeStringLists, normalizeStringList } from "../../lib/string-lists";
 import { pickLocalPathWithFallback } from "../../lib/tauri-io";
 
 type SettingsSection = "map" | "environment" | "plugins" | "project";
@@ -83,6 +83,23 @@ interface DraftPreferences {
   environmentVariables: DraftEnvironmentVariable[];
 }
 
+// Draft plugin-source rows carry the same stable client-side id as draft env
+// vars so React keys survive mid-list deletes instead of reusing input DOM
+// state across the wrong row.
+interface DraftListEntry {
+  id: string;
+  value: string;
+}
+
+interface DraftDesktopSettings {
+  additionalPluginDirectories: DraftListEntry[];
+  pluginManifestUrls: DraftListEntry[];
+}
+
+function toDraftListEntry(value: string): DraftListEntry {
+  return { id: createDraftId(), value };
+}
+
 function createDraftId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -102,18 +119,15 @@ function clonePreferences(preferences: ProjectPreferences): DraftPreferences {
 function cloneDesktopSettings(
   settings: DesktopSettings,
   projectPlugins: ProjectPluginState | null,
-): DesktopSettings {
+): DraftDesktopSettings {
   return {
-    additionalPluginDirectories: [...settings.additionalPluginDirectories],
+    additionalPluginDirectories:
+      settings.additionalPluginDirectories.map(toDraftListEntry),
     pluginManifestUrls: mergeStringLists(
       projectPlugins?.manifestUrls ?? [],
       settings.pluginManifestUrls,
-    ),
+    ).map(toDraftListEntry),
   };
-}
-
-function mergeStringLists(...lists: string[][]): string[] {
-  return normalizeStringList(lists.flat());
 }
 
 function normalizeBounds(
@@ -189,9 +203,9 @@ function validatePluginManifestUrls(urls: string[]): string | null {
       const isHttps = parsed.protocol === "https:";
       const isLocalHttp =
         parsed.protocol === "http:" &&
-        (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1");
+        ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
       if (!isHttps && !isLocalHttp) {
-        return "Plugin manifest URLs must use HTTPS, or HTTP on localhost or 127.0.0.1.";
+        return "Plugin manifest URLs must use HTTPS, or HTTP on localhost, 127.0.0.1, or [::1].";
       }
     } catch {
       return "Plugin manifest URLs must be valid absolute URLs.";
@@ -224,7 +238,7 @@ export function SettingsDialog({
     () => clonePreferences(preferences),
   );
   const [draftDesktopSettings, setDraftDesktopSettings] =
-    useState<DesktopSettings>(() =>
+    useState<DraftDesktopSettings>(() =>
       cloneDesktopSettings(desktopSettings, projectPlugins),
     );
   const [draftProjectName, setDraftProjectName] = useState(projectName);
@@ -333,7 +347,7 @@ export function SettingsDialog({
     setDraftDesktopSettings((current) => ({
       ...current,
       additionalPluginDirectories: current.additionalPluginDirectories.map(
-        (directory, i) => (i === index ? path : directory),
+        (entry, i) => (i === index ? { ...entry, value: path } : entry),
       ),
     }));
     setError(null);
@@ -342,7 +356,10 @@ export function SettingsDialog({
   const addPluginDirectory = () => {
     setDraftDesktopSettings((current) => ({
       ...current,
-      additionalPluginDirectories: [...current.additionalPluginDirectories, ""],
+      additionalPluginDirectories: [
+        ...current.additionalPluginDirectories,
+        toDraftListEntry(""),
+      ],
     }));
     setSection("plugins");
     setError(null);
@@ -375,8 +392,8 @@ export function SettingsDialog({
   const updatePluginManifestUrl = (index: number, url: string) => {
     setDraftDesktopSettings((current) => ({
       ...current,
-      pluginManifestUrls: current.pluginManifestUrls.map((currentUrl, i) =>
-        i === index ? url : currentUrl,
+      pluginManifestUrls: current.pluginManifestUrls.map((entry, i) =>
+        i === index ? { ...entry, value: url } : entry,
       ),
     }));
     setError(null);
@@ -385,7 +402,7 @@ export function SettingsDialog({
   const addPluginManifestUrl = () => {
     setDraftDesktopSettings((current) => ({
       ...current,
-      pluginManifestUrls: [...current.pluginManifestUrls, ""],
+      pluginManifestUrls: [...current.pluginManifestUrls, toDraftListEntry("")],
     }));
     setSection("plugins");
     setError(null);
@@ -434,7 +451,7 @@ export function SettingsDialog({
     }
 
     const pluginManifestUrls = normalizeStringList(
-      draftDesktopSettings.pluginManifestUrls,
+      draftDesktopSettings.pluginManifestUrls.map((entry) => entry.value),
     );
     const manifestUrlValidationError =
       validatePluginManifestUrls(pluginManifestUrls);
@@ -449,7 +466,9 @@ export function SettingsDialog({
     setPreferences(normalized);
     setDesktopSettings({
       additionalPluginDirectories: normalizeStringList(
-        draftDesktopSettings.additionalPluginDirectories,
+        draftDesktopSettings.additionalPluginDirectories.map(
+          (entry) => entry.value,
+        ),
       ),
       pluginManifestUrls,
     });
@@ -842,15 +861,15 @@ export function SettingsDialog({
                     ) : (
                       <div className="space-y-2">
                         {draftDesktopSettings.additionalPluginDirectories.map(
-                          (directory, index) => (
+                          (entry, index) => (
                             <div
-                              key={index}
+                              key={entry.id}
                               className="grid grid-cols-[minmax(10rem,1fr)_2rem_2rem] items-center gap-2"
                             >
                               <Input
                                 aria-label="Plugin directory"
                                 placeholder="/path/to/geolibre-plugin"
-                                value={directory}
+                                value={entry.value}
                                 onChange={(event) =>
                                   updatePluginDirectory(
                                     index,
@@ -908,15 +927,15 @@ export function SettingsDialog({
                     ) : (
                       <div className="space-y-2">
                         {draftDesktopSettings.pluginManifestUrls.map(
-                          (url, index) => (
+                          (entry, index) => (
                             <div
-                              key={index}
+                              key={entry.id}
                               className="grid grid-cols-[minmax(10rem,1fr)_2rem] items-center gap-2"
                             >
                               <Input
                                 aria-label="Plugin manifest URL"
                                 placeholder="https://example.com/plugin/plugin.json"
-                                value={url}
+                                value={entry.value}
                                 onChange={(event) =>
                                   updatePluginManifestUrl(
                                     index,
