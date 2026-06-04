@@ -52,6 +52,7 @@ export type LayerType =
   | "zarr"
   | "lidar"
   | "gaussian-splat"
+  | "3d-tiles"
   | "cog"
   | "flatgeobuf"
   | "geoparquet"

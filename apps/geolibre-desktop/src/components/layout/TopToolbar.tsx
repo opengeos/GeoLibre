@@ -20,6 +20,7 @@ import {
   openSearchPlacesPanel,
   openSplattingLayerPanel,
   openStacSearchLayerPanel,
+  openThreeDTilesLayerPanel,
   openZarrLayerPanel,
   subscribeSearchPlacesPanel,
   type GeoLibreMapControlPosition,
@@ -361,6 +362,9 @@ export function TopToolbar({
   const handleAddSplattingLayer = () => {
     openSplattingLayerPanel(appApi);
   };
+  const handleAddThreeDTilesLayer = () => {
+    openThreeDTilesLayerPanel(appApi);
+  };
   const toggleMapControl = (control: ToolbarMapControl) => {
     setControlsVisible((current) => {
       const visible = !current[control];
@@ -541,6 +545,9 @@ export function TopToolbar({
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddSplattingLayer}>
             Add Splatting Layer
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleAddThreeDTilesLayer}>
+            Add 3D Tiles Layer
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddStacLayer}>
             Add STAC Layer

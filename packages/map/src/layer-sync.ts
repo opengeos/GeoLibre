@@ -128,6 +128,13 @@ function syncExternalNativeLayer(
     ensurePMTilesExternalLayer(map, layer, nativeLayerIds, beforeId);
   }
 
+  if (isExternalCustomLayer(map, nativeLayerIds)) {
+    for (const nativeLayerId of nativeLayerIds) {
+      moveLayer(map, nativeLayerId, beforeId);
+    }
+    return;
+  }
+
   if (isWaybackExternalRasterLayer(layer)) {
     syncWaybackExternalRasterLayer(map, layer, nativeLayerIds, beforeId);
     return;
@@ -203,6 +210,15 @@ function isPMTilesExternalLayer(layer: GeoLibreLayer): boolean {
     layer.type === "pmtiles" &&
     layer.metadata.sourceKind === "pmtiles-url" &&
     layer.metadata.externalNativeLayer === true
+  );
+}
+
+function isExternalCustomLayer(
+  map: maplibregl.Map,
+  nativeLayerIds: string[],
+): boolean {
+  return nativeLayerIds.some(
+    (nativeLayerId) => map.getLayer(nativeLayerId)?.type === "custom",
   );
 }
 

@@ -1077,7 +1077,9 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
     layer.metadata.sourceKind === "stac-search-cog";
   const isDeckVectorLayer = hasExternalDeckLayer(layer);
   const isRasterTileLayer = layer.metadata.tileType === "raster";
+  const isThreeDTilesLayer = layer.type === "3d-tiles";
   const hasVectorPaintControls =
+    !isThreeDTilesLayer &&
     !isRasterTileLayer &&
     (layer.type === "geojson" ||
       layer.type === "vector-tiles" ||
@@ -1085,7 +1087,9 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
       hasExternalNativeLayers(layer) ||
       hasExternalDeckLayer(layer));
   const hasExtrusionControls =
-    !isRasterTileLayer && supportsExtrusionControls(layer);
+    !isThreeDTilesLayer &&
+    !isRasterTileLayer &&
+    supportsExtrusionControls(layer);
   const hasRasterPaintControls =
     isRasterPaintLayer(layer.type) || isRasterTileLayer;
   const extrusionEnabled = styleValue(style, "extrusionEnabled");

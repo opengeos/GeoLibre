@@ -570,6 +570,23 @@ export class MapController {
   }
 
   fitLayer(layer: GeoLibreLayer): void {
+    if (layer.type === "3d-tiles" && this.map) {
+      const center = layer.metadata.center;
+      if (
+        Array.isArray(center) &&
+        typeof center[0] === "number" &&
+        typeof center[1] === "number"
+      ) {
+        this.map.flyTo({
+          center: [center[0], center[1]],
+          duration: 800,
+          pitch: Math.max(this.map.getPitch(), 60),
+          zoom: Math.max(this.map.getZoom(), 18),
+        });
+        return;
+      }
+    }
+
     const bounds =
       getLayerBounds(layer) ??
       this.getLayerMetadataBounds(layer) ??

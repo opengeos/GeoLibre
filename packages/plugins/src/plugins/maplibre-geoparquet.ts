@@ -68,6 +68,8 @@ type GeoParquetRenderedLayerLike = {
 };
 
 const geoparquetControlPosition: GeoLibreMapControlPosition = "top-left";
+const DEFAULT_GEOPARQUET_URL =
+  "https://data.source.coop/giswqs/opengeos/countries.parquet";
 
 const GEOPARQUET_OPTIONS = {
   className: "geolibre-geoparquet-control",
@@ -75,6 +77,7 @@ const GEOPARQUET_OPTIONS = {
   interleaved: true,
   panelWidth: 365,
   pickable: true,
+  sampleUrl: DEFAULT_GEOPARQUET_URL,
   title: "Add GeoParquet Layer",
 } satisfies GeoParquetControlOptions;
 
@@ -669,4 +672,60 @@ function hideGeoParquetControl(control: GeoParquetControl | null): void {
 function showGeoParquetControl(control: GeoParquetControl | null): void {
   const container = control?.getContainer();
   if (container) container.style.display = "";
+
+  const panel = getGeoParquetPanel(control);
+  if (!panel) return;
+
+  updateGeoParquetPanelInset(control, panel);
+  window.requestAnimationFrame(() => {
+    updateGeoParquetPanelInset(control, panel);
+  });
+}
+
+function getGeoParquetPanel(
+  control: GeoParquetControl | null,
+): HTMLElement | null {
+  return (
+    control
+      ?.getMap()
+      ?.getContainer()
+      .querySelector<HTMLElement>(".geoparquet-control-panel") ?? null
+  );
+}
+
+function updateGeoParquetPanelInset(
+  control: GeoParquetControl | null,
+  panel: HTMLElement,
+): void {
+  panel.style.setProperty(
+    "--geolibre-geoparquet-panel-left",
+    hasVisibleTopLeftMapControls(control) ? "48px" : "10px",
+  );
+}
+
+function hasVisibleTopLeftMapControls(
+  control: GeoParquetControl | null,
+): boolean {
+  const topLeftControls = control
+    ?.getMap()
+    ?.getContainer()
+    .querySelector<HTMLElement>(".maplibregl-ctrl-top-left");
+  if (!topLeftControls) return false;
+
+  return [...topLeftControls.querySelectorAll<HTMLElement>(".maplibregl-ctrl")]
+    .filter(
+      (element) => !element.classList.contains("geolibre-geoparquet-control"),
+    )
+    .some(isVisibleElement);
+}
+
+function isVisibleElement(element: HTMLElement): boolean {
+  const style = window.getComputedStyle(element);
+  const rect = element.getBoundingClientRect();
+  return (
+    style.display !== "none" &&
+    style.visibility !== "hidden" &&
+    rect.width > 0 &&
+    rect.height > 0
+  );
 }

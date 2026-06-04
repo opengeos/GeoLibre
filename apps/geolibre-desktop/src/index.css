@@ -264,8 +264,14 @@ body,
   border: 1px solid hsl(var(--border));
   box-sizing: border-box;
   color: hsl(var(--popover-foreground)) !important;
+  --geolibre-geoparquet-panel-left: 10px;
+  left: var(--geolibre-geoparquet-panel-left) !important;
   max-height: min(620px, calc(100% - 20px));
-  max-width: min(365px, calc(100vw - 32px));
+  max-width: min(
+    365px,
+    calc(100vw - var(--geolibre-geoparquet-panel-left) - 22px)
+  );
+  top: 10px !important;
 }
 
 .geoparquet-control-content {
@@ -1258,6 +1264,149 @@ body,
   justify-content: center !important;
   line-height: 1 !important;
   min-height: 30px;
+}
+
+.geolibre-3d-tiles-control {
+  background: hsl(var(--popover)) !important;
+  color: hsl(var(--popover-foreground)) !important;
+}
+
+.geolibre-3d-tiles-control .three-d-tiles-control-toggle {
+  color: hsl(var(--popover-foreground)) !important;
+}
+
+.geolibre-3d-tiles-control .three-d-tiles-control-toggle:hover {
+  background-color: hsl(var(--accent)) !important;
+}
+
+.geolibre-3d-tiles-panel {
+  background: hsl(var(--popover)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  box-shadow:
+    0 10px 15px -3px rgb(0 0 0 / 0.18),
+    0 4px 6px -4px rgb(0 0 0 / 0.18) !important;
+  color: hsl(var(--popover-foreground)) !important;
+  color-scheme: light dark;
+}
+
+.geolibre-3d-tiles-panel .three-d-tiles-control-header {
+  border-bottom-color: hsl(var(--border)) !important;
+  color: hsl(var(--popover-foreground)) !important;
+}
+
+.geolibre-3d-tiles-panel .three-d-tiles-control-close,
+.geolibre-3d-tiles-panel .three-d-tiles-empty,
+.geolibre-3d-tiles-panel .three-d-tiles-list-status,
+.geolibre-3d-tiles-panel .three-d-tiles-list-url,
+.geolibre-3d-tiles-panel .three-d-tiles-status {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.geolibre-3d-tiles-panel .three-d-tiles-control-close:hover {
+  color: hsl(var(--popover-foreground)) !important;
+}
+
+.geolibre-3d-tiles-panel .three-d-tiles-field,
+.geolibre-3d-tiles-panel .three-d-tiles-checkbox,
+.geolibre-3d-tiles-panel .three-d-tiles-list-title {
+  color: hsl(var(--popover-foreground)) !important;
+}
+
+.geolibre-3d-tiles-panel .three-d-tiles-input {
+  background: hsl(var(--background)) !important;
+  border-color: hsl(var(--input)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.geolibre-3d-tiles-panel .three-d-tiles-input[type="number"] {
+  min-height: 36px;
+  padding-right: 4px;
+}
+
+.geolibre-3d-tiles-panel
+  .three-d-tiles-input[type="number"]::-webkit-inner-spin-button,
+.geolibre-3d-tiles-panel
+  .three-d-tiles-input[type="number"]::-webkit-outer-spin-button {
+  min-height: 30px;
+  opacity: 1;
+  width: 22px;
+}
+
+.geolibre-3d-tiles-panel .three-d-tiles-input:focus {
+  border-color: #2f8f85 !important;
+  box-shadow: 0 0 0 2px rgba(47, 143, 133, 0.16) !important;
+}
+
+.geolibre-3d-tiles-panel .three-d-tiles-checkbox input,
+.geolibre-3d-tiles-panel .three-d-tiles-list-actions input[type="checkbox"],
+.geolibre-3d-tiles-panel .three-d-tiles-opacity {
+  accent-color: #2f8f85;
+}
+
+.geolibre-3d-tiles-panel .three-d-tiles-button {
+  background: hsl(var(--secondary)) !important;
+  border-color: hsl(var(--border)) !important;
+  color: hsl(var(--secondary-foreground)) !important;
+}
+
+.geolibre-3d-tiles-panel .three-d-tiles-button:hover:not(:disabled) {
+  background: hsl(var(--accent)) !important;
+  border-color: hsl(var(--border)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+.geolibre-3d-tiles-panel .three-d-tiles-button:disabled {
+  background: hsl(var(--muted)) !important;
+  border-color: hsl(var(--border)) !important;
+  color: hsl(var(--muted-foreground)) !important;
+  opacity: 0.75;
+}
+
+.geolibre-3d-tiles-panel .three-d-tiles-opacity {
+  width: 58px;
+}
+
+.geolibre-3d-tiles-panel .three-d-tiles-small-button {
+  background: hsl(var(--secondary)) !important;
+  border-color: hsl(var(--border)) !important;
+  color: hsl(var(--secondary-foreground)) !important;
+}
+
+.geolibre-3d-tiles-panel .three-d-tiles-small-button:hover:not(:disabled) {
+  background: hsl(var(--accent)) !important;
+  border-color: hsl(var(--border)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+.geolibre-3d-tiles-panel .three-d-tiles-small-button:disabled {
+  background: hsl(var(--muted)) !important;
+  border-color: hsl(var(--border)) !important;
+  color: hsl(var(--muted-foreground)) !important;
+  opacity: 0.75;
+}
+
+.geolibre-3d-tiles-panel .three-d-tiles-list-actions {
+  color: hsl(var(--popover-foreground)) !important;
+}
+
+.geolibre-3d-tiles-panel .three-d-tiles-status,
+.geolibre-3d-tiles-panel .three-d-tiles-list-item {
+  border-color: hsl(var(--border)) !important;
+}
+
+.geolibre-3d-tiles-panel .three-d-tiles-list-item.active {
+  background: hsl(var(--accent)) !important;
+  border-color: #2f8f85 !important;
+}
+
+.geolibre-3d-tiles-panel .three-d-tiles-status[data-status="loaded"],
+.geolibre-3d-tiles-panel .three-d-tiles-list-status[data-status="loaded"] {
+  color: #0f9f6e !important;
+}
+
+.geolibre-3d-tiles-panel .three-d-tiles-status[data-status="error"],
+.geolibre-3d-tiles-panel .three-d-tiles-list-status[data-status="error"] {
+  color: #ef4444 !important;
 }
 
 .geolibre-components-control input:not([type="checkbox"]):not([type="radio"]):not(
