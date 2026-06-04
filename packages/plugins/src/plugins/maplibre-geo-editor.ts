@@ -449,7 +449,9 @@ function bindSketchesStoreSync(): void {
       sketches &&
       previousSketches &&
       sketches.id === previousSketches.id &&
-      sketches.visible !== previousSketches.visible
+      (sketches.visible !== previousSketches.visible ||
+        sketches.opacity !== previousSketches.opacity ||
+        sketches.style !== previousSketches.style)
     ) {
       scheduleApplySketchesMapDisplay();
     }
@@ -545,9 +547,14 @@ function setSketchesMapLayersVisibility(layer: GeoLibreLayer): void {
 function setGeomanDisplayLayersVisibility(visibility: "visible" | "none"): void {
   const map = appApi?.getMap?.();
   if (!map) return;
+  const sketchesLayer = findSketchesLayer(useAppStore.getState().layers);
+  const effectiveVisibility =
+    visibility === "visible" && sketchesLayer?.visible === false
+      ? "none"
+      : visibility;
 
-  if (visibility === "visible") {
-    applyGeomanTextMarkerStyle(map);
+  if (visibility === "visible" && sketchesLayer) {
+    applyGeomanSketchesStyle(map, sketchesLayer);
   }
 
   const style = map.getStyle();
@@ -556,7 +563,7 @@ function setGeomanDisplayLayersVisibility(visibility: "visible" | "none"): void 
   for (const layer of style.layers) {
     if (!isGeomanDisplayLayer(layer)) continue;
     try {
-      map.setLayoutProperty(layer.id, "visibility", visibility);
+      map.setLayoutProperty(layer.id, "visibility", effectiveVisibility);
     } catch {
       // Layer may have been removed with the current style.
     }
@@ -571,14 +578,16 @@ function showGeomanDisplayLayers(): void {
   setGeomanDisplayLayersVisibility("visible");
 }
 
-function applyGeomanTextMarkerStyle(map: maplibregl.Map): void {
-  const sketchesLayer = findSketchesLayer(useAppStore.getState().layers);
-  if (!sketchesLayer) return;
-
+function applyGeomanSketchesStyle(
+  map: maplibregl.Map,
+  sketchesLayer: GeoLibreLayer,
+): void {
   const style = map.getStyle();
   if (!style?.layers) return;
 
   for (const layer of style.layers) {
+    if (!isGeomanDisplayLayer(layer)) continue;
+    applyGeomanDisplayLayerOpacity(map, layer, sketchesLayer.opacity);
     if (!isGeomanTextMarkerLayer(layer)) continue;
     try {
       map.setLayoutProperty(
@@ -604,6 +613,30 @@ function applyGeomanTextMarkerStyle(map: maplibregl.Map): void {
     } catch {
       // Geoman may rebuild its temporary layers while an interaction is active.
     }
+  }
+}
+
+function applyGeomanDisplayLayerOpacity(
+  map: maplibregl.Map,
+  layer: maplibregl.LayerSpecification,
+  opacity: number,
+): void {
+  try {
+    if (layer.type === "circle") {
+      map.setPaintProperty(layer.id, "circle-opacity", opacity);
+      map.setPaintProperty(layer.id, "circle-stroke-opacity", opacity);
+    } else if (layer.type === "line") {
+      map.setPaintProperty(layer.id, "line-opacity", opacity);
+    } else if (layer.type === "fill") {
+      map.setPaintProperty(layer.id, "fill-opacity", opacity);
+    } else if (layer.type === "fill-extrusion") {
+      map.setPaintProperty(layer.id, "fill-extrusion-opacity", opacity);
+    } else if (layer.type === "symbol") {
+      map.setPaintProperty(layer.id, "icon-opacity", opacity);
+      map.setPaintProperty(layer.id, "text-opacity", opacity);
+    }
+  } catch {
+    // Geoman layers are rebuilt often and may not support every paint property.
   }
 }
 
