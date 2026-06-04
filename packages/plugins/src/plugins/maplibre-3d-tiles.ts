@@ -579,7 +579,8 @@ function restoredThreeDTilesLayerId(layer: GeoLibreLayer): string {
   const nativeLayerIds = layer.metadata.nativeLayerIds;
   if (Array.isArray(nativeLayerIds)) {
     const layerId = nativeLayerIds.find(
-      (value): value is string => typeof value === "string" && value.trim(),
+      (value): value is string =>
+        typeof value === "string" && value.trim().length > 0,
     );
     if (layerId) return layerId;
   }
