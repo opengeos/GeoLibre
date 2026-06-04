@@ -145,11 +145,12 @@ export function DesktopShell({
       !mapControllerRef.current
     )
       return;
+    const appAPI = createAppAPI(mapControllerRef);
     getPluginManager().restoreProjectState(
       useAppStore.getState().projectPlugins,
-      createAppAPI(mapControllerRef),
+      appAPI,
     );
-    restoreThreeDTilesLayers(createAppAPI(mapControllerRef));
+    restoreThreeDTilesLayers(appAPI);
   }, [externalPluginsReady, mapReadyGeneration, projectGeneration]);
 
   useEffect(() => {

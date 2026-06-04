@@ -19,6 +19,9 @@ import type {
 
 const threeDTilesControlPosition: GeoLibreMapControlPosition = "top-left";
 const THREE_D_TILES_LAYER_ID = "geolibre-3d-tiles";
+// Keep in sync with the three.js version maplibre-gl-3d-tiles is built
+// against. Only used as a fallback when the control does not expose its own
+// decoder paths (see getThreeDTilesDecoderOptions).
 const THREE_VERSION = "0.184.0";
 const DEFAULT_DRACO_DECODER_PATH = `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/draco/`;
 const DEFAULT_KTX2_TRANSCODER_PATH = `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/basis/`;
@@ -74,11 +77,12 @@ export function restoreThreeDTilesLayers(app: GeoLibreAppAPI): void {
       control.expand();
     }
   });
-  void hydrateThreeDTilesControlFromStore(control, {
-    replaceExisting: true,
-  }).then(() => {
+  try {
+    hydrateThreeDTilesControlFromStore(control, { replaceExisting: true });
     syncThreeDTilesStoreFromControl(control);
-  });
+  } catch (error) {
+    console.error("[GeoLibre] Failed to restore 3D Tiles layers", error);
+  }
 }
 
 function openStandaloneThreeDTilesControl(app: GeoLibreAppAPI): boolean {
@@ -89,9 +93,12 @@ function openStandaloneThreeDTilesControl(app: GeoLibreAppAPI): boolean {
     threeDTilesPanelPinned = true;
     showThreeDTilesControl(control);
     control.expand();
-    void hydrateThreeDTilesControlFromStore(control).then(() => {
+    try {
+      hydrateThreeDTilesControlFromStore(control);
       syncThreeDTilesStoreFromControl(control);
-    });
+    } catch (error) {
+      console.error("[GeoLibre] Failed to open 3D Tiles layer panel", error);
+    }
   }, 0);
 
   return true;
@@ -194,10 +201,10 @@ function syncThreeDTilesStoreFromControl(control: ThreeDTilesControl): void {
   }
 }
 
-async function hydrateThreeDTilesControlFromStore(
+function hydrateThreeDTilesControlFromStore(
   control: ThreeDTilesControl,
   options: { replaceExisting?: boolean } = {},
-): Promise<void> {
+): void {
   const layers = useAppStore
     .getState()
     .layers.filter(isThreeDTilesControlLayer);
@@ -289,6 +296,9 @@ function restoreThreeDTilesMapLayer(
     onLoad: (metadata) => updateThreeDTilesLoaded(control, id, metadata),
     onError: (error) => updateThreeDTilesError(control, id, error),
   });
+  // ThreeDTilesControl keys its internal `_layers` map by tileset id (see
+  // loadTileset/removeTileset in the library), so removeTileset(id) reaches
+  // this entry. The ThreeDTilesLayer itself carries the native map layer id.
   controlLayers.set(id, restoredLayer);
   map.addLayer(restoredLayer, beforeId);
 }
@@ -432,6 +442,9 @@ function resetThreeDTilesControl(control: ThreeDTilesControl | null): void {
   threeDTilesPanelPinned = false;
   threeDTilesControlMounted = false;
   threeDTilesControl = null;
+  // Clear the suspension counter so a control torn down mid-hydration cannot
+  // leave its successor permanently suppressing store sync events.
+  threeDTilesStoreSyncSuspended = 0;
 }
 
 function isThreeDTilesControlLayer(layer: GeoLibreLayer): boolean {
@@ -564,7 +577,9 @@ function threeDTilesPanelCollapsedFromLayers(
   const panelCollapsed = layers.find(
     (layer) => typeof layer.metadata.panelCollapsed === "boolean",
   )?.metadata.panelCollapsed;
-  return typeof panelCollapsed === "boolean" ? panelCollapsed : false;
+  // Default to collapsed to match the control's initial state, so projects
+  // saved before panelCollapsed existed do not pop the panel open on load.
+  return typeof panelCollapsed === "boolean" ? panelCollapsed : true;
 }
 
 function validThreeDTilesBeforeId(
@@ -591,7 +606,13 @@ function getThreeDTilesControlLayers(
   control: ThreeDTilesControl,
 ): Map<string, ThreeDTilesLayerInstance> | null {
   const layers = (control as unknown as ThreeDTilesControlInternals)._layers;
-  return layers instanceof Map ? layers : null;
+  if (!(layers instanceof Map)) {
+    console.warn(
+      "[GeoLibre] ThreeDTilesControl._layers unavailable; skipping 3D Tiles restore. The library internals may have changed.",
+    );
+    return null;
+  }
+  return layers;
 }
 
 function getThreeDTilesDecoderOptions(
@@ -601,6 +622,15 @@ function getThreeDTilesDecoderOptions(
   ktx2TranscoderPath: string;
 } {
   const options = (control as unknown as ThreeDTilesControlInternals)._options;
+  if (!options?.dracoDecoderPath || !options?.ktx2TranscoderPath) {
+    // The control normally exposes its configured decoder paths via _options.
+    // When it does not, fall back to a CDN build of three pinned to the
+    // version maplibre-gl-3d-tiles depends on (THREE_VERSION). This is a
+    // network-dependent supply-chain fallback, so surface it for diagnosis.
+    console.warn(
+      `[GeoLibre] ThreeDTilesControl decoder paths unavailable; falling back to unpkg three@${THREE_VERSION}. Compressed tilesets will fail offline.`,
+    );
+  }
   return {
     dracoDecoderPath:
       options?.dracoDecoderPath ?? DEFAULT_DRACO_DECODER_PATH,
@@ -650,7 +680,9 @@ function lngLatPairValue(value: unknown): [number, number] | undefined {
     typeof value[0] === "number" &&
     typeof value[1] === "number" &&
     Number.isFinite(value[0]) &&
-    Number.isFinite(value[1])
+    Number.isFinite(value[1]) &&
+    Math.abs(value[0]) <= 180 &&
+    Math.abs(value[1]) <= 90
   ) {
     return [value[0], value[1]];
   }
