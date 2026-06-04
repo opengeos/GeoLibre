@@ -53,12 +53,12 @@ body,
 }
 
 .geo-editor-control .geo-editor-tool-button[data-mode="text_marker"] svg {
-  height: 26px;
-  width: 26px;
+  height: 24px;
+  width: 24px;
 }
 
 .geo-editor-control .geo-editor-tool-button[data-mode="text_marker"] svg text {
-  font-size: 20px;
+  font-size: 18px;
 }
 
 .geolibre-esri-wayback-control,
