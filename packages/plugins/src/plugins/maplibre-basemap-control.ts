@@ -129,9 +129,11 @@ function registerRasterBasemap(
       externalNativeLayer: true,
       identifiable: false,
       sourceKind: "maplibre-basemap-control",
+      // Tile URL template lives in metadata, not sourcePath, which is reserved
+      // for local file paths (GeoJSON, FlatGeobuf, etc.).
       tileType: "raster",
+      tileUrl: basemap.source.tiles[0],
     },
-    sourcePath: basemap.source.tiles[0],
   });
   registeredRasterLayerId = layerId;
 }
@@ -157,7 +159,10 @@ function getManagedRaster(
   };
 }
 
-function normalizeBeforeId(value: string): string | undefined {
+function normalizeBeforeId(
+  value: string | undefined | null,
+): string | undefined {
+  if (value == null) return undefined;
   const trimmed = value.trim();
   if (!trimmed || trimmed.toLowerCase() === "none") return undefined;
   return trimmed;

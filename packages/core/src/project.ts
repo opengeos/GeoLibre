@@ -301,8 +301,13 @@ export function projectFromStore(state: {
   plugins?: ProjectPluginState | null;
   metadata: Record<string, unknown>;
 }): GeoLibreProject {
+  // Raster basemaps registered by maplibre-gl-basemap-control are transient
+  // session layers with no restore path, so persisting them would orphan the
+  // raster layer (and leave basemapStyleUrl pointing at the prior style) on
+  // reload. Keep them out of the saved project.
+  const layers = state.layers.filter((layer) => !isTransientBasemapLayer(layer));
   const styles: Record<string, LayerStyle> = {};
-  for (const layer of state.layers) {
+  for (const layer of layers) {
     styles[layer.id] = layer.style;
   }
   const plugins = normalizeProjectPlugins(state.plugins);
@@ -313,12 +318,16 @@ export function projectFromStore(state: {
     basemapStyleUrl: state.basemapStyleUrl,
     basemapVisible: state.basemapVisible,
     basemapOpacity: state.basemapOpacity,
-    layers: state.layers.map(prepareLayerForSave),
+    layers: layers.map(prepareLayerForSave),
     styles,
     preferences: state.preferences,
     ...(plugins ? { plugins } : {}),
     metadata: state.metadata,
   };
+}
+
+function isTransientBasemapLayer(layer: GeoLibreLayer): boolean {
+  return layer.metadata?.sourceKind === "maplibre-basemap-control";
 }
 
 function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {

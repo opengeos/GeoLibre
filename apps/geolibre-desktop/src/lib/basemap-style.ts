@@ -147,7 +147,7 @@ const openBasemapSelectMenu = (
     item.dataset.value = option.value;
     item.setAttribute("role", "option");
     if (option.value === select.value) {
-      item.classList.add("is-selected", "is-active");
+      item.classList.add("is-selected");
       item.setAttribute("aria-selected", "true");
     }
     item.addEventListener("click", (event) => {
@@ -246,7 +246,18 @@ if (typeof document !== "undefined") {
     true,
   );
 
-  const observer = new MutationObserver(enhanceBasemapSelects);
+  // Coalesce frequent body mutations (canvas renders, popups, etc.) into one
+  // enhancement pass per animation frame instead of running a DOM query on
+  // every child-list change.
+  let enhancePending = false;
+  const observer = new MutationObserver(() => {
+    if (enhancePending) return;
+    enhancePending = true;
+    requestAnimationFrame(() => {
+      enhancePending = false;
+      enhanceBasemapSelects();
+    });
+  });
   observer.observe(document.body, { childList: true, subtree: true });
   enhanceBasemapSelects();
 }
