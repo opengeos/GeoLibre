@@ -144,6 +144,8 @@ function syncExternalNativeLayer(
     return;
   }
 
+  ensureExternalGeoJsonNativeLayer(map, layer, nativeLayerIds, beforeId);
+
   const nativeFillLayerSpecs = nativeLayerIds
     .map((nativeLayerId) => getStyleLayerSpec(map, nativeLayerId))
     .filter(isFillStyleLayerSpec);
@@ -207,6 +209,112 @@ function syncExternalNativeLayer(
 
     moveLayer(map, nativeLayerId, beforeId);
   }
+}
+
+function ensureExternalGeoJsonNativeLayer(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+  nativeLayerIds: string[],
+  beforeId?: string,
+): void {
+  if (!layer.geojson || nativeLayerIds.every((id) => map.getLayer(id))) return;
+
+  const nativeSourceId =
+    getExternalSourceIds(layer)[0] ??
+    stringSource(layer.source.sourceId) ??
+    sourceIdFromNativeLayerId(nativeLayerIds[0]) ??
+    sourceId(layer.id);
+
+  if (!map.getSource(nativeSourceId)) {
+    map.addSource(nativeSourceId, {
+      type: "geojson",
+      data: layer.geojson,
+    });
+  } else {
+    (map.getSource(nativeSourceId) as maplibregl.GeoJSONSource).setData(
+      layer.geojson,
+    );
+  }
+
+  const visibility = layer.visible ? "visible" : "none";
+  const zoomRange = styleLayerZoomRange(layer.style);
+  const geometryType = stringMetadata(layer.metadata.geometryType);
+  const symbolLayer = layer.metadata.symbolLayer === true;
+  const profile = detectGeometryProfile(layer.geojson);
+  const primaryLayerId = nativeLayerIds[0] ?? layer.id;
+
+  if (symbolLayer) {
+    ensureLayer(
+      map,
+      primaryLayerId,
+      {
+        id: primaryLayerId,
+        type: "symbol",
+        source: nativeSourceId,
+        ...zoomRange,
+        layout: {
+          "text-allow-overlap": true,
+          "text-field": "*",
+          "text-ignore-placement": true,
+          "text-size": Math.max(8, styleValue(layer.style, "circleRadius") * 2.5),
+          visibility,
+        },
+        paint: {
+          "text-color": styleValue(layer.style, "fillColor"),
+          "text-halo-color": styleValue(layer.style, "strokeColor"),
+          "text-halo-width": styleValue(layer.style, "strokeWidth"),
+          "text-opacity": layer.opacity,
+        },
+      },
+      beforeId,
+    );
+    return;
+  }
+
+  if (geometryType === "point" || profile.hasPoint) {
+    ensureLayer(
+      map,
+      primaryLayerId,
+      {
+        id: primaryLayerId,
+        type: "circle",
+        source: nativeSourceId,
+        ...zoomRange,
+        filter: ["match", ["geometry-type"], ["Point", "MultiPoint"], true, false],
+        paint: circlePaint(layer.style, layer.opacity),
+        layout: { visibility },
+      },
+      beforeId,
+    );
+    return;
+  }
+
+  if (geometryType === "line" || profile.hasLine || profile.hasPolygon) {
+    ensureLayer(
+      map,
+      primaryLayerId,
+      {
+        id: primaryLayerId,
+        type: "line",
+        source: nativeSourceId,
+        ...zoomRange,
+        filter: [
+          "match",
+          ["geometry-type"],
+          ["LineString", "MultiLineString", "Polygon", "MultiPolygon"],
+          true,
+          false,
+        ],
+        paint: linePaint(layer.style, layer.opacity),
+        layout: { visibility },
+      },
+      beforeId,
+    );
+  }
+}
+
+function sourceIdFromNativeLayerId(layerId: string | undefined): string | null {
+  return layerId ? `${layerId}-source` : null;
 }
 
 function isPMTilesExternalLayer(layer: GeoLibreLayer): boolean {

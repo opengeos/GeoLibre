@@ -1,4 +1,8 @@
-import { useAppStore } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  type GeoLibreLayer,
+  useAppStore,
+} from "@geolibre/core";
 import {
   maplibreBasemapControlPlugin,
   maplibreComponentsPlugin,
@@ -12,9 +16,13 @@ import {
   PluginManager,
 } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
-import type { GeoLibreMapControlPosition } from "@geolibre/plugins";
+import type {
+  GeoLibreExternalNativeLayerRegistration,
+  GeoLibreMapControlPosition,
+} from "@geolibre/plugins";
 import { invoke } from "@tauri-apps/api/core";
-import { readFile } from "@tauri-apps/plugin-fs";
+import { open } from "@tauri-apps/plugin-dialog";
+import { readDir, readFile } from "@tauri-apps/plugin-fs";
 import type { RefObject } from "react";
 import { useEffect, useSyncExternalStore } from "react";
 import { loadExternalPlugins } from "../lib/external-plugins";
@@ -39,6 +47,45 @@ manager.registerAll([
   maplibreSwipePlugin,
   maplibreComponentsPlugin,
 ]);
+
+function createExternalNativeStoreLayer(
+  registration: GeoLibreExternalNativeLayerRegistration,
+  existing?: GeoLibreLayer,
+): GeoLibreLayer {
+  const sourceIds = registration.sourceIds?.length
+    ? registration.sourceIds
+    : registration.sourceId
+      ? [registration.sourceId]
+      : [];
+  const sourceId = registration.sourceId ?? sourceIds[0];
+
+  return {
+    id: registration.id,
+    name: registration.name,
+    type: "geojson",
+    source: {
+      type: "geojson",
+      ...(sourceId ? { sourceId } : {}),
+    },
+    visible: existing?.visible ?? true,
+    opacity: existing?.opacity ?? registration.opacity ?? 1,
+    style: {
+      ...DEFAULT_LAYER_STYLE,
+      ...(registration.style ?? {}),
+      ...(existing?.style ?? {}),
+    } as GeoLibreLayer["style"],
+    metadata: {
+      ...(existing?.metadata ?? {}),
+      ...(registration.metadata ?? {}),
+      externalNativeLayer: true,
+      nativeLayerIds: registration.nativeLayerIds,
+      sourceIds,
+      ...(sourceId ? { sourceId } : {}),
+    },
+    geojson: registration.geojson ?? existing?.geojson,
+    sourcePath: registration.sourcePath ?? existing?.sourcePath,
+  };
+}
 
 let externalPluginsLoaded = false;
 let externalPluginsLoadPromise: Promise<void> | null = null;
@@ -197,6 +244,27 @@ export function createAppAPI(
     fitBounds: (bounds: [number, number, number, number]) =>
       mapControllerRef?.current?.fitBounds(bounds),
     getMap: () => mapControllerRef?.current?.getMap() ?? null,
+    pickLocalDirectoryFiles,
+    registerExternalNativeLayer: (
+      registration: GeoLibreExternalNativeLayerRegistration,
+    ) => {
+      const state = useAppStore.getState();
+      const existing = state.layers.find(
+        (layer) => layer.id === registration.id,
+      );
+      const layer = createExternalNativeStoreLayer(registration, existing);
+      if (existing) {
+        state.updateLayer(layer.id, layer);
+      } else {
+        state.addLayer(layer);
+      }
+    },
+    unregisterExternalNativeLayer: (id: string) => {
+      const state = useAppStore.getState();
+      if (state.layers.some((layer) => layer.id === id)) {
+        state.removeLayer(id);
+      }
+    },
     addMapControl: (
       control: Parameters<MapController["addControl"]>[0],
       position?: Parameters<MapController["addControl"]>[1],
@@ -250,6 +318,54 @@ async function fetchRemoteArrayBuffer(url: string): Promise<ArrayBuffer> {
     if (!isLocalDevHost()) throw error;
     return fetchDevRasterProxy(url);
   }
+}
+
+async function pickLocalDirectoryFiles(): Promise<File[] | null> {
+  if (!isTauriRuntime()) return null;
+  const selected = await open({
+    directory: true,
+    multiple: false,
+    recursive: true,
+  });
+  if (typeof selected !== "string") return null;
+  return readTauriDirectoryFiles(selected);
+}
+
+async function readTauriDirectoryFiles(rootPath: string): Promise<File[]> {
+  const rootName = localNameFromPath(rootPath) || "dataset";
+  const files: File[] = [];
+
+  async function walk(directoryPath: string, relativePrefix: string): Promise<void> {
+    const entries = await readDir(directoryPath);
+    for (const entry of entries) {
+      const entryPath = joinLocalPath(directoryPath, entry.name);
+      const relativePath = `${relativePrefix}${entry.name}`;
+      if (entry.isDirectory) {
+        await walk(entryPath, `${relativePath}/`);
+        continue;
+      }
+      if (!entry.isFile) continue;
+      const bytes = await readFile(entryPath);
+      const file = new File([bytes], entry.name);
+      Object.defineProperty(file, "webkitRelativePath", {
+        configurable: true,
+        value: `${rootName}/${relativePath}`,
+      });
+      files.push(file);
+    }
+  }
+
+  await walk(rootPath, "");
+  return files;
+}
+
+function joinLocalPath(parent: string, child: string): string {
+  if (parent.endsWith("/") || parent.endsWith("\\")) return `${parent}${child}`;
+  return `${parent}/${child}`;
+}
+
+function localNameFromPath(path: string): string {
+  return path.split(/[/\\]/).filter(Boolean).pop() ?? "";
 }
 
 function isLocalFileReference(value: string): boolean {

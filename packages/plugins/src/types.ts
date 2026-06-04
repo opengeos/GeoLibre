@@ -18,6 +18,19 @@ export type GeoLibreBuiltInMapControl =
   | "logo"
   | "layer-control";
 
+export interface GeoLibreExternalNativeLayerRegistration {
+  id: string;
+  name: string;
+  geojson?: FeatureCollection;
+  nativeLayerIds: string[];
+  sourceIds?: string[];
+  sourceId?: string;
+  opacity?: number;
+  style?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  sourcePath?: string;
+}
+
 export interface GeoLibreAppAPI {
   setBasemap: (styleUrl: string) => void;
   addGeoJsonLayer: (
@@ -30,6 +43,11 @@ export interface GeoLibreAppAPI {
   fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;
   fitBounds?: (bounds: [number, number, number, number]) => void;
   getMap?: () => MapLibreMap | null;
+  pickLocalDirectoryFiles?: () => Promise<File[] | null>;
+  registerExternalNativeLayer?: (
+    layer: GeoLibreExternalNativeLayerRegistration,
+  ) => void;
+  unregisterExternalNativeLayer?: (id: string) => void;
   addMapControl: (
     control: IControl,
     position?: GeoLibreMapControlPosition,
