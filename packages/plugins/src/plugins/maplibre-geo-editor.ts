@@ -189,9 +189,34 @@ function geomanLayerStylesForMap(map: maplibregl.Map) {
   return layerStyles;
 }
 
+// Operators that can start a data-driven text-font expression. A bare
+// ["get", "font"] is all strings, so an every(typeof === "string") check
+// alone would mistake it for a font stack.
+const FONT_EXPRESSION_OPERATORS = new Set([
+  "literal",
+  "get",
+  "has",
+  "at",
+  "in",
+  "case",
+  "match",
+  "coalesce",
+  "step",
+  "interpolate",
+  "let",
+  "var",
+  "concat",
+  "to-string",
+  "string",
+  "array",
+  "format",
+]);
+
 function textFontForMapStyle(map: maplibregl.Map): string[] {
   for (const styleLayer of map.getStyle().layers ?? []) {
     if (styleLayer.type !== "symbol") continue;
+    // Icon-only symbol layers may carry a glyph/sprite font unsuited to text.
+    if (!styleLayer.layout?.["text-field"]) continue;
     const textFont = styleLayer.layout?.["text-font"];
     if (!Array.isArray(textFont)) continue;
     // Unwrap the ["literal", ["Font A", "Font B"]] expression form used by
@@ -202,7 +227,8 @@ function textFontForMapStyle(map: maplibregl.Map): string[] {
         : (textFont as unknown[]);
     if (
       fonts.length > 0 &&
-      fonts.every((font) => typeof font === "string")
+      fonts.every((font) => typeof font === "string") &&
+      !FONT_EXPRESSION_OPERATORS.has(fonts[0] as string)
     ) {
       return fonts as string[];
     }
