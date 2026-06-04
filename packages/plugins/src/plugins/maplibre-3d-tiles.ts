@@ -46,7 +46,7 @@ function openStandaloneThreeDTilesControl(app: GeoLibreAppAPI): boolean {
       threeDTilesControlPosition,
     );
     if (!added) {
-      threeDTilesControl = null;
+      resetThreeDTilesControl(threeDTilesControl);
       return false;
     }
     threeDTilesControlMounted = true;
@@ -73,6 +73,7 @@ function createThreeDTilesControl(): ThreeDTilesControl {
   };
 
   control.on("statechange", syncHandler);
+  patchThreeDTilesControlOnRemove(control);
   threeDTilesStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
 
@@ -218,6 +219,24 @@ function createThreeDTilesLayerUpdate(
   }
 
   return Object.keys(update).length > 0 ? update : null;
+}
+
+function patchThreeDTilesControlOnRemove(control: ThreeDTilesControl): void {
+  const originalOnRemove = control.onRemove.bind(control);
+  control.onRemove = () => {
+    originalOnRemove();
+    resetThreeDTilesControl(control);
+  };
+}
+
+function resetThreeDTilesControl(control: ThreeDTilesControl | null): void {
+  if (threeDTilesControl !== control) return;
+
+  threeDTilesStoreUnsubscribe?.();
+  threeDTilesStoreUnsubscribe = null;
+  threeDTilesPanelPinned = false;
+  threeDTilesControlMounted = false;
+  threeDTilesControl = null;
 }
 
 function isThreeDTilesControlLayer(layer: GeoLibreLayer): boolean {

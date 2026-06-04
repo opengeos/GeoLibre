@@ -1280,6 +1280,7 @@ body,
 }
 
 .geolibre-3d-tiles-panel {
+  --geolibre-3d-tiles-status-success: #0f9f6e;
   background: hsl(var(--popover)) !important;
   border: 1px solid hsl(var(--border)) !important;
   box-shadow:
@@ -1333,29 +1334,32 @@ body,
 }
 
 .geolibre-3d-tiles-panel .three-d-tiles-input:focus {
-  border-color: #2f8f85 !important;
-  box-shadow: 0 0 0 2px rgba(47, 143, 133, 0.16) !important;
+  border-color: hsl(var(--ring)) !important;
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.16) !important;
 }
 
 .geolibre-3d-tiles-panel .three-d-tiles-checkbox input,
 .geolibre-3d-tiles-panel .three-d-tiles-list-actions input[type="checkbox"],
 .geolibre-3d-tiles-panel .three-d-tiles-opacity {
-  accent-color: #2f8f85;
+  accent-color: hsl(var(--primary));
 }
 
-.geolibre-3d-tiles-panel .three-d-tiles-button {
+.geolibre-3d-tiles-panel .three-d-tiles-button,
+.geolibre-3d-tiles-panel .three-d-tiles-small-button {
   background: hsl(var(--secondary)) !important;
   border-color: hsl(var(--border)) !important;
   color: hsl(var(--secondary-foreground)) !important;
 }
 
-.geolibre-3d-tiles-panel .three-d-tiles-button:hover:not(:disabled) {
+.geolibre-3d-tiles-panel .three-d-tiles-button:hover:not(:disabled),
+.geolibre-3d-tiles-panel .three-d-tiles-small-button:hover:not(:disabled) {
   background: hsl(var(--accent)) !important;
   border-color: hsl(var(--border)) !important;
   color: hsl(var(--accent-foreground)) !important;
 }
 
-.geolibre-3d-tiles-panel .three-d-tiles-button:disabled {
+.geolibre-3d-tiles-panel .three-d-tiles-button:disabled,
+.geolibre-3d-tiles-panel .three-d-tiles-small-button:disabled {
   background: hsl(var(--muted)) !important;
   border-color: hsl(var(--border)) !important;
   color: hsl(var(--muted-foreground)) !important;
@@ -1364,25 +1368,6 @@ body,
 
 .geolibre-3d-tiles-panel .three-d-tiles-opacity {
   width: 58px;
-}
-
-.geolibre-3d-tiles-panel .three-d-tiles-small-button {
-  background: hsl(var(--secondary)) !important;
-  border-color: hsl(var(--border)) !important;
-  color: hsl(var(--secondary-foreground)) !important;
-}
-
-.geolibre-3d-tiles-panel .three-d-tiles-small-button:hover:not(:disabled) {
-  background: hsl(var(--accent)) !important;
-  border-color: hsl(var(--border)) !important;
-  color: hsl(var(--accent-foreground)) !important;
-}
-
-.geolibre-3d-tiles-panel .three-d-tiles-small-button:disabled {
-  background: hsl(var(--muted)) !important;
-  border-color: hsl(var(--border)) !important;
-  color: hsl(var(--muted-foreground)) !important;
-  opacity: 0.75;
 }
 
 .geolibre-3d-tiles-panel .three-d-tiles-list-actions {
@@ -1396,17 +1381,17 @@ body,
 
 .geolibre-3d-tiles-panel .three-d-tiles-list-item.active {
   background: hsl(var(--accent)) !important;
-  border-color: #2f8f85 !important;
+  border-color: hsl(var(--ring)) !important;
 }
 
 .geolibre-3d-tiles-panel .three-d-tiles-status[data-status="loaded"],
 .geolibre-3d-tiles-panel .three-d-tiles-list-status[data-status="loaded"] {
-  color: #0f9f6e !important;
+  color: var(--geolibre-3d-tiles-status-success) !important;
 }
 
 .geolibre-3d-tiles-panel .three-d-tiles-status[data-status="error"],
 .geolibre-3d-tiles-panel .three-d-tiles-list-status[data-status="error"] {
-  color: #ef4444 !important;
+  color: hsl(var(--destructive)) !important;
 }
 
 .geolibre-components-control input:not([type="checkbox"]):not([type="radio"]):not(
