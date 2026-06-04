@@ -1,4 +1,5 @@
 import { type GeoLibreLayer, useAppStore } from "@geolibre/core";
+import { Geoman, defaultLayerStyles } from "@geoman-io/maplibre-geoman-free";
 import type { Feature, FeatureCollection } from "geojson";
 import type maplibregl from "maplibre-gl";
 import { GeoEditor, type GeoEditorOptions } from "maplibre-gl-geo-editor";
@@ -86,6 +87,15 @@ export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
 
     if (!geoEditorControl) {
       geoEditorControl = new GeoEditor(getGeoEditorOptions());
+      const map = app.getMap?.();
+      if (map) {
+        geoEditorControl.setGeoman(
+          new Geoman(map, {
+            layerStyles: geomanLayerStylesForMap(map),
+            settings: { useControlsUi: false },
+          }),
+        );
+      }
     }
 
     const added = app.addMapControl(geoEditorControl, geoEditorPosition);
@@ -161,6 +171,36 @@ function getGeoEditorOptions(): GeoEditorOptions {
     },
     onSelectionChange: () => applySketchesMapDisplay(),
   };
+}
+
+function geomanLayerStylesForMap(map: maplibregl.Map) {
+  const layerStyles = structuredClone(defaultLayerStyles);
+
+  for (const sourceLayers of Object.values(layerStyles.text_marker)) {
+    for (const layer of sourceLayers) {
+      if (layer.type !== "symbol") continue;
+      layer.layout = {
+        ...layer.layout,
+        "text-font": textFontForMapStyle(map),
+      };
+    }
+  }
+
+  return layerStyles;
+}
+
+function textFontForMapStyle(map: maplibregl.Map): string[] {
+  for (const styleLayer of map.getStyle().layers ?? []) {
+    if (styleLayer.type !== "symbol") continue;
+    const textFont = styleLayer.layout?.["text-font"];
+    if (
+      Array.isArray(textFont) &&
+      textFont.every((font): font is string => typeof font === "string")
+    ) {
+      return textFont;
+    }
+  }
+  return ["Noto Sans Regular"];
 }
 
 function isSketchesLayer(layer: GeoLibreLayer): boolean {
