@@ -998,22 +998,18 @@ function textFontForMapStyle(map: maplibregl.Map): string[] {
   for (const styleLayer of map.getStyle().layers ?? []) {
     if (styleLayer.type !== "symbol") continue;
     const textFont = styleLayer.layout?.["text-font"];
+    if (!Array.isArray(textFont)) continue;
+    // Unwrap the ["literal", ["Font A", "Font B"]] expression form used by
+    // many popular styles.
+    const fonts =
+      textFont[0] === "literal" && Array.isArray(textFont[1])
+        ? (textFont[1] as unknown[])
+        : (textFont as unknown[]);
     if (
-      Array.isArray(textFont) &&
-      textFont.every((font): font is string => typeof font === "string")
+      fonts.length > 0 &&
+      fonts.every((font) => typeof font === "string")
     ) {
-      return textFont;
-    }
-    // ["literal", ["Font A", "Font B"]] form used by many popular styles.
-    if (
-      Array.isArray(textFont) &&
-      textFont[0] === "literal" &&
-      Array.isArray(textFont[1]) &&
-      (textFont[1] as unknown[]).every(
-        (font): font is string => typeof font === "string",
-      )
-    ) {
-      return textFont[1] as string[];
+      return fonts as string[];
     }
   }
   return ["Noto Sans Regular"];
