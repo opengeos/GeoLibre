@@ -6,6 +6,8 @@ import {
 import {
   DEFAULT_TILESET_URL,
   ThreeDTilesControl,
+  ThreeDTilesLayer,
+  type LoadedTilesetMetadata,
   type ThreeDTilesControlEventHandler,
   type ThreeDTilesControlOptions,
   type ThreeDTilesItemState,
@@ -17,6 +19,9 @@ import type {
 
 const threeDTilesControlPosition: GeoLibreMapControlPosition = "top-left";
 const THREE_D_TILES_LAYER_ID = "geolibre-3d-tiles";
+const THREE_VERSION = "0.184.0";
+const DEFAULT_DRACO_DECODER_PATH = `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/draco/`;
+const DEFAULT_KTX2_TRANSCODER_PATH = `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/basis/`;
 
 const THREE_D_TILES_OPTIONS = {
   className: "geolibre-3d-tiles-control",
@@ -34,6 +39,16 @@ let threeDTilesPanelPinned = false;
 let threeDTilesStoreUnsubscribe: (() => void) | null = null;
 let threeDTilesStoreSyncSuspended = 0;
 
+type ThreeDTilesLayerInstance = InstanceType<typeof ThreeDTilesLayer>;
+
+interface ThreeDTilesControlInternals {
+  _layers?: Map<string, ThreeDTilesLayerInstance>;
+  _options?: {
+    dracoDecoderPath?: string;
+    ktx2TranscoderPath?: string;
+  };
+}
+
 export function openThreeDTilesLayerPanel(app: GeoLibreAppAPI): void {
   openStandaloneThreeDTilesControl(app);
 }
@@ -49,7 +64,16 @@ export function restoreThreeDTilesLayers(app: GeoLibreAppAPI): void {
   );
   if (!control) return;
 
-  hideThreeDTilesControl(control);
+  const panelCollapsed = threeDTilesPanelCollapsedFromLayers(layers);
+  runWithThreeDTilesStoreSyncSuspended(() => {
+    showThreeDTilesControl(control);
+    threeDTilesPanelPinned = !panelCollapsed;
+    if (panelCollapsed) {
+      control.collapse();
+    } else {
+      control.expand();
+    }
+  });
   void hydrateThreeDTilesControlFromStore(control, {
     replaceExisting: true,
   }).then(() => {
@@ -154,7 +178,11 @@ function syncThreeDTilesStoreFromControl(control: ThreeDTilesControl): void {
   );
   for (const tileset of state.tilesets) {
     const existingLayer = layersById.get(tileset.id);
-    const layer = createThreeDTilesStoreLayer(tileset, tileset.opacity);
+    const layer = createThreeDTilesStoreLayer(
+      tileset,
+      tileset.opacity,
+      state.collapsed,
+    );
 
     if (existingLayer) {
       const update = createThreeDTilesLayerUpdate(existingLayer, layer);
@@ -190,27 +218,142 @@ async function hydrateThreeDTilesControlFromStore(
     const url = stringValue(layer.source.url) ?? layer.sourcePath;
     if (!url) continue;
 
-    const layerValues = {
-      beforeId: layer.beforeId,
-      layerName: layer.name,
-    };
-    const id = await runWithThreeDTilesStoreSyncSuspended(() => {
-      return control.loadTileset(url, {
-        altitudeOffset: numberValue(layer.source.altitudeOffset, 0),
-        beforeId: layerValues.beforeId,
-        flyToOnLoad: false,
-        layerName: layerValues.layerName,
-        opacity: layer.opacity,
-        visible: layer.visible,
-      });
-    });
-    if (id) setThreeDTilesOpacity(control, id, layer.opacity);
+    restoreThreeDTilesMapLayer(control, layer, url);
   }
+}
+
+function restoreThreeDTilesMapLayer(
+  control: ThreeDTilesControl,
+  layer: GeoLibreLayer,
+  url: string,
+): void {
+  const map = control.getMap();
+  const controlLayers = getThreeDTilesControlLayers(control);
+  if (!map || !controlLayers) return;
+
+  const id = layer.id;
+  const layerId = restoredThreeDTilesLayerId(layer);
+  const layerName = layer.name || layerNameFromUrl(url, id);
+  const beforeId = validThreeDTilesBeforeId(control, layer.beforeId);
+  const altitudeOffset = numberValue(layer.source.altitudeOffset, 0);
+  const existingTilesets = control
+    .getState()
+    .tilesets.filter((tileset) => tileset.id !== id);
+  const savedCenter = lngLatPairValue(layer.metadata.center);
+  const savedAltitude = optionalNumberValue(layer.metadata.altitude);
+  const status = savedCenter ? "loaded" : "loading";
+
+  const restoredTileset: ThreeDTilesItemState = {
+    id,
+    layerId,
+    layerName,
+    beforeId,
+    tilesetUrl: url,
+    altitudeOffset,
+    opacity: layer.opacity,
+    visible: layer.visible,
+    status,
+    center: savedCenter,
+    altitude: savedAltitude,
+  };
+
+  runWithThreeDTilesStoreSyncSuspended(() => {
+    control.setState({
+      activeTilesetId: id,
+      altitude: restoredTileset.altitude,
+      altitudeOffset,
+      beforeId,
+      center: restoredTileset.center,
+      error: undefined,
+      layerName,
+      opacity: layer.opacity,
+      status,
+      tilesetUrl: url,
+      tilesets: [...existingTilesets, restoredTileset],
+      visible: layer.visible,
+    });
+  });
+
+  if (map.getLayer(layerId)) {
+    moveThreeDTilesMapLayer(map, layerId, beforeId);
+    return;
+  }
+
+  const restoredLayer = new ThreeDTilesLayer({
+    id: layerId,
+    tilesetUrl: url,
+    altitudeOffset,
+    opacity: layer.opacity,
+    visible: layer.visible,
+    ...getThreeDTilesDecoderOptions(control),
+    onLoad: (metadata) => updateThreeDTilesLoaded(control, id, metadata),
+    onError: (error) => updateThreeDTilesError(control, id, error),
+  });
+  controlLayers.set(id, restoredLayer);
+  map.addLayer(restoredLayer, beforeId);
+}
+
+function updateThreeDTilesLoaded(
+  control: ThreeDTilesControl,
+  id: string,
+  metadata: LoadedTilesetMetadata,
+): void {
+  const state = control.getState();
+  const tilesets = state.tilesets.map((tileset) =>
+    tileset.id === id
+      ? {
+          ...tileset,
+          altitude: metadata.altitude,
+          center: metadata.center,
+          error: undefined,
+          status: "loaded" as const,
+        }
+      : tileset,
+  );
+  const activeTileset =
+    tilesets.find((tileset) => tileset.id === state.activeTilesetId) ??
+    tilesets.at(-1);
+
+  control.setState({
+    altitude: activeTileset?.altitude,
+    center: activeTileset?.center,
+    error: activeTileset?.error,
+    status: activeTileset?.status ?? "idle",
+    tilesets,
+  });
+}
+
+function updateThreeDTilesError(
+  control: ThreeDTilesControl,
+  id: string,
+  error: Error,
+): void {
+  const state = control.getState();
+  const message = error.message || "Unable to load 3D Tiles layer.";
+  const tilesets = state.tilesets.map((tileset) =>
+    tileset.id === id
+      ? {
+          ...tileset,
+          error: message,
+          status: "error" as const,
+        }
+      : tileset,
+  );
+  const activeTileset =
+    tilesets.find((tileset) => tileset.id === state.activeTilesetId) ??
+    tilesets.at(-1);
+
+  control.setState({
+    error: activeTileset?.error,
+    status: activeTileset?.status ?? "idle",
+    tilesets,
+  });
 }
 
 function createThreeDTilesStoreLayer(
   tileset: ThreeDTilesItemState,
   opacity = 1,
+  panelCollapsed = true,
 ): GeoLibreLayer {
   const layerName = tileset.layerName || layerNameFromUrl(tileset.tilesetUrl, tileset.id);
   const beforeId = tileset.beforeId;
@@ -240,6 +383,7 @@ function createThreeDTilesStoreLayer(
       identifiable: false,
       layerName,
       nativeLayerIds: [tileset.layerId],
+      panelCollapsed,
       sourceId: tileset.id,
       sourceKind: "3d-tiles-url",
       status: tileset.status,
@@ -414,6 +558,74 @@ function isThreeDTilesStoreSyncSuspended(): boolean {
   return threeDTilesStoreSyncSuspended > 0;
 }
 
+function threeDTilesPanelCollapsedFromLayers(
+  layers: GeoLibreLayer[],
+): boolean {
+  const panelCollapsed = layers.find(
+    (layer) => typeof layer.metadata.panelCollapsed === "boolean",
+  )?.metadata.panelCollapsed;
+  return typeof panelCollapsed === "boolean" ? panelCollapsed : false;
+}
+
+function validThreeDTilesBeforeId(
+  control: ThreeDTilesControl,
+  beforeId: string | undefined,
+): string | undefined {
+  if (!beforeId) return undefined;
+  return control.getMap()?.getLayer(beforeId) ? beforeId : undefined;
+}
+
+function restoredThreeDTilesLayerId(layer: GeoLibreLayer): string {
+  const nativeLayerIds = layer.metadata.nativeLayerIds;
+  if (Array.isArray(nativeLayerIds)) {
+    const layerId = nativeLayerIds.find(
+      (value): value is string => typeof value === "string" && value.trim(),
+    );
+    if (layerId) return layerId;
+  }
+  return `${THREE_D_TILES_LAYER_ID}-${layer.id}`;
+}
+
+function getThreeDTilesControlLayers(
+  control: ThreeDTilesControl,
+): Map<string, ThreeDTilesLayerInstance> | null {
+  const layers = (control as unknown as ThreeDTilesControlInternals)._layers;
+  return layers instanceof Map ? layers : null;
+}
+
+function getThreeDTilesDecoderOptions(
+  control: ThreeDTilesControl,
+): {
+  dracoDecoderPath: string;
+  ktx2TranscoderPath: string;
+} {
+  const options = (control as unknown as ThreeDTilesControlInternals)._options;
+  return {
+    dracoDecoderPath:
+      options?.dracoDecoderPath ?? DEFAULT_DRACO_DECODER_PATH,
+    ktx2TranscoderPath:
+      options?.ktx2TranscoderPath ?? DEFAULT_KTX2_TRANSCODER_PATH,
+  };
+}
+
+function moveThreeDTilesMapLayer(
+  map: ReturnType<ThreeDTilesControl["getMap"]>,
+  layerId: string,
+  beforeId: string | undefined,
+): void {
+  if (!map?.getLayer(layerId)) return;
+  try {
+    if (beforeId && beforeId !== layerId && map.getLayer(beforeId)) {
+      map.moveLayer(layerId, beforeId);
+      return;
+    }
+    map.moveLayer(layerId);
+  } catch {
+    // Style reloads can make ordering transiently unavailable. The next
+    // restore/sync pass will retry with the same saved layer metadata.
+  }
+}
+
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
@@ -422,6 +634,26 @@ function numberValue(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value)
     ? value
     : fallback;
+}
+
+function optionalNumberValue(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+function lngLatPairValue(value: unknown): [number, number] | undefined {
+  if (
+    Array.isArray(value) &&
+    value.length >= 2 &&
+    typeof value[0] === "number" &&
+    typeof value[1] === "number" &&
+    Number.isFinite(value[0]) &&
+    Number.isFinite(value[1])
+  ) {
+    return [value[0], value[1]];
+  }
+  return undefined;
 }
 
 function recordsEqual(

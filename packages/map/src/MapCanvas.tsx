@@ -575,6 +575,7 @@ export const MapCanvas = memo(function MapCanvas({
         state.layers.find((layer) => layer.id === state.selectedLayerId),
         state.selectedFeatureId,
       );
+      onControllerReadyRef.current?.();
     });
     controller.current?.setStyle(basemapStyleUrl);
   }, [basemapStyleUrl]);
