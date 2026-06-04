@@ -17,6 +17,7 @@ import {
   pointRadiusMaxPixels,
   type StyledDeckLayerLike,
 } from "./deck-style-utils";
+import { ensureMercatorProjection } from "./map-projection-utils";
 
 type GeoParquetControlConstructor =
   (typeof import("maplibre-gl-geoparquet"))["GeoParquetControl"];
@@ -97,7 +98,7 @@ export function openGeoParquetLayerPanel(app: GeoLibreAppAPI): void {
 async function openStandaloneGeoParquetControl(
   app: GeoLibreAppAPI,
 ): Promise<boolean> {
-  ensureGeoParquetMercatorProjection(app);
+  ensureMercatorProjection(app.getMap?.());
 
   const { GeoParquetControl: GeoParquetControlClass } =
     await getGeoParquetConstructors();
@@ -124,16 +125,6 @@ async function openStandaloneGeoParquetControl(
   return true;
 }
 
-function ensureGeoParquetMercatorProjection(app: GeoLibreAppAPI): void {
-  try {
-    const map = app.getMap?.();
-    if (!map || map.getProjection()?.type === "mercator") return;
-    map.setProjection({ type: "mercator" });
-  } catch {
-    // MapLibre can reject projection changes while the style is still settling.
-  }
-}
-
 function getGeoParquetConstructors(): Promise<{
   GeoParquetControl: GeoParquetControlConstructor;
 }> {
@@ -152,7 +143,7 @@ function createGeoParquetControl(
   const control = new GeoParquetControlClass(GEOPARQUET_OPTIONS);
   patchGeoParquetControlOnRemove(control);
   control.on("collapse", () => hideGeoParquetControl(control));
-  control.on("loadstart", () => ensureGeoParquetMercatorProjection(app));
+  control.on("loadstart", () => ensureMercatorProjection(app.getMap?.()));
   control.on("load", createGeoParquetStateChangeHandler(control));
   control.on("statechange", createGeoParquetStateChangeHandler(control));
 

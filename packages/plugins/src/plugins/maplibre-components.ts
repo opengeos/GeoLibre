@@ -52,6 +52,7 @@ import type {
   GeoLibreMapControlPosition,
   GeoLibrePlugin,
 } from "../types";
+import { ensureMercatorProjection } from "./map-projection-utils";
 
 type ControlGridConstructor =
   (typeof import("maplibre-gl-components"))["ControlGrid"];
@@ -754,7 +755,7 @@ export async function addCogRasterLayer(
     return addGeoTiffRasterLayer(app, options);
   }
 
-  ensureCogRasterMercatorProjection(app);
+  ensureMercatorProjection(app.getMap?.());
   const control = await ensureCogRasterControl(app);
   if (!control) {
     throw new Error("The COG raster layer control could not be added to the map.");
@@ -2104,16 +2105,6 @@ function configureCogRasterControl(
   mutableControl._render?.();
 }
 
-function ensureCogRasterMercatorProjection(app: GeoLibreAppAPI): void {
-  try {
-    const map = app.getMap?.();
-    if (!map || map.getProjection()?.type === "mercator") return;
-    map.setProjection({ type: "mercator" });
-  } catch {
-    // MapLibre can reject projection changes while the style is still settling.
-  }
-}
-
 function createFlatGeobufStoreLayer(
   id: string,
   layerInfo: AddVectorLayerInfo,
@@ -2586,7 +2577,7 @@ function patchStacSearchCogLayer(control: StacSearchControl): void {
     item: StacSearchItem,
     assetKey: string,
   ) => {
-    ensureStacSearchMercatorProjection(mutableControl);
+    ensureMercatorProjection(mutableControl._map);
     await mutableControl._ensureOverlay?.();
     const selectedAsset = getStacSearchSelectedAsset(mutableControl, item, {
       key: assetKey,
@@ -2956,17 +2947,6 @@ function getAlphaValue(
 
 function getStacCogShaderNoData(): number | null {
   return null;
-}
-
-function ensureStacSearchMercatorProjection(
-  control: MutableStacSearchControl,
-): void {
-  try {
-    if (control._map?.getProjection()?.type === "mercator") return;
-    control._map?.setProjection({ type: "mercator" });
-  } catch {
-    // MapLibre may reject projection changes while the style is still settling.
-  }
 }
 
 async function patchStacSearchCOGLayerClass(

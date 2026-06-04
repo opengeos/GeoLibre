@@ -340,7 +340,11 @@ export function TopToolbar({
       configureGeoParquetDuckDBRuntime();
       openGeoParquetLayerPanel(appApi);
     } catch (error) {
-      console.error("Failed to initialise GeoParquet DuckDB runtime", error);
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "Failed to open GeoParquet panel",
+      );
     }
   };
   const handleAddPMTilesLayer = () => {
