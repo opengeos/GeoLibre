@@ -176,7 +176,7 @@ function getGeoEditorOptions(): GeoEditorOptions {
 function geomanLayerStylesForMap(map: maplibregl.Map) {
   const layerStyles = structuredClone(defaultLayerStyles);
 
-  for (const sourceLayers of Object.values(layerStyles.text_marker)) {
+  for (const sourceLayers of Object.values(layerStyles.text_marker ?? {})) {
     for (const layer of sourceLayers) {
       if (layer.type !== "symbol") continue;
       layer.layout = {
@@ -198,6 +198,17 @@ function textFontForMapStyle(map: maplibregl.Map): string[] {
       textFont.every((font): font is string => typeof font === "string")
     ) {
       return textFont;
+    }
+    // ["literal", ["Font A", "Font B"]] form used by many popular styles.
+    if (
+      Array.isArray(textFont) &&
+      textFont[0] === "literal" &&
+      Array.isArray(textFont[1]) &&
+      (textFont[1] as unknown[]).every(
+        (font): font is string => typeof font === "string",
+      )
+    ) {
+      return textFont[1] as string[];
     }
   }
   return ["Noto Sans Regular"];

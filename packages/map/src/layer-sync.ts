@@ -960,7 +960,7 @@ function syncGeoJsonLayer(
         },
         paint: {
           "text-color": styleValue(layer.style, "fillColor"),
-          "text-halo-color": "#ffffff",
+          "text-halo-color": styleValue(layer.style, "strokeColor"),
           "text-halo-width": Math.max(1, styleValue(layer.style, "strokeWidth")),
           "text-opacity": opacity,
         },
@@ -972,21 +972,25 @@ function syncGeoJsonLayer(
   }
 }
 
+// Keep this predicate aligned with textMarkerFilter: any text-marker-shaped
+// point routes to the symbol layer, even with empty text, so features are
+// never excluded from the circle layer without a matching symbol entry.
 function hasTextMarkerFeatures(
   collection: GeoJSON.FeatureCollection,
 ): boolean {
   return collection.features.some((feature) => {
-    const properties = feature.properties;
-    if (!properties) return false;
     if (
-      properties[GEOMAN_SHAPE_PROPERTY] !== TEXT_MARKER_SHAPE &&
-      properties.shape !== TEXT_MARKER_SHAPE
+      feature.geometry?.type !== "Point" &&
+      feature.geometry?.type !== "MultiPoint"
     ) {
       return false;
     }
-
-    const value = properties[GEOMAN_TEXT_PROPERTY] ?? properties.text;
-    return typeof value === "string" && value.trim().length > 0;
+    const properties = feature.properties;
+    if (!properties) return false;
+    return (
+      properties[GEOMAN_SHAPE_PROPERTY] === TEXT_MARKER_SHAPE ||
+      properties.shape === TEXT_MARKER_SHAPE
+    );
   });
 }
 
@@ -999,6 +1003,17 @@ function textFontForMapStyle(map: maplibregl.Map): string[] {
       textFont.every((font): font is string => typeof font === "string")
     ) {
       return textFont;
+    }
+    // ["literal", ["Font A", "Font B"]] form used by many popular styles.
+    if (
+      Array.isArray(textFont) &&
+      textFont[0] === "literal" &&
+      Array.isArray(textFont[1]) &&
+      (textFont[1] as unknown[]).every(
+        (font): font is string => typeof font === "string",
+      )
+    ) {
+      return textFont[1] as string[];
     }
   }
   return ["Noto Sans Regular"];
