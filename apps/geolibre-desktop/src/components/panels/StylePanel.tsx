@@ -54,6 +54,27 @@ function hasExternalDeckLayer(layer: { metadata: Record<string, unknown> }) {
   return layer.metadata.externalDeckLayer === true;
 }
 
+function hasTextMarkerFeatures(layer: {
+  geojson?: {
+    features?: Array<{
+      geometry?: { type?: string } | null;
+      properties?: Record<string, unknown> | null;
+    }>;
+  };
+}): boolean {
+  return (layer.geojson?.features ?? []).some((feature) => {
+    const geometryType = feature.geometry?.type;
+    if (geometryType !== "Point" && geometryType !== "MultiPoint") {
+      return false;
+    }
+    const properties = feature.properties;
+    return (
+      properties?.__gm_shape === "text_marker" ||
+      properties?.shape === "text_marker"
+    );
+  });
+}
+
 function supportsExtrusionControls(layer: {
   type: LayerType;
   source: Record<string, unknown>;
@@ -1092,6 +1113,8 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
     supportsExtrusionControls(layer);
   const hasRasterPaintControls =
     isRasterPaintLayer(layer.type) || isRasterTileLayer;
+  const hasTextMarkerControls =
+    layer.type === "geojson" && hasTextMarkerFeatures(layer);
   const extrusionEnabled = styleValue(style, "extrusionEnabled");
   const extrusionHeightPropertyOptions = getAttributePropertyNames(layer);
   const vectorStylePropertyOptions = extrusionHeightPropertyOptions;
@@ -1642,6 +1665,53 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
         value={style.circleRadius}
         onChange={(circleRadius) => setLayerStyle(layer.id, { circleRadius })}
       />
+      {hasTextMarkerControls ? (
+        <>
+          <Separator />
+          <div className="space-y-2">
+            <Label htmlFor="textColor">Text color</Label>
+            <Input
+              id="textColor"
+              type="color"
+              value={styleValue(style, "textColor")}
+              onChange={(e) =>
+                setLayerStyle(layer.id, { textColor: e.target.value })
+              }
+            />
+          </div>
+          <NumericStyleInput
+            id="textSize"
+            label="Text size"
+            min={6}
+            max={96}
+            step={1}
+            value={styleValue(style, "textSize")}
+            onChange={(textSize) => setLayerStyle(layer.id, { textSize })}
+          />
+          <div className="space-y-2">
+            <Label htmlFor="textHaloColor">Text halo color</Label>
+            <Input
+              id="textHaloColor"
+              type="color"
+              value={styleValue(style, "textHaloColor")}
+              onChange={(e) =>
+                setLayerStyle(layer.id, { textHaloColor: e.target.value })
+              }
+            />
+          </div>
+          <NumericStyleInput
+            id="textHaloWidth"
+            label="Text halo width"
+            min={0}
+            max={8}
+            step={0.5}
+            value={styleValue(style, "textHaloWidth")}
+            onChange={(textHaloWidth) =>
+              setLayerStyle(layer.id, { textHaloWidth })
+            }
+          />
+        </>
+      ) : null}
     </>
   );
   const extrusionControls = (

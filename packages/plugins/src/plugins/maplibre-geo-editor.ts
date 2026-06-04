@@ -1,4 +1,4 @@
-import { type GeoLibreLayer, useAppStore } from "@geolibre/core";
+import { type GeoLibreLayer, styleValue, useAppStore } from "@geolibre/core";
 import { Geoman, defaultLayerStyles } from "@geoman-io/maplibre-geoman-free";
 import type { Feature, FeatureCollection } from "geojson";
 import type maplibregl from "maplibre-gl";
@@ -12,6 +12,7 @@ import type {
 const SKETCHES_LAYER_NAME = "Sketches";
 const SKETCHES_SOURCE_KIND = "geoeditor-sketches";
 const SKETCHES_SOURCE_PATH = "geoeditor://sketches";
+const GEOMAN_TEXT_PROPERTY = "__gm_text";
 
 let geoEditorPosition: GeoLibreMapControlPosition = "top-left";
 
@@ -25,8 +26,8 @@ const GEO_EDITOR_OPTIONS = {
     "rectangle",
     "circle",
     "marker",
-    "text_marker",
     "freehand",
+    "text_marker",
   ],
   editModes: [
     "select",
@@ -76,6 +77,13 @@ let sketchesIdleDisplayOverride = false;
 let unionSketchesWithStoreOnNextSync = false;
 /** Pending one-shot `styledata` listener, so repeated draw events don't pile up listeners. */
 let pendingStyleDataListener: (() => void) | null = null;
+let geomanEditSyncMap: maplibregl.Map | null = null;
+
+const GEOMAN_EDIT_SYNC_EVENTS = [
+  "gm:dragend",
+  "gm:editend",
+  "gm:rotateend",
+] as const;
 
 export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-geo-editor",
@@ -95,6 +103,7 @@ export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
             settings: { useControlsUi: false },
           }),
         );
+        bindGeomanEditSync(map);
       }
     }
 
@@ -118,6 +127,7 @@ export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
     showGeomanDisplayLayers();
     appApi = null;
     teardownSketchesStoreSync();
+    unbindGeomanEditSync();
 
     if (!geoEditorControl) return;
     app.removeMapControl(geoEditorControl);
@@ -171,6 +181,30 @@ function getGeoEditorOptions(): GeoEditorOptions {
     },
     onSelectionChange: () => applySketchesMapDisplay(),
   };
+}
+
+function handleGeomanEditSync(): void {
+  queueMicrotask(() => {
+    syncSketchesToStore();
+    applySketchesMapDisplay();
+  });
+}
+
+function bindGeomanEditSync(map: maplibregl.Map): void {
+  if (geomanEditSyncMap === map) return;
+  unbindGeomanEditSync();
+  geomanEditSyncMap = map;
+  for (const eventName of GEOMAN_EDIT_SYNC_EVENTS) {
+    map.on(eventName, handleGeomanEditSync);
+  }
+}
+
+function unbindGeomanEditSync(): void {
+  if (!geomanEditSyncMap) return;
+  for (const eventName of GEOMAN_EDIT_SYNC_EVENTS) {
+    geomanEditSyncMap.off(eventName, handleGeomanEditSync);
+  }
+  geomanEditSyncMap = null;
 }
 
 function geomanLayerStylesForMap(map: maplibregl.Map) {
@@ -512,6 +546,10 @@ function setGeomanDisplayLayersVisibility(visibility: "visible" | "none"): void 
   const map = appApi?.getMap?.();
   if (!map) return;
 
+  if (visibility === "visible") {
+    applyGeomanTextMarkerStyle(map);
+  }
+
   const style = map.getStyle();
   if (!style?.layers) return;
 
@@ -533,6 +571,42 @@ function showGeomanDisplayLayers(): void {
   setGeomanDisplayLayersVisibility("visible");
 }
 
+function applyGeomanTextMarkerStyle(map: maplibregl.Map): void {
+  const sketchesLayer = findSketchesLayer(useAppStore.getState().layers);
+  if (!sketchesLayer) return;
+
+  const style = map.getStyle();
+  if (!style?.layers) return;
+
+  for (const layer of style.layers) {
+    if (!isGeomanTextMarkerLayer(layer)) continue;
+    try {
+      map.setLayoutProperty(
+        layer.id,
+        "text-size",
+        Math.max(1, styleValue(sketchesLayer.style, "textSize")),
+      );
+      map.setPaintProperty(
+        layer.id,
+        "text-color",
+        styleValue(sketchesLayer.style, "textColor"),
+      );
+      map.setPaintProperty(
+        layer.id,
+        "text-halo-color",
+        styleValue(sketchesLayer.style, "textHaloColor"),
+      );
+      map.setPaintProperty(
+        layer.id,
+        "text-halo-width",
+        Math.max(0, styleValue(sketchesLayer.style, "textHaloWidth")),
+      );
+    } catch {
+      // Geoman may rebuild its temporary layers while an interaction is active.
+    }
+  }
+}
+
 function isGeomanDisplayLayer(layer: maplibregl.LayerSpecification): boolean {
   const id = layer.id.toLowerCase();
   if (id.startsWith("gm_") || id.startsWith("gm-")) {
@@ -545,5 +619,14 @@ function isGeomanDisplayLayer(layer: maplibregl.LayerSpecification): boolean {
     (source.startsWith("gm_") ||
       source.startsWith("gm-") ||
       source.startsWith("geoman"))
+  );
+}
+
+function isGeomanTextMarkerLayer(
+  layer: maplibregl.LayerSpecification,
+): layer is maplibregl.SymbolLayerSpecification {
+  if (layer.type !== "symbol" || !isGeomanDisplayLayer(layer)) return false;
+  return JSON.stringify(layer.layout?.["text-field"] ?? "").includes(
+    GEOMAN_TEXT_PROPERTY,
   );
 }

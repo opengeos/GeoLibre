@@ -78,6 +78,10 @@ export interface LayerStyle {
   strokeWidth: number;
   fillOpacity: number;
   circleRadius: number;
+  textColor: string;
+  textHaloColor: string;
+  textHaloWidth: number;
+  textSize: number;
   extrusionEnabled: boolean;
   extrusionColor: string;
   extrusionOpacity: number;
@@ -109,6 +113,10 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
   strokeWidth: 2,
   fillOpacity: 0.6,
   circleRadius: 6,
+  textColor: "#111827",
+  textHaloColor: "#ffffff",
+  textHaloWidth: 2,
+  textSize: 16,
   extrusionEnabled: false,
   extrusionColor: "#3b82f6",
   extrusionOpacity: 0.8,
