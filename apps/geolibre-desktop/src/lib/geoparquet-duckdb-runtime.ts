@@ -9,6 +9,9 @@ import {
   openGeoParquetLayerPanel,
 } from "@geolibre/plugins";
 
+// Blob workers created by DuckDB-WASM require absolute base URLs; Tauri's
+// origin (tauri://localhost/) won't resolve root-relative ?url imports
+// without this normalisation.
 function absoluteAssetUrl(url: string): string {
   return new URL(url, globalThis.location?.href ?? "http://localhost/").href;
 }
