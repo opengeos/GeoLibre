@@ -3,10 +3,7 @@ export { PluginManager } from "./plugin-manager";
 export { maplibreLayerControlPlugin } from "./plugins/layer-control";
 export { osmBasemapPlugin } from "./plugins/osm-basemap";
 export { cartoLightPlugin } from "./plugins/carto-light";
-export {
-  maplibreBasemapControlPlugin,
-  restoreBasemapControlLayers,
-} from "./plugins/maplibre-basemap-control";
+export { maplibreBasemapControlPlugin } from "./plugins/maplibre-basemap-control";
 export {
   addArcGISLayer,
   type ArcGISLayerOptions,

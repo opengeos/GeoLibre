@@ -144,6 +144,11 @@ function syncExternalNativeLayer(
     return;
   }
 
+  if (isBasemapControlRasterLayer(layer)) {
+    syncBasemapControlRasterLayer(map, layer, nativeLayerIds, beforeId);
+    return;
+  }
+
   ensureExternalGeoJsonNativeLayer(map, layer, nativeLayerIds, beforeId);
 
   const nativeFillLayerSpecs = nativeLayerIds
@@ -627,6 +632,79 @@ function syncWaybackExternalRasterLayer(
     },
     beforeId,
   );
+}
+
+function isBasemapControlRasterLayer(layer: GeoLibreLayer): boolean {
+  return (
+    layer.type === "raster" &&
+    layer.metadata.sourceKind === "maplibre-basemap-control" &&
+    layer.metadata.externalNativeLayer === true
+  );
+}
+
+// Raster basemaps selected in the basemap control are normally rendered by the
+// control itself. Rebuilding them here too keeps them on the map after a style
+// reload (e.g. reopening a project), where the control does not replay them.
+// The native source/layer ids match the control's deterministic ids, so this
+// is idempotent during a live session.
+function syncBasemapControlRasterLayer(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+  nativeLayerIds: string[],
+  beforeId?: string,
+): void {
+  const nativeLayerId = nativeLayerIds[0] ?? layer.id;
+  const sourceId = getExternalSourceIds(layer)[0] ?? `${nativeLayerId}-source`;
+  const tiles = getBasemapControlTiles(layer);
+  if (tiles.length === 0) return;
+
+  if (!map.getSource(sourceId)) {
+    map.addSource(sourceId, {
+      type: "raster",
+      tiles,
+      tileSize: numberSource(layer.source.tileSize) ?? 256,
+      ...(numberSource(layer.source.minzoom) !== undefined
+        ? { minzoom: numberSource(layer.source.minzoom) }
+        : {}),
+      ...(numberSource(layer.source.maxzoom) !== undefined
+        ? { maxzoom: numberSource(layer.source.maxzoom) }
+        : {}),
+      ...(layer.source.scheme === "tms" ? { scheme: "tms" as const } : {}),
+      ...(stringSource(layer.source.attribution)
+        ? { attribution: stringSource(layer.source.attribution) }
+        : {}),
+    });
+  }
+
+  ensureLayer(
+    map,
+    nativeLayerId,
+    {
+      id: nativeLayerId,
+      type: "raster",
+      source: sourceId,
+      ...styleLayerZoomRange(layer.style),
+      paint: rasterPaint(layer.style, layer.opacity),
+      layout: { visibility: layer.visible ? "visible" : "none" },
+    },
+    beforeId,
+  );
+}
+
+function getBasemapControlTiles(layer: GeoLibreLayer): string[] {
+  const tiles = layer.source.tiles;
+  if (Array.isArray(tiles)) {
+    const valid = tiles.filter(
+      (tile): tile is string => typeof tile === "string" && tile.length > 0,
+    );
+    if (valid.length > 0) return valid;
+  }
+  const tileUrl = stringMetadata(layer.metadata.tileUrl);
+  return tileUrl ? [tileUrl] : [];
+}
+
+function numberSource(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function getWaybackTileUrl(layer: GeoLibreLayer): string | null {

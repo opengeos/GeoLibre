@@ -1,4 +1,3 @@
-import { useAppStore } from "@geolibre/core";
 import {
   BasemapControl,
   type BasemapChangeEvent,
@@ -17,9 +16,6 @@ let basemapControlPosition: GeoLibreMapControlPosition = "top-left";
 
 let basemapControl: BasemapControl | null = null;
 let registeredRasterLayerId: string | null = null;
-// Set while a project is reopening so the replayed basemapchange does not
-// rewrite the (already-persisted) store layer and flag the project as dirty.
-let restoringBasemapId: string | null = null;
 
 export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-basemap-control",
@@ -90,9 +86,6 @@ function handleBasemapChange(
     return;
   }
   if (source.type !== "style" && source.type !== "vector-style") return;
-  // A style basemap ends any in-flight raster restore (e.g. a persisted id that
-  // now resolves to a non-raster catalog entry), so clear the guard.
-  restoringBasemapId = null;
   unregisterActiveRasterBasemap(app);
   app.setBasemap(source.url);
 }
@@ -109,16 +102,6 @@ function registerRasterBasemap(
   const layerId = `basemap-${basemap.id}`;
   if (registeredRasterLayerId && registeredRasterLayerId !== layerId) {
     app.unregisterExternalNativeLayer?.(registeredRasterLayerId);
-  }
-
-  // On project restore the mirror layer is already in the store with matching
-  // (deterministic) source/layer ids, so skip the write-back that would mark
-  // the freshly opened project dirty. The control has still re-rendered the
-  // tiles on the map by this point.
-  if (restoringBasemapId === basemap.id) {
-    restoringBasemapId = null;
-    registeredRasterLayerId = layerId;
-    return;
   }
 
   app.registerExternalNativeLayer({
@@ -159,38 +142,6 @@ function unregisterActiveRasterBasemap(app: GeoLibreAppAPI): void {
   if (!registeredRasterLayerId) return;
   app.unregisterExternalNativeLayer?.(registeredRasterLayerId);
   registeredRasterLayerId = null;
-}
-
-/**
- * Re-apply a persisted raster basemap after a project is reopened.
- *
- * Raster basemaps are rendered by the basemap control itself, not by the
- * generic layer-sync path, so the saved store layer alone does not put the
- * tiles back on the map. Replaying `setBasemap` drives the control's own
- * render path (correct source, layer, and stacking order) and re-emits the
- * `basemapchange` event that refreshes the store layer. Mirrors how 3D Tiles
- * layers are restored from the store on project load.
- */
-export function restoreBasemapControlLayers(app: GeoLibreAppAPI): void {
-  if (!basemapControl) return;
-
-  const basemapId = useAppStore
-    .getState()
-    .layers.filter(
-      (layer) =>
-        layer.type === "raster" &&
-        layer.metadata?.sourceKind === "maplibre-basemap-control",
-    )
-    .map((layer) => layer.metadata?.basemapId)
-    .filter((id): id is string => typeof id === "string" && id.length > 0)
-    .at(-1);
-  if (!basemapId) return;
-
-  restoringBasemapId = basemapId;
-  basemapControl.setBasemap(basemapId).catch((error) => {
-    restoringBasemapId = null;
-    console.error("[GeoLibre] Failed to restore raster basemap", error);
-  });
 }
 
 function getManagedRaster(
