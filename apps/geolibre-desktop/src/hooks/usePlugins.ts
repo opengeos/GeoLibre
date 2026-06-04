@@ -13,6 +13,8 @@ import {
 } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
 import type { GeoLibreMapControlPosition } from "@geolibre/plugins";
+import { invoke } from "@tauri-apps/api/core";
+import { readFile } from "@tauri-apps/plugin-fs";
 import type { RefObject } from "react";
 import { useEffect, useSyncExternalStore } from "react";
 import { loadExternalPlugins } from "../lib/external-plugins";
@@ -224,13 +226,11 @@ export function createAppAPI(
 
 async function fetchRemoteArrayBuffer(url: string): Promise<ArrayBuffer> {
   if (isTauriRuntime() && isLocalFileReference(url)) {
-    const { readFile } = await import("@tauri-apps/plugin-fs");
     return normalizeBytes(await readFile(localPathFromReference(url)));
   }
 
   if (isTauriRuntime()) {
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
       const bytes = await invoke<number[] | Uint8Array>("fetch_url_bytes", {
         url,
       });

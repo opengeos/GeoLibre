@@ -1,4 +1,5 @@
 import { isTauri } from "./tauri-io";
+import { invoke } from "@tauri-apps/api/core";
 import { addProtocol, type RequestParameters } from "maplibre-gl";
 
 const MBTILES_PROTOCOL = "geolibre-mbtiles";
@@ -28,7 +29,6 @@ export async function readMbtilesMetadata(
     throw new Error("MBTiles files require GeoLibre Desktop.");
   }
 
-  const { invoke } = await import("@tauri-apps/api/core");
   return invoke<MbtilesMetadata>("read_mbtiles_metadata", { path });
 }
 
@@ -37,7 +37,6 @@ export function registerMbtilesProtocol(): void {
 
   addProtocol(MBTILES_PROTOCOL, async (request) => {
     const params = parseMbtilesTileRequest(request);
-    const { invoke } = await import("@tauri-apps/api/core");
     const bytes = await invoke<number[] | Uint8Array>(
       "read_mbtiles_tile",
       params,

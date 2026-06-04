@@ -5,6 +5,7 @@ import {
   type GeoAgentControlOptions,
 } from "maplibre-gl-geoagent";
 import earthEngine from "@google/earthengine";
+import { invoke } from "@tauri-apps/api/core";
 import type {
   GeoLibreAppAPI,
   GeoLibreMapControlPosition,
@@ -266,7 +267,6 @@ function isTauriProductionOrigin(): boolean {
 async function authenticateEarthEngineViaTauri(
   oauthClientId: string,
 ): Promise<void> {
-  const { invoke } = await import("@tauri-apps/api/core");
   const session = await invoke<TauriEarthEngineOAuthStart>(
     "start_earth_engine_oauth",
     { clientId: oauthClientId },
@@ -338,7 +338,6 @@ function delay(ms: number): Promise<void> {
 async function closeTauriOauthPopups(): Promise<void> {
   let closedByCommand = false;
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
     await invoke("close_oauth_popups");
     closedByCommand = true;
     setTimeout(() => {

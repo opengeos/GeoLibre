@@ -11,7 +11,7 @@ import { defineConfig, type Plugin } from "vite";
 
 const GEOAGENT_BROWSER_BUNDLE = "maplibre-gl-geoagent/dist/browser-";
 const EARTH_ENGINE_BROWSER_BUNDLE = "@google/earthengine/build/browser.js";
-const GIS_CHUNK_WARNING_LIMIT_KB = 5000;
+const GIS_CHUNK_WARNING_LIMIT_KB = 14000;
 const APP_BASE = process.env.GEOLIBRE_APP_BASE;
 const APP_VERSION = JSON.parse(
   readFileSync(new URL("./package.json", import.meta.url), "utf8"),
@@ -47,7 +47,7 @@ function manualChunks(id: string): string | undefined {
   if (id.includes("mapillary-js")) return "mapillary";
   if (id.includes("@geoman-io/maplibre-geoman-free")) return "maplibre-geoman";
   if (id.includes("maplibre-gl")) return "maplibre";
-  return "vendor";
+  return undefined;
 }
 
 function onwarn(
@@ -296,6 +296,7 @@ export default defineConfig({
     dedupe: ["react", "react-dom", "maplibre-gl"],
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      module: path.resolve(__dirname, "./src/lib/browser-node-module.ts"),
     },
   },
 });

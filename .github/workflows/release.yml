@@ -89,3 +89,20 @@ jobs:
           tagName: ${{ github.event.release.tag_name }}
           args: ${{ matrix.args }}
           uploadPlainBinary: true
+
+      - name: Build MSIX package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/build-msix.ps1
+
+      - name: Upload MSIX release asset
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $msix = Get-ChildItem -Path "apps/geolibre-desktop/src-tauri/target/release/bundle/msix" -Filter "*.msix" | Select-Object -First 1
+          if (-not $msix) {
+            throw "No MSIX package was created."
+          }
+          gh release upload "${{ github.event.release.tag_name }}" $msix.FullName --clobber

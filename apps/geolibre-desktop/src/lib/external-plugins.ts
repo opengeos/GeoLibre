@@ -3,6 +3,7 @@ import type {
   GeoLibrePlugin,
   PluginManager,
 } from "@geolibre/plugins";
+import { invoke } from "@tauri-apps/api/core";
 import { isTauri } from "./tauri-io";
 
 interface ExternalPluginBundle {
@@ -131,7 +132,6 @@ export async function loadExternalPlugins(
 async function loadFilesystemPluginBundles(
   additionalPluginDirectories: string[],
 ): Promise<ExternalPluginBundleLoadResult> {
-  const { invoke } = await import("@tauri-apps/api/core");
   return invoke<ExternalPluginBundleLoadResult>(
     "load_external_plugin_bundles",
     {

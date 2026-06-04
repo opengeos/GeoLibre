@@ -1,4 +1,5 @@
 import type { GeoLibreLayer, GeoLibreProject } from "@geolibre/core";
+import { invoke } from "@tauri-apps/api/core";
 import { addProtocol, type RequestParameters } from "maplibre-gl";
 import { isTauri } from "./tauri-io";
 
@@ -81,7 +82,6 @@ export function registerXyzTileProtocol(): void {
 
   addProtocol(XYZ_TILE_PROTOCOL, async (request) => {
     const url = parseXyzTileRequest(request);
-    const { invoke } = await import("@tauri-apps/api/core");
     const bytes = await invoke<number[] | Uint8Array>("fetch_url_bytes", {
       url,
     });
@@ -213,7 +213,6 @@ async function resolveShortXyzUrl(
       console.warn("Falling back to desktop URL resolver", error);
     }
 
-    const { invoke } = await import("@tauri-apps/api/core");
     return invoke<string>("resolve_url_redirect", { url });
   }
 

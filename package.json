@@ -17,7 +17,8 @@
     "build": "npm run build -w geolibre-desktop",
     "tauri": "npm run tauri -w geolibre-desktop",
     "tauri:dev": "npm run tauri dev -w geolibre-desktop",
-    "tauri:build": "node scripts/tauri-build.mjs"
+    "tauri:build": "node scripts/tauri-build.mjs",
+    "msix:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/build-msix.ps1"
   },
   "engines": {
     "node": ">=22"
