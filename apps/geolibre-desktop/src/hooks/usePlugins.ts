@@ -62,9 +62,9 @@ function createExternalNativeStoreLayer(
   return {
     id: registration.id,
     name: registration.name,
-    type: "geojson",
+    type: registration.type ?? "geojson",
     source: {
-      type: "geojson",
+      ...(registration.source ?? { type: "geojson" }),
       ...(sourceId ? { sourceId } : {}),
     },
     visible: existing?.visible ?? true,
@@ -82,6 +82,7 @@ function createExternalNativeStoreLayer(
       sourceIds,
       ...(sourceId ? { sourceId } : {}),
     },
+    beforeId: registration.beforeId ?? existing?.beforeId,
     geojson: registration.geojson ?? existing?.geojson,
     sourcePath: registration.sourcePath ?? existing?.sourcePath,
   };

@@ -15,6 +15,7 @@ import "maplibre-gl-streetview/style.css";
 import "maplibre-gl-swipe/style.css";
 import "mapillary-js/dist/mapillary.css";
 import "./index.css";
+import "./lib/basemap-style";
 import "./lib/geoagent-style";
 import "./lib/lidar-style";
 import "./lib/swipe-style";
