@@ -333,11 +333,15 @@ export function TopToolbar({
     openDuckDBLayerPanel(appApi);
   };
   const handleAddGeoParquetLayer = async () => {
-    const { configureGeoParquetDuckDBRuntime } = await import(
-      "../../lib/geoparquet-duckdb-runtime"
-    );
-    configureGeoParquetDuckDBRuntime();
-    openGeoParquetLayerPanel(appApi);
+    try {
+      const { configureGeoParquetDuckDBRuntime } = await import(
+        "../../lib/geoparquet-duckdb-runtime"
+      );
+      configureGeoParquetDuckDBRuntime();
+      openGeoParquetLayerPanel(appApi);
+    } catch (error) {
+      console.error("Failed to initialise GeoParquet DuckDB runtime", error);
+    }
   };
   const handleAddPMTilesLayer = () => {
     openPMTilesLayerPanel(appApi);

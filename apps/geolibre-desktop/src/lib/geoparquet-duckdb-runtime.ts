@@ -7,17 +7,6 @@ import { configureDuckDB } from "maplibre-gl-geoparquet";
 
 let configured = false;
 
-const GEOPARQUET_DUCKDB_BUNDLES = {
-  mvp: {
-    mainModule: absoluteAssetUrl(duckdbWasmMvp),
-    mainWorker: absoluteAssetUrl(mvpWorker),
-  },
-  eh: {
-    mainModule: absoluteAssetUrl(duckdbWasmEh),
-    mainWorker: absoluteAssetUrl(ehWorker),
-  },
-} satisfies DuckDBBundles;
-
 function absoluteAssetUrl(url: string): string {
   return new URL(url, globalThis.location.href).href;
 }
@@ -25,7 +14,16 @@ function absoluteAssetUrl(url: string): string {
 export function configureGeoParquetDuckDBRuntime(): void {
   if (configured) return;
   configureDuckDB({
-    bundles: GEOPARQUET_DUCKDB_BUNDLES,
+    bundles: {
+      mvp: {
+        mainModule: absoluteAssetUrl(duckdbWasmMvp),
+        mainWorker: absoluteAssetUrl(mvpWorker),
+      },
+      eh: {
+        mainModule: absoluteAssetUrl(duckdbWasmEh),
+        mainWorker: absoluteAssetUrl(ehWorker),
+      },
+    } satisfies DuckDBBundles,
   });
   configured = true;
 }
