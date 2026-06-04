@@ -699,24 +699,33 @@ function updateGeoParquetPanelInset(
 ): void {
   panel.style.setProperty(
     "--geolibre-geoparquet-panel-left",
-    hasVisibleTopLeftMapControls(control) ? "48px" : "10px",
+    geoParquetPanelLeftOffset(control),
   );
 }
 
-function hasVisibleTopLeftMapControls(
-  control: GeoParquetControl | null,
-): boolean {
-  const topLeftControls = control
-    ?.getMap()
-    ?.getContainer()
-    .querySelector<HTMLElement>(".maplibregl-ctrl-top-left");
-  if (!topLeftControls) return false;
+function geoParquetPanelLeftOffset(control: GeoParquetControl | null): string {
+  const mapContainer = control?.getMap()?.getContainer();
+  const topLeftControls = mapContainer?.querySelector<HTMLElement>(
+    ".maplibregl-ctrl-top-left",
+  );
+  if (!mapContainer || !topLeftControls) return "10px";
 
-  return [...topLeftControls.querySelectorAll<HTMLElement>(".maplibregl-ctrl")]
+  // Measure the actual right edge of the other visible top-left controls
+  // instead of assuming a fixed control width.
+  const visibleControls = [
+    ...topLeftControls.querySelectorAll<HTMLElement>(".maplibregl-ctrl"),
+  ]
     .filter(
       (element) => !element.classList.contains("geolibre-geoparquet-control"),
     )
-    .some(isVisibleElement);
+    .filter(isVisibleElement);
+  if (visibleControls.length === 0) return "10px";
+
+  const rightEdge = Math.max(
+    ...visibleControls.map((element) => element.getBoundingClientRect().right),
+  );
+  const left = rightEdge - mapContainer.getBoundingClientRect().left + 10;
+  return `${Math.max(Math.round(left), 10)}px`;
 }
 
 function isVisibleElement(element: HTMLElement): boolean {

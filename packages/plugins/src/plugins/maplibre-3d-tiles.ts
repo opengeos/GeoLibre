@@ -70,6 +70,9 @@ function createThreeDTilesControl(): ThreeDTilesControl {
   const syncHandler: ThreeDTilesControlEventHandler = () => {
     syncThreeDTilesStoreFromControl(control);
     keepThreeDTilesPanelExpanded(control);
+    // The panel may render after showThreeDTilesControl ran, so retry the
+    // (idempotent) handler installation whenever the control state changes.
+    installThreeDTilesPanelHandlers(control);
   };
 
   control.on("statechange", syncHandler);
@@ -114,7 +117,11 @@ function syncThreeDTilesStoreFromControl(control: ThreeDTilesControl): void {
     }
   }
 
-  const layersById = new Map(store.layers.map((layer) => [layer.id, layer]));
+  // Re-read state: the removals above produce a new store snapshot, so the
+  // captured `store.layers` would still include the just-removed layers.
+  const layersById = new Map(
+    useAppStore.getState().layers.map((layer) => [layer.id, layer]),
+  );
   for (const tileset of state.tilesets) {
     const existingLayer = layersById.get(tileset.id);
     const layer = createThreeDTilesStoreLayer(tileset, tileset.opacity);
@@ -262,10 +269,18 @@ function hideThreeDTilesControl(control: ThreeDTilesControl | null): void {
 function showThreeDTilesControl(control: ThreeDTilesControl | null): void {
   const container = control?.getContainer();
   if (container) container.style.display = "";
+  installThreeDTilesPanelHandlers(control);
+}
+
+function installThreeDTilesPanelHandlers(
+  control: ThreeDTilesControl | null,
+): void {
   const panel = getThreeDTilesPanel(control);
-  panel?.classList.add("geolibre-3d-tiles-panel");
+  if (panel) {
+    panel.classList.add("geolibre-3d-tiles-panel");
+    installThreeDTilesCloseHandler(control, panel);
+  }
   installThreeDTilesToggleHandler(control);
-  installThreeDTilesCloseHandler(control, panel);
 }
 
 function getThreeDTilesPanel(

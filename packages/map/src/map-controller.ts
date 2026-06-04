@@ -575,7 +575,9 @@ export class MapController {
       if (
         Array.isArray(center) &&
         typeof center[0] === "number" &&
-        typeof center[1] === "number"
+        typeof center[1] === "number" &&
+        Number.isFinite(center[0]) &&
+        Number.isFinite(center[1])
       ) {
         // Tilesets only expose their center, not a native zoom range. Use a
         // conservative floor so city-scale tilesets that render below zoom 18
