@@ -32,27 +32,35 @@ let threeDTilesControl: ThreeDTilesControl | null = null;
 let threeDTilesControlMounted = false;
 let threeDTilesPanelPinned = false;
 let threeDTilesStoreUnsubscribe: (() => void) | null = null;
+let threeDTilesStoreSyncSuspended = 0;
 
 export function openThreeDTilesLayerPanel(app: GeoLibreAppAPI): void {
   openStandaloneThreeDTilesControl(app);
 }
 
+export function restoreThreeDTilesLayers(app: GeoLibreAppAPI): void {
+  const layers = useAppStore
+    .getState()
+    .layers.filter(isThreeDTilesControlLayer);
+  if (layers.length === 0) return;
+
+  const control = runWithThreeDTilesStoreSyncSuspended(() =>
+    ensureThreeDTilesControl(app),
+  );
+  if (!control) return;
+
+  hideThreeDTilesControl(control);
+  void hydrateThreeDTilesControlFromStore(control, {
+    replaceExisting: true,
+  }).then(() => {
+    syncThreeDTilesStoreFromControl(control);
+  });
+}
+
 function openStandaloneThreeDTilesControl(app: GeoLibreAppAPI): boolean {
-  threeDTilesControl ??= createThreeDTilesControl();
+  const control = ensureThreeDTilesControl(app);
+  if (!control) return false;
 
-  if (!threeDTilesControlMounted) {
-    const added = app.addMapControl(
-      threeDTilesControl,
-      threeDTilesControlPosition,
-    );
-    if (!added) {
-      resetThreeDTilesControl(threeDTilesControl);
-      return false;
-    }
-    threeDTilesControlMounted = true;
-  }
-
-  const control = threeDTilesControl;
   window.setTimeout(() => {
     threeDTilesPanelPinned = true;
     showThreeDTilesControl(control);
@@ -65,10 +73,32 @@ function openStandaloneThreeDTilesControl(app: GeoLibreAppAPI): boolean {
   return true;
 }
 
+function ensureThreeDTilesControl(
+  app: GeoLibreAppAPI,
+): ThreeDTilesControl | null {
+  threeDTilesControl ??= createThreeDTilesControl();
+
+  if (!threeDTilesControlMounted) {
+    const added = app.addMapControl(
+      threeDTilesControl,
+      threeDTilesControlPosition,
+    );
+    if (!added) {
+      resetThreeDTilesControl(threeDTilesControl);
+      return null;
+    }
+    threeDTilesControlMounted = true;
+  }
+
+  return threeDTilesControl;
+}
+
 function createThreeDTilesControl(): ThreeDTilesControl {
   const control = new ThreeDTilesControl(THREE_D_TILES_OPTIONS);
   const syncHandler: ThreeDTilesControlEventHandler = () => {
-    syncThreeDTilesStoreFromControl(control);
+    if (!isThreeDTilesStoreSyncSuspended()) {
+      syncThreeDTilesStoreFromControl(control);
+    }
     keepThreeDTilesPanelExpanded(control);
     // The panel may render after showThreeDTilesControl ran, so retry the
     // (idempotent) handler installation whenever the control state changes.
@@ -138,12 +168,24 @@ function syncThreeDTilesStoreFromControl(control: ThreeDTilesControl): void {
 
 async function hydrateThreeDTilesControlFromStore(
   control: ThreeDTilesControl,
+  options: { replaceExisting?: boolean } = {},
 ): Promise<void> {
-  if (control.getState().tilesets.length > 0) return;
-
   const layers = useAppStore
     .getState()
     .layers.filter(isThreeDTilesControlLayer);
+  if (layers.length === 0) return;
+
+  const tilesets = control.getState().tilesets;
+  if (tilesets.length > 0) {
+    if (!options.replaceExisting) return;
+
+    runWithThreeDTilesStoreSyncSuspended(() => {
+      for (const tileset of tilesets) {
+        control.removeTileset(tileset.id);
+      }
+    });
+  }
+
   for (const layer of layers) {
     const url = stringValue(layer.source.url) ?? layer.sourcePath;
     if (!url) continue;
@@ -152,13 +194,15 @@ async function hydrateThreeDTilesControlFromStore(
       beforeId: layer.beforeId,
       layerName: layer.name,
     };
-    const id = await control.loadTileset(url, {
-      altitudeOffset: numberValue(layer.source.altitudeOffset, 0),
-      beforeId: layerValues.beforeId,
-      flyToOnLoad: false,
-      layerName: layerValues.layerName,
-      opacity: layer.opacity,
-      visible: layer.visible,
+    const id = await runWithThreeDTilesStoreSyncSuspended(() => {
+      return control.loadTileset(url, {
+        altitudeOffset: numberValue(layer.source.altitudeOffset, 0),
+        beforeId: layerValues.beforeId,
+        flyToOnLoad: false,
+        layerName: layerValues.layerName,
+        opacity: layer.opacity,
+        visible: layer.visible,
+      });
     });
     if (id) setThreeDTilesOpacity(control, id, layer.opacity);
   }
@@ -352,7 +396,22 @@ function setThreeDTilesOpacity(
   id: string,
   opacity: number,
 ): void {
-  control.setOpacity(opacity, id, false);
+  runWithThreeDTilesStoreSyncSuspended(() => {
+    control.setOpacity(opacity, id, false);
+  });
+}
+
+function runWithThreeDTilesStoreSyncSuspended<T>(callback: () => T): T {
+  threeDTilesStoreSyncSuspended += 1;
+  try {
+    return callback();
+  } finally {
+    threeDTilesStoreSyncSuspended -= 1;
+  }
+}
+
+function isThreeDTilesStoreSyncSuspended(): boolean {
+  return threeDTilesStoreSyncSuspended > 0;
 }
 
 function stringValue(value: unknown): string | undefined {

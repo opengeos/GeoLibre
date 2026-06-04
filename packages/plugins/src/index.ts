@@ -27,7 +27,10 @@ export {
 } from "./plugins/maplibre-components";
 export { openDuckDBLayerPanel } from "./plugins/maplibre-duckdb";
 export { openGeoParquetLayerPanel } from "./plugins/maplibre-geoparquet";
-export { openThreeDTilesLayerPanel } from "./plugins/maplibre-3d-tiles";
+export {
+  openThreeDTilesLayerPanel,
+  restoreThreeDTilesLayers,
+} from "./plugins/maplibre-3d-tiles";
 export { maplibreEsriWaybackPlugin } from "./plugins/maplibre-esri-wayback";
 export { maplibreGeoEditorPlugin } from "./plugins/maplibre-geo-editor";
 export { maplibreGeoAgentPlugin } from "./plugins/maplibre-geoagent";

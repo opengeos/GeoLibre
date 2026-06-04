@@ -1268,6 +1268,8 @@ function removeIfExists(map: maplibregl.Map, id: string): void {
 }
 
 function moveLayer(map: maplibregl.Map, id: string, beforeId?: string): void {
+  if (!map.getLayer(id)) return;
+
   try {
     if (beforeId && beforeId !== id && map.getLayer(beforeId)) {
       map.moveLayer(id, beforeId);
