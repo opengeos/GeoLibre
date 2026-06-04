@@ -85,8 +85,7 @@ const BASEMAP_SELECT_FIXES = `
   width: 100%;
 }
 
-.basemap-select-menu button:hover,
-.basemap-select-menu button.is-active {
+.basemap-select-menu button:hover {
   background: #f3f4f6;
 }
 
@@ -106,8 +105,13 @@ if (
   document.head.appendChild(style);
 }
 
+// Tracks the currently-open menu so global listeners can bail without a DOM
+// query when nothing is open.
+let openMenu: HTMLDivElement | null = null;
+
 const closeBasemapSelectMenu = () => {
-  document.querySelector(`.${BASEMAP_SELECT_MENU_CLASS}`)?.remove();
+  openMenu?.remove();
+  openMenu = null;
   document
     .querySelectorAll<HTMLButtonElement>(
       `.${BASEMAP_SELECT_PROXY_CLASS}.is-open`,
@@ -183,12 +187,17 @@ const openBasemapSelectMenu = (
       event.preventDefault();
       closeBasemapSelectMenu();
       button.focus();
+    } else if (event.key === "Tab") {
+      // Let focus advance naturally, but dismiss the menu so it does not linger
+      // open after the user tabs away.
+      closeBasemapSelectMenu();
     }
   });
 
   button.classList.add("is-open");
   button.setAttribute("aria-expanded", "true");
   document.body.appendChild(menu);
+  openMenu = menu;
   (menu.querySelector<HTMLButtonElement>("button.is-selected") ?? items[0])?.focus();
 };
 
@@ -211,7 +220,8 @@ const enhanceBasemapSelect = (select: HTMLSelectElement) => {
   button.addEventListener("keydown", (event) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      openBasemapSelectMenu(select, button);
+      if (button.classList.contains("is-open")) closeBasemapSelectMenu();
+      else openBasemapSelectMenu(select, button);
     }
     if (event.key === "Escape") closeBasemapSelectMenu();
   });
@@ -237,8 +247,8 @@ if (typeof document !== "undefined") {
   window.addEventListener(
     "scroll",
     (event) => {
-      const menu = document.querySelector(`.${BASEMAP_SELECT_MENU_CLASS}`);
-      if (menu && event.target instanceof Node && menu.contains(event.target)) {
+      if (!openMenu) return;
+      if (event.target instanceof Node && openMenu.contains(event.target)) {
         return;
       }
       closeBasemapSelectMenu();

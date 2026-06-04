@@ -1,3 +1,4 @@
+import { useAppStore } from "@geolibre/core";
 import {
   BasemapControl,
   type BasemapChangeEvent,
@@ -40,6 +41,10 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
     basemapControl.setState({
       activeBasemapId: getBasemapIdForStyleUrl(app.getActiveBasemap()),
     });
+    // Re-link a raster basemap layer restored from a reopened project so that a
+    // later switch to a style basemap can unregister it (the module state does
+    // not survive a new session).
+    relinkRestoredRasterBasemap();
     setTimeout(() => basemapControl?.expand(), 0);
   },
   deactivate: (app: GeoLibreAppAPI) => {
@@ -85,8 +90,11 @@ function handleBasemapChange(
     registerRasterBasemap(app, event.basemap, event);
     return;
   }
-  if (source.type !== "style" && source.type !== "vector-style") return;
+  // Any non-raster basemap (including an unrecognized future source type)
+  // clears a previously registered raster layer so it does not linger in the
+  // layer manager.
   unregisterActiveRasterBasemap(app);
+  if (source.type !== "style" && source.type !== "vector-style") return;
   app.setBasemap(source.url);
 }
 
@@ -132,7 +140,8 @@ function registerRasterBasemap(
       // Tile URL template lives in metadata, not sourcePath, which is reserved
       // for local file paths (GeoJSON, FlatGeobuf, etc.).
       tileType: "raster",
-      tileUrl: basemap.source.tiles[0],
+      tileUrl:
+        basemap.source.tiles.length > 0 ? basemap.source.tiles[0] : undefined,
     },
   });
   registeredRasterLayerId = layerId;
@@ -144,6 +153,16 @@ function unregisterActiveRasterBasemap(app: GeoLibreAppAPI): void {
   registeredRasterLayerId = null;
 }
 
+function relinkRestoredRasterBasemap(): void {
+  if (registeredRasterLayerId) return;
+  const restored = useAppStore
+    .getState()
+    .layers.find(
+      (layer) => layer.metadata?.sourceKind === "maplibre-basemap-control",
+    );
+  if (restored) registeredRasterLayerId = restored.id;
+}
+
 function getManagedRaster(
   event: BasemapChangeEvent,
   basemap: BasemapDefinition,
@@ -152,6 +171,11 @@ function getManagedRaster(
     return event.managedRaster;
   }
 
+  // Fallback for library versions that omit `managedRaster` on the event. These
+  // ids must mirror the native source/layer ids maplibre-gl-basemap-control
+  // creates: `${CONTROL_SOURCE_PREFIX}-${id}` for the source and the bare
+  // `${id}` for the layer (CONTROL_LAYER_PREFIX is empty). Verified against
+  // maplibre-gl-basemap-control@0.2.2.
   return {
     sourceId: `maplibre-basemap-control-source-${basemap.id}`,
     layerId: basemap.id,
