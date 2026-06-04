@@ -47,6 +47,10 @@ function manualChunks(id: string): string | undefined {
   if (id.includes("mapillary-js")) return "mapillary";
   if (id.includes("@geoman-io/maplibre-geoman-free")) return "maplibre-geoman";
   if (id.includes("maplibre-gl")) return "maplibre";
+  // Returning undefined hands remaining node_modules back to Rollup's default
+  // chunking. We intentionally do not group them into a single "vendor" chunk:
+  // that produced a circular manual-chunks warning. Do not re-add a catch-all
+  // `return "vendor"` here without re-checking that warning.
   return undefined;
 }
 

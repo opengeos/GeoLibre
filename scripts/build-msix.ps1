@@ -1,6 +1,7 @@
 param(
   [string] $AppDir = "apps/geolibre-desktop",
   [string] $Configuration = "release",
+  [ValidateSet("x64", "x86", "arm64", "arm", "neutral")]
   [string] $Architecture = "x64",
   [string] $Publisher = "CN=GeoLibre",
   [string] $PublisherDisplayName = "GeoLibre"
@@ -61,7 +62,7 @@ $identifier = [string] $config.identifier
 $version = ConvertTo-MsixVersion ([string] $config.version)
 
 $cargo = Get-Content -Raw $cargoPath
-$binaryNameMatch = [regex]::Match($cargo, '(?m)^name\s*=\s*"([^"]+)"')
+$binaryNameMatch = [regex]::Match($cargo, '(?ms)\[package\].*?^name\s*=\s*"([^"]+)"')
 if (-not $binaryNameMatch.Success) {
   throw "Could not determine the Tauri binary name from $cargoPath."
 }
@@ -85,6 +86,8 @@ New-Item -ItemType Directory -Force -Path $stagingDir, $assetsDir, $backendPacka
 Copy-Item -Force $binaryPath (Join-Path $stagingDir "$binaryName.exe")
 Copy-Item -Force (Join-Path $targetDir "*.dll") $stagingDir -ErrorAction SilentlyContinue
 Copy-Item -Recurse -Force (Join-Path $backendDir "*") $backendPackageDir
+Get-ChildItem -Recurse -Path $backendPackageDir -Include "__pycache__", "*.pyc", "*.pyo", "tests", "test_*.py" |
+  Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
 $assetNames = @(
   "Square44x44Logo.png",
@@ -141,3 +144,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "MSIX package created at $packagePath"
+
+if ($env:GITHUB_OUTPUT) {
+  "msix_path=$packagePath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+}
