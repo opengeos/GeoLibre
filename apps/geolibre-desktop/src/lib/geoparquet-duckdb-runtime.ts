@@ -4,15 +4,18 @@ import ehWorker from "@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url";
 import duckdbWasmMvp from "@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url";
 import mvpWorker from "@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url";
 import { configureDuckDB } from "maplibre-gl-geoparquet";
-
-let configured = false;
+import {
+  type GeoLibreAppAPI,
+  openGeoParquetLayerPanel,
+} from "@geolibre/plugins";
 
 function absoluteAssetUrl(url: string): string {
-  return new URL(url, globalThis.location.href).href;
+  return new URL(url, globalThis.location?.href ?? "http://localhost/").href;
 }
 
 export function configureGeoParquetDuckDBRuntime(): void {
-  if (configured) return;
+  // configureDuckDB is an idempotent synchronous setter, so repeated calls
+  // are harmless (and DuckDB ignores config changes once initialized).
   configureDuckDB({
     bundles: {
       mvp: {
@@ -25,5 +28,9 @@ export function configureGeoParquetDuckDBRuntime(): void {
       },
     } satisfies DuckDBBundles,
   });
-  configured = true;
+}
+
+export function openGeoParquetPanel(app: GeoLibreAppAPI): void {
+  configureGeoParquetDuckDBRuntime();
+  openGeoParquetLayerPanel(app);
 }

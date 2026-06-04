@@ -13,7 +13,6 @@ import {
   closeSearchPlacesPanel,
   openFlatGeobufAddVectorLayerPanel,
   openDuckDBLayerPanel,
-  openGeoParquetLayerPanel,
   isSearchPlacesPanelVisible,
   openLidarLayerPanel,
   openPMTilesLayerPanel,
@@ -334,12 +333,12 @@ export function TopToolbar({
   };
   const handleAddGeoParquetLayer = async () => {
     try {
-      const { configureGeoParquetDuckDBRuntime } = await import(
+      const { openGeoParquetPanel } = await import(
         "../../lib/geoparquet-duckdb-runtime"
       );
-      configureGeoParquetDuckDBRuntime();
-      openGeoParquetLayerPanel(appApi);
+      openGeoParquetPanel(appApi);
     } catch (error) {
+      console.error("Failed to open the GeoParquet panel", error);
       setActionError(
         error instanceof Error
           ? error.message
