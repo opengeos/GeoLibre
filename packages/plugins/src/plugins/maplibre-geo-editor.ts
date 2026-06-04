@@ -18,7 +18,15 @@ const GEO_EDITOR_OPTIONS = {
   collapsed: false,
   toolbarOrientation: "vertical",
   columns: 2,
-  drawModes: ["polygon", "line", "rectangle", "circle", "marker", "freehand"],
+  drawModes: [
+    "polygon",
+    "line",
+    "rectangle",
+    "circle",
+    "marker",
+    "text_marker",
+    "freehand",
+  ],
   editModes: [
     "select",
     "drag",
@@ -359,6 +367,7 @@ function sketchesMapLayerIds(layerId: string): string[] {
     `layer-${layerId}-extrusion`,
     `layer-${layerId}-line`,
     `layer-${layerId}-circle`,
+    `layer-${layerId}-text`,
   ];
 }
 

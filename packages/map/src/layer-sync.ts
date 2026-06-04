@@ -14,6 +14,7 @@ import {
   fillLayerId,
   lineLayerId,
   sourceId,
+  textLayerId,
 } from "./geojson-loader";
 import { isPlaceholderLayer } from "./placeholders";
 import {
@@ -29,6 +30,33 @@ const PMTILES_PROTOCOL = "pmtiles";
 const PMTILES_PROTOCOL_GLOBAL_KEY = "__geolibrePMTilesProtocol";
 const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
 const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;
+const TEXT_MARKER_SHAPE = "text_marker";
+const GEOMAN_SHAPE_PROPERTY = "__gm_shape";
+const GEOMAN_TEXT_PROPERTY = "__gm_text";
+
+const pointGeometryFilter: maplibregl.FilterSpecification = [
+  "match",
+  ["geometry-type"],
+  ["Point", "MultiPoint"],
+  true,
+  false,
+];
+
+const textMarkerFilter: maplibregl.FilterSpecification = [
+  "all",
+  pointGeometryFilter,
+  [
+    "any",
+    ["==", ["get", GEOMAN_SHAPE_PROPERTY], TEXT_MARKER_SHAPE],
+    ["==", ["get", "shape"], TEXT_MARKER_SHAPE],
+  ],
+];
+
+const nonTextMarkerPointFilter: maplibregl.FilterSpecification = [
+  "all",
+  pointGeometryFilter,
+  ["!", textMarkerFilter],
+];
 
 // Native layer ids whose zoom range GeoLibre has taken over. A pristine external
 // layer keeps its source-declared range, but once the user sets a non-default
@@ -804,6 +832,7 @@ function syncGeoJsonLayer(
 
   const visibility = layer.visible ? "visible" : "none";
   const opacity = layer.opacity;
+  const hasTextMarkers = hasTextMarkerFeatures(layer.geojson!);
 
   if (profile.hasPolygon) {
     if (layer.style.extrusionEnabled) {
@@ -893,13 +922,7 @@ function syncGeoJsonLayer(
         type: "circle",
         source: src,
         ...styleLayerZoomRange(layer.style),
-        filter: [
-          "match",
-          ["geometry-type"],
-          ["Point", "MultiPoint"],
-          true,
-          false,
-        ],
+        filter: hasTextMarkers ? nonTextMarkerPointFilter : pointGeometryFilter,
         paint: circlePaint(layer.style, opacity),
         layout: { visibility },
       },
@@ -908,6 +931,77 @@ function syncGeoJsonLayer(
   } else {
     removeIfExists(map, circleLayerId(layer.id));
   }
+
+  if (!layer.style.extrusionEnabled && hasTextMarkers) {
+    ensureLayer(
+      map,
+      textLayerId(layer.id),
+      {
+        id: textLayerId(layer.id),
+        type: "symbol",
+        source: src,
+        ...styleLayerZoomRange(layer.style),
+        filter: textMarkerFilter,
+        layout: {
+          "text-allow-overlap": true,
+          "text-font": textFontForMapStyle(map),
+          "text-field": [
+            "to-string",
+            [
+              "coalesce",
+              ["get", GEOMAN_TEXT_PROPERTY],
+              ["get", "text"],
+              "",
+            ],
+          ],
+          "text-ignore-placement": true,
+          "text-size": Math.max(12, styleValue(layer.style, "circleRadius") * 2.5),
+          visibility,
+        },
+        paint: {
+          "text-color": styleValue(layer.style, "fillColor"),
+          "text-halo-color": "#ffffff",
+          "text-halo-width": Math.max(1, styleValue(layer.style, "strokeWidth")),
+          "text-opacity": opacity,
+        },
+      },
+      beforeId,
+    );
+  } else {
+    removeIfExists(map, textLayerId(layer.id));
+  }
+}
+
+function hasTextMarkerFeatures(
+  collection: GeoJSON.FeatureCollection,
+): boolean {
+  return collection.features.some((feature) => {
+    const properties = feature.properties;
+    if (!properties) return false;
+    if (
+      properties[GEOMAN_SHAPE_PROPERTY] !== TEXT_MARKER_SHAPE &&
+      properties.shape !== TEXT_MARKER_SHAPE
+    ) {
+      return false;
+    }
+
+    const value = properties[GEOMAN_TEXT_PROPERTY] ?? properties.text;
+    return typeof value === "string" && value.trim().length > 0;
+  });
+}
+
+function textFontForMapStyle(map: maplibregl.Map): string[] {
+  for (const styleLayer of map.getStyle().layers ?? []) {
+    if (styleLayer.type !== "symbol") continue;
+    const textFont = styleLayer.layout?.["text-font"];
+    if (
+      Array.isArray(textFont) &&
+      textFont.every((font): font is string => typeof font === "string")
+    ) {
+      return textFont;
+    }
+  }
+  return ["Noto Sans Regular"];
 }
 
 function syncRasterTileLayer(
@@ -1500,6 +1594,7 @@ export function removeLayerFromMap(
     fillExtrusionLayerId(layerId),
     lineLayerId(layerId),
     circleLayerId(layerId),
+    textLayerId(layerId),
     `layer-${layerId}-raster`,
     ...(layer ? vectorTileAllStyleLayerIds(layer) : []),
     vectorTileCircleLayerId(layerId),

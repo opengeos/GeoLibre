@@ -73,6 +73,10 @@ export function circleLayerId(layerId: string): string {
   return `layer-${layerId}-circle`;
 }
 
+export function textLayerId(layerId: string): string {
+  return `layer-${layerId}-text`;
+}
+
 export function highlightSourceId(): string {
   return "geolibre-highlight-source";
 }
