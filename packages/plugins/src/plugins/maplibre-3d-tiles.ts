@@ -267,7 +267,7 @@ function installThreeDTilesToggleHandler(
 
   const toggleButton = control
     .getContainer()
-    .querySelector<HTMLButtonElement>(".three-d-tiles-control-toggle");
+    ?.querySelector<HTMLButtonElement>(".three-d-tiles-control-toggle");
   if (!toggleButton || toggleButton.dataset.geolibreToggleHandler === "true") {
     return;
   }
