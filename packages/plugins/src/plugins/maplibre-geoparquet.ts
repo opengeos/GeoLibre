@@ -97,10 +97,12 @@ export function openGeoParquetLayerPanel(app: GeoLibreAppAPI): void {
 async function openStandaloneGeoParquetControl(
   app: GeoLibreAppAPI,
 ): Promise<boolean> {
+  ensureGeoParquetMercatorProjection(app);
+
   const { GeoParquetControl: GeoParquetControlClass } =
     await getGeoParquetConstructors();
 
-  geoparquetControl ??= createGeoParquetControl(GeoParquetControlClass);
+  geoparquetControl ??= createGeoParquetControl(GeoParquetControlClass, app);
 
   if (!geoparquetControlMounted) {
     const added = app.addMapControl(
@@ -122,6 +124,16 @@ async function openStandaloneGeoParquetControl(
   return true;
 }
 
+function ensureGeoParquetMercatorProjection(app: GeoLibreAppAPI): void {
+  try {
+    const map = app.getMap?.();
+    if (!map || map.getProjection()?.type === "mercator") return;
+    map.setProjection({ type: "mercator" });
+  } catch {
+    // MapLibre can reject projection changes while the style is still settling.
+  }
+}
+
 function getGeoParquetConstructors(): Promise<{
   GeoParquetControl: GeoParquetControlConstructor;
 }> {
@@ -135,10 +147,12 @@ function getGeoParquetConstructors(): Promise<{
 
 function createGeoParquetControl(
   GeoParquetControlClass: GeoParquetControlConstructor,
+  app: GeoLibreAppAPI,
 ): GeoParquetControl {
   const control = new GeoParquetControlClass(GEOPARQUET_OPTIONS);
   patchGeoParquetControlOnRemove(control);
   control.on("collapse", () => hideGeoParquetControl(control));
+  control.on("loadstart", () => ensureGeoParquetMercatorProjection(app));
   control.on("load", createGeoParquetStateChangeHandler(control));
   control.on("statechange", createGeoParquetStateChangeHandler(control));
 

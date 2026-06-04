@@ -20,7 +20,7 @@
     "@deck.gl/mesh-layers": "^9.3.2",
     "@developmentseed/deck.gl-geotiff": "^0.7.0",
     "@developmentseed/deck.gl-raster": "^0.7.0",
-    "@duckdb/duckdb-wasm": "^1.29.0",
+    "@duckdb/duckdb-wasm": "^1.33.1-dev45.0",
     "@dvt3d/maplibre-three-plugin": "^1.6.0",
     "@geolibre/core": "*",
     "@geolibre/map": "*",

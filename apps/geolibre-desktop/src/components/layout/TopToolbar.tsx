@@ -332,7 +332,11 @@ export function TopToolbar({
   const handleAddDuckDBLayer = () => {
     openDuckDBLayerPanel(appApi);
   };
-  const handleAddGeoParquetLayer = () => {
+  const handleAddGeoParquetLayer = async () => {
+    const { configureGeoParquetDuckDBRuntime } = await import(
+      "../../lib/geoparquet-duckdb-runtime"
+    );
+    configureGeoParquetDuckDBRuntime();
     openGeoParquetLayerPanel(appApi);
   };
   const handleAddPMTilesLayer = () => {
@@ -522,7 +526,7 @@ export function TopToolbar({
           <DropdownMenuItem onSelect={() => setAddDataKind("raster")}>
             Add Raster Layer
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={handleAddGeoParquetLayer}>
+          <DropdownMenuItem onSelect={() => void handleAddGeoParquetLayer()}>
             Add GeoParquet Layer
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddFlatGeobufLayer}>
