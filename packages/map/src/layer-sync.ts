@@ -42,20 +42,22 @@ const pointGeometryFilter: maplibregl.FilterSpecification = [
   false,
 ];
 
+const textMarkerShapeFilter: maplibregl.FilterSpecification = [
+  "any",
+  ["==", ["get", GEOMAN_SHAPE_PROPERTY], TEXT_MARKER_SHAPE],
+  ["==", ["get", "shape"], TEXT_MARKER_SHAPE],
+];
+
 const textMarkerFilter: maplibregl.FilterSpecification = [
   "all",
   pointGeometryFilter,
-  [
-    "any",
-    ["==", ["get", GEOMAN_SHAPE_PROPERTY], TEXT_MARKER_SHAPE],
-    ["==", ["get", "shape"], TEXT_MARKER_SHAPE],
-  ],
+  textMarkerShapeFilter,
 ];
 
 const nonTextMarkerPointFilter: maplibregl.FilterSpecification = [
   "all",
   pointGeometryFilter,
-  ["!", textMarkerFilter],
+  ["!", textMarkerShapeFilter],
 ];
 
 // Native layer ids whose zoom range GeoLibre has taken over. A pristine external
@@ -1532,6 +1534,13 @@ function ensureLayer(
     if (spec.layout) {
       for (const [key, value] of Object.entries(spec.layout)) {
         map.setLayoutProperty(id, key, value);
+      }
+    }
+    if ("filter" in spec) {
+      // setFilter invalidates the layer, so skip no-op updates.
+      const current = map.getFilter(id);
+      if (JSON.stringify(current ?? null) !== JSON.stringify(spec.filter ?? null)) {
+        map.setFilter(id, spec.filter);
       }
     }
     setLayerZoomRange(map, id, {
