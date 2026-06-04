@@ -334,8 +334,11 @@ async function pickLocalDirectoryFiles(): Promise<File[] | null> {
 async function readTauriDirectoryFiles(rootPath: string): Promise<File[]> {
   const rootName = localNameFromPath(rootPath) || "dataset";
   const files: File[] = [];
+  const visited = new Set<string>();
 
   async function walk(directoryPath: string, relativePrefix: string): Promise<void> {
+    if (visited.has(directoryPath)) return;
+    visited.add(directoryPath);
     const entries = await readDir(directoryPath);
     for (const entry of entries) {
       const entryPath = joinLocalPath(directoryPath, entry.name);

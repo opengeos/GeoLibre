@@ -1,3 +1,4 @@
+import type { LayerStyle } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import type { IControl, Map as MapLibreMap } from "maplibre-gl";
 
@@ -26,7 +27,7 @@ export interface GeoLibreExternalNativeLayerRegistration {
   sourceIds?: string[];
   sourceId?: string;
   opacity?: number;
-  style?: Record<string, unknown>;
+  style?: Partial<LayerStyle>;
   metadata?: Record<string, unknown>;
   sourcePath?: string;
 }

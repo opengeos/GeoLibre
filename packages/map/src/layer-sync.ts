@@ -217,7 +217,14 @@ function ensureExternalGeoJsonNativeLayer(
   nativeLayerIds: string[],
   beforeId?: string,
 ): void {
-  if (!layer.geojson || nativeLayerIds.every((id) => map.getLayer(id))) return;
+  if (!layer.geojson) return;
+
+  if (nativeLayerIds.length === 0) {
+    console.warn(
+      `[layer-sync] external native GeoJSON layer "${layer.id}" has no nativeLayerIds; skipping native layer creation`,
+    );
+    return;
+  }
 
   const nativeSourceId =
     getExternalSourceIds(layer)[0] ??
@@ -225,6 +232,9 @@ function ensureExternalGeoJsonNativeLayer(
     sourceIdFromNativeLayerId(nativeLayerIds[0]) ??
     sourceId(layer.id);
 
+  // Always refresh the source so re-registration with new geojson data takes
+  // effect, then short-circuit only the layer creation when the native layers
+  // already exist.
   if (!map.getSource(nativeSourceId)) {
     map.addSource(nativeSourceId, {
       type: "geojson",
@@ -236,13 +246,20 @@ function ensureExternalGeoJsonNativeLayer(
     );
   }
 
+  if (nativeLayerIds.every((id) => map.getLayer(id))) return;
+
   const visibility = layer.visible ? "visible" : "none";
   const zoomRange = styleLayerZoomRange(layer.style);
   const geometryType = stringMetadata(layer.metadata.geometryType);
   const symbolLayer = layer.metadata.symbolLayer === true;
   const profile = detectGeometryProfile(layer.geojson);
-  const primaryLayerId = nativeLayerIds[0] ?? layer.id;
+  const primaryLayerId = nativeLayerIds[0];
 
+  // Each registration is rendered with a single representative native layer
+  // (the first nativeLayerId), chosen by the dominant geometry below. A
+  // FeatureCollection mixing geometry types only renders the representative
+  // one; callers that need every type drawn should register one entry per
+  // geometry type (one nativeLayerId each).
   if (symbolLayer) {
     ensureLayer(
       map,
@@ -254,6 +271,9 @@ function ensureExternalGeoJsonNativeLayer(
         ...zoomRange,
         layout: {
           "text-allow-overlap": true,
+          // Literal glyph rendered at every feature as a sprite-free point
+          // marker (an asterisk, not a property lookup). Symbol registrations
+          // here carry no label field, so this is intentional placeholder text.
           "text-field": "*",
           "text-ignore-placement": true,
           "text-size": Math.max(8, styleValue(layer.style, "circleRadius") * 2.5),
