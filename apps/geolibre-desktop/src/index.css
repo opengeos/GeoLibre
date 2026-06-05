@@ -1530,7 +1530,7 @@ body,
   .geolibre-components-control .maplibre-gl-control-grid-relocated,
   .geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-panel,
   .geolibre-zarr-control .maplibre-gl-zarr-layer-panel,
-  .pc-control-panel,
+  .maplibregl-map .pc-control-panel,
   .duckdb-control-panel,
   .geoparquet-control-panel {
     box-sizing: border-box;

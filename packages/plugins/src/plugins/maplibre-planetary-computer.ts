@@ -50,7 +50,7 @@ async function openStandalonePlanetaryComputerControl(
       planetaryComputerControlPosition,
     );
     if (!added) {
-      planetaryComputerControl = null;
+      resetPlanetaryComputerControl(planetaryComputerControl);
       return false;
     }
     planetaryComputerControlMounted = true;
@@ -78,11 +78,17 @@ function createPlanetaryComputerControl(
   PlanetaryComputerControlClass: PlanetaryComputerControlConstructor,
 ): PlanetaryComputerControl {
   const control = new PlanetaryComputerControlClass(PLANETARY_COMPUTER_OPTIONS);
+  patchPlanetaryComputerControlOnRemove(control);
   control.on("collapse", () => hidePlanetaryComputerControl(control));
   control.on("layer:add", syncPlanetaryComputerLayersToStore);
   control.on("layer:remove", syncPlanetaryComputerLayersToStore);
   control.on("layer:update", syncPlanetaryComputerLayersToStore);
 
+  // updateLayer stores the passed visible/opacity values verbatim before
+  // re-emitting "layer:update" (verified against
+  // maplibre-gl-planetary-computer 0.3.0), so the equality checks here and
+  // in syncPlanetaryComputerLayersToStore break the store <-> control
+  // feedback cycle.
   planetaryComputerStoreUnsubscribe ??= useAppStore.subscribe(
     (state, previous) => {
       const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
@@ -199,6 +205,27 @@ function planetaryComputerLayerName(activeLayer: ActiveLayer): string {
     return activeLayer.collection.title || activeLayer.collection.id;
   }
   return activeLayer.id;
+}
+
+function patchPlanetaryComputerControlOnRemove(
+  control: PlanetaryComputerControl,
+): void {
+  const originalOnRemove = control.onRemove.bind(control);
+  control.onRemove = () => {
+    originalOnRemove();
+    resetPlanetaryComputerControl(control);
+  };
+}
+
+function resetPlanetaryComputerControl(
+  control: PlanetaryComputerControl | null,
+): void {
+  if (planetaryComputerControl !== control) return;
+
+  planetaryComputerStoreUnsubscribe?.();
+  planetaryComputerStoreUnsubscribe = null;
+  planetaryComputerControlMounted = false;
+  planetaryComputerControl = null;
 }
 
 function hidePlanetaryComputerControl(
