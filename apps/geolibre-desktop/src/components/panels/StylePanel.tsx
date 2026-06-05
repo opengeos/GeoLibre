@@ -710,6 +710,10 @@ function clampNumber(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+// Shared shell classes for every StylePanel return branch.
+const STYLE_PANEL_ASIDE_CLASS =
+  "relative flex max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-[var(--style-panel-width)] md:border-l md:border-t-0";
+
 const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
 const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;
 
@@ -1069,7 +1073,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
 
   if (!layer) {
     return (
-      <aside className="relative flex max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-[var(--style-panel-width)] md:border-l md:border-t-0">
+      <aside className={STYLE_PANEL_ASIDE_CLASS}>
         {resizeHandle}
         <div className="flex items-center justify-between border-b px-3 py-1.5">
           <span className="text-sm font-semibold">Style</span>
@@ -1824,7 +1828,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
 
   if (hasRasterPaintControls) {
     return (
-      <aside className="relative flex max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-[var(--style-panel-width)] md:border-l md:border-t-0">
+      <aside className={STYLE_PANEL_ASIDE_CLASS}>
         {resizeHandle}
         <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
           <span className="truncate text-sm font-semibold">
@@ -1922,7 +1926,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
 
   if (!hasVectorPaintControls) {
     return (
-      <aside className="relative flex max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-[var(--style-panel-width)] md:border-l md:border-t-0">
+      <aside className={STYLE_PANEL_ASIDE_CLASS}>
         {resizeHandle}
         <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
           <span className="truncate text-sm font-semibold">
@@ -1952,7 +1956,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
   }
 
   return (
-    <aside className="relative flex max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-[var(--style-panel-width)] md:border-l md:border-t-0">
+    <aside className={STYLE_PANEL_ASIDE_CLASS}>
       {resizeHandle}
       <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
         <span className="truncate text-sm font-semibold">

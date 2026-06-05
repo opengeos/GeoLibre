@@ -636,9 +636,9 @@ export function SettingsDialog({
                 Layout Settings
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <p className="px-2 py-1 text-xs text-muted-foreground">
+              <DropdownMenuLabel className="px-2 py-1 text-xs font-normal text-muted-foreground">
                 URL layout parameters override saved settings.
-              </p>
+              </DropdownMenuLabel>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
           <DropdownMenuItem

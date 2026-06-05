@@ -627,7 +627,7 @@ export function ProcessingDialog({
     <Dialog open={open} onOpenChange={setProcessingOpen}>
       <DialogContent
         className="h-[min(760px,92vh)] max-w-6xl"
-        bodyClassName="grid-rows-[auto_minmax(0,1fr)] gap-3 p-5"
+        bodyClassName="grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden p-5"
       >
         <DialogHeader>
           <DialogTitle>Whitebox toolbox</DialogTitle>

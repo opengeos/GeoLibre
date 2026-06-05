@@ -41,8 +41,8 @@ export const DialogContent = React.forwardRef<
     >
       <div
         className={cn(
-          "grid min-h-0 flex-1 gap-4 overflow-y-auto p-4 sm:p-6",
-          bodyClassName,
+          "grid min-h-0 flex-1 gap-4 overflow-auto",
+          bodyClassName ?? "p-4 sm:p-6",
         )}
       >
         {children}

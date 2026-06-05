@@ -101,7 +101,7 @@ export function DiagnosticsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="max-h-[min(760px,92vh)] max-w-5xl"
-        bodyClassName="grid-rows-[auto_auto_minmax(0,1fr)] p-0"
+        bodyClassName="grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden p-0"
       >
         <DialogHeader className="border-b px-6 py-4 pr-12">
           <DialogTitle>Diagnostics</DialogTitle>

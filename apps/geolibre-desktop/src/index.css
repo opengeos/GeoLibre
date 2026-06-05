@@ -1533,6 +1533,7 @@ body,
   .duckdb-control-panel,
   .geoparquet-control-panel {
     box-sizing: border-box;
+    /* 96px clears the mobile top toolbar plus the panel's own top offset */
     max-height: calc(100vh - 96px) !important;
     max-height: calc(100dvh - 96px) !important;
     max-width: calc(100vw - 20px) !important;
@@ -1548,6 +1549,7 @@ body,
 
   .duckdb-control-content,
   .geoparquet-control-content {
+    /* 170px = the 96px panel offset above plus the panel header height */
     max-height: calc(100vh - 170px);
     max-height: calc(100dvh - 170px);
   }
