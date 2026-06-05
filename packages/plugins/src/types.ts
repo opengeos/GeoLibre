@@ -75,8 +75,13 @@ export interface GeoLibrePlugin {
   name: string;
   version: string;
   activeByDefault?: boolean;
+  urlParameterNames?: string[];
   activate: (app: GeoLibreAppAPI) => boolean | void;
   deactivate: (app: GeoLibreAppAPI) => void;
+  handleUrlParameters?: (
+    app: GeoLibreAppAPI,
+    params: URLSearchParams,
+  ) => boolean | void | Promise<boolean | void>;
   getMapControlPosition?: () => GeoLibreMapControlPosition;
   setMapControlPosition?: (
     app: GeoLibreAppAPI,

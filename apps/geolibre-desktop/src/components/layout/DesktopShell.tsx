@@ -153,11 +153,17 @@ export function DesktopShell({
     )
       return;
     const appAPI = createAppAPI(mapControllerRef);
-    getPluginManager().restoreProjectState(
+    const pluginManager = getPluginManager();
+    pluginManager.restoreProjectState(
       useAppStore.getState().projectPlugins,
       appAPI,
     );
     restoreThreeDTilesLayers(appAPI);
+    void pluginManager.handleUrlParameters(
+      new URLSearchParams(window.location.search),
+      appAPI,
+      `${projectGeneration}:${window.location.href}`,
+    );
   }, [externalPluginsReady, mapReadyGeneration, projectGeneration]);
 
   useEffect(() => {

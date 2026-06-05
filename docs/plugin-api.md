@@ -117,6 +117,40 @@ Map control plugins can optionally expose `getMapControlPosition()` and `setMapC
 
 Plugins with serializable runtime settings can expose `getProjectState()` and `applyProjectState()` so GeoLibre can save and restore those settings in the project file. A wrapper should use these hooks to adapt upstream control APIs such as `getState()` without requiring every upstream package to implement a GeoLibre-specific interface.
 
+Plugins can also declare URL query parameters and handle them when GeoLibre opens. URL parameter handlers run after the map is ready, external plugins are loaded, and project plugin state has been restored. GeoLibre calls handlers only for active plugins whose declared parameter names are present in the URL, and it suppresses repeated handling of the same URL context for the same plugin.
+
+```typescript
+import type { GeoLibreAppAPI, GeoLibrePlugin } from "@geolibre/plugins";
+
+export const plugin: GeoLibrePlugin = {
+  id: "example-url-loader",
+  name: "Example URL Loader",
+  version: "0.1.0",
+  urlParameterNames: ["exampleGeoJson"],
+  activate() {
+    // Set up controls or plugin state here.
+  },
+  deactivate() {
+    // Clean up controls, listeners, and plugin state here.
+  },
+  async handleUrlParameters(app: GeoLibreAppAPI, params: URLSearchParams) {
+    for (const dataUrl of params.getAll("exampleGeoJson")) {
+      const response = await fetch(dataUrl);
+      if (!response.ok) continue;
+      app.addGeoJsonLayer("Example URL layer", await response.json(), dataUrl);
+    }
+  },
+};
+```
+
+For example:
+
+```text
+https://viewer.geolibre.app/?url=https://example.com/project.geolibre.json&exampleGeoJson=https://example.com/data.geojson
+```
+
+A URL parameter does not activate an inactive plugin by itself. For external plugins, include the plugin manifest URL and active plugin ID in the project `plugins` state, or have the user enable the plugin before relying on its URL handler.
+
 ## External plugins
 
 Use the [GeoLibre plugin template](https://github.com/opengeos/geolibre-plugin-template) as the recommended starting point for external plugin development. The template includes a MapLibre control wrapper, a `plugin.json` manifest, a GeoLibre plugin entry point, and a `package:geolibre` script that builds the zip layout GeoLibre Desktop expects.

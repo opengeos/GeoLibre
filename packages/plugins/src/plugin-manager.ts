@@ -13,6 +13,7 @@ export class PluginManager {
     string,
     GeoLibreMapControlPosition
   >();
+  private handledUrlParameterKeys = new Set<string>();
   private listeners = new Set<() => void>();
   private version = 0;
 
@@ -106,6 +107,41 @@ export class PluginManager {
     else this.activate(id, app);
   }
 
+  async handleUrlParameters(
+    params: URLSearchParams,
+    app: GeoLibreAppAPI,
+    contextKey = params.toString(),
+  ): Promise<void> {
+    if (!Array.from(params.keys()).length) return;
+
+    for (const [id, plugin] of this.plugins) {
+      if (!this.active.has(id) || !plugin.handleUrlParameters) continue;
+
+      const parameterNames = normalizeUrlParameterNames(
+        plugin.urlParameterNames,
+      );
+      if (
+        parameterNames.length === 0 ||
+        !parameterNames.some((name) => params.has(name))
+      ) {
+        continue;
+      }
+
+      const handledKey = `${id}\0${contextKey}`;
+      if (this.handledUrlParameterKeys.has(handledKey)) continue;
+      this.handledUrlParameterKeys.add(handledKey);
+
+      try {
+        await plugin.handleUrlParameters(app, new URLSearchParams(params));
+      } catch (error) {
+        console.warn(
+          `Plugin '${id}' could not handle GeoLibre URL parameters.`,
+          error,
+        );
+      }
+    }
+  }
+
   setMapControlPosition(
     id: string,
     app: GeoLibreAppAPI,
@@ -179,4 +215,11 @@ export class PluginManager {
     this.version += 1;
     for (const listener of this.listeners) listener();
   }
+}
+
+function normalizeUrlParameterNames(names: string[] | undefined): string[] {
+  if (!names) return [];
+  return Array.from(
+    new Set(names.map((name) => name.trim()).filter((name) => name.length > 0)),
+  );
 }
