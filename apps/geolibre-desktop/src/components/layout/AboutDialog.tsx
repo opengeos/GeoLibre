@@ -169,7 +169,9 @@ export function AboutDialog({
 
   // Read the latest handler through a ref so the effect can depend only on
   // the command counter; the update check should run exactly once for each
-  // increment.
+  // increment. Invariant: call sites must increment checkForUpdatesRequest
+  // only while also opening the dialog; an increment made while the dialog
+  // stays closed would fire the check on the next open instead.
   const handleCheckForUpdatesRef = useRef(handleCheckForUpdates);
   handleCheckForUpdatesRef.current = handleCheckForUpdates;
 

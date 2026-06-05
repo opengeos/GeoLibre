@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 
 export type DiagnosticCategory = "console" | "map" | "network" | "runtime";
 export type DiagnosticLevel = "error" | "info" | "warning";
@@ -175,16 +175,12 @@ export function useDiagnosticsSnapshot(): DiagnosticsSnapshot {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
-export function useDiagnosticsCapture(): void {
-  useEffect(() => installDiagnosticsCapture(), []);
-}
-
 /**
  * Installs the fetch/console/window interceptors and returns a cleanup
  * function. Ref-counted so concurrent callers share one installation; the
  * interceptors are only removed once every returned cleanup has been called.
- * Each caller must therefore invoke its cleanup exactly once (guaranteed when
- * used via useDiagnosticsCapture's effect).
+ * Each caller must therefore invoke its cleanup exactly once (e.g. from a
+ * useEffect cleanup or a single entry-point install as in main.tsx).
  */
 export function installDiagnosticsCapture(): () => void {
   captureRefCount += 1;

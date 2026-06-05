@@ -486,7 +486,15 @@ function stringifyDiagnosticDetail(value: unknown): string | undefined {
     return JSON.stringify(
       value,
       (key, nestedValue: unknown) => {
-        if (key === "target") return "[Map]";
+        // Only clamp object-valued targets (Map, XHR, DOM nodes) that risk
+        // circular or huge output; keep string targets such as tile URLs.
+        if (
+          key === "target" &&
+          typeof nestedValue === "object" &&
+          nestedValue !== null
+        ) {
+          return "[Map]";
+        }
         if (typeof nestedValue !== "object" || nestedValue === null) {
           return nestedValue;
         }
