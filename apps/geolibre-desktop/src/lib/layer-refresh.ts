@@ -1,0 +1,212 @@
+import type { FeatureCollection } from "geojson";
+import type { GeoLibreLayer } from "@geolibre/core";
+
+const WFS_PROXY_PATH = "/__geolibre_wfs_proxy";
+const REFRESHABLE_GEOJSON_SOURCE_KINDS = new Set([
+  "wfs-getfeature",
+  "geojson-url",
+]);
+
+export interface LayerRefreshConfig {
+  enabled: boolean;
+  intervalMs: number;
+}
+
+export function createWfsGetFeatureUrl(options: {
+  endpoint: string;
+  typeName: string;
+  version: string;
+  outputFormat: string;
+  srsName: string;
+  maxFeatures?: string;
+}): string {
+  const isWfs2 = options.version.startsWith("2");
+  const params: Array<[string, string]> = [
+    ["service", "WFS"],
+    ["request", "GetFeature"],
+    ["version", options.version],
+    [isWfs2 ? "typeNames" : "typeName", options.typeName],
+    ["outputFormat", options.outputFormat],
+  ];
+
+  if (options.srsName) params.push(["srsName", options.srsName]);
+  if (options.maxFeatures) {
+    params.push([isWfs2 ? "count" : "maxFeatures", options.maxFeatures]);
+  }
+
+  return appendQuery(options.endpoint, params);
+}
+
+export async function fetchGeoJsonFeatureCollection(
+  url: string,
+  options: { useWfsProxy?: boolean } = {},
+): Promise<FeatureCollection> {
+  const response = await fetch(
+    options.useWfsProxy ? proxyWfsRequestUrl(url) : url,
+  );
+  const text = await response.text();
+  if (!response.ok && !/^\s*</.test(text)) {
+    throw new Error(`Request failed with status ${response.status}`);
+  }
+  try {
+    return parseGeoJsonFeatureCollection(JSON.parse(text));
+  } catch (error) {
+    if (/^\s*</.test(text)) {
+      throw new Error(
+        "The service returned XML instead of GeoJSON. Check the layer name and output format.",
+      );
+    }
+    throw error;
+  }
+}
+
+export async function refreshGeoJsonLayer(
+  layer: GeoLibreLayer,
+): Promise<Partial<GeoLibreLayer>> {
+  const sourceUrl = refreshSourceUrl(layer);
+  if (!sourceUrl) {
+    throw new Error("This layer does not have a refreshable GeoJSON URL.");
+  }
+
+  const data = await fetchGeoJsonFeatureCollection(sourceUrl, {
+    useWfsProxy: isWfsLayer(layer),
+  });
+
+  return {
+    geojson: data,
+    metadata: {
+      featureCount: data.features.length,
+    },
+  };
+}
+
+export function isRefreshableLayer(layer: GeoLibreLayer): boolean {
+  return Boolean(refreshSourceUrl(layer));
+}
+
+export function getLayerRefreshConfig(
+  layer: GeoLibreLayer,
+): LayerRefreshConfig {
+  const refresh = layer.metadata.refresh;
+  if (!refresh || typeof refresh !== "object" || Array.isArray(refresh)) {
+    return { enabled: false, intervalMs: 0 };
+  }
+
+  const candidate = refresh as Partial<LayerRefreshConfig>;
+  const intervalMs =
+    typeof candidate.intervalMs === "number" &&
+    Number.isFinite(candidate.intervalMs) &&
+    candidate.intervalMs > 0
+      ? candidate.intervalMs
+      : 0;
+
+  return {
+    enabled: candidate.enabled === true && intervalMs > 0,
+    intervalMs,
+  };
+}
+
+export function setLayerRefreshConfig(
+  layer: GeoLibreLayer,
+  config: LayerRefreshConfig,
+): Partial<GeoLibreLayer> {
+  return {
+    metadata: {
+      ...layer.metadata,
+      refresh: {
+        enabled: config.enabled && config.intervalMs > 0,
+        intervalMs: config.intervalMs,
+      },
+    },
+  };
+}
+
+function appendQuery(
+  endpoint: string,
+  params: Array<[string, string]>,
+): string {
+  const separator = endpoint.includes("?")
+    ? endpoint.endsWith("?") || endpoint.endsWith("&")
+      ? ""
+      : "&"
+    : "?";
+  const query = params
+    .map(
+      ([key, value]) =>
+        `${encodeURIComponent(key)}=${encodeURIComponent(value)}`,
+    )
+    .join("&");
+  return `${endpoint}${separator}${query}`;
+}
+
+function parseGeoJsonFeatureCollection(value: unknown): FeatureCollection {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("type" in value) ||
+    value.type !== "FeatureCollection" ||
+    !("features" in value) ||
+    !Array.isArray(value.features)
+  ) {
+    throw new Error("The response is not a GeoJSON FeatureCollection.");
+  }
+
+  return value as FeatureCollection;
+}
+
+function refreshSourceUrl(layer: GeoLibreLayer): string | null {
+  if (layer.type !== "geojson") return null;
+
+  const sourcePath =
+    typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
+  const sourceUrl =
+    typeof layer.source.url === "string" ? layer.source.url.trim() : "";
+  const url = sourceUrl || sourcePath;
+  if (!isHttpUrl(url)) return null;
+
+  if (isWfsLayer(layer)) return url;
+  if (layer.metadata.externalNativeLayer === true) return null;
+
+  const sourceKind =
+    typeof layer.metadata.sourceKind === "string"
+      ? layer.metadata.sourceKind
+      : undefined;
+  if (sourceKind && !REFRESHABLE_GEOJSON_SOURCE_KINDS.has(sourceKind)) {
+    return null;
+  }
+
+  return url;
+}
+
+function isWfsLayer(layer: GeoLibreLayer): boolean {
+  return (
+    layer.metadata.sourceKind === "wfs-getfeature" ||
+    layer.metadata.service === "wfs" ||
+    layer.source.service === "wfs"
+  );
+}
+
+function isViteDevServer(): boolean {
+  return Boolean(
+    (
+      import.meta as ImportMeta & {
+        env?: { DEV?: boolean };
+      }
+    ).env?.DEV,
+  );
+}
+
+function proxyWfsRequestUrl(url: string): string {
+  return isViteDevServer()
+    ? `${WFS_PROXY_PATH}?url=${encodeURIComponent(url)}`
+    : url;
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}

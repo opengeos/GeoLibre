@@ -72,6 +72,20 @@ Projects without a `plugins` section open with the built-in default plugin state
 }
 ```
 
+For WFS GetFeature and GeoJSON URL layers, `metadata.refresh` can persist an
+optional auto-refresh interval. `intervalMs` can be any positive interval in
+milliseconds:
+
+```json
+{
+  "metadata": {
+    "refresh": { "enabled": true, "intervalMs": 60000 }
+  }
+}
+```
+
+Manual refresh uses the same saved source URL without requiring this metadata.
+
 ## Layer types
 
 | Type             | v0.7.0 status                                                                                      |

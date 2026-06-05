@@ -50,6 +50,10 @@ import {
 } from "../../lib/delimited-text";
 import { parseGpxLayer } from "../../lib/gpx";
 import {
+  createWfsGetFeatureUrl,
+  fetchGeoJsonFeatureCollection,
+} from "../../lib/layer-refresh";
+import {
   mbtilesTileUrl,
   readMbtilesMetadata,
   registerMbtilesProtocol,
@@ -157,8 +161,6 @@ const DEFAULT_ARCGIS_URLS: Record<ArcGISLayerType, string> = {
   feature: DEFAULT_ARCGIS_FEATURE_URL,
   "vector-tile": DEFAULT_ARCGIS_VECTOR_TILE_URL,
 };
-// Keep in sync with WFS_PROXY_PATH in vite.config.ts (the dev proxy binds it there).
-const WFS_PROXY_PATH = "/__geolibre_wfs_proxy";
 // Keep in sync with GPX_PROXY_PATH in vite.config.ts (the dev proxy binds it there).
 const GPX_PROXY_PATH = "/__geolibre_gpx_proxy";
 const POSTGRES_CONNECTIONS_STORAGE_KEY =
@@ -248,31 +250,6 @@ function createWmsTileUrl(options: {
   ]);
 }
 
-function createWfsGetFeatureUrl(options: {
-  endpoint: string;
-  typeName: string;
-  version: string;
-  outputFormat: string;
-  srsName: string;
-  maxFeatures?: string;
-}): string {
-  const isWfs2 = options.version.startsWith("2");
-  const params: Array<[string, string]> = [
-    ["service", "WFS"],
-    ["request", "GetFeature"],
-    ["version", options.version],
-    [isWfs2 ? "typeNames" : "typeName", options.typeName],
-    ["outputFormat", options.outputFormat],
-  ];
-
-  if (options.srsName) params.push(["srsName", options.srsName]);
-  if (options.maxFeatures) {
-    params.push([isWfs2 ? "count" : "maxFeatures", options.maxFeatures]);
-  }
-
-  return appendQuery(options.endpoint, params);
-}
-
 function parseRequiredNumber(value: string, label: string): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
@@ -350,31 +327,10 @@ function isViteDevServer(): boolean {
   );
 }
 
-function proxyWfsRequestUrl(url: string): string {
-  return isViteDevServer()
-    ? `${WFS_PROXY_PATH}?url=${encodeURIComponent(url)}`
-    : url;
-}
-
 function proxyGpxRequestUrl(url: string): string {
   return isViteDevServer()
     ? `${GPX_PROXY_PATH}?url=${encodeURIComponent(url)}`
     : url;
-}
-
-function parseGeoJsonFeatureCollection(value: unknown): FeatureCollection {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    !("type" in value) ||
-    value.type !== "FeatureCollection" ||
-    !("features" in value) ||
-    !Array.isArray(value.features)
-  ) {
-    throw new Error("The response is not a GeoJSON FeatureCollection.");
-  }
-
-  return value as FeatureCollection;
 }
 
 function resolveDelimitedTextDelimiter(
@@ -404,24 +360,6 @@ function inferDelimitedTextField(
   }
 
   return fields[0] ?? currentField;
-}
-
-async function fetchGeoJson(url: string): Promise<FeatureCollection> {
-  const response = await fetch(url);
-  const text = await response.text();
-  if (!response.ok && !/^\s*</.test(text)) {
-    throw new Error(`Request failed with status ${response.status}`);
-  }
-  try {
-    return parseGeoJsonFeatureCollection(JSON.parse(text));
-  } catch (error) {
-    if (/^\s*</.test(text)) {
-      throw new Error(
-        "The service returned XML instead of GeoJSON. Check the layer name and output format.",
-      );
-    }
-    throw error;
-  }
 }
 
 export function AddDataDialog({
@@ -1173,7 +1111,9 @@ export function AddDataDialog({
           srsName: wfsSrsName.trim(),
           maxFeatures: wfsMaxFeatures.trim() || undefined,
         });
-        const data = await fetchGeoJson(proxyWfsRequestUrl(featureUrl));
+        const data = await fetchGeoJsonFeatureCollection(featureUrl, {
+          useWfsProxy: true,
+        });
         addAndClose(
           {
             ...createBaseLayer(
@@ -1240,9 +1180,23 @@ export function AddDataDialog({
 
         if (vectorMode === "geojson-url") {
           if (!vectorUrl.trim()) throw new Error("Enter a GeoJSON URL.");
-          const data = await fetchGeoJson(vectorUrl.trim());
+          const data = await fetchGeoJsonFeatureCollection(vectorUrl.trim());
           const id = addGeoJsonLayer(name, data, vectorUrl.trim(), beforeLayer);
-          const layer = useAppStore.getState().layers.find((l) => l.id === id);
+          const state = useAppStore.getState();
+          const layer = state.layers.find((l) => l.id === id);
+          if (layer) {
+            state.updateLayer(id, {
+              source: {
+                ...layer.source,
+                url: vectorUrl.trim(),
+              },
+              metadata: {
+                ...layer.metadata,
+                featureCount: data.features.length,
+                sourceKind: "geojson-url",
+              },
+            });
+          }
           if (layer) mapControllerRef.current?.fitLayer(layer);
           closeDialog();
           return;
