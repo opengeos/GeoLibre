@@ -391,7 +391,7 @@ export function TopToolbar({
     isSearchPlacesPanelVisible,
     isSearchPlacesPanelVisible,
   );
-  const handleToggleSearchPlaces = () => {
+  const handleToggleSearchPlacesPanel = () => {
     if (searchPlacesVisible) {
       closeSearchPlacesPanel();
       return;
@@ -697,7 +697,7 @@ export function TopToolbar({
             </DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={handleToggleSearchPlaces}>
+          <DropdownMenuItem onSelect={handleToggleSearchPlacesPanel}>
             Search
             {searchPlacesVisible ? " ✓" : ""}
           </DropdownMenuItem>
