@@ -77,13 +77,13 @@ The browser demo supports URL parameters for iframe-friendly layouts.
 
 Open a project by URL:
 
-<https://viewer.geolibre.app/?url=https://data.geolibre.app/opera-dswx.geolibre.json>
+<https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json>
 
 Supported query parameters:
 
 | Parameter    | Example                                                  | Description                                                                                                                 |
 | ------------ | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `url`        | `url=https://data.geolibre.app/opera-dswx.geolibre.json` | Loads a `.geolibre.json` project from a public URL.                                                                         |
+| `url`        | `url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json` | Loads a `.geolibre.json` project from a public URL.                                                                         |
 | `layout`     | `layout=compact`                                         | Uses the compact embed layout with icon-only toolbar buttons and hidden project metadata. `embed` and `iframe` are aliases. |
 | `toolbar`    | `toolbar=icons`                                          | Shows icon-only toolbar buttons without enabling the full compact layout.                                                   |
 | `panels`     | `panels=none`                                            | Hides the Layers, Style, and Attribute table panels. `hidden`, `hide`, and `off` are aliases.                               |
@@ -92,13 +92,13 @@ Supported query parameters:
 Use compact mode for narrow embeds. This shows icon-only toolbar buttons and hides project metadata:
 
 ```text
-https://viewer.geolibre.app/?url=https://data.geolibre.app/opera-dswx.geolibre.json&layout=compact
+https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&layout=compact
 ```
 
 Hide the Layers, Style, and Attribute table panels for map-focused embeds:
 
 ```text
-https://viewer.geolibre.app/?url=https://data.geolibre.app/opera-dswx.geolibre.json&layout=compact&panels=none
+https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&layout=compact&panels=none
 ```
 
 Use `toolbar=icons` when you only want icon-only toolbar buttons. `panels=hidden`, `panels=hide`, `panels=off`, and `hidePanels=true` are accepted aliases for hiding panels.
