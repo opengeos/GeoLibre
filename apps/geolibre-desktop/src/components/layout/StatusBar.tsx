@@ -42,11 +42,15 @@ export function StatusBar({
         Bearing: {mapView.bearing.toFixed(1)}°
       </span>
       <span className="shrink-0">Pitch: {mapView.pitch.toFixed(1)}°</span>
+      {compact ? null : (
+        <span className="min-w-0 flex-1 truncate">BBox: {bboxText}</span>
+      )}
       <button
         type="button"
         className={cn(
           "inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 hover:bg-accent hover:text-accent-foreground",
-          diagnosticsErrorCount > 0 && "text-destructive",
+          compact && "ml-auto",
+          diagnosticsErrorCount > 0 && "text-red-700 dark:text-red-300",
           diagnosticsErrorCount === 0 &&
             diagnosticsWarningCount > 0 &&
             "text-amber-700 dark:text-amber-300",
@@ -56,7 +60,6 @@ export function StatusBar({
         <Bug className="h-3 w-3" />
         {compact ? "Diag" : "Diagnostics"}: {diagnosticsCount}
       </button>
-      {compact ? null : <span className="min-w-0 truncate">BBox: {bboxText}</span>}
     </footer>
   );
 }
