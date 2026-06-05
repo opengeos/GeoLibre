@@ -464,7 +464,6 @@ export function DesktopShell({
       <TopToolbar
         compact={layoutOptions.compact}
         diagnosticsErrorCount={diagnostics.errorCount}
-        diagnosticsTotalCount={diagnostics.totalCount}
         mapControllerRef={mapControllerRef}
         showLabels={layoutOptions.toolbarLabels}
         showProjectInfo={layoutOptions.showProjectInfo}

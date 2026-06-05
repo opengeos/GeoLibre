@@ -102,10 +102,11 @@ export function DiagnosticsDialog({
             <button
               type="button"
               className={cn(
-                "rounded border px-2 py-1 hover:bg-accent hover:text-accent-foreground",
-                levelFilter === "error" && "bg-accent text-accent-foreground",
+                "rounded border px-2 py-1 hover:bg-destructive/10 hover:text-destructive dark:hover:text-red-200",
                 diagnostics.errorCount > 0 &&
-                  "border-destructive/30 text-destructive",
+                  "border-destructive/50 text-destructive dark:border-red-400/60 dark:text-red-300",
+                levelFilter === "error" &&
+                  "border-destructive bg-destructive text-destructive-foreground hover:bg-destructive hover:text-destructive-foreground dark:border-red-500 dark:bg-red-600 dark:text-white dark:hover:bg-red-600 dark:hover:text-white",
               )}
               onClick={() => setLevelFilter("error")}
             >

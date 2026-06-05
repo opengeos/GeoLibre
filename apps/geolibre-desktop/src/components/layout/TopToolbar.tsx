@@ -91,7 +91,6 @@ import { SettingsDialog } from "./SettingsDialog";
 interface TopToolbarProps {
   compact?: boolean;
   diagnosticsErrorCount: number;
-  diagnosticsTotalCount: number;
   mapControllerRef: React.RefObject<MapController | null>;
   showLabels?: boolean;
   showProjectInfo?: boolean;
@@ -142,7 +141,6 @@ function formatRecentProjectTime(openedAt: string): string {
 export function TopToolbar({
   compact = false,
   diagnosticsErrorCount,
-  diagnosticsTotalCount,
   mapControllerRef,
   showLabels = true,
   showProjectInfo = true,
@@ -722,20 +720,13 @@ export function TopToolbar({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
-            className={cn(toolbarButtonClass, "relative")}
+            className={toolbarButtonClass}
             variant="ghost"
             size={toolbarButtonSize}
             aria-label="Help"
           >
             <CircleHelp className={toolbarIconClassName} />
             {renderToolbarLabel("Help")}
-            {diagnosticsErrorCount > 0 ? (
-              <span className="ml-1 rounded bg-destructive px-1.5 py-0.5 text-[10px] leading-none text-destructive-foreground">
-                {diagnosticsErrorCount}
-              </span>
-            ) : diagnosticsTotalCount > 0 && !showLabels ? (
-              <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary" />
-            ) : null}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
@@ -744,7 +735,11 @@ export function TopToolbar({
           <DropdownMenuItem onSelect={onOpenDiagnostics}>
             <Bug className="mr-2 h-3.5 w-3.5" />
             Diagnostics
-            {diagnosticsErrorCount > 0 ? ` (${diagnosticsErrorCount})` : ""}
+            {diagnosticsErrorCount > 0 ? (
+              <span className="ml-2 rounded bg-destructive px-1.5 py-0.5 text-[10px] leading-none text-destructive-foreground">
+                {diagnosticsErrorCount}
+              </span>
+            ) : null}
           </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={() => {
