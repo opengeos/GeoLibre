@@ -13,6 +13,7 @@ import { useMemo, useState } from "react";
 import {
   clearDiagnostics,
   type DiagnosticRecord,
+  type DiagnosticLevel,
   useDiagnosticsSnapshot,
 } from "../../lib/diagnostics";
 
@@ -53,13 +54,24 @@ export function DiagnosticsDialog({
 }: DiagnosticsDialogProps) {
   const diagnostics = useDiagnosticsSnapshot();
   const [copyState, setCopyState] = useState<"copied" | "idle">("idle");
-  const serializedRecords = useMemo(
-    () => JSON.stringify(diagnostics.records, null, 2),
-    [diagnostics.records],
+  const [levelFilter, setLevelFilter] = useState<DiagnosticLevel | "all">(
+    "all",
   );
+  const filteredRecords = useMemo(
+    () =>
+      levelFilter === "all"
+        ? diagnostics.records
+        : diagnostics.records.filter((record) => record.level === levelFilter),
+    [diagnostics.records, levelFilter],
+  );
+  const serializedRecords = useMemo(
+    () => JSON.stringify(filteredRecords, null, 2),
+    [filteredRecords],
+  );
+  const listIsFiltered = levelFilter !== "all";
 
   const copyDiagnostics = async () => {
-    if (!navigator.clipboard || diagnostics.records.length === 0) return;
+    if (!navigator.clipboard || filteredRecords.length === 0) return;
     await navigator.clipboard.writeText(serializedRecords);
     setCopyState("copied");
     window.setTimeout(() => setCopyState("idle"), 1500);
@@ -77,21 +89,38 @@ export function DiagnosticsDialog({
         </DialogHeader>
         <div className="flex flex-wrap items-center justify-between gap-3 px-6">
           <div className="flex flex-wrap gap-2 text-xs">
-            <span className="rounded border px-2 py-1">
-              {diagnostics.totalCount} total
-            </span>
-            <span
+            <button
+              type="button"
               className={cn(
-                "rounded border px-2 py-1",
+                "rounded border px-2 py-1 hover:bg-accent hover:text-accent-foreground",
+                levelFilter === "all" && "bg-accent text-accent-foreground",
+              )}
+              onClick={() => setLevelFilter("all")}
+            >
+              {diagnostics.totalCount} total
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "rounded border px-2 py-1 hover:bg-accent hover:text-accent-foreground",
+                levelFilter === "error" && "bg-accent text-accent-foreground",
                 diagnostics.errorCount > 0 &&
                   "border-destructive/30 text-destructive",
               )}
+              onClick={() => setLevelFilter("error")}
             >
               {diagnostics.errorCount} errors
-            </span>
-            <span className="rounded border px-2 py-1">
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "rounded border px-2 py-1 hover:bg-accent hover:text-accent-foreground",
+                levelFilter === "warning" && "bg-accent text-accent-foreground",
+              )}
+              onClick={() => setLevelFilter("warning")}
+            >
               {diagnostics.warningCount} warnings
-            </span>
+            </button>
             <span className="rounded border px-2 py-1">
               {diagnostics.networkCount} network
             </span>
@@ -101,7 +130,7 @@ export function DiagnosticsDialog({
               type="button"
               variant="outline"
               size="sm"
-              disabled={diagnostics.records.length === 0}
+              disabled={filteredRecords.length === 0}
               onClick={() => void copyDiagnostics()}
             >
               <Clipboard className="h-3.5 w-3.5" />
@@ -112,7 +141,10 @@ export function DiagnosticsDialog({
               variant="outline"
               size="sm"
               disabled={diagnostics.records.length === 0}
-              onClick={clearDiagnostics}
+              onClick={() => {
+                setLevelFilter("all");
+                clearDiagnostics();
+              }}
             >
               <Trash2 className="h-3.5 w-3.5" />
               Clear
@@ -120,13 +152,15 @@ export function DiagnosticsDialog({
           </div>
         </div>
         <ScrollArea className="min-h-0 border-t">
-          {diagnostics.records.length === 0 ? (
+          {filteredRecords.length === 0 ? (
             <div className="flex min-h-48 items-center justify-center px-6 py-12 text-sm text-muted-foreground">
-              No diagnostics captured.
+              {listIsFiltered
+                ? `No ${levelFilter} diagnostics captured.`
+                : "No diagnostics captured."}
             </div>
           ) : (
             <ol className="divide-y">
-              {diagnostics.records.map((record) => (
+              {filteredRecords.map((record) => (
                 <li
                   key={record.id}
                   className={cn("border-l-2 px-6 py-3", recordAccent(record))}

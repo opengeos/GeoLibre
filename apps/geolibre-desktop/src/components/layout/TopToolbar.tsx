@@ -48,14 +48,17 @@ import {
 } from "@geolibre/ui";
 import {
   Bug,
+  CircleHelp,
   Database,
   FolderOpen,
   History,
+  Info,
   Layers,
   Link2,
   Map,
   Moon,
   Puzzle,
+  RefreshCw,
   Save,
   SlidersHorizontal,
   Sun,
@@ -175,6 +178,8 @@ export function TopToolbar({
   const [projectUrlError, setProjectUrlError] = useState<string | null>(null);
   const [projectUrlLoading, setProjectUrlLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [checkForUpdatesRequest, setCheckForUpdatesRequest] = useState(0);
   const projectUrlAbortRef = useRef<AbortController | null>(null);
   const recentAbortRef = useRef<AbortController | null>(null);
 
@@ -584,23 +589,6 @@ export function TopToolbar({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <Button
-        className={cn(toolbarButtonClass, "relative")}
-        variant="ghost"
-        size={toolbarButtonSize}
-        onClick={onOpenDiagnostics}
-        aria-label="Diagnostics"
-      >
-        <Bug className={toolbarIconClassName} />
-        {renderToolbarLabel("Diagnostics")}
-        {diagnosticsErrorCount > 0 ? (
-          <span className="ml-1 rounded bg-destructive px-1.5 py-0.5 text-[10px] leading-none text-destructive-foreground">
-            {diagnosticsErrorCount}
-          </span>
-        ) : diagnosticsTotalCount > 0 && !showLabels ? (
-          <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary" />
-        ) : null}
-      </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -731,6 +719,48 @@ export function TopToolbar({
         mapControllerRef={mapControllerRef}
         showLabels={showLabels}
       />
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            className={cn(toolbarButtonClass, "relative")}
+            variant="ghost"
+            size={toolbarButtonSize}
+            aria-label="Help"
+          >
+            <CircleHelp className={toolbarIconClassName} />
+            {renderToolbarLabel("Help")}
+            {diagnosticsErrorCount > 0 ? (
+              <span className="ml-1 rounded bg-destructive px-1.5 py-0.5 text-[10px] leading-none text-destructive-foreground">
+                {diagnosticsErrorCount}
+              </span>
+            ) : diagnosticsTotalCount > 0 && !showLabels ? (
+              <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary" />
+            ) : null}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuLabel>Help</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={onOpenDiagnostics}>
+            <Bug className="mr-2 h-3.5 w-3.5" />
+            Diagnostics
+            {diagnosticsErrorCount > 0 ? ` (${diagnosticsErrorCount})` : ""}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => {
+              setAboutOpen(true);
+              setCheckForUpdatesRequest((value) => value + 1);
+            }}
+          >
+            <RefreshCw className="mr-2 h-3.5 w-3.5" />
+            Check for updates
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setAboutOpen(true)}>
+            <Info className="mr-2 h-3.5 w-3.5" />
+            About
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <AddDataDialog
         kind={addDataKind}
         mapControllerRef={mapControllerRef}
@@ -807,10 +837,10 @@ export function TopToolbar({
         </DialogContent>
       </Dialog>
       <AboutDialog
-        buttonClassName={toolbarButtonClass}
-        buttonSize={toolbarButtonSize}
-        iconClassName={toolbarIconClassName}
-        showLabels={showLabels}
+        checkForUpdatesRequest={checkForUpdatesRequest}
+        open={aboutOpen}
+        renderTrigger={false}
+        onOpenChange={setAboutOpen}
       />
       <div className="ml-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
         <Button

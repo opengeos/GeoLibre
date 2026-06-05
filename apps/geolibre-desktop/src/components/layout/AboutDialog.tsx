@@ -6,7 +6,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@geolibre/ui";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { CheckCircle2, ExternalLink, Info, Map, RefreshCw } from "lucide-react";
@@ -35,6 +34,10 @@ interface GitHubRelease {
 }
 
 interface AboutDialogProps {
+  checkForUpdatesRequest?: number;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  renderTrigger?: boolean;
   buttonClassName?: string;
   buttonSize?: ButtonProps["size"];
   iconClassName?: string;
@@ -78,15 +81,23 @@ function formatVersion(version: string): string {
 }
 
 export function AboutDialog({
+  checkForUpdatesRequest = 0,
+  open,
+  onOpenChange,
+  renderTrigger = true,
   buttonClassName,
   buttonSize = "sm",
   iconClassName,
   showLabels = true,
 }: AboutDialogProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>("idle");
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const handledCheckForUpdatesRequestRef = useRef(0);
+  const wasOpenRef = useRef(false);
+  const dialogOpen = open ?? internalOpen;
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -150,23 +161,45 @@ export function AboutDialog({
     }
   };
 
+  useEffect(() => {
+    if (dialogOpen && !wasOpenRef.current) resetUpdateState();
+    wasOpenRef.current = dialogOpen;
+  }, [dialogOpen]);
+
+  useEffect(() => {
+    if (
+      !dialogOpen ||
+      checkForUpdatesRequest === 0 ||
+      checkForUpdatesRequest === handledCheckForUpdatesRequestRef.current
+    ) {
+      return;
+    }
+    handledCheckForUpdatesRequestRef.current = checkForUpdatesRequest;
+    void handleCheckForUpdates();
+    // checkForUpdatesRequest is an explicit command counter; the update check
+    // should run exactly once for each increment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkForUpdatesRequest, dialogOpen]);
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    setInternalOpen(nextOpen);
+    onOpenChange?.(nextOpen);
+  };
+
   return (
-    <Dialog
-      onOpenChange={(open) => {
-        if (open) resetUpdateState();
-      }}
-    >
-      <DialogTrigger asChild>
+    <Dialog open={dialogOpen} onOpenChange={handleOpenChange}>
+      {renderTrigger ? (
         <Button
           className={buttonClassName}
           variant="ghost"
           size={buttonSize}
           aria-label="About"
+          onClick={() => handleOpenChange(true)}
         >
           <Info className={iconClassName ?? "h-3.5 w-3.5 sm:mr-1"} />
           {showLabels ? <span className="hidden sm:inline">About</span> : null}
         </Button>
-      </DialogTrigger>
+      ) : null}
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
