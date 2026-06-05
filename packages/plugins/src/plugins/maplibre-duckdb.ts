@@ -195,7 +195,16 @@ function createDuckDBQueryHandler(): DuckDBControlEventHandler {
     if (!layerState) return;
 
     const store = useAppStore.getState();
-    const controlLayer = getMutableDuckDBControl().layer;
+    const controlLayer = getMutableDuckDBControl()?.layer;
+    if (!controlLayer) {
+      // Without the control's layer there is no geometry to render; skip
+      // adding a ghost entry to the store.
+      console.warn(
+        "DuckDB query completed before the control layer was ready; the result will not be added to the layer list.",
+      );
+      return;
+    }
+
     const queryLayerId = createDuckDBQueryLayerId(layerState.id);
     const queryLayerName = createUniqueDuckDBLayerName(
       layerState.name,
@@ -208,24 +217,23 @@ function createDuckDBQueryHandler(): DuckDBControlEventHandler {
     };
     const layer = createDuckDBStoreLayer(event.state, nextLayerState);
 
-    if (controlLayer) {
-      // Rename the control's internal layer to the unique query layer id so
-      // its own follow-up renders and feature-select calls stay keyed to the
-      // same id as the cached layer below. The renderer rebuilds all deck
-      // layers from scratch on every setData call, so the rename is safe.
-      controlLayer.id = queryLayerId;
-      controlLayer.name = queryLayerName;
-      duckdbRenderedLayers.set(layer.id, {
-        beforeId: controlLayer.beforeId ?? nextLayerState.beforeId ?? null,
-        id: layer.id,
-        name: layer.name,
-        results: controlLayer.results ?? controlLayer.geoArrowResults ?? [],
-      });
-      duckdbRenderedRows.set(layer.id, controlLayer.rows ?? {});
-    } else if (import.meta.env.DEV) {
-      console.warn(
-        `DuckDB query completed before the control layer was ready; layer ${queryLayerId} will not render.`,
-      );
+    // Rename the control's internal layer to the unique query layer id so
+    // its own follow-up renders and feature-select calls stay keyed to the
+    // same id as the cached layer below. Verified against
+    // maplibre-gl-duckdb 0.2.0: the renderer rebuilds all deck layers from
+    // scratch on every setData call and the control builds a fresh layer
+    // object (with complete rows) before emitting "query", so the rename
+    // and the by-reference caches are safe. Re-check on library upgrades.
+    controlLayer.id = queryLayerId;
+    controlLayer.name = queryLayerName;
+    duckdbRenderedLayers.set(layer.id, {
+      beforeId: controlLayer.beforeId ?? nextLayerState.beforeId ?? null,
+      id: layer.id,
+      name: layer.name,
+      results: controlLayer.results ?? controlLayer.geoArrowResults ?? [],
+    });
+    if (controlLayer.rows) {
+      duckdbRenderedRows.set(layer.id, controlLayer.rows);
     }
 
     // Seed the style before addLayer so the store subscription's sync render
@@ -297,7 +305,9 @@ function removeDuckDBRenderedLayer(layerId: string): void {
   duckdbRenderedStyles.delete(layerId);
   duckdbLayerOrder.delete(layerId);
   warnedMissingRowsLayerIds.delete(layerId);
-  renderDuckDBCachedLayers();
+  // No render here: removals are only observed via the store subscription,
+  // whose layer-order signature check follows up with
+  // syncDuckDBRenderedLayersFromStore and a single render.
 }
 
 function clearDuckDBRenderedLayers(): void {
@@ -306,7 +316,7 @@ function clearDuckDBRenderedLayers(): void {
   duckdbRenderedRows.clear();
   duckdbRenderedStyles.clear();
   warnedMissingRowsLayerIds.clear();
-  getMutableDuckDBControl().renderer?.clear?.();
+  getMutableDuckDBControl()?.renderer?.clear?.();
 }
 
 function syncDuckDBRenderedLayersFromStore(layers: GeoLibreLayer[]): void {
@@ -346,33 +356,35 @@ function renderDuckDBCachedLayers(): void {
 }
 
 function getOrderedDuckDBRenderedLayers(): DuckDBRenderedLayerLike[] {
-  return [...duckdbRenderedLayers.values()].sort(
-    (first, second) =>
-      (duckdbLayerOrder.get(first.id) ?? Number.MAX_SAFE_INTEGER) -
-      (duckdbLayerOrder.get(second.id) ?? Number.MAX_SAFE_INTEGER),
+  return [...duckdbRenderedLayers.values()].sort(compareDuckDBLayerOrder);
+}
+
+function compareDuckDBLayerOrder(
+  first: DuckDBRenderedLayerLike,
+  second: DuckDBRenderedLayerLike,
+): number {
+  return (
+    (duckdbLayerOrder.get(first.id) ?? Number.MAX_SAFE_INTEGER) -
+    (duckdbLayerOrder.get(second.id) ?? Number.MAX_SAFE_INTEGER)
   );
 }
 
 function patchDuckDBRenderer(renderer: DuckDBRendererLike | null | undefined) {
   if (!renderer || renderer.__geolibreStylePatched) return;
 
-  if (renderer.setData) {
+  if (renderer.setData && !renderer.__geolibreOriginalSetData) {
     renderer.__geolibreOriginalSetData = renderer.setData.bind(renderer);
     renderer.setData = (layers: DuckDBRenderedLayerLike[]) => {
       renderer.__geolibreOriginalSetData?.(
-        [...layers].sort(
-          (first, second) =>
-            (duckdbLayerOrder.get(first.id) ?? Number.MAX_SAFE_INTEGER) -
-            (duckdbLayerOrder.get(second.id) ?? Number.MAX_SAFE_INTEGER),
-        ),
+        [...layers].sort(compareDuckDBLayerOrder),
       );
     };
   }
 
-  if (!renderer.createLayers) {
-    renderer.__geolibreStylePatched = true;
-    return;
-  }
+  // Leave the patched flag unset until createLayers is available so a later
+  // call can finish the patch; the setData guard above keeps that retry
+  // idempotent.
+  if (!renderer.createLayers) return;
 
   renderer.__geolibreOriginalCreateLayers = renderer.createLayers.bind(
     renderer,
@@ -559,8 +571,8 @@ function isDuckDBControlLayer(layer: GeoLibreLayer): boolean {
 
 function getMutableDuckDBControl(
   control = duckdbControl,
-): MutableDuckDBControl {
-  return control as unknown as MutableDuckDBControl;
+): MutableDuckDBControl | null {
+  return control as unknown as MutableDuckDBControl | null;
 }
 
 function createDuckDBQueryLayerId(baseId: string): string {
