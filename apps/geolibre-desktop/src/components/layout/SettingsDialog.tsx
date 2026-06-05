@@ -669,7 +669,10 @@ export function SettingsDialog({
         </DropdownMenuContent>
       </DropdownMenu>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[min(88vh,760px)] max-w-3xl overflow-hidden p-0">
+        <DialogContent
+          className="max-h-[min(88vh,760px)] max-w-3xl"
+          bodyClassName="overflow-hidden p-0"
+        >
           <DialogHeader className="border-b px-6 pb-4 pt-6">
             <DialogTitle>Settings</DialogTitle>
             <DialogDescription>

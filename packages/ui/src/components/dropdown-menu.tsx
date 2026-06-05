@@ -44,7 +44,7 @@ export const DropdownMenuSubContent = React.forwardRef<
     )}
     style={{
       maxHeight:
-        "min(var(--radix-dropdown-menu-content-available-height, calc(100vh - 1rem)), calc(100vh - 1rem))",
+        "min(var(--radix-dropdown-menu-content-available-height, 100vh), calc(100vh - 1rem))",
       ...style,
     }}
     {...props}
@@ -67,7 +67,7 @@ export const DropdownMenuContent = React.forwardRef<
       )}
       style={{
         maxHeight:
-          "min(var(--radix-dropdown-menu-content-available-height, calc(100vh - 1rem)), calc(100vh - 1rem))",
+          "min(var(--radix-dropdown-menu-content-available-height, 100vh), calc(100vh - 1rem))",
         ...style,
       }}
       {...props}
