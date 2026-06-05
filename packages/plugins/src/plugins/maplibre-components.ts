@@ -1517,7 +1517,6 @@ function createColorbarControl(
   ColorbarGuiControlClass: ColorbarGuiControlConstructor,
 ): ColorbarGuiControl {
   const control = new ColorbarGuiControlClass(COLORBAR_OPTIONS);
-  control.on("collapse", () => setColorbarPanelVisible(false));
   control.on("expand", () => {
     constrainGuiPanelToViewport(
       ".geolibre-colorbar-control .colorbar-gui-panel",
@@ -1531,7 +1530,6 @@ function createLegendControl(
   LegendGuiControlClass: LegendGuiControlConstructor,
 ): LegendGuiControl {
   const control = new LegendGuiControlClass(LEGEND_OPTIONS);
-  control.on("collapse", () => setLegendPanelVisible(false));
   control.on("expand", () => {
     constrainGuiPanelToViewport(
       ".geolibre-legend-control .legend-gui-panel",
@@ -1545,7 +1543,6 @@ function createHtmlControl(
   HtmlGuiControlClass: HtmlGuiControlConstructor,
 ): HtmlGuiControl {
   const control = new HtmlGuiControlClass(HTML_OPTIONS);
-  control.on("collapse", () => setHtmlPanelVisible(false));
   control.on("expand", () => {
     constrainGuiPanelToViewport(".geolibre-html-control .html-gui-panel");
     setHtmlPanelVisible(true);
