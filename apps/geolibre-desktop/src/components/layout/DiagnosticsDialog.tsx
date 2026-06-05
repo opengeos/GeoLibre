@@ -9,15 +9,16 @@ import {
   ScrollArea,
 } from "@geolibre/ui";
 import { Clipboard, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   clearDiagnostics,
   type DiagnosticRecord,
   type DiagnosticLevel,
-  useDiagnosticsSnapshot,
+  type DiagnosticsSnapshot,
 } from "../../lib/diagnostics";
 
 interface DiagnosticsDialogProps {
+  diagnostics: DiagnosticsSnapshot;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -49,11 +50,12 @@ function recordLevelClass(record: DiagnosticRecord): string {
 }
 
 export function DiagnosticsDialog({
+  diagnostics,
   open,
   onOpenChange,
 }: DiagnosticsDialogProps) {
-  const diagnostics = useDiagnosticsSnapshot();
   const [copyState, setCopyState] = useState<"copied" | "idle">("idle");
+  const copyResetTimerRef = useRef<number | null>(null);
   const [levelFilter, setLevelFilter] = useState<DiagnosticLevel | "all">(
     "all",
   );
@@ -70,11 +72,31 @@ export function DiagnosticsDialog({
   );
   const listIsFiltered = levelFilter !== "all";
 
+  useEffect(
+    () => () => {
+      if (copyResetTimerRef.current !== null) {
+        window.clearTimeout(copyResetTimerRef.current);
+      }
+    },
+    [],
+  );
+
   const copyDiagnostics = async () => {
     if (!navigator.clipboard || filteredRecords.length === 0) return;
-    await navigator.clipboard.writeText(serializedRecords);
+    try {
+      await navigator.clipboard.writeText(serializedRecords);
+    } catch {
+      // Clipboard access denied or unavailable.
+      return;
+    }
     setCopyState("copied");
-    window.setTimeout(() => setCopyState("idle"), 1500);
+    if (copyResetTimerRef.current !== null) {
+      window.clearTimeout(copyResetTimerRef.current);
+    }
+    copyResetTimerRef.current = window.setTimeout(
+      () => setCopyState("idle"),
+      1500,
+    );
   };
 
   return (
@@ -122,7 +144,7 @@ export function DiagnosticsDialog({
             >
               {diagnostics.warningCount} warnings
             </button>
-            <span className="rounded border px-2 py-1">
+            <span className="rounded bg-muted px-2 py-1 text-muted-foreground">
               {diagnostics.networkCount} network
             </span>
           </div>
@@ -178,7 +200,9 @@ export function DiagnosticsDialog({
                     <span className="rounded bg-muted px-1.5 py-0.5 uppercase">
                       {record.category}
                     </span>
-                    <time>{formatTime(record.timestamp)}</time>
+                    <time dateTime={record.timestamp}>
+                      {formatTime(record.timestamp)}
+                    </time>
                     {record.method ? <span>{record.method}</span> : null}
                     {record.status ? <span>HTTP {record.status}</span> : null}
                     {record.durationMs != null ? (

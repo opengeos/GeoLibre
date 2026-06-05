@@ -501,6 +501,7 @@ export function DesktopShell({
         onOpenDiagnostics={() => setDiagnosticsOpen(true)}
       />
       <DiagnosticsDialog
+        diagnostics={diagnostics}
         open={diagnosticsOpen}
         onOpenChange={setDiagnosticsOpen}
       />

@@ -581,6 +581,9 @@ export const MapCanvas = memo(function MapCanvas({
     });
     map.on("mouseout", () => setPointerCoords(null));
     map.on("error", (event) => {
+      // Cancelled tile fetches are already surfaced (as info) by the
+      // network capture; logging them here would double-count aborts.
+      if (isAbortError(event.error)) return;
       onMapDiagnosticEventRef.current?.(mapErrorDiagnosticEvent(event));
     });
 

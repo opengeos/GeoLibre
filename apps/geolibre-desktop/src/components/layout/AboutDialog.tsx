@@ -166,6 +166,12 @@ export function AboutDialog({
     wasOpenRef.current = dialogOpen;
   }, [dialogOpen]);
 
+  // Read the latest handler through a ref so the effect can depend only on
+  // the command counter; the update check should run exactly once for each
+  // increment.
+  const handleCheckForUpdatesRef = useRef(handleCheckForUpdates);
+  handleCheckForUpdatesRef.current = handleCheckForUpdates;
+
   useEffect(() => {
     if (
       !dialogOpen ||
@@ -175,10 +181,7 @@ export function AboutDialog({
       return;
     }
     handledCheckForUpdatesRequestRef.current = checkForUpdatesRequest;
-    void handleCheckForUpdates();
-    // checkForUpdatesRequest is an explicit command counter; the update check
-    // should run exactly once for each increment.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void handleCheckForUpdatesRef.current();
   }, [checkForUpdatesRequest, dialogOpen]);
 
   const handleOpenChange = (nextOpen: boolean) => {

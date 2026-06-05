@@ -22,7 +22,7 @@ export interface DiagnosticInput
   timestamp?: string;
 }
 
-interface DiagnosticsSnapshot {
+export interface DiagnosticsSnapshot {
   records: DiagnosticRecord[];
   totalCount: number;
   errorCount: number;
@@ -41,14 +41,20 @@ let captureRefCount = 0;
 let captureCleanup: (() => void) | null = null;
 
 function createSnapshot(nextRecords: DiagnosticRecord[]): DiagnosticsSnapshot {
+  let errorCount = 0;
+  let warningCount = 0;
+  let networkCount = 0;
+  for (const record of nextRecords) {
+    if (record.level === "error") errorCount += 1;
+    else if (record.level === "warning") warningCount += 1;
+    if (record.category === "network") networkCount += 1;
+  }
   return {
     records: nextRecords,
     totalCount: nextRecords.length,
-    errorCount: nextRecords.filter((record) => record.level === "error").length,
-    warningCount: nextRecords.filter((record) => record.level === "warning")
-      .length,
-    networkCount: nextRecords.filter((record) => record.category === "network")
-      .length,
+    errorCount,
+    warningCount,
+    networkCount,
   };
 }
 
@@ -183,11 +189,14 @@ export function installDiagnosticsCapture(): () => void {
       });
       return response;
     } catch (error) {
+      const isAbort =
+        (error instanceof DOMException || error instanceof Error) &&
+        error.name === "AbortError";
       appendDiagnostic({
         category: "network",
-        level: "error",
-        message: `${method} request failed`,
-        detail: formatUnknown(error),
+        level: isAbort ? "info" : "error",
+        message: isAbort ? `${method} aborted` : `${method} request failed`,
+        detail: isAbort ? undefined : formatUnknown(error),
         durationMs: Math.round(performance.now() - startedAt),
         method,
         url,
