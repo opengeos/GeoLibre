@@ -4,17 +4,21 @@ Lightweight, cloud-native desktop GIS prototype built with **Tauri v2**, **React
 
 [![](https://files.opengeos.org/GeoLibre-OPERA-demo.webp)](https://viewer.geolibre.app/?url=https://data.geolibre.app/opera-dswx.geolibre.json)
 
-## Features (v0.6.0)
+## Features (v0.8.0)
 
 - MapLibre map workspace with OpenFreeMap basemaps, blank background support, and toggleable navigation, fullscreen, geolocation, globe, terrain, scale, attribution, and logo controls
-- Load local vector layers supported by DuckDB-WASM Spatial, including common formats such as GeoJSON, GeoParquet, GeoPackage, Shapefile, FlatGeobuf, KML/KMZ, and GML
-- Add Data menu for XYZ tiles, WMS, GeoJSON URLs, vector tiles, COG and GeoTIFF rasters, MBTiles, ArcGIS FeatureServer and VectorTileServer layers, PMTiles, Zarr, LiDAR, and Gaussian splats
-- Layer panel for visibility, opacity, reordering, zoom-to-layer, identify, and remove actions
+- Load local vector layers supported by DuckDB-WASM Spatial, including common formats such as GeoJSON, GeoParquet, GeoPackage, Shapefile, FlatGeobuf, KML/KMZ, GML, delimited text, and GPX
+- Reproject vector layers to EPSG:4326 on load and split dragged GPX files into named waypoint, track, and route layers
+- Add Data menu for XYZ tiles, WMS, WFS, GeoJSON URLs, vector tiles, COG and GeoTIFF rasters, MBTiles, ArcGIS FeatureServer and VectorTileServer layers, PMTiles, Zarr, LiDAR, 3D Tiles, and Gaussian splats
+- Manual and automatic refresh for WFS and GeoJSON URL layers
+- Layer panel for visibility, opacity, reordering, zoom-to-layer, identify, labels, and remove actions
 - Live style panel (fill, stroke, opacity, circle radius)
 - Attribute table with filtering, sorting, resize controls, feature highlighting, and optional zoom to selected features
+- Multiple DuckDB SQL query-result layers
 - Save/open `.geolibre.json` projects
-- Processing toolbox with local bounds and feature count algorithms
-- Plugin system with basemap, layer control, MapLibre components, swipe, street view, LiDAR, GeoAgent, and GeoEditor integrations, including configurable control positions
+- Desktop diagnostics panel, update check, and MSIX packaging support
+- Plugin system with basemap, layer control, MapLibre components, swipe, street view, LiDAR, GeoAgent, and GeoEditor integrations, including configurable control positions and external plugin manifests
+- External plugin zip loading from the app data plugins directory and local development plugin directories
 - Optional Python FastAPI sidecar for heavier processing workflows
 
 ## Prerequisites
@@ -169,7 +173,7 @@ Plugins can use the app API to change basemaps, add GeoJSON layers, or attach Ma
 
 Built-in MapLibre controls such as Navigation, Fullscreen, Geolocate, Globe, Terrain, Scale, Attribution, and Logo are toggled from the desktop app's Controls menu. The same menu also opens Search, a standalone place search panel backed by the Components plugin. Keep project-specific controls such as Layer Control and Components in the plugin menu when they use the plugin API or need plugin lifecycle behavior.
 
-The v0.6.0 Components plugin wraps `maplibre-gl-components` controls and wires their layer events into the GeoLibre store. It provides Add Data shortcuts for FlatGeobuf, PMTiles, Zarr, LiDAR, and Gaussian splats, while raster COG and GeoTIFF layers can also be added through the standard Add Raster Layer dialog.
+The Components plugin wraps `maplibre-gl-components` controls and wires their layer events into the GeoLibre store. It provides Add Data shortcuts for FlatGeobuf, PMTiles, Zarr, LiDAR, and Gaussian splats, while raster COG and GeoTIFF layers can also be added through the standard Add Raster Layer dialog.
 
 If a third-party MapLibre control needs app-specific styling fixes, add scoped overrides in `apps/geolibre-desktop/src/index.css` instead of editing files in `node_modules`. Keep selectors limited to the plugin control class. For example, GeoEditor toolbar buttons need a local override because MapLibre's default control button CSS can override their flex centering:
 

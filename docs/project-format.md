@@ -88,7 +88,7 @@ Manual refresh uses the same saved source URL without requiring this metadata.
 
 ## Layer types
 
-| Type             | v0.7.0 status                                                                                      |
+| Type             | v0.8.0 status                                                                                      |
 | ---------------- | -------------------------------------------------------------------------------------------------- |
 | `geojson`        | Supported for imported files and GeoJSON URLs                                                      |
 | `xyz`            | Supported for raster tile templates                                                                |
@@ -104,7 +104,7 @@ Manual refresh uses the same saved source URL without requiring this metadata.
 | `lidar`          | Supported through the Components plugin                                                            |
 | `gaussian-splat` | Supported through the Components plugin                                                            |
 | `geoparquet`     | Imported as GeoJSON via DuckDB-WASM                                                                |
-| `duckdb-query`   | Reserved for SQL query-result layers                                                               |
+| `duckdb-query`   | Supported for SQL query-result layers                                                              |
 
 ## Example
 

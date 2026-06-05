@@ -47,7 +47,7 @@
 - [x] STAC search workflow for adding catalog-backed raster layers
 - [x] Esri Wayback, GeoAgent, GeoEditor, Street View, and Swipe plugin integrations
 
-## v0.7: Add Data expansion, identify, settings, and processing (current)
+## v0.7: Add Data expansion, identify, settings, and processing
 
 - [x] GPX loading from URL or local file, with selectable waypoint, track, and route layers
 - [x] Delimited text loading from URL or local file using longitude and latitude fields
@@ -61,23 +61,41 @@
 - [x] Local raster file loading fix
 - [x] Large-file pre-commit guard
 
-## v0.8: SQL and processing sidecar
+## v0.8: Viewer, desktop packaging, plugins, and dynamic layers (current)
 
+- [x] Cloudflare Worker viewer served from `viewer.geolibre.app`
+- [x] Browser demo links updated to the production viewer
+- [x] GPX drag-and-drop split into named waypoint, track, and route layers
+- [x] Vector layers reprojected to EPSG:4326 on load
+- [x] Desktop About dialog update check
+- [x] Dynamic external plugin zip loading from the app data plugins directory
+- [x] Safe fallback for `crypto.randomUUID` in non-secure contexts
+- [x] External plugin manifest support with `plugin.json`
+- [x] 3D Tiles layer support through `maplibre-gl-3d-tiles`
+- [x] 3D Tiles restoration when reopening projects
+- [x] GeoParquet panel DuckDB startup fix
+- [x] MSIX desktop packaging and cleaner build output
+- [x] External native GeoJSON layers registered from local directories
+- [x] Raster basemaps registered as external native layers
+- [x] Text marker labels rendered on GeoJSON layers
+- [x] Manual and automatic refresh for WFS and GeoJSON URL layers
+- [x] Multiple DuckDB SQL query-result layers
+- [x] Desktop diagnostics panel and improved diagnostics/status bar contrast
+- [x] Toolbar toggles for Colorbar, Legend, and HTML panels
+
+## v0.9: SQL and processing sidecar
+
+- [ ] SQL panel workflow for building and managing queries
 - [ ] GDAL / Rasterio / GeoPandas pipelines
-- [ ] Buffer, reproject, export GeoJSON
-- [ ] Expanded WhiteboxTools coverage, Leafmap, GeoAI, SamGeo (selective)
-- [ ] SQL panel and query-result layers
+- [ ] Buffer, reproject, and export GeoJSON processing tools
+- [ ] Expanded WhiteboxTools coverage
+- [ ] Leafmap, GeoAI, and SamGeo integrations (selective)
 
-## v0.9: External plugin system
+## v1.0: External plugin system and stable prototype
 
-- [ ] External plugin packages
+- [ ] External plugin package distribution workflow
 - [ ] Plugin marketplace / registry (design)
-- [x] Dynamic plugin loading from a `plugins/` directory
-- [x] Plugin manifest (`plugin.json`)
 - [ ] Sandboxed worker plugins
-
-## v1.0: Stable prototype
-
-- [ ] Performance tuning, test suite
+- [ ] Performance tuning and test suite
 - [ ] Cross-platform installers
-- [ ] Documentation & tutorials
+- [ ] Documentation and tutorials
