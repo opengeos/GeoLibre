@@ -1,6 +1,7 @@
 # Run the build stage on the builder's native platform: the output is
 # arch-independent static files, so emulating arm64 with QEMU here only
 # slows down multi-arch builds without changing the result.
+# ($BUILDPLATFORM is a Docker-provided automatic ARG, set by BuildKit.)
 FROM --platform=$BUILDPLATFORM node:22-alpine AS build
 
 WORKDIR /app
