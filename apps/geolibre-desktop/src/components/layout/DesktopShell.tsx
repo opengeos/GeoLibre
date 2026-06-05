@@ -162,7 +162,7 @@ export function DesktopShell({
     void pluginManager.handleUrlParameters(
       new URLSearchParams(window.location.search),
       appAPI,
-      `${projectGeneration}:${window.location.href}`,
+      `${projectGeneration}:${window.location.search}`,
     );
   }, [externalPluginsReady, mapReadyGeneration, projectGeneration]);
 

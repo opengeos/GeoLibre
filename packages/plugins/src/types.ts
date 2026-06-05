@@ -81,7 +81,7 @@ export interface GeoLibrePlugin {
   handleUrlParameters?: (
     app: GeoLibreAppAPI,
     params: URLSearchParams,
-  ) => boolean | void | Promise<boolean | void>;
+  ) => void | Promise<void>;
   getMapControlPosition?: () => GeoLibreMapControlPosition;
   setMapControlPosition?: (
     app: GeoLibreAppAPI,

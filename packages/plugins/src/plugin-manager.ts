@@ -14,12 +14,18 @@ export class PluginManager {
     GeoLibreMapControlPosition
   >();
   private handledUrlParameterKeys = new Set<string>();
+  private lastHandledContextKey: string | null = null;
+  private urlParameterNamesById = new Map<string, string[]>();
   private listeners = new Set<() => void>();
   private version = 0;
 
   register(plugin: GeoLibrePlugin): void {
     const previous = this.plugins.get(plugin.id);
     this.plugins.set(plugin.id, plugin);
+    this.urlParameterNamesById.set(
+      plugin.id,
+      normalizeUrlParameterNames(plugin.urlParameterNames),
+    );
     const defaultPosition = plugin.getMapControlPosition?.();
     if (defaultPosition) {
       this.defaultMapControlPositions.set(plugin.id, defaultPosition);
@@ -112,14 +118,19 @@ export class PluginManager {
     app: GeoLibreAppAPI,
     contextKey = params.toString(),
   ): Promise<void> {
-    if (!Array.from(params.keys()).length) return;
+    if (!params.toString()) return;
+
+    // Only the latest context matters for dedup, so evict the previous
+    // context's keys instead of accumulating them for the page lifetime.
+    if (contextKey !== this.lastHandledContextKey) {
+      this.handledUrlParameterKeys.clear();
+      this.lastHandledContextKey = contextKey;
+    }
 
     for (const [id, plugin] of this.plugins) {
       if (!this.active.has(id) || !plugin.handleUrlParameters) continue;
 
-      const parameterNames = normalizeUrlParameterNames(
-        plugin.urlParameterNames,
-      );
+      const parameterNames = this.urlParameterNamesById.get(id) ?? [];
       if (
         parameterNames.length === 0 ||
         !parameterNames.some((name) => params.has(name))

@@ -78,4 +78,103 @@ describe("PluginManager URL parameters", () => {
       "https://example.com/next.geojson",
     ]);
   });
+
+  it("awaits async handlers in registration order", async () => {
+    const calls: string[] = [];
+    const manager = new PluginManager();
+
+    manager.register(
+      testPlugin({
+        id: "slow-loader",
+        urlParameterNames: ["data"],
+        handleUrlParameters: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          calls.push("slow");
+        },
+      }),
+    );
+    manager.register(
+      testPlugin({
+        id: "fast-loader",
+        urlParameterNames: ["data"],
+        handleUrlParameters: () => {
+          calls.push("fast");
+        },
+      }),
+    );
+    manager.activate("slow-loader", app);
+    manager.activate("fast-loader", app);
+
+    await manager.handleUrlParameters(
+      new URLSearchParams("data=value"),
+      app,
+      "project-1",
+    );
+
+    assert.deepEqual(calls, ["slow", "fast"]);
+  });
+
+  it("keeps running handlers after one plugin throws", async () => {
+    const calls: string[] = [];
+    const manager = new PluginManager();
+
+    manager.register(
+      testPlugin({
+        id: "broken-loader",
+        urlParameterNames: ["data"],
+        handleUrlParameters: () => {
+          throw new Error("boom");
+        },
+      }),
+    );
+    manager.register(
+      testPlugin({
+        id: "working-loader",
+        urlParameterNames: ["data"],
+        handleUrlParameters: () => {
+          calls.push("working");
+        },
+      }),
+    );
+    manager.activate("broken-loader", app);
+    manager.activate("working-loader", app);
+
+    await manager.handleUrlParameters(
+      new URLSearchParams("data=value"),
+      app,
+      "project-1",
+    );
+
+    assert.deepEqual(calls, ["working"]);
+  });
+
+  it("does not re-run a handled context after deactivate and reactivate", async () => {
+    const calls: string[] = [];
+    const manager = new PluginManager();
+
+    manager.register(
+      testPlugin({
+        urlParameterNames: ["data"],
+        handleUrlParameters: () => {
+          calls.push("handled");
+        },
+      }),
+    );
+    manager.activate("url-loader", app);
+
+    await manager.handleUrlParameters(
+      new URLSearchParams("data=value"),
+      app,
+      "project-1",
+    );
+    manager.deactivate("url-loader", app);
+    manager.activate("url-loader", app);
+    await manager.handleUrlParameters(
+      new URLSearchParams("data=value"),
+      app,
+      "project-1",
+    );
+
+    assert.deepEqual(calls, ["handled"]);
+  });
 });

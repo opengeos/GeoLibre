@@ -135,6 +135,9 @@ export const plugin: GeoLibrePlugin = {
   },
   async handleUrlParameters(app: GeoLibreAppAPI, params: URLSearchParams) {
     for (const dataUrl of params.getAll("exampleGeoJson")) {
+      // URL parameter values are attacker-controlled: only fetch HTTPS URLs
+      // so adversarial links cannot reach file://, data:, or loopback hosts.
+      if (!dataUrl.startsWith("https://")) continue;
       const response = await fetch(dataUrl);
       if (!response.ok) continue;
       app.addGeoJsonLayer("Example URL layer", await response.json(), dataUrl);
@@ -142,6 +145,8 @@ export const plugin: GeoLibrePlugin = {
   },
 };
 ```
+
+Validate URL parameter values before acting on them. Anyone can craft a link to GeoLibre, so handlers that fetch a parameter value should reject unexpected schemes (`file://`, `data:`, plain `http://`) and only contact origins they trust.
 
 For example:
 
