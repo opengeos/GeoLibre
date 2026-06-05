@@ -5,7 +5,6 @@ import { useProjectUrlLoader } from "./hooks/useProjectUrlLoader";
 import { useRecentProjectsPersistence } from "./hooks/useRecentProjectsPersistence";
 import { useRuntimeEnvironmentVariables } from "./hooks/useRuntimeEnvironmentVariables";
 import { useThemeMode } from "./hooks/useThemeMode";
-import { useDiagnosticsCapture } from "./lib/diagnostics";
 
 export default function App() {
   const layoutOptions = useLayoutOptions();
@@ -13,7 +12,6 @@ export default function App() {
   const projectUrlLoadState = useProjectUrlLoader();
 
   useDesktopSettingsPersistence();
-  useDiagnosticsCapture();
   useRecentProjectsPersistence();
   useRuntimeEnvironmentVariables();
   return (

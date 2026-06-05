@@ -1,7 +1,6 @@
 import "./lib/symbol-dispose-polyfill";
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App";
 import "@geoman-io/maplibre-geoman-free/dist/maplibre-geoman.css";
 import "maplibre-gl-3d-tiles/style.css";
 import "maplibre-gl-basemap-control/style.css";
@@ -19,9 +18,18 @@ import "./lib/basemap-style";
 import "./lib/geoagent-style";
 import "./lib/lidar-style";
 import "./lib/swipe-style";
+import { installDiagnosticsCapture } from "./lib/diagnostics";
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+installDiagnosticsCapture();
+
+void import("./App")
+  .then(({ default: App }) => {
+    ReactDOM.createRoot(document.getElementById("root")!).render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>,
+    );
+  })
+  .catch((error: unknown) => {
+    console.error("Failed to start GeoLibre", error);
+  });
