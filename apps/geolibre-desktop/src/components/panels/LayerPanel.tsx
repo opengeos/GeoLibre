@@ -462,7 +462,7 @@ export function LayerPanel({
   }
 
   return (
-    <aside className="relative flex max-h-56 w-full shrink-0 flex-col border-b bg-card md:max-h-none md:w-[var(--layer-panel-width)] md:border-b-0 md:border-r">
+    <aside className="relative flex max-h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-b bg-card md:max-h-none md:w-[var(--layer-panel-width)] md:border-b-0 md:border-r">
       <div
         role="separator"
         aria-orientation="vertical"

@@ -1525,6 +1525,36 @@ body,
   border-top-color: hsl(var(--popover));
 }
 
+@media (max-width: 767px) {
+  .geolibre-components-control .maplibre-gl-control-grid-floating-panel,
+  .geolibre-components-control .maplibre-gl-control-grid-relocated,
+  .geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-panel,
+  .geolibre-zarr-control .maplibre-gl-zarr-layer-panel,
+  .duckdb-control-panel,
+  .geoparquet-control-panel {
+    box-sizing: border-box;
+    max-height: calc(100dvh - 96px) !important;
+    max-width: calc(100vw - 20px) !important;
+    overflow-y: auto;
+  }
+
+  .duckdb-control-panel,
+  .geoparquet-control-panel {
+    left: 10px !important;
+    right: auto !important;
+    width: calc(100vw - 20px) !important;
+  }
+
+  .duckdb-control-content,
+  .geoparquet-control-content {
+    max-height: calc(100dvh - 170px);
+  }
+
+  .geolibre-identify-popup .maplibregl-popup-content {
+    max-width: calc(100vw - 24px);
+  }
+}
+
 .geolibre-identify-popup.maplibregl-popup-anchor-left .maplibregl-popup-tip {
   border-right-color: hsl(var(--popover));
 }

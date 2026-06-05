@@ -625,7 +625,7 @@ export function AttributeTable() {
         ref={tableResizeGuideRef}
         className="pointer-events-none fixed left-0 right-0 z-50 hidden h-px bg-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.25)]"
       />
-      <div className="flex items-center gap-2 border-b px-3 py-1.5">
+      <div className="flex flex-wrap items-center gap-2 border-b px-3 py-1.5 md:flex-nowrap">
         <Button
           variant="ghost"
           size="icon"
@@ -639,10 +639,12 @@ export function AttributeTable() {
         <TableProperties className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-semibold">Attribute table</span>
         {layer ? (
-          <span className="text-xs text-muted-foreground">— {layer.name}</span>
+          <span className="min-w-0 max-w-full truncate text-xs text-muted-foreground md:max-w-56">
+            - {layer.name}
+          </span>
         ) : (
-          <span className="text-xs text-muted-foreground">
-            — select a vector layer
+          <span className="min-w-0 max-w-full truncate text-xs text-muted-foreground md:max-w-56">
+            - select a vector layer
           </span>
         )}
         {exportError ? (
@@ -668,7 +670,7 @@ export function AttributeTable() {
           onClick={toggleEditing}
         >
           <Pencil className="h-3.5 w-3.5" />
-          Edit
+          <span className="hidden sm:inline">Edit</span>
         </Button>
         <Button
           variant="default"
@@ -684,7 +686,7 @@ export function AttributeTable() {
           onClick={saveDrafts}
         >
           <Save className="h-3.5 w-3.5" />
-          Save
+          <span className="hidden sm:inline">Save</span>
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -697,7 +699,7 @@ export function AttributeTable() {
               disabled={!layer?.geojson}
             >
               <Download className="h-3.5 w-3.5" />
-              Export
+              <span className="hidden sm:inline">Export</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -725,8 +727,8 @@ export function AttributeTable() {
           </Button>
         ) : null}
         <Input
-          className="h-7 max-w-xs text-xs"
-          placeholder="Search attributes…"
+          className="h-7 min-w-36 flex-1 text-xs md:max-w-xs"
+          placeholder="Search attributes..."
           aria-label="Search attributes"
           value={attributeFilter}
           onChange={(e) => setAttributeFilter(e.target.value)}
