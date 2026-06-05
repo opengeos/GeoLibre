@@ -104,7 +104,7 @@ function customRefreshIntervalSeconds(intervalMs: number): string {
   return String(Math.round(intervalMs / 1000));
 }
 
-function parseCustomRefreshIntervalSeconds(value: string): number | null {
+function parseCustomRefreshIntervalMs(value: string): number | null {
   const seconds = Number(value);
   if (!Number.isFinite(seconds) || seconds <= 0) return null;
   return Math.max(CUSTOM_REFRESH_INTERVAL_MIN_MS, Math.round(seconds * 1000));
@@ -170,6 +170,14 @@ export function LayerPanel({
   const refreshSettingsLayer = refreshSettingsLayerId
     ? (layers.find((layer) => layer.id === refreshSettingsLayerId) ?? null)
     : null;
+  const refreshSettingsConfig = refreshSettingsLayer
+    ? getLayerRefreshConfig(refreshSettingsLayer)
+    : null;
+  const refreshSettingsIntervalMs = refreshSettingsConfig
+    ? refreshSettingsConfig.enabled
+      ? refreshSettingsConfig.intervalMs
+      : 0
+    : null;
   const backgroundSelected = selectedLayerId === BACKGROUND_SELECTION_ID;
   const allLayersVisible =
     basemapVisible && layers.every((layer) => layer.visible);
@@ -183,7 +191,7 @@ export function LayerPanel({
   const draggedDisplayIndex = draggedLayerId
     ? visibleLayers.findIndex((layer) => layer.id === draggedLayerId)
     : -1;
-  const customRefreshIntervalMs = parseCustomRefreshIntervalSeconds(
+  const customRefreshIntervalMs = parseCustomRefreshIntervalMs(
     customRefreshSeconds,
   );
 
@@ -294,12 +302,14 @@ export function LayerPanel({
     }
 
     const layerIds = new Set(layers.map((layer) => layer.id));
+    for (const id of refreshStatusTimersRef.current.keys()) {
+      if (!layerIds.has(id)) clearRefreshStatusTimer(id);
+    }
     setRefreshStatuses((current) => {
       let changed = false;
       const next = { ...current };
       for (const id of Object.keys(next)) {
         if (!layerIds.has(id)) {
-          clearRefreshStatusTimer(id);
           delete next[id];
           changed = true;
         }
@@ -309,21 +319,22 @@ export function LayerPanel({
   }, [layers, refreshSettingsLayerId]);
 
   useEffect(() => {
-    if (!refreshSettingsLayer) {
+    if (refreshSettingsIntervalMs === null) {
       setRefreshIntervalChoice("0");
       setCustomRefreshSeconds("");
       return;
     }
 
-    const config = getLayerRefreshConfig(refreshSettingsLayer);
-    const intervalMs = config.enabled ? config.intervalMs : 0;
-    setRefreshIntervalChoice(refreshIntervalOptionValue(intervalMs));
+    setRefreshIntervalChoice(
+      refreshIntervalOptionValue(refreshSettingsIntervalMs),
+    );
     setCustomRefreshSeconds(
-      refreshIntervalOptionValue(intervalMs) === CUSTOM_REFRESH_INTERVAL_VALUE
-        ? customRefreshIntervalSeconds(intervalMs)
+      refreshIntervalOptionValue(refreshSettingsIntervalMs) ===
+        CUSTOM_REFRESH_INTERVAL_VALUE
+        ? customRefreshIntervalSeconds(refreshSettingsIntervalMs)
         : "",
     );
-  }, [refreshSettingsLayer]);
+  }, [refreshSettingsLayerId, refreshSettingsIntervalMs]);
 
   useEffect(() => {
     const activeLayerIds = new Set<string>();
@@ -375,9 +386,15 @@ export function LayerPanel({
   }, []);
 
   const setRefreshInterval = (layer: GeoLibreLayer, intervalMs: number) => {
+    // Read the latest layer from the store so a concurrent refresh's metadata
+    // (e.g. featureCount) is not overwritten by a stale render snapshot.
+    const latest =
+      useAppStore
+        .getState()
+        .layers.find((candidate) => candidate.id === layer.id) ?? layer;
     updateLayer(
       layer.id,
-      setLayerRefreshConfig(layer, {
+      setLayerRefreshConfig(latest, {
         enabled: intervalMs > 0,
         intervalMs,
       }),
