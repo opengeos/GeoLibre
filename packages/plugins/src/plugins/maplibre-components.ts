@@ -1117,12 +1117,12 @@ async function openStandaloneColorbarControl(
       return false;
     }
     colorbarControlMounted = true;
-    setColorbarPanelVisible(true);
   }
 
   setTimeout(() => {
     colorbarControl?.show();
     colorbarControl?.expand();
+    setColorbarPanelVisible(true);
   }, 0);
   return true;
 }
@@ -1142,12 +1142,12 @@ async function openStandaloneLegendControl(
       return false;
     }
     legendControlMounted = true;
-    setLegendPanelVisible(true);
   }
 
   setTimeout(() => {
     legendControl?.show();
     legendControl?.expand();
+    setLegendPanelVisible(true);
   }, 0);
   return true;
 }
@@ -1167,12 +1167,12 @@ async function openStandaloneHtmlControl(
       return false;
     }
     htmlControlMounted = true;
-    setHtmlPanelVisible(true);
   }
 
   setTimeout(() => {
     htmlControl?.show();
     htmlControl?.expand();
+    setHtmlPanelVisible(true);
   }, 0);
   return true;
 }
@@ -1501,6 +1501,7 @@ function createColorbarControl(
   ColorbarGuiControlClass: ColorbarGuiControlConstructor,
 ): ColorbarGuiControl {
   const control = new ColorbarGuiControlClass(COLORBAR_OPTIONS);
+  control.on("collapse", hideColorbarControl);
   return control;
 }
 
@@ -1508,6 +1509,7 @@ function createLegendControl(
   LegendGuiControlClass: LegendGuiControlConstructor,
 ): LegendGuiControl {
   const control = new LegendGuiControlClass(LEGEND_OPTIONS);
+  control.on("collapse", hideLegendControl);
   return control;
 }
 
@@ -1515,6 +1517,7 @@ function createHtmlControl(
   HtmlGuiControlClass: HtmlGuiControlConstructor,
 ): HtmlGuiControl {
   const control = new HtmlGuiControlClass(HTML_OPTIONS);
+  control.on("collapse", hideHtmlControl);
   return control;
 }
 
@@ -1652,7 +1655,6 @@ function teardownColorbarControl(app: GeoLibreAppAPI): void {
 
 function hideColorbarControl(): void {
   colorbarControl?.hide();
-  colorbarControl?.collapse();
   setColorbarPanelVisible(false);
 }
 
@@ -1675,7 +1677,6 @@ function teardownLegendControl(app: GeoLibreAppAPI): void {
 
 function hideLegendControl(): void {
   legendControl?.hide();
-  legendControl?.collapse();
   setLegendPanelVisible(false);
 }
 
@@ -1698,7 +1699,6 @@ function teardownHtmlControl(app: GeoLibreAppAPI): void {
 
 function hideHtmlControl(): void {
   htmlControl?.hide();
-  htmlControl?.collapse();
   setHtmlPanelVisible(false);
 }
 
