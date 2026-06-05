@@ -472,7 +472,7 @@ export function DesktopShell({
         onToggleThemeMode={onToggleThemeMode}
       />
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        {layoutOptions.panelsVisible ? (
+        {layoutOptions.layerPanelVisible ? (
           <LayerPanel
             mapControllerRef={mapControllerRef}
             onResizeStart={startLayerPanelResize}
@@ -489,11 +489,11 @@ export function DesktopShell({
             onControllerReady={handleMapControllerReady}
           />
         </main>
-        {layoutOptions.panelsVisible ? (
+        {layoutOptions.stylePanelVisible ? (
           <StylePanel onResizeStart={startStylePanelResize} />
         ) : null}
       </div>
-      {layoutOptions.panelsVisible ? <AttributeTable /> : null}
+      {layoutOptions.attributePanelVisible ? <AttributeTable /> : null}
       <StatusBar
         compact={layoutOptions.compact}
         diagnosticsErrorCount={diagnostics.errorCount}

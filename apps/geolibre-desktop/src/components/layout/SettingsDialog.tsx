@@ -16,10 +16,14 @@ import {
   DialogHeader,
   DialogTitle,
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
   Input,
   Label,
@@ -32,9 +36,14 @@ import {
   EyeOff,
   FolderCog,
   MapPinned,
+  LayoutPanelTop,
+  PanelLeft,
+  PanelRight,
   Plus,
   RotateCcw,
   Settings,
+  TableProperties,
+  Type,
   Trash2,
   TriangleAlert,
   Puzzle,
@@ -42,14 +51,21 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState, type RefObject } from "react";
 import {
+  DEFAULT_DESKTOP_LAYOUT_SETTINGS,
   useDesktopSettingsStore,
   type DesktopSettings,
+  type DesktopLayoutSettings,
 } from "../../hooks/useDesktopSettings";
 import { getPluginManager } from "../../hooks/usePlugins";
 import { mergeStringLists, normalizeStringList } from "../../lib/string-lists";
 import { pickLocalPathWithFallback } from "../../lib/tauri-io";
 
-type SettingsSection = "map" | "environment" | "plugins" | "project";
+type SettingsSection =
+  | "map"
+  | "layout"
+  | "environment"
+  | "plugins"
+  | "project";
 
 interface SettingsDialogProps {
   buttonClassName?: string;
@@ -65,6 +81,7 @@ const SECTION_ITEMS: Array<{
   icon: typeof MapPinned;
 }> = [
   { id: "map", label: "Map", icon: MapPinned },
+  { id: "layout", label: "Layout", icon: LayoutPanelTop },
   { id: "environment", label: "Environment", icon: Braces },
   { id: "plugins", label: "Plugins", icon: Puzzle },
   { id: "project", label: "Project", icon: FolderCog },
@@ -94,6 +111,7 @@ interface DraftListEntry {
 
 interface DraftDesktopSettings {
   additionalPluginDirectories: DraftListEntry[];
+  layout: DesktopLayoutSettings;
   pluginManifestUrls: DraftListEntry[];
 }
 
@@ -124,6 +142,7 @@ function cloneDesktopSettings(
   return {
     additionalPluginDirectories:
       settings.additionalPluginDirectories.map(toDraftListEntry),
+    layout: { ...settings.layout },
     pluginManifestUrls: mergeStringLists(
       projectPlugins?.manifestUrls ?? [],
       settings.pluginManifestUrls,
@@ -436,6 +455,25 @@ export function SettingsDialog({
     updateMapPreferences(DEFAULT_PROJECT_PREFERENCES.map);
   };
 
+  const updateDraftLayoutSettings = (patch: Partial<DesktopLayoutSettings>) => {
+    setDraftDesktopSettings((current) => ({
+      ...current,
+      layout: { ...current.layout, ...patch },
+    }));
+    setError(null);
+  };
+
+  const updateSavedLayoutSettings = (patch: Partial<DesktopLayoutSettings>) => {
+    setDesktopSettings({
+      ...desktopSettings,
+      layout: { ...desktopSettings.layout, ...patch },
+    });
+  };
+
+  const resetLayoutSettings = () => {
+    updateDraftLayoutSettings(DEFAULT_DESKTOP_LAYOUT_SETTINGS);
+  };
+
   const saveSettings = () => {
     const normalized = normalizePreferences(draftPreferences);
     const validationError = validateEnvironmentVariables(
@@ -467,6 +505,7 @@ export function SettingsDialog({
           (entry) => entry.value,
         ),
       ),
+      layout: draftDesktopSettings.layout,
       pluginManifestUrls,
     });
     setProjectPlugins({
@@ -524,6 +563,75 @@ export function SettingsDialog({
             <MapPinned className="mr-2 h-3.5 w-3.5" />
             Map Preferences
           </DropdownMenuItem>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <LayoutPanelTop className="mr-2 h-3.5 w-3.5" />
+              Layout
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="min-w-56">
+              <DropdownMenuCheckboxItem
+                checked={!desktopSettings.layout.toolbarLabels}
+                onCheckedChange={(checked) =>
+                  updateSavedLayoutSettings({ toolbarLabels: checked !== true })
+                }
+                onSelect={(event) => event.preventDefault()}
+              >
+                Icon-only toolbar buttons
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={desktopSettings.layout.showProjectInfo}
+                onCheckedChange={(checked) =>
+                  updateSavedLayoutSettings({ showProjectInfo: checked === true })
+                }
+                onSelect={(event) => event.preventDefault()}
+              >
+                Show project info
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem
+                checked={desktopSettings.layout.layerPanelVisible}
+                onCheckedChange={(checked) =>
+                  updateSavedLayoutSettings({
+                    layerPanelVisible: checked === true,
+                  })
+                }
+                onSelect={(event) => event.preventDefault()}
+              >
+                Show Layers panel
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={desktopSettings.layout.stylePanelVisible}
+                onCheckedChange={(checked) =>
+                  updateSavedLayoutSettings({
+                    stylePanelVisible: checked === true,
+                  })
+                }
+                onSelect={(event) => event.preventDefault()}
+              >
+                Show Style panel
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={desktopSettings.layout.attributePanelVisible}
+                onCheckedChange={(checked) =>
+                  updateSavedLayoutSettings({
+                    attributePanelVisible: checked === true,
+                  })
+                }
+                onSelect={(event) => event.preventDefault()}
+              >
+                Show Attribute panel
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => {
+                  setSection("layout");
+                  setOpen(true);
+                }}
+              >
+                Layout Settings
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
           <DropdownMenuItem
             onSelect={() => {
               setSection("environment");
@@ -698,6 +806,113 @@ export function SettingsDialog({
                     />
                     Render world copies
                   </label>
+                </div>
+              ) : null}
+              {section === "layout" ? (
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold">Layout</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Workspace visibility and toolbar presentation.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={resetLayoutSettings}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      Reset
+                    </Button>
+                  </div>
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Toolbar
+                    </h4>
+                    <label className="flex items-center gap-3 rounded-md border p-3 text-sm">
+                      <input
+                        className="h-4 w-4"
+                        type="checkbox"
+                        checked={!draftDesktopSettings.layout.toolbarLabels}
+                        onChange={(event) =>
+                          updateDraftLayoutSettings({
+                            toolbarLabels: !event.target.checked,
+                          })
+                        }
+                      />
+                      <Type className="h-4 w-4 text-muted-foreground" />
+                      <span>Use icon-only toolbar buttons</span>
+                    </label>
+                    <label className="flex items-center gap-3 rounded-md border p-3 text-sm">
+                      <input
+                        className="h-4 w-4"
+                        type="checkbox"
+                        checked={draftDesktopSettings.layout.showProjectInfo}
+                        onChange={(event) =>
+                          updateDraftLayoutSettings({
+                            showProjectInfo: event.target.checked,
+                          })
+                        }
+                      />
+                      <FolderCog className="h-4 w-4 text-muted-foreground" />
+                      <span>Show project info in the toolbar</span>
+                    </label>
+                  </div>
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Panels
+                    </h4>
+                    <label className="flex items-center gap-3 rounded-md border p-3 text-sm">
+                      <input
+                        className="h-4 w-4"
+                        type="checkbox"
+                        checked={draftDesktopSettings.layout.layerPanelVisible}
+                        onChange={(event) =>
+                          updateDraftLayoutSettings({
+                            layerPanelVisible: event.target.checked,
+                          })
+                        }
+                      />
+                      <PanelLeft className="h-4 w-4 text-muted-foreground" />
+                      <span>Show Layers panel</span>
+                    </label>
+                    <label className="flex items-center gap-3 rounded-md border p-3 text-sm">
+                      <input
+                        className="h-4 w-4"
+                        type="checkbox"
+                        checked={draftDesktopSettings.layout.stylePanelVisible}
+                        onChange={(event) =>
+                          updateDraftLayoutSettings({
+                            stylePanelVisible: event.target.checked,
+                          })
+                        }
+                      />
+                      <PanelRight className="h-4 w-4 text-muted-foreground" />
+                      <span>Show Style panel</span>
+                    </label>
+                    <label className="flex items-center gap-3 rounded-md border p-3 text-sm">
+                      <input
+                        className="h-4 w-4"
+                        type="checkbox"
+                        checked={
+                          draftDesktopSettings.layout.attributePanelVisible
+                        }
+                        onChange={(event) =>
+                          updateDraftLayoutSettings({
+                            attributePanelVisible: event.target.checked,
+                          })
+                        }
+                      />
+                      <TableProperties className="h-4 w-4 text-muted-foreground" />
+                      <span>Show Attribute panel</span>
+                    </label>
+                  </div>
+                  <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+                    URL layout parameters still apply when present in shared
+                    viewer links.
+                  </div>
                 </div>
               ) : null}
               {section === "environment" ? (
