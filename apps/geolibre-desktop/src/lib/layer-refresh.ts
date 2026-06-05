@@ -47,7 +47,13 @@ export async function fetchGeoJsonFeatureCollection(
   let response: Response;
   try {
     response = await fetch(options.useWfsProxy ? proxyWfsRequestUrl(url) : url, {
-      signal: options.signal ?? AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      // Combine signals so a caller-supplied signal does not drop the timeout.
+      signal: options.signal
+        ? AbortSignal.any([
+            options.signal,
+            AbortSignal.timeout(FETCH_TIMEOUT_MS),
+          ])
+        : AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === "TimeoutError") {
@@ -121,14 +127,17 @@ export function setLayerRefreshConfig(
   layer: GeoLibreLayer,
   config: LayerRefreshConfig,
 ): Partial<GeoLibreLayer> {
+  const enabled = config.enabled && config.intervalMs > 0;
+  // Omit the refresh key entirely when disabled so saved projects do not
+  // accumulate meaningless { enabled: false, intervalMs: 0 } entries.
+  const { refresh: _refresh, ...restMetadata } = layer.metadata;
   return {
-    metadata: {
-      ...layer.metadata,
-      refresh: {
-        enabled: config.enabled && config.intervalMs > 0,
-        intervalMs: config.intervalMs,
-      },
-    },
+    metadata: enabled
+      ? {
+          ...restMetadata,
+          refresh: { enabled: true, intervalMs: config.intervalMs },
+        }
+      : restMetadata,
   };
 }
 

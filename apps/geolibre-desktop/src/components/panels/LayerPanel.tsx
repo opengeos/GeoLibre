@@ -71,7 +71,7 @@ const REFRESH_INTERVAL_OPTIONS = [
   { label: "15 minutes", intervalMs: 15 * 60_000 },
 ];
 const CUSTOM_REFRESH_INTERVAL_VALUE = "custom";
-const REFRESH_SUCCESS_STATUS_DURATION_MS = 4_000;
+const REFRESH_STATUS_DURATION_MS = 4_000;
 
 type LayerRefreshStatus = {
   type: "refreshing" | "success" | "error";
@@ -207,18 +207,21 @@ export function LayerPanel({
     refreshStatusTimersRef.current.delete(layerId);
   }, []);
 
-  const scheduleSuccessStatusClear = useCallback(
+  const scheduleStatusClear = useCallback(
     (layerId: string) => {
       clearRefreshStatusTimer(layerId);
       const timer = window.setTimeout(() => {
         refreshStatusTimersRef.current.delete(layerId);
         setRefreshStatuses((current) => {
-          if (current[layerId]?.type !== "success") return current;
+          // Keep in-flight statuses; only fade finished success/error notes.
+          if (!current[layerId] || current[layerId].type === "refreshing") {
+            return current;
+          }
           const next = { ...current };
           delete next[layerId];
           return next;
         });
-      }, REFRESH_SUCCESS_STATUS_DURATION_MS);
+      }, REFRESH_STATUS_DURATION_MS);
       refreshStatusTimersRef.current.set(layerId, timer);
     },
     [clearRefreshStatusTimer],
@@ -260,9 +263,8 @@ export function LayerPanel({
             message: `Refreshed ${featureCount.toLocaleString()} features.`,
           },
         }));
-        scheduleSuccessStatusClear(layer.id);
+        scheduleStatusClear(layer.id);
       } catch (error) {
-        clearRefreshStatusTimer(layer.id);
         const message =
           error instanceof Error
             ? error.message
@@ -274,11 +276,12 @@ export function LayerPanel({
             message,
           },
         }));
+        scheduleStatusClear(layer.id);
       } finally {
         refreshingLayerIdsRef.current.delete(layer.id);
       }
     },
-    [clearRefreshStatusTimer, scheduleSuccessStatusClear, updateLayer],
+    [clearRefreshStatusTimer, scheduleStatusClear, updateLayer],
   );
 
   // Read through a ref inside interval callbacks so long-lived timers never
@@ -380,21 +383,24 @@ export function LayerPanel({
     };
   }, []);
 
-  const setRefreshInterval = (layer: GeoLibreLayer, intervalMs: number) => {
-    // Read the latest layer from the store so a concurrent refresh's metadata
-    // (e.g. featureCount) is not overwritten by a stale render snapshot.
-    const latest =
-      useAppStore
-        .getState()
-        .layers.find((candidate) => candidate.id === layer.id) ?? layer;
-    updateLayer(
-      layer.id,
-      setLayerRefreshConfig(latest, {
-        enabled: intervalMs > 0,
-        intervalMs,
-      }),
-    );
-  };
+  const setRefreshInterval = useCallback(
+    (layer: GeoLibreLayer, intervalMs: number) => {
+      // Read the latest layer from the store so a concurrent refresh's
+      // metadata (e.g. featureCount) is not overwritten by a stale snapshot.
+      const latest =
+        useAppStore
+          .getState()
+          .layers.find((candidate) => candidate.id === layer.id) ?? layer;
+      updateLayer(
+        layer.id,
+        setLayerRefreshConfig(latest, {
+          enabled: intervalMs > 0,
+          intervalMs,
+        }),
+      );
+    },
+    [updateLayer],
+  );
 
   const handleLayerDragStart = (
     event: ReactDragEvent<HTMLElement>,
