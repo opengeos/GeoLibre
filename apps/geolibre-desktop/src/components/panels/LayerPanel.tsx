@@ -50,6 +50,7 @@ import {
 import {
   getLayerRefreshConfig,
   isRefreshableLayer,
+  MIN_REFRESH_INTERVAL_MS,
   refreshGeoJsonLayer,
   setLayerRefreshConfig,
 } from "../../lib/layer-refresh";
@@ -70,7 +71,6 @@ const REFRESH_INTERVAL_OPTIONS = [
   { label: "15 minutes", intervalMs: 15 * 60_000 },
 ];
 const CUSTOM_REFRESH_INTERVAL_VALUE = "custom";
-const CUSTOM_REFRESH_INTERVAL_MIN_MS = 1_000;
 const REFRESH_SUCCESS_STATUS_DURATION_MS = 4_000;
 
 type LayerRefreshStatus = {
@@ -107,7 +107,7 @@ function customRefreshIntervalSeconds(intervalMs: number): string {
 function parseCustomRefreshIntervalMs(value: string): number | null {
   const seconds = Number(value);
   if (!Number.isFinite(seconds) || seconds <= 0) return null;
-  return Math.max(CUSTOM_REFRESH_INTERVAL_MIN_MS, Math.round(seconds * 1000));
+  return Math.max(MIN_REFRESH_INTERVAL_MS, Math.round(seconds * 1000));
 }
 
 function hasNativeIdentifyLayers(layer: GeoLibreLayer): boolean {
@@ -281,6 +281,13 @@ export function LayerPanel({
     [clearRefreshStatusTimer, scheduleSuccessStatusClear, updateLayer],
   );
 
+  // Read through a ref inside interval callbacks so long-lived timers never
+  // capture a stale handleRefreshLayer closure.
+  const handleRefreshLayerRef = useRef(handleRefreshLayer);
+  useEffect(() => {
+    handleRefreshLayerRef.current = handleRefreshLayer;
+  }, [handleRefreshLayer]);
+
   useEffect(() => {
     if (
       refreshSettingsLayerId &&
@@ -304,7 +311,7 @@ export function LayerPanel({
       }
       return changed ? next : current;
     });
-  }, [layers, refreshSettingsLayerId]);
+  }, [clearRefreshStatusTimer, layers, refreshSettingsLayerId]);
 
   useEffect(() => {
     if (refreshSettingsIntervalMs === null) {
@@ -344,7 +351,7 @@ export function LayerPanel({
 
         const latestConfig = getLayerRefreshConfig(latest);
         if (!latestConfig.enabled || !isRefreshableLayer(latest)) return;
-        void handleRefreshLayer(latest, true);
+        void handleRefreshLayerRef.current(latest, true);
       }, config.intervalMs);
 
       refreshTimersRef.current.set(layer.id, {
@@ -358,7 +365,7 @@ export function LayerPanel({
       window.clearInterval(entry.timer);
       refreshTimersRef.current.delete(id);
     }
-  }, [handleRefreshLayer, layers]);
+  }, [layers]);
 
   useEffect(() => {
     return () => {

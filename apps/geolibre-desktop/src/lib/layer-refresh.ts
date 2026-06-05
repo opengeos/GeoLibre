@@ -4,6 +4,7 @@ import type { GeoLibreLayer } from "@geolibre/core";
 // Keep in sync with WFS_PROXY_PATH in vite.config.ts (the dev proxy binds it there).
 const WFS_PROXY_PATH = "/__geolibre_wfs_proxy";
 const FETCH_TIMEOUT_MS = 30_000;
+export const MIN_REFRESH_INTERVAL_MS = 1_000;
 const REFRESHABLE_GEOJSON_SOURCE_KINDS = new Set([
   "wfs-getfeature",
   "geojson-url",
@@ -101,11 +102,13 @@ export function getLayerRefreshConfig(
   }
 
   const candidate = refresh as Partial<LayerRefreshConfig>;
+  // Clamp persisted values so a hand-edited project file cannot schedule
+  // sub-second refresh intervals.
   const intervalMs =
     typeof candidate.intervalMs === "number" &&
     Number.isFinite(candidate.intervalMs) &&
     candidate.intervalMs > 0
-      ? candidate.intervalMs
+      ? Math.max(MIN_REFRESH_INTERVAL_MS, candidate.intervalMs)
       : 0;
 
   return {
