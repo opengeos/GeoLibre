@@ -115,8 +115,8 @@ const REDACTED_URL_PARAMS = new Set([
 function redactUrl(raw: string): string {
   try {
     const url = new URL(raw);
-    for (const param of REDACTED_URL_PARAMS) {
-      if (url.searchParams.has(param)) {
+    for (const param of [...url.searchParams.keys()]) {
+      if (REDACTED_URL_PARAMS.has(param.toLowerCase())) {
         url.searchParams.set(param, "[REDACTED]");
       }
     }
