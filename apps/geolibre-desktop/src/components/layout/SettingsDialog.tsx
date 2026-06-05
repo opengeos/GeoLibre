@@ -21,9 +21,6 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
   Input,
   Label,
@@ -554,7 +551,7 @@ export function SettingsDialog({
             ) : null}
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
+        <DropdownMenuContent align="start" className="w-72">
           <DropdownMenuLabel>Settings</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem
@@ -566,79 +563,76 @@ export function SettingsDialog({
             <MapPinned className="mr-2 h-3.5 w-3.5" />
             Map Preferences
           </DropdownMenuItem>
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              <LayoutPanelTop className="mr-2 h-3.5 w-3.5" />
-              Layout
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="min-w-56">
-              <DropdownMenuCheckboxItem
-                checked={desktopSettings.layout.toolbarLabels}
-                onCheckedChange={(checked) =>
-                  updateSavedLayoutSettings({ toolbarLabels: checked === true })
-                }
-                onSelect={(event) => event.preventDefault()}
-              >
-                Show toolbar labels
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem
-                checked={desktopSettings.layout.showProjectInfo}
-                onCheckedChange={(checked) =>
-                  updateSavedLayoutSettings({ showProjectInfo: checked === true })
-                }
-                onSelect={(event) => event.preventDefault()}
-              >
-                Show project info
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuCheckboxItem
-                checked={desktopSettings.layout.layerPanelVisible}
-                onCheckedChange={(checked) =>
-                  updateSavedLayoutSettings({
-                    layerPanelVisible: checked === true,
-                  })
-                }
-                onSelect={(event) => event.preventDefault()}
-              >
-                Show Layers panel
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem
-                checked={desktopSettings.layout.stylePanelVisible}
-                onCheckedChange={(checked) =>
-                  updateSavedLayoutSettings({
-                    stylePanelVisible: checked === true,
-                  })
-                }
-                onSelect={(event) => event.preventDefault()}
-              >
-                Show Style panel
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem
-                checked={desktopSettings.layout.attributePanelVisible}
-                onCheckedChange={(checked) =>
-                  updateSavedLayoutSettings({
-                    attributePanelVisible: checked === true,
-                  })
-                }
-                onSelect={(event) => event.preventDefault()}
-              >
-                Show Attribute panel
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onSelect={() => {
-                  setSection("layout");
-                  setOpen(true);
-                }}
-              >
-                Layout Settings
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <p className="px-2 py-1 text-xs text-muted-foreground">
-                URL layout parameters override saved settings.
-              </p>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="flex items-center gap-2 text-xs text-muted-foreground">
+            <LayoutPanelTop className="h-3.5 w-3.5" />
+            Layout
+          </DropdownMenuLabel>
+          <DropdownMenuCheckboxItem
+            checked={desktopSettings.layout.toolbarLabels}
+            onCheckedChange={(checked) =>
+              updateSavedLayoutSettings({ toolbarLabels: checked === true })
+            }
+            onSelect={(event) => event.preventDefault()}
+          >
+            Show toolbar labels
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuCheckboxItem
+            checked={desktopSettings.layout.showProjectInfo}
+            onCheckedChange={(checked) =>
+              updateSavedLayoutSettings({ showProjectInfo: checked === true })
+            }
+            onSelect={(event) => event.preventDefault()}
+          >
+            Show project info
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuCheckboxItem
+            checked={desktopSettings.layout.layerPanelVisible}
+            onCheckedChange={(checked) =>
+              updateSavedLayoutSettings({
+                layerPanelVisible: checked === true,
+              })
+            }
+            onSelect={(event) => event.preventDefault()}
+          >
+            Show Layers panel
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuCheckboxItem
+            checked={desktopSettings.layout.stylePanelVisible}
+            onCheckedChange={(checked) =>
+              updateSavedLayoutSettings({
+                stylePanelVisible: checked === true,
+              })
+            }
+            onSelect={(event) => event.preventDefault()}
+          >
+            Show Style panel
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuCheckboxItem
+            checked={desktopSettings.layout.attributePanelVisible}
+            onCheckedChange={(checked) =>
+              updateSavedLayoutSettings({
+                attributePanelVisible: checked === true,
+              })
+            }
+            onSelect={(event) => event.preventDefault()}
+          >
+            Show Attribute panel
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onSelect={() => {
+              setSection("layout");
+              setOpen(true);
+            }}
+          >
+            Layout Settings
+          </DropdownMenuItem>
+          <p className="px-2 py-1 text-xs text-muted-foreground">
+            URL layout parameters override saved settings.
+          </p>
+          <DropdownMenuSeparator />
           <DropdownMenuItem
             onSelect={() => {
               setSection("environment");
