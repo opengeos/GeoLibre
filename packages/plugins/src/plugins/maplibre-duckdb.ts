@@ -270,7 +270,7 @@ function createDuckDBStoreLayer(
     visible: true,
     opacity: 1,
     style: { ...DEFAULT_LAYER_STYLE },
-    beforeId: layerState.beforeId,
+    beforeId: layerState.beforeId ?? undefined,
     metadata: {
       columns: layerState.schema,
       databaseSource: state.databaseSource,
@@ -295,6 +295,7 @@ function removeDuckDBRenderedLayer(layerId: string): void {
   duckdbRenderedLayers.delete(layerId);
   duckdbRenderedRows.delete(layerId);
   duckdbRenderedStyles.delete(layerId);
+  duckdbLayerOrder.delete(layerId);
   warnedMissingRowsLayerIds.delete(layerId);
   renderDuckDBCachedLayers();
 }
@@ -340,7 +341,8 @@ function renderDuckDBCachedLayers(): void {
   if (!renderer) return;
 
   patchDuckDBRenderer(renderer);
-  renderer.setData?.(getOrderedDuckDBRenderedLayers());
+  const orderedLayers = getOrderedDuckDBRenderedLayers();
+  (renderer.__geolibreOriginalSetData ?? renderer.setData)?.(orderedLayers);
 }
 
 function getOrderedDuckDBRenderedLayers(): DuckDBRenderedLayerLike[] {
