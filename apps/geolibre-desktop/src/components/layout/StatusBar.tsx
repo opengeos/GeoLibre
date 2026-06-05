@@ -49,7 +49,7 @@ export function StatusBar({
         type="button"
         className={cn(
           "inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 hover:bg-accent hover:text-accent-foreground",
-          compact && "ml-auto",
+          "ml-auto",
           diagnosticsErrorCount > 0 && "text-red-700 dark:text-red-300",
           diagnosticsErrorCount === 0 &&
             diagnosticsWarningCount > 0 &&
