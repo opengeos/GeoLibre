@@ -10,10 +10,19 @@ import {
   type MapController,
 } from "@geolibre/map";
 import {
+  closeColorbarPanel,
+  closeHtmlPanel,
+  closeLegendPanel,
   closeSearchPlacesPanel,
   openFlatGeobufAddVectorLayerPanel,
   openDuckDBLayerPanel,
+  isColorbarPanelVisible,
+  isHtmlPanelVisible,
+  isLegendPanelVisible,
   isSearchPlacesPanelVisible,
+  openColorbarPanel,
+  openHtmlPanel,
+  openLegendPanel,
   openLidarLayerPanel,
   openPMTilesLayerPanel,
   openSearchPlacesPanel,
@@ -21,6 +30,9 @@ import {
   openStacSearchLayerPanel,
   openThreeDTilesLayerPanel,
   openZarrLayerPanel,
+  subscribeColorbarPanel,
+  subscribeHtmlPanel,
+  subscribeLegendPanel,
   subscribeSearchPlacesPanel,
   type GeoLibreMapControlPosition,
 } from "@geolibre/plugins";
@@ -379,12 +391,48 @@ export function TopToolbar({
     isSearchPlacesPanelVisible,
     isSearchPlacesPanelVisible,
   );
-  const handleToggleSearchPlaces = () => {
+  const handleToggleSearchPlacesPanel = () => {
     if (searchPlacesVisible) {
       closeSearchPlacesPanel();
       return;
     }
     openSearchPlacesPanel(appApi);
+  };
+  const colorbarPanelVisible = useSyncExternalStore(
+    subscribeColorbarPanel,
+    isColorbarPanelVisible,
+    isColorbarPanelVisible,
+  );
+  const handleToggleColorbarPanel = () => {
+    if (colorbarPanelVisible) {
+      closeColorbarPanel(appApi);
+      return;
+    }
+    openColorbarPanel(appApi);
+  };
+  const legendPanelVisible = useSyncExternalStore(
+    subscribeLegendPanel,
+    isLegendPanelVisible,
+    isLegendPanelVisible,
+  );
+  const handleToggleLegendPanel = () => {
+    if (legendPanelVisible) {
+      closeLegendPanel(appApi);
+      return;
+    }
+    openLegendPanel(appApi);
+  };
+  const htmlPanelVisible = useSyncExternalStore(
+    subscribeHtmlPanel,
+    isHtmlPanelVisible,
+    isHtmlPanelVisible,
+  );
+  const handleToggleHtmlPanel = () => {
+    if (htmlPanelVisible) {
+      closeHtmlPanel(appApi);
+      return;
+    }
+    openHtmlPanel(appApi);
   };
   const handleAddZarrLayer = () => {
     openZarrLayerPanel(appApi);
@@ -649,9 +697,21 @@ export function TopToolbar({
             </DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={handleToggleSearchPlaces}>
+          <DropdownMenuItem onSelect={handleToggleSearchPlacesPanel}>
             Search
             {searchPlacesVisible ? " ✓" : ""}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleToggleColorbarPanel}>
+            Colorbar
+            {colorbarPanelVisible ? " ✓" : ""}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleToggleLegendPanel}>
+            Legend
+            {legendPanelVisible ? " ✓" : ""}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleToggleHtmlPanel}>
+            HTML
+            {htmlPanelVisible ? " ✓" : ""}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
