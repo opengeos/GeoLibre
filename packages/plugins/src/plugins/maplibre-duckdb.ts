@@ -18,6 +18,7 @@ import {
   pointRadiusMaxPixels,
   type StyledDeckLayerLike,
 } from "./deck-style-utils";
+import { ensureMercatorProjection } from "./map-projection-utils";
 
 type DuckDBControlConstructor =
   (typeof import("maplibre-gl-duckdb"))["DuckDBControl"];
@@ -26,19 +27,40 @@ type DuckDBRendererLike = {
   clear?: () => void;
   createLayers?: (
     layerId: string,
-    result: { geometryType?: string },
+    result: DuckDBResultLike,
     index: number,
   ) => StyledDeckLayerLike[];
+  setData?: (layers: DuckDBRenderedLayerLike[]) => void;
+  __geolibreOriginalSetData?: DuckDBRendererLike["setData"];
   __geolibreStylePatched?: boolean;
   __geolibreOriginalCreateLayers?: DuckDBRendererLike["createLayers"];
 };
 
+type DuckDBResultLike = {
+  bounds?: [number, number, number, number];
+  geometryType?: string;
+};
+
+type DuckDBRenderedLayerLike = {
+  beforeId?: string | null;
+  id: string;
+  name?: string;
+  results: DuckDBResultLike[];
+};
+
+type DuckDBInternalLayer = DuckDBRenderedLayerLike & {
+  geoArrowResults?: DuckDBResultLike[];
+  geometryColumn?: string | null;
+  geometryFormat?: string | null;
+  query?: string;
+  rows?: Record<number, Record<string, unknown>>;
+  schema?: DuckDBLayerState["schema"];
+  totalRows?: number;
+};
+
 type MutableDuckDBControl = {
   beforeId?: string;
-  layer?: {
-    beforeId: string | null;
-    rows?: Record<number, Record<string, unknown>>;
-  } | null;
+  layer?: DuckDBInternalLayer | null;
   renderLayer?: () => Promise<void>;
   renderer?: DuckDBRendererLike | null;
 };
@@ -46,20 +68,17 @@ type MutableDuckDBControl = {
 interface DuckDBRenderedStyle {
   opacity: number;
   style: LayerStyle;
+  visible: boolean;
 }
 
 const duckdbControlPosition: GeoLibreMapControlPosition = "top-left";
 const DUCKDB_SAMPLE_DATABASE_URL =
   "https://data.source.coop/giswqs/opengeos/nyc_data.db";
-const DUCKDB_SAMPLE_QUERY = `SELECT BORONAME, NAME, ST_Transform(geom, 'EPSG:32618', 'EPSG:4326', true) AS geom
-FROM data.main.nyc_neighborhoods
-LIMIT 1000`;
 
 const DUCKDB_OPTIONS = {
   className: "geolibre-duckdb-control",
   collapsed: false,
   geometryColumn: "geom",
-  initialQuery: DUCKDB_SAMPLE_QUERY,
   layerName: "DuckDB query",
   panelWidth: 365,
   pickable: true,
@@ -74,6 +93,9 @@ let duckdbStoreUnsubscribe: (() => void) | null = null;
 let duckdbConstructorsPromise: Promise<{
   DuckDBControl: DuckDBControlConstructor;
 }> | null = null;
+let duckdbLayerOrder = new Map<string, number>();
+const duckdbRenderedLayers = new Map<string, DuckDBRenderedLayerLike>();
+const duckdbRenderedRows = new Map<string, Record<number, Record<string, unknown>>>();
 const duckdbRenderedStyles = new Map<string, DuckDBRenderedStyle>();
 const warnedMissingRowsLayerIds = new Set<string>();
 
@@ -84,6 +106,8 @@ export function openDuckDBLayerPanel(app: GeoLibreAppAPI): void {
 async function openStandaloneDuckDBControl(
   app: GeoLibreAppAPI,
 ): Promise<boolean> {
+  ensureMercatorProjection(app.getMap?.());
+
   const { DuckDBControl: DuckDBControlClass } = await getDuckDBConstructors();
 
   duckdbControl ??= createDuckDBControl(DuckDBControlClass);
@@ -126,6 +150,8 @@ function createDuckDBControl(
   duckdbStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
 
+    let shouldSyncControl = false;
+
     for (const layer of previous.layers) {
       if (!isDuckDBControlLayer(layer)) continue;
 
@@ -137,20 +163,26 @@ function createDuckDBControl(
 
       if (!isDuckDBControlLayer(currentLayer)) continue;
 
-      if (currentLayer.visible !== layer.visible) {
-        setDuckDBRenderedLayerVisible(currentLayer.visible);
-      }
-
       if (
         currentLayer.opacity !== layer.opacity ||
-        currentLayer.style !== layer.style
+        currentLayer.style !== layer.style ||
+        currentLayer.visible !== layer.visible ||
+        currentLayer.beforeId !== layer.beforeId ||
+        currentLayer.name !== layer.name
       ) {
-        setDuckDBRenderedLayerStyle(currentLayer);
+        shouldSyncControl = true;
       }
+    }
 
-      if (currentLayer.beforeId !== layer.beforeId) {
-        setDuckDBRenderedLayerBeforeId(currentLayer.beforeId ?? null);
-      }
+    if (
+      duckdbLayerOrderSignature(state.layers) !==
+      duckdbLayerOrderSignature(previous.layers)
+    ) {
+      shouldSyncControl = true;
+    }
+
+    if (shouldSyncControl) {
+      syncDuckDBRenderedLayersFromStore(state.layers);
     }
   });
 
@@ -163,26 +195,32 @@ function createDuckDBQueryHandler(): DuckDBControlEventHandler {
     if (!layerState) return;
 
     const store = useAppStore.getState();
-    const existingLayer = store.layers.find((layer) => layer.id === layerState.id);
-    const layer = createDuckDBStoreLayer(event.state, layerState, existingLayer);
+    const controlLayer = getMutableDuckDBControl().layer;
+    const queryLayerId = createDuckDBQueryLayerId(layerState.id);
+    const queryLayerName = createUniqueDuckDBLayerName(
+      layerState.name,
+      store.layers,
+    );
+    const nextLayerState = {
+      ...layerState,
+      id: queryLayerId,
+      name: queryLayerName,
+    };
+    const layer = createDuckDBStoreLayer(event.state, nextLayerState);
 
-    if (existingLayer) {
-      store.updateLayer(layer.id, {
-        metadata: layer.metadata,
+    if (controlLayer) {
+      controlLayer.id = queryLayerId;
+      controlLayer.name = queryLayerName;
+      duckdbRenderedLayers.set(layer.id, {
+        beforeId: controlLayer.beforeId ?? nextLayerState.beforeId ?? null,
+        id: layer.id,
         name: layer.name,
-        source: layer.source,
-        sourcePath: layer.sourcePath,
-        style: layer.style,
+        results: controlLayer.results ?? controlLayer.geoArrowResults ?? [],
       });
-      setDuckDBRenderedLayerVisible(layer.visible);
-      setDuckDBRenderedLayerBeforeId(layer.beforeId ?? null);
-      setDuckDBRenderedLayerStyle(layer);
-      return;
+      duckdbRenderedRows.set(layer.id, controlLayer.rows ?? {});
     }
 
     store.addLayer(layer);
-    setDuckDBRenderedLayerVisible(layer.visible);
-    setDuckDBRenderedLayerBeforeId(layer.beforeId ?? null);
     setDuckDBRenderedLayerStyle(layer);
   };
 }
@@ -197,6 +235,7 @@ function createDuckDBStateChangeHandler(): DuckDBControlEventHandler {
         store.removeLayer(layer.id);
       }
     }
+    clearDuckDBRenderedLayers();
   };
 }
 
@@ -240,54 +279,106 @@ function createDuckDBStoreLayer(
 }
 
 function removeDuckDBRenderedLayer(layerId: string): void {
-  const stateLayerId = duckdbControl?.getState().layer?.id;
-  if (stateLayerId !== layerId) return;
+  duckdbRenderedLayers.delete(layerId);
+  duckdbRenderedRows.delete(layerId);
   duckdbRenderedStyles.delete(layerId);
-  duckdbControl?.clear();
+  warnedMissingRowsLayerIds.delete(layerId);
+  renderDuckDBCachedLayers();
 }
 
-function setDuckDBRenderedLayerVisible(visible: boolean): void {
-  const control = duckdbControl as unknown as MutableDuckDBControl | null;
-  if (!control) return;
-
-  if (!visible) {
-    control.renderer?.clear?.();
-    return;
-  }
-
-  void control.renderLayer?.();
+function clearDuckDBRenderedLayers(): void {
+  duckdbLayerOrder.clear();
+  duckdbRenderedLayers.clear();
+  duckdbRenderedRows.clear();
+  duckdbRenderedStyles.clear();
+  warnedMissingRowsLayerIds.clear();
+  getMutableDuckDBControl().renderer?.clear?.();
 }
 
 function setDuckDBRenderedLayerStyle(layer: GeoLibreLayer): void {
   duckdbRenderedStyles.set(layer.id, {
     opacity: layer.opacity,
     style: layer.style,
+    visible: layer.visible,
   });
-  void renderStyledDuckDBLayer();
+  renderDuckDBCachedLayers();
 }
 
-async function renderStyledDuckDBLayer(): Promise<void> {
-  const control = duckdbControl as unknown as MutableDuckDBControl | null;
-  if (!control) return;
+function syncDuckDBRenderedLayersFromStore(layers: GeoLibreLayer[]): void {
+  duckdbLayerOrder = new Map(
+    layers
+      .filter(isDuckDBControlLayer)
+      .map((layer, index) => [layer.id, index]),
+  );
 
-  if (!control.renderer) {
-    await control.renderLayer?.();
+  for (const layer of layers) {
+    if (!isDuckDBControlLayer(layer)) continue;
+
+    const renderedLayer = duckdbRenderedLayers.get(layer.id);
+    if (renderedLayer) {
+      renderedLayer.name = layer.name;
+      renderedLayer.beforeId = layer.beforeId ?? null;
+    }
+
+    duckdbRenderedStyles.set(layer.id, {
+      opacity: layer.opacity,
+      style: layer.style,
+      visible: layer.visible,
+    });
   }
-  patchDuckDBRenderer(control.renderer);
-  await control.renderLayer?.();
+
+  renderDuckDBCachedLayers();
+}
+
+function renderDuckDBCachedLayers(): void {
+  const control = duckdbControl as unknown as MutableDuckDBControl | null;
+  const renderer = control?.renderer;
+  if (!renderer) return;
+
+  patchDuckDBRenderer(renderer);
+  renderer.setData?.(getOrderedDuckDBRenderedLayers());
+}
+
+function getOrderedDuckDBRenderedLayers(): DuckDBRenderedLayerLike[] {
+  return [...duckdbRenderedLayers.values()].sort(
+    (first, second) =>
+      (duckdbLayerOrder.get(first.id) ?? Number.MAX_SAFE_INTEGER) -
+      (duckdbLayerOrder.get(second.id) ?? Number.MAX_SAFE_INTEGER),
+  );
 }
 
 function patchDuckDBRenderer(renderer: DuckDBRendererLike | null | undefined) {
-  if (!renderer?.createLayers || renderer.__geolibreStylePatched) return;
+  if (!renderer || renderer.__geolibreStylePatched) return;
+
+  if (renderer.setData) {
+    renderer.__geolibreOriginalSetData = renderer.setData.bind(renderer);
+    renderer.setData = (layers: DuckDBRenderedLayerLike[]) => {
+      renderer.__geolibreOriginalSetData?.(
+        [...layers].sort(
+          (first, second) =>
+            (duckdbLayerOrder.get(first.id) ?? Number.MAX_SAFE_INTEGER) -
+            (duckdbLayerOrder.get(second.id) ?? Number.MAX_SAFE_INTEGER),
+        ),
+      );
+    };
+  }
+
+  if (!renderer.createLayers) {
+    renderer.__geolibreStylePatched = true;
+    return;
+  }
 
   renderer.__geolibreOriginalCreateLayers = renderer.createLayers.bind(
     renderer,
   );
   renderer.createLayers = (
     layerId: string,
-    result: { geometryType?: string },
+    result: DuckDBResultLike,
     index: number,
   ) => {
+    const renderedStyle = duckdbRenderedStyles.get(layerId);
+    if (renderedStyle && !renderedStyle.visible) return [];
+
     const originalLayers = renderer.__geolibreOriginalCreateLayers?.(
       layerId,
       result,
@@ -295,7 +386,6 @@ function patchDuckDBRenderer(renderer: DuckDBRendererLike | null | undefined) {
     );
     if (!originalLayers) return [];
 
-    const renderedStyle = duckdbRenderedStyles.get(layerId);
     if (!renderedStyle) return originalLayers;
 
     return originalLayers.map((deckLayer) =>
@@ -418,6 +508,9 @@ function getGeoArrowRowIndex(objectInfo: {
 }
 
 function getDuckDBRenderedRows(layerId: string): Record<number, Record<string, unknown>> {
+  const cachedRows = duckdbRenderedRows.get(layerId);
+  if (cachedRows) return cachedRows;
+
   const control = duckdbControl as unknown as MutableDuckDBControl | null;
   const stateLayerId = duckdbControl?.getState().layer?.id;
   if (stateLayerId !== layerId) return {};
@@ -440,15 +533,6 @@ function warnMissingDuckDBRows(layerId: string): void {
   }
 }
 
-function setDuckDBRenderedLayerBeforeId(beforeId: string | null): void {
-  const control = duckdbControl as unknown as MutableDuckDBControl | null;
-  if (!control) return;
-
-  control.beforeId = beforeId ?? "";
-  if (control.layer) control.layer.beforeId = beforeId;
-  void control.renderLayer?.();
-}
-
 function hideDuckDBControl(control: DuckDBControl | null): void {
   const container = control?.getContainer();
   if (container) container.style.display = "none";
@@ -465,4 +549,32 @@ function isDuckDBControlLayer(layer: GeoLibreLayer): boolean {
     layer.metadata.sourceKind === "duckdb-query" &&
     layer.metadata.externalDeckLayer === true
   );
+}
+
+function getMutableDuckDBControl(
+  control = duckdbControl,
+): MutableDuckDBControl {
+  return control as unknown as MutableDuckDBControl;
+}
+
+function createDuckDBQueryLayerId(baseId: string): string {
+  return `${baseId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createUniqueDuckDBLayerName(
+  baseName: string,
+  existingLayers: GeoLibreLayer[],
+): string {
+  const trimmedBaseName = baseName.trim() || "DuckDB query";
+  const existingNames = new Set(existingLayers.map((layer) => layer.name));
+  if (!existingNames.has(trimmedBaseName)) return trimmedBaseName;
+
+  for (let index = 2; ; index += 1) {
+    const candidate = `${trimmedBaseName} ${index}`;
+    if (!existingNames.has(candidate)) return candidate;
+  }
+}
+
+function duckdbLayerOrderSignature(layers: GeoLibreLayer[]): string {
+  return layers.filter(isDuckDBControlLayer).map((layer) => layer.id).join("|");
 }
