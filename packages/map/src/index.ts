@@ -1,4 +1,8 @@
-export { MapCanvas, type MapCanvasProps } from "./MapCanvas";
+export {
+  MapCanvas,
+  type MapCanvasProps,
+  type MapDiagnosticEvent,
+} from "./MapCanvas";
 export {
   MapController,
   createMapController,

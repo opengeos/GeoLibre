@@ -1,13 +1,23 @@
 import { useAppStore } from "@geolibre/core";
 import { cn } from "@geolibre/ui";
+import { Bug } from "lucide-react";
 
 interface StatusBarProps {
   compact?: boolean;
+  diagnosticsErrorCount: number;
+  diagnosticsWarningCount: number;
+  onOpenDiagnostics: () => void;
 }
 
-export function StatusBar({ compact = false }: StatusBarProps) {
+export function StatusBar({
+  compact = false,
+  diagnosticsErrorCount,
+  diagnosticsWarningCount,
+  onOpenDiagnostics,
+}: StatusBarProps) {
   const pointerCoords = useAppStore((s) => s.pointerCoords);
   const mapView = useAppStore((s) => s.mapView);
+  const diagnosticsCount = diagnosticsErrorCount + diagnosticsWarningCount;
 
   const coordText = pointerCoords
     ? `${pointerCoords[0].toFixed(5)}, ${pointerCoords[1].toFixed(5)}`
@@ -32,6 +42,20 @@ export function StatusBar({ compact = false }: StatusBarProps) {
         Bearing: {mapView.bearing.toFixed(1)}°
       </span>
       <span className="shrink-0">Pitch: {mapView.pitch.toFixed(1)}°</span>
+      <button
+        type="button"
+        className={cn(
+          "inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 hover:bg-accent hover:text-accent-foreground",
+          diagnosticsErrorCount > 0 && "text-destructive",
+          diagnosticsErrorCount === 0 &&
+            diagnosticsWarningCount > 0 &&
+            "text-amber-700 dark:text-amber-300",
+        )}
+        onClick={onOpenDiagnostics}
+      >
+        <Bug className="h-3 w-3" />
+        {compact ? "Diag" : "Diagnostics"}: {diagnosticsCount}
+      </button>
       {compact ? null : <span className="min-w-0 truncate">BBox: {bboxText}</span>}
     </footer>
   );

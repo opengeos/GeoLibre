@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapController, MapDiagnosticEvent } from "@geolibre/map";
 import { MapCanvas } from "@geolibre/map";
 import { restoreThreeDTilesLayers } from "@geolibre/plugins";
 import {
@@ -25,9 +25,14 @@ import {
 } from "../../hooks/usePlugins";
 import { registerMbtilesProtocol } from "../../lib/mbtiles";
 import { registerXyzTileProtocol } from "../../lib/xyz-url";
+import {
+  appendDiagnostic,
+  useDiagnosticsSnapshot,
+} from "../../lib/diagnostics";
 import { AttributeTable } from "../panels/AttributeTable";
 import { LayerPanel } from "../panels/LayerPanel";
 import { StylePanel } from "../panels/StylePanel";
+import { DiagnosticsDialog } from "./DiagnosticsDialog";
 import { StatusBar } from "./StatusBar";
 import { TopToolbar } from "./TopToolbar";
 import type { LayoutOptions } from "../../hooks/useLayoutOptions";
@@ -103,6 +108,8 @@ export function DesktopShell({
   const [mapReadyGeneration, setMapReadyGeneration] = useState(0);
   const [dropMessage, setDropMessage] = useState<string | null>(null);
   const [dropError, setDropError] = useState<string | null>(null);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const diagnostics = useDiagnosticsSnapshot();
   const externalPluginsReady = useExternalPluginsReady();
   const [layerPanelWidth, setLayerPanelWidth] = useState(
     DEFAULT_SIDE_PANEL_WIDTH,
@@ -163,6 +170,18 @@ export function DesktopShell({
 
   const handleMapControllerReady = useCallback(() => {
     setMapReadyGeneration((generation) => generation + 1);
+  }, []);
+
+  const handleMapDiagnosticEvent = useCallback((event: MapDiagnosticEvent) => {
+    appendDiagnostic({
+      category: "map",
+      level: "error",
+      message: event.message,
+      detail: event.detail,
+      source: event.source,
+      status: event.status,
+      url: event.url,
+    });
   }, []);
 
   const addImportedVectorLayers = useCallback(
@@ -444,10 +463,13 @@ export function DesktopShell({
     >
       <TopToolbar
         compact={layoutOptions.compact}
+        diagnosticsErrorCount={diagnostics.errorCount}
+        diagnosticsTotalCount={diagnostics.totalCount}
         mapControllerRef={mapControllerRef}
         showLabels={layoutOptions.toolbarLabels}
         showProjectInfo={layoutOptions.showProjectInfo}
         themeMode={themeMode}
+        onOpenDiagnostics={() => setDiagnosticsOpen(true)}
         onToggleThemeMode={onToggleThemeMode}
       />
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
@@ -464,6 +486,7 @@ export function DesktopShell({
         >
           <MapCanvas
             controllerRef={mapControllerRef}
+            onMapDiagnosticEvent={handleMapDiagnosticEvent}
             onControllerReady={handleMapControllerReady}
           />
         </main>
@@ -472,7 +495,16 @@ export function DesktopShell({
         ) : null}
       </div>
       {layoutOptions.panelsVisible ? <AttributeTable /> : null}
-      <StatusBar compact={layoutOptions.compact} />
+      <StatusBar
+        compact={layoutOptions.compact}
+        diagnosticsErrorCount={diagnostics.errorCount}
+        diagnosticsWarningCount={diagnostics.warningCount}
+        onOpenDiagnostics={() => setDiagnosticsOpen(true)}
+      />
+      <DiagnosticsDialog
+        open={diagnosticsOpen}
+        onOpenChange={setDiagnosticsOpen}
+      />
       <Suspense fallback={null}>
         <ProcessingDialog mapControllerRef={mapControllerRef} />
       </Suspense>

@@ -47,6 +47,7 @@ import {
   Label,
 } from "@geolibre/ui";
 import {
+  Bug,
   Database,
   FolderOpen,
   History,
@@ -86,10 +87,13 @@ import { SettingsDialog } from "./SettingsDialog";
 
 interface TopToolbarProps {
   compact?: boolean;
+  diagnosticsErrorCount: number;
+  diagnosticsTotalCount: number;
   mapControllerRef: React.RefObject<MapController | null>;
   showLabels?: boolean;
   showProjectInfo?: boolean;
   themeMode: ThemeMode;
+  onOpenDiagnostics: () => void;
   onToggleThemeMode: () => void;
 }
 
@@ -134,10 +138,13 @@ function formatRecentProjectTime(openedAt: string): string {
 
 export function TopToolbar({
   compact = false,
+  diagnosticsErrorCount,
+  diagnosticsTotalCount,
   mapControllerRef,
   showLabels = true,
   showProjectInfo = true,
   themeMode,
+  onOpenDiagnostics,
   onToggleThemeMode,
 }: TopToolbarProps) {
   const loadProject = useAppStore((s) => s.loadProject);
@@ -577,6 +584,23 @@ export function TopToolbar({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      <Button
+        className={cn(toolbarButtonClass, "relative")}
+        variant="ghost"
+        size={toolbarButtonSize}
+        onClick={onOpenDiagnostics}
+        aria-label="Diagnostics"
+      >
+        <Bug className={toolbarIconClassName} />
+        {renderToolbarLabel("Diagnostics")}
+        {diagnosticsErrorCount > 0 ? (
+          <span className="ml-1 rounded bg-destructive px-1.5 py-0.5 text-[10px] leading-none text-destructive-foreground">
+            {diagnosticsErrorCount}
+          </span>
+        ) : diagnosticsTotalCount > 0 && !showLabels ? (
+          <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary" />
+        ) : null}
+      </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
