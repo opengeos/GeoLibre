@@ -458,6 +458,7 @@ export function TopToolbar({
   const toolbarButtonSize = compact ? "icon" : "sm";
   const toolbarButtonClass = compact ? "h-8 w-8 shrink-0" : "shrink-0";
   const toolbarIconClassName = cn("h-3.5 w-3.5", showLabels && "sm:mr-1");
+  const appTitle = isTauri() ? "GeoLibre Desktop" : "GeoLibre";
   const renderToolbarLabel = (label: string) =>
     showLabels ? <span className="hidden sm:inline">{label}</span> : null;
 
@@ -473,7 +474,7 @@ export function TopToolbar({
       <span className="mr-1 flex shrink-0 items-center gap-1.5 text-sm font-semibold text-primary md:mr-2">
         <Map className="h-4 w-4" />
         {showProjectInfo ? (
-          <span className="hidden sm:inline">GeoLibre Desktop</span>
+          <span className="hidden sm:inline">{appTitle}</span>
         ) : null}
       </span>
       <NewProjectDialog
