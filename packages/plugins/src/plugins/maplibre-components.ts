@@ -21,11 +21,17 @@ import type {
   CogLayerControlOptions,
   CogLayerEventHandler,
   CogLayerInfo,
+  ColorbarGuiControl,
+  ColorbarGuiControlOptions,
   ControlGrid,
   ControlGridOptions,
   DefaultControlName,
   GaussianSplatControl,
   GaussianSplatLayerAdapter,
+  HtmlGuiControl,
+  HtmlGuiControlOptions,
+  LegendGuiControl,
+  LegendGuiControlOptions,
   LidarControl,
   LidarLayerAdapter,
   PMTilesLayerControl,
@@ -60,6 +66,8 @@ type AddVectorControlConstructor =
   (typeof import("maplibre-gl-components"))["AddVectorControl"];
 type CogLayerControlConstructor =
   (typeof import("maplibre-gl-components"))["CogLayerControl"];
+type ColorbarGuiControlConstructor =
+  (typeof import("maplibre-gl-components"))["ColorbarGuiControl"];
 type PMTilesLayerControlConstructor =
   (typeof import("maplibre-gl-components"))["PMTilesLayerControl"];
 type SearchControlConstructor =
@@ -68,6 +76,10 @@ type StacSearchControlConstructor =
   (typeof import("maplibre-gl-components"))["StacSearchControl"];
 type ZarrLayerControlConstructor =
   (typeof import("maplibre-gl-components"))["ZarrLayerControl"];
+type HtmlGuiControlConstructor =
+  (typeof import("maplibre-gl-components"))["HtmlGuiControl"];
+type LegendGuiControlConstructor =
+  (typeof import("maplibre-gl-components"))["LegendGuiControl"];
 type LidarControlConstructor =
   (typeof import("maplibre-gl-components"))["LidarControl"];
 type LidarLayerAdapterConstructor =
@@ -88,9 +100,12 @@ interface SplattingControlVisibilityState {
 interface ComponentsConstructors {
   AddVectorControl: AddVectorControlConstructor;
   CogLayerControl: CogLayerControlConstructor;
+  ColorbarGuiControl: ColorbarGuiControlConstructor;
   ControlGrid: ControlGridConstructor;
   GaussianSplatControl: GaussianSplatControlConstructor;
   GaussianSplatLayerAdapter: GaussianSplatLayerAdapterConstructor;
+  HtmlGuiControl: HtmlGuiControlConstructor;
+  LegendGuiControl: LegendGuiControlConstructor;
   LidarControl: LidarControlConstructor;
   LidarLayerAdapter: LidarLayerAdapterConstructor;
   PMTilesLayerControl: PMTilesLayerControlConstructor;
@@ -106,6 +121,9 @@ const pmtilesControlPosition: GeoLibreMapControlPosition = "top-left";
 const searchControlPosition: GeoLibreMapControlPosition = "top-right";
 const stacSearchControlPosition: GeoLibreMapControlPosition = "top-left";
 const zarrControlPosition: GeoLibreMapControlPosition = "top-left";
+const colorbarControlPosition: GeoLibreMapControlPosition = "top-right";
+const legendControlPosition: GeoLibreMapControlPosition = "top-right";
+const htmlControlPosition: GeoLibreMapControlPosition = "top-right";
 const lidarControlPosition: GeoLibreMapControlPosition = "top-left";
 const splattingControlPosition: GeoLibreMapControlPosition = "top-left";
 
@@ -145,6 +163,9 @@ const COMPONENT_CONTROL_NAMES = [
   "stacSearch",
   "planetaryComputer",
   "gaussianSplat",
+  "colorbarGui",
+  "legendGui",
+  "htmlGui",
   "lidar",
   "usgsLidar",
 ] satisfies DefaultControlName[];
@@ -228,6 +249,36 @@ const STAC_SEARCH_OPTIONS = {
   panelWidth: 365,
   showFootprints: true,
 } satisfies StacSearchControlOptions;
+
+const COLORBAR_OPTIONS = {
+  backgroundColor: "hsl(var(--popover))",
+  className: "geolibre-colorbar-control",
+  collapsed: false,
+  fontColor: "hsl(var(--popover-foreground))",
+  maxHeight: 520,
+  panelWidth: 320,
+  position: colorbarControlPosition,
+} satisfies ColorbarGuiControlOptions;
+
+const LEGEND_OPTIONS = {
+  backgroundColor: "hsl(var(--popover))",
+  className: "geolibre-legend-control",
+  collapsed: false,
+  fontColor: "hsl(var(--popover-foreground))",
+  maxHeight: 520,
+  panelWidth: 320,
+  position: legendControlPosition,
+} satisfies LegendGuiControlOptions;
+
+const HTML_OPTIONS = {
+  backgroundColor: "hsl(var(--popover))",
+  className: "geolibre-html-control",
+  collapsed: false,
+  fontColor: "hsl(var(--popover-foreground))",
+  maxHeight: 520,
+  panelWidth: 340,
+  position: htmlControlPosition,
+} satisfies HtmlGuiControlOptions;
 
 const STAC_COLOR_RAMP_MODULE = {
   name: "geolibre-stac-color-ramp",
@@ -409,6 +460,9 @@ let pmtilesControl: PMTilesLayerControl | null = null;
 let searchControl: SearchControl | null = null;
 let stacSearchControl: StacSearchControl | null = null;
 let zarrControl: ZarrLayerControl | null = null;
+let colorbarControl: ColorbarGuiControl | null = null;
+let legendControl: LegendGuiControl | null = null;
+let htmlControl: HtmlGuiControl | null = null;
 let lidarControl: LidarControl | null = null;
 let lidarLayerAdapter: LidarLayerAdapter | null = null;
 let splattingControl: GaussianSplatControl | null = null;
@@ -421,6 +475,9 @@ let pmtilesControlMounted = false;
 let searchControlMounted = false;
 let stacSearchControlMounted = false;
 let zarrControlMounted = false;
+let colorbarControlMounted = false;
+let legendControlMounted = false;
+let htmlControlMounted = false;
 let lidarControlMounted = false;
 let splattingControlMounted = false;
 let flatGeobufStoreUnsubscribe: (() => void) | null = null;
@@ -437,6 +494,12 @@ let componentsConstructorsPromise: Promise<ComponentsConstructors> | null =
   null;
 let searchPlacesPanelVisible = false;
 const searchPlacesPanelListeners = new Set<() => void>();
+let colorbarPanelVisible = false;
+const colorbarPanelListeners = new Set<() => void>();
+let legendPanelVisible = false;
+const legendPanelListeners = new Set<() => void>();
+let htmlPanelVisible = false;
+const htmlPanelListeners = new Set<() => void>();
 
 export interface CogRasterLayerOptions {
   url: string;
@@ -639,9 +702,12 @@ const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
     ({
       AddVectorControl: AddVectorControlClass,
       CogLayerControl: CogLayerControlClass,
+      ColorbarGuiControl: ColorbarGuiControlClass,
       ControlGrid: ControlGridClass,
       GaussianSplatControl: GaussianSplatControlClass,
       GaussianSplatLayerAdapter: GaussianSplatLayerAdapterClass,
+      HtmlGuiControl: HtmlGuiControlClass,
+      LegendGuiControl: LegendGuiControlClass,
       LidarControl: LidarControlClass,
       LidarLayerAdapter: LidarLayerAdapterClass,
       PMTilesLayerControl: PMTilesLayerControlClass,
@@ -651,9 +717,12 @@ const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
     }) => ({
       AddVectorControl: AddVectorControlClass,
       CogLayerControl: CogLayerControlClass,
+      ColorbarGuiControl: ColorbarGuiControlClass,
       ControlGrid: ControlGridClass,
       GaussianSplatControl: GaussianSplatControlClass,
       GaussianSplatLayerAdapter: GaussianSplatLayerAdapterClass,
+      HtmlGuiControl: HtmlGuiControlClass,
+      LegendGuiControl: LegendGuiControlClass,
       LidarControl: LidarControlClass,
       LidarLayerAdapter: LidarLayerAdapterClass,
       PMTilesLayerControl: PMTilesLayerControlClass,
@@ -706,7 +775,7 @@ const mountComponentsControl = (app: GeoLibreAppAPI): boolean => {
 export const maplibreComponentsPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-components",
   name: "Components",
-  version: "0.17.1",
+  version: "0.18.0",
   activate: (app: GeoLibreAppAPI) => {
     pluginActive = true;
     if (componentsControl) return mountComponentsControl(app);
@@ -722,6 +791,9 @@ export const maplibreComponentsPlugin: GeoLibrePlugin = {
     teardownSearchControl(app);
     teardownStacSearchControl(app);
     teardownZarrControl(app);
+    teardownColorbarControl(app);
+    teardownLegendControl(app);
+    teardownHtmlControl(app);
     teardownLidarControl(app);
     teardownSplattingControl(app);
     if (!componentsControl) return;
@@ -792,6 +864,57 @@ export function subscribeSearchPlacesPanel(
 ): () => void {
   searchPlacesPanelListeners.add(listener);
   return () => searchPlacesPanelListeners.delete(listener);
+}
+
+export function openColorbarPanel(app: GeoLibreAppAPI): void {
+  void openStandaloneColorbarControl(app);
+}
+
+export function closeColorbarPanel(): void {
+  hideColorbarControl();
+}
+
+export function isColorbarPanelVisible(): boolean {
+  return colorbarPanelVisible;
+}
+
+export function subscribeColorbarPanel(listener: () => void): () => void {
+  colorbarPanelListeners.add(listener);
+  return () => colorbarPanelListeners.delete(listener);
+}
+
+export function openLegendPanel(app: GeoLibreAppAPI): void {
+  void openStandaloneLegendControl(app);
+}
+
+export function closeLegendPanel(): void {
+  hideLegendControl();
+}
+
+export function isLegendPanelVisible(): boolean {
+  return legendPanelVisible;
+}
+
+export function subscribeLegendPanel(listener: () => void): () => void {
+  legendPanelListeners.add(listener);
+  return () => legendPanelListeners.delete(listener);
+}
+
+export function openHtmlPanel(app: GeoLibreAppAPI): void {
+  void openStandaloneHtmlControl(app);
+}
+
+export function closeHtmlPanel(): void {
+  hideHtmlControl();
+}
+
+export function isHtmlPanelVisible(): boolean {
+  return htmlPanelVisible;
+}
+
+export function subscribeHtmlPanel(listener: () => void): () => void {
+  htmlPanelListeners.add(listener);
+  return () => htmlPanelListeners.delete(listener);
 }
 
 export function openStacSearchLayerPanel(app: GeoLibreAppAPI): void {
@@ -963,6 +1086,81 @@ async function openStandaloneZarrControl(
   setTimeout(() => {
     zarrControl?.show();
     zarrControl?.expand();
+  }, 0);
+  return true;
+}
+
+async function openStandaloneColorbarControl(
+  app: GeoLibreAppAPI,
+): Promise<boolean> {
+  const { ColorbarGuiControl: ColorbarGuiControlClass } =
+    await getComponentsConstructors();
+
+  colorbarControl ??= createColorbarControl(ColorbarGuiControlClass);
+
+  if (!colorbarControlMounted) {
+    const added = app.addMapControl(colorbarControl, colorbarControlPosition);
+    if (!added) {
+      colorbarControl = null;
+      return false;
+    }
+    colorbarControlMounted = true;
+  }
+
+  setTimeout(() => {
+    colorbarControl?.show();
+    colorbarControl?.expand();
+    setColorbarPanelVisible(true);
+  }, 0);
+  return true;
+}
+
+async function openStandaloneLegendControl(
+  app: GeoLibreAppAPI,
+): Promise<boolean> {
+  const { LegendGuiControl: LegendGuiControlClass } =
+    await getComponentsConstructors();
+
+  legendControl ??= createLegendControl(LegendGuiControlClass);
+
+  if (!legendControlMounted) {
+    const added = app.addMapControl(legendControl, legendControlPosition);
+    if (!added) {
+      legendControl = null;
+      return false;
+    }
+    legendControlMounted = true;
+  }
+
+  setTimeout(() => {
+    legendControl?.show();
+    legendControl?.expand();
+    setLegendPanelVisible(true);
+  }, 0);
+  return true;
+}
+
+async function openStandaloneHtmlControl(
+  app: GeoLibreAppAPI,
+): Promise<boolean> {
+  const { HtmlGuiControl: HtmlGuiControlClass } =
+    await getComponentsConstructors();
+
+  htmlControl ??= createHtmlControl(HtmlGuiControlClass);
+
+  if (!htmlControlMounted) {
+    const added = app.addMapControl(htmlControl, htmlControlPosition);
+    if (!added) {
+      htmlControl = null;
+      return false;
+    }
+    htmlControlMounted = true;
+  }
+
+  setTimeout(() => {
+    htmlControl?.show();
+    htmlControl?.expand();
+    setHtmlPanelVisible(true);
   }, 0);
   return true;
 }
@@ -1287,6 +1485,30 @@ function createSearchControl(
   return control;
 }
 
+function createColorbarControl(
+  ColorbarGuiControlClass: ColorbarGuiControlConstructor,
+): ColorbarGuiControl {
+  const control = new ColorbarGuiControlClass(COLORBAR_OPTIONS);
+  control.on("collapse", () => setColorbarPanelVisible(false));
+  return control;
+}
+
+function createLegendControl(
+  LegendGuiControlClass: LegendGuiControlConstructor,
+): LegendGuiControl {
+  const control = new LegendGuiControlClass(LEGEND_OPTIONS);
+  control.on("collapse", () => setLegendPanelVisible(false));
+  return control;
+}
+
+function createHtmlControl(
+  HtmlGuiControlClass: HtmlGuiControlConstructor,
+): HtmlGuiControl {
+  const control = new HtmlGuiControlClass(HTML_OPTIONS);
+  control.on("collapse", () => setHtmlPanelVisible(false));
+  return control;
+}
+
 function createStacSearchControl(
   StacSearchControlClass: StacSearchControlConstructor,
 ): StacSearchControl {
@@ -1408,6 +1630,75 @@ function teardownZarrControl(app: GeoLibreAppAPI): void {
   }
   zarrControl = null;
   zarrControlMounted = false;
+}
+
+function teardownColorbarControl(app: GeoLibreAppAPI): void {
+  if (colorbarControl && colorbarControlMounted) {
+    app.removeMapControl(colorbarControl);
+  }
+  colorbarControl = null;
+  colorbarControlMounted = false;
+  setColorbarPanelVisible(false);
+}
+
+function hideColorbarControl(): void {
+  colorbarControl?.hide();
+  colorbarControl?.collapse();
+  setColorbarPanelVisible(false);
+}
+
+function setColorbarPanelVisible(visible: boolean): void {
+  if (colorbarPanelVisible === visible) return;
+  colorbarPanelVisible = visible;
+  for (const listener of colorbarPanelListeners) {
+    listener();
+  }
+}
+
+function teardownLegendControl(app: GeoLibreAppAPI): void {
+  if (legendControl && legendControlMounted) {
+    app.removeMapControl(legendControl);
+  }
+  legendControl = null;
+  legendControlMounted = false;
+  setLegendPanelVisible(false);
+}
+
+function hideLegendControl(): void {
+  legendControl?.hide();
+  legendControl?.collapse();
+  setLegendPanelVisible(false);
+}
+
+function setLegendPanelVisible(visible: boolean): void {
+  if (legendPanelVisible === visible) return;
+  legendPanelVisible = visible;
+  for (const listener of legendPanelListeners) {
+    listener();
+  }
+}
+
+function teardownHtmlControl(app: GeoLibreAppAPI): void {
+  if (htmlControl && htmlControlMounted) {
+    app.removeMapControl(htmlControl);
+  }
+  htmlControl = null;
+  htmlControlMounted = false;
+  setHtmlPanelVisible(false);
+}
+
+function hideHtmlControl(): void {
+  htmlControl?.hide();
+  htmlControl?.collapse();
+  setHtmlPanelVisible(false);
+}
+
+function setHtmlPanelVisible(visible: boolean): void {
+  if (htmlPanelVisible === visible) return;
+  htmlPanelVisible = visible;
+  for (const listener of htmlPanelListeners) {
+    listener();
+  }
 }
 
 function teardownLidarControl(app: GeoLibreAppAPI): void {
