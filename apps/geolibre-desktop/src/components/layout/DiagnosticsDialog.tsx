@@ -66,10 +66,6 @@ export function DiagnosticsDialog({
         : diagnostics.records.filter((record) => record.level === levelFilter),
     [diagnostics.records, levelFilter],
   );
-  const serializedRecords = useMemo(
-    () => JSON.stringify(filteredRecords, null, 2),
-    [filteredRecords],
-  );
   const listIsFiltered = levelFilter !== "all";
 
   useEffect(
@@ -84,7 +80,9 @@ export function DiagnosticsDialog({
   const copyDiagnostics = async () => {
     if (!navigator.clipboard || filteredRecords.length === 0) return;
     try {
-      await navigator.clipboard.writeText(serializedRecords);
+      await navigator.clipboard.writeText(
+        JSON.stringify(filteredRecords, null, 2),
+      );
     } catch {
       // Clipboard access denied or unavailable.
       return;
@@ -113,6 +111,7 @@ export function DiagnosticsDialog({
           <div className="flex flex-wrap gap-2 text-xs">
             <button
               type="button"
+              aria-pressed={levelFilter === "all"}
               className={cn(
                 "rounded border px-2 py-1 hover:bg-accent hover:text-accent-foreground",
                 levelFilter === "all" && "bg-accent text-accent-foreground",
@@ -123,6 +122,7 @@ export function DiagnosticsDialog({
             </button>
             <button
               type="button"
+              aria-pressed={levelFilter === "error"}
               className={cn(
                 "rounded border px-2 py-1 hover:bg-destructive/10 hover:text-destructive dark:hover:text-red-200",
                 diagnostics.errorCount > 0 &&
@@ -136,6 +136,7 @@ export function DiagnosticsDialog({
             </button>
             <button
               type="button"
+              aria-pressed={levelFilter === "warning"}
               className={cn(
                 "rounded border px-2 py-1 hover:bg-accent hover:text-accent-foreground",
                 levelFilter === "warning" && "bg-accent text-accent-foreground",

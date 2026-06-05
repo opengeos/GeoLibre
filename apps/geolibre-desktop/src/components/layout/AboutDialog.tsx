@@ -6,10 +6,11 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@geolibre/ui";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { CheckCircle2, ExternalLink, Info, Map, RefreshCw } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const LINKS = [
   {
@@ -101,11 +102,11 @@ export function AboutDialog({
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  const resetUpdateState = () => {
+  const resetUpdateState = useCallback(() => {
     setUpdateStatus("idle");
     setLatestVersion(null);
     setUpdateError(null);
-  };
+  }, []);
 
   const handleCheckForUpdates = async () => {
     abortRef.current?.abort();
@@ -164,7 +165,7 @@ export function AboutDialog({
   useEffect(() => {
     if (dialogOpen && !wasOpenRef.current) resetUpdateState();
     wasOpenRef.current = dialogOpen;
-  }, [dialogOpen]);
+  }, [dialogOpen, resetUpdateState]);
 
   // Read the latest handler through a ref so the effect can depend only on
   // the command counter; the update check should run exactly once for each
@@ -192,16 +193,19 @@ export function AboutDialog({
   return (
     <Dialog open={dialogOpen} onOpenChange={handleOpenChange}>
       {renderTrigger ? (
-        <Button
-          className={buttonClassName}
-          variant="ghost"
-          size={buttonSize}
-          aria-label="About"
-          onClick={() => handleOpenChange(true)}
-        >
-          <Info className={iconClassName ?? "h-3.5 w-3.5 sm:mr-1"} />
-          {showLabels ? <span className="hidden sm:inline">About</span> : null}
-        </Button>
+        <DialogTrigger asChild>
+          <Button
+            className={buttonClassName}
+            variant="ghost"
+            size={buttonSize}
+            aria-label="About"
+          >
+            <Info className={iconClassName ?? "h-3.5 w-3.5 sm:mr-1"} />
+            {showLabels ? (
+              <span className="hidden sm:inline">About</span>
+            ) : null}
+          </Button>
+        </DialogTrigger>
       ) : null}
       <DialogContent className="max-w-md">
         <DialogHeader>

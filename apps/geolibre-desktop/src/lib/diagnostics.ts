@@ -206,21 +206,27 @@ export function installDiagnosticsCapture(): () => void {
   };
 
   console.error = (...args: unknown[]) => {
-    appendDiagnostic({
-      category: "console",
-      level: "error",
-      message: formatConsoleArgs(args) || "console.error",
-    });
-    originalConsoleError(...args);
+    try {
+      appendDiagnostic({
+        category: "console",
+        level: "error",
+        message: formatConsoleArgs(args) || "console.error",
+      });
+    } finally {
+      originalConsoleError(...args);
+    }
   };
 
   console.warn = (...args: unknown[]) => {
-    appendDiagnostic({
-      category: "console",
-      level: "warning",
-      message: formatConsoleArgs(args) || "console.warn",
-    });
-    originalConsoleWarn(...args);
+    try {
+      appendDiagnostic({
+        category: "console",
+        level: "warning",
+        message: formatConsoleArgs(args) || "console.warn",
+      });
+    } finally {
+      originalConsoleWarn(...args);
+    }
   };
 
   const handleWindowError = (event: ErrorEvent) => {
