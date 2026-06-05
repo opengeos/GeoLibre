@@ -451,6 +451,7 @@ class ExternalRuntimeSession:
         tool_id: str,
         args_json: str,
         callback: Callable[[Any], None] | None = None,
+        working_directory: str | None = None,
     ) -> str:
         """Run a Whitebox tool and stream progress events to a callback."""
         payload = {
@@ -500,6 +501,7 @@ class ExternalRuntimeSession:
             encoding="utf-8",
             errors="replace",
             env=_clean_env(),
+            cwd=working_directory,
             bufsize=1,
             **_subprocess_startup_kwargs(),
         )
@@ -718,6 +720,45 @@ def _coerce_value(value: Any, kind: str) -> Any:
     return value
 
 
+def _is_batch_directory_input(param: dict[str, Any]) -> bool:
+    """Return whether a parameter supports directory-backed batch mode.
+
+    Args:
+        param: Normalized Whitebox parameter metadata.
+
+    Returns:
+        True when the parameter is an input dataset that the catalog documents
+        as batch-capable when omitted.
+    """
+    kind = str(param.get("kind") or "")
+    description = str(param.get("description") or "").lower()
+    return (
+        kind.endswith("_in")
+        and "batch mode" in description
+        and "current directory" in description
+        and "omitted" in description
+    )
+
+
+def _batch_working_directory(value: Any, param: dict[str, Any]) -> str | None:
+    """Return the working directory for a batch-mode input value.
+
+    Args:
+        value: Frontend parameter value.
+        param: Normalized Whitebox parameter metadata.
+
+    Returns:
+        The selected directory path when the value should trigger batch mode,
+        otherwise None.
+    """
+    if not _is_batch_directory_input(param) or not isinstance(value, str):
+        return None
+    path = Path(value).expanduser()
+    if path.is_dir():
+        return str(path)
+    return None
+
+
 def _write_layer_input(param_name: str, layer: dict[str, Any], temp_paths: list[Path]) -> str:
     """Write an embedded layer input to a temporary file.
 
@@ -739,28 +780,47 @@ def _write_layer_input(param_name: str, layer: dict[str, Any], temp_paths: list[
     return str(path)
 
 
-def _prepare_arguments(request: WhiteboxRunRequest, temp_paths: list[Path]) -> dict[str, Any]:
-    """Prepare a Whitebox JSON argument payload from a run request."""
+def _prepare_arguments(
+    request: WhiteboxRunRequest,
+    temp_paths: list[Path],
+) -> tuple[dict[str, Any], str | None]:
+    """Prepare a Whitebox JSON argument payload from a run request.
+
+    Args:
+        request: Tool run request from the frontend.
+        temp_paths: Collection of temporary paths to remove after execution.
+
+    Returns:
+        A tuple containing the argument payload and an optional subprocess
+        working directory for directory-backed batch tools.
+    """
     specs = {
         str(param.get("name")): param
         for param in (request.tool or {}).get("params", [])
         if isinstance(param, dict)
     }
     args: dict[str, Any] = {}
+    working_directory: str | None = None
     for name, value in request.parameters.items():
         spec = specs.get(str(name), {})
         kind = str(spec.get("kind") or "")
         if name in request.layer_inputs:
             value = _write_layer_input(name, request.layer_inputs[name], temp_paths)
+        batch_directory = _batch_working_directory(value, spec)
+        if batch_directory:
+            if working_directory and working_directory != batch_directory:
+                raise ValueError("Only one Whitebox batch input directory is supported.")
+            working_directory = batch_directory
+            continue
         coerced = _coerce_value(value, kind)
         if coerced is not None:
             args[name] = coerced
 
     for name, spec in specs.items():
         kind = str(spec.get("kind") or "")
-        if kind.endswith("_out") and not args.get(name):
+        if kind.endswith("_out") and not args.get(name) and not working_directory:
             args[name] = _default_output_path(request.tool_id, name, kind)
-    return args
+    return args, working_directory
 
 
 def _extract_outputs(result: Any, args: dict[str, Any], tool: dict[str, Any] | None) -> dict[str, Any]:
@@ -822,7 +882,7 @@ def _run_job(job_id: str, request: WhiteboxRunRequest) -> None:
     temp_paths: list[Path] = []
     try:
         _job_update(job_id, status="running")
-        args = _prepare_arguments(request, temp_paths)
+        args, working_directory = _prepare_arguments(request, temp_paths)
         session = create_runtime_session(
             include_pro=request.include_pro,
             tier=request.tier or "open",
@@ -831,6 +891,7 @@ def _run_job(job_id: str, request: WhiteboxRunRequest) -> None:
             request.tool_id,
             json.dumps(args),
             lambda event: _append_job_message(job_id, event),
+            working_directory=working_directory,
         )
         result = _parse_json_maybe(raw_result)
         _job_update(
