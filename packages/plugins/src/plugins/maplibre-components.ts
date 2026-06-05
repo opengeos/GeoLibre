@@ -138,6 +138,7 @@ const LIDAR_SAMPLE_URL =
 const SPLATTING_SAMPLE_URL =
   "https://maplibre.org/maplibre-gl-js/docs/assets/34M_17/34M_17.gltf";
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
+const GUI_PANEL_VIEWPORT_MARGIN = 16;
 
 const COMPONENT_CONTROL_NAMES = [
   "spinGlobe",
@@ -257,6 +258,7 @@ const COLORBAR_OPTIONS = {
   fontColor: "hsl(var(--popover-foreground))",
   maxHeight: 520,
   panelWidth: 320,
+  position: colorbarControlPosition,
 } satisfies ColorbarGuiControlOptions;
 
 const LEGEND_OPTIONS = {
@@ -266,6 +268,7 @@ const LEGEND_OPTIONS = {
   fontColor: "hsl(var(--popover-foreground))",
   maxHeight: 520,
   panelWidth: 320,
+  position: legendControlPosition,
 } satisfies LegendGuiControlOptions;
 
 const HTML_OPTIONS = {
@@ -275,6 +278,7 @@ const HTML_OPTIONS = {
   fontColor: "hsl(var(--popover-foreground))",
   maxHeight: 520,
   panelWidth: 340,
+  position: htmlControlPosition,
 } satisfies HtmlGuiControlOptions;
 
 const STAC_COLOR_RAMP_MODULE = {
@@ -497,6 +501,26 @@ let legendPanelVisible = false;
 const legendPanelListeners = new Set<() => void>();
 let htmlPanelVisible = false;
 const htmlPanelListeners = new Set<() => void>();
+
+function constrainGuiPanelToViewport(panelSelector: string): void {
+  const panel = document.querySelector<HTMLElement>(panelSelector);
+  if (!panel) return;
+
+  const rect = panel.getBoundingClientRect();
+  const availableHeight = Math.floor(
+    window.innerHeight - rect.top - GUI_PANEL_VIEWPORT_MARGIN,
+  );
+  if (availableHeight > 160 && rect.bottom > window.innerHeight) {
+    panel.style.maxHeight = `${availableHeight}px`;
+  }
+
+  const availableWidth = Math.floor(
+    window.innerWidth - rect.left - GUI_PANEL_VIEWPORT_MARGIN,
+  );
+  if (availableWidth > 220 && rect.right > window.innerWidth) {
+    panel.style.width = `${availableWidth}px`;
+  }
+}
 
 export interface CogRasterLayerOptions {
   url: string;
@@ -1107,6 +1131,9 @@ async function openStandaloneColorbarControl(
   setTimeout(() => {
     colorbarControl?.show();
     colorbarControl?.expand();
+    constrainGuiPanelToViewport(
+      ".geolibre-colorbar-control .colorbar-gui-panel",
+    );
     setColorbarPanelVisible(true);
   }, 0);
   return true;
@@ -1132,6 +1159,9 @@ async function openStandaloneLegendControl(
   setTimeout(() => {
     legendControl?.show();
     legendControl?.expand();
+    constrainGuiPanelToViewport(
+      ".geolibre-legend-control .legend-gui-panel",
+    );
     setLegendPanelVisible(true);
   }, 0);
   return true;
@@ -1157,6 +1187,7 @@ async function openStandaloneHtmlControl(
   setTimeout(() => {
     htmlControl?.show();
     htmlControl?.expand();
+    constrainGuiPanelToViewport(".geolibre-html-control .html-gui-panel");
     setHtmlPanelVisible(true);
   }, 0);
   return true;
@@ -1486,7 +1517,13 @@ function createColorbarControl(
   ColorbarGuiControlClass: ColorbarGuiControlConstructor,
 ): ColorbarGuiControl {
   const control = new ColorbarGuiControlClass(COLORBAR_OPTIONS);
-  control.on("collapse", hideColorbarControl);
+  control.on("collapse", () => setColorbarPanelVisible(false));
+  control.on("expand", () => {
+    constrainGuiPanelToViewport(
+      ".geolibre-colorbar-control .colorbar-gui-panel",
+    );
+    setColorbarPanelVisible(true);
+  });
   return control;
 }
 
@@ -1494,7 +1531,13 @@ function createLegendControl(
   LegendGuiControlClass: LegendGuiControlConstructor,
 ): LegendGuiControl {
   const control = new LegendGuiControlClass(LEGEND_OPTIONS);
-  control.on("collapse", hideLegendControl);
+  control.on("collapse", () => setLegendPanelVisible(false));
+  control.on("expand", () => {
+    constrainGuiPanelToViewport(
+      ".geolibre-legend-control .legend-gui-panel",
+    );
+    setLegendPanelVisible(true);
+  });
   return control;
 }
 
@@ -1502,7 +1545,11 @@ function createHtmlControl(
   HtmlGuiControlClass: HtmlGuiControlConstructor,
 ): HtmlGuiControl {
   const control = new HtmlGuiControlClass(HTML_OPTIONS);
-  control.on("collapse", hideHtmlControl);
+  control.on("collapse", () => setHtmlPanelVisible(false));
+  control.on("expand", () => {
+    constrainGuiPanelToViewport(".geolibre-html-control .html-gui-panel");
+    setHtmlPanelVisible(true);
+  });
   return control;
 }
 
@@ -1638,11 +1685,6 @@ function teardownColorbarControl(app: GeoLibreAppAPI): void {
   setColorbarPanelVisible(false);
 }
 
-function hideColorbarControl(): void {
-  colorbarControl?.hide();
-  setColorbarPanelVisible(false);
-}
-
 function setColorbarPanelVisible(visible: boolean): void {
   if (colorbarPanelVisible === visible) return;
   colorbarPanelVisible = visible;
@@ -1660,11 +1702,6 @@ function teardownLegendControl(app: GeoLibreAppAPI): void {
   setLegendPanelVisible(false);
 }
 
-function hideLegendControl(): void {
-  legendControl?.hide();
-  setLegendPanelVisible(false);
-}
-
 function setLegendPanelVisible(visible: boolean): void {
   if (legendPanelVisible === visible) return;
   legendPanelVisible = visible;
@@ -1679,11 +1716,6 @@ function teardownHtmlControl(app: GeoLibreAppAPI): void {
   }
   htmlControl = null;
   htmlControlMounted = false;
-  setHtmlPanelVisible(false);
-}
-
-function hideHtmlControl(): void {
-  htmlControl?.hide();
   setHtmlPanelVisible(false);
 }
 
