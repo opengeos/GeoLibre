@@ -610,6 +610,7 @@ function applyGeomanSketchesStyle(
         "text-halo-width",
         Math.max(0, styleValue(sketchesLayer.style, "textHaloWidth")),
       );
+      map.setPaintProperty(layer.id, "text-opacity", sketchesLayer.opacity);
     } catch {
       // Geoman may rebuild its temporary layers while an interaction is active.
     }
@@ -621,20 +622,29 @@ function applyGeomanDisplayLayerOpacity(
   layer: maplibregl.LayerSpecification,
   opacity: number,
 ): void {
+  if (layer.type === "circle") {
+    setGeomanPaintProperty(map, layer.id, "circle-opacity", opacity);
+    setGeomanPaintProperty(map, layer.id, "circle-stroke-opacity", opacity);
+  } else if (layer.type === "line") {
+    setGeomanPaintProperty(map, layer.id, "line-opacity", opacity);
+  } else if (layer.type === "fill") {
+    setGeomanPaintProperty(map, layer.id, "fill-opacity", opacity);
+  } else if (layer.type === "fill-extrusion") {
+    setGeomanPaintProperty(map, layer.id, "fill-extrusion-opacity", opacity);
+  } else if (layer.type === "symbol") {
+    setGeomanPaintProperty(map, layer.id, "icon-opacity", opacity);
+    setGeomanPaintProperty(map, layer.id, "text-opacity", opacity);
+  }
+}
+
+function setGeomanPaintProperty(
+  map: maplibregl.Map,
+  layerId: string,
+  property: string,
+  value: unknown,
+): void {
   try {
-    if (layer.type === "circle") {
-      map.setPaintProperty(layer.id, "circle-opacity", opacity);
-      map.setPaintProperty(layer.id, "circle-stroke-opacity", opacity);
-    } else if (layer.type === "line") {
-      map.setPaintProperty(layer.id, "line-opacity", opacity);
-    } else if (layer.type === "fill") {
-      map.setPaintProperty(layer.id, "fill-opacity", opacity);
-    } else if (layer.type === "fill-extrusion") {
-      map.setPaintProperty(layer.id, "fill-extrusion-opacity", opacity);
-    } else if (layer.type === "symbol") {
-      map.setPaintProperty(layer.id, "icon-opacity", opacity);
-      map.setPaintProperty(layer.id, "text-opacity", opacity);
-    }
+    map.setPaintProperty(layerId, property, value);
   } catch {
     // Geoman layers are rebuilt often and may not support every paint property.
   }
