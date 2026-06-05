@@ -86,7 +86,9 @@ function safeStringify(value: unknown): string {
         return nestedValue;
       },
       2,
-    );
+      // JSON.stringify returns undefined for undefined, functions, and
+      // symbols; fall back to String() so the field is never dropped.
+    ) ?? String(value);
   } catch {
     return String(value);
   }
@@ -100,6 +102,28 @@ function formatUnknown(value: unknown): string {
 
 function formatConsoleArgs(args: unknown[]): string {
   return args.map(formatUnknown).filter(Boolean).join(" ");
+}
+
+const REDACTED_URL_PARAMS = new Set([
+  "access_token",
+  "api_key",
+  "apikey",
+  "key",
+  "token",
+]);
+
+function redactUrl(raw: string): string {
+  try {
+    const url = new URL(raw);
+    for (const param of REDACTED_URL_PARAMS) {
+      if (url.searchParams.has(param)) {
+        url.searchParams.set(param, "[REDACTED]");
+      }
+    }
+    return url.toString();
+  } catch {
+    return raw;
+  }
 }
 
 function requestUrl(input: Parameters<typeof fetch>[0]): string {
@@ -135,7 +159,7 @@ export function appendDiagnostic(input: DiagnosticInput): void {
     message: truncate(input.message),
     detail: input.detail ? truncate(input.detail) : undefined,
     source: input.source ? truncate(input.source) : undefined,
-    url: input.url ? truncate(input.url) : undefined,
+    url: input.url ? truncate(redactUrl(input.url)) : undefined,
   };
 
   records = [record, ...records].slice(0, MAX_DIAGNOSTIC_RECORDS);
@@ -155,6 +179,13 @@ export function useDiagnosticsCapture(): void {
   useEffect(() => installDiagnosticsCapture(), []);
 }
 
+/**
+ * Installs the fetch/console/window interceptors and returns a cleanup
+ * function. Ref-counted so concurrent callers share one installation; the
+ * interceptors are only removed once every returned cleanup has been called.
+ * Each caller must therefore invoke its cleanup exactly once (guaranteed when
+ * used via useDiagnosticsCapture's effect).
+ */
 export function installDiagnosticsCapture(): () => void {
   captureRefCount += 1;
   if (captureCleanup) {
