@@ -200,41 +200,33 @@ export function LayerPanel({
     setDropTargetLayerId(null);
   };
 
-  const clearRefreshStatusTimer = (layerId: string) => {
+  const clearRefreshStatusTimer = useCallback((layerId: string) => {
     const timer = refreshStatusTimersRef.current.get(layerId);
     if (!timer) return;
     window.clearTimeout(timer);
     refreshStatusTimersRef.current.delete(layerId);
-  };
+  }, []);
 
-  const scheduleSuccessStatusClear = (layerId: string) => {
-    clearRefreshStatusTimer(layerId);
-    const timer = window.setTimeout(() => {
-      refreshStatusTimersRef.current.delete(layerId);
-      setRefreshStatuses((current) => {
-        if (current[layerId]?.type !== "success") return current;
-        const next = { ...current };
-        delete next[layerId];
-        return next;
-      });
-    }, REFRESH_SUCCESS_STATUS_DURATION_MS);
-    refreshStatusTimersRef.current.set(layerId, timer);
-  };
+  const scheduleSuccessStatusClear = useCallback(
+    (layerId: string) => {
+      clearRefreshStatusTimer(layerId);
+      const timer = window.setTimeout(() => {
+        refreshStatusTimersRef.current.delete(layerId);
+        setRefreshStatuses((current) => {
+          if (current[layerId]?.type !== "success") return current;
+          const next = { ...current };
+          delete next[layerId];
+          return next;
+        });
+      }, REFRESH_SUCCESS_STATUS_DURATION_MS);
+      refreshStatusTimersRef.current.set(layerId, timer);
+    },
+    [clearRefreshStatusTimer],
+  );
 
   const handleRefreshLayer = useCallback(
     async (layer: GeoLibreLayer, automatic = false) => {
       if (refreshingLayerIdsRef.current.has(layer.id)) return;
-
-      if (!isRefreshableLayer(layer)) {
-        setRefreshStatuses((current) => ({
-          ...current,
-          [layer.id]: {
-            type: "error",
-            message: "Refresh is only available for WFS and GeoJSON URL layers.",
-          },
-        }));
-        return;
-      }
 
       refreshingLayerIdsRef.current.add(layer.id);
       clearRefreshStatusTimer(layer.id);
@@ -247,29 +239,25 @@ export function LayerPanel({
       }));
 
       try {
-        const patch = await refreshGeoJsonLayer(layer);
+        const { geojson, featureCount } = await refreshGeoJsonLayer(layer);
         const latest = useAppStore
           .getState()
           .layers.find((candidate) => candidate.id === layer.id);
         if (!latest) return;
 
         updateLayer(layer.id, {
-          ...patch,
+          geojson,
           metadata: {
             ...latest.metadata,
-            ...(patch.metadata ?? {}),
+            featureCount,
           },
         });
 
-        const featureCount = patch.metadata?.featureCount;
         setRefreshStatuses((current) => ({
           ...current,
           [layer.id]: {
             type: "success",
-            message:
-              typeof featureCount === "number"
-                ? `Refreshed ${featureCount.toLocaleString()} features.`
-                : "Layer refreshed.",
+            message: `Refreshed ${featureCount.toLocaleString()} features.`,
           },
         }));
         scheduleSuccessStatusClear(layer.id);
@@ -290,7 +278,7 @@ export function LayerPanel({
         refreshingLayerIdsRef.current.delete(layer.id);
       }
     },
-    [updateLayer],
+    [clearRefreshStatusTimer, scheduleSuccessStatusClear, updateLayer],
   );
 
   useEffect(() => {

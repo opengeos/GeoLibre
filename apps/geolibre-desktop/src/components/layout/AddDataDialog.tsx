@@ -1180,25 +1180,24 @@ export function AddDataDialog({
 
         if (vectorMode === "geojson-url") {
           if (!vectorUrl.trim()) throw new Error("Enter a GeoJSON URL.");
-          const data = await fetchGeoJsonFeatureCollection(vectorUrl.trim());
-          const id = addGeoJsonLayer(name, data, vectorUrl.trim(), beforeLayer);
-          const state = useAppStore.getState();
-          const layer = state.layers.find((l) => l.id === id);
-          if (layer) {
-            state.updateLayer(id, {
-              source: {
-                ...layer.source,
-                url: vectorUrl.trim(),
-              },
-              metadata: {
-                ...layer.metadata,
-                featureCount: data.features.length,
-                sourceKind: "geojson-url",
-              },
-            });
-          }
-          if (layer) mapControllerRef.current?.fitLayer(layer);
-          closeDialog();
+          const url = vectorUrl.trim();
+          const data = await fetchGeoJsonFeatureCollection(url);
+          addAndClose(
+            {
+              ...createBaseLayer(
+                name,
+                "geojson",
+                { type: "geojson", url },
+                {
+                  featureCount: data.features.length,
+                  sourceKind: "geojson-url",
+                },
+              ),
+              geojson: data,
+              sourcePath: url,
+            },
+            { fit: true },
+          );
           return;
         }
 

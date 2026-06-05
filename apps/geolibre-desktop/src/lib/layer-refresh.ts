@@ -1,7 +1,9 @@
 import type { FeatureCollection } from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
 
+// Keep in sync with WFS_PROXY_PATH in vite.config.ts (the dev proxy binds it there).
 const WFS_PROXY_PATH = "/__geolibre_wfs_proxy";
+const FETCH_TIMEOUT_MS = 30_000;
 const REFRESHABLE_GEOJSON_SOURCE_KINDS = new Set([
   "wfs-getfeature",
   "geojson-url",
@@ -39,11 +41,19 @@ export function createWfsGetFeatureUrl(options: {
 
 export async function fetchGeoJsonFeatureCollection(
   url: string,
-  options: { useWfsProxy?: boolean } = {},
+  options: { useWfsProxy?: boolean; signal?: AbortSignal } = {},
 ): Promise<FeatureCollection> {
-  const response = await fetch(
-    options.useWfsProxy ? proxyWfsRequestUrl(url) : url,
-  );
+  let response: Response;
+  try {
+    response = await fetch(options.useWfsProxy ? proxyWfsRequestUrl(url) : url, {
+      signal: options.signal ?? AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      throw new Error("The request timed out.");
+    }
+    throw error;
+  }
   const text = await response.text();
   if (!response.ok && !/^\s*</.test(text)) {
     throw new Error(`Request failed with status ${response.status}`);
@@ -62,7 +72,7 @@ export async function fetchGeoJsonFeatureCollection(
 
 export async function refreshGeoJsonLayer(
   layer: GeoLibreLayer,
-): Promise<Partial<GeoLibreLayer>> {
+): Promise<{ geojson: FeatureCollection; featureCount: number }> {
   const sourceUrl = refreshSourceUrl(layer);
   if (!sourceUrl) {
     throw new Error("This layer does not have a refreshable GeoJSON URL.");
@@ -74,9 +84,7 @@ export async function refreshGeoJsonLayer(
 
   return {
     geojson: data,
-    metadata: {
-      featureCount: data.features.length,
-    },
+    featureCount: data.features.length,
   };
 }
 
@@ -167,6 +175,9 @@ function refreshSourceUrl(layer: GeoLibreLayer): string | null {
   if (isWfsLayer(layer)) return url;
   if (layer.metadata.externalNativeLayer === true) return null;
 
+  // Layers added before sourceKind existed have no tag; treat any GeoJSON
+  // layer with an HTTP URL as refreshable unless it is explicitly tagged
+  // with a non-refreshable kind.
   const sourceKind =
     typeof layer.metadata.sourceKind === "string"
       ? layer.metadata.sourceKind
