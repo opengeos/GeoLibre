@@ -257,7 +257,6 @@ const COLORBAR_OPTIONS = {
   fontColor: "hsl(var(--popover-foreground))",
   maxHeight: 520,
   panelWidth: 320,
-  position: colorbarControlPosition,
 } satisfies ColorbarGuiControlOptions;
 
 const LEGEND_OPTIONS = {
@@ -267,7 +266,6 @@ const LEGEND_OPTIONS = {
   fontColor: "hsl(var(--popover-foreground))",
   maxHeight: 520,
   panelWidth: 320,
-  position: legendControlPosition,
 } satisfies LegendGuiControlOptions;
 
 const HTML_OPTIONS = {
@@ -277,7 +275,6 @@ const HTML_OPTIONS = {
   fontColor: "hsl(var(--popover-foreground))",
   maxHeight: 520,
   panelWidth: 340,
-  position: htmlControlPosition,
 } satisfies HtmlGuiControlOptions;
 
 const STAC_COLOR_RAMP_MODULE = {
@@ -775,7 +772,7 @@ const mountComponentsControl = (app: GeoLibreAppAPI): boolean => {
 export const maplibreComponentsPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-components",
   name: "Components",
-  version: "0.18.0",
+  version: "0.18.1",
   activate: (app: GeoLibreAppAPI) => {
     pluginActive = true;
     if (componentsControl) return mountComponentsControl(app);
@@ -870,12 +867,8 @@ export function openColorbarPanel(app: GeoLibreAppAPI): void {
   void openStandaloneColorbarControl(app);
 }
 
-export function closeColorbarPanel(app?: GeoLibreAppAPI): void {
-  if (app) {
-    teardownColorbarControl(app);
-    return;
-  }
-  hideColorbarControl();
+export function closeColorbarPanel(app: GeoLibreAppAPI): void {
+  teardownColorbarControl(app);
 }
 
 export function isColorbarPanelVisible(): boolean {
@@ -891,12 +884,8 @@ export function openLegendPanel(app: GeoLibreAppAPI): void {
   void openStandaloneLegendControl(app);
 }
 
-export function closeLegendPanel(app?: GeoLibreAppAPI): void {
-  if (app) {
-    teardownLegendControl(app);
-    return;
-  }
-  hideLegendControl();
+export function closeLegendPanel(app: GeoLibreAppAPI): void {
+  teardownLegendControl(app);
 }
 
 export function isLegendPanelVisible(): boolean {
@@ -912,12 +901,8 @@ export function openHtmlPanel(app: GeoLibreAppAPI): void {
   void openStandaloneHtmlControl(app);
 }
 
-export function closeHtmlPanel(app?: GeoLibreAppAPI): void {
-  if (app) {
-    teardownHtmlControl(app);
-    return;
-  }
-  hideHtmlControl();
+export function closeHtmlPanel(app: GeoLibreAppAPI): void {
+  teardownHtmlControl(app);
 }
 
 export function isHtmlPanelVisible(): boolean {
