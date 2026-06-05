@@ -93,7 +93,7 @@ let duckdbStoreUnsubscribe: (() => void) | null = null;
 let duckdbConstructorsPromise: Promise<{
   DuckDBControl: DuckDBControlConstructor;
 }> | null = null;
-let duckdbLayerOrder = new Map<string, number>();
+const duckdbLayerOrder = new Map<string, number>();
 const duckdbRenderedLayers = new Map<string, DuckDBRenderedLayerLike>();
 const duckdbRenderedRows = new Map<string, Record<number, Record<string, unknown>>>();
 const duckdbRenderedStyles = new Map<string, DuckDBRenderedStyle>();
@@ -320,20 +320,19 @@ function clearDuckDBRenderedLayers(): void {
 }
 
 function syncDuckDBRenderedLayersFromStore(layers: GeoLibreLayer[]): void {
-  duckdbLayerOrder = new Map(
-    layers
-      .filter(isDuckDBControlLayer)
-      .map((layer, index) => [layer.id, index]),
-  );
+  duckdbLayerOrder.clear();
+  layers
+    .filter(isDuckDBControlLayer)
+    .forEach((layer, index) => duckdbLayerOrder.set(layer.id, index));
 
   for (const layer of layers) {
     if (!isDuckDBControlLayer(layer)) continue;
 
     const renderedLayer = duckdbRenderedLayers.get(layer.id);
-    if (renderedLayer) {
-      renderedLayer.name = layer.name;
-      renderedLayer.beforeId = layer.beforeId ?? null;
-    }
+    if (!renderedLayer) continue;
+
+    renderedLayer.name = layer.name;
+    renderedLayer.beforeId = layer.beforeId ?? null;
 
     duckdbRenderedStyles.set(layer.id, {
       opacity: layer.opacity,
@@ -375,9 +374,15 @@ function patchDuckDBRenderer(renderer: DuckDBRendererLike | null | undefined) {
   if (renderer.setData && !renderer.__geolibreOriginalSetData) {
     renderer.__geolibreOriginalSetData = renderer.setData.bind(renderer);
     renderer.setData = (layers: DuckDBRenderedLayerLike[]) => {
-      renderer.__geolibreOriginalSetData?.(
-        [...layers].sort(compareDuckDBLayerOrder),
-      );
+      // The control's own follow-up renders (feature select, pickable
+      // toggle) pass only its current layer, which would wipe the other
+      // cached layers. Fold the fresh results into the cache and always
+      // render the full ordered set instead.
+      for (const incoming of layers) {
+        const cached = duckdbRenderedLayers.get(incoming.id);
+        if (cached) cached.results = incoming.results;
+      }
+      renderer.__geolibreOriginalSetData?.(getOrderedDuckDBRenderedLayers());
     };
   }
 
