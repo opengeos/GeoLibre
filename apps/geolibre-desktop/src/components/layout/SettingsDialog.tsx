@@ -464,9 +464,12 @@ export function SettingsDialog({
   };
 
   const updateSavedLayoutSettings = (patch: Partial<DesktopLayoutSettings>) => {
+    // Read the latest state synchronously so rapid successive toggles do not
+    // overwrite each other with a stale render-closure snapshot.
+    const current = useDesktopSettingsStore.getState().desktopSettings;
     setDesktopSettings({
-      ...desktopSettings,
-      layout: { ...desktopSettings.layout, ...patch },
+      ...current,
+      layout: { ...current.layout, ...patch },
     });
   };
 
@@ -570,13 +573,13 @@ export function SettingsDialog({
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="min-w-56">
               <DropdownMenuCheckboxItem
-                checked={!desktopSettings.layout.toolbarLabels}
+                checked={desktopSettings.layout.toolbarLabels}
                 onCheckedChange={(checked) =>
-                  updateSavedLayoutSettings({ toolbarLabels: checked !== true })
+                  updateSavedLayoutSettings({ toolbarLabels: checked === true })
                 }
                 onSelect={(event) => event.preventDefault()}
               >
-                Icon-only toolbar buttons
+                Show toolbar labels
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={desktopSettings.layout.showProjectInfo}
@@ -835,15 +838,15 @@ export function SettingsDialog({
                       <input
                         className="h-4 w-4"
                         type="checkbox"
-                        checked={!draftDesktopSettings.layout.toolbarLabels}
+                        checked={draftDesktopSettings.layout.toolbarLabels}
                         onChange={(event) =>
                           updateDraftLayoutSettings({
-                            toolbarLabels: !event.target.checked,
+                            toolbarLabels: event.target.checked,
                           })
                         }
                       />
                       <Type className="h-4 w-4 text-muted-foreground" />
-                      <span>Use icon-only toolbar buttons</span>
+                      <span>Show toolbar labels</span>
                     </label>
                     <label className="flex items-center gap-3 rounded-md border p-3 text-sm">
                       <input

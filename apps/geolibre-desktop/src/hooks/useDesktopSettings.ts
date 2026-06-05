@@ -64,23 +64,30 @@ function normalizeDesktopLayoutSettings(
     return DEFAULT_DESKTOP_LAYOUT_SETTINGS;
   }
 
+  // Require strict booleans so tampered localStorage values (e.g. "yes")
+  // cannot smuggle non-boolean values into the layout settings.
   const candidate = layout as Partial<DesktopLayoutSettings>;
   return {
     attributePanelVisible:
-      candidate.attributePanelVisible ??
-      DEFAULT_DESKTOP_LAYOUT_SETTINGS.attributePanelVisible,
+      typeof candidate.attributePanelVisible === "boolean"
+        ? candidate.attributePanelVisible
+        : DEFAULT_DESKTOP_LAYOUT_SETTINGS.attributePanelVisible,
     layerPanelVisible:
-      candidate.layerPanelVisible ??
-      DEFAULT_DESKTOP_LAYOUT_SETTINGS.layerPanelVisible,
+      typeof candidate.layerPanelVisible === "boolean"
+        ? candidate.layerPanelVisible
+        : DEFAULT_DESKTOP_LAYOUT_SETTINGS.layerPanelVisible,
     showProjectInfo:
-      candidate.showProjectInfo ??
-      DEFAULT_DESKTOP_LAYOUT_SETTINGS.showProjectInfo,
+      typeof candidate.showProjectInfo === "boolean"
+        ? candidate.showProjectInfo
+        : DEFAULT_DESKTOP_LAYOUT_SETTINGS.showProjectInfo,
     stylePanelVisible:
-      candidate.stylePanelVisible ??
-      DEFAULT_DESKTOP_LAYOUT_SETTINGS.stylePanelVisible,
+      typeof candidate.stylePanelVisible === "boolean"
+        ? candidate.stylePanelVisible
+        : DEFAULT_DESKTOP_LAYOUT_SETTINGS.stylePanelVisible,
     toolbarLabels:
-      candidate.toolbarLabels ??
-      DEFAULT_DESKTOP_LAYOUT_SETTINGS.toolbarLabels,
+      typeof candidate.toolbarLabels === "boolean"
+        ? candidate.toolbarLabels
+        : DEFAULT_DESKTOP_LAYOUT_SETTINGS.toolbarLabels,
   };
 }
 

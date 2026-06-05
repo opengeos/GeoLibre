@@ -8,7 +8,6 @@ export interface LayoutOptions {
   attributePanelVisible: boolean;
   compact: boolean;
   layerPanelVisible: boolean;
-  panelsVisible: boolean;
   showProjectInfo: boolean;
   stylePanelVisible: boolean;
   toolbarLabels: boolean;
@@ -22,7 +21,6 @@ const DEFAULT_LAYOUT_OPTIONS: LayoutOptions = {
   attributePanelVisible: true,
   compact: false,
   layerPanelVisible: true,
-  panelsVisible: true,
   showProjectInfo: true,
   stylePanelVisible: true,
   toolbarLabels: true,
@@ -40,14 +38,7 @@ function layoutOptionsFromLocation(
   layoutSettings: DesktopLayoutSettings,
 ): LayoutOptions {
   if (typeof window === "undefined") {
-    return {
-      ...DEFAULT_LAYOUT_OPTIONS,
-      ...layoutSettings,
-      panelsVisible:
-        layoutSettings.layerPanelVisible ||
-        layoutSettings.stylePanelVisible ||
-        layoutSettings.attributePanelVisible,
-    };
+    return { ...DEFAULT_LAYOUT_OPTIONS, ...layoutSettings };
   }
 
   const params = new URLSearchParams(window.location.search);
@@ -77,8 +68,6 @@ function layoutOptionsFromLocation(
     attributePanelVisible,
     compact,
     layerPanelVisible,
-    panelsVisible:
-      layerPanelVisible || stylePanelVisible || attributePanelVisible,
     showProjectInfo,
     stylePanelVisible,
     toolbarLabels,
