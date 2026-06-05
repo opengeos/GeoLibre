@@ -23,6 +23,12 @@ Or:
 geolibre-server
 ```
 
+## Test
+
+```bash
+python -m pytest
+```
+
 ## Whitebox runtime
 
 Whitebox tools use a dedicated GeoLibre-managed Python environment. On first

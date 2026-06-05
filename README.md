@@ -129,6 +129,20 @@ npm run build
 npm run tauri:build
 ```
 
+## Quality checks
+
+Run the fast TypeScript unit tests:
+
+```bash
+npm run test:frontend
+```
+
+Run the full local quality gate:
+
+```bash
+npm run ci
+```
+
 ## Optional Python sidecar
 
 ```bash

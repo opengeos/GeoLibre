@@ -10,6 +10,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+]
 whitebox = [
   "whitebox-workflows>=2.0.2",
 ]
@@ -32,3 +35,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["geolibre_server"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
