@@ -48,7 +48,10 @@ type DuckDBRenderedLayerLike = {
   results: DuckDBResultLike[];
 };
 
-type DuckDBInternalLayer = DuckDBRenderedLayerLike & {
+type DuckDBInternalLayer = Omit<DuckDBRenderedLayerLike, "results"> & {
+  // The control's internal layer stores its tables as geoArrowResults;
+  // results only exists on the objects passed to the renderer.
+  results?: DuckDBResultLike[];
   geoArrowResults?: DuckDBResultLike[];
   geometryColumn?: string | null;
   geometryFormat?: string | null;
@@ -175,8 +178,9 @@ function createDuckDBControl(
     }
 
     if (
+      !shouldSyncControl &&
       duckdbLayerOrderSignature(state.layers) !==
-      duckdbLayerOrderSignature(previous.layers)
+        duckdbLayerOrderSignature(previous.layers)
     ) {
       shouldSyncControl = true;
     }
@@ -252,12 +256,14 @@ function createDuckDBStateChangeHandler(): DuckDBControlEventHandler {
     if (event.state.layer) return;
 
     const store = useAppStore.getState();
+    // Clear the caches first so the per-removal subscription syncs render
+    // an empty set instead of flashing the remaining layers n-1 times.
+    clearDuckDBRenderedLayers();
     for (const layer of store.layers) {
       if (isDuckDBControlLayer(layer)) {
         store.removeLayer(layer.id);
       }
     }
-    clearDuckDBRenderedLayers();
   };
 }
 
