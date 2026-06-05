@@ -121,9 +121,9 @@ const pmtilesControlPosition: GeoLibreMapControlPosition = "top-left";
 const searchControlPosition: GeoLibreMapControlPosition = "top-right";
 const stacSearchControlPosition: GeoLibreMapControlPosition = "top-left";
 const zarrControlPosition: GeoLibreMapControlPosition = "top-left";
-const colorbarControlPosition: GeoLibreMapControlPosition = "top-right";
-const legendControlPosition: GeoLibreMapControlPosition = "top-right";
-const htmlControlPosition: GeoLibreMapControlPosition = "top-right";
+const colorbarControlPosition: GeoLibreMapControlPosition = "top-left";
+const legendControlPosition: GeoLibreMapControlPosition = "top-left";
+const htmlControlPosition: GeoLibreMapControlPosition = "top-left";
 const lidarControlPosition: GeoLibreMapControlPosition = "top-left";
 const splattingControlPosition: GeoLibreMapControlPosition = "top-left";
 
@@ -870,7 +870,11 @@ export function openColorbarPanel(app: GeoLibreAppAPI): void {
   void openStandaloneColorbarControl(app);
 }
 
-export function closeColorbarPanel(): void {
+export function closeColorbarPanel(app?: GeoLibreAppAPI): void {
+  if (app) {
+    teardownColorbarControl(app);
+    return;
+  }
   hideColorbarControl();
 }
 
@@ -887,7 +891,11 @@ export function openLegendPanel(app: GeoLibreAppAPI): void {
   void openStandaloneLegendControl(app);
 }
 
-export function closeLegendPanel(): void {
+export function closeLegendPanel(app?: GeoLibreAppAPI): void {
+  if (app) {
+    teardownLegendControl(app);
+    return;
+  }
   hideLegendControl();
 }
 
@@ -904,7 +912,11 @@ export function openHtmlPanel(app: GeoLibreAppAPI): void {
   void openStandaloneHtmlControl(app);
 }
 
-export function closeHtmlPanel(): void {
+export function closeHtmlPanel(app?: GeoLibreAppAPI): void {
+  if (app) {
+    teardownHtmlControl(app);
+    return;
+  }
   hideHtmlControl();
 }
 
@@ -1105,12 +1117,12 @@ async function openStandaloneColorbarControl(
       return false;
     }
     colorbarControlMounted = true;
+    setColorbarPanelVisible(true);
   }
 
   setTimeout(() => {
     colorbarControl?.show();
     colorbarControl?.expand();
-    setColorbarPanelVisible(true);
   }, 0);
   return true;
 }
@@ -1130,12 +1142,12 @@ async function openStandaloneLegendControl(
       return false;
     }
     legendControlMounted = true;
+    setLegendPanelVisible(true);
   }
 
   setTimeout(() => {
     legendControl?.show();
     legendControl?.expand();
-    setLegendPanelVisible(true);
   }, 0);
   return true;
 }
@@ -1155,12 +1167,12 @@ async function openStandaloneHtmlControl(
       return false;
     }
     htmlControlMounted = true;
+    setHtmlPanelVisible(true);
   }
 
   setTimeout(() => {
     htmlControl?.show();
     htmlControl?.expand();
-    setHtmlPanelVisible(true);
   }, 0);
   return true;
 }
@@ -1489,7 +1501,6 @@ function createColorbarControl(
   ColorbarGuiControlClass: ColorbarGuiControlConstructor,
 ): ColorbarGuiControl {
   const control = new ColorbarGuiControlClass(COLORBAR_OPTIONS);
-  control.on("collapse", () => setColorbarPanelVisible(false));
   return control;
 }
 
@@ -1497,7 +1508,6 @@ function createLegendControl(
   LegendGuiControlClass: LegendGuiControlConstructor,
 ): LegendGuiControl {
   const control = new LegendGuiControlClass(LEGEND_OPTIONS);
-  control.on("collapse", () => setLegendPanelVisible(false));
   return control;
 }
 
@@ -1505,7 +1515,6 @@ function createHtmlControl(
   HtmlGuiControlClass: HtmlGuiControlConstructor,
 ): HtmlGuiControl {
   const control = new HtmlGuiControlClass(HTML_OPTIONS);
-  control.on("collapse", () => setHtmlPanelVisible(false));
   return control;
 }
 

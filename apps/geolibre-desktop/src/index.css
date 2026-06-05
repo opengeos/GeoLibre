@@ -1109,6 +1109,64 @@ body,
   color: #111827;
 }
 
+.geolibre-colorbar-control,
+.geolibre-legend-control,
+.geolibre-html-control {
+  --maplibre-gl-gui-border-color: hsl(var(--border));
+  --maplibre-gl-gui-focus-color: hsl(var(--ring));
+  --maplibre-gl-gui-hover-background: hsl(var(--secondary));
+  --maplibre-gl-gui-input-background: hsl(var(--background));
+  --maplibre-gl-gui-input-color: hsl(var(--foreground));
+  --maplibre-gl-gui-muted-color: hsl(var(--muted-foreground));
+  --maplibre-gl-gui-placeholder-color: hsl(var(--muted-foreground));
+  color: hsl(var(--popover-foreground)) !important;
+}
+
+.dark .geolibre-colorbar-control,
+.dark .geolibre-legend-control,
+.dark .geolibre-html-control,
+.dark .geolibre-colorbar-control .colorbar-gui-input,
+.dark .geolibre-colorbar-control .colorbar-gui-select,
+.dark .geolibre-colorbar-control .colorbar-gui-textarea,
+.dark .geolibre-legend-control .legend-gui-input,
+.dark .geolibre-legend-control .legend-gui-select,
+.dark .geolibre-legend-control .legend-gui-textarea,
+.dark .geolibre-html-control .html-gui-input,
+.dark .geolibre-html-control .html-gui-select,
+.dark .geolibre-html-control .html-gui-textarea {
+  color-scheme: dark;
+}
+
+.geolibre-colorbar-control .colorbar-gui-input,
+.geolibre-colorbar-control .colorbar-gui-select,
+.geolibre-colorbar-control .colorbar-gui-textarea,
+.geolibre-legend-control .legend-gui-input,
+.geolibre-legend-control .legend-gui-select,
+.geolibre-legend-control .legend-gui-textarea,
+.geolibre-html-control .html-gui-input,
+.geolibre-html-control .html-gui-select,
+.geolibre-html-control .html-gui-textarea {
+  background: var(--maplibre-gl-gui-input-background) !important;
+  border-color: var(--maplibre-gl-gui-border-color) !important;
+  color: var(--maplibre-gl-gui-input-color) !important;
+}
+
+.geolibre-colorbar-control .colorbar-gui-input::placeholder,
+.geolibre-colorbar-control .colorbar-gui-textarea::placeholder,
+.geolibre-legend-control .legend-gui-input::placeholder,
+.geolibre-legend-control .legend-gui-textarea::placeholder,
+.geolibre-html-control .html-gui-input::placeholder,
+.geolibre-html-control .html-gui-textarea::placeholder {
+  color: var(--maplibre-gl-gui-placeholder-color) !important;
+}
+
+.geolibre-colorbar-control .colorbar-gui-select option,
+.geolibre-legend-control .legend-gui-select option,
+.geolibre-html-control .html-gui-select option {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
 .geolibre-components-control input[type="radio"] {
   appearance: none;
   background-color: #fff;

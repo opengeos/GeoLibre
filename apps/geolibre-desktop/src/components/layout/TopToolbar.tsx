@@ -405,7 +405,7 @@ export function TopToolbar({
   );
   const handleToggleColorbarPanel = () => {
     if (colorbarPanelVisible) {
-      closeColorbarPanel();
+      closeColorbarPanel(appApi);
       return;
     }
     openColorbarPanel(appApi);
@@ -417,7 +417,7 @@ export function TopToolbar({
   );
   const handleToggleLegendPanel = () => {
     if (legendPanelVisible) {
-      closeLegendPanel();
+      closeLegendPanel(appApi);
       return;
     }
     openLegendPanel(appApi);
@@ -429,7 +429,7 @@ export function TopToolbar({
   );
   const handleToggleHtmlPanel = () => {
     if (htmlPanelVisible) {
-      closeHtmlPanel();
+      closeHtmlPanel(appApi);
       return;
     }
     openHtmlPanel(appApi);
