@@ -5,8 +5,11 @@
 node_modules
 **/node_modules
 apps/geolibre-desktop/dist
-apps/geolibre-desktop/src-tauri/target
-backend/geolibre_server/.venv
+apps/geolibre-desktop/src-tauri
+backend
+workers
+docs
+sample-data
 coverage
 dist
 build

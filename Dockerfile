@@ -2,6 +2,9 @@ FROM node:22-alpine AS build
 
 WORKDIR /app
 
+# Copy every workspace member's package.json before npm ci so the install
+# layer is cached. Adding a new package under apps/ or packages/ requires
+# adding its package.json here, or npm ci fails with a missing workspace.
 COPY package.json package-lock.json ./
 COPY apps/geolibre-desktop/package.json apps/geolibre-desktop/package.json
 COPY packages/core/package.json packages/core/package.json
