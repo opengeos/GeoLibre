@@ -1560,6 +1560,10 @@ body,
 }
 
 @media (max-width: 639px) {
+  /* On narrow screens the Layout submenu can be wider than the space Radix
+     has between the trigger and the viewport edge. Shift it left by the
+     shortfall (Radix reports it via the available-width variable) plus an
+     8px edge buffer so the submenu stays fully visible. */
   .geolibre-layout-submenu {
     margin-left: max(
       0px,
