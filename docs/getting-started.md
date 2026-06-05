@@ -52,6 +52,8 @@ For deployments under a URL subpath, pass the app base at build time:
 docker build --build-arg GEOLIBRE_APP_BASE=/geolibre/ -t geolibre .
 ```
 
+The container always serves the app from its root path. The build argument only sets the URL prefix that the app expects, so subpath deployments also require a reverse proxy in front of the container that strips the prefix before forwarding requests (for example, nginx `proxy_pass http://geolibre/;` with a trailing slash).
+
 ## Run the desktop app
 
 ```bash
