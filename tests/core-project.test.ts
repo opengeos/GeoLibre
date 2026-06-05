@@ -133,6 +133,7 @@ describe("project parsing", () => {
 describe("app store", () => {
   beforeEach(() => {
     useAppStore.getState().newProject({ name: "Test Project" });
+    useAppStore.getState().clearRecentProjects();
   });
 
   it("adds, selects, moves, and removes layers consistently", () => {
