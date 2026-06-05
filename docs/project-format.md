@@ -104,7 +104,8 @@ Manual refresh uses the same saved source URL without requiring this metadata.
 | `lidar`          | Supported through the Components plugin                                                            |
 | `gaussian-splat` | Supported through the Components plugin                                                            |
 | `geoparquet`     | Imported as GeoJSON via DuckDB-WASM                                                                |
-| `duckdb-query`   | Supported for SQL query-result layers                                                              |
+| `duckdb-query`   | Supported for SQL query-result layers                                              |
+| `3d-tiles`       | Supported through the `maplibre-gl-3d-tiles` plugin                               |
 
 ## Example
 
