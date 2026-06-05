@@ -720,6 +720,13 @@ def _coerce_value(value: Any, kind: str) -> Any:
     return value
 
 
+# Catalog wording that marks a dataset input as batch-capable. Whitebox tool
+# descriptions read "... If omitted, runs in batch mode over all ... files in
+# current directory." If a catalog release rephrases this, directory values
+# fall through to normal argument coercion instead of enabling batch mode.
+_BATCH_DESCRIPTION_PHRASES = ("batch mode", "current directory", "omitted")
+
+
 def _is_batch_directory_input(param: dict[str, Any]) -> bool:
     """Return whether a parameter supports directory-backed batch mode.
 
@@ -732,11 +739,8 @@ def _is_batch_directory_input(param: dict[str, Any]) -> bool:
     """
     kind = str(param.get("kind") or "")
     description = str(param.get("description") or "").lower()
-    return (
-        kind.endswith("_in")
-        and "batch mode" in description
-        and "current directory" in description
-        and "omitted" in description
+    return kind.endswith("_in") and all(
+        phrase in description for phrase in _BATCH_DESCRIPTION_PHRASES
     )
 
 
@@ -748,15 +752,19 @@ def _batch_working_directory(value: Any, param: dict[str, Any]) -> str | None:
         param: Normalized Whitebox parameter metadata.
 
     Returns:
-        The selected directory path when the value should trigger batch mode,
-        otherwise None.
+        The normalized directory path when the value should trigger batch
+        mode, otherwise None.
     """
     if not _is_batch_directory_input(param) or not isinstance(value, str):
         return None
     path = Path(value).expanduser()
-    if path.is_dir():
-        return str(path)
-    return None
+    # Require an absolute, non-symlinked directory (matching the symlink
+    # policy of whitebox_output) and normalize it so the single-directory
+    # comparison in _prepare_arguments is not defeated by lexical variants
+    # such as /data/./a.
+    if not path.is_absolute() or path.is_symlink() or not path.is_dir():
+        return None
+    return str(path.resolve())
 
 
 def _write_layer_input(param_name: str, layer: dict[str, Any], temp_paths: list[Path]) -> str:
