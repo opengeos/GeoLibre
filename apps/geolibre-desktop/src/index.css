@@ -1533,6 +1533,7 @@ body,
   .duckdb-control-panel,
   .geoparquet-control-panel {
     box-sizing: border-box;
+    max-height: calc(100vh - 96px) !important;
     max-height: calc(100dvh - 96px) !important;
     max-width: calc(100vw - 20px) !important;
     overflow-y: auto;
@@ -1547,6 +1548,7 @@ body,
 
   .duckdb-control-content,
   .geoparquet-control-content {
+    max-height: calc(100vh - 170px);
     max-height: calc(100dvh - 170px);
   }
 
