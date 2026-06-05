@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useShallow } from "zustand/react/shallow";
 import {
   useDesktopSettingsStore,
   type DesktopLayoutSettings,
@@ -17,17 +18,12 @@ const COMPACT_LAYOUT_VALUES = new Set(["compact", "embed", "iframe"]);
 const ICON_TOOLBAR_VALUES = new Set(["icon", "icons", "icon-only"]);
 const HIDDEN_PANEL_VALUES = new Set(["hidden", "hide", "none", "off"]);
 
-const DEFAULT_LAYOUT_OPTIONS: LayoutOptions = {
-  attributePanelVisible: true,
-  compact: false,
-  layerPanelVisible: true,
-  showProjectInfo: true,
-  stylePanelVisible: true,
-  toolbarLabels: true,
-};
-
 export function useLayoutOptions(): LayoutOptions {
-  const layoutSettings = useDesktopSettingsStore((s) => s.desktopSettings.layout);
+  // Shallow equality keeps unrelated desktop-settings updates (which always
+  // rebuild the layout object) from re-rendering every layout consumer.
+  const layoutSettings = useDesktopSettingsStore(
+    useShallow((s) => s.desktopSettings.layout),
+  );
   return useMemo(
     () => layoutOptionsFromLocation(layoutSettings),
     [layoutSettings],
@@ -38,7 +34,7 @@ function layoutOptionsFromLocation(
   layoutSettings: DesktopLayoutSettings,
 ): LayoutOptions {
   if (typeof window === "undefined") {
-    return { ...DEFAULT_LAYOUT_OPTIONS, ...layoutSettings };
+    return { compact: false, ...layoutSettings };
   }
 
   const params = new URLSearchParams(window.location.search);
