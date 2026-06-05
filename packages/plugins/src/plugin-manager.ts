@@ -124,12 +124,17 @@ export class PluginManager {
     app: GeoLibreAppAPI,
     contextKey = params.toString(),
   ): Promise<void> {
-    if (params.size === 0) return;
+    // An empty serialization means no parameters. params.size would be more
+    // direct but is unavailable in older webviews (pre-Safari 17 WKWebView).
+    if (!params.toString()) return;
 
     // Dedup state is kept per context so overlapping async calls with
     // different context keys cannot clear each other's in-flight entries.
     // Only the most recent contexts matter, so older ones are evicted to keep
-    // the map bounded for the lifetime of the page.
+    // the map bounded for the lifetime of the page. If more than
+    // MAX_HANDLED_URL_CONTEXTS contexts ever overlapped concurrently, the
+    // oldest could be evicted while still in flight and re-run on a repeat
+    // dispatch; that much overlap is not expected in practice.
     let handledPluginIds = this.handledUrlParametersByContext.get(contextKey);
     if (!handledPluginIds) {
       handledPluginIds = new Set();

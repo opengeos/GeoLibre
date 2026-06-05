@@ -148,6 +148,74 @@ describe("PluginManager URL parameters", () => {
     assert.deepEqual(calls, ["working"]);
   });
 
+  it("ignores calls without any URL parameters", async () => {
+    const calls: string[] = [];
+    const manager = new PluginManager();
+
+    manager.register(
+      testPlugin({
+        urlParameterNames: ["data"],
+        handleUrlParameters: () => {
+          calls.push("handled");
+        },
+      }),
+    );
+    manager.activate("url-loader", app);
+
+    await manager.handleUrlParameters(new URLSearchParams(""), app, "ctx");
+
+    assert.deepEqual(calls, []);
+  });
+
+  it("evicts the oldest context once the retained context limit is exceeded", async () => {
+    const calls: string[] = [];
+    const manager = new PluginManager();
+
+    manager.register(
+      testPlugin({
+        urlParameterNames: ["data"],
+        handleUrlParameters: (_app, params) => {
+          calls.push(params.get("data") ?? "");
+        },
+      }),
+    );
+    manager.activate("url-loader", app);
+
+    // Handle the first context, then push it out of the bounded dedup map
+    // with eight newer contexts (MAX_HANDLED_URL_CONTEXTS = 8).
+    await manager.handleUrlParameters(
+      new URLSearchParams("data=first"),
+      app,
+      "ctx-first",
+    );
+    for (let i = 0; i < 8; i += 1) {
+      await manager.handleUrlParameters(
+        new URLSearchParams(`data=${i}`),
+        app,
+        `ctx-${i}`,
+      );
+    }
+    // The evicted context is treated as new again and re-runs the handler.
+    await manager.handleUrlParameters(
+      new URLSearchParams("data=first"),
+      app,
+      "ctx-first",
+    );
+
+    assert.deepEqual(calls, [
+      "first",
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "first",
+    ]);
+  });
+
   it("keeps dedup state for overlapping calls with different contexts", async () => {
     const calls: string[] = [];
     const resolvers: Array<() => void> = [];
