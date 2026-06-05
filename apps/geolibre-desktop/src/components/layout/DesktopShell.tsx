@@ -310,6 +310,12 @@ const PythonConsolePanel = lazy(() =>
     }),
 );
 
+const OpenEODialog = lazy(() =>
+  import("../openeo/OpenEODialog").then((module) => ({
+    default: module.OpenEODialog,
+  })),
+);
+
 interface DesktopShellProps {
   layoutOptions: LayoutOptions;
   projectUrlLoadState?: ProjectUrlLoadState;
@@ -489,6 +495,7 @@ export function DesktopShell({
   const [dropMessage, setDropMessage] = useState<string | null>(null);
   const [dropError, setDropError] = useState<string | null>(null);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [openEOOpen, setOpenEOOpen] = useState(false);
   const diagnostics = useDiagnosticsSnapshot();
   const externalPluginsReady = useExternalPluginsReady(mapControllerRef);
   // Sync the project with an embedding host (the GeoLibre Jupyter widget) over
@@ -1370,6 +1377,7 @@ export function DesktopShell({
             showProjectInfo={layoutOptions.showProjectInfo}
             themeMode={themeMode}
             onOpenDiagnostics={() => setDiagnosticsOpen(true)}
+            onOpenOpenEO={() => setOpenEOOpen(true)}
             onToggleThemeMode={onToggleThemeMode}
           />
         </SectionErrorBoundary>
@@ -1538,6 +1546,7 @@ export function DesktopShell({
             await addRasterToMap(createAppAPI(mapControllerRef), file, { name });
           }}
         />
+        <OpenEODialog open={openEOOpen} onOpenChange={setOpenEOOpen} />
       </Suspense>
       <Suspense fallback={null}>
         <ConversionDialog />

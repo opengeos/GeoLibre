@@ -26,6 +26,7 @@ interface ProcessingMenuProps {
   onOpenNetworkTool: (kind: NetworkToolKind) => void;
   onOpenPlanetaryComputer: () => void;
   onOpenGeoreferencer: () => void;
+  onOpenOpenEO: () => void;
 }
 
 /** The Processing menu: assistant, toolboxes, conversion/vector/network/statistics/raster submenus. */
@@ -35,6 +36,7 @@ export function ProcessingMenu({
   onOpenNetworkTool,
   onOpenPlanetaryComputer,
   onOpenGeoreferencer,
+  onOpenOpenEO,
 }: ProcessingMenuProps) {
   const { t } = useTranslation();
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
@@ -445,6 +447,11 @@ export function ProcessingMenu({
           <DropdownMenuItem onSelect={earthEnginePanel.toggle}>
             {t("toolbar.command.earthEngine")}
             {earthEnginePanel.visible ? " ✓" : ""}
+          </DropdownMenuItem>
+        )}
+        {show("processing.openeo") && (
+          <DropdownMenuItem onSelect={onOpenOpenEO}>
+            {t("toolbar.command.openeo")}
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>

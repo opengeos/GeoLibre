@@ -1017,6 +1017,7 @@
       "modelBuilder": "Batch & Models",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
+      "openeo": "openEO",
       "segmentation": "AI Segmentation",
       "toggleControl": "Toggle {{name}} Control",
       "toggleAtmosphereEffects": "Toggle Atmospheric Effects",

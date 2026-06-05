@@ -137,6 +137,7 @@ interface TopToolbarProps {
   showProjectInfo?: boolean;
   themeMode: ThemeMode;
   onOpenDiagnostics: () => void;
+  onOpenOpenEO: () => void;
   onToggleThemeMode: () => void;
 }
 
@@ -149,6 +150,7 @@ export function TopToolbar({
   showProjectInfo = true,
   themeMode,
   onOpenDiagnostics,
+  onOpenOpenEO,
   onToggleThemeMode,
 }: TopToolbarProps) {
   const { t } = useTranslation();
@@ -901,6 +903,7 @@ export function TopToolbar({
           onOpenNetworkTool={consent.openNetworkTool}
           onOpenPlanetaryComputer={handleOpenPlanetaryComputer}
           onOpenGeoreferencer={() => setGeoreferencerOpen(true)}
+          onOpenOpenEO={onOpenOpenEO}
         />
       )}
       {isMenuVisible(uiProfile, "controls") && (
