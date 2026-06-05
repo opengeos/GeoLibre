@@ -1557,6 +1557,15 @@ body,
   }
 }
 
+@media (max-width: 639px) {
+  .geolibre-layout-submenu {
+    margin-left: max(
+      0px,
+      calc(100% - var(--radix-dropdown-menu-content-available-width) + 8px)
+    );
+  }
+}
+
 .geolibre-identify-popup.maplibregl-popup-anchor-left .maplibregl-popup-tip {
   border-right-color: hsl(var(--popover));
 }
