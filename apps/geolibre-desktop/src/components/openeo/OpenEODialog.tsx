@@ -104,6 +104,11 @@ const DEFAULT_COLLECTION = "COPERNICUS/S1_GRD";
 const DEFAULT_BANDS = "VV,VH";
 const DEFAULT_OUTPUT_FORMAT = "GTiff";
 const CONNECT_TIMEOUT_MS = 30_000;
+const OPERATION_TIMEOUT_MS = 60_000;
+// Synchronous processing can legitimately take several minutes.
+const SYNC_RESULT_TIMEOUT_MS = 300_000;
+const MAX_LIST_ITEMS = 24;
+const MAX_JOB_ITEMS = 20;
 
 function withTimeout<T>(
   promise: Promise<T>,
@@ -155,6 +160,12 @@ function buildBoundingBox(values: {
   if (bbox.south >= bbox.north) {
     throw new Error("South must be less than north.");
   }
+  if (bbox.west < -180 || bbox.east > 180) {
+    throw new Error("Longitude must be between -180 and 180.");
+  }
+  if (bbox.south < -90 || bbox.north > 90) {
+    throw new Error("Latitude must be between -90 and 90.");
+  }
   return bbox;
 }
 
@@ -163,15 +174,13 @@ function filterByQuery<T extends { id?: string; title?: string; summary?: string
   query: string,
 ): T[] {
   const normalizedQuery = query.trim().toLowerCase();
-  if (!normalizedQuery) return values.slice(0, 24);
+  if (!normalizedQuery) return values;
 
-  return values
-    .filter((value) =>
-      [value.id, value.title, value.summary]
-        .filter(Boolean)
-        .some((text) => text!.toLowerCase().includes(normalizedQuery)),
-    )
-    .slice(0, 24);
+  return values.filter((value) =>
+    [value.id, value.title, value.summary]
+      .filter(Boolean)
+      .some((text) => text!.toLowerCase().includes(normalizedQuery)),
+  );
 }
 
 function formatError(error: unknown): string {
@@ -224,14 +233,16 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const visibleCollections = useMemo(
+  const filteredCollections = useMemo(
     () => filterByQuery(collections, collectionQuery),
     [collections, collectionQuery],
   );
-  const visibleProcesses = useMemo(
+  const filteredProcesses = useMemo(
     () => filterByQuery(processes, processQuery),
     [processes, processQuery],
   );
+  const visibleCollections = filteredCollections.slice(0, MAX_LIST_ITEMS);
+  const visibleProcesses = filteredProcesses.slice(0, MAX_LIST_ITEMS);
 
   const isBusy = busyAction !== null;
 
@@ -274,10 +285,14 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
         `Connected to API ${nextCapabilities.apiVersion() || "unknown"}.`,
       );
 
-      const [collectionResponse, processResponse] = await Promise.all([
-        nextConnection.listCollections(),
-        nextConnection.listProcesses(),
-      ]);
+      const [collectionResponse, processResponse] = await withTimeout(
+        Promise.all([
+          nextConnection.listCollections(),
+          nextConnection.listProcesses(),
+        ]),
+        OPERATION_TIMEOUT_MS,
+        "Loading collections and processes timed out.",
+      );
       setConnection(nextConnection);
       setCapabilities(nextCapabilities);
       const nextCollections = collectionResponse.collections ?? [];
@@ -336,12 +351,17 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
     try {
       if (!connection) throw new Error("Connect to an openEO backend first.");
       const process = await buildProcess();
-      const job = await connection.createJob(
-        process,
-        jobTitle.trim() || "GeoLibre openEO job",
+      const job = await withTimeout(
+        connection.createJob(process, jobTitle.trim() || "GeoLibre openEO job"),
+        OPERATION_TIMEOUT_MS,
+        "Creating the batch job timed out.",
       );
       if (startImmediately) {
-        await job.startJob();
+        await withTimeout(
+          job.startJob(),
+          OPERATION_TIMEOUT_MS,
+          "Starting the batch job timed out.",
+        );
       }
       setStatusMessage(
         startImmediately
@@ -365,9 +385,17 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
     try {
       if (!connection) throw new Error("Connect to an openEO backend first.");
       const process = await buildProcess();
-      await connection.downloadResult(
-        process,
-        downloadFilename.trim() || "openeo-result.tif",
+      await withTimeout(
+        connection.downloadResult(
+          process,
+          // Strip path separators so the value is always a bare filename.
+          (downloadFilename.trim() || "openeo-result.tif").replace(
+            /[\\/]/g,
+            "_",
+          ),
+        ),
+        SYNC_RESULT_TIMEOUT_MS,
+        "The synchronous result request timed out.",
       );
       setStatusMessage("Synchronous result request completed.");
     } catch (error) {
@@ -383,7 +411,13 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
     setBusyAction("jobs");
     setErrorMessage(null);
     try {
-      setJobs(await activeConnection.listJobs());
+      setJobs(
+        await withTimeout(
+          activeConnection.listJobs(),
+          OPERATION_TIMEOUT_MS,
+          "Loading jobs timed out.",
+        ),
+      );
     } catch (error) {
       setErrorMessage(formatError(error));
     } finally {
@@ -542,9 +576,17 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                       ))
                     ) : (
                       <p className="p-3 text-sm text-muted-foreground">
-                        Connect to a backend to load collections.
+                        {connection
+                          ? "No collections match the search."
+                          : "Connect to a backend to load collections."}
                       </p>
                     )}
+                    {filteredCollections.length > MAX_LIST_ITEMS ? (
+                      <p className="p-3 text-xs text-muted-foreground">
+                        Showing {MAX_LIST_ITEMS} of {filteredCollections.length}{" "}
+                        collections. Refine the search to narrow the list.
+                      </p>
+                    ) : null}
                   </div>
                 </div>
 
@@ -576,9 +618,17 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                       ))
                     ) : (
                       <p className="p-3 text-sm text-muted-foreground">
-                        Connect to a backend to load processes.
+                        {connection
+                          ? "No processes match the search."
+                          : "Connect to a backend to load processes."}
                       </p>
                     )}
+                    {filteredProcesses.length > MAX_LIST_ITEMS ? (
+                      <p className="p-3 text-xs text-muted-foreground">
+                        Showing {MAX_LIST_ITEMS} of {filteredProcesses.length}{" "}
+                        processes. Refine the search to narrow the list.
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               </section>
@@ -785,7 +835,7 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                 </div>
                 <div className="rounded-md border">
                   {jobs.length ? (
-                    jobs.slice(0, 20).map((job) => (
+                    jobs.slice(0, MAX_JOB_ITEMS).map((job) => (
                       <div
                         key={job.id}
                         className="grid gap-1 border-b px-3 py-2 text-sm md:grid-cols-[minmax(0,1fr)_8rem_10rem]"
@@ -806,6 +856,11 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                       No jobs loaded.
                     </p>
                   )}
+                  {jobs.length > MAX_JOB_ITEMS ? (
+                    <p className="p-3 text-xs text-muted-foreground">
+                      Showing {MAX_JOB_ITEMS} of {jobs.length} jobs.
+                    </p>
+                  ) : null}
                 </div>
               </section>
             </div>
