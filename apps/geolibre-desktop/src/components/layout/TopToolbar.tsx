@@ -56,6 +56,7 @@ import {
   Layers,
   Link2,
   Map,
+  MessageSquare,
   Moon,
   Puzzle,
   RefreshCw,
@@ -65,6 +66,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { type FormEvent, useRef, useState, useSyncExternalStore } from "react";
 import {
   createAppAPI,
@@ -124,6 +126,16 @@ const PLUGIN_POSITION_ITEMS: Array<{
   { value: "bottom-left", label: "Bottom left" },
   { value: "bottom-right", label: "Bottom right" },
 ];
+
+const FEEDBACK_URL = "https://github.com/opengeos/GeoLibre/issues";
+
+async function openExternalLink(url: string): Promise<void> {
+  if (isTauri()) {
+    await openUrl(url);
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
+}
 
 function formatRecentProjectTime(openedAt: string): string {
   const openedDate = new Date(openedAt);
@@ -740,6 +752,12 @@ export function TopToolbar({
                 {diagnosticsErrorCount}
               </span>
             ) : null}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => void openExternalLink(FEEDBACK_URL)}
+          >
+            <MessageSquare className="mr-2 h-3.5 w-3.5" />
+            Give feedback
           </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={() => {
