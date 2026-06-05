@@ -209,6 +209,10 @@ function createDuckDBQueryHandler(): DuckDBControlEventHandler {
     const layer = createDuckDBStoreLayer(event.state, nextLayerState);
 
     if (controlLayer) {
+      // Rename the control's internal layer to the unique query layer id so
+      // its own follow-up renders and feature-select calls stay keyed to the
+      // same id as the cached layer below. The renderer rebuilds all deck
+      // layers from scratch on every setData call, so the rename is safe.
       controlLayer.id = queryLayerId;
       controlLayer.name = queryLayerName;
       duckdbRenderedLayers.set(layer.id, {
@@ -218,10 +222,20 @@ function createDuckDBQueryHandler(): DuckDBControlEventHandler {
         results: controlLayer.results ?? controlLayer.geoArrowResults ?? [],
       });
       duckdbRenderedRows.set(layer.id, controlLayer.rows ?? {});
+    } else if (import.meta.env.DEV) {
+      console.warn(
+        `DuckDB query completed before the control layer was ready; layer ${queryLayerId} will not render.`,
+      );
     }
 
+    // Seed the style before addLayer so the store subscription's sync render
+    // already picks it up, avoiding a second back-to-back render.
+    duckdbRenderedStyles.set(layer.id, {
+      opacity: layer.opacity,
+      style: layer.style,
+      visible: layer.visible,
+    });
     store.addLayer(layer);
-    setDuckDBRenderedLayerStyle(layer);
   };
 }
 
@@ -242,7 +256,6 @@ function createDuckDBStateChangeHandler(): DuckDBControlEventHandler {
 function createDuckDBStoreLayer(
   state: DuckDBState,
   layerState: DuckDBLayerState,
-  existingLayer?: GeoLibreLayer,
 ): GeoLibreLayer {
   return {
     id: layerState.id,
@@ -254,10 +267,10 @@ function createDuckDBStoreLayer(
       query: layerState.query,
       type: "duckdb",
     },
-    visible: existingLayer?.visible ?? true,
-    opacity: existingLayer?.opacity ?? 1,
-    style: existingLayer?.style ?? { ...DEFAULT_LAYER_STYLE },
-    beforeId: layerState.beforeId ?? existingLayer?.beforeId,
+    visible: true,
+    opacity: 1,
+    style: { ...DEFAULT_LAYER_STYLE },
+    beforeId: layerState.beforeId,
     metadata: {
       columns: layerState.schema,
       databaseSource: state.databaseSource,
@@ -293,15 +306,6 @@ function clearDuckDBRenderedLayers(): void {
   duckdbRenderedStyles.clear();
   warnedMissingRowsLayerIds.clear();
   getMutableDuckDBControl().renderer?.clear?.();
-}
-
-function setDuckDBRenderedLayerStyle(layer: GeoLibreLayer): void {
-  duckdbRenderedStyles.set(layer.id, {
-    opacity: layer.opacity,
-    style: layer.style,
-    visible: layer.visible,
-  });
-  renderDuckDBCachedLayers();
 }
 
 function syncDuckDBRenderedLayersFromStore(layers: GeoLibreLayer[]): void {
