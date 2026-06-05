@@ -503,23 +503,32 @@ let htmlPanelVisible = false;
 const htmlPanelListeners = new Set<() => void>();
 
 function constrainGuiPanelToViewport(panelSelector: string): void {
-  const panel = document.querySelector<HTMLElement>(panelSelector);
-  if (!panel) return;
+  // Defer measurement until after the expanded panel has been laid out so
+  // getBoundingClientRect() reflects the fully expanded dimensions.
+  requestAnimationFrame(() => {
+    const panel = document.querySelector<HTMLElement>(panelSelector);
+    if (!panel) return;
 
-  const rect = panel.getBoundingClientRect();
-  const availableHeight = Math.floor(
-    window.innerHeight - rect.top - GUI_PANEL_VIEWPORT_MARGIN,
-  );
-  if (availableHeight > 160 && rect.bottom > window.innerHeight) {
-    panel.style.maxHeight = `${availableHeight}px`;
-  }
+    // Clear previously-applied inline constraints before re-measuring so
+    // they don't suppress the overflow check on subsequent opens.
+    panel.style.maxHeight = "";
+    panel.style.maxWidth = "";
 
-  const availableWidth = Math.floor(
-    window.innerWidth - rect.left - GUI_PANEL_VIEWPORT_MARGIN,
-  );
-  if (availableWidth > 220 && rect.right > window.innerWidth) {
-    panel.style.width = `${availableWidth}px`;
-  }
+    const rect = panel.getBoundingClientRect();
+    const availableHeight = Math.floor(
+      window.innerHeight - rect.top - GUI_PANEL_VIEWPORT_MARGIN,
+    );
+    if (availableHeight > 160 && rect.bottom > window.innerHeight) {
+      panel.style.maxHeight = `${availableHeight}px`;
+    }
+
+    const availableWidth = Math.floor(
+      window.innerWidth - rect.left - GUI_PANEL_VIEWPORT_MARGIN,
+    );
+    if (availableWidth > 220 && rect.right > window.innerWidth) {
+      panel.style.maxWidth = `${availableWidth}px`;
+    }
+  });
 }
 
 export interface CogRasterLayerOptions {
@@ -1130,10 +1139,9 @@ async function openStandaloneColorbarControl(
 
   setTimeout(() => {
     colorbarControl?.show();
+    // expand() fires the "expand" handler, which applies the viewport
+    // constraint, so no separate constrainGuiPanelToViewport call is needed.
     colorbarControl?.expand();
-    constrainGuiPanelToViewport(
-      ".geolibre-colorbar-control .colorbar-gui-panel",
-    );
     setColorbarPanelVisible(true);
   }, 0);
   return true;
@@ -1159,9 +1167,6 @@ async function openStandaloneLegendControl(
   setTimeout(() => {
     legendControl?.show();
     legendControl?.expand();
-    constrainGuiPanelToViewport(
-      ".geolibre-legend-control .legend-gui-panel",
-    );
     setLegendPanelVisible(true);
   }, 0);
   return true;
@@ -1187,7 +1192,6 @@ async function openStandaloneHtmlControl(
   setTimeout(() => {
     htmlControl?.show();
     htmlControl?.expand();
-    constrainGuiPanelToViewport(".geolibre-html-control .html-gui-panel");
     setHtmlPanelVisible(true);
   }, 0);
   return true;
