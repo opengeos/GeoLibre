@@ -61,6 +61,14 @@ The FastAPI app in `backend/geolibre_server` backs the Whitebox toolbox through 
 
 Future processing releases are expected to expand the same sidecar pattern for GDAL, Rasterio, GeoPandas, DuckDB Spatial SQL, Leafmap, GeoAI, and SamGeo workflows.
 
+## Container image
+
+The root Dockerfile packages the browser version of the app. It uses a Node build stage to run the workspace build for `geolibre-desktop`, then copies `apps/geolibre-desktop/dist` into an nginx runtime image. The nginx config serves static assets and falls back to `index.html` for browser-entry URLs.
+
+The `Publish Container Image` GitHub Actions workflow builds the image for pull requests and publishes it to GitHub Container Registry for pushes to `main`, version tags, and manual runs. The upstream image name is `ghcr.io/opengeos/geolibre`.
+
+The container does not run the Tauri desktop shell or the optional Python sidecar. Workflows that depend on desktop filesystem access still require the installed desktop app.
+
 ## Security
 
 - Tauri CSP allowlists tile and style hosts (OpenFreeMap, CARTO).

@@ -45,6 +45,30 @@ npm run dev
 
 Open http://localhost:5173. The map and browser vector import support local vector files that DuckDB-WASM Spatial can read, including common formats such as GeoJSON, GeoParquet, GeoPackage, Shapefile, FlatGeobuf, KML/KMZ, and GML, with direct handling for GeoJSON, zipped Shapefiles, and KMZ archives. You can choose files from Add Vector Layer or drag them onto the app. Desktop filesystem dialogs, local MBTiles, and local raster file reads require Tauri.
 
+## Run with Docker
+
+Build and run the browser version of GeoLibre:
+
+```bash
+docker build -t geolibre .
+docker run --rm -p 8080:80 geolibre
+```
+
+Open http://localhost:8080. The Docker image serves the production Vite build with nginx. Desktop-only features such as Tauri filesystem dialogs, local MBTiles, local raster file reads, and project save/open require the desktop app.
+
+The published image is available from GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/opengeos/geolibre:latest
+docker run --rm -p 8080:80 ghcr.io/opengeos/geolibre:latest
+```
+
+For deployments under a URL subpath, pass `GEOLIBRE_APP_BASE` at build time:
+
+```bash
+docker build --build-arg GEOLIBRE_APP_BASE=/geolibre/ -t geolibre .
+```
+
 ## Embed the demo
 
 The browser demo supports URL parameters for iframe-friendly layouts.

@@ -1,0 +1,14 @@
+.git
+.github
+.vscode
+.idea
+node_modules
+**/node_modules
+apps/geolibre-desktop/dist
+apps/geolibre-desktop/src-tauri/target
+backend/geolibre_server/.venv
+coverage
+dist
+build
+*.log
+.DS_Store
