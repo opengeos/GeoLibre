@@ -1530,6 +1530,7 @@ body,
   .geolibre-components-control .maplibre-gl-control-grid-relocated,
   .geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-panel,
   .geolibre-zarr-control .maplibre-gl-zarr-layer-panel,
+  .pc-control-panel,
   .duckdb-control-panel,
   .geoparquet-control-panel {
     box-sizing: border-box;
@@ -1586,4 +1587,198 @@ body,
   min-height: 0;
   padding-bottom: 0;
   padding-top: 0;
+}
+
+.dark .pc-control-toggle {
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+}
+
+.dark .pc-control-toggle:hover {
+  background: hsl(var(--muted));
+}
+
+.dark .pc-control-icon svg {
+  fill: none;
+  stroke: hsl(var(--popover-foreground));
+}
+
+.dark .pc-control-panel {
+  background: hsl(var(--popover));
+  border: 1px solid hsl(var(--border));
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
+  color: hsl(var(--popover-foreground));
+}
+
+.dark .pc-control-header,
+.dark .pc-control-nav {
+  background: hsl(var(--muted));
+  border-color: hsl(var(--border));
+}
+
+.dark .pc-control-title,
+.dark .pc-collection-title,
+.dark .pc-result-title,
+.dark .pc-details-title,
+.dark .pc-section-title,
+.dark .pc-meta-item .pc-value,
+.dark .pc-stats-grid > div > strong,
+.dark .pc-point-values > div > strong,
+.dark .pc-stats-title,
+.dark .pc-legend-title,
+.dark .pc-tilejson-card > div > strong,
+.dark .pc-layer-name,
+.dark .pc-inspector-title,
+.dark .pc-opacity-value,
+.dark .pc-cloud-value,
+.dark .pc-advanced-render summary,
+.dark .pc-checkbox-group label,
+.dark .pc-asset-name {
+  color: hsl(var(--popover-foreground));
+}
+
+.dark .pc-control-close,
+.dark .pc-nav-btn,
+.dark .pc-loading,
+.dark .pc-collection-description,
+.dark .pc-label,
+.dark .pc-bbox-text,
+.dark .pc-date-separator,
+.dark .pc-results-count,
+.dark .pc-results-empty,
+.dark .pc-result-date,
+.dark .pc-result-cloud,
+.dark .pc-asset-type,
+.dark .pc-stats-grid > div > span,
+.dark .pc-point-values > div > span,
+.dark .pc-legend-labels,
+.dark .pc-tilejson-card > div > span,
+.dark .pc-layers-empty,
+.dark .pc-inspector-hint,
+.dark .pc-inspector-coords,
+.dark .pc-opacity-label,
+.dark .pc-rescale-separator {
+  color: hsl(var(--muted-foreground));
+}
+
+.dark .pc-control-close:hover,
+.dark .pc-btn-icon:hover {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+.dark .pc-search-box,
+.dark .pc-selected-collection,
+.dark .pc-bbox-display,
+.dark .pc-details-meta,
+.dark .pc-asset-item,
+.dark .pc-tool-loading,
+.dark .pc-custom-viz,
+.dark .pc-point-json,
+.dark .pc-result-thumbnail {
+  background: hsl(var(--muted));
+}
+
+.dark .pc-collection-item,
+.dark .pc-result-item,
+.dark .pc-stats-card,
+.dark .pc-legend-card,
+.dark .pc-tilejson-card,
+.dark .pc-layer-item,
+.dark .pc-inspector-panel,
+.dark .pc-custom-viz {
+  border-color: hsl(var(--border));
+}
+
+.dark .pc-collection-item:hover,
+.dark .pc-result-item:hover {
+  background: hsl(var(--accent));
+  border-color: hsl(var(--ring));
+}
+
+.dark .pc-result-selected,
+.dark .pc-result-selected:hover {
+  background: hsl(var(--accent));
+  border-color: #f59e0b;
+}
+
+.dark .pc-tag,
+.dark .pc-btn-active,
+.dark .pc-layer-controls-active {
+  background: rgb(14 116 144 / 0.22);
+  color: #67e8f9;
+}
+
+.dark .pc-search-input,
+.dark .pc-input {
+  background: hsl(var(--background));
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground));
+}
+
+.dark .pc-search-input::placeholder,
+.dark .pc-input::placeholder {
+  color: hsl(var(--muted-foreground));
+}
+
+.dark .pc-search-input:focus,
+.dark .pc-input:focus {
+  border-color: hsl(var(--ring));
+  box-shadow: inset 0 0 0 1px hsl(var(--ring));
+}
+
+.dark .pc-btn,
+.dark .pc-nav-btn {
+  background: hsl(var(--background));
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground));
+}
+
+.dark .pc-btn:hover,
+.dark .pc-nav-btn:hover {
+  background: hsl(var(--accent));
+}
+
+.dark .pc-btn:disabled:hover {
+  background: hsl(var(--background));
+}
+
+.dark .pc-btn-primary,
+.dark .pc-nav-btn.active,
+.dark .pc-search-btn-loading,
+.dark .pc-search-btn-loading:disabled,
+.dark .pc-search-btn-loading:disabled:hover,
+.dark .pc-inspect-active,
+.dark .pc-inspect-active:hover {
+  background: #0891b2;
+  border-color: #0891b2;
+  color: #ecfeff;
+}
+
+.dark .pc-btn-back {
+  color: #67e8f9;
+}
+
+.dark .pc-error,
+.dark .pc-tool-error {
+  background: rgb(127 29 29 / 0.35);
+  color: #fecaca;
+}
+
+.dark .pc-tool-success {
+  background: rgb(20 83 45 / 0.35);
+  color: #bbf7d0;
+}
+
+.dark .pc-spinner {
+  border-color: hsl(var(--border));
+  border-top-color: #67e8f9;
+}
+
+.dark .pc-control-content::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+}
+
+.dark .pc-control-content::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
 }
