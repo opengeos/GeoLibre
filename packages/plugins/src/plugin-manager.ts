@@ -13,14 +13,20 @@ export class PluginManager {
     string,
     GeoLibreMapControlPosition
   >();
-  private handledUrlParameterKeys = new Set<string>();
-  private lastHandledContextKey: string | null = null;
+  private handledUrlParametersByContext = new Map<string, Set<string>>();
   private urlParameterNamesById = new Map<string, string[]>();
   private listeners = new Set<() => void>();
   private version = 0;
 
   register(plugin: GeoLibrePlugin): void {
     const previous = this.plugins.get(plugin.id);
+    if (previous && previous !== plugin) {
+      // Evict dedup entries so a re-registered (e.g. hot-reloaded) plugin can
+      // handle the current URL context again.
+      for (const handled of this.handledUrlParametersByContext.values()) {
+        handled.delete(plugin.id);
+      }
+    }
     this.plugins.set(plugin.id, plugin);
     this.urlParameterNamesById.set(
       plugin.id,
@@ -118,13 +124,21 @@ export class PluginManager {
     app: GeoLibreAppAPI,
     contextKey = params.toString(),
   ): Promise<void> {
-    if (!params.toString()) return;
+    if (params.size === 0) return;
 
-    // Only the latest context matters for dedup, so evict the previous
-    // context's keys instead of accumulating them for the page lifetime.
-    if (contextKey !== this.lastHandledContextKey) {
-      this.handledUrlParameterKeys.clear();
-      this.lastHandledContextKey = contextKey;
+    // Dedup state is kept per context so overlapping async calls with
+    // different context keys cannot clear each other's in-flight entries.
+    // Only the most recent contexts matter, so older ones are evicted to keep
+    // the map bounded for the lifetime of the page.
+    let handledPluginIds = this.handledUrlParametersByContext.get(contextKey);
+    if (!handledPluginIds) {
+      handledPluginIds = new Set();
+      this.handledUrlParametersByContext.set(contextKey, handledPluginIds);
+      while (this.handledUrlParametersByContext.size > MAX_HANDLED_URL_CONTEXTS) {
+        const oldest = this.handledUrlParametersByContext.keys().next().value;
+        if (oldest === undefined) break;
+        this.handledUrlParametersByContext.delete(oldest);
+      }
     }
 
     for (const [id, plugin] of this.plugins) {
@@ -138,9 +152,8 @@ export class PluginManager {
         continue;
       }
 
-      const handledKey = `${id}\0${contextKey}`;
-      if (this.handledUrlParameterKeys.has(handledKey)) continue;
-      this.handledUrlParameterKeys.add(handledKey);
+      if (handledPluginIds.has(id)) continue;
+      handledPluginIds.add(id);
 
       try {
         await plugin.handleUrlParameters(app, new URLSearchParams(params));
@@ -227,6 +240,10 @@ export class PluginManager {
     for (const listener of this.listeners) listener();
   }
 }
+
+// Retaining several recent contexts (rather than only the latest) keeps dedup
+// intact when fire-and-forget calls with different context keys overlap.
+const MAX_HANDLED_URL_CONTEXTS = 8;
 
 function normalizeUrlParameterNames(names: string[] | undefined): string[] {
   if (!names) return [];

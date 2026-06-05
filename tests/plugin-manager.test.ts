@@ -148,6 +148,47 @@ describe("PluginManager URL parameters", () => {
     assert.deepEqual(calls, ["working"]);
   });
 
+  it("keeps dedup state for overlapping calls with different contexts", async () => {
+    const calls: string[] = [];
+    const resolvers: Array<() => void> = [];
+    const manager = new PluginManager();
+
+    manager.register(
+      testPlugin({
+        urlParameterNames: ["data"],
+        handleUrlParameters: async (_app, params) => {
+          await new Promise<void>((resolve) => {
+            resolvers.push(resolve);
+          });
+          calls.push(params.get("data") ?? "");
+        },
+      }),
+    );
+    manager.activate("url-loader", app);
+
+    // Start two fire-and-forget calls with different context keys, then
+    // re-dispatch the first context while both handlers are still suspended.
+    const callA = manager.handleUrlParameters(
+      new URLSearchParams("data=a"),
+      app,
+      "ctx-a",
+    );
+    const callB = manager.handleUrlParameters(
+      new URLSearchParams("data=b"),
+      app,
+      "ctx-b",
+    );
+    const callARepeat = manager.handleUrlParameters(
+      new URLSearchParams("data=a"),
+      app,
+      "ctx-a",
+    );
+    for (const resolve of resolvers) resolve();
+    await Promise.all([callA, callB, callARepeat]);
+
+    assert.deepEqual(calls, ["a", "b"]);
+  });
+
   it("does not re-run a handled context after deactivate and reactivate", async () => {
     const calls: string[] = [];
     const manager = new PluginManager();
