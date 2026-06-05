@@ -2,7 +2,7 @@
 
 Lightweight, cloud-native desktop GIS prototype built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS**, **DuckDB-WASM Spatial**, and **deck.gl**.
 
-[![](https://files.opengeos.org/GeoLibre-OPERA-demo.webp)](https://viewer.geolibre.app/?url=https://data.geolibre.app/opera-dswx.geolibre.json)
+[![](https://files.opengeos.org/GeoLibre-demo.webp)](https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json)
 
 ## Features (v0.8.0)
 
