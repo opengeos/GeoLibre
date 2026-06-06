@@ -201,13 +201,16 @@ declare global {
 }
 
 if (typeof window !== "undefined") {
-  window.__GEOLIBRE_DUCKDB__ = {
+  // Bridge consumed only by @geolibre/map (MapCanvas), which cannot import
+  // this package directly. Do not widen this API; frozen so its members
+  // cannot be swapped out by other scripts after construction.
+  window.__GEOLIBRE_DUCKDB__ = Object.freeze({
     getFeatureBounds: getDuckDBFeatureBounds,
     getLayerRows: getDuckDBLayerRows,
     identifyLayerAtPoint: identifyDuckDBLayerAtPoint,
     setSelectedFeature: setDuckDBSelectedFeature,
     updateLayerRows: updateDuckDBLayerRows,
-  };
+  });
 }
 
 export function openDuckDBLayerPanel(app: GeoLibreAppAPI): void {
@@ -934,7 +937,9 @@ function getGeoArrowRowIndex(objectInfo: {
     return rawIndex;
   }
   if (typeof rawIndex === "bigint") {
-    return rawIndex <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(rawIndex) : index;
+    return rawIndex >= BigInt(0) && rawIndex <= BigInt(Number.MAX_SAFE_INTEGER)
+      ? Number(rawIndex)
+      : index;
   }
   return index;
 }
@@ -998,11 +1003,20 @@ function getDuckDBCustomLayerType(geometryTypes: string[]): string {
 
 function getDuckDBDeckLayerIds(layerId: string): string[] {
   const renderedLayer = duckdbRenderedLayers.get(layerId);
-  return (renderedLayer?.results ?? [])
+  const results = renderedLayer?.results ?? [];
+  // Mirrors the deck layer naming scheme of maplibre-gl-duckdb 0.2.0
+  // (`duckdb-<layerId>-<geometryType>-<resultIndex>`); revisit on upgrades.
+  const ids = results
     .map((result, index) =>
       result.geometryType ? `duckdb-${layerId}-${result.geometryType}-${index}` : null,
     )
     .filter((id): id is string => typeof id === "string");
+  if (ids.length === 0 && results.length > 0 && import.meta.env.DEV) {
+    console.warn(
+      `DuckDB layer ${layerId} has results without geometry types; identify picking may match nothing.`,
+    );
+  }
+  return ids;
 }
 
 function getDuckDBResultLocalRowIndex(
@@ -1129,7 +1143,11 @@ function getRowIndexFromProperties(
 ): number | null {
   const rawIndex = properties?.__index;
   if (typeof rawIndex === "number" && Number.isFinite(rawIndex)) return rawIndex;
-  if (typeof rawIndex === "bigint" && rawIndex <= BigInt(Number.MAX_SAFE_INTEGER)) {
+  if (
+    typeof rawIndex === "bigint" &&
+    rawIndex >= BigInt(0) &&
+    rawIndex <= BigInt(Number.MAX_SAFE_INTEGER)
+  ) {
     return Number(rawIndex);
   }
   return null;
