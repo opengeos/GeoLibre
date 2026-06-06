@@ -630,9 +630,6 @@ export function TopToolbar({
           <DropdownMenuItem onSelect={handleAddStacLayer}>
             STAC Layer
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={handleOpenPlanetaryComputerPanel}>
-            Planetary Computer
-          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-xs text-muted-foreground">
             Cloud formats
@@ -697,6 +694,9 @@ export function TopToolbar({
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
+          <DropdownMenuItem onSelect={handleOpenPlanetaryComputerPanel}>
+            Planetary Computer
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       <DropdownMenu>
