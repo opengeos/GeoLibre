@@ -64,6 +64,18 @@ describe("diagnostics network info capture", () => {
     assert.equal(snapshot.errorCount, 1);
   });
 
+  it("keeps warning-level network entries even when capture is off", () => {
+    appendDiagnostic({
+      category: "network",
+      level: "warning",
+      message: "GET 301 Moved Permanently",
+    });
+    const snapshot = getDiagnosticsSnapshot();
+    assert.equal(snapshot.totalCount, 1);
+    assert.equal(snapshot.networkCount, 1);
+    assert.equal(snapshot.warningCount, 1);
+  });
+
   it("does not filter info-level entries from other categories", () => {
     appendDiagnostic({
       category: "console",

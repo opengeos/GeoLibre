@@ -229,7 +229,7 @@ export function useDiagnosticsSnapshot(): DiagnosticsSnapshot {
 /**
  * Returns the current diagnostics snapshot outside of React (e.g. in tests).
  *
- * @returns The latest immutable diagnostics snapshot.
+ * @returns The current diagnostics snapshot (treat as read-only).
  */
 export function getDiagnosticsSnapshot(): DiagnosticsSnapshot {
   return snapshot;
