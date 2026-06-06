@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useAppStore } from "@geolibre/core";
+import { isDuckDBQueryLayer, useAppStore } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import { isPlaceholderLayer, placeholderMessage } from "@geolibre/map";
@@ -116,14 +116,6 @@ function hasNativeIdentifyLayers(layer: GeoLibreLayer): boolean {
   return (
     Array.isArray(layer.metadata.nativeLayerIds) &&
     layer.metadata.nativeLayerIds.length > 0
-  );
-}
-
-function isDuckDBQueryLayer(layer: GeoLibreLayer): boolean {
-  return (
-    layer.type === "duckdb-query" &&
-    layer.metadata.sourceKind === "duckdb-query" &&
-    layer.metadata.externalDeckLayer === true
   );
 }
 

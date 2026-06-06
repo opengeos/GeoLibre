@@ -169,6 +169,21 @@ export interface GeoLibreLayer {
   sourcePath?: string;
 }
 
+/**
+ * Detect a DuckDB query layer rendered through the plugin's external deck.gl
+ * overlay. Shared by `@geolibre/map`, `@geolibre/plugins`, and the desktop
+ * app so the detection criteria cannot drift.
+ */
+export function isDuckDBQueryLayer(
+  layer: Pick<GeoLibreLayer, "metadata" | "type"> | undefined,
+): boolean {
+  return (
+    layer?.type === "duckdb-query" &&
+    layer.metadata.sourceKind === "duckdb-query" &&
+    layer.metadata.externalDeckLayer === true
+  );
+}
+
 export interface MapViewState {
   center: [number, number];
   zoom: number;

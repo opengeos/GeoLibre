@@ -1,4 +1,8 @@
-import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import {
+  isDuckDBQueryLayer,
+  useAppStore,
+  type GeoLibreLayer,
+} from "@geolibre/core";
 import maplibregl from "maplibre-gl";
 import { memo, useEffect, useRef } from "react";
 import {
@@ -168,14 +172,6 @@ function findFeatureId(
 
 function isWmsLayer(layer: GeoLibreLayer): boolean {
   return layer.type === "wms";
-}
-
-function isDuckDBQueryLayer(layer: GeoLibreLayer): boolean {
-  return (
-    layer.type === "duckdb-query" &&
-    layer.metadata.sourceKind === "duckdb-query" &&
-    layer.metadata.externalDeckLayer === true
-  );
 }
 
 function duckDBBridge(): GeoLibreDuckDBBridge | undefined {

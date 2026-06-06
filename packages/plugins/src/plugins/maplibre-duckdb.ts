@@ -1,5 +1,6 @@
 import {
   DEFAULT_LAYER_STYLE,
+  isDuckDBQueryLayer,
   type GeoLibreLayer,
   type LayerStyle,
   useAppStore,
@@ -79,7 +80,6 @@ type DuckDBSelection = {
 
 type MutableDuckDBControl = {
   beforeId?: string;
-  emit?: (event: string, data?: Record<string, unknown>) => void;
   handleMapSelect?: (selection: DuckDBPickInfo | null) => void;
   layer?: DuckDBInternalLayer | null;
   popup?: { remove?: () => void } | null;
@@ -89,6 +89,7 @@ type MutableDuckDBControl = {
   selectedFeature?: DuckDBSelection | null;
   setPickable?: (pickable: boolean) => void;
   showAttributePopup?: (coordinate: [number, number] | null) => void;
+  __geolibreOriginalShowAttributePopup?: MutableDuckDBControl["showAttributePopup"];
   __geolibreSelectionPatched?: boolean;
 };
 
@@ -230,16 +231,16 @@ export function setDuckDBSelectedFeature(
 ): void {
   if (!isKnownDuckDBLayer(layerId)) return;
 
+  // Row indices are integers; reject fractional or non-numeric ids outright
+  // so a bad id clears the selection instead of silently matching nothing.
+  const numericId = featureId === null ? null : Number(featureId);
   const index =
-    featureId === null
-      ? null
-      : Number.isFinite(Number(featureId))
-        ? Number(featureId)
-        : null;
+    numericId !== null && Number.isInteger(numericId) ? numericId : null;
   getMutableDuckDBControl()?.renderer?.setSelectedFeature?.(
     index === null ? null : layerId,
     index,
   );
+  syncDuckDBControlSelection(layerId, index);
   renderDuckDBCachedLayers();
 }
 
@@ -329,7 +330,6 @@ export function identifyDuckDBLayerAtPoint(
   if (index === null) return null;
 
   const properties = getDuckDBRenderedRows(layerId)[index] ?? picked.object ?? {};
-  setDuckDBSelectedFeature(layerId, String(index));
 
   return {
     coordinate:
@@ -394,7 +394,7 @@ function createDuckDBControl(
     let shouldSyncControl = false;
 
     for (const layer of previous.layers) {
-      if (!isDuckDBControlLayer(layer)) continue;
+      if (!isDuckDBQueryLayer(layer)) continue;
 
       const currentLayer = currentById.get(layer.id);
       if (!currentLayer) {
@@ -402,7 +402,7 @@ function createDuckDBControl(
         continue;
       }
 
-      if (!isDuckDBControlLayer(currentLayer)) continue;
+      if (!isDuckDBQueryLayer(currentLayer)) continue;
 
       if (
         currentLayer.opacity !== layer.opacity ||
@@ -502,7 +502,7 @@ function createDuckDBStateChangeHandler(): DuckDBControlEventHandler {
     // an empty set instead of flashing the remaining layers n-1 times.
     clearDuckDBRenderedLayers();
     for (const layer of store.layers) {
-      if (isDuckDBControlLayer(layer)) {
+      if (isDuckDBQueryLayer(layer)) {
         store.removeLayer(layer.id);
       }
     }
@@ -582,7 +582,7 @@ function syncDuckDBPickableFromStore(
 ): void {
   const identifyLayer = layers.find((layer) => layer.id === identifyLayerId);
   getMutableDuckDBControl()?.setPickable?.(
-    Boolean(identifyLayer && isDuckDBControlLayer(identifyLayer)),
+    Boolean(identifyLayer && isDuckDBQueryLayer(identifyLayer)),
   );
 }
 
@@ -593,50 +593,63 @@ function patchDuckDBControlSelection(control: DuckDBControl): void {
   const originalHandleMapSelect = mutableControl.handleMapSelect?.bind(
     mutableControl,
   );
+  // Keep the original around (matching the __geolibreOriginalSetData pattern)
+  // so future patches can inspect or restore the library behavior.
+  mutableControl.__geolibreOriginalShowAttributePopup =
+    mutableControl.showAttributePopup?.bind(mutableControl);
   mutableControl.showAttributePopup = () => {};
   mutableControl.handleMapSelect = (selection) => {
-    if (!selection) {
-      originalHandleMapSelect?.(selection);
-      useAppStore.getState().selectFeature(null);
-      return;
-    }
-
-    const layer = useAppStore
-      .getState()
-      .layers.find((item) => item.id === selection.layerId);
-    const rows = getDuckDBRenderedRows(selection.layerId);
-    const properties = rows[selection.index] ?? { __index: selection.index };
-    const selectedFeature = {
-      index: selection.index,
-      layerId: selection.layerId,
-      layerName: layer?.name ?? selection.layerId,
-      properties,
-    };
-
-    mutableControl.selectedFeature = selectedFeature;
-    mutableControl.popup?.remove?.();
-    mutableControl.popup = null;
-    mutableControl.renderer?.setSelectedFeature?.(
-      selection.layerId,
-      selection.index,
-    );
-    renderDuckDBCachedLayers();
-    mutableControl.renderContent?.();
-    mutableControl.emit?.("select", { selection: selectedFeature });
-    mutableControl.emit?.("statechange");
-    useAppStore.getState().selectFeature(String(selection.index));
+    // The control is only pickable while identify mode targets a DuckDB layer
+    // (see syncDuckDBPickableFromStore), and in that mode MapCanvas already
+    // handles the click via identifyDuckDBLayerAtPoint and the selection
+    // store; letting the overlay's own callback run too would process the
+    // same click twice.
+    const { identifyLayerId, layers } = useAppStore.getState();
+    const identifyLayer = layers.find((layer) => layer.id === identifyLayerId);
+    if (identifyLayer && isDuckDBQueryLayer(identifyLayer)) return;
+    originalHandleMapSelect?.(selection);
   };
   mutableControl.__geolibreSelectionPatched = true;
+}
+
+// Mirror the store-driven selection into the control's own attribute pane so
+// it stays consistent with the map highlight and the attribute table.
+function syncDuckDBControlSelection(
+  layerId: string,
+  index: number | null,
+): void {
+  const control = getMutableDuckDBControl();
+  if (!control) return;
+
+  if (index === null) {
+    if (control.selectedFeature?.layerId !== layerId) return;
+    control.selectedFeature = null;
+    control.renderContent?.();
+    return;
+  }
+
+  const layer = useAppStore
+    .getState()
+    .layers.find((item) => item.id === layerId);
+  control.selectedFeature = {
+    index,
+    layerId,
+    layerName: layer?.name ?? layerId,
+    properties: getDuckDBRenderedRows(layerId)[index] ?? { __index: index },
+  };
+  control.popup?.remove?.();
+  control.popup = null;
+  control.renderContent?.();
 }
 
 function syncDuckDBRenderedLayersFromStore(layers: GeoLibreLayer[]): void {
   duckdbLayerOrder.clear();
   layers
-    .filter(isDuckDBControlLayer)
+    .filter(isDuckDBQueryLayer)
     .forEach((layer, index) => duckdbLayerOrder.set(layer.id, index));
 
   for (const layer of layers) {
-    if (!isDuckDBControlLayer(layer)) continue;
+    if (!isDuckDBQueryLayer(layer)) continue;
 
     const renderedLayer = duckdbRenderedLayers.get(layer.id);
     if (!renderedLayer) continue;
@@ -986,8 +999,14 @@ function getDuckDBResultLocalRowIndex(
       : indexVector?.length;
   if (typeof rowCount !== "number" || rowCount <= 0) return null;
 
+  // Without an __index column the rows are stored in natural order, so the
+  // global row index addresses the chunk directly — no scan needed.
+  if (!indexVector?.get) {
+    return rowIndex >= 0 && rowIndex < rowCount ? rowIndex : null;
+  }
+
   for (let localIndex = 0; localIndex < rowCount; localIndex += 1) {
-    const value = indexVector?.get?.(localIndex);
+    const value = indexVector.get(localIndex);
     if (value === rowIndex) return localIndex;
     if (typeof value === "bigint" && value === BigInt(rowIndex)) {
       return localIndex;
@@ -1114,14 +1133,6 @@ function showDuckDBControl(control: DuckDBControl | null): void {
   if (container) container.style.display = "";
 }
 
-function isDuckDBControlLayer(layer: GeoLibreLayer): boolean {
-  return (
-    layer.type === "duckdb-query" &&
-    layer.metadata.sourceKind === "duckdb-query" &&
-    layer.metadata.externalDeckLayer === true
-  );
-}
-
 function getMutableDuckDBControl(
   control = duckdbControl,
 ): MutableDuckDBControl | null {
@@ -1147,5 +1158,5 @@ function createUniqueDuckDBLayerName(
 }
 
 function duckdbLayerOrderSignature(layers: GeoLibreLayer[]): string {
-  return layers.filter(isDuckDBControlLayer).map((layer) => layer.id).join("|");
+  return layers.filter(isDuckDBQueryLayer).map((layer) => layer.id).join("|");
 }

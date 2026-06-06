@@ -1,7 +1,6 @@
-import { useAppStore } from "@geolibre/core";
+import { isDuckDBQueryLayer, useAppStore } from "@geolibre/core";
 import {
   getDuckDBLayerRows,
-  setDuckDBSelectedFeature,
   updateDuckDBLayerRows,
   type DuckDBAttributeRow,
 } from "@geolibre/plugins";
@@ -51,7 +50,6 @@ type ColumnWidths = Record<string, number>;
 type AttributeDrafts = Record<string, Record<string, string>>;
 type ExportFormat = "geojson" | "csv" | BinaryVectorExportFormat;
 type AttributeTableRow = {
-  feature?: Feature;
   featureId: string;
   properties: Record<string, unknown>;
 };
@@ -163,14 +161,6 @@ function applyDraftsToFeatures(
   });
 }
 
-function isDuckDBQueryLayer(layer: { metadata: Record<string, unknown>; type: string } | undefined): boolean {
-  return (
-    layer?.type === "duckdb-query" &&
-    layer.metadata.sourceKind === "duckdb-query" &&
-    layer.metadata.externalDeckLayer === true
-  );
-}
-
 function duckDBRowsToAttributeRows(
   rows: DuckDBAttributeRow[],
 ): AttributeTableRow[] {
@@ -277,13 +267,12 @@ export function AttributeTable() {
   const features = layer?.geojson?.features ?? [];
   const isDuckDBLayer = isDuckDBQueryLayer(layer);
   const duckdbRows = layer && isDuckDBLayer ? getDuckDBLayerRows(layer.id) : [];
-  const attributeRows: AttributeTableRow[] = layer?.geojson
-    ? features.map((feature, index) => ({
-        feature,
+  const attributeRows: AttributeTableRow[] = isDuckDBLayer
+    ? duckDBRowsToAttributeRows(duckdbRows)
+    : features.map((feature, index) => ({
         featureId: String(feature.id ?? index),
         properties: (feature.properties ?? {}) as Record<string, unknown>,
-      }))
-    : duckDBRowsToAttributeRows(duckdbRows);
+      }));
   const hasAttributeSource = Boolean(layer?.geojson || isDuckDBLayer);
   const hasEdits = hasDraftEdits(drafts);
   const hasInvalidDrafts = attributeRows.some((row) => {
@@ -828,10 +817,7 @@ export function AttributeTable() {
           title="Clear selected feature"
           aria-label="Clear selected feature"
           disabled={!selectedFeatureId}
-          onClick={() => {
-            if (layer && isDuckDBLayer) setDuckDBSelectedFeature(layer.id, null);
-            selectFeature(null);
-          }}
+          onClick={() => selectFeature(null)}
         >
           <X className="h-4 w-4" />
         </Button>
@@ -880,9 +866,6 @@ export function AttributeTable() {
                     data-state={selected ? "selected" : undefined}
                     className="cursor-pointer"
                     onClick={() => {
-                      if (layer && isDuckDBLayer) {
-                        setDuckDBSelectedFeature(layer.id, featureId);
-                      }
                       selectFeature(featureId);
                     }}
                   >
