@@ -6,16 +6,17 @@ import {
 import {
   PluginControl,
   type PluginControlOptions,
+  type VisualizeOptions,
 } from "maplibre-gl-earth-engine";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
 import {
   authenticateEarthEngine,
   closeTauriOauthPopups,
   importMetaEnv,
-  isTauriRuntime,
   oauthClientIdValue,
   preloadEarthEngineAuthLibrary,
   projectValue,
+  shouldUseTauriEarthEngineOAuth,
   type TauriEarthEngineOAuthToken,
 } from "./earth-engine-auth";
 
@@ -49,6 +50,10 @@ type EarthEngineLoadedLayer = {
   tileUrl: string;
 };
 
+type EarthEngineExportedFunctionInfoGlobal = {
+  EXPORTED_FN_INFO?: unknown;
+};
+
 type EarthEngineControlMethods = EarthEngineControlInternals & {
   _applyLayerOpacity?: (layer: EarthEngineLoadedLayer) => void;
   _applyLayerVisibility?: (layer: EarthEngineLoadedLayer) => void;
@@ -78,6 +83,15 @@ let syncingEarthEngineControlToStore = false;
 let syncingEarthEngineStoreToControl = false;
 const earthEnginePanelListeners = new Set<() => void>();
 const syncedEarthEngineControls = new WeakSet<PluginControl>();
+
+function clearEarthEngineGlobalExportedFunctionInfo(): void {
+  const scope = globalThis as EarthEngineExportedFunctionInfoGlobal;
+  try {
+    delete scope.EXPORTED_FN_INFO;
+  } catch {
+    scope.EXPORTED_FN_INFO = undefined;
+  }
+}
 
 export function openEarthEnginePanel(app: GeoLibreAppAPI): void {
   void openStandaloneEarthEngineControl(app);
@@ -136,14 +150,33 @@ class GeoLibreEarthEngineControl extends PluginControl {
     projectId?: string,
     oauthClientId?: string,
   ): Promise<void> {
-    const isTauriAuth = isTauriRuntime();
+    const isTauriAuth = shouldUseTauriEarthEngineOAuth();
     if (isTauriAuth) {
       const activeOAuthClientId = oauthClientIdValue(
         oauthClientId || activeOAuthClientIdFromControl(this),
       );
+      const existingToken = tokenFromControlOptions(this);
+      if (existingToken?.accessToken) {
+        try {
+          clearEarthEngineGlobalExportedFunctionInfo();
+          await super.authenticate(projectId, activeOAuthClientId);
+        } finally {
+          await closeTauriOauthPopups();
+        }
+        return;
+      }
+
       const token = await authenticateEarthEngine(activeOAuthClientId);
       if (token?.accessToken) {
+        await closeTauriOauthPopups();
         applyTokenToControlOptions(this, token);
+        try {
+          clearEarthEngineGlobalExportedFunctionInfo();
+          await super.authenticate(projectId, activeOAuthClientId);
+        } finally {
+          await closeTauriOauthPopups();
+        }
+        return;
       }
     }
 
@@ -151,10 +184,21 @@ class GeoLibreEarthEngineControl extends PluginControl {
     // (no second OAuth prompt) and still handles project ID persistence,
     // ee.initialize, and status updates.
     try {
+      clearEarthEngineGlobalExportedFunctionInfo();
       await super.authenticate(projectId, oauthClientId);
     } finally {
-      if (isTauriAuth) void closeTauriOauthPopups();
+      if (isTauriAuth) await closeTauriOauthPopups();
     }
+  }
+
+  async loadAsset(assetId: string, vis: VisualizeOptions): Promise<void> {
+    clearEarthEngineGlobalExportedFunctionInfo();
+    await super.loadAsset(assetId, vis);
+  }
+
+  async runScript(script: string, vis: VisualizeOptions): Promise<void> {
+    clearEarthEngineGlobalExportedFunctionInfo();
+    await super.runScript(script, vis);
   }
 }
 
@@ -166,6 +210,19 @@ function activeOAuthClientIdFromControl(control: PluginControl): string {
     internals._options?.oauthClientId ||
     ""
   );
+}
+
+function tokenFromControlOptions(
+  control: PluginControl,
+): TauriEarthEngineOAuthToken | null {
+  const options = (control as unknown as EarthEngineControlInternals)._options;
+  if (!options?.accessToken) return null;
+
+  return {
+    accessToken: options.accessToken,
+    tokenType: options.tokenType || "Bearer",
+    expiresIn: options.tokenExpiresIn || 3600,
+  };
 }
 
 function applyTokenToControlOptions(

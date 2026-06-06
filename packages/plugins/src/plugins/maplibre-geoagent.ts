@@ -1,10 +1,9 @@
 /// <reference path="../earthengine.d.ts" />
 
-import {
+import type {
   GeoAgentControl,
-  type GeoAgentControlOptions,
+  GeoAgentControlOptions,
 } from "maplibre-gl-geoagent";
-import earthEngine from "@google/earthengine";
 import type {
   GeoLibreAppAPI,
   GeoLibreMapControlPosition,
@@ -18,6 +17,7 @@ import {
   oauthClientIdValue,
   preloadEarthEngineAuthLibrary,
   projectValue as earthEngineProjectValue,
+  shouldUseTauriEarthEngineOAuth,
 } from "./earth-engine-auth";
 
 const STORAGE_PREFIX = "geolibre.geoagent";
@@ -49,6 +49,8 @@ const GEOAGENT_OPTIONS = {
 } satisfies Omit<GeoAgentControlOptions, "position">;
 
 let geoAgentControl: GeoAgentControl | null = null;
+let geoAgentControlPromise: Promise<GeoAgentControl> | null = null;
+let geoAgentActive = false;
 let earthEngineAccessTokenOverride = "";
 let earthEngineTokenTypeOverride = "Bearer";
 let earthEngineTokenExpiresInOverride = 3600;
@@ -58,20 +60,11 @@ export const maplibreGeoAgentPlugin: GeoLibrePlugin = {
   name: "GeoAgent",
   version: "0.4.2",
   activate: (app: GeoLibreAppAPI) => {
-    if (!geoAgentControl) {
-      geoAgentControl = new GeoAgentControl(getGeoAgentOptions());
-    }
-
-    const added = app.addMapControl(geoAgentControl, geoAgentPosition);
-    if (!added) {
-      geoAgentControl = null;
-      return false;
-    }
-    setTimeout(() => geoAgentControl?.expand(), 0);
-    setTimeout(enhanceEarthEngineSignIn, 0);
-    preloadEarthEngineAuthLibrary();
+    geoAgentActive = true;
+    void mountGeoAgentControl(app);
   },
   deactivate: (app: GeoLibreAppAPI) => {
+    geoAgentActive = false;
     if (!geoAgentControl) return;
     app.removeMapControl(geoAgentControl);
     geoAgentControl = null;
@@ -82,7 +75,10 @@ export const maplibreGeoAgentPlugin: GeoLibrePlugin = {
     position: GeoLibreMapControlPosition,
   ) => {
     geoAgentPosition = position;
-    if (!geoAgentControl) return;
+    if (!geoAgentControl) {
+      if (geoAgentActive) void mountGeoAgentControl(app);
+      return;
+    }
     app.removeMapControl(geoAgentControl);
     const added = app.addMapControl(geoAgentControl, geoAgentPosition);
     if (!added) return false;
@@ -90,6 +86,33 @@ export const maplibreGeoAgentPlugin: GeoLibrePlugin = {
     setTimeout(enhanceEarthEngineSignIn, 0);
   },
 };
+
+async function mountGeoAgentControl(app: GeoLibreAppAPI): Promise<void> {
+  const control = await loadGeoAgentControl();
+  if (!geoAgentActive) return;
+
+  const added = app.addMapControl(control, geoAgentPosition);
+  if (!added) {
+    if (geoAgentControl === control) geoAgentControl = null;
+    return;
+  }
+  setTimeout(() => geoAgentControl?.expand(), 0);
+  setTimeout(enhanceEarthEngineSignIn, 0);
+  preloadEarthEngineAuthLibrary();
+}
+
+async function loadGeoAgentControl(): Promise<GeoAgentControl> {
+  if (geoAgentControl) return geoAgentControl;
+  geoAgentControlPromise ??= import("maplibre-gl-geoagent")
+    .then(({ GeoAgentControl }) => {
+      geoAgentControl ??= new GeoAgentControl(getGeoAgentOptions());
+      return geoAgentControl;
+    })
+    .finally(() => {
+      geoAgentControlPromise = null;
+    });
+  return geoAgentControlPromise;
+}
 
 function getGeoAgentOptions(): GeoAgentControlOptions {
   return {
@@ -134,7 +157,7 @@ function enhanceEarthEngineSignIn(): void {
     status.textContent = "Opening Google sign-in...";
     try {
       await authenticateEarthEngine(oauthClientId);
-      applyEarthEngineAccessToken(
+      await applyEarthEngineAccessToken(
         oauthClientId,
         projectValue(projectIdInput.value),
       );
@@ -150,11 +173,11 @@ function enhanceEarthEngineSignIn(): void {
   status.insertAdjacentElement("beforebegin", button);
 }
 
-function applyEarthEngineAccessToken(
+async function applyEarthEngineAccessToken(
   oauthClientId: string,
   projectId: string,
-): void {
-  const accessToken = earthEngineAccessToken();
+): Promise<void> {
+  const accessToken = await earthEngineAccessToken();
   if (!accessToken || !geoAgentControl) return;
 
   const control = geoAgentControl as unknown as GeoAgentControlInternals;
@@ -175,8 +198,10 @@ function applyEarthEngineAccessToken(
   control.invalidateAgent?.();
 }
 
-function earthEngineAccessToken(): string {
+async function earthEngineAccessToken(): Promise<string> {
   if (earthEngineAccessTokenOverride) return earthEngineAccessTokenOverride;
+  if (shouldUseTauriEarthEngineOAuth()) return "";
+  const { default: earthEngine } = await import("@google/earthengine");
   return (earthEngine.data?.getAuthToken?.() ?? "")
     .replace(/^Bearer\s+/i, "")
     .trim();

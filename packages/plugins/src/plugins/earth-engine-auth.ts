@@ -1,6 +1,5 @@
 /// <reference path="../earthengine.d.ts" />
 
-import earthEngine from "@google/earthengine";
 import { invoke } from "@tauri-apps/api/core";
 
 export const DEFAULT_GEE_OAUTH_CLIENT_ID =
@@ -25,6 +24,26 @@ export type TauriEarthEngineOAuthToken = {
 
 type TauriRuntimeWindow = Window & {
   __TAURI_INTERNALS__?: unknown;
+};
+
+type EarthEngineApi = {
+  apiclient?: {
+    ensureAuthLibLoaded?: (callback: () => void) => void;
+  };
+  data?: {
+    authenticateViaOauth?: (
+      clientId: string,
+      onSuccess: () => void,
+      onFailure: (error: unknown) => void,
+      extraScopes?: unknown,
+      onImmediateFailed?: () => void,
+    ) => void;
+    authenticateViaPopup?: (
+      onSuccess: () => void,
+      onFailure: (error: unknown) => void,
+    ) => void;
+    getAuthToken?: () => string;
+  };
 };
 
 export function importMetaEnv(): EarthEngineImportMetaEnv {
@@ -55,13 +74,31 @@ export function projectValue(envValue: unknown, storagePrefix: string): string {
 }
 
 export function preloadEarthEngineAuthLibrary(): void {
-  earthEngine.apiclient?.ensureAuthLibLoaded?.(() => undefined);
+  if (shouldUseTauriEarthEngineOAuth()) return;
+  void loadEarthEngine()
+    .then((earthEngine) => {
+      earthEngine.apiclient?.ensureAuthLibLoaded?.(() => undefined);
+    })
+    .catch(() => undefined);
+}
+
+export async function ensureEarthEngineAuthLibraryLoaded(): Promise<void> {
+  if (shouldUseTauriEarthEngineOAuth()) return;
+  const earthEngine = await loadEarthEngine();
+  return new Promise((resolve) => {
+    const ensureAuthLibLoaded = earthEngine.apiclient?.ensureAuthLibLoaded;
+    if (!ensureAuthLibLoaded) {
+      resolve();
+      return;
+    }
+    ensureAuthLibLoaded(() => resolve());
+  });
 }
 
 export async function authenticateEarthEngine(
   oauthClientId: string,
 ): Promise<TauriEarthEngineOAuthToken | null> {
-  if (isTauriProductionOrigin()) {
+  if (shouldUseTauriEarthEngineOAuth()) {
     return authenticateEarthEngineViaTauri(oauthClientId);
   }
 
@@ -69,8 +106,7 @@ export async function authenticateEarthEngine(
   return null;
 }
 
-export function applyEarthEngineAccessToken(
-  oauthClientId: string,
+function normalizeEarthEngineAccessToken(
   token: TauriEarthEngineOAuthToken,
 ): Required<Pick<TauriEarthEngineOAuthToken, "accessToken" | "tokenType" | "expiresIn">> {
   if (token.error) throw new Error(token.error);
@@ -82,16 +118,6 @@ export function applyEarthEngineAccessToken(
   const tokenType = token.tokenType || "Bearer";
   const expiresIn = token.expiresIn || 3600;
 
-  earthEngine.apiclient?.setAuthToken?.(
-    oauthClientId,
-    tokenType,
-    accessToken,
-    expiresIn,
-    [],
-    () => undefined,
-    false,
-  );
-
   return { accessToken, tokenType, expiresIn };
 }
 
@@ -100,7 +126,7 @@ export function isTauriRuntime(): boolean {
   return Boolean((window as TauriRuntimeWindow).__TAURI_INTERNALS__);
 }
 
-function isTauriProductionOrigin(): boolean {
+export function isTauriProductionOrigin(): boolean {
   if (typeof window === "undefined") return false;
   const { hostname, protocol } = window.location;
   return (
@@ -110,9 +136,14 @@ function isTauriProductionOrigin(): boolean {
   );
 }
 
+export function shouldUseTauriEarthEngineOAuth(): boolean {
+  return isTauriProductionOrigin();
+}
+
 async function authenticateEarthEngineViaBrowser(
   oauthClientId: string,
 ): Promise<void> {
+  const earthEngine = await loadEarthEngine();
   return new Promise((resolve, reject) => {
     const onSuccess = () => resolve();
     const onFailure = (error: unknown) => reject(new Error(errorMessage(error)));
@@ -160,9 +191,13 @@ async function authenticateEarthEngineViaTauri(
   }
 
   const token = await waitForTauriEarthEngineToken(session.state, popup);
-  applyEarthEngineAccessToken(oauthClientId, token);
   popup.close();
-  return token;
+  return normalizeEarthEngineAccessToken(token);
+}
+
+async function loadEarthEngine(): Promise<EarthEngineApi> {
+  const module = await import("@google/earthengine");
+  return (module.default ?? module) as EarthEngineApi;
 }
 
 async function waitForTauriEarthEngineToken(
@@ -192,38 +227,33 @@ function delay(ms: number): Promise<void> {
 }
 
 export async function closeTauriOauthPopups(): Promise<void> {
-  let closedByCommand = false;
-  try {
-    await invoke("close_oauth_popups");
-    closedByCommand = true;
+  await closeTauriOauthPopupsOnce();
+  for (const delayMs of [250, 750, 1500]) {
     setTimeout(() => {
-      void invoke("close_oauth_popups");
-    }, 500);
-  } catch {
-    // Browser builds do not have a Tauri command bridge.
+      void closeTauriOauthPopupsOnce();
+    }, delayMs);
   }
+}
 
-  try {
-    if (closedByCommand) return;
-    const { getAllWindows } = await import("@tauri-apps/api/window");
-    const windows = await getAllWindows();
-    await Promise.all(
-      windows
-        .filter((window) => window.label.startsWith("oauthPopup"))
-        .map((window) => window.close()),
-    );
-    setTimeout(() => {
-      void getAllWindows().then((openWindows) =>
-        Promise.all(
-          openWindows
-            .filter((window) => window.label.startsWith("oauthPopup"))
-            .map((window) => window.close()),
-        ),
-      );
-    }, 500);
-  } catch {
-    // Browser builds do not have a Tauri window manager.
-  }
+async function closeTauriOauthPopupsOnce(): Promise<void> {
+  await Promise.allSettled([
+    closeTauriOauthPopupsByCommand(),
+    closeTauriOauthPopupsByWindowApi(),
+  ]);
+}
+
+async function closeTauriOauthPopupsByCommand(): Promise<void> {
+  await invoke("close_oauth_popups");
+}
+
+async function closeTauriOauthPopupsByWindowApi(): Promise<void> {
+  const { getAllWindows } = await import("@tauri-apps/api/window");
+  const windows = await getAllWindows();
+  await Promise.all(
+    windows
+      .filter((window) => window.label.startsWith("oauthPopup"))
+      .map((window) => window.close()),
+  );
 }
 
 export function errorMessage(error: unknown): string {

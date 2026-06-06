@@ -156,7 +156,16 @@ pub fn run() {
 #[tauri::command]
 fn close_oauth_popups(app: tauri::AppHandle) {
     for window in app.webview_windows().values() {
-        if window.label().starts_with("oauthPopup") {
+        let is_oauth_popup = window.label().starts_with("oauthPopup")
+            || window
+                .title()
+                .map(|title| {
+                    title.contains("Earth Engine sign-in")
+                        || title.contains("accounts.google.com")
+                        || title.contains("Google")
+                })
+                .unwrap_or(false);
+        if is_oauth_popup {
             let _ = window.close();
         }
     }

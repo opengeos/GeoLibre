@@ -24,6 +24,7 @@ const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
 const DUCKDB_WORKER_PATH_PART = "/@duckdb/duckdb-wasm/dist/";
 const DUCKDB_WORKER_SOURCE_MAP_RE =
   /\n?\/\/# sourceMappingURL=duckdb-browser-(?:eh|mvp)\.worker\.js\.map\s*$/;
+const EARTH_ENGINE_PARAMETER_ERROR = "Failed to locate function parameters";
 const RADIX_OPTIMIZE_EXCLUDES = [
   "@developmentseed/geotiff",
   "@developmentseed/lzw-tiff-decoder",
@@ -39,13 +40,11 @@ const RADIX_OPTIMIZE_EXCLUDES = [
 function manualChunks(id: string): string | undefined {
   if (!id.includes("node_modules")) return undefined;
   if (id.includes("@duckdb/duckdb-wasm")) return "duckdb";
-  if (
-    id.includes("maplibre-gl-earth-engine") ||
-    id.includes("maplibre-gl-geoagent") ||
-    id.includes("@google/earthengine")
-  ) {
-    return "maplibre-geoagent";
+  if (id.includes("maplibre-gl-earth-engine")) {
+    return "maplibre-earth-engine";
   }
+  if (id.includes("maplibre-gl-geoagent")) return "maplibre-geoagent";
+  if (id.includes("@google/earthengine")) return "earth-engine-browser";
   if (id.includes("mapillary-js")) return "mapillary";
   if (id.includes("@geoman-io/maplibre-geoman-free")) return "maplibre-geoman";
   if (id.includes("maplibre-gl")) return "maplibre";
@@ -170,6 +169,44 @@ function stripDuckDbWorkerSourcemapPlugin(): Plugin {
   };
 }
 
+function selectiveJsMinifyPlugin(): Plugin {
+  return {
+    name: "geolibre-selective-js-minify",
+    apply: "build",
+    async generateBundle(_, bundle) {
+      if (process.env.TAURI_DEBUG) return;
+
+      const { transform } = await import("esbuild");
+      await Promise.all(
+        Object.values(bundle).map(async (asset) => {
+          if (asset.type !== "chunk") return;
+          if (shouldPreserveEarthEngineChunk(asset.fileName, asset.code)) {
+            return;
+          }
+
+          const result = await transform(asset.code, {
+            legalComments: "none",
+            minify: true,
+            target: "esnext",
+          });
+          asset.code = result.code;
+        }),
+      );
+    },
+  };
+}
+
+function shouldPreserveEarthEngineChunk(
+  fileName: string,
+  code: string,
+): boolean {
+  return (
+    fileName.includes("earth-engine") ||
+    fileName.includes("maplibre-geoagent") ||
+    code.includes(EARTH_ENGINE_PARAMETER_ERROR)
+  );
+}
+
 function isDuckDbWorkerRequest(pathname: string): boolean {
   return (
     pathname.includes(DUCKDB_WORKER_PATH_PART) &&
@@ -268,6 +305,7 @@ export default defineConfig({
     projectUrlQueryPlugin(),
     react(),
     wmsProxyPlugin(),
+    selectiveJsMinifyPlugin(),
   ],
   clearScreen: false,
   define: {
@@ -289,7 +327,11 @@ export default defineConfig({
   },
   build: {
     target: "esnext",
-    minify: !process.env.TAURI_DEBUG ? "esbuild" : false,
+    // The Earth Engine browser SDK keys EXPORTED_FN_INFO by Function#toString().
+    // A second Vite/esbuild minification pass rewrites those functions after
+    // the SDK table has been generated. Vite minification stays disabled here;
+    // selectiveJsMinifyPlugin minifies chunks that do not contain that SDK.
+    minify: false,
     sourcemap: !!process.env.TAURI_DEBUG,
     chunkSizeWarningLimit: GIS_CHUNK_WARNING_LIMIT_KB,
     rollupOptions: {
