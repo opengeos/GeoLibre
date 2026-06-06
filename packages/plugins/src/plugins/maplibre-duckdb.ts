@@ -337,7 +337,9 @@ export function identifyDuckDBLayerAtPoint(
 
   const index =
     getRowIndexFromProperties(picked.object) ??
-    (typeof picked.index === "number" && Number.isFinite(picked.index)
+    (typeof picked.index === "number" &&
+    Number.isFinite(picked.index) &&
+    picked.index >= 0
       ? picked.index
       : null);
   if (index === null) return null;
@@ -776,12 +778,16 @@ function cloneStyledDeckLayer(
   );
   const strokeColor = colorToRgba(style.strokeColor, opacity);
   const geometry = geometryType?.toLowerCase() ?? "";
+  // Captured once per clone; updateTriggers below include it, so deck.gl
+  // re-creates the accessors on selection changes and the closures never
+  // read the store per object.
+  const selectedFeatureId = getSelectedDuckDBFeatureId(layerId);
 
   if (geometry.includes("point")) {
     const selectedRadius = selectedDuckDBPointRadius(style.circleRadius);
     return deckLayer.clone({
-      getFillColor: createDuckDBColorAccessor(layerId, fillColor),
-      getRadius: createDuckDBRadiusAccessor(layerId, style.circleRadius),
+      getFillColor: createDuckDBColorAccessor(selectedFeatureId, fillColor),
+      getRadius: createDuckDBRadiusAccessor(selectedFeatureId, style.circleRadius),
       radiusMaxPixels: Math.max(pointRadiusMaxPixels(style), selectedRadius),
       radiusMinPixels: Math.max(1, Math.min(style.circleRadius, 4)),
       updateTriggers: {
@@ -790,22 +796,22 @@ function cloneStyledDeckLayer(
           style.fillColor,
           style.fillOpacity,
           opacity,
-          getSelectedDuckDBFeatureId(layerId),
+          selectedFeatureId,
         ],
-        getRadius: [style.circleRadius, getSelectedDuckDBFeatureId(layerId)],
+        getRadius: [style.circleRadius, selectedFeatureId],
       },
     });
   }
 
   if (geometry.includes("line")) {
     return deckLayer.clone({
-      getColor: createDuckDBColorAccessor(layerId, strokeColor),
-      getWidth: createDuckDBLineWidthAccessor(layerId, style.strokeWidth),
+      getColor: createDuckDBColorAccessor(selectedFeatureId, strokeColor),
+      getWidth: createDuckDBLineWidthAccessor(selectedFeatureId, style.strokeWidth),
       widthMinPixels: Math.max(1, style.strokeWidth),
       updateTriggers: {
         ...asRecord(deckLayer.props?.updateTriggers),
-        getColor: [style.strokeColor, opacity, getSelectedDuckDBFeatureId(layerId)],
-        getWidth: [style.strokeWidth, getSelectedDuckDBFeatureId(layerId)],
+        getColor: [style.strokeColor, opacity, selectedFeatureId],
+        getWidth: [style.strokeWidth, selectedFeatureId],
       },
     });
   }
@@ -813,10 +819,10 @@ function cloneStyledDeckLayer(
   return deckLayer.clone({
     elevationScale: style.extrusionHeightScale,
     extruded: style.extrusionEnabled,
-    getFillColor: createDuckDBColorAccessor(layerId, fillColor),
+    getFillColor: createDuckDBColorAccessor(selectedFeatureId, fillColor),
     getElevation: createDuckDBElevationAccessor(layerId, renderedStyle),
-    getLineColor: createDuckDBLineColorAccessor(layerId, strokeColor),
-    getLineWidth: createDuckDBLineWidthAccessor(layerId, style.strokeWidth),
+    getLineColor: createDuckDBLineColorAccessor(selectedFeatureId, strokeColor),
+    getLineWidth: createDuckDBLineWidthAccessor(selectedFeatureId, style.strokeWidth),
     lineWidthMinPixels: Math.max(1, style.strokeWidth),
     updateTriggers: {
       ...asRecord(deckLayer.props?.updateTriggers),
@@ -829,41 +835,44 @@ function cloneStyledDeckLayer(
         style.fillColor,
         style.fillOpacity,
         opacity,
-        getSelectedDuckDBFeatureId(layerId),
+        selectedFeatureId,
       ],
       getLineColor: [
         style.strokeColor,
         opacity,
-        getSelectedDuckDBFeatureId(layerId),
+        selectedFeatureId,
       ],
-      getLineWidth: [style.strokeWidth, getSelectedDuckDBFeatureId(layerId)],
+      getLineWidth: [style.strokeWidth, selectedFeatureId],
     },
   });
 }
 
 function createDuckDBColorAccessor(
-  layerId: string,
+  selectedFeatureId: string | null,
   fallbackColor: [number, number, number, number],
 ) {
   return (objectInfo: { data?: unknown; index?: number }) =>
-    isSelectedDuckDBObject(layerId, objectInfo)
+    isSelectedDuckDBObject(selectedFeatureId, objectInfo)
       ? DUCKDB_SELECTED_FILL_COLOR
       : fallbackColor;
 }
 
 function createDuckDBLineColorAccessor(
-  layerId: string,
+  selectedFeatureId: string | null,
   fallbackColor: [number, number, number, number],
 ) {
   return (objectInfo: { data?: unknown; index?: number }) =>
-    isSelectedDuckDBObject(layerId, objectInfo)
+    isSelectedDuckDBObject(selectedFeatureId, objectInfo)
       ? DUCKDB_SELECTED_STROKE_COLOR
       : fallbackColor;
 }
 
-function createDuckDBRadiusAccessor(layerId: string, fallbackRadius: number) {
+function createDuckDBRadiusAccessor(
+  selectedFeatureId: string | null,
+  fallbackRadius: number,
+) {
   return (objectInfo: { data?: unknown; index?: number }) =>
-    isSelectedDuckDBObject(layerId, objectInfo)
+    isSelectedDuckDBObject(selectedFeatureId, objectInfo)
       ? selectedDuckDBPointRadius(fallbackRadius)
       : fallbackRadius;
 }
@@ -872,18 +881,20 @@ function selectedDuckDBPointRadius(fallbackRadius: number): number {
   return Math.max(fallbackRadius + 3, fallbackRadius * 1.6);
 }
 
-function createDuckDBLineWidthAccessor(layerId: string, fallbackWidth: number) {
+function createDuckDBLineWidthAccessor(
+  selectedFeatureId: string | null,
+  fallbackWidth: number,
+) {
   return (objectInfo: { data?: unknown; index?: number }) =>
-    isSelectedDuckDBObject(layerId, objectInfo)
+    isSelectedDuckDBObject(selectedFeatureId, objectInfo)
       ? Math.max(fallbackWidth + 3, fallbackWidth * 2)
       : fallbackWidth;
 }
 
 function isSelectedDuckDBObject(
-  layerId: string,
+  selectedFeatureId: string | null,
   objectInfo: { data?: unknown; index?: number },
 ): boolean {
-  const selectedFeatureId = getSelectedDuckDBFeatureId(layerId);
   if (selectedFeatureId === null) return false;
 
   const rowIndex = getGeoArrowRowIndex(objectInfo);
@@ -1071,15 +1082,18 @@ function boundsFromDuckDBGeometryValue(
 function collectGeometryBounds(
   value: unknown,
   bounds: [number, number, number, number],
+  depth = 0,
 ): void {
-  if (!value) return;
+  // Well-formed GeoArrow geometries nest a handful of levels at most; the
+  // cap keeps malformed data from recursing unboundedly.
+  if (!value || depth > 10) return;
 
   if (Array.isArray(value)) {
     if (value.length >= 2 && isFiniteNumber(value[0]) && isFiniteNumber(value[1])) {
       extendBounds(bounds, value[0], value[1]);
       return;
     }
-    for (const item of value) collectGeometryBounds(item, bounds);
+    for (const item of value) collectGeometryBounds(item, bounds, depth + 1);
     return;
   }
 
@@ -1098,7 +1112,7 @@ function collectGeometryBounds(
   }
 
   for (let index = 0; index < vector.length; index += 1) {
-    collectGeometryBounds(vector.get(index), bounds);
+    collectGeometryBounds(vector.get(index), bounds, depth + 1);
   }
 }
 
