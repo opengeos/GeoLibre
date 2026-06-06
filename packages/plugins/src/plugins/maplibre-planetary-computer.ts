@@ -29,7 +29,6 @@ let planetaryComputerConstructorsPromise: Promise<{
   PlanetaryComputerControl: PlanetaryComputerControlConstructor;
 }> | null = null;
 let planetaryComputerStoreUnsubscribe: (() => void) | null = null;
-let planetaryComputerCollapseHandler: (() => void) | null = null;
 
 export function openPlanetaryComputerPanel(app: GeoLibreAppAPI): void {
   void openStandalonePlanetaryComputerControl(app);
@@ -63,8 +62,29 @@ async function openStandalonePlanetaryComputerControl(
   setTimeout(() => {
     showPlanetaryComputerControl(planetaryComputerControl);
     planetaryComputerControl?.expand();
+    wirePlanetaryComputerCloseButton(planetaryComputerControl);
   }, 0);
   return true;
+}
+
+// The library fires the same "collapse" event for the toggle icon and the
+// panel's X button, so the two cannot be told apart through events. Clicking
+// the toggle icon keeps the library's default behavior (collapse the panel,
+// leave the icon on the map); only a direct click on the X button hides the
+// whole control until it is reopened from the Processing menu.
+function wirePlanetaryComputerCloseButton(
+  control: PlanetaryComputerControl | null,
+): void {
+  const closeButton = control
+    ?.getPanelElement()
+    ?.querySelector<HTMLElement>(".pc-control-close");
+  if (!closeButton || closeButton.dataset.geolibreCloseWired === "true") {
+    return;
+  }
+  closeButton.dataset.geolibreCloseWired = "true";
+  closeButton.addEventListener("click", () =>
+    hidePlanetaryComputerControl(control),
+  );
 }
 
 function getPlanetaryComputerConstructors(): Promise<{
@@ -83,9 +103,6 @@ function createPlanetaryComputerControl(
 ): PlanetaryComputerControl {
   const control = new PlanetaryComputerControlClass(PLANETARY_COMPUTER_OPTIONS);
   patchPlanetaryComputerControlOnRemove(control);
-  planetaryComputerCollapseHandler = () =>
-    hidePlanetaryComputerControl(control);
-  control.on("collapse", planetaryComputerCollapseHandler);
   control.on("layer:add", syncPlanetaryComputerLayersToStore);
   control.on("layer:remove", syncPlanetaryComputerLayersToStore);
   control.on("layer:update", syncPlanetaryComputerLayersToStore);
@@ -232,10 +249,6 @@ function resetPlanetaryComputerControl(
 ): void {
   if (planetaryComputerControl !== control) return;
 
-  if (control && planetaryComputerCollapseHandler) {
-    control.off("collapse", planetaryComputerCollapseHandler);
-  }
-  planetaryComputerCollapseHandler = null;
   control?.off("layer:add", syncPlanetaryComputerLayersToStore);
   control?.off("layer:remove", syncPlanetaryComputerLayersToStore);
   control?.off("layer:update", syncPlanetaryComputerLayersToStore);
