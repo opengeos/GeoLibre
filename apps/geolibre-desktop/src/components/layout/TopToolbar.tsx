@@ -686,14 +686,9 @@ export function TopToolbar({
         <DropdownMenuContent align="start">
           <DropdownMenuLabel>Processing</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>Whitebox</DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              <DropdownMenuItem onSelect={() => setProcessingOpen(true)}>
-                Toolbox
-              </DropdownMenuItem>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
+          <DropdownMenuItem onSelect={() => setProcessingOpen(true)}>
+            Whitebox
+          </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleOpenPlanetaryComputerPanel}>
             Planetary Computer
           </DropdownMenuItem>
