@@ -147,7 +147,7 @@ export const plugin: GeoLibrePlugin = {
         continue;
       }
       if (parsedUrl.protocol !== "https:") continue;
-      const response = await fetch(dataUrl);
+      const response = await fetch(parsedUrl.href);
       if (!response.ok) continue;
       app.addGeoJsonLayer("Example URL layer", await response.json(), dataUrl);
     }

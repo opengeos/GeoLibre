@@ -22,8 +22,11 @@ export class PluginManager {
   register(plugin: GeoLibrePlugin): void {
     const previous = this.plugins.get(plugin.id);
     if (previous && previous !== plugin) {
-      // Evict dedup entries so a re-registered (e.g. hot-reloaded) plugin can
-      // handle the current URL context again.
+      // Evict the plugin's dedup entries from every retained context so a
+      // re-registered (e.g. hot-reloaded) plugin can handle the current URL
+      // context again. This intentionally also lets it re-handle older
+      // retained contexts if one of those is ever re-dispatched: the new
+      // plugin instance has fresh state and never saw them.
       for (const handled of this.handledUrlParametersByContext.values()) {
         handled.delete(plugin.id);
       }
@@ -123,11 +126,13 @@ export class PluginManager {
   async handleUrlParameters(
     params: URLSearchParams,
     app: GeoLibreAppAPI,
-    contextKey = params.toString(),
+    contextKey?: string,
   ): Promise<void> {
     // An empty serialization means no parameters. params.size would be more
     // direct but is unavailable in older webviews (pre-Safari 17 WKWebView).
-    if (!params.toString()) return;
+    const serialized = params.toString();
+    if (!serialized) return;
+    contextKey ??= serialized;
 
     // Dedup state is kept per context so overlapping async calls with
     // different context keys cannot clear each other's in-flight entries.
