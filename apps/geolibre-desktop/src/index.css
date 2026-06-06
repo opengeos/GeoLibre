@@ -1589,6 +1589,17 @@ body,
   padding-top: 0;
 }
 
+/* The library caps the panel with an inline max-height (500px), which
+   overflows short windows: the panel sits ~50px from the top of the map
+   with overflow hidden, so the bottom is cut off and only the inner
+   content area scrolls within the 500px cap. Clamp the panel to the map
+   height instead so the content scrollbar always reaches the bottom.
+   !important is needed to beat the inline style, and this rule sits
+   after the small-screen media query above so it wins there too. */
+.maplibregl-map .pc-control-panel {
+  max-height: min(500px, calc(100% - 60px)) !important;
+}
+
 .dark .pc-control-toggle {
   background: hsl(var(--popover));
   color: hsl(var(--popover-foreground));
