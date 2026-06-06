@@ -63,16 +63,9 @@ export {
   openRasterLayerPanel,
   restoreRasterLayers,
 } from "./plugins/maplibre-raster";
-export {
-  createRasterStoreLayer,
-  isRasterControlStoreLayer,
-  removeRasterStoreLayers,
-  savedRasterState,
-  syncRasterLayersToStore,
-  unwireRasterStoreSync,
-  wireRasterStoreSync,
-  type RasterSyncableControl,
-} from "./plugins/raster-layer-sync";
+// The raster-layer-sync internals are not re-exported: the app drives the
+// panel through the two functions above, and the tests import the sync
+// helpers from the module path directly.
 export { maplibreEsriWaybackPlugin } from "./plugins/maplibre-esri-wayback";
 export { maplibreGeoEditorPlugin } from "./plugins/maplibre-geo-editor";
 export { maplibreGeoAgentPlugin } from "./plugins/maplibre-geoagent";

@@ -58,7 +58,8 @@ export function isRasterControlStoreLayer(layer: GeoLibreLayer): boolean {
  */
 export function createRasterStoreLayer(info: RasterLayerInfo): GeoLibreLayer {
   const url = info.source.kind === "url" ? info.source.url : undefined;
-  const sourcePath = url ?? (info.source.kind === "file" ? info.source.fileName : info.id);
+  const sourcePath =
+    url ?? (info.source.kind === "file" ? info.source.fileName : info.id);
   return {
     id: info.id,
     name: info.name,
@@ -296,16 +297,22 @@ export function savedRasterState(
   ) {
     state.bands = candidate.bands as number[];
   }
+  // null is the control's "auto rescale from stats" state and round-trips
+  // explicitly; an empty array is not a meaningful rescale value.
   if (
-    Array.isArray(candidate.rescale) &&
-    candidate.rescale.every(
-      (range) =>
-        Array.isArray(range) &&
-        range.length === 2 &&
-        range.every((value) => typeof value === "number" && Number.isFinite(value)),
-    )
+    candidate.rescale === null ||
+    (Array.isArray(candidate.rescale) &&
+      candidate.rescale.length > 0 &&
+      candidate.rescale.every(
+        (range) =>
+          Array.isArray(range) &&
+          range.length === 2 &&
+          range.every(
+            (value) => typeof value === "number" && Number.isFinite(value),
+          ),
+      ))
   ) {
-    state.rescale = candidate.rescale as [number, number][];
+    state.rescale = candidate.rescale as [number, number][] | null;
   }
   if (typeof candidate.colormap === "string" && candidate.colormap) {
     state.colormap = candidate.colormap;

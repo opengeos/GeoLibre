@@ -312,12 +312,20 @@ describe("savedRasterState", () => {
     });
   });
 
+  it("round-trips the auto-rescale (null) state explicitly", () => {
+    const layer = createRasterStoreLayer(
+      rasterInfo({ state: rasterState({ rescale: null }) }),
+    );
+
+    assert.equal(savedRasterState(layer).rescale, null);
+  });
+
   it("drops malformed fields from hand-edited project files", () => {
     const layer = createRasterStoreLayer(rasterInfo());
     layer.metadata.rasterState = {
       mode: "sepia",
       bands: [0, -1],
-      rescale: [[0]],
+      rescale: [],
       colormap: 42,
       nodata: "sometimes",
       gamma: Number.NaN,

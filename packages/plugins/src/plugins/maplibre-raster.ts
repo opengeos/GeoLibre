@@ -45,13 +45,21 @@ export function openRasterLayerPanel(app: GeoLibreAppAPI): void {
     const control = await ensureRasterControl(app);
     if (!control) return;
     window.setTimeout(() => {
-      showRasterControl(control);
-      control.expand();
-      // Idempotent (guarded by a dataset flag / null checks): retried on
-      // every open so the panel chrome stays wired even if a future
-      // upstream release builds the panel DOM lazily on first expand.
-      wireRasterCloseButton(control);
-      applyRasterPanelClass(control);
+      // The IIFE's catch cannot see exceptions thrown in this later task.
+      try {
+        showRasterControl(control);
+        control.expand();
+        // Idempotent (guarded by a dataset flag / null checks): retried on
+        // every open so the panel chrome stays wired even if a future
+        // upstream release builds the panel DOM lazily on first expand.
+        wireRasterCloseButton(control);
+        applyRasterPanelClass(control);
+      } catch (error) {
+        console.error(
+          "[GeoLibre] Failed to open the raster layer panel",
+          error,
+        );
+      }
     }, 0);
   })().catch((error) => {
     console.error("[GeoLibre] Failed to open the raster layer panel", error);
@@ -101,6 +109,9 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
             ? layer.source.url
             : undefined;
         if (!url) {
+          // Console-only on purpose for this first pass: the plugin layer has
+          // no toast/notification API today. Surface this through an in-app
+          // notification once one is exposed to plugins.
           console.info(
             `[GeoLibre] Raster layer "${layer.name}" came from a local file and cannot be restored from the saved project.`,
           );
@@ -134,6 +145,9 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
     // restores may still be loading; this final pass settles the store once
     // every raster has either loaded or failed.
     void Promise.allSettled(pending).then(() => {
+      // A control torn down mid-restore (map reinitialisation) must not let
+      // this stale callback rewrite layers owned by its successor.
+      if (control !== rasterControl) return;
       syncRasterLayersToStore(control);
     });
   })().catch((error) => {
@@ -260,7 +274,7 @@ function applyRasterPanelClass(control: RasterControl): void {
 function wireRasterCloseButton(control: RasterControl): void {
   const panel = (control as unknown as RasterControlInternals)._panel;
   const closeButton = panel?.querySelector<HTMLElement>(
-    ".plugin-control-close",
+    ".mlr-control-close",
   );
   if (!closeButton || closeButton.dataset.geolibreCloseWired === "true") {
     return;
