@@ -4,6 +4,12 @@ import type {
   GeoAgentControl,
   GeoAgentControlOptions,
 } from "maplibre-gl-geoagent";
+import type { Map as MapLibreMap } from "maplibre-gl";
+import {
+  authenticateWithOAuth,
+  renderEeLayer,
+  type VisualizeOptions,
+} from "maplibre-gl-earth-engine";
 import type {
   GeoLibreAppAPI,
   GeoLibreMapControlPosition,
@@ -11,9 +17,12 @@ import type {
 } from "../types";
 import {
   authenticateEarthEngine as authenticateEarthEngineForGeoLibre,
+  captureEarthEngineFunctionInfo,
+  clearEarthEngineFunctionInfo,
   closeTauriOauthPopups,
   errorMessage,
   importMetaEnv,
+  installEarthEngineFunctionInfoFallback,
   oauthClientIdValue,
   preloadEarthEngineAuthLibrary,
   projectValue as earthEngineProjectValue,
@@ -25,6 +34,22 @@ const STORAGE_PREFIX = "geolibre.geoagent";
 type GeoAgentControlInternals = {
   options?: GeoAgentControlOptions;
   tools?: {
+    __geolibreEarthEngineFallbackPatched?: boolean;
+    addGeeRasterOverlay?: (overlay: {
+      name: string;
+      url: string;
+    }) => Promise<void>;
+    map?: MapLibreMap;
+    overlays?: Map<string, unknown>;
+    publishEarthEngineState?: () => void;
+    removeOverlay?: (name: string) => boolean;
+    requireEarthEngine?: () => {
+      registerLayer?: (layer: Record<string, unknown>) => void;
+    };
+    runCommand?: (command: string, args?: unknown) => Promise<unknown>;
+    uniqueLayerBaseId?: (baseId: string, suffixes: string[]) => string;
+    uniqueSourceId?: (baseId: string) => string;
+    waitForMapIdle?: () => Promise<void>;
     updateEarthEngineOptions?: (
       options: NonNullable<GeoAgentControlOptions["earthEngine"]>,
     ) => void;
@@ -54,6 +79,7 @@ let geoAgentActive = false;
 let earthEngineAccessTokenOverride = "";
 let earthEngineTokenTypeOverride = "Bearer";
 let earthEngineTokenExpiresInOverride = 3600;
+let geoAgentEarthEngineFunctionInfo: unknown;
 
 export const maplibreGeoAgentPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-geoagent",
@@ -82,6 +108,7 @@ export const maplibreGeoAgentPlugin: GeoLibrePlugin = {
     app.removeMapControl(geoAgentControl);
     const added = app.addMapControl(geoAgentControl, geoAgentPosition);
     if (!added) return false;
+    patchGeoAgentEarthEngineToolRunner(geoAgentControl);
     setTimeout(() => geoAgentControl?.expand(), 0);
     setTimeout(enhanceEarthEngineSignIn, 0);
   },
@@ -96,6 +123,7 @@ async function mountGeoAgentControl(app: GeoLibreAppAPI): Promise<void> {
     if (geoAgentControl === control) geoAgentControl = null;
     return;
   }
+  patchGeoAgentEarthEngineToolRunner(control);
   setTimeout(() => geoAgentControl?.expand(), 0);
   setTimeout(enhanceEarthEngineSignIn, 0);
   preloadEarthEngineAuthLibrary();
@@ -103,6 +131,7 @@ async function mountGeoAgentControl(app: GeoLibreAppAPI): Promise<void> {
 
 async function loadGeoAgentControl(): Promise<GeoAgentControl> {
   if (geoAgentControl) return geoAgentControl;
+  installEarthEngineFunctionInfoFallback();
   geoAgentControlPromise ??= import("maplibre-gl-geoagent")
     .then(({ GeoAgentControl }) => {
       geoAgentControl ??= new GeoAgentControl(getGeoAgentOptions());
@@ -119,6 +148,175 @@ function getGeoAgentOptions(): GeoAgentControlOptions {
     ...GEOAGENT_OPTIONS,
     position: geoAgentPosition,
   };
+}
+
+function patchGeoAgentEarthEngineToolRunner(control: GeoAgentControl): void {
+  const tools = (control as unknown as GeoAgentControlInternals).tools;
+  if (
+    !tools?.runCommand ||
+    tools.__geolibreEarthEngineFallbackPatched === true
+  ) {
+    return;
+  }
+
+  const runCommand = tools.runCommand.bind(tools);
+  tools.runCommand = async (command, args) => {
+    if (isEarthEngineToolCommand(command)) {
+      if (command === "load_gee_dataset") {
+        return loadGeoAgentDatasetWithGeoLibreEarthEngine(tools, args);
+      }
+
+      installEarthEngineFunctionInfoFallback(geoAgentEarthEngineFunctionInfo);
+      try {
+        return await runCommand(command, args);
+      } finally {
+        geoAgentEarthEngineFunctionInfo = captureEarthEngineFunctionInfo();
+      }
+    }
+    return runCommand(command, args);
+  };
+  tools.__geolibreEarthEngineFallbackPatched = true;
+}
+
+async function loadGeoAgentDatasetWithGeoLibreEarthEngine(
+  tools: NonNullable<GeoAgentControlInternals["tools"]>,
+  args: unknown,
+): Promise<Record<string, unknown>> {
+  if (!tools.map) throw new Error("GeoAgent map is unavailable.");
+
+  const input = recordArg(args);
+  const assetId = stringArg(input, "asset_id");
+  if (!assetId) throw new Error("load_gee_dataset requires asset_id.");
+
+  const layerName = stringArg(input, "layer_name") || assetId;
+  const vis = geoAgentVisualizeOptions(input);
+  const earthEngine = geoAgentEarthEngineOptions();
+  const oauthClientId = oauthClientIdValue(earthEngine.oauthClientId);
+  const projectId = projectValue(earthEngine.projectId);
+  let accessToken = earthEngine.accessToken || earthEngineAccessTokenOverride;
+
+  if (shouldUseTauriEarthEngineOAuth() && !accessToken) {
+    await authenticateEarthEngine(oauthClientId);
+    accessToken = earthEngineAccessTokenOverride;
+  }
+
+  clearEarthEngineFunctionInfo();
+  await authenticateWithOAuth({
+    accessToken: accessToken || undefined,
+    oauthClientId,
+    projectId,
+    tokenExpiresIn:
+      earthEngine.tokenExpiresIn ?? earthEngineTokenExpiresInOverride,
+    tokenType: earthEngine.tokenType || earthEngineTokenTypeOverride,
+  });
+
+  await tools.waitForMapIdle?.();
+  tools.removeOverlay?.(layerName);
+  clearEarthEngineFunctionInfo();
+  const layerBaseId = geoAgentSlug(layerName);
+  const sourceId =
+    tools.uniqueSourceId?.(`${layerBaseId}-source`) ?? `${layerBaseId}-source`;
+  const layerId = tools.uniqueLayerBaseId?.(layerBaseId, [""]) ?? layerBaseId;
+  const result = await renderEeLayer(tools.map, assetId, vis, sourceId, layerId);
+
+  tools.overlays?.set(layerName, {
+    attribution: "Google Earth Engine",
+    geeLayerName: layerName,
+    kind: "gee",
+    layerIds: [result.layerId],
+    name: layerName,
+    sourceIds: [result.sourceId],
+    url: result.tileUrl,
+  });
+  tools.requireEarthEngine?.().registerLayer?.({
+    asset_id: assetId,
+    asset_type: stringArg(input, "asset_type") || "Image",
+    eeObject: result.eeObject,
+    layer_name: layerName,
+    name: layerName,
+    object_type: stringArg(input, "asset_type") || "Image",
+    source: "earth_engine",
+    tile_url: result.tileUrl,
+    vis_params: vis,
+  });
+  tools.publishEarthEngineState?.();
+
+  return {
+    success: true,
+    asset_id: assetId,
+    asset_type: stringArg(input, "asset_type") || "Image",
+    layer_name: layerName,
+    source: "maplibre-gl-earth-engine",
+    tile_url: result.tileUrl,
+    vis_params: vis,
+  };
+}
+
+function isEarthEngineToolCommand(command: string): boolean {
+  return (
+    command === "initialize_earth_engine" ||
+    command.startsWith("gee_") ||
+    command.includes("_gee_")
+  );
+}
+
+function geoAgentEarthEngineOptions(): NonNullable<
+  GeoAgentControlOptions["earthEngine"]
+> {
+  const control = geoAgentControl as unknown as GeoAgentControlInternals | null;
+  return {
+    ...GEOAGENT_OPTIONS.earthEngine,
+    ...(control?.options?.earthEngine ?? {}),
+  };
+}
+
+function recordArg(args: unknown): Record<string, unknown> {
+  return args && typeof args === "object" && !Array.isArray(args)
+    ? (args as Record<string, unknown>)
+    : {};
+}
+
+function stringArg(args: Record<string, unknown>, key: string): string {
+  const value = args[key];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function numberArg(args: Record<string, unknown>, key: string): number | undefined {
+  const value = args[key];
+  const numberValue =
+    typeof value === "number" || typeof value === "string"
+      ? Number(value)
+      : Number.NaN;
+  return Number.isFinite(numberValue) ? numberValue : undefined;
+}
+
+function geoAgentVisualizeOptions(
+  args: Record<string, unknown>,
+): VisualizeOptions {
+  const vis: VisualizeOptions = {};
+  const bands = stringArg(args, "bands") || stringArg(args, "band");
+  const palette = stringArg(args, "palette");
+  const min = numberArg(args, "min_value") ?? numberArg(args, "min");
+  const max = numberArg(args, "max_value") ?? numberArg(args, "max");
+  const opacity = numberArg(args, "opacity");
+
+  if (bands) vis.bands = bands;
+  if (palette) vis.palette = palette;
+  if (min !== undefined) vis.min = min;
+  if (max !== undefined) vis.max = max;
+  if (opacity !== undefined) vis.opacity = Math.max(0, Math.min(1, opacity));
+  return vis;
+}
+
+function geoAgentSlug(value: string): string {
+  return (
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60) || "layer"
+  );
 }
 
 function projectValue(envValue: unknown): string {
@@ -201,6 +399,7 @@ async function applyEarthEngineAccessToken(
 async function earthEngineAccessToken(): Promise<string> {
   if (earthEngineAccessTokenOverride) return earthEngineAccessTokenOverride;
   if (shouldUseTauriEarthEngineOAuth()) return "";
+  installEarthEngineFunctionInfoFallback();
   const { default: earthEngine } = await import("@google/earthengine");
   return (earthEngine.data?.getAuthToken?.() ?? "")
     .replace(/^Bearer\s+/i, "")

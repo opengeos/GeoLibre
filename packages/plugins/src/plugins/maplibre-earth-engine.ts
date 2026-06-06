@@ -11,6 +11,7 @@ import {
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
 import {
   authenticateEarthEngine,
+  clearEarthEngineFunctionInfo,
   closeTauriOauthPopups,
   importMetaEnv,
   oauthClientIdValue,
@@ -50,10 +51,6 @@ type EarthEngineLoadedLayer = {
   tileUrl: string;
 };
 
-type EarthEngineExportedFunctionInfoGlobal = {
-  EXPORTED_FN_INFO?: unknown;
-};
-
 type EarthEngineControlMethods = EarthEngineControlInternals & {
   _applyLayerOpacity?: (layer: EarthEngineLoadedLayer) => void;
   _applyLayerVisibility?: (layer: EarthEngineLoadedLayer) => void;
@@ -83,15 +80,6 @@ let syncingEarthEngineControlToStore = false;
 let syncingEarthEngineStoreToControl = false;
 const earthEnginePanelListeners = new Set<() => void>();
 const syncedEarthEngineControls = new WeakSet<PluginControl>();
-
-function clearEarthEngineGlobalExportedFunctionInfo(): void {
-  const scope = globalThis as EarthEngineExportedFunctionInfoGlobal;
-  try {
-    delete scope.EXPORTED_FN_INFO;
-  } catch {
-    scope.EXPORTED_FN_INFO = undefined;
-  }
-}
 
 export function openEarthEnginePanel(app: GeoLibreAppAPI): void {
   void openStandaloneEarthEngineControl(app);
@@ -158,7 +146,7 @@ class GeoLibreEarthEngineControl extends PluginControl {
       const existingToken = tokenFromControlOptions(this);
       if (existingToken?.accessToken) {
         try {
-          clearEarthEngineGlobalExportedFunctionInfo();
+          clearEarthEngineFunctionInfo();
           await super.authenticate(projectId, activeOAuthClientId);
         } finally {
           await closeTauriOauthPopups();
@@ -171,7 +159,7 @@ class GeoLibreEarthEngineControl extends PluginControl {
         await closeTauriOauthPopups();
         applyTokenToControlOptions(this, token);
         try {
-          clearEarthEngineGlobalExportedFunctionInfo();
+          clearEarthEngineFunctionInfo();
           await super.authenticate(projectId, activeOAuthClientId);
         } finally {
           await closeTauriOauthPopups();
@@ -184,7 +172,7 @@ class GeoLibreEarthEngineControl extends PluginControl {
     // (no second OAuth prompt) and still handles project ID persistence,
     // ee.initialize, and status updates.
     try {
-      clearEarthEngineGlobalExportedFunctionInfo();
+      clearEarthEngineFunctionInfo();
       await super.authenticate(projectId, oauthClientId);
     } finally {
       if (isTauriAuth) await closeTauriOauthPopups();
@@ -192,12 +180,12 @@ class GeoLibreEarthEngineControl extends PluginControl {
   }
 
   async loadAsset(assetId: string, vis: VisualizeOptions): Promise<void> {
-    clearEarthEngineGlobalExportedFunctionInfo();
+    clearEarthEngineFunctionInfo();
     await super.loadAsset(assetId, vis);
   }
 
   async runScript(script: string, vis: VisualizeOptions): Promise<void> {
-    clearEarthEngineGlobalExportedFunctionInfo();
+    clearEarthEngineFunctionInfo();
     await super.runScript(script, vis);
   }
 }

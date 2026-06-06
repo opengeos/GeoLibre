@@ -46,6 +46,72 @@ type EarthEngineApi = {
   };
 };
 
+type EarthEngineExportedFunctionInfoGlobal = {
+  EXPORTED_FN_INFO?: unknown;
+};
+
+let earthEngineExportedFunctionInfo: unknown;
+
+export function captureEarthEngineFunctionInfo(): unknown {
+  const scope = globalThis as EarthEngineExportedFunctionInfoGlobal;
+  const descriptor = Object.getOwnPropertyDescriptor(scope, "EXPORTED_FN_INFO");
+  if (descriptor && "value" in descriptor) return descriptor.value;
+  return scope.EXPORTED_FN_INFO;
+}
+
+export function clearEarthEngineFunctionInfo(): void {
+  earthEngineExportedFunctionInfo = undefined;
+  const scope = globalThis as EarthEngineExportedFunctionInfoGlobal;
+  const descriptor = Object.getOwnPropertyDescriptor(scope, "EXPORTED_FN_INFO");
+  if (descriptor?.configurable === false) {
+    try {
+      scope.EXPORTED_FN_INFO = undefined;
+    } catch {
+      // A non-configurable readonly host property cannot be cleared here.
+    }
+    return;
+  }
+
+  try {
+    delete scope.EXPORTED_FN_INFO;
+  } catch {
+    try {
+      Object.defineProperty(scope, "EXPORTED_FN_INFO", {
+        configurable: true,
+        writable: true,
+        value: undefined,
+      });
+    } catch {
+      // The Earth Engine call site will report the real failure.
+    }
+  }
+}
+
+export function installEarthEngineFunctionInfoFallback(
+  functionInfo?: unknown,
+): void {
+  const scope = globalThis as EarthEngineExportedFunctionInfoGlobal;
+  const descriptor = Object.getOwnPropertyDescriptor(scope, "EXPORTED_FN_INFO");
+  if (descriptor?.configurable === false) return;
+
+  if (functionInfo !== undefined) {
+    earthEngineExportedFunctionInfo = functionInfo;
+  } else if ("value" in (descriptor ?? {})) {
+    earthEngineExportedFunctionInfo = descriptor?.value;
+  }
+
+  try {
+    Object.defineProperty(scope, "EXPORTED_FN_INFO", {
+      configurable: true,
+      writable: true,
+      value: earthEngineExportedFunctionInfo,
+    });
+  } catch {
+    // If the host has already installed a non-configurable global, do not
+    // throw here. The Earth Engine call site will report the real failure.
+  }
+}
+
 export function importMetaEnv(): EarthEngineImportMetaEnv {
   return (
     import.meta as ImportMeta & {
@@ -196,6 +262,7 @@ async function authenticateEarthEngineViaTauri(
 }
 
 async function loadEarthEngine(): Promise<EarthEngineApi> {
+  installEarthEngineFunctionInfoFallback();
   const module = await import("@google/earthengine");
   return (module.default ?? module) as EarthEngineApi;
 }
