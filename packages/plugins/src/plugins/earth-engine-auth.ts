@@ -2,7 +2,6 @@
 
 import earthEngine from "@google/earthengine";
 import { invoke } from "@tauri-apps/api/core";
-import { openUrl } from "@tauri-apps/plugin-opener";
 
 export const DEFAULT_GEE_OAUTH_CLIENT_ID =
   "141292844612-gitmgm28jkmkujonfkrkvdaqjiqt6qkf.apps.googleusercontent.com";
@@ -62,7 +61,7 @@ export function preloadEarthEngineAuthLibrary(): void {
 export async function authenticateEarthEngine(
   oauthClientId: string,
 ): Promise<TauriEarthEngineOAuthToken | null> {
-  if (isTauriRuntime()) {
+  if (isTauriProductionOrigin()) {
     return authenticateEarthEngineViaTauri(oauthClientId);
   }
 
@@ -97,7 +96,18 @@ export function applyEarthEngineAccessToken(
 }
 
 export function isTauriRuntime(): boolean {
+  if (typeof window === "undefined") return false;
   return Boolean((window as TauriRuntimeWindow).__TAURI_INTERNALS__);
+}
+
+function isTauriProductionOrigin(): boolean {
+  if (typeof window === "undefined") return false;
+  const { hostname, protocol } = window.location;
+  return (
+    protocol === "tauri:" ||
+    protocol === "file:" ||
+    (hostname.endsWith(".localhost") && hostname !== "localhost")
+  );
 }
 
 async function authenticateEarthEngineViaBrowser(
@@ -140,36 +150,24 @@ async function authenticateEarthEngineViaTauri(
     { clientId: oauthClientId },
   );
 
-  const popup = await openTauriBrowserTab(session.url);
-  const token = await waitForTauriEarthEngineToken(session.state, popup);
-  applyEarthEngineAccessToken(oauthClientId, token);
-  return token;
-}
-
-async function openTauriBrowserTab(url: string): Promise<Window | null> {
-  try {
-    await openUrl(url);
-    // Native browser tabs cannot be observed for cancellation; the poll loop
-    // falls back to its timeout in that case.
-    return null;
-  } catch {
-    // Fall back to window.open in development or if the opener plugin is absent.
-  }
-
   const popup = window.open(
-    url,
+    session.url,
     "geolibre-earth-engine-oauth",
     "popup,width=520,height=680",
   );
   if (!popup) {
     throw new Error("Earth Engine sign-in popup was blocked.");
   }
-  return popup;
+
+  const token = await waitForTauriEarthEngineToken(session.state, popup);
+  applyEarthEngineAccessToken(oauthClientId, token);
+  popup.close();
+  return token;
 }
 
 async function waitForTauriEarthEngineToken(
   state: string,
-  popup?: Window | null,
+  popup: Window,
 ): Promise<TauriEarthEngineOAuthToken> {
   let closedPolls = 0;
   for (let poll = 0; poll < 300; poll += 1) {
@@ -178,7 +176,7 @@ async function waitForTauriEarthEngineToken(
       { stateId: state },
     );
     if (token) return token;
-    if (popup?.closed) {
+    if (popup.closed) {
       closedPolls += 1;
       if (closedPolls > 2) {
         throw new Error("Earth Engine sign-in was cancelled.");

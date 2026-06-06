@@ -10,6 +10,7 @@ import {
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
 import {
   authenticateEarthEngine,
+  closeTauriOauthPopups,
   importMetaEnv,
   isTauriRuntime,
   oauthClientIdValue,
@@ -22,6 +23,11 @@ const STORAGE_PREFIX = "geolibre.earthEngine";
 const EARTH_ENGINE_CONTROL_POSITION: GeoLibreMapControlPosition = "top-left";
 const EARTH_ENGINE_PANEL_CLASS = "geolibre-earth-engine-panel";
 
+// These types mirror undocumented private members of PluginControl from
+// maplibre-gl-earth-engine (verified against v0.4.0). All access is optional
+// (?.) so a rename in a future release degrades to a no-op rather than a
+// crash, but the store<->control layer sync would silently stop working --
+// re-verify these names when bumping the dependency.
 type EarthEngineControlInternals = {
   _authOAuthClientInput?: HTMLInputElement;
   _container?: HTMLElement;
@@ -107,6 +113,7 @@ async function openStandaloneEarthEngineControl(
     );
     if (!added) {
       earthEngineControl = null;
+      earthEngineControlMounted = false;
       setEarthEngineControlVisible(false);
       return false;
     }
@@ -129,7 +136,8 @@ class GeoLibreEarthEngineControl extends PluginControl {
     projectId?: string,
     oauthClientId?: string,
   ): Promise<void> {
-    if (isTauriRuntime()) {
+    const isTauriAuth = isTauriRuntime();
+    if (isTauriAuth) {
       const activeOAuthClientId = oauthClientIdValue(
         oauthClientId || activeOAuthClientIdFromControl(this),
       );
@@ -142,7 +150,11 @@ class GeoLibreEarthEngineControl extends PluginControl {
     // The base implementation consumes options.accessToken when present
     // (no second OAuth prompt) and still handles project ID persistence,
     // ee.initialize, and status updates.
-    await super.authenticate(projectId, oauthClientId);
+    try {
+      await super.authenticate(projectId, oauthClientId);
+    } finally {
+      if (isTauriAuth) void closeTauriOauthPopups();
+    }
   }
 }
 
@@ -217,12 +229,15 @@ function wireEarthEngineLayerSync(control: PluginControl): void {
     const controlLayers = earthEngineControlLayers(earthEngineControl);
     let needsRender = false;
 
+    const removedLayerIds = new Set<string>();
+
     syncingEarthEngineStoreToControl = true;
     try {
       for (const layer of controlLayers) {
         const storeLayer = currentById.get(layer.id);
         if (!storeLayer) {
           removeEarthEngineControlLayer(earthEngineControl, layer.id);
+          removedLayerIds.add(layer.id);
           needsRender = true;
           continue;
         }
@@ -242,6 +257,7 @@ function wireEarthEngineLayerSync(control: PluginControl): void {
 
       for (const previousId of previousEarthEngineLayerIds) {
         if (currentById.has(previousId)) continue;
+        if (removedLayerIds.has(previousId)) continue;
         removeEarthEngineControlLayer(earthEngineControl, previousId);
         needsRender = true;
       }
