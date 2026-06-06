@@ -14,7 +14,7 @@ Release builds are produced for:
 - macOS Apple Silicon: ad-hoc signed DMG and app bundle
 - macOS Intel: ad-hoc signed DMG and app bundle
 
-Unsigned builds may require platform-specific trust prompts. Check each release note for the exact assets and platform guidance.
+The Windows build is unsigned and may require a platform-specific trust prompt. Check each release note for the exact assets and platform guidance.
 
 ## macOS installation
 
