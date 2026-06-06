@@ -56,9 +56,11 @@ export function openRasterLayerPanel(app: GeoLibreAppAPI): void {
         control.expand();
         // Idempotent (guarded by a dataset flag / null checks): retried on
         // every open so the panel chrome stays wired even if a future
-        // upstream release builds the panel DOM lazily on first expand.
+        // upstream release builds the panel DOM (or registers the
+        // click-outside handler) lazily on first expand.
         wireRasterCloseButton(control);
         applyRasterPanelClass(control);
+        disableRasterClickOutsideCollapse(control);
       } catch (error) {
         console.error(
           "[GeoLibre] Failed to open the raster layer panel",
@@ -126,6 +128,8 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
           console.info(
             `[GeoLibre] Raster layer "${layer.name}" came from a local file and cannot be restored from the saved project.`,
           );
+          // removeLayer fires the store subscriber synchronously; the
+          // suspension guard keeps it from echoing back at the control.
           useAppStore.getState().removeLayer(layer.id);
           continue;
         }
@@ -241,6 +245,9 @@ function patchRasterControlOnRemove(control: RasterControl): void {
     // A control torn down mid-restore must not leave its successor
     // permanently suppressing store sync events.
     resetRasterStoreSyncSuspension();
+    // Store layers are intentionally NOT pruned here: the control is
+    // removed on map reinitialisation, where they must survive so
+    // restoreRasterLayers can replay them into the successor control.
     rasterControl = null;
     rasterControlMounted = false;
   };

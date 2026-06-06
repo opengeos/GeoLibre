@@ -138,8 +138,8 @@ export function syncRasterLayersToStore(control: RasterSyncableControl): void {
         existing.visible !== layer.visible ||
         existing.opacity !== layer.opacity ||
         existing.sourcePath !== layer.sourcePath ||
-        JSON.stringify(existing.source) !== JSON.stringify(layer.source) ||
-        JSON.stringify(existing.metadata) !== JSON.stringify(layer.metadata)
+        !recordsEqual(existing.source, layer.source) ||
+        !recordsEqual(existing.metadata, layer.metadata)
       ) {
         useAppStore.getState().updateLayer(layer.id, {
           // Replace metadata wholesale so stale keys (error, bounds) cannot
@@ -220,6 +220,10 @@ export function unwireRasterStoreSync(): void {
 /**
  * Removes every control-managed raster layer from the store, without
  * echoing the removals back at the control.
+ *
+ * Deliberately NOT called from the control's onRemove teardown: the control
+ * is removed on map reinitialisation, where the store layers must survive
+ * so restoreRasterLayers can replay them into the successor control.
  */
 export function removeRasterStoreLayers(): void {
   syncingLayersToStore = true;
@@ -314,6 +318,10 @@ export function savedRasterState(
   ) {
     state.rescale = candidate.rescale as [number, number][] | null;
   }
+  // The valid names are a runtime property of maplibre-gl-raster (90+
+  // colormaps), so no allowlist here; the control tolerates unknown names
+  // (addRaster does not validate them and rendering falls back) rather
+  // than throwing on restore.
   if (typeof candidate.colormap === "string" && candidate.colormap) {
     state.colormap = candidate.colormap;
   }
@@ -324,7 +332,13 @@ export function savedRasterState(
   ) {
     state.nodata = candidate.nodata;
   }
-  if (typeof candidate.gamma === "number" && Number.isFinite(candidate.gamma)) {
+  // Gamma is a power-law exponent; zero and negative values are physically
+  // meaningless and could misbehave in the shader.
+  if (
+    typeof candidate.gamma === "number" &&
+    Number.isFinite(candidate.gamma) &&
+    candidate.gamma > 0
+  ) {
     state.gamma = candidate.gamma;
   }
   if (
@@ -336,6 +350,39 @@ export function savedRasterState(
   }
 
   return state;
+}
+
+// Key-order-insensitive deep equality for source/metadata records, matching
+// the helper of the same name in maplibre-3d-tiles.ts. JSON.stringify would
+// report a difference for semantically equal objects whose keys were built
+// in a different order, forcing a spurious updateLayer on every event.
+function recordsEqual(
+  left: Record<string, unknown>,
+  right: Record<string, unknown>,
+): boolean {
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+  for (const key of keys) {
+    if (!valuesEqual(left[key], right[key])) return false;
+  }
+  return true;
+}
+
+function valuesEqual(left: unknown, right: unknown): boolean {
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right)) return false;
+    if (left.length !== right.length) return false;
+    return left.every((value, index) => valuesEqual(value, right[index]));
+  }
+
+  if (isRecord(left) || isRecord(right)) {
+    return isRecord(left) && isRecord(right) && recordsEqual(left, right);
+  }
+
+  return Object.is(left, right);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function serializableRasterState(

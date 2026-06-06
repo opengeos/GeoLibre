@@ -194,6 +194,18 @@ describe("syncRasterLayersToStore", () => {
     assert.deepEqual(layer.metadata.bounds, [0, 0, 1, 1]);
   });
 
+  it("does not touch an existing layer when nothing changed", () => {
+    const { control } = fakeControl([rasterInfo()]);
+    syncRasterLayersToStore(control);
+    const before = useAppStore.getState().layers[0];
+
+    // A second sync with an identical snapshot builds fresh source/metadata
+    // objects; the deep comparison must not report them as changed.
+    syncRasterLayersToStore(fakeControl([rasterInfo()]).control);
+
+    assert.equal(useAppStore.getState().layers[0], before);
+  });
+
   it("does nothing while sync is suspended", () => {
     const { control } = fakeControl([rasterInfo()]);
     runWithRasterStoreSyncSuspended(() => {
@@ -327,7 +339,7 @@ describe("savedRasterState", () => {
       rescale: [],
       colormap: 42,
       nodata: "sometimes",
-      gamma: Number.NaN,
+      gamma: 0,
       stretch: "cubic",
     };
 
