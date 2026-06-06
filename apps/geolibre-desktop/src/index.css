@@ -1826,8 +1826,11 @@ body,
   --ee-button-muted: hsl(var(--muted-foreground));
   --ee-button-danger: hsl(var(--destructive));
   --ee-shadow: 0 16px 40px hsl(var(--foreground) / 0.16);
+  --geolibre-ee-panel-left: 10px;
 
   color-scheme: light;
+  left: var(--geolibre-ee-panel-left) !important;
+  max-width: calc(100% - var(--geolibre-ee-panel-left) * 2);
 }
 
 .dark .geolibre-earth-engine-panel {
