@@ -223,6 +223,81 @@ describe("syncGeoAgentOverlaysToStore", () => {
     assert.equal(layer.opacity, 0.4);
   });
 
+  it("refreshes the layer type when an overlay is re-added as another kind", () => {
+    syncGeoAgentOverlaysToStore(overlayMap(geojsonOverlay()));
+    syncGeoAgentOverlaysToStore(overlayMap(geeOverlay({ name: "Rivers" })));
+
+    const layer = useAppStore.getState().layers[0];
+    assert.equal(layer.type, "raster");
+  });
+
+  it("omits sourceId for overlays without their own sources", () => {
+    // Native overlays may reference sources that already exist on the map,
+    // leaving their own sourceSpecs (and thus sourceIds) empty.
+    const layer = createGeoAgentStoreLayer({
+      kind: "native",
+      name: "Sky Layer",
+      sourceIds: [],
+      layerIds: ["sky-fill"],
+    });
+
+    assert.ok(!("sourceId" in layer.source));
+    assert.ok(!("sourceId" in layer.metadata));
+  });
+
+  it("treats empty-string style numbers as absent and clamps negatives", () => {
+    const raster = createGeoAgentStoreLayer(geeOverlay({ style: { opacity: "" } }));
+    assert.equal(raster.opacity, 1);
+
+    const geojson = createGeoAgentStoreLayer(
+      geojsonOverlay({ style: { "line-width": -3, "circle-radius": -1 } }),
+    );
+    assert.equal(geojson.style.strokeWidth, 0);
+    assert.equal(geojson.style.circleRadius, 0);
+  });
+
+  it("seeds opacity only for layer types the panel can later control", () => {
+    // hillshade has no *-opacity paint property; seeding from a made-up key
+    // would desync the panel from what opacity changes can actually affect.
+    const layer = createGeoAgentStoreLayer({
+      kind: "native",
+      name: "Relief",
+      sourceIds: ["relief-source"],
+      layerIds: ["relief"],
+      layerSpecs: [
+        {
+          layer: {
+            id: "relief",
+            type: "hillshade",
+            paint: { "hillshade-opacity": 0.5 },
+          },
+        },
+      ],
+    });
+
+    assert.equal(layer.opacity, 1);
+  });
+
+  it("does not echo removeOverlay during deactivate cleanup", () => {
+    const removed: string[] = [];
+    wireGeoAgentStoreSync({
+      removeOverlay: (name) => {
+        removed.push(name);
+        return true;
+      },
+    });
+
+    try {
+      syncGeoAgentOverlaysToStore(overlayMap(geojsonOverlay()));
+      removeGeoAgentStoreLayers();
+
+      assert.equal(useAppStore.getState().layers.length, 0);
+      assert.deepEqual(removed, []);
+    } finally {
+      unwireGeoAgentStoreSync();
+    }
+  });
+
   it("removes only GeoAgent layers when the plugin deactivates", () => {
     useAppStore.getState().addLayer(otherStoreLayer());
     syncGeoAgentOverlaysToStore(overlayMap(geojsonOverlay(), geeOverlay()));

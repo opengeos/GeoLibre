@@ -21,7 +21,12 @@ export type GeoAgentOverlayRecord = {
   style?: Record<string, unknown>;
   attribution?: string;
   layerSpecs?: Array<{
-    layer: { id: string; type: string; paint?: Record<string, unknown> };
+    layer: {
+      id: string;
+      type: string;
+      paint?: Record<string, unknown>;
+      [key: string]: unknown;
+    };
     beforeId?: string;
   }>;
   geeLayerName?: string;
@@ -90,13 +95,19 @@ function isSyncableOverlay(overlay: GeoAgentOverlayRecord): boolean {
 export function createGeoAgentStoreLayer(
   overlay: GeoAgentOverlayRecord,
 ): GeoLibreLayer {
+  // Native overlays may only reference sources that already exist on the
+  // map, so sourceIds can legitimately be empty; omit sourceId rather than
+  // leaking `undefined` into the layer.
+  const sourceId = overlay.sourceIds[0]
+    ? { sourceId: overlay.sourceIds[0] }
+    : {};
   const base: GeoLibreLayer = {
     id: geoAgentStoreLayerId(overlay.name),
     name: overlay.name,
     type: "raster",
     source: {
       type: "raster",
-      sourceId: overlay.sourceIds[0],
+      ...sourceId,
       ...(overlay.url ? { tiles: [overlay.url] } : {}),
       ...(overlay.attribution ? { attribution: overlay.attribution } : {}),
     },
@@ -108,7 +119,7 @@ export function createGeoAgentStoreLayer(
       geoAgentOverlayKind: overlay.kind,
       geoAgentOverlayName: overlay.name,
       nativeLayerIds: [...overlay.layerIds],
-      sourceId: overlay.sourceIds[0],
+      ...sourceId,
       sourceIds: [...overlay.sourceIds],
       sourceKind: GEOAGENT_SOURCE_KIND,
     },
@@ -121,7 +132,7 @@ export function createGeoAgentStoreLayer(
       type: "geojson",
       source: {
         type: "geojson",
-        sourceId: overlay.sourceIds[0],
+        ...sourceId,
         ...(overlay.url ? { url: overlay.url } : {}),
       },
       ...(isFeatureCollection(overlay.data) ? { geojson: overlay.data } : {}),
@@ -134,7 +145,9 @@ export function createGeoAgentStoreLayer(
     // 3D buildings, ...) whose paint is agent-authored, often with data-driven
     // expressions. customLayerType makes layer-sync manage ordering only, so
     // the store's generic style never clobbers that paint; the GeoAgent
-    // plugin applies visibility/opacity itself.
+    // plugin applies visibility/opacity itself. Beyond gating that behavior,
+    // the value feeds map-controller's getLayerSymbolType fallback for the
+    // layer control's symbol when no native layer is on the map.
     return {
       ...base,
       opacity: nativeOverlayOpacity(overlay),
@@ -218,6 +231,7 @@ export function syncGeoAgentOverlaysToStore(
           metadata: { ...existing.metadata, ...layer.metadata },
           source: layer.source,
           sourcePath: layer.sourcePath,
+          type: layer.type,
         });
       }
     }
@@ -232,10 +246,15 @@ export function syncGeoAgentOverlaysToStore(
  * from the map.
  */
 export function removeGeoAgentStoreLayers(): void {
-  for (const layer of useAppStore.getState().layers) {
-    if (isGeoAgentStoreLayer(layer)) {
-      useAppStore.getState().removeLayer(layer.id);
+  syncingOverlaysToStore = true;
+  try {
+    for (const layer of useAppStore.getState().layers) {
+      if (isGeoAgentStoreLayer(layer)) {
+        useAppStore.getState().removeLayer(layer.id);
+      }
     }
+  } finally {
+    syncingOverlaysToStore = false;
   }
 }
 
@@ -351,10 +370,14 @@ function geoJsonOverlayStyle(
     fillColor,
     strokeColor,
     fillOpacity,
-    strokeWidth:
+    strokeWidth: Math.max(
+      0,
       numberValue(style["line-width"]) ?? numberValue(style.lineWidth) ?? 2,
-    circleRadius:
+    ),
+    circleRadius: Math.max(
+      0,
       numberValue(style["circle-radius"]) ?? numberValue(style.radius) ?? 6,
+    ),
   };
 }
 
@@ -362,12 +385,12 @@ function rasterOverlayOpacity(overlay: GeoAgentOverlayRecord): number {
   return clamp01(numberValue(overlay.style?.opacity) ?? 1);
 }
 
+// Uses the same NATIVE_OPACITY_PROPERTIES lookup (and no-op for unlisted
+// types) as applyGeoAgentCustomLayerState, so the panel never seeds an
+// opacity it cannot later apply back to the map.
 function nativeOverlayOpacity(overlay: GeoAgentOverlayRecord): number {
   for (const spec of overlay.layerSpecs ?? []) {
-    const properties = NATIVE_OPACITY_PROPERTIES[spec.layer.type] ?? [
-      `${spec.layer.type}-opacity`,
-    ];
-    for (const property of properties) {
+    for (const property of NATIVE_OPACITY_PROPERTIES[spec.layer.type] ?? []) {
       const opacity = numberValue(spec.layer.paint?.[property]);
       if (opacity !== undefined) return clamp01(opacity);
     }
@@ -382,14 +405,16 @@ function isFeatureCollection(
 }
 
 function stringValue(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
 }
 
 function numberValue(value: unknown): number | undefined {
-  const numeric =
-    typeof value === "number" || typeof value === "string"
-      ? Number(value)
-      : Number.NaN;
+  if (typeof value !== "number" && typeof value !== "string") return undefined;
+  // Number("") is 0; treat blank strings as absent rather than zero.
+  if (typeof value === "string" && !value.trim()) return undefined;
+  const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : undefined;
 }
 
