@@ -18,9 +18,10 @@ const DEFAULT_RASTER_URL =
   "https://data.source.coop/giswqs/opengeos/nlcd_2021_land_cover_30m.tif";
 
 // These types mirror undocumented private members of RasterControl from
-// maplibre-gl-raster (verified against v0.1.1). All access is optional (?.)
+// maplibre-gl-raster (verified against v0.1.2). All access is optional (?.)
 // so a rename in a future release degrades to a no-op rather than a crash --
-// re-verify these names when bumping the dependency.
+// re-verify these names AND the .mlr-control-close selector in
+// wireRasterCloseButton when bumping the dependency.
 type RasterControlInternals = {
   _clickOutsideHandler?: ((event: MouseEvent) => void) | null;
   _panel?: HTMLElement;
@@ -44,6 +45,10 @@ export function openRasterLayerPanel(app: GeoLibreAppAPI): void {
   void (async () => {
     const control = await ensureRasterControl(app);
     if (!control) return;
+    // Defer by one task so the control finishes its mount cycle before the
+    // panel is shown and expanded, matching the other standalone panels
+    // (Earth Engine, 3D Tiles); expanding in the same task as addControl can
+    // measure the panel before MapLibre has laid the control out.
     window.setTimeout(() => {
       // The IIFE's catch cannot see exceptions thrown in this later task.
       try {
@@ -95,6 +100,12 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
     );
 
     const pending: Promise<unknown>[] = [];
+    // The suspension covers the synchronous events fired inside this block:
+    // removeRaster's rasterremove, and the rasteradd each addRaster emits
+    // before it awaits the GeoTIFF header (without it, the first rasteradd
+    // sync would prune store layers not yet replayed). The rasterchange
+    // events that follow header loads land after this window and sync
+    // incrementally; the Promise.allSettled pass below settles the rest.
     runWithRasterStoreSyncSuspended(() => {
       for (const info of control.getRasters()) {
         if (!storeLayerIds.has(info.id)) control.removeRaster(info.id);
