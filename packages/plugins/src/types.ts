@@ -82,7 +82,8 @@ export interface GeoLibrePlugin {
   /**
    * Called once per URL context after the map and plugins are ready.
    * Requires urlParameterNames to be non-empty; otherwise this hook is never
-   * invoked.
+   * invoked. A handler that throws is not counted as handled, so a later
+   * dispatch for the same context retries it.
    */
   handleUrlParameters?: (
     app: GeoLibreAppAPI,

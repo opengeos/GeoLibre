@@ -148,6 +148,46 @@ describe("PluginManager URL parameters", () => {
     assert.deepEqual(calls, ["working"]);
   });
 
+  it("retries a plugin whose handler failed on a later dispatch", async () => {
+    const calls: string[] = [];
+    let shouldFail = true;
+    const manager = new PluginManager();
+
+    manager.register(
+      testPlugin({
+        urlParameterNames: ["data"],
+        handleUrlParameters: () => {
+          if (shouldFail) {
+            shouldFail = false;
+            throw new Error("boom");
+          }
+          calls.push("handled");
+        },
+      }),
+    );
+    manager.activate("url-loader", app);
+
+    // The first dispatch fails, the second retries and succeeds, and the
+    // third is deduped as handled.
+    await manager.handleUrlParameters(
+      new URLSearchParams("data=value"),
+      app,
+      "project-1",
+    );
+    await manager.handleUrlParameters(
+      new URLSearchParams("data=value"),
+      app,
+      "project-1",
+    );
+    await manager.handleUrlParameters(
+      new URLSearchParams("data=value"),
+      app,
+      "project-1",
+    );
+
+    assert.deepEqual(calls, ["handled"]);
+  });
+
   it("ignores calls without any URL parameters", async () => {
     const calls: string[] = [];
     const manager = new PluginManager();
@@ -214,6 +254,53 @@ describe("PluginManager URL parameters", () => {
       "7",
       "first",
     ]);
+  });
+
+  it("does not evict an in-flight context from the dedup map", async () => {
+    const calls: string[] = [];
+    const resolvers: Array<() => void> = [];
+    const manager = new PluginManager();
+
+    manager.register(
+      testPlugin({
+        urlParameterNames: ["data"],
+        handleUrlParameters: async (_app, params) => {
+          const value = params.get("data") ?? "";
+          if (value === "first") {
+            await new Promise<void>((resolve) => {
+              resolvers.push(resolve);
+            });
+          }
+          calls.push(value);
+        },
+      }),
+    );
+    manager.activate("url-loader", app);
+
+    // Suspend the first context, overflow the dedup map with eight newer
+    // contexts, then settle the first dispatch and re-dispatch its context.
+    // The in-flight context must survive eviction so the repeat is deduped.
+    const firstCall = manager.handleUrlParameters(
+      new URLSearchParams("data=first"),
+      app,
+      "ctx-first",
+    );
+    for (let i = 0; i < 8; i += 1) {
+      await manager.handleUrlParameters(
+        new URLSearchParams(`data=${i}`),
+        app,
+        `ctx-${i}`,
+      );
+    }
+    for (const resolve of resolvers) resolve();
+    await firstCall;
+    await manager.handleUrlParameters(
+      new URLSearchParams("data=first"),
+      app,
+      "ctx-first",
+    );
+
+    assert.deepEqual(calls, ["0", "1", "2", "3", "4", "5", "6", "7", "first"]);
   });
 
   it("keeps dedup state for overlapping calls with different contexts", async () => {

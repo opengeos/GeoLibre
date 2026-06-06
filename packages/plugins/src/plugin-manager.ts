@@ -14,6 +14,7 @@ export class PluginManager {
     GeoLibreMapControlPosition
   >();
   private handledUrlParametersByContext = new Map<string, Set<string>>();
+  private inFlightUrlContexts = new Map<string, number>();
   private urlParameterNamesById = new Map<string, string[]>();
   private listeners = new Set<() => void>();
   private version = 0;
@@ -131,43 +132,63 @@ export class PluginManager {
     // Dedup state is kept per context so overlapping async calls with
     // different context keys cannot clear each other's in-flight entries.
     // Only the most recent contexts matter, so older ones are evicted to keep
-    // the map bounded for the lifetime of the page. If more than
-    // MAX_HANDLED_URL_CONTEXTS contexts ever overlapped concurrently, the
-    // oldest could be evicted while still in flight and re-run on a repeat
-    // dispatch; that much overlap is not expected in practice.
+    // the map bounded for the lifetime of the page. In-flight contexts are
+    // never evicted, so a suspended dispatch cannot lose its dedup entries
+    // and re-run plugins for the same context; the map can temporarily exceed
+    // MAX_HANDLED_URL_CONTEXTS while that many dispatches overlap.
+    this.inFlightUrlContexts.set(
+      contextKey,
+      (this.inFlightUrlContexts.get(contextKey) ?? 0) + 1,
+    );
+
     let handledPluginIds = this.handledUrlParametersByContext.get(contextKey);
     if (!handledPluginIds) {
       handledPluginIds = new Set();
       this.handledUrlParametersByContext.set(contextKey, handledPluginIds);
-      while (this.handledUrlParametersByContext.size > MAX_HANDLED_URL_CONTEXTS) {
-        const oldest = this.handledUrlParametersByContext.keys().next().value;
-        if (oldest === undefined) break;
-        this.handledUrlParametersByContext.delete(oldest);
+      for (const key of this.handledUrlParametersByContext.keys()) {
+        if (
+          this.handledUrlParametersByContext.size <= MAX_HANDLED_URL_CONTEXTS
+        ) {
+          break;
+        }
+        if (this.inFlightUrlContexts.has(key)) continue;
+        this.handledUrlParametersByContext.delete(key);
       }
     }
 
-    for (const [id, plugin] of this.plugins) {
-      if (!this.active.has(id) || !plugin.handleUrlParameters) continue;
+    try {
+      for (const [id, plugin] of this.plugins) {
+        if (!this.active.has(id) || !plugin.handleUrlParameters) continue;
 
-      const parameterNames = this.urlParameterNamesById.get(id) ?? [];
-      if (
-        parameterNames.length === 0 ||
-        !parameterNames.some((name) => params.has(name))
-      ) {
-        continue;
+        const parameterNames = this.urlParameterNamesById.get(id) ?? [];
+        if (
+          parameterNames.length === 0 ||
+          !parameterNames.some((name) => params.has(name))
+        ) {
+          continue;
+        }
+
+        if (handledPluginIds.has(id)) continue;
+        // Mark before awaiting so a concurrent dispatch for the same context
+        // cannot double-fire the handler.
+        handledPluginIds.add(id);
+
+        try {
+          await plugin.handleUrlParameters(app, new URLSearchParams(params));
+        } catch (error) {
+          // Unmark so a later dispatch for the same context retries the
+          // plugin instead of silently skipping it after a failure.
+          handledPluginIds.delete(id);
+          console.warn(
+            `Plugin '${id}' could not handle GeoLibre URL parameters.`,
+            error,
+          );
+        }
       }
-
-      if (handledPluginIds.has(id)) continue;
-      handledPluginIds.add(id);
-
-      try {
-        await plugin.handleUrlParameters(app, new URLSearchParams(params));
-      } catch (error) {
-        console.warn(
-          `Plugin '${id}' could not handle GeoLibre URL parameters.`,
-          error,
-        );
-      }
+    } finally {
+      const inFlight = this.inFlightUrlContexts.get(contextKey) ?? 0;
+      if (inFlight <= 1) this.inFlightUrlContexts.delete(contextKey);
+      else this.inFlightUrlContexts.set(contextKey, inFlight - 1);
     }
   }
 

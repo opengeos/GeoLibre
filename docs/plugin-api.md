@@ -136,10 +136,17 @@ export const plugin: GeoLibrePlugin = {
   async handleUrlParameters(app: GeoLibreAppAPI, params: URLSearchParams) {
     for (const dataUrl of params.getAll("exampleGeoJson")) {
       // URL parameter values are attacker-controlled: only fetch HTTPS URLs
-      // and verify the origin is one you trust before loading. This check
-      // only prevents non-HTTPS schemes (file://, data:, http://); it does
-      // not protect against SSRF to loopback or private-network addresses.
-      if (!dataUrl.startsWith("https://")) continue;
+      // and verify the origin is one you trust before loading. Parsing the
+      // value rejects malformed URLs, and the protocol check blocks
+      // non-HTTPS schemes (file://, data:, http://); neither protects
+      // against SSRF to loopback or private-network addresses.
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(dataUrl);
+      } catch {
+        continue;
+      }
+      if (parsedUrl.protocol !== "https:") continue;
       const response = await fetch(dataUrl);
       if (!response.ok) continue;
       app.addGeoJsonLayer("Example URL layer", await response.json(), dataUrl);

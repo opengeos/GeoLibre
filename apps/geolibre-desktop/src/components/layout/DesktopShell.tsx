@@ -159,11 +159,13 @@ export function DesktopShell({
       appAPI,
     );
     restoreThreeDTilesLayers(appAPI);
-    void pluginManager.handleUrlParameters(
-      new URLSearchParams(window.location.search),
-      appAPI,
-      `${projectGeneration}:${window.location.search}`,
-    );
+    void pluginManager
+      .handleUrlParameters(
+        new URLSearchParams(window.location.search),
+        appAPI,
+        `${projectGeneration}:${window.location.search}`,
+      )
+      .catch(console.error);
   }, [externalPluginsReady, mapReadyGeneration, projectGeneration]);
 
   useEffect(() => {
