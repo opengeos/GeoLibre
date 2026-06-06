@@ -36,6 +36,10 @@ const MAX_FIELD_LENGTH = 3000;
 const CAPTURE_NETWORK_INFO_STORAGE_KEY =
   "geolibre.diagnostics.captureNetworkInfo";
 
+// Note: called once at module import, so the initial value is frozen for the
+// lifetime of the module. Tests that need a different starting state must
+// mock localStorage before importing this module, or call
+// setCaptureNetworkInfo() to change it afterwards.
 function readStoredCaptureNetworkInfo(): boolean {
   try {
     return window.localStorage.getItem(CAPTURE_NETWORK_INFO_STORAGE_KEY) === "true";
@@ -205,10 +209,13 @@ export function setCaptureNetworkInfo(enabled: boolean): void {
   if (captureNetworkInfo === enabled) return;
   captureNetworkInfo = enabled;
   try {
-    window.localStorage.setItem(
-      CAPTURE_NETWORK_INFO_STORAGE_KEY,
-      String(enabled),
-    );
+    // The key is only present when the user has explicitly opted in; the
+    // default-off state matches a pristine localStorage.
+    if (enabled) {
+      window.localStorage.setItem(CAPTURE_NETWORK_INFO_STORAGE_KEY, "true");
+    } else {
+      window.localStorage.removeItem(CAPTURE_NETWORK_INFO_STORAGE_KEY);
+    }
   } catch {
     // Persistence is best-effort; the in-memory flag still applies.
   }

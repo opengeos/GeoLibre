@@ -150,7 +150,8 @@ export function DiagnosticsDialog({
               {diagnostics.warningCount} warnings
             </button>
             <span className="rounded bg-muted px-2 py-1 text-muted-foreground">
-              {diagnostics.networkCount} network
+              {diagnostics.networkCount}{" "}
+              {diagnostics.captureNetworkInfo ? "network" : "network errors"}
             </span>
             <label
               className="flex items-center gap-1.5 rounded border px-2 py-1 text-muted-foreground"
