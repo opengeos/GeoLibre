@@ -10,6 +10,7 @@ import "maplibre-gl-esri-wayback/style.css";
 import "maplibre-gl-geo-editor/style.css";
 import "maplibre-gl-geoagent/style.css";
 import "maplibre-gl-geoparquet/style.css";
+import "maplibre-gl-planetary-computer/style.css";
 import "maplibre-gl-streetview/style.css";
 import "maplibre-gl-swipe/style.css";
 import "mapillary-js/dist/mapillary.css";

@@ -24,6 +24,7 @@ import {
   openHtmlPanel,
   openLegendPanel,
   openLidarLayerPanel,
+  openPlanetaryComputerPanel,
   openPMTilesLayerPanel,
   openSearchPlacesPanel,
   openSplattingLayerPanel,
@@ -446,6 +447,9 @@ export function TopToolbar({
   const handleAddThreeDTilesLayer = () => {
     openThreeDTilesLayerPanel(appApi);
   };
+  const handleOpenPlanetaryComputerPanel = () => {
+    openPlanetaryComputerPanel(appApi);
+  };
   const toggleMapControl = (control: ToolbarMapControl) => {
     setControlsVisible((current) => {
       const visible = !current[control];
@@ -690,6 +694,9 @@ export function TopToolbar({
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
+          <DropdownMenuItem onSelect={handleOpenPlanetaryComputerPanel}>
+            Planetary Computer
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       <DropdownMenu>

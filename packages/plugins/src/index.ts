@@ -39,6 +39,7 @@ export {
 } from "./plugins/maplibre-components";
 export { openDuckDBLayerPanel } from "./plugins/maplibre-duckdb";
 export { openGeoParquetLayerPanel } from "./plugins/maplibre-geoparquet";
+export { openPlanetaryComputerPanel } from "./plugins/maplibre-planetary-computer";
 export {
   openThreeDTilesLayerPanel,
   restoreThreeDTilesLayers,
