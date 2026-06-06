@@ -141,13 +141,14 @@ function syncPlanetaryComputerLayersToStore(
       .layers.find((current) => current.id === layer.id);
 
     if (existing) {
+      // Only sync visible/opacity (the same fields the store -> control path
+      // syncs). The name is derived from STAC metadata, so re-syncing it here
+      // would clobber a user rename on every panel event.
       if (
         existing.visible !== layer.visible ||
-        existing.opacity !== layer.opacity ||
-        existing.name !== layer.name
+        existing.opacity !== layer.opacity
       ) {
         useAppStore.getState().updateLayer(layer.id, {
-          name: layer.name,
           opacity: layer.opacity,
           visible: layer.visible,
         });
@@ -222,6 +223,9 @@ function resetPlanetaryComputerControl(
 ): void {
   if (planetaryComputerControl !== control) return;
 
+  control?.off("layer:add", syncPlanetaryComputerLayersToStore);
+  control?.off("layer:remove", syncPlanetaryComputerLayersToStore);
+  control?.off("layer:update", syncPlanetaryComputerLayersToStore);
   planetaryComputerStoreUnsubscribe?.();
   planetaryComputerStoreUnsubscribe = null;
   planetaryComputerControlMounted = false;
