@@ -68,6 +68,15 @@ export function DiagnosticsDialog({
     [diagnostics.records, levelFilter],
   );
   const listIsFiltered = levelFilter !== "all";
+  // Derived here rather than assumed from networkCount so the badge label
+  // and count cannot diverge if non-error network levels are introduced.
+  const networkErrorCount = useMemo(
+    () =>
+      diagnostics.records.filter(
+        (record) => record.category === "network" && record.level === "error",
+      ).length,
+    [diagnostics.records],
+  );
 
   useEffect(
     () => () => {
@@ -150,12 +159,13 @@ export function DiagnosticsDialog({
               {diagnostics.warningCount} warnings
             </button>
             <span className="rounded bg-muted px-2 py-1 text-muted-foreground">
-              {diagnostics.networkCount}{" "}
-              {diagnostics.captureNetworkInfo ? "network" : "network errors"}
+              {diagnostics.captureNetworkInfo
+                ? `${diagnostics.networkCount} network`
+                : `${networkErrorCount} network errors`}
             </span>
             <label
               className="flex items-center gap-1.5 rounded border px-2 py-1 text-muted-foreground"
-              title="Record successful and aborted network requests. Off by default because logging every request slows the app down."
+              title="Record successful and aborted network requests from now on; requests made while logging was off are not backfilled. Off by default because logging every request slows the app down."
             >
               <input
                 className="h-3.5 w-3.5"

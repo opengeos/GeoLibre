@@ -227,6 +227,15 @@ export function useDiagnosticsSnapshot(): DiagnosticsSnapshot {
 }
 
 /**
+ * Returns the current diagnostics snapshot outside of React (e.g. in tests).
+ *
+ * @returns The latest immutable diagnostics snapshot.
+ */
+export function getDiagnosticsSnapshot(): DiagnosticsSnapshot {
+  return snapshot;
+}
+
+/**
  * Installs the fetch/console/window interceptors and returns a cleanup
  * function. Ref-counted so concurrent callers share one installation; the
  * interceptors are only removed once every returned cleanup has been called.
