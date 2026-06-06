@@ -89,7 +89,11 @@ export function geoAgentOverlayName(layer: GeoLibreLayer): string {
  * "__sky") are map state rather than layers, so both are excluded.
  */
 function isSyncableOverlay(overlay: GeoAgentOverlayRecord): boolean {
-  return !overlay.name.startsWith("__") && overlay.layerIds.length > 0;
+  return (
+    overlay.kind !== "marker" &&
+    !overlay.name.startsWith("__") &&
+    overlay.layerIds.length > 0
+  );
 }
 
 export function createGeoAgentStoreLayer(
@@ -206,7 +210,13 @@ export function syncGeoAgentOverlaysToStore(
         .layers.find((current) => current.id === layer.id);
 
       if (!existing) {
+        // addLayer selects the new layer; agent-driven adds happen in the
+        // background and must not steal the user's panel selection.
+        const selectedLayerId = useAppStore.getState().selectedLayerId;
         useAppStore.getState().addLayer(layer);
+        if (useAppStore.getState().selectedLayerId !== selectedLayerId) {
+          useAppStore.setState({ selectedLayerId });
+        }
         continue;
       }
 
@@ -230,7 +240,10 @@ export function syncGeoAgentOverlaysToStore(
       ) {
         useAppStore.getState().updateLayer(layer.id, {
           geojson: layer.geojson,
-          metadata: { ...existing.metadata, ...layer.metadata },
+          // Replace metadata wholesale (like the Earth Engine plugin does):
+          // merging would let kind-specific keys (customLayerType, tileUrl,
+          // identifiable) survive a kind change and misroute layer-sync.
+          metadata: layer.metadata,
           source: layer.source,
           sourcePath: layer.sourcePath,
           type: layer.type,
@@ -287,6 +300,10 @@ export function wireGeoAgentStoreSync(tools: GeoAgentSyncableTools): void {
     ) {
       return;
     }
+
+    // The subscriber fires on every layers change; skip the per-layer scan
+    // when the previous snapshot held no GeoAgent layers at all.
+    if (!previous.layers.some(isGeoAgentStoreLayer)) return;
 
     const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
     for (const layer of previous.layers) {
@@ -393,7 +410,10 @@ function rasterOverlayOpacity(overlay: GeoAgentOverlayRecord): number {
 
 // Uses the same NATIVE_OPACITY_PROPERTIES lookup (and no-op for unlisted
 // types) as applyGeoAgentCustomLayerState, so the panel never seeds an
-// opacity it cannot later apply back to the map.
+// opacity it cannot later apply back to the map. First match wins: the panel
+// models a single opacity per layer, so a heterogeneous multi-spec overlay is
+// seeded from its first recognised spec and homogenised on the first slider
+// change — keep both functions on the same lookup and first-match contract.
 function nativeOverlayOpacity(overlay: GeoAgentOverlayRecord): number {
   for (const spec of overlay.layerSpecs ?? []) {
     for (const property of NATIVE_OPACITY_PROPERTIES[spec.layer.type] ?? []) {

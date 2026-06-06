@@ -231,6 +231,37 @@ describe("syncGeoAgentOverlaysToStore", () => {
     assert.equal(layer.type, "raster");
   });
 
+  it("preserves the panel selection when sync adds layers", () => {
+    useAppStore.getState().addLayer(otherStoreLayer());
+    assert.equal(useAppStore.getState().selectedLayerId, "unrelated");
+
+    // Agent-driven adds happen in the background; they must not steal the
+    // user's current layer-panel selection.
+    syncGeoAgentOverlaysToStore(overlayMap(geojsonOverlay()));
+
+    assert.equal(useAppStore.getState().selectedLayerId, "unrelated");
+  });
+
+  it("clears customLayerType when a native overlay is re-added as geojson", () => {
+    syncGeoAgentOverlaysToStore(
+      overlayMap({
+        kind: "native",
+        name: "Rivers",
+        sourceIds: ["rivers-source"],
+        layerIds: ["rivers-fill"],
+        layerSpecs: [{ layer: { id: "rivers-fill", type: "fill" } }],
+      }),
+    );
+    syncGeoAgentOverlaysToStore(overlayMap(geojsonOverlay()));
+
+    const layer = useAppStore.getState().layers[0];
+    assert.equal(layer.type, "geojson");
+    assert.ok(
+      typeof layer.metadata.customLayerType !== "string",
+      "customLayerType must be absent so layer-sync uses the normal geojson path",
+    );
+  });
+
   it("reseeds the style when an overlay changes kind", () => {
     syncGeoAgentOverlaysToStore(overlayMap(geeOverlay()));
     syncGeoAgentOverlaysToStore(overlayMap(geojsonOverlay({ name: "NDVI" })));
