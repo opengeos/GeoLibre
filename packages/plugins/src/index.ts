@@ -59,6 +59,20 @@ export {
   openThreeDTilesLayerPanel,
   restoreThreeDTilesLayers,
 } from "./plugins/maplibre-3d-tiles";
+export {
+  openRasterLayerPanel,
+  restoreRasterLayers,
+} from "./plugins/maplibre-raster";
+export {
+  createRasterStoreLayer,
+  isRasterControlStoreLayer,
+  removeRasterStoreLayers,
+  savedRasterState,
+  syncRasterLayersToStore,
+  unwireRasterStoreSync,
+  wireRasterStoreSync,
+  type RasterSyncableControl,
+} from "./plugins/raster-layer-sync";
 export { maplibreEsriWaybackPlugin } from "./plugins/maplibre-esri-wayback";
 export { maplibreGeoEditorPlugin } from "./plugins/maplibre-geo-editor";
 export { maplibreGeoAgentPlugin } from "./plugins/maplibre-geoagent";

@@ -1,7 +1,10 @@
 import { useAppStore } from "@geolibre/core";
 import type { MapController, MapDiagnosticEvent } from "@geolibre/map";
 import { MapCanvas } from "@geolibre/map";
-import { restoreThreeDTilesLayers } from "@geolibre/plugins";
+import {
+  restoreRasterLayers,
+  restoreThreeDTilesLayers,
+} from "@geolibre/plugins";
 import {
   type CSSProperties,
   type DragEvent,
@@ -159,6 +162,7 @@ export function DesktopShell({
       appAPI,
     );
     restoreThreeDTilesLayers(appAPI);
+    restoreRasterLayers(appAPI);
     const search = window.location.search;
     void pluginManager
       .handleUrlParameters(

@@ -27,6 +27,7 @@ import {
   openLidarLayerPanel,
   openPlanetaryComputerPanel,
   openPMTilesLayerPanel,
+  openRasterLayerPanel,
   openSearchPlacesPanel,
   openSplattingLayerPanel,
   openStacSearchLayerPanel,
@@ -390,6 +391,9 @@ export function TopToolbar({
   const handleAddStacLayer = () => {
     openStacSearchLayerPanel(appApi);
   };
+  const handleAddRasterLayer = () => {
+    openRasterLayerPanel(appApi);
+  };
   const searchPlacesVisible = useSyncExternalStore(
     subscribeSearchPlacesPanel,
     isSearchPlacesPanelVisible,
@@ -607,7 +611,7 @@ export function TopToolbar({
           <DropdownMenuItem onSelect={() => setAddDataKind("vector")}>
             Vector Layer
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setAddDataKind("raster")}>
+          <DropdownMenuItem onSelect={handleAddRasterLayer}>
             Raster Layer
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setAddDataKind("delimited-text")}>

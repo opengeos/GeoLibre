@@ -6,10 +6,8 @@ import {
 import { getLayerBounds, type MapController } from "@geolibre/map";
 import {
   addArcGISLayer,
-  addCogRasterLayer,
   type ArcGISLayerType,
   type ArcGISSourceType,
-  type CogRasterLayerOptions,
 } from "@geolibre/plugins";
 import {
   Button,
@@ -28,7 +26,6 @@ import {
   Database,
   FileUp,
   Globe2,
-  Image,
   Map as MapIcon,
 } from "lucide-react";
 import {
@@ -84,7 +81,6 @@ export type AddDataKind =
   | "vector"
   | "gpx"
   | "delimited-text"
-  | "raster"
   | "mbtiles"
   | "arcgis"
   | "postgres";
@@ -100,12 +96,6 @@ type GpxMode = "url" | "file";
 type GpxLayerKind = "waypoints" | "tracks" | "routes";
 type DelimitedTextMode = "url" | "file";
 type DelimitedTextDelimiter = "comma" | "tab" | "semicolon" | "pipe" | "custom";
-type RasterMode = "tiles" | "cog-url" | "file";
-type RasterColormap = NonNullable<CogRasterLayerOptions["colormap"]>;
-type SelectedRasterFile = {
-  data: ArrayBuffer;
-  path: string;
-};
 
 const KIND_LABELS: Record<AddDataKind, string> = {
   xyz: "Add XYZ Layer",
@@ -115,24 +105,10 @@ const KIND_LABELS: Record<AddDataKind, string> = {
   vector: "Add Vector Layer",
   gpx: "Add GPX Layer",
   "delimited-text": "Add Delimited Text Layer",
-  raster: "Add Raster Layer",
   mbtiles: "Add MBTiles Layer",
   arcgis: "Add ArcGIS Layer",
   postgres: "Add PostgreSQL Layer",
 };
-
-const COG_COLORMAPS = [
-  "none",
-  "viridis",
-  "plasma",
-  "inferno",
-  "magma",
-  "cividis",
-  "terrain",
-  "turbo",
-  "jet",
-  "gray",
-] satisfies RasterColormap[];
 
 const DEFAULT_XYZ_URL =
   "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}";
@@ -143,8 +119,6 @@ const DEFAULT_WFS_ENDPOINT = "https://ahocevar.com/geoserver/wfs";
 const DEFAULT_WFS_TYPE_NAME = "topp:states";
 const DEFAULT_WMTS_URL =
   "https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/119/{z}/{y}/{x}";
-const DEFAULT_RASTER_URL =
-  "https://data.source.coop/giswqs/opengeos/nlcd_2021_land_cover_30m.tif";
 const DEFAULT_GEOJSON_URL =
   "https://data.source.coop/giswqs/opengeos/countries.geojson";
 const DEFAULT_GPX_URL =
@@ -440,16 +414,6 @@ export function AddDataDialog({
     text: string;
   } | null>(null);
 
-  const [rasterMode, setRasterMode] = useState<RasterMode>("cog-url");
-  const [rasterUrl, setRasterUrl] = useState(DEFAULT_RASTER_URL);
-  const [rasterTileSize, setRasterTileSize] = useState("256");
-  const [rasterBands, setRasterBands] = useState("1");
-  const [rasterColormap, setRasterColormap] = useState<RasterColormap>("none");
-  const [rasterMin, setRasterMin] = useState("0");
-  const [rasterMax, setRasterMax] = useState("255");
-  const [rasterNodata, setRasterNodata] = useState("");
-  const [selectedRasterFile, setSelectedRasterFile] =
-    useState<SelectedRasterFile | null>(null);
   const [selectedMbtiles, setSelectedMbtiles] = useState<{
     metadata: MbtilesMetadata;
     path: string;
@@ -490,7 +454,6 @@ export function AddDataDialog({
         vector: "Vector Layer",
         gpx: "GPX Layer",
         "delimited-text": "Delimited Text Layer",
-        raster: "Raster Layer",
         mbtiles: "MBTiles Layer",
         arcgis: "ArcGIS Layer",
         postgres: "PostgreSQL Layer",
@@ -536,15 +499,6 @@ export function AddDataDialog({
     setDelimitedTextColumnsStatus(null);
     setIsRetrievingDelimitedTextColumns(false);
     setSelectedDelimitedText(null);
-    setRasterMode("cog-url");
-    setRasterUrl(DEFAULT_RASTER_URL);
-    setRasterTileSize("256");
-    setRasterBands("1");
-    setRasterColormap("none");
-    setRasterMin("0");
-    setRasterMax("255");
-    setRasterNodata("");
-    setSelectedRasterFile(null);
     setSelectedMbtiles(null);
     setMbtilesSourceLayers("");
     setArcgisLayerType("feature");
@@ -588,9 +542,6 @@ export function AddDataDialog({
     }
     if (kind === "delimited-text") {
       return "Add a delimited text file or URL as a point layer using longitude and latitude fields.";
-    }
-    if (kind === "raster") {
-      return "Add a Cloud Optimized GeoTIFF or raster URL, or use a raster tile template.";
     }
     if (kind === "mbtiles") {
       return "Add a local MBTiles file as a raster or vector tile layer.";
@@ -966,35 +917,6 @@ export function AddDataDialog({
       );
     } catch (err) {
       setError(errorMessage(err, "Could not read GPX file."));
-    }
-  };
-
-  const handleChooseRasterFile = async () => {
-    setError(null);
-    try {
-      const result = await openLocalDataFileWithFallback({
-        filters: [
-          {
-            name: "GeoTIFF raster",
-            extensions: ["tif", "tiff"],
-          },
-        ],
-        accept: ".tif,.tiff",
-        readBinary: true,
-      });
-      if (!result) return;
-      if (!result.data) throw new Error("Raster file data is missing.");
-      setSelectedRasterFile({
-        data: result.data,
-        path: result.path,
-      });
-      setLayerName((current) =>
-        current.trim() && current !== "Raster Layer"
-          ? current
-          : layerNameFromPath(result.path, "Raster Layer"),
-      );
-    } catch (err) {
-      setError(errorMessage(err, "Could not read raster file."));
     }
   };
 
@@ -1410,62 +1332,6 @@ export function AddDataDialog({
         await addMartinSource(selectedMartinSourceId);
         return;
       }
-
-      if (rasterMode === "tiles") {
-        if (!rasterUrl.trim()) {
-          throw new Error("Enter a raster tile URL template.");
-        }
-        addAndClose(
-          createBaseLayer(name, "raster", {
-            type: "raster",
-            tiles: [rasterUrl.trim()],
-            tileSize: Number(rasterTileSize) || 256,
-          }),
-        );
-        return;
-      }
-
-      if (rasterMode === "cog-url") {
-        if (!rasterUrl.trim()) throw new Error("Enter a raster URL.");
-        const rescaleMin = parseRequiredNumber(rasterMin, "minimum value");
-        const rescaleMax = parseRequiredNumber(rasterMax, "maximum value");
-        if (rescaleMax <= rescaleMin) {
-          throw new Error("Maximum value must be greater than minimum value.");
-        }
-        await addCogRasterLayer(createAppAPI(mapControllerRef), {
-          bands: rasterBands.trim() || "1",
-          beforeLayerId: beforeLayer,
-          colormap: rasterColormap,
-          name,
-          nodata: parseOptionalNumber(rasterNodata, "nodata value"),
-          opacity: 1,
-          rescaleMax,
-          rescaleMin,
-          url: rasterUrl.trim(),
-        });
-        closeDialog();
-        return;
-      }
-
-      if (!selectedRasterFile) throw new Error("Choose a raster file.");
-      const rescaleMin = parseRequiredNumber(rasterMin, "minimum value");
-      const rescaleMax = parseRequiredNumber(rasterMax, "maximum value");
-      if (rescaleMax <= rescaleMin) {
-        throw new Error("Maximum value must be greater than minimum value.");
-      }
-      await addCogRasterLayer(createAppAPI(mapControllerRef), {
-        bands: rasterBands.trim() || "1",
-        beforeLayerId: beforeLayer,
-        colormap: rasterColormap,
-        data: selectedRasterFile.data,
-        name,
-        nodata: parseOptionalNumber(rasterNodata, "nodata value"),
-        opacity: 1,
-        rescaleMax,
-        rescaleMin,
-        url: selectedRasterFile.path,
-      });
-      closeDialog();
     } catch (err) {
       setError(errorMessage(err, "Could not add layer."));
     } finally {
@@ -2272,132 +2138,6 @@ export function AddDataDialog({
             </div>
           )}
 
-          {kind === "raster" && (
-            <div className="space-y-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="raster-mode">Source type</Label>
-                <Select
-                  id="raster-mode"
-                  value={rasterMode}
-                  onChange={(event) =>
-                    setRasterMode(event.target.value as RasterMode)
-                  }
-                >
-                  <option value="cog-url">COG or raster URL</option>
-                  <option value="tiles">Raster tile URL template</option>
-                  <option value="file">Raster file</option>
-                </Select>
-              </div>
-              {rasterMode === "file" ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleChooseRasterFile}
-                  >
-                    <Image className="mr-2 h-3.5 w-3.5" />
-                    Choose file
-                  </Button>
-                  <span className="min-w-0 truncate text-xs text-muted-foreground">
-                    {selectedRasterFile
-                      ? fileNameFromPath(selectedRasterFile.path)
-                      : "No file selected"}
-                  </span>
-                </div>
-              ) : (
-                <div className="grid gap-3 sm:grid-cols-[1fr_7rem]">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="raster-url">
-                      {rasterMode === "tiles"
-                        ? "Tile URL template"
-                        : "Raster URL"}
-                    </Label>
-                    <Input
-                      id="raster-url"
-                      placeholder={
-                        rasterMode === "tiles"
-                          ? "https://example.com/{z}/{x}/{y}.png"
-                          : "https://example.com/image.tif"
-                      }
-                      value={rasterUrl}
-                      onChange={(event) => setRasterUrl(event.target.value)}
-                    />
-                  </div>
-                  {rasterMode === "tiles" && (
-                    <div className="space-y-1.5">
-                      <Label htmlFor="raster-tile-size">Tile size</Label>
-                      <Input
-                        id="raster-tile-size"
-                        inputMode="numeric"
-                        value={rasterTileSize}
-                        onChange={(event) =>
-                          setRasterTileSize(event.target.value)
-                        }
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-              {rasterMode !== "tiles" && (
-                <div className="grid gap-3 sm:grid-cols-4">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="raster-bands">Bands</Label>
-                    <Input
-                      id="raster-bands"
-                      placeholder="1 or 1,2,3"
-                      value={rasterBands}
-                      onChange={(event) => setRasterBands(event.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="raster-colormap">Colormap</Label>
-                    <Select
-                      id="raster-colormap"
-                      value={rasterColormap}
-                      onChange={(event) =>
-                        setRasterColormap(event.target.value as RasterColormap)
-                      }
-                    >
-                      {COG_COLORMAPS.map((colormap) => (
-                        <option key={colormap} value={colormap}>
-                          {colormap}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="raster-min">Min</Label>
-                    <Input
-                      id="raster-min"
-                      inputMode="decimal"
-                      value={rasterMin}
-                      onChange={(event) => setRasterMin(event.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="raster-max">Max</Label>
-                    <Input
-                      id="raster-max"
-                      inputMode="decimal"
-                      value={rasterMax}
-                      onChange={(event) => setRasterMax(event.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label htmlFor="raster-nodata">Nodata</Label>
-                    <Input
-                      id="raster-nodata"
-                      inputMode="decimal"
-                      placeholder="Optional"
-                      value={rasterNodata}
-                      onChange={(event) => setRasterNodata(event.target.value)}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
           <div className="flex justify-end gap-2">
@@ -2413,8 +2153,6 @@ export function AddDataDialog({
               {!isSubmitting ? (
                 kind === "wms" || kind === "wfs" || kind === "wmts" ? (
                   <Globe2 className="mr-2 h-3.5 w-3.5" />
-                ) : kind === "raster" ? (
-                  <Image className="mr-2 h-3.5 w-3.5" />
                 ) : (
                   <MapIcon className="mr-2 h-3.5 w-3.5" />
                 )
