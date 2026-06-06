@@ -50,15 +50,19 @@ type EarthEngineControlMethods = EarthEngineControlInternals & {
   _renderLayersList?: () => void;
 };
 
-const EARTH_ENGINE_OPTIONS = {
-  className: "geolibre-earth-engine-control",
-  collapsed: false,
-  oauthClientId: oauthClientIdValue(importMetaEnv().VITE_GEE_OAUTH_CLIENT_ID),
-  panelWidth: 420,
-  projectId: projectValue(importMetaEnv().VITE_GEE_PROJECT_ID, STORAGE_PREFIX),
-  storagePrefix: STORAGE_PREFIX,
-  title: "Earth Engine",
-} satisfies Omit<PluginControlOptions, "position">;
+function earthEngineOptions(): Omit<PluginControlOptions, "position"> {
+  return {
+    className: "geolibre-earth-engine-control",
+    collapsed: false,
+    oauthClientId: oauthClientIdValue(importMetaEnv().VITE_GEE_OAUTH_CLIENT_ID),
+    panelWidth: 420,
+    // Evaluated when the panel opens so deep links and storage updates made
+    // after startup are picked up.
+    projectId: projectValue(importMetaEnv().VITE_GEE_PROJECT_ID, STORAGE_PREFIX),
+    storagePrefix: STORAGE_PREFIX,
+    title: "Earth Engine",
+  };
+}
 
 let earthEngineControl: PluginControl | null = null;
 let earthEngineControlMounted = false;
@@ -93,7 +97,7 @@ export function subscribeEarthEnginePanel(listener: () => void): () => void {
 async function openStandaloneEarthEngineControl(
   app: GeoLibreAppAPI,
 ): Promise<boolean> {
-  earthEngineControl ??= new GeoLibreEarthEngineControl(EARTH_ENGINE_OPTIONS);
+  earthEngineControl ??= new GeoLibreEarthEngineControl(earthEngineOptions());
   wireEarthEngineLayerSync(earthEngineControl);
 
   if (!earthEngineControlMounted) {
@@ -135,6 +139,9 @@ class GeoLibreEarthEngineControl extends PluginControl {
       }
     }
 
+    // The base implementation consumes options.accessToken when present
+    // (no second OAuth prompt) and still handles project ID persistence,
+    // ee.initialize, and status updates.
     await super.authenticate(projectId, oauthClientId);
   }
 }

@@ -100,10 +100,15 @@ fn ensure_oauth_server(state: &EarthEngineOAuthState) -> Result<u16, String> {
             ));
         }
     };
-    let oauth_port = listener
-        .local_addr()
-        .map_err(|error| format!("Could not read Earth Engine OAuth helper address: {error}"))?
-        .port();
+    let oauth_port = match listener.local_addr() {
+        Ok(addr) => addr.port(),
+        Err(error) => {
+            state.server_started.store(false, Ordering::Release);
+            return Err(format!(
+                "Could not read Earth Engine OAuth helper address: {error}",
+            ));
+        }
+    };
     state.server_port.store(oauth_port, Ordering::Release);
     let tokens = Arc::clone(&state.tokens);
 

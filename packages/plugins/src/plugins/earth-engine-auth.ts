@@ -149,16 +149,18 @@ async function authenticateEarthEngineViaTauri(
     { clientId: oauthClientId },
   );
 
-  await openTauriBrowserTab(session.url);
-  const token = await waitForTauriEarthEngineToken(session.state);
+  const popup = await openTauriBrowserTab(session.url);
+  const token = await waitForTauriEarthEngineToken(session.state, popup);
   applyEarthEngineAccessToken(oauthClientId, token);
   return token;
 }
 
-async function openTauriBrowserTab(url: string): Promise<void> {
+async function openTauriBrowserTab(url: string): Promise<Window | null> {
   try {
     await openUrl(url);
-    return;
+    // Native browser tabs cannot be observed for cancellation; the poll loop
+    // falls back to its timeout in that case.
+    return null;
   } catch {
     // Fall back to window.open in development or if the opener plugin is absent.
   }
@@ -171,17 +173,26 @@ async function openTauriBrowserTab(url: string): Promise<void> {
   if (!popup) {
     throw new Error("Earth Engine sign-in popup was blocked.");
   }
+  return popup;
 }
 
 async function waitForTauriEarthEngineToken(
   state: string,
+  popup?: Window | null,
 ): Promise<TauriEarthEngineOAuthToken> {
+  let closedPolls = 0;
   for (let poll = 0; poll < 300; poll += 1) {
     const token = await invoke<TauriEarthEngineOAuthToken | null>(
       "poll_earth_engine_oauth",
       { stateId: state },
     );
     if (token) return token;
+    if (popup?.closed) {
+      closedPolls += 1;
+      if (closedPolls > 2) {
+        throw new Error("Earth Engine sign-in was cancelled.");
+      }
+    }
     await delay(1000);
   }
   throw new Error("Earth Engine sign-in timed out.");

@@ -1826,12 +1826,14 @@ body,
   --ee-button-muted: #475569;
   --ee-button-danger: hsl(var(--destructive));
   --ee-shadow: 0 16px 40px hsl(var(--foreground) / 0.16);
+
   color-scheme: light;
 }
 
 .dark .geolibre-earth-engine-panel {
   --ee-button-muted: #64748b;
   --ee-shadow: 0 16px 40px hsl(0 0% 0% / 0.4);
+
   color-scheme: dark;
 }
 
