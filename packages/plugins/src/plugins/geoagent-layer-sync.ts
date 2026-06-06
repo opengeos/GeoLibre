@@ -216,7 +216,9 @@ export function syncGeoAgentOverlaysToStore(
       // by reference: unchanged overlays keep the same record (and data
       // object) between commands, while a removeOverlay-then-add cycle swaps
       // it out even when the freed ids are reused.
+      const typeChanged = existing.type !== layer.type;
       if (
+        typeChanged ||
         JSON.stringify(existing.metadata.nativeLayerIds) !==
           JSON.stringify(layer.metadata.nativeLayerIds) ||
         JSON.stringify(existing.metadata.sourceIds) !==
@@ -232,6 +234,10 @@ export function syncGeoAgentOverlaysToStore(
           source: layer.source,
           sourcePath: layer.sourcePath,
           type: layer.type,
+          // User style edits do not carry meaning across a kind switch;
+          // reseed from the overlay so e.g. a geojson re-add paints with the
+          // agent's style instead of the old kind's.
+          ...(typeChanged ? { style: layer.style } : {}),
         });
       }
     }

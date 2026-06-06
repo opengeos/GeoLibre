@@ -231,6 +231,17 @@ describe("syncGeoAgentOverlaysToStore", () => {
     assert.equal(layer.type, "raster");
   });
 
+  it("reseeds the style when an overlay changes kind", () => {
+    syncGeoAgentOverlaysToStore(overlayMap(geeOverlay()));
+    syncGeoAgentOverlaysToStore(overlayMap(geojsonOverlay({ name: "NDVI" })));
+
+    const layer = useAppStore.getState().layers[0];
+    assert.equal(layer.type, "geojson");
+    // The old kind's style carries no meaning across the switch; the new
+    // geojson style mapped from the overlay must win.
+    assert.equal(layer.style.fillColor, "#ff0000");
+  });
+
   it("omits sourceId for overlays without their own sources", () => {
     // Native overlays may reference sources that already exist on the map,
     // leaving their own sourceSpecs (and thus sourceIds) empty.
