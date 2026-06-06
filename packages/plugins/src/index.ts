@@ -50,6 +50,12 @@ export {
 export { openGeoParquetLayerPanel } from "./plugins/maplibre-geoparquet";
 export { openPlanetaryComputerPanel } from "./plugins/maplibre-planetary-computer";
 export {
+  isEarthEnginePanelVisible,
+  openEarthEnginePanel,
+  subscribeEarthEnginePanel,
+  toggleEarthEnginePanel,
+} from "./plugins/maplibre-earth-engine";
+export {
   openThreeDTilesLayerPanel,
   restoreThreeDTilesLayers,
 } from "./plugins/maplibre-3d-tiles";

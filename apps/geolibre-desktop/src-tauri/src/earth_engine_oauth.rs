@@ -1,11 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    io::ErrorKind,
     io::{BufRead, BufReader, Read, Write},
     net::{TcpListener, TcpStream},
     sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU16, AtomicU64, Ordering},
         Arc, Mutex,
     },
     thread,
@@ -13,7 +12,6 @@ use std::{
 };
 
 const OAUTH_HOST: &str = "127.0.0.1";
-const OAUTH_PORT: u16 = 5173;
 const AUTH_PATH: &str = "/__geolibre_ee_auth";
 const TOKEN_PATH: &str = "/__geolibre_ee_token";
 
@@ -21,6 +19,7 @@ const TOKEN_PATH: &str = "/__geolibre_ee_token";
 pub struct EarthEngineOAuthState {
     counter: AtomicU64,
     server_started: AtomicBool,
+    server_port: AtomicU16,
     tokens: Arc<Mutex<HashMap<String, EarthEngineOAuthToken>>>,
 }
 
@@ -51,7 +50,7 @@ pub fn start_earth_engine_oauth(
         return Err("Earth Engine OAuth client ID is required.".to_string());
     }
 
-    ensure_oauth_server(&state)?;
+    let oauth_port = ensure_oauth_server(&state)?;
 
     let counter = state.counter.fetch_add(1, Ordering::Relaxed);
     let now = SystemTime::now()
@@ -60,7 +59,7 @@ pub fn start_earth_engine_oauth(
         .as_millis();
     let state_id = format!("geolibre-{now}-{counter}");
     let url = format!(
-        "http://localhost:{OAUTH_PORT}{AUTH_PATH}?client_id={}&state={}",
+        "http://localhost:{oauth_port}{AUTH_PATH}?client_id={}&state={}",
         url_encode(client_id),
         url_encode(&state_id),
     );
@@ -80,50 +79,62 @@ pub fn poll_earth_engine_oauth(
     Ok(tokens.remove(&state_id))
 }
 
-fn ensure_oauth_server(state: &EarthEngineOAuthState) -> Result<(), String> {
+fn ensure_oauth_server(state: &EarthEngineOAuthState) -> Result<u16, String> {
     if state.server_started.load(Ordering::Acquire) {
-        return Ok(());
+        return current_oauth_port(state);
     }
     if state
         .server_started
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
         .is_err()
     {
-        return Ok(());
+        return current_oauth_port(state);
     }
 
-    let listener = match TcpListener::bind((OAUTH_HOST, OAUTH_PORT)) {
+    let listener = match TcpListener::bind((OAUTH_HOST, 0)) {
         Ok(listener) => listener,
         Err(error) => {
             state.server_started.store(false, Ordering::Release);
-            if error.kind() == ErrorKind::AddrInUse {
-                return Err(format!(
-                    "Could not start Earth Engine OAuth helper on http://localhost:{OAUTH_PORT} because the port is already in use. Close any running GeoLibre dev server or other app using port {OAUTH_PORT}, then try again.",
-                ));
-            }
             return Err(format!(
-                "Could not start Earth Engine OAuth helper on http://localhost:{OAUTH_PORT}: {error}",
+                "Could not start Earth Engine OAuth helper on localhost: {error}",
             ));
         }
     };
+    let oauth_port = listener
+        .local_addr()
+        .map_err(|error| format!("Could not read Earth Engine OAuth helper address: {error}"))?
+        .port();
+    state.server_port.store(oauth_port, Ordering::Release);
     let tokens = Arc::clone(&state.tokens);
 
     thread::spawn(move || {
         for stream in listener.incoming().flatten() {
             let tokens = Arc::clone(&tokens);
-            thread::spawn(move || handle_connection(stream, tokens));
+            thread::spawn(move || handle_connection(stream, oauth_port, tokens));
         }
     });
 
-    Ok(())
+    Ok(oauth_port)
+}
+
+fn current_oauth_port(state: &EarthEngineOAuthState) -> Result<u16, String> {
+    for _ in 0..50 {
+        let port = state.server_port.load(Ordering::Acquire);
+        if port != 0 {
+            return Ok(port);
+        }
+        thread::sleep(std::time::Duration::from_millis(10));
+    }
+    Err("Earth Engine OAuth helper is still starting. Try again in a moment.".to_string())
 }
 
 fn handle_connection(
     mut stream: TcpStream,
+    oauth_port: u16,
     tokens: Arc<Mutex<HashMap<String, EarthEngineOAuthToken>>>,
 ) {
     let Ok((method, target, body)) = read_request(&stream) else {
-        let _ = write_response(&mut stream, 400, "text/plain", "Bad request");
+        let _ = write_response(&mut stream, 400, "text/plain", "Bad request", oauth_port);
         return;
     };
     let (path, query) = split_target(&target);
@@ -138,6 +149,7 @@ fn handle_connection(
                 200,
                 "text/html",
                 &auth_page(&client_id, &state),
+                oauth_port,
             );
         }
         ("POST", TOKEN_PATH) => {
@@ -148,13 +160,13 @@ fn handle_connection(
                     }
                 }
             }
-            let _ = write_response(&mut stream, 204, "text/plain", "");
+            let _ = write_response(&mut stream, 204, "text/plain", "", oauth_port);
         }
         ("OPTIONS", TOKEN_PATH) => {
-            let _ = write_response(&mut stream, 204, "text/plain", "");
+            let _ = write_response(&mut stream, 204, "text/plain", "", oauth_port);
         }
         _ => {
-            let _ = write_response(&mut stream, 404, "text/plain", "Not found");
+            let _ = write_response(&mut stream, 404, "text/plain", "Not found", oauth_port);
         }
     }
 }
@@ -213,6 +225,7 @@ fn write_response(
     status: u16,
     content_type: &str,
     body: &str,
+    oauth_port: u16,
 ) -> std::io::Result<()> {
     let reason = match status {
         200 => "OK",
@@ -226,7 +239,7 @@ fn write_response(
         "HTTP/1.1 {status} {reason}\r\n\
          Content-Type: {content_type}; charset=utf-8\r\n\
          Content-Length: {}\r\n\
-         Access-Control-Allow-Origin: http://localhost:{OAUTH_PORT}\r\n\
+         Access-Control-Allow-Origin: http://localhost:{oauth_port}\r\n\
          Access-Control-Allow-Headers: content-type\r\n\
          Access-Control-Allow-Methods: POST, OPTIONS\r\n\
          Connection: close\r\n\

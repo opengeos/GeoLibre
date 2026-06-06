@@ -70,6 +70,8 @@ jobs:
 
       - name: Build web app
         run: npm run build
+        env:
+          VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
 
       - name: Run frontend tests
         run: npm run test:frontend

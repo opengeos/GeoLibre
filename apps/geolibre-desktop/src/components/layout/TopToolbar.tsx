@@ -16,6 +16,7 @@ import {
   closeSearchPlacesPanel,
   openFlatGeobufAddVectorLayerPanel,
   openDuckDBLayerPanel,
+  isEarthEnginePanelVisible,
   isColorbarPanelVisible,
   isHtmlPanelVisible,
   isLegendPanelVisible,
@@ -32,9 +33,11 @@ import {
   openThreeDTilesLayerPanel,
   openZarrLayerPanel,
   subscribeColorbarPanel,
+  subscribeEarthEnginePanel,
   subscribeHtmlPanel,
   subscribeLegendPanel,
   subscribeSearchPlacesPanel,
+  toggleEarthEnginePanel,
   type GeoLibreMapControlPosition,
 } from "@geolibre/plugins";
 import {
@@ -450,6 +453,14 @@ export function TopToolbar({
   const handleOpenPlanetaryComputerPanel = () => {
     openPlanetaryComputerPanel(appApi);
   };
+  const earthEnginePanelVisible = useSyncExternalStore(
+    subscribeEarthEnginePanel,
+    isEarthEnginePanelVisible,
+    isEarthEnginePanelVisible,
+  );
+  const handleToggleEarthEnginePanel = () => {
+    toggleEarthEnginePanel(appApi);
+  };
   const toggleMapControl = (control: ToolbarMapControl) => {
     setControlsVisible((current) => {
       const visible = !current[control];
@@ -691,6 +702,10 @@ export function TopToolbar({
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleOpenPlanetaryComputerPanel}>
             Planetary Computer
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleToggleEarthEnginePanel}>
+            Earth Engine
+            {earthEnginePanelVisible ? " ✓" : ""}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

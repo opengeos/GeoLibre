@@ -10,6 +10,7 @@ import type {
 import { defineConfig, type Plugin } from "vite";
 
 const GEOAGENT_BROWSER_BUNDLE = "maplibre-gl-geoagent/dist/browser-";
+const EARTH_ENGINE_CONTROL_BUNDLE = "maplibre-gl-earth-engine/dist/";
 const EARTH_ENGINE_BROWSER_BUNDLE = "@google/earthengine/build/browser.js";
 const GIS_CHUNK_WARNING_LIMIT_KB = 14000;
 const APP_BASE = process.env.GEOLIBRE_APP_BASE;
@@ -39,6 +40,7 @@ function manualChunks(id: string): string | undefined {
   if (!id.includes("node_modules")) return undefined;
   if (id.includes("@duckdb/duckdb-wasm")) return "duckdb";
   if (
+    id.includes("maplibre-gl-earth-engine") ||
     id.includes("maplibre-gl-geoagent") ||
     id.includes("@google/earthengine")
   ) {
@@ -62,6 +64,7 @@ function onwarn(
     warning.code === "EVAL" &&
     typeof warning.id === "string" &&
     (warning.id.includes(GEOAGENT_BROWSER_BUNDLE) ||
+      warning.id.includes(EARTH_ENGINE_CONTROL_BUNDLE) ||
       warning.id.includes(EARTH_ENGINE_BROWSER_BUNDLE))
   ) {
     return;

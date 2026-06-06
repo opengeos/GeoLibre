@@ -48,6 +48,7 @@ jobs:
         run: npm run build -w geolibre-desktop
         env:
           GEOLIBRE_APP_BASE: ./
+          VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
 
       - name: Build documentation
         run: mkdocs build --strict --site-dir site

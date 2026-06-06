@@ -40,6 +40,7 @@
     "maplibre-gl-basemap-control": "^0.3.0",
     "maplibre-gl-components": "^0.18.1",
     "maplibre-gl-duckdb": "^0.2.0",
+    "maplibre-gl-earth-engine": "^0.4.0",
     "maplibre-gl-esri-wayback": "^0.1.0",
     "maplibre-gl-geo-editor": "^0.7.3",
     "maplibre-gl-geoagent": "^0.4.2",

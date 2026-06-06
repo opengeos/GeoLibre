@@ -1793,3 +1793,51 @@ body,
 .dark .pc-control-content::-webkit-scrollbar-thumb {
   background: hsl(var(--border));
 }
+
+.geolibre-earth-engine-control .plugin-control-toggle {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+}
+
+.geolibre-earth-engine-control .plugin-control-icon {
+  align-items: center;
+  display: flex;
+  height: 100%;
+  justify-content: center;
+  width: 100%;
+}
+
+.geolibre-earth-engine-panel {
+  --ee-panel-bg: hsl(var(--popover));
+  --ee-panel-elevated: hsl(var(--card));
+  --ee-panel-muted: hsl(var(--muted));
+  --ee-panel-text: hsl(var(--popover-foreground));
+  --ee-panel-subtle: hsl(var(--muted-foreground));
+  --ee-panel-placeholder: hsl(var(--muted-foreground));
+  --ee-panel-border: hsl(var(--border));
+  --ee-panel-border-strong: hsl(var(--input));
+  --ee-input-bg: hsl(var(--background));
+  --ee-input-text: hsl(var(--foreground));
+  --ee-item-bg: hsl(var(--card));
+  --ee-active-bg: hsl(var(--accent));
+  --ee-active-border: hsl(var(--ring));
+  --ee-button-primary: hsl(var(--primary));
+  --ee-button-muted: #475569;
+  --ee-button-danger: hsl(var(--destructive));
+  --ee-shadow: 0 16px 40px hsl(var(--foreground) / 0.16);
+  color-scheme: light;
+}
+
+.dark .geolibre-earth-engine-panel {
+  --ee-button-muted: #64748b;
+  --ee-shadow: 0 16px 40px hsl(0 0% 0% / 0.4);
+  color-scheme: dark;
+}
+
+.geolibre-earth-engine-panel .plugin-control-input:focus,
+.geolibre-earth-engine-panel .plugin-control-input:focus-visible {
+  border-color: hsl(var(--ring));
+  box-shadow: inset 0 0 0 1px hsl(var(--ring));
+  outline: none;
+}

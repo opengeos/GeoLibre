@@ -25,7 +25,19 @@ declare module "@google/earthengine" {
         success?: () => void,
         error?: (error: unknown) => void,
       ) => void;
+      clearAuthToken?: () => void;
+      getAuthClientId?: () => string | null | undefined;
       getAuthToken?: () => string | null | undefined;
+      setAuthToken?: (
+        clientId: string,
+        tokenType: string,
+        accessToken: string,
+        expiresIn: number,
+        extraScopes?: string[],
+        callback?: () => void,
+        updateAuthLibrary?: boolean,
+        suppressDefaultScopes?: boolean,
+      ) => void;
     };
   };
 
