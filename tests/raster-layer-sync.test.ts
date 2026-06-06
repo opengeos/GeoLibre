@@ -131,16 +131,15 @@ describe("createRasterStoreLayer", () => {
     );
 
     assert.equal(layer.metadata.error, "CORS blocked");
+    // visible and opacity live on the top-level layer fields, not here.
     assert.deepEqual(layer.metadata.rasterState, {
       mode: "single",
       bands: [2],
       rescale: [[0, 4000]],
       colormap: "viridis",
       nodata: 0,
-      opacity: 1,
       gamma: 1,
       stretch: "sqrt",
-      visible: true,
     });
   });
 });

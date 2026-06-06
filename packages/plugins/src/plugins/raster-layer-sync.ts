@@ -341,8 +341,12 @@ export function savedRasterState(
 function serializableRasterState(
   state: RasterLayerState,
 ): Record<string, unknown> {
+  // visible and opacity live on the top-level layer fields (the panel edits
+  // them there); persisting copies here would leave two competing values in
+  // a saved project file, so they are omitted.
+  const { visible: _visible, opacity: _opacity, ...vizState } = state;
   return {
-    ...state,
+    ...vizState,
     bands: [...state.bands],
     rescale: state.rescale?.map((range) => [...range]) ?? null,
   };
