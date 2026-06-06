@@ -260,6 +260,15 @@ export function isRasterStoreSyncSuspended(): boolean {
 }
 
 /**
+ * Clears the suspension counter. Called on control teardown so a control
+ * torn down mid-restore cannot leave its successor permanently suppressing
+ * store sync events.
+ */
+export function resetRasterStoreSyncSuspension(): void {
+  storeSyncSuspended = 0;
+}
+
+/**
  * Reads the persisted visualization state from a store layer's metadata,
  * keeping only well-formed fields so a hand-edited project file cannot
  * crash the control.

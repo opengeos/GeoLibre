@@ -4,6 +4,7 @@ import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
 import { ensureMercatorProjection } from "./map-projection-utils";
 import {
   isRasterControlStoreLayer,
+  resetRasterStoreSyncSuspension,
   runWithRasterStoreSyncSuspended,
   savedRasterState,
   syncRasterLayersToStore,
@@ -46,8 +47,15 @@ export function openRasterLayerPanel(app: GeoLibreAppAPI): void {
     window.setTimeout(() => {
       showRasterControl(control);
       control.expand();
+      // Idempotent (guarded by a dataset flag / null checks): retried on
+      // every open so the panel chrome stays wired even if a future
+      // upstream release builds the panel DOM lazily on first expand.
+      wireRasterCloseButton(control);
+      applyRasterPanelClass(control);
     }, 0);
-  })();
+  })().catch((error) => {
+    console.error("[GeoLibre] Failed to open the raster layer panel", error);
+  });
 }
 
 /**
@@ -128,7 +136,9 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
     void Promise.allSettled(pending).then(() => {
       syncRasterLayersToStore(control);
     });
-  })();
+  })().catch((error) => {
+    console.error("[GeoLibre] Failed to restore raster layers", error);
+  });
 }
 
 async function ensureRasterControl(
@@ -162,6 +172,13 @@ function getRasterControlClass(): Promise<RasterControlConstructor> {
   // until the user first opens the panel or a project restores a raster.
   rasterControlClassPromise ??= import("maplibre-gl-raster").then(
     (module) => module.RasterControl,
+    (error: unknown) => {
+      // Do not cache the rejection: a transient failure (e.g. the dev
+      // server restarting) would otherwise make every later open re-throw
+      // until the page reloads.
+      rasterControlClassPromise = null;
+      throw error;
+    },
   );
   return rasterControlClassPromise;
 }
@@ -196,6 +213,9 @@ function patchRasterControlOnRemove(control: RasterControl): void {
     originalOnRemove();
     if (rasterControl !== control) return;
     unwireRasterStoreSync();
+    // A control torn down mid-restore must not leave its successor
+    // permanently suppressing store sync events.
+    resetRasterStoreSyncSuspension();
     rasterControl = null;
     rasterControlMounted = false;
   };
