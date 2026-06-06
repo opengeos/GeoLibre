@@ -1852,8 +1852,8 @@ body,
    them onto the app theme tokens keeps the panel in sync with the in-app
    light/dark toggle. The doubled selectors outrank the upstream
    prefers-color-scheme block regardless of stylesheet order. */
-.plugin-control.geolibre-raster-control,
-.plugin-control-panel.geolibre-raster-panel {
+.mlr-control.geolibre-raster-control,
+.mlr-control-panel.geolibre-raster-panel {
   --mlr-bg: hsl(var(--popover));
   --mlr-surface-muted: hsl(var(--muted));
   --mlr-surface-soft: hsl(var(--card));
@@ -1881,8 +1881,8 @@ body,
   color-scheme: light;
 }
 
-.dark .plugin-control.geolibre-raster-control,
-.dark .plugin-control-panel.geolibre-raster-panel {
+.dark .mlr-control.geolibre-raster-control,
+.dark .mlr-control-panel.geolibre-raster-panel {
   --mlr-shadow: hsl(0 0% 0% / 0.4);
 
   color-scheme: dark;

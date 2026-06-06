@@ -38,7 +38,7 @@
     "maplibre-gl-geoparquet": "^0.2.1",
     "maplibre-gl-lidar": "^0.14.1",
     "maplibre-gl-planetary-computer": "^0.3.0",
-    "maplibre-gl-raster": "^0.1.1",
+    "maplibre-gl-raster": "^0.1.2",
     "maplibre-gl-streetview": "^0.4.0",
     "maplibre-gl-swipe": "^0.7.1",
     "proj4": "^2.20.8",
