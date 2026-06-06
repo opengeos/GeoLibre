@@ -119,6 +119,14 @@ function hasNativeIdentifyLayers(layer: GeoLibreLayer): boolean {
   );
 }
 
+function isDuckDBQueryLayer(layer: GeoLibreLayer): boolean {
+  return (
+    layer.type === "duckdb-query" &&
+    layer.metadata.sourceKind === "duckdb-query" &&
+    layer.metadata.externalDeckLayer === true
+  );
+}
+
 function isMobileViewport(): boolean {
   return (
     typeof window !== "undefined" &&
@@ -511,6 +519,7 @@ export function LayerPanel({
           {visibleLayers.map((layer, displayIndex) => {
             const canIdentify =
               layer.type === "geojson" ||
+              isDuckDBQueryLayer(layer) ||
               (layer.type === "wms" &&
                 typeof layer.source.layers === "string" &&
                 Boolean(layer.source.layers.trim()) &&

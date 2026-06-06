@@ -34,11 +34,14 @@ type DuckDBRendererLike = {
   __geolibreOriginalSetData?: DuckDBRendererLike["setData"];
   __geolibreStylePatched?: boolean;
   __geolibreOriginalCreateLayers?: DuckDBRendererLike["createLayers"];
+  overlay?: DuckDBDeckOverlayLike;
+  setSelectedFeature?: (layerId: string | null, index: number | null) => void;
 };
 
 type DuckDBResultLike = {
   bounds?: [number, number, number, number];
   geometryType?: string;
+  table?: DuckDBArrowTableLike;
 };
 
 type DuckDBRenderedLayerLike = {
@@ -61,11 +64,32 @@ type DuckDBInternalLayer = Omit<DuckDBRenderedLayerLike, "results"> & {
   totalRows?: number;
 };
 
+type DuckDBPickInfo = {
+  coordinate: [number, number] | null;
+  index: number;
+  layerId: string;
+};
+
+type DuckDBSelection = {
+  index: number;
+  layerId: string;
+  layerName: string;
+  properties: Record<string, unknown>;
+};
+
 type MutableDuckDBControl = {
   beforeId?: string;
+  emit?: (event: string, data?: Record<string, unknown>) => void;
+  handleMapSelect?: (selection: DuckDBPickInfo | null) => void;
   layer?: DuckDBInternalLayer | null;
+  popup?: { remove?: () => void } | null;
   renderLayer?: () => Promise<void>;
+  renderContent?: () => void;
   renderer?: DuckDBRendererLike | null;
+  selectedFeature?: DuckDBSelection | null;
+  setPickable?: (pickable: boolean) => void;
+  showAttributePopup?: (coordinate: [number, number] | null) => void;
+  __geolibreSelectionPatched?: boolean;
 };
 
 interface DuckDBRenderedStyle {
@@ -73,6 +97,61 @@ interface DuckDBRenderedStyle {
   style: LayerStyle;
   visible: boolean;
 }
+
+export interface DuckDBAttributeRow {
+  featureId: string;
+  index: number;
+  properties: Record<string, unknown>;
+}
+
+export interface DuckDBIdentifyResult {
+  coordinate: [number, number] | null;
+  featureId: string;
+  index: number;
+  properties: Record<string, unknown>;
+}
+
+type DuckDBPickingInfo = {
+  coordinate?: number[];
+  index?: number;
+  layer?: { id?: string };
+  object?: Record<string, unknown>;
+  picked?: boolean;
+};
+
+type DuckDBDeckOverlayLike = {
+  pickObject?: (options: {
+    layerIds?: string[];
+    radius?: number;
+    x: number;
+    y: number;
+  }) => DuckDBPickingInfo | null;
+};
+
+type DuckDBArrowFieldLike = {
+  name?: string;
+};
+
+type DuckDBArrowVectorLike = {
+  get?: (index: number) => unknown;
+  length?: number;
+};
+
+type DuckDBArrowTableLike = {
+  getChild?: (name: string) => DuckDBArrowVectorLike | null;
+  numRows?: number;
+  schema?: {
+    fields?: DuckDBArrowFieldLike[];
+  };
+};
+
+type DuckDBGlobalBridge = {
+  getFeatureBounds: typeof getDuckDBFeatureBounds;
+  getLayerRows: typeof getDuckDBLayerRows;
+  identifyLayerAtPoint: typeof identifyDuckDBLayerAtPoint;
+  setSelectedFeature: typeof setDuckDBSelectedFeature;
+  updateLayerRows: typeof updateDuckDBLayerRows;
+};
 
 const duckdbControlPosition: GeoLibreMapControlPosition = "top-left";
 const DUCKDB_SAMPLE_DATABASE_URL =
@@ -101,9 +180,166 @@ const duckdbRenderedLayers = new Map<string, DuckDBRenderedLayerLike>();
 const duckdbRenderedRows = new Map<string, Record<number, Record<string, unknown>>>();
 const duckdbRenderedStyles = new Map<string, DuckDBRenderedStyle>();
 const warnedMissingRowsLayerIds = new Set<string>();
+const DUCKDB_SELECTED_FILL_COLOR: [number, number, number, number] = [
+  250, 204, 21, 230,
+];
+const DUCKDB_SELECTED_STROKE_COLOR: [number, number, number, number] = [
+  17, 24, 39, 255,
+];
+
+declare global {
+  interface Window {
+    __GEOLIBRE_DUCKDB__?: DuckDBGlobalBridge;
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.__GEOLIBRE_DUCKDB__ = {
+    getFeatureBounds: getDuckDBFeatureBounds,
+    getLayerRows: getDuckDBLayerRows,
+    identifyLayerAtPoint: identifyDuckDBLayerAtPoint,
+    setSelectedFeature: setDuckDBSelectedFeature,
+    updateLayerRows: updateDuckDBLayerRows,
+  };
+}
 
 export function openDuckDBLayerPanel(app: GeoLibreAppAPI): void {
   void openStandaloneDuckDBControl(app);
+}
+
+export function getDuckDBLayerRows(layerId: string): DuckDBAttributeRow[] {
+  return Object.entries(getDuckDBRenderedRows(layerId))
+    .map(([key, properties]) => {
+      const numericKey = Number(key);
+      const rowIndex =
+        Number.isFinite(numericKey) && Number.isInteger(numericKey)
+          ? numericKey
+          : getRowIndexFromProperties(properties) ?? 0;
+      return {
+        featureId: String(rowIndex),
+        index: rowIndex,
+        properties: publicDuckDBProperties(properties),
+      };
+    })
+    .sort((first, second) => first.index - second.index);
+}
+
+export function setDuckDBSelectedFeature(
+  layerId: string,
+  featureId: string | null,
+): void {
+  if (!isKnownDuckDBLayer(layerId)) return;
+
+  const index =
+    featureId === null
+      ? null
+      : Number.isFinite(Number(featureId))
+        ? Number(featureId)
+        : null;
+  getMutableDuckDBControl()?.renderer?.setSelectedFeature?.(
+    index === null ? null : layerId,
+    index,
+  );
+  renderDuckDBCachedLayers();
+}
+
+export function getDuckDBFeatureBounds(
+  layerId: string,
+  featureId: string,
+): [number, number, number, number] | null {
+  const index = Number(featureId);
+  if (!Number.isFinite(index)) return null;
+
+  const renderedLayer = duckdbRenderedLayers.get(layerId);
+  if (!renderedLayer) return null;
+
+  for (const result of renderedLayer.results) {
+    const localRowIndex = getDuckDBResultLocalRowIndex(result, index);
+    if (localRowIndex === null) continue;
+
+    const geometry = result.table?.getChild?.("geometry")?.get?.(localRowIndex);
+    const bounds = boundsFromDuckDBGeometryValue(geometry);
+    if (bounds) return bounds;
+  }
+
+  return null;
+}
+
+export function updateDuckDBLayerRows(
+  layerId: string,
+  updates: Record<string, Record<string, unknown>>,
+): void {
+  const rows = getDuckDBRenderedRows(layerId);
+  if (Object.keys(rows).length === 0) return;
+
+  for (const [featureId, properties] of Object.entries(updates)) {
+    const index = Number(featureId);
+    if (!Number.isFinite(index)) continue;
+
+    const current = rows[index];
+    if (!current) continue;
+
+    rows[index] = {
+      ...current,
+      ...properties,
+    };
+  }
+
+  const control = getMutableDuckDBControl();
+  if (control?.layer?.id === layerId) {
+    control.layer.rows = rows;
+    if (
+      control.selectedFeature?.layerId === layerId &&
+      rows[control.selectedFeature.index]
+    ) {
+      control.selectedFeature = {
+        ...control.selectedFeature,
+        properties: rows[control.selectedFeature.index],
+      };
+    }
+    control.renderContent?.();
+  }
+
+  renderDuckDBCachedLayers();
+}
+
+export function identifyDuckDBLayerAtPoint(
+  layerId: string,
+  point: { x: number; y: number },
+): DuckDBIdentifyResult | null {
+  if (!isKnownDuckDBLayer(layerId)) return null;
+
+  const overlay = getMutableDuckDBControl()?.renderer?.overlay;
+  const deckLayerIds = getDuckDBDeckLayerIds(layerId);
+  const picked = overlay?.pickObject?.({
+    x: point.x,
+    y: point.y,
+    radius: 5,
+    layerIds: deckLayerIds.length > 0 ? deckLayerIds : undefined,
+  });
+  if (!picked?.picked || !isDuckDBDeckLayerId(layerId, picked.layer?.id)) {
+    return null;
+  }
+
+  const index =
+    getRowIndexFromProperties(picked.object) ??
+    (typeof picked.index === "number" && Number.isFinite(picked.index)
+      ? picked.index
+      : null);
+  if (index === null) return null;
+
+  const properties = getDuckDBRenderedRows(layerId)[index] ?? picked.object ?? {};
+  setDuckDBSelectedFeature(layerId, String(index));
+
+  return {
+    coordinate:
+      picked.coordinate && picked.coordinate.length >= 2
+        ? [picked.coordinate[0], picked.coordinate[1]]
+        : null,
+    featureId: String(index),
+    index,
+    properties: publicDuckDBProperties(properties),
+  };
 }
 
 async function openStandaloneDuckDBControl(
@@ -146,6 +382,8 @@ function createDuckDBControl(
   DuckDBControlClass: DuckDBControlConstructor,
 ): DuckDBControl {
   const control = new DuckDBControlClass(DUCKDB_OPTIONS);
+  patchDuckDBControlSelection(control);
+  syncDuckDBPickableFromStore();
   control.on("collapse", () => hideDuckDBControl(control));
   control.on("query", createDuckDBQueryHandler());
   control.on("statechange", createDuckDBStateChangeHandler());
@@ -183,6 +421,10 @@ function createDuckDBControl(
         duckdbLayerOrderSignature(previous.layers)
     ) {
       shouldSyncControl = true;
+    }
+
+    if (state.identifyLayerId !== previous.identifyLayerId) {
+      syncDuckDBPickableFromStore(state.layers, state.identifyLayerId);
     }
 
     if (shouldSyncControl) {
@@ -271,11 +513,17 @@ function createDuckDBStoreLayer(
   state: DuckDBState,
   layerState: DuckDBLayerState,
 ): GeoLibreLayer {
+  const controlLayer = getMutableDuckDBControl()?.layer;
+  const results = controlLayer?.results ?? controlLayer?.geoArrowResults ?? [];
+  const bounds = combineResultBounds(results);
+  const geometryTypes = getDuckDBGeometryTypes(results);
+
   return {
     id: layerState.id,
     name: layerState.name,
     type: "duckdb-query",
     source: {
+      bounds,
       databaseSource: state.databaseSource,
       displaySource: state.displaySource,
       query: layerState.query,
@@ -286,7 +534,9 @@ function createDuckDBStoreLayer(
     style: { ...DEFAULT_LAYER_STYLE },
     beforeId: layerState.beforeId ?? undefined,
     metadata: {
+      bounds,
       columns: layerState.schema,
+      customLayerType: getDuckDBCustomLayerType(geometryTypes),
       databaseSource: state.databaseSource,
       deckLayerId: layerState.id,
       displaySource: state.displaySource,
@@ -294,7 +544,8 @@ function createDuckDBStoreLayer(
       externalNativeLayer: true,
       geometryColumn: layerState.geometryColumn,
       geometryFormat: layerState.geometryFormat,
-      identifiable: false,
+      geometryTypes,
+      identifiable: true,
       loadedRows: layerState.loadedRows,
       pageSize: state.pageSize,
       query: layerState.query,
@@ -323,6 +574,59 @@ function clearDuckDBRenderedLayers(): void {
   duckdbRenderedStyles.clear();
   warnedMissingRowsLayerIds.clear();
   getMutableDuckDBControl()?.renderer?.clear?.();
+}
+
+function syncDuckDBPickableFromStore(
+  layers = useAppStore.getState().layers,
+  identifyLayerId = useAppStore.getState().identifyLayerId,
+): void {
+  const identifyLayer = layers.find((layer) => layer.id === identifyLayerId);
+  getMutableDuckDBControl()?.setPickable?.(
+    Boolean(identifyLayer && isDuckDBControlLayer(identifyLayer)),
+  );
+}
+
+function patchDuckDBControlSelection(control: DuckDBControl): void {
+  const mutableControl = getMutableDuckDBControl(control);
+  if (!mutableControl || mutableControl.__geolibreSelectionPatched) return;
+
+  const originalHandleMapSelect = mutableControl.handleMapSelect?.bind(
+    mutableControl,
+  );
+  mutableControl.showAttributePopup = () => {};
+  mutableControl.handleMapSelect = (selection) => {
+    if (!selection) {
+      originalHandleMapSelect?.(selection);
+      useAppStore.getState().selectFeature(null);
+      return;
+    }
+
+    const layer = useAppStore
+      .getState()
+      .layers.find((item) => item.id === selection.layerId);
+    const rows = getDuckDBRenderedRows(selection.layerId);
+    const properties = rows[selection.index] ?? { __index: selection.index };
+    const selectedFeature = {
+      index: selection.index,
+      layerId: selection.layerId,
+      layerName: layer?.name ?? selection.layerId,
+      properties,
+    };
+
+    mutableControl.selectedFeature = selectedFeature;
+    mutableControl.popup?.remove?.();
+    mutableControl.popup = null;
+    mutableControl.renderer?.setSelectedFeature?.(
+      selection.layerId,
+      selection.index,
+    );
+    renderDuckDBCachedLayers();
+    mutableControl.renderContent?.();
+    mutableControl.emit?.("select", { selection: selectedFeature });
+    mutableControl.emit?.("statechange");
+    useAppStore.getState().selectFeature(String(selection.index));
+  };
+  mutableControl.__geolibreSelectionPatched = true;
 }
 
 function syncDuckDBRenderedLayersFromStore(layers: GeoLibreLayer[]): void {
@@ -441,28 +745,34 @@ function cloneStyledDeckLayer(
   const geometry = geometryType?.toLowerCase() ?? "";
 
   if (geometry.includes("point")) {
+    const selectedRadius = selectedDuckDBPointRadius(style.circleRadius);
     return deckLayer.clone({
-      getFillColor: fillColor,
-      getRadius: style.circleRadius,
-      radiusMaxPixels: pointRadiusMaxPixels(style),
+      getFillColor: createDuckDBColorAccessor(layerId, fillColor),
+      getRadius: createDuckDBRadiusAccessor(layerId, style.circleRadius),
+      radiusMaxPixels: Math.max(pointRadiusMaxPixels(style), selectedRadius),
       radiusMinPixels: Math.max(1, Math.min(style.circleRadius, 4)),
       updateTriggers: {
         ...asRecord(deckLayer.props?.updateTriggers),
-        getFillColor: [style.fillColor, style.fillOpacity, opacity],
-        getRadius: [style.circleRadius],
+        getFillColor: [
+          style.fillColor,
+          style.fillOpacity,
+          opacity,
+          getSelectedDuckDBFeatureId(layerId),
+        ],
+        getRadius: [style.circleRadius, getSelectedDuckDBFeatureId(layerId)],
       },
     });
   }
 
   if (geometry.includes("line")) {
     return deckLayer.clone({
-      getColor: strokeColor,
-      getWidth: style.strokeWidth,
+      getColor: createDuckDBColorAccessor(layerId, strokeColor),
+      getWidth: createDuckDBLineWidthAccessor(layerId, style.strokeWidth),
       widthMinPixels: Math.max(1, style.strokeWidth),
       updateTriggers: {
         ...asRecord(deckLayer.props?.updateTriggers),
-        getColor: [style.strokeColor, opacity],
-        getWidth: [style.strokeWidth],
+        getColor: [style.strokeColor, opacity, getSelectedDuckDBFeatureId(layerId)],
+        getWidth: [style.strokeWidth, getSelectedDuckDBFeatureId(layerId)],
       },
     });
   }
@@ -470,10 +780,10 @@ function cloneStyledDeckLayer(
   return deckLayer.clone({
     elevationScale: style.extrusionHeightScale,
     extruded: style.extrusionEnabled,
-    getFillColor: fillColor,
+    getFillColor: createDuckDBColorAccessor(layerId, fillColor),
     getElevation: createDuckDBElevationAccessor(layerId, renderedStyle),
-    getLineColor: strokeColor,
-    getLineWidth: style.strokeWidth,
+    getLineColor: createDuckDBLineColorAccessor(layerId, strokeColor),
+    getLineWidth: createDuckDBLineWidthAccessor(layerId, style.strokeWidth),
     lineWidthMinPixels: Math.max(1, style.strokeWidth),
     updateTriggers: {
       ...asRecord(deckLayer.props?.updateTriggers),
@@ -482,11 +792,74 @@ function cloneStyledDeckLayer(
         style.extrusionHeightProperty,
         style.extrusionHeightScale,
       ],
-      getFillColor: [style.fillColor, style.fillOpacity, opacity],
-      getLineColor: [style.strokeColor, opacity],
-      getLineWidth: [style.strokeWidth],
+      getFillColor: [
+        style.fillColor,
+        style.fillOpacity,
+        opacity,
+        getSelectedDuckDBFeatureId(layerId),
+      ],
+      getLineColor: [
+        style.strokeColor,
+        opacity,
+        getSelectedDuckDBFeatureId(layerId),
+      ],
+      getLineWidth: [style.strokeWidth, getSelectedDuckDBFeatureId(layerId)],
     },
   });
+}
+
+function createDuckDBColorAccessor(
+  layerId: string,
+  fallbackColor: [number, number, number, number],
+) {
+  return (objectInfo: { data?: unknown; index?: number }) =>
+    isSelectedDuckDBObject(layerId, objectInfo)
+      ? DUCKDB_SELECTED_FILL_COLOR
+      : fallbackColor;
+}
+
+function createDuckDBLineColorAccessor(
+  layerId: string,
+  fallbackColor: [number, number, number, number],
+) {
+  return (objectInfo: { data?: unknown; index?: number }) =>
+    isSelectedDuckDBObject(layerId, objectInfo)
+      ? DUCKDB_SELECTED_STROKE_COLOR
+      : fallbackColor;
+}
+
+function createDuckDBRadiusAccessor(layerId: string, fallbackRadius: number) {
+  return (objectInfo: { data?: unknown; index?: number }) =>
+    isSelectedDuckDBObject(layerId, objectInfo)
+      ? selectedDuckDBPointRadius(fallbackRadius)
+      : fallbackRadius;
+}
+
+function selectedDuckDBPointRadius(fallbackRadius: number): number {
+  return Math.max(fallbackRadius + 3, fallbackRadius * 1.6);
+}
+
+function createDuckDBLineWidthAccessor(layerId: string, fallbackWidth: number) {
+  return (objectInfo: { data?: unknown; index?: number }) =>
+    isSelectedDuckDBObject(layerId, objectInfo)
+      ? Math.max(fallbackWidth + 3, fallbackWidth * 2)
+      : fallbackWidth;
+}
+
+function isSelectedDuckDBObject(
+  layerId: string,
+  objectInfo: { data?: unknown; index?: number },
+): boolean {
+  const selectedFeatureId = getSelectedDuckDBFeatureId(layerId);
+  if (selectedFeatureId === null) return false;
+
+  const rowIndex = getGeoArrowRowIndex(objectInfo);
+  return rowIndex !== null && String(rowIndex) === selectedFeatureId;
+}
+
+function getSelectedDuckDBFeatureId(layerId: string): string | null {
+  const state = useAppStore.getState();
+  return state.selectedLayerId === layerId ? state.selectedFeatureId : null;
 }
 
 function createDuckDBElevationAccessor(
@@ -549,6 +922,175 @@ function getDuckDBRenderedRows(layerId: string): Record<number, Record<string, u
     return {};
   }
   return rows;
+}
+
+function combineResultBounds(
+  results: DuckDBResultLike[] | undefined,
+): [number, number, number, number] | undefined {
+  const bounds = (results ?? [])
+    .map((result) => result.bounds)
+    .filter(isBounds);
+  if (bounds.length === 0) return undefined;
+
+  return [
+    Math.min(...bounds.map((item) => item[0])),
+    Math.min(...bounds.map((item) => item[1])),
+    Math.max(...bounds.map((item) => item[2])),
+    Math.max(...bounds.map((item) => item[3])),
+  ];
+}
+
+function isBounds(value: unknown): value is [number, number, number, number] {
+  return (
+    Array.isArray(value) &&
+    value.length === 4 &&
+    value.every((item) => typeof item === "number" && Number.isFinite(item))
+  );
+}
+
+function getDuckDBGeometryTypes(results: DuckDBResultLike[]): string[] {
+  return Array.from(
+    new Set(
+      results
+        .map((result) => result.geometryType)
+        .filter((item): item is string => typeof item === "string"),
+    ),
+  );
+}
+
+function getDuckDBCustomLayerType(geometryTypes: string[]): string {
+  const normalized = geometryTypes.map((type) => type.toLowerCase());
+  if (normalized.some((type) => type.includes("point"))) return "circle";
+  if (normalized.some((type) => type.includes("line"))) return "line";
+  if (normalized.some((type) => type.includes("polygon"))) return "fill";
+  return "custom";
+}
+
+function getDuckDBDeckLayerIds(layerId: string): string[] {
+  const renderedLayer = duckdbRenderedLayers.get(layerId);
+  return (renderedLayer?.results ?? [])
+    .map((result, index) =>
+      result.geometryType ? `duckdb-${layerId}-${result.geometryType}-${index}` : null,
+    )
+    .filter((id): id is string => typeof id === "string");
+}
+
+function getDuckDBResultLocalRowIndex(
+  result: DuckDBResultLike,
+  rowIndex: number,
+): number | null {
+  const indexVector = result.table?.getChild?.("__index");
+  const rowCount =
+    typeof result.table?.numRows === "number"
+      ? result.table.numRows
+      : indexVector?.length;
+  if (typeof rowCount !== "number" || rowCount <= 0) return null;
+
+  for (let localIndex = 0; localIndex < rowCount; localIndex += 1) {
+    const value = indexVector?.get?.(localIndex);
+    if (value === rowIndex) return localIndex;
+    if (typeof value === "bigint" && value === BigInt(rowIndex)) {
+      return localIndex;
+    }
+  }
+  return null;
+}
+
+function boundsFromDuckDBGeometryValue(
+  value: unknown,
+): [number, number, number, number] | null {
+  const bounds = createEmptyBounds();
+  collectGeometryBounds(value, bounds);
+  return isFiniteBounds(bounds) ? bounds : null;
+}
+
+function collectGeometryBounds(
+  value: unknown,
+  bounds: [number, number, number, number],
+): void {
+  if (!value) return;
+
+  if (Array.isArray(value)) {
+    if (value.length >= 2 && isFiniteNumber(value[0]) && isFiniteNumber(value[1])) {
+      extendBounds(bounds, value[0], value[1]);
+      return;
+    }
+    for (const item of value) collectGeometryBounds(item, bounds);
+    return;
+  }
+
+  const vector = value as DuckDBArrowVectorLike;
+  if (typeof vector.get !== "function" || typeof vector.length !== "number") {
+    return;
+  }
+
+  if (
+    vector.length >= 2 &&
+    isFiniteNumber(vector.get(0)) &&
+    isFiniteNumber(vector.get(1))
+  ) {
+    extendBounds(bounds, vector.get(0) as number, vector.get(1) as number);
+    return;
+  }
+
+  for (let index = 0; index < vector.length; index += 1) {
+    collectGeometryBounds(vector.get(index), bounds);
+  }
+}
+
+function createEmptyBounds(): [number, number, number, number] {
+  return [Infinity, Infinity, -Infinity, -Infinity];
+}
+
+function extendBounds(
+  bounds: [number, number, number, number],
+  x: number,
+  y: number,
+): void {
+  bounds[0] = Math.min(bounds[0], x);
+  bounds[1] = Math.min(bounds[1], y);
+  bounds[2] = Math.max(bounds[2], x);
+  bounds[3] = Math.max(bounds[3], y);
+}
+
+function isFiniteBounds(
+  bounds: [number, number, number, number],
+): bounds is [number, number, number, number] {
+  return bounds.every((value) => Number.isFinite(value));
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isDuckDBDeckLayerId(
+  layerId: string,
+  deckLayerId: string | undefined,
+): boolean {
+  return typeof deckLayerId === "string" && deckLayerId.startsWith(`duckdb-${layerId}-`);
+}
+
+function isKnownDuckDBLayer(layerId: string): boolean {
+  return duckdbRenderedLayers.has(layerId) || duckdbRenderedRows.has(layerId);
+}
+
+function getRowIndexFromProperties(
+  properties: Record<string, unknown> | undefined,
+): number | null {
+  const rawIndex = properties?.__index;
+  if (typeof rawIndex === "number" && Number.isFinite(rawIndex)) return rawIndex;
+  if (typeof rawIndex === "bigint" && rawIndex <= BigInt(Number.MAX_SAFE_INTEGER)) {
+    return Number(rawIndex);
+  }
+  return null;
+}
+
+function publicDuckDBProperties(
+  properties: Record<string, unknown>,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(properties).filter(([key]) => !key.startsWith("__")),
+  );
 }
 
 function warnMissingDuckDBRows(layerId: string): void {

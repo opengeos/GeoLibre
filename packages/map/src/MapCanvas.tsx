@@ -46,6 +46,24 @@ export interface MapDiagnosticEvent {
   url?: string;
 }
 
+interface DuckDBIdentifyBridgeResult {
+  coordinate: [number, number] | null;
+  featureId: string;
+  properties: Record<string, unknown>;
+}
+
+interface GeoLibreDuckDBBridge {
+  getFeatureBounds?: (
+    layerId: string,
+    featureId: string,
+  ) => [number, number, number, number] | null;
+  identifyLayerAtPoint?: (
+    layerId: string,
+    point: { x: number; y: number },
+  ) => DuckDBIdentifyBridgeResult | null;
+  setSelectedFeature?: (layerId: string, featureId: string | null) => void;
+}
+
 function stringifyIdentifyValue(value: unknown): string {
   if (value == null) return "";
   if (typeof value === "object") return JSON.stringify(value);
@@ -150,6 +168,21 @@ function findFeatureId(
 
 function isWmsLayer(layer: GeoLibreLayer): boolean {
   return layer.type === "wms";
+}
+
+function isDuckDBQueryLayer(layer: GeoLibreLayer): boolean {
+  return (
+    layer.type === "duckdb-query" &&
+    layer.metadata.sourceKind === "duckdb-query" &&
+    layer.metadata.externalDeckLayer === true
+  );
+}
+
+function duckDBBridge(): GeoLibreDuckDBBridge | undefined {
+  return typeof window === "undefined"
+    ? undefined
+    : (window as Window & { __GEOLIBRE_DUCKDB__?: GeoLibreDuckDBBridge })
+        .__GEOLIBRE_DUCKDB__;
 }
 
 function stringSource(value: unknown): string | undefined {
@@ -570,6 +603,7 @@ export const MapCanvas = memo(function MapCanvas({
   const setMapView = useAppStore((s) => s.setMapView);
   const setPointerCoords = useAppStore((s) => s.setPointerCoords);
   const previousSelectedFeatureKey = useRef<string | null>(null);
+  const previousDuckDBSelectionLayerId = useRef<string | null>(null);
   const identifyPopup = useRef<maplibregl.Popup | null>(null);
 
   useEffect(() => {
@@ -719,6 +753,23 @@ export const MapCanvas = memo(function MapCanvas({
     controller.current?.highlightFeature(layer, selectedFeatureId, {
       fit: shouldFit,
     });
+    if (layer && isDuckDBQueryLayer(layer)) {
+      duckDBBridge()?.setSelectedFeature?.(layer.id, selectedFeatureId);
+      if (shouldFit && selectedFeatureId) {
+        const bounds = duckDBBridge()?.getFeatureBounds?.(
+          layer.id,
+          selectedFeatureId,
+        );
+        if (bounds) controller.current?.fitBounds(bounds);
+      }
+      previousDuckDBSelectionLayerId.current = layer.id;
+    } else if (previousDuckDBSelectionLayerId.current) {
+      duckDBBridge()?.setSelectedFeature?.(
+        previousDuckDBSelectionLayerId.current,
+        null,
+      );
+      previousDuckDBSelectionLayerId.current = null;
+    }
   }, [layers, selectedLayerId, selectedFeatureId, zoomToSelectedFeature]);
 
   useEffect(() => {
@@ -815,6 +866,27 @@ export const MapCanvas = memo(function MapCanvas({
               createIdentifyMessagePopupElement(layer.name, message),
             );
           });
+        return;
+      }
+
+      if (isDuckDBQueryLayer(layer)) {
+        const result = duckDBBridge()?.identifyLayerAtPoint?.(layer.id, {
+          x: event.point.x,
+          y: event.point.y,
+        });
+        if (!result) {
+          clearIdentifyResult();
+          return;
+        }
+
+        selectFeature(result.featureId);
+        showIdentifyPopup(
+          createIdentifyPopupElement(
+            layer.name,
+            result.properties,
+            result.featureId,
+          ),
+        );
         return;
       }
 

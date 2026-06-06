@@ -37,7 +37,16 @@ export {
   subscribeSearchPlacesPanel,
   type CogRasterLayerOptions,
 } from "./plugins/maplibre-components";
-export { openDuckDBLayerPanel } from "./plugins/maplibre-duckdb";
+export {
+  getDuckDBFeatureBounds,
+  getDuckDBLayerRows,
+  identifyDuckDBLayerAtPoint,
+  openDuckDBLayerPanel,
+  setDuckDBSelectedFeature,
+  updateDuckDBLayerRows,
+  type DuckDBAttributeRow,
+  type DuckDBIdentifyResult,
+} from "./plugins/maplibre-duckdb";
 export { openGeoParquetLayerPanel } from "./plugins/maplibre-geoparquet";
 export { openPlanetaryComputerPanel } from "./plugins/maplibre-planetary-computer";
 export {

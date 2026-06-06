@@ -1,5 +1,11 @@
 import { useAppStore } from "@geolibre/core";
 import {
+  getDuckDBLayerRows,
+  setDuckDBSelectedFeature,
+  updateDuckDBLayerRows,
+  type DuckDBAttributeRow,
+} from "@geolibre/plugins";
+import {
   Button,
   DropdownMenu,
   DropdownMenuContent,
@@ -44,6 +50,11 @@ type SortKey = "__featureId" | string;
 type ColumnWidths = Record<string, number>;
 type AttributeDrafts = Record<string, Record<string, string>>;
 type ExportFormat = "geojson" | "csv" | BinaryVectorExportFormat;
+type AttributeTableRow = {
+  feature?: Feature;
+  featureId: string;
+  properties: Record<string, unknown>;
+};
 
 const DEFAULT_FEATURE_ID_COLUMN_WIDTH = 72;
 const DEFAULT_ATTRIBUTE_COLUMN_WIDTH = 160;
@@ -152,6 +163,47 @@ function applyDraftsToFeatures(
   });
 }
 
+function isDuckDBQueryLayer(layer: { metadata: Record<string, unknown>; type: string } | undefined): boolean {
+  return (
+    layer?.type === "duckdb-query" &&
+    layer.metadata.sourceKind === "duckdb-query" &&
+    layer.metadata.externalDeckLayer === true
+  );
+}
+
+function duckDBRowsToAttributeRows(
+  rows: DuckDBAttributeRow[],
+): AttributeTableRow[] {
+  return rows.map((row) => ({
+    featureId: row.featureId,
+    properties: row.properties,
+  }));
+}
+
+function applyDraftsToDuckDBRows(
+  rows: AttributeTableRow[],
+  drafts: AttributeDrafts,
+): Record<string, Record<string, unknown>> {
+  const rowById = new Map(rows.map((row) => [row.featureId, row]));
+  const updates: Record<string, Record<string, unknown>> = {};
+
+  for (const [featureId, rowDrafts] of Object.entries(drafts)) {
+    const row = rowById.get(featureId);
+    if (!row) continue;
+
+    const properties: Record<string, unknown> = {};
+    for (const [column, draft] of Object.entries(rowDrafts)) {
+      const previousValue = row.properties[column];
+      if (isInvalidObjectDraft(draft, previousValue)) continue;
+      properties[column] = parseAttributeDraft(draft, previousValue);
+    }
+
+    if (Object.keys(properties).length > 0) updates[featureId] = properties;
+  }
+
+  return updates;
+}
+
 function sanitizeExportFileName(name: string): string {
   const sanitized = name
     .trim()
@@ -223,12 +275,22 @@ export function AttributeTable() {
   const layer = layers.find((l) => l.id === selectedLayerId);
   const hasLayer = Boolean(layer);
   const features = layer?.geojson?.features ?? [];
+  const isDuckDBLayer = isDuckDBQueryLayer(layer);
+  const duckdbRows = layer && isDuckDBLayer ? getDuckDBLayerRows(layer.id) : [];
+  const attributeRows: AttributeTableRow[] = layer?.geojson
+    ? features.map((feature, index) => ({
+        feature,
+        featureId: String(feature.id ?? index),
+        properties: (feature.properties ?? {}) as Record<string, unknown>,
+      }))
+    : duckDBRowsToAttributeRows(duckdbRows);
+  const hasAttributeSource = Boolean(layer?.geojson || isDuckDBLayer);
   const hasEdits = hasDraftEdits(drafts);
-  const hasInvalidDrafts = features.some((feature, index) => {
-    const rowDrafts = drafts[String(feature.id ?? index)];
+  const hasInvalidDrafts = attributeRows.some((row) => {
+    const rowDrafts = drafts[row.featureId];
     if (!rowDrafts) return false;
     return Object.entries(rowDrafts).some(([column, draft]) =>
-      isInvalidObjectDraft(draft, feature.properties?.[column]),
+      isInvalidObjectDraft(draft, row.properties[column]),
     );
   });
 
@@ -238,32 +300,28 @@ export function AttributeTable() {
   }, [selectedLayerId, hasLayer]);
 
   const filterLower = attributeFilter.toLowerCase();
-  const indexedFeatures = features.map((feature, index) => ({
-    feature,
-    featureId: String(feature.id ?? index),
-  }));
-  const filtered = indexedFeatures.filter(({ feature, featureId }) => {
+  const filtered = attributeRows.filter(({ properties, featureId }) => {
     if (!filterLower) return true;
-    const props = JSON.stringify(feature.properties ?? {}).toLowerCase();
+    const props = JSON.stringify(properties).toLowerCase();
     return featureId.includes(filterLower) || props.includes(filterLower);
   });
   const sorted = [...filtered].sort((a, b) => {
     const aValue =
       sort.key === "__featureId"
         ? a.featureId
-        : a.feature.properties?.[sort.key];
+        : a.properties[sort.key];
     const bValue =
       sort.key === "__featureId"
         ? b.featureId
-        : b.feature.properties?.[sort.key];
+        : b.properties[sort.key];
     const result = compareAttributeValues(aValue, bValue);
     return sort.direction === "asc" ? result : -result;
   });
 
   const propKeys = new Set<string>();
-  for (const f of features) {
-    if (f.properties) {
-      for (const k of Object.keys(f.properties)) propKeys.add(k);
+  for (const row of attributeRows) {
+    for (const k of Object.keys(row.properties)) {
+      propKeys.add(k);
     }
   }
   const columns = Array.from(propKeys);
@@ -441,7 +499,19 @@ export function AttributeTable() {
   };
 
   const saveDrafts = () => {
-    if (!layer?.geojson || !hasEdits || hasInvalidDrafts) return;
+    if (!layer || !hasEdits || hasInvalidDrafts) return;
+
+    if (isDuckDBLayer) {
+      updateDuckDBLayerRows(
+        layer.id,
+        applyDraftsToDuckDBRows(attributeRows, drafts),
+      );
+      setIsEditing(false);
+      setDrafts({});
+      return;
+    }
+
+    if (!layer.geojson) return;
 
     const geojson = {
       ...layer.geojson,
@@ -644,7 +714,7 @@ export function AttributeTable() {
           </span>
         ) : (
           <span className="min-w-0 max-w-full truncate text-xs text-muted-foreground md:max-w-56">
-            - select a vector layer
+            - select a layer with attributes
           </span>
         )}
         {exportError ? (
@@ -661,12 +731,14 @@ export function AttributeTable() {
               ? hasEdits
                 ? "Use Save or Cancel to finish editing"
                 : "Exit edit mode"
-              : "Edit attribute values"
+              : isDuckDBLayer
+                ? "Edit displayed DuckDB query attributes in memory"
+                : "Edit attribute values"
           }
           aria-label={
             isEditing && !hasEdits ? "Exit edit mode" : "Edit attribute values"
           }
-          disabled={!layer?.geojson || (isEditing && hasEdits)}
+          disabled={!hasAttributeSource || (isEditing && hasEdits)}
           onClick={toggleEditing}
         >
           <Pencil className="h-3.5 w-3.5" />
@@ -679,7 +751,9 @@ export function AttributeTable() {
           title={
             hasInvalidDrafts
               ? "Fix invalid JSON before saving"
-              : "Save attribute edits"
+              : isDuckDBLayer
+                ? "Save in-memory DuckDB attribute edits"
+                : "Save attribute edits"
           }
           aria-label="Save attribute edits"
           disabled={!isEditing || !hasEdits || hasInvalidDrafts}
@@ -694,7 +768,11 @@ export function AttributeTable() {
               variant="outline"
               size="sm"
               className="h-7 px-2"
-              title="Export selected layer"
+              title={
+                layer?.geojson
+                  ? "Export selected layer"
+                  : "Export requires a GeoJSON-backed layer"
+              }
               aria-label="Export selected layer"
               disabled={!layer?.geojson}
             >
@@ -750,7 +828,10 @@ export function AttributeTable() {
           title="Clear selected feature"
           aria-label="Clear selected feature"
           disabled={!selectedFeatureId}
-          onClick={() => selectFeature(null)}
+          onClick={() => {
+            if (layer && isDuckDBLayer) setDuckDBSelectedFeature(layer.id, null);
+            selectFeature(null);
+          }}
         >
           <X className="h-4 w-4" />
         </Button>
@@ -764,9 +845,9 @@ export function AttributeTable() {
         type="always"
         className="flex-1 [&_[data-orientation=vertical]]:!top-11 [&_[data-orientation=vertical]]:!h-[calc(100%-3.625rem)]"
       >
-        {!layer?.geojson ? (
+        {!hasAttributeSource ? (
           <p className="p-4 text-xs text-muted-foreground">
-            Attribute table requires a vector layer.
+            Attribute table requires a vector or DuckDB query layer.
           </p>
         ) : (
           <table
@@ -791,10 +872,7 @@ export function AttributeTable() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sorted.map(({ feature, featureId }: {
-                feature: Feature;
-                featureId: string;
-              }) => {
+              {sorted.map(({ featureId, properties }) => {
                 const selected = selectedFeatureId === featureId;
                 return (
                   <TableRow
@@ -802,12 +880,15 @@ export function AttributeTable() {
                     data-state={selected ? "selected" : undefined}
                     className="cursor-pointer"
                     onClick={() => {
+                      if (layer && isDuckDBLayer) {
+                        setDuckDBSelectedFeature(layer.id, featureId);
+                      }
                       selectFeature(featureId);
                     }}
                   >
                     <TableCell>{featureId}</TableCell>
                     {columns.map((col) => {
-                      const value = feature.properties?.[col];
+                      const value = properties[col];
                       const draft = drafts[featureId]?.[col];
                       const changed = draft !== undefined;
                       const invalid =

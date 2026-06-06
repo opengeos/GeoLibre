@@ -608,6 +608,14 @@ export class MapController {
 
   fitBounds(bounds: [number, number, number, number]): void {
     if (!this.map) return;
+    if (bounds[0] === bounds[2] && bounds[1] === bounds[3]) {
+      this.map.flyTo({
+        center: [bounds[0], bounds[1]],
+        zoom: Math.max(this.map.getZoom(), 14),
+        duration: 800,
+      });
+      return;
+    }
     this.map.fitBounds(
       [
         [bounds[0], bounds[1]],
