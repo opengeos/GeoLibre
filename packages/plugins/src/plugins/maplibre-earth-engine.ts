@@ -56,8 +56,8 @@ function earthEngineOptions(): Omit<PluginControlOptions, "position"> {
     collapsed: false,
     oauthClientId: oauthClientIdValue(importMetaEnv().VITE_GEE_OAUTH_CLIENT_ID),
     panelWidth: 420,
-    // Evaluated when the panel opens so deep links and storage updates made
-    // after startup are picked up.
+    // Evaluated when the control is first created (not at module load) so a
+    // deep link or storage value present at open time is picked up.
     projectId: projectValue(importMetaEnv().VITE_GEE_PROJECT_ID, STORAGE_PREFIX),
     storagePrefix: STORAGE_PREFIX,
     title: "Earth Engine",

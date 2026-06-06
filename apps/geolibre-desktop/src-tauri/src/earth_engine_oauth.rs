@@ -130,7 +130,7 @@ fn current_oauth_port(state: &EarthEngineOAuthState) -> Result<u16, String> {
         }
         thread::sleep(std::time::Duration::from_millis(10));
     }
-    Err("Earth Engine OAuth helper is still starting. Try again in a moment.".to_string())
+    Err("Earth Engine OAuth helper could not start. Try again in a moment.".to_string())
 }
 
 fn handle_connection(

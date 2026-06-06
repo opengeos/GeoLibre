@@ -100,15 +100,6 @@ export function isTauriRuntime(): boolean {
   return Boolean((window as TauriRuntimeWindow).__TAURI_INTERNALS__);
 }
 
-export function isTauriProductionOrigin(): boolean {
-  const { hostname, protocol } = window.location;
-  return (
-    protocol === "tauri:" ||
-    protocol === "file:" ||
-    (hostname.endsWith(".localhost") && hostname !== "localhost")
-  );
-}
-
 async function authenticateEarthEngineViaBrowser(
   oauthClientId: string,
 ): Promise<void> {

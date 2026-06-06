@@ -1823,7 +1823,7 @@ body,
   --ee-active-bg: hsl(var(--accent));
   --ee-active-border: hsl(var(--ring));
   --ee-button-primary: hsl(var(--primary));
-  --ee-button-muted: #475569;
+  --ee-button-muted: hsl(var(--muted-foreground));
   --ee-button-danger: hsl(var(--destructive));
   --ee-shadow: 0 16px 40px hsl(var(--foreground) / 0.16);
 
@@ -1831,7 +1831,6 @@ body,
 }
 
 .dark .geolibre-earth-engine-panel {
-  --ee-button-muted: #64748b;
   --ee-shadow: 0 16px 40px hsl(0 0% 0% / 0.4);
 
   color-scheme: dark;
