@@ -180,6 +180,49 @@ describe("syncGeoAgentOverlaysToStore", () => {
     assert.deepEqual(layer.metadata.sourceIds, ["rivers-source-2"]);
   });
 
+  it("refreshes geojson data when an overlay is re-added with the same ids", () => {
+    syncGeoAgentOverlaysToStore(overlayMap(geojsonOverlay()));
+
+    // GeoAgent's removeOverlay-then-add flow frees the old ids, so the re-add
+    // reuses them while the payload changes.
+    const updatedData: GeoJSON.FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [0, 0] },
+          properties: {},
+        },
+      ],
+    };
+    syncGeoAgentOverlaysToStore(
+      overlayMap(geojsonOverlay({ data: updatedData })),
+    );
+
+    const layer = useAppStore.getState().layers[0];
+    assert.equal(layer.geojson, updatedData);
+  });
+
+  it("initializes native symbol overlay opacity from icon/text opacity", () => {
+    const layer = createGeoAgentStoreLayer({
+      kind: "native",
+      name: "Labels",
+      sourceIds: ["labels-source"],
+      layerIds: ["labels"],
+      layerSpecs: [
+        {
+          layer: {
+            id: "labels",
+            type: "symbol",
+            paint: { "text-opacity": 0.4 },
+          },
+        },
+      ],
+    });
+
+    assert.equal(layer.opacity, 0.4);
+  });
+
   it("removes only GeoAgent layers when the plugin deactivates", () => {
     useAppStore.getState().addLayer(otherStoreLayer());
     syncGeoAgentOverlaysToStore(overlayMap(geojsonOverlay(), geeOverlay()));

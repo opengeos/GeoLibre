@@ -199,18 +199,25 @@ export function syncGeoAgentOverlaysToStore(
 
       // Only structural fields are refreshed here. Name, visibility, opacity,
       // and style are user-editable in the layer panel, so re-syncing them
-      // would clobber edits on every agent command.
+      // would clobber edits on every agent command. The geojson comparison is
+      // by reference: unchanged overlays keep the same record (and data
+      // object) between commands, while a removeOverlay-then-add cycle swaps
+      // it out even when the freed ids are reused.
       if (
         JSON.stringify(existing.metadata.nativeLayerIds) !==
           JSON.stringify(layer.metadata.nativeLayerIds) ||
         JSON.stringify(existing.metadata.sourceIds) !==
           JSON.stringify(layer.metadata.sourceIds) ||
-        existing.metadata.tileUrl !== layer.metadata.tileUrl
+        JSON.stringify(existing.source) !== JSON.stringify(layer.source) ||
+        existing.metadata.tileUrl !== layer.metadata.tileUrl ||
+        existing.sourcePath !== layer.sourcePath ||
+        existing.geojson !== layer.geojson
       ) {
         useAppStore.getState().updateLayer(layer.id, {
+          geojson: layer.geojson,
           metadata: { ...existing.metadata, ...layer.metadata },
           source: layer.source,
-          ...(layer.geojson ? { geojson: layer.geojson } : {}),
+          sourcePath: layer.sourcePath,
         });
       }
     }
@@ -357,8 +364,13 @@ function rasterOverlayOpacity(overlay: GeoAgentOverlayRecord): number {
 
 function nativeOverlayOpacity(overlay: GeoAgentOverlayRecord): number {
   for (const spec of overlay.layerSpecs ?? []) {
-    const opacity = numberValue(spec.layer.paint?.[`${spec.layer.type}-opacity`]);
-    if (opacity !== undefined) return clamp01(opacity);
+    const properties = NATIVE_OPACITY_PROPERTIES[spec.layer.type] ?? [
+      `${spec.layer.type}-opacity`,
+    ];
+    for (const property of properties) {
+      const opacity = numberValue(spec.layer.paint?.[property]);
+      if (opacity !== undefined) return clamp01(opacity);
+    }
   }
   return 1;
 }

@@ -119,7 +119,13 @@ export const maplibreGeoAgentPlugin: GeoLibrePlugin = {
     }
     app.removeMapControl(geoAgentControl);
     const added = app.addMapControl(geoAgentControl, geoAgentPosition);
-    if (!added) return false;
+    if (!added) {
+      // removeMapControl already tore the tools (and their overlays) down;
+      // drop the now-stale sync wiring and store layers with them.
+      unwireGeoAgentStoreSync();
+      removeGeoAgentStoreLayers();
+      return false;
+    }
     patchGeoAgentToolRunner(geoAgentControl);
     setTimeout(() => geoAgentControl?.expand(), 0);
     setTimeout(enhanceEarthEngineSignIn, 0);
