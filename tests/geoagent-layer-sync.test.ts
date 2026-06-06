@@ -1,0 +1,288 @@
+import assert from "node:assert/strict";
+import { beforeEach, describe, it } from "node:test";
+import {
+  DEFAULT_LAYER_STYLE,
+  type GeoLibreLayer,
+  useAppStore,
+} from "@geolibre/core";
+import {
+  createGeoAgentStoreLayer,
+  geoAgentStoreLayerId,
+  isGeoAgentStoreLayer,
+  removeGeoAgentStoreLayers,
+  syncGeoAgentOverlaysToStore,
+  unwireGeoAgentStoreSync,
+  wireGeoAgentStoreSync,
+  type GeoAgentOverlayRecord,
+} from "../packages/plugins/src/plugins/geoagent-layer-sync";
+
+function overlayMap(
+  ...overlays: GeoAgentOverlayRecord[]
+): Map<string, GeoAgentOverlayRecord> {
+  return new Map(overlays.map((overlay) => [overlay.name, overlay]));
+}
+
+function geojsonOverlay(
+  patch: Partial<GeoAgentOverlayRecord> = {},
+): GeoAgentOverlayRecord {
+  return {
+    kind: "geojson",
+    name: "Rivers",
+    sourceIds: ["rivers-source"],
+    layerIds: ["rivers-fill", "rivers-line"],
+    style: { "fill-color": "#ff0000", "line-color": "#00ff00" },
+    data: { type: "FeatureCollection", features: [] },
+    ...patch,
+  };
+}
+
+function geeOverlay(
+  patch: Partial<GeoAgentOverlayRecord> = {},
+): GeoAgentOverlayRecord {
+  return {
+    kind: "gee",
+    name: "NDVI",
+    sourceIds: ["ndvi-source"],
+    layerIds: ["ndvi"],
+    url: "https://earthengine.googleapis.com/tiles/{z}/{x}/{y}",
+    attribution: "Google Earth Engine",
+    ...patch,
+  };
+}
+
+function otherStoreLayer(id = "unrelated"): GeoLibreLayer {
+  return {
+    id,
+    name: "Unrelated",
+    type: "geojson",
+    source: { type: "geojson" },
+    visible: true,
+    opacity: 1,
+    style: { ...DEFAULT_LAYER_STYLE },
+    metadata: {},
+  };
+}
+
+describe("syncGeoAgentOverlaysToStore", () => {
+  beforeEach(() => {
+    useAppStore.setState({ layers: [] });
+  });
+
+  it("adds a store layer for a GeoAgent geojson overlay", () => {
+    syncGeoAgentOverlaysToStore(overlayMap(geojsonOverlay()));
+
+    const layers = useAppStore.getState().layers;
+    assert.equal(layers.length, 1);
+
+    const layer = layers[0];
+    assert.equal(layer.id, geoAgentStoreLayerId("Rivers"));
+    assert.equal(layer.name, "Rivers");
+    assert.equal(layer.type, "geojson");
+    assert.equal(layer.visible, true);
+    assert.equal(layer.metadata.externalNativeLayer, true);
+    assert.deepEqual(layer.metadata.nativeLayerIds, [
+      "rivers-fill",
+      "rivers-line",
+    ]);
+    assert.deepEqual(layer.metadata.sourceIds, ["rivers-source"]);
+    assert.equal(layer.metadata.sourceKind, "geoagent-overlay");
+    assert.equal(layer.metadata.geoAgentOverlayName, "Rivers");
+    assert.ok(isGeoAgentStoreLayer(layer));
+  });
+
+  it("maps GeoAgent geojson overlay style onto the store layer style", () => {
+    const layer = createGeoAgentStoreLayer(geojsonOverlay());
+
+    assert.equal(layer.style.fillColor, "#ff0000");
+    assert.equal(layer.style.strokeColor, "#00ff00");
+    // geojsonLayerPaint in maplibre-gl-geoagent defaults fill-opacity to 0.35.
+    assert.equal(layer.style.fillOpacity, 0.35);
+  });
+
+  it("adds a raster store layer for a GeoAgent Earth Engine overlay", () => {
+    syncGeoAgentOverlaysToStore(overlayMap(geeOverlay()));
+
+    const layer = useAppStore.getState().layers[0];
+    assert.equal(layer.type, "raster");
+    assert.equal(layer.opacity, 1);
+    assert.equal(layer.metadata.identifiable, false);
+    assert.equal(
+      layer.metadata.tileUrl,
+      "https://earthengine.googleapis.com/tiles/{z}/{x}/{y}",
+    );
+    assert.deepEqual(layer.metadata.nativeLayerIds, ["ndvi"]);
+  });
+
+  it("removes store layers whose overlays are gone, leaving others alone", () => {
+    useAppStore.getState().addLayer(otherStoreLayer());
+    syncGeoAgentOverlaysToStore(overlayMap(geojsonOverlay(), geeOverlay()));
+    assert.equal(useAppStore.getState().layers.length, 3);
+
+    syncGeoAgentOverlaysToStore(overlayMap(geeOverlay()));
+
+    const layers = useAppStore.getState().layers;
+    assert.equal(layers.length, 2);
+    assert.ok(layers.some((layer) => layer.id === "unrelated"));
+    assert.ok(
+      layers.some((layer) => layer.id === geoAgentStoreLayerId("NDVI")),
+    );
+  });
+
+  it("skips markers and internal overlays", () => {
+    syncGeoAgentOverlaysToStore(
+      overlayMap(
+        {
+          kind: "marker",
+          name: "Pin",
+          sourceIds: [],
+          layerIds: [],
+        },
+        {
+          kind: "native",
+          name: "__terrain",
+          sourceIds: ["terrain-source"],
+          layerIds: ["terrain-hillshade"],
+        },
+      ),
+    );
+
+    assert.equal(useAppStore.getState().layers.length, 0);
+  });
+
+  it("preserves user edits on re-sync but refreshes native ids", () => {
+    syncGeoAgentOverlaysToStore(overlayMap(geojsonOverlay()));
+
+    const id = geoAgentStoreLayerId("Rivers");
+    useAppStore.getState().updateLayer(id, {
+      name: "My Rivers",
+      visible: false,
+      opacity: 0.5,
+    });
+
+    // The agent re-adds the overlay; unique id allocation produces new ids.
+    syncGeoAgentOverlaysToStore(
+      overlayMap(
+        geojsonOverlay({
+          sourceIds: ["rivers-source-2"],
+          layerIds: ["rivers-fill-2", "rivers-line-2"],
+        }),
+      ),
+    );
+
+    const layer = useAppStore.getState().layers[0];
+    assert.equal(layer.name, "My Rivers");
+    assert.equal(layer.visible, false);
+    assert.equal(layer.opacity, 0.5);
+    assert.deepEqual(layer.metadata.nativeLayerIds, [
+      "rivers-fill-2",
+      "rivers-line-2",
+    ]);
+    assert.deepEqual(layer.metadata.sourceIds, ["rivers-source-2"]);
+  });
+
+  it("removes only GeoAgent layers when the plugin deactivates", () => {
+    useAppStore.getState().addLayer(otherStoreLayer());
+    syncGeoAgentOverlaysToStore(overlayMap(geojsonOverlay(), geeOverlay()));
+
+    removeGeoAgentStoreLayers();
+
+    const layers = useAppStore.getState().layers;
+    assert.equal(layers.length, 1);
+    assert.equal(layers[0].id, "unrelated");
+  });
+
+  it("drops GeoAgent's overlay record when the layer is removed in the panel", () => {
+    const removed: string[] = [];
+    wireGeoAgentStoreSync({
+      removeOverlay: (name) => {
+        removed.push(name);
+        return true;
+      },
+    });
+
+    try {
+      syncGeoAgentOverlaysToStore(overlayMap(geojsonOverlay()));
+      useAppStore.getState().removeLayer(geoAgentStoreLayerId("Rivers"));
+
+      assert.deepEqual(removed, ["Rivers"]);
+    } finally {
+      unwireGeoAgentStoreSync();
+    }
+  });
+
+  it("applies visibility and opacity to custom native layers via the map", () => {
+    const layout: Array<[string, string, unknown]> = [];
+    const paint: Array<[string, string, unknown]> = [];
+    wireGeoAgentStoreSync({
+      map: {
+        getLayer: (id: string) =>
+          id === "buildings-3d" ? { type: "fill-extrusion" } : undefined,
+        setLayoutProperty: (id: string, property: string, value: unknown) => {
+          layout.push([id, property, value]);
+        },
+        setPaintProperty: (id: string, property: string, value: unknown) => {
+          paint.push([id, property, value]);
+        },
+      },
+    });
+
+    try {
+      syncGeoAgentOverlaysToStore(
+        overlayMap({
+          kind: "native",
+          name: "3D Buildings",
+          sourceIds: ["buildings-source"],
+          layerIds: ["buildings-3d"],
+          layerSpecs: [
+            {
+              layer: {
+                id: "buildings-3d",
+                type: "fill-extrusion",
+                source: "buildings-source",
+                paint: { "fill-extrusion-opacity": 0.6 },
+              },
+            },
+          ],
+        }),
+      );
+
+      const id = geoAgentStoreLayerId("3D Buildings");
+      useAppStore.getState().setLayerVisibility(id, false);
+      useAppStore.getState().setLayerOpacity(id, 0.25);
+
+      assert.deepEqual(layout, [
+        ["buildings-3d", "visibility", "none"],
+        ["buildings-3d", "visibility", "none"],
+      ]);
+      assert.deepEqual(paint, [
+        ["buildings-3d", "fill-extrusion-opacity", 0.6],
+        ["buildings-3d", "fill-extrusion-opacity", 0.25],
+      ]);
+    } finally {
+      unwireGeoAgentStoreSync();
+    }
+  });
+
+  it("registers native overlays as custom layers with their initial opacity", () => {
+    const layer = createGeoAgentStoreLayer({
+      kind: "native",
+      name: "3D Buildings",
+      sourceIds: ["buildings-source"],
+      layerIds: ["buildings-3d"],
+      layerSpecs: [
+        {
+          layer: {
+            id: "buildings-3d",
+            type: "fill-extrusion",
+            source: "buildings-source",
+            paint: { "fill-extrusion-opacity": 0.6 },
+          },
+        },
+      ],
+    });
+
+    assert.equal(layer.metadata.customLayerType, "fill-extrusion");
+    assert.equal(layer.opacity, 0.6);
+    assert.equal(layer.metadata.geoAgentOverlayKind, "native");
+  });
+});

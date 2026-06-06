@@ -16,6 +16,13 @@ import type {
   GeoLibrePlugin,
 } from "../types";
 import {
+  removeGeoAgentStoreLayers,
+  syncGeoAgentOverlaysToStore,
+  unwireGeoAgentStoreSync,
+  wireGeoAgentStoreSync,
+  type GeoAgentOverlayRecord,
+} from "./geoagent-layer-sync";
+import {
   authenticateEarthEngine as authenticateEarthEngineForGeoLibre,
   captureEarthEngineFunctionInfo,
   clearEarthEngineFunctionInfo,
@@ -34,13 +41,13 @@ const STORAGE_PREFIX = "geolibre.geoagent";
 type GeoAgentControlInternals = {
   options?: GeoAgentControlOptions;
   tools?: {
-    __geolibreEarthEngineFallbackPatched?: boolean;
+    __geolibreToolRunnerPatched?: boolean;
     addGeeRasterOverlay?: (overlay: {
       name: string;
       url: string;
     }) => Promise<void>;
     map?: MapLibreMap;
-    overlays?: Map<string, unknown>;
+    overlays?: Map<string, GeoAgentOverlayRecord>;
     publishEarthEngineState?: () => void;
     removeOverlay?: (name: string) => boolean;
     requireEarthEngine?: () => {
@@ -91,9 +98,14 @@ export const maplibreGeoAgentPlugin: GeoLibrePlugin = {
   },
   deactivate: (app: GeoLibreAppAPI) => {
     geoAgentActive = false;
-    if (!geoAgentControl) return;
-    app.removeMapControl(geoAgentControl);
-    geoAgentControl = null;
+    unwireGeoAgentStoreSync();
+    if (geoAgentControl) {
+      app.removeMapControl(geoAgentControl);
+      geoAgentControl = null;
+    }
+    // The control's teardown already cleared its overlays from the map; drop
+    // the matching store entries so the layer panel does not list dead layers.
+    removeGeoAgentStoreLayers();
   },
   getMapControlPosition: () => geoAgentPosition,
   setMapControlPosition: (
@@ -108,7 +120,7 @@ export const maplibreGeoAgentPlugin: GeoLibrePlugin = {
     app.removeMapControl(geoAgentControl);
     const added = app.addMapControl(geoAgentControl, geoAgentPosition);
     if (!added) return false;
-    patchGeoAgentEarthEngineToolRunner(geoAgentControl);
+    patchGeoAgentToolRunner(geoAgentControl);
     setTimeout(() => geoAgentControl?.expand(), 0);
     setTimeout(enhanceEarthEngineSignIn, 0);
   },
@@ -123,7 +135,7 @@ async function mountGeoAgentControl(app: GeoLibreAppAPI): Promise<void> {
     if (geoAgentControl === control) geoAgentControl = null;
     return;
   }
-  patchGeoAgentEarthEngineToolRunner(control);
+  patchGeoAgentToolRunner(control);
   setTimeout(() => geoAgentControl?.expand(), 0);
   setTimeout(enhanceEarthEngineSignIn, 0);
   preloadEarthEngineAuthLibrary();
@@ -150,32 +162,41 @@ function getGeoAgentOptions(): GeoAgentControlOptions {
   };
 }
 
-function patchGeoAgentEarthEngineToolRunner(control: GeoAgentControl): void {
+function patchGeoAgentToolRunner(control: GeoAgentControl): void {
   const tools = (control as unknown as GeoAgentControlInternals).tools;
-  if (
-    !tools?.runCommand ||
-    tools.__geolibreEarthEngineFallbackPatched === true
-  ) {
+  if (!tools?.runCommand || tools.__geolibreToolRunnerPatched === true) {
     return;
   }
 
   const runCommand = tools.runCommand.bind(tools);
   tools.runCommand = async (command, args) => {
-    if (isEarthEngineToolCommand(command)) {
-      if (command === "load_gee_dataset") {
-        return loadGeoAgentDatasetWithGeoLibreEarthEngine(tools, args);
-      }
+    try {
+      if (isEarthEngineToolCommand(command)) {
+        if (command === "load_gee_dataset") {
+          return await loadGeoAgentDatasetWithGeoLibreEarthEngine(tools, args);
+        }
 
-      installEarthEngineFunctionInfoFallback(geoAgentEarthEngineFunctionInfo);
-      try {
-        return await runCommand(command, args);
-      } finally {
-        geoAgentEarthEngineFunctionInfo = captureEarthEngineFunctionInfo();
+        installEarthEngineFunctionInfoFallback(geoAgentEarthEngineFunctionInfo);
+        try {
+          return await runCommand(command, args);
+        } finally {
+          geoAgentEarthEngineFunctionInfo = captureEarthEngineFunctionInfo();
+        }
       }
+      return await runCommand(command, args);
+    } finally {
+      // Any command may add or remove overlays (including scripts run through
+      // run_maplibre_script); mirror the registry into the store so the layer
+      // panel stays in sync.
+      syncGeoAgentOverlaysToStore(tools.overlays);
     }
-    return runCommand(command, args);
   };
-  tools.__geolibreEarthEngineFallbackPatched = true;
+  tools.__geolibreToolRunnerPatched = true;
+
+  wireGeoAgentStoreSync(tools);
+  // The control recreates tools (with an empty overlay registry) on every
+  // onAdd, so prune store entries left over from a previous tools instance.
+  syncGeoAgentOverlaysToStore(tools.overlays);
 }
 
 async function loadGeoAgentDatasetWithGeoLibreEarthEngine(
