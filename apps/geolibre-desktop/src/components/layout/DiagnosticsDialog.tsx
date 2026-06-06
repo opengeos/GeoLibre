@@ -12,6 +12,7 @@ import { Clipboard, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   clearDiagnostics,
+  setCaptureNetworkInfo,
   type DiagnosticRecord,
   type DiagnosticLevel,
   type DiagnosticsSnapshot,
@@ -151,6 +152,20 @@ export function DiagnosticsDialog({
             <span className="rounded bg-muted px-2 py-1 text-muted-foreground">
               {diagnostics.networkCount} network
             </span>
+            <label
+              className="flex items-center gap-1.5 rounded border px-2 py-1 text-muted-foreground"
+              title="Record successful and aborted network requests. Off by default because logging every request slows the app down."
+            >
+              <input
+                className="h-3.5 w-3.5"
+                type="checkbox"
+                checked={diagnostics.captureNetworkInfo}
+                onChange={(event) =>
+                  setCaptureNetworkInfo(event.target.checked)
+                }
+              />
+              Log all network requests
+            </label>
           </div>
           <div className="flex gap-2">
             <Button

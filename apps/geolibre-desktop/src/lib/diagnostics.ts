@@ -28,14 +28,28 @@ export interface DiagnosticsSnapshot {
   errorCount: number;
   warningCount: number;
   networkCount: number;
+  captureNetworkInfo: boolean;
 }
 
 const MAX_DIAGNOSTIC_RECORDS = 500;
 const MAX_FIELD_LENGTH = 3000;
+const CAPTURE_NETWORK_INFO_STORAGE_KEY =
+  "geolibre.diagnostics.captureNetworkInfo";
+
+function readStoredCaptureNetworkInfo(): boolean {
+  try {
+    return window.localStorage.getItem(CAPTURE_NETWORK_INFO_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
 
 const listeners = new Set<() => void>();
 let records: DiagnosticRecord[] = [];
 let sequence = 0;
+// Capturing every successful request floods the store and re-renders
+// subscribers on each fetch, so info-level network entries are opt-in.
+let captureNetworkInfo = readStoredCaptureNetworkInfo();
 let snapshot = createSnapshot(records);
 let captureRefCount = 0;
 let captureCleanup: (() => void) | null = null;
@@ -55,6 +69,7 @@ function createSnapshot(nextRecords: DiagnosticRecord[]): DiagnosticsSnapshot {
     errorCount,
     warningCount,
     networkCount,
+    captureNetworkInfo,
   };
 }
 
@@ -152,6 +167,14 @@ function getSnapshot(): DiagnosticsSnapshot {
 }
 
 export function appendDiagnostic(input: DiagnosticInput): void {
+  if (
+    input.category === "network" &&
+    input.level === "info" &&
+    !captureNetworkInfo
+  ) {
+    return;
+  }
+
   const record: DiagnosticRecord = {
     ...input,
     id: `diagnostic-${Date.now()}-${sequence++}`,
@@ -168,6 +191,27 @@ export function appendDiagnostic(input: DiagnosticInput): void {
 
 export function clearDiagnostics(): void {
   records = [];
+  emitChange();
+}
+
+/**
+ * Enables or disables capturing info-level network diagnostics (successful
+ * and aborted requests). Disabled by default to avoid the overhead of
+ * recording every request; the choice persists across sessions.
+ *
+ * @param enabled - Whether info-level network entries should be recorded.
+ */
+export function setCaptureNetworkInfo(enabled: boolean): void {
+  if (captureNetworkInfo === enabled) return;
+  captureNetworkInfo = enabled;
+  try {
+    window.localStorage.setItem(
+      CAPTURE_NETWORK_INFO_STORAGE_KEY,
+      String(enabled),
+    );
+  } catch {
+    // Persistence is best-effort; the in-memory flag still applies.
+  }
   emitChange();
 }
 
