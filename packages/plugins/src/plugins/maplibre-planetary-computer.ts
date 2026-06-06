@@ -29,6 +29,7 @@ let planetaryComputerConstructorsPromise: Promise<{
   PlanetaryComputerControl: PlanetaryComputerControlConstructor;
 }> | null = null;
 let planetaryComputerStoreUnsubscribe: (() => void) | null = null;
+let planetaryComputerCollapseHandler: (() => void) | null = null;
 
 export function openPlanetaryComputerPanel(app: GeoLibreAppAPI): void {
   void openStandalonePlanetaryComputerControl(app);
@@ -37,6 +38,9 @@ export function openPlanetaryComputerPanel(app: GeoLibreAppAPI): void {
 async function openStandalonePlanetaryComputerControl(
   app: GeoLibreAppAPI,
 ): Promise<boolean> {
+  // Unlike the deck.gl-based plugins (GeoParquet, DuckDB), no
+  // ensureMercatorProjection call is needed: the control adds native
+  // MapLibre raster layers, which render correctly on the globe projection.
   const { PlanetaryComputerControl: PlanetaryComputerControlClass } =
     await getPlanetaryComputerConstructors();
 
@@ -79,7 +83,9 @@ function createPlanetaryComputerControl(
 ): PlanetaryComputerControl {
   const control = new PlanetaryComputerControlClass(PLANETARY_COMPUTER_OPTIONS);
   patchPlanetaryComputerControlOnRemove(control);
-  control.on("collapse", () => hidePlanetaryComputerControl(control));
+  planetaryComputerCollapseHandler = () =>
+    hidePlanetaryComputerControl(control);
+  control.on("collapse", planetaryComputerCollapseHandler);
   control.on("layer:add", syncPlanetaryComputerLayersToStore);
   control.on("layer:remove", syncPlanetaryComputerLayersToStore);
   control.on("layer:update", syncPlanetaryComputerLayersToStore);
@@ -88,7 +94,10 @@ function createPlanetaryComputerControl(
   // re-emitting "layer:update" (verified against
   // maplibre-gl-planetary-computer 0.3.0), so the equality checks here and
   // in syncPlanetaryComputerLayersToStore break the store <-> control
-  // feedback cycle.
+  // feedback cycle. When upgrading the library, re-verify that updateLayer
+  // does not coerce or round these values; if it ever does, toggling
+  // visibility/opacity in the layer list would loop updateLayer <->
+  // layer:update indefinitely.
   planetaryComputerStoreUnsubscribe ??= useAppStore.subscribe(
     (state, previous) => {
       const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
@@ -223,6 +232,10 @@ function resetPlanetaryComputerControl(
 ): void {
   if (planetaryComputerControl !== control) return;
 
+  if (control && planetaryComputerCollapseHandler) {
+    control.off("collapse", planetaryComputerCollapseHandler);
+  }
+  planetaryComputerCollapseHandler = null;
   control?.off("layer:add", syncPlanetaryComputerLayersToStore);
   control?.off("layer:remove", syncPlanetaryComputerLayersToStore);
   control?.off("layer:update", syncPlanetaryComputerLayersToStore);
