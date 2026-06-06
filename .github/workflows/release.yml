@@ -30,8 +30,8 @@ jobs:
             rust-targets: ""
 
           # macOS bundles are ad-hoc signed (bundle > macOS > signingIdentity
-          # in tauri.conf.json) so Gatekeeper lets users open them after
-          # removing the quarantine attribute. Do not pass --no-sign here.
+          # in tauri.conf.json); users must still remove the quarantine attribute
+          # to bypass Gatekeeper. Do not pass --no-sign here.
           - name: macOS Apple Silicon
             os: macos-latest
             args: --target aarch64-apple-darwin

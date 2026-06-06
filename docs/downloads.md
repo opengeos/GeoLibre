@@ -19,14 +19,16 @@ The Windows build is unsigned and may require a platform-specific trust prompt. 
 ## macOS installation
 
 The macOS builds are not signed with an Apple Developer certificate, so
-Gatekeeper blocks them on first launch. Depending on your macOS version,
-the message is one of:
-
-> "GeoLibre Desktop" is damaged and can't be opened. You should move it to
-> the Bin.
+Gatekeeper blocks them on first launch. Depending on your macOS version and
+which release you downloaded, the message is one of:
 
 > "GeoLibre Desktop" cannot be opened because the developer cannot be
 > verified.
+
+or:
+
+> "GeoLibre Desktop" is damaged and can't be opened. You should move it to
+> the Bin.
 
 The app is not actually damaged. macOS attaches a quarantine attribute to
 files downloaded from the internet and refuses to open apps that are not
