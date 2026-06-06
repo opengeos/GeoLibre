@@ -1845,3 +1845,45 @@ body,
   box-shadow: inset 0 0 0 1px hsl(var(--ring));
   outline: none;
 }
+
+/* maplibre-gl-raster themes its panel from prefers-color-scheme (the OS
+   setting), while GeoLibre themes from the .dark class on <html>. All of
+   the panel's colors flow through --mlr-* custom properties, so remapping
+   them onto the app theme tokens keeps the panel in sync with the in-app
+   light/dark toggle. The doubled selectors outrank the upstream
+   prefers-color-scheme block regardless of stylesheet order. */
+.plugin-control.geolibre-raster-control,
+.plugin-control-panel.geolibre-raster-panel {
+  --mlr-bg: hsl(var(--popover));
+  --mlr-surface-muted: hsl(var(--muted));
+  --mlr-surface-soft: hsl(var(--card));
+  --mlr-text: hsl(var(--popover-foreground));
+  --mlr-text-strong: hsl(var(--foreground));
+  --mlr-text-soft: hsl(var(--popover-foreground) / 0.8);
+  --mlr-text-muted: hsl(var(--muted-foreground));
+  --mlr-text-faint: hsl(var(--muted-foreground) / 0.75);
+  --mlr-border: hsl(var(--border));
+  --mlr-border-soft: hsl(var(--border) / 0.8);
+  --mlr-border-faint: hsl(var(--border) / 0.6);
+  --mlr-border-strong: hsl(var(--input));
+  --mlr-accent: hsl(var(--primary));
+  --mlr-accent-strong: hsl(var(--primary) / 0.85);
+  --mlr-accent-soft: hsl(var(--primary) / 0.12);
+  --mlr-hover: hsl(var(--foreground) / 0.06);
+  --mlr-error: hsl(var(--destructive));
+  --mlr-disabled-bg: hsl(var(--muted));
+  --mlr-disabled-text: hsl(var(--muted-foreground) / 0.5);
+  --mlr-scrollbar: hsl(var(--border));
+  --mlr-scrollbar-hover: hsl(var(--input));
+  --mlr-shadow: hsl(var(--foreground) / 0.12);
+  --mlr-histogram-neutral: hsl(var(--foreground));
+
+  color-scheme: light;
+}
+
+.dark .plugin-control.geolibre-raster-control,
+.dark .plugin-control-panel.geolibre-raster-panel {
+  --mlr-shadow: hsl(0 0% 0% / 0.4);
+
+  color-scheme: dark;
+}

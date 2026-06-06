@@ -12,6 +12,9 @@ import {
 } from "./raster-layer-sync";
 
 const rasterControlPosition: GeoLibreMapControlPosition = "top-left";
+const RASTER_PANEL_CLASS = "geolibre-raster-panel";
+const DEFAULT_RASTER_URL =
+  "https://data.source.coop/giswqs/opengeos/nlcd_2021_land_cover_30m.tif";
 
 // These types mirror undocumented private members of RasterControl from
 // maplibre-gl-raster (verified against v0.1.1). All access is optional (?.)
@@ -148,6 +151,7 @@ async function ensureRasterControl(
     hideRasterControl(rasterControl);
     disableRasterClickOutsideCollapse(rasterControl);
     wireRasterCloseButton(rasterControl);
+    applyRasterPanelClass(rasterControl);
   }
 
   return rasterControl;
@@ -168,6 +172,7 @@ function createRasterControl(
   const control = new RasterControlClass({
     className: "geolibre-raster-control",
     collapsed: true,
+    defaultUrl: DEFAULT_RASTER_URL,
     panelWidth: 380,
     title: "Add Raster Layer",
   });
@@ -217,6 +222,15 @@ function disableRasterClickOutsideCollapse(control: RasterControl): void {
   if (!handler) return;
   document.removeEventListener("click", handler);
   internals._clickOutsideHandler = null;
+}
+
+// The upstream stylesheet themes the panel from prefers-color-scheme (the
+// OS setting), while GeoLibre themes from the .dark class on <html>. The
+// app maps the panel's --mlr-* custom properties onto its own theme tokens
+// under this class (see index.css), so the panel follows the app theme.
+function applyRasterPanelClass(control: RasterControl): void {
+  const internals = control as unknown as RasterControlInternals;
+  internals._panel?.classList.add(RASTER_PANEL_CLASS);
 }
 
 // The upstream close button only collapses the panel, leaving the map
