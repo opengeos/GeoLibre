@@ -55,6 +55,11 @@ const NATIVE_OPACITY_PROPERTIES: Record<string, string[]> = {
 
 let syncedTools: GeoAgentSyncableTools | null = null;
 let storeUnsubscribe: (() => void) | null = null;
+// Guards the store subscriber against re-entrancy: store mutations made by
+// syncGeoAgentOverlaysToStore fire the subscriber synchronously, which would
+// otherwise echo removeOverlay calls back at GeoAgent for overlays it already
+// dropped from its own registry.
+let syncingOverlaysToStore = false;
 
 export function geoAgentStoreLayerId(overlayName: string): string {
   return `geoagent:${overlayName}`;
@@ -172,40 +177,45 @@ export function syncGeoAgentOverlaysToStore(
     syncable.map((overlay) => geoAgentStoreLayerId(overlay.name)),
   );
 
-  for (const storeLayer of useAppStore.getState().layers) {
-    if (!isGeoAgentStoreLayer(storeLayer)) continue;
-    if (!syncableIds.has(storeLayer.id)) {
-      useAppStore.getState().removeLayer(storeLayer.id);
-    }
-  }
-
-  for (const overlay of syncable) {
-    const layer = createGeoAgentStoreLayer(overlay);
-    const existing = useAppStore
-      .getState()
-      .layers.find((current) => current.id === layer.id);
-
-    if (!existing) {
-      useAppStore.getState().addLayer(layer);
-      continue;
+  syncingOverlaysToStore = true;
+  try {
+    for (const storeLayer of useAppStore.getState().layers) {
+      if (!isGeoAgentStoreLayer(storeLayer)) continue;
+      if (!syncableIds.has(storeLayer.id)) {
+        useAppStore.getState().removeLayer(storeLayer.id);
+      }
     }
 
-    // Only structural fields are refreshed here. Name, visibility, opacity,
-    // and style are user-editable in the layer panel, so re-syncing them
-    // would clobber edits on every agent command.
-    if (
-      JSON.stringify(existing.metadata.nativeLayerIds) !==
-        JSON.stringify(layer.metadata.nativeLayerIds) ||
-      JSON.stringify(existing.metadata.sourceIds) !==
-        JSON.stringify(layer.metadata.sourceIds) ||
-      existing.metadata.tileUrl !== layer.metadata.tileUrl
-    ) {
-      useAppStore.getState().updateLayer(layer.id, {
-        metadata: { ...existing.metadata, ...layer.metadata },
-        source: layer.source,
-        ...(layer.geojson ? { geojson: layer.geojson } : {}),
-      });
+    for (const overlay of syncable) {
+      const layer = createGeoAgentStoreLayer(overlay);
+      const existing = useAppStore
+        .getState()
+        .layers.find((current) => current.id === layer.id);
+
+      if (!existing) {
+        useAppStore.getState().addLayer(layer);
+        continue;
+      }
+
+      // Only structural fields are refreshed here. Name, visibility, opacity,
+      // and style are user-editable in the layer panel, so re-syncing them
+      // would clobber edits on every agent command.
+      if (
+        JSON.stringify(existing.metadata.nativeLayerIds) !==
+          JSON.stringify(layer.metadata.nativeLayerIds) ||
+        JSON.stringify(existing.metadata.sourceIds) !==
+          JSON.stringify(layer.metadata.sourceIds) ||
+        existing.metadata.tileUrl !== layer.metadata.tileUrl
+      ) {
+        useAppStore.getState().updateLayer(layer.id, {
+          metadata: { ...existing.metadata, ...layer.metadata },
+          source: layer.source,
+          ...(layer.geojson ? { geojson: layer.geojson } : {}),
+        });
+      }
     }
+  } finally {
+    syncingOverlaysToStore = false;
   }
 }
 
@@ -238,7 +248,13 @@ export function wireGeoAgentStoreSync(tools: GeoAgentSyncableTools): void {
   syncedTools = tools;
   storeUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     const activeTools = syncedTools;
-    if (!activeTools || state.layers === previous.layers) return;
+    if (
+      !activeTools ||
+      syncingOverlaysToStore ||
+      state.layers === previous.layers
+    ) {
+      return;
+    }
 
     const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
     for (const layer of previous.layers) {
@@ -250,12 +266,11 @@ export function wireGeoAgentStoreSync(tools: GeoAgentSyncableTools): void {
         continue;
       }
 
-      if (
-        typeof current.metadata.customLayerType === "string" &&
-        (current.visible !== layer.visible ||
-          current.opacity !== layer.opacity)
-      ) {
-        applyGeoAgentCustomLayerState(activeTools.map, current);
+      if (typeof current.metadata.customLayerType === "string") {
+        applyGeoAgentCustomLayerState(activeTools.map, current, {
+          opacity: current.opacity !== layer.opacity,
+          visibility: current.visible !== layer.visible,
+        });
       }
     }
   });
@@ -270,8 +285,9 @@ export function unwireGeoAgentStoreSync(): void {
 function applyGeoAgentCustomLayerState(
   map: GeoAgentSyncableTools["map"],
   layer: GeoLibreLayer,
+  changed: { opacity: boolean; visibility: boolean },
 ): void {
-  if (!map) return;
+  if (!map || (!changed.opacity && !changed.visibility)) return;
 
   const nativeLayerIds = Array.isArray(layer.metadata.nativeLayerIds)
     ? layer.metadata.nativeLayerIds
@@ -281,15 +297,18 @@ function applyGeoAgentCustomLayerState(
     const nativeLayer = map.getLayer(nativeLayerId);
     if (!nativeLayer) continue;
 
-    try {
-      map.setLayoutProperty(
-        nativeLayerId,
-        "visibility",
-        layer.visible ? "visible" : "none",
-      );
-    } catch {
-      // Custom layers from external controls may not accept layout updates.
+    if (changed.visibility) {
+      try {
+        map.setLayoutProperty(
+          nativeLayerId,
+          "visibility",
+          layer.visible ? "visible" : "none",
+        );
+      } catch {
+        // Custom layers from external controls may not accept layout updates.
+      }
     }
+    if (!changed.opacity) continue;
     for (const property of NATIVE_OPACITY_PROPERTIES[nativeLayer.type] ?? []) {
       try {
         map.setPaintProperty(nativeLayerId, property, layer.opacity);
@@ -314,6 +333,8 @@ function geoJsonOverlayStyle(
     stringValue(style["fill-color"]) ?? stringValue(style.fillColor) ?? color;
   const strokeColor =
     stringValue(style["line-color"]) ?? stringValue(style.lineColor) ?? color;
+  // GeoAgent's geojsonLayerPaint uses `opacity` (not `fill-opacity`) as its
+  // primary fill-opacity parameter; `fill-opacity` is an alternate key.
   const fillOpacity = clamp01(
     numberValue(style.opacity) ?? numberValue(style["fill-opacity"]) ?? 0.35,
   );

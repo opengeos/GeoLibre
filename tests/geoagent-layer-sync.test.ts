@@ -210,6 +210,28 @@ describe("syncGeoAgentOverlaysToStore", () => {
     }
   });
 
+  it("does not call removeOverlay for sync-driven store removals", () => {
+    const removed: string[] = [];
+    wireGeoAgentStoreSync({
+      removeOverlay: (name) => {
+        removed.push(name);
+        return true;
+      },
+    });
+
+    try {
+      syncGeoAgentOverlaysToStore(overlayMap(geojsonOverlay()));
+      // GeoAgent already dropped the overlay from its registry; the sync
+      // prunes the store layer and must not echo a removeOverlay back.
+      syncGeoAgentOverlaysToStore(overlayMap());
+
+      assert.equal(useAppStore.getState().layers.length, 0);
+      assert.deepEqual(removed, []);
+    } finally {
+      unwireGeoAgentStoreSync();
+    }
+  });
+
   it("applies visibility and opacity to custom native layers via the map", () => {
     const layout: Array<[string, string, unknown]> = [];
     const paint: Array<[string, string, unknown]> = [];
@@ -250,14 +272,9 @@ describe("syncGeoAgentOverlaysToStore", () => {
       useAppStore.getState().setLayerVisibility(id, false);
       useAppStore.getState().setLayerOpacity(id, 0.25);
 
-      assert.deepEqual(layout, [
-        ["buildings-3d", "visibility", "none"],
-        ["buildings-3d", "visibility", "none"],
-      ]);
-      assert.deepEqual(paint, [
-        ["buildings-3d", "fill-extrusion-opacity", 0.6],
-        ["buildings-3d", "fill-extrusion-opacity", 0.25],
-      ]);
+      // Each store mutation applies only the dimension that changed.
+      assert.deepEqual(layout, [["buildings-3d", "visibility", "none"]]);
+      assert.deepEqual(paint, [["buildings-3d", "fill-extrusion-opacity", 0.25]]);
     } finally {
       unwireGeoAgentStoreSync();
     }
