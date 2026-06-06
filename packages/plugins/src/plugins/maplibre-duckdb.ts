@@ -181,6 +181,12 @@ const duckdbRenderedLayers = new Map<string, DuckDBRenderedLayerLike>();
 const duckdbRenderedRows = new Map<string, Record<number, Record<string, unknown>>>();
 const duckdbRenderedStyles = new Map<string, DuckDBRenderedStyle>();
 const warnedMissingRowsLayerIds = new Set<string>();
+// Global row index → local Arrow row index, built lazily per result chunk.
+// Keyed weakly so replaced query results release their maps automatically.
+const duckdbResultRowIndexMaps = new WeakMap<
+  DuckDBResultLike,
+  Map<number, number>
+>();
 const DUCKDB_SELECTED_FILL_COLOR: [number, number, number, number] = [
   250, 204, 21, 230,
 ];
@@ -255,7 +261,11 @@ export function getDuckDBFeatureBounds(
   if (!renderedLayer) return null;
 
   for (const result of renderedLayer.results) {
-    const localRowIndex = getDuckDBResultLocalRowIndex(result, index);
+    const localRowIndex = getDuckDBResultLocalRowIndex(
+      result,
+      index,
+      renderedLayer.results.length === 1,
+    );
     if (localRowIndex === null) continue;
 
     const geometry = result.table?.getChild?.("geometry")?.get?.(localRowIndex);
@@ -597,19 +607,26 @@ function patchDuckDBControlSelection(control: DuckDBControl): void {
   // so future patches can inspect or restore the library behavior.
   mutableControl.__geolibreOriginalShowAttributePopup =
     mutableControl.showAttributePopup?.bind(mutableControl);
-  mutableControl.showAttributePopup = () => {};
+  // While identify mode targets a DuckDB layer, MapCanvas already handles the
+  // click via identifyDuckDBLayerAtPoint and the selection store; letting the
+  // control's own callbacks run too would process the same click twice and
+  // show a duplicate popup. The control is only pickable in that mode (see
+  // syncDuckDBPickableFromStore), so outside it the originals run unchanged.
+  mutableControl.showAttributePopup = (coordinate) => {
+    if (isDuckDBIdentifyModeActive()) return;
+    mutableControl.__geolibreOriginalShowAttributePopup?.(coordinate);
+  };
   mutableControl.handleMapSelect = (selection) => {
-    // The control is only pickable while identify mode targets a DuckDB layer
-    // (see syncDuckDBPickableFromStore), and in that mode MapCanvas already
-    // handles the click via identifyDuckDBLayerAtPoint and the selection
-    // store; letting the overlay's own callback run too would process the
-    // same click twice.
-    const { identifyLayerId, layers } = useAppStore.getState();
-    const identifyLayer = layers.find((layer) => layer.id === identifyLayerId);
-    if (identifyLayer && isDuckDBQueryLayer(identifyLayer)) return;
+    if (isDuckDBIdentifyModeActive()) return;
     originalHandleMapSelect?.(selection);
   };
   mutableControl.__geolibreSelectionPatched = true;
+}
+
+function isDuckDBIdentifyModeActive(): boolean {
+  const { identifyLayerId, layers } = useAppStore.getState();
+  const identifyLayer = layers.find((layer) => layer.id === identifyLayerId);
+  return Boolean(identifyLayer && isDuckDBQueryLayer(identifyLayer));
 }
 
 // Mirror the store-driven selection into the control's own attribute pane so
@@ -991,6 +1008,7 @@ function getDuckDBDeckLayerIds(layerId: string): string[] {
 function getDuckDBResultLocalRowIndex(
   result: DuckDBResultLike,
   rowIndex: number,
+  isOnlyResult: boolean,
 ): number | null {
   const indexVector = result.table?.getChild?.("__index");
   const rowCount =
@@ -999,20 +1017,33 @@ function getDuckDBResultLocalRowIndex(
       : indexVector?.length;
   if (typeof rowCount !== "number" || rowCount <= 0) return null;
 
-  // Without an __index column the rows are stored in natural order, so the
-  // global row index addresses the chunk directly — no scan needed.
   if (!indexVector?.get) {
+    // Without an __index column a global row index cannot be attributed to
+    // one chunk among several; only a lone chunk, whose rows are stored in
+    // natural order, can be addressed directly.
+    if (!isOnlyResult) return null;
     return rowIndex >= 0 && rowIndex < rowCount ? rowIndex : null;
   }
 
-  for (let localIndex = 0; localIndex < rowCount; localIndex += 1) {
-    const value = indexVector.get(localIndex);
-    if (value === rowIndex) return localIndex;
-    if (typeof value === "bigint" && value === BigInt(rowIndex)) {
-      return localIndex;
+  let indexMap = duckdbResultRowIndexMaps.get(result);
+  if (!indexMap) {
+    // Build the global → local index map once per result so repeated lookups
+    // (one per zoom-to-feature) do not rescan the Arrow column.
+    indexMap = new Map();
+    for (let localIndex = 0; localIndex < rowCount; localIndex += 1) {
+      const value = indexVector.get(localIndex);
+      if (typeof value === "number" && Number.isFinite(value)) {
+        indexMap.set(value, localIndex);
+      } else if (
+        typeof value === "bigint" &&
+        value <= BigInt(Number.MAX_SAFE_INTEGER)
+      ) {
+        indexMap.set(Number(value), localIndex);
+      }
     }
+    duckdbResultRowIndexMaps.set(result, indexMap);
   }
-  return null;
+  return indexMap.get(rowIndex) ?? null;
 }
 
 function boundsFromDuckDBGeometryValue(
