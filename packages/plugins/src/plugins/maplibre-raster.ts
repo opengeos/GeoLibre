@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import type { RasterControl } from "maplibre-gl-raster";
+import type { RasterControl, RasterControlEventHandler } from "maplibre-gl-raster";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
 import { ensureMercatorProjection } from "./map-projection-utils";
 import {
@@ -102,6 +102,9 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
     );
 
     const pending: Promise<unknown>[] = [];
+    const panelCollapsed = rasterPanelCollapsedFromLayers(
+      useAppStore.getState().layers,
+    );
     // The suspension covers the synchronous events fired inside this block:
     // removeRaster's rasterremove, and the rasteradd each addRaster emits
     // before it awaits the GeoTIFF header (without it, the first rasteradd
@@ -109,6 +112,8 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
     // events that follow header loads land after this window and sync
     // incrementally; the Promise.allSettled pass below settles the rest.
     runWithRasterStoreSyncSuspended(() => {
+      applyRestoredRasterPanelState(control, panelCollapsed);
+
       for (const info of control.getRasters()) {
         if (!storeLayerIds.has(info.id)) control.removeRaster(info.id);
       }
@@ -230,6 +235,10 @@ function createRasterControl(
   for (const event of ["rasteradd", "rasterchange", "rasterremove"] as const) {
     control.on(event, () => syncRasterLayersToStore(control));
   }
+  const panelStateSyncHandler: RasterControlEventHandler = () =>
+    syncRasterLayersToStore(control);
+  control.on("expand", panelStateSyncHandler);
+  control.on("collapse", panelStateSyncHandler);
   wireRasterStoreSync(control);
   patchRasterControlOnRemove(control);
 
@@ -262,6 +271,33 @@ function hideRasterControl(control: RasterControl): void {
   control.collapse();
   const container = control.getContainer();
   if (container) container.style.display = "none";
+}
+
+function applyRestoredRasterPanelState(
+  control: RasterControl,
+  panelCollapsed: boolean,
+): void {
+  if (panelCollapsed) {
+    hideRasterControl(control);
+    return;
+  }
+
+  showRasterControl(control);
+  control.expand();
+  wireRasterCloseButton(control);
+  applyRasterPanelClass(control);
+  disableRasterClickOutsideCollapse(control);
+}
+
+function rasterPanelCollapsedFromLayers(layers: ReturnType<typeof useAppStore.getState>["layers"]): boolean {
+  const panelCollapsed = layers.find(
+    (layer) =>
+      isRasterControlStoreLayer(layer) &&
+      typeof layer.metadata.panelCollapsed === "boolean",
+  )?.metadata.panelCollapsed;
+  // Older projects did not persist this UI state. Keep them collapsed so
+  // loading a raster project does not unexpectedly open the Add Data panel.
+  return typeof panelCollapsed === "boolean" ? panelCollapsed : true;
 }
 
 // The control collapses its panel when the user clicks anywhere else on the

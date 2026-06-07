@@ -13,6 +13,7 @@ export const RASTER_SOURCE_KIND = "maplibre-gl-raster";
  * fakes without touching deck.gl or a real map.
  */
 export type RasterSyncableControl = {
+  getState?: () => { collapsed: boolean };
   getRasters: () => RasterLayerInfo[];
   removeRaster: (id: string) => void;
   setRasterState: (id: string, patch: Partial<RasterLayerState>) => void;
@@ -54,9 +55,13 @@ export function isRasterControlStoreLayer(layer: GeoLibreLayer): boolean {
  * back through the control API.
  *
  * @param info - Public raster snapshot from RasterControl.getRasters().
+ * @param panelCollapsed - Whether the Add Raster Layer panel is collapsed.
  * @returns The corresponding GeoLibre store layer.
  */
-export function createRasterStoreLayer(info: RasterLayerInfo): GeoLibreLayer {
+export function createRasterStoreLayer(
+  info: RasterLayerInfo,
+  panelCollapsed = true,
+): GeoLibreLayer {
   const url = info.source.kind === "url" ? info.source.url : undefined;
   const sourcePath =
     url ?? (info.source.kind === "file" ? info.source.fileName : info.id);
@@ -78,6 +83,7 @@ export function createRasterStoreLayer(info: RasterLayerInfo): GeoLibreLayer {
       // In interleaved mode the deck.gl overlay inserts one custom style
       // layer per raster, keyed by the raster id, so ordering moves reach it.
       nativeLayerIds: [info.id],
+      panelCollapsed,
       // The visualization state is persisted so restoreRasterLayers can
       // replay URL-backed rasters when a saved project is reopened.
       rasterSource: info.source.kind,
@@ -113,6 +119,7 @@ export function syncRasterLayersToStore(control: RasterSyncableControl): void {
 
   const infos = control.getRasters();
   const infoIds = new Set(infos.map((info) => info.id));
+  const panelCollapsed = rasterPanelCollapsedFromControl(control);
 
   syncingLayersToStore = true;
   try {
@@ -124,7 +131,7 @@ export function syncRasterLayersToStore(control: RasterSyncableControl): void {
     }
 
     for (const info of infos) {
-      const layer = createRasterStoreLayer(info);
+      const layer = createRasterStoreLayer(info, panelCollapsed);
       const existing = useAppStore
         .getState()
         .layers.find((current) => current.id === layer.id);
@@ -350,6 +357,17 @@ export function savedRasterState(
   }
 
   return state;
+}
+
+function rasterPanelCollapsedFromControl(
+  control: RasterSyncableControl,
+): boolean {
+  try {
+    const collapsed = control.getState?.().collapsed;
+    return typeof collapsed === "boolean" ? collapsed : true;
+  } catch {
+    return true;
+  }
 }
 
 // Key-order-insensitive deep equality for source/metadata records, matching

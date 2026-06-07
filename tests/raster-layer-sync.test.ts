@@ -50,9 +50,13 @@ function rasterInfo(patch: Partial<RasterLayerInfo> = {}): RasterLayerInfo {
 }
 
 /** Recorder fake standing in for RasterControl in store->control tests. */
-function fakeControl(infos: RasterLayerInfo[] = []) {
+function fakeControl(
+  infos: RasterLayerInfo[] = [],
+  options: { collapsed?: boolean } = {},
+) {
   const calls: { method: string; args: unknown[] }[] = [];
   const control: RasterSyncableControl = {
+    getState: () => ({ collapsed: options.collapsed ?? true }),
     getRasters: () => infos,
     removeRaster: (id) => calls.push({ method: "removeRaster", args: [id] }),
     setRasterState: (id, patch) =>
@@ -95,6 +99,7 @@ describe("createRasterStoreLayer", () => {
     assert.equal(layer.metadata.externalNativeLayer, true);
     assert.equal(layer.metadata.customLayerType, "raster");
     assert.equal(layer.metadata.identifiable, false);
+    assert.equal(layer.metadata.panelCollapsed, true);
     assert.equal(layer.metadata.sourceKind, "maplibre-gl-raster");
     assert.deepEqual(layer.metadata.nativeLayerIds, ["raster-1"]);
     // fitLayer falls back to metadata.bounds for zoom-to-layer.
@@ -141,6 +146,12 @@ describe("createRasterStoreLayer", () => {
       gamma: 1,
       stretch: "sqrt",
     });
+  });
+
+  it("persists the raster panel collapsed state", () => {
+    const layer = createRasterStoreLayer(rasterInfo(), false);
+
+    assert.equal(layer.metadata.panelCollapsed, false);
   });
 });
 
@@ -192,6 +203,24 @@ describe("syncRasterLayersToStore", () => {
     assert.equal(layer.name, "My DEM");
     assert.equal(layer.opacity, 0.4);
     assert.deepEqual(layer.metadata.bounds, [0, 0, 1, 1]);
+  });
+
+  it("refreshes the saved panel collapsed state", () => {
+    const { control } = fakeControl([rasterInfo()]);
+    syncRasterLayersToStore(control);
+    assert.equal(
+      useAppStore.getState().layers[0].metadata.panelCollapsed,
+      true,
+    );
+
+    syncRasterLayersToStore(
+      fakeControl([rasterInfo()], { collapsed: false }).control,
+    );
+
+    assert.equal(
+      useAppStore.getState().layers[0].metadata.panelCollapsed,
+      false,
+    );
   });
 
   it("does not touch an existing layer when nothing changed", () => {
