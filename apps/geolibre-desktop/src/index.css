@@ -1665,7 +1665,11 @@ body,
   width: 100%;
 }
 
-.geolibre-earth-engine-panel {
+/* The repeated class outranks the upstream stylesheet's scoped variable
+   blocks (.plugin-control-panel.earth-engine-panel and its dark variants)
+   so the app-token remap below keeps winning after the 0.4.2 selector
+   scoping. */
+.geolibre-earth-engine-panel.geolibre-earth-engine-panel.geolibre-earth-engine-panel {
   --ee-panel-bg: hsl(var(--popover));
   --ee-panel-elevated: hsl(var(--card));
   --ee-panel-muted: hsl(var(--muted));
@@ -1690,7 +1694,7 @@ body,
   max-width: calc(100% - var(--geolibre-ee-panel-left) * 2);
 }
 
-.dark .geolibre-earth-engine-panel {
+.dark .geolibre-earth-engine-panel.geolibre-earth-engine-panel.geolibre-earth-engine-panel {
   --ee-shadow: 0 16px 40px hsl(0 0% 0% / 0.4);
 
   color-scheme: dark;
