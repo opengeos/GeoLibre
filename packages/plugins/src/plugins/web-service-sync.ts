@@ -299,6 +299,9 @@ export function createStoreLayer(
     opacity: entry.opacity,
     style: { ...DEFAULT_LAYER_STYLE },
     metadata: {
+      ...(entry.metadata ?? {}),
+      // Base fields come after the adapter spread so adapter metadata can
+      // never override what the sync engine and layer-sync rely on.
       externalNativeLayer: true,
       identifiable: false,
       nativeLayerIds: [entry.id],
@@ -306,7 +309,6 @@ export function createStoreLayer(
       sourceIds: [entry.sourceId],
       sourceKind,
       tileUrl: entry.tiles[0],
-      ...(entry.metadata ?? {}),
     },
     sourcePath: entry.tiles[0],
   };

@@ -50,10 +50,10 @@ function storedVisibility(layerId: string): boolean | undefined {
 }
 
 function wmsLayerName(entry: WebServiceLayerEntry): string {
-  return (
-    stringMetadata(entry.metadata?.femaLayerName) ??
-    entry.id.slice(NATIVE_ID_PREFIX.length)
-  );
+  const fromMetadata = stringMetadata(entry.metadata?.femaLayerName);
+  if (fromMetadata) return fromMetadata;
+  if (!entry.id.startsWith(NATIVE_ID_PREFIX)) return entry.id;
+  return entry.id.slice(NATIVE_ID_PREFIX.length);
 }
 
 const femaWmsAdapter: WebServiceAdapter<FemaWmsControl> = {
@@ -124,7 +124,7 @@ const femaWmsStoreSync = createWebServiceStoreSync(femaWmsAdapter);
 export const maplibreFemaWmsPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-fema-wms",
   name: "FEMA NFHL",
-  version: "0.1.0",
+  version: "0.1.2",
   activate: (app: GeoLibreAppAPI) => {
     if (!femaWmsControl) {
       femaWmsControl = new FemaWmsControl(getFemaWmsControlOptions());
