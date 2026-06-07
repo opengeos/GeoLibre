@@ -75,6 +75,8 @@ import {
   Bug,
   CircleHelp,
   Database,
+  FilePlus2,
+  Folder,
   FolderOpen,
   History,
   Info,
@@ -86,6 +88,7 @@ import {
   Puzzle,
   RefreshCw,
   Save,
+  SaveAll,
   SlidersHorizontal,
   Sun,
   Wrench,
@@ -101,11 +104,13 @@ import {
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import {
+  isHttpUrl,
   isTauri,
   openProjectFile,
   openRecentProjectFile,
   RecentProjectGoneError,
   saveProjectFile,
+  saveProjectFileToPath,
 } from "../../lib/tauri-io";
 import { mergeStringLists } from "../../lib/string-lists";
 import { normalizeProjectUrl } from "../../lib/urls";
@@ -234,6 +239,7 @@ export function TopToolbar({
     ),
   );
   const [addDataKind, setAddDataKind] = useState<AddDataKind | null>(null);
+  const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
   const [projectUrlDialogOpen, setProjectUrlDialogOpen] = useState(false);
   const [projectUrl, setProjectUrl] = useState("");
   const [projectUrlError, setProjectUrlError] = useState<string | null>(null);
@@ -353,7 +359,9 @@ export function TopToolbar({
     }
   };
 
-  const handleSave = async (): Promise<boolean> => {
+  const saveProject = async (options?: {
+    saveAs?: boolean;
+  }): Promise<boolean> => {
     const state = useAppStore.getState();
     const defaultProjectName = state.projectName.trim() || "Untitled Project";
     const pluginManifestUrls = mergeStringLists(
@@ -375,10 +383,19 @@ export function TopToolbar({
       metadata: state.metadata,
     });
     const content = serializeProject(project);
-    const path = await saveProjectFile(
-      content,
-      state.projectPath ?? `${defaultProjectName}.geolibre.json`,
-    );
+    // Projects opened from a URL have no writable path, so both Save and
+    // Save As fall back to the save dialog for them.
+    const existingLocalPath =
+      state.projectPath && !isHttpUrl(state.projectPath)
+        ? state.projectPath
+        : null;
+    const path =
+      !options?.saveAs && existingLocalPath
+        ? await saveProjectFileToPath(content, existingLocalPath)
+        : await saveProjectFile(
+            content,
+            existingLocalPath ?? `${defaultProjectName}.geolibre.json`,
+          );
     if (!path) return false;
     setProjectPath(path);
     rememberRecentProject({
@@ -389,6 +406,9 @@ export function TopToolbar({
     markSaved();
     return true;
   };
+
+  const handleSave = () => saveProject();
+  const handleSaveAs = () => saveProject({ saveAs: true });
 
   const {
     plugins,
@@ -541,108 +561,123 @@ export function TopToolbar({
           <span className="hidden sm:inline">{appTitle}</span>
         ) : null}
       </span>
-      <NewProjectDialog
-        buttonClassName={toolbarButtonClass}
-        buttonSize={toolbarButtonSize}
-        iconClassName={toolbarIconClassName}
-        showLabels={showLabels}
-        onSaveCurrentProject={handleSave}
-        onProjectCreated={resetRuntimeControlsForNewProject}
-      />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
             className={toolbarButtonClass}
             variant="ghost"
             size={toolbarButtonSize}
-            aria-label="Open"
+            aria-label="Project"
           >
-            <FolderOpen className={toolbarIconClassName} />
-            {renderToolbarLabel("Open")}
+            <Folder className={toolbarIconClassName} />
+            {renderToolbarLabel("Project")}
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-80">
+        <DropdownMenuContent align="start" className="w-64">
           <DropdownMenuLabel>Project</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => void handleOpenFromFile()}>
-            <FolderOpen className="mr-2 h-3.5 w-3.5" />
-            Open Project from File...
+          <DropdownMenuItem onSelect={() => setNewProjectDialogOpen(true)}>
+            <FilePlus2 className="mr-2 h-3.5 w-3.5" />
+            New...
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setProjectUrlDialogOpen(true)}>
-            <Link2 className="mr-2 h-3.5 w-3.5" />
-            Open Project from URL...
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuLabel>Recent projects</DropdownMenuLabel>
-          {recentProjects.length === 0 ? (
-            <DropdownMenuItem disabled>No recent projects</DropdownMenuItem>
-          ) : (
-            recentProjects.map((project) => {
-              const openedAt = formatRecentProjectTime(project.openedAt);
-              const label = project.name || projectPathLabel(project.path);
-              return (
-                <DropdownMenuItem
-                  key={project.path}
-                  className="flex items-start justify-between gap-2"
-                  onSelect={() => void handleOpenRecent(project.path)}
-                  title={project.path}
-                >
-                  <span className="flex min-w-0 flex-col items-start gap-0.5">
-                    <span
-                      className="max-w-full truncate font-medium"
-                      title={label}
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <FolderOpen className="mr-2 h-3.5 w-3.5" />
+              Open From
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuItem onSelect={() => void handleOpenFromFile()}>
+                <FolderOpen className="mr-2 h-3.5 w-3.5" />
+                File...
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setProjectUrlDialogOpen(true)}>
+                <Link2 className="mr-2 h-3.5 w-3.5" />
+                URL...
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <History className="mr-2 h-3.5 w-3.5" />
+              Open Recent
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-80">
+              {recentProjects.length === 0 ? (
+                <DropdownMenuItem disabled>No recent projects</DropdownMenuItem>
+              ) : (
+                recentProjects.map((project) => {
+                  const openedAt = formatRecentProjectTime(project.openedAt);
+                  const label = project.name || projectPathLabel(project.path);
+                  return (
+                    <DropdownMenuItem
+                      key={project.path}
+                      className="flex items-start justify-between gap-2"
+                      onSelect={() => void handleOpenRecent(project.path)}
+                      title={project.path}
                     >
-                      {label}
-                    </span>
-                    <span className="flex max-w-full items-start gap-1 text-xs text-muted-foreground">
-                      <History className="h-3 w-3 shrink-0" />
-                      <span
-                        className="break-all text-left leading-snug"
-                        title={project.path}
-                      >
-                        {openedAt
-                          ? `${openedAt} - ${project.path}`
-                          : project.path}
+                      <span className="flex min-w-0 flex-col items-start gap-0.5">
+                        <span
+                          className="max-w-full truncate font-medium"
+                          title={label}
+                        >
+                          {label}
+                        </span>
+                        <span className="flex max-w-full items-start gap-1 text-xs text-muted-foreground">
+                          <History className="h-3 w-3 shrink-0" />
+                          <span
+                            className="break-all text-left leading-snug"
+                            title={project.path}
+                          >
+                            {openedAt
+                              ? `${openedAt} - ${project.path}`
+                              : project.path}
+                          </span>
+                        </span>
                       </span>
-                    </span>
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={`Remove ${label} from recent projects`}
-                    className="mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
-                    onClick={(event) => {
-                      // Keep the menu open and prevent the row's onSelect (which
-                      // would reopen the project) from firing.
-                      event.stopPropagation();
-                      event.preventDefault();
-                      forgetRecentProject(project.path);
-                    }}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </DropdownMenuItem>
-              );
-            })
-          )}
+                      <button
+                        type="button"
+                        aria-label={`Remove ${label} from recent projects`}
+                        className="mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+                        onClick={(event) => {
+                          // Keep the menu open and prevent the row's onSelect
+                          // (which would reopen the project) from firing.
+                          event.stopPropagation();
+                          event.preventDefault();
+                          forgetRecentProject(project.path);
+                        }}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </DropdownMenuItem>
+                  );
+                })
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={recentProjects.length === 0}
+                onSelect={clearRecentProjects}
+              >
+                Clear Recent Projects
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            disabled={recentProjects.length === 0}
-            onSelect={clearRecentProjects}
-          >
-            Clear Recent Projects
+          <DropdownMenuItem onSelect={() => void handleSave()}>
+            <Save className="mr-2 h-3.5 w-3.5" />
+            Save
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void handleSaveAs()}>
+            <SaveAll className="mr-2 h-3.5 w-3.5" />
+            Save As...
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <Button
-        className={toolbarButtonClass}
-        variant="ghost"
-        size={toolbarButtonSize}
-        onClick={handleSave}
-        aria-label="Save"
-      >
-        <Save className={toolbarIconClassName} />
-        {renderToolbarLabel("Save")}
-      </Button>
+      <NewProjectDialog
+        open={newProjectDialogOpen}
+        onOpenChange={setNewProjectDialogOpen}
+        onSaveCurrentProject={handleSave}
+        onProjectCreated={resetRuntimeControlsForNewProject}
+      />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button

@@ -128,7 +128,7 @@ function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }
 
-function isHttpUrl(path: string): boolean {
+export function isHttpUrl(path: string): boolean {
   try {
     const url = new URL(path);
     return url.protocol === "http:" || url.protocol === "https:";
@@ -860,6 +860,22 @@ export async function saveProjectFile(
     defaultPath: defaultName ?? "project.geolibre.json",
   });
   if (!path) return null;
+  await writeTextFile(path, content);
+  return path;
+}
+
+/**
+ * Save a project directly to an already-known local path without prompting.
+ * Falls back to the save dialog when not running in Tauri (the browser never
+ * has a writable filesystem path) or when the path is an HTTP(S) URL.
+ */
+export async function saveProjectFileToPath(
+  content: string,
+  path: string,
+): Promise<string | null> {
+  if (!isTauri() || isHttpUrl(path)) {
+    return saveProjectFile(content, path);
+  }
   await writeTextFile(path, content);
   return path;
 }
