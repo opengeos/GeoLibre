@@ -77,6 +77,7 @@ import {
   Database,
   FilePen,
   FilePlus2,
+  FileText,
   Folder,
   FolderOpen,
   History,
@@ -596,7 +597,7 @@ export function TopToolbar({
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
               <DropdownMenuItem onSelect={() => void handleOpenFromFile()}>
-                <FolderOpen className="mr-2 h-3.5 w-3.5" />
+                <FileText className="mr-2 h-3.5 w-3.5" />
                 File...
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setProjectUrlDialogOpen(true)}>
