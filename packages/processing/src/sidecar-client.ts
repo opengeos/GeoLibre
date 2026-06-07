@@ -1,6 +1,31 @@
 import type { FeatureCollection } from "geojson";
 
-const DEFAULT_SIDECAR_URL = "http://127.0.0.1:8765";
+const LOCAL_SIDECAR_URL = "http://127.0.0.1:8765";
+
+/**
+ * Resolve the sidecar base URL for the current runtime.
+ *
+ * - Desktop (Tauri) and the Vite dev server talk to a local sidecar directly at
+ *   {@link LOCAL_SIDECAR_URL}.
+ * - When the app is served from any other http(s) origin (e.g. the combined
+ *   Docker image), the sidecar is reached through a same-origin `/sidecar`
+ *   reverse proxy, which sidesteps CORS entirely.
+ */
+function resolveSidecarBaseUrl(): string {
+  if (typeof window === "undefined" || !window.location) {
+    return LOCAL_SIDECAR_URL;
+  }
+  const { protocol, hostname, port, origin } = window.location;
+  const isTauri =
+    protocol === "tauri:" || hostname === "tauri.localhost";
+  const isViteDev = port === "5173";
+  if (!isTauri && !isViteDev && (protocol === "http:" || protocol === "https:")) {
+    return `${origin}/sidecar`;
+  }
+  return LOCAL_SIDECAR_URL;
+}
+
+const DEFAULT_SIDECAR_URL = resolveSidecarBaseUrl();
 const WHITEBOX_CATALOG_SNAPSHOT_URL =
   "https://raw.githubusercontent.com/opengeos/Whitebox-Next-Gen-ArcGIS/main/WNG/data/catalog_snapshot.json";
 

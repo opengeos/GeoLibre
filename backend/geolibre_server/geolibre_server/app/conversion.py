@@ -228,7 +228,13 @@ _PMTILES_SCRIPT = """
 import json, os, shutil, sys, tempfile, uuid
 
 import duckdb
-import freestiler
+try:
+    import freestiler
+except ImportError:
+    raise SystemExit(
+        "freestiler is not installed. PMTiles tiling requires freestiler, "
+        "which has no linux/arm64 wheel; it is available on amd64."
+    )
 
 params = json.loads(sys.argv[1])
 input_path = params["input_path"]
@@ -322,10 +328,16 @@ def _managed_runtime_dir() -> Path:
 
 
 def _check_runtime_import(python_executable: str) -> None:
-    """Raise if a Python executable cannot import the conversion stack."""
+    """Raise if a Python executable cannot import the core conversion stack.
+
+    Only ``duckdb`` and ``rio_cogeo`` are required for the runtime to be
+    "available" (both ship linux/arm64 wheels). ``freestiler`` powers PMTiles
+    only and is checked when that job runs, so an arm64 container without it can
+    still serve the GeoParquet/FlatGeobuf/COG conversions.
+    """
     try:
         completed = subprocess.run(
-            [python_executable, "-c", "import duckdb, rio_cogeo, freestiler"],
+            [python_executable, "-c", "import duckdb, rio_cogeo"],
             check=False,
             capture_output=True,
             text=True,

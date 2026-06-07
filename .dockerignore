@@ -6,7 +6,8 @@ node_modules
 **/node_modules
 apps/geolibre-desktop/dist
 apps/geolibre-desktop/src-tauri
-backend
+backend/geolibre_server/.venv
+backend/**/__pycache__
 workers
 docs
 sample-data
