@@ -13,7 +13,9 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .whitebox import (
+from .runtime import (
+    RUNTIME_DISCOVERY_TIMEOUT_SECS,
+    RUNTIME_SETUP_TIMEOUT_SECS,
     JobState,
     RuntimeBootstrapError,
     _clean_env,
@@ -23,8 +25,6 @@ from .whitebox import (
     _utc_now,
     _uv_executable,
     _venv_python,
-    RUNTIME_DISCOVERY_TIMEOUT_SECS,
-    RUNTIME_SETUP_TIMEOUT_SECS,
 )
 
 router = APIRouter(prefix="/conversion", tags=["conversion"])
@@ -101,22 +101,28 @@ else:
     relation = f"ST_Read({quote(input_path)})"
 
 columns = con.execute(f"DESCRIBE SELECT * FROM {relation}").fetchall()
+# DuckDB Spatial reports CRS-annotated geometry types such as
+# GEOMETRY('EPSG:4326'), so match on the prefix rather than equality.
+def is_geometry_type(column_type):
+    return str(column_type).upper().startswith("GEOMETRY")
+
 geometry_column = None
-geometry_type = None
+geometry_is_native = True
 for name, column_type, *_ in columns:
-    if str(column_type).upper() == "GEOMETRY":
-        geometry_column, geometry_type = name, column_type
+    if is_geometry_type(column_type):
+        geometry_column = name
         break
 if geometry_column is None:
+    # Plain Parquet may carry geometry as a WKB blob; rebuild it as GEOMETRY.
     for name, column_type, *_ in columns:
         if name.lower() in {"geometry", "geom", "wkb_geometry"}:
-            geometry_column, geometry_type = name, column_type
+            geometry_column, geometry_is_native = name, False
             break
 if geometry_column is None:
     raise SystemExit("No geometry column found in the input dataset.")
 
 quoted_geometry = '"' + geometry_column.replace('"', '""') + '"'
-if str(geometry_type).upper() == "GEOMETRY":
+if geometry_is_native:
     source = f"SELECT * FROM {relation}"
 else:
     source = (
@@ -124,10 +130,11 @@ else:
         f"FROM {relation}"
     )
 
-count = con.execute(f"SELECT COUNT(*) FROM ({source})").fetchone()[0]
-print(f"Converting {count} features from {input_path}")
+print(f"Converting {input_path} -> {output_path} ({compression})")
 
-con.execute(
+# COPY returns the number of rows written, so the feature count comes for free
+# rather than costing a second full scan of the dataset.
+copy_result = con.execute(
     f\"\"\"
     COPY (
       WITH src AS ({source}),
@@ -137,8 +144,9 @@ con.execute(
     ) TO {quote(output_path)}
     (FORMAT PARQUET, COMPRESSION {quote(compression)}, ROW_GROUP_SIZE {row_group_size});
     \"\"\"
-)
-print(f"Wrote Hilbert-sorted GeoParquet to {output_path}")
+).fetchone()
+count = copy_result[0] if copy_result else None
+print(f"Wrote {count} Hilbert-sorted features to {output_path}")
 print(
     "{marker}"
     + json.dumps(
@@ -292,9 +300,9 @@ def _runtime_python() -> str:
 
 def _validate_paths(input_path: str, output_path: str) -> tuple[str, str]:
     """Validate conversion input/output paths and return them normalized."""
-    source = Path(input_path).expanduser()
     if not input_path.strip():
         raise HTTPException(status_code=400, detail="input_path is required")
+    source = Path(input_path).expanduser()
     if not source.is_file():
         raise HTTPException(
             status_code=400, detail=f"Input file not found: {input_path}"
@@ -338,12 +346,16 @@ def _evict_finished_jobs_locked() -> None:
     excess = len(_JOBS) - MAX_RETAINED_JOBS
     if excess <= 0:
         return
-    finished = [
-        job_id
-        for job_id, job in _JOBS.items()
-        if job.status in {"succeeded", "failed"}
-    ]
-    for job_id in finished[:excess]:
+    # Sort by creation time so the genuinely oldest finished jobs are evicted;
+    # dict order is UUID-keyed insertion order, not chronological.
+    finished = sorted(
+        (
+            (job.created_at, job_id)
+            for job_id, job in _JOBS.items()
+            if job.status in {"succeeded", "failed"}
+        ),
+    )
+    for _created_at, job_id in finished[:excess]:
         _JOBS.pop(job_id, None)
 
 
@@ -354,6 +366,8 @@ def _run_conversion_job(
     output_name: str,
 ) -> None:
     """Run a conversion script in the managed runtime and record the result."""
+    process: subprocess.Popen[str] | None = None
+    timed_out = threading.Event()
     try:
         _job_update(job_id, status="running")
         python = _runtime_python()
@@ -368,20 +382,39 @@ def _run_conversion_job(
             bufsize=1,
             **_subprocess_startup_kwargs(),
         )
+        # A watchdog kills the subprocess if it exceeds the deadline. Reading
+        # process.stdout blocks until the pipe closes, so without this a hung
+        # DuckDB or cog_translate call (one that emits no further output) would
+        # tie up this background thread indefinitely; process.wait()'s own
+        # timeout cannot fire because the loop has already drained stdout.
+        watchdog = threading.Timer(
+            CONVERSION_RUN_TIMEOUT_SECS,
+            lambda: (timed_out.set(), process.kill()),
+        )
+        watchdog.daemon = True
+        watchdog.start()
         result: Any = None
-        assert process.stdout is not None
-        for line in process.stdout:
-            line = line.rstrip("\r\n")
-            if not line:
-                continue
-            if line.startswith(_RESULT_MARKER):
-                try:
-                    result = json.loads(line[len(_RESULT_MARKER) :])
-                except json.JSONDecodeError:
-                    result = line[len(_RESULT_MARKER) :]
-            else:
-                _append_job_message(job_id, line)
-        returncode = process.wait(timeout=CONVERSION_RUN_TIMEOUT_SECS)
+        if process.stdout is None:
+            raise RuntimeError("Conversion subprocess stdout is unexpectedly None")
+        try:
+            for line in process.stdout:
+                line = line.rstrip("\r\n")
+                if not line:
+                    continue
+                if line.startswith(_RESULT_MARKER):
+                    try:
+                        result = json.loads(line[len(_RESULT_MARKER) :])
+                    except json.JSONDecodeError:
+                        result = line[len(_RESULT_MARKER) :]
+                else:
+                    _append_job_message(job_id, line)
+            returncode = process.wait()
+        finally:
+            watchdog.cancel()
+        if timed_out.is_set():
+            raise RuntimeError(
+                f"Conversion timed out after {CONVERSION_RUN_TIMEOUT_SECS} seconds"
+            )
         if returncode != 0:
             with _JOBS_LOCK:
                 messages = list(_JOBS[job_id].messages)
@@ -396,6 +429,11 @@ def _run_conversion_job(
         )
     except Exception as exc:
         _job_update(job_id, status="failed", error=str(exc))
+    finally:
+        # Guard against leaking a still-running subprocess if an exception is
+        # raised before it exits (e.g. during streaming or a job-state update).
+        if process is not None and process.poll() is None:
+            process.kill()
 
 
 def _start_job(

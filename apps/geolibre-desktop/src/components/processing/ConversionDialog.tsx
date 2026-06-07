@@ -28,7 +28,7 @@ import {
   Save,
   Server,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   isTauri,
   pickLocalPathWithFallback,
@@ -178,6 +178,7 @@ export function ConversionDialog() {
   const [startingServer, setStartingServer] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [job, setJob] = useState<ConversionJob | null>(null);
+  const logEndRef = useRef<HTMLDivElement | null>(null);
 
   const config = kind ? TOOL_CONFIGS[kind] : null;
   const desktop = isTauri();
@@ -246,6 +247,11 @@ export function ConversionDialog() {
       window.clearTimeout(timer);
     };
   }, [job]);
+
+  // Keep the newest log lines in view as messages stream in.
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ block: "end" });
+  }, [job?.messages.length]);
 
   const pickBrowserInput = () => {
     if (!config) return;
@@ -610,9 +616,14 @@ export function ConversionDialog() {
                 {job.messages.length === 0 ? (
                   <span className="text-muted-foreground">No output yet.</span>
                 ) : (
-                  job.messages.map((line, index) => (
-                    <div key={`${index}-${line}`}>{line}</div>
-                  ))
+                  <>
+                    {/* The message list is append-only, so the slot index is a
+                        stable key. */}
+                    {job.messages.map((line, index) => (
+                      <div key={index}>{line}</div>
+                    ))}
+                    <div ref={logEndRef} />
+                  </>
                 )}
               </ScrollArea>
             </div>

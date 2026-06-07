@@ -3,16 +3,19 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException
 
+from geolibre_server.app import conversion
 from geolibre_server.app.conversion import (
     _RASTER_SCRIPT,
     _RESULT_MARKER,
     _VECTOR_SCRIPT,
+    _evict_finished_jobs_locked,
     _validate_paths,
     raster_to_cog,
     vector_to_geoparquet,
     RasterToCogRequest,
     VectorToGeoParquetRequest,
 )
+from geolibre_server.app.runtime import JobState
 
 
 def test_embedded_scripts_compile() -> None:
@@ -94,3 +97,43 @@ def test_raster_to_cog_rejects_unknown_compression(tmp_path: Path) -> None:
     with pytest.raises(HTTPException) as excinfo:
         raster_to_cog(request)
     assert excinfo.value.status_code == 400
+
+
+def _job(job_id: str, status: str, created_at: str) -> JobState:
+    """Build a JobState fixture with a controllable creation timestamp."""
+    return JobState(
+        id=job_id,
+        status=status,
+        tool_id="vector-to-geoparquet",
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+
+def test_evict_finished_jobs_drops_oldest_first(monkeypatch) -> None:
+    """Eviction removes the oldest finished jobs, regardless of insert order."""
+    monkeypatch.setattr(conversion, "MAX_RETAINED_JOBS", 2)
+    # Insertion order deliberately does not match chronological order.
+    jobs = {
+        "c": _job("c", "succeeded", "2026-01-03T00:00:00+00:00"),
+        "a": _job("a", "succeeded", "2026-01-01T00:00:00+00:00"),
+        "b": _job("b", "failed", "2026-01-02T00:00:00+00:00"),
+    }
+    monkeypatch.setattr(conversion, "_JOBS", jobs)
+    _evict_finished_jobs_locked()
+    # Only the single oldest finished job (created 01-01) should be evicted.
+    assert set(jobs) == {"b", "c"}
+
+
+def test_evict_finished_jobs_never_drops_running(monkeypatch) -> None:
+    """Running and pending jobs are retained even when over the cap."""
+    monkeypatch.setattr(conversion, "MAX_RETAINED_JOBS", 1)
+    jobs = {
+        "old_running": _job("old_running", "running", "2026-01-01T00:00:00+00:00"),
+        "pending": _job("pending", "pending", "2026-01-02T00:00:00+00:00"),
+        "done": _job("done", "succeeded", "2026-01-03T00:00:00+00:00"),
+    }
+    monkeypatch.setattr(conversion, "_JOBS", jobs)
+    _evict_finished_jobs_locked()
+    # Excess is 2, but only the one finished job is eligible for eviction.
+    assert set(jobs) == {"old_running", "pending"}

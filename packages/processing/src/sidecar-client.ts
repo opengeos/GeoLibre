@@ -261,13 +261,19 @@ export interface ConversionJob {
 export interface VectorToGeoParquetRequest {
   input_path: string;
   output_path: string;
+  /** Parquet compression codec. Defaults to `"zstd"` when omitted. */
   compression?: string;
+  /**
+   * Parquet row group size. Must be a positive integer; the backend rejects
+   * values <= 0. Defaults to 30000 when omitted.
+   */
   row_group_size?: number;
 }
 
 export interface RasterToCogRequest {
   input_path: string;
   output_path: string;
+  /** COG compression profile. Defaults to `"deflate"` when omitted. */
   compression?: string;
 }
 
