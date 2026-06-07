@@ -40,6 +40,11 @@ function fakeProjectionMap(initialProjection: ProjectionType) {
 }
 
 describe("ensureMercatorProjection", () => {
+  it("is a no-op for nullish map values", () => {
+    assert.doesNotThrow(() => ensureMercatorProjection(undefined));
+    assert.doesNotThrow(() => ensureMercatorProjection(null));
+  });
+
   it("restores mercator on idle if the map is flipped back to globe", () => {
     const fake = fakeProjectionMap("globe");
 
@@ -60,6 +65,15 @@ describe("ensureMercatorProjection", () => {
     ensureMercatorProjection(fake.map);
     ensureMercatorProjection(fake.map);
 
+    assert.equal(fake.idleHandlers.length, 1);
+  });
+
+  it("does not call setProjection when already mercator", () => {
+    const fake = fakeProjectionMap("mercator");
+
+    ensureMercatorProjection(fake.map);
+
+    assert.deepEqual(fake.setProjectionCalls, []);
     assert.equal(fake.idleHandlers.length, 1);
   });
 });

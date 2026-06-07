@@ -18,7 +18,7 @@ const DEFAULT_RASTER_URL =
   "https://data.source.coop/giswqs/opengeos/nlcd_2021_land_cover_30m.tif";
 
 // These types mirror undocumented private members of RasterControl from
-// maplibre-gl-raster (verified against v0.1.2). All access is optional (?.)
+// maplibre-gl-raster (verified against v0.1.3). All access is optional (?.)
 // so a rename in a future release degrades to a no-op rather than a crash --
 // re-verify these names AND the .mlr-control-close selector in
 // wireRasterCloseButton when bumping the dependency.
@@ -112,7 +112,16 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
     // events that follow header loads land after this window and sync
     // incrementally; the Promise.allSettled pass below settles the rest.
     runWithRasterStoreSyncSuspended(() => {
-      applyRestoredRasterPanelState(control, panelCollapsed);
+      // Isolated so a DOM error from the panel-state restore cannot abort
+      // the raster replay below.
+      try {
+        applyRestoredRasterPanelState(control, panelCollapsed);
+      } catch (error) {
+        console.error(
+          "[GeoLibre] Failed to restore raster panel state",
+          error,
+        );
+      }
 
       for (const info of control.getRasters()) {
         if (!storeLayerIds.has(info.id)) control.removeRaster(info.id);
@@ -235,21 +244,32 @@ function createRasterControl(
   for (const event of ["rasteradd", "rasterchange", "rasterremove"] as const) {
     control.on(event, () => syncRasterLayersToStore(control));
   }
+  // syncRasterLayersToStore re-reads getState().collapsed when these fire.
+  // Safe: expand()/collapse() delegate to toggle(), which flips
+  // _state.collapsed BEFORE emitting the event (verified against v0.1.3) --
+  // re-verify that ordering when bumping the dependency.
   const panelStateSyncHandler: RasterControlEventHandler = () =>
     syncRasterLayersToStore(control);
   control.on("expand", panelStateSyncHandler);
   control.on("collapse", panelStateSyncHandler);
   wireRasterStoreSync(control);
-  patchRasterControlOnRemove(control);
+  patchRasterControlOnRemove(control, panelStateSyncHandler);
 
   return control;
 }
 
-function patchRasterControlOnRemove(control: RasterControl): void {
+function patchRasterControlOnRemove(
+  control: RasterControl,
+  panelStateSyncHandler: RasterControlEventHandler,
+): void {
   const originalOnRemove = control.onRemove.bind(control);
   control.onRemove = () => {
     originalOnRemove();
     if (rasterControl !== control) return;
+    // Symmetric with unwireRasterStoreSync below: a removed control must
+    // not keep syncing panel state if a stale reference toggles it.
+    control.off("expand", panelStateSyncHandler);
+    control.off("collapse", panelStateSyncHandler);
     unwireRasterStoreSync();
     // A control torn down mid-restore must not leave its successor
     // permanently suppressing store sync events.
@@ -283,13 +303,30 @@ function applyRestoredRasterPanelState(
   }
 
   showRasterControl(control);
-  control.expand();
-  wireRasterCloseButton(control);
-  applyRasterPanelClass(control);
-  disableRasterClickOutsideCollapse(control);
+  // Defer the expand like openRasterLayerPanel does: on a first-mount
+  // restore this runs in the same task as addControl, and expanding before
+  // MapLibre has laid the control out can measure the panel at zero size.
+  window.setTimeout(() => {
+    // A control torn down before this task runs (map reinitialisation)
+    // must not expand or fire panel-state syncs against its successor.
+    if (control !== rasterControl) return;
+    try {
+      control.expand();
+      wireRasterCloseButton(control);
+      applyRasterPanelClass(control);
+      disableRasterClickOutsideCollapse(control);
+    } catch (error) {
+      console.error(
+        "[GeoLibre] Failed to restore raster panel state",
+        error,
+      );
+    }
+  }, 0);
 }
 
-function rasterPanelCollapsedFromLayers(layers: ReturnType<typeof useAppStore.getState>["layers"]): boolean {
+function rasterPanelCollapsedFromLayers(
+  layers: ReturnType<typeof useAppStore.getState>["layers"],
+): boolean {
   const panelCollapsed = layers.find(
     (layer) =>
       isRasterControlStoreLayer(layer) &&

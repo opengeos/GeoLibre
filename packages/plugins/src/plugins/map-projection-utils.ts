@@ -19,6 +19,10 @@ function setMercatorProjection(map: MapLibreMap): void {
   }
 }
 
+// Scheduled even when the projection already reads mercator: while the
+// style is settling, getProjection() can report a value the settled style
+// will overwrite (and setMercatorProjection swallows rejections in that
+// window), so the cheap re-check on idle covers both cases.
 function scheduleMercatorIdleGuard(map: MapLibreMap): void {
   if (pendingMercatorIdleGuards.has(map)) return;
   pendingMercatorIdleGuards.add(map);
