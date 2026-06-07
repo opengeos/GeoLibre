@@ -92,3 +92,4 @@ export {
   sampleGeoJsonPlugin,
   setSampleGeoJson,
 } from "./plugins/sample-geojson";
+export { WEB_SERVICE_PLUGIN_IDS } from "./plugins/web-service-sync";

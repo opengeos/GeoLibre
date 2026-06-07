@@ -47,6 +47,7 @@ import {
   subscribeLegendPanel,
   subscribeSearchPlacesPanel,
   toggleEarthEnginePanel,
+  WEB_SERVICE_PLUGIN_IDS,
   type GeoLibreMapControlPosition,
 } from "@geolibre/plugins";
 import {
@@ -165,12 +166,7 @@ const PLUGIN_POSITION_ITEMS: Array<{
 ];
 
 // Plugins grouped under the "Web Services" submenu of the Plugins menu.
-const WEB_SERVICE_PLUGIN_IDS = new Set([
-  "maplibre-gl-fema-wms",
-  "maplibre-gl-nasa-earthdata",
-  "maplibre-gl-enviroatlas",
-  "maplibre-gl-national-map",
-]);
+const WEB_SERVICE_PLUGIN_ID_SET = new Set<string>(WEB_SERVICE_PLUGIN_IDS);
 
 const FEEDBACK_URL = "https://github.com/opengeos/GeoLibre/issues";
 
@@ -915,14 +911,14 @@ export function TopToolbar({
             };
 
             const webServicePlugins = plugins.filter((p) =>
-              WEB_SERVICE_PLUGIN_IDS.has(p.id),
+              WEB_SERVICE_PLUGIN_ID_SET.has(p.id),
             );
             // The web service plugins render as one grouped submenu, placed
             // where the first of them appears in registration order (just
             // above Esri Wayback).
             let webServicesRendered = false;
             return plugins.map((p) => {
-              if (!WEB_SERVICE_PLUGIN_IDS.has(p.id)) {
+              if (!WEB_SERVICE_PLUGIN_ID_SET.has(p.id)) {
                 return renderPluginMenuItem(p);
               }
               if (webServicesRendered) return null;

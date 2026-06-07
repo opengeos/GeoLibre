@@ -75,7 +75,9 @@ const nasaEarthdataAdapter: WebServiceAdapter<NasaEarthdataControl> = {
   sourceKind: SOURCE_KIND,
   attachEvents: (control, listener) => {
     controlEventHandler = (event) => {
-      if (event.layer) gibsLayerCache.set(event.layer.id, event.layer);
+      if (event.type === "layeradd" && event.layer) {
+        gibsLayerCache.set(event.layer.id, event.layer);
+      }
       // layeradd/layerremove are always followed by statechange; reconciling
       // on statechange alone keeps one reconcile per control mutation while
       // the layeradd subscription still fills the catalog cache first.

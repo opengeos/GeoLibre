@@ -34,7 +34,7 @@
     "maplibre-gl-earth-engine": "^0.4.1",
     "maplibre-gl-enviroatlas": "^0.1.1",
     "maplibre-gl-esri-wayback": "^0.1.0",
-    "maplibre-gl-fema-wms": "^0.1.0",
+    "maplibre-gl-fema-wms": "^0.1.1",
     "maplibre-gl-geo-editor": "^0.7.3",
     "maplibre-gl-geoagent": "^0.4.2",
     "maplibre-gl-lidar": "^0.14.1",

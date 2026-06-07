@@ -726,6 +726,10 @@ function syncBasemapControlRasterLayer(
   );
 }
 
+// Store-layer metadata.sourceKind values written by the Web Services
+// plugins. Each entry pairs with a plugin id in WEB_SERVICE_PLUGIN_IDS in
+// @geolibre/plugins' web-service-sync; keep the two lists in step when
+// adding a web service plugin.
 const WEB_SERVICE_SOURCE_KINDS = new Set([
   "fema-wms",
   "nasa-earthdata",

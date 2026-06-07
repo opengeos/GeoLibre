@@ -20,6 +20,19 @@ import {
  *   adopt restored project layers the control does not know about yet
  */
 
+/**
+ * Plugin ids grouped under the Plugins menu's "Web Services" submenu.
+ * The corresponding store-layer `metadata.sourceKind` values live in
+ * WEB_SERVICE_SOURCE_KINDS in `@geolibre/map`'s layer-sync, which rebuilds
+ * these layers after style reloads.
+ */
+export const WEB_SERVICE_PLUGIN_IDS = [
+  "maplibre-gl-fema-wms",
+  "maplibre-gl-nasa-earthdata",
+  "maplibre-gl-enviroatlas",
+  "maplibre-gl-national-map",
+] as const;
+
 /** One active layer reported by a web service control. */
 export interface WebServiceLayerEntry {
   /** Store layer id. Must equal the control's native maplibre layer id. */
@@ -307,10 +320,31 @@ function shouldUpdateStoreLayer(
     existingLayer.type !== nextLayer.type ||
     existingLayer.name !== nextLayer.name ||
     existingLayer.sourcePath !== nextLayer.sourcePath ||
-    JSON.stringify(existingLayer.metadata) !==
-      JSON.stringify(nextLayer.metadata) ||
-    JSON.stringify(existingLayer.source) !== JSON.stringify(nextLayer.source)
+    stableStringify(existingLayer.source) !==
+      stableStringify(nextLayer.source) ||
+    stableStringify(existingLayer.metadata) !==
+      stableStringify(nextLayer.metadata)
   );
+}
+
+// JSON.stringify is sensitive to key insertion order, and the existing store
+// layer may have been deserialized from a project file, so the comparison
+// uses a key-sorted form to avoid spurious updates.
+function stableStringify(value: unknown): string {
+  return JSON.stringify(sortKeysDeep(value));
+}
+
+function sortKeysDeep(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortKeysDeep);
+  if (value && typeof value === "object") {
+    const source = value as Record<string, unknown>;
+    const sorted: Record<string, unknown> = {};
+    for (const key of Object.keys(source).sort()) {
+      sorted[key] = sortKeysDeep(source[key]);
+    }
+    return sorted;
+  }
+  return value;
 }
 
 /**

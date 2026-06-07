@@ -108,9 +108,12 @@ const femaWmsAdapter: WebServiceAdapter<FemaWmsControl> = {
     control.setLayerOpacity(wmsLayerName(entry), opacity);
   },
   adopt: (control, layers) => {
+    const activeNames = new Set(
+      control.getState().activeLayers.map((active) => active.name),
+    );
     for (const layer of layers) {
       const name = layerNameFromStoreLayer(layer);
-      if (!name) continue;
+      if (!name || activeNames.has(name)) continue;
       control.addLayer(name, layer.opacity);
     }
   },
