@@ -456,8 +456,9 @@ describe("savedVectorState", () => {
       renderMode: "hologram",
       ingestMode: "teleport",
       picker: "yes",
-      sourceLayer: "",
-      format: 42,
+      // Length-capped like colors: legitimate names are short.
+      sourceLayer: "x".repeat(201),
+      format: "y".repeat(51),
       style: {
         fillColor: 7,
         fillOpacity: 2,

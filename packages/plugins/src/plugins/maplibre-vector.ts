@@ -359,7 +359,13 @@ function applyRestoredVectorPanelState(
   panelCollapsed: boolean,
 ): void {
   // A restore queued by an earlier project load must not fire after this
-  // one has applied a different panel state to the same control.
+  // one has applied a different panel state to the same control, and a
+  // pending openVectorLayerPanel defer must not re-show a panel the
+  // restored project keeps collapsed.
+  if (openPanelTimeout !== null) {
+    window.clearTimeout(openPanelTimeout);
+    openPanelTimeout = null;
+  }
   if (restorePanelExpandTimeout !== null) {
     window.clearTimeout(restorePanelExpandTimeout);
     restorePanelExpandTimeout = null;

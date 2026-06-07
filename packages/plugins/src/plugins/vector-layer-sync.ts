@@ -337,13 +337,24 @@ export function savedVectorState(
   if (typeof candidate.picker === "boolean") {
     state.picker = candidate.picker;
   }
-  if (typeof candidate.sourceLayer === "string" && candidate.sourceLayer) {
+  // Length caps match the color validator below: legitimate container
+  // layer names and format identifiers are short, and a hand-edited
+  // project file must not smuggle arbitrary blobs through these fields.
+  if (
+    typeof candidate.sourceLayer === "string" &&
+    candidate.sourceLayer &&
+    candidate.sourceLayer.length <= 200
+  ) {
     state.sourceLayer = candidate.sourceLayer;
   }
   // Formats are open-ended (any extension the spatial extension's GDAL
   // build reads), so no allowlist here; the control falls back to its own
   // detection for unknown names.
-  if (typeof candidate.format === "string" && candidate.format) {
+  if (
+    typeof candidate.format === "string" &&
+    candidate.format &&
+    candidate.format.length <= 50
+  ) {
     state.format = candidate.format;
   }
   const style = savedVectorStyle(candidate.style);
