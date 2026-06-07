@@ -426,40 +426,55 @@ def _ensure_managed_runtime() -> str:
 
 
 _CHECKED_RUNTIME_PYTHON: str | None = None
+_CHECKED_RUNTIME_PYTHON_LOCK = threading.Lock()
 
 
 def _runtime_python() -> str:
     """Return the Python executable used for conversions.
 
     The import check spawns a subprocess, so the verified interpreter is cached
-    to avoid that cost on every status poll and job start. The managed-runtime
-    path does its own (cheaper) re-check under its setup lock.
+    to avoid that cost on every status poll and job start. Double-checked
+    locking keeps concurrent cold-start callers (FastAPI runs sync handlers in
+    a thread pool) from each spawning that subprocess.
     """
     global _CHECKED_RUNTIME_PYTHON
-    if _CHECKED_RUNTIME_PYTHON is not None:
-        return _CHECKED_RUNTIME_PYTHON
-    configured = os.environ.get("GEOLIBRE_CONVERSION_PYTHON")
-    if configured:
-        resolved = str(Path(configured).expanduser())
-        if os.path.isfile(resolved) and os.access(resolved, os.X_OK):
-            _check_runtime_import(resolved)
-            _CHECKED_RUNTIME_PYTHON = resolved
-            return resolved
-        raise RuntimeBootstrapError(
-            f"Configured conversion Python is not executable: {configured}"
-        )
-    resolved = _ensure_managed_runtime()
-    _CHECKED_RUNTIME_PYTHON = resolved
-    return resolved
+    cached = _CHECKED_RUNTIME_PYTHON
+    # Drop a cached interpreter whose file has since disappeared (e.g. the
+    # managed venv was wiped) so the next call re-bootstraps cleanly.
+    if cached is not None and os.path.isfile(cached):
+        return cached
+    with _CHECKED_RUNTIME_PYTHON_LOCK:
+        cached = _CHECKED_RUNTIME_PYTHON
+        if cached is not None and os.path.isfile(cached):
+            return cached
+        _CHECKED_RUNTIME_PYTHON = None
+        configured = os.environ.get("GEOLIBRE_CONVERSION_PYTHON")
+        if configured:
+            resolved = str(Path(configured).expanduser())
+            if os.path.isfile(resolved) and os.access(resolved, os.X_OK):
+                _check_runtime_import(resolved)
+                _CHECKED_RUNTIME_PYTHON = resolved
+                return resolved
+            raise RuntimeBootstrapError(
+                f"Configured conversion Python is not executable: {configured}"
+            )
+        resolved = _ensure_managed_runtime()
+        _CHECKED_RUNTIME_PYTHON = resolved
+        return resolved
 
 
 def _is_within_roots(path: Path) -> bool:
-    """Return whether a resolved path lives under an allowlisted root."""
+    """Return whether a resolved path lives under an allowlisted root.
+
+    Uses ``Path.is_relative_to`` so filesystem roots (``/``, a Windows drive)
+    work — naive ``startswith(root + sep)`` would produce ``//`` and reject
+    valid descendants.
+    """
     if not _CONVERSION_ROOTS:
         return True
-    resolved = str(path.resolve())
+    resolved = path.resolve()
     return any(
-        resolved == root or resolved.startswith(root + os.sep)
+        resolved == Path(root) or resolved.is_relative_to(root)
         for root in _CONVERSION_ROOTS
     )
 
@@ -495,7 +510,9 @@ def _validate_paths(input_path: str, output_path: str) -> tuple[str, str]:
             status_code=400,
             detail="input_path and output_path must be different files",
         )
-    return str(source), str(target)
+    # Return canonical paths so the subprocess and the failure-cleanup unlink
+    # operate on the same resolved paths the allowlist check approved.
+    return str(source.resolve()), str(target.resolve())
 
 
 def _job_update(job_id: str, **patch: Any) -> None:

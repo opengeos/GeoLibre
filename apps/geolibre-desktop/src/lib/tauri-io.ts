@@ -11,6 +11,7 @@ import {
 import { unzip } from "fflate";
 import type { FeatureCollection } from "geojson";
 import shp from "shpjs";
+import { parseDelimitedTextFields } from "./delimited-text";
 import type { DuckDbVectorFile } from "./duckdb-vector-loader";
 import { parseGpxLayer } from "./gpx";
 
@@ -1011,57 +1012,26 @@ export async function loadDroppedVectorPaths(
   return layers;
 }
 
-/**
- * Split one RFC 4180-style line into fields for a given delimiter, honoring
- * double-quoted fields (which may contain the delimiter) and "" escapes.
- */
-function splitCsvLine(line: string, delimiter: string): string[] {
-  const fields: string[] = [];
-  let field = "";
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i += 1) {
-    const char = line[i];
-    if (inQuotes) {
-      if (char === '"') {
-        if (line[i + 1] === '"') {
-          field += '"';
-          i += 1;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        field += char;
-      }
-    } else if (char === '"') {
-      inQuotes = true;
-    } else if (char === delimiter) {
-      fields.push(field);
-      field = "";
-    } else {
-      field += char;
-    }
-  }
-  fields.push(field);
-  return fields;
-}
-
 /** Split a CSV/TSV header line into trimmed column names. */
 export function parseCsvHeaderLine(line: string): string[] {
   const header = line.replace(/^﻿/, "").replace(/[\r\n]+$/, "");
   if (!header) return [];
-  // Quote-aware parsing for each candidate delimiter, then pick the one that
-  // yields the most fields. Because quotes are respected, a quoted field
-  // containing the delimiter (e.g. "city,state") no longer skews the count.
-  const delimiter = [",", "\t", ";"]
-    .map((d) => ({
-      d,
-      count: splitCsvLine(header, d).filter((token) => token.trim().length > 0)
-        .length,
-    }))
-    .sort((a, b) => b.count - a.count)[0].d;
-  return splitCsvLine(header, delimiter)
-    .map((name) => name.trim())
-    .filter((name) => name.length > 0);
+  // Reuse the project's quote-aware delimited-text parser for each candidate
+  // delimiter (comma, tab, semicolon) and keep the one that yields the most
+  // columns. Quoting is respected, so a quoted field containing the delimiter
+  // (e.g. "city,state") neither skews detection nor splits the header.
+  let best: string[] = [];
+  for (const delimiter of [",", "\t", ";"]) {
+    try {
+      const fields = parseDelimitedTextFields(header, delimiter).filter(
+        (name) => name.trim().length > 0,
+      );
+      if (fields.length > best.length) best = fields;
+    } catch {
+      // No header row for this delimiter; try the next candidate.
+    }
+  }
+  return best.map((name) => name.trim()).filter((name) => name.length > 0);
 }
 
 /**

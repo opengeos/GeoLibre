@@ -135,16 +135,24 @@ def _download_to_temp(url: str, suffix: str) -> Path:
     return target
 
 
+def _is_valid_managed_uv(path: Path) -> bool:
+    """Return whether the managed uv binary is present and runnable."""
+    if not path.is_file():
+        return False
+    # Windows executability is extension-based; POSIX needs the execute bit.
+    return os.name == "nt" or os.access(path, os.X_OK)
+
+
 def _install_managed_uv() -> str:
     """Download and install uv into GeoLibre's managed runtime directory."""
     uv = _managed_uv_executable()
-    if uv.exists():
+    if _is_valid_managed_uv(uv):
         return str(uv)
 
     with _UV_INSTALL_LOCK:
         # Re-check inside the lock: another router may have installed uv while
         # this caller was waiting.
-        if uv.exists():
+        if _is_valid_managed_uv(uv):
             return str(uv)
         return _install_managed_uv_locked(uv)
 
@@ -188,8 +196,10 @@ def _install_managed_uv_locked(uv: Path) -> str:
     if completed.returncode != 0:
         detail = completed.stderr.strip() or completed.stdout.strip()
         raise RuntimeBootstrapError(f"uv installer failed. {detail}")
-    if not uv.exists():
-        raise RuntimeBootstrapError(f"uv installer did not create {uv}")
+    if not _is_valid_managed_uv(uv):
+        raise RuntimeBootstrapError(
+            f"uv installer did not create a runnable binary at {uv}"
+        )
     return str(uv)
 
 

@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import pytest
@@ -72,6 +73,22 @@ def test_validate_paths_rejects_outside_allowed_roots(
     assert excinfo.value.status_code == 403
 
 
+def test_validate_paths_rejects_output_outside_allowed_roots(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """An allowlisted input but out-of-root output is rejected (403)."""
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    source = allowed / "input.geojson"
+    source.write_text("{}", encoding="utf-8")
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    monkeypatch.setattr(conversion, "_CONVERSION_ROOTS", [str(allowed.resolve())])
+    with pytest.raises(HTTPException) as excinfo:
+        _validate_paths(str(source), str(outside_dir / "out.parquet"))
+    assert excinfo.value.status_code == 403
+
+
 def test_validate_paths_allows_within_allowed_roots(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -84,8 +101,25 @@ def test_validate_paths_allows_within_allowed_roots(
     input_path, output_path = _validate_paths(
         str(source), str(allowed / "out.parquet")
     )
-    assert input_path == str(source)
-    assert output_path == str(allowed / "out.parquet")
+    assert input_path == str(source.resolve())
+    assert output_path == str((allowed / "out.parquet").resolve())
+
+
+def test_runtime_python_caches_after_first_call(monkeypatch) -> None:
+    """The import check runs at most once across repeated _runtime_python calls."""
+    import_calls = 0
+
+    def fake_check(python_executable: str) -> None:
+        nonlocal import_calls
+        import_calls += 1
+
+    monkeypatch.setattr(conversion, "_CHECKED_RUNTIME_PYTHON", None)
+    monkeypatch.setenv("GEOLIBRE_CONVERSION_PYTHON", sys.executable)
+    monkeypatch.setattr(conversion, "_check_runtime_import", fake_check)
+
+    assert conversion._runtime_python() == sys.executable
+    conversion._runtime_python()
+    assert import_calls == 1
 
 
 def test_vector_to_geoparquet_rejects_unknown_compression(tmp_path: Path) -> None:
