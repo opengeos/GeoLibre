@@ -390,7 +390,8 @@ function patchTiledRasterSource(source: unknown): void {
 
 function normalizeTileNumericNodata(tile: RasterTile): void {
   const array = tile.array;
-  const nodata = array?.nodata;
+  if (!array) return;
+  const nodata = array.nodata;
   if (typeof nodata !== "number" || !Number.isFinite(nodata)) return;
 
   let replaced = false;
