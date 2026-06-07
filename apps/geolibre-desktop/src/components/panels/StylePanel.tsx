@@ -908,6 +908,7 @@ export function StylePanel({
   const setLayerOpacity = useAppStore((s) => s.setLayerOpacity);
   const setLayerStyle = useAppStore((s) => s.setLayerStyle);
   const updateLayer = useAppStore((s) => s.updateLayer);
+  const moveLayer = useAppStore((s) => s.moveLayer);
   const [isCollapsed, setIsCollapsed] = useState(isMobileViewport);
   const [draftBeforeId, setDraftBeforeId] = useState("");
   const [draftColorExpression, setDraftColorExpression] = useState("");
@@ -1332,6 +1333,16 @@ export function StylePanel({
     });
   };
   const applyBeforeId = (value: string) => {
+    // Picking another user layer is a one-shot reorder in the layer list;
+    // beforeId metadata only works for raw MapLibre (basemap) layer ids.
+    const otherLayers = layers.filter((l) => l.id !== layer.id);
+    const targetIndex = otherLayers.findIndex((l) => l.id === value);
+    if (targetIndex >= 0) {
+      setDraftBeforeId("");
+      if (layer.beforeId) updateLayer(layer.id, { beforeId: undefined });
+      moveLayer(layer.id, targetIndex);
+      return;
+    }
     setDraftBeforeId(value);
     updateLayer(layer.id, {
       beforeId: value.trim() || undefined,
@@ -1372,8 +1383,11 @@ export function StylePanel({
   };
   const basemapStyleLayerIds =
     mapControllerRef.current?.getBasemapStyleLayerIds() ?? [];
+  const otherLayers = layers.filter((l) => l.id !== layer.id);
   const beforeIdOptions =
-    draftBeforeId && !basemapStyleLayerIds.includes(draftBeforeId)
+    draftBeforeId &&
+    !basemapStyleLayerIds.includes(draftBeforeId) &&
+    !otherLayers.some((l) => l.id === draftBeforeId)
       ? [draftBeforeId, ...basemapStyleLayerIds]
       : basemapStyleLayerIds;
   const beforeIdControl = (
@@ -1385,11 +1399,24 @@ export function StylePanel({
         onChange={(event) => applyBeforeId(event.target.value)}
       >
         <option value="">Layer order (default)</option>
-        {beforeIdOptions.map((styleLayerId) => (
-          <option key={styleLayerId} value={styleLayerId}>
-            {styleLayerId}
-          </option>
-        ))}
+        {otherLayers.length > 0 && (
+          <optgroup label="Layers">
+            {[...otherLayers].reverse().map((otherLayer) => (
+              <option key={otherLayer.id} value={otherLayer.id}>
+                {otherLayer.name}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {beforeIdOptions.length > 0 && (
+          <optgroup label="Basemap layers">
+            {beforeIdOptions.map((styleLayerId) => (
+              <option key={styleLayerId} value={styleLayerId}>
+                {styleLayerId}
+              </option>
+            ))}
+          </optgroup>
+        )}
       </Select>
     </div>
   );

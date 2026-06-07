@@ -682,11 +682,11 @@ export function AddDataDialog({
 
   const beforeLayer = beforeLayerId.trim() || null;
 
-  const basemapStyleLayerIds = useMemo(
-    () =>
-      open ? (mapControllerRef.current?.getBasemapStyleLayerIds() ?? []) : [],
-    [open, mapControllerRef],
-  );
+  // Computed during render (not memoized) so the list picks up the map
+  // controller once it finishes initialising; the call is a cheap filter.
+  const basemapStyleLayerIds = open
+    ? (mapControllerRef.current?.getBasemapStyleLayerIds() ?? [])
+    : [];
 
   const handleArcgisLayerTypeChange = (nextLayerType: ArcGISLayerType) => {
     const currentUrl = arcgisUrl.trim();
