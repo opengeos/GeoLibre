@@ -296,25 +296,35 @@ export async function runVectorToGeoParquet(
   request: VectorToGeoParquetRequest,
   baseUrl = DEFAULT_SIDECAR_URL,
 ): Promise<ConversionJob> {
-  return startConversion(`${baseUrl}/conversion/vector-to-geoparquet`, request);
+  return startConversion(
+    `${baseUrl}/conversion/vector-to-geoparquet`,
+    request,
+    baseUrl,
+  );
 }
 
 export async function runRasterToCog(
   request: RasterToCogRequest,
   baseUrl = DEFAULT_SIDECAR_URL,
 ): Promise<ConversionJob> {
-  return startConversion(`${baseUrl}/conversion/raster-to-cog`, request);
+  return startConversion(`${baseUrl}/conversion/raster-to-cog`, request, baseUrl);
 }
 
 async function startConversion(
   url: string,
   request: VectorToGeoParquetRequest | RasterToCogRequest,
+  baseUrl: string,
 ): Promise<ConversionJob> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(request),
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request),
+    });
+  } catch (error) {
+    throw sidecarConnectionError(baseUrl, error);
+  }
   if (!res.ok) {
     throw new Error(await responseErrorMessage(res, "Could not start conversion"));
   }
@@ -325,9 +335,14 @@ export async function fetchConversionJob(
   jobId: string,
   baseUrl = DEFAULT_SIDECAR_URL,
 ): Promise<ConversionJob> {
-  const res = await fetch(
-    `${baseUrl}/conversion/jobs/${encodeURIComponent(jobId)}`,
-  );
+  let res: Response;
+  try {
+    res = await fetch(
+      `${baseUrl}/conversion/jobs/${encodeURIComponent(jobId)}`,
+    );
+  } catch (error) {
+    throw sidecarConnectionError(baseUrl, error);
+  }
   if (!res.ok) {
     throw new Error(await responseErrorMessage(res, "Could not load conversion job"));
   }

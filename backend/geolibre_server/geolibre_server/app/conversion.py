@@ -468,14 +468,16 @@ def _start_job(
 def conversion_status():
     """Return conversion runtime availability."""
     try:
-        python = _runtime_python()
+        # Resolve the runtime to confirm availability, but do not return the
+        # interpreter path — the frontend only needs available/message, and the
+        # absolute path is needless filesystem recon for a caller.
+        _runtime_python()
         return {
             "available": True,
             "message": "Conversion runtime (DuckDB + rio-cogeo) is available.",
-            "python": python,
         }
     except Exception as exc:
-        return {"available": False, "message": str(exc), "python": None}
+        return {"available": False, "message": str(exc)}
 
 
 @router.post("/vector-to-geoparquet")
