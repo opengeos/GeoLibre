@@ -1016,8 +1016,16 @@ export function parseCsvHeaderLine(line: string): string[] {
   const header = line.replace(/^﻿/, "").replace(/[\r\n]+$/, "");
   if (!header) return [];
   // Pick the delimiter that yields the most fields (comma, tab, or semicolon).
+  // Strip outer quotes from each token first so a quoted field containing the
+  // candidate delimiter (e.g. "city,state" in a TSV) does not skew the count.
   const delimiter = [",", "\t", ";"]
-    .map((d) => ({ d, count: header.split(d).length }))
+    .map((d) => ({
+      d,
+      count: header
+        .split(d)
+        .map((token) => token.trim().replace(/^".*"$/, ""))
+        .filter((token) => token.length > 0).length,
+    }))
     .sort((a, b) => b.count - a.count)[0].d;
   return header
     .split(delimiter)

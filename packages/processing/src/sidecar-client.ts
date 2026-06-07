@@ -268,7 +268,6 @@ export async function fetchWhiteboxJsonOutput(
 export interface ConversionStatus {
   available: boolean;
   message: string;
-  python?: string | null;
 }
 
 export interface ConversionJob {
