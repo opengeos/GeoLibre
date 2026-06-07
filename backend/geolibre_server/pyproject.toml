@@ -16,6 +16,10 @@ dev = [
 whitebox = [
   "whitebox-workflows>=2.0.2",
 ]
+conversion = [
+  "duckdb>=1.1.0",
+  "rio-cogeo>=5.0.0",
+]
 # Future geospatial stack (not required for MVP UI):
 # geo = [
 #   "gdal",

@@ -212,6 +212,7 @@ export function TopToolbar({
 }: TopToolbarProps) {
   const loadProject = useAppStore((s) => s.loadProject);
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
+  const setConversionOpen = useAppStore((s) => s.setConversionOpen);
   const projectName = useAppStore((s) => s.projectName);
   const projectPath = useAppStore((s) => s.projectPath);
   const recentProjects = useAppStore((s) => s.recentProjects);
@@ -756,6 +757,21 @@ export function TopToolbar({
           <DropdownMenuItem onSelect={() => setProcessingOpen(true)}>
             Whitebox
           </DropdownMenuItem>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>Conversion</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuItem
+                onSelect={() => setConversionOpen("vector-to-geoparquet")}
+              >
+                Vector to GeoParquet
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setConversionOpen("raster-to-cog")}
+              >
+                Raster to COG
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
           <DropdownMenuItem onSelect={handleOpenPlanetaryComputerPanel}>
             Planetary Computer
           </DropdownMenuItem>

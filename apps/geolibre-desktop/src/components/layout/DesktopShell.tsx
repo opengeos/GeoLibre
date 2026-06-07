@@ -59,6 +59,20 @@ const ProcessingDialog = lazy(() =>
     }),
 );
 
+const ConversionDialog = lazy(() =>
+  import("../processing/ConversionDialog")
+    .then((module) => ({
+      default: module.ConversionDialog,
+    }))
+    .catch((error) => {
+      // Same chunk-load fallback rationale as ProcessingDialog above.
+      console.error("Failed to load ConversionDialog", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/ConversionDialog").ConversionDialog;
+      return { default: Fallback };
+    }),
+);
+
 interface DesktopShellProps {
   layoutOptions: LayoutOptions;
   projectUrlLoadState?: ProjectUrlLoadState;
@@ -522,6 +536,9 @@ export function DesktopShell({
       />
       <Suspense fallback={null}>
         <ProcessingDialog mapControllerRef={mapControllerRef} />
+      </Suspense>
+      <Suspense fallback={null}>
+        <ConversionDialog />
       </Suspense>
       <div
         ref={verticalResizeGuideRef}

@@ -20,6 +20,8 @@ import {
   type RecentProjectEntry,
 } from "./types";
 
+export type ConversionToolKind = "vector-to-geoparquet" | "raster-to-cog";
+
 export interface AppState {
   projectName: string;
   projectPath: string | null;
@@ -41,6 +43,7 @@ export interface AppState {
   attributeFilter: string;
   ui: {
     processingOpen: boolean;
+    conversionOpen: ConversionToolKind | null;
     attributeTableOpen: boolean;
     zoomToSelectedFeature: boolean;
   };
@@ -60,6 +63,7 @@ export interface AppState {
   setIdentifyLayer: (id: string | null) => void;
   setAttributeFilter: (filter: string) => void;
   setProcessingOpen: (open: boolean) => void;
+  setConversionOpen: (kind: ConversionToolKind | null) => void;
   setAttributeTableOpen: (open: boolean) => void;
   setZoomToSelectedFeature: (enabled: boolean) => void;
 
@@ -143,6 +147,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   attributeFilter: "",
   ui: {
     processingOpen: false,
+    conversionOpen: null,
     attributeTableOpen: false,
     zoomToSelectedFeature: false,
   },
@@ -172,6 +177,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setAttributeFilter: (filter) => set({ attributeFilter: filter }),
   setProcessingOpen: (open) =>
     set((s) => ({ ui: { ...s.ui, processingOpen: open } })),
+  setConversionOpen: (kind) =>
+    set((s) => ({ ui: { ...s.ui, conversionOpen: kind } })),
   setAttributeTableOpen: (open) =>
     set((s) => ({ ui: { ...s.ui, attributeTableOpen: open } })),
   setZoomToSelectedFeature: (enabled) =>

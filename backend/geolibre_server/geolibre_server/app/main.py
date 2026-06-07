@@ -20,6 +20,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from .conversion import router as conversion_router
 from .whitebox import router as whitebox_router
 
 app = FastAPI(title="GeoLibre Server", version="0.8.0")
@@ -37,6 +38,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(whitebox_router)
+app.include_router(conversion_router)
 
 
 class RunRequest(BaseModel):

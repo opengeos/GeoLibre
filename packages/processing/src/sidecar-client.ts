@@ -240,6 +240,94 @@ export async function fetchWhiteboxJsonOutput(
   return res.json();
 }
 
+export interface ConversionStatus {
+  available: boolean;
+  message: string;
+  python?: string | null;
+}
+
+export interface ConversionJob {
+  id: string;
+  status: "pending" | "running" | "succeeded" | "failed" | string;
+  tool_id: string;
+  created_at: string;
+  updated_at: string;
+  messages: string[];
+  outputs: Record<string, unknown>;
+  result?: unknown;
+  error?: string | null;
+}
+
+export interface VectorToGeoParquetRequest {
+  input_path: string;
+  output_path: string;
+  compression?: string;
+  row_group_size?: number;
+}
+
+export interface RasterToCogRequest {
+  input_path: string;
+  output_path: string;
+  compression?: string;
+}
+
+export async function fetchConversionStatus(
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<ConversionStatus> {
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}/conversion/status`);
+  } catch (error) {
+    throw sidecarConnectionError(baseUrl, error);
+  }
+  if (!res.ok) {
+    throw new Error(`Conversion status failed: HTTP ${res.status}`);
+  }
+  return (await res.json()) as ConversionStatus;
+}
+
+export async function runVectorToGeoParquet(
+  request: VectorToGeoParquetRequest,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<ConversionJob> {
+  return startConversion(`${baseUrl}/conversion/vector-to-geoparquet`, request);
+}
+
+export async function runRasterToCog(
+  request: RasterToCogRequest,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<ConversionJob> {
+  return startConversion(`${baseUrl}/conversion/raster-to-cog`, request);
+}
+
+async function startConversion(
+  url: string,
+  request: VectorToGeoParquetRequest | RasterToCogRequest,
+): Promise<ConversionJob> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Could not start conversion"));
+  }
+  return (await res.json()) as ConversionJob;
+}
+
+export async function fetchConversionJob(
+  jobId: string,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<ConversionJob> {
+  const res = await fetch(
+    `${baseUrl}/conversion/jobs/${encodeURIComponent(jobId)}`,
+  );
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Could not load conversion job"));
+  }
+  return (await res.json()) as ConversionJob;
+}
+
 async function responseErrorMessage(
   response: Response,
   fallback: string,
