@@ -801,7 +801,11 @@ function getWebServiceTiles(layer: GeoLibreLayer): string[] {
   const tiles = getBasemapControlTiles(layer);
   if (layer.type !== "wms" || !isViteDevServer()) return tiles;
   return tiles.map((tile) =>
-    tile.includes("{bbox-epsg-3857}") ? proxyWmsTileUrl(tile) : tile,
+    // Skip already proxied templates so repeated sync passes cannot nest
+    // proxy URLs.
+    tile.includes("{bbox-epsg-3857}") && !tile.startsWith(WMS_PROXY_PATH)
+      ? proxyWmsTileUrl(tile)
+      : tile,
   );
 }
 

@@ -4,7 +4,7 @@ import {
   type FemaWmsControlOptions,
   type FemaWmsEventHandler,
 } from "maplibre-gl-fema-wms";
-import type { GeoLibreLayer } from "@geolibre/core";
+import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type {
   GeoLibreAppAPI,
   GeoLibreMapControlPosition,
@@ -41,6 +41,12 @@ function layerNameFromStoreLayer(layer: GeoLibreLayer): string | undefined {
   return layer.id.startsWith(NATIVE_ID_PREFIX)
     ? layer.id.slice(NATIVE_ID_PREFIX.length)
     : undefined;
+}
+
+function storedVisibility(layerId: string): boolean | undefined {
+  return useAppStore
+    .getState()
+    .layers.find((candidate) => candidate.id === layerId)?.visible;
 }
 
 function wmsLayerName(entry: WebServiceLayerEntry): string {
@@ -83,8 +89,9 @@ const femaWmsAdapter: WebServiceAdapter<FemaWmsControl> = {
         tiles,
         opacity: active.opacity,
         // The control has no per-layer visibility toggle; visibility is
-        // driven from the Layers panel through the native layer alone.
-        visible: true,
+        // driven from the Layers panel alone. Echo the store value so a
+        // hidden layer is never reported (and persisted) as visible.
+        visible: storedVisibility(id) ?? true,
         layerType: layerTypeForTiles(tiles),
         source: native?.source ?? {
           tileSize: 256,

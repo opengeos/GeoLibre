@@ -203,6 +203,25 @@ describe("readNativeRasterSource", () => {
     });
   });
 
+  it("unwraps dev-proxied WMS tile templates before they are persisted", () => {
+    const original =
+      "https://example.com/wms?service=WMS&bbox={bbox-epsg-3857}";
+    const proxied = `/__geolibre_wms_proxy?url=${encodeURIComponent(
+      original,
+    ).replaceAll("%7Bbbox-epsg-3857%7D", "{bbox-epsg-3857}")}`;
+    const map = {
+      getStyle: () => ({
+        sources: {
+          "svc-layer-1": { type: "raster", tiles: [proxied], tileSize: 256 },
+        },
+      }),
+    };
+
+    const native = readNativeRasterSource(map, "svc-layer-1");
+    assert.ok(native);
+    assert.deepEqual(native.tiles, [original]);
+  });
+
   it("returns null for missing or non-raster sources", () => {
     const map = {
       getStyle: () => ({

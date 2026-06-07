@@ -56,7 +56,7 @@ function isBounds(value: unknown): value is LngLatBoundsArray {
   return (
     Array.isArray(value) &&
     value.length === 4 &&
-    value.every((item) => typeof item === "number")
+    value.every((item) => typeof item === "number" && Number.isFinite(item))
   );
 }
 

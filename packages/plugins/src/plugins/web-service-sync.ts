@@ -49,7 +49,7 @@ export interface WebServiceAdapter<C> {
   /** Wires control events so `listener` runs after every relevant change. */
   attachEvents: (control: C, listener: () => void) => void;
   /** Removes the handlers installed by {@link attachEvents}. */
-  detachEvents: (control: C, listener: () => void) => void;
+  detachEvents: (control: C) => void;
   /** Lists the layers currently active in the control. */
   listActive: (control: C) => WebServiceLayerEntry[];
   /** Removes a layer from the control (the user deleted its store layer). */
@@ -102,6 +102,11 @@ export function createWebServiceStoreSync<C>(
   >();
   // Layers handed to adopt() whose control-side registration is pending.
   const pendingAdoptionIds = new Set<string>();
+  // Layers handed to removeFromControl() whose control-side removal is
+  // pending. Guards against re-adding a just-deleted store layer when a
+  // control removes asynchronously and still lists the layer during the
+  // reconcile that follows reverseSync.
+  const pendingRemovalIds = new Set<string>();
 
   const handleControlEvent = () => {
     if (syncing || !control) return;
@@ -129,12 +134,20 @@ export function createWebServiceStoreSync<C>(
     const entries = adapter.listActive(activeControl);
     const activeIds = new Set(entries.map((entry) => entry.id));
 
+    // A pending removal is finished once the control stops listing the id.
+    for (const id of pendingRemovalIds) {
+      if (!activeIds.has(id)) pendingRemovalIds.delete(id);
+    }
+
     for (const entry of entries) {
       pendingAdoptionIds.delete(entry.id);
       const nextLayer = createStoreLayer(adapter.sourceKind, entry);
       const existing = store.layers.find((layer) => layer.id === entry.id);
       const last = lastControlValues.get(entry.id);
       if (!existing) {
+        // The control may still list a layer whose removal is in flight;
+        // re-adding it here would resurrect the deleted store layer.
+        if (pendingRemovalIds.has(entry.id)) continue;
         store.addLayer(nextLayer);
       } else {
         if (shouldUpdateStoreLayer(existing, nextLayer)) {
@@ -143,6 +156,7 @@ export function createWebServiceStoreSync<C>(
             name: nextLayer.name,
             source: nextLayer.source,
             sourcePath: nextLayer.sourcePath,
+            type: nextLayer.type,
           });
         }
         // Push opacity/visibility only when the control changed them, so a
@@ -196,6 +210,7 @@ export function createWebServiceStoreSync<C>(
         // The user removed the layer through the Layers panel.
         if (lastControlValues.has(entry.id)) {
           lastControlValues.delete(entry.id);
+          pendingRemovalIds.add(entry.id);
           adapter.removeFromControl(activeControl, entry);
         }
         continue;
@@ -234,12 +249,13 @@ export function createWebServiceStoreSync<C>(
       handleStoreChange();
     },
     detach: () => {
-      if (control) adapter.detachEvents(control, handleControlEvent);
+      if (control) adapter.detachEvents(control);
       unsubscribeStore?.();
       unsubscribeStore = null;
       control = null;
       lastControlValues.clear();
       pendingAdoptionIds.clear();
+      pendingRemovalIds.clear();
     },
   };
 }
@@ -288,6 +304,7 @@ function shouldUpdateStoreLayer(
   nextLayer: GeoLibreLayer,
 ): boolean {
   return (
+    existingLayer.type !== nextLayer.type ||
     existingLayer.name !== nextLayer.name ||
     existingLayer.sourcePath !== nextLayer.sourcePath ||
     JSON.stringify(existingLayer.metadata) !==
@@ -318,9 +335,11 @@ export function readNativeRasterSource(
   if (!spec || typeof spec !== "object") return null;
   const raw = spec as Record<string, unknown>;
   if (raw.type !== "raster" || !Array.isArray(raw.tiles)) return null;
-  const tiles = raw.tiles.filter(
-    (tile): tile is string => typeof tile === "string" && tile.length > 0,
-  );
+  const tiles = raw.tiles
+    .filter(
+      (tile): tile is string => typeof tile === "string" && tile.length > 0,
+    )
+    .map(unproxyWmsTileUrl);
   if (tiles.length === 0) return null;
 
   const source: Record<string, unknown> = {};
@@ -335,6 +354,21 @@ export function readNativeRasterSource(
     if (raw[key] !== undefined) source[key] = raw[key];
   }
   return { tiles, source };
+}
+
+// Mirrors WMS_PROXY_PATH in @geolibre/map's layer-sync. In dev the map's
+// native sources can carry proxied tile URLs; those must be unwrapped before
+// they are persisted into store layers, or project files would record
+// dev-only proxy URLs (and re-proxying would nest them).
+const WMS_PROXY_PREFIX = "/__geolibre_wms_proxy?url=";
+
+function unproxyWmsTileUrl(tile: string): string {
+  if (!tile.startsWith(WMS_PROXY_PREFIX)) return tile;
+  try {
+    return decodeURIComponent(tile.slice(WMS_PROXY_PREFIX.length));
+  } catch {
+    return tile;
+  }
 }
 
 /**
