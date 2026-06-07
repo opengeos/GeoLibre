@@ -13,6 +13,7 @@ import {
   runWithRasterStoreSyncSuspended,
   savedRasterState,
   syncRasterLayersToStore,
+  syncRasterLayersToStoreWithOptions,
   unwireRasterStoreSync,
   wireRasterStoreSync,
   type RasterSyncableControl,
@@ -101,9 +102,11 @@ describe("createRasterStoreLayer", () => {
     assert.equal(layer.source.url, "https://example.com/dem.tif");
     assert.equal(layer.sourcePath, "https://example.com/dem.tif");
     assert.equal(layer.metadata.externalNativeLayer, true);
+    assert.equal(layer.metadata.externalDeckLayer, true);
     assert.equal(layer.metadata.customLayerType, "raster");
     assert.equal(layer.metadata.identifiable, false);
     assert.equal(layer.metadata.panelCollapsed, true);
+    assert.equal(layer.metadata.rasterOverlayMode, "interleaved");
     assert.equal(layer.metadata.sourceKind, "maplibre-gl-raster");
     assert.deepEqual(layer.metadata.nativeLayerIds, ["raster-1"]);
     // fitLayer falls back to metadata.bounds for zoom-to-layer.
@@ -157,6 +160,16 @@ describe("createRasterStoreLayer", () => {
 
     assert.equal(layer.metadata.panelCollapsed, false);
   });
+
+  it("marks overlaid deck rasters without MapLibre native layer ids", () => {
+    const layer = createRasterStoreLayer(rasterInfo(), true, {
+      interleaved: false,
+    });
+
+    assert.equal(layer.metadata.externalDeckLayer, true);
+    assert.equal(layer.metadata.rasterOverlayMode, "overlaid");
+    assert.deepEqual(layer.metadata.nativeLayerIds, []);
+  });
 });
 
 describe("syncRasterLayersToStore", () => {
@@ -178,6 +191,16 @@ describe("syncRasterLayersToStore", () => {
     assert.ok(layers.some((layer) => layer.id === "raster-1"));
     assert.ok(layers.some((layer) => layer.id === "raster-2"));
     assert.ok(layers.some((layer) => layer.id === "unrelated"));
+  });
+
+  it("can sync non-interleaved rasters without native layer ids", () => {
+    syncRasterLayersToStoreWithOptions(fakeControl([rasterInfo()]).control, {
+      interleaved: false,
+    });
+
+    const layer = useAppStore.getState().layers[0];
+    assert.equal(layer.metadata.rasterOverlayMode, "overlaid");
+    assert.deepEqual(layer.metadata.nativeLayerIds, []);
   });
 
   it("removes store layers whose rasters are gone", () => {

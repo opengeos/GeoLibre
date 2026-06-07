@@ -1099,6 +1099,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
   const isDeckRasterLayer =
     layer.metadata.sourceKind === "cog-url" ||
     layer.metadata.sourceKind === "geotiff-url" ||
+    layer.metadata.sourceKind === "maplibre-gl-raster" ||
     layer.metadata.sourceKind === "stac-search-cog";
   const isDeckVectorLayer = hasExternalDeckLayer(layer);
   const isRasterTileLayer = layer.metadata.tileType === "raster";
@@ -1106,6 +1107,7 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
   const hasVectorPaintControls =
     !isThreeDTilesLayer &&
     !isRasterTileLayer &&
+    !isDeckRasterLayer &&
     (layer.type === "geojson" ||
       layer.type === "vector-tiles" ||
       layer.type === "mbtiles" ||
@@ -1114,9 +1116,10 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
   const hasExtrusionControls =
     !isThreeDTilesLayer &&
     !isRasterTileLayer &&
+    !isDeckRasterLayer &&
     supportsExtrusionControls(layer);
   const hasRasterPaintControls =
-    isRasterPaintLayer(layer.type) || isRasterTileLayer;
+    isRasterPaintLayer(layer.type) || isRasterTileLayer || isDeckRasterLayer;
   const hasTextMarkerControls =
     layer.type === "geojson" && hasTextMarkerFeatures(layer);
   const extrusionEnabled = styleValue(style, "extrusionEnabled");

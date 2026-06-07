@@ -7,7 +7,7 @@ import {
   resetRasterStoreSyncSuspension,
   runWithRasterStoreSyncSuspended,
   savedRasterState,
-  syncRasterLayersToStore,
+  syncRasterLayersToStoreWithOptions,
   unwireRasterStoreSync,
   wireRasterStoreSync,
 } from "./raster-layer-sync";
@@ -24,15 +24,40 @@ const DEFAULT_RASTER_URL =
 // wireRasterCloseButton when bumping the dependency.
 type RasterControlInternals = {
   _clickOutsideHandler?: ((event: MouseEvent) => void) | null;
+  _layerManager?: RasterLayerManagerInternals;
   _panel?: HTMLElement;
 };
 
 type RasterControlConstructor = typeof RasterControl;
+type OverlayFactoryOptions = {
+  interleaved: boolean;
+  onDeviceInitialized: (device: unknown) => void;
+};
+type OverlayLike = {
+  setProps: (props: { layers?: unknown[] }) => void;
+};
+type MapControlHost = {
+  addControl: (control: unknown) => void;
+};
+type MapboxOverlayConstructor = new (
+  props: Record<string, unknown>,
+) => OverlayLike;
+type RasterLayerManagerInternals = {
+  _deps?: {
+    createOverlay?: (
+      map: MapControlHost,
+      options: OverlayFactoryOptions,
+    ) => OverlayLike;
+    geolibreTransparentOverlayPatched?: boolean;
+  };
+};
 
 let rasterControlClassPromise: Promise<RasterControlConstructor> | null = null;
+let mapboxOverlayClassPromise: Promise<MapboxOverlayConstructor> | null = null;
 let rasterControl: RasterControl | null = null;
 let rasterControlMounted = false;
 let restorePanelExpandTimeout: number | null = null;
+let rasterControlInterleaved = true;
 
 /**
  * Opens the maplibre-gl-raster panel, mounting the control on first use.
@@ -187,7 +212,7 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
         // A control torn down mid-restore (map reinitialisation) must not
         // let this stale callback rewrite layers owned by its successor.
         if (control !== rasterControl) return;
-        syncRasterLayersToStore(control);
+        syncRasterLayersToStoreForRuntime(control);
       }, 0);
     });
   })().catch((error) => {
@@ -212,6 +237,7 @@ async function ensureRasterControl(
     rasterControlMounted = true;
     // The control mounts hidden: project restore must not surface a map
     // button the user never asked for. openRasterLayerPanel shows it.
+    await patchTauriRasterOverlayFactory(rasterControl);
     hideRasterControl(rasterControl);
     disableRasterClickOutsideCollapse(rasterControl);
     wireRasterCloseButton(rasterControl);
@@ -237,13 +263,22 @@ function getRasterControlClass(): Promise<RasterControlConstructor> {
   return rasterControlClassPromise;
 }
 
+function getMapboxOverlayClass(): Promise<MapboxOverlayConstructor> {
+  mapboxOverlayClassPromise ??= import("@deck.gl/mapbox").then(
+    (module) => module.MapboxOverlay as unknown as MapboxOverlayConstructor,
+  );
+  return mapboxOverlayClassPromise;
+}
+
 function createRasterControl(
   RasterControlClass: RasterControlConstructor,
 ): RasterControl {
+  rasterControlInterleaved = !isTauriRuntime();
   const control = new RasterControlClass({
     className: "geolibre-raster-control",
     collapsed: true,
     defaultUrl: DEFAULT_RASTER_URL,
+    interleaved: rasterControlInterleaved,
     panelWidth: 380,
     title: "Add Raster Layer",
   });
@@ -253,20 +288,65 @@ function createRasterControl(
   // switches the map to mercator, like the other deck.gl-backed plugins.
   control.on("rasteradd", () => ensureMercatorProjection(control.getMap()));
   for (const event of ["rasteradd", "rasterchange", "rasterremove"] as const) {
-    control.on(event, () => syncRasterLayersToStore(control));
+    control.on(event, () => syncRasterLayersToStoreForRuntime(control));
   }
   // syncRasterLayersToStore re-reads getState().collapsed when these fire.
   // Safe: expand()/collapse() delegate to toggle(), which flips
   // _state.collapsed BEFORE emitting the event (verified against v0.1.3) --
   // re-verify that ordering when bumping the dependency.
   const panelStateSyncHandler: RasterControlEventHandler = () =>
-    syncRasterLayersToStore(control);
+    syncRasterLayersToStoreForRuntime(control);
   control.on("expand", panelStateSyncHandler);
   control.on("collapse", panelStateSyncHandler);
   wireRasterStoreSync(control);
   patchRasterControlOnRemove(control, panelStateSyncHandler);
 
   return control;
+}
+
+function syncRasterLayersToStoreForRuntime(control: RasterControl): void {
+  syncRasterLayersToStoreWithOptions(control, {
+    interleaved: rasterControlInterleaved,
+  });
+}
+
+async function patchTauriRasterOverlayFactory(
+  control: RasterControl,
+): Promise<void> {
+  if (!isTauriRuntime()) return;
+
+  const manager = (control as unknown as RasterControlInternals)._layerManager;
+  const deps = manager?._deps;
+  if (!deps?.createOverlay || deps.geolibreTransparentOverlayPatched) return;
+
+  const MapboxOverlayClass = await getMapboxOverlayClass();
+  deps.createOverlay = (map, options) => {
+    const overlay = new MapboxOverlayClass({
+      deviceProps: {
+        createCanvasContext: { alphaMode: "premultiplied" },
+        webgl: {
+          alpha: true,
+          premultipliedAlpha: true,
+        },
+      },
+      interleaved: false,
+      layers: [],
+      onDeviceInitialized: options.onDeviceInitialized,
+      parameters: {
+        clearColor: [0, 0, 0, 0],
+      },
+    });
+    map.addControl(overlay);
+    return overlay;
+  };
+  deps.geolibreTransparentOverlayPatched = true;
+}
+
+function isTauriRuntime(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    "__TAURI_INTERNALS__" in window
+  );
 }
 
 function patchRasterControlOnRemove(
