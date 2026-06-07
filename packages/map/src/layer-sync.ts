@@ -179,6 +179,11 @@ function syncExternalNativeLayer(
     return;
   }
 
+  if (isWebServiceTileRasterLayer(layer)) {
+    syncWebServiceTileRasterLayer(map, layer, nativeLayerIds, beforeId);
+    return;
+  }
+
   ensureExternalGeoJsonNativeLayer(map, layer, nativeLayerIds, beforeId);
 
   const nativeFillLayerSpecs = nativeLayerIds
@@ -719,6 +724,95 @@ function syncBasemapControlRasterLayer(
     },
     beforeId,
   );
+}
+
+const WEB_SERVICE_SOURCE_KINDS = new Set([
+  "fema-wms",
+  "nasa-earthdata",
+  "enviroatlas",
+  "national-map",
+]);
+
+function isWebServiceTileRasterLayer(layer: GeoLibreLayer): boolean {
+  return (
+    (layer.type === "raster" || layer.type === "wms") &&
+    typeof layer.metadata.sourceKind === "string" &&
+    WEB_SERVICE_SOURCE_KINDS.has(layer.metadata.sourceKind) &&
+    layer.metadata.externalNativeLayer === true
+  );
+}
+
+// Web service layers (FEMA NFHL, NASA Earthdata, US EPA EnviroAtlas, USGS
+// National Map) are normally rendered by their panel controls. Rebuilding
+// them here keeps them on the map after a style reload (e.g. reopening a
+// project), where the controls do not replay them. The native source/layer
+// ids match the controls' deterministic ids, so this is idempotent during a
+// live session.
+function syncWebServiceTileRasterLayer(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+  nativeLayerIds: string[],
+  beforeId?: string,
+): void {
+  const nativeLayerId = nativeLayerIds[0] ?? layer.id;
+  const sourceId = getExternalSourceIds(layer)[0] ?? `${nativeLayerId}-source`;
+  const tiles = getWebServiceTiles(layer);
+  if (tiles.length === 0) return;
+
+  if (!map.getSource(sourceId)) {
+    const bounds = boundsSource(layer.source.bounds);
+    map.addSource(sourceId, {
+      type: "raster",
+      tiles,
+      tileSize: numberSource(layer.source.tileSize) ?? 256,
+      ...(numberSource(layer.source.minzoom) !== undefined
+        ? { minzoom: numberSource(layer.source.minzoom) }
+        : {}),
+      ...(numberSource(layer.source.maxzoom) !== undefined
+        ? { maxzoom: numberSource(layer.source.maxzoom) }
+        : {}),
+      ...(bounds ? { bounds } : {}),
+      ...(stringSource(layer.source.attribution)
+        ? { attribution: stringSource(layer.source.attribution) }
+        : {}),
+    });
+  }
+
+  ensureLayer(
+    map,
+    nativeLayerId,
+    {
+      id: nativeLayerId,
+      type: "raster",
+      source: sourceId,
+      ...styleLayerZoomRange(layer.style),
+      paint: rasterPaint(layer.style, layer.opacity),
+      layout: { visibility: layer.visible ? "visible" : "none" },
+    },
+    beforeId,
+  );
+}
+
+// WMS-style web service tiles carry a {bbox-epsg-3857} placeholder and hit
+// federal endpoints without permissive CORS headers, so the dev server
+// routes them through the WMS proxy. The external-native path bypasses
+// getRenderableRasterTiles, hence the dedicated proxying here.
+function getWebServiceTiles(layer: GeoLibreLayer): string[] {
+  const tiles = getBasemapControlTiles(layer);
+  if (layer.type !== "wms" || !isViteDevServer()) return tiles;
+  return tiles.map((tile) =>
+    tile.includes("{bbox-epsg-3857}") ? proxyWmsTileUrl(tile) : tile,
+  );
+}
+
+function boundsSource(
+  value: unknown,
+): [number, number, number, number] | undefined {
+  return Array.isArray(value) &&
+    value.length === 4 &&
+    value.every((item) => typeof item === "number" && Number.isFinite(item))
+    ? (value as [number, number, number, number])
+    : undefined;
 }
 
 function getBasemapControlTiles(layer: GeoLibreLayer): string[] {

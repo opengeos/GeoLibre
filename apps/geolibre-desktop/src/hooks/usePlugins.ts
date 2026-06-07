@@ -6,11 +6,15 @@ import {
 import {
   maplibreBasemapControlPlugin,
   maplibreComponentsPlugin,
+  maplibreEnviroAtlasPlugin,
   maplibreEsriWaybackPlugin,
+  maplibreFemaWmsPlugin,
   maplibreGeoAgentPlugin,
   maplibreGeoEditorPlugin,
   maplibreLayerControlPlugin,
   maplibreLidarPlugin,
+  maplibreNasaEarthdataPlugin,
+  maplibreNationalMapPlugin,
   maplibreStreetViewPlugin,
   maplibreSwipePlugin,
   PluginManager,
@@ -39,6 +43,12 @@ const manager = new PluginManager();
 manager.registerAll([
   maplibreLayerControlPlugin,
   maplibreBasemapControlPlugin,
+  // The four web service plugins are grouped into the "Web Services"
+  // submenu, rendered where the first of them appears in this order.
+  maplibreFemaWmsPlugin,
+  maplibreNasaEarthdataPlugin,
+  maplibreEnviroAtlasPlugin,
+  maplibreNationalMapPlugin,
   maplibreEsriWaybackPlugin,
   maplibreGeoAgentPlugin,
   maplibreGeoEditorPlugin,

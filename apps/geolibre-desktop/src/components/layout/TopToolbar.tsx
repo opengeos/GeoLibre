@@ -164,6 +164,14 @@ const PLUGIN_POSITION_ITEMS: Array<{
   { value: "bottom-right", label: "Bottom right" },
 ];
 
+// Plugins grouped under the "Web Services" submenu of the Plugins menu.
+const WEB_SERVICE_PLUGIN_IDS = new Set([
+  "maplibre-gl-fema-wms",
+  "maplibre-gl-nasa-earthdata",
+  "maplibre-gl-enviroatlas",
+  "maplibre-gl-national-map",
+]);
+
 const FEEDBACK_URL = "https://github.com/opengeos/GeoLibre/issues";
 
 async function openExternalLink(url: string): Promise<void> {
@@ -854,56 +862,86 @@ export function TopToolbar({
         <DropdownMenuContent align="start">
           <DropdownMenuLabel>Activate plugin</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {plugins.map((p) => {
-            const pluginPosition = getMapControlPosition(p.id);
-            if (!pluginPosition) {
-              return (
-                <DropdownMenuItem
-                  key={p.id}
-                  onClick={() => toggle(p.id, appApi)}
-                >
-                  {p.name}
-                  {isActive(p.id) ? " ✓" : ""}
-                </DropdownMenuItem>
-              );
-            }
-
-            return (
-              <DropdownMenuSub key={p.id}>
-                <DropdownMenuSubTrigger>
-                  {p.name}
-                  {isActive(p.id) ? " ✓" : ""}
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
-                  <DropdownMenuItem onClick={() => toggle(p.id, appApi)}>
-                    {isActive(p.id) ? "Deactivate" : "Activate"}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel>Position</DropdownMenuLabel>
-                  <DropdownMenuRadioGroup
-                    value={pluginPosition}
-                    onValueChange={(position: string) =>
-                      setMapControlPosition(
-                        p.id,
-                        appApi,
-                        position as GeoLibreMapControlPosition,
-                      )
-                    }
+          {(() => {
+            const renderPluginMenuItem = (p: (typeof plugins)[number]) => {
+              const pluginPosition = getMapControlPosition(p.id);
+              if (!pluginPosition) {
+                return (
+                  <DropdownMenuItem
+                    key={p.id}
+                    onClick={() => toggle(p.id, appApi)}
                   >
-                    {PLUGIN_POSITION_ITEMS.map((position) => (
-                      <DropdownMenuRadioItem
-                        key={position.value}
-                        value={position.value}
-                        onSelect={(event) => event.preventDefault()}
-                      >
-                        {position.label}
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
+                    {p.name}
+                    {isActive(p.id) ? " ✓" : ""}
+                  </DropdownMenuItem>
+                );
+              }
+
+              return (
+                <DropdownMenuSub key={p.id}>
+                  <DropdownMenuSubTrigger>
+                    {p.name}
+                    {isActive(p.id) ? " ✓" : ""}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem onClick={() => toggle(p.id, appApi)}>
+                      {isActive(p.id) ? "Deactivate" : "Activate"}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel>Position</DropdownMenuLabel>
+                    <DropdownMenuRadioGroup
+                      value={pluginPosition}
+                      onValueChange={(position: string) =>
+                        setMapControlPosition(
+                          p.id,
+                          appApi,
+                          position as GeoLibreMapControlPosition,
+                        )
+                      }
+                    >
+                      {PLUGIN_POSITION_ITEMS.map((position) => (
+                        <DropdownMenuRadioItem
+                          key={position.value}
+                          value={position.value}
+                          onSelect={(event) => event.preventDefault()}
+                        >
+                          {position.label}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              );
+            };
+
+            const webServicePlugins = plugins.filter((p) =>
+              WEB_SERVICE_PLUGIN_IDS.has(p.id),
             );
-          })}
+            // The web service plugins render as one grouped submenu, placed
+            // where the first of them appears in registration order (just
+            // above Esri Wayback).
+            let webServicesRendered = false;
+            return plugins.map((p) => {
+              if (!WEB_SERVICE_PLUGIN_IDS.has(p.id)) {
+                return renderPluginMenuItem(p);
+              }
+              if (webServicesRendered) return null;
+              webServicesRendered = true;
+              return (
+                <DropdownMenuSub key="web-services">
+                  <DropdownMenuSubTrigger>
+                    Web Services
+                    {webServicePlugins.some((plugin) => isActive(plugin.id))
+                      ? " ✓"
+                      : ""}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {webServicePlugins.map(renderPluginMenuItem)}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              );
+            });
+          })()}
         </DropdownMenuContent>
       </DropdownMenu>
       <SettingsDialog
