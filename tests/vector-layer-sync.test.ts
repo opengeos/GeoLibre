@@ -193,6 +193,12 @@ describe("syncVectorLayersToStore", () => {
     useAppStore.setState({ layers: [] });
   });
 
+  // The suspension counter is module state; a test failing mid-suspension
+  // must not leave later tests silently syncing nothing.
+  afterEach(() => {
+    resetVectorStoreSyncSuspension();
+  });
+
   it("adds store layers for control layers, leaving others alone", () => {
     useAppStore.getState().addLayer(otherStoreLayer());
     const { control } = fakeControl([
@@ -344,6 +350,7 @@ describe("wireVectorStoreSync", () => {
 
   afterEach(() => {
     unwireVectorStoreSync();
+    resetVectorStoreSyncSuspension();
   });
 
   it("applies panel visibility and opacity changes through the control", () => {
@@ -402,6 +409,7 @@ describe("removeVectorStoreLayers", () => {
 
   afterEach(() => {
     unwireVectorStoreSync();
+    resetVectorStoreSyncSuspension();
   });
 
   it("prunes vector layers without echoing removals at the control", () => {
