@@ -227,6 +227,40 @@ describe("syncRasterLayersToStore", () => {
     );
   });
 
+  it("flips panelCollapsed on store layers when an expand event syncs", () => {
+    // Stateful stand-in for the production expand/collapse wiring: the
+    // handler mirrors panelStateSyncHandler in maplibre-raster.ts, and
+    // expand() flips the state before notifying, matching the verified
+    // maplibre-gl-raster event ordering.
+    let collapsed = true;
+    const handlers: Array<() => void> = [];
+    const control: RasterSyncableControl = {
+      getState: () => ({ collapsed }),
+      getRasters: () => [rasterInfo()],
+      removeRaster: () => {},
+      setRasterState: () => {},
+      setVisible: () => {},
+    };
+    handlers.push(() => syncRasterLayersToStore(control));
+    const expand = () => {
+      collapsed = false;
+      for (const handler of handlers) handler();
+    };
+
+    syncRasterLayersToStore(control);
+    assert.equal(
+      useAppStore.getState().layers[0].metadata.panelCollapsed,
+      true,
+    );
+
+    expand();
+
+    assert.equal(
+      useAppStore.getState().layers[0].metadata.panelCollapsed,
+      false,
+    );
+  });
+
   it("does not touch an existing layer when nothing changed", () => {
     const { control } = fakeControl([rasterInfo()]);
     syncRasterLayersToStore(control);

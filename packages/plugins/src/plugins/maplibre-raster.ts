@@ -178,7 +178,11 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
       // Defer one task so this sync runs after the deferred panel expand in
       // applyRestoredRasterPanelState: with no pending rasters, allSettled
       // resolves as a microtask, and syncing then would briefly write the
-      // pre-expand collapsed state to the store.
+      // pre-expand collapsed state to the store. Ordering invariant: the
+      // expand timer is registered synchronously inside the suspension
+      // block above, this one from a microtask after it, and same-delay
+      // timers fire FIFO -- revisit if applyRestoredRasterPanelState ever
+      // becomes async.
       window.setTimeout(() => {
         // A control torn down mid-restore (map reinitialisation) must not
         // let this stale callback rewrite layers owned by its successor.
@@ -277,6 +281,10 @@ function patchRasterControlOnRemove(
     // not keep syncing panel state if a stale reference toggles it.
     control.off("expand", panelStateSyncHandler);
     control.off("collapse", panelStateSyncHandler);
+    if (restorePanelExpandTimeout !== null) {
+      window.clearTimeout(restorePanelExpandTimeout);
+      restorePanelExpandTimeout = null;
+    }
     unwireRasterStoreSync();
     // A control torn down mid-restore must not leave its successor
     // permanently suppressing store sync events.
