@@ -11,6 +11,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,6 +26,11 @@ UV_INSTALL_BASE_URL = os.environ.get(
     "GEOLIBRE_UV_INSTALL_BASE_URL",
     "https://astral.sh/uv",
 ).rstrip("/")
+
+# The Whitebox and conversion routers each guard their own runtime setup with
+# their own lock, but both call _install_managed_uv; this shared lock prevents
+# two concurrent cold-start bootstraps from racing on the same uv binary.
+_UV_INSTALL_LOCK = threading.Lock()
 
 
 class RuntimeBootstrapError(RuntimeError):
@@ -135,6 +141,16 @@ def _install_managed_uv() -> str:
     if uv.exists():
         return str(uv)
 
+    with _UV_INSTALL_LOCK:
+        # Re-check inside the lock: another router may have installed uv while
+        # this caller was waiting.
+        if uv.exists():
+            return str(uv)
+        return _install_managed_uv_locked(uv)
+
+
+def _install_managed_uv_locked(uv: Path) -> str:
+    """Download and install uv. The caller must hold ``_UV_INSTALL_LOCK``."""
     install_dir = _managed_uv_dir()
     install_dir.mkdir(parents=True, exist_ok=True)
     script_url = (

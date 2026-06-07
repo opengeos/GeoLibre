@@ -51,6 +51,18 @@ DEFAULT_COG_COMPRESSION = "deflate"
 
 _RESULT_MARKER = "__GEOLIBRE_CONVERSION_RESULT__"
 
+# Optional allowlist of directories that conversion inputs/outputs must live
+# under, set via GEOLIBRE_CONVERSION_ROOTS (os.pathsep-separated). Unset means
+# no restriction (the default for the desktop app, where paths are the user's
+# own filesystem). The bundled Docker image sets this so the sidecar — which is
+# reachable same-origin through the nginx proxy — cannot read or overwrite
+# arbitrary container paths.
+_CONVERSION_ROOTS = [
+    str(Path(root).expanduser().resolve())
+    for root in os.environ.get("GEOLIBRE_CONVERSION_ROOTS", "").split(os.pathsep)
+    if root.strip()
+]
+
 _JOBS: dict[str, JobState] = {}
 _JOBS_LOCK = threading.Lock()
 _RUNTIME_SETUP_LOCK = threading.Lock()
@@ -413,18 +425,43 @@ def _ensure_managed_runtime() -> str:
         return str(python)
 
 
+_CHECKED_RUNTIME_PYTHON: str | None = None
+
+
 def _runtime_python() -> str:
-    """Return the Python executable used for conversions."""
+    """Return the Python executable used for conversions.
+
+    The import check spawns a subprocess, so the verified interpreter is cached
+    to avoid that cost on every status poll and job start. The managed-runtime
+    path does its own (cheaper) re-check under its setup lock.
+    """
+    global _CHECKED_RUNTIME_PYTHON
+    if _CHECKED_RUNTIME_PYTHON is not None:
+        return _CHECKED_RUNTIME_PYTHON
     configured = os.environ.get("GEOLIBRE_CONVERSION_PYTHON")
     if configured:
         resolved = str(Path(configured).expanduser())
         if os.path.isfile(resolved) and os.access(resolved, os.X_OK):
             _check_runtime_import(resolved)
+            _CHECKED_RUNTIME_PYTHON = resolved
             return resolved
         raise RuntimeBootstrapError(
             f"Configured conversion Python is not executable: {configured}"
         )
-    return _ensure_managed_runtime()
+    resolved = _ensure_managed_runtime()
+    _CHECKED_RUNTIME_PYTHON = resolved
+    return resolved
+
+
+def _is_within_roots(path: Path) -> bool:
+    """Return whether a resolved path lives under an allowlisted root."""
+    if not _CONVERSION_ROOTS:
+        return True
+    resolved = str(path.resolve())
+    return any(
+        resolved == root or resolved.startswith(root + os.sep)
+        for root in _CONVERSION_ROOTS
+    )
 
 
 def _validate_paths(input_path: str, output_path: str) -> tuple[str, str]:
@@ -443,6 +480,14 @@ def _validate_paths(input_path: str, output_path: str) -> tuple[str, str]:
         raise HTTPException(
             status_code=400,
             detail=f"Output folder does not exist: {target.parent}",
+        )
+    # When an allowlist is configured, confine reads/writes (and the failure
+    # cleanup unlink) to those roots so a same-origin caller cannot touch
+    # arbitrary files.
+    if not _is_within_roots(source) or not _is_within_roots(target):
+        raise HTTPException(
+            status_code=403,
+            detail="Path is outside the allowed conversion directories",
         )
     # Reading from and writing to the same file would truncate the input.
     if source.resolve() == target.resolve():
@@ -602,6 +647,8 @@ def _start_job(
         daemon=True,
     )
     thread.start()
+    # The worker may have already flipped the job to "running" by the time this
+    # lock is re-acquired, so callers must not assume the response is "pending".
     with _JOBS_LOCK:
         return _JOBS[job_id]
 

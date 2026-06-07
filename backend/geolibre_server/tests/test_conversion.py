@@ -58,6 +58,36 @@ def test_validate_paths_rejects_missing_output_folder(tmp_path: Path) -> None:
     assert excinfo.value.status_code == 400
 
 
+def test_validate_paths_rejects_outside_allowed_roots(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """With an allowlist set, paths outside the roots are rejected (403)."""
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    outside = tmp_path / "outside.geojson"
+    outside.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(conversion, "_CONVERSION_ROOTS", [str(allowed.resolve())])
+    with pytest.raises(HTTPException) as excinfo:
+        _validate_paths(str(outside), str(allowed / "out.parquet"))
+    assert excinfo.value.status_code == 403
+
+
+def test_validate_paths_allows_within_allowed_roots(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Paths under an allowlisted root pass validation."""
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    source = allowed / "input.geojson"
+    source.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(conversion, "_CONVERSION_ROOTS", [str(allowed.resolve())])
+    input_path, output_path = _validate_paths(
+        str(source), str(allowed / "out.parquet")
+    )
+    assert input_path == str(source)
+    assert output_path == str(allowed / "out.parquet")
+
+
 def test_vector_to_geoparquet_rejects_unknown_compression(tmp_path: Path) -> None:
     """Unsupported Parquet compressions are rejected before starting a job."""
     source = tmp_path / "input.geojson"

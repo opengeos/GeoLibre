@@ -2,22 +2,39 @@ import type { FeatureCollection } from "geojson";
 
 const LOCAL_SIDECAR_URL = "http://127.0.0.1:8765";
 
+/** Build-time override, e.g. `VITE_SIDECAR_URL=http://127.0.0.1:9000`. */
+function explicitSidecarUrl(): string | undefined {
+  try {
+    const env = (import.meta as { env?: Record<string, string | undefined> })
+      .env;
+    const value = env?.VITE_SIDECAR_URL;
+    return value && value.trim() ? value.trim().replace(/\/$/, "") : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Resolve the sidecar base URL for the current runtime.
  *
- * - Desktop (Tauri) and the Vite dev server talk to a local sidecar directly at
- *   {@link LOCAL_SIDECAR_URL}.
+ * - An explicit `VITE_SIDECAR_URL` always wins (useful for non-standard dev
+ *   ports such as `vite --port 3000`).
+ * - Desktop (Tauri) and the default Vite dev server (port 5173) talk to a local
+ *   sidecar directly at {@link LOCAL_SIDECAR_URL}.
  * - When the app is served from any other http(s) origin (e.g. the combined
  *   Docker image), the sidecar is reached through a same-origin `/sidecar`
  *   reverse proxy, which sidesteps CORS entirely.
  */
 function resolveSidecarBaseUrl(): string {
+  const override = explicitSidecarUrl();
+  if (override) return override;
   if (typeof window === "undefined" || !window.location) {
     return LOCAL_SIDECAR_URL;
   }
   const { protocol, hostname, port, origin } = window.location;
-  const isTauri =
-    protocol === "tauri:" || hostname === "tauri.localhost";
+  const isTauri = protocol === "tauri:" || hostname === "tauri.localhost";
+  // 5173 is Vite's default dev port (vite.config.ts pins strictPort). For other
+  // ports set VITE_SIDECAR_URL explicitly.
   const isViteDev = port === "5173";
   if (!isTauri && !isViteDev && (protocol === "http:" || protocol === "https:")) {
     return `${origin}/sidecar`;

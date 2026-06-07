@@ -405,7 +405,9 @@ export function ConversionDialog() {
   };
 
   const runBrowserConversion = async () => {
-    const toolId = kind ?? "vector-to-geoparquet";
+    // Only reached when usesBrowserRuntime is true, which requires a kind.
+    if (!kind) return;
+    const toolId = kind;
     const { mainFile, siblings } = splitBrowserSelection(browserFiles);
     if (!mainFile) {
       setError("Choose an input file.");
@@ -462,19 +464,20 @@ export function ConversionDialog() {
           mimeType: GEOPARQUET_MIME_TYPE,
         },
       );
+      const sortedLine =
+        result.featureCount === undefined
+          ? `Hilbert-sorted on column ${result.geometryColumn}`
+          : `Hilbert-sorted ${result.featureCount} features on column ${result.geometryColumn}`;
+      // The conversion itself succeeded; cancelling the save dialog is a
+      // deliberate user action, not a failure, so keep the status green.
       setJob(
-        browserConversionJob(
-          toolId,
-          savedName ? "succeeded" : "failed",
-          [
-            `Converting ${mainFile.name} with DuckDB-WASM`,
-            `Hilbert-sorted ${result.featureCount} features on column ${result.geometryColumn}`,
-            savedName
-              ? `Saved GeoParquet as ${savedName}`
-              : "Conversion finished but the file was not saved.",
-          ],
-          savedName ? null : "Save canceled",
-        ),
+        browserConversionJob(toolId, "succeeded", [
+          `Converting ${mainFile.name} with DuckDB-WASM`,
+          sortedLine,
+          savedName
+            ? `Saved GeoParquet as ${savedName}`
+            : "Conversion finished; save was canceled.",
+        ]),
       );
     } catch (err) {
       const detail =

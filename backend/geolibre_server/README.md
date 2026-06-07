@@ -76,7 +76,13 @@ Useful overrides:
 GEOLIBRE_CONVERSION_PYTHON=/path/to/python   # reuse an existing env (skip bootstrap)
 GEOLIBRE_CONVERSION_ENV=/path/to/venv        # managed runtime location
 GEOLIBRE_CONVERSION_PACKAGES='duckdb>=1.1.0 rio-cogeo>=5.0.0 freestiler>=0.1.0'  # whitespace-separated
+GEOLIBRE_CONVERSION_ROOTS=/data:/srv/geo      # confine inputs/outputs to these roots (os.pathsep-separated; unset = no restriction)
 ```
+
+When the sidecar is reachable by untrusted same-origin content (e.g. the
+bundled Docker image), set `GEOLIBRE_CONVERSION_ROOTS` so conversions cannot
+read or overwrite arbitrary filesystem paths. It is unset by default for the
+desktop app, where paths are the user's own filesystem.
 
 ## Endpoints
 

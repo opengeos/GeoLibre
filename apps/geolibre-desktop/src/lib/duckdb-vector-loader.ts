@@ -281,7 +281,12 @@ export interface GeoParquetConversionOptions {
 
 export interface GeoParquetConversionResult {
   data: Uint8Array;
-  featureCount: number;
+  /**
+   * Number of rows written, or `undefined` — DuckDB-WASM does not surface the
+   * COPY row count, so the count is only populated when a caller opts into the
+   * extra scan. It is left out here to avoid a second full pass over the data.
+   */
+  featureCount?: number;
   geometryColumn: string;
 }
 
@@ -378,17 +383,9 @@ export async function convertDuckDbVectorToGeoParquet(
 
     const geometrySql = quoteIdentifier(geometryColumn);
 
-    // Unlike the Python sidecar, DuckDB-WASM's connection.query does not surface
-    // the COPY row count, so a separate COUNT(*) is required to report the
-    // feature total. This is a second scan; keep it cheap by not materializing
-    // rows. Remove only if the count is dropped from the result.
-    const countRow = rowsFromResult(
-      await connection.query(
-        `SELECT COUNT(*) AS feature_count FROM (${source}) AS src`,
-      ),
-    )[0];
-    const featureCount = Number(countRow?.feature_count ?? 0);
-
+    // DuckDB-WASM's connection.query does not surface the COPY row count, and a
+    // separate COUNT(*) would scan the whole dataset a second time, so the
+    // feature count is left undefined to keep the in-browser path single-pass.
     await connection.query(
       `COPY (
         WITH src AS (${source}),
@@ -401,7 +398,7 @@ export async function convertDuckDbVectorToGeoParquet(
     );
     await db.flushFiles();
     const data = await db.copyFileToBuffer(outputFile);
-    return { data, featureCount, geometryColumn };
+    return { data, geometryColumn };
   } finally {
     await connection.close();
     await dropFilesIfPresent(db, [...registeredFiles, outputFile]);

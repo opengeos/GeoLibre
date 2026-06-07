@@ -75,6 +75,14 @@ CORS or separate process to manage. `/conversion/status` is reachable at
   `freestiler` and `whitebox-workflows` publish no linux/arm64 wheels. On arm64
   the other conversions still work; those two report unavailable.
 
+Because the sidecar is reachable same-origin, conversion reads/writes are
+confined to `GEOLIBRE_CONVERSION_ROOTS` (default `/data` in the image). Mount
+your files there:
+
+```bash
+docker run --rm -p 8080:80 -v "$PWD/data:/data" geolibre
+```
+
 Set `GEOLIBRE_DISABLE_SIDECAR=1` to run nginx only (the original web-only
 behavior):
 

@@ -1011,25 +1011,56 @@ export async function loadDroppedVectorPaths(
   return layers;
 }
 
+/**
+ * Split one RFC 4180-style line into fields for a given delimiter, honoring
+ * double-quoted fields (which may contain the delimiter) and "" escapes.
+ */
+function splitCsvLine(line: string, delimiter: string): string[] {
+  const fields: string[] = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+    if (inQuotes) {
+      if (char === '"') {
+        if (line[i + 1] === '"') {
+          field += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += char;
+      }
+    } else if (char === '"') {
+      inQuotes = true;
+    } else if (char === delimiter) {
+      fields.push(field);
+      field = "";
+    } else {
+      field += char;
+    }
+  }
+  fields.push(field);
+  return fields;
+}
+
 /** Split a CSV/TSV header line into trimmed column names. */
 export function parseCsvHeaderLine(line: string): string[] {
   const header = line.replace(/^﻿/, "").replace(/[\r\n]+$/, "");
   if (!header) return [];
-  // Pick the delimiter that yields the most fields (comma, tab, or semicolon).
-  // Strip outer quotes from each token first so a quoted field containing the
-  // candidate delimiter (e.g. "city,state" in a TSV) does not skew the count.
+  // Quote-aware parsing for each candidate delimiter, then pick the one that
+  // yields the most fields. Because quotes are respected, a quoted field
+  // containing the delimiter (e.g. "city,state") no longer skews the count.
   const delimiter = [",", "\t", ";"]
     .map((d) => ({
       d,
-      count: header
-        .split(d)
-        .map((token) => token.trim().replace(/^".*"$/, ""))
-        .filter((token) => token.length > 0).length,
+      count: splitCsvLine(header, d).filter((token) => token.trim().length > 0)
+        .length,
     }))
     .sort((a, b) => b.count - a.count)[0].d;
-  return header
-    .split(delimiter)
-    .map((name) => name.trim().replace(/^"(.*)"$/, "$1").trim())
+  return splitCsvLine(header, delimiter)
+    .map((name) => name.trim())
     .filter((name) => name.length > 0);
 }
 

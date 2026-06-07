@@ -61,9 +61,15 @@ RUN if [ "$TARGETARCH" = "amd64" ]; then \
     fi
 
 # Point the sidecar at this interpreter so it skips the managed-runtime
-# bootstrap and uses the prebaked packages.
+# bootstrap and uses the prebaked packages. Confine conversion reads/writes to
+# /data by default: the sidecar is reachable same-origin through the nginx
+# proxy, so without this an arbitrary same-origin caller could read or
+# overwrite container paths. Mount input files at /data (read-write for
+# outputs); override GEOLIBRE_CONVERSION_ROOTS to widen or disable.
 ENV GEOLIBRE_CONVERSION_PYTHON=/usr/local/bin/python \
-    WBW_EXTERNAL_PYTHON=/usr/local/bin/python
+    WBW_EXTERNAL_PYTHON=/usr/local/bin/python \
+    GEOLIBRE_CONVERSION_ROOTS=/data
+RUN mkdir -p /data
 
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
