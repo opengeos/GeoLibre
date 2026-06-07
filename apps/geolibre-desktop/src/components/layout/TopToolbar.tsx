@@ -21,6 +21,7 @@ import {
   closeRasterLayerPanel,
   closeSearchPlacesPanel,
   closeThreeDTilesLayerPanel,
+  closeVectorLayerPanel,
   openFlatGeobufAddVectorLayerPanel,
   openDuckDBLayerPanel,
   isEarthEnginePanelVisible,
@@ -39,6 +40,7 @@ import {
   openSplattingLayerPanel,
   openStacSearchLayerPanel,
   openThreeDTilesLayerPanel,
+  openVectorLayerPanel,
   openZarrLayerPanel,
   subscribeColorbarPanel,
   subscribeEarthEnginePanel,
@@ -399,6 +401,7 @@ export function TopToolbar({
   const resetRuntimeControlsForNewProject = () => {
     closeMaplibreComponentControls(appApi);
     closeRasterLayerPanel(appApi);
+    closeVectorLayerPanel(appApi);
     closePlanetaryComputerPanel(appApi);
     closeEarthEnginePanel(appApi);
     closeThreeDTilesLayerPanel(appApi);
@@ -447,6 +450,9 @@ export function TopToolbar({
   };
   const handleAddRasterLayer = () => {
     openRasterLayerPanel(appApi);
+  };
+  const handleAddVectorLayer = () => {
+    openVectorLayerPanel(appApi);
   };
   const searchPlacesVisible = useSyncExternalStore(
     subscribeSearchPlacesPanel,
@@ -670,7 +676,7 @@ export function TopToolbar({
           <DropdownMenuLabel className="text-xs text-muted-foreground">
             Files
           </DropdownMenuLabel>
-          <DropdownMenuItem onSelect={() => setAddDataKind("vector")}>
+          <DropdownMenuItem onSelect={handleAddVectorLayer}>
             Vector Layer
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddRasterLayer}>

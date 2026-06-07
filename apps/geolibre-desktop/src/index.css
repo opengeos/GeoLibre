@@ -1887,3 +1887,94 @@ body,
 
   color-scheme: dark;
 }
+
+/* maplibre-gl-vector themes its panel from prefers-color-scheme (the OS
+   setting), while GeoLibre themes from the .dark class on <html>. All of
+   the panel's colors flow through --vc-* custom properties, so remapping
+   them onto the app theme tokens keeps the panel in sync with the in-app
+   light/dark toggle, following the raster panel pattern above. The doubled
+   selectors outrank the upstream prefers-color-scheme block regardless of
+   stylesheet order. The attribute picker popup is themed through the same
+   variables; it mounts in MapLibre's popup container without a hook for a
+   custom class, so it is keyed off html:not(.dark)/.dark instead. */
+.vector-control.geolibre-vector-control,
+.vector-control-panel.geolibre-vector-panel,
+html:not(.dark) .vector-control-popup,
+.dark .vector-control-popup {
+  --vc-bg: hsl(var(--popover));
+  --vc-text: hsl(var(--popover-foreground));
+  --vc-text-strong: hsl(var(--foreground));
+  --vc-text-soft: hsl(var(--popover-foreground) / 0.8);
+  --vc-muted: hsl(var(--muted-foreground));
+  --vc-border: hsl(var(--border));
+  --vc-border-soft: hsl(var(--border) / 0.8);
+  --vc-item-bg: hsl(var(--card));
+  --vc-hover: hsl(var(--foreground) / 0.06);
+  --vc-accent: hsl(var(--primary));
+  --vc-accent-hover: hsl(var(--primary) / 0.85);
+  --vc-accent-soft: hsl(var(--primary) / 0.12);
+  --vc-accent-text: hsl(var(--primary-foreground));
+  --vc-error: hsl(var(--destructive));
+  --vc-input-bg: hsl(var(--popover));
+  --vc-input-border: hsl(var(--input));
+  --vc-scrollbar: hsl(var(--border));
+  --vc-scrollbar-hover: hsl(var(--input));
+  --vc-shadow: 0 0 0 2px hsl(var(--foreground) / 0.12);
+
+  color-scheme: light;
+}
+
+.dark .vector-control.geolibre-vector-control,
+.dark .vector-control-panel.geolibre-vector-panel,
+.dark .vector-control-popup {
+  --vc-shadow: 0 0 0 2px hsl(0 0% 0% / 0.4);
+
+  color-scheme: dark;
+}
+
+/* The upstream stylesheet themes the MapLibre popup chrome around the
+   picker popup from prefers-color-scheme; re-key it to the app theme. The
+   html prefixes also outrank the upstream :has() rules when the OS scheme
+   and the app theme disagree. */
+html:not(.dark) .maplibregl-popup:has(.vector-control-popup) .maplibregl-popup-content {
+  background: hsl(var(--popover));
+  box-shadow: 0 1px 6px hsl(var(--foreground) / 0.25);
+}
+
+html.dark .maplibregl-popup:has(.vector-control-popup) .maplibregl-popup-content {
+  background: hsl(var(--popover));
+  box-shadow: 0 1px 6px hsl(0 0% 0% / 0.5);
+}
+
+html:not(.dark) .maplibregl-popup:has(.vector-control-popup) .maplibregl-popup-close-button,
+html.dark .maplibregl-popup:has(.vector-control-popup) .maplibregl-popup-close-button {
+  color: hsl(var(--muted-foreground));
+}
+
+html:not(.dark) .maplibregl-popup-anchor-top:has(.vector-control-popup) .maplibregl-popup-tip,
+html:not(.dark) .maplibregl-popup-anchor-top-left:has(.vector-control-popup) .maplibregl-popup-tip,
+html:not(.dark) .maplibregl-popup-anchor-top-right:has(.vector-control-popup) .maplibregl-popup-tip,
+html.dark .maplibregl-popup-anchor-top:has(.vector-control-popup) .maplibregl-popup-tip,
+html.dark .maplibregl-popup-anchor-top-left:has(.vector-control-popup) .maplibregl-popup-tip,
+html.dark .maplibregl-popup-anchor-top-right:has(.vector-control-popup) .maplibregl-popup-tip {
+  border-bottom-color: hsl(var(--popover));
+}
+
+html:not(.dark) .maplibregl-popup-anchor-bottom:has(.vector-control-popup) .maplibregl-popup-tip,
+html:not(.dark) .maplibregl-popup-anchor-bottom-left:has(.vector-control-popup) .maplibregl-popup-tip,
+html:not(.dark) .maplibregl-popup-anchor-bottom-right:has(.vector-control-popup) .maplibregl-popup-tip,
+html.dark .maplibregl-popup-anchor-bottom:has(.vector-control-popup) .maplibregl-popup-tip,
+html.dark .maplibregl-popup-anchor-bottom-left:has(.vector-control-popup) .maplibregl-popup-tip,
+html.dark .maplibregl-popup-anchor-bottom-right:has(.vector-control-popup) .maplibregl-popup-tip {
+  border-top-color: hsl(var(--popover));
+}
+
+html:not(.dark) .maplibregl-popup-anchor-left:has(.vector-control-popup) .maplibregl-popup-tip,
+html.dark .maplibregl-popup-anchor-left:has(.vector-control-popup) .maplibregl-popup-tip {
+  border-right-color: hsl(var(--popover));
+}
+
+html:not(.dark) .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-popup-tip,
+html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-popup-tip {
+  border-left-color: hsl(var(--popover));
+}

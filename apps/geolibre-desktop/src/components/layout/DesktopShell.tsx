@@ -4,6 +4,7 @@ import { MapCanvas } from "@geolibre/map";
 import {
   restoreRasterLayers,
   restoreThreeDTilesLayers,
+  restoreVectorLayers,
 } from "@geolibre/plugins";
 import {
   type CSSProperties,
@@ -163,6 +164,7 @@ export function DesktopShell({
     );
     restoreThreeDTilesLayers(appAPI);
     restoreRasterLayers(appAPI);
+    restoreVectorLayers(appAPI);
     const search = window.location.search;
     void pluginManager
       .handleUrlParameters(

@@ -36,10 +36,7 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  openLocalDataFileWithFallback,
-  openVectorFileWithFallback,
-} from "../../lib/tauri-io";
+import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
 import { createAppAPI } from "../../hooks/usePlugins";
 import {
   parseDelimitedTextFields,
@@ -78,7 +75,6 @@ export type AddDataKind =
   | "wms"
   | "wfs"
   | "wmts"
-  | "vector"
   | "gpx"
   | "delimited-text"
   | "mbtiles"
@@ -91,7 +87,6 @@ interface AddDataDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-type VectorMode = "vector-file" | "geojson-url" | "vector-tiles";
 type GpxMode = "url" | "file";
 type GpxLayerKind = "waypoints" | "tracks" | "routes";
 type DelimitedTextMode = "url" | "file";
@@ -102,7 +97,6 @@ const KIND_LABELS: Record<AddDataKind, string> = {
   wms: "Add WMS Layer",
   wfs: "Add WFS Layer",
   wmts: "Add WMTS Layer",
-  vector: "Add Vector Layer",
   gpx: "Add GPX Layer",
   "delimited-text": "Add Delimited Text Layer",
   mbtiles: "Add MBTiles Layer",
@@ -119,8 +113,6 @@ const DEFAULT_WFS_ENDPOINT = "https://ahocevar.com/geoserver/wfs";
 const DEFAULT_WFS_TYPE_NAME = "topp:states";
 const DEFAULT_WMTS_URL =
   "https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/119/{z}/{y}/{x}";
-const DEFAULT_GEOJSON_URL =
-  "https://data.source.coop/giswqs/opengeos/countries.geojson";
 const DEFAULT_GPX_URL =
   "https://data.source.coop/giswqs/opengeos/fells_loop.gpx";
 const DEFAULT_DELIMITED_TEXT_URL =
@@ -343,7 +335,6 @@ export function AddDataDialog({
 }: AddDataDialogProps) {
   const open = kind !== null;
   const addLayer = useAppStore((s) => s.addLayer);
-  const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const title = kind ? KIND_LABELS[kind] : "Add Data";
 
   const [layerName, setLayerName] = useState("");
@@ -370,13 +361,6 @@ export function AddDataDialog({
   const [wmtsUrl, setWmtsUrl] = useState(DEFAULT_WMTS_URL);
   const [wmtsTileSize, setWmtsTileSize] = useState("256");
 
-  const [vectorMode, setVectorMode] = useState<VectorMode>("geojson-url");
-  const [vectorUrl, setVectorUrl] = useState(DEFAULT_GEOJSON_URL);
-  const [vectorSourceLayer, setVectorSourceLayer] = useState("");
-  const [selectedVector, setSelectedVector] = useState<{
-    data: FeatureCollection;
-    path: string;
-  } | null>(null);
   const [gpxMode, setGpxMode] = useState<GpxMode>("url");
   const [gpxUrl, setGpxUrl] = useState(DEFAULT_GPX_URL);
   const [selectedGpx, setSelectedGpx] = useState<{
@@ -451,7 +435,6 @@ export function AddDataDialog({
         wms: "WMS Layer",
         wfs: "WFS Layer",
         wmts: "WMTS Layer",
-        vector: "Vector Layer",
         gpx: "GPX Layer",
         "delimited-text": "Delimited Text Layer",
         mbtiles: "MBTiles Layer",
@@ -477,10 +460,6 @@ export function AddDataDialog({
     setWfsMaxFeatures("1000");
     setWmtsUrl(DEFAULT_WMTS_URL);
     setWmtsTileSize("256");
-    setVectorMode("geojson-url");
-    setVectorUrl(DEFAULT_GEOJSON_URL);
-    setVectorSourceLayer("");
-    setSelectedVector(null);
     setGpxMode("url");
     setGpxUrl(DEFAULT_GPX_URL);
     setSelectedGpx(null);
@@ -534,9 +513,6 @@ export function AddDataDialog({
     if (kind === "wmts") {
       return "Add a WMTS tile URL template as a raster layer.";
     }
-    if (kind === "vector") {
-      return "Add local vector files supported by DuckDB Spatial, GeoJSON URLs, or MapLibre vector tile sources.";
-    }
     if (kind === "gpx") {
       return "Add GPX waypoints, routes, and tracks as one or more vector layers.";
     }
@@ -573,18 +549,6 @@ export function AddDataDialog({
     if (!next && isSubmitting) return;
     if (!next) stopTransientMartinServer();
     onOpenChange(next);
-  };
-
-  const handleVectorModeChange = (mode: VectorMode) => {
-    const currentUrl = vectorUrl.trim();
-    setVectorMode(mode);
-    setVectorSourceLayer("");
-    setSelectedVector(null);
-    if (mode === "geojson-url" && !currentUrl) {
-      setVectorUrl(DEFAULT_GEOJSON_URL);
-    } else if (mode !== "geojson-url" && currentUrl === DEFAULT_GEOJSON_URL) {
-      setVectorUrl("");
-    }
   };
 
   const handleGpxModeChange = (mode: GpxMode) => {
@@ -845,21 +809,6 @@ export function AddDataDialog({
     );
   };
 
-  const handleChooseVector = async () => {
-    setError(null);
-    try {
-      const result = await openVectorFileWithFallback();
-      if (!result) return;
-      setSelectedVector(result);
-      setLayerName((current) =>
-        current.trim() && current !== "Vector Layer"
-          ? current
-          : layerNameFromPath(result.path, "Vector Layer"),
-      );
-    } catch (err) {
-      setError(errorMessage(err, "Could not read file."));
-    }
-  };
 
   const handleChooseDelimitedText = async () => {
     setError(null);
@@ -1081,59 +1030,6 @@ export function AddDataDialog({
             },
             { service: "wmts" },
           ),
-        );
-        return;
-      }
-
-      if (kind === "vector") {
-        if (vectorMode === "vector-file") {
-          if (!selectedVector) throw new Error("Choose a vector file.");
-          const id = addGeoJsonLayer(
-            name,
-            selectedVector.data,
-            selectedVector.path,
-            beforeLayer,
-          );
-          const layer = useAppStore.getState().layers.find((l) => l.id === id);
-          if (layer) mapControllerRef.current?.fitLayer(layer);
-          closeDialog();
-          return;
-        }
-
-        if (vectorMode === "geojson-url") {
-          if (!vectorUrl.trim()) throw new Error("Enter a GeoJSON URL.");
-          const url = vectorUrl.trim();
-          const data = await fetchGeoJsonFeatureCollection(url);
-          addAndClose(
-            {
-              ...createBaseLayer(
-                name,
-                "geojson",
-                { type: "geojson", url },
-                {
-                  featureCount: data.features.length,
-                  sourceKind: "geojson-url",
-                },
-              ),
-              geojson: data,
-              sourcePath: url,
-            },
-            { fit: true },
-          );
-          return;
-        }
-
-        if (!vectorUrl.trim())
-          throw new Error("Enter a vector tile source URL.");
-        if (!vectorSourceLayer.trim()) {
-          throw new Error("Enter the vector tile source layer name.");
-        }
-        addAndClose(
-          createBaseLayer(name, "vector-tiles", {
-            type: "vector",
-            url: vectorUrl.trim(),
-            sourceLayer: vectorSourceLayer.trim(),
-          }),
         );
         return;
       }
@@ -1586,72 +1482,6 @@ export function AddDataDialog({
                   onChange={(event) => setWmtsTileSize(event.target.value)}
                 />
               </div>
-            </div>
-          )}
-
-          {kind === "vector" && (
-            <div className="space-y-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="vector-mode">Source type</Label>
-                <Select
-                  id="vector-mode"
-                  value={vectorMode}
-                  onChange={(event) =>
-                    handleVectorModeChange(event.target.value as VectorMode)
-                  }
-                >
-                  <option value="vector-file">Vector file</option>
-                  <option value="geojson-url">GeoJSON URL</option>
-                  <option value="vector-tiles">Vector tile source URL</option>
-                </Select>
-              </div>
-              {vectorMode === "vector-file" ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleChooseVector}
-                  >
-                    <FileUp className="mr-2 h-3.5 w-3.5" />
-                    Choose file
-                  </Button>
-                  <span className="min-w-0 truncate text-xs text-muted-foreground">
-                    {selectedVector
-                      ? fileNameFromPath(selectedVector.path)
-                      : "No file selected"}
-                  </span>
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  <Label htmlFor="vector-url">
-                    {vectorMode === "geojson-url"
-                      ? "GeoJSON URL"
-                      : "Source URL"}
-                  </Label>
-                  <Input
-                    id="vector-url"
-                    placeholder={
-                      vectorMode === "geojson-url"
-                        ? "https://example.com/data.geojson"
-                        : "mapbox://tileset or https://example.com/tiles.json"
-                    }
-                    value={vectorUrl}
-                    onChange={(event) => setVectorUrl(event.target.value)}
-                  />
-                </div>
-              )}
-              {vectorMode === "vector-tiles" && (
-                <div className="space-y-1.5">
-                  <Label htmlFor="vector-source-layer">Source layer</Label>
-                  <Input
-                    id="vector-source-layer"
-                    value={vectorSourceLayer}
-                    onChange={(event) =>
-                      setVectorSourceLayer(event.target.value)
-                    }
-                  />
-                </div>
-              )}
             </div>
           )}
 

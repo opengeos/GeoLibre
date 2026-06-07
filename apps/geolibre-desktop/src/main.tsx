@@ -15,6 +15,7 @@ import "maplibre-gl-planetary-computer/style.css";
 import "maplibre-gl-raster/style.css";
 import "maplibre-gl-streetview/style.css";
 import "maplibre-gl-swipe/style.css";
+import "maplibre-gl-vector/style.css";
 import "mapillary-js/dist/mapillary.css";
 import "./index.css";
 import "./lib/basemap-style";
