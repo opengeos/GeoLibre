@@ -35,6 +35,7 @@ type VectorControlConstructor = typeof VectorControl;
 let vectorControlClassPromise: Promise<VectorControlConstructor> | null = null;
 let vectorControl: VectorControl | null = null;
 let vectorControlMounted = false;
+let openPanelTimeout: number | null = null;
 let restorePanelExpandTimeout: number | null = null;
 
 /**
@@ -55,8 +56,11 @@ export function openVectorLayerPanel(app: GeoLibreAppAPI): void {
     // panel is shown and expanded, matching the other standalone panels
     // (Earth Engine, 3D Tiles, raster); expanding in the same task as
     // addControl can measure the panel before MapLibre has laid the
-    // control out.
-    window.setTimeout(() => {
+    // control out. Tracked so close/teardown can cancel it before it runs
+    // against a torn-down control.
+    if (openPanelTimeout !== null) window.clearTimeout(openPanelTimeout);
+    openPanelTimeout = window.setTimeout(() => {
+      openPanelTimeout = null;
       // The IIFE's catch cannot see exceptions thrown in this later task.
       try {
         showVectorControl(control);
@@ -81,6 +85,10 @@ export function openVectorLayerPanel(app: GeoLibreAppAPI): void {
 }
 
 export function closeVectorLayerPanel(app: GeoLibreAppAPI): void {
+  if (openPanelTimeout !== null) {
+    window.clearTimeout(openPanelTimeout);
+    openPanelTimeout = null;
+  }
   if (restorePanelExpandTimeout !== null) {
     window.clearTimeout(restorePanelExpandTimeout);
     restorePanelExpandTimeout = null;
@@ -301,25 +309,37 @@ function patchVectorControlOnRemove(
 ): void {
   const originalOnRemove = control.onRemove.bind(control);
   control.onRemove = () => {
-    originalOnRemove();
-    if (vectorControl !== control) return;
-    // Symmetric with unwireVectorStoreSync below: a removed control must
-    // not keep syncing panel state if a stale reference toggles it.
-    control.off("expand", panelStateSyncHandler);
-    control.off("collapse", panelStateSyncHandler);
-    if (restorePanelExpandTimeout !== null) {
-      window.clearTimeout(restorePanelExpandTimeout);
-      restorePanelExpandTimeout = null;
+    try {
+      originalOnRemove();
+    } finally {
+      // In a finally block (without a return, so an exception from the
+      // upstream teardown still propagates) because skipping this cleanup
+      // would leave the module pointing at a removed control until reload.
+      if (vectorControl === control) {
+        // Symmetric with unwireVectorStoreSync below: a removed control
+        // must not keep syncing panel state if a stale reference toggles
+        // it.
+        control.off("expand", panelStateSyncHandler);
+        control.off("collapse", panelStateSyncHandler);
+        if (openPanelTimeout !== null) {
+          window.clearTimeout(openPanelTimeout);
+          openPanelTimeout = null;
+        }
+        if (restorePanelExpandTimeout !== null) {
+          window.clearTimeout(restorePanelExpandTimeout);
+          restorePanelExpandTimeout = null;
+        }
+        unwireVectorStoreSync();
+        // A control torn down mid-restore must not leave its successor
+        // permanently suppressing store sync events.
+        resetVectorStoreSyncSuspension();
+        // Store layers are intentionally NOT pruned here: the control is
+        // removed on map reinitialisation, where they must survive so
+        // restoreVectorLayers can replay them into the successor control.
+        vectorControl = null;
+        vectorControlMounted = false;
+      }
     }
-    unwireVectorStoreSync();
-    // A control torn down mid-restore must not leave its successor
-    // permanently suppressing store sync events.
-    resetVectorStoreSyncSuspension();
-    // Store layers are intentionally NOT pruned here: the control is
-    // removed on map reinitialisation, where they must survive so
-    // restoreVectorLayers can replay them into the successor control.
-    vectorControl = null;
-    vectorControlMounted = false;
   };
 }
 

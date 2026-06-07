@@ -73,7 +73,7 @@ export function createVectorStoreLayer(
   return {
     id: info.id,
     name: info.name,
-    type: "geojson",
+    type: info.renderMode === "tiles" ? "vector-tiles" : "geojson",
     source: {
       type: info.renderMode === "tiles" ? "vector" : "geojson",
       ...(url ? { url } : {}),
@@ -147,6 +147,7 @@ export function syncVectorLayersToStore(control: VectorSyncableControl): void {
       }
 
       if (
+        existing.type !== layer.type ||
         existing.visible !== layer.visible ||
         existing.opacity !== layer.opacity ||
         existing.sourcePath !== layer.sourcePath ||
@@ -160,6 +161,8 @@ export function syncVectorLayersToStore(control: VectorSyncableControl): void {
           opacity: layer.opacity,
           source: layer.source,
           sourcePath: layer.sourcePath,
+          // A render-mode switch in the panel flips geojson <-> vector-tiles.
+          type: layer.type,
           visible: layer.visible,
         });
       }
@@ -354,8 +357,12 @@ function savedVectorStyle(raw: unknown): Partial<VectorLayerStyle> | null {
   const candidate = raw as Record<string, unknown>;
   const style: Partial<VectorLayerStyle> = {};
 
+  // Length-capped rather than parsed: valid CSS color syntax is broad and
+  // MapLibre rejects unparseable values itself, but a hand-edited project
+  // file must not smuggle arbitrary multi-kilobyte strings into paint
+  // properties.
   const color = (value: unknown): value is string =>
-    typeof value === "string" && value.length > 0;
+    typeof value === "string" && value.length > 0 && value.length <= 100;
   const fraction = (value: unknown): value is number =>
     typeof value === "number" && value >= 0 && value <= 1;
   const positive = (value: unknown): value is number =>

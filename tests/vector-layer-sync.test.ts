@@ -151,9 +151,10 @@ describe("createVectorStoreLayer", () => {
     assert.equal("featureCount" in layer.metadata, false);
   });
 
-  it("marks tile-rendered layers with a vector source type", () => {
+  it("marks tile-rendered layers as vector-tiles", () => {
     const layer = createVectorStoreLayer(vectorInfo({ renderMode: "tiles" }));
 
+    assert.equal(layer.type, "vector-tiles");
     assert.equal(layer.source.type, "vector");
   });
 
@@ -239,6 +240,7 @@ describe("syncVectorLayersToStore", () => {
     assert.equal(layer.opacity, 0.4);
     assert.deepEqual(layer.metadata.bounds, [0, 0, 1, 1]);
     assert.equal(layer.source.type, "vector");
+    assert.equal(layer.type, "vector-tiles");
   });
 
   it("refreshes the saved panel collapsed state", () => {
@@ -451,6 +453,9 @@ describe("savedVectorState", () => {
       style: {
         fillColor: 7,
         fillOpacity: 2,
+        // Colors are length-capped so a hand-edited project file cannot
+        // smuggle arbitrary blobs into paint properties.
+        lineColor: `#${"f".repeat(200)}`,
         lineWidth: -1,
         circleRadius: Number.NaN,
       },
