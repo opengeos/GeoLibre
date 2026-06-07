@@ -18,7 +18,7 @@ import {
 const vectorControlPosition: GeoLibreMapControlPosition = "top-left";
 const VECTOR_PANEL_CLASS = "geolibre-vector-panel";
 const DEFAULT_VECTOR_URL =
-  "https://data.source.coop/giswqs/opengeos/countries.geojson";
+  "https://data.source.coop/giswqs/opengeos/countries.parquet";
 
 // These types mirror undocumented private members of VectorControl from
 // maplibre-gl-vector (verified against v0.2.0). All access is optional (?.)
@@ -269,6 +269,10 @@ function createVectorControl(
   const control = new VectorControlClass({
     className: "geolibre-vector-control",
     collapsed: true,
+    // Prefilled but not autoLoad: the control also mounts hidden during
+    // project restore, where auto-loading the sample would inject it
+    // into every restored project.
+    defaultUrl: DEFAULT_VECTOR_URL,
     panelWidth: 380,
     title: "Add Vector Layer",
     urlPlaceholder: DEFAULT_VECTOR_URL,

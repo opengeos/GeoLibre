@@ -50,10 +50,6 @@ export {
   type DuckDBIdentifyResult,
 } from "./plugins/maplibre-duckdb";
 export {
-  closeGeoParquetLayerPanel,
-  openGeoParquetLayerPanel,
-} from "./plugins/maplibre-geoparquet";
-export {
   closePlanetaryComputerPanel,
   openPlanetaryComputerPanel,
 } from "./plugins/maplibre-planetary-computer";
