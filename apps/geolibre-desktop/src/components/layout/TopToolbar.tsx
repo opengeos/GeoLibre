@@ -11,9 +11,16 @@ import {
 } from "@geolibre/map";
 import {
   closeColorbarPanel,
+  closeDuckDBLayerPanel,
+  closeEarthEnginePanel,
+  closeGeoParquetLayerPanel,
   closeHtmlPanel,
   closeLegendPanel,
+  closeMaplibreComponentControls,
+  closePlanetaryComputerPanel,
+  closeRasterLayerPanel,
   closeSearchPlacesPanel,
+  closeThreeDTilesLayerPanel,
   openFlatGeobufAddVectorLayerPanel,
   openDuckDBLayerPanel,
   isEarthEnginePanelVisible,
@@ -134,6 +141,18 @@ const MAP_CONTROL_ITEMS: Array<{
   { id: "logo", label: "MapLibre logo" },
 ];
 
+const NEW_PROJECT_VISIBLE_BUILT_IN_CONTROLS = new Set<BuiltInMapControl>([
+  "navigation",
+  "fullscreen",
+  "globe",
+  "layer-control",
+]);
+
+const ALL_BUILT_IN_CONTROL_IDS: BuiltInMapControl[] = [
+  ...MAP_CONTROL_ITEMS.map(({ id }) => id),
+  "layer-control",
+];
+
 const PLUGIN_POSITION_ITEMS: Array<{
   value: GeoLibreMapControlPosition;
   label: string;
@@ -165,6 +184,19 @@ function formatRecentProjectTime(openedAt: string): string {
     hour: "numeric",
     minute: "2-digit",
   }).format(openedDate);
+}
+
+function newProjectToolbarControlVisibility(): Record<
+  ToolbarMapControl,
+  boolean
+> {
+  return MAP_CONTROL_ITEMS.reduce(
+    (acc, { id }) => {
+      acc[id] = NEW_PROJECT_VISIBLE_BUILT_IN_CONTROLS.has(id);
+      return acc;
+    },
+    {} as Record<ToolbarMapControl, boolean>,
+  );
 }
 
 export function TopToolbar({
@@ -364,6 +396,29 @@ export function TopToolbar({
     setMapControlPosition,
   } = usePluginRegistry();
   const appApi = createAppAPI(mapControllerRef);
+  const resetRuntimeControlsForNewProject = () => {
+    closeMaplibreComponentControls(appApi);
+    closeRasterLayerPanel(appApi);
+    closePlanetaryComputerPanel(appApi);
+    closeEarthEnginePanel(appApi);
+    closeThreeDTilesLayerPanel(appApi);
+    closeDuckDBLayerPanel(appApi);
+    closeGeoParquetLayerPanel(appApi);
+    getPluginManager().restoreProjectState(null, appApi, {
+      resetMissingSettings: true,
+    });
+
+    for (const control of ALL_BUILT_IN_CONTROL_IDS) {
+      mapControllerRef.current?.setBuiltInControlPosition(control, "top-right");
+    }
+    for (const control of ALL_BUILT_IN_CONTROL_IDS) {
+      mapControllerRef.current?.setBuiltInControlVisible(
+        control,
+        NEW_PROJECT_VISIBLE_BUILT_IN_CONTROLS.has(control),
+      );
+    }
+    setControlsVisible(newProjectToolbarControlVisibility());
+  };
   const handleAddFlatGeobufLayer = () => {
     openFlatGeobufAddVectorLayerPanel(appApi);
   };
@@ -372,9 +427,8 @@ export function TopToolbar({
   };
   const handleAddGeoParquetLayer = async () => {
     try {
-      const { openGeoParquetPanel } = await import(
-        "../../lib/geoparquet-duckdb-runtime"
-      );
+      const { openGeoParquetPanel } =
+        await import("../../lib/geoparquet-duckdb-runtime");
       openGeoParquetPanel(appApi);
     } catch (error) {
       console.error("Failed to open the GeoParquet panel", error);
@@ -502,6 +556,7 @@ export function TopToolbar({
         iconClassName={toolbarIconClassName}
         showLabels={showLabels}
         onSaveCurrentProject={handleSave}
+        onProjectCreated={resetRuntimeControlsForNewProject}
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -539,14 +594,21 @@ export function TopToolbar({
                   key={project.path}
                   className="flex items-start justify-between gap-2"
                   onSelect={() => void handleOpenRecent(project.path)}
+                  title={project.path}
                 >
                   <span className="flex min-w-0 flex-col items-start gap-0.5">
-                    <span className="max-w-full truncate font-medium">
+                    <span
+                      className="max-w-full truncate font-medium"
+                      title={label}
+                    >
                       {label}
                     </span>
-                    <span className="flex max-w-full items-center gap-1 text-xs text-muted-foreground">
+                    <span className="flex max-w-full items-start gap-1 text-xs text-muted-foreground">
                       <History className="h-3 w-3 shrink-0" />
-                      <span className="truncate">
+                      <span
+                        className="break-all text-left leading-snug"
+                        title={project.path}
+                      >
                         {openedAt
                           ? `${openedAt} - ${project.path}`
                           : project.path}
@@ -993,7 +1055,9 @@ export function TopToolbar({
               }}
             />
             {projectPath ? (
-              <span className="hidden truncate lg:inline">{projectPath}</span>
+              <span className="hidden truncate lg:inline" title={projectPath}>
+                {projectPath}
+              </span>
             ) : null}
           </>
         ) : null}

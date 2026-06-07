@@ -66,7 +66,10 @@ function earthEngineOptions(): Omit<PluginControlOptions, "position"> {
     panelWidth: 420,
     // Evaluated when the control is first created (not at module load) so a
     // deep link or storage value present at open time is picked up.
-    projectId: projectValue(importMetaEnv().VITE_GEE_PROJECT_ID, STORAGE_PREFIX),
+    projectId: projectValue(
+      importMetaEnv().VITE_GEE_PROJECT_ID,
+      STORAGE_PREFIX,
+    ),
     storagePrefix: STORAGE_PREFIX,
     title: "Earth Engine",
   };
@@ -91,6 +94,17 @@ export function toggleEarthEnginePanel(app: GeoLibreAppAPI): void {
     return;
   }
   openEarthEnginePanel(app);
+}
+
+export function closeEarthEnginePanel(app: GeoLibreAppAPI): void {
+  earthEngineStoreUnsubscribe?.();
+  earthEngineStoreUnsubscribe = null;
+  if (earthEngineControl && earthEngineControlMounted) {
+    app.removeMapControl(earthEngineControl);
+  }
+  earthEngineControl = null;
+  earthEngineControlMounted = false;
+  setEarthEngineControlVisible(false);
 }
 
 export function isEarthEnginePanelVisible(): boolean {

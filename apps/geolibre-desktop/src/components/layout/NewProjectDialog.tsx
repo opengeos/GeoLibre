@@ -46,6 +46,7 @@ interface NewProjectDialogProps {
   iconClassName?: string;
   showLabels?: boolean;
   onSaveCurrentProject: () => Promise<boolean>;
+  onProjectCreated?: () => void;
 }
 
 export function NewProjectDialog({
@@ -54,6 +55,7 @@ export function NewProjectDialog({
   iconClassName,
   showLabels = true,
   onSaveCurrentProject,
+  onProjectCreated,
 }: NewProjectDialogProps) {
   const newProject = useAppStore((s) => s.newProject);
   const isDirty = useAppStore((s) => s.isDirty);
@@ -104,7 +106,7 @@ export function NewProjectDialog({
       ? customStyleUrl
       : isBlankSelected
         ? BLANK_BASEMAP
-      : selectedPreset?.styleUrl;
+        : selectedPreset?.styleUrl;
     if (basemapStyleUrl == null) return;
 
     newProject({
@@ -115,6 +117,7 @@ export function NewProjectDialog({
           ? THREE_D_MAP_VIEW
           : createDefaultMapView(),
     });
+    onProjectCreated?.();
     setOpen(false);
     resetForm();
   };
@@ -197,8 +200,8 @@ export function NewProjectDialog({
             <DialogHeader>
               <DialogTitle>New map</DialogTitle>
               <DialogDescription>
-                Choose a blank background, an OpenFreeMap basemap, or a
-                MapLibre style URL.
+                Choose a blank background, an OpenFreeMap basemap, or a MapLibre
+                style URL.
               </DialogDescription>
             </DialogHeader>
             <form className="space-y-5" onSubmit={handleCreate}>

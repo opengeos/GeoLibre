@@ -1,5 +1,8 @@
 import { useAppStore } from "@geolibre/core";
-import type { RasterControl, RasterControlEventHandler } from "maplibre-gl-raster";
+import type {
+  RasterControl,
+  RasterControlEventHandler,
+} from "maplibre-gl-raster";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
 import { ensureMercatorProjection } from "./map-projection-utils";
 import {
@@ -18,7 +21,7 @@ const DEFAULT_RASTER_URL =
   "https://data.source.coop/giswqs/opengeos/nlcd_2021_land_cover_30m.tif";
 
 // These types mirror undocumented private members of RasterControl from
-// maplibre-gl-raster (verified against v0.1.3). All access is optional (?.)
+// maplibre-gl-raster (verified against v0.2.0). All access is optional (?.)
 // so a rename in a future release degrades to a no-op rather than a crash --
 // re-verify these names AND the .mlr-control-close selector in
 // wireRasterCloseButton when bumping the dependency.
@@ -116,6 +119,23 @@ export function openRasterLayerPanel(app: GeoLibreAppAPI): void {
   });
 }
 
+export function closeRasterLayerPanel(app: GeoLibreAppAPI): void {
+  if (restorePanelExpandTimeout !== null) {
+    window.clearTimeout(restorePanelExpandTimeout);
+    restorePanelExpandTimeout = null;
+  }
+
+  if (rasterControl && rasterControlMounted) {
+    app.removeMapControl(rasterControl);
+    return;
+  }
+
+  unwireRasterStoreSync();
+  resetRasterStoreSyncSuspension();
+  rasterControl = null;
+  rasterControlMounted = false;
+}
+
 /**
  * Replays URL-backed rasters from the loaded project into the control and
  * drops control rasters the project does not contain. Called by the desktop
@@ -160,10 +180,7 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
       try {
         applyRestoredRasterPanelState(control, panelCollapsed);
       } catch (error) {
-        console.error(
-          "[GeoLibre] Failed to restore raster panel state",
-          error,
-        );
+        console.error("[GeoLibre] Failed to restore raster panel state", error);
       }
 
       for (const info of control.getRasters()) {
@@ -309,7 +326,7 @@ function createRasterControl(
   }
   // syncRasterLayersToStore re-reads getState().collapsed when these fire.
   // Safe: expand()/collapse() delegate to toggle(), which flips
-  // _state.collapsed BEFORE emitting the event (verified against v0.1.3) --
+  // _state.collapsed BEFORE emitting the event (verified against v0.2.0) --
   // re-verify that ordering when bumping the dependency.
   const panelStateSyncHandler: RasterControlEventHandler = () =>
     syncRasterLayersToStoreForRuntime(control);
@@ -362,7 +379,8 @@ async function patchTauriRasterOverlayFactory(
 
   if (deps.loadGeoTIFF && !deps.geolibreTauriNodataPatched) {
     const loadGeoTIFF = deps.loadGeoTIFF;
-    deps.loadGeoTIFF = async (url) => patchGeoTiffNumericNodata(await loadGeoTIFF(url));
+    deps.loadGeoTIFF = async (url) =>
+      patchGeoTiffNumericNodata(await loadGeoTIFF(url));
     deps.geolibreTauriNodataPatched = true;
   }
 }
@@ -420,10 +438,7 @@ function replaceFloat32NodataWithNaN(data: unknown, nodata: number): boolean {
 }
 
 function isTauriRuntime(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    "__TAURI_INTERNALS__" in window
-  );
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
 function patchRasterControlOnRemove(
@@ -496,10 +511,7 @@ function applyRestoredRasterPanelState(
       applyRasterPanelClass(control);
       disableRasterClickOutsideCollapse(control);
     } catch (error) {
-      console.error(
-        "[GeoLibre] Failed to restore raster panel state",
-        error,
-      );
+      console.error("[GeoLibre] Failed to restore raster panel state", error);
     }
   }, 0);
 }
@@ -544,9 +556,7 @@ function applyRasterPanelClass(control: RasterControl): void {
 // keep rendering; the layer panel still manages them.
 function wireRasterCloseButton(control: RasterControl): void {
   const panel = (control as unknown as RasterControlInternals)._panel;
-  const closeButton = panel?.querySelector<HTMLElement>(
-    ".mlr-control-close",
-  );
+  const closeButton = panel?.querySelector<HTMLElement>(".mlr-control-close");
   if (!closeButton || closeButton.dataset.geolibreCloseWired === "true") {
     return;
   }

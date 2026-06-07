@@ -127,8 +127,7 @@ const htmlControlPosition: GeoLibreMapControlPosition = "top-left";
 const lidarControlPosition: GeoLibreMapControlPosition = "top-left";
 const splattingControlPosition: GeoLibreMapControlPosition = "top-left";
 
-const FLATGEOBUF_SAMPLE_URL =
-  "https://flatgeobuf.org/test/data/UScounties.fgb";
+const FLATGEOBUF_SAMPLE_URL = "https://flatgeobuf.org/test/data/UScounties.fgb";
 const PMTILES_SAMPLE_URL =
   "https://overturemaps-extras-us-west-2.s3.us-west-2.amazonaws.com/tiles/2026-05-20.0/buildings.pmtiles";
 const ZARR_SAMPLE_URL =
@@ -379,7 +378,9 @@ const STAC_COLOR_RAMP_COLORS: Record<string, string[]> = {
   ],
 };
 
-function getStacColorRampModule(colormap: string): typeof STAC_COLOR_RAMP_MODULE {
+function getStacColorRampModule(
+  colormap: string,
+): typeof STAC_COLOR_RAMP_MODULE {
   const colors = STAC_COLOR_RAMP_COLORS[colormap.toLowerCase()];
   if (!colors) return STAC_COLOR_RAMP_MODULE;
 
@@ -501,6 +502,129 @@ let legendPanelVisible = false;
 const legendPanelListeners = new Set<() => void>();
 let htmlPanelVisible = false;
 const htmlPanelListeners = new Set<() => void>();
+
+interface ComponentsProjectState {
+  colorbar?: ComponentColorbarGuiState;
+  legend?: ComponentLegendGuiState;
+  html?: ComponentHtmlGuiState;
+}
+
+interface ComponentColorbarGuiEntryState {
+  mode: "named" | "custom";
+  colormap: string;
+  customColors: string;
+  vmin: number;
+  vmax: number;
+  label: string;
+  units: string;
+  orientation: "horizontal" | "vertical";
+  colorbarPosition: GeoLibreMapControlPosition;
+}
+
+interface ComponentColorbarGuiState extends ComponentColorbarGuiEntryState {
+  visible: boolean;
+  collapsed: boolean;
+  hasColorbar: boolean;
+  selectedColorbarIndex: number;
+  colorbars: ComponentColorbarGuiEntryState[];
+}
+
+interface ComponentLegendItem {
+  label: string;
+  color: string;
+  shape?: "square" | "circle" | "line";
+  strokeColor?: string;
+  icon?: string;
+}
+
+interface ComponentLegendGuiEntryState {
+  title: string;
+  items: ComponentLegendItem[];
+  legendPosition: GeoLibreMapControlPosition;
+}
+
+interface ComponentLegendGuiState extends ComponentLegendGuiEntryState {
+  visible: boolean;
+  collapsed: boolean;
+  hasLegend: boolean;
+  selectedLegendIndex: number;
+  legends: ComponentLegendGuiEntryState[];
+}
+
+interface ComponentHtmlGuiEntryState {
+  title: string;
+  html: string;
+  htmlPosition: GeoLibreMapControlPosition;
+  collapsible: boolean;
+}
+
+interface ComponentHtmlGuiState extends ComponentHtmlGuiEntryState {
+  visible: boolean;
+  collapsed: boolean;
+  hasHtmlControl: boolean;
+  selectedHtmlIndex: number;
+  htmls: ComponentHtmlGuiEntryState[];
+}
+
+type RestorableColorbarGuiControl = ColorbarGuiControl & {
+  setState?: (state: ComponentColorbarGuiState) => unknown;
+};
+
+type RestorableLegendGuiControl = LegendGuiControl & {
+  setState?: (state: ComponentLegendGuiState) => unknown;
+};
+
+type RestorableHtmlGuiControl = HtmlGuiControl & {
+  setState?: (state: ComponentHtmlGuiState) => unknown;
+};
+
+type GuiControlStateInternals<TState> = {
+  _render?: () => void;
+  _state?: TState;
+  setState?: (state: TState) => unknown;
+};
+
+const CONTROL_POSITIONS = new Set<GeoLibreMapControlPosition>([
+  "top-left",
+  "top-right",
+  "bottom-left",
+  "bottom-right",
+]);
+
+const LEGEND_ITEM_SHAPES = new Set<ComponentLegendItem["shape"]>([
+  "square",
+  "circle",
+  "line",
+]);
+
+const DEFAULT_COLORBAR_GUI_ENTRY: ComponentColorbarGuiEntryState = {
+  mode: "named",
+  colormap: "viridis",
+  customColors: "#440154, #31688e, #21918c, #90d743, #fde725",
+  vmin: 0,
+  vmax: 100,
+  label: "",
+  units: "",
+  orientation: "vertical",
+  colorbarPosition: "bottom-right",
+};
+
+const DEFAULT_LEGEND_GUI_ENTRY: ComponentLegendGuiEntryState = {
+  title: "Legend",
+  items: [
+    { label: "Category A", color: "#ff6b6b", shape: "square" },
+    { label: "Category B", color: "#4ecdc4", shape: "square" },
+    { label: "Category C", color: "#95a5a6", shape: "square" },
+  ],
+  legendPosition: "bottom-left",
+};
+
+const DEFAULT_HTML_GUI_ENTRY: ComponentHtmlGuiEntryState = {
+  title: "Info",
+  html: '<div style="padding: 4px;">\n  <h4 style="margin: 0 0 8px 0;">Welcome</h4>\n  <p style="margin: 0; color: #666;">This is a custom HTML control.</p>\n</div>',
+  htmlPosition: "top-left",
+  collapsible: true,
+};
 
 function constrainGuiPanelToViewport(panelSelector: string): void {
   // Defer measurement until after the expanded panel has been laid out so
@@ -790,10 +914,7 @@ const createAndMountComponentsControl = (app: GeoLibreAppAPI): void => {
 
 const mountComponentsControl = (app: GeoLibreAppAPI): boolean => {
   if (!componentsControl) return false;
-  const added = app.addMapControl(
-    componentsControl,
-    componentsControlPosition,
-  );
+  const added = app.addMapControl(componentsControl, componentsControlPosition);
   if (!added) {
     componentsControl = null;
     return false;
@@ -805,7 +926,7 @@ const mountComponentsControl = (app: GeoLibreAppAPI): boolean => {
 export const maplibreComponentsPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-components",
   name: "Components",
-  version: "0.18.1",
+  version: "0.18.2",
   activate: (app: GeoLibreAppAPI) => {
     pluginActive = true;
     if (componentsControl) return mountComponentsControl(app);
@@ -841,11 +962,336 @@ export const maplibreComponentsPlugin: GeoLibrePlugin = {
     componentsControl = null;
     createAndMountComponentsControl(app);
   },
+  getProjectState: () => componentsProjectStateSnapshot(),
+  applyProjectState: (app: GeoLibreAppAPI, state: unknown) => {
+    applyComponentsProjectState(app, state);
+  },
 };
 
-export function openFlatGeobufAddVectorLayerPanel(
+function componentsProjectStateSnapshot(): ComponentsProjectState | undefined {
+  const state: ComponentsProjectState = {};
+  if (colorbarPanelVisible && colorbarControl) {
+    state.colorbar = normalizeColorbarState(colorbarControl.getState());
+  }
+  if (legendPanelVisible && legendControl) {
+    state.legend = normalizeLegendState(legendControl.getState());
+  }
+  if (htmlPanelVisible && htmlControl) {
+    state.html = normalizeHtmlState(htmlControl.getState());
+  }
+
+  return Object.keys(state).length > 0 ? state : undefined;
+}
+
+function applyComponentsProjectState(
   app: GeoLibreAppAPI,
+  state: unknown,
 ): void {
+  const normalized = normalizeComponentsProjectState(state);
+  if (normalized?.colorbar?.visible) {
+    void restoreColorbarPanel(app, normalized.colorbar);
+  } else {
+    teardownColorbarControl(app);
+  }
+
+  if (normalized?.legend?.visible) {
+    void restoreLegendPanel(app, normalized.legend);
+  } else {
+    teardownLegendControl(app);
+  }
+
+  if (normalized?.html?.visible) {
+    void restoreHtmlPanel(app, normalized.html);
+  } else {
+    teardownHtmlControl(app);
+  }
+}
+
+async function restoreColorbarPanel(
+  app: GeoLibreAppAPI,
+  state: ComponentColorbarGuiState,
+): Promise<void> {
+  const restored = await openStandaloneColorbarControl(app);
+  if (!restored) return;
+  setTimeout(() => {
+    if (!colorbarControl) return;
+    const control = colorbarControl as RestorableColorbarGuiControl;
+    restoreGuiControlState(control, state);
+    if (state.collapsed) control.collapse();
+    else control.expand();
+    if (state.visible) control.show();
+    else control.hide();
+    setColorbarPanelVisible(state.visible);
+  }, 0);
+}
+
+async function restoreLegendPanel(
+  app: GeoLibreAppAPI,
+  state: ComponentLegendGuiState,
+): Promise<void> {
+  const restored = await openStandaloneLegendControl(app);
+  if (!restored) return;
+  setTimeout(() => {
+    if (!legendControl) return;
+    const control = legendControl as RestorableLegendGuiControl;
+    restoreGuiControlState(control, state);
+    if (state.collapsed) control.collapse();
+    else control.expand();
+    if (state.visible) control.show();
+    else control.hide();
+    setLegendPanelVisible(state.visible);
+  }, 0);
+}
+
+async function restoreHtmlPanel(
+  app: GeoLibreAppAPI,
+  state: ComponentHtmlGuiState,
+): Promise<void> {
+  const restored = await openStandaloneHtmlControl(app);
+  if (!restored) return;
+  setTimeout(() => {
+    if (!htmlControl) return;
+    const control = htmlControl as RestorableHtmlGuiControl;
+    restoreGuiControlState(control, state);
+    if (state.collapsed) control.collapse();
+    else control.expand();
+    if (state.visible) control.show();
+    else control.hide();
+    setHtmlPanelVisible(state.visible);
+  }, 0);
+}
+
+function restoreGuiControlState<
+  TState extends
+    | ComponentColorbarGuiState
+    | ComponentLegendGuiState
+    | ComponentHtmlGuiState,
+>(
+  control:
+    | RestorableColorbarGuiControl
+    | RestorableLegendGuiControl
+    | RestorableHtmlGuiControl,
+  state: TState,
+): void {
+  const internals = control as unknown as GuiControlStateInternals<TState>;
+  if (internals.setState) {
+    internals.setState(state);
+    return;
+  }
+
+  internals._state = state;
+  internals._render?.();
+}
+
+function normalizeComponentsProjectState(
+  state: unknown,
+): ComponentsProjectState | null {
+  if (!state || typeof state !== "object") return null;
+  const candidate = state as Partial<ComponentsProjectState>;
+  return {
+    colorbar: normalizeColorbarState(candidate.colorbar),
+    legend: normalizeLegendState(candidate.legend),
+    html: normalizeHtmlState(candidate.html),
+  };
+}
+
+function normalizeColorbarState(
+  state: unknown,
+): ComponentColorbarGuiState | undefined {
+  if (!state || typeof state !== "object") return undefined;
+  const candidate = state as Partial<ComponentColorbarGuiState>;
+  const formEntry = normalizeColorbarEntry(candidate);
+  const colorbars = Array.isArray(candidate.colorbars)
+    ? candidate.colorbars.map(normalizeColorbarEntry)
+    : [];
+  const selectedColorbarIndex = selectedIndex(
+    candidate.selectedColorbarIndex,
+    colorbars.length,
+  );
+  return {
+    ...formEntry,
+    visible: typeof candidate.visible === "boolean" ? candidate.visible : true,
+    collapsed:
+      typeof candidate.collapsed === "boolean" ? candidate.collapsed : false,
+    hasColorbar: colorbars.length > 0,
+    selectedColorbarIndex,
+    colorbars,
+  };
+}
+
+function normalizeLegendState(
+  state: unknown,
+): ComponentLegendGuiState | undefined {
+  if (!state || typeof state !== "object") return undefined;
+  const candidate = state as Partial<ComponentLegendGuiState>;
+  const formEntry = normalizeLegendEntry(candidate);
+  const legends = Array.isArray(candidate.legends)
+    ? candidate.legends.map(normalizeLegendEntry)
+    : [];
+  return {
+    ...formEntry,
+    visible: typeof candidate.visible === "boolean" ? candidate.visible : true,
+    collapsed:
+      typeof candidate.collapsed === "boolean" ? candidate.collapsed : false,
+    hasLegend: legends.length > 0,
+    selectedLegendIndex: selectedIndex(
+      candidate.selectedLegendIndex,
+      legends.length,
+    ),
+    legends,
+  };
+}
+
+function normalizeHtmlState(state: unknown): ComponentHtmlGuiState | undefined {
+  if (!state || typeof state !== "object") return undefined;
+  const candidate = state as Partial<ComponentHtmlGuiState>;
+  const formEntry = normalizeHtmlEntry(candidate);
+  const htmls = Array.isArray(candidate.htmls)
+    ? candidate.htmls.map(normalizeHtmlEntry)
+    : [];
+  return {
+    ...formEntry,
+    visible: typeof candidate.visible === "boolean" ? candidate.visible : true,
+    collapsed:
+      typeof candidate.collapsed === "boolean" ? candidate.collapsed : false,
+    hasHtmlControl: htmls.length > 0,
+    selectedHtmlIndex: selectedIndex(candidate.selectedHtmlIndex, htmls.length),
+    htmls,
+  };
+}
+
+function normalizeColorbarEntry(
+  entry: unknown,
+): ComponentColorbarGuiEntryState {
+  const candidate = (
+    entry && typeof entry === "object" ? entry : {}
+  ) as Partial<ComponentColorbarGuiEntryState>;
+  const vmin = finiteNumber(candidate.vmin, DEFAULT_COLORBAR_GUI_ENTRY.vmin);
+  const vmax = finiteNumber(candidate.vmax, DEFAULT_COLORBAR_GUI_ENTRY.vmax);
+  return {
+    mode: candidate.mode === "custom" ? "custom" : "named",
+    colormap:
+      typeof candidate.colormap === "string" && candidate.colormap.trim()
+        ? candidate.colormap
+        : DEFAULT_COLORBAR_GUI_ENTRY.colormap,
+    customColors:
+      typeof candidate.customColors === "string" &&
+      candidate.customColors.trim()
+        ? candidate.customColors
+        : DEFAULT_COLORBAR_GUI_ENTRY.customColors,
+    vmin,
+    vmax: vmax === vmin ? vmin + 1 : vmax,
+    label: typeof candidate.label === "string" ? candidate.label : "",
+    units: typeof candidate.units === "string" ? candidate.units : "",
+    orientation:
+      candidate.orientation === "horizontal" ? "horizontal" : "vertical",
+    colorbarPosition: normalizeControlPosition(
+      candidate.colorbarPosition,
+      DEFAULT_COLORBAR_GUI_ENTRY.colorbarPosition,
+    ),
+  };
+}
+
+function normalizeLegendEntry(entry: unknown): ComponentLegendGuiEntryState {
+  const candidate = (
+    entry && typeof entry === "object" ? entry : {}
+  ) as Partial<ComponentLegendGuiEntryState>;
+  const items = Array.isArray(candidate.items)
+    ? candidate.items
+        .map(normalizeLegendItem)
+        .filter((item): item is ComponentLegendItem => item !== null)
+    : DEFAULT_LEGEND_GUI_ENTRY.items;
+  return {
+    title:
+      typeof candidate.title === "string"
+        ? candidate.title
+        : DEFAULT_LEGEND_GUI_ENTRY.title,
+    items,
+    legendPosition: normalizeControlPosition(
+      candidate.legendPosition,
+      DEFAULT_LEGEND_GUI_ENTRY.legendPosition,
+    ),
+  };
+}
+
+function normalizeHtmlEntry(entry: unknown): ComponentHtmlGuiEntryState {
+  const candidate = (
+    entry && typeof entry === "object" ? entry : {}
+  ) as Partial<ComponentHtmlGuiEntryState>;
+  return {
+    title:
+      typeof candidate.title === "string"
+        ? candidate.title
+        : DEFAULT_HTML_GUI_ENTRY.title,
+    html:
+      typeof candidate.html === "string"
+        ? candidate.html
+        : DEFAULT_HTML_GUI_ENTRY.html,
+    htmlPosition: normalizeControlPosition(
+      candidate.htmlPosition,
+      DEFAULT_HTML_GUI_ENTRY.htmlPosition,
+    ),
+    collapsible:
+      typeof candidate.collapsible === "boolean"
+        ? candidate.collapsible
+        : DEFAULT_HTML_GUI_ENTRY.collapsible,
+  };
+}
+
+function normalizeLegendItem(item: unknown): ComponentLegendItem | null {
+  if (!item || typeof item !== "object") return null;
+  const candidate = item as Partial<ComponentLegendItem>;
+  if (typeof candidate.label !== "string" || !candidate.label.trim()) {
+    return null;
+  }
+  if (typeof candidate.color !== "string" || !candidate.color.trim()) {
+    return null;
+  }
+
+  return {
+    label: candidate.label,
+    color: candidate.color,
+    ...(isLegendItemShape(candidate.shape) ? { shape: candidate.shape } : {}),
+    ...(typeof candidate.strokeColor === "string"
+      ? { strokeColor: candidate.strokeColor }
+      : {}),
+    ...(typeof candidate.icon === "string" ? { icon: candidate.icon } : {}),
+  };
+}
+
+function isLegendItemShape(
+  value: unknown,
+): value is ComponentLegendItem["shape"] {
+  return LEGEND_ITEM_SHAPES.has(value as ComponentLegendItem["shape"]);
+}
+
+function normalizeControlPosition(
+  value: unknown,
+  fallback: GeoLibreMapControlPosition,
+): GeoLibreMapControlPosition {
+  return typeof value === "string" &&
+    CONTROL_POSITIONS.has(value as GeoLibreMapControlPosition)
+    ? (value as GeoLibreMapControlPosition)
+    : fallback;
+}
+
+function selectedIndex(value: unknown, length: number): number {
+  if (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    value < length
+  ) {
+    return value;
+  }
+  return length > 0 ? length - 1 : -1;
+}
+
+function finiteNumber(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+export function openFlatGeobufAddVectorLayerPanel(app: GeoLibreAppAPI): void {
   void openStandaloneFlatGeobufControl(app);
 }
 
@@ -860,7 +1306,9 @@ export async function addCogRasterLayer(
   ensureMercatorProjection(app.getMap?.());
   const control = await ensureCogRasterControl(app);
   if (!control) {
-    throw new Error("The COG raster layer control could not be added to the map.");
+    throw new Error(
+      "The COG raster layer control could not be added to the map.",
+    );
   }
 
   try {
@@ -889,9 +1337,7 @@ export function isSearchPlacesPanelVisible(): boolean {
   return searchPlacesPanelVisible;
 }
 
-export function subscribeSearchPlacesPanel(
-  listener: () => void,
-): () => void {
+export function subscribeSearchPlacesPanel(listener: () => void): () => void {
   searchPlacesPanelListeners.add(listener);
   return () => searchPlacesPanelListeners.delete(listener);
 }
@@ -938,6 +1384,21 @@ export function closeHtmlPanel(app: GeoLibreAppAPI): void {
   teardownHtmlControl(app);
 }
 
+export function closeMaplibreComponentControls(app: GeoLibreAppAPI): void {
+  teardownCogRasterControl(app);
+  teardownGeoTiffRasterOverlay(app);
+  teardownFlatGeobufControl(app);
+  teardownPMTilesControl(app);
+  teardownSearchControl(app);
+  teardownStacSearchControl(app);
+  teardownZarrControl(app);
+  teardownColorbarControl(app);
+  teardownLegendControl(app);
+  teardownHtmlControl(app);
+  teardownLidarControl(app);
+  teardownSplattingControl(app);
+}
+
 export function isHtmlPanelVisible(): boolean {
   return htmlPanelVisible;
 }
@@ -963,9 +1424,7 @@ export function openSplattingLayerPanel(app: GeoLibreAppAPI): void {
   void openStandaloneSplattingControl(app);
 }
 
-function getComponentsOptions(
-  app: GeoLibreAppAPI,
-): ControlGridOptions {
+function getComponentsOptions(app: GeoLibreAppAPI): ControlGridOptions {
   return {
     ...COMPONENTS_OPTIONS,
     basemapStyleUrl: app.getActiveBasemap(),
@@ -1051,7 +1510,8 @@ async function openStandalonePMTilesControl(
 async function openStandaloneSearchControl(
   app: GeoLibreAppAPI,
 ): Promise<boolean> {
-  const { SearchControl: SearchControlClass } = await getComponentsConstructors();
+  const { SearchControl: SearchControlClass } =
+    await getComponentsConstructors();
 
   searchControl ??= createSearchControl(SearchControlClass);
 
@@ -1081,7 +1541,10 @@ async function openStandaloneStacSearchControl(
   stacSearchControl ??= createStacSearchControl(StacSearchControlClass);
 
   if (!stacSearchControlMounted) {
-    const added = app.addMapControl(stacSearchControl, stacSearchControlPosition);
+    const added = app.addMapControl(
+      stacSearchControl,
+      stacSearchControlPosition,
+    );
     if (!added) {
       stacSearchControl = null;
       return false;
@@ -1203,8 +1666,7 @@ async function openStandaloneLidarControl(
   const {
     LidarControl: LidarControlClass,
     LidarLayerAdapter: LidarLayerAdapterClass,
-  } =
-    await getComponentsConstructors();
+  } = await getComponentsConstructors();
 
   lidarControl ??= createLidarControl(
     LidarControlClass,
@@ -1243,10 +1705,7 @@ async function openStandaloneSplattingControl(
   );
 
   if (!splattingControlMounted) {
-    const added = app.addMapControl(
-      splattingControl,
-      splattingControlPosition,
-    );
+    const added = app.addMapControl(splattingControl, splattingControlPosition);
     if (!added) {
       splattingControl = null;
       return false;
@@ -1329,7 +1788,10 @@ function createCogRasterControl(
 
       if (currentLayer.opacity !== layer.opacity) {
         if (currentLayer.visible) {
-          cogRasterControl?.setLayerOpacity(currentLayer.id, currentLayer.opacity);
+          cogRasterControl?.setLayerOpacity(
+            currentLayer.id,
+            currentLayer.opacity,
+          );
         } else {
           cogRasterControl?.setLayerVisibility(
             currentLayer.id,
@@ -1413,7 +1875,10 @@ function createSplattingControl(
       }
 
       if (currentLayer.opacity !== layer.opacity) {
-        splattingLayerAdapter?.setOpacity(currentLayer.id, currentLayer.opacity);
+        splattingLayerAdapter?.setOpacity(
+          currentLayer.id,
+          currentLayer.opacity,
+        );
       }
     }
   });
@@ -1535,9 +2000,7 @@ function createLegendControl(
 ): LegendGuiControl {
   const control = new LegendGuiControlClass(LEGEND_OPTIONS);
   control.on("expand", () => {
-    constrainGuiPanelToViewport(
-      ".geolibre-legend-control .legend-gui-panel",
-    );
+    constrainGuiPanelToViewport(".geolibre-legend-control .legend-gui-panel");
     setLegendPanelVisible(true);
   });
   return control;
@@ -1793,7 +2256,9 @@ function createSplattingLoadHandler(
   };
 }
 
-function createSplattingRemoveHandler(): Parameters<GaussianSplatControl["on"]>[1] {
+function createSplattingRemoveHandler(): Parameters<
+  GaussianSplatControl["on"]
+>[1] {
   return (event) => {
     const id = event.splatId ?? event.modelId;
     if (!id) return;
@@ -1988,7 +2453,9 @@ function addLayerWithCogRasterControl(
     };
     const handleError: CogLayerEventHandler = (event) => {
       settle(() =>
-        reject(new Error(event.error || "Failed to load the COG raster layer.")),
+        reject(
+          new Error(event.error || "Failed to load the COG raster layer."),
+        ),
       );
     };
 
@@ -2066,41 +2533,36 @@ async function ensureGeoTiffRasterOverlay(
     geoTiffRasterOverlayMounted = true;
   }
 
-  geoTiffRasterStoreUnsubscribe ??= useAppStore.subscribe(
-    (state, previous) => {
-      const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
+  geoTiffRasterStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
+    const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
 
-      for (const layer of previous.layers) {
-        if (!isGeoTiffRasterLayer(layer)) continue;
+    for (const layer of previous.layers) {
+      if (!isGeoTiffRasterLayer(layer)) continue;
 
-        const currentLayer = currentById.get(layer.id);
-        if (!currentLayer) {
-          geoTiffRasterLayerProps.delete(layer.id);
-          geoTiffRasterLayers.delete(layer.id);
-          continue;
-        }
-
-        if (!isGeoTiffRasterLayer(currentLayer)) continue;
-
-        if (
-          currentLayer.visible !== layer.visible ||
-          currentLayer.opacity !== layer.opacity
-        ) {
-          const rasterState = geoTiffRasterLayerProps.get(layer.id);
-          if (!rasterState) continue;
-          rasterState.visible = currentLayer.visible;
-          rasterState.opacity = currentLayer.opacity;
-          geoTiffRasterLayerProps.set(layer.id, rasterState);
-          geoTiffRasterLayers.set(
-            layer.id,
-            createGeoTiffDeckLayer(rasterState),
-          );
-        }
+      const currentLayer = currentById.get(layer.id);
+      if (!currentLayer) {
+        geoTiffRasterLayerProps.delete(layer.id);
+        geoTiffRasterLayers.delete(layer.id);
+        continue;
       }
 
-      updateGeoTiffRasterOverlayLayers();
-    },
-  );
+      if (!isGeoTiffRasterLayer(currentLayer)) continue;
+
+      if (
+        currentLayer.visible !== layer.visible ||
+        currentLayer.opacity !== layer.opacity
+      ) {
+        const rasterState = geoTiffRasterLayerProps.get(layer.id);
+        if (!rasterState) continue;
+        rasterState.visible = currentLayer.visible;
+        rasterState.opacity = currentLayer.opacity;
+        geoTiffRasterLayerProps.set(layer.id, rasterState);
+        geoTiffRasterLayers.set(layer.id, createGeoTiffDeckLayer(rasterState));
+      }
+    }
+
+    updateGeoTiffRasterOverlayLayers();
+  });
 
   return geoTiffRasterOverlay;
 }
@@ -2364,9 +2826,7 @@ function getGeoTiffGeographicBounds(
   ];
 }
 
-function createGeoTiffDeckLayer(
-  state: GeoTiffRasterLayerState,
-): Layer {
+function createGeoTiffDeckLayer(state: GeoTiffRasterLayerState): Layer {
   return new RasterLayer({
     id: state.id,
     image: state.raster.image,
@@ -2657,9 +3117,7 @@ function createStacSearchStoreLayer(
 ): GeoLibreLayer {
   const rasterLayerInfo = getStacSearchRasterLayerInfo(snapshot.layer);
   const deckLayerProps = "props" in snapshot.layer ? snapshot.layer.props : {};
-  const sourceKind = rasterLayerInfo
-    ? "stac-search-raster"
-    : "stac-search-cog";
+  const sourceKind = rasterLayerInfo ? "stac-search-raster" : "stac-search-cog";
   const url = rasterLayerInfo?.tileUrl ?? getDeckLayerSourceUrl(snapshot.layer);
   const nativeLayerIds = rasterLayerInfo
     ? [rasterLayerInfo.layerId]
@@ -2905,9 +3363,8 @@ function patchStacSearchCogLayer(control: StacSearchControl): void {
       mutableControl._convertS3ToHttps?.(selectedAsset.url) ??
         selectedAsset.url,
     );
-    const { COGLayer: COGLayerClass, texture } = await import(
-      "@developmentseed/deck.gl-geotiff"
-    );
+    const { COGLayer: COGLayerClass, texture } =
+      await import("@developmentseed/deck.gl-geotiff");
     const renderProps = await createStacCogRenderProps(
       texture,
       getStacSearchRenderOptions(mutableControl),
@@ -2979,7 +3436,10 @@ function getStacSearchRenderOptions(
   };
 }
 
-async function createStacCogRenderProps(texture: unknown, renderOptions: StacCogRenderOptions): Promise<{
+async function createStacCogRenderProps(
+  texture: unknown,
+  renderOptions: StacCogRenderOptions,
+): Promise<{
   getTileData: (
     image: StacCogImageLike,
     options: StacCogTileOptions,
@@ -2988,12 +3448,8 @@ async function createStacCogRenderProps(texture: unknown, renderOptions: StacCog
     renderPipeline: Array<{ module: unknown; props?: Record<string, unknown> }>;
   };
 }> {
-  const {
-    BlackIsZero,
-    CreateTexture,
-    FilterNoDataVal,
-    LinearRescale,
-  } = await import("@developmentseed/deck.gl-raster/gpu-modules");
+  const { BlackIsZero, CreateTexture, FilterNoDataVal, LinearRescale } =
+    await import("@developmentseed/deck.gl-raster/gpu-modules");
   const { getColormap } = (await import("maplibre-gl-components")) as {
     getColormap?: (name: string) => StacColorStop[];
   };
@@ -3218,9 +3674,7 @@ function parseStacColor(color: string): [number, number, number] {
     ];
   }
 
-  const rgb = color.match(
-    /(?:rgb|vec3)\(([\d.]+),\s*([\d.]+),\s*([\d.]+)\)/i,
-  );
+  const rgb = color.match(/(?:rgb|vec3)\(([\d.]+),\s*([\d.]+),\s*([\d.]+)\)/i);
   if (!rgb) return [0, 0, 0];
   const values = rgb.slice(1, 4).map(Number);
   const scale = values.some((value) => value > 1) ? 1 : 255;
@@ -3288,9 +3742,8 @@ async function patchStacSearchCOGLayerClass(
 }
 
 function removeStacSearchControlLayer(id: string): void {
-  const mutableControl = stacSearchControl as unknown as
-    | MutableStacSearchControl
-    | null;
+  const mutableControl =
+    stacSearchControl as unknown as MutableStacSearchControl | null;
   mutableControl?._removeLayer?.(id);
 }
 
@@ -3299,17 +3752,17 @@ function setStacSearchControlLayerState(
   visible: boolean,
   opacity: number,
 ): void {
-  const mutableControl = stacSearchControl as unknown as
-    | MutableStacSearchControl
-    | null;
+  const mutableControl =
+    stacSearchControl as unknown as MutableStacSearchControl | null;
   const layer = mutableControl?._cogLayers?.get(id);
   if (!layer) return;
 
   const appliedOpacity = visible ? opacity : 0;
   const rasterLayerInfo = getStacSearchRasterLayerInfo(layer);
   if (rasterLayerInfo) {
-    const map = (stacSearchControl as unknown as MutableStacSearchControl | null)
-      ?._map;
+    const map = (
+      stacSearchControl as unknown as MutableStacSearchControl | null
+    )?._map;
     try {
       map?.setLayoutProperty(
         rasterLayerInfo.layerId,
@@ -3338,9 +3791,7 @@ function setStacSearchControlLayerState(
   });
 }
 
-function getStacSearchDeckLayers(
-  control: MutableStacSearchControl,
-): Layer[] {
+function getStacSearchDeckLayers(control: MutableStacSearchControl): Layer[] {
   return Array.from(control._cogLayers?.values() ?? []).filter(
     (layer): layer is Layer => !getStacSearchRasterLayerInfo(layer),
   );
@@ -3413,10 +3864,7 @@ async function createStacGeoKeysParser(): Promise<StacGeoKeysParser> {
 }
 
 function registerStacCommonProjections(): void {
-  proj4.defs(
-    "EPSG:4326",
-    "+proj=longlat +datum=WGS84 +no_defs +type=crs",
-  );
+  proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs +type=crs");
   proj4.defs(
     "EPSG:3857",
     "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 " +
@@ -3451,9 +3899,11 @@ function stacSearchLayerName(
   item?: StacSearchItem | null,
   collectionId?: string,
 ): string {
-  return [collectionId, item?.id, stacAssetFromLayerId(id)]
-    .filter(Boolean)
-    .join(" - ") || id;
+  return (
+    [collectionId, item?.id, stacAssetFromLayerId(id)]
+      .filter(Boolean)
+      .join(" - ") || id
+  );
 }
 
 function stacAssetFromLayerId(id: string): string | undefined {
@@ -3527,9 +3977,8 @@ function getSplattingControlContainer(
 }
 
 function disableLidarClickOutsideCollapse(control: LidarControl | null): void {
-  const clickOutsideState = control as unknown as
-    | LidarControlClickOutsideState
-    | null;
+  const clickOutsideState =
+    control as unknown as LidarControlClickOutsideState | null;
   const handler = clickOutsideState?._clickOutsideHandler;
   if (!handler) return;
   document.removeEventListener("click", handler);
@@ -3537,8 +3986,10 @@ function disableLidarClickOutsideCollapse(control: LidarControl | null): void {
 }
 
 function hasLidarPointCloud(id: string): boolean {
-  return lidarControl?.getPointClouds().some((pointCloud) => pointCloud.id === id)
-    ?? false;
+  return (
+    lidarControl?.getPointClouds().some((pointCloud) => pointCloud.id === id) ??
+    false
+  );
 }
 
 function findLidarPanel(control: LidarControl | null): HTMLElement | null {

@@ -178,7 +178,10 @@ let duckdbConstructorsPromise: Promise<{
 }> | null = null;
 const duckdbLayerOrder = new Map<string, number>();
 const duckdbRenderedLayers = new Map<string, DuckDBRenderedLayerLike>();
-const duckdbRenderedRows = new Map<string, Record<number, Record<string, unknown>>>();
+const duckdbRenderedRows = new Map<
+  string,
+  Record<number, Record<string, unknown>>
+>();
 const duckdbRenderedStyles = new Map<string, DuckDBRenderedStyle>();
 const warnedMissingRowsLayerIds = new Set<string>();
 // Global row index → local Arrow row index, built lazily per result chunk.
@@ -217,6 +220,17 @@ export function openDuckDBLayerPanel(app: GeoLibreAppAPI): void {
   void openStandaloneDuckDBControl(app);
 }
 
+export function closeDuckDBLayerPanel(app: GeoLibreAppAPI): void {
+  duckdbStoreUnsubscribe?.();
+  duckdbStoreUnsubscribe = null;
+  clearDuckDBRenderedLayers();
+  if (duckdbControl && duckdbControlMounted) {
+    app.removeMapControl(duckdbControl);
+  }
+  duckdbControl = null;
+  duckdbControlMounted = false;
+}
+
 export function getDuckDBLayerRows(layerId: string): DuckDBAttributeRow[] {
   return Object.entries(getDuckDBRenderedRows(layerId))
     .map(([key, properties]) => {
@@ -224,7 +238,7 @@ export function getDuckDBLayerRows(layerId: string): DuckDBAttributeRow[] {
       const rowIndex =
         Number.isFinite(numericKey) && Number.isInteger(numericKey)
           ? numericKey
-          : getRowIndexFromProperties(properties) ?? 0;
+          : (getRowIndexFromProperties(properties) ?? 0);
       return {
         featureId: String(rowIndex),
         index: rowIndex,
@@ -344,7 +358,8 @@ export function identifyDuckDBLayerAtPoint(
       : null);
   if (index === null) return null;
 
-  const properties = getDuckDBRenderedRows(layerId)[index] ?? picked.object ?? {};
+  const properties =
+    getDuckDBRenderedRows(layerId)[index] ?? picked.object ?? {};
 
   return {
     coordinate:
@@ -605,9 +620,8 @@ function patchDuckDBControlSelection(control: DuckDBControl): void {
   const mutableControl = getMutableDuckDBControl(control);
   if (!mutableControl || mutableControl.__geolibreSelectionPatched) return;
 
-  const originalHandleMapSelect = mutableControl.handleMapSelect?.bind(
-    mutableControl,
-  );
+  const originalHandleMapSelect =
+    mutableControl.handleMapSelect?.bind(mutableControl);
   // Keep the original around (matching the __geolibreOriginalSetData pattern)
   // so future patches can inspect or restore the library behavior.
   mutableControl.__geolibreOriginalShowAttributePopup =
@@ -736,9 +750,8 @@ function patchDuckDBRenderer(renderer: DuckDBRendererLike | null | undefined) {
   // idempotent.
   if (!renderer.createLayers) return;
 
-  renderer.__geolibreOriginalCreateLayers = renderer.createLayers.bind(
-    renderer,
-  );
+  renderer.__geolibreOriginalCreateLayers =
+    renderer.createLayers.bind(renderer);
   renderer.createLayers = (
     layerId: string,
     result: DuckDBResultLike,
@@ -757,7 +770,12 @@ function patchDuckDBRenderer(renderer: DuckDBRendererLike | null | undefined) {
     if (!renderedStyle) return originalLayers;
 
     return originalLayers.map((deckLayer) =>
-      cloneStyledDeckLayer(layerId, deckLayer, result.geometryType, renderedStyle),
+      cloneStyledDeckLayer(
+        layerId,
+        deckLayer,
+        result.geometryType,
+        renderedStyle,
+      ),
     );
   };
   renderer.__geolibreStylePatched = true;
@@ -772,10 +790,7 @@ function cloneStyledDeckLayer(
   if (!deckLayer.clone) return deckLayer;
 
   const { style, opacity } = renderedStyle;
-  const fillColor = colorToRgba(
-    style.fillColor,
-    opacity * style.fillOpacity,
-  );
+  const fillColor = colorToRgba(style.fillColor, opacity * style.fillOpacity);
   const strokeColor = colorToRgba(style.strokeColor, opacity);
   const geometry = geometryType?.toLowerCase() ?? "";
   // Captured once per clone; updateTriggers below include it, so deck.gl
@@ -787,7 +802,10 @@ function cloneStyledDeckLayer(
     const selectedRadius = selectedDuckDBPointRadius(style.circleRadius);
     return deckLayer.clone({
       getFillColor: createDuckDBColorAccessor(selectedFeatureId, fillColor),
-      getRadius: createDuckDBRadiusAccessor(selectedFeatureId, style.circleRadius),
+      getRadius: createDuckDBRadiusAccessor(
+        selectedFeatureId,
+        style.circleRadius,
+      ),
       radiusMaxPixels: Math.max(pointRadiusMaxPixels(style), selectedRadius),
       radiusMinPixels: Math.max(1, Math.min(style.circleRadius, 4)),
       updateTriggers: {
@@ -806,7 +824,10 @@ function cloneStyledDeckLayer(
   if (geometry.includes("line")) {
     return deckLayer.clone({
       getColor: createDuckDBColorAccessor(selectedFeatureId, strokeColor),
-      getWidth: createDuckDBLineWidthAccessor(selectedFeatureId, style.strokeWidth),
+      getWidth: createDuckDBLineWidthAccessor(
+        selectedFeatureId,
+        style.strokeWidth,
+      ),
       widthMinPixels: Math.max(1, style.strokeWidth),
       updateTriggers: {
         ...asRecord(deckLayer.props?.updateTriggers),
@@ -822,7 +843,10 @@ function cloneStyledDeckLayer(
     getFillColor: createDuckDBColorAccessor(selectedFeatureId, fillColor),
     getElevation: createDuckDBElevationAccessor(layerId, renderedStyle),
     getLineColor: createDuckDBLineColorAccessor(selectedFeatureId, strokeColor),
-    getLineWidth: createDuckDBLineWidthAccessor(selectedFeatureId, style.strokeWidth),
+    getLineWidth: createDuckDBLineWidthAccessor(
+      selectedFeatureId,
+      style.strokeWidth,
+    ),
     lineWidthMinPixels: Math.max(1, style.strokeWidth),
     updateTriggers: {
       ...asRecord(deckLayer.props?.updateTriggers),
@@ -837,11 +861,7 @@ function cloneStyledDeckLayer(
         opacity,
         selectedFeatureId,
       ],
-      getLineColor: [
-        style.strokeColor,
-        opacity,
-        selectedFeatureId,
-      ],
+      getLineColor: [style.strokeColor, opacity, selectedFeatureId],
       getLineWidth: [style.strokeWidth, selectedFeatureId],
     },
   });
@@ -935,7 +955,9 @@ function getGeoArrowRowIndex(objectInfo: {
     objectInfo.data as
       | {
           data?: {
-            getChild?: (name: string) => { get?: (index: number) => unknown } | null;
+            getChild?: (
+              name: string,
+            ) => { get?: (index: number) => unknown } | null;
           };
         }
       | undefined
@@ -955,7 +977,9 @@ function getGeoArrowRowIndex(objectInfo: {
   return index;
 }
 
-function getDuckDBRenderedRows(layerId: string): Record<number, Record<string, unknown>> {
+function getDuckDBRenderedRows(
+  layerId: string,
+): Record<number, Record<string, unknown>> {
   const cachedRows = duckdbRenderedRows.get(layerId);
   if (cachedRows) return cachedRows;
 
@@ -1019,7 +1043,9 @@ function getDuckDBDeckLayerIds(layerId: string): string[] {
   // (`duckdb-<layerId>-<geometryType>-<resultIndex>`); revisit on upgrades.
   const ids = results
     .map((result, index) =>
-      result.geometryType ? `duckdb-${layerId}-${result.geometryType}-${index}` : null,
+      result.geometryType
+        ? `duckdb-${layerId}-${result.geometryType}-${index}`
+        : null,
     )
     .filter((id): id is string => typeof id === "string");
   if (ids.length === 0 && results.length > 0 && import.meta.env.DEV) {
@@ -1089,7 +1115,11 @@ function collectGeometryBounds(
   if (!value || depth > 10) return;
 
   if (Array.isArray(value)) {
-    if (value.length >= 2 && isFiniteNumber(value[0]) && isFiniteNumber(value[1])) {
+    if (
+      value.length >= 2 &&
+      isFiniteNumber(value[0]) &&
+      isFiniteNumber(value[1])
+    ) {
       extendBounds(bounds, value[0], value[1]);
       return;
     }
@@ -1145,7 +1175,10 @@ function isDuckDBDeckLayerId(
   layerId: string,
   deckLayerId: string | undefined,
 ): boolean {
-  return typeof deckLayerId === "string" && deckLayerId.startsWith(`duckdb-${layerId}-`);
+  return (
+    typeof deckLayerId === "string" &&
+    deckLayerId.startsWith(`duckdb-${layerId}-`)
+  );
 }
 
 function isKnownDuckDBLayer(layerId: string): boolean {
@@ -1156,7 +1189,8 @@ function getRowIndexFromProperties(
   properties: Record<string, unknown> | undefined,
 ): number | null {
   const rawIndex = properties?.__index;
-  if (typeof rawIndex === "number" && Number.isFinite(rawIndex)) return rawIndex;
+  if (typeof rawIndex === "number" && Number.isFinite(rawIndex))
+    return rawIndex;
   if (
     typeof rawIndex === "bigint" &&
     rawIndex >= BigInt(0) &&
@@ -1221,5 +1255,8 @@ function createUniqueDuckDBLayerName(
 }
 
 function duckdbLayerOrderSignature(layers: GeoLibreLayer[]): string {
-  return layers.filter(isDuckDBQueryLayer).map((layer) => layer.id).join("|");
+  return layers
+    .filter(isDuckDBQueryLayer)
+    .map((layer) => layer.id)
+    .join("|");
 }

@@ -15,6 +15,7 @@ export {
   closeColorbarPanel,
   closeHtmlPanel,
   closeLegendPanel,
+  closeMaplibreComponentControls,
   closeSearchPlacesPanel,
   isColorbarPanelVisible,
   isHtmlPanelVisible,
@@ -38,6 +39,7 @@ export {
   type CogRasterLayerOptions,
 } from "./plugins/maplibre-components";
 export {
+  closeDuckDBLayerPanel,
   getDuckDBFeatureBounds,
   getDuckDBLayerRows,
   identifyDuckDBLayerAtPoint,
@@ -47,19 +49,28 @@ export {
   type DuckDBAttributeRow,
   type DuckDBIdentifyResult,
 } from "./plugins/maplibre-duckdb";
-export { openGeoParquetLayerPanel } from "./plugins/maplibre-geoparquet";
-export { openPlanetaryComputerPanel } from "./plugins/maplibre-planetary-computer";
 export {
+  closeGeoParquetLayerPanel,
+  openGeoParquetLayerPanel,
+} from "./plugins/maplibre-geoparquet";
+export {
+  closePlanetaryComputerPanel,
+  openPlanetaryComputerPanel,
+} from "./plugins/maplibre-planetary-computer";
+export {
+  closeEarthEnginePanel,
   isEarthEnginePanelVisible,
   openEarthEnginePanel,
   subscribeEarthEnginePanel,
   toggleEarthEnginePanel,
 } from "./plugins/maplibre-earth-engine";
 export {
+  closeThreeDTilesLayerPanel,
   openThreeDTilesLayerPanel,
   restoreThreeDTilesLayers,
 } from "./plugins/maplibre-3d-tiles";
 export {
+  closeRasterLayerPanel,
   openRasterLayerPanel,
   restoreRasterLayers,
 } from "./plugins/maplibre-raster";

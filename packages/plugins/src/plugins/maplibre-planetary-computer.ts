@@ -34,6 +34,14 @@ export function openPlanetaryComputerPanel(app: GeoLibreAppAPI): void {
   void openStandalonePlanetaryComputerControl(app);
 }
 
+export function closePlanetaryComputerPanel(app: GeoLibreAppAPI): void {
+  if (planetaryComputerControl && planetaryComputerControlMounted) {
+    app.removeMapControl(planetaryComputerControl);
+    return;
+  }
+  resetPlanetaryComputerControl(planetaryComputerControl);
+}
+
 async function openStandalonePlanetaryComputerControl(
   app: GeoLibreAppAPI,
 ): Promise<boolean> {
@@ -90,11 +98,12 @@ function wirePlanetaryComputerCloseButton(
 function getPlanetaryComputerConstructors(): Promise<{
   PlanetaryComputerControl: PlanetaryComputerControlConstructor;
 }> {
-  planetaryComputerConstructorsPromise ??= import(
-    "maplibre-gl-planetary-computer"
-  ).then(({ PlanetaryComputerControl: PlanetaryComputerControlClass }) => ({
-    PlanetaryComputerControl: PlanetaryComputerControlClass,
-  }));
+  planetaryComputerConstructorsPromise ??=
+    import("maplibre-gl-planetary-computer").then(
+      ({ PlanetaryComputerControl: PlanetaryComputerControlClass }) => ({
+        PlanetaryComputerControl: PlanetaryComputerControlClass,
+      }),
+    );
   return planetaryComputerConstructorsPromise;
 }
 
@@ -117,7 +126,9 @@ function createPlanetaryComputerControl(
   // layer:update indefinitely.
   planetaryComputerStoreUnsubscribe ??= useAppStore.subscribe(
     (state, previous) => {
-      const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
+      const currentById = new Map(
+        state.layers.map((layer) => [layer.id, layer]),
+      );
 
       for (const layer of previous.layers) {
         if (!isPlanetaryComputerLayer(layer)) continue;
@@ -190,7 +201,8 @@ function createPlanetaryComputerStoreLayer(
   activeLayer: ActiveLayer,
 ): GeoLibreLayer {
   const bbox =
-    activeLayer.item?.bbox ?? activeLayer.collection?.extent?.spatial?.bbox?.[0];
+    activeLayer.item?.bbox ??
+    activeLayer.collection?.extent?.spatial?.bbox?.[0];
   const collectionId =
     activeLayer.item?.collection ?? activeLayer.collection?.id ?? "";
 

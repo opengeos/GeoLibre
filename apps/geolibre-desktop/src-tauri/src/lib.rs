@@ -135,6 +135,7 @@ pub fn run() {
             ensure_martin_binary,
             fetch_url_bytes,
             load_external_plugin_bundles,
+            read_project_file,
             resolve_url_redirect,
             read_mbtiles_metadata,
             read_mbtiles_tile,
@@ -151,6 +152,11 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running GeoLibre Desktop");
+}
+
+#[tauri::command]
+fn read_project_file(path: String) -> Result<String, String> {
+    fs::read_to_string(&path).map_err(|error| format!("Could not read project file: {error}"))
 }
 
 #[tauri::command]

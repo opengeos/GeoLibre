@@ -1,4 +1,5 @@
 import { parseProject, type GeoLibreProject } from "@geolibre/core";
+import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   readFile,
@@ -151,7 +152,8 @@ function isGeoLibreProjectFile(path: string): boolean {
 
 function isVectorFileName(path: string): boolean {
   if (isGeoLibreProjectFile(path)) return false;
-  if (browserSafeFileName(path).toLowerCase().endsWith(".shp.xml")) return false;
+  if (browserSafeFileName(path).toLowerCase().endsWith(".shp.xml"))
+    return false;
   return !NON_VECTOR_SIDECAR_EXTENSIONS.includes(fileExtension(path));
 }
 
@@ -164,7 +166,9 @@ function assertFeatureCollection(value: unknown): FeatureCollection {
   ) {
     return value as FeatureCollection;
   }
-  throw new Error("The selected file did not produce a GeoJSON FeatureCollection.");
+  throw new Error(
+    "The selected file did not produce a GeoJSON FeatureCollection.",
+  );
 }
 
 // DuckDB-wasm (pthreads build) can hand back a Uint8Array backed by a
@@ -192,9 +196,7 @@ function normalizeShapefileResult(value: unknown): FeatureCollection {
   return assertFeatureCollection(value);
 }
 
-async function parseGeoJsonText(
-  text: string,
-): Promise<FeatureCollection> {
+async function parseGeoJsonText(text: string): Promise<FeatureCollection> {
   return assertFeatureCollection(JSON.parse(text));
 }
 
@@ -805,7 +807,10 @@ export async function openRecentProjectFile(
     // Only a present Content-Length lets us guard up front. `Number(null)` is
     // 0, which would silently pass for chunked/CDN responses that omit it.
     const contentLength = response.headers.get("content-length");
-    if (contentLength !== null && Number(contentLength) > MAX_PROJECT_URL_BYTES) {
+    if (
+      contentLength !== null &&
+      Number(contentLength) > MAX_PROJECT_URL_BYTES
+    ) {
       throw new Error("Project file is too large to load (over 25 MB).");
     }
 
@@ -827,10 +832,12 @@ export async function openRecentProjectFile(
 
   let text: string;
   try {
-    text = await readTextFile(path);
+    text = await invoke<string>("read_project_file", { path });
   } catch (error) {
     if (isFileMissingError(error)) {
-      throw new RecentProjectGoneError(`Project file no longer exists: ${path}`);
+      throw new RecentProjectGoneError(
+        `Project file no longer exists: ${path}`,
+      );
     }
     throw error;
   }
@@ -934,9 +941,7 @@ export async function loadDroppedVectorFiles(
   droppedFiles: FileList | File[],
 ): Promise<LoadedVectorLayer[]> {
   const droppedFileArray = Array.from(droppedFiles);
-  const files = droppedFileArray.filter((file) =>
-    isVectorFileName(file.name),
-  );
+  const files = droppedFileArray.filter((file) => isVectorFileName(file.name));
   if (!files.length) return [];
 
   const filesByBaseName = new Map<string, File[]>();
@@ -962,8 +967,9 @@ export async function loadDroppedVectorFiles(
       extension === "shp"
         ? await Promise.all(
             (
-              filesByBaseName.get(pathWithoutExtension(file.name).toLowerCase()) ??
-              []
+              filesByBaseName.get(
+                pathWithoutExtension(file.name).toLowerCase(),
+              ) ?? []
             )
               .filter((candidate) =>
                 SHAPEFILE_SIDECAR_EXTENSIONS.includes(

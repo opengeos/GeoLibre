@@ -95,6 +95,14 @@ export function openGeoParquetLayerPanel(app: GeoLibreAppAPI): void {
   void openStandaloneGeoParquetControl(app);
 }
 
+export function closeGeoParquetLayerPanel(app: GeoLibreAppAPI): void {
+  if (geoparquetControl && geoparquetControlMounted) {
+    app.removeMapControl(geoparquetControl);
+    return;
+  }
+  if (geoparquetControl) resetGeoParquetControl(geoparquetControl);
+}
+
 async function openStandaloneGeoParquetControl(
   app: GeoLibreAppAPI,
 ): Promise<boolean> {
@@ -174,8 +182,10 @@ function createGeoParquetControl(
       }
     }
 
-    if (geoparquetLayerOrderSignature(state.layers) !==
-      geoparquetLayerOrderSignature(previous.layers)) {
+    if (
+      geoparquetLayerOrderSignature(state.layers) !==
+      geoparquetLayerOrderSignature(previous.layers)
+    ) {
       shouldSyncControl = true;
     }
 
@@ -350,9 +360,8 @@ function patchGeoParquetRenderer(
     return;
   }
 
-  renderer.__geolibreOriginalCreateLayers = renderer.createLayers.bind(
-    renderer,
-  );
+  renderer.__geolibreOriginalCreateLayers =
+    renderer.createLayers.bind(renderer);
   renderer.createLayers = (
     layerId: string,
     result: GeoParquetResultLike,
@@ -369,7 +378,12 @@ function patchGeoParquetRenderer(
     if (!originalLayers || !renderedStyle) return originalLayers ?? [];
 
     return originalLayers.map((deckLayer) =>
-      cloneStyledDeckLayer(layerId, deckLayer, result.geometryType, renderedStyle),
+      cloneStyledDeckLayer(
+        layerId,
+        deckLayer,
+        result.geometryType,
+        renderedStyle,
+      ),
     );
   };
   renderer.__geolibreStylePatched = true;
@@ -384,10 +398,7 @@ function cloneStyledDeckLayer(
   if (!deckLayer.clone) return deckLayer;
 
   const { style, opacity } = renderedStyle;
-  const fillColor = colorToRgba(
-    style.fillColor,
-    opacity * style.fillOpacity,
-  );
+  const fillColor = colorToRgba(style.fillColor, opacity * style.fillOpacity);
   const strokeColor = colorToRgba(style.strokeColor, opacity);
   const geometry = geometryType?.toLowerCase() ?? "";
 
@@ -444,7 +455,10 @@ function createGeoParquetElevationAccessor(
   layerId: string,
   renderedStyle: GeoParquetRenderedStyle,
 ) {
-  return (objectInfo: { index?: number; object?: Record<string, unknown> }): number => {
+  return (objectInfo: {
+    index?: number;
+    object?: Record<string, unknown>;
+  }): number => {
     const { style } = renderedStyle;
     const fallbackHeight = style.extrusionBase ?? 100;
     const rowIndex = getGeoParquetRowIndex(objectInfo);
@@ -516,7 +530,8 @@ function getGeoParquetLayerBounds(
 ): [number, number, number, number] | undefined {
   const primaryColumn = layer.primaryGeoColumn;
   const bounds =
-    primaryColumn && layer.metadata?.geoMetadata?.columns?.[primaryColumn]?.bbox;
+    primaryColumn &&
+    layer.metadata?.geoMetadata?.columns?.[primaryColumn]?.bbox;
   if (isBounds(bounds)) return bounds;
 
   const mutableLayer = getMutableGeoParquetControl().layers?.find(

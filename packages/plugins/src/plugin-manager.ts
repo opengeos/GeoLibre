@@ -212,6 +212,7 @@ export class PluginManager {
   restoreProjectState(
     state: ProjectPluginState | null,
     app: GeoLibreAppAPI,
+    options: { resetMissingSettings?: boolean } = {},
   ): void {
     const targetActive = new Set(
       state?.activePluginIds ?? Array.from(this.defaultActive),
@@ -244,11 +245,17 @@ export class PluginManager {
         }
       }
 
-      // Only apply settings the loaded project actually carries for this
-      // plugin. A missing entry means "no change" rather than "reset", which
-      // avoids clobbering in-memory state for plugins absent from the project.
-      if (plugin.applyProjectState && state?.settings && id in state.settings) {
-        const updated = plugin.applyProjectState(app, state.settings[id]);
+      // Regular project loads apply only the settings present in the file. New
+      // project resets can opt into clearing cached state for every plugin.
+      const hasSetting = state?.settings && id in state.settings;
+      if (
+        plugin.applyProjectState &&
+        (hasSetting || options.resetMissingSettings)
+      ) {
+        const updated = plugin.applyProjectState(
+          app,
+          hasSetting ? state.settings[id] : undefined,
+        );
         if (updated !== false) changed = true;
       }
     }

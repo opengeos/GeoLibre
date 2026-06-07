@@ -12,10 +12,7 @@ import {
   type ThreeDTilesControlOptions,
   type ThreeDTilesItemState,
 } from "maplibre-gl-3d-tiles";
-import type {
-  GeoLibreAppAPI,
-  GeoLibreMapControlPosition,
-} from "../types";
+import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
 
 const threeDTilesControlPosition: GeoLibreMapControlPosition = "top-left";
 const THREE_D_TILES_LAYER_ID = "geolibre-3d-tiles";
@@ -54,6 +51,14 @@ interface ThreeDTilesControlInternals {
 
 export function openThreeDTilesLayerPanel(app: GeoLibreAppAPI): void {
   openStandaloneThreeDTilesControl(app);
+}
+
+export function closeThreeDTilesLayerPanel(app: GeoLibreAppAPI): void {
+  if (threeDTilesControl && threeDTilesControlMounted) {
+    app.removeMapControl(threeDTilesControl);
+    return;
+  }
+  resetThreeDTilesControl(threeDTilesControl);
 }
 
 export function restoreThreeDTilesLayers(app: GeoLibreAppAPI): void {
@@ -365,7 +370,8 @@ function createThreeDTilesStoreLayer(
   opacity = 1,
   panelCollapsed = true,
 ): GeoLibreLayer {
-  const layerName = tileset.layerName || layerNameFromUrl(tileset.tilesetUrl, tileset.id);
+  const layerName =
+    tileset.layerName || layerNameFromUrl(tileset.tilesetUrl, tileset.id);
   const beforeId = tileset.beforeId;
 
   return {
@@ -410,7 +416,8 @@ function createThreeDTilesLayerUpdate(
   const name = existingLayer.name || layer.name;
 
   if (existingLayer.name !== name) update.name = name;
-  if (existingLayer.beforeId !== layer.beforeId) update.beforeId = layer.beforeId;
+  if (existingLayer.beforeId !== layer.beforeId)
+    update.beforeId = layer.beforeId;
   if (existingLayer.opacity !== layer.opacity) update.opacity = layer.opacity;
   if (existingLayer.visible !== layer.visible) update.visible = layer.visible;
   if (existingLayer.sourcePath !== layer.sourcePath) {
@@ -571,9 +578,7 @@ function isThreeDTilesStoreSyncSuspended(): boolean {
   return threeDTilesStoreSyncSuspended > 0;
 }
 
-function threeDTilesPanelCollapsedFromLayers(
-  layers: GeoLibreLayer[],
-): boolean {
+function threeDTilesPanelCollapsedFromLayers(layers: GeoLibreLayer[]): boolean {
   const panelCollapsed = layers.find(
     (layer) => typeof layer.metadata.panelCollapsed === "boolean",
   )?.metadata.panelCollapsed;
@@ -615,9 +620,7 @@ function getThreeDTilesControlLayers(
   return layers;
 }
 
-function getThreeDTilesDecoderOptions(
-  control: ThreeDTilesControl,
-): {
+function getThreeDTilesDecoderOptions(control: ThreeDTilesControl): {
   dracoDecoderPath: string;
   ktx2TranscoderPath: string;
 } {
@@ -632,8 +635,7 @@ function getThreeDTilesDecoderOptions(
     );
   }
   return {
-    dracoDecoderPath:
-      options?.dracoDecoderPath ?? DEFAULT_DRACO_DECODER_PATH,
+    dracoDecoderPath: options?.dracoDecoderPath ?? DEFAULT_DRACO_DECODER_PATH,
     ktx2TranscoderPath:
       options?.ktx2TranscoderPath ?? DEFAULT_KTX2_TRANSCODER_PATH,
   };
@@ -662,9 +664,7 @@ function stringValue(value: unknown): string | undefined {
 }
 
 function numberValue(value: unknown, fallback: number): number {
-  return typeof value === "number" && Number.isFinite(value)
-    ? value
-    : fallback;
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
 function optionalNumberValue(value: unknown): number | undefined {
@@ -715,11 +715,7 @@ function valuesEqual(left: unknown, right: unknown): boolean {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value)
-  );
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function layerNameFromUrl(url: string, fallback: string): string {
