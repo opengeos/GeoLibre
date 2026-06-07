@@ -48,8 +48,25 @@ type RasterLayerManagerInternals = {
       map: MapControlHost,
       options: OverlayFactoryOptions,
     ) => OverlayLike;
+    loadGeoTIFF?: (url: string) => Promise<unknown>;
     geolibreTransparentOverlayPatched?: boolean;
+    geolibreTauriNodataPatched?: boolean;
   };
+};
+type RasterTileArray = {
+  bands?: unknown[];
+  data?: unknown;
+  nodata?: number | null;
+};
+type RasterTile = {
+  array?: RasterTileArray;
+};
+type TiledRasterSource = {
+  fetchTile?: (...args: unknown[]) => Promise<RasterTile>;
+  geolibreNodataPatched?: boolean;
+};
+type GeoTiffWithOverviews = TiledRasterSource & {
+  overviews?: TiledRasterSource[];
 };
 
 let rasterControlClassPromise: Promise<RasterControlConstructor> | null = null;
@@ -317,29 +334,88 @@ async function patchTauriRasterOverlayFactory(
 
   const manager = (control as unknown as RasterControlInternals)._layerManager;
   const deps = manager?._deps;
-  if (!deps?.createOverlay || deps.geolibreTransparentOverlayPatched) return;
+  if (!deps) return;
 
-  const MapboxOverlayClass = await getMapboxOverlayClass();
-  deps.createOverlay = (map, options) => {
-    const overlay = new MapboxOverlayClass({
-      deviceProps: {
-        createCanvasContext: { alphaMode: "premultiplied" },
-        webgl: {
-          alpha: true,
-          premultipliedAlpha: true,
+  if (deps.createOverlay && !deps.geolibreTransparentOverlayPatched) {
+    const MapboxOverlayClass = await getMapboxOverlayClass();
+    deps.createOverlay = (map, options) => {
+      const overlay = new MapboxOverlayClass({
+        deviceProps: {
+          createCanvasContext: { alphaMode: "premultiplied" },
+          webgl: {
+            alpha: true,
+            premultipliedAlpha: true,
+          },
         },
-      },
-      interleaved: false,
-      layers: [],
-      onDeviceInitialized: options.onDeviceInitialized,
-      parameters: {
-        clearColor: [0, 0, 0, 0],
-      },
-    });
-    map.addControl(overlay);
-    return overlay;
+        interleaved: false,
+        layers: [],
+        onDeviceInitialized: options.onDeviceInitialized,
+        parameters: {
+          clearColor: [0, 0, 0, 0],
+        },
+      });
+      map.addControl(overlay);
+      return overlay;
+    };
+    deps.geolibreTransparentOverlayPatched = true;
+  }
+
+  if (deps.loadGeoTIFF && !deps.geolibreTauriNodataPatched) {
+    const loadGeoTIFF = deps.loadGeoTIFF;
+    deps.loadGeoTIFF = async (url) => patchGeoTiffNumericNodata(await loadGeoTIFF(url));
+    deps.geolibreTauriNodataPatched = true;
+  }
+}
+
+function patchGeoTiffNumericNodata(tiff: unknown): unknown {
+  patchTiledRasterSource(tiff);
+  for (const overview of (tiff as GeoTiffWithOverviews).overviews ?? []) {
+    patchTiledRasterSource(overview);
+  }
+  return tiff;
+}
+
+function patchTiledRasterSource(source: unknown): void {
+  const tiledSource = source as TiledRasterSource;
+  if (!tiledSource.fetchTile || tiledSource.geolibreNodataPatched) return;
+
+  const fetchTile = tiledSource.fetchTile.bind(source);
+  tiledSource.fetchTile = async (...args) => {
+    const tile = await fetchTile(...args);
+    normalizeTileNumericNodata(tile);
+    return tile;
   };
-  deps.geolibreTransparentOverlayPatched = true;
+  tiledSource.geolibreNodataPatched = true;
+}
+
+function normalizeTileNumericNodata(tile: RasterTile): void {
+  const array = tile.array;
+  const nodata = array?.nodata;
+  if (typeof nodata !== "number" || !Number.isFinite(nodata)) return;
+
+  let replaced = false;
+  if (Array.isArray(array.bands)) {
+    for (const band of array.bands) {
+      replaced = replaceFloat32NodataWithNaN(band, nodata) || replaced;
+    }
+  } else {
+    replaced = replaceFloat32NodataWithNaN(array.data, nodata);
+  }
+
+  if (replaced) array.nodata = Number.NaN;
+}
+
+function replaceFloat32NodataWithNaN(data: unknown, nodata: number): boolean {
+  if (!(data instanceof Float32Array)) return false;
+
+  let replaced = false;
+  for (let index = 0; index < data.length; index += 1) {
+    if (data[index] === nodata) {
+      data[index] = Number.NaN;
+      replaced = true;
+    }
+  }
+  return replaced;
 }
 
 function isTauriRuntime(): boolean {
