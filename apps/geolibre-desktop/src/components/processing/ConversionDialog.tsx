@@ -2,8 +2,11 @@ import { useAppStore, type ConversionToolKind } from "@geolibre/core";
 import {
   fetchConversionJob,
   fetchConversionStatus,
+  runCsvToGeoParquet,
   runRasterToCog,
+  runVectorToFlatGeobuf,
   runVectorToGeoParquet,
+  runVectorToPmtiles,
   type ConversionJob,
 } from "@geolibre/processing";
 import {
@@ -62,6 +65,7 @@ function defaultGeoParquetName(inputName: string): string {
 }
 
 function browserConversionJob(
+  toolId: string,
   status: ConversionJob["status"],
   messages: string[],
   error: string | null = null,
@@ -70,7 +74,7 @@ function browserConversionJob(
   return {
     id: BROWSER_JOB_ID,
     status,
-    tool_id: "vector-to-geoparquet",
+    tool_id: toolId,
     created_at: now,
     updated_at: now,
     messages,
@@ -104,9 +108,22 @@ interface ConversionToolConfig {
   outputLabel: string;
   outputFilters: FileDialogFilter[];
   defaultOutputName: string;
-  compressions: string[];
-  defaultCompression: string;
+  compressions?: string[];
+  defaultCompression?: string;
 }
+
+const VECTOR_INPUT_EXTENSIONS = [
+  "parquet",
+  "geoparquet",
+  "geojson",
+  "json",
+  "shp",
+  "gpkg",
+  "fgb",
+  "gml",
+  "kml",
+];
+const PARQUET_COMPRESSIONS = ["zstd", "snappy", "gzip", "lz4", "uncompressed"];
 
 const TOOL_CONFIGS: Record<ConversionToolKind, ConversionToolConfig> = {
   "vector-to-geoparquet": {
@@ -114,27 +131,49 @@ const TOOL_CONFIGS: Record<ConversionToolKind, ConversionToolConfig> = {
     description:
       "Convert a vector dataset to a Hilbert-sorted, compressed GeoParquet file optimized for cloud-native range requests.",
     inputLabel: "Input vector file",
-    inputFilters: [
-      {
-        name: "Vector",
-        extensions: [
-          "parquet",
-          "geoparquet",
-          "geojson",
-          "json",
-          "shp",
-          "gpkg",
-          "fgb",
-          "gml",
-          "kml",
-        ],
-      },
-    ],
+    inputFilters: [{ name: "Vector", extensions: VECTOR_INPUT_EXTENSIONS }],
     outputLabel: "Output GeoParquet file",
     outputFilters: [{ name: "GeoParquet", extensions: ["parquet"] }],
     defaultOutputName: "sorted.parquet",
-    compressions: ["zstd", "snappy", "gzip", "lz4", "uncompressed"],
+    compressions: PARQUET_COMPRESSIONS,
     defaultCompression: "zstd",
+  },
+  "vector-to-flatgeobuf": {
+    title: "Vector to FlatGeobuf",
+    description:
+      "Convert a vector dataset to a Hilbert-sorted FlatGeobuf with a packed spatial index for fast cloud-native access.",
+    inputLabel: "Input vector file",
+    inputFilters: [{ name: "Vector", extensions: VECTOR_INPUT_EXTENSIONS }],
+    outputLabel: "Output FlatGeobuf file",
+    outputFilters: [{ name: "FlatGeobuf", extensions: ["fgb"] }],
+    defaultOutputName: "output.fgb",
+  },
+  "csv-to-geoparquet": {
+    title: "CSV to GeoParquet",
+    description:
+      "Build point geometries from longitude/latitude columns and write a Hilbert-sorted, compressed GeoParquet.",
+    inputLabel: "Input CSV file",
+    inputFilters: [{ name: "CSV", extensions: ["csv", "tsv", "txt"] }],
+    outputLabel: "Output GeoParquet file",
+    outputFilters: [{ name: "GeoParquet", extensions: ["parquet"] }],
+    defaultOutputName: "points.parquet",
+    compressions: PARQUET_COMPRESSIONS,
+    defaultCompression: "zstd",
+  },
+  "vector-to-pmtiles": {
+    title: "Vector to PMTiles",
+    description:
+      "Tile a vector dataset into a single PMTiles archive of vector tiles, ready for cloud-native serving.",
+    inputLabel: "Input vector file",
+    inputFilters: [
+      {
+        name: "Vector",
+        extensions: ["parquet", "geoparquet", "geojson", "json", "gpkg", "fgb"],
+      },
+    ],
+    outputLabel: "Output PMTiles file",
+    outputFilters: [{ name: "PMTiles", extensions: ["pmtiles"] }],
+    defaultOutputName: "tiles.pmtiles",
   },
   "raster-to-cog": {
     title: "Raster to COG",
@@ -173,6 +212,11 @@ export function ConversionDialog() {
   const [browserFiles, setBrowserFiles] = useState<File[]>([]);
   const [compression, setCompression] = useState("");
   const [rowGroupSize, setRowGroupSize] = useState(DEFAULT_ROW_GROUP_SIZE);
+  const [lonColumn, setLonColumn] = useState("longitude");
+  const [latColumn, setLatColumn] = useState("latitude");
+  const [layerName, setLayerName] = useState("data");
+  const [minZoom, setMinZoom] = useState("0");
+  const [maxZoom, setMaxZoom] = useState("14");
   const [runtimeAvailable, setRuntimeAvailable] = useState<boolean | null>(null);
   const [runtimeMessage, setRuntimeMessage] = useState("");
   const [startingServer, setStartingServer] = useState(false);
@@ -182,14 +226,29 @@ export function ConversionDialog() {
 
   const config = kind ? TOOL_CONFIGS[kind] : null;
   const desktop = isTauri();
-  // In the browser, Vector to GeoParquet runs locally with DuckDB-WASM and
-  // never needs the Python sidecar.
-  const usesBrowserRuntime = !desktop && kind === "vector-to-geoparquet";
+  // These conversions run entirely in-browser with DuckDB-WASM and never need
+  // the Python sidecar. FlatGeobuf and PMTiles have no WASM writer, so they
+  // stay sidecar-only.
+  const usesBrowserRuntime =
+    !desktop &&
+    (kind === "vector-to-geoparquet" || kind === "csv-to-geoparquet");
+  const isCsv = kind === "csv-to-geoparquet";
+  const isPmtiles = kind === "vector-to-pmtiles";
+  const showParquetOptions = Boolean(config?.compressions);
 
   const checkRuntime = useCallback(async () => {
     if (usesBrowserRuntime) {
       setRuntimeAvailable(true);
       setRuntimeMessage("Conversion runs in your browser with DuckDB-WASM.");
+      return;
+    }
+    if (!desktop) {
+      // FlatGeobuf / PMTiles have no in-browser writer and need the sidecar,
+      // which a pure web build cannot start.
+      setRuntimeAvailable(false);
+      setRuntimeMessage(
+        "This conversion needs the GeoLibre desktop app or a running sidecar.",
+      );
       return;
     }
     setRuntimeAvailable(null);
@@ -204,7 +263,7 @@ export function ConversionDialog() {
         err instanceof Error ? err.message : "Could not connect to sidecar.",
       );
     }
-  }, [usesBrowserRuntime]);
+  }, [desktop, usesBrowserRuntime]);
 
   // Reset per-tool state when the dialog opens or the tool changes.
   useEffect(() => {
@@ -212,8 +271,13 @@ export function ConversionDialog() {
     setInputPath("");
     setOutputPath("");
     setBrowserFiles([]);
-    setCompression(TOOL_CONFIGS[kind].defaultCompression);
+    setCompression(TOOL_CONFIGS[kind].defaultCompression ?? "zstd");
     setRowGroupSize(DEFAULT_ROW_GROUP_SIZE);
+    setLonColumn("longitude");
+    setLatColumn("latitude");
+    setLayerName("data");
+    setMinZoom("0");
+    setMaxZoom("14");
     setError(null);
     setJob(null);
     void checkRuntime();
@@ -301,6 +365,7 @@ export function ConversionDialog() {
   };
 
   const runBrowserConversion = async () => {
+    const toolId = kind ?? "vector-to-geoparquet";
     const { mainFile, siblings } = splitBrowserSelection(browserFiles);
     if (!mainFile) {
       setError("Choose an input file.");
@@ -311,9 +376,13 @@ export function ConversionDialog() {
       setError("Row group size must be a positive integer.");
       return;
     }
+    if (isCsv && (!lonColumn.trim() || !latColumn.trim())) {
+      setError("Longitude and latitude column names are required.");
+      return;
+    }
     const outputName = outputPath.trim() || defaultGeoParquetName(mainFile.name);
     setJob(
-      browserConversionJob("running", [
+      browserConversionJob(toolId, "running", [
         `Converting ${mainFile.name} with DuckDB-WASM`,
       ]),
     );
@@ -334,6 +403,9 @@ export function ConversionDialog() {
         {
           compression,
           rowGroupSize: parsedRowGroupSize,
+          csv: isCsv
+            ? { lonColumn: lonColumn.trim(), latColumn: latColumn.trim() }
+            : undefined,
         },
       );
       const savedName = await saveBinaryFileWithFallback(
@@ -352,6 +424,7 @@ export function ConversionDialog() {
       );
       setJob(
         browserConversionJob(
+          toolId,
           savedName ? "succeeded" : "failed",
           [
             `Converting ${mainFile.name} with DuckDB-WASM`,
@@ -366,7 +439,7 @@ export function ConversionDialog() {
     } catch (err) {
       const detail =
         err instanceof Error ? err.message : "Could not convert this file.";
-      setJob(browserConversionJob("failed", [detail], detail));
+      setJob(browserConversionJob(toolId, "failed", [detail], detail));
     }
   };
 
@@ -400,29 +473,70 @@ export function ConversionDialog() {
       setError("Choose an output file.");
       return;
     }
+    const input_path = inputPath.trim();
+    const output_path = outputPath.trim();
+    const parsedRowGroupSize = Number.parseInt(rowGroupSize, 10);
+    const rowGroupValid =
+      Number.isFinite(parsedRowGroupSize) && parsedRowGroupSize > 0;
     try {
       if (kind === "vector-to-geoparquet") {
-        const parsedRowGroupSize = Number.parseInt(rowGroupSize, 10);
-        if (!Number.isFinite(parsedRowGroupSize) || parsedRowGroupSize <= 0) {
+        if (!rowGroupValid) {
           setError("Row group size must be a positive integer.");
           return;
         }
         setJob(
           await runVectorToGeoParquet({
-            input_path: inputPath.trim(),
-            output_path: outputPath.trim(),
+            input_path,
+            output_path,
             compression,
             row_group_size: parsedRowGroupSize,
           }),
         );
-      } else {
+      } else if (kind === "vector-to-flatgeobuf") {
+        setJob(await runVectorToFlatGeobuf({ input_path, output_path }));
+      } else if (kind === "csv-to-geoparquet") {
+        if (!rowGroupValid) {
+          setError("Row group size must be a positive integer.");
+          return;
+        }
+        if (!lonColumn.trim() || !latColumn.trim()) {
+          setError("Longitude and latitude column names are required.");
+          return;
+        }
         setJob(
-          await runRasterToCog({
-            input_path: inputPath.trim(),
-            output_path: outputPath.trim(),
+          await runCsvToGeoParquet({
+            input_path,
+            output_path,
+            lon_column: lonColumn.trim(),
+            lat_column: latColumn.trim(),
             compression,
+            row_group_size: parsedRowGroupSize,
           }),
         );
+      } else if (kind === "vector-to-pmtiles") {
+        const parsedMin = Number.parseInt(minZoom, 10);
+        const parsedMax = Number.parseInt(maxZoom, 10);
+        if (
+          !Number.isFinite(parsedMin) ||
+          !Number.isFinite(parsedMax) ||
+          parsedMin < 0 ||
+          parsedMin > parsedMax ||
+          parsedMax > 24
+        ) {
+          setError("Zoom levels must satisfy 0 ≤ min ≤ max ≤ 24.");
+          return;
+        }
+        setJob(
+          await runVectorToPmtiles({
+            input_path,
+            output_path,
+            layer_name: layerName.trim() || "data",
+            min_zoom: parsedMin,
+            max_zoom: parsedMax,
+          }),
+        );
+      } else {
+        setJob(await runRasterToCog({ input_path, output_path, compression }));
       }
     } catch (err) {
       setError(
@@ -499,7 +613,7 @@ export function ConversionDialog() {
                 <FolderOpen className="h-4 w-4" />
               </Button>
             </div>
-            {usesBrowserRuntime && (
+            {usesBrowserRuntime && !isCsv && (
               <p className="text-xs text-muted-foreground">
                 For Shapefiles, select the .shp together with its .dbf, .shx,
                 and .prj files.
@@ -520,7 +634,11 @@ export function ConversionDialog() {
               <Input
                 id="conversion-output"
                 value={outputPath}
-                placeholder={usesBrowserRuntime ? "sorted.parquet" : "File path"}
+                placeholder={
+                  usesBrowserRuntime
+                    ? (config?.defaultOutputName ?? "output")
+                    : "File path"
+                }
                 onChange={(event) => setOutputPath(event.target.value)}
               />
               {!usesBrowserRuntime && (
@@ -537,27 +655,45 @@ export function ConversionDialog() {
             </div>
           </div>
 
-          <div
-            className={cn(
-              "grid gap-4",
-              kind === "vector-to-geoparquet" && "grid-cols-2",
-            )}
-          >
-            <div className="grid gap-1.5">
-              <Label htmlFor="conversion-compression">Compression</Label>
-              <Select
-                id="conversion-compression"
-                value={compression}
-                onChange={(event) => setCompression(event.target.value)}
-              >
-                {(config?.compressions ?? []).map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </Select>
+          {isCsv && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-1.5">
+                <Label htmlFor="conversion-lon">Longitude column</Label>
+                <Input
+                  id="conversion-lon"
+                  value={lonColumn}
+                  placeholder="longitude"
+                  onChange={(event) => setLonColumn(event.target.value)}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="conversion-lat">Latitude column</Label>
+                <Input
+                  id="conversion-lat"
+                  value={latColumn}
+                  placeholder="latitude"
+                  onChange={(event) => setLatColumn(event.target.value)}
+                />
+              </div>
             </div>
-            {kind === "vector-to-geoparquet" && (
+          )}
+
+          {showParquetOptions && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-1.5">
+                <Label htmlFor="conversion-compression">Compression</Label>
+                <Select
+                  id="conversion-compression"
+                  value={compression}
+                  onChange={(event) => setCompression(event.target.value)}
+                >
+                  {(config?.compressions ?? []).map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </Select>
+              </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="conversion-row-group-size">
                   Row group size
@@ -569,8 +705,40 @@ export function ConversionDialog() {
                   onChange={(event) => setRowGroupSize(event.target.value)}
                 />
               </div>
-            )}
-          </div>
+            </div>
+          )}
+
+          {isPmtiles && (
+            <div className="grid grid-cols-[minmax(0,1fr)_5rem_5rem] gap-4">
+              <div className="grid gap-1.5">
+                <Label htmlFor="conversion-layer">Layer name</Label>
+                <Input
+                  id="conversion-layer"
+                  value={layerName}
+                  placeholder="data"
+                  onChange={(event) => setLayerName(event.target.value)}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="conversion-min-zoom">Min zoom</Label>
+                <Input
+                  id="conversion-min-zoom"
+                  inputMode="numeric"
+                  value={minZoom}
+                  onChange={(event) => setMinZoom(event.target.value)}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="conversion-max-zoom">Max zoom</Label>
+                <Input
+                  id="conversion-max-zoom"
+                  inputMode="numeric"
+                  value={maxZoom}
+                  onChange={(event) => setMaxZoom(event.target.value)}
+                />
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center justify-end gap-2">
             <Button

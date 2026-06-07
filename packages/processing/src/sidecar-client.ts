@@ -270,6 +270,33 @@ export interface VectorToGeoParquetRequest {
   row_group_size?: number;
 }
 
+export interface VectorToFlatGeobufRequest {
+  input_path: string;
+  output_path: string;
+}
+
+export interface CsvToGeoParquetRequest {
+  input_path: string;
+  output_path: string;
+  lon_column: string;
+  lat_column: string;
+  /** Parquet compression codec. Defaults to `"zstd"` when omitted. */
+  compression?: string;
+  /** Parquet row group size. Positive integer; defaults to 30000. */
+  row_group_size?: number;
+}
+
+export interface VectorToPmtilesRequest {
+  input_path: string;
+  output_path: string;
+  /** Tile layer name. Defaults to `"data"` when omitted. */
+  layer_name?: string;
+  /** Minimum zoom level. Defaults to 0. */
+  min_zoom?: number;
+  /** Maximum zoom level. Defaults to 14. */
+  max_zoom?: number;
+}
+
 export interface RasterToCogRequest {
   input_path: string;
   output_path: string;
@@ -298,6 +325,39 @@ export async function runVectorToGeoParquet(
 ): Promise<ConversionJob> {
   return startConversion(
     `${baseUrl}/conversion/vector-to-geoparquet`,
+    request,
+    baseUrl,
+  );
+}
+
+export async function runVectorToFlatGeobuf(
+  request: VectorToFlatGeobufRequest,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<ConversionJob> {
+  return startConversion(
+    `${baseUrl}/conversion/vector-to-flatgeobuf`,
+    request,
+    baseUrl,
+  );
+}
+
+export async function runCsvToGeoParquet(
+  request: CsvToGeoParquetRequest,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<ConversionJob> {
+  return startConversion(
+    `${baseUrl}/conversion/csv-to-geoparquet`,
+    request,
+    baseUrl,
+  );
+}
+
+export async function runVectorToPmtiles(
+  request: VectorToPmtilesRequest,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<ConversionJob> {
+  return startConversion(
+    `${baseUrl}/conversion/vector-to-pmtiles`,
     request,
     baseUrl,
   );

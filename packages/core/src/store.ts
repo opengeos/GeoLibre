@@ -20,7 +20,12 @@ import {
   type RecentProjectEntry,
 } from "./types";
 
-export type ConversionToolKind = "vector-to-geoparquet" | "raster-to-cog";
+export type ConversionToolKind =
+  | "vector-to-geoparquet"
+  | "vector-to-flatgeobuf"
+  | "csv-to-geoparquet"
+  | "vector-to-pmtiles"
+  | "raster-to-cog";
 
 export interface AppState {
   projectName: string;

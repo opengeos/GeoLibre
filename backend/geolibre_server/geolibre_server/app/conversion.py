@@ -37,7 +37,7 @@ CONVERSION_RUNTIME_PACKAGES = [
     package.strip()
     for package in os.environ.get(
         "GEOLIBRE_CONVERSION_PACKAGES",
-        "duckdb>=1.1.0,rio-cogeo>=5.0.0",
+        "duckdb>=1.1.0,rio-cogeo>=5.0.0,freestiler>=0.1.0",
     ).split(",")
     if package.strip()
 ]
@@ -66,6 +66,34 @@ class VectorToGeoParquetRequest(BaseModel):
     row_group_size: int = DEFAULT_ROW_GROUP_SIZE
 
 
+class VectorToFlatGeobufRequest(BaseModel):
+    """Request body for a vector to FlatGeobuf conversion."""
+
+    input_path: str
+    output_path: str
+
+
+class CsvToGeoParquetRequest(BaseModel):
+    """Request body for a CSV (with lon/lat columns) to GeoParquet conversion."""
+
+    input_path: str
+    output_path: str
+    lon_column: str
+    lat_column: str
+    compression: str = DEFAULT_VECTOR_COMPRESSION
+    row_group_size: int = DEFAULT_ROW_GROUP_SIZE
+
+
+class VectorToPmtilesRequest(BaseModel):
+    """Request body for a vector to PMTiles conversion."""
+
+    input_path: str
+    output_path: str
+    layer_name: str = "data"
+    min_zoom: int = 0
+    max_zoom: int = 14
+
+
 class RasterToCogRequest(BaseModel):
     """Request body for a raster to Cloud Optimized GeoTIFF conversion."""
 
@@ -74,10 +102,11 @@ class RasterToCogRequest(BaseModel):
     compression: str = DEFAULT_COG_COMPRESSION
 
 
-# Hilbert-sorting the rows before writing produces spatially clustered row
-# groups so range requests over the GeoParquet output stay local. The geometry
-# column is rewritten from WKB when needed so ST_Hilbert and the GeoParquet
-# writer both receive a GEOMETRY-typed column.
+# Hilbert-sorting the rows before writing produces spatially clustered output
+# (row groups for Parquet, the packed R-tree for FlatGeobuf) so range requests
+# stay local. The geometry column is rebuilt from WKB or from CSV lon/lat
+# columns when needed so ST_Hilbert and the writer both receive a GEOMETRY
+# column. `output_format` selects the Parquet or FlatGeobuf writer.
 _VECTOR_SCRIPT = """
 import json, sys
 
@@ -86,51 +115,82 @@ import duckdb
 params = json.loads(sys.argv[1])
 input_path = params["input_path"]
 output_path = params["output_path"]
-compression = params["compression"]
-row_group_size = int(params["row_group_size"])
+output_format = params.get("output_format", "parquet")
+source_kind = params.get("source_kind", "auto")
+compression = params.get("compression", "zstd")
+row_group_size = int(params.get("row_group_size", 30000))
 
 def quote(value):
     return "'" + str(value).replace("'", "''") + "'"
 
+def quote_ident(value):
+    return '"' + str(value).replace('"', '""') + '"'
+
 con = duckdb.connect()
 con.execute("INSTALL spatial; LOAD spatial;")
 
-if input_path.lower().endswith((".parquet", ".geoparquet")):
-    relation = f"read_parquet({quote(input_path)})"
+if source_kind == "csv":
+    lon = params["lon_column"]
+    lat = params["lat_column"]
+    relation = f"read_csv_auto({quote(input_path)}, header=true)"
+    geometry_column = "geometry"
+    quoted_geometry = quote_ident(geometry_column)
+    point = (
+        f"ST_Point(CAST({quote_ident(lon)} AS DOUBLE), "
+        f"CAST({quote_ident(lat)} AS DOUBLE))"
+    )
+    source = f"SELECT *, {point} AS {quoted_geometry} FROM {relation}"
+    # CSV lon/lat are assumed WGS84; ST_Point carries no CRS, so tag it on write.
+    output_srs = "EPSG:4326"
 else:
-    relation = f"ST_Read({quote(input_path)})"
+    if input_path.lower().endswith((".parquet", ".geoparquet")):
+        relation = f"read_parquet({quote(input_path)})"
+    else:
+        relation = f"ST_Read({quote(input_path)})"
 
-columns = con.execute(f"DESCRIBE SELECT * FROM {relation}").fetchall()
-# DuckDB Spatial reports CRS-annotated geometry types such as
-# GEOMETRY('EPSG:4326'), so match on the prefix rather than equality.
-def is_geometry_type(column_type):
-    return str(column_type).upper().startswith("GEOMETRY")
+    columns = con.execute(f"DESCRIBE SELECT * FROM {relation}").fetchall()
+    # DuckDB Spatial reports CRS-annotated geometry types such as
+    # GEOMETRY('EPSG:4326'), so match on the prefix rather than equality.
+    def is_geometry_type(column_type):
+        return str(column_type).upper().startswith("GEOMETRY")
 
-geometry_column = None
-geometry_is_native = True
-for name, column_type, *_ in columns:
-    if is_geometry_type(column_type):
-        geometry_column = name
-        break
-if geometry_column is None:
-    # Plain Parquet may carry geometry as a WKB blob; rebuild it as GEOMETRY.
+    geometry_column = None
+    geometry_is_native = True
     for name, column_type, *_ in columns:
-        if name.lower() in {"geometry", "geom", "wkb_geometry"}:
-            geometry_column, geometry_is_native = name, False
+        if is_geometry_type(column_type):
+            geometry_column = name
             break
-if geometry_column is None:
-    raise SystemExit("No geometry column found in the input dataset.")
+    if geometry_column is None:
+        # Plain Parquet may carry geometry as a WKB blob; rebuild it as GEOMETRY.
+        for name, column_type, *_ in columns:
+            if name.lower() in {"geometry", "geom", "wkb_geometry"}:
+                geometry_column, geometry_is_native = name, False
+                break
+    if geometry_column is None:
+        raise SystemExit("No geometry column found in the input dataset.")
 
-quoted_geometry = '"' + geometry_column.replace('"', '""') + '"'
-if geometry_is_native:
-    source = f"SELECT * FROM {relation}"
+    quoted_geometry = quote_ident(geometry_column)
+    if geometry_is_native:
+        source = f"SELECT * FROM {relation}"
+    else:
+        source = (
+            f"SELECT * REPLACE (ST_GeomFromWKB({quoted_geometry}) AS {quoted_geometry}) "
+            f"FROM {relation}"
+        )
+    # Preserve the source CRS embedded in the GEOMETRY column rather than
+    # assuming one for arbitrary vector inputs.
+    output_srs = None
+
+if output_format == "flatgeobuf":
+    srs_clause = f", SRS {quote(output_srs)}" if output_srs else ""
+    to_clause = f"(FORMAT GDAL, DRIVER 'FlatGeobuf'{srs_clause})"
 else:
-    source = (
-        f"SELECT * REPLACE (ST_GeomFromWKB({quoted_geometry}) AS {quoted_geometry}) "
-        f"FROM {relation}"
+    to_clause = (
+        f"(FORMAT PARQUET, COMPRESSION {quote(compression)}, "
+        f"ROW_GROUP_SIZE {row_group_size})"
     )
 
-print(f"Converting {input_path} -> {output_path} ({compression})")
+print(f"Converting {input_path} -> {output_path} ({output_format})")
 
 # COPY returns the number of rows written, so the feature count comes for free
 # rather than costing a second full scan of the dataset.
@@ -141,8 +201,7 @@ copy_result = con.execute(
       b AS (SELECT ST_Extent(ST_Extent_Agg({quoted_geometry})) AS box FROM src)
       SELECT * FROM src
       ORDER BY ST_Hilbert({quoted_geometry}, (SELECT box FROM b))
-    ) TO {quote(output_path)}
-    (FORMAT PARQUET, COMPRESSION {quote(compression)}, ROW_GROUP_SIZE {row_group_size});
+    ) TO {quote(output_path)} {to_clause};
     \"\"\"
 ).fetchone()
 count = copy_result[0] if copy_result else None
@@ -156,6 +215,63 @@ print(
             "output_path": output_path,
         }
     )
+)
+""".replace("{marker}", _RESULT_MARKER)
+
+
+# Vector to PMTiles via freestiler (pip-installable Rust engine). The input is
+# first materialized to a temporary GeoParquet through DuckDB so any vector
+# format ST_Read understands is accepted, then freestiler tiles it.
+_PMTILES_SCRIPT = """
+import json, os, sys, tempfile, uuid
+
+import duckdb
+import freestiler
+
+params = json.loads(sys.argv[1])
+input_path = params["input_path"]
+output_path = params["output_path"]
+layer_name = params.get("layer_name") or "data"
+min_zoom = int(params.get("min_zoom", 0))
+max_zoom = int(params.get("max_zoom", 14))
+
+def quote(value):
+    return "'" + str(value).replace("'", "''") + "'"
+
+con = duckdb.connect()
+con.execute("INSTALL spatial; LOAD spatial;")
+
+if input_path.lower().endswith((".parquet", ".geoparquet")):
+    relation = f"read_parquet({quote(input_path)})"
+else:
+    relation = f"ST_Read({quote(input_path)})"
+
+tmp_dir = tempfile.mkdtemp(prefix="geolibre-pmtiles-")
+tmp_parquet = os.path.join(tmp_dir, uuid.uuid4().hex + ".parquet")
+print(f"Preparing {input_path} for tiling")
+con.execute(
+    f"COPY (SELECT * FROM {relation}) TO {quote(tmp_parquet)} (FORMAT PARQUET)"
+)
+
+print(f"Tiling to PMTiles (z{min_zoom}-{max_zoom}) as layer {layer_name}")
+freestiler.freestile_file(
+    tmp_parquet,
+    output_path,
+    layer_name=layer_name,
+    min_zoom=min_zoom,
+    max_zoom=max_zoom,
+    quiet=True,
+)
+try:
+    os.remove(tmp_parquet)
+    os.rmdir(tmp_dir)
+except OSError:
+    pass
+
+print(f"Wrote PMTiles to {output_path}")
+print(
+    "{marker}"
+    + json.dumps({"output_path": output_path, "layer_name": layer_name})
 )
 """.replace("{marker}", _RESULT_MARKER)
 
@@ -208,7 +324,7 @@ def _check_runtime_import(python_executable: str) -> None:
     """Raise if a Python executable cannot import the conversion stack."""
     try:
         completed = subprocess.run(
-            [python_executable, "-c", "import duckdb, rio_cogeo"],
+            [python_executable, "-c", "import duckdb, rio_cogeo, freestiler"],
             check=False,
             capture_output=True,
             text=True,
@@ -500,10 +616,87 @@ def vector_to_geoparquet(request: VectorToGeoParquetRequest):
         {
             "input_path": input_path,
             "output_path": output_path,
+            "output_format": "parquet",
+            "source_kind": "auto",
             "compression": compression,
             "row_group_size": request.row_group_size,
         },
         "geoparquet",
+    )
+
+
+@router.post("/vector-to-flatgeobuf")
+def vector_to_flatgeobuf(request: VectorToFlatGeobufRequest):
+    """Convert a vector dataset to a Hilbert-sorted FlatGeobuf."""
+    input_path, output_path = _validate_paths(request.input_path, request.output_path)
+    return _start_job(
+        "vector-to-flatgeobuf",
+        _VECTOR_SCRIPT,
+        {
+            "input_path": input_path,
+            "output_path": output_path,
+            "output_format": "flatgeobuf",
+            "source_kind": "auto",
+        },
+        "flatgeobuf",
+    )
+
+
+@router.post("/csv-to-geoparquet")
+def csv_to_geoparquet(request: CsvToGeoParquetRequest):
+    """Convert a CSV with lon/lat columns to a Hilbert-sorted GeoParquet."""
+    compression = request.compression.strip().lower() or DEFAULT_VECTOR_COMPRESSION
+    if compression not in VECTOR_COMPRESSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported Parquet compression: {request.compression}",
+        )
+    if request.row_group_size <= 0:
+        raise HTTPException(
+            status_code=400, detail="row_group_size must be a positive integer"
+        )
+    if not request.lon_column.strip() or not request.lat_column.strip():
+        raise HTTPException(
+            status_code=400, detail="lon_column and lat_column are required"
+        )
+    input_path, output_path = _validate_paths(request.input_path, request.output_path)
+    return _start_job(
+        "csv-to-geoparquet",
+        _VECTOR_SCRIPT,
+        {
+            "input_path": input_path,
+            "output_path": output_path,
+            "output_format": "parquet",
+            "source_kind": "csv",
+            "lon_column": request.lon_column.strip(),
+            "lat_column": request.lat_column.strip(),
+            "compression": compression,
+            "row_group_size": request.row_group_size,
+        },
+        "geoparquet",
+    )
+
+
+@router.post("/vector-to-pmtiles")
+def vector_to_pmtiles(request: VectorToPmtilesRequest):
+    """Convert a vector dataset to PMTiles vector tiles via freestiler."""
+    if not 0 <= request.min_zoom <= request.max_zoom <= 24:
+        raise HTTPException(
+            status_code=400,
+            detail="Zoom levels must satisfy 0 <= min_zoom <= max_zoom <= 24",
+        )
+    input_path, output_path = _validate_paths(request.input_path, request.output_path)
+    return _start_job(
+        "vector-to-pmtiles",
+        _PMTILES_SCRIPT,
+        {
+            "input_path": input_path,
+            "output_path": output_path,
+            "layer_name": request.layer_name.strip() or "data",
+            "min_zoom": request.min_zoom,
+            "max_zoom": request.max_zoom,
+        },
+        "pmtiles",
     )
 
 

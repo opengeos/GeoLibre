@@ -272,6 +272,11 @@ async function registerGeoJsonExportSource(
 export interface GeoParquetConversionOptions {
   compression?: string;
   rowGroupSize?: number;
+  /**
+   * When set, the input is read as a CSV and a point geometry is built from
+   * the named longitude/latitude columns (assumed WGS84).
+   */
+  csv?: { lonColumn: string; latColumn: string };
 }
 
 export interface GeoParquetConversionResult {
@@ -331,32 +336,47 @@ export async function convertDuckDbVectorToGeoParquet(
     }
     await ensureSpatialExtension(connection);
 
-    const sql = sourceSql(file.name, file.extension);
-    const description = rowsFromResult(
-      await connection.query(`DESCRIBE ${sql}`),
-    );
-    let geometryColumn = description.find((row) =>
-      isGeometryColumnType(row.column_type),
-    )?.column_name;
-    let geometryIsNative = true;
-    if (typeof geometryColumn !== "string") {
-      // Plain Parquet files may carry geometry as a WKB blob; rebuild it as a
-      // GEOMETRY column so ST_Hilbert and the GeoParquet writer can use it.
-      geometryColumn = description.find(
-        (row) =>
-          typeof row.column_name === "string" &&
-          WKB_GEOMETRY_COLUMN_NAMES.has(row.column_name.toLowerCase()),
-      )?.column_name as string | undefined;
-      geometryIsNative = false;
-    }
-    if (typeof geometryColumn !== "string") {
-      throw new Error("DuckDB did not find a geometry column in this file.");
+    let geometryColumn: string;
+    let source: string;
+    if (options.csv) {
+      // Build a point geometry from CSV lon/lat columns (assumed WGS84).
+      geometryColumn = "geometry";
+      const geometrySql = quoteIdentifier(geometryColumn);
+      const lonSql = quoteIdentifier(options.csv.lonColumn);
+      const latSql = quoteIdentifier(options.csv.latColumn);
+      source =
+        `SELECT *, ST_Point(CAST(${lonSql} AS DOUBLE), CAST(${latSql} AS DOUBLE)) ` +
+        `AS ${geometrySql} FROM read_csv_auto(${quoteSqlString(file.name)}, header=true)`;
+    } else {
+      const sql = sourceSql(file.name, file.extension);
+      const description = rowsFromResult(
+        await connection.query(`DESCRIBE ${sql}`),
+      );
+      let detected = description.find((row) =>
+        isGeometryColumnType(row.column_type),
+      )?.column_name;
+      let geometryIsNative = true;
+      if (typeof detected !== "string") {
+        // Plain Parquet files may carry geometry as a WKB blob; rebuild it as a
+        // GEOMETRY column so ST_Hilbert and the GeoParquet writer can use it.
+        detected = description.find(
+          (row) =>
+            typeof row.column_name === "string" &&
+            WKB_GEOMETRY_COLUMN_NAMES.has(row.column_name.toLowerCase()),
+        )?.column_name as string | undefined;
+        geometryIsNative = false;
+      }
+      if (typeof detected !== "string") {
+        throw new Error("DuckDB did not find a geometry column in this file.");
+      }
+      geometryColumn = detected;
+      const geometrySql = quoteIdentifier(geometryColumn);
+      source = geometryIsNative
+        ? sql
+        : `SELECT * REPLACE (ST_GeomFromWKB(${geometrySql}) AS ${geometrySql}) FROM (${sql}) AS data`;
     }
 
     const geometrySql = quoteIdentifier(geometryColumn);
-    const source = geometryIsNative
-      ? sql
-      : `SELECT * REPLACE (ST_GeomFromWKB(${geometrySql}) AS ${geometrySql}) FROM (${sql}) AS data`;
 
     const countRow = rowsFromResult(
       await connection.query(

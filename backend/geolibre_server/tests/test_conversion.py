@@ -5,27 +5,30 @@ from fastapi import HTTPException
 
 from geolibre_server.app import conversion
 from geolibre_server.app.conversion import (
+    _PMTILES_SCRIPT,
     _RASTER_SCRIPT,
     _RESULT_MARKER,
     _VECTOR_SCRIPT,
     _evict_finished_jobs_locked,
     _validate_paths,
+    csv_to_geoparquet,
     raster_to_cog,
     vector_to_geoparquet,
+    vector_to_pmtiles,
+    CsvToGeoParquetRequest,
     RasterToCogRequest,
     VectorToGeoParquetRequest,
+    VectorToPmtilesRequest,
 )
 from geolibre_server.app.runtime import JobState
 
 
 def test_embedded_scripts_compile() -> None:
     """The inline conversion scripts must be valid Python with a result marker."""
-    compile(_VECTOR_SCRIPT, "<vector>", "exec")
-    compile(_RASTER_SCRIPT, "<raster>", "exec")
-    assert _RESULT_MARKER in _VECTOR_SCRIPT
-    assert _RESULT_MARKER in _RASTER_SCRIPT
-    assert "{marker}" not in _VECTOR_SCRIPT
-    assert "{marker}" not in _RASTER_SCRIPT
+    for script in (_VECTOR_SCRIPT, _RASTER_SCRIPT, _PMTILES_SCRIPT):
+        compile(script, "<script>", "exec")
+        assert _RESULT_MARKER in script
+        assert "{marker}" not in script
 
 
 def test_validate_paths_accepts_existing_input_and_folder(tmp_path: Path) -> None:
@@ -96,6 +99,52 @@ def test_raster_to_cog_rejects_unknown_compression(tmp_path: Path) -> None:
     )
     with pytest.raises(HTTPException) as excinfo:
         raster_to_cog(request)
+    assert excinfo.value.status_code == 400
+
+
+def test_csv_to_geoparquet_requires_lon_lat(tmp_path: Path) -> None:
+    """Missing lon/lat column names are rejected before starting a job."""
+    source = tmp_path / "points.csv"
+    source.write_text("name,x,y\n", encoding="utf-8")
+    request = CsvToGeoParquetRequest(
+        input_path=str(source),
+        output_path=str(tmp_path / "out.parquet"),
+        lon_column=" ",
+        lat_column="y",
+    )
+    with pytest.raises(HTTPException) as excinfo:
+        csv_to_geoparquet(request)
+    assert excinfo.value.status_code == 400
+
+
+def test_csv_to_geoparquet_rejects_unknown_compression(tmp_path: Path) -> None:
+    """Unsupported Parquet compressions are rejected for CSV conversion too."""
+    source = tmp_path / "points.csv"
+    source.write_text("name,x,y\n", encoding="utf-8")
+    request = CsvToGeoParquetRequest(
+        input_path=str(source),
+        output_path=str(tmp_path / "out.parquet"),
+        lon_column="x",
+        lat_column="y",
+        compression="brotli",
+    )
+    with pytest.raises(HTTPException) as excinfo:
+        csv_to_geoparquet(request)
+    assert excinfo.value.status_code == 400
+
+
+def test_vector_to_pmtiles_rejects_bad_zoom_range(tmp_path: Path) -> None:
+    """min_zoom greater than max_zoom is rejected before starting a job."""
+    source = tmp_path / "in.parquet"
+    source.write_bytes(b"")
+    request = VectorToPmtilesRequest(
+        input_path=str(source),
+        output_path=str(tmp_path / "out.pmtiles"),
+        min_zoom=10,
+        max_zoom=4,
+    )
+    with pytest.raises(HTTPException) as excinfo:
+        vector_to_pmtiles(request)
     assert excinfo.value.status_code == 400
 
 

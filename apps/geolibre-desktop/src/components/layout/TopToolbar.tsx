@@ -766,6 +766,21 @@ export function TopToolbar({
                 Vector to GeoParquet
               </DropdownMenuItem>
               <DropdownMenuItem
+                onSelect={() => setConversionOpen("vector-to-flatgeobuf")}
+              >
+                Vector to FlatGeobuf
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setConversionOpen("csv-to-geoparquet")}
+              >
+                CSV to GeoParquet
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setConversionOpen("vector-to-pmtiles")}
+              >
+                Vector to PMTiles
+              </DropdownMenuItem>
+              <DropdownMenuItem
                 onSelect={() => setConversionOpen("raster-to-cog")}
               >
                 Raster to COG
