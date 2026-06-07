@@ -152,6 +152,29 @@ pip install -e .
 uvicorn geolibre_server.app.main:app --host 127.0.0.1 --port 8765
 ```
 
+### Conversion tools (Processing → Conversion)
+
+The **Processing → Conversion** menu (Vector → GeoParquet / FlatGeobuf,
+CSV → GeoParquet, Vector → PMTiles, Raster → COG) talks to this sidecar at
+`http://127.0.0.1:8765`. **Vector → GeoParquet** and **CSV → GeoParquet** also
+run fully in the browser with DuckDB-WASM and need no sidecar; the others
+require it.
+
+To use them from the **web** build, start the sidecar and serve the app from
+`localhost:5173` (CORS is restricted to that origin and the Tauri origins):
+
+```bash
+# install the conversion extras (DuckDB, rio-cogeo, freestiler)
+pip install -e "backend/geolibre_server[conversion]"
+# run it
+geolibre-server   # or: uvicorn geolibre_server.app.main:app --host 127.0.0.1 --port 8765
+```
+
+The sidecar self-bootstraps a managed runtime on first use; set
+`GEOLIBRE_CONVERSION_PYTHON=$(which python)` to reuse the current environment
+instead. See [backend/geolibre_server/README.md](backend/geolibre_server/README.md)
+for details.
+
 ## Repository layout
 
 ```

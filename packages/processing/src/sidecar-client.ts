@@ -370,9 +370,16 @@ export async function runRasterToCog(
   return startConversion(`${baseUrl}/conversion/raster-to-cog`, request, baseUrl);
 }
 
+type ConversionRequest =
+  | VectorToGeoParquetRequest
+  | VectorToFlatGeobufRequest
+  | CsvToGeoParquetRequest
+  | VectorToPmtilesRequest
+  | RasterToCogRequest;
+
 async function startConversion(
   url: string,
-  request: VectorToGeoParquetRequest | RasterToCogRequest,
+  request: ConversionRequest,
   baseUrl: string,
 ): Promise<ConversionJob> {
   let res: Response;
@@ -427,6 +434,6 @@ function sidecarConnectionError(baseUrl: string, error: unknown): Error {
   console.debug("GeoLibre sidecar unreachable:", error);
   return new Error(
     `Could not connect to the GeoLibre sidecar at ${baseUrl}. ` +
-      "Start the sidecar to run Whitebox tools.",
+      "Start the sidecar to run processing tools.",
   );
 }

@@ -378,6 +378,10 @@ export async function convertDuckDbVectorToGeoParquet(
 
     const geometrySql = quoteIdentifier(geometryColumn);
 
+    // Unlike the Python sidecar, DuckDB-WASM's connection.query does not surface
+    // the COPY row count, so a separate COUNT(*) is required to report the
+    // feature total. This is a second scan; keep it cheap by not materializing
+    // rows. Remove only if the count is dropped from the result.
     const countRow = rowsFromResult(
       await connection.query(
         `SELECT COUNT(*) AS feature_count FROM (${source}) AS src`,

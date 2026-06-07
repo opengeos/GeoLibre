@@ -36,6 +36,7 @@ import {
   isTauri,
   pickLocalPathWithFallback,
   pickSavePathWithFallback,
+  readCsvHeaderColumns,
   saveBinaryFileWithFallback,
   type FileDialogFilter,
 } from "../../lib/tauri-io";
@@ -80,6 +81,22 @@ function browserConversionJob(
     messages,
     outputs: {},
     error,
+  };
+}
+
+const LON_PATTERN = /^(lon|lng|long|longitude|x|x_coord|easting)$/i;
+const LAT_PATTERN = /^(lat|latitude|y|y_coord|northing)$/i;
+
+/** Guess the longitude/latitude columns from a CSV's header names. */
+function guessLonLatColumns(columns: string[]): {
+  lon: string;
+  lat: string;
+} {
+  const lon = columns.find((name) => LON_PATTERN.test(name.trim()));
+  const lat = columns.find((name) => LAT_PATTERN.test(name.trim()));
+  return {
+    lon: lon ?? columns[0] ?? "",
+    lat: lat ?? columns[1] ?? "",
   };
 }
 
@@ -214,6 +231,7 @@ export function ConversionDialog() {
   const [rowGroupSize, setRowGroupSize] = useState(DEFAULT_ROW_GROUP_SIZE);
   const [lonColumn, setLonColumn] = useState("longitude");
   const [latColumn, setLatColumn] = useState("latitude");
+  const [csvColumns, setCsvColumns] = useState<string[]>([]);
   const [layerName, setLayerName] = useState("data");
   const [minZoom, setMinZoom] = useState("0");
   const [maxZoom, setMaxZoom] = useState("14");
@@ -234,7 +252,12 @@ export function ConversionDialog() {
     (kind === "vector-to-geoparquet" || kind === "csv-to-geoparquet");
   const isCsv = kind === "csv-to-geoparquet";
   const isPmtiles = kind === "vector-to-pmtiles";
-  const showParquetOptions = Boolean(config?.compressions);
+  const showCompression = Boolean(config?.compressions);
+  // Row group size is a Parquet concept, so it is shown only for the
+  // GeoParquet writers — not for Raster to COG, which also has a compression
+  // option.
+  const showRowGroup =
+    kind === "vector-to-geoparquet" || kind === "csv-to-geoparquet";
 
   const checkRuntime = useCallback(async () => {
     if (usesBrowserRuntime) {
@@ -275,6 +298,7 @@ export function ConversionDialog() {
     setRowGroupSize(DEFAULT_ROW_GROUP_SIZE);
     setLonColumn("longitude");
     setLatColumn("latitude");
+    setCsvColumns([]);
     setLayerName("data");
     setMinZoom("0");
     setMaxZoom("14");
@@ -290,6 +314,7 @@ export function ConversionDialog() {
     // Schedule the next poll only after the current request resolves so a slow
     // sidecar cannot accumulate overlapping, out-of-order in-flight requests.
     let cancelled = false;
+    let timer: number;
     const poll = async () => {
       if (cancelled) return;
       try {
@@ -297,7 +322,7 @@ export function ConversionDialog() {
         if (cancelled) return;
         setJob(next);
         if (RUNNING_JOB_STATUSES.has(next.status)) {
-          window.setTimeout(poll, 1000);
+          timer = window.setTimeout(poll, 1000);
         }
       } catch (err) {
         if (!cancelled) {
@@ -305,7 +330,7 @@ export function ConversionDialog() {
         }
       }
     };
-    const timer = window.setTimeout(poll, 1000);
+    timer = window.setTimeout(poll, 1000);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
@@ -316,6 +341,17 @@ export function ConversionDialog() {
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ block: "end" });
   }, [job?.messages.length]);
+
+  // Read the CSV header and pre-fill the lon/lat dropdowns with a best guess.
+  const loadCsvColumns = async (source: File | string) => {
+    const columns = await readCsvHeaderColumns(source);
+    setCsvColumns(columns);
+    if (columns.length) {
+      const guess = guessLonLatColumns(columns);
+      setLonColumn(guess.lon);
+      setLatColumn(guess.lat);
+    }
+  };
 
   const pickBrowserInput = () => {
     if (!config) return;
@@ -338,6 +374,7 @@ export function ConversionDialog() {
         setOutputPath((current) =>
           current.trim() ? current : defaultGeoParquetName(mainFile.name),
         );
+        if (isCsv) void loadCsvColumns(mainFile);
       }
     };
     input.click();
@@ -352,7 +389,10 @@ export function ConversionDialog() {
     const path = await pickLocalPathWithFallback({
       filters: config.inputFilters,
     });
-    if (path) setInputPath(path);
+    if (path) {
+      setInputPath(path);
+      if (isCsv) void loadCsvColumns(path);
+    }
   };
 
   const pickOutput = async () => {
@@ -659,27 +699,55 @@ export function ConversionDialog() {
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-1.5">
                 <Label htmlFor="conversion-lon">Longitude column</Label>
-                <Input
-                  id="conversion-lon"
-                  value={lonColumn}
-                  placeholder="longitude"
-                  onChange={(event) => setLonColumn(event.target.value)}
-                />
+                {csvColumns.length > 0 ? (
+                  <Select
+                    id="conversion-lon"
+                    value={lonColumn}
+                    onChange={(event) => setLonColumn(event.target.value)}
+                  >
+                    {csvColumns.map((column) => (
+                      <option key={column} value={column}>
+                        {column}
+                      </option>
+                    ))}
+                  </Select>
+                ) : (
+                  <Input
+                    id="conversion-lon"
+                    value={lonColumn}
+                    placeholder="longitude"
+                    onChange={(event) => setLonColumn(event.target.value)}
+                  />
+                )}
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="conversion-lat">Latitude column</Label>
-                <Input
-                  id="conversion-lat"
-                  value={latColumn}
-                  placeholder="latitude"
-                  onChange={(event) => setLatColumn(event.target.value)}
-                />
+                {csvColumns.length > 0 ? (
+                  <Select
+                    id="conversion-lat"
+                    value={latColumn}
+                    onChange={(event) => setLatColumn(event.target.value)}
+                  >
+                    {csvColumns.map((column) => (
+                      <option key={column} value={column}>
+                        {column}
+                      </option>
+                    ))}
+                  </Select>
+                ) : (
+                  <Input
+                    id="conversion-lat"
+                    value={latColumn}
+                    placeholder="latitude"
+                    onChange={(event) => setLatColumn(event.target.value)}
+                  />
+                )}
               </div>
             </div>
           )}
 
-          {showParquetOptions && (
-            <div className="grid grid-cols-2 gap-4">
+          {showCompression && (
+            <div className={cn("grid gap-4", showRowGroup && "grid-cols-2")}>
               <div className="grid gap-1.5">
                 <Label htmlFor="conversion-compression">Compression</Label>
                 <Select
@@ -694,17 +762,19 @@ export function ConversionDialog() {
                   ))}
                 </Select>
               </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="conversion-row-group-size">
-                  Row group size
-                </Label>
-                <Input
-                  id="conversion-row-group-size"
-                  inputMode="numeric"
-                  value={rowGroupSize}
-                  onChange={(event) => setRowGroupSize(event.target.value)}
-                />
-              </div>
+              {showRowGroup && (
+                <div className="grid gap-1.5">
+                  <Label htmlFor="conversion-row-group-size">
+                    Row group size
+                  </Label>
+                  <Input
+                    id="conversion-row-group-size"
+                    inputMode="numeric"
+                    value={rowGroupSize}
+                    onChange={(event) => setRowGroupSize(event.target.value)}
+                  />
+                </div>
+              )}
             </div>
           )}
 

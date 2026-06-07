@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 import threading
@@ -28,19 +29,18 @@ from .runtime import (
 )
 
 router = APIRouter(prefix="/conversion", tags=["conversion"])
+logger = logging.getLogger(__name__)
 
 CONVERSION_RUN_TIMEOUT_SECS = 3600
 CONVERSION_PYTHON_VERSION = os.environ.get(
     "GEOLIBRE_CONVERSION_PYTHON_VERSION", "3.12"
 )
-CONVERSION_RUNTIME_PACKAGES = [
-    package.strip()
-    for package in os.environ.get(
-        "GEOLIBRE_CONVERSION_PACKAGES",
-        "duckdb>=1.1.0,rio-cogeo>=5.0.0,freestiler>=0.1.0",
-    ).split(",")
-    if package.strip()
-]
+# Whitespace-separated so a single requirement may carry a comma-joined version
+# range (e.g. "duckdb>=1.1.0,<2.0.0") without being split into two tokens.
+CONVERSION_RUNTIME_PACKAGES = os.environ.get(
+    "GEOLIBRE_CONVERSION_PACKAGES",
+    "duckdb>=1.1.0 rio-cogeo>=5.0.0 freestiler>=0.1.0",
+).split()
 
 VECTOR_COMPRESSIONS = {"zstd", "snappy", "gzip", "lz4", "uncompressed"}
 DEFAULT_VECTOR_COMPRESSION = "zstd"
@@ -140,7 +140,9 @@ if source_kind == "csv":
         f"CAST({quote_ident(lat)} AS DOUBLE))"
     )
     source = f"SELECT *, {point} AS {quoted_geometry} FROM {relation}"
-    # CSV lon/lat are assumed WGS84; ST_Point carries no CRS, so tag it on write.
+    # CSV lon/lat are WGS84. DuckDB has no ST_SetSRID, but the GeoParquet spec
+    # treats an absent CRS as OGC:CRS84 (WGS84 lon/lat), so the Parquet output
+    # is correct. output_srs only tags the FlatGeobuf writer below.
     output_srs = "EPSG:4326"
 else:
     if input_path.lower().endswith((".parquet", ".geoparquet")):
@@ -223,7 +225,7 @@ print(
 # first materialized to a temporary GeoParquet through DuckDB so any vector
 # format ST_Read understands is accepted, then freestiler tiles it.
 _PMTILES_SCRIPT = """
-import json, os, sys, tempfile, uuid
+import json, os, shutil, sys, tempfile, uuid
 
 import duckdb
 import freestiler
@@ -248,25 +250,24 @@ else:
 
 tmp_dir = tempfile.mkdtemp(prefix="geolibre-pmtiles-")
 tmp_parquet = os.path.join(tmp_dir, uuid.uuid4().hex + ".parquet")
-print(f"Preparing {input_path} for tiling")
-con.execute(
-    f"COPY (SELECT * FROM {relation}) TO {quote(tmp_parquet)} (FORMAT PARQUET)"
-)
-
-print(f"Tiling to PMTiles (z{min_zoom}-{max_zoom}) as layer {layer_name}")
-freestiler.freestile_file(
-    tmp_parquet,
-    output_path,
-    layer_name=layer_name,
-    min_zoom=min_zoom,
-    max_zoom=max_zoom,
-    quiet=True,
-)
+# try/finally so the temp dir is removed even if tiling raises or is killed.
 try:
-    os.remove(tmp_parquet)
-    os.rmdir(tmp_dir)
-except OSError:
-    pass
+    print(f"Preparing {input_path} for tiling")
+    con.execute(
+        f"COPY (SELECT * FROM {relation}) TO {quote(tmp_parquet)} (FORMAT PARQUET)"
+    )
+
+    print(f"Tiling to PMTiles (z{min_zoom}-{max_zoom}) as layer {layer_name}")
+    freestiler.freestile_file(
+        tmp_parquet,
+        output_path,
+        layer_name=layer_name,
+        min_zoom=min_zoom,
+        max_zoom=max_zoom,
+        quiet=True,
+    )
+finally:
+    shutil.rmtree(tmp_dir, ignore_errors=True)
 
 print(f"Wrote PMTiles to {output_path}")
 print(
@@ -431,6 +432,12 @@ def _validate_paths(input_path: str, output_path: str) -> tuple[str, str]:
             status_code=400,
             detail=f"Output folder does not exist: {target.parent}",
         )
+    # Reading from and writing to the same file would truncate the input.
+    if source.resolve() == target.resolve():
+        raise HTTPException(
+            status_code=400,
+            detail="input_path and output_path must be different files",
+        )
     return str(source), str(target)
 
 
@@ -438,10 +445,9 @@ def _job_update(job_id: str, **patch: Any) -> None:
     """Update an in-memory conversion job."""
     with _JOBS_LOCK:
         job = _JOBS[job_id]
-        data = job.model_dump()
-        data.update(patch)
-        data["updated_at"] = _utc_now()
-        _JOBS[job_id] = JobState(**data)
+        # model_copy(update=...) mirrors _append_job_message and skips the full
+        # re-validation that model_dump() + JobState(**data) would incur.
+        _JOBS[job_id] = job.model_copy(update={**patch, "updated_at": _utc_now()})
 
 
 def _append_job_message(job_id: str, message: str) -> None:
@@ -545,6 +551,14 @@ def _run_conversion_job(
         )
     except Exception as exc:
         _job_update(job_id, status="failed", error=str(exc))
+        # Remove a partial output so a retry starts clean and stale bytes do not
+        # confuse downstream tools.
+        output_path = params.get("output_path")
+        if output_path:
+            try:
+                Path(output_path).unlink(missing_ok=True)
+            except OSError:
+                pass
     finally:
         # Guard against leaking a still-running subprocess if an exception is
         # raised before it exits (e.g. during streaming or a job-state update).
@@ -592,8 +606,20 @@ def conversion_status():
             "available": True,
             "message": "Conversion runtime (DuckDB + rio-cogeo) is available.",
         }
-    except Exception as exc:
-        return {"available": False, "message": str(exc)}
+    except RuntimeBootstrapError as exc:
+        # Log the detailed bootstrap error server-side but return a stable
+        # message rather than leaking local runtime/setup specifics.
+        logger.warning("Conversion runtime unavailable: %s", exc)
+        return {
+            "available": False,
+            "message": "Conversion runtime is unavailable. Check the sidecar logs.",
+        }
+    except Exception:
+        logger.exception("Unexpected error while checking conversion runtime")
+        return {
+            "available": False,
+            "message": "Conversion runtime status check failed.",
+        }
 
 
 @router.post("/vector-to-geoparquet")

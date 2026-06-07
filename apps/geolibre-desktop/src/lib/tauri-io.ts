@@ -4,6 +4,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   readFile,
   readTextFile,
+  readTextFileLines,
   writeFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
@@ -1008,4 +1009,43 @@ export async function loadDroppedVectorPaths(
   }
 
   return layers;
+}
+
+/** Split a CSV/TSV header line into trimmed column names. */
+export function parseCsvHeaderLine(line: string): string[] {
+  const header = line.replace(/^﻿/, "").replace(/[\r\n]+$/, "");
+  if (!header) return [];
+  // Pick the delimiter that yields the most fields (comma, tab, or semicolon).
+  const delimiter = [",", "\t", ";"]
+    .map((d) => ({ d, count: header.split(d).length }))
+    .sort((a, b) => b.count - a.count)[0].d;
+  return header
+    .split(delimiter)
+    .map((name) => name.trim().replace(/^"(.*)"$/, "$1").trim())
+    .filter((name) => name.length > 0);
+}
+
+/**
+ * Read the header column names of a CSV from a browser File or a desktop path.
+ * Reads only the first line so large CSVs are not loaded into memory.
+ */
+export async function readCsvHeaderColumns(
+  source: File | string,
+): Promise<string[]> {
+  try {
+    if (typeof source !== "string") {
+      // Browser File: decode just the leading slice that holds the header.
+      const text = await source.slice(0, 65536).text();
+      return parseCsvHeaderLine(text.split(/\r?\n/, 1)[0] ?? "");
+    }
+    if (!isTauri()) return [];
+    const lines = await readTextFileLines(source);
+    for await (const line of lines) {
+      return parseCsvHeaderLine(line);
+    }
+    return [];
+  } catch (error) {
+    console.warn("Could not read CSV header", error);
+    return [];
+  }
 }
