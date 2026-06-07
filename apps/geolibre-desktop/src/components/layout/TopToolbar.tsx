@@ -75,6 +75,7 @@ import {
   Bug,
   CircleHelp,
   Database,
+  FilePen,
   FilePlus2,
   Folder,
   FolderOpen,
@@ -88,7 +89,6 @@ import {
   Puzzle,
   RefreshCw,
   Save,
-  SaveAll,
   SlidersHorizontal,
   Sun,
   Wrench,
@@ -389,13 +389,22 @@ export function TopToolbar({
       state.projectPath && !isHttpUrl(state.projectPath)
         ? state.projectPath
         : null;
-    const path =
-      !options?.saveAs && existingLocalPath
-        ? await saveProjectFileToPath(content, existingLocalPath)
-        : await saveProjectFile(
-            content,
-            existingLocalPath ?? `${defaultProjectName}.geolibre.json`,
-          );
+    let path: string | null;
+    try {
+      path =
+        !options?.saveAs && existingLocalPath
+          ? await saveProjectFileToPath(content, existingLocalPath)
+          : await saveProjectFile(
+              content,
+              existingLocalPath ?? `${defaultProjectName}.geolibre.json`,
+            );
+    } catch (error) {
+      console.error("Failed to save project", error);
+      setActionError(
+        error instanceof Error ? error.message : "Could not save the project.",
+      );
+      return false;
+    }
     if (!path) return false;
     setProjectPath(path);
     rememberRecentProject({
@@ -597,7 +606,7 @@ export function TopToolbar({
             </DropdownMenuSubContent>
           </DropdownMenuSub>
           <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
+            <DropdownMenuSubTrigger disabled={recentProjects.length === 0}>
               <History className="mr-2 h-3.5 w-3.5" />
               Open Recent
             </DropdownMenuSubTrigger>
@@ -667,7 +676,7 @@ export function TopToolbar({
             Save
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => void handleSaveAs()}>
-            <SaveAll className="mr-2 h-3.5 w-3.5" />
+            <FilePen className="mr-2 h-3.5 w-3.5" />
             Save As...
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -1060,7 +1069,7 @@ export function TopToolbar({
       >
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Could not open project</DialogTitle>
+            <DialogTitle>Something went wrong</DialogTitle>
             <DialogDescription>{actionError}</DialogDescription>
           </DialogHeader>
           <div className="flex justify-end">
