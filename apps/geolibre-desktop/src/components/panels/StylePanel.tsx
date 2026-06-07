@@ -1339,8 +1339,10 @@ export function StylePanel({
     const targetIndex = otherLayers.findIndex((l) => l.id === value);
     if (targetIndex >= 0) {
       setDraftBeforeId("");
-      if (layer.beforeId) updateLayer(layer.id, { beforeId: undefined });
+      // Move first so the sync triggered by each store update already sees
+      // the correct array position.
       moveLayer(layer.id, targetIndex);
+      if (layer.beforeId) updateLayer(layer.id, { beforeId: undefined });
       return;
     }
     setDraftBeforeId(value);
@@ -1382,6 +1384,8 @@ export function StylePanel({
       extrusionHeightExpression: draftHeightExpression.trim(),
     });
   };
+  // NOTE: not reactive to basemap switches — the ref does not trigger a
+  // re-render, so the list refreshes on the next store-driven render.
   const basemapStyleLayerIds =
     mapControllerRef.current?.getBasemapStyleLayerIds() ?? [];
   const otherLayers = layers.filter((l) => l.id !== layer.id);
