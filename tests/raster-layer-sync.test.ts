@@ -49,7 +49,11 @@ function rasterInfo(patch: Partial<RasterLayerInfo> = {}): RasterLayerInfo {
   };
 }
 
-/** Recorder fake standing in for RasterControl in store->control tests. */
+/**
+ * Recorder fake standing in for RasterControl in store->control tests.
+ * getState is a static snapshot of options.collapsed: tests exercising
+ * event-driven expand/collapse transitions need a stateful fake instead.
+ */
 function fakeControl(
   infos: RasterLayerInfo[] = [],
   options: { collapsed?: boolean } = {},

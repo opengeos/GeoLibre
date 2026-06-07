@@ -75,5 +75,9 @@ describe("ensureMercatorProjection", () => {
 
     assert.deepEqual(fake.setProjectionCalls, []);
     assert.equal(fake.idleHandlers.length, 1);
+
+    fake.emitIdle();
+
+    assert.deepEqual(fake.setProjectionCalls, []);
   });
 });

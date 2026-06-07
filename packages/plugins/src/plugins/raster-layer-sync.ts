@@ -365,7 +365,13 @@ function rasterPanelCollapsedFromControl(
   try {
     const collapsed = control.getState?.().collapsed;
     return typeof collapsed === "boolean" ? collapsed : true;
-  } catch {
+  } catch (error) {
+    // getState is optional, so only a throwing implementation lands here;
+    // surface it instead of letting it look like the method being absent.
+    console.warn(
+      "[GeoLibre] rasterPanelCollapsedFromControl: getState threw",
+      error,
+    );
     return true;
   }
 }

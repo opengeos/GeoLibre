@@ -32,6 +32,7 @@ type RasterControlConstructor = typeof RasterControl;
 let rasterControlClassPromise: Promise<RasterControlConstructor> | null = null;
 let rasterControl: RasterControl | null = null;
 let rasterControlMounted = false;
+let restorePanelExpandTimeout: number | null = null;
 
 /**
  * Opens the maplibre-gl-raster panel, mounting the control on first use.
@@ -174,10 +175,16 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
     // restores may still be loading; this final pass settles the store once
     // every raster has either loaded or failed.
     void Promise.allSettled(pending).then(() => {
-      // A control torn down mid-restore (map reinitialisation) must not let
-      // this stale callback rewrite layers owned by its successor.
-      if (control !== rasterControl) return;
-      syncRasterLayersToStore(control);
+      // Defer one task so this sync runs after the deferred panel expand in
+      // applyRestoredRasterPanelState: with no pending rasters, allSettled
+      // resolves as a microtask, and syncing then would briefly write the
+      // pre-expand collapsed state to the store.
+      window.setTimeout(() => {
+        // A control torn down mid-restore (map reinitialisation) must not
+        // let this stale callback rewrite layers owned by its successor.
+        if (control !== rasterControl) return;
+        syncRasterLayersToStore(control);
+      }, 0);
     });
   })().catch((error) => {
     console.error("[GeoLibre] Failed to restore raster layers", error);
@@ -297,6 +304,13 @@ function applyRestoredRasterPanelState(
   control: RasterControl,
   panelCollapsed: boolean,
 ): void {
+  // A restore queued by an earlier project load must not fire after this
+  // one has applied a different panel state to the same control.
+  if (restorePanelExpandTimeout !== null) {
+    window.clearTimeout(restorePanelExpandTimeout);
+    restorePanelExpandTimeout = null;
+  }
+
   if (panelCollapsed) {
     hideRasterControl(control);
     return;
@@ -306,7 +320,8 @@ function applyRestoredRasterPanelState(
   // Defer the expand like openRasterLayerPanel does: on a first-mount
   // restore this runs in the same task as addControl, and expanding before
   // MapLibre has laid the control out can measure the panel at zero size.
-  window.setTimeout(() => {
+  restorePanelExpandTimeout = window.setTimeout(() => {
+    restorePanelExpandTimeout = null;
     // A control torn down before this task runs (map reinitialisation)
     // must not expand or fire panel-state syncs against its successor.
     if (control !== rasterControl) return;
