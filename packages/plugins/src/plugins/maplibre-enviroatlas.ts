@@ -152,7 +152,7 @@ const enviroAtlasStoreSync = createWebServiceStoreSync(enviroAtlasAdapter);
 export const maplibreEnviroAtlasPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-enviroatlas",
   name: "US EPA EnviroAtlas",
-  version: "0.1.0",
+  version: "0.1.1",
   activate: (app: GeoLibreAppAPI) => {
     if (!enviroAtlasControl) {
       enviroAtlasControl = new EnviroAtlasControl(

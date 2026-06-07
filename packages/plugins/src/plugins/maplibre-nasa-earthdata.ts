@@ -91,6 +91,7 @@ const nasaEarthdataAdapter: WebServiceAdapter<NasaEarthdataControl> = {
     control.off("layerremove", controlEventHandler);
     control.off("statechange", controlEventHandler);
     controlEventHandler = null;
+    gibsLayerCache.clear();
   },
   listActive: (control) => {
     const map = control.getMap();
@@ -137,9 +138,15 @@ const nasaEarthdataAdapter: WebServiceAdapter<NasaEarthdataControl> = {
     control.setLayerVisibility(instanceKey(entry), visible);
   },
   adopt: (control, layers) => {
+    const existingKeys = new Set(
+      control.getState().addedLayers.map((added) => added.key),
+    );
     const restored = layers
       .map(addedLayerStateFromStoreLayer)
-      .filter((state): state is AddedLayerState => state !== null);
+      .filter(
+        (state): state is AddedLayerState =>
+          state !== null && !existingKeys.has(state.key),
+      );
     if (restored.length === 0) return;
     // setState reconciles addedLayers against the map, deferring until the
     // GIBS capabilities have loaded when necessary.
@@ -164,7 +171,7 @@ const nasaEarthdataStoreSync = createWebServiceStoreSync(nasaEarthdataAdapter);
 export const maplibreNasaEarthdataPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-nasa-earthdata",
   name: "NASA Earthdata",
-  version: "0.1.0",
+  version: "0.1.1",
   activate: (app: GeoLibreAppAPI) => {
     if (!nasaEarthdataControl) {
       nasaEarthdataControl = new NasaEarthdataControl(

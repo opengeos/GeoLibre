@@ -54,11 +54,14 @@ const nationalMapAdapter: WebServiceAdapter<NationalMapControl> = {
   },
   listActive: (control) => {
     const map = control.getMap();
-    return control.getActiveLayers().map((active) => {
+    const entries: WebServiceLayerEntry[] = [];
+    for (const active of control.getActiveLayers()) {
       const native = readNativeRasterSource(map, active.sourceId);
       const spec = native ? null : buildLayerSpec(active.service);
       const tiles = native?.tiles ?? spec?.source.tiles ?? [];
-      return {
+      // A store layer without tiles cannot be rebuilt on reload; skip it.
+      if (tiles.length === 0) continue;
+      entries.push({
         id: active.layerId,
         name: `USGS ${active.service.title}`,
         sourceId: active.sourceId,
@@ -85,8 +88,9 @@ const nationalMapAdapter: WebServiceAdapter<NationalMapControl> = {
               }
             : {}),
         metadata: { nationalMapServiceId: active.service.id },
-      };
-    });
+      });
+    }
+    return entries;
   },
   removeFromControl: (control, entry) => {
     const id = serviceId(entry);
@@ -101,6 +105,7 @@ const nationalMapAdapter: WebServiceAdapter<NationalMapControl> = {
     if (id) control.setServiceVisibility(id, visible);
   },
   adopt: (control, layers) => {
+    const existingIds = new Set(control.getState().activeLayerIds ?? []);
     const restorable = layers
       .map((layer) => ({
         layer,
@@ -108,7 +113,7 @@ const nationalMapAdapter: WebServiceAdapter<NationalMapControl> = {
       }))
       .filter(
         (item): item is { layer: GeoLibreLayer; serviceId: string } =>
-          item.serviceId !== undefined,
+          item.serviceId !== undefined && !existingIds.has(item.serviceId),
       );
     if (restorable.length === 0) return;
     // setState reconciles activeLayerIds against the map, adopting native
@@ -133,7 +138,7 @@ const nationalMapStoreSync = createWebServiceStoreSync(nationalMapAdapter);
 export const maplibreNationalMapPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-national-map",
   name: "USGS National Map",
-  version: "0.1.0",
+  version: "0.1.1",
   activate: (app: GeoLibreAppAPI) => {
     if (!nationalMapControl) {
       nationalMapControl = new NationalMapControl(

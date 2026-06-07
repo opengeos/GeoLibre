@@ -206,6 +206,8 @@ describe("readNativeRasterSource", () => {
   it("unwraps dev-proxied WMS tile templates before they are persisted", () => {
     const original =
       "https://example.com/wms?service=WMS&bbox={bbox-epsg-3857}";
+    // Mimic the real dev proxy: encode the URL but keep the bbox placeholder
+    // literal so MapLibre can substitute it per tile.
     const proxied = `/__geolibre_wms_proxy?url=${encodeURIComponent(
       original,
     ).replaceAll("%7Bbbox-epsg-3857%7D", "{bbox-epsg-3857}")}`;
