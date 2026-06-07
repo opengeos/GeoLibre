@@ -1344,9 +1344,10 @@ export function StylePanel({
       return;
     }
     setDraftBeforeId(value);
-    updateLayer(layer.id, {
-      beforeId: value.trim() || undefined,
-    });
+    const nextBeforeId = value.trim() || undefined;
+    if (nextBeforeId !== layer.beforeId) {
+      updateLayer(layer.id, { beforeId: nextBeforeId });
+    }
   };
   const applyExtrusionSettings = () => {
     if (draftAdvancedExtrusionEnabled) {
@@ -1384,12 +1385,12 @@ export function StylePanel({
   const basemapStyleLayerIds =
     mapControllerRef.current?.getBasemapStyleLayerIds() ?? [];
   const otherLayers = layers.filter((l) => l.id !== layer.id);
-  const beforeIdOptions =
+  const orphanedBeforeId =
     draftBeforeId &&
     !basemapStyleLayerIds.includes(draftBeforeId) &&
     !otherLayers.some((l) => l.id === draftBeforeId)
-      ? [draftBeforeId, ...basemapStyleLayerIds]
-      : basemapStyleLayerIds;
+      ? draftBeforeId
+      : null;
   const beforeIdControl = (
     <div className="space-y-2">
       <Label htmlFor="beforeId">Insert before</Label>
@@ -1399,6 +1400,11 @@ export function StylePanel({
         onChange={(event) => applyBeforeId(event.target.value)}
       >
         <option value="">Layer order (default)</option>
+        {orphanedBeforeId && (
+          <optgroup label="Saved (unavailable)">
+            <option value={orphanedBeforeId}>{orphanedBeforeId}</option>
+          </optgroup>
+        )}
         {otherLayers.length > 0 && (
           <optgroup label="Layers">
             {[...otherLayers].reverse().map((otherLayer) => (
@@ -1408,9 +1414,9 @@ export function StylePanel({
             ))}
           </optgroup>
         )}
-        {beforeIdOptions.length > 0 && (
+        {basemapStyleLayerIds.length > 0 && (
           <optgroup label="Basemap layers">
-            {beforeIdOptions.map((styleLayerId) => (
+            {basemapStyleLayerIds.map((styleLayerId) => (
               <option key={styleLayerId} value={styleLayerId}>
                 {styleLayerId}
               </option>
