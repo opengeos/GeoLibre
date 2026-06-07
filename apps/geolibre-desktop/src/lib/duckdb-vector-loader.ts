@@ -84,6 +84,15 @@ function rowsFromResult(result: { toArray: () => DuckDbRow[] }) {
   );
 }
 
+// DuckDB Spatial reports CRS-annotated geometry types such as
+// GEOMETRY('EPSG:4326'), so match on the prefix rather than equality.
+function isGeometryColumnType(columnType: unknown): boolean {
+  return (
+    typeof columnType === "string" &&
+    columnType.toUpperCase().startsWith("GEOMETRY")
+  );
+}
+
 function isParquetExtension(extension: string): boolean {
   return extension === "parquet" || extension === "geoparquet";
 }
@@ -218,10 +227,8 @@ export async function loadDuckDbVectorFile(
     const description = rowsFromResult(
       await connection.query(`DESCRIBE ${sql}`),
     );
-    const geometryColumn = description.find(
-      (row) =>
-        typeof row.column_type === "string" &&
-        row.column_type.toUpperCase() === "GEOMETRY",
+    const geometryColumn = description.find((row) =>
+      isGeometryColumnType(row.column_type),
     )?.column_name;
 
     if (typeof geometryColumn !== "string") {
@@ -260,6 +267,121 @@ async function registerGeoJsonExportSource(
   sourceFile: string,
 ): Promise<void> {
   await db.registerFileText(sourceFile, JSON.stringify(geojson));
+}
+
+export interface GeoParquetConversionOptions {
+  compression?: string;
+  rowGroupSize?: number;
+}
+
+export interface GeoParquetConversionResult {
+  data: Uint8Array;
+  featureCount: number;
+  geometryColumn: string;
+}
+
+const GEOPARQUET_COMPRESSIONS = new Set([
+  "zstd",
+  "snappy",
+  "gzip",
+  "lz4",
+  "uncompressed",
+]);
+const DEFAULT_GEOPARQUET_COMPRESSION = "zstd";
+const DEFAULT_GEOPARQUET_ROW_GROUP_SIZE = 30000;
+
+// Well-known WKB geometry column names used when a plain Parquet input lacks
+// a GEOMETRY-typed column. Mirrors the sidecar's vector conversion fallback.
+const WKB_GEOMETRY_COLUMN_NAMES = new Set(["geometry", "geom", "wkb_geometry"]);
+
+/**
+ * Convert an in-memory vector file to a Hilbert-sorted, compressed GeoParquet
+ * entirely inside DuckDB-WASM. Rows are ordered by ST_Hilbert over the
+ * dataset extent so row groups stay spatially clustered for range requests.
+ */
+export async function convertDuckDbVectorToGeoParquet(
+  file: DuckDbVectorFile,
+  options: GeoParquetConversionOptions = {},
+): Promise<GeoParquetConversionResult> {
+  const compression = (
+    options.compression ?? DEFAULT_GEOPARQUET_COMPRESSION
+  ).toLowerCase();
+  if (!GEOPARQUET_COMPRESSIONS.has(compression)) {
+    throw new Error(`Unsupported Parquet compression: ${compression}`);
+  }
+  const rowGroupSize = Math.trunc(
+    options.rowGroupSize ?? DEFAULT_GEOPARQUET_ROW_GROUP_SIZE,
+  );
+  if (!Number.isFinite(rowGroupSize) || rowGroupSize <= 0) {
+    throw new Error("Row group size must be a positive integer.");
+  }
+
+  const db = await getDatabase();
+  const connection = await db.connect();
+  const outputFile = `${exportBaseName()}.${EXPORT_GEOPARQUET_EXTENSION}`;
+  const registeredFiles = [
+    file.name,
+    ...(file.siblingFiles ?? []).map((sibling) => sibling.name),
+  ];
+
+  try {
+    await db.registerFileBuffer(file.name, file.data);
+    for (const sibling of file.siblingFiles ?? []) {
+      await db.registerFileBuffer(sibling.name, sibling.data);
+    }
+    await ensureSpatialExtension(connection);
+
+    const sql = sourceSql(file.name, file.extension);
+    const description = rowsFromResult(
+      await connection.query(`DESCRIBE ${sql}`),
+    );
+    let geometryColumn = description.find((row) =>
+      isGeometryColumnType(row.column_type),
+    )?.column_name;
+    let geometryIsNative = true;
+    if (typeof geometryColumn !== "string") {
+      // Plain Parquet files may carry geometry as a WKB blob; rebuild it as a
+      // GEOMETRY column so ST_Hilbert and the GeoParquet writer can use it.
+      geometryColumn = description.find(
+        (row) =>
+          typeof row.column_name === "string" &&
+          WKB_GEOMETRY_COLUMN_NAMES.has(row.column_name.toLowerCase()),
+      )?.column_name as string | undefined;
+      geometryIsNative = false;
+    }
+    if (typeof geometryColumn !== "string") {
+      throw new Error("DuckDB did not find a geometry column in this file.");
+    }
+
+    const geometrySql = quoteIdentifier(geometryColumn);
+    const source = geometryIsNative
+      ? sql
+      : `SELECT * REPLACE (ST_GeomFromWKB(${geometrySql}) AS ${geometrySql}) FROM (${sql}) AS data`;
+
+    const countRow = rowsFromResult(
+      await connection.query(
+        `SELECT COUNT(*) AS feature_count FROM (${source}) AS src`,
+      ),
+    )[0];
+    const featureCount = Number(countRow?.feature_count ?? 0);
+
+    await connection.query(
+      `COPY (
+        WITH src AS (${source}),
+        b AS (SELECT ST_Extent(ST_Extent_Agg(${geometrySql})) AS box FROM src)
+        SELECT * FROM src
+        ORDER BY ST_Hilbert(${geometrySql}, (SELECT box FROM b))
+      ) TO ${quoteSqlString(outputFile)} (FORMAT PARQUET, COMPRESSION ${quoteSqlString(
+        compression,
+      )}, ROW_GROUP_SIZE ${rowGroupSize})`,
+    );
+    await db.flushFiles();
+    const data = await db.copyFileToBuffer(outputFile);
+    return { data, featureCount, geometryColumn };
+  } finally {
+    await connection.close();
+    await dropFilesIfPresent(db, [...registeredFiles, outputFile]);
+  }
 }
 
 export async function exportDuckDbGeoParquet(
