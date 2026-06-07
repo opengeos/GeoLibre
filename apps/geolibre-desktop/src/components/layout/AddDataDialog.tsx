@@ -335,6 +335,7 @@ export function AddDataDialog({
 }: AddDataDialogProps) {
   const open = kind !== null;
   const addLayer = useAppStore((s) => s.addLayer);
+  const existingLayers = useAppStore((s) => s.layers);
   const title = kind ? KIND_LABELS[kind] : "Add Data";
 
   const [layerName, setLayerName] = useState("");
@@ -680,6 +681,12 @@ export function AddDataDialog({
   };
 
   const beforeLayer = beforeLayerId.trim() || null;
+
+  const basemapStyleLayerIds = useMemo(
+    () =>
+      open ? (mapControllerRef.current?.getBasemapStyleLayerIds() ?? []) : [],
+    [open, mapControllerRef],
+  );
 
   const handleArcgisLayerTypeChange = (nextLayerType: ArcGISLayerType) => {
     const currentUrl = arcgisUrl.trim();
@@ -1289,13 +1296,32 @@ export function AddDataDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="add-data-before-id">Before Id</Label>
-            <Input
+            <Label htmlFor="add-data-before-id">Insert before</Label>
+            <Select
               id="add-data-before-id"
-              placeholder="Optional layer id"
               value={beforeLayerId}
               onChange={(event) => setBeforeLayerId(event.target.value)}
-            />
+            >
+              <option value="">Top of layer list (default)</option>
+              {existingLayers.length > 0 && (
+                <optgroup label="Layers">
+                  {[...existingLayers].reverse().map((existingLayer) => (
+                    <option key={existingLayer.id} value={existingLayer.id}>
+                      {existingLayer.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {basemapStyleLayerIds.length > 0 && (
+                <optgroup label="Basemap layers">
+                  {basemapStyleLayerIds.map((styleLayerId) => (
+                    <option key={styleLayerId} value={styleLayerId}>
+                      {styleLayerId}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </Select>
           </div>
 
           {kind === "xyz" && (

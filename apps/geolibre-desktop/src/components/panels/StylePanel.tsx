@@ -15,6 +15,7 @@ import {
   Separator,
   Slider,
 } from "@geolibre/ui";
+import type { MapController } from "@geolibre/map";
 import {
   ChevronDown,
   ChevronUp,
@@ -24,9 +25,15 @@ import {
   SlidersHorizontal,
   Trash2,
 } from "lucide-react";
-import { type MouseEvent as ReactMouseEvent, useEffect, useState } from "react";
+import {
+  type MouseEvent as ReactMouseEvent,
+  type RefObject,
+  useEffect,
+  useState,
+} from "react";
 
 interface StylePanelProps {
+  mapControllerRef: RefObject<MapController | null>;
   onResizeStart: (event: ReactMouseEvent<HTMLDivElement>) => void;
 }
 
@@ -892,7 +899,10 @@ function RasterStyleSlider({
   );
 }
 
-export function StylePanel({ onResizeStart }: StylePanelProps) {
+export function StylePanel({
+  mapControllerRef,
+  onResizeStart,
+}: StylePanelProps) {
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const layers = useAppStore((s) => s.layers);
   const setLayerOpacity = useAppStore((s) => s.setLayerOpacity);
@@ -1321,9 +1331,10 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
       vectorStyleExpression: draftVectorStyleExpression.trim(),
     });
   };
-  const applyBeforeId = () => {
+  const applyBeforeId = (value: string) => {
+    setDraftBeforeId(value);
     updateLayer(layer.id, {
-      beforeId: draftBeforeId.trim() || undefined,
+      beforeId: value.trim() || undefined,
     });
   };
   const applyExtrusionSettings = () => {
@@ -1359,20 +1370,27 @@ export function StylePanel({ onResizeStart }: StylePanelProps) {
       extrusionHeightExpression: draftHeightExpression.trim(),
     });
   };
+  const basemapStyleLayerIds =
+    mapControllerRef.current?.getBasemapStyleLayerIds() ?? [];
+  const beforeIdOptions =
+    draftBeforeId && !basemapStyleLayerIds.includes(draftBeforeId)
+      ? [draftBeforeId, ...basemapStyleLayerIds]
+      : basemapStyleLayerIds;
   const beforeIdControl = (
     <div className="space-y-2">
-      <Label htmlFor="beforeId">Before ID</Label>
-      <Input
+      <Label htmlFor="beforeId">Insert before</Label>
+      <Select
         id="beforeId"
         value={draftBeforeId}
-        placeholder="MapLibre layer ID"
-        onChange={(event) => setDraftBeforeId(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key !== "Enter") return;
-          event.preventDefault();
-          applyBeforeId();
-        }}
-      />
+        onChange={(event) => applyBeforeId(event.target.value)}
+      >
+        <option value="">Layer order (default)</option>
+        {beforeIdOptions.map((styleLayerId) => (
+          <option key={styleLayerId} value={styleLayerId}>
+            {styleLayerId}
+          </option>
+        ))}
+      </Select>
     </div>
   );
   const minZoom = styleValue(style, "minZoom");

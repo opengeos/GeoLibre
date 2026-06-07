@@ -519,7 +519,10 @@ export function DesktopShell({
           />
         </main>
         {layoutOptions.stylePanelVisible ? (
-          <StylePanel onResizeStart={startStylePanelResize} />
+          <StylePanel
+            mapControllerRef={mapControllerRef}
+            onResizeStart={startStylePanelResize}
+          />
         ) : null}
       </div>
       {layoutOptions.attributePanelVisible ? <AttributeTable /> : null}

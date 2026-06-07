@@ -522,6 +522,10 @@ export class MapController {
     }
   }
 
+  getBasemapStyleLayerIds(): string[] {
+    return this.getBasemapStyleLayers().map((layer) => layer.id);
+  }
+
   private getBasemapStyleLayers(): maplibregl.LayerSpecification[] {
     if (!this.isStyleReady() || !this.map) return [];
     const map = this.map;
