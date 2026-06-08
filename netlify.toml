@@ -12,7 +12,14 @@
 [build]
   # Mirrors the steps previously run in .github/workflows/netlify-preview.yml:
   #   docs deps -> frontend deps -> web demo build -> docs build -> bundle demo
-  command = "pip install -r requirements-docs.txt && npm ci && npm run build -w geolibre-desktop && mkdocs build --strict --site-dir site && mkdir -p site/demo && cp -R apps/geolibre-desktop/dist/. site/demo/"
+  # The trailing test -f guards against a silently empty/misplaced demo copy.
+  command = """python -m pip install -r requirements-docs.txt \
+    && npm ci \
+    && npm run build -w geolibre-desktop \
+    && mkdocs build --strict --site-dir site \
+    && mkdir -p site/demo \
+    && cp -R apps/geolibre-desktop/dist/. site/demo/ \
+    && test -f site/demo/index.html"""
   publish = "site"
 
 [build.environment]
