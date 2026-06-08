@@ -1,0 +1,22 @@
+# Netlify build configuration for GeoLibre.
+#
+# This drives Netlify's native continuous deployment, including Deploy
+# Previews for pull requests. Because Netlify builds in its own sandbox,
+# previews work for PRs from forks (external contributors) without exposing
+# any repository secrets to untrusted code.
+#
+# Secrets are NOT defined here. Set them in the Netlify dashboard under
+# Site configuration -> Environment variables:
+#   - VITE_GEE_OAUTH_CLIENT_ID  (Google Earth Engine OAuth client ID)
+
+[build]
+  # Mirrors the steps previously run in .github/workflows/netlify-preview.yml:
+  #   docs deps -> frontend deps -> web demo build -> docs build -> bundle demo
+  command = "pip install -r requirements-docs.txt && npm ci && npm run build -w geolibre-desktop && mkdocs build --strict --site-dir site && mkdir -p site/demo && cp -R apps/geolibre-desktop/dist/. site/demo/"
+  publish = "site"
+
+[build.environment]
+  NODE_VERSION = "22"
+  PYTHON_VERSION = "3.12"
+  # Emit relative asset paths so the demo works when served from /demo/.
+  GEOLIBRE_APP_BASE = "./"
