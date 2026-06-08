@@ -52,7 +52,9 @@ function sanitizeTableName(layerName: string, layerId: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
-  const normalized = /^[a-z_]/.test(base) ? base : `t_${base}`;
+  // Keep `normalized` empty when `base` is empty so the layer_<id> fallback is
+  // reached; prefixing an empty base would yield "t_" and bypass the fallback.
+  const normalized = base ? (/^[a-z_]/.test(base) ? base : `t_${base}`) : "";
   return normalized || `layer_${layerId.replace(/[^a-z0-9]+/gi, "_")}`;
 }
 
@@ -252,8 +254,12 @@ export async function runSqlQuery(
 
   try {
     await ensureSpatialExtension(connection);
-    const tables = await registerLayerTables(db, connection, layers);
-    registeredFiles = tables.map((table) => `${table.tableName}.geojson`);
+    // Pre-compute the file names from the same naming logic so the finally
+    // block can clean up even if registration throws part-way through the loop.
+    registeredFiles = previewLayerTables(layers).map(
+      (table) => `${table.tableName}.geojson`,
+    );
+    await registerLayerTables(db, connection, layers);
 
     const geometryColumn = await detectGeometryColumn(connection, statement);
 

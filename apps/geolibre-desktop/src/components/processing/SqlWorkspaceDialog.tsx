@@ -169,9 +169,19 @@ export function SqlWorkspaceDialog() {
             </p>
           )}
 
+          <label htmlFor="sql-workspace-editor" className="sr-only">
+            SQL query
+          </label>
           <textarea
+            id="sql-workspace-editor"
             value={sql}
             onChange={(event) => setSql(event.target.value)}
+            onKeyDown={(event) => {
+              if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+                event.preventDefault();
+                void runQuery();
+              }
+            }}
             spellCheck={false}
             rows={6}
             className={cn(
