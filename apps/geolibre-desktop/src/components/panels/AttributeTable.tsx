@@ -325,7 +325,12 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     const source = mapControllerRef.current?.getMap()?.getSource(sourceId) as
       | GeoJSONSource
       | undefined;
-    if (!source || typeof source.getData !== "function") return;
+    if (!source || typeof source.getData !== "function") {
+      // Reset here too: a prior run may have left the indicator true, and this
+      // early return would otherwise leave it stuck after a layer switch.
+      setLoadingVectorGeojson(false);
+      return;
+    }
 
     let cancelled = false;
     const layerId = layer.id;

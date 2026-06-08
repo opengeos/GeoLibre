@@ -32,7 +32,6 @@ import {
 import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
 
 const CSV_MIME_TYPE = "text/csv";
-const GEOPARQUET_MIME_TYPE = "application/vnd.apache.parquet";
 
 // Cap how many result rows are rendered so a large result set cannot freeze the
 // UI; the full result is still used for export and add-as-layer.
@@ -155,6 +154,9 @@ export function SqlWorkspaceDialog() {
   // read the stale `false` and fire a concurrent query. A ref is updated
   // synchronously and guards against that race; `running` only drives the UI.
   const runningRef = useRef(false);
+  // Same race for exports: the disabled buttons lag a render, so a fast double
+  // click could open two save dialogs. The ref guards synchronously.
+  const exportingRef = useRef(false);
 
   const runQuery = async () => {
     const trimmed = sql.trim();
@@ -211,7 +213,8 @@ export function SqlWorkspaceDialog() {
   };
 
   const handleExportCsv = async () => {
-    if (!result || exporting) return;
+    if (!result || exportingRef.current) return;
+    exportingRef.current = true;
     setError(null);
     setNotice(null);
     setExporting(true);
@@ -228,12 +231,14 @@ export function SqlWorkspaceDialog() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
+      exportingRef.current = false;
       setExporting(false);
     }
   };
 
   const handleExportGeoParquet = async () => {
-    if (!result?.geojson || exporting) return;
+    if (!result?.geojson || exportingRef.current) return;
+    exportingRef.current = true;
     setError(null);
     setNotice(null);
     setExporting(true);
@@ -243,10 +248,12 @@ export function SqlWorkspaceDialog() {
         "geoparquet",
         "SQL result",
       );
-      await saveBinary({ ...exported, mimeType: GEOPARQUET_MIME_TYPE }, "GeoParquet");
+      // exportBinaryVectorLayer already sets the GeoParquet mimeType.
+      await saveBinary(exported, "GeoParquet");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
+      exportingRef.current = false;
       setExporting(false);
     }
   };
@@ -385,7 +392,7 @@ export function SqlWorkspaceDialog() {
             <Button
               variant="outline"
               onClick={clearWorkspace}
-              disabled={running || (!sql && !result && !error)}
+              disabled={running || (!sql && !result && !error && !notice)}
             >
               <Eraser className="h-4 w-4" />
               Clear

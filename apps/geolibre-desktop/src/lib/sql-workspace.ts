@@ -38,6 +38,9 @@ const RESERVED_TABLE_NAMES = new Set([
   "references", "returning", "select", "show", "some", "symmetric", "table",
   "then", "to", "trailing", "true", "union", "unique", "using", "variadic",
   "when", "where", "window", "with",
+  // DuckDB-specific keywords beyond the ANSI set above.
+  "anti", "asof", "by", "glob", "ilike", "like", "macro", "map", "positional",
+  "semi", "struct", "summarize", "try_cast", "unpivot", "values", "virtual",
 ]);
 
 // Bare URLs and file paths after FROM/JOIN are auto-wrapped in a matching
@@ -56,12 +59,14 @@ const DATA_SOURCE_READERS: Array<{ extensions: string[]; reader: string }> = [
 const BARE_SOURCE_PATTERN =
   /\b(from|join)\s+((?:https?:\/\/|\/|\.\/|\.\.\/|~\/|[A-Za-z]:[\\/])[^\s,;()]+)/gi;
 
-// HTTP(S) URLs whose extension feeds a native DuckDB reader (read_parquet /
-// read_csv_auto / read_json_auto) are registered as DuckDB file handles so the
-// JS runtime streams them via range requests. The in-WASM httpfs path used by a
-// bare `read_parquet('https://…')` fails with "stoi: no conversion" on many
-// servers. ST_Read (GDAL/vsicurl) URLs are left bare so GDAL handles them.
-const REMOTE_URL_PATTERN = /https?:\/\/[^\s'");]+/gi;
+// HTTP(S) URLs that are arguments to a native DuckDB reader are registered as
+// DuckDB file handles so the JS runtime streams them via range requests. The
+// in-WASM httpfs path used by a bare `read_parquet('https://…')` fails with
+// "stoi: no conversion" on many servers. ST_Read (GDAL/vsicurl) URLs are left
+// bare so GDAL handles them. Matching only reader-call arguments (rather than
+// any URL) means a URL inside an unrelated string literal is never rewritten.
+const REMOTE_READER_ARG_PATTERN =
+  /\b(read_parquet|parquet_scan|read_csv_auto|read_csv|read_json_auto|read_json|read_ndjson_auto|read_ndjson)\s*\(\s*'(https?:\/\/[^']+)'/gi;
 
 // A pre-spatial remote read_parquet is what initialises the HTTP read path (see
 // ensureSpatialExtension). When a query has no remote parquet of its own to warm
@@ -296,8 +301,14 @@ async function describeQuery(
  * Running regexes against this mask makes them literal-aware without a full
  * parser: a match's indices are valid against the original string, but the
  * regex can never match text that lives inside a literal or comment.
+ *
+ * The scanner always parses literals and comments (so a `--` inside a string is
+ * not mistaken for a comment), but `blankLiterals` controls whether literal
+ * content is blanked. Callers that need to find the end of the real statement
+ * (e.g. `cleanStatement`) pass `false` so a trailing string literal is not
+ * mistaken for trailing whitespace.
  */
-function maskSqlLiterals(sql: string): string {
+function maskSqlLiterals(sql: string, blankLiterals = true): string {
   const out = sql.split("");
   const blank = (start: number, end: number): void => {
     for (let k = start; k < end && k < out.length; k += 1) {
@@ -320,7 +331,7 @@ function maskSqlLiterals(sql: string): string {
         }
         j += 1;
       }
-      blank(i, j + 1);
+      if (blankLiterals) blank(i, j + 1);
       i = j + 1;
     } else if (char === "-" && sql[i + 1] === "-") {
       let j = i;
@@ -339,7 +350,7 @@ function maskSqlLiterals(sql: string): string {
         const tag = tagMatch[0];
         const closeAt = sql.indexOf(tag, i + tag.length);
         const end = closeAt === -1 ? sql.length : closeAt + tag.length;
-        blank(i, end);
+        if (blankLiterals) blank(i, end);
         i = end;
       } else {
         i += 1;
@@ -359,9 +370,10 @@ function maskSqlLiterals(sql: string): string {
  */
 function cleanStatement(sql: string): string {
   const src = sql.trim();
-  const masked = maskSqlLiterals(src);
-  // maskSqlLiterals blanks comments to spaces, so trimming the mask drops any
-  // trailing comment; the matching slice of the original is the real content.
+  // Blank comments only (keep string literals): trimming the mask then drops a
+  // trailing comment without mistaking a trailing string literal — e.g. the
+  // `'a;b'` in `SELECT 'a;b'` — for trailing whitespace.
+  const masked = maskSqlLiterals(src, false);
   let end = masked.replace(/\s+$/, "").length;
   if (end > 0 && masked[end - 1] === ";") end -= 1;
   return src.slice(0, end).trimEnd();
@@ -382,22 +394,6 @@ function containsMultipleStatements(sql: string): boolean {
   return semicolon !== -1 && masked.slice(semicolon + 1).trim().length > 0;
 }
 
-/** Names of layer tables referenced (as bare identifiers) in the statement. */
-function referencedTableNames(
-  statement: string,
-  candidates: Iterable<string>,
-): Set<string> {
-  const masked = maskSqlLiterals(statement);
-  const referenced = new Set<string>();
-  for (const name of candidates) {
-    // Table names are sanitized lower-case identifiers, so a word-boundary
-    // match against the masked (literal-free) statement is reliable.
-    const pattern = new RegExp(`(?<![\\w.])${name}\\b`, "i");
-    if (pattern.test(masked)) referenced.add(name);
-  }
-  return referenced;
-}
-
 /** Pick the DuckDB table function for a data source extension, if recognised. */
 function readerForExtension(extension: string): string | null {
   return (
@@ -414,16 +410,29 @@ function readerForExtension(extension: string): string | null {
  * function call, are left unchanged.
  */
 function rewriteBareSources(sql: string): string {
-  return sql.replace(
-    BARE_SOURCE_PATTERN,
-    (whole, keyword: string, source: string) => {
-      const path = source.split(/[?#]/)[0];
-      const dot = path.lastIndexOf(".");
-      const extension = dot >= 0 ? path.slice(dot + 1).toLowerCase() : "";
-      const reader = readerForExtension(extension);
-      return reader ? `${keyword} ${reader}(${quoteSqlString(source)})` : whole;
-    },
-  );
+  // Match against the masked SQL so a `FROM`/`JOIN` that appears inside a string
+  // literal or comment is never rewritten; the match indices are valid against
+  // the original string, and the matched source text is code (never masked).
+  const masked = maskSqlLiterals(sql);
+  let result = "";
+  let lastIndex = 0;
+  for (const match of masked.matchAll(BARE_SOURCE_PATTERN)) {
+    const index = match.index ?? 0;
+    const whole = sql.slice(index, index + match[0].length);
+    const keyword = match[1];
+    const source = match[2];
+    const path = source.split(/[?#]/)[0];
+    const dot = path.lastIndexOf(".");
+    const extension = dot >= 0 ? path.slice(dot + 1).toLowerCase() : "";
+    const reader = readerForExtension(extension);
+    result += sql.slice(lastIndex, index);
+    result += reader
+      ? `${keyword} ${reader}(${quoteSqlString(source)})`
+      : whole;
+    lastIndex = index + match[0].length;
+  }
+  result += sql.slice(lastIndex);
+  return result;
 }
 
 /** Derive a stable, VFS-safe handle name from a URL, keeping its extension. */
@@ -448,28 +457,38 @@ async function registerRemoteSources(
   statement: string,
   registeredFiles: string[],
 ): Promise<{ statement: string; readerCalls: string[] }> {
-  // Longest first so a URL that is a prefix of another is replaced correctly.
-  const urls = [...new Set(statement.match(REMOTE_URL_PATTERN) ?? [])].sort(
-    (a, b) => b.length - a.length,
-  );
-  let rewritten = statement;
-  let index = 0;
+  // Collect each distinct URL that is a native reader's argument, keeping the
+  // first reader function it appears with (used to warm up the HTTP path).
+  const readerByUrl = new Map<string, string>();
+  for (const match of statement.matchAll(REMOTE_READER_ARG_PATTERN)) {
+    const reader = match[1].toLowerCase();
+    const url = match[2];
+    if (!readerByUrl.has(url)) readerByUrl.set(url, reader);
+  }
+  if (readerByUrl.size === 0) return { statement, readerCalls: [] };
+
+  const handleByUrl = new Map<string, string>();
   const readerCalls: string[] = [];
-  for (const url of urls) {
-    const path = url.split(/[?#]/)[0];
-    const dot = path.lastIndexOf(".");
-    const extension = dot >= 0 ? path.slice(dot + 1).toLowerCase() : "";
-    const reader = readerForExtension(extension);
-    if (!reader || reader === "ST_Read") continue;
+  let index = 0;
+  for (const [url, reader] of readerByUrl) {
     const handle = remoteHandleName(filePrefix, index, url);
     index += 1;
     // directIO = true forces range-based reads so the whole file is never
     // buffered locally.
     await db.registerFileURL(handle, url, DuckDBDataProtocol.HTTP, true);
     registeredFiles.push(handle);
+    handleByUrl.set(url, handle);
     readerCalls.push(`${reader}(${quoteSqlString(handle)})`);
-    rewritten = rewritten.split(url).join(handle);
   }
+  // Replace only the matched reader-call arguments, so a URL that happens to
+  // appear elsewhere (e.g. in a WHERE-clause string literal) is left intact.
+  const rewritten = statement.replace(
+    REMOTE_READER_ARG_PATTERN,
+    (whole, reader: string, url: string) => {
+      const handle = handleByUrl.get(url);
+      return handle ? `${reader}(${quoteSqlString(handle)})` : whole;
+    },
+  );
   return { statement: rewritten, readerCalls };
 }
 
@@ -525,17 +544,18 @@ export async function runSqlQuery(
   sql: string,
   layers: GeoLibreLayer[],
 ): Promise<SqlQueryResult> {
-  // A trailing semicolon is valid as a standalone statement but breaks the
-  // geometry-detection wrapper `... FROM (<sql>) AS ...`, so strip it once.
-  const trimmed = sql.trim().replace(/;\s*$/, "");
-  if (containsMultipleStatements(trimmed)) {
+  // Strip a trailing semicolon and any trailing comment (literal-aware) so the
+  // statement can be wrapped in the geometry-detection subquery `... FROM
+  // (<sql>) AS ...` without the terminator or a line comment breaking it.
+  const cleaned = cleanStatement(sql);
+  if (containsMultipleStatements(cleaned)) {
     throw new Error(
       "Only a single SQL statement is supported. Remove any intermediate semicolons.",
     );
   }
   // Wrap bare URLs/paths after FROM/JOIN in the matching reader so the
   // convenient `SELECT * FROM https://…/x.parquet` form runs.
-  const rewritten = rewriteBareSources(trimmed);
+  const rewritten = rewriteBareSources(cleaned);
 
   const db = await getDatabase();
   const connection = await db.connect();
