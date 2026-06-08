@@ -62,11 +62,13 @@ const BARE_SOURCE_PATTERN =
 // bare `read_parquet('https://…')` fails with "stoi: no conversion" on many
 // servers. ST_Read (GDAL/vsicurl) URLs are left bare so GDAL handles them.
 const REMOTE_URL_PATTERN = /https?:\/\/[^\s'");]+/gi;
-const NATIVE_REMOTE_READER_EXTENSIONS = new Set(
-  DATA_SOURCE_READERS.filter((entry) => entry.reader !== "ST_Read").flatMap(
-    (entry) => entry.extensions,
-  ),
-);
+
+// A pre-spatial remote read_parquet is what initialises the HTTP read path (see
+// ensureSpatialExtension). When a query has no remote parquet of its own to warm
+// up with (e.g. a local-only first query that would otherwise load spatial
+// cold), this tiny public parquet is read instead. Only its footer is fetched.
+const HTTP_WARMUP_PARQUET_URL =
+  "https://data.source.coop/giswqs/opengeos/countries.parquet";
 
 /** A loaded layer exposed to the workspace as a DuckDB table. */
 export interface SqlWorkspaceTable {
@@ -286,41 +288,114 @@ async function describeQuery(
 }
 
 /**
- * Detect whether `sql` contains more than one statement (an interior semicolon
- * outside of string literals, quoted identifiers, and comments). DuckDB-WASM
- * silently runs every statement but only returns the last result, so the caller
- * rejects multi-statement input instead of discarding earlier results.
+ * Return a copy of `sql` in which every character inside a string literal,
+ * quoted identifier, line/block comment, or dollar-quoted string (`$$…$$`,
+ * `$tag$…$tag$`) is replaced with a space, while newlines and all "code"
+ * characters keep their original position.
+ *
+ * Running regexes against this mask makes them literal-aware without a full
+ * parser: a match's indices are valid against the original string, but the
+ * regex can never match text that lives inside a literal or comment.
  */
-function containsMultipleStatements(sql: string): boolean {
-  let index = 0;
-  while (index < sql.length) {
-    const char = sql[index];
+function maskSqlLiterals(sql: string): string {
+  const out = sql.split("");
+  const blank = (start: number, end: number): void => {
+    for (let k = start; k < end && k < out.length; k += 1) {
+      if (out[k] !== "\n") out[k] = " ";
+    }
+  };
+  let i = 0;
+  while (i < sql.length) {
+    const char = sql[i];
     if (char === "'" || char === '"') {
-      index += 1;
-      while (index < sql.length) {
-        if (sql[index] === char) {
+      let j = i + 1;
+      while (j < sql.length) {
+        if (sql[j] === char) {
           // A doubled quote is an escaped quote, not the end of the literal.
-          if (sql[index + 1] === char) {
-            index += 2;
+          if (sql[j + 1] === char) {
+            j += 2;
             continue;
           }
           break;
         }
-        index += 1;
+        j += 1;
       }
-    } else if (char === "-" && sql[index + 1] === "-") {
-      while (index < sql.length && sql[index] !== "\n") index += 1;
-    } else if (char === "/" && sql[index + 1] === "*") {
-      index += 2;
-      while (index < sql.length && !(sql[index] === "*" && sql[index + 1] === "/"))
-        index += 1;
-      index += 1;
-    } else if (char === ";") {
-      return true;
+      blank(i, j + 1);
+      i = j + 1;
+    } else if (char === "-" && sql[i + 1] === "-") {
+      let j = i;
+      while (j < sql.length && sql[j] !== "\n") j += 1;
+      blank(i, j);
+      i = j;
+    } else if (char === "/" && sql[i + 1] === "*") {
+      let j = i + 2;
+      while (j < sql.length && !(sql[j] === "*" && sql[j + 1] === "/")) j += 1;
+      blank(i, j + 2);
+      i = j + 2;
+    } else if (char === "$") {
+      // Dollar-quote tag: $tag$ where tag is empty or [A-Za-z0-9_]+.
+      const tagMatch = /^\$[A-Za-z0-9_]*\$/.exec(sql.slice(i));
+      if (tagMatch) {
+        const tag = tagMatch[0];
+        const closeAt = sql.indexOf(tag, i + tag.length);
+        const end = closeAt === -1 ? sql.length : closeAt + tag.length;
+        blank(i, end);
+        i = end;
+      } else {
+        i += 1;
+      }
+    } else {
+      i += 1;
     }
-    index += 1;
   }
-  return false;
+  return out.join("");
+}
+
+/**
+ * Trim the statement and strip a single trailing semicolon and any trailing
+ * comment, so it can be safely wrapped in `... FROM (<statement>) AS …` for
+ * geometry detection. Operates via {@link maskSqlLiterals} so a semicolon or
+ * comment inside a literal is never mistaken for the terminator.
+ */
+function cleanStatement(sql: string): string {
+  const src = sql.trim();
+  const masked = maskSqlLiterals(src);
+  // maskSqlLiterals blanks comments to spaces, so trimming the mask drops any
+  // trailing comment; the matching slice of the original is the real content.
+  let end = masked.replace(/\s+$/, "").length;
+  if (end > 0 && masked[end - 1] === ";") end -= 1;
+  return src.slice(0, end).trimEnd();
+}
+
+/**
+ * Detect whether `sql` contains more than one statement (an interior semicolon
+ * outside of string literals, quoted identifiers, comments, and dollar-quotes).
+ * DuckDB-WASM silently runs every statement but only returns the last result,
+ * so the caller rejects multi-statement input instead of discarding earlier
+ * results. Expects a statement already cleaned of its trailing semicolon.
+ */
+function containsMultipleStatements(sql: string): boolean {
+  const masked = maskSqlLiterals(sql);
+  const semicolon = masked.indexOf(";");
+  // A semicolon is only a statement separator when real content follows it;
+  // trailing comments/whitespace have already been blanked by the mask.
+  return semicolon !== -1 && masked.slice(semicolon + 1).trim().length > 0;
+}
+
+/** Names of layer tables referenced (as bare identifiers) in the statement. */
+function referencedTableNames(
+  statement: string,
+  candidates: Iterable<string>,
+): Set<string> {
+  const masked = maskSqlLiterals(statement);
+  const referenced = new Set<string>();
+  for (const name of candidates) {
+    // Table names are sanitized lower-case identifiers, so a word-boundary
+    // match against the masked (literal-free) statement is reliable.
+    const pattern = new RegExp(`(?<![\\w.])${name}\\b`, "i");
+    if (pattern.test(masked)) referenced.add(name);
+  }
+  return referenced;
 }
 
 /** Pick the DuckDB table function for a data source extension, if recognised. */
@@ -372,27 +447,30 @@ async function registerRemoteSources(
   filePrefix: string,
   statement: string,
   registeredFiles: string[],
-): Promise<string> {
+): Promise<{ statement: string; readerCalls: string[] }> {
   // Longest first so a URL that is a prefix of another is replaced correctly.
   const urls = [...new Set(statement.match(REMOTE_URL_PATTERN) ?? [])].sort(
     (a, b) => b.length - a.length,
   );
   let rewritten = statement;
   let index = 0;
+  const readerCalls: string[] = [];
   for (const url of urls) {
     const path = url.split(/[?#]/)[0];
     const dot = path.lastIndexOf(".");
     const extension = dot >= 0 ? path.slice(dot + 1).toLowerCase() : "";
-    if (!NATIVE_REMOTE_READER_EXTENSIONS.has(extension)) continue;
+    const reader = readerForExtension(extension);
+    if (!reader || reader === "ST_Read") continue;
     const handle = remoteHandleName(filePrefix, index, url);
     index += 1;
     // directIO = true forces range-based reads so the whole file is never
     // buffered locally.
     await db.registerFileURL(handle, url, DuckDBDataProtocol.HTTP, true);
     registeredFiles.push(handle);
+    readerCalls.push(`${reader}(${quoteSqlString(handle)})`);
     rewritten = rewritten.split(url).join(handle);
   }
-  return rewritten;
+  return { statement: rewritten, readerCalls };
 }
 
 function rowsToFeatureCollection(
@@ -471,16 +549,31 @@ export async function runSqlQuery(
   const registeredFiles: string[] = [];
 
   try {
-    await ensureSpatialExtension(connection);
-    await registerLayerTables(db, connection, layers, filePrefix, registeredFiles);
     // Register remote URLs as DuckDB file handles so they stream over HTTP
-    // range requests instead of the unreliable in-WASM httpfs path.
-    const statement = await registerRemoteSources(
+    // range requests instead of the unreliable in-WASM httpfs path. Done before
+    // loading spatial so the handles can warm up the HTTP read path first.
+    const { statement, readerCalls } = await registerRemoteSources(
       db,
       filePrefix,
       rewritten,
       registeredFiles,
     );
+    // Load spatial, warming up the HTTP read path first: duckdb-wasm breaks
+    // remote read_parquet if spatial is loaded before the first remote read. A
+    // single pre-spatial read_parquet initialises the path for all later remote
+    // reads. Warm up with the query's own remote readers (no extra request),
+    // and guarantee at least one read_parquet runs by falling back to a tiny
+    // default parquet when the query has none of its own.
+    const warmups = [...readerCalls];
+    if (!warmups.some((call) => call.startsWith("read_parquet"))) {
+      warmups.push(`read_parquet(${quoteSqlString(HTTP_WARMUP_PARQUET_URL)})`);
+    }
+    await ensureSpatialExtension(connection, async () => {
+      for (const readerCall of warmups) {
+        await connection.query(`SELECT 1 FROM ${readerCall} LIMIT 0`);
+      }
+    });
+    await registerLayerTables(db, connection, layers, filePrefix, registeredFiles);
 
     const described = await describeQuery(connection, statement);
     const geometryColumn = described?.geometryColumn ?? null;

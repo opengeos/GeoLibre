@@ -49,8 +49,20 @@ let spatialExtensionLoaded = false;
  */
 export async function ensureSpatialExtension(
   connection: duckdb.AsyncDuckDBConnection,
+  beforeLoad?: () => Promise<void>,
 ): Promise<void> {
   if (spatialExtensionLoaded) return;
+  // duckdb-wasm 1.33.1-dev45 breaks remote read_parquet if the spatial
+  // extension is loaded before the first remote HTTP read on the database.
+  // `beforeLoad` lets the caller warm up that path (a pre-spatial remote read)
+  // before INSTALL/LOAD, which is the only thing that initialises it.
+  if (beforeLoad) {
+    try {
+      await beforeLoad();
+    } catch {
+      // Warm-up is best-effort; a failure here must not block spatial loading.
+    }
+  }
   await connection.query("INSTALL spatial");
   await connection.query("LOAD spatial");
   spatialExtensionLoaded = true;
