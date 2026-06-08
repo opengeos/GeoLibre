@@ -63,13 +63,13 @@ let timeSliderControl: TimeSliderControl | null = null;
 let savedConfig: TimeSliderConfig | null = null;
 let sourceAddHandler: TimeSliderEventHandler | null = null;
 let sourceRemoveHandler: TimeSliderEventHandler | null = null;
-let stateChangeHandler: TimeSliderEventHandler | null = null;
 
 export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-time-slider",
   name: "Time Slider",
   version: "1.0.1",
   activate: (app: GeoLibreAppAPI) => {
+    if (timeSliderControl) return;
     timeSliderControl = new TimeSliderControl(
       savedConfig ? configToOptions(savedConfig) : SEED_OPTIONS,
     );
@@ -120,7 +120,12 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
     timeSliderControl?.getConfig() ?? savedConfig ?? undefined,
   applyProjectState: (app: GeoLibreAppAPI, state: unknown) => {
     const nextConfig = normalizeConfig(state);
-    if (!nextConfig) return false;
+    if (!nextConfig) {
+      // A reset/new project (or an invalid value) clears the cached config so
+      // the next activation seeds fresh instead of restoring stale state.
+      savedConfig = null;
+      return false;
+    }
 
     savedConfig = nextConfig;
     if (!timeSliderControl) return true;
@@ -129,6 +134,7 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
     // resulting `change`/`statechange` events drive the store reconcile.
     timeSliderControl.setConfig(nextConfig);
     setTimeout(() => syncStoreLayers(timeSliderControl), 0);
+    return true;
   },
 };
 
@@ -154,7 +160,7 @@ function configToOptions(config: TimeSliderConfig): TimeSliderOptions {
     dateFormat: config.dateFormat,
     collapsed: config.collapsed,
     beforeId: config.beforeId,
-    sources: config.sources,
+    sources: [...config.sources],
     collapsible: true,
   };
 }
@@ -172,20 +178,28 @@ function normalizeConfig(state: unknown): TimeSliderConfig | null {
   if (
     typeof candidate.startDate !== "string" ||
     typeof candidate.endDate !== "string" ||
-    !Array.isArray(candidate.sources)
+    !Array.isArray(candidate.sources) ||
+    (candidate.sources as unknown[]).some(
+      (source) =>
+        !source ||
+        typeof source !== "object" ||
+        typeof (source as { id?: unknown }).id !== "string",
+    )
   ) {
     return null;
   }
   return candidate as TimeSliderConfig;
 }
 
+// Only sourceadd/sourceremove change the store's layer set. statechange also
+// fires on every playback tick (goTo emits it), so subscribing it to a store
+// reconcile would run at animation speed for no benefit; opacity and
+// visibility are intentionally left to the Layers panel.
 function attachStoreSync(control: TimeSliderControl): void {
   sourceAddHandler = () => syncStoreLayers(control);
   sourceRemoveHandler = () => syncStoreLayers(control);
-  stateChangeHandler = () => syncStoreLayers(control);
   control.on("sourceadd", sourceAddHandler);
   control.on("sourceremove", sourceRemoveHandler);
-  control.on("statechange", stateChangeHandler);
 }
 
 function detachStoreSync(control: TimeSliderControl): void {
@@ -196,10 +210,6 @@ function detachStoreSync(control: TimeSliderControl): void {
   if (sourceRemoveHandler) {
     control.off("sourceremove", sourceRemoveHandler);
     sourceRemoveHandler = null;
-  }
-  if (stateChangeHandler) {
-    control.off("statechange", stateChangeHandler);
-    stateChangeHandler = null;
   }
 }
 
