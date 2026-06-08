@@ -25,19 +25,21 @@ const STORE_LAYER_SOURCE_KIND = "time-slider";
 /**
  * Default configuration applied on first activation. No data sources are seeded:
  * the dock opens expanded (`collapsed: false`) with an empty timeline so the
- * user can add their own layers via the dock's "Add data" form, which applies a
- * matching timeline for each chosen source type. Seeding sample sources was
- * removed because the bundled examples cover different periods, so the
- * out-of-range ones flooded the console with 404 tile errors.
+ * user can add their own layers via the dock's "Add data" form. Seeding sample
+ * sources was removed because the bundled examples cover different periods, so
+ * the out-of-range ones flooded the console with 404 tile errors.
  *
- * The starting range is a neutral recent span (the last 20 calendar years,
- * yearly) that is replaced as soon as a real source is added.
+ * The starting range matches the dock's default "Add data" example (the Landsat
+ * annual COG, 1984-2013 yearly): COG is the form's default type, so its example
+ * timeline is only applied when the user actively switches type. Aligning the
+ * default here means the prefilled Landsat COG renders across its whole valid
+ * range out of the box rather than against an unrelated span (which would
+ * request tiles for years the data does not cover).
  */
 function buildDefaultOptions(): TimeSliderOptions {
-  const endYear = new Date().getFullYear();
   return {
-    startDate: `${endYear - 20}-01-01`,
-    endDate: `${endYear}-01-01`,
+    startDate: "1984-01-01",
+    endDate: "2013-01-01",
     granularity: "year",
     granularities: ["year", "month", "day"],
     speed: 800,
