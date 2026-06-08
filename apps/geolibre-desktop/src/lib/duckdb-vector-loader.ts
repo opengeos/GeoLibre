@@ -4,6 +4,7 @@ import ehWorker from "@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url";
 import duckdbWasmMvp from "@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url";
 import mvpWorker from "@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
+import { getSpatialExtensionPath } from "./spatial-extension-config";
 
 const GEOMETRY_JSON_COLUMN = "__geolibre_geometry_geojson";
 const EXPORT_GEOJSON_EXTENSION = "geojson";
@@ -42,6 +43,16 @@ export function getDatabase(): Promise<duckdb.AsyncDuckDB> {
 
 let spatialExtensionPromise: Promise<void> | null = null;
 
+function configuredSpatialExtensionPath(): string | undefined {
+  try {
+    const env = (import.meta as { env?: Record<string, string | undefined> })
+      .env;
+    return getSpatialExtensionPath(env);
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Install and load the DuckDB spatial extension once per database instance.
  * `getDatabase` returns a memoized singleton, so the extension persists across
@@ -50,12 +61,23 @@ let spatialExtensionPromise: Promise<void> | null = null;
  * The load is memoized as a promise rather than a boolean so concurrent callers
  * (the function is exported and reused) share a single INSTALL/LOAD instead of
  * each racing to run it. On failure the memo is cleared so a later call retries.
+ *
+ * When `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` is set, INSTALL is skipped and
+ * the extension is loaded from the provided local path (useful for offline or
+ * sandboxed environments where the remote extension repository is unreachable).
  */
 export async function ensureSpatialExtension(
   connection: duckdb.AsyncDuckDBConnection,
   beforeLoad?: () => Promise<void>,
 ): Promise<void> {
   spatialExtensionPromise ??= (async () => {
+    const customPath = configuredSpatialExtensionPath();
+    if (customPath) {
+      const normalizedPath = customPath.replace(/\\/g, "/");
+      await connection.query(`LOAD ${quoteSqlString(normalizedPath)}`);
+      return;
+    }
+
     // duckdb-wasm 1.33.1-dev45 breaks remote read_parquet if the spatial
     // extension is loaded before the first remote HTTP read on the database.
     // `beforeLoad` lets the caller warm up that path (a pre-spatial remote read)
