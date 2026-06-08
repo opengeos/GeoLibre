@@ -701,6 +701,69 @@ body,
   z-index: 1;
 }
 
+/*
+ * The Measure, Bookmark and View State controls theme themselves purely via
+ * `@media (prefers-color-scheme)`, so they follow the OS preference instead of
+ * GeoLibre's in-app light/dark toggle (the `.dark` class on <html>). When the
+ * two disagree — e.g. the app is in light mode on an OS set to dark — the panel
+ * background is forced light by our backgroundColor option while the icons,
+ * borders and secondary text stay dark-themed (light gray on white), which
+ * reads as poor contrast. Remap each control's theme variables onto the app's
+ * design tokens, which already switch with the `.dark` class, so the controls
+ * track the in-app theme in both directions regardless of the OS setting.
+ * index.css is imported after the component stylesheet, so these same-specificity
+ * rules win the cascade over the component's media-query defaults.
+ */
+.geolibre-measure-control {
+  --ms-panel-bg: hsl(var(--popover));
+  --ms-text: hsl(var(--popover-foreground));
+  --ms-strong-text: hsl(var(--foreground));
+  --ms-muted: hsl(var(--muted-foreground));
+  --ms-subtle: hsl(var(--muted-foreground));
+  --ms-border: hsl(var(--border));
+  --ms-input-bg: hsl(var(--background));
+  --ms-input-text: hsl(var(--foreground));
+  --ms-hover-bg: hsl(var(--accent));
+  --ms-subtle-bg: hsl(var(--muted));
+  --ms-button-bg: hsl(var(--background));
+  --ms-button-text: hsl(var(--foreground));
+  --ms-chip-bg: hsl(var(--muted));
+  --ms-chip-text: hsl(var(--muted-foreground));
+  --ms-secondary-border: hsl(var(--border));
+}
+
+.geolibre-bookmark-control {
+  --bm-panel-bg: hsl(var(--popover));
+  --bm-text: hsl(var(--popover-foreground));
+  --bm-muted: hsl(var(--muted-foreground));
+  --bm-subtle: hsl(var(--muted-foreground));
+  --bm-border: hsl(var(--border));
+  --bm-input-bg: hsl(var(--background));
+  --bm-input-text: hsl(var(--foreground));
+  --bm-placeholder: hsl(var(--muted-foreground));
+  --bm-hover-bg: hsl(var(--accent));
+  --bm-chip-hover-bg: hsl(var(--accent));
+  --bm-button-bg: hsl(var(--background));
+  --bm-button-text: hsl(var(--foreground));
+  --bm-item-active-bg: hsl(var(--accent));
+  --bm-secondary-text: hsl(var(--muted-foreground));
+  --bm-secondary-border: hsl(var(--border));
+}
+
+.geolibre-view-state-control {
+  --vs-surface-bg: hsl(var(--popover));
+  --vs-panel-bg: hsl(var(--popover));
+  --vs-text: hsl(var(--popover-foreground));
+  --vs-heading: hsl(var(--foreground));
+  --vs-label: hsl(var(--muted-foreground));
+  --vs-muted: hsl(var(--muted-foreground));
+  --vs-border: hsl(var(--border));
+  --vs-row-hover: hsl(var(--accent));
+  --vs-code-bg: hsl(var(--muted));
+  --vs-chip-bg: hsl(var(--muted));
+  --vs-chip-hover-bg: hsl(var(--accent));
+}
+
 .geolibre-stac-search-control .maplibre-gl-stac-search-button {
   display: none !important;
 }
