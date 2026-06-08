@@ -53,6 +53,7 @@ export function SqlWorkspaceDialog() {
 
   const [sql, setSql] = useState(SAMPLE_QUERY);
   const [running, setRunning] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SqlQueryResult | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -78,6 +79,7 @@ export function SqlWorkspaceDialog() {
 
   const handleAddAsLayer = () => {
     if (!result?.geojson) return;
+    setError(null);
     const featureCount = result.geojson.features.length;
     const name = `SQL result ${new Date().toLocaleTimeString()}`;
     addGeoJsonLayer(name, result.geojson);
@@ -103,8 +105,10 @@ export function SqlWorkspaceDialog() {
   };
 
   const handleExportCsv = async () => {
-    if (!result) return;
+    if (!result || exporting) return;
     setError(null);
+    setNotice(null);
+    setExporting(true);
     try {
       const csv = resultToCsv(result.columns, result.rows);
       await saveBinary(
@@ -117,12 +121,16 @@ export function SqlWorkspaceDialog() {
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setExporting(false);
     }
   };
 
   const handleExportGeoParquet = async () => {
-    if (!result?.geojson) return;
+    if (!result?.geojson || exporting) return;
     setError(null);
+    setNotice(null);
+    setExporting(true);
     try {
       const exported = await exportBinaryVectorLayer(
         result.geojson,
@@ -132,6 +140,8 @@ export function SqlWorkspaceDialog() {
       await saveBinary({ ...exported, mimeType: GEOPARQUET_MIME_TYPE }, "GeoParquet");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -231,7 +241,7 @@ export function SqlWorkspaceDialog() {
                   variant="outline"
                   size="sm"
                   onClick={handleAddAsLayer}
-                  disabled={!result.geojson}
+                  disabled={!result.geojson || exporting}
                 >
                   <MapPlus className="h-4 w-4" />
                   Add as layer
@@ -240,7 +250,7 @@ export function SqlWorkspaceDialog() {
                   variant="outline"
                   size="sm"
                   onClick={handleExportCsv}
-                  disabled={result.columns.length === 0}
+                  disabled={result.columns.length === 0 || exporting}
                 >
                   <Download className="h-4 w-4" />
                   Export CSV
@@ -249,7 +259,7 @@ export function SqlWorkspaceDialog() {
                   variant="outline"
                   size="sm"
                   onClick={handleExportGeoParquet}
-                  disabled={!result.geojson}
+                  disabled={!result.geojson || exporting}
                 >
                   <Download className="h-4 w-4" />
                   Export GeoParquet

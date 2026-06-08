@@ -19,6 +19,10 @@ import {
 // the same name is filtered out of both the grid and the GeoJSON properties.
 const GEOMETRY_JSON_COLUMN = "__geolibre_sql_geometry_geojson";
 
+// Reserved alias wrapping the user's statement when geometry is detected; kept
+// deliberately obscure so it does not collide with a user's own CTE/subquery.
+const SQL_SUBQUERY_ALIAS = "__geolibre_sql_subquery";
+
 /** A loaded layer exposed to the workspace as a DuckDB table. */
 export interface SqlWorkspaceTable {
   /** SQL identifier the user references in queries. */
@@ -269,7 +273,7 @@ export async function runSqlQuery(
       const result = await connection.query(
         `SELECT * REPLACE (ST_AsText(${geomId}) AS ${geomId}), ` +
           `ST_AsGeoJSON(${geomId}) AS ${hiddenId} ` +
-          `FROM (${statement}) AS __geolibre_sql_query`,
+          `FROM (${statement}) AS ${quoteIdentifier(SQL_SUBQUERY_ALIAS)}`,
       );
       const allColumns = columnNamesFromResult(result);
       const columns = allColumns.filter(
