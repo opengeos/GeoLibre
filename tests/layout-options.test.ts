@@ -46,7 +46,21 @@ describe("layoutOptionsFromLocation", () => {
       const options = layoutOptionsFromLocation(DEFAULT_DESKTOP_LAYOUT_SETTINGS);
       assert.equal(options.toolbarVisible, false, `maponly=${value}`);
       assert.equal(options.statusBarVisible, false, `maponly=${value}`);
+      assert.equal(options.layerPanelVisible, false, `maponly=${value}`);
+      assert.equal(options.stylePanelVisible, false, `maponly=${value}`);
+      assert.equal(options.attributePanelVisible, false, `maponly=${value}`);
     }
+  });
+
+  it("returns defaults when window is undefined (SSR)", () => {
+    delete (globalThis as { window?: unknown }).window;
+    const options = layoutOptionsFromLocation(DEFAULT_DESKTOP_LAYOUT_SETTINGS);
+    assert.equal(options.toolbarVisible, true);
+    assert.equal(options.statusBarVisible, true);
+    assert.equal(options.compact, false);
+    assert.equal(options.layerPanelVisible, true);
+    assert.equal(options.stylePanelVisible, true);
+    assert.equal(options.attributePanelVisible, true);
   });
 
   it("ignores maponly with a non-truthy value", () => {

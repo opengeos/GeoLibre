@@ -55,6 +55,10 @@ export function layoutOptionsFromLocation(
   const mapOnly =
     params.has("maponly") &&
     MAP_ONLY_VALUES.has(normalizedParam(params.get("maponly")));
+  // `maponly` implies `compact` so the map fills its container (the `<main>`
+  // element gets `min-h-0`). This also forces `toolbarLabels` and
+  // `showProjectInfo` to false below, which is harmless since the toolbar is
+  // hidden, but any other consumer of `compact` sees `true` in map-only mode.
   const compact = mapOnly || COMPACT_LAYOUT_VALUES.has(layout);
   const panelsHidden =
     mapOnly ||
