@@ -93,7 +93,7 @@
 - [x] Add Raster Layer powered by the `maplibre-gl-raster` plugin
 - [x] Add Vector Layer powered by the `maplibre-gl-vector` plugin
 - [x] Identify, selection, and attribute table support for DuckDB layers
-- [x] Conversion menu under Processing for Vector to GeoParquet and Raster to COG, backed by a hardened conversion sidecar with a path allowlist
+- [x] Conversion menu under Processing for Vector to GeoParquet/FlatGeobuf/PMTiles, CSV to GeoParquet, and Raster to COG, backed by a hardened conversion sidecar with a path allowlist
 - [x] Whitebox batch tools run against a selected input directory
 - [x] Controls menu with Measure, Bookmark, Minimap, and View State tools
 - [x] Print menu backed by `PrintControl`
@@ -106,7 +106,7 @@
 - [x] Docker support for the browser app
 - [x] `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` for offline spatial extension loading
 
-## v1.0: External plugin system and stable prototype
+## v1.0: Processing pipelines, external plugin system, and stable prototype
 
 - [ ] GDAL / Rasterio / GeoPandas pipelines
 - [ ] Buffer, reproject, and export GeoJSON processing tools

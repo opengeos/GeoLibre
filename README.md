@@ -4,7 +4,7 @@ Lightweight, cloud-native desktop GIS prototype built with **Tauri v2**, **React
 
 [![](https://files.opengeos.org/GeoLibre-demo.webp)](https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json)
 
-## Features (v0.8.0)
+## Features (v0.9.0)
 
 - MapLibre map workspace with OpenFreeMap basemaps, blank background support, and toggleable navigation, fullscreen, geolocation, globe, terrain, scale, attribution, and logo controls
 - Load local vector layers supported by DuckDB-WASM Spatial, including common formats such as GeoJSON, GeoParquet, GeoPackage, Shapefile, FlatGeobuf, KML/KMZ, GML, delimited text, and GPX
