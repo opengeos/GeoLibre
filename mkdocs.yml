@@ -1,5 +1,5 @@
 site_name: GeoLibre
-site_description: A lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data across desktop, mobile, and web environments.
+site_description: A lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data across desktop and web environments, with a responsive layout for mobile screens.
 site_url: https://geolibre.app
 repo_name: opengeos/GeoLibre
 repo_url: https://github.com/opengeos/GeoLibre

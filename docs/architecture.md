@@ -2,7 +2,7 @@
 
 ## Overview
 
-GeoLibre is a lightweight, cloud-native GIS platform that runs across desktop, mobile, and web environments from a single npm workspaces monorepo. The UI is a React app that ships as a native desktop app hosted by Tauri v2 and as a browser-based web app, adapting responsively to mobile and small screens. Map rendering uses MapLibre GL JS in the browser webview, with deck.gl used for advanced raster, point cloud, and 3D overlays. Application state lives in a Zustand store (`@geolibre/core`).
+GeoLibre is a lightweight, cloud-native GIS platform that runs across desktop and web environments, with a responsive layout for mobile screens, from a single npm workspaces monorepo. The UI is a React app that ships as a native desktop app hosted by Tauri v2 and as a browser-based web app, adapting responsively to mobile and small screens. Map rendering uses MapLibre GL JS in the browser webview, with deck.gl used for advanced raster, point cloud, and 3D overlays. Application state lives in a Zustand store (`@geolibre/core`).
 
 ```mermaid
 flowchart LR

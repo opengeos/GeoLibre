@@ -9,9 +9,10 @@ hide:
     <h1>A lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data.</h1>
     <p class="hero__lead">
       GeoLibre is built with Tauri, React, TypeScript, MapLibre GL JS,
-      DuckDB-WASM Spatial, and deck.gl. The same workspace runs across desktop,
-      mobile, and web environments, with fast local and cloud-native data work,
-      project files, styling, plugins, and modern geospatial workflows.
+      DuckDB-WASM Spatial, and deck.gl. The same workspace runs across desktop
+      and web environments, with a responsive layout for mobile screens, fast
+      local and cloud-native data work, project files, styling, plugins, and
+      modern geospatial workflows.
     </p>
     <div class="hero__actions">
       <a class="md-button md-button--primary" href="https://viewer.geolibre.app/">Open live demo</a>

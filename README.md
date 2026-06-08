@@ -1,6 +1,6 @@
 # GeoLibre
 
-A lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data across desktop, mobile, and web environments.
+A lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data across desktop and web environments, with a responsive layout for mobile screens.
 
 GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS**, **DuckDB-WASM Spatial**, and **deck.gl**. The same workspace runs as a native desktop app, in any modern web browser, and adapts responsively to mobile and small screens.
 
