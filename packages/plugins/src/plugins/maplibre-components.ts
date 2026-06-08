@@ -571,6 +571,7 @@ let measureControlMounted = false;
 let bookmarkControlMounted = false;
 let minimapControlMounted = false;
 let viewStateControlMounted = false;
+let minimapBasemapUnsubscribe: (() => void) | null = null;
 let stacSearchControlMounted = false;
 let zarrControlMounted = false;
 let colorbarControlMounted = false;
@@ -1802,8 +1803,12 @@ async function openStandaloneMeasureControl(
   }
 
   setTimeout(() => {
-    measureControl?.show();
-    measureControl?.expand();
+    // Guard against a teardown that nulled measureControl between addMapControl
+    // succeeding and this deferred callback firing, which would otherwise mark
+    // the panel visible even though the control no longer exists.
+    if (!measureControl) return;
+    measureControl.show();
+    measureControl.expand();
     setMeasurePanelVisible(true);
   }, 0);
   return true;
@@ -1827,8 +1832,9 @@ async function openStandaloneBookmarkControl(
   }
 
   setTimeout(() => {
-    bookmarkControl?.show();
-    bookmarkControl?.expand();
+    if (!bookmarkControl) return;
+    bookmarkControl.show();
+    bookmarkControl.expand();
     setBookmarkPanelVisible(true);
   }, 0);
   return true;
@@ -1853,13 +1859,51 @@ async function openStandaloneMinimapControl(
       return false;
     }
     minimapControlMounted = true;
+    // MinimapControl has no setStyle method and is reused across reopens, so
+    // recreate it whenever the active basemap changes to avoid showing a stale
+    // style for the rest of the session.
+    minimapBasemapUnsubscribe ??= app.onBasemapChange(() => {
+      void refreshMinimapBasemap(app);
+    });
   }
 
   setTimeout(() => {
-    minimapControl?.show();
+    if (!minimapControl) return;
+    minimapControl.show();
+    minimapControl.expand();
     setMinimapPanelVisible(true);
   }, 0);
   return true;
+}
+
+// Swap the mounted minimap for a fresh instance built with the current
+// basemap. MinimapControl bakes the style in at construction and exposes no
+// style setter, so a rebuild is the only way to follow a basemap change.
+async function refreshMinimapBasemap(app: GeoLibreAppAPI): Promise<void> {
+  if (!minimapControl || !minimapControlMounted) return;
+  const { MinimapControl: MinimapControlClass } =
+    await getComponentsConstructors();
+  if (!minimapControl || !minimapControlMounted) return;
+
+  app.removeMapControl(minimapControl);
+  minimapControl = createMinimapControl(
+    MinimapControlClass,
+    app.getActiveBasemap(),
+    app,
+  );
+  const added = app.addMapControl(minimapControl, minimapControlPosition);
+  if (!added) {
+    minimapControl = null;
+    minimapControlMounted = false;
+    setMinimapPanelVisible(false);
+    return;
+  }
+
+  setTimeout(() => {
+    if (!minimapControl) return;
+    minimapControl.show();
+    minimapControl.expand();
+  }, 0);
 }
 
 async function openStandaloneViewStateControl(
@@ -1880,8 +1924,9 @@ async function openStandaloneViewStateControl(
   }
 
   setTimeout(() => {
-    viewStateControl?.show();
-    viewStateControl?.expand();
+    if (!viewStateControl) return;
+    viewStateControl.show();
+    viewStateControl.expand();
     setViewStatePanelVisible(true);
   }, 0);
   return true;
@@ -2737,6 +2782,8 @@ function setBookmarkPanelVisible(visible: boolean): void {
 }
 
 function teardownMinimapControl(app: GeoLibreAppAPI): void {
+  minimapBasemapUnsubscribe?.();
+  minimapBasemapUnsubscribe = null;
   if (minimapControl && minimapControlMounted) {
     app.removeMapControl(minimapControl);
   }
