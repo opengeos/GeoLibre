@@ -1375,6 +1375,10 @@ export function openPrintPanel(app: GeoLibreAppAPI): void {
   void openStandalonePrintControl(app);
 }
 
+// Hides the panel but leaves the control mounted on the map (mirrors
+// closeSearchPlacesPanel). For full teardown — removing the control and
+// stopping the theme observer — use closeMaplibreComponentControls(app) or
+// deactivate the plugin.
 export function closePrintPanel(): void {
   hidePrintControl();
 }

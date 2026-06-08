@@ -17,6 +17,7 @@ import {
   closeLegendPanel,
   closeMaplibreComponentControls,
   closePlanetaryComputerPanel,
+  closePrintPanel,
   closeRasterLayerPanel,
   closeSearchPlacesPanel,
   closeThreeDTilesLayerPanel,
@@ -27,6 +28,7 @@ import {
   isColorbarPanelVisible,
   isHtmlPanelVisible,
   isLegendPanelVisible,
+  isPrintPanelVisible,
   isSearchPlacesPanelVisible,
   openColorbarPanel,
   openHtmlPanel,
@@ -46,6 +48,7 @@ import {
   subscribeEarthEnginePanel,
   subscribeHtmlPanel,
   subscribeLegendPanel,
+  subscribePrintPanel,
   subscribeSearchPlacesPanel,
   toggleEarthEnginePanel,
   WEB_SERVICE_PLUGIN_IDS,
@@ -487,6 +490,18 @@ export function TopToolbar({
     }
     openSearchPlacesPanel(appApi);
   };
+  const printPanelVisible = useSyncExternalStore(
+    subscribePrintPanel,
+    isPrintPanelVisible,
+    isPrintPanelVisible,
+  );
+  const handleTogglePrintPanel = () => {
+    if (printPanelVisible) {
+      closePrintPanel();
+      return;
+    }
+    openPrintPanel(appApi);
+  };
   const colorbarPanelVisible = useSyncExternalStore(
     subscribeColorbarPanel,
     isColorbarPanelVisible,
@@ -687,9 +702,10 @@ export function TopToolbar({
             Save As...
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => openPrintPanel(appApi)}>
+          <DropdownMenuItem onSelect={handleTogglePrintPanel}>
             <Printer className="mr-2 h-3.5 w-3.5" />
             Print...
+            {printPanelVisible ? " ✓" : ""}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
