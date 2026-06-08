@@ -62,6 +62,11 @@ async function createDatabase(): Promise<duckdb.AsyncDuckDB> {
   const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING);
   const db = new duckdb.AsyncDuckDB(logger, worker);
   await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+  // Open the database so its runtime/filesystem config is initialised. Without
+  // this, locally registered buffers still read, but remote HTTP reads fail
+  // (e.g. read_parquet over https throws "stoi: no conversion"). This mirrors
+  // how maplibre-gl-duckdb initialises the engine that reads remote files.
+  await db.open({});
   return db;
 }
 
