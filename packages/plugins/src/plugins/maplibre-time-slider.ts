@@ -46,6 +46,12 @@ const SEED_OPTIONS: TimeSliderOptions = {
       rescale: [0, 110],
       nodata: 0,
       bidx: [1, 2, 3],
+      // Footprint of the COG so MapLibre only requests in-bounds tiles
+      // (out-of-bounds tiles 404 at TiTiler and would flood the console).
+      bounds: [
+        -74.72222465917544, -8.586918476798596, -74.15951996520296,
+        -8.282218213133522,
+      ],
     },
   ],
 };
