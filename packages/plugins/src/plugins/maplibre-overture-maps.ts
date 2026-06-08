@@ -43,22 +43,15 @@ let overtureControl: OvertureMapsControl | null = null;
 // repositioning it restores the user's release, visibility, and opacity.
 let pendingState: Partial<OvertureMapsState> | null = null;
 
-function getOvertureControlOptions(): OvertureMapsControlOptions {
-  return {
-    ...OVERTURE_OPTIONS,
-    ...(pendingState?.collapsed != null
-      ? { collapsed: pendingState.collapsed }
-      : {}),
-    ...(pendingState?.panelWidth != null
-      ? { panelWidth: pendingState.panelWidth }
-      : {}),
-    ...(pendingState?.release ? { release: pendingState.release } : {}),
-    position: overturePosition,
-  };
-}
-
 function createOvertureControl(): OvertureMapsControl {
-  const control = new OvertureMapsControl(getOvertureControlOptions());
+  // Construct with the static defaults, then let setState restore the full
+  // saved state (release, panel size, and per-layer themes). setState alone
+  // covers collapsed/panelWidth/release too, so they are not duplicated as
+  // constructor options.
+  const control = new OvertureMapsControl({
+    ...OVERTURE_OPTIONS,
+    position: overturePosition,
+  });
   if (pendingState) {
     control.setState(pendingState);
   }
@@ -68,7 +61,14 @@ function createOvertureControl(): OvertureMapsControl {
 function isOvertureMapsState(
   value: unknown,
 ): value is Partial<OvertureMapsState> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  // Require at least one distinctive OvertureMapsState field so an unrelated
+  // object stored under this plugin's key is not forwarded to setState.
+  return (
+    "themes" in value || "release" in value || "collapsed" in value
+  );
 }
 
 export const maplibreOvertureMapsPlugin: GeoLibrePlugin = {
@@ -78,13 +78,14 @@ export const maplibreOvertureMapsPlugin: GeoLibrePlugin = {
   activate: (app: GeoLibreAppAPI) => {
     if (!overtureControl) {
       overtureControl = createOvertureControl();
+      attachStoreSync(overtureControl);
     }
     const added = app.addMapControl(overtureControl, overturePosition);
     if (!added) {
+      detachStoreSync();
       overtureControl = null;
       return false;
     }
-    attachStoreSync(overtureControl);
     // Open the panel on activation. Deferring past the current click avoids
     // the menu click that activated the plugin being treated as a
     // click-outside that immediately re-collapses the panel.
@@ -104,11 +105,13 @@ export const maplibreOvertureMapsPlugin: GeoLibrePlugin = {
   ) => {
     overturePosition = position;
     if (!overtureControl) return;
+    // Snapshot before detaching from the map so a failed re-add still keeps
+    // the latest state, mirroring the ordering used in deactivate.
+    pendingState = overtureControl.getState();
     app.removeMapControl(overtureControl);
     const added = app.addMapControl(overtureControl, overturePosition);
     if (!added) {
       detachStoreSync();
-      pendingState = overtureControl.getState();
       overtureControl = null;
       return false;
     }
@@ -185,7 +188,12 @@ function humanizeSourceLayer(sourceLayer: string): string {
 function attachStoreSync(control: OvertureMapsControl): void {
   controlEventHandler = () => handleControlEvent(control);
   control.on("statechange", controlEventHandler);
-  storeUnsubscribe = useAppStore.subscribe(() => handleStoreChange(control));
+  // Only react to layer changes; the store also updates on unrelated mutations
+  // (basemap, UI state) that cannot affect the Overture mirror.
+  storeUnsubscribe = useAppStore.subscribe((state, prev) => {
+    if (state.layers === prev.layers) return;
+    handleStoreChange(control);
+  });
   // Mirror the control's current source layers and adopt any layers restored
   // from a project, pushing their state back into the control.
   handleStoreChange(control);
@@ -299,10 +307,9 @@ function reverseSync(control: OvertureMapsControl): void {
     if (storeLayer.visible !== layerState.visible) {
       control.setLayerVisible(unit.theme, unit.sourceLayer, storeLayer.visible);
     }
-    if (
-      storeLayer.visible &&
-      Math.abs(storeLayer.opacity - layerState.opacity) > 1e-6
-    ) {
+    // Forward opacity even while hidden so the value persists for the next
+    // time the source layer is shown.
+    if (Math.abs(storeLayer.opacity - layerState.opacity) > 1e-6) {
       control.setLayerOpacity(unit.theme, unit.sourceLayer, storeLayer.opacity);
     }
   }
@@ -353,9 +360,29 @@ function shouldUpdateStoreLayer(
     existing.name !== next.name ||
     existing.type !== next.type ||
     existing.sourcePath !== next.sourcePath ||
-    JSON.stringify(existing.source) !== JSON.stringify(next.source) ||
-    JSON.stringify(existing.metadata) !== JSON.stringify(next.metadata)
+    stableStringify(existing.source) !== stableStringify(next.source) ||
+    stableStringify(existing.metadata) !== stableStringify(next.metadata)
   );
+}
+
+// Key-order-insensitive stringify: an existing layer deserialized from a
+// project file may carry the same source/metadata with a different key order
+// than the factory output, which a plain JSON.stringify would flag as changed.
+function stableStringify(value: unknown): string {
+  return JSON.stringify(sortKeysDeep(value));
+}
+
+function sortKeysDeep(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortKeysDeep);
+  if (value && typeof value === "object") {
+    const source = value as Record<string, unknown>;
+    const sorted: Record<string, unknown> = {};
+    for (const key of Object.keys(source).sort()) {
+      sorted[key] = sortKeysDeep(source[key]);
+    }
+    return sorted;
+  }
+  return value;
 }
 
 function removeOvertureStoreLayers(): void {
