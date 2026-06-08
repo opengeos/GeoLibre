@@ -35,7 +35,7 @@ export interface DuckDbVectorFile {
   siblingFiles?: DuckDbVectorFile[];
 }
 
-function getDatabase(): Promise<duckdb.AsyncDuckDB> {
+export function getDatabase(): Promise<duckdb.AsyncDuckDB> {
   dbPromise ??= createDatabase();
   return dbPromise;
 }
@@ -47,7 +47,7 @@ let spatialExtensionLoaded = false;
  * `getDatabase` returns a memoized singleton, so the extension persists across
  * connections and the redundant INSTALL/LOAD queries are skipped on reuse.
  */
-async function ensureSpatialExtension(
+export async function ensureSpatialExtension(
   connection: duckdb.AsyncDuckDBConnection,
 ): Promise<void> {
   if (spatialExtensionLoaded) return;
@@ -78,7 +78,7 @@ function exportBaseName(): string {
   return `__geolibre_export_${Date.now()}_${suffix}`;
 }
 
-function rowsFromResult(result: { toArray: () => DuckDbRow[] }) {
+export function rowsFromResult(result: { toArray: () => DuckDbRow[] }) {
   return result.toArray().map((row) =>
     typeof row.toJSON === "function" ? row.toJSON() : { ...row },
   );
@@ -86,7 +86,7 @@ function rowsFromResult(result: { toArray: () => DuckDbRow[] }) {
 
 // DuckDB Spatial reports CRS-annotated geometry types such as
 // GEOMETRY('EPSG:4326'), so match on the prefix rather than equality.
-function isGeometryColumnType(columnType: unknown): boolean {
+export function isGeometryColumnType(columnType: unknown): boolean {
   return (
     typeof columnType === "string" &&
     columnType.toUpperCase().startsWith("GEOMETRY")

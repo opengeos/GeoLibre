@@ -49,6 +49,7 @@ export interface AppState {
   ui: {
     processingOpen: boolean;
     conversionOpen: ConversionToolKind | null;
+    sqlWorkspaceOpen: boolean;
     attributeTableOpen: boolean;
     zoomToSelectedFeature: boolean;
   };
@@ -69,6 +70,7 @@ export interface AppState {
   setAttributeFilter: (filter: string) => void;
   setProcessingOpen: (open: boolean) => void;
   setConversionOpen: (kind: ConversionToolKind | null) => void;
+  setSqlWorkspaceOpen: (open: boolean) => void;
   setAttributeTableOpen: (open: boolean) => void;
   setZoomToSelectedFeature: (enabled: boolean) => void;
 
@@ -153,6 +155,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   ui: {
     processingOpen: false,
     conversionOpen: null,
+    sqlWorkspaceOpen: false,
     attributeTableOpen: false,
     zoomToSelectedFeature: false,
   },
@@ -184,6 +187,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((s) => ({ ui: { ...s.ui, processingOpen: open } })),
   setConversionOpen: (kind) =>
     set((s) => ({ ui: { ...s.ui, conversionOpen: kind } })),
+  setSqlWorkspaceOpen: (open) =>
+    set((s) => ({ ui: { ...s.ui, sqlWorkspaceOpen: open } })),
   setAttributeTableOpen: (open) =>
     set((s) => ({ ui: { ...s.ui, attributeTableOpen: open } })),
   setZoomToSelectedFeature: (enabled) =>

@@ -244,6 +244,7 @@ export function TopToolbar({
   const loadProject = useAppStore((s) => s.loadProject);
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
   const setConversionOpen = useAppStore((s) => s.setConversionOpen);
+  const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
   const projectName = useAppStore((s) => s.projectName);
   const projectPath = useAppStore((s) => s.projectPath);
   const recentProjects = useAppStore((s) => s.recentProjects);
@@ -892,6 +893,9 @@ export function TopToolbar({
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setProcessingOpen(true)}>
             Whitebox
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setSqlWorkspaceOpen(true)}>
+            SQL Workspace
           </DropdownMenuItem>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>Conversion</DropdownMenuSubTrigger>

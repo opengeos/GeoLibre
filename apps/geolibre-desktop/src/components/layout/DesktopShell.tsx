@@ -73,6 +73,20 @@ const ConversionDialog = lazy(() =>
     }),
 );
 
+const SqlWorkspaceDialog = lazy(() =>
+  import("../processing/SqlWorkspaceDialog")
+    .then((module) => ({
+      default: module.SqlWorkspaceDialog,
+    }))
+    .catch((error) => {
+      // Same chunk-load fallback rationale as ProcessingDialog above.
+      console.error("Failed to load SqlWorkspaceDialog", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/SqlWorkspaceDialog").SqlWorkspaceDialog;
+      return { default: Fallback };
+    }),
+);
+
 interface DesktopShellProps {
   layoutOptions: LayoutOptions;
   projectUrlLoadState?: ProjectUrlLoadState;
@@ -546,6 +560,9 @@ export function DesktopShell({
       </Suspense>
       <Suspense fallback={null}>
         <ConversionDialog />
+      </Suspense>
+      <Suspense fallback={null}>
+        <SqlWorkspaceDialog />
       </Suspense>
       <div
         ref={verticalResizeGuideRef}
