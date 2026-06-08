@@ -1903,6 +1903,11 @@ async function refreshMinimapBasemap(app: GeoLibreAppAPI): Promise<void> {
   );
   const added = app.addMapControl(minimapControl, minimapControlPosition);
   if (!added) {
+    // Also drop the basemap subscription: minimapControlMounted is now false,
+    // so without nulling the unsubscribe the `??=` in openStandaloneMinimapControl
+    // would never re-subscribe on a later reopen, silently disabling refresh.
+    minimapBasemapUnsubscribe?.();
+    minimapBasemapUnsubscribe = null;
     minimapControl = null;
     minimapControlMounted = false;
     setMinimapPanelVisible(false);
@@ -2496,9 +2501,9 @@ function routeBookmarkFileIoThroughHost(
           (bookmark): bookmark is MapBookmark =>
             !!bookmark &&
             typeof (bookmark as MapBookmark).name === "string" &&
-            typeof (bookmark as MapBookmark).lng === "number" &&
-            typeof (bookmark as MapBookmark).lat === "number" &&
-            typeof (bookmark as MapBookmark).zoom === "number",
+            Number.isFinite((bookmark as MapBookmark).lng) &&
+            Number.isFinite((bookmark as MapBookmark).lat) &&
+            Number.isFinite((bookmark as MapBookmark).zoom),
         );
         if (valid.length === 0) {
           console.warn("BookmarkControl: no valid bookmarks found in file");

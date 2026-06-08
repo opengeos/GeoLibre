@@ -78,6 +78,11 @@ export interface GeoLibreAppAPI {
    * Prompt the user to pick a text file and return its contents (a native open
    * dialog under Tauri, a file input on the web). Resolves to null when the
    * user cancels. Plugins can import data without depending on the runtime.
+   *
+   * Web-only caveat: browsers do not fire a cancel event for `<input
+   * type="file">`, so on the web the returned promise stays pending if the
+   * user dismisses the dialog without choosing a file. Under Tauri (the
+   * primary desktop target) cancel resolves to null as expected.
    */
   importTextFile?: (
     options?: GeoLibreFileDialogOptions,
