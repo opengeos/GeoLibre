@@ -23,77 +23,81 @@ import type {
 const STORE_LAYER_SOURCE_KIND = "time-slider";
 
 /**
- * Seed configuration applied on first activation. It mirrors the four bundled
- * "Add data" examples from maplibre-gl-time-slider, one per source type (COG,
- * XYZ, GeoJSON, WMS), so every supported type is demonstrated out of the box.
+ * Default configuration applied on first activation. No data sources are seeded:
+ * the dock opens expanded (`collapsed: false`) with an empty timeline so the
+ * user can add their own layers via the dock's "Add data" form, which applies a
+ * matching timeline for each chosen source type. Seeding sample sources was
+ * removed because the bundled examples cover different periods, so the
+ * out-of-range ones flooded the console with 404 tile errors.
  *
- * The examples cover different periods, so a single timeline cannot show all of
- * them at once: the active timeline defaults to the Landsat COG (yearly,
- * 1984-2013), which renders immediately. The other sources appear in the Layers
- * panel and render once the user moves the timeline into their range via the
- * dock (year/month/day granularity pills are all offered). Each source has a
- * stable explicit `id` so its maplibre layer id and GeoLibre store-layer id
- * stay constant across save/load.
+ * The starting range is a neutral recent span (the last 20 calendar years,
+ * yearly) that is replaced as soon as a real source is added.
  */
-const SEED_OPTIONS: TimeSliderOptions = {
-  startDate: "1984-01-01",
-  endDate: "2013-01-01",
-  granularity: "year",
-  granularities: ["year", "month", "day"],
-  speed: 800,
-  collapsible: true,
-  collapsed: false,
-  sources: [
-    {
-      type: "cog",
-      id: "time-slider-landsat",
-      name: "Landsat Annual Composite",
-      url: "https://data.source.coop/giswqs/opengeos/landsat_ts/{date:YYYY}.tif",
-      rescale: [0, 110],
-      nodata: 0,
-      bidx: [1, 2, 3],
-      // Footprint of the COG so MapLibre only requests in-bounds tiles
-      // (out-of-bounds tiles 404 at TiTiler and would flood the console).
-      bounds: [
-        -74.72222465917544, -8.586918476798596, -74.15951996520296,
-        -8.282218213133522,
-      ],
-    },
-    // The remaining examples cover other periods, so they are seeded hidden to
-    // avoid requesting out-of-range tiles under the default Landsat timeline.
-    // They appear in the Layers panel; toggle them on after moving the timeline
-    // into their range (MODIS: Aug 2023 daily; earthquakes: 2015 monthly).
-    {
-      type: "xyz",
-      id: "time-slider-modis-truecolor",
-      name: "MODIS Terra True Color (XYZ)",
-      visible: false,
-      tiles:
-        "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor" +
-        "/default/{date:YYYY-MM-DD}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg",
-    },
-    {
-      type: "geojson",
-      id: "time-slider-earthquakes",
-      name: "Significant Earthquakes 2015",
-      visible: false,
-      data: "https://maplibre.org/maplibre-gl-js/docs/assets/significant-earthquakes-2015.geojson",
-      timeProperty: "time",
-      window: { unit: "month", before: 0, after: 1 },
-    },
-    {
-      type: "wms",
-      id: "time-slider-modis-wms",
-      name: "MODIS Terra True Color (WMS)",
-      visible: false,
-      baseUrl:
-        "https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi?version=1.3.0&service=WMS" +
-        "&request=GetMap&format=image/png&transparent=true&CRS=EPSG:3857" +
-        "&width=256&height=256&bbox={bbox-epsg-3857}",
-      layers: "MODIS_Terra_CorrectedReflectance_TrueColor",
-    },
-  ],
-};
+function buildDefaultOptions(): TimeSliderOptions {
+  const endYear = new Date().getFullYear();
+  return {
+    startDate: `${endYear - 20}-01-01`,
+    endDate: `${endYear}-01-01`,
+    granularity: "year",
+    granularities: ["year", "month", "day"],
+    speed: 800,
+    collapsible: true,
+    collapsed: false,
+    // Match the in-app light/dark toggle rather than the system
+    // `prefers-color-scheme`, which the dock's default `auto` theme follows and
+    // which may differ from the in-app theme. startThemeSync keeps it in sync.
+    theme: resolveDocumentTheme(),
+    sources: [],
+  };
+}
+
+/**
+ * Reads the current GeoLibre theme from the `dark` class that the desktop app
+ * toggles on the document element, so the time slider dock is forced to match
+ * the in-app theme instead of the system `prefers-color-scheme`.
+ *
+ * @returns `"dark"` when the app is in dark mode, otherwise `"light"`.
+ */
+function resolveDocumentTheme(): "light" | "dark" {
+  if (typeof document === "undefined") return "light";
+  return document.documentElement.classList.contains("dark") ? "dark" : "light";
+}
+
+// Observes the document element's `class` so the dock theme tracks the in-app
+// light/dark toggle. A single module-level observer suffices: only one control
+// is ever active at a time.
+let themeObserver: MutationObserver | null = null;
+
+/**
+ * Forces the control's theme to the current in-app theme and keeps it in sync
+ * with the light/dark toggle by observing the document element's `class`.
+ *
+ * @param control - The active time-slider control.
+ */
+function startThemeSync(control: TimeSliderControl): void {
+  control.setTheme(resolveDocumentTheme());
+  if (themeObserver || typeof MutationObserver === "undefined") return;
+  // The observer fires on any `class` mutation of <html>, so cache the last
+  // applied theme and only call setTheme when the dark/light value flips.
+  let lastTheme = resolveDocumentTheme();
+  themeObserver = new MutationObserver(() => {
+    const next = resolveDocumentTheme();
+    if (next === lastTheme) return;
+    lastTheme = next;
+    control.setTheme(next);
+  });
+  themeObserver.observe(document.documentElement, {
+    attributeFilter: ["class"],
+  });
+}
+
+/**
+ * Stops the document-theme observer started by {@link startThemeSync}.
+ */
+function stopThemeSync(): void {
+  themeObserver?.disconnect();
+  themeObserver = null;
+}
 
 let timeSliderPosition: GeoLibreMapControlPosition = "bottom-left";
 let timeSliderControl: TimeSliderControl | null = null;
@@ -111,7 +115,7 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
   activate: (app: GeoLibreAppAPI) => {
     if (timeSliderControl) return;
     const control = new TimeSliderControl(
-      savedConfig ? configToOptions(savedConfig) : SEED_OPTIONS,
+      savedConfig ? configToOptions(savedConfig) : buildDefaultOptions(),
     );
     timeSliderControl = control;
     attachStoreSync(control);
@@ -178,10 +182,10 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
     const nextConfig = normalizeConfig(state);
     if (!nextConfig) {
       // A reset/new project (or an invalid value) clears the cached config so
-      // the next activation seeds fresh. If a control is still live (e.g. an
-      // invalid settings entry arrives while the plugin stays active across a
-      // project switch), tear it down and re-seed so the previous project's
-      // timeline cannot linger on screen.
+      // the next activation rebuilds the default empty timeline. If a control is
+      // still live (e.g. an invalid settings entry arrives while the plugin
+      // stays active across a project switch), tear it down and rebuild so the
+      // previous project's timeline cannot linger on screen.
       savedConfig = null;
       if (timeSliderControl) {
         detachStoreSync?.();
@@ -301,11 +305,15 @@ function attachStoreSync(control: TimeSliderControl): void {
   const onSourceRemove = () => syncStoreLayers(control);
   control.on("sourceadd", onSourceAdd);
   control.on("sourceremove", onSourceRemove);
+  // Force the dock theme to follow the in-app light/dark toggle for as long as
+  // this control is attached.
+  startThemeSync(control);
   // Bind the detacher to this specific control and its own handler closures so
   // a second attach can never orphan the previous control's listeners.
   detachStoreSync = () => {
     control.off("sourceadd", onSourceAdd);
     control.off("sourceremove", onSourceRemove);
+    stopThemeSync();
     detachStoreSync = null;
   };
 }

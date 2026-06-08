@@ -24,6 +24,19 @@ import { ensureMercatorProjection } from "./map-projection-utils";
 type DuckDBControlConstructor =
   (typeof import("maplibre-gl-duckdb"))["DuckDBControl"];
 
+/**
+ * Whether the app is running in a Vite dev build. `import.meta.env` is not part
+ * of the base `ImportMeta` type, so it is read through a cast (mirroring the
+ * accessor in earth-engine-auth) rather than referencing `vite/client`.
+ *
+ * @returns True only in a development build.
+ */
+function isDevEnv(): boolean {
+  return (
+    (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true
+  );
+}
+
 type DuckDBRendererLike = {
   clear?: () => void;
   createLayers?: (
@@ -1048,7 +1061,7 @@ function getDuckDBDeckLayerIds(layerId: string): string[] {
         : null,
     )
     .filter((id): id is string => typeof id === "string");
-  if (ids.length === 0 && results.length > 0 && import.meta.env.DEV) {
+  if (ids.length === 0 && results.length > 0 && isDevEnv()) {
     console.warn(
       `DuckDB layer ${layerId} has results without geometry types; identify picking may match nothing.`,
     );
@@ -1213,7 +1226,7 @@ function warnMissingDuckDBRows(layerId: string): void {
   if (warnedMissingRowsLayerIds.has(layerId)) return;
   warnedMissingRowsLayerIds.add(layerId);
 
-  if (import.meta.env.DEV) {
+  if (isDevEnv()) {
     console.warn(
       `DuckDB layer ${layerId} did not expose row data for extrusion heights.`,
     );
