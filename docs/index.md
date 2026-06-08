@@ -58,6 +58,12 @@ Add Data supports XYZ, WMS, GeoJSON URLs, vector tiles, COG and GeoTIFF rasters,
 The processing toolbox includes client-side algorithms now, with a roadmap toward DuckDB Spatial and an optional Python sidecar for heavier geoprocessing.
 </div>
 
+<div class="feature-card" markdown>
+### SQL Workspace
+
+Run DuckDB Spatial SQL in the browser against loaded layers, local files, and remote URLs. Auto-wraps bare URLs into the matching reader and streams remote files over HTTP range requests. Includes sample queries, query history, and adding a result (with an optional layer name) to the map or exporting it as CSV or GeoParquet.
+</div>
+
 </div>
 
 ## Try it in the browser

@@ -85,7 +85,7 @@
 
 ## v0.9: SQL and processing sidecar
 
-- [ ] SQL panel workflow for building and managing queries
+- [x] SQL Workspace for running DuckDB Spatial SQL against loaded layers, local files, and remote URLs, with sample queries, query history, and adding results to the map or exporting them
 - [ ] GDAL / Rasterio / GeoPandas pipelines
 - [ ] Buffer, reproject, and export GeoJSON processing tools
 - [ ] Expanded WhiteboxTools coverage

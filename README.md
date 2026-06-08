@@ -14,6 +14,7 @@ Lightweight, cloud-native desktop GIS prototype built with **Tauri v2**, **React
 - Layer panel for visibility, opacity, reordering, zoom-to-layer, identify, labels, and remove actions
 - Live style panel (fill, stroke, opacity, circle radius)
 - Attribute table with filtering, sorting, resize controls, feature highlighting, and optional zoom to selected features
+- SQL Workspace for running DuckDB SQL against loaded layers, local files, and remote URLs, with sample queries, query history, and adding results to the map
 - Multiple DuckDB SQL query-result layers
 - Save/open `.geolibre.json` projects
 - Desktop diagnostics panel, update check, and MSIX packaging support
@@ -104,6 +105,25 @@ docker build --build-arg GEOLIBRE_APP_BASE=/geolibre/ -t geolibre .
 ```
 
 The container always serves the app from its root path. The build argument only sets the URL prefix that the app expects, so subpath deployments also require a reverse proxy in front of the container that strips the prefix before forwarding requests (for example, nginx `proxy_pass http://geolibre/;` with a trailing slash).
+
+## SQL Workspace
+
+The SQL Workspace runs DuckDB SQL (with the Spatial extension loaded, so `ST_*` functions are available) directly in the browser against your loaded layers and remote data. Open it from the Processing menu.
+
+- **Query loaded layers.** Every vector layer with in-memory features is exposed as a table; the queryable table names are listed at the top of the dialog.
+- **Read files and URLs.** Use `read_parquet()`, `read_csv_auto()`, `read_json_auto()`, or `ST_Read()`. A bare URL or path after `FROM`/`JOIN` (for example `SELECT * FROM https://host/data.parquet`) is auto-wrapped in the matching reader. Remote files are streamed over HTTP range requests, so large datasets are not downloaded in full.
+- **Sample queries.** A dropdown of ready-to-run examples (attribute-only, aggregate, and spatial queries) against a public sample dataset, plus a per-layer "sample query for layer" dropdown.
+- **Query history.** Recently run queries are saved (in `localStorage`) and can be reloaded from the History dropdown.
+- **Results and export.** Results show in a grid (capped for display; the full result is kept for export). When a query returns a geometry column, you can add the result to the map as a new layer (with an optional custom **layer name**) or export it as CSV or GeoParquet.
+
+```sql
+SELECT NAME, CONTINENT, POP_EST, geom
+FROM https://data.source.coop/giswqs/opengeos/countries.parquet
+WHERE POP_EST > 50000000
+ORDER BY POP_EST DESC;
+```
+
+Only a single statement is supported per run; remote `s3://` URLs are not read directly, so use the HTTPS form instead.
 
 ## Embed the demo
 
