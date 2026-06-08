@@ -156,8 +156,16 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
     }
     setTimeout(() => syncStoreLayers(timeSliderControl), 0);
   },
-  getProjectState: () =>
-    timeSliderControl?.getConfig() ?? savedConfig ?? undefined,
+  getProjectState: () => {
+    const config = timeSliderControl?.getConfig() ?? savedConfig;
+    // getConfig() includes optional keys (e.g. dateFormat/beforeId) with
+    // `undefined` values. The host drops plugin settings that are not strictly
+    // JSON-compatible, and `undefined` fails that check, so round-trip through
+    // JSON to strip those keys before persisting.
+    return config
+      ? (JSON.parse(JSON.stringify(config)) as TimeSliderConfig)
+      : undefined;
+  },
   applyProjectState: (app: GeoLibreAppAPI, state: unknown) => {
     const nextConfig = normalizeConfig(state);
     if (!nextConfig) {
