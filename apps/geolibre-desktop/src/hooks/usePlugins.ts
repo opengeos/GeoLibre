@@ -23,6 +23,7 @@ import {
 import type { MapController } from "@geolibre/map";
 import type {
   GeoLibreExternalNativeLayerRegistration,
+  GeoLibreFileDialogOptions,
   GeoLibreMapControlPosition,
 } from "@geolibre/plugins";
 import { invoke } from "@tauri-apps/api/core";
@@ -32,7 +33,10 @@ import type { RefObject } from "react";
 import { useEffect, useSyncExternalStore } from "react";
 import { loadExternalPlugins } from "../lib/external-plugins";
 import { mergeStringLists } from "../lib/string-lists";
-import { saveTextFileWithFallback } from "../lib/tauri-io";
+import {
+  openLocalDataFileWithFallback,
+  saveTextFileWithFallback,
+} from "../lib/tauri-io";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
 
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
@@ -259,20 +263,35 @@ export function createAppAPI(
       mapControllerRef?.current?.fitBounds(bounds),
     getMap: () => mapControllerRef?.current?.getMap() ?? null,
     pickLocalDirectoryFiles,
-    exportTextFile: (filename: string, content: string) => {
+    exportTextFile: (
+      filename: string,
+      content: string,
+      options?: GeoLibreFileDialogOptions,
+    ) => {
+      const description = options?.description ?? "GeoJSON";
+      const extensions = options?.extensions ?? ["geojson", "json"];
+      const mimeType = options?.mimeType ?? "application/geo+json";
       void saveTextFileWithFallback(content, {
         defaultName: filename,
-        filters: [{ name: "GeoJSON", extensions: ["geojson", "json"] }],
+        filters: [{ name: description, extensions }],
         browserTypes: [
           {
-            description: "GeoJSON",
-            accept: { "application/geo+json": [".geojson", ".json"] },
+            description,
+            accept: { [mimeType]: extensions.map((ext) => `.${ext}`) },
           },
         ],
-        mimeType: "application/geo+json",
+        mimeType,
       }).catch((error) => {
         console.error(`Could not export ${filename}.`, error);
       });
+    },
+    importTextFile: (options?: GeoLibreFileDialogOptions) => {
+      const extensions = options?.extensions ?? ["json"];
+      return openLocalDataFileWithFallback({
+        filters: [{ name: options?.description ?? "JSON", extensions }],
+        accept: extensions.map((ext) => `.${ext}`).join(","),
+        readText: true,
+      }).then((result) => result?.text ?? null);
     },
     registerExternalNativeLayer: (
       registration: GeoLibreExternalNativeLayerRegistration,

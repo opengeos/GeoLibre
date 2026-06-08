@@ -701,6 +701,31 @@ body,
   z-index: 1;
 }
 
+/*
+ * The ViewState control is added as a `maplibregl-ctrl-group`, so MapLibre's
+ * `.maplibregl-ctrl-group button { display: block; width: 29px; height: 29px }`
+ * rule clobbers every button the control renders (the crosshair toggle, the
+ * per-row copy buttons, and the Draw BBox button). That left-aligns the toggle
+ * icon and blows the small copy buttons up to 29px so they no longer line up
+ * with the values beside them. Restore the component's intended sizing with a
+ * higher-specificity, container-scoped selector.
+ */
+.geolibre-view-state-control .maplibre-gl-view-state-button,
+.geolibre-view-state-control .maplibre-gl-view-state-copy,
+.geolibre-view-state-control .maplibre-gl-view-state-bbox-toggle {
+  display: flex;
+}
+
+.geolibre-view-state-control .maplibre-gl-view-state-copy {
+  width: 20px;
+  height: 20px;
+}
+
+.geolibre-view-state-control .maplibre-gl-view-state-bbox-toggle {
+  width: calc(100% - 20px);
+  height: auto;
+}
+
 .geolibre-stac-search-control .maplibre-gl-stac-search-button {
   display: none !important;
 }

@@ -35,6 +35,20 @@ export interface GeoLibreExternalNativeLayerRegistration {
   sourcePath?: string;
 }
 
+/**
+ * Describes the file-type filter shown by the host's save/open dialog so
+ * plugins can label exports/imports (e.g. JSON, GeoJSON, CSV) without knowing
+ * whether they run under Tauri or in a browser.
+ */
+export interface GeoLibreFileDialogOptions {
+  /** Human-readable file-type label, e.g. "Bookmarks" or "GeoJSON". */
+  description?: string;
+  /** Allowed extensions without the leading dot, e.g. ["json"]. */
+  extensions?: string[];
+  /** MIME type used for the browser download blob. */
+  mimeType?: string;
+}
+
 export interface GeoLibreAppAPI {
   setBasemap: (styleUrl: string) => void;
   addGeoJsonLayer: (
@@ -52,8 +66,22 @@ export interface GeoLibreAppAPI {
    * Save text content to a file chosen by the user. The host handles the
    * platform specifics (a native save dialog under Tauri, a browser download
    * on the web), so plugins can export data without depending on the runtime.
+   * Pass `options` to control the file-type label/extensions (defaults to
+   * GeoJSON).
    */
-  exportTextFile?: (filename: string, content: string) => void;
+  exportTextFile?: (
+    filename: string,
+    content: string,
+    options?: GeoLibreFileDialogOptions,
+  ) => void;
+  /**
+   * Prompt the user to pick a text file and return its contents (a native open
+   * dialog under Tauri, a file input on the web). Resolves to null when the
+   * user cancels. Plugins can import data without depending on the runtime.
+   */
+  importTextFile?: (
+    options?: GeoLibreFileDialogOptions,
+  ) => Promise<string | null>;
   registerExternalNativeLayer?: (
     layer: GeoLibreExternalNativeLayerRegistration,
   ) => void;

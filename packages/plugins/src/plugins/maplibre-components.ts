@@ -36,6 +36,7 @@ import type {
   LegendGuiControlOptions,
   LidarControl,
   LidarLayerAdapter,
+  MapBookmark,
   MeasureControl,
   MeasureControlOptions,
   MinimapControl,
@@ -1789,7 +1790,7 @@ async function openStandaloneMeasureControl(
   const { MeasureControl: MeasureControlClass } =
     await getComponentsConstructors();
 
-  measureControl ??= createMeasureControl(MeasureControlClass);
+  measureControl ??= createMeasureControl(MeasureControlClass, app);
 
   if (!measureControlMounted) {
     const added = app.addMapControl(measureControl, measureControlPosition);
@@ -1814,7 +1815,7 @@ async function openStandaloneBookmarkControl(
   const { BookmarkControl: BookmarkControlClass } =
     await getComponentsConstructors();
 
-  bookmarkControl ??= createBookmarkControl(BookmarkControlClass);
+  bookmarkControl ??= createBookmarkControl(BookmarkControlClass, app);
 
   if (!bookmarkControlMounted) {
     const added = app.addMapControl(bookmarkControl, bookmarkControlPosition);
@@ -1842,6 +1843,7 @@ async function openStandaloneMinimapControl(
   minimapControl ??= createMinimapControl(
     MinimapControlClass,
     app.getActiveBasemap(),
+    app,
   );
 
   if (!minimapControlMounted) {
@@ -1866,7 +1868,7 @@ async function openStandaloneViewStateControl(
   const { ViewStateControl: ViewStateControlClass } =
     await getComponentsConstructors();
 
-  viewStateControl ??= createViewStateControl(ViewStateControlClass);
+  viewStateControl ??= createViewStateControl(ViewStateControlClass, app);
 
   if (!viewStateControlMounted) {
     const added = app.addMapControl(viewStateControl, viewStateControlPosition);
@@ -2335,43 +2337,138 @@ function createSearchControl(
   return control;
 }
 
+// The panel's close (X) / collapse button emits "collapse". Treat that as a
+// request to remove the control entirely so the in-panel close button and the
+// Controls-menu toggle stay in sync — otherwise a collapsed icon button lingers
+// on the map with no way to dismiss it. Teardown is deferred so it runs after
+// the control finishes emitting the event.
 function createMeasureControl(
   MeasureControlClass: MeasureControlConstructor,
+  app: GeoLibreAppAPI,
 ): MeasureControl {
   const control = new MeasureControlClass(MEASURE_OPTIONS);
-  control.on("collapse", () => setMeasurePanelVisible(false));
-  control.on("expand", () => setMeasurePanelVisible(true));
+  control.on("collapse", () => {
+    if (control !== measureControl) return;
+    setTimeout(() => {
+      if (control === measureControl) teardownMeasureControl(app);
+    }, 0);
+  });
   return control;
 }
 
 function createBookmarkControl(
   BookmarkControlClass: BookmarkControlConstructor,
+  app: GeoLibreAppAPI,
 ): BookmarkControl {
   const control = new BookmarkControlClass(BOOKMARK_OPTIONS);
-  control.on("collapse", () => setBookmarkPanelVisible(false));
-  control.on("expand", () => setBookmarkPanelVisible(true));
+  control.on("collapse", () => {
+    if (control !== bookmarkControl) return;
+    setTimeout(() => {
+      if (control === bookmarkControl) teardownBookmarkControl(app);
+    }, 0);
+  });
+  routeBookmarkFileIoThroughHost(control, app);
   return control;
+}
+
+/**
+ * The BookmarkControl's built-in Import/Export use a Blob `<a download>` and a
+ * hidden `<input type="file">`, which do not work inside the Tauri WebView.
+ * Override the control's instance file-I/O methods so the host's runtime-aware
+ * helpers (a native dialog under Tauri, a download/file-input on the web) are
+ * used instead. Falls back to the control's originals if the host does not
+ * provide the helpers.
+ */
+function routeBookmarkFileIoThroughHost(
+  control: BookmarkControl,
+  app: GeoLibreAppAPI,
+): void {
+  const io = control as unknown as {
+    _exportToFile?: () => void;
+    _importFromFile?: () => void;
+    exportBookmarks: () => string;
+    importBookmarks: (bookmarks: MapBookmark[]) => unknown;
+  };
+  const originalExport = io._exportToFile?.bind(control);
+  const originalImport = io._importFromFile?.bind(control);
+  const dialogOptions = {
+    description: "Bookmarks",
+    extensions: ["json"],
+    mimeType: "application/json",
+  };
+
+  io._exportToFile = () => {
+    if (!app.exportTextFile) {
+      originalExport?.();
+      return;
+    }
+    app.exportTextFile("bookmarks.json", io.exportBookmarks(), dialogOptions);
+  };
+
+  io._importFromFile = () => {
+    if (!app.importTextFile) {
+      originalImport?.();
+      return;
+    }
+    void app.importTextFile(dialogOptions).then((text) => {
+      if (!text || control !== bookmarkControl) return;
+      let data: unknown;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        console.warn("BookmarkControl: failed to parse imported file");
+        return;
+      }
+      if (!Array.isArray(data)) {
+        console.warn("BookmarkControl: imported data is not an array");
+        return;
+      }
+      const valid = data.filter(
+        (bookmark: MapBookmark) =>
+          bookmark &&
+          typeof bookmark.name === "string" &&
+          typeof bookmark.lng === "number" &&
+          typeof bookmark.lat === "number" &&
+          typeof bookmark.zoom === "number",
+      ) as MapBookmark[];
+      if (valid.length === 0) {
+        console.warn("BookmarkControl: no valid bookmarks found in file");
+        return;
+      }
+      io.importBookmarks(valid);
+    });
+  };
 }
 
 function createMinimapControl(
   MinimapControlClass: MinimapControlConstructor,
   basemapStyleUrl: string,
+  app: GeoLibreAppAPI,
 ): MinimapControl {
   const control = new MinimapControlClass({
     ...MINIMAP_OPTIONS,
     style: basemapStyleUrl,
   });
-  control.on("collapse", () => setMinimapPanelVisible(false));
-  control.on("expand", () => setMinimapPanelVisible(true));
+  control.on("collapse", () => {
+    if (control !== minimapControl) return;
+    setTimeout(() => {
+      if (control === minimapControl) teardownMinimapControl(app);
+    }, 0);
+  });
   return control;
 }
 
 function createViewStateControl(
   ViewStateControlClass: ViewStateControlConstructor,
+  app: GeoLibreAppAPI,
 ): ViewStateControl {
   const control = new ViewStateControlClass(VIEW_STATE_OPTIONS);
-  control.on("collapse", () => setViewStatePanelVisible(false));
-  control.on("expand", () => setViewStatePanelVisible(true));
+  control.on("collapse", () => {
+    if (control !== viewStateControl) return;
+    setTimeout(() => {
+      if (control === viewStateControl) teardownViewStateControl(app);
+    }, 0);
+  });
   return control;
 }
 
