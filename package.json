@@ -1,8 +1,8 @@
 {
   "name": "geolibre",
   "private": true,
-  "version": "0.8.0",
-  "description": "GeoLibre Desktop — lightweight cloud-native desktop GIS",
+  "version": "0.9.0",
+  "description": "GeoLibre: a lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data across desktop, mobile, and web environments",
   "workspaces": [
     "apps/*",
     "packages/*",

@@ -1,4 +1,4 @@
-# GeoLibre Desktop Roadmap
+# GeoLibre Roadmap
 
 ## v0.1: Map viewer and GeoJSON
 

@@ -5,13 +5,13 @@ hide:
 
 <section class="hero">
   <div class="hero__content">
-    <p class="eyebrow">Cloud-native desktop GIS</p>
-    <h1>MapLibre-powered GIS for local projects and modern geospatial workflows.</h1>
+    <p class="eyebrow">Cloud-native GIS platform</p>
+    <h1>A lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data.</h1>
     <p class="hero__lead">
-      GeoLibre is a lightweight desktop GIS prototype built with Tauri, React,
-      TypeScript, MapLibre GL JS, DuckDB-WASM Spatial, and deck.gl. It focuses
-      on fast local data work, project files, styling, plugins, and a practical
-      path toward cloud-native geospatial workflows.
+      GeoLibre is built with Tauri, React, TypeScript, MapLibre GL JS,
+      DuckDB-WASM Spatial, and deck.gl. The same workspace runs across desktop,
+      mobile, and web environments, with fast local and cloud-native data work,
+      project files, styling, plugins, and modern geospatial workflows.
     </p>
     <div class="hero__actions">
       <a class="md-button md-button--primary" href="https://viewer.geolibre.app/">Open live demo</a>
@@ -20,7 +20,7 @@ hide:
     </div>
   </div>
   <figure class="hero__media">
-    <img src="https://files.opengeos.org/GeoLibre-demo.webp" alt="GeoLibre map interface showing the desktop GIS workspace">
+    <img src="https://files.opengeos.org/GeoLibre-demo.webp" alt="GeoLibre map interface showing the GIS workspace">
   </figure>
 </section>
 
@@ -43,7 +43,7 @@ Load local vector data supported by DuckDB-WASM Spatial, add web tile and servic
 <div class="feature-card" markdown>
 ### Plugin-ready UI
 
-Built-in plugins cover basemaps, sample data, layer control, MapLibre components, swipe, street view, time slider, LiDAR, GeoAgent, and GeoEditor integrations.
+Built-in plugins cover basemaps, sample data, layer control, MapLibre components, swipe, street view, time slider, Overture Maps, LiDAR, GeoAgent, and GeoEditor integrations.
 </div>
 
 <div class="feature-card" markdown>

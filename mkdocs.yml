@@ -1,5 +1,5 @@
 site_name: GeoLibre
-site_description: Lightweight, cloud-native desktop GIS built with Tauri, React, TypeScript, and MapLibre GL JS.
+site_description: A lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data across desktop, mobile, and web environments.
 site_url: https://geolibre.app
 repo_name: opengeos/GeoLibre
 repo_url: https://github.com/opengeos/GeoLibre

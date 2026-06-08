@@ -1,25 +1,34 @@
-# GeoLibre Desktop
+# GeoLibre
 
-Lightweight, cloud-native desktop GIS prototype built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS**, **DuckDB-WASM Spatial**, and **deck.gl**.
+A lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data across desktop, mobile, and web environments.
+
+GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS**, **DuckDB-WASM Spatial**, and **deck.gl**. The same workspace runs as a native desktop app, in any modern web browser, and adapts responsively to mobile and small screens.
 
 [![](https://files.opengeos.org/GeoLibre-demo.webp)](https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json)
 
 ## Features (v0.9.0)
 
+- Runs across desktop (Tauri), web (browser), and mobile or small screens, with a responsive layout that adapts menus, dialogs, and panels and per-panel visibility through Layout settings
 - MapLibre map workspace with OpenFreeMap basemaps, blank background support, and toggleable navigation, fullscreen, geolocation, globe, terrain, scale, attribution, and logo controls
 - Load local vector layers supported by DuckDB-WASM Spatial, including common formats such as GeoJSON, GeoParquet, GeoPackage, Shapefile, FlatGeobuf, KML/KMZ, GML, delimited text, and GPX
 - Reproject vector layers to EPSG:4326 on load and split dragged GPX files into named waypoint, track, and route layers
 - Add Data menu for XYZ tiles, WMS, WFS, GeoJSON URLs, vector tiles, COG and GeoTIFF rasters, MBTiles, ArcGIS FeatureServer and VectorTileServer layers, PMTiles, Zarr, LiDAR, 3D Tiles, and Gaussian splats
+- Cloud data integrations through the Planetary Computer and Earth Engine panels, the Overture Maps plugin, and federal Web Services plugins
 - Manual and automatic refresh for WFS and GeoJSON URL layers
 - Layer panel for visibility, opacity, reordering, zoom-to-layer, identify, labels, and remove actions
 - Live style panel (fill, stroke, opacity, circle radius)
 - Attribute table with filtering, sorting, resize controls, feature highlighting, and optional zoom to selected features
-- SQL Workspace for running DuckDB SQL against loaded layers, local files, and remote URLs, with sample queries, query history, and adding results to the map
-- Multiple DuckDB SQL query-result layers
-- Save/open `.geolibre.json` projects
+- SQL Workspace for running DuckDB Spatial SQL against loaded layers, local files, and remote URLs, with sample queries, query history, and adding results to the map or exporting them
+- Multiple DuckDB SQL query-result layers with identify, selection, and attribute table support
+- Controls menu with Measure, Bookmark, Minimap, and View State tools, plus a Print menu and a Search panel
+- Conversion menu for Vector to GeoParquet/FlatGeobuf/PMTiles, CSV to GeoParquet, and Raster to COG, with browser DuckDB-WASM and an optional sidecar
+- Whitebox toolbox with batch tools run against a selected input directory
+- Project menu to create, open, save, and Save As `.geolibre.json` projects
 - Desktop diagnostics panel, update check, and MSIX packaging support
-- Plugin system with basemap, layer control, MapLibre components, swipe, street view, LiDAR, GeoAgent, and GeoEditor integrations, including configurable control positions and external plugin manifests
+- Plugin system with basemap, layer control, MapLibre components, swipe, street view, Time Slider, Overture Maps, LiDAR, GeoAgent, and GeoEditor integrations, including configurable control positions and external plugin manifests
+- Time Slider plugin for animating time series raster and vector data
 - External plugin zip loading from the app data plugins directory and local development plugin directories
+- Browser deployment with Docker, embed-friendly URL parameters, and a `maponly` chrome-free mode
 - Optional Python FastAPI sidecar for heavier processing workflows
 
 ## Prerequisites
