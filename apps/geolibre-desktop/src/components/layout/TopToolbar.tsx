@@ -34,6 +34,7 @@ import {
   openLidarLayerPanel,
   openPlanetaryComputerPanel,
   openPMTilesLayerPanel,
+  openPrintPanel,
   openRasterLayerPanel,
   openSearchPlacesPanel,
   openSplattingLayerPanel,
@@ -88,6 +89,7 @@ import {
   Map,
   MessageSquare,
   Moon,
+  Printer,
   Puzzle,
   RefreshCw,
   Save,
@@ -683,6 +685,11 @@ export function TopToolbar({
           <DropdownMenuItem onSelect={() => void handleSaveAs()}>
             <FilePen className="mr-2 h-3.5 w-3.5" />
             Save As...
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => openPrintPanel(appApi)}>
+            <Printer className="mr-2 h-3.5 w-3.5" />
+            Print...
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

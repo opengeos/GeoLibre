@@ -38,6 +38,9 @@ import type {
   PMTilesLayerControlOptions,
   PMTilesLayerEventHandler,
   PMTilesLayerInfo,
+  PrintControl,
+  PrintControlOptions,
+  PrintTheme,
   SearchControl,
   SearchControlOptions,
   StacSearchControl,
@@ -70,6 +73,8 @@ type ColorbarGuiControlConstructor =
   (typeof import("maplibre-gl-components"))["ColorbarGuiControl"];
 type PMTilesLayerControlConstructor =
   (typeof import("maplibre-gl-components"))["PMTilesLayerControl"];
+type PrintControlConstructor =
+  (typeof import("maplibre-gl-components"))["PrintControl"];
 type SearchControlConstructor =
   (typeof import("maplibre-gl-components"))["SearchControl"];
 type StacSearchControlConstructor =
@@ -109,6 +114,7 @@ interface ComponentsConstructors {
   LidarControl: LidarControlConstructor;
   LidarLayerAdapter: LidarLayerAdapterConstructor;
   PMTilesLayerControl: PMTilesLayerControlConstructor;
+  PrintControl: PrintControlConstructor;
   SearchControl: SearchControlConstructor;
   StacSearchControl: StacSearchControlConstructor;
   ZarrLayerControl: ZarrLayerControlConstructor;
@@ -119,6 +125,7 @@ const cogRasterControlPosition: GeoLibreMapControlPosition = "top-left";
 const flatGeobufControlPosition: GeoLibreMapControlPosition = "top-left";
 const pmtilesControlPosition: GeoLibreMapControlPosition = "top-left";
 const searchControlPosition: GeoLibreMapControlPosition = "top-right";
+const printControlPosition: GeoLibreMapControlPosition = "top-right";
 const stacSearchControlPosition: GeoLibreMapControlPosition = "top-left";
 const zarrControlPosition: GeoLibreMapControlPosition = "top-left";
 const colorbarControlPosition: GeoLibreMapControlPosition = "top-left";
@@ -235,6 +242,18 @@ const SEARCH_OPTIONS = {
   placeholder: "Search places...",
   width: 320,
 } satisfies SearchControlOptions;
+
+const PRINT_OPTIONS = {
+  backgroundColor: "hsl(var(--popover))",
+  className: "geolibre-print-control",
+  collapsed: false,
+  fontColor: "hsl(var(--popover-foreground))",
+  maxHeight: 520,
+  panelWidth: 300,
+  position: printControlPosition,
+  showPageOptions: true,
+  showSizeOptions: true,
+} satisfies PrintControlOptions;
 
 const STAC_SEARCH_OPTIONS = {
   backgroundColor: "hsl(var(--popover))",
@@ -459,6 +478,7 @@ let componentsControl: ControlGrid | null = null;
 let cogRasterControl: CogLayerControl | null = null;
 let flatGeobufControl: AddVectorControl | null = null;
 let pmtilesControl: PMTilesLayerControl | null = null;
+let printControl: PrintControl | null = null;
 let searchControl: SearchControl | null = null;
 let stacSearchControl: StacSearchControl | null = null;
 let zarrControl: ZarrLayerControl | null = null;
@@ -474,6 +494,7 @@ let flatGeobufControlMounted = false;
 let cogRasterControlMounted = false;
 let geoTiffRasterOverlayMounted = false;
 let pmtilesControlMounted = false;
+let printControlMounted = false;
 let searchControlMounted = false;
 let stacSearchControlMounted = false;
 let zarrControlMounted = false;
@@ -496,6 +517,9 @@ let componentsConstructorsPromise: Promise<ComponentsConstructors> | null =
   null;
 let searchPlacesPanelVisible = false;
 const searchPlacesPanelListeners = new Set<() => void>();
+let printPanelVisible = false;
+const printPanelListeners = new Set<() => void>();
+let printThemeObserver: MutationObserver | null = null;
 let colorbarPanelVisible = false;
 const colorbarPanelListeners = new Set<() => void>();
 let legendPanelVisible = false;
@@ -865,6 +889,7 @@ const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
       LidarControl: LidarControlClass,
       LidarLayerAdapter: LidarLayerAdapterClass,
       PMTilesLayerControl: PMTilesLayerControlClass,
+      PrintControl: PrintControlClass,
       SearchControl: SearchControlClass,
       StacSearchControl: StacSearchControlClass,
       ZarrLayerControl: ZarrLayerControlClass,
@@ -880,6 +905,7 @@ const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
       LidarControl: LidarControlClass,
       LidarLayerAdapter: LidarLayerAdapterClass,
       PMTilesLayerControl: PMTilesLayerControlClass,
+      PrintControl: PrintControlClass,
       SearchControl: SearchControlClass,
       StacSearchControl: StacSearchControlClass,
       ZarrLayerControl: ZarrLayerControlClass,
@@ -939,6 +965,7 @@ export const maplibreComponentsPlugin: GeoLibrePlugin = {
     teardownGeoTiffRasterOverlay(app);
     teardownFlatGeobufControl(app);
     teardownPMTilesControl(app);
+    teardownPrintControl(app);
     teardownSearchControl(app);
     teardownStacSearchControl(app);
     teardownZarrControl(app);
@@ -1342,6 +1369,25 @@ export function subscribeSearchPlacesPanel(listener: () => void): () => void {
   return () => searchPlacesPanelListeners.delete(listener);
 }
 
+// The standalone Print panel exports the map via the maplibre-gl-components
+// PrintControl. It is opened on demand from the Project menu.
+export function openPrintPanel(app: GeoLibreAppAPI): void {
+  void openStandalonePrintControl(app);
+}
+
+export function closePrintPanel(): void {
+  hidePrintControl();
+}
+
+export function isPrintPanelVisible(): boolean {
+  return printPanelVisible;
+}
+
+export function subscribePrintPanel(listener: () => void): () => void {
+  printPanelListeners.add(listener);
+  return () => printPanelListeners.delete(listener);
+}
+
 export function openColorbarPanel(app: GeoLibreAppAPI): void {
   void openStandaloneColorbarControl(app);
 }
@@ -1389,6 +1435,7 @@ export function closeMaplibreComponentControls(app: GeoLibreAppAPI): void {
   teardownGeoTiffRasterOverlay(app);
   teardownFlatGeobufControl(app);
   teardownPMTilesControl(app);
+  teardownPrintControl(app);
   teardownSearchControl(app);
   teardownStacSearchControl(app);
   teardownZarrControl(app);
@@ -1503,6 +1550,32 @@ async function openStandalonePMTilesControl(
   setTimeout(() => {
     pmtilesControl?.show();
     pmtilesControl?.expand();
+  }, 0);
+  return true;
+}
+
+async function openStandalonePrintControl(
+  app: GeoLibreAppAPI,
+): Promise<boolean> {
+  const { PrintControl: PrintControlClass } =
+    await getComponentsConstructors();
+
+  printControl ??= createPrintControl(PrintControlClass);
+
+  if (!printControlMounted) {
+    const added = app.addMapControl(printControl, printControlPosition);
+    if (!added) {
+      printControl = null;
+      return false;
+    }
+    printControlMounted = true;
+    startPrintThemeSync();
+  }
+
+  setTimeout(() => {
+    printControl?.show();
+    printControl?.expand();
+    setPrintPanelVisible(true);
   }, 0);
   return true;
 }
@@ -1982,6 +2055,49 @@ function createSearchControl(
   return control;
 }
 
+/**
+ * Read the current GeoLibre theme from the `dark` class that the desktop app
+ * toggles on the document element so the PrintControl panel can be forced to
+ * match it (rather than following the system `prefers-color-scheme`, which may
+ * differ from the in-app theme).
+ */
+function resolveDocumentTheme(): PrintTheme {
+  if (typeof document === "undefined") return "auto";
+  return document.documentElement.classList.contains("dark")
+    ? "dark"
+    : "light";
+}
+
+function createPrintControl(
+  PrintControlClass: PrintControlConstructor,
+): PrintControl {
+  const control = new PrintControlClass({
+    ...PRINT_OPTIONS,
+    theme: resolveDocumentTheme(),
+  });
+  control.on("collapse", hidePrintControl);
+  return control;
+}
+
+/**
+ * Keep the PrintControl panel theme in sync with the in-app light/dark toggle
+ * by observing the `class` attribute of the document element.
+ */
+function startPrintThemeSync(): void {
+  if (printThemeObserver || typeof MutationObserver === "undefined") return;
+  printThemeObserver = new MutationObserver(() => {
+    printControl?.setTheme(resolveDocumentTheme());
+  });
+  printThemeObserver.observe(document.documentElement, {
+    attributeFilter: ["class"],
+  });
+}
+
+function stopPrintThemeSync(): void {
+  printThemeObserver?.disconnect();
+  printThemeObserver = null;
+}
+
 function createColorbarControl(
   ColorbarGuiControlClass: ColorbarGuiControlConstructor,
 ): ColorbarGuiControl {
@@ -2105,6 +2221,29 @@ function teardownSearchControl(app: GeoLibreAppAPI): void {
   searchControl = null;
   searchControlMounted = false;
   setSearchPlacesPanelVisible(false);
+}
+
+function teardownPrintControl(app: GeoLibreAppAPI): void {
+  stopPrintThemeSync();
+  if (printControl && printControlMounted) {
+    app.removeMapControl(printControl);
+  }
+  printControl = null;
+  printControlMounted = false;
+  setPrintPanelVisible(false);
+}
+
+function hidePrintControl(): void {
+  printControl?.hide();
+  setPrintPanelVisible(false);
+}
+
+function setPrintPanelVisible(visible: boolean): void {
+  if (printPanelVisible === visible) return;
+  printPanelVisible = visible;
+  for (const listener of printPanelListeners) {
+    listener();
+  }
 }
 
 function teardownStacSearchControl(app: GeoLibreAppAPI): void {
