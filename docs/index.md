@@ -10,7 +10,7 @@ hide:
     <p class="hero__lead">
       GeoLibre is built with Tauri, React, TypeScript, MapLibre GL JS,
       DuckDB-WASM Spatial, and deck.gl. The same workspace runs across desktop
-      and web environments, with a responsive layout for mobile screens, fast
+      and web environments, adapting responsively to mobile screens, with fast
       local and cloud-native data work, project files, styling, plugins, and
       modern geospatial workflows.
     </p>
