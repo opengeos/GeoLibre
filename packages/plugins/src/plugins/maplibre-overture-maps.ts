@@ -43,7 +43,7 @@ let overtureControl: OvertureMapsControl | null = null;
 // repositioning it restores the user's release, visibility, and opacity.
 let pendingState: Partial<OvertureMapsState> | null = null;
 
-function createOvertureControl(): OvertureMapsControl {
+function createOvertureControl(app: GeoLibreAppAPI): OvertureMapsControl {
   // Construct with the static defaults, then let setState restore the full
   // saved state (release, panel size, and per-layer themes). setState alone
   // covers collapsed/panelWidth/release too, so they are not duplicated as
@@ -51,6 +51,16 @@ function createOvertureControl(): OvertureMapsControl {
   const control = new OvertureMapsControl({
     ...OVERTURE_OPTIONS,
     position: overturePosition,
+    // Route the layer GeoJSON export through the host so it works in desktop
+    // webviews (Tauri), where the control's built-in anchor download is a
+    // no-op. Falls back to the control's browser download when the host has
+    // no exporter.
+    ...(app.exportTextFile
+      ? {
+          onExport: (filename, data) =>
+            app.exportTextFile?.(filename, JSON.stringify(data)),
+        }
+      : {}),
   });
   if (pendingState) {
     control.setState(pendingState);
@@ -77,7 +87,7 @@ export const maplibreOvertureMapsPlugin: GeoLibrePlugin = {
   version: "0.2.0",
   activate: (app: GeoLibreAppAPI) => {
     if (!overtureControl) {
-      overtureControl = createOvertureControl();
+      overtureControl = createOvertureControl(app);
       attachStoreSync(overtureControl);
     }
     const added = app.addMapControl(overtureControl, overturePosition);

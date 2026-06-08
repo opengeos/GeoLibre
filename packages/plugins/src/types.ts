@@ -48,6 +48,12 @@ export interface GeoLibreAppAPI {
   fitBounds?: (bounds: [number, number, number, number]) => void;
   getMap?: () => MapLibreMap | null;
   pickLocalDirectoryFiles?: () => Promise<File[] | null>;
+  /**
+   * Save text content to a file chosen by the user. The host handles the
+   * platform specifics (a native save dialog under Tauri, a browser download
+   * on the web), so plugins can export data without depending on the runtime.
+   */
+  exportTextFile?: (filename: string, content: string) => void;
   registerExternalNativeLayer?: (
     layer: GeoLibreExternalNativeLayerRegistration,
   ) => void;

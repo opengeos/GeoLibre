@@ -32,6 +32,7 @@ import type { RefObject } from "react";
 import { useEffect, useSyncExternalStore } from "react";
 import { loadExternalPlugins } from "../lib/external-plugins";
 import { mergeStringLists } from "../lib/string-lists";
+import { saveTextFileWithFallback } from "../lib/tauri-io";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
 
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
@@ -258,6 +259,21 @@ export function createAppAPI(
       mapControllerRef?.current?.fitBounds(bounds),
     getMap: () => mapControllerRef?.current?.getMap() ?? null,
     pickLocalDirectoryFiles,
+    exportTextFile: (filename: string, content: string) => {
+      void saveTextFileWithFallback(content, {
+        defaultName: filename,
+        filters: [{ name: "GeoJSON", extensions: ["geojson", "json"] }],
+        browserTypes: [
+          {
+            description: "GeoJSON",
+            accept: { "application/geo+json": [".geojson", ".json"] },
+          },
+        ],
+        mimeType: "application/geo+json",
+      }).catch((error) => {
+        console.error(`Could not export ${filename}.`, error);
+      });
+    },
     registerExternalNativeLayer: (
       registration: GeoLibreExternalNativeLayerRegistration,
     ) => {
