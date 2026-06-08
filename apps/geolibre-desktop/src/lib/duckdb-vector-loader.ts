@@ -40,32 +40,42 @@ export function getDatabase(): Promise<duckdb.AsyncDuckDB> {
   return dbPromise;
 }
 
-let spatialExtensionLoaded = false;
+let spatialExtensionPromise: Promise<void> | null = null;
 
 /**
  * Install and load the DuckDB spatial extension once per database instance.
  * `getDatabase` returns a memoized singleton, so the extension persists across
  * connections and the redundant INSTALL/LOAD queries are skipped on reuse.
+ *
+ * The load is memoized as a promise rather than a boolean so concurrent callers
+ * (the function is exported and reused) share a single INSTALL/LOAD instead of
+ * each racing to run it. On failure the memo is cleared so a later call retries.
  */
 export async function ensureSpatialExtension(
   connection: duckdb.AsyncDuckDBConnection,
   beforeLoad?: () => Promise<void>,
 ): Promise<void> {
-  if (spatialExtensionLoaded) return;
-  // duckdb-wasm 1.33.1-dev45 breaks remote read_parquet if the spatial
-  // extension is loaded before the first remote HTTP read on the database.
-  // `beforeLoad` lets the caller warm up that path (a pre-spatial remote read)
-  // before INSTALL/LOAD, which is the only thing that initialises it.
-  if (beforeLoad) {
-    try {
-      await beforeLoad();
-    } catch {
-      // Warm-up is best-effort; a failure here must not block spatial loading.
+  spatialExtensionPromise ??= (async () => {
+    // duckdb-wasm 1.33.1-dev45 breaks remote read_parquet if the spatial
+    // extension is loaded before the first remote HTTP read on the database.
+    // `beforeLoad` lets the caller warm up that path (a pre-spatial remote read)
+    // before INSTALL/LOAD, which is the only thing that initialises it.
+    if (beforeLoad) {
+      try {
+        await beforeLoad();
+      } catch {
+        // Warm-up is best-effort; a failure here must not block spatial loading.
+      }
     }
+    await connection.query("INSTALL spatial");
+    await connection.query("LOAD spatial");
+  })();
+  try {
+    await spatialExtensionPromise;
+  } catch (error) {
+    spatialExtensionPromise = null;
+    throw error;
   }
-  await connection.query("INSTALL spatial");
-  await connection.query("LOAD spatial");
-  spatialExtensionLoaded = true;
 }
 
 async function createDatabase(): Promise<duckdb.AsyncDuckDB> {

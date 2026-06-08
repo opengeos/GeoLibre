@@ -27,6 +27,7 @@ import {
   previewLayerTables,
   resultToCsv,
   runSqlQuery,
+  SAMPLE_DATASET_URL,
   type SqlQueryResult,
 } from "../../lib/sql-workspace";
 import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
@@ -38,11 +39,6 @@ const CSV_MIME_TYPE = "text/csv";
 const MAX_DISPLAYED_ROWS = 500;
 
 const SAMPLE_QUERY = "SELECT 1 AS hello;";
-
-// Public sample dataset (Natural Earth countries, GeoParquet) used by the
-// example queries so users can try the workspace without loading data first.
-const SAMPLE_DATASET_URL =
-  "https://data.source.coop/giswqs/opengeos/countries.parquet";
 
 // Curated examples covering plain attribute tables, aggregates, and spatial
 // queries that return a geometry column (so "Add as layer" / export work). All

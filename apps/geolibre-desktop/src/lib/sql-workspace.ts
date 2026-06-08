@@ -68,11 +68,13 @@ const BARE_SOURCE_PATTERN =
 const REMOTE_READER_ARG_PATTERN =
   /\b(read_parquet|parquet_scan|read_csv_auto|read_csv|read_json_auto|read_json|read_ndjson_auto|read_ndjson)\s*\(\s*'(https?:\/\/[^']+)'/gi;
 
-// A pre-spatial remote read_parquet is what initialises the HTTP read path (see
-// ensureSpatialExtension). When a query has no remote parquet of its own to warm
-// up with (e.g. a local-only first query that would otherwise load spatial
-// cold), this tiny public parquet is read instead. Only its footer is fetched.
-const HTTP_WARMUP_PARQUET_URL =
+// Public sample dataset used both by the dialog's example queries and as the
+// pre-spatial HTTP warm-up read. A pre-spatial remote read_parquet is what
+// initialises the HTTP read path (see ensureSpatialExtension); when a query has
+// no remote parquet of its own to warm up with (e.g. a local-only first query
+// that would otherwise load spatial cold), this parquet is read instead — only
+// its footer is fetched. Exported so the dialog shares the same single URL.
+export const SAMPLE_DATASET_URL =
   "https://data.source.coop/giswqs/opengeos/countries.parquet";
 
 /** A loaded layer exposed to the workspace as a DuckDB table. */
@@ -482,11 +484,14 @@ async function registerRemoteSources(
   }
   // Replace only the matched reader-call arguments, so a URL that happens to
   // appear elsewhere (e.g. in a WHERE-clause string literal) is left intact.
+  // The pattern matches up to the URL's closing quote but not the call's
+  // closing paren, so the replacement must not add one: the original `)` (and
+  // any trailing arguments) stays in place.
   const rewritten = statement.replace(
     REMOTE_READER_ARG_PATTERN,
     (whole, reader: string, url: string) => {
       const handle = handleByUrl.get(url);
-      return handle ? `${reader}(${quoteSqlString(handle)})` : whole;
+      return handle ? `${reader}(${quoteSqlString(handle)}` : whole;
     },
   );
   return { statement: rewritten, readerCalls };
@@ -585,8 +590,15 @@ export async function runSqlQuery(
     // and guarantee at least one read_parquet runs by falling back to a tiny
     // default parquet when the query has none of its own.
     const warmups = [...readerCalls];
-    if (!warmups.some((call) => call.startsWith("read_parquet"))) {
-      warmups.push(`read_parquet(${quoteSqlString(HTTP_WARMUP_PARQUET_URL)})`);
+    // read_parquet and its alias parquet_scan both initialise the HTTP read
+    // path; only fall back to the default warmup when neither is present.
+    if (
+      !warmups.some(
+        (call) =>
+          call.startsWith("read_parquet") || call.startsWith("parquet_scan"),
+      )
+    ) {
+      warmups.push(`read_parquet(${quoteSqlString(SAMPLE_DATASET_URL)})`);
     }
     await ensureSpatialExtension(connection, async () => {
       for (const readerCall of warmups) {
