@@ -2092,7 +2092,13 @@ function createPrintControl(
  * by observing the `class` attribute of the document element.
  */
 function startPrintThemeSync(): void {
-  if (printThemeObserver || typeof MutationObserver === "undefined") return;
+  if (
+    printThemeObserver ||
+    typeof MutationObserver === "undefined" ||
+    typeof document === "undefined"
+  ) {
+    return;
+  }
   // The observer fires on any `class` mutation of <html>, so cache the last
   // applied theme and only call setTheme when the dark/light value flips.
   let lastTheme = resolveDocumentTheme();
