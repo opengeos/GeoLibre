@@ -152,6 +152,11 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
     if (!added) {
       detachStoreSync(timeSliderControl);
       timeSliderControl = null;
+      // Preserve the captured config so a later activate() restores the user's
+      // layers, and drop the now-orphaned store layers (the previous control's
+      // map layers were already removed above).
+      savedConfig = config;
+      removeAllTimeSliderStoreLayers();
       return false;
     }
     setTimeout(() => syncStoreLayers(timeSliderControl), 0);
@@ -170,16 +175,27 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
     const nextConfig = normalizeConfig(state);
     if (!nextConfig) {
       // A reset/new project (or an invalid value) clears the cached config so
-      // the next activation seeds fresh instead of restoring stale state.
+      // the next activation seeds fresh. If a control is still live (e.g. an
+      // invalid settings entry arrives while the plugin stays active across a
+      // project switch), tear it down and re-seed so the previous project's
+      // timeline cannot linger on screen.
       savedConfig = null;
+      if (timeSliderControl) {
+        detachStoreSync(timeSliderControl);
+        app.removeMapControl(timeSliderControl);
+        timeSliderControl = null;
+        removeAllTimeSliderStoreLayers();
+        return maplibreTimeSliderPlugin.activate(app) !== false;
+      }
       return false;
     }
 
     savedConfig = nextConfig;
     if (!timeSliderControl) return true;
 
-    // setConfig replaces every layer with those in the saved config; the
-    // resulting `change`/`statechange` events drive the store reconcile.
+    // setConfig replaces the sources in place without firing
+    // sourceadd/sourceremove, so reconcile the store via the setTimeout below
+    // once the new layers exist.
     timeSliderControl.setConfig(nextConfig);
     setTimeout(() => syncStoreLayers(timeSliderControl), 0);
     return true;
@@ -208,7 +224,8 @@ function configToOptions(config: TimeSliderConfig): TimeSliderOptions {
     dateFormat: config.dateFormat,
     collapsed: config.collapsed,
     beforeId: config.beforeId,
-    sources: [...config.sources],
+    // Copy each source so the rebuilt control cannot mutate the cached config.
+    sources: config.sources.map((source) => ({ ...source })),
     collapsible: true,
   };
 }
@@ -226,6 +243,9 @@ function normalizeConfig(state: unknown): TimeSliderConfig | null {
   if (
     typeof candidate.startDate !== "string" ||
     typeof candidate.endDate !== "string" ||
+    typeof candidate.granularity !== "string" ||
+    (candidate.currentDate !== undefined &&
+      typeof candidate.currentDate !== "string") ||
     !Array.isArray(candidate.sources) ||
     (candidate.sources as unknown[]).some(
       (source) =>
