@@ -53,7 +53,7 @@
     "maplibre-gl-raster": "^0.2.0",
     "maplibre-gl-streetview": "^0.4.0",
     "maplibre-gl-swipe": "^0.7.1",
-    "maplibre-gl-time-slider": "^1.0.2",
+    "maplibre-gl-time-slider": "^1.0.3",
     "maplibre-gl-vector": "^0.2.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
