@@ -1962,3 +1962,37 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
 
   color-scheme: dark;
 }
+
+/* maplibre-gl-overture-maps themes its control, panel, and inspect popup
+   from prefers-color-scheme (the OS theme): in `auto` mode it stamps a hard
+   `ovt-theme-light`/`ovt-theme-dark` class on the elements from the system
+   preference, so a light OS keeps the panel light even when the app is in
+   dark mode. Remapping the upstream `--ovt-*` tokens to the app theme tokens
+   keys the control to the app's light/dark toggle instead. The repeated
+   classes outrank the upstream `.overture-control.ovt-theme-*` and
+   prefers-color-scheme blocks regardless of stylesheet order. */
+.overture-control.overture-control.overture-control,
+.overture-control-panel.overture-control-panel.overture-control-panel,
+.overture-popup-content.overture-popup-content.overture-popup-content {
+  --ovt-bg: hsl(var(--popover));
+  --ovt-fg: hsl(var(--popover-foreground));
+  --ovt-text: hsl(var(--popover-foreground));
+  --ovt-muted: hsl(var(--muted-foreground));
+  --ovt-border: hsl(var(--border));
+  --ovt-input-border: hsl(var(--input));
+  --ovt-input-bg: hsl(var(--popover));
+  --ovt-hover: hsl(var(--foreground) / 0.06);
+  --ovt-accent: hsl(var(--primary));
+  --ovt-scrollbar: hsl(var(--border));
+  --ovt-scrollbar-hover: hsl(var(--input));
+  --ovt-error-bg: hsl(var(--destructive) / 0.15);
+  --ovt-error-fg: hsl(var(--destructive));
+
+  color-scheme: light;
+}
+
+.dark .overture-control.overture-control.overture-control,
+.dark .overture-control-panel.overture-control-panel.overture-control-panel,
+.dark .overture-popup-content.overture-popup-content.overture-popup-content {
+  color-scheme: dark;
+}

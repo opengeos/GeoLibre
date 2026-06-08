@@ -14,6 +14,7 @@ import "maplibre-gl-geo-editor/style.css";
 import "maplibre-gl-geoagent/style.css";
 import "maplibre-gl-nasa-earthdata/style.css";
 import "maplibre-gl-national-map/style.css";
+import "maplibre-gl-overture-maps/style.css";
 import "maplibre-gl-planetary-computer/style.css";
 import "maplibre-gl-raster/style.css";
 import "maplibre-gl-streetview/style.css";
