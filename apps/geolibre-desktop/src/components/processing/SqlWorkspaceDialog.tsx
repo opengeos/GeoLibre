@@ -10,7 +10,7 @@ import {
   cn,
 } from "@geolibre/ui";
 import { AlertCircle, Download, Loader2, MapPlus, Play } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   exportBinaryVectorLayer,
   type BinaryVectorExportResult,
@@ -60,9 +60,15 @@ export function SqlWorkspaceDialog() {
 
   const tables = useMemo(() => previewLayerTables(layers), [layers]);
 
+  // `running` state lags a render behind, so a rapid second Ctrl+Enter could
+  // read the stale `false` and fire a concurrent query. A ref is updated
+  // synchronously and guards against that race; `running` only drives the UI.
+  const runningRef = useRef(false);
+
   const runQuery = async () => {
     const trimmed = sql.trim();
-    if (!trimmed || running) return;
+    if (!trimmed || runningRef.current) return;
+    runningRef.current = true;
     setRunning(true);
     setError(null);
     setNotice(null);
@@ -73,6 +79,7 @@ export function SqlWorkspaceDialog() {
       setResult(null);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
+      runningRef.current = false;
       setRunning(false);
     }
   };

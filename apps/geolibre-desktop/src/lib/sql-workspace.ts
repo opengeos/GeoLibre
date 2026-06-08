@@ -23,6 +23,38 @@ const GEOMETRY_JSON_COLUMN = "__geolibre_sql_geometry_geojson";
 // deliberately obscure so it does not collide with a user's own CTE/subquery.
 const SQL_SUBQUERY_ALIAS = "__geolibre_sql_subquery";
 
+// DuckDB reserved keywords cannot be used as unquoted identifiers, so a layer
+// named e.g. "Group" would sanitize to `group` and break `SELECT * FROM group`.
+// Such names are prefixed with `t_` to stay valid in the SQL the user types.
+const RESERVED_TABLE_NAMES = new Set([
+  "all", "analyse", "analyze", "and", "any", "array", "as", "asc",
+  "asymmetric", "both", "case", "cast", "check", "collate", "column",
+  "constraint", "create", "default", "deferrable", "desc", "describe",
+  "distinct", "do", "else", "end", "except", "false", "fetch", "for",
+  "foreign", "from", "grant", "group", "having", "in", "initially",
+  "intersect", "into", "lateral", "leading", "limit", "not", "null", "offset",
+  "on", "only", "or", "order", "pivot", "placing", "primary", "qualify",
+  "references", "returning", "select", "show", "some", "symmetric", "table",
+  "then", "to", "trailing", "true", "union", "unique", "using", "variadic",
+  "when", "where", "window", "with",
+]);
+
+// Bare URLs and file paths after FROM/JOIN are auto-wrapped in a matching
+// DuckDB table function so the convenient `SELECT * FROM https://…/x.parquet`
+// form works (DuckDB itself rejects unquoted URLs/paths). Quoted sources,
+// subqueries, and plain table names are left untouched.
+const DATA_SOURCE_READERS: Array<{ extensions: string[]; reader: string }> = [
+  { extensions: ["parquet", "geoparquet", "pq"], reader: "read_parquet" },
+  { extensions: ["csv", "tsv", "txt"], reader: "read_csv_auto" },
+  { extensions: ["json", "ndjson"], reader: "read_json_auto" },
+  {
+    extensions: ["geojson", "fgb", "shp", "gpkg", "kml", "gml"],
+    reader: "ST_Read",
+  },
+];
+const BARE_SOURCE_PATTERN =
+  /\b(from|join)\s+((?:https?:\/\/|\/|\.\/|\.\.\/|~\/|[A-Za-z]:[\\/])[^\s,;()]+)/gi;
+
 /** A loaded layer exposed to the workspace as a DuckDB table. */
 export interface SqlWorkspaceTable {
   /** SQL identifier the user references in queries. */
@@ -58,7 +90,11 @@ function sanitizeTableName(layerName: string, layerId: string): string {
     .replace(/^_+|_+$/g, "");
   // Keep `normalized` empty when `base` is empty so the layer_<id> fallback is
   // reached; prefixing an empty base would yield "t_" and bypass the fallback.
-  const normalized = base ? (/^[a-z_]/.test(base) ? base : `t_${base}`) : "";
+  // A leading digit or a reserved keyword is prefixed with `t_` so the name is
+  // a usable bare identifier in the SQL the user writes.
+  const needsPrefix =
+    !!base && (!/^[a-z_]/.test(base) || RESERVED_TABLE_NAMES.has(base));
+  const normalized = base ? (needsPrefix ? `t_${base}` : base) : "";
   return normalized || `layer_${layerId.replace(/[^a-z0-9]+/gi, "_")}`;
 }
 
@@ -114,21 +150,33 @@ export function previewLayerTables(
  * from the current layers, which keeps the tables in sync with edits and avoids
  * leaking tables for layers that were since removed.
  *
+ * The registered GeoJSON file names are namespaced with `filePrefix` so that
+ * concurrent `runSqlQuery` calls against the shared database instance cannot
+ * overwrite or drop each other's files while a query is still reading them.
+ *
  * @param db Shared DuckDB-WASM database instance.
  * @param connection Open connection used to create the tables.
  * @param layers Current app layers; those without `geojson` are skipped.
+ * @param filePrefix Per-run prefix applied to every registered VFS file name.
+ * @param registeredFiles Optional accumulator; each created file name is pushed
+ *   as it is registered so the caller can clean up even if a later layer throws.
  * @returns The registered tables in registration order.
  */
 export async function registerLayerTables(
   db: AsyncDuckDB,
   connection: AsyncDuckDBConnection,
   layers: GeoLibreLayer[],
+  filePrefix: string,
+  registeredFiles?: string[],
 ): Promise<SqlWorkspaceTable[]> {
   const registered: SqlWorkspaceTable[] = [];
 
   for (const { layer, tableName } of assignTableNames(layers)) {
-    const fileName = `${tableName}.geojson`;
+    const fileName = `${filePrefix}__${tableName}.geojson`;
     await db.registerFileText(fileName, JSON.stringify(layer.geojson));
+    // Track immediately after registration so a failure in the CREATE TABLE
+    // below still leaves this file in the cleanup list.
+    registeredFiles?.push(fileName);
     await connection.query(
       `CREATE OR REPLACE TEMP TABLE ${quoteIdentifier(tableName)} AS ` +
         `SELECT * FROM ST_Read(${quoteSqlString(fileName)})`,
@@ -179,21 +227,115 @@ function normalizeRow(
   return out;
 }
 
-/** Find the first GEOMETRY-typed column in the user's query, if any. */
-async function detectGeometryColumn(
+interface DescribedQuery {
+  /** Column names the query returns, in select order. */
+  columnNames: string[];
+  /** Name of the first GEOMETRY-typed column, or null when there is none. */
+  geometryColumn: string | null;
+}
+
+/**
+ * Describe the user's query to learn its columns and detect a GEOMETRY column.
+ *
+ * The statement is wrapped in a `SELECT * FROM (...)` subquery so the probe also
+ * works for CTE (`WITH`) and set-operation (`UNION`) queries, which a bare
+ * `DESCRIBE <statement>` rejects. Because DDL/DML cannot appear inside a FROM
+ * subquery, this also avoids ever executing a mutating statement (e.g. a
+ * `DELETE ... RETURNING`) during description: such statements simply throw here
+ * and fall through to being run once, normally. Returns null when the statement
+ * cannot be described as a query result.
+ */
+async function describeQuery(
   connection: AsyncDuckDBConnection,
-  sql: string,
-): Promise<string | null> {
+  statement: string,
+): Promise<DescribedQuery | null> {
   try {
-    const described = rowsFromResult(await connection.query(`DESCRIBE ${sql}`));
-    const match = described.find((row) =>
+    const described = rowsFromResult(
+      await connection.query(
+        `DESCRIBE SELECT * FROM (${statement}) AS ` +
+          quoteIdentifier(SQL_SUBQUERY_ALIAS),
+      ),
+    );
+    const columnNames = described
+      .map((row) => row.column_name)
+      .filter((name): name is string => typeof name === "string");
+    const geometryColumn = described.find((row) =>
       isGeometryColumnType(row.column_type),
     )?.column_name;
-    return typeof match === "string" ? match : null;
+    return {
+      columnNames,
+      geometryColumn:
+        typeof geometryColumn === "string" ? geometryColumn : null,
+    };
   } catch {
-    // DESCRIBE fails for DDL or multi-statement input; those have no geometry.
     return null;
   }
+}
+
+/**
+ * Detect whether `sql` contains more than one statement (an interior semicolon
+ * outside of string literals, quoted identifiers, and comments). DuckDB-WASM
+ * silently runs every statement but only returns the last result, so the caller
+ * rejects multi-statement input instead of discarding earlier results.
+ */
+function containsMultipleStatements(sql: string): boolean {
+  let index = 0;
+  while (index < sql.length) {
+    const char = sql[index];
+    if (char === "'" || char === '"') {
+      index += 1;
+      while (index < sql.length) {
+        if (sql[index] === char) {
+          // A doubled quote is an escaped quote, not the end of the literal.
+          if (sql[index + 1] === char) {
+            index += 2;
+            continue;
+          }
+          break;
+        }
+        index += 1;
+      }
+    } else if (char === "-" && sql[index + 1] === "-") {
+      while (index < sql.length && sql[index] !== "\n") index += 1;
+    } else if (char === "/" && sql[index + 1] === "*") {
+      index += 2;
+      while (index < sql.length && !(sql[index] === "*" && sql[index + 1] === "/"))
+        index += 1;
+      index += 1;
+    } else if (char === ";") {
+      return true;
+    }
+    index += 1;
+  }
+  return false;
+}
+
+/** Pick the DuckDB table function for a data source extension, if recognised. */
+function readerForExtension(extension: string): string | null {
+  return (
+    DATA_SOURCE_READERS.find((entry) => entry.extensions.includes(extension))
+      ?.reader ?? null
+  );
+}
+
+/**
+ * Rewrite a bare URL or file path after FROM/JOIN into the matching DuckDB
+ * reader (`read_parquet`, `read_csv_auto`, `read_json_auto`, or `ST_Read`) by
+ * file extension, so `SELECT * FROM https://host/data.parquet` works. Sources
+ * with an unrecognised extension, and anything already quoted or wrapped in a
+ * function call, are left unchanged.
+ */
+function rewriteBareSources(sql: string): string {
+  return sql.replace(
+    BARE_SOURCE_PATTERN,
+    (whole, keyword: string, source: string) => {
+      const path = source.split(/[?#]/)[0];
+      const dot = path.lastIndexOf(".");
+      const extension = dot >= 0 ? path.slice(dot + 1).toLowerCase() : "";
+      const reader = readerForExtension(extension);
+      return reader ? `${keyword} ${reader}(${quoteSqlString(source)})` : whole;
+    },
+  );
 }
 
 function rowsToFeatureCollection(
@@ -250,28 +392,45 @@ export async function runSqlQuery(
 ): Promise<SqlQueryResult> {
   // A trailing semicolon is valid as a standalone statement but breaks the
   // geometry-detection wrapper `... FROM (<sql>) AS ...`, so strip it once.
-  const statement = sql.trim().replace(/;\s*$/, "");
+  const trimmed = sql.trim().replace(/;\s*$/, "");
+  if (containsMultipleStatements(trimmed)) {
+    throw new Error(
+      "Only a single SQL statement is supported. Remove any intermediate semicolons.",
+    );
+  }
+  // Wrap bare URLs/paths after FROM/JOIN in the matching reader so the
+  // convenient `SELECT * FROM https://…/x.parquet` form runs.
+  const statement = rewriteBareSources(trimmed);
 
   const db = await getDatabase();
   const connection = await db.connect();
-  let registeredFiles: string[] = [];
+  // Per-run prefix so concurrent queries on the shared database do not register
+  // or drop one another's VFS files. Populated by registerLayerTables as it
+  // creates files so cleanup matches exactly what was registered.
+  const filePrefix = `__geolibre_sql_${Date.now()}_${Math.random()
+    .toString(36)
+    .slice(2)}`;
+  const registeredFiles: string[] = [];
 
   try {
     await ensureSpatialExtension(connection);
-    // Pre-compute the file names from the same naming logic so the finally
-    // block can clean up even if registration throws part-way through the loop.
-    registeredFiles = previewLayerTables(layers).map(
-      (table) => `${table.tableName}.geojson`,
-    );
-    await registerLayerTables(db, connection, layers);
+    await registerLayerTables(db, connection, layers, filePrefix, registeredFiles);
 
-    const geometryColumn = await detectGeometryColumn(connection, statement);
+    const described = await describeQuery(connection, statement);
+    const geometryColumn = described?.geometryColumn ?? null;
 
     if (geometryColumn) {
       const geomId = quoteIdentifier(geometryColumn);
       const hiddenId = quoteIdentifier(GEOMETRY_JSON_COLUMN);
+      // Drop a user column that already uses the reserved hidden name from the
+      // wildcard so appending our own alias cannot raise a duplicate-column
+      // error. EXCLUDE only when present, since DuckDB rejects EXCLUDE of a
+      // missing column.
+      const excludeClause = described?.columnNames.includes(GEOMETRY_JSON_COLUMN)
+        ? ` EXCLUDE (${hiddenId})`
+        : "";
       const result = await connection.query(
-        `SELECT * REPLACE (ST_AsText(${geomId}) AS ${geomId}), ` +
+        `SELECT *${excludeClause} REPLACE (ST_AsText(${geomId}) AS ${geomId}), ` +
           `ST_AsGeoJSON(${geomId}) AS ${hiddenId} ` +
           `FROM (${statement}) AS ${quoteIdentifier(SQL_SUBQUERY_ALIAS)}`,
       );
