@@ -40,6 +40,41 @@ const MAX_DISPLAYED_ROWS = 500;
 
 const SAMPLE_QUERY = "SELECT 1 AS hello;";
 
+// Public sample dataset (Natural Earth countries, GeoParquet) used by the
+// example queries so users can try the workspace without loading data first.
+const SAMPLE_DATASET_URL =
+  "https://data.source.coop/giswqs/opengeos/countries.parquet";
+
+// Curated examples covering plain attribute tables, aggregates, and spatial
+// queries that return a geometry column (so "Add as layer" / export work). All
+// were validated against the dataset above.
+const SAMPLE_QUERIES: ReadonlyArray<{ label: string; sql: string }> = [
+  {
+    label: "Countries with geometry",
+    sql: `SELECT NAME, CONTINENT, POP_EST, geom\nFROM ${SAMPLE_DATASET_URL}\nLIMIT 100;`,
+  },
+  {
+    label: "Attributes only (no geometry)",
+    sql: `SELECT NAME, CONTINENT, POP_EST, GDP_MD_EST\nFROM ${SAMPLE_DATASET_URL}\nORDER BY POP_EST DESC\nLIMIT 10;`,
+  },
+  {
+    label: "Population by continent (aggregate)",
+    sql: `SELECT CONTINENT, COUNT(*) AS countries, SUM(POP_EST) AS population\nFROM ${SAMPLE_DATASET_URL}\nGROUP BY CONTINENT\nORDER BY population DESC;`,
+  },
+  {
+    label: "Most populous countries (geometry)",
+    sql: `SELECT NAME, POP_EST, geom\nFROM ${SAMPLE_DATASET_URL}\nWHERE POP_EST > 50000000\nORDER BY POP_EST DESC;`,
+  },
+  {
+    label: "Country centroids (spatial)",
+    sql: `SELECT NAME, CONTINENT, ST_Centroid(geom) AS geom\nFROM ${SAMPLE_DATASET_URL}\nWHERE CONTINENT = 'Africa';`,
+  },
+  {
+    label: "Largest countries by area (spatial)",
+    sql: `SELECT NAME, ST_Area(geom) AS area\nFROM ${SAMPLE_DATASET_URL}\nORDER BY area DESC\nLIMIT 10;`,
+  },
+];
+
 /** Build a starter query that selects the first rows of a layer table. */
 function sampleQueryForTable(tableName: string): string {
   return `SELECT *\nFROM ${tableName}\nLIMIT 10;`;
@@ -187,8 +222,8 @@ export function SqlWorkspaceDialog() {
         </DialogHeader>
 
         <div className="grid gap-4">
-          {tables.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {tables.length > 0 ? (
               <p className="text-xs text-muted-foreground">
                 Queryable layers:{" "}
                 {tables.map((table, index) => (
@@ -200,31 +235,55 @@ export function SqlWorkspaceDialog() {
                   </span>
                 ))}
               </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                No vector layers are loaded as tables yet. You can still read
+                files and URLs with {"read_parquet()"}, {"read_csv_auto()"}, or{" "}
+                {"ST_Read()"}.
+              </p>
+            )}
+            <div className="ml-auto flex items-center gap-2">
               <Select
-                aria-label="Insert a sample query for a layer"
-                className="ml-auto h-8 w-auto text-xs"
+                aria-label="Insert a sample query"
+                className="h-8 w-auto text-xs"
                 value=""
                 onChange={(event) => {
-                  const tableName = event.target.value;
-                  if (tableName) setSql(sampleQueryForTable(tableName));
+                  const index = Number(event.target.value);
+                  const sample = SAMPLE_QUERIES[index];
+                  if (sample) setSql(sample.sql);
                 }}
               >
                 <option value="" disabled>
-                  Sample query for layer…
+                  Sample queries…
                 </option>
-                {tables.map((table) => (
-                  <option key={table.tableName} value={table.tableName}>
-                    {table.tableName}
+                {SAMPLE_QUERIES.map((sample, index) => (
+                  <option key={sample.label} value={index}>
+                    {sample.label}
                   </option>
                 ))}
               </Select>
+              {tables.length > 0 ? (
+                <Select
+                  aria-label="Insert a sample query for a layer"
+                  className="h-8 w-auto text-xs"
+                  value=""
+                  onChange={(event) => {
+                    const tableName = event.target.value;
+                    if (tableName) setSql(sampleQueryForTable(tableName));
+                  }}
+                >
+                  <option value="" disabled>
+                    Sample query for layer…
+                  </option>
+                  {tables.map((table) => (
+                    <option key={table.tableName} value={table.tableName}>
+                      {table.tableName}
+                    </option>
+                  ))}
+                </Select>
+              ) : null}
             </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              No vector layers are loaded as tables yet. You can still read files
-              and URLs with {"read_parquet()"}, {"read_csv_auto()"}, or {"ST_Read()"}.
-            </p>
-          )}
+          </div>
 
           <label htmlFor="sql-workspace-editor" className="sr-only">
             SQL query
