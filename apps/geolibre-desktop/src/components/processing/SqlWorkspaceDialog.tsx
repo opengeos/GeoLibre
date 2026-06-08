@@ -7,9 +7,17 @@ import {
   DialogHeader,
   DialogTitle,
   ScrollArea,
+  Select,
   cn,
 } from "@geolibre/ui";
-import { AlertCircle, Download, Loader2, MapPlus, Play } from "lucide-react";
+import {
+  AlertCircle,
+  Download,
+  Eraser,
+  Loader2,
+  MapPlus,
+  Play,
+} from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import {
   exportBinaryVectorLayer,
@@ -31,6 +39,11 @@ const GEOPARQUET_MIME_TYPE = "application/vnd.apache.parquet";
 const MAX_DISPLAYED_ROWS = 500;
 
 const SAMPLE_QUERY = "SELECT 1 AS hello;";
+
+/** Build a starter query that selects the first rows of a layer table. */
+function sampleQueryForTable(tableName: string): string {
+  return `SELECT *\nFROM ${tableName}\nLIMIT 10;`;
+}
 
 /** Format a result cell for display, keeping the grid compact and readable. */
 function formatCell(value: unknown): string {
@@ -82,6 +95,13 @@ export function SqlWorkspaceDialog() {
       runningRef.current = false;
       setRunning(false);
     }
+  };
+
+  const clearWorkspace = () => {
+    setSql("");
+    setResult(null);
+    setError(null);
+    setNotice(null);
   };
 
   const handleAddAsLayer = () => {
@@ -168,17 +188,37 @@ export function SqlWorkspaceDialog() {
 
         <div className="grid gap-4">
           {tables.length > 0 ? (
-            <p className="text-xs text-muted-foreground">
-              Queryable layers:{" "}
-              {tables.map((table, index) => (
-                <span key={table.tableName}>
-                  {index > 0 ? ", " : ""}
-                  <code className="rounded bg-muted px-1 py-0.5 font-mono">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xs text-muted-foreground">
+                Queryable layers:{" "}
+                {tables.map((table, index) => (
+                  <span key={table.tableName}>
+                    {index > 0 ? ", " : ""}
+                    <code className="rounded bg-muted px-1 py-0.5 font-mono">
+                      {table.tableName}
+                    </code>
+                  </span>
+                ))}
+              </p>
+              <Select
+                aria-label="Insert a sample query for a layer"
+                className="ml-auto h-8 w-auto text-xs"
+                value=""
+                onChange={(event) => {
+                  const tableName = event.target.value;
+                  if (tableName) setSql(sampleQueryForTable(tableName));
+                }}
+              >
+                <option value="" disabled>
+                  Sample query for layer…
+                </option>
+                {tables.map((table) => (
+                  <option key={table.tableName} value={table.tableName}>
                     {table.tableName}
-                  </code>
-                </span>
-              ))}
-            </p>
+                  </option>
+                ))}
+              </Select>
+            </div>
           ) : (
             <p className="text-xs text-muted-foreground">
               No vector layers are loaded as tables yet. You can still read files
@@ -218,6 +258,14 @@ export function SqlWorkspaceDialog() {
                 <Play className="h-4 w-4" />
               )}
               Run
+            </Button>
+            <Button
+              variant="outline"
+              onClick={clearWorkspace}
+              disabled={running || (!sql && !result && !error)}
+            >
+              <Eraser className="h-4 w-4" />
+              Clear
             </Button>
             {result ? (
               <span className="text-sm text-muted-foreground">
