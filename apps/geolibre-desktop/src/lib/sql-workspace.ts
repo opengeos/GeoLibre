@@ -15,7 +15,8 @@ import {
 
 // Hidden column appended to the user's query so geometry can be returned as
 // GeoJSON for the "Add as layer" / export paths without disturbing the columns
-// the user sees in the results grid.
+// the user sees in the results grid. This is a reserved name: a user column of
+// the same name is filtered out of both the grid and the GeoJSON properties.
 const GEOMETRY_JSON_COLUMN = "__geolibre_sql_geometry_geojson";
 
 /** A loaded layer exposed to the workspace as a DuckDB table. */
@@ -102,8 +103,10 @@ export function previewLayerTables(
  * Register every loaded layer that carries an in-memory GeoJSON FeatureCollection
  * as a DuckDB table, so user SQL can query the current map data by layer name.
  *
- * Existing tables are replaced so repeated runs stay in sync with edits to the
- * layers.
+ * Tables are created TEMPORARY so they are scoped to the caller's connection and
+ * dropped when it closes. Each query therefore starts from a clean set built
+ * from the current layers, which keeps the tables in sync with edits and avoids
+ * leaking tables for layers that were since removed.
  *
  * @param db Shared DuckDB-WASM database instance.
  * @param connection Open connection used to create the tables.
@@ -121,7 +124,7 @@ export async function registerLayerTables(
     const fileName = `${tableName}.geojson`;
     await db.registerFileText(fileName, JSON.stringify(layer.geojson));
     await connection.query(
-      `CREATE OR REPLACE TABLE ${quoteIdentifier(tableName)} AS ` +
+      `CREATE OR REPLACE TEMP TABLE ${quoteIdentifier(tableName)} AS ` +
         `SELECT * FROM ST_Read(${quoteSqlString(fileName)})`,
     );
     registered.push({ tableName, layerName: layer.name });
@@ -137,7 +140,12 @@ function columnNamesFromResult(result: {
   return result.schema?.fields?.map((field) => field.name) ?? [];
 }
 
-/** Normalise a DuckDB cell value into something JSON/CSV friendly. */
+/**
+ * Normalise a DuckDB cell value into something JSON/CSV friendly. Recurses into
+ * arrays (LIST) and objects (STRUCT) so nested bigint/Date values are coerced,
+ * matching the loader's `normalizePropertyValue`; otherwise a nested bigint
+ * would make `JSON.stringify` throw during CSV/GeoJSON export.
+ */
 function normalizeValue(value: unknown): unknown {
   if (typeof value === "bigint") {
     const asNumber = Number(value);
@@ -145,6 +153,12 @@ function normalizeValue(value: unknown): unknown {
   }
   if (value instanceof Date) return value.toISOString();
   if (value instanceof Uint8Array) return `[binary ${value.length} bytes]`;
+  if (Array.isArray(value)) return value.map(normalizeValue);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, normalizeValue(item)]),
+    );
+  }
   return value;
 }
 
@@ -182,10 +196,16 @@ function rowsToFeatureCollection(
 ): FeatureCollection {
   const features = rows.map((row) => {
     const rawGeometry = row[GEOMETRY_JSON_COLUMN];
-    const geometry =
-      typeof rawGeometry === "string"
-        ? (JSON.parse(rawGeometry) as Geometry)
-        : null;
+    // Parse defensively: a single malformed geometry string should drop that
+    // one feature's geometry, not abort the whole result set.
+    let geometry: Geometry | null = null;
+    if (typeof rawGeometry === "string") {
+      try {
+        geometry = JSON.parse(rawGeometry) as Geometry;
+      } catch {
+        geometry = null;
+      }
+    }
     const properties: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(row)) {
       if (key === GEOMETRY_JSON_COLUMN || key === geometryColumn) continue;
@@ -302,5 +322,6 @@ export function resultToCsv(
   for (const row of rows) {
     lines.push(columns.map((column) => escape(row[column])).join(","));
   }
-  return lines.join("\n");
+  // RFC 4180 specifies CRLF line endings for the broadest spreadsheet support.
+  return lines.join("\r\n");
 }
