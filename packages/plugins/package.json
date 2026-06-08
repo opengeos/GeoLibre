@@ -45,6 +45,7 @@
     "maplibre-gl-raster": "^0.2.0",
     "maplibre-gl-streetview": "^0.4.0",
     "maplibre-gl-swipe": "^0.7.1",
+    "maplibre-gl-time-slider": "^1.0.1",
     "maplibre-gl-vector": "^0.2.1",
     "proj4": "^2.20.8",
     "shpjs": "^6.2.0",

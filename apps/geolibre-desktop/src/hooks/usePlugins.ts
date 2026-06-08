@@ -18,6 +18,7 @@ import {
   maplibreOvertureMapsPlugin,
   maplibreStreetViewPlugin,
   maplibreSwipePlugin,
+  maplibreTimeSliderPlugin,
   PluginManager,
 } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
@@ -56,6 +57,7 @@ manager.registerAll([
   maplibreEnviroAtlasPlugin,
   maplibreNationalMapPlugin,
   maplibreEsriWaybackPlugin,
+  maplibreTimeSliderPlugin,
   maplibreOvertureMapsPlugin,
   maplibreGeoAgentPlugin,
   maplibreGeoEditorPlugin,

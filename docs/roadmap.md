@@ -89,6 +89,7 @@
 - [x] Planetary Computer panel for browsing and loading STAC data
 - [x] Earth Engine panel for browsing and loading datasets
 - [x] Overture Maps plugin for loading Overture data themes
+- [x] Time Slider plugin for animating time series raster and vector data, powered by `maplibre-gl-time-slider`
 - [x] Web Services menu with four federal data plugins
 - [x] Add Raster Layer powered by the `maplibre-gl-raster` plugin
 - [x] Add Vector Layer powered by the `maplibre-gl-vector` plugin
