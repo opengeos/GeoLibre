@@ -8,7 +8,7 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 
 ## Features (v0.9.0)
 
-- Runs across desktop (Tauri), web (browser), and mobile or small screens, with a responsive layout that adapts menus, dialogs, and panels and per-panel visibility through Layout settings
+- Runs across desktop (Tauri), web (browser), and mobile or small screens, with a responsive layout that adapts menus, dialogs, and panels, plus per-panel visibility through Layout settings
 - MapLibre map workspace with OpenFreeMap basemaps, blank background support, and toggleable navigation, fullscreen, geolocation, globe, terrain, scale, attribution, and logo controls
 - Load local vector layers supported by DuckDB-WASM Spatial, including common formats such as GeoJSON, GeoParquet, GeoPackage, Shapefile, FlatGeobuf, KML/KMZ, GML, delimited text, and GPX
 - Reproject vector layers to EPSG:4326 on load and split dragged GPX files into named waypoint, track, and route layers
@@ -25,7 +25,7 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 - Whitebox toolbox with batch tools run against a selected input directory
 - Project menu to create, open, save, and Save As `.geolibre.json` projects
 - Desktop diagnostics panel, update check, and MSIX packaging support
-- Plugin system with basemap, layer control, MapLibre components, swipe, street view, Time Slider, Overture Maps, LiDAR, GeoAgent, and GeoEditor integrations, including configurable control positions and external plugin manifests
+- Plugin system with basemap, layer control, MapLibre components, swipe, street view, Overture Maps, LiDAR, GeoAgent, and GeoEditor integrations, including configurable control positions and external plugin manifests
 - Time Slider plugin for animating time series raster and vector data
 - External plugin zip loading from the app data plugins directory and local development plugin directories
 - Browser deployment with Docker, embed-friendly URL parameters, and a `maponly` chrome-free mode
