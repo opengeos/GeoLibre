@@ -6,6 +6,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  Input,
   ScrollArea,
   Select,
   cn,
@@ -143,6 +144,7 @@ export function SqlWorkspaceDialog() {
   const [result, setResult] = useState<SqlQueryResult | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [history, setHistory] = useState<string[]>(loadQueryHistory);
+  const [layerName, setLayerName] = useState("");
 
   const tables = useMemo(() => previewLayerTables(layers), [layers]);
 
@@ -179,13 +181,15 @@ export function SqlWorkspaceDialog() {
     setResult(null);
     setError(null);
     setNotice(null);
+    setLayerName("");
   };
 
   const handleAddAsLayer = () => {
     if (!result?.geojson) return;
     setError(null);
     const featureCount = result.geojson.features.length;
-    const name = `SQL result ${new Date().toLocaleTimeString()}`;
+    const name =
+      layerName.trim() || `SQL result ${new Date().toLocaleTimeString()}`;
     addGeoJsonLayer(name, result.geojson);
     setNotice(`Added ${featureCount} features to the map as "${name}".`);
   };
@@ -418,6 +422,15 @@ export function SqlWorkspaceDialog() {
           {result ? (
             <div className="grid gap-2">
               <div className="flex flex-wrap items-center gap-2">
+                {result.geojson ? (
+                  <Input
+                    aria-label="Layer name"
+                    className="h-8 w-48 text-sm"
+                    value={layerName}
+                    onChange={(event) => setLayerName(event.target.value)}
+                    placeholder="Layer name (optional)"
+                  />
+                ) : null}
                 <Button
                   variant="outline"
                   size="sm"
