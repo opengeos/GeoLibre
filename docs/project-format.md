@@ -88,7 +88,7 @@ Manual refresh uses the same saved source URL without requiring this metadata.
 
 ## Layer types
 
-| Type             | v0.8.0 status                                                                                      |
+| Type             | v0.9.0 status                                                                                      |
 | ---------------- | -------------------------------------------------------------------------------------------------- |
 | `geojson`        | Supported for imported files and GeoJSON URLs                                                      |
 | `xyz`            | Supported for raster tile templates                                                                |
