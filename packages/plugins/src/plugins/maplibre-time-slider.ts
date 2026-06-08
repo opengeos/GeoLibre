@@ -78,15 +78,23 @@ let themeObserver: MutationObserver | null = null;
  */
 function startThemeSync(control: TimeSliderControl): void {
   control.setTheme(resolveDocumentTheme());
-  if (themeObserver || typeof MutationObserver === "undefined") return;
+  if (
+    themeObserver ||
+    typeof MutationObserver === "undefined" ||
+    typeof document === "undefined"
+  ) {
+    return;
+  }
   // The observer fires on any `class` mutation of <html>, so cache the last
-  // applied theme and only call setTheme when the dark/light value flips.
+  // applied theme and only call setTheme when the dark/light value flips. It
+  // targets the module-level `timeSliderControl` (late-bound, like PrintControl)
+  // so a rebuilt control still receives theme updates.
   let lastTheme = resolveDocumentTheme();
   themeObserver = new MutationObserver(() => {
     const next = resolveDocumentTheme();
     if (next === lastTheme) return;
     lastTheme = next;
-    control.setTheme(next);
+    timeSliderControl?.setTheme(next);
   });
   themeObserver.observe(document.documentElement, {
     attributeFilter: ["class"],
@@ -113,7 +121,7 @@ let detachStoreSync: (() => void) | null = null;
 export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-time-slider",
   name: "Time Slider",
-  version: "1.0.2",
+  version: "1.0.3",
   activate: (app: GeoLibreAppAPI) => {
     if (timeSliderControl) return;
     const control = new TimeSliderControl(
