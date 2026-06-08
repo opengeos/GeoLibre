@@ -65,11 +65,11 @@ async function createDatabase(): Promise<duckdb.AsyncDuckDB> {
   return db;
 }
 
-function quoteSqlString(value: string): string {
+export function quoteSqlString(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
 }
 
-function quoteIdentifier(value: string): string {
+export function quoteIdentifier(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
 

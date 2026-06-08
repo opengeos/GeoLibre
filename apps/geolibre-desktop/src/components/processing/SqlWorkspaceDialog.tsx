@@ -1,5 +1,4 @@
-import { DEFAULT_LAYER_STYLE, useAppStore } from "@geolibre/core";
-import type { GeoLibreLayer } from "@geolibre/core";
+import { useAppStore } from "@geolibre/core";
 import {
   Button,
   Dialog,
@@ -33,16 +32,16 @@ const MAX_DISPLAYED_ROWS = 500;
 
 const SAMPLE_QUERY = "SELECT 1 AS hello;";
 
-function createLayerId(): string {
-  return typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
 /** Format a result cell for display, keeping the grid compact and readable. */
 function formatCell(value: unknown): string {
   if (value === null || value === undefined) return "";
-  if (typeof value === "object") return JSON.stringify(value);
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return "[object]";
+    }
+  }
   return String(value);
 }
 
@@ -50,7 +49,7 @@ export function SqlWorkspaceDialog() {
   const open = useAppStore((s) => s.ui.sqlWorkspaceOpen);
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
   const layers = useAppStore((s) => s.layers);
-  const addLayer = useAppStore((s) => s.addLayer);
+  const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
 
   const [sql, setSql] = useState(SAMPLE_QUERY);
   const [running, setRunning] = useState(false);
@@ -79,24 +78,10 @@ export function SqlWorkspaceDialog() {
 
   const handleAddAsLayer = () => {
     if (!result?.geojson) return;
-    const layer: GeoLibreLayer = {
-      id: createLayerId(),
-      name: "SQL result",
-      type: "geojson",
-      source: { type: "geojson" },
-      visible: true,
-      opacity: 1,
-      style: { ...DEFAULT_LAYER_STYLE },
-      metadata: {
-        featureCount: result.geojson.features.length,
-        sourceKind: "sql-workspace",
-      },
-      geojson: result.geojson,
-    };
-    addLayer(layer);
-    setNotice(
-      `Added ${result.geojson.features.length} features to the map as "SQL result".`,
-    );
+    const featureCount = result.geojson.features.length;
+    const name = `SQL result ${new Date().toLocaleTimeString()}`;
+    addGeoJsonLayer(name, result.geojson);
+    setNotice(`Added ${featureCount} features to the map as "${name}".`);
   };
 
   const saveBinary = async (

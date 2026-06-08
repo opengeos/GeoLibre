@@ -8,6 +8,8 @@ import {
   ensureSpatialExtension,
   getDatabase,
   isGeometryColumnType,
+  quoteIdentifier,
+  quoteSqlString,
   rowsFromResult,
 } from "./duckdb-vector-loader";
 
@@ -36,14 +38,6 @@ export interface SqlQueryResult {
   geometryColumn: string | null;
   /** Result as GeoJSON when a geometry column is present, otherwise null. */
   geojson: FeatureCollection | null;
-}
-
-function quoteIdentifier(value: string): string {
-  return `"${value.replaceAll('"', '""')}"`;
-}
-
-function quoteSqlString(value: string): string {
-  return `'${value.replaceAll("'", "''")}'`;
 }
 
 /**
@@ -234,10 +228,12 @@ export async function runSqlQuery(
 
   const db = await getDatabase();
   const connection = await db.connect();
+  let registeredFiles: string[] = [];
 
   try {
     await ensureSpatialExtension(connection);
-    await registerLayerTables(db, connection, layers);
+    const tables = await registerLayerTables(db, connection, layers);
+    registeredFiles = tables.map((table) => `${table.tableName}.geojson`);
 
     const geometryColumn = await detectGeometryColumn(connection, statement);
 
@@ -279,6 +275,15 @@ export async function runSqlQuery(
     };
   } finally {
     await connection.close();
+    // The table data is materialised by CREATE TABLE, so the registered GeoJSON
+    // files are no longer needed; drop them to free DuckDB's in-memory VFS.
+    if (registeredFiles.length > 0) {
+      try {
+        await db.dropFiles(registeredFiles);
+      } catch {
+        // Files may already be gone; cleanup is best-effort.
+      }
+    }
   }
 }
 
