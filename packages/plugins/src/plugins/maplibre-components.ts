@@ -1573,8 +1573,12 @@ async function openStandalonePrintControl(
   }
 
   setTimeout(() => {
-    printControl?.show();
-    printControl?.expand();
+    // Guard against a teardown that nulled printControl between addMapControl
+    // succeeding and this deferred callback firing, which would otherwise mark
+    // the panel visible even though the control no longer exists.
+    if (!printControl) return;
+    printControl.show();
+    printControl.expand();
     setPrintPanelVisible(true);
   }, 0);
   return true;
@@ -2075,7 +2079,11 @@ function createPrintControl(
     ...PRINT_OPTIONS,
     theme: resolveDocumentTheme(),
   });
-  control.on("collapse", hidePrintControl);
+  // Skip if a teardown has already replaced the module reference with a newer
+  // instance, so a late `collapse` from an orphaned control is ignored.
+  control.on("collapse", () => {
+    if (control === printControl) hidePrintControl();
+  });
   return control;
 }
 
@@ -2085,8 +2093,14 @@ function createPrintControl(
  */
 function startPrintThemeSync(): void {
   if (printThemeObserver || typeof MutationObserver === "undefined") return;
+  // The observer fires on any `class` mutation of <html>, so cache the last
+  // applied theme and only call setTheme when the dark/light value flips.
+  let lastTheme = resolveDocumentTheme();
   printThemeObserver = new MutationObserver(() => {
-    printControl?.setTheme(resolveDocumentTheme());
+    const next = resolveDocumentTheme();
+    if (next === lastTheme) return;
+    lastTheme = next;
+    printControl?.setTheme(next);
   });
   printThemeObserver.observe(document.documentElement, {
     attributeFilter: ["class"],
