@@ -10,30 +10,41 @@ import {
   type MapController,
 } from "@geolibre/map";
 import {
+  closeBookmarkPanel,
   closeColorbarPanel,
   closeDuckDBLayerPanel,
   closeEarthEnginePanel,
   closeHtmlPanel,
   closeLegendPanel,
   closeMaplibreComponentControls,
+  closeMeasurePanel,
+  closeMinimapPanel,
   closePlanetaryComputerPanel,
   closePrintPanel,
   closeRasterLayerPanel,
   closeSearchPlacesPanel,
   closeThreeDTilesLayerPanel,
   closeVectorLayerPanel,
+  closeViewStatePanel,
   openFlatGeobufAddVectorLayerPanel,
   openDuckDBLayerPanel,
+  isBookmarkPanelVisible,
   isEarthEnginePanelVisible,
   isColorbarPanelVisible,
   isHtmlPanelVisible,
   isLegendPanelVisible,
+  isMeasurePanelVisible,
+  isMinimapPanelVisible,
   isPrintPanelVisible,
   isSearchPlacesPanelVisible,
+  isViewStatePanelVisible,
+  openBookmarkPanel,
   openColorbarPanel,
   openHtmlPanel,
   openLegendPanel,
   openLidarLayerPanel,
+  openMeasurePanel,
+  openMinimapPanel,
   openPlanetaryComputerPanel,
   openPMTilesLayerPanel,
   openPrintPanel,
@@ -43,13 +54,18 @@ import {
   openStacSearchLayerPanel,
   openThreeDTilesLayerPanel,
   openVectorLayerPanel,
+  openViewStatePanel,
   openZarrLayerPanel,
+  subscribeBookmarkPanel,
   subscribeColorbarPanel,
   subscribeEarthEnginePanel,
   subscribeHtmlPanel,
   subscribeLegendPanel,
+  subscribeMeasurePanel,
+  subscribeMinimapPanel,
   subscribePrintPanel,
   subscribeSearchPlacesPanel,
+  subscribeViewStatePanel,
   toggleEarthEnginePanel,
   WEB_SERVICE_PLUGIN_IDS,
   type GeoLibreMapControlPosition,
@@ -538,6 +554,54 @@ export function TopToolbar({
     }
     openHtmlPanel(appApi);
   };
+  const measurePanelVisible = useSyncExternalStore(
+    subscribeMeasurePanel,
+    isMeasurePanelVisible,
+    isMeasurePanelVisible,
+  );
+  const handleToggleMeasurePanel = () => {
+    if (measurePanelVisible) {
+      closeMeasurePanel(appApi);
+      return;
+    }
+    openMeasurePanel(appApi);
+  };
+  const bookmarkPanelVisible = useSyncExternalStore(
+    subscribeBookmarkPanel,
+    isBookmarkPanelVisible,
+    isBookmarkPanelVisible,
+  );
+  const handleToggleBookmarkPanel = () => {
+    if (bookmarkPanelVisible) {
+      closeBookmarkPanel(appApi);
+      return;
+    }
+    openBookmarkPanel(appApi);
+  };
+  const minimapPanelVisible = useSyncExternalStore(
+    subscribeMinimapPanel,
+    isMinimapPanelVisible,
+    isMinimapPanelVisible,
+  );
+  const handleToggleMinimapPanel = () => {
+    if (minimapPanelVisible) {
+      closeMinimapPanel(appApi);
+      return;
+    }
+    openMinimapPanel(appApi);
+  };
+  const viewStatePanelVisible = useSyncExternalStore(
+    subscribeViewStatePanel,
+    isViewStatePanelVisible,
+    isViewStatePanelVisible,
+  );
+  const handleToggleViewStatePanel = () => {
+    if (viewStatePanelVisible) {
+      closeViewStatePanel(appApi);
+      return;
+    }
+    openViewStatePanel(appApi);
+  };
   const handleAddZarrLayer = () => {
     openZarrLayerPanel(appApi);
   };
@@ -908,6 +972,22 @@ export function TopToolbar({
           <DropdownMenuItem onSelect={handleToggleHtmlPanel}>
             HTML
             {htmlPanelVisible ? " ✓" : ""}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleToggleMeasurePanel}>
+            Measure
+            {measurePanelVisible ? " ✓" : ""}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleToggleBookmarkPanel}>
+            Bookmark
+            {bookmarkPanelVisible ? " ✓" : ""}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleToggleMinimapPanel}>
+            Minimap
+            {minimapPanelVisible ? " ✓" : ""}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleToggleViewStatePanel}>
+            View State
+            {viewStatePanelVisible ? " ✓" : ""}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
