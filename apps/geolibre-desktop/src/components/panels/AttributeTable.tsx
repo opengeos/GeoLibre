@@ -1,9 +1,15 @@
-import { isDuckDBQueryLayer, useAppStore } from "@geolibre/core";
+import {
+  isDuckDBQueryLayer,
+  useAppStore,
+  type GeoLibreLayer,
+} from "@geolibre/core";
 import {
   getDuckDBLayerRows,
   updateDuckDBLayerRows,
   type DuckDBAttributeRow,
 } from "@geolibre/plugins";
+import type { MapController } from "@geolibre/map";
+import type { GeoJSONSource } from "maplibre-gl";
 import {
   Button,
   DropdownMenu,
@@ -18,7 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "@geolibre/ui";
-import type { Feature } from "geojson";
+import type { Feature, FeatureCollection } from "geojson";
 import {
   ArrowDown,
   ArrowUp,
@@ -33,6 +39,7 @@ import {
 } from "lucide-react";
 import {
   type MouseEvent as ReactMouseEvent,
+  type RefObject,
   useEffect,
   useRef,
   useState,
@@ -230,7 +237,31 @@ function exportMimeType(format: BinaryVectorExportFormat): string {
   }
 }
 
-export function AttributeTable() {
+/**
+ * Source id of a geojson-render-mode vector layer created by the Add Vector
+ * Layer control, or null. These layers hold their features in a MapLibre
+ * GeoJSON source rather than in `layer.geojson`, so the attribute table reads
+ * the data back from the map. Tiles-mode (DuckDB) vector layers are excluded.
+ */
+function geojsonVectorSourceId(layer: GeoLibreLayer | undefined): string | null {
+  if (
+    !layer ||
+    layer.type !== "geojson" ||
+    layer.metadata.sourceKind !== "maplibre-gl-vector" ||
+    layer.metadata.externalNativeLayer !== true
+  ) {
+    return null;
+  }
+  const sourceIds = layer.metadata.sourceIds;
+  const sourceId = Array.isArray(sourceIds) ? sourceIds[0] : undefined;
+  return typeof sourceId === "string" ? sourceId : null;
+}
+
+interface AttributeTableProps {
+  mapControllerRef: RefObject<MapController | null>;
+}
+
+export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const tableSectionRef = useRef<HTMLElement>(null);
   const tableResizeGuideRef = useRef<HTMLDivElement>(null);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
@@ -262,6 +293,8 @@ export function AttributeTable() {
   const [exportError, setExportError] = useState<string | null>(null);
   const deferTableResize = isTauri();
 
+  const [loadingVectorGeojson, setLoadingVectorGeojson] = useState(false);
+
   const layer = layers.find((l) => l.id === selectedLayerId);
   const hasLayer = Boolean(layer);
   const features = layer?.geojson?.features ?? [];
@@ -274,6 +307,53 @@ export function AttributeTable() {
         properties: (feature.properties ?? {}) as Record<string, unknown>,
       }));
   const hasAttributeSource = Boolean(layer?.geojson || isDuckDBLayer);
+
+  // Vector layers added via the Add Vector Layer control keep their features in
+  // a MapLibre GeoJSON source rather than in `layer.geojson`. Read the data back
+  // from the map once so the table (and export) can use it like any other
+  // vector layer. Tiles-mode vector layers are not handled here.
+  useEffect(() => {
+    if (!layer || layer.geojson) {
+      setLoadingVectorGeojson(false);
+      return;
+    }
+    const sourceId = geojsonVectorSourceId(layer);
+    if (!sourceId) {
+      setLoadingVectorGeojson(false);
+      return;
+    }
+    const source = mapControllerRef.current?.getMap()?.getSource(sourceId) as
+      | GeoJSONSource
+      | undefined;
+    if (!source || typeof source.getData !== "function") return;
+
+    let cancelled = false;
+    const layerId = layer.id;
+    setLoadingVectorGeojson(true);
+    source
+      .getData()
+      .then((data) => {
+        if (cancelled) return;
+        if (
+          data &&
+          typeof data === "object" &&
+          (data as { type?: string }).type === "FeatureCollection"
+        ) {
+          updateLayer(layerId, { geojson: data as FeatureCollection });
+        }
+      })
+      .catch(() => {
+        // Best-effort: a source that cannot return data leaves the table in its
+        // existing "requires a vector layer" empty state.
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingVectorGeojson(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [layer, mapControllerRef, updateLayer]);
   const hasEdits = hasDraftEdits(drafts);
   const hasInvalidDrafts = attributeRows.some((row) => {
     const rowDrafts = drafts[row.featureId];
@@ -833,7 +913,9 @@ export function AttributeTable() {
       >
         {!hasAttributeSource ? (
           <p className="p-4 text-xs text-muted-foreground">
-            Attribute table requires a vector or DuckDB query layer.
+            {loadingVectorGeojson
+              ? "Loading layer attributes…"
+              : "Attribute table requires a vector or DuckDB query layer."}
           </p>
         ) : (
           <table

@@ -541,7 +541,9 @@ export function DesktopShell({
           />
         ) : null}
       </div>
-      {layoutOptions.attributePanelVisible ? <AttributeTable /> : null}
+      {layoutOptions.attributePanelVisible ? (
+        <AttributeTable mapControllerRef={mapControllerRef} />
+      ) : null}
       {layoutOptions.statusBarVisible ? (
         <StatusBar
           compact={layoutOptions.compact}

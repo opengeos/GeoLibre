@@ -322,6 +322,14 @@ export function projectFromStore(state: {
 }
 
 function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
+  // Vector layers owned by the Add Vector Layer control restore their features
+  // from their source URL/file, so any `geojson` read back from the map for the
+  // attribute table is redundant in a saved project and would only bloat it.
+  if (layer.metadata.externalNativeLayer === true && layer.geojson) {
+    const { geojson: _geojson, ...rest } = layer;
+    layer = rest;
+  }
+
   if (layer.type !== "xyz") return layer;
 
   const originalUrl =
