@@ -20,3 +20,5 @@
   PYTHON_VERSION = "3.12"
   # Emit relative asset paths so the demo works when served from /demo/.
   GEOLIBRE_APP_BASE = "./"
+  # vite build exhausts Node's default ~2 GB heap; raise the limit.
+  NODE_OPTIONS = "--max-old-space-size=4096"
