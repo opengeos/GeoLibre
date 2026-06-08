@@ -4,7 +4,7 @@ A lightweight, cloud-native GIS platform for visualizing, exploring, and analyzi
 
 GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS**, **DuckDB-WASM Spatial**, and **deck.gl**. The same workspace runs as a native desktop app, in any modern web browser, and adapts responsively to mobile and small screens.
 
-[![](https://files.opengeos.org/GeoLibre-demo.webp)](https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json)
+[![GeoLibre demo showing 3D Tiles rendered on a MapLibre map](https://files.opengeos.org/GeoLibre-demo.webp)](https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json)
 
 ## Features (v0.9.0)
 
@@ -21,7 +21,7 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 - SQL Workspace for running DuckDB Spatial SQL against loaded layers, local files, and remote URLs, with sample queries, query history, and adding results to the map or exporting them
 - Multiple DuckDB SQL query-result layers with identify, selection, and attribute table support
 - Controls menu with Measure, Bookmark, Minimap, and View State tools, plus a Print menu and a Search panel
-- Conversion menu for Vector to GeoParquet/FlatGeobuf/PMTiles, CSV to GeoParquet, and Raster to COG, with browser DuckDB-WASM and an optional sidecar
+- Conversion menu for Vector to GeoParquet/FlatGeobuf/PMTiles, CSV to GeoParquet, and Raster to COG; GeoParquet and CSV conversions run in the browser with DuckDB-WASM, while FlatGeobuf, PMTiles, and COG require the optional Python sidecar
 - Whitebox toolbox with batch tools run against a selected input directory
 - Project menu to create, open, save, and Save As `.geolibre.json` projects
 - Desktop diagnostics panel, update check, and MSIX packaging support
