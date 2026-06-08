@@ -307,6 +307,11 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
         properties: (feature.properties ?? {}) as Record<string, unknown>,
       }));
   const hasAttributeSource = Boolean(layer?.geojson || isDuckDBLayer);
+  // Add Vector Layer (geojson-mode) layers render from a MapLibre source the
+  // control owns, and their `layer.geojson` is dropped when a project is saved.
+  // Edits made here would neither redraw on the map nor survive a save, so the
+  // attribute table is read-only for them.
+  const isReadOnlyVectorLayer = geojsonVectorSourceId(layer) !== null;
 
   // Vector layers added via the Add Vector Layer control keep their features in
   // a MapLibre GeoJSON source rather than in `layer.geojson`. Read the data back
@@ -801,18 +806,24 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           size="sm"
           className="ml-auto h-7 px-2"
           title={
-            isEditing
-              ? hasEdits
-                ? "Use Save or Cancel to finish editing"
-                : "Exit edit mode"
-              : isDuckDBLayer
-                ? "Edit displayed DuckDB query attributes in memory"
-                : "Edit attribute values"
+            isReadOnlyVectorLayer
+              ? "Editing is not available for Add Vector Layer layers"
+              : isEditing
+                ? hasEdits
+                  ? "Use Save or Cancel to finish editing"
+                  : "Exit edit mode"
+                : isDuckDBLayer
+                  ? "Edit displayed DuckDB query attributes in memory"
+                  : "Edit attribute values"
           }
           aria-label={
             isEditing && !hasEdits ? "Exit edit mode" : "Edit attribute values"
           }
-          disabled={!hasAttributeSource || (isEditing && hasEdits)}
+          disabled={
+            !hasAttributeSource ||
+            isReadOnlyVectorLayer ||
+            (isEditing && hasEdits)
+          }
           onClick={toggleEditing}
         >
           <Pencil className="h-3.5 w-3.5" />

@@ -73,7 +73,9 @@ const SAMPLE_QUERIES: ReadonlyArray<{ label: string; sql: string }> = [
 
 /** Build a starter query that selects the first rows of a layer table. */
 function sampleQueryForTable(tableName: string): string {
-  return `SELECT *\nFROM ${tableName}\nLIMIT 10;`;
+  // Quote the identifier so the generated query stays valid even if the table
+  // name ever contains characters the sanitizer does not currently produce.
+  return `SELECT *\nFROM "${tableName.replaceAll('"', '""')}"\nLIMIT 10;`;
 }
 
 const HISTORY_STORAGE_KEY = "geolibre.sqlWorkspace.history";
@@ -87,7 +89,9 @@ function loadQueryHistory(): string[] {
       window.localStorage.getItem(HISTORY_STORAGE_KEY) ?? "[]",
     );
     return Array.isArray(parsed)
-      ? parsed.filter((entry): entry is string => typeof entry === "string")
+      ? parsed
+          .filter((entry): entry is string => typeof entry === "string")
+          .slice(0, MAX_HISTORY_ENTRIES)
       : [];
   } catch {
     return [];
@@ -155,6 +159,9 @@ export function SqlWorkspaceDialog() {
   // Same race for exports: the disabled buttons lag a render, so a fast double
   // click could open two save dialogs. The ref guards synchronously.
   const exportingRef = useRef(false);
+  // handleAddAsLayer is synchronous, so a rapid double-click could add the same
+  // result as two layers before React re-renders. The ref guards synchronously.
+  const addingLayerRef = useRef(false);
 
   const runQuery = async () => {
     const trimmed = sql.trim();
@@ -185,13 +192,15 @@ export function SqlWorkspaceDialog() {
   };
 
   const handleAddAsLayer = () => {
-    if (!result?.geojson) return;
+    if (!result?.geojson || addingLayerRef.current) return;
+    addingLayerRef.current = true;
     setError(null);
     const featureCount = result.geojson.features.length;
     const name =
       layerName.trim() || `SQL result ${new Date().toLocaleTimeString()}`;
     addGeoJsonLayer(name, result.geojson);
     setNotice(`Added ${featureCount} features to the map as "${name}".`);
+    addingLayerRef.current = false;
   };
 
   const saveBinary = async (
@@ -308,7 +317,7 @@ export function SqlWorkspaceDialog() {
                     History…
                   </option>
                   {history.map((entry, index) => (
-                    <option key={entry} value={index}>
+                    <option key={index} value={index}>
                       {historyLabel(entry)}
                     </option>
                   ))}

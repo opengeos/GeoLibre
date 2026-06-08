@@ -275,7 +275,7 @@ async function describeQuery(
     const described = rowsFromResult(
       await connection.query(
         `DESCRIBE SELECT * FROM (${statement}) AS ` +
-          quoteIdentifier(SQL_SUBQUERY_ALIAS),
+          `${quoteIdentifier(SQL_SUBQUERY_ALIAS)} LIMIT 0`,
       ),
     );
     const columnNames = described
@@ -459,13 +459,21 @@ async function registerRemoteSources(
   statement: string,
   registeredFiles: string[],
 ): Promise<{ statement: string; readerCalls: string[] }> {
+  // Match against the masked SQL so a reader call that appears inside a string
+  // literal or comment is ignored: a match whose start is blanked in the mask is
+  // not real code. Match indices are valid against the original string, and the
+  // reader keyword and URL the pattern captures are code (never masked).
+  const masked = maskSqlLiterals(statement);
+  const matches = [...statement.matchAll(REMOTE_READER_ARG_PATTERN)].filter(
+    (match) => masked[match.index ?? 0] !== " ",
+  );
+
   // Collect each distinct URL that is a native reader's argument, keeping the
   // first reader function it appears with (used to warm up the HTTP path).
   const readerByUrl = new Map<string, string>();
-  for (const match of statement.matchAll(REMOTE_READER_ARG_PATTERN)) {
-    const reader = match[1].toLowerCase();
+  for (const match of matches) {
     const url = match[2];
-    if (!readerByUrl.has(url)) readerByUrl.set(url, reader);
+    if (!readerByUrl.has(url)) readerByUrl.set(url, match[1].toLowerCase());
   }
   if (readerByUrl.size === 0) return { statement, readerCalls: [] };
 
@@ -482,18 +490,23 @@ async function registerRemoteSources(
     handleByUrl.set(url, handle);
     readerCalls.push(`${reader}(${quoteSqlString(handle)})`);
   }
-  // Replace only the matched reader-call arguments, so a URL that happens to
-  // appear elsewhere (e.g. in a WHERE-clause string literal) is left intact.
-  // The pattern matches up to the URL's closing quote but not the call's
-  // closing paren, so the replacement must not add one: the original `)` (and
-  // any trailing arguments) stays in place.
-  const rewritten = statement.replace(
-    REMOTE_READER_ARG_PATTERN,
-    (whole, reader: string, url: string) => {
-      const handle = handleByUrl.get(url);
-      return handle ? `${reader}(${quoteSqlString(handle)}` : whole;
-    },
-  );
+
+  // Rebuild the statement replacing only the matched (code) reader-call
+  // arguments via their indices. The pattern matches up to the URL's closing
+  // quote but not the call's closing paren, so the replacement must not add one:
+  // the original `)` and any trailing arguments stay in place.
+  let rewritten = "";
+  let lastIndex = 0;
+  for (const match of matches) {
+    const matchIndex = match.index ?? 0;
+    const handle = handleByUrl.get(match[2]);
+    rewritten += statement.slice(lastIndex, matchIndex);
+    rewritten += handle
+      ? `${match[1]}(${quoteSqlString(handle)}`
+      : match[0];
+    lastIndex = matchIndex + match[0].length;
+  }
+  rewritten += statement.slice(lastIndex);
   return { statement: rewritten, readerCalls };
 }
 
