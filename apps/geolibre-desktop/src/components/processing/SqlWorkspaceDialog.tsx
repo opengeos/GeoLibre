@@ -80,6 +80,48 @@ function sampleQueryForTable(tableName: string): string {
   return `SELECT *\nFROM ${tableName}\nLIMIT 10;`;
 }
 
+const HISTORY_STORAGE_KEY = "geolibre.sqlWorkspace.history";
+const MAX_HISTORY_ENTRIES = 25;
+
+/** Load saved query history from localStorage, newest first. */
+function loadQueryHistory(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(HISTORY_STORAGE_KEY) ?? "[]",
+    );
+    return Array.isArray(parsed)
+      ? parsed.filter((entry): entry is string => typeof entry === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Prepend a query to history (deduped, newest first, capped) and persist it. */
+function saveQueryToHistory(history: string[], query: string): string[] {
+  const trimmed = query.trim();
+  if (!trimmed) return history;
+  const next = [
+    trimmed,
+    ...history.filter((entry) => entry !== trimmed),
+  ].slice(0, MAX_HISTORY_ENTRIES);
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // Best-effort: ignore quota or privacy-mode storage failures.
+    }
+  }
+  return next;
+}
+
+/** One-line, length-capped label for a history entry. */
+function historyLabel(query: string): string {
+  const oneLine = query.replace(/\s+/g, " ").trim();
+  return oneLine.length > 80 ? `${oneLine.slice(0, 80)}…` : oneLine;
+}
+
 /** Format a result cell for display, keeping the grid compact and readable. */
 function formatCell(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -105,6 +147,7 @@ export function SqlWorkspaceDialog() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SqlQueryResult | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [history, setHistory] = useState<string[]>(loadQueryHistory);
 
   const tables = useMemo(() => previewLayerTables(layers), [layers]);
 
@@ -116,6 +159,7 @@ export function SqlWorkspaceDialog() {
   const runQuery = async () => {
     const trimmed = sql.trim();
     if (!trimmed || runningRef.current) return;
+    setHistory((current) => saveQueryToHistory(current, trimmed));
     runningRef.current = true;
     setRunning(true);
     setError(null);
@@ -243,6 +287,26 @@ export function SqlWorkspaceDialog() {
               </p>
             )}
             <div className="ml-auto flex items-center gap-2">
+              {history.length > 0 ? (
+                <Select
+                  aria-label="Reuse a query from history"
+                  className="h-8 w-auto max-w-[12rem] text-xs"
+                  value=""
+                  onChange={(event) => {
+                    const entry = history[Number(event.target.value)];
+                    if (entry) setSql(entry);
+                  }}
+                >
+                  <option value="" disabled>
+                    History…
+                  </option>
+                  {history.map((entry, index) => (
+                    <option key={entry} value={index}>
+                      {historyLabel(entry)}
+                    </option>
+                  ))}
+                </Select>
+              ) : null}
               <Select
                 aria-label="Insert a sample query"
                 className="h-8 w-auto text-xs"
