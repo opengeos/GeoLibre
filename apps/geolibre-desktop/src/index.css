@@ -719,6 +719,10 @@ body,
 .geolibre-view-state-control .maplibre-gl-view-state-copy {
   width: 20px;
   height: 20px;
+  /* The row is baseline-aligned for the label/value text, which pins the copy
+   * button to the first line. Center it so it stays vertically centered when
+   * the value wraps to two lines (e.g. the Bounds row). */
+  align-self: center;
 }
 
 .geolibre-view-state-control .maplibre-gl-view-state-bbox-toggle {
