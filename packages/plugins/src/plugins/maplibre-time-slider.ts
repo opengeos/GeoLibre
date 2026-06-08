@@ -7,7 +7,6 @@ import {
   TimeSliderControl,
   type SourceSpec,
   type TimeSliderConfig,
-  type TimeSliderEventHandler,
   type TimeSliderOptions,
 } from "maplibre-gl-time-slider";
 import type {
@@ -101,34 +100,37 @@ let timeSliderControl: TimeSliderControl | null = null;
 // Last known config, kept so deactivating/reactivating (or restoring a saved
 // project) rebuilds the timeline and its layers exactly.
 let savedConfig: TimeSliderConfig | null = null;
-let sourceAddHandler: TimeSliderEventHandler | null = null;
-let sourceRemoveHandler: TimeSliderEventHandler | null = null;
+// Detaches the active control's store-sync listeners; set by attachStoreSync,
+// cleared when invoked. Bound to a specific control so handlers cannot leak.
+let detachStoreSync: (() => void) | null = null;
 
 export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-time-slider",
   name: "Time Slider",
-  version: "1.0.1",
+  version: "1.0.2",
   activate: (app: GeoLibreAppAPI) => {
     if (timeSliderControl) return;
-    timeSliderControl = new TimeSliderControl(
+    const control = new TimeSliderControl(
       savedConfig ? configToOptions(savedConfig) : SEED_OPTIONS,
     );
-    attachStoreSync(timeSliderControl);
+    timeSliderControl = control;
+    attachStoreSync(control);
 
-    const added = app.addMapControl(timeSliderControl, timeSliderPosition);
+    const added = app.addMapControl(control, timeSliderPosition);
     if (!added) {
-      detachStoreSync(timeSliderControl);
+      detachStoreSync?.();
       timeSliderControl = null;
       return false;
     }
     // Layers (especially the async COG) only exist a tick after the control is
-    // added, so reconcile the store once they have been created.
-    setTimeout(() => syncStoreLayers(timeSliderControl), 0);
+    // added, so reconcile the store once they have been created. Capture the
+    // control locally so a later reassignment cannot redirect this callback.
+    setTimeout(() => syncStoreLayers(control), 0);
   },
   deactivate: (app: GeoLibreAppAPI) => {
     if (!timeSliderControl) return;
     savedConfig = timeSliderControl.getConfig();
-    detachStoreSync(timeSliderControl);
+    detachStoreSync?.();
     app.removeMapControl(timeSliderControl);
     timeSliderControl = null;
     removeAllTimeSliderStoreLayers();
@@ -144,13 +146,14 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
     // handlers, so capture the full config first and rebuild a fresh control
     // at the new position to preserve user-added layers.
     const config = timeSliderControl.getConfig();
-    detachStoreSync(timeSliderControl);
+    detachStoreSync?.();
     app.removeMapControl(timeSliderControl);
-    timeSliderControl = new TimeSliderControl(configToOptions(config));
-    attachStoreSync(timeSliderControl);
-    const added = app.addMapControl(timeSliderControl, timeSliderPosition);
+    const control = new TimeSliderControl(configToOptions(config));
+    timeSliderControl = control;
+    attachStoreSync(control);
+    const added = app.addMapControl(control, timeSliderPosition);
     if (!added) {
-      detachStoreSync(timeSliderControl);
+      detachStoreSync?.();
       timeSliderControl = null;
       // Preserve the captured config so a later activate() restores the user's
       // layers, and drop the now-orphaned store layers (the previous control's
@@ -159,7 +162,7 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
       removeAllTimeSliderStoreLayers();
       return false;
     }
-    setTimeout(() => syncStoreLayers(timeSliderControl), 0);
+    setTimeout(() => syncStoreLayers(control), 0);
   },
   getProjectState: () => {
     const config = timeSliderControl?.getConfig() ?? savedConfig;
@@ -181,7 +184,7 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
       // timeline cannot linger on screen.
       savedConfig = null;
       if (timeSliderControl) {
-        detachStoreSync(timeSliderControl);
+        detachStoreSync?.();
         app.removeMapControl(timeSliderControl);
         timeSliderControl = null;
         removeAllTimeSliderStoreLayers();
@@ -195,9 +198,11 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
 
     // setConfig replaces the sources in place without firing
     // sourceadd/sourceremove, so reconcile the store via the setTimeout below
-    // once the new layers exist.
-    timeSliderControl.setConfig(nextConfig);
-    setTimeout(() => syncStoreLayers(timeSliderControl), 0);
+    // once the new layers exist. Capture the control so a later reassignment
+    // cannot redirect this callback.
+    const control = timeSliderControl;
+    control.setConfig(nextConfig);
+    setTimeout(() => syncStoreLayers(control), 0);
     return true;
   },
 };
@@ -231,6 +236,19 @@ function configToOptions(config: TimeSliderConfig): TimeSliderOptions {
 }
 
 /**
+ * Returns true when a source URL-bearing field is safe to hand to the library:
+ * absent/empty, a non-string (e.g. inline GeoJSON data objects), or a plain
+ * http(s) URL. Other schemes (javascript:/data:/file:) are rejected.
+ *
+ * @param value - A candidate `url`/`tiles`/`data`/`baseUrl` value.
+ * @returns Whether the value is safe.
+ */
+function isSafeSourceUrl(value: unknown): boolean {
+  if (typeof value !== "string" || value === "") return true;
+  return /^https?:\/\//i.test(value);
+}
+
+/**
  * Minimal validation of a restored project value before treating it as a
  * `TimeSliderConfig` (it arrives untyped from the saved project file).
  *
@@ -247,12 +265,27 @@ function normalizeConfig(state: unknown): TimeSliderConfig | null {
     (candidate.currentDate !== undefined &&
       typeof candidate.currentDate !== "string") ||
     !Array.isArray(candidate.sources) ||
-    (candidate.sources as unknown[]).some(
-      (source) =>
-        !source ||
-        typeof source !== "object" ||
-        typeof (source as { id?: unknown }).id !== "string",
-    )
+    (candidate.sources as unknown[]).some((source) => {
+      if (!source || typeof source !== "object") return true;
+      const spec = source as {
+        id?: unknown;
+        url?: unknown;
+        tiles?: unknown;
+        data?: unknown;
+        baseUrl?: unknown;
+      };
+      // Reject malformed ids and any URL-bearing field that is not a plain
+      // http(s) URL. A crafted project file could otherwise smuggle a
+      // javascript:/data:/file: URI that MapLibre would fetch, which matters
+      // under the Tauri desktop target.
+      return (
+        typeof spec.id !== "string" ||
+        !isSafeSourceUrl(spec.url) ||
+        !isSafeSourceUrl(spec.tiles) ||
+        !isSafeSourceUrl(spec.data) ||
+        !isSafeSourceUrl(spec.baseUrl)
+      );
+    })
   ) {
     return null;
   }
@@ -264,21 +297,17 @@ function normalizeConfig(state: unknown): TimeSliderConfig | null {
 // reconcile would run at animation speed for no benefit; opacity and
 // visibility are intentionally left to the Layers panel.
 function attachStoreSync(control: TimeSliderControl): void {
-  sourceAddHandler = () => syncStoreLayers(control);
-  sourceRemoveHandler = () => syncStoreLayers(control);
-  control.on("sourceadd", sourceAddHandler);
-  control.on("sourceremove", sourceRemoveHandler);
-}
-
-function detachStoreSync(control: TimeSliderControl): void {
-  if (sourceAddHandler) {
-    control.off("sourceadd", sourceAddHandler);
-    sourceAddHandler = null;
-  }
-  if (sourceRemoveHandler) {
-    control.off("sourceremove", sourceRemoveHandler);
-    sourceRemoveHandler = null;
-  }
+  const onSourceAdd = () => syncStoreLayers(control);
+  const onSourceRemove = () => syncStoreLayers(control);
+  control.on("sourceadd", onSourceAdd);
+  control.on("sourceremove", onSourceRemove);
+  // Bind the detacher to this specific control and its own handler closures so
+  // a second attach can never orphan the previous control's listeners.
+  detachStoreSync = () => {
+    control.off("sourceadd", onSourceAdd);
+    control.off("sourceremove", onSourceRemove);
+    detachStoreSync = null;
+  };
 }
 
 /**
