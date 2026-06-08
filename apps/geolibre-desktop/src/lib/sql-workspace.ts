@@ -1,8 +1,9 @@
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
-import type {
-  AsyncDuckDB,
-  AsyncDuckDBConnection,
+import {
+  DuckDBDataProtocol,
+  type AsyncDuckDB,
+  type AsyncDuckDBConnection,
 } from "@duckdb/duckdb-wasm";
 import {
   ensureSpatialExtension,
@@ -54,6 +55,18 @@ const DATA_SOURCE_READERS: Array<{ extensions: string[]; reader: string }> = [
 ];
 const BARE_SOURCE_PATTERN =
   /\b(from|join)\s+((?:https?:\/\/|\/|\.\/|\.\.\/|~\/|[A-Za-z]:[\\/])[^\s,;()]+)/gi;
+
+// HTTP(S) URLs whose extension feeds a native DuckDB reader (read_parquet /
+// read_csv_auto / read_json_auto) are registered as DuckDB file handles so the
+// JS runtime streams them via range requests. The in-WASM httpfs path used by a
+// bare `read_parquet('https://…')` fails with "stoi: no conversion" on many
+// servers. ST_Read (GDAL/vsicurl) URLs are left bare so GDAL handles them.
+const REMOTE_URL_PATTERN = /https?:\/\/[^\s'");]+/gi;
+const NATIVE_REMOTE_READER_EXTENSIONS = new Set(
+  DATA_SOURCE_READERS.filter((entry) => entry.reader !== "ST_Read").flatMap(
+    (entry) => entry.extensions,
+  ),
+);
 
 /** A loaded layer exposed to the workspace as a DuckDB table. */
 export interface SqlWorkspaceTable {
@@ -338,6 +351,50 @@ function rewriteBareSources(sql: string): string {
   );
 }
 
+/** Derive a stable, VFS-safe handle name from a URL, keeping its extension. */
+function remoteHandleName(filePrefix: string, index: number, url: string): string {
+  const path = url.split(/[?#]/)[0];
+  const base = path.slice(path.lastIndexOf("/") + 1).replace(/[^\w.-]/g, "_");
+  return `${filePrefix}__remote_${index}_${base || "source"}`;
+}
+
+/**
+ * Register each HTTP(S) URL that feeds a native DuckDB reader as a file handle
+ * and rewrite the statement to reference the handle. DuckDB-WASM then reads the
+ * remote file through the JS runtime's HTTP range reader (streaming only the
+ * byte ranges the query needs, so large files work) instead of the in-WASM
+ * httpfs path, which fails with "stoi: no conversion" against many servers.
+ *
+ * @returns The statement with registered URLs replaced by their handle names.
+ */
+async function registerRemoteSources(
+  db: AsyncDuckDB,
+  filePrefix: string,
+  statement: string,
+  registeredFiles: string[],
+): Promise<string> {
+  // Longest first so a URL that is a prefix of another is replaced correctly.
+  const urls = [...new Set(statement.match(REMOTE_URL_PATTERN) ?? [])].sort(
+    (a, b) => b.length - a.length,
+  );
+  let rewritten = statement;
+  let index = 0;
+  for (const url of urls) {
+    const path = url.split(/[?#]/)[0];
+    const dot = path.lastIndexOf(".");
+    const extension = dot >= 0 ? path.slice(dot + 1).toLowerCase() : "";
+    if (!NATIVE_REMOTE_READER_EXTENSIONS.has(extension)) continue;
+    const handle = remoteHandleName(filePrefix, index, url);
+    index += 1;
+    // directIO = true forces range-based reads so the whole file is never
+    // buffered locally.
+    await db.registerFileURL(handle, url, DuckDBDataProtocol.HTTP, true);
+    registeredFiles.push(handle);
+    rewritten = rewritten.split(url).join(handle);
+  }
+  return rewritten;
+}
+
 function rowsToFeatureCollection(
   rows: Record<string, unknown>[],
   geometryColumn: string,
@@ -400,13 +457,14 @@ export async function runSqlQuery(
   }
   // Wrap bare URLs/paths after FROM/JOIN in the matching reader so the
   // convenient `SELECT * FROM https://…/x.parquet` form runs.
-  const statement = rewriteBareSources(trimmed);
+  const rewritten = rewriteBareSources(trimmed);
 
   const db = await getDatabase();
   const connection = await db.connect();
   // Per-run prefix so concurrent queries on the shared database do not register
-  // or drop one another's VFS files. Populated by registerLayerTables as it
-  // creates files so cleanup matches exactly what was registered.
+  // or drop one another's VFS files. Populated by registerLayerTables and
+  // registerRemoteSources as they create handles so cleanup matches exactly
+  // what was registered.
   const filePrefix = `__geolibre_sql_${Date.now()}_${Math.random()
     .toString(36)
     .slice(2)}`;
@@ -415,6 +473,14 @@ export async function runSqlQuery(
   try {
     await ensureSpatialExtension(connection);
     await registerLayerTables(db, connection, layers, filePrefix, registeredFiles);
+    // Register remote URLs as DuckDB file handles so they stream over HTTP
+    // range requests instead of the unreliable in-WASM httpfs path.
+    const statement = await registerRemoteSources(
+      db,
+      filePrefix,
+      rewritten,
+      registeredFiles,
+    );
 
     const described = await describeQuery(connection, statement);
     const geometryColumn = described?.geometryColumn ?? null;
