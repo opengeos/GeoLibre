@@ -24,16 +24,23 @@ import type {
 const STORE_LAYER_SOURCE_KIND = "time-slider";
 
 /**
- * Seed configuration applied on first activation: the opengeos Landsat annual
- * composite COG (1984-2013) served via TiTiler, so a layer appears immediately.
- * The source has a stable explicit `id` so the maplibre layer id and the
- * GeoLibre store-layer id stay constant across save/load.
+ * Seed configuration applied on first activation. It mirrors the four bundled
+ * "Add data" examples from maplibre-gl-time-slider, one per source type (COG,
+ * XYZ, GeoJSON, WMS), so every supported type is demonstrated out of the box.
+ *
+ * The examples cover different periods, so a single timeline cannot show all of
+ * them at once: the active timeline defaults to the Landsat COG (yearly,
+ * 1984-2013), which renders immediately. The other sources appear in the Layers
+ * panel and render once the user moves the timeline into their range via the
+ * dock (year/month/day granularity pills are all offered). Each source has a
+ * stable explicit `id` so its maplibre layer id and GeoLibre store-layer id
+ * stay constant across save/load.
  */
 const SEED_OPTIONS: TimeSliderOptions = {
   startDate: "1984-01-01",
   endDate: "2013-01-01",
   granularity: "year",
-  granularities: ["year"],
+  granularities: ["year", "month", "day"],
   speed: 800,
   collapsible: true,
   collapsed: false,
@@ -52,6 +59,39 @@ const SEED_OPTIONS: TimeSliderOptions = {
         -74.72222465917544, -8.586918476798596, -74.15951996520296,
         -8.282218213133522,
       ],
+    },
+    // The remaining examples cover other periods, so they are seeded hidden to
+    // avoid requesting out-of-range tiles under the default Landsat timeline.
+    // They appear in the Layers panel; toggle them on after moving the timeline
+    // into their range (MODIS: Aug 2023 daily; earthquakes: 2015 monthly).
+    {
+      type: "xyz",
+      id: "time-slider-modis-truecolor",
+      name: "MODIS Terra True Color (XYZ)",
+      visible: false,
+      tiles:
+        "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor" +
+        "/default/{date:YYYY-MM-DD}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg",
+    },
+    {
+      type: "geojson",
+      id: "time-slider-earthquakes",
+      name: "Significant Earthquakes 2015",
+      visible: false,
+      data: "https://maplibre.org/maplibre-gl-js/docs/assets/significant-earthquakes-2015.geojson",
+      timeProperty: "time",
+      window: { unit: "month", before: 0, after: 1 },
+    },
+    {
+      type: "wms",
+      id: "time-slider-modis-wms",
+      name: "MODIS Terra True Color (WMS)",
+      visible: false,
+      baseUrl:
+        "https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi?version=1.3.0&service=WMS" +
+        "&request=GetMap&format=image/png&transparent=true&CRS=EPSG:3857" +
+        "&width=256&height=256&bbox={bbox-epsg-3857}",
+      layers: "MODIS_Terra_CorrectedReflectance_TrueColor",
     },
   ],
 };
