@@ -1881,9 +1881,19 @@ async function openStandaloneMinimapControl(
 // style setter, so a rebuild is the only way to follow a basemap change.
 async function refreshMinimapBasemap(app: GeoLibreAppAPI): Promise<void> {
   if (!minimapControl || !minimapControlMounted) return;
+  const controlAtStart = minimapControl;
   const { MinimapControl: MinimapControlClass } =
     await getComponentsConstructors();
-  if (!minimapControl || !minimapControlMounted) return;
+  // Bail out if a concurrent refresh already rebuilt the control or a teardown
+  // ran while awaiting; otherwise rapid basemap switches could double-remove
+  // the just-added control and leave two minimap instances on the map.
+  if (
+    !minimapControl ||
+    !minimapControlMounted ||
+    minimapControl !== controlAtStart
+  ) {
+    return;
+  }
 
   app.removeMapControl(minimapControl);
   minimapControl = createMinimapControl(
@@ -2428,14 +2438,26 @@ function routeBookmarkFileIoThroughHost(
   control: BookmarkControl,
   app: GeoLibreAppAPI,
 ): void {
+  // `_exportToFile`/`_importFromFile` are private (underscore-prefixed) members
+  // of BookmarkControl as of maplibre-gl-components@0.20.1. If a future version
+  // renames them, the overrides below silently stop being called and file I/O
+  // regresses to the WebView-incompatible Blob/file-input path — so warn loudly
+  // to flag it when bumping the dependency.
   const io = control as unknown as {
     _exportToFile?: () => void;
     _importFromFile?: () => void;
     exportBookmarks: () => string;
     importBookmarks: (bookmarks: MapBookmark[]) => unknown;
   };
-  const originalExport = io._exportToFile?.bind(control);
-  const originalImport = io._importFromFile?.bind(control);
+  if (!io._exportToFile || !io._importFromFile) {
+    console.warn(
+      "BookmarkControl: _exportToFile/_importFromFile not found; Tauri-aware " +
+        "Import/Export overrides are inactive. Check maplibre-gl-components.",
+    );
+    return;
+  }
+  const originalExport = io._exportToFile.bind(control);
+  const originalImport = io._importFromFile.bind(control);
   const dialogOptions = {
     description: "Bookmarks",
     extensions: ["json"],
@@ -2444,7 +2466,7 @@ function routeBookmarkFileIoThroughHost(
 
   io._exportToFile = () => {
     if (!app.exportTextFile) {
-      originalExport?.();
+      originalExport();
       return;
     }
     app.exportTextFile("bookmarks.json", io.exportBookmarks(), dialogOptions);
@@ -2452,36 +2474,41 @@ function routeBookmarkFileIoThroughHost(
 
   io._importFromFile = () => {
     if (!app.importTextFile) {
-      originalImport?.();
+      originalImport();
       return;
     }
-    void app.importTextFile(dialogOptions).then((text) => {
-      if (!text || control !== bookmarkControl) return;
-      let data: unknown;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        console.warn("BookmarkControl: failed to parse imported file");
-        return;
-      }
-      if (!Array.isArray(data)) {
-        console.warn("BookmarkControl: imported data is not an array");
-        return;
-      }
-      const valid = data.filter(
-        (bookmark: MapBookmark) =>
-          bookmark &&
-          typeof bookmark.name === "string" &&
-          typeof bookmark.lng === "number" &&
-          typeof bookmark.lat === "number" &&
-          typeof bookmark.zoom === "number",
-      ) as MapBookmark[];
-      if (valid.length === 0) {
-        console.warn("BookmarkControl: no valid bookmarks found in file");
-        return;
-      }
-      io.importBookmarks(valid);
-    });
+    app
+      .importTextFile(dialogOptions)
+      .then((text) => {
+        if (!text || control !== bookmarkControl) return;
+        let data: unknown;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          console.warn("BookmarkControl: failed to parse imported file");
+          return;
+        }
+        if (!Array.isArray(data)) {
+          console.warn("BookmarkControl: imported data is not an array");
+          return;
+        }
+        const valid = data.filter(
+          (bookmark): bookmark is MapBookmark =>
+            !!bookmark &&
+            typeof (bookmark as MapBookmark).name === "string" &&
+            typeof (bookmark as MapBookmark).lng === "number" &&
+            typeof (bookmark as MapBookmark).lat === "number" &&
+            typeof (bookmark as MapBookmark).zoom === "number",
+        );
+        if (valid.length === 0) {
+          console.warn("BookmarkControl: no valid bookmarks found in file");
+          return;
+        }
+        io.importBookmarks(valid);
+      })
+      .catch((error) => {
+        console.warn("BookmarkControl: import failed", error);
+      });
   };
 }
 
