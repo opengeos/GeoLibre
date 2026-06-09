@@ -6,6 +6,7 @@ import {
   createEmptyProject,
   parseProject,
   projectFromStore,
+  serializeProject,
   useAppStore,
   type GeoLibreLayer,
 } from "@geolibre/core";
@@ -127,6 +128,80 @@ describe("project parsing", () => {
     ]);
     assert.equal(project.layers[0].source.url, "https://tiles.example.com/{z}/{x}/{y}.png");
     assert.equal("resolvedUrl" in project.layers[0].metadata, false);
+  });
+
+  it("drops redundant geojson for external native layers restorable from a source URL", () => {
+    const project = projectFromStore({
+      projectName: "Native URL",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [
+        geojsonLayer({
+          id: "native-url",
+          source: { type: "geojson", url: "https://example.com/data.geojson" },
+          metadata: { externalNativeLayer: true },
+          geojson: {
+            type: "FeatureCollection",
+            features: [
+              {
+                type: "Feature",
+                properties: {},
+                geometry: { type: "Point", coordinates: [1, 2] },
+              },
+            ],
+          },
+        }),
+      ],
+      preferences: createEmptyProject().preferences,
+      metadata: {},
+    });
+
+    assert.equal(project.layers[0].geojson, undefined);
+  });
+
+  it("keeps geojson for external native layers without a restorable source URL", () => {
+    const project = projectFromStore({
+      projectName: "Native File",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [
+        geojsonLayer({
+          id: "native-file",
+          source: { type: "geojson" },
+          metadata: {
+            externalNativeLayer: true,
+            sourceKind: "annotate-geocodes",
+          },
+          geojson: {
+            type: "FeatureCollection",
+            features: [
+              {
+                type: "Feature",
+                properties: {},
+                geometry: { type: "Point", coordinates: [1, 2] },
+              },
+            ],
+          },
+        }),
+      ],
+      preferences: createEmptyProject().preferences,
+      metadata: {},
+    });
+
+    assert.ok(
+      project.layers[0].geojson,
+      "geojson is the only copy for a source-less native layer and must be retained",
+    );
+    assert.equal(project.layers[0].geojson?.features.length, 1);
+
+    // The features must survive the full on-disk round-trip so the restore
+    // path (ensureExternalGeoJsonNativeLayer) can re-render them on reopen.
+    const reopened = parseProject(serializeProject(project));
+    assert.equal(reopened.layers[0].geojson?.features.length, 1);
   });
 });
 

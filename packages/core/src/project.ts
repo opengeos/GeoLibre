@@ -321,11 +321,32 @@ export function projectFromStore(state: {
   };
 }
 
+// An external native layer can drop its persisted `geojson` only if its
+// features can be reconstructed on reopen, i.e. it has a fetchable source URL
+// (the Add Vector Layer / WFS / geojson-url cases). Layers loaded from local
+// files or built in-memory (e.g. the Annotate Geocodes control) have no such
+// URL, so the persisted `geojson` is their ONLY copy and must be kept.
+function hasRestorableSourceUrl(layer: GeoLibreLayer): boolean {
+  const sourceUrl = layer.source.url;
+  const originalUrl = layer.metadata.originalUrl;
+  return (
+    (typeof sourceUrl === "string" && sourceUrl.trim() !== "") ||
+    (typeof originalUrl === "string" && originalUrl.trim() !== "")
+  );
+}
+
 function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
-  // Vector layers owned by the Add Vector Layer control restore their features
-  // from their source URL/file, so any `geojson` read back from the map for the
-  // attribute table is redundant in a saved project and would only bloat it.
-  if (layer.metadata.externalNativeLayer === true && layer.geojson) {
+  // External native layers that restore their features from a source URL keep
+  // a `geojson` copy on the map only for the attribute table; it is redundant
+  // in a saved project and would only bloat it, so strip it. Layers without a
+  // restorable URL (local-file or in-memory) keep their `geojson` because it is
+  // the sole copy GeoLibre's restore path (`ensureExternalGeoJsonNativeLayer`)
+  // re-renders from.
+  if (
+    layer.metadata.externalNativeLayer === true &&
+    layer.geojson &&
+    hasRestorableSourceUrl(layer)
+  ) {
     const { geojson: _geojson, ...rest } = layer;
     layer = rest;
   }
