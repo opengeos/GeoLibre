@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   DEFAULT_PROJECT_TITLE,
+  DEFAULT_SHARE_BASE_URL,
   isShareableTitle,
+  MAX_PROJECT_TITLE_LENGTH,
   resolveShareBaseUrl,
   uploadProjectToShare,
 } from "../apps/geolibre-desktop/src/lib/share-geolibre";
-
-const DEFAULT_SHARE_BASE_URL = "https://share.geolibre.app";
 
 const PROJECT_DTO = {
   username: "giswqs",
@@ -52,6 +52,14 @@ describe("isShareableTitle", () => {
   it("accepts a real, non-default title", () => {
     assert.equal(isShareableTitle("My Flood Map"), true);
     assert.equal(isShareableTitle("  Trimmed Title  "), true);
+  });
+
+  it("rejects a title longer than the max length", () => {
+    assert.equal(isShareableTitle("a".repeat(MAX_PROJECT_TITLE_LENGTH)), true);
+    assert.equal(
+      isShareableTitle("a".repeat(MAX_PROJECT_TITLE_LENGTH + 1)),
+      false,
+    );
   });
 });
 

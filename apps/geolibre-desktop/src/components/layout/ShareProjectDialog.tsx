@@ -15,6 +15,7 @@ import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
 import { openExternalLink } from "../../lib/open-external";
 import {
   isShareableTitle,
+  MAX_PROJECT_TITLE_LENGTH,
   resolveShareBaseUrl,
   uploadProjectToShare,
   type ShareUploadResult,
@@ -205,7 +206,7 @@ export function ShareProjectDialog({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Name your project"
-                maxLength={100}
+                maxLength={MAX_PROJECT_TITLE_LENGTH}
                 disabled={status === "uploading"}
                 autoFocus={!titleValid}
               />

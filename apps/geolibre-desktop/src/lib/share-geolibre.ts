@@ -26,7 +26,7 @@ export interface ShareUploadOptions {
   fetchImpl?: typeof fetch;
 }
 
-const DEFAULT_SHARE_BASE_URL = "https://share.geolibre.app";
+export const DEFAULT_SHARE_BASE_URL = "https://share.geolibre.app";
 
 // Upload deadline; a hung connection rejects with a TimeoutError rather than
 // spinning forever.
@@ -38,10 +38,22 @@ const UPLOAD_TIMEOUT_MS = 30_000;
 // title first.
 export const DEFAULT_PROJECT_TITLE = DEFAULT_PROJECT_NAME;
 
-/** A title is shareable when it is non-empty and not the default placeholder. */
+// Upper bound on a project title, shared with the dialog's input so the gate and
+// the widget stay in sync. Matches the server's title length limit.
+export const MAX_PROJECT_TITLE_LENGTH = 100;
+
+/**
+ * A title is shareable when it is non-empty, within the length limit, and not
+ * the default placeholder. The length check keeps the predicate self-contained
+ * rather than relying on the input's `maxLength` attribute alone.
+ */
 export function isShareableTitle(title: string): boolean {
   const trimmed = title.trim();
-  return trimmed.length > 0 && trimmed !== DEFAULT_PROJECT_TITLE;
+  return (
+    trimmed.length > 0 &&
+    trimmed.length <= MAX_PROJECT_TITLE_LENGTH &&
+    trimmed !== DEFAULT_PROJECT_TITLE
+  );
 }
 
 /**
