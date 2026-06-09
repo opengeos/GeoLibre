@@ -21,6 +21,10 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+# These helpers are reused as-is from the conversion module so raster jobs share
+# the same job store, runtime, and path-allowlist behavior. They are treated as a
+# stable internal interface; a future refactor could lift them into a shared
+# `_job_helpers` module.
 from .conversion import (
     _RESULT_MARKER,
     _is_within_roots,
@@ -78,7 +82,9 @@ aspect = np.arctan2(-dx, dy)
 az = np.radians(360.0 - azimuth + 90.0)
 alt = np.radians(altitude)
 shaded = np.sin(alt) * np.sin(slope) + np.cos(alt) * np.cos(slope) * np.cos(az - aspect)
-shaded = np.clip((shaded + 1.0) / 2.0 * 255.0, 0, 255)
+# Match the GDAL/QGIS convention: clip back-facing (negative) illumination to
+# black and scale [0, 1] -> [0, 255], rather than a symmetric [-1, 1] remap.
+shaded = np.clip(shaded * 255.0, 0, 255)
 shaded = np.where(np.isnan(shaded), 0, shaded).astype("uint8")
 
 profile.update(dtype="uint8", count=1, nodata=0, compress="deflate")
@@ -241,7 +247,8 @@ _CLIP_EXTENT_SCRIPT = """
 import json, sys
 
 import rasterio
-from rasterio.windows import from_bounds
+from rasterio.errors import WindowError
+from rasterio.windows import Window, from_bounds
 
 params = json.loads(sys.argv[1])
 input_path = params["input_path"]
@@ -256,6 +263,12 @@ if minx >= maxx or miny >= maxy:
 with rasterio.open(input_path) as src:
     window = from_bounds(minx, miny, maxx, maxy, src.transform)
     window = window.round_offsets().round_lengths()
+    # Independent rounding can push the window past the raster edge (negative
+    # offsets or beyond width/height); clamp it to the valid extent.
+    try:
+        window = window.intersection(Window(0, 0, src.width, src.height))
+    except WindowError:
+        raise SystemExit("Extent does not overlap the raster")
     data = src.read(window=window)
     if data.shape[1] == 0 or data.shape[2] == 0:
         raise SystemExit("Extent does not overlap the raster")
@@ -315,8 +328,9 @@ print("{marker}" + json.dumps({"output_path": output_path}))
 
 
 _POLYGONIZE_SCRIPT = """
-import json, sys
+import json, math, sys
 
+import numpy as np
 import rasterio
 from rasterio.features import shapes as rio_shapes
 
@@ -331,7 +345,13 @@ with rasterio.open(input_path) as src:
     arr = src.read(band)
     valid = None
     if src.nodata is not None:
-        valid = arr != src.nodata
+        # NaN nodata needs np.isnan: ``arr != nan`` is True for every pixel
+        # (NaN != NaN), which would otherwise mask nothing. rio_shapes wants a
+        # uint8/bool mask.
+        if isinstance(src.nodata, float) and math.isnan(src.nodata):
+            valid = (~np.isnan(arr)).astype("uint8")
+        else:
+            valid = (arr != src.nodata).astype("uint8")
     transform = src.transform
     crs = src.crs
 
@@ -383,11 +403,10 @@ if not np.isfinite(data).any():
 zmin = float(np.nanmin(data.filled(np.nan)))
 zmax = float(np.nanmax(data.filled(np.nan)))
 start = base + np.ceil((zmin - base) / interval) * interval
-levels = []
-level = start
-while level <= zmax:
-    levels.append(round(float(level), 6))
-    level += interval
+# Index-based generation avoids float drift from repeated ``+= interval`` that
+# could skip the final level or append a spurious one.
+n_levels = int(np.floor((zmax - start) / interval + 1e-9)) + 1
+levels = [round(start + i * interval, 6) for i in range(max(0, n_levels))]
 
 gen = contour_generator(z=data, line_type="Separate")
 features = []
@@ -456,17 +475,23 @@ def _validate_extra_input(path: str, label: str) -> str:
 
 def _check_raster_import(python_executable: str) -> None:
     """Raise if the runtime cannot import the raster processing stack."""
-    completed = subprocess.run(
-        [python_executable, "-c", "import rasterio, numpy, contourpy"],
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        env=_clean_env(),
-        timeout=RUNTIME_DISCOVERY_TIMEOUT_SECS,
-        **_subprocess_startup_kwargs(),
-    )
+    try:
+        completed = subprocess.run(
+            [python_executable, "-c", "import rasterio, numpy, contourpy"],
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=_clean_env(),
+            timeout=RUNTIME_DISCOVERY_TIMEOUT_SECS,
+            **_subprocess_startup_kwargs(),
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeBootstrapError(
+            f"{python_executable}: import timed out after "
+            f"{RUNTIME_DISCOVERY_TIMEOUT_SECS} seconds"
+        ) from exc
     if completed.returncode != 0:
         detail = (
             completed.stderr.strip()
