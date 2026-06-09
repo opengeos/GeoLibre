@@ -14,9 +14,8 @@
     {
       "identifier": "opener:allow-open-url",
       "allow": [
-        { "url": "https://geolibre.app" },
-        { "url": "https://geolibre.app/downloads/" },
-        { "url": "https://github.com/opengeos/GeoLibre" }
+        { "url": "http://*" },
+        { "url": "https://*" }
       ]
     }
   ]
