@@ -114,8 +114,82 @@
 - [ ] Expanded WhiteboxTools coverage
 - [ ] Leafmap, GeoAI, and SamGeo integrations (selective)
 - [ ] External plugin package distribution workflow
-- [ ] Plugin marketplace / registry (design)
+- [x] Plugin marketplace / registry design (see [Plugin marketplace and registry](#plugin-marketplace-and-registry-design))
+- [ ] Plugin marketplace MVP: curated registry plus browse and install UI
+- [ ] Plugin update, removal, and integrity verification
 - [ ] Sandboxed worker plugins
 - [ ] Performance tuning and test suite
 - [ ] Cross-platform installers
 - [ ] Documentation and tutorials
+
+## Plugin marketplace and registry (design)
+
+This captures the design for the `v1.0` "Plugin marketplace / registry" item. It
+builds on the existing external-plugin foundation, the `plugin.json` manifest
+contract, HTTPS manifest-URL loading, the desktop app data `plugins/` scan, and
+the bundled `public/plugins/` drop-in mechanism, and it relates to the "External
+plugin package distribution workflow" and "Sandboxed worker plugins" items.
+
+### Goal
+
+Let users discover, install, update, and remove trusted external plugins from a
+curated registry without hand-entering manifest URLs, on both the desktop and
+web builds, while keeping the existing trust model in which plugins are trusted
+code.
+
+### Registry
+
+- A curated, versioned index published as static JSON (for example
+  `registry.json` hosted on `geolibre.app`, or generated from a GitHub
+  repository of submissions). No live backend is required for the MVP.
+- Each entry carries `id`, `name`, `version`, `description`, `author`,
+  `homepage`, `manifestUrl`, `categories`, `minGeoLibreVersion`, optional
+  `screenshots`, and an integrity `hash` for the entry bundle.
+- The index is fetched over HTTPS and cached; entries point at the same
+  `plugin.json` manifests the existing loader already understands.
+
+### Browse and install UI
+
+- A Browse tab in Settings > Plugins lists registry entries with search,
+  category filters, and per-entry install, installed, and update states.
+- Install reuses the current external-plugin loader: it resolves the entry's
+  `manifestUrl`, validates it, and registers the plugin.
+  - Desktop: download the bundle into the app data `plugins/<id>/` directory so
+    it persists and loads on startup through the existing scan.
+  - Web: record the entry's `manifestUrl` in desktop settings (and, for shared
+    projects, in the project `plugins.manifestUrls`) so it loads on next open.
+- Remove unregisters the plugin and deletes the downloaded bundle (desktop) or
+  drops the recorded manifest URL (web).
+
+### Updates and versioning
+
+- Compare the installed `version` against the registry entry, surface an update
+  available state, and offer a one-click update that re-fetches the bundle.
+- Honor `minGeoLibreVersion` so incompatible plugins are flagged, not installed.
+
+### Trust and security
+
+- The registry is an allowlist; only curated entries are offered for install.
+- HTTPS-only manifests (the existing `isAllowedPluginManifestUrl` rule), plus
+  integrity verification of the downloaded entry against the registry `hash`.
+- Explicit user consent on install, because plugin entries execute as trusted
+  code (the desktop CSP permits `blob:` script execution by design).
+- Plugin signing and the separate "Sandboxed worker plugins" item harden this
+  further; until then the curated registry and integrity checks are the primary
+  controls.
+
+### Relationship to bundled plugins
+
+- Bundled `public/plugins/<id>/` drop-ins remain the zero-config way to ship
+  first-party or private plugins inside a build. The marketplace covers
+  discoverable, user-installed third-party plugins; the two are complementary
+  and share the same `plugin.json` contract and loader.
+
+### Phasing
+
+1. Curated static registry plus browse and install through manifest URLs
+   (reuses the current loader; desktop downloads to the app data directory, web
+   records the URL).
+2. Version checks, update and removal flows, and integrity hashes.
+3. Submission workflow for third-party authors, plugin signing, and sandboxed
+   execution.
