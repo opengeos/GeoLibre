@@ -394,9 +394,10 @@ export function TopToolbar({
   // Build the current project from live store + map state and serialize it.
   // Shared by Save/Save As and the Share action so they all capture identical
   // project content (including the current map view and plugin state).
-  const buildCurrentProject = () => {
+  const buildCurrentProject = (nameOverride?: string) => {
     const state = useAppStore.getState();
-    const defaultProjectName = state.projectName.trim() || "Untitled Project";
+    const defaultProjectName =
+      nameOverride?.trim() || state.projectName.trim() || "Untitled Project";
     const pluginManifestUrls = mergeStringLists(
       state.projectPlugins?.manifestUrls ?? [],
       useDesktopSettingsStore.getState().desktopSettings.pluginManifestUrls,
@@ -1125,8 +1126,9 @@ export function TopToolbar({
       <ShareProjectDialog
         open={shareDialogOpen}
         onOpenChange={setShareDialogOpen}
-        getProject={() => {
-          const { content, defaultProjectName } = buildCurrentProject();
+        currentTitle={projectName}
+        getProject={(title) => {
+          const { content, defaultProjectName } = buildCurrentProject(title);
           return { content, filename: `${defaultProjectName}.geolibre.json` };
         }}
       />

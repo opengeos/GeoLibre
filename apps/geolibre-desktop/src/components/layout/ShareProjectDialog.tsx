@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
 import { openExternalLink } from "../../lib/open-external";
 import {
+  isShareableTitle,
   uploadProjectToShare,
   type ShareUploadResult,
   type ShareVisibility,
@@ -22,8 +23,13 @@ import {
 interface ShareProjectDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Lazily serialize the current project when the user confirms the upload. */
-  getProject: () => { content: string; filename: string };
+  /** The current project name, used to seed the title field. */
+  currentTitle: string;
+  /**
+   * Lazily serialize the current project (under the given title) when the user
+   * confirms the upload.
+   */
+  getProject: (title: string) => { content: string; filename: string };
 }
 
 const SETTINGS_TOKEN_URL = "https://share.geolibre.app/settings";
@@ -31,9 +37,11 @@ const SETTINGS_TOKEN_URL = "https://share.geolibre.app/settings";
 export function ShareProjectDialog({
   open,
   onOpenChange,
+  currentTitle,
   getProject,
 }: ShareProjectDialogProps) {
   const shareToken = useDesktopSettingsStore((s) => s.desktopSettings.shareToken);
+  const [title, setTitle] = useState("");
   const [visibility, setVisibility] = useState<ShareVisibility>("unlisted");
   const [status, setStatus] = useState<"idle" | "uploading">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -42,9 +50,12 @@ export function ShareProjectDialog({
   const abortRef = useRef<AbortController | null>(null);
 
   // Reset transient state whenever the dialog is (re)opened so a prior result or
-  // error never lingers into a new share.
+  // error never lingers into a new share. Seed the title from the current
+  // project name, but leave it blank when the project still has its default
+  // placeholder name so the field reads as a prompt.
   useEffect(() => {
     if (open) {
+      setTitle(isShareableTitle(currentTitle) ? currentTitle.trim() : "");
       setStatus("idle");
       setError(null);
       setResult(null);
@@ -53,9 +64,10 @@ export function ShareProjectDialog({
       abortRef.current?.abort();
       abortRef.current = null;
     }
-  }, [open]);
+  }, [open, currentTitle]);
 
   const hasToken = shareToken.trim().length > 0;
+  const titleValid = isShareableTitle(title);
 
   const handleShare = async () => {
     setError(null);
@@ -63,7 +75,7 @@ export function ShareProjectDialog({
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const { content, filename } = getProject();
+      const { content, filename } = getProject(title.trim());
       const uploaded = await uploadProjectToShare({
         token: shareToken,
         filename,
@@ -150,6 +162,22 @@ export function ShareProjectDialog({
         ) : (
           <div className="space-y-4">
             <div className="space-y-1.5">
+              <Label htmlFor="share-title">Project title</Label>
+              <Input
+                id="share-title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Name your project"
+                disabled={status === "uploading"}
+                autoFocus={!titleValid}
+              />
+              {!titleValid && (
+                <p className="text-xs text-muted-foreground">
+                  Enter a project title before sharing.
+                </p>
+              )}
+            </div>
+            <div className="space-y-1.5">
               <Label htmlFor="share-visibility">Visibility</Label>
               <Select
                 id="share-visibility"
@@ -183,7 +211,7 @@ export function ShareProjectDialog({
               <Button
                 type="button"
                 onClick={() => void handleShare()}
-                disabled={status === "uploading"}
+                disabled={status === "uploading" || !titleValid}
               >
                 {status === "uploading" ? (
                   <>

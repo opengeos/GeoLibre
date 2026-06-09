@@ -26,6 +26,17 @@ export interface ShareUploadOptions {
 
 const DEFAULT_SHARE_BASE_URL = "https://share.geolibre.app";
 
+// The placeholder name a project gets before the user names it (see
+// projectFromStore / TopToolbar). Sharing under this title is unhelpful, so the
+// Share dialog requires a real title first.
+export const DEFAULT_PROJECT_TITLE = "Untitled Project";
+
+/** A title is shareable when it is non-empty and not the default placeholder. */
+export function isShareableTitle(title: string): boolean {
+  const trimmed = title.trim();
+  return trimmed.length > 0 && trimmed !== DEFAULT_PROJECT_TITLE;
+}
+
 /** Resolve the share host from the Vite env, falling back to production. */
 export function resolveShareBaseUrl(): string {
   const configured = import.meta.env?.VITE_GEOLIBRE_SHARE_URL;

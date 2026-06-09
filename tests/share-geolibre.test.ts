@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { uploadProjectToShare } from "../apps/geolibre-desktop/src/lib/share-geolibre";
+import {
+  DEFAULT_PROJECT_TITLE,
+  isShareableTitle,
+  uploadProjectToShare,
+} from "../apps/geolibre-desktop/src/lib/share-geolibre";
 
 const PROJECT_DTO = {
   username: "giswqs",
@@ -33,6 +37,20 @@ const baseArgs = {
   visibility: "unlisted" as const,
   baseUrl: "https://share.geolibre.app",
 };
+
+describe("isShareableTitle", () => {
+  it("rejects empty, whitespace, and the default project title", () => {
+    assert.equal(isShareableTitle(""), false);
+    assert.equal(isShareableTitle("   "), false);
+    assert.equal(isShareableTitle(DEFAULT_PROJECT_TITLE), false);
+    assert.equal(isShareableTitle(`  ${DEFAULT_PROJECT_TITLE}  `), false);
+  });
+
+  it("accepts a real, non-default title", () => {
+    assert.equal(isShareableTitle("My Flood Map"), true);
+    assert.equal(isShareableTitle("  Trimmed Title  "), true);
+  });
+});
 
 describe("uploadProjectToShare", () => {
   it("rejects when no token is provided", async () => {
