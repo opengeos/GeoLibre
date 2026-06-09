@@ -113,4 +113,43 @@ describe("uploadProjectToShare", () => {
       /could not reach/i,
     );
   });
+
+  it("maps 403 to a forbidden message", async () => {
+    const { fn } = fakeFetch(403, { error: "Forbidden" });
+    await assert.rejects(
+      () => uploadProjectToShare({ ...baseArgs, fetchImpl: fn }),
+      /not allowed to upload/i,
+    );
+  });
+
+  it("rejects when the response is missing required fields", async () => {
+    const { fn } = fakeFetch(201, { project: { username: "test" } });
+    await assert.rejects(
+      () => uploadProjectToShare({ ...baseArgs, fetchImpl: fn }),
+      /unexpected response/i,
+    );
+  });
+
+  it("re-throws AbortError without wrapping it", async () => {
+    const fn = (async () => {
+      throw new DOMException("The operation was aborted.", "AbortError");
+    }) as unknown as typeof fetch;
+    await assert.rejects(
+      () => uploadProjectToShare({ ...baseArgs, fetchImpl: fn }),
+      (err: Error) => err.name === "AbortError",
+    );
+  });
+
+  it("defaults optional fields to empty strings", async () => {
+    const { fn } = fakeFetch(201, {
+      project: {
+        projectUrl: "https://share.geolibre.app/user/project",
+        rawJsonUrl: "https://share.geolibre.app/user/project.geolibre.json",
+      },
+    });
+    const result = await uploadProjectToShare({ ...baseArgs, fetchImpl: fn });
+    assert.equal(result.username, "");
+    assert.equal(result.slug, "");
+    assert.equal(result.viewerUrl, "");
+  });
 });

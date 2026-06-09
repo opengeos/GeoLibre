@@ -30,7 +30,7 @@ Worker middleware.
 
 ## Architecture overview
 
-```
+```text
 GeoLibre (desktop or web)
   Project menu > Share…
      -> ShareProjectDialog (visibility select, progress, result URL)
@@ -114,10 +114,10 @@ privilege escalation / token self-propagation):
 | POST   | `/api/tokens`     | `{ name, expiresInDays? }` -> `{ token: "glb_…", id, name, prefix, expiresAt, createdAt }` (plaintext returned once) |
 | DELETE | `/api/tokens/:id` | revoke (sets `revoked_at`; ownership-checked) -> `{ success: true }` |
 
-- `expiresInDays` is optional: one of an allowed set (e.g. `7`, `30`, `60`, `90`,
-  `365`) or omitted/`null` for **no expiration**. The Worker computes
-  `expires_at` from `now + days`; an out-of-range value is rejected by the Zod
-  schema.
+- `expiresInDays` is optional: the allowed set is exactly `7`, `30`, `60`, `90`,
+  `365` (the authoritative list is `API_TOKEN_EXPIRY_DAYS`, enforced by the Zod
+  schema), or omitted/`null` for **no expiration**. The Worker computes
+  `expires_at` from `now + days`; an out-of-range value is rejected.
 - GET derives a `status` field per token for the UI: `active`, `expired`, or
   `revoked` (so the client does not re-implement the time math).
 - `DELETE` is a **revoke** (soft delete via `revoked_at`) rather than a hard row
@@ -178,10 +178,12 @@ New `apps/geolibre-desktop/src/lib/share-geolibre.ts`:
 - `uploadProjectToShare({ token, filename, content, visibility, signal })`:
   `POST {base}/api/projects` with the Bearer token and JSON body. Returns the
   parsed `project` (so we can surface `projectUrl`, `viewerUrl`, `rawJsonUrl`).
-- Maps HTTP failures to friendly messages: 401 -> "Invalid or missing API token",
-  402/413/400-quota -> the server's message, 429 -> "Too many uploads, try again
-  later", network error -> offline message. Honors an `AbortSignal` and a
-  timeout, matching the existing plugin-fetch patterns.
+- Maps HTTP failures to friendly messages: 401 -> "Invalid or expired API token",
+  403 -> not-allowed message, 429 -> "Too many uploads, try again later", and any
+  other non-2xx (including the `400` the Worker returns for an invalid schema or
+  an exceeded storage quota) -> the server's own message; a network/fetch failure
+  -> offline message. Honors an `AbortSignal` and a timeout, matching the existing
+  plugin-fetch patterns.
 
 ### B2. Token storage + Settings field
 
@@ -237,9 +239,10 @@ New `apps/geolibre-desktop/src/lib/share-geolibre.ts`:
 | Condition                | Where         | Behavior                                            |
 | ------------------------ | ------------- | --------------------------------------------------- |
 | No token stored          | GeoLibre      | Dialog prompts to add a token; links to Settings    |
-| Invalid token (401)      | Worker        | "Invalid or missing API token"                      |
+| Invalid/expired token (401) | Worker     | "Invalid or expired API token"                      |
+| Forbidden (403)          | Worker        | Not-allowed message                                 |
 | Schema invalid (400)     | Worker        | Show server message; dialog stays open              |
-| Storage quota exceeded   | Worker        | Show server quota message                           |
+| Storage quota exceeded (400) | Worker    | Show server quota message (returned as a 400)       |
 | Rate limited (429)       | Worker        | "Too many uploads, try again later"                 |
 | Offline / network        | GeoLibre      | Offline message; retry available                    |
 | PAT used on `/api/tokens`| Worker        | 403 (token-management requires a real session)      |

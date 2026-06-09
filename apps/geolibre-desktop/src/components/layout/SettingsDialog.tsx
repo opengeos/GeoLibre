@@ -92,6 +92,7 @@ interface DraftPreferences {
 
 interface DraftDesktopSettings {
   layout: DesktopLayoutSettings;
+  shareToken: string;
 }
 
 function createDraftId(): string {
@@ -113,6 +114,7 @@ function clonePreferences(preferences: ProjectPreferences): DraftPreferences {
 function cloneDesktopSettings(settings: DesktopSettings): DraftDesktopSettings {
   return {
     layout: { ...settings.layout },
+    shareToken: settings.shareToken,
   };
 }
 
@@ -348,10 +350,10 @@ export function SettingsDialog({
   };
 
   const updateShareToken = (value: string) => {
-    // Persist live, like the layout toggles: saveSettings re-reads the latest
-    // store state, so an in-progress edit here is never clobbered on Save.
-    const current = useDesktopSettingsStore.getState().desktopSettings;
-    setDesktopSettings({ ...current, shareToken: value });
+    // Kept in the draft and only committed on Save, so editing the token and
+    // then closing the dialog without saving discards the change (a secret
+    // field should not persist on every keystroke).
+    setDraftDesktopSettings((current) => ({ ...current, shareToken: value }));
   };
 
   const saveSettings = () => {
@@ -373,6 +375,7 @@ export function SettingsDialog({
     setDesktopSettings({
       ...useDesktopSettingsStore.getState().desktopSettings,
       layout: draftDesktopSettings.layout,
+      shareToken: draftDesktopSettings.shareToken,
     });
     setOpen(false);
   };
@@ -806,9 +809,16 @@ export function SettingsDialog({
                       type="password"
                       autoComplete="off"
                       placeholder="glb_…"
-                      value={desktopSettings.shareToken}
+                      value={draftDesktopSettings.shareToken}
                       onChange={(event) => updateShareToken(event.target.value)}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Stored locally on this device and sent only to
+                      share.geolibre.app to authenticate uploads. On the web
+                      build it shares the same browser storage as other site
+                      data, so revoke it on share.geolibre.app if your machine
+                      is compromised.
+                    </p>
                   </div>
                   <div className="flex items-center justify-between gap-3 border-t pt-5">
                     <div>

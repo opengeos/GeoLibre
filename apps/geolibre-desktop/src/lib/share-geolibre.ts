@@ -122,6 +122,10 @@ async function uploadErrorMessage(response: Response): Promise<string> {
   const body = (await response.json().catch(() => null)) as
     | { error?: string }
     | null;
-  if (body?.error) return body.error;
+  // Cap the server-provided string so a misconfigured host or MITM on a
+  // non-HTTPS share URL cannot render a wall of text in the dialog.
+  if (typeof body?.error === "string" && body.error.trim()) {
+    return body.error.slice(0, 300);
+  }
   return `Upload failed (HTTP ${response.status}).`;
 }

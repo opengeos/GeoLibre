@@ -48,6 +48,7 @@ export function ShareProjectDialog({
   const [result, setResult] = useState<ShareUploadResult | null>(null);
   const [copied, setCopied] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const copyTimeoutRef = useRef<number | null>(null);
 
   // Reset transient state whenever the dialog is (re)opened so a prior result or
   // error never lingers into a new share. Seed the title from the current
@@ -66,10 +67,23 @@ export function ShareProjectDialog({
     }
   }, [open, currentTitle]);
 
+  // Cancel a pending "copied" reset if the dialog unmounts mid-window.
+  useEffect(
+    () => () => {
+      if (copyTimeoutRef.current !== null) {
+        window.clearTimeout(copyTimeoutRef.current);
+      }
+    },
+    [],
+  );
+
   const hasToken = shareToken.trim().length > 0;
   const titleValid = isShareableTitle(title);
 
   const handleShare = async () => {
+    // Guard re-entry synchronously: a second click before the disabled state
+    // renders would otherwise start a concurrent, non-idempotent upload.
+    if (abortRef.current) return;
     setError(null);
     setStatus("uploading");
     const controller = new AbortController();
@@ -88,16 +102,23 @@ export function ShareProjectDialog({
       if (err instanceof DOMException && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Could not share the project.");
     } finally {
-      if (abortRef.current === controller) abortRef.current = null;
-      setStatus("idle");
+      // Only the controller that is still current clears state, so an aborted
+      // (superseded) request never flips a newer one back to idle.
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+        setStatus("idle");
+      }
     }
   };
 
   const handleCopy = () => {
     if (!result) return;
     void navigator.clipboard.writeText(result.projectUrl);
+    if (copyTimeoutRef.current !== null) {
+      window.clearTimeout(copyTimeoutRef.current);
+    }
     setCopied(true);
-    window.setTimeout(() => setCopied(false), 2000);
+    copyTimeoutRef.current = window.setTimeout(() => setCopied(false), 2000);
   };
 
   return (
