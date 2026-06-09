@@ -536,11 +536,21 @@ export function startLayerGeometryEdit(
   let loaded = false;
   restoringSketchesToEditor = true;
   try {
-    geoEditorControl.loadGeoJson(
-      tagFeatureKeys(cloneFeatureCollection(layer.geojson)),
-      SKETCHES_SOURCE_PATH,
-    );
+    const tagged = tagFeatureKeys(cloneFeatureCollection(layer.geojson));
+    const result = geoEditorControl.loadGeoJson(tagged, SKETCHES_SOURCE_PATH);
     loaded = true;
+    // Geoman skips features whose geometry shape it cannot map (e.g. some
+    // MultiPolygon/GeometryCollection inputs); those render but are not editable.
+    // Surface the count so the cause is visible instead of looking like a bug.
+    const importedCount = result?.count ?? tagged.features.length;
+    if (importedCount < tagged.features.length) {
+      console.warn(
+        `Geometry edit: ${
+          tagged.features.length - importedCount
+        } of ${tagged.features.length} features could not be loaded into the ` +
+          "editor and will not be editable (unsupported geometry shape).",
+      );
+    }
   } catch {
     // Geoman may not be ready until the map style finishes loading.
   } finally {

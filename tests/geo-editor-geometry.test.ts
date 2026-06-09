@@ -130,7 +130,7 @@ describe("canEditLayerGeometry", () => {
 });
 
 describe("tagFeatureKeys", () => {
-  it("tags each feature with its stable id, falling back to the index", () => {
+  it("tags each feature with a unique id mirrored into feature.id", () => {
     const collection: FeatureCollection = {
       type: "FeatureCollection",
       features: [point("a"), point(undefined)],
@@ -140,15 +140,29 @@ describe("tagFeatureKeys", () => {
       tagged.features[0].properties?.[GEOMETRY_EDIT_FID_PROPERTY],
       "a",
     );
+    assert.equal(tagged.features[0].id, "a");
+    // The untagged feature gets a freshly allocated, non-colliding id.
+    const secondId = String(tagged.features[1].id);
     assert.equal(
       tagged.features[1].properties?.[GEOMETRY_EDIT_FID_PROPERTY],
-      "1",
+      secondId,
     );
+    assert.notEqual(secondId, "a");
     // Original collection is not mutated.
     assert.equal(
       collection.features[0].properties?.[GEOMETRY_EDIT_FID_PROPERTY],
       undefined,
     );
+  });
+
+  it("assigns unique ids when the input has duplicate ids", () => {
+    const tagged = tagFeatureKeys({
+      type: "FeatureCollection",
+      features: [point("dup"), point("dup"), point("dup")],
+    });
+    const ids = tagged.features.map((f) => String(f.id));
+    assert.equal(new Set(ids).size, ids.length);
+    assert.equal(ids[0], "dup");
   });
 });
 
@@ -193,7 +207,25 @@ describe("reconcileEditedFeatures", () => {
     const reconciled = reconcileEditedFeatures(tagFeatureKeys(original));
     assert.deepEqual(
       reconciled.features.map((f) => String(f.id)),
-      ["5", "12", "2"],
+      ["5", "12", "0"],
     );
+  });
+
+  it("de-duplicates ids when a tag was cloned (e.g. a copied feature)", () => {
+    // Two features share the same tag, as a Geoman copy that cloned properties
+    // would produce. Reconcile must give them distinct ids so Geoman does not
+    // overwrite one with the other on the next load.
+    const collection: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        { ...point(undefined), properties: { [GEOMETRY_EDIT_FID_PROPERTY]: "7" } },
+        { ...point(undefined), properties: { [GEOMETRY_EDIT_FID_PROPERTY]: "7" } },
+      ],
+    };
+    const reconciled = reconcileEditedFeatures(collection);
+    const ids = reconciled.features.map((f) => String(f.id));
+    assert.equal(ids[0], "7");
+    assert.notEqual(ids[1], "7");
+    assert.equal(new Set(ids).size, ids.length);
   });
 });

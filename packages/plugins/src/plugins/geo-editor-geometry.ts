@@ -56,56 +56,71 @@ export function canEditLayerGeometry(
   return Array.isArray(layer.geojson?.features);
 }
 
+/** Allocator that hands out unique string ids, skipping ones already taken. */
+function makeIdAllocator(): { take: (preferred?: unknown) => string } {
+  const used = new Set<string>();
+  let next = 0;
+  return {
+    take(preferred?: unknown): string {
+      // Reuse the preferred id only if it is a non-empty, not-yet-taken value;
+      // otherwise allocate a fresh integer id that does not collide.
+      if (preferred != null && preferred !== "" && !used.has(String(preferred))) {
+        const id = String(preferred);
+        used.add(id);
+        return id;
+      }
+      while (used.has(String(next))) next += 1;
+      const id = String(next);
+      used.add(id);
+      return id;
+    },
+  };
+}
+
 /**
- * Tag each feature with its stable original id in `properties` before loading
- * into the editor. Geoman preserves `properties` through geometry operations but
- * reassigns `feature.id`, so this tag is how identity survives the round-trip.
+ * Tag each feature with a stable, UNIQUE id in both `feature.id` and a
+ * `properties` key before loading into the editor. Geoman keys its feature store
+ * by `feature.id`, so duplicate ids would make features overwrite each other on
+ * import (some would silently disappear or become non-editable). The id is also
+ * mirrored into `properties` because Geoman reassigns `feature.id` during edits
+ * but preserves `properties`, so the tag is how identity survives the round-trip.
  *
  * @param collection The layer's feature collection.
- * @returns A new collection with each feature carrying a feature-key tag.
+ * @returns A new collection with unique ids and a feature-key tag per feature.
  */
 export function tagFeatureKeys(
   collection: FeatureCollection,
 ): FeatureCollection {
+  const ids = makeIdAllocator();
   return {
     type: "FeatureCollection",
-    features: collection.features.map((feature, index) => ({
-      ...feature,
-      properties: {
-        ...(feature.properties ?? {}),
-        [GEOMETRY_EDIT_FID_PROPERTY]: String(feature.id ?? index),
-      },
-    })),
+    features: collection.features.map((feature) => {
+      const id = ids.take(feature.id);
+      return {
+        ...feature,
+        id,
+        properties: {
+          ...(feature.properties ?? {}),
+          [GEOMETRY_EDIT_FID_PROPERTY]: id,
+        },
+      };
+    }),
   };
 }
 
 /**
  * Restore stable feature ids from the load-time tag and strip it, so the store
- * layer stays tag-free. Features without a tag are new (drawn during the
- * session) and receive a fresh id that does not collide with a tagged one.
+ * layer stays tag-free. Ids are guaranteed unique: a duplicated tag (e.g. from a
+ * Geoman copy/split that cloned `properties`) and untagged new features each get
+ * a fresh id that does not collide.
  *
  * @param collection The editor's current feature collection (tagged).
- * @returns A new collection with stable ids and the tag removed.
+ * @returns A new collection with unique stable ids and the tag removed.
  */
 export function reconcileEditedFeatures(
   collection: FeatureCollection,
 ): FeatureCollection {
-  const usedIds = new Set<string>();
-  for (const feature of collection.features) {
-    const tag = (feature.properties as Record<string, unknown> | null)?.[
-      GEOMETRY_EDIT_FID_PROPERTY
-    ];
-    if (tag != null) usedIds.add(String(tag));
-  }
-
-  let nextId = 0;
-  const allocateId = (): string => {
-    while (usedIds.has(String(nextId))) nextId += 1;
-    const id = String(nextId);
-    usedIds.add(id);
-    return id;
-  };
-
+  const ids = makeIdAllocator();
   return {
     type: "FeatureCollection",
     features: collection.features.map((feature) => {
@@ -114,7 +129,7 @@ export function reconcileEditedFeatures(
       } as Record<string, unknown>;
       const tag = properties[GEOMETRY_EDIT_FID_PROPERTY];
       delete properties[GEOMETRY_EDIT_FID_PROPERTY];
-      const id = tag != null ? String(tag) : allocateId();
+      const id = ids.take(tag);
       return { ...feature, id, properties };
     }),
   };
