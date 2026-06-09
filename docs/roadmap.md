@@ -151,8 +151,10 @@ code.
 
 ### Browse and install UI
 
-- A Browse tab in Settings > Plugins lists registry entries with search,
-  category filters, and per-entry install, installed, and update states.
+- A standalone Manage Plugins dialog (Settings menu > Manage Plugins), modeled
+  on QGIS, with All / Installed / Not installed / Upgradeable / Settings
+  sections lists registry entries with search and per-entry install, installed,
+  and update states.
 - Install reuses the current external-plugin loader: it resolves the entry's
   `manifestUrl`, validates it, and registers the plugin.
   - Desktop: download the bundle into the app data `plugins/<id>/` directory so
@@ -204,10 +206,13 @@ build, works in both:
   against the registry location. The registry URL is
   `VITE_GEOLIBRE_PLUGIN_REGISTRY_URL` or a bundled
   `public/plugin-registry.json` fallback.
-- `apps/geolibre-desktop/src/components/layout/PluginMarketplace.tsx` renders a
-  Browse list in Settings > Plugins with search, install, a confirm step before
-  uninstall, an Update action when a newer version is published,
-  `minGeoLibreVersion` compatibility checks, and inline error handling.
+- `apps/geolibre-desktop/src/components/layout/ManagePluginsDialog.tsx` is a
+  standalone dialog (Settings menu > Manage Plugins) with All / Installed / Not
+  installed / Upgradeable / Settings sections: search, install, a confirm step
+  before uninstall, an Update action when a newer version is published,
+  `minGeoLibreVersion` compatibility checks, and inline error handling. The
+  Settings section manages additional local directories and manual manifest
+  URLs. All actions apply immediately (live).
 - Installing records the entry's manifest URL in the plugin manifest URL list,
   so the existing external-plugin loader fetches and registers it. No new trust
   path is introduced. Uninstalling (after confirmation) unregisters the plugin

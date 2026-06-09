@@ -141,6 +141,7 @@ import { resolveProjectXyzLayers } from "../../lib/xyz-url";
 import { AddDataDialog, type AddDataKind } from "./AddDataDialog";
 import { AboutDialog } from "./AboutDialog";
 import { NewProjectDialog } from "./NewProjectDialog";
+import { ManagePluginsDialog } from "./ManagePluginsDialog";
 import { SettingsDialog } from "./SettingsDialog";
 
 interface TopToolbarProps {
@@ -268,6 +269,7 @@ export function TopToolbar({
   const [addDataKind, setAddDataKind] = useState<AddDataKind | null>(null);
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
   const [projectUrlDialogOpen, setProjectUrlDialogOpen] = useState(false);
+  const [managePluginsOpen, setManagePluginsOpen] = useState(false);
   const [projectUrl, setProjectUrl] = useState("");
   const [projectUrlError, setProjectUrlError] = useState<string | null>(null);
   const [projectUrlLoading, setProjectUrlLoading] = useState(false);
@@ -1098,6 +1100,12 @@ export function TopToolbar({
         iconClassName={toolbarIconClassName}
         mapControllerRef={mapControllerRef}
         showLabels={showLabels}
+        onOpenManagePlugins={() => setManagePluginsOpen(true)}
+      />
+      <ManagePluginsDialog
+        open={managePluginsOpen}
+        onOpenChange={setManagePluginsOpen}
+        mapControllerRef={mapControllerRef}
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

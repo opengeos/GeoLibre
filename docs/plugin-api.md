@@ -227,7 +227,7 @@ When using the template, update `geolibre-plugin/plugin.json` and `src/geolibre.
 
 ### Plugin marketplace
 
-Settings > Plugins includes a Marketplace section that lists curated external plugins so users can install them without hand-entering manifest URLs. It is a thin layer over the manifest-URL loader above: installing an entry records its manifest URL in the plugin manifest URL list, and the existing loader fetches and registers it. The marketplace introduces no new trust path.
+The Settings menu's **Manage Plugins** entry opens a standalone dialog (modeled on QGIS's plugin manager) with **All**, **Installed**, **Not installed**, **Upgradeable**, and **Settings** sections. The first four list curated registry plugins so users can install, update, and uninstall them without hand-entering manifest URLs; the Settings section manages additional local plugin directories and manual manifest URLs. Actions apply immediately (install/uninstall/update are live; uninstall asks for confirmation). It is a thin layer over the manifest-URL loader above: installing an entry records its manifest URL in the plugin manifest URL list, and the existing loader fetches and registers it. It introduces no new trust path.
 
 The registry is JSON, fetched from `VITE_GEOLIBRE_PLUGIN_REGISTRY_URL` or a bundled `public/plugin-registry.json` fallback (so it works offline and in both the web and desktop builds). It is an array, or an object with a `plugins` array, of entries:
 

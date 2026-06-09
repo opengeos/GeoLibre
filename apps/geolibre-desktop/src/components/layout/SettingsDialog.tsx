@@ -1,10 +1,8 @@
 import {
   DEFAULT_PROJECT_PREFERENCES,
-  isAllowedPluginManifestUrl,
   PROJECT_VERSION,
   useAppStore,
   type MapPreferences,
-  type ProjectPluginState,
   type ProjectPreferences,
   type RuntimeEnvironmentVariable,
 } from "@geolibre/core";
@@ -47,7 +45,6 @@ import {
   Trash2,
   TriangleAlert,
   Puzzle,
-  FolderOpen,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type RefObject } from "react";
 import {
@@ -56,17 +53,8 @@ import {
   type DesktopSettings,
   type DesktopLayoutSettings,
 } from "../../hooks/useDesktopSettings";
-import { getPluginManager, upgradeExternalPlugin } from "../../hooks/usePlugins";
-import { mergeStringLists, normalizeStringList } from "../../lib/string-lists";
-import { pickLocalPathWithFallback } from "../../lib/tauri-io";
-import { PluginMarketplace } from "./PluginMarketplace";
 
-type SettingsSection =
-  | "map"
-  | "layout"
-  | "environment"
-  | "plugins"
-  | "project";
+type SettingsSection = "map" | "layout" | "environment" | "project";
 
 interface SettingsDialogProps {
   buttonClassName?: string;
@@ -74,6 +62,7 @@ interface SettingsDialogProps {
   iconClassName?: string;
   mapControllerRef: RefObject<MapController | null>;
   showLabels?: boolean;
+  onOpenManagePlugins: () => void;
 }
 
 const SECTION_ITEMS: Array<{
@@ -84,7 +73,6 @@ const SECTION_ITEMS: Array<{
   { id: "map", label: "Map", icon: MapPinned },
   { id: "layout", label: "Layout", icon: LayoutPanelTop },
   { id: "environment", label: "Environment", icon: Braces },
-  { id: "plugins", label: "Plugins", icon: Puzzle },
   { id: "project", label: "Project", icon: FolderCog },
 ];
 
@@ -102,22 +90,8 @@ interface DraftPreferences {
   environmentVariables: DraftEnvironmentVariable[];
 }
 
-// Draft plugin-source rows carry the same stable client-side id as draft env
-// vars so React keys survive mid-list deletes instead of reusing input DOM
-// state across the wrong row.
-interface DraftListEntry {
-  id: string;
-  value: string;
-}
-
 interface DraftDesktopSettings {
-  additionalPluginDirectories: DraftListEntry[];
   layout: DesktopLayoutSettings;
-  pluginManifestUrls: DraftListEntry[];
-}
-
-function toDraftListEntry(value: string): DraftListEntry {
-  return { id: createDraftId(), value };
 }
 
 function createDraftId(): string {
@@ -136,18 +110,9 @@ function clonePreferences(preferences: ProjectPreferences): DraftPreferences {
   };
 }
 
-function cloneDesktopSettings(
-  settings: DesktopSettings,
-  projectPlugins: ProjectPluginState | null,
-): DraftDesktopSettings {
+function cloneDesktopSettings(settings: DesktopSettings): DraftDesktopSettings {
   return {
-    additionalPluginDirectories:
-      settings.additionalPluginDirectories.map(toDraftListEntry),
     layout: { ...settings.layout },
-    pluginManifestUrls: mergeStringLists(
-      projectPlugins?.manifestUrls ?? [],
-      settings.pluginManifestUrls,
-    ).map(toDraftListEntry),
   };
 }
 
@@ -216,27 +181,13 @@ function validateEnvironmentVariables(
   return null;
 }
 
-function validatePluginManifestUrls(urls: string[]): string | null {
-  for (const url of urls) {
-    if (!url.trim()) continue;
-    try {
-      new URL(url.trim());
-    } catch {
-      return "Plugin manifest URLs must be valid absolute URLs.";
-    }
-    if (!isAllowedPluginManifestUrl(url.trim())) {
-      return "Plugin manifest URLs must use HTTPS, or HTTP on localhost, 127.0.0.1, or [::1].";
-    }
-  }
-  return null;
-}
-
 export function SettingsDialog({
   buttonClassName,
   buttonSize = "sm",
   iconClassName,
   mapControllerRef,
   showLabels = true,
+  onOpenManagePlugins,
 }: SettingsDialogProps) {
   const preferences = useAppStore((s) => s.preferences);
   const setPreferences = useAppStore((s) => s.setPreferences);
@@ -244,8 +195,6 @@ export function SettingsDialog({
   const setDesktopSettings = useDesktopSettingsStore(
     (s) => s.setDesktopSettings,
   );
-  const projectPlugins = useAppStore((s) => s.projectPlugins);
-  const setProjectPlugins = useAppStore((s) => s.setProjectPlugins);
   const projectName = useAppStore((s) => s.projectName);
   const projectPath = useAppStore((s) => s.projectPath);
   const setProjectName = useAppStore((s) => s.setProjectName);
@@ -255,9 +204,7 @@ export function SettingsDialog({
     () => clonePreferences(preferences),
   );
   const [draftDesktopSettings, setDraftDesktopSettings] =
-    useState<DraftDesktopSettings>(() =>
-      cloneDesktopSettings(desktopSettings, projectPlugins),
-    );
+    useState<DraftDesktopSettings>(() => cloneDesktopSettings(desktopSettings));
   const [draftProjectName, setDraftProjectName] = useState(projectName);
   const [error, setError] = useState<string | null>(null);
   // Ids of variables whose value is temporarily revealed; values are masked
@@ -280,10 +227,7 @@ export function SettingsDialog({
     if (!open) return;
     setDraftPreferences(clonePreferences(useAppStore.getState().preferences));
     setDraftDesktopSettings(
-      cloneDesktopSettings(
-        useDesktopSettingsStore.getState().desktopSettings,
-        useAppStore.getState().projectPlugins,
-      ),
+      cloneDesktopSettings(useDesktopSettingsStore.getState().desktopSettings),
     );
     setDraftProjectName(useAppStore.getState().projectName);
     setRevealedValueIds(new Set());
@@ -360,111 +304,6 @@ export function SettingsDialog({
     setError(null);
   };
 
-  const updatePluginDirectory = (index: number, path: string) => {
-    setDraftDesktopSettings((current) => ({
-      ...current,
-      additionalPluginDirectories: current.additionalPluginDirectories.map(
-        (entry, i) => (i === index ? { ...entry, value: path } : entry),
-      ),
-    }));
-    setError(null);
-  };
-
-  const addPluginDirectory = () => {
-    setDraftDesktopSettings((current) => ({
-      ...current,
-      additionalPluginDirectories: [
-        ...current.additionalPluginDirectories,
-        toDraftListEntry(""),
-      ],
-    }));
-    setSection("plugins");
-    setError(null);
-  };
-
-  const browsePluginDirectory = async (index: number) => {
-    try {
-      const path = await pickLocalPathWithFallback({ directory: true });
-      if (!path) return;
-      updatePluginDirectory(index, path);
-    } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Could not open the directory picker.",
-      );
-    }
-  };
-
-  const removePluginDirectory = (index: number) => {
-    setDraftDesktopSettings((current) => ({
-      ...current,
-      additionalPluginDirectories: current.additionalPluginDirectories.filter(
-        (_, i) => i !== index,
-      ),
-    }));
-    setError(null);
-  };
-
-  const updatePluginManifestUrl = (index: number, url: string) => {
-    setDraftDesktopSettings((current) => ({
-      ...current,
-      pluginManifestUrls: current.pluginManifestUrls.map((entry, i) =>
-        i === index ? { ...entry, value: url } : entry,
-      ),
-    }));
-    setError(null);
-  };
-
-  const addPluginManifestUrl = () => {
-    setDraftDesktopSettings((current) => ({
-      ...current,
-      pluginManifestUrls: [...current.pluginManifestUrls, toDraftListEntry("")],
-    }));
-    setSection("plugins");
-    setError(null);
-  };
-
-  const removePluginManifestUrl = (index: number) => {
-    setDraftDesktopSettings((current) => ({
-      ...current,
-      pluginManifestUrls: current.pluginManifestUrls.filter(
-        (_, i) => i !== index,
-      ),
-    }));
-    setError(null);
-  };
-
-  // Marketplace install/remove operate on the same draft manifest URL list as
-  // manual entry, so a curated plugin behaves exactly like a hand-added URL and
-  // persists through the dialog's Save flow.
-  const installMarketplacePlugin = (manifestUrl: string) => {
-    const url = manifestUrl.trim();
-    setDraftDesktopSettings((current) =>
-      current.pluginManifestUrls.some((entry) => entry.value.trim() === url)
-        ? current
-        : {
-            ...current,
-            pluginManifestUrls: [
-              ...current.pluginManifestUrls,
-              toDraftListEntry(url),
-            ],
-          },
-    );
-    setError(null);
-  };
-
-  const removeMarketplacePlugin = (manifestUrl: string) => {
-    const url = manifestUrl.trim();
-    setDraftDesktopSettings((current) => ({
-      ...current,
-      pluginManifestUrls: current.pluginManifestUrls.filter(
-        (entry) => entry.value.trim() !== url,
-      ),
-    }));
-    setError(null);
-  };
-
   const applyCurrentViewBounds = () => {
     const bounds = mapControllerRef.current?.readView().bbox;
     if (!bounds) {
@@ -519,32 +358,14 @@ export function SettingsDialog({
       return;
     }
 
-    const pluginManifestUrls = normalizeStringList(
-      draftDesktopSettings.pluginManifestUrls.map((entry) => entry.value),
-    );
-    const manifestUrlValidationError =
-      validatePluginManifestUrls(pluginManifestUrls);
-    if (manifestUrlValidationError) {
-      setError(manifestUrlValidationError);
-      setSection("plugins");
-      return;
-    }
-
     const nextProjectName = draftProjectName.trim() || "Untitled Project";
     if (nextProjectName !== projectName) setProjectName(nextProjectName);
     setPreferences(normalized);
+    // Plugin sources are managed live in the Manage Plugins dialog; preserve the
+    // current store values and only update the layout from this dialog.
     setDesktopSettings({
-      additionalPluginDirectories: normalizeStringList(
-        draftDesktopSettings.additionalPluginDirectories.map(
-          (entry) => entry.value,
-        ),
-      ),
+      ...useDesktopSettingsStore.getState().desktopSettings,
       layout: draftDesktopSettings.layout,
-      pluginManifestUrls,
-    });
-    setProjectPlugins({
-      ...getPluginManager().getProjectState(),
-      manifestUrls: pluginManifestUrls,
     });
     setOpen(false);
   };
@@ -681,14 +502,9 @@ export function SettingsDialog({
             <Braces className="mr-2 h-3.5 w-3.5" />
             Environment Variables
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onSelect={() => {
-              setSection("plugins");
-              setOpen(true);
-            }}
-          >
+          <DropdownMenuItem onSelect={() => onOpenManagePlugins()}>
             <Puzzle className="mr-2 h-3.5 w-3.5" />
-            Plugin Directories
+            Manage Plugins
           </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={() => {
@@ -1070,160 +886,6 @@ export function SettingsDialog({
                       )}
                     </div>
                   )}
-                </div>
-              ) : null}
-              {section === "plugins" ? (
-                <div className="space-y-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <h3 className="text-sm font-semibold">Plugin sources</h3>
-                      <p className="text-xs text-muted-foreground">
-                        Extra local directories and web manifest URLs scanned
-                        for external plugins.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
-                    GeoLibre always scans its app data plugins directory. These
-                    local directories are desktop-only settings and are not
-                    saved into project files. Manifest URLs are saved with the
-                    project so reloading a project can fetch its external
-                    plugins before restoring active plugin state. Desktop
-                    directories can contain `.zip` plugin bundles, unpacked
-                    plugin bundle folders, or be an unpacked plugin bundle with
-                    a root `plugin.json`.
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Local directories
-                      </h4>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={addPluginDirectory}
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        Add
-                      </Button>
-                    </div>
-                    {draftDesktopSettings.additionalPluginDirectories.length ===
-                    0 ? (
-                      <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                        No additional plugin directories configured.
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {draftDesktopSettings.additionalPluginDirectories.map(
-                          (entry, index) => (
-                            <div
-                              key={entry.id}
-                              className="grid grid-cols-[minmax(10rem,1fr)_2rem_2rem] items-center gap-2"
-                            >
-                              <Input
-                                aria-label="Plugin directory"
-                                placeholder="/path/to/geolibre-plugin"
-                                value={entry.value}
-                                onChange={(event) =>
-                                  updatePluginDirectory(
-                                    index,
-                                    event.target.value,
-                                  )
-                                }
-                              />
-                              <Button
-                                aria-label="Browse plugin directory"
-                                className="h-8 w-8"
-                                type="button"
-                                size="icon"
-                                variant="ghost"
-                                onClick={() =>
-                                  void browsePluginDirectory(index)
-                                }
-                              >
-                                <FolderOpen className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button
-                                aria-label="Remove plugin directory"
-                                className="h-8 w-8"
-                                type="button"
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => removePluginDirectory(index)}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          ),
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <PluginMarketplace
-                    installedUrls={draftDesktopSettings.pluginManifestUrls.map(
-                      (entry) => entry.value,
-                    )}
-                    onInstall={installMarketplacePlugin}
-                    onRemove={removeMarketplacePlugin}
-                    onUpgrade={(manifestUrl) =>
-                      upgradeExternalPlugin(manifestUrl, mapControllerRef)
-                    }
-                  />
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Manifest URLs
-                      </h4>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={addPluginManifestUrl}
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        Add
-                      </Button>
-                    </div>
-                    {draftDesktopSettings.pluginManifestUrls.length === 0 ? (
-                      <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                        No plugin manifest URLs configured.
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {draftDesktopSettings.pluginManifestUrls.map(
-                          (entry, index) => (
-                            <div
-                              key={entry.id}
-                              className="grid grid-cols-[minmax(10rem,1fr)_2rem] items-center gap-2"
-                            >
-                              <Input
-                                aria-label="Plugin manifest URL"
-                                placeholder="https://example.com/plugin/plugin.json"
-                                value={entry.value}
-                                onChange={(event) =>
-                                  updatePluginManifestUrl(
-                                    index,
-                                    event.target.value,
-                                  )
-                                }
-                              />
-                              <Button
-                                aria-label="Remove plugin manifest URL"
-                                className="h-8 w-8"
-                                type="button"
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => removePluginManifestUrl(index)}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          ),
-                        )}
-                      </div>
-                    )}
-                  </div>
                 </div>
               ) : null}
               {section === "project" ? (
