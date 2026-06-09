@@ -54,24 +54,35 @@ export async function fetchPluginRegistry(
   registryUrl: string = resolveRegistryUrl(),
 ): Promise<PluginRegistry> {
   // Bound the request so a slow or stalled registry endpoint cannot leave the
-  // UI stuck in its loading state indefinitely.
+  // UI stuck in its loading state indefinitely. The timeout stays armed until
+  // the body is consumed so a trickled response can't outlive the deadline.
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
-  let response: Response;
   try {
-    response = await fetch(registryUrl, { signal: controller.signal });
+    const response = await fetch(registryUrl, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(
+        `Could not fetch plugin registry: HTTP ${response.status}`,
+      );
+    }
+    // Guard against a pathologically large payload buffering into memory, the
+    // way fetchPluginText caps streamed plugin assets.
+    const MAX_REGISTRY_BYTES = 5 * 1024 * 1024; // 5 MB ceiling
+    const declaredLength = Number(response.headers.get("content-length"));
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_REGISTRY_BYTES) {
+      throw new Error(
+        "Could not fetch plugin registry: response exceeds the 5 MB size limit.",
+      );
+    }
+    const payload = (await response.json()) as unknown;
+    const rawEntries = extractEntries(payload);
+    const entries = rawEntries
+      .map((entry) => normalizeEntry(entry, registryUrl))
+      .filter((entry): entry is PluginRegistryEntry => entry !== null);
+    return { entries, registryUrl };
   } finally {
     clearTimeout(timeout);
   }
-  if (!response.ok) {
-    throw new Error(`Could not fetch plugin registry: HTTP ${response.status}`);
-  }
-  const payload = (await response.json()) as unknown;
-  const rawEntries = extractEntries(payload);
-  const entries = rawEntries
-    .map((entry) => normalizeEntry(entry, registryUrl))
-    .filter((entry): entry is PluginRegistryEntry => entry !== null);
-  return { entries, registryUrl };
 }
 
 /** Accept either a bare array or `{ plugins: [...] }` / `{ entries: [...] }`. */
@@ -82,7 +93,9 @@ function extractEntries(payload: unknown): unknown[] {
     if (Array.isArray(record.plugins)) return record.plugins;
     if (Array.isArray(record.entries)) return record.entries;
   }
-  throw new Error("Plugin registry must be an array or { plugins: [...] }.");
+  throw new Error(
+    "Plugin registry must be an array or an object with a 'plugins' or 'entries' array.",
+  );
 }
 
 function normalizeEntry(
@@ -148,8 +161,13 @@ function stringArray(value: unknown): string[] | undefined {
 
 /**
  * Compare dotted numeric versions. Returns true when `current` is greater than
- * or equal to `required`. Non-numeric or missing requirements are treated as
- * satisfied so a malformed `minGeoLibreVersion` never blocks installation.
+ * or equal to `required`. Pre-release and build suffixes (e.g. `-rc.1`, `+sha`)
+ * are stripped before comparison, so `1.0.0-rc.1` is treated as equal to
+ * `1.0.0` rather than ordered before it. A consequence is that the "update
+ * available" check (which negates this) will not flag a registry's `1.0.0`
+ * release for a user running `1.0.0-rc.1`; the marketplace is expected to
+ * publish stable versions only. Non-numeric or missing requirements are treated
+ * as satisfied so a malformed `minGeoLibreVersion` never blocks installation.
  */
 export function satisfiesMinVersion(current: string, required?: string): boolean {
   if (!required) return true;

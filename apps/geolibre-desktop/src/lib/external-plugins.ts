@@ -418,6 +418,13 @@ export function unloadRemovedUrlPlugins(
  * before the old one is torn down, so a failed upgrade leaves the installed
  * plugin intact. Active state is preserved: an active plugin is reactivated
  * after the new version registers. Returns the new plugin.
+ *
+ * Contract: callers are expected to serialize calls per manifest URL (the
+ * Manage Plugins dialog does this via its `busyId` guard). The function is not
+ * re-entrant-safe for the same URL — two concurrent calls capture the same
+ * `existingId`/`wasActive` snapshot before fetching and could double-register.
+ * If the plugin is uninstalled mid-fetch the returned plugin is fetched and
+ * validated but NOT registered in the manager; the caller discards it.
  */
 export async function reloadExternalUrlPlugin(
   manager: PluginManager,

@@ -59,6 +59,12 @@ const APP_VERSION = __GEOLIBRE_VERSION__;
 // render while the registry is loading or errored.
 const EMPTY_ENTRIES: PluginRegistryEntry[] = [];
 
+// Module-level store bindings so useSyncExternalStore sees a stable subscribe /
+// snapshot identity and doesn't re-subscribe on every render.
+const subscribeToPluginManager = (listener: () => void) =>
+  getPluginManager().subscribe(listener);
+const getPluginManagerVersion = () => getPluginManager().getVersion();
+
 interface ManagePluginsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -96,7 +102,9 @@ export function ManagePluginsDialog({
     let cancelled = false;
     setRegistry({ status: "loading" });
     setConfirmRemoveId(null);
-    setBusyId(null);
+    // Don't reset busyId here: an in-flight upgrade's finally block owns it.
+    // Clearing it on Refresh would re-enable the Update button mid-flight and
+    // could start a second concurrent upgrade for the same manifest URL.
     setActionError(null);
     fetchPluginRegistry()
       .then((result) => {
@@ -106,10 +114,13 @@ export function ManagePluginsDialog({
       })
       .catch((error: unknown) => {
         if (cancelled) return;
+        const timedOut =
+          error instanceof DOMException && error.name === "AbortError";
         setRegistry({
           status: "error",
-          message:
-            error instanceof Error
+          message: timedOut
+            ? "Plugin registry request timed out. Check your connection and try again."
+            : error instanceof Error
               ? error.message
               : "Could not load the plugin registry.",
         });
@@ -123,9 +134,9 @@ export function ManagePluginsDialog({
   // live as plugins register, unregister, or upgrade. The version drives the
   // loadedVersions memo so it only rebuilds when the manager actually changes.
   const managerVersion = useSyncExternalStore(
-    (listener) => getPluginManager().subscribe(listener),
-    () => getPluginManager().getVersion(),
-    () => getPluginManager().getVersion(),
+    subscribeToPluginManager,
+    getPluginManagerVersion,
+    getPluginManagerVersion,
   );
   const loadedVersions = useMemo(() => {
     const versions = new Map<string, string>();
@@ -140,18 +151,25 @@ export function ManagePluginsDialog({
     [desktopSettings.pluginManifestUrls],
   );
 
-  const isInstalled = (entry: PluginRegistryEntry) =>
-    installedSet.has(entry.manifestUrl.trim());
+  // entry.manifestUrl is already trimmed/absolute (normalizeEntry resolves it
+  // through new URL(...)), so only the user-supplied installedSet needs trimming.
+  const isInstalled = useCallback(
+    (entry: PluginRegistryEntry) => installedSet.has(entry.manifestUrl),
+    [installedSet],
+  );
   // An update is available only when the registry version is strictly newer
   // than the loaded one (directional, not any mismatch).
-  const isUpgradeable = (entry: PluginRegistryEntry) => {
-    const loaded = loadedVersions.get(entry.id);
-    return (
-      isInstalled(entry) &&
-      loaded !== undefined &&
-      !satisfiesMinVersion(loaded, entry.version)
-    );
-  };
+  const isUpgradeable = useCallback(
+    (entry: PluginRegistryEntry) => {
+      const loaded = loadedVersions.get(entry.id);
+      return (
+        isInstalled(entry) &&
+        loaded !== undefined &&
+        !satisfiesMinVersion(loaded, entry.version)
+      );
+    },
+    [isInstalled, loadedVersions],
+  );
 
   const refresh = useCallback(() => setReloadToken((token) => token + 1), []);
 
@@ -295,7 +313,7 @@ export function ManagePluginsDialog({
           return true;
       }
     });
-  }, [entries, installedSet, loadedVersions, query, section]);
+  }, [entries, isInstalled, isUpgradeable, query, section]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -541,6 +559,7 @@ export function ManagePluginsDialog({
                                 size="icon"
                                 variant="ghost"
                                 className="h-8 w-8"
+                                disabled={busyId === entry.id}
                                 aria-label={`Uninstall ${entry.name}`}
                                 onClick={() => {
                                   setActionError(null);
