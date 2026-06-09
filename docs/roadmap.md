@@ -111,7 +111,7 @@
 
 - [ ] GDAL / Rasterio / GeoPandas pipelines
 - [ ] Buffer, reproject, and export GeoJSON processing tools
-- [ ] Expanded WhiteboxTools coverage
+- [x] Expanded WhiteboxTools coverage
 - [ ] Leafmap, GeoAI, and SamGeo integrations (selective)
 - [ ] External plugin package distribution workflow
 - [x] Plugin marketplace / registry design (see [Plugin marketplace and registry](#plugin-marketplace-and-registry-design))
@@ -119,7 +119,7 @@
 - [x] Plugin update (in-place re-fetch) and uninstall with confirmation
 - [ ] Plugin integrity verification (hashes and signing)
 - [ ] Sandboxed worker plugins
-- [ ] Performance tuning and test suite
+- [x] Performance tuning and test suite
 - [ ] Cross-platform installers
 - [ ] Documentation and tutorials
 
