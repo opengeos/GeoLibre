@@ -142,6 +142,7 @@ export function DesktopShell({
   const dragDepthRef = useRef(0);
   const dropMessageTimeoutRef = useRef<number | null>(null);
   const materializingRef = useRef(false);
+  const togglingGeometryEditRef = useRef(false);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
   const geometryEditLayerId = useSyncExternalStore(
@@ -210,37 +211,47 @@ export function DesktopShell({
     async (layerId: string) => {
       const appAPI = createAppAPI(mapControllerRef);
       if (getGeometryEditTargetLayerId() === layerId) {
-        endLayerGeometryEdit(appAPI, { save: true });
+        await endLayerGeometryEdit(appAPI, { save: true });
         return;
       }
-      // Add Vector Layer (geojson-mode) layers keep their features in a MapLibre
-      // source rather than in `layer.geojson`. Read them back once so the editor
-      // has features to load. (Plain geojson layers already have `geojson`.)
-      await ensureLayerGeojsonFromSource(layerId);
-      const manager = getPluginManager();
-      if (!manager.isActive("maplibre-gl-geo-editor")) {
-        manager.activate("maplibre-gl-geo-editor", appAPI);
+      // Guard against concurrent invocations: this handler awaits before it sets
+      // the session target, so two rapid clicks could otherwise both pass the
+      // check above and race into startLayerGeometryEdit for different layers.
+      if (togglingGeometryEditRef.current) return;
+      togglingGeometryEditRef.current = true;
+      try {
+        // Add Vector Layer (geojson-mode) layers keep their features in a
+        // MapLibre source rather than in `layer.geojson`. Read them back once so
+        // the editor has features to load. (Plain geojson layers already have
+        // `geojson`.)
+        await ensureLayerGeojsonFromSource(layerId);
+        const manager = getPluginManager();
         if (!manager.isActive("maplibre-gl-geo-editor")) {
+          manager.activate("maplibre-gl-geo-editor", appAPI);
+          if (!manager.isActive("maplibre-gl-geo-editor")) {
+            setDropError(
+              "Could not activate the geometry editor. Try again once the map has fully loaded.",
+            );
+            clearDropMessageLater();
+            return;
+          }
+        }
+        const started = await startLayerGeometryEdit(appAPI, layerId);
+        if (!started) {
           setDropError(
-            "Could not activate the geometry editor. Try again once the map has fully loaded.",
+            "Could not start geometry editing for this layer. Its data may still be loading.",
           );
           clearDropMessageLater();
-          return;
         }
-      }
-      const started = await startLayerGeometryEdit(appAPI, layerId);
-      if (!started) {
-        setDropError(
-          "Could not start geometry editing for this layer. Its data may still be loading.",
-        );
-        clearDropMessageLater();
+      } finally {
+        togglingGeometryEditRef.current = false;
       }
     },
     [clearDropMessageLater, ensureLayerGeojsonFromSource],
   );
 
   const handleCancelGeometryEdit = useCallback(() => {
-    endLayerGeometryEdit(createAppAPI(mapControllerRef), { save: false });
+    void endLayerGeometryEdit(createAppAPI(mapControllerRef), { save: false });
   }, []);
 
   const handleMaterializeDuckDBLayer = useCallback(

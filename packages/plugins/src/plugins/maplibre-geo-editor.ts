@@ -111,7 +111,7 @@ const GEOMAN_EDIT_SYNC_EVENTS = [
 export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-geo-editor",
   name: "GeoEditor",
-  version: "0.7.3",
+  version: "0.8.0",
   activate: (app: GeoLibreAppAPI) => {
     pluginActive = true;
     appApi = app;
@@ -143,9 +143,10 @@ export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
   },
   deactivate: (app: GeoLibreAppAPI) => {
     // Persist any in-progress geometry edit and restore the editor to Sketches
-    // mode before tearing the control down, so map rendering and store state
-    // stay consistent.
-    if (editTargetLayerId) endLayerGeometryEdit(app, { save: true });
+    // mode before tearing the control down. The write-back is synchronous; only
+    // the sketches restore is async, which is moot since the control is removed
+    // below, so this need not be awaited.
+    if (editTargetLayerId) void endLayerGeometryEdit(app, { save: true });
     pluginActive = false;
     sketchesIdleDisplayOverride = false;
     unionSketchesWithStoreOnNextSync = false;
@@ -508,6 +509,12 @@ async function ensureGeomanReady(): Promise<void> {
  * helpers at the target layer. Returns false when the plugin is not active or
  * the layer is not editable.
  *
+ * The target's features must already be in `layer.geojson`. Add-Vector-Layer
+ * (`maplibre-gl-vector`) layers keep their features in a MapLibre source, so the
+ * caller must hydrate `layer.geojson` from that source first (otherwise this
+ * returns false); `canEditLayerGeometry` deliberately reports them editable
+ * because that hydration is the caller's responsibility.
+ *
  * `_app` is accepted for API symmetry with the other plugin entry points but is
  * not used: this function operates through the module-level `appApi`/store.
  */
@@ -518,8 +525,9 @@ export async function startLayerGeometryEdit(
   if (!pluginActive || !geoEditorControl) return false;
 
   // Only one session at a time; finish any open one first (saving its work).
+  // Await it so its sketches restore completes before the new session starts.
   if (editTargetLayerId && editTargetLayerId !== layerId) {
-    endLayerGeometryEdit(_app, { save: true });
+    await endLayerGeometryEdit(_app, { save: true });
   }
   if (editTargetLayerId === layerId) return true;
 
@@ -577,6 +585,11 @@ export async function startLayerGeometryEdit(
     restoringSketchesToEditor = false;
   }
 
+  // The target layer may have been removed while `loadGeoJson` was awaited; the
+  // store subscription's `abortGeometryEditSession` then already tore the session
+  // down (and restored sketches). Bail out without a second teardown.
+  if (editTargetLayerId !== layerId) return false;
+
   // If the load failed the editor is empty; do NOT keep the session active or a
   // later Save would overwrite the layer with an empty collection. Roll back:
   // restore visibility and the stashed sketches and report failure.
@@ -616,10 +629,10 @@ function disableActiveEditModes(): void {
  * layer keeps the geojson it had at session start (it was never modified). The
  * editor is returned to Sketches mode either way.
  */
-export function endLayerGeometryEdit(
+export async function endLayerGeometryEdit(
   _app: GeoLibreAppAPI,
   { save }: { save: boolean },
-): void {
+): Promise<void> {
   if (!editTargetLayerId) return;
 
   // Defensive: if the control was torn down while a session id lingered, clear
@@ -647,10 +660,9 @@ export function endLayerGeometryEdit(
     // edits, or the untouched original on cancel).
     setEditTargetStoreVisible(targetId, editTargetOriginalVisible ?? true);
     editTargetOriginalVisible = null;
-    // restoreSketchesAfterSession() exits Geoman edit modes and clears the
-    // editor before reloading sketches. It is async (it awaits Geoman); the
-    // internal awaits keep its own steps ordered, so it is fire-and-forget here.
-    void restoreSketchesAfterSession();
+    // Await the sketches restore so a caller switching sessions does not start a
+    // new edit while the previous restore is still clearing/loading the editor.
+    await restoreSketchesAfterSession();
     applySketchesMapDisplay();
     notifyGeometryEdit();
   }

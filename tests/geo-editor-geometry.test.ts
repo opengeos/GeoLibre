@@ -110,6 +110,20 @@ describe("canEditLayerGeometry", () => {
       ),
       false,
     );
+    // maplibre-gl-vector with an empty sourceIds array: still no usable source.
+    assert.equal(
+      canEditLayerGeometry(
+        makeLayer({
+          geojson: undefined,
+          metadata: {
+            sourceKind: "maplibre-gl-vector",
+            externalNativeLayer: true,
+            sourceIds: [],
+          },
+        }),
+      ),
+      false,
+    );
   });
 
   it("allows Add-Vector-Layer geojson-mode layers (features in a source)", () => {

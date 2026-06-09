@@ -46,10 +46,14 @@ export function canEditLayerGeometry(
   if (layer.metadata.externalNativeLayer === true) {
     // Externally-rendered layers are only editable when they are Add-Vector-Layer
     // geojson-mode layers, whose features live in a MapLibre GeoJSON source that
-    // can be read and written back. Other external layers are not editable.
+    // can be read and written back. Require a usable source id (a non-empty
+    // string), otherwise there is nothing to hydrate from or write back to.
+    const sourceIds = layer.metadata.sourceIds;
     return (
       layer.metadata.sourceKind === "maplibre-gl-vector" &&
-      Array.isArray(layer.metadata.sourceIds)
+      Array.isArray(sourceIds) &&
+      typeof sourceIds[0] === "string" &&
+      sourceIds[0].length > 0
     );
   }
 
