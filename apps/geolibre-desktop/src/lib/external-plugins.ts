@@ -473,8 +473,9 @@ async function reloadExternalUrlPluginUncoalesced(
   let plugin: GeoLibrePlugin;
   try {
     bundle = await loadPluginUrlBundle(manifestUrl, controller.signal);
-    // Keep the deadline armed across the dynamic import too, so a module that
-    // hangs during evaluation can't leave the Update spinner stuck forever.
+    // The timeout only bounds the fetch/stream above; a dynamic import() of a
+    // local blob URL can't be aborted, but it evaluates near-instantly so it is
+    // not a practical hang risk.
     plugin = await importExternalPlugin(bundle);
   } finally {
     clearTimeout(timeout);
