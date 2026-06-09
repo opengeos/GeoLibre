@@ -95,6 +95,7 @@
 - [x] Add Vector Layer powered by the `maplibre-gl-vector` plugin
 - [x] Identify, selection, and attribute table support for DuckDB layers
 - [x] Conversion menu under Processing for Vector to GeoParquet/FlatGeobuf/PMTiles, CSV to GeoParquet, and Raster to COG, backed by a hardened conversion sidecar with a path allowlist
+- [x] Vector menu under Processing with common geometry tools (buffer, centroids, convex hull, dissolve, bounding box, simplify, clip, intersection, difference, union) running client-side with Turf.js, plus an optional GeoPandas sidecar engine
 - [x] Whitebox batch tools run against a selected input directory
 - [x] Controls menu with Measure, Bookmark, Minimap, and View State tools
 - [x] Print menu backed by `PrintControl`

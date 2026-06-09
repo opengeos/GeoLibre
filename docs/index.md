@@ -65,6 +65,12 @@ The processing toolbox includes client-side algorithms now, with a roadmap towar
 Run DuckDB Spatial SQL in the browser against loaded layers, local files, and remote URLs. Auto-wraps bare URLs into the matching reader and streams remote files over HTTP range requests. Includes sample queries, query history, and adding a result (with an optional layer name) to the map or exporting it as CSV or GeoParquet.
 </div>
 
+<div class="feature-card" markdown>
+### Vector tools
+
+Common geometry tools under Processing → Vector: buffer, centroids, convex hull, dissolve, bounding box, simplify, clip, intersection, difference, and union. They run in the browser with Turf.js, with an optional GeoPandas sidecar engine for buffer and overlay tools.
+</div>
+
 </div>
 
 ## Try it in the browser

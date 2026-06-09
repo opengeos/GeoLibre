@@ -57,9 +57,11 @@ Local MBTiles tiles are read through a custom MapLibre protocol backed by Tauri 
 
 ## Python sidecar
 
-The FastAPI app in `backend/geolibre_server` backs the Whitebox toolbox through a managed local processing sidecar. The desktop app starts the sidecar on demand, communicates over `127.0.0.1`, and keeps the heavier Python processing stack outside the browser bundle.
+The FastAPI app in `backend/geolibre_server` backs the Whitebox toolbox and the format Conversion tools through a managed local processing sidecar. The desktop app starts the sidecar on demand, communicates over `127.0.0.1`, and keeps the heavier Python processing stack outside the browser bundle.
 
-Future processing releases are expected to expand the same sidecar pattern for GDAL, Rasterio, GeoPandas, DuckDB Spatial SQL, Leafmap, GeoAI, and SamGeo workflows.
+The Vector tools (Processing → Vector) run client-side with Turf.js and need no sidecar. Buffer and the overlay tools can optionally run on the sidecar's `/vector` endpoints, backed by GeoPandas and Shapely, for projection-aware results; the sidecar reports availability through `/vector/status`, and the dialog falls back to the client engine when the optional `vector` extra is not installed.
+
+Future processing releases are expected to expand the same sidecar pattern for GDAL, Rasterio, DuckDB Spatial SQL, Leafmap, GeoAI, and SamGeo workflows.
 
 ## Container image
 
