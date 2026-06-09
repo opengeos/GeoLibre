@@ -331,7 +331,18 @@ export function ManagePluginsDialog({
         <DialogHeader className="border-b px-6 pb-4 pt-6">
           <DialogTitle>Manage Plugins</DialogTitle>
           <DialogDescription>
-            Browse, install, update, and remove external GeoLibre plugins.
+            Browse, install, update, and remove external GeoLibre plugins.{" "}
+            Plugins are listed in the{" "}
+            <a
+              href="https://plugins.geolibre.app"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 font-medium text-foreground underline underline-offset-2 hover:text-primary"
+            >
+              GeoLibre plugin registry
+              <ExternalLink className="h-3 w-3" />
+            </a>
+            .
           </DialogDescription>
         </DialogHeader>
         <div className="grid min-h-0 grid-cols-1 md:grid-cols-[12rem_1fr]">

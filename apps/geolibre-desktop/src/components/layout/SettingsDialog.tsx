@@ -502,10 +502,6 @@ export function SettingsDialog({
             <Braces className="mr-2 h-3.5 w-3.5" />
             Environment Variables
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => onOpenManagePlugins()}>
-            <Puzzle className="mr-2 h-3.5 w-3.5" />
-            Manage Plugins
-          </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={() => {
               setSection("project");
@@ -514,6 +510,10 @@ export function SettingsDialog({
           >
             <FolderCog className="mr-2 h-3.5 w-3.5" />
             Project Settings
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onOpenManagePlugins()}>
+            <Puzzle className="mr-2 h-3.5 w-3.5" />
+            Manage Plugins
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
