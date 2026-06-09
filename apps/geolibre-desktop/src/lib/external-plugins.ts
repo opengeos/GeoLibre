@@ -167,8 +167,9 @@ async function loadPluginUrlBundles(
 
 async function loadPluginUrlBundle(
   manifestUrl: string,
+  signal?: AbortSignal,
 ): Promise<ExternalPluginBundle> {
-  const manifestResponse = await fetch(manifestUrl);
+  const manifestResponse = await fetch(manifestUrl, { signal });
   if (!manifestResponse.ok) {
     throw new Error(
       `Could not fetch plugin manifest: HTTP ${manifestResponse.status}`,
@@ -185,9 +186,9 @@ async function loadPluginUrlBundle(
     ? resolvePluginAssetUrl(manifestUrl, manifest.style)
     : null;
   const [entrySource, styleSource] = await Promise.all([
-    fetchPluginText(entryUrl, "plugin entry"),
+    fetchPluginText(entryUrl, "plugin entry", signal),
     styleUrl
-      ? fetchPluginText(styleUrl, "plugin style")
+      ? fetchPluginText(styleUrl, "plugin style", signal)
       : Promise.resolve(null),
   ]);
 
@@ -203,8 +204,12 @@ async function loadPluginUrlBundle(
 // plugin assets cannot buffer an unbounded response into memory.
 const MAX_PLUGIN_ASSET_BYTES = 50 * 1024 * 1024;
 
-async function fetchPluginText(url: string, label: string): Promise<string> {
-  const response = await fetch(url);
+async function fetchPluginText(
+  url: string,
+  label: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const response = await fetch(url, { signal });
   if (!response.ok) {
     throw new Error(`Could not fetch ${label}: HTTP ${response.status}`);
   }
@@ -429,8 +434,16 @@ export async function reloadExternalUrlPlugin(
   const wasActive = existingId ? manager.isActive(existingId) : false;
 
   // Fetch and validate the new version first; if this throws the old plugin is
-  // untouched.
-  const bundle = await loadPluginUrlBundle(manifestUrl);
+  // untouched. Bound the fetch so a stalled endpoint can't leave the Update
+  // button spinning forever (the manifest + entry/style requests are aborted).
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  let bundle: ExternalPluginBundle;
+  try {
+    bundle = await loadPluginUrlBundle(manifestUrl, controller.signal);
+  } finally {
+    clearTimeout(timeout);
+  }
   const plugin = await importExternalPlugin(bundle);
 
   // If the plugin was uninstalled while we were fetching (its source was

@@ -154,6 +154,9 @@ export function satisfiesMinVersion(current: string, required?: string): boolean
   if (!required) return true;
   const currentParts = parseVersion(current);
   const requiredParts = parseVersion(required);
+  // An unparseable requirement never blocks installation. An unparseable
+  // current version (e.g. a "dev"/local build) is treated as unknown and
+  // allowed to pass rather than blocking every plugin.
   if (!currentParts || !requiredParts) return true;
   const length = Math.max(currentParts.length, requiredParts.length);
   for (let index = 0; index < length; index += 1) {
