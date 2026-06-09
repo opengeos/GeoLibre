@@ -91,6 +91,9 @@ export function ManagePluginsDialog({
     if (!open) return;
     let cancelled = false;
     setRegistry({ status: "loading" });
+    setConfirmRemoveId(null);
+    setBusyId(null);
+    setActionError(null);
     fetchPluginRegistry()
       .then((result) => {
         if (!cancelled) {
@@ -289,9 +292,9 @@ export function ManagePluginsDialog({
           return true;
       }
     });
-    // loadedVersions is rebuilt each render from the subscribed manager.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, installedSet, query, section]);
+    // managerVersion gates loadedVersions, so include it here too: otherwise the
+    // memo returns stale entries when a load/upgrade changes only the manager.
+  }, [entries, installedSet, query, section, managerVersion]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

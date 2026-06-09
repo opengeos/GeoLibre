@@ -152,9 +152,10 @@ code.
 ### Browse and install UI
 
 - A standalone Manage Plugins dialog (Settings menu > Manage Plugins), modeled
-  on QGIS, with All / Installed / Not installed / Upgradeable / Settings
-  sections lists registry entries with search and per-entry install, installed,
-  and update states.
+  on QGIS, has All / Installed / Not installed / Upgradeable / Settings sections.
+  The four browse sections list registry entries with search and per-entry
+  install, installed, and update states; the Settings section manages plugin
+  sources.
 - Install reuses the current external-plugin loader: it resolves the entry's
   `manifestUrl`, validates it, and registers the plugin.
   - Desktop: download the bundle into the app data `plugins/<id>/` directory so

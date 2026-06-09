@@ -429,6 +429,12 @@ export async function reloadExternalUrlPlugin(
   const bundle = await loadPluginUrlBundle(manifestUrl);
   const plugin = await importExternalPlugin(bundle);
 
+  // If the plugin was uninstalled while we were fetching (its source was
+  // removed from the loaded map by unloadRemovedUrlPlugins), don't resurrect it.
+  if (existingId !== null && !externallyLoadedPluginSources.has(existingId)) {
+    return plugin;
+  }
+
   // A version that changes its plugin id (e.g. the author renamed it) would
   // leave the marketplace's installed/version state pointing at the old id.
   // Refuse rather than silently register a mismatched plugin.
