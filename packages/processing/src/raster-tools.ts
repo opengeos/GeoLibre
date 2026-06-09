@@ -234,7 +234,7 @@ export const clipMaskTool: RasterTool = {
       required: true,
       fileFilters: [{ name: "GeoJSON", extensions: ["geojson", "json"] }],
       description:
-        "A GeoJSON file (in the raster's CRS) whose geometries define the clip region.",
+        "A GeoJSON file whose geometries define the clip region. It is reprojected to the raster's CRS automatically (a GeoJSON with no CRS is assumed to be WGS84).",
     },
     {
       id: "crop",

@@ -160,8 +160,9 @@ aspect = np.where(
     90.0 - aspect,
     np.where(aspect > 90.0, 360.0 - aspect + 90.0, 90.0 - aspect),
 )
-# Flat cells (no gradient) have an undefined aspect; flag them with nodata.
-flat = (dx == 0) & (dy == 0)
+# Flat cells (no appreciable gradient) have an undefined aspect; flag them with
+# nodata. A small tolerance catches float32 interpolation artifacts too.
+flat = np.hypot(dx, dy) < 1e-10
 aspect = np.where(flat | np.isnan(aspect), nodata, aspect).astype("float32")
 
 profile.update(dtype="float32", count=1, nodata=nodata, compress="deflate")
@@ -316,7 +317,7 @@ gtype = gj.get("type")
 if gtype == "FeatureCollection":
     shapes = [feat["geometry"] for feat in gj.get("features", []) if feat.get("geometry")]
 elif gtype == "Feature":
-    shapes = [gj["geometry"]]
+    shapes = [gj["geometry"]] if gj.get("geometry") else []
 else:
     shapes = [gj]
 if not shapes:
@@ -336,9 +337,15 @@ if isinstance(crs_member, dict):
             pass
 
 with rasterio.open(input_path) as src:
+    if src.crs is None:
+        # Without a raster CRS the mask coordinates cannot be aligned; passing
+        # them through would crop in raw raster units. Fail with a clear error.
+        raise SystemExit(
+            "Input raster has no CRS; clip-by-mask requires a georeferenced raster."
+        )
     # rio_mask needs shapes in the raster's CRS; reproject the geometries when
     # the mask CRS differs so a WGS84 mask over a projected raster still works.
-    if src.crs is not None and mask_crs != src.crs:
+    if mask_crs != src.crs:
         shapes = [transform_geom(mask_crs, src.crs, geom) for geom in shapes]
     out_image, out_transform = rio_mask(
         src, shapes, crop=crop, all_touched=all_touched
@@ -567,7 +574,7 @@ def raster_status():
         _check_raster_import(python)
         return {
             "available": True,
-            "message": "Raster runtime (rasterio) is available.",
+            "message": "Raster runtime (rasterio + contourpy) is available.",
         }
     except RuntimeBootstrapError as exc:
         logger.warning("Raster runtime unavailable: %s", exc)
