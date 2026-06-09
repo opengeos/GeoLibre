@@ -62,20 +62,6 @@ export const exportGeoJsonPlaceholder: ProcessingAlgorithm = {
   },
 };
 
-export const bufferPlaceholder: ProcessingAlgorithm = {
-  id: "buffer",
-  name: "Buffer",
-  description: "Buffer geometries by distance",
-  parameters: [
-    { id: "layer", label: "Layer", type: "layer", required: true },
-    { id: "distance", label: "Distance (m)", type: "number", default: 100 },
-  ],
-  run: (ctx) => {
-    // TODO(v0.5): Buffer via Python sidecar or Turf.js
-    ctx.log("Not implemented — buffer planned for v0.5 (Python sidecar)");
-  },
-};
-
 export const reprojectPlaceholder: ProcessingAlgorithm = {
   id: "reproject",
   name: "Reproject",
@@ -94,7 +80,6 @@ export const ALGORITHMS: ProcessingAlgorithm[] = [
   calculateBoundsAlgorithm,
   countFeaturesAlgorithm,
   exportGeoJsonPlaceholder,
-  bufferPlaceholder,
   reprojectPlaceholder,
 ];
 

@@ -5,6 +5,7 @@ export {
   calculateBoundsAlgorithm,
   countFeaturesAlgorithm,
 } from "./registry";
+export { VECTOR_TOOLS, getVectorTool } from "./vector-tools";
 export {
   checkSidecarHealth,
   clearRemoteWhiteboxCatalogSnapshotCache,
@@ -22,6 +23,8 @@ export {
   runVectorToFlatGeobuf,
   runVectorToGeoParquet,
   runVectorToPmtiles,
+  runVectorTool,
+  fetchVectorStatus,
   runWhiteboxTool,
   WHITEBOX_CATALOG_URL,
   type ConversionJob,
@@ -32,6 +35,9 @@ export {
   type VectorToFlatGeobufRequest,
   type VectorToGeoParquetRequest,
   type VectorToPmtilesRequest,
+  type VectorStatus,
+  type VectorToolRequest,
+  type VectorToolResult,
   type WhiteboxJob,
   type WhiteboxLayerInput,
   type WhiteboxParameterKind,

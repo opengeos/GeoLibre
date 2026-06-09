@@ -28,6 +28,19 @@ export type ConversionToolKind =
   | "vector-to-pmtiles"
   | "raster-to-cog";
 
+/** Identifiers of the vector processing tools (see `@geolibre/processing`). */
+export type VectorToolKind =
+  | "buffer"
+  | "centroids"
+  | "convex-hull"
+  | "dissolve"
+  | "bounding-box"
+  | "simplify"
+  | "clip"
+  | "intersection"
+  | "difference"
+  | "union";
+
 export interface AppState {
   projectName: string;
   projectPath: string | null;
@@ -50,6 +63,7 @@ export interface AppState {
   ui: {
     processingOpen: boolean;
     conversionOpen: ConversionToolKind | null;
+    vectorToolOpen: VectorToolKind | null;
     sqlWorkspaceOpen: boolean;
     attributeTableOpen: boolean;
     zoomToSelectedFeature: boolean;
@@ -71,6 +85,7 @@ export interface AppState {
   setAttributeFilter: (filter: string) => void;
   setProcessingOpen: (open: boolean) => void;
   setConversionOpen: (kind: ConversionToolKind | null) => void;
+  setVectorToolOpen: (kind: VectorToolKind | null) => void;
   setSqlWorkspaceOpen: (open: boolean) => void;
   setAttributeTableOpen: (open: boolean) => void;
   setZoomToSelectedFeature: (enabled: boolean) => void;
@@ -156,6 +171,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   ui: {
     processingOpen: false,
     conversionOpen: null,
+    vectorToolOpen: null,
     sqlWorkspaceOpen: false,
     attributeTableOpen: false,
     zoomToSelectedFeature: false,
@@ -188,6 +204,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((s) => ({ ui: { ...s.ui, processingOpen: open } })),
   setConversionOpen: (kind) =>
     set((s) => ({ ui: { ...s.ui, conversionOpen: kind } })),
+  setVectorToolOpen: (kind) =>
+    set((s) => ({ ui: { ...s.ui, vectorToolOpen: kind } })),
   setSqlWorkspaceOpen: (open) =>
     set((s) => ({ ui: { ...s.ui, sqlWorkspaceOpen: open } })),
   setAttributeTableOpen: (open) =>

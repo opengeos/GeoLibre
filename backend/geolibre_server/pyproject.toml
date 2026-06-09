@@ -21,6 +21,13 @@ conversion = [
   "rio-cogeo>=5.0.0",
   "freestiler>=0.1.0",
 ]
+# Optional GeoPandas engine for the Vector processing tools. Not installed by
+# default to keep the bundled sidecar small; the desktop app falls back to the
+# client-side (Turf.js) engine when this is absent.
+vector = [
+  "geopandas>=1.0",
+  "shapely>=2.0",
+]
 # Future geospatial stack (not required for MVP UI):
 # geo = [
 #   "gdal",

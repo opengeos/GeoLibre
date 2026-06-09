@@ -248,6 +248,7 @@ export function TopToolbar({
   const loadProject = useAppStore((s) => s.loadProject);
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
   const setConversionOpen = useAppStore((s) => s.setConversionOpen);
+  const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
   const projectName = useAppStore((s) => s.projectName);
   const projectPath = useAppStore((s) => s.projectPath);
@@ -948,6 +949,56 @@ export function TopToolbar({
                 onSelect={() => setConversionOpen("raster-to-cog")}
               >
                 Raster to COG
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>Vector</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuLabel className="text-xs text-muted-foreground">
+                Geometry
+              </DropdownMenuLabel>
+              <DropdownMenuItem onSelect={() => setVectorToolOpen("buffer")}>
+                Buffer
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setVectorToolOpen("centroids")}>
+                Centroids
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setVectorToolOpen("convex-hull")}
+              >
+                Convex hull
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setVectorToolOpen("dissolve")}>
+                Dissolve
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setVectorToolOpen("bounding-box")}
+              >
+                Bounding box
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setVectorToolOpen("simplify")}>
+                Simplify
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs text-muted-foreground">
+                Overlay
+              </DropdownMenuLabel>
+              <DropdownMenuItem onSelect={() => setVectorToolOpen("clip")}>
+                Clip
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setVectorToolOpen("intersection")}
+              >
+                Intersection
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setVectorToolOpen("difference")}
+              >
+                Difference
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setVectorToolOpen("union")}>
+                Union
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>

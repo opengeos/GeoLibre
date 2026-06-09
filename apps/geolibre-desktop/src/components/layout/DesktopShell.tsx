@@ -80,6 +80,20 @@ const ConversionDialog = lazy(() =>
     }),
 );
 
+const VectorToolsDialog = lazy(() =>
+  import("../processing/VectorToolsDialog")
+    .then((module) => ({
+      default: module.VectorToolsDialog,
+    }))
+    .catch((error) => {
+      // Same chunk-load fallback rationale as ProcessingDialog above.
+      console.error("Failed to load VectorToolsDialog", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/VectorToolsDialog").VectorToolsDialog;
+      return { default: Fallback };
+    }),
+);
+
 const SqlWorkspaceDialog = lazy(() =>
   import("../processing/SqlWorkspaceDialog")
     .then((module) => ({
@@ -701,6 +715,9 @@ export function DesktopShell({
       </Suspense>
       <Suspense fallback={null}>
         <ConversionDialog />
+      </Suspense>
+      <Suspense fallback={null}>
+        <VectorToolsDialog mapControllerRef={mapControllerRef} />
       </Suspense>
       <Suspense fallback={null}>
         <SqlWorkspaceDialog />
