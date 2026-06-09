@@ -86,6 +86,7 @@ export {
   restoreThreeDTilesLayers,
 } from "./plugins/maplibre-3d-tiles";
 export {
+  addRasterToMap,
   closeRasterLayerPanel,
   openRasterLayerPanel,
   restoreRasterLayers,

@@ -1003,6 +1003,55 @@ export async function loadDroppedVectorFiles(
   return layers;
 }
 
+/** GeoTIFF/COG extensions accepted by the map drag and drop raster path. */
+const RASTER_DROP_EXTENSIONS = ["tif", "tiff"];
+
+/** Whether a filename looks like a raster the map can load. */
+export function isRasterFileName(name: string): boolean {
+  return RASTER_DROP_EXTENSIONS.includes(fileExtension(name));
+}
+
+export interface DroppedRaster {
+  name: string;
+  /** A blob/object URL the raster control can fetch (GeoTIFF/COG). */
+  url: string;
+}
+
+function fileBaseName(path: string): string {
+  return path.split(/[\\/]/).pop() || path;
+}
+
+/**
+ * Turn dropped browser File objects into rasters the map control can load.
+ * Each becomes an object URL; the caller is responsible for the layer lifetime
+ * (the URL must stay valid while the COG is rendered, so it is not revoked).
+ */
+export function loadDroppedRasterFiles(
+  droppedFiles: FileList | File[],
+): DroppedRaster[] {
+  return Array.from(droppedFiles)
+    .filter((file) => isRasterFileName(file.name))
+    .map((file) => ({ name: file.name, url: URL.createObjectURL(file) }));
+}
+
+/**
+ * Read dropped raster file paths (Tauri) into object URLs the control can load.
+ * There is no asset-protocol scope configured, so the bytes are read and wrapped
+ * in a blob URL, matching how local vector files are loaded.
+ */
+export async function loadDroppedRasterPaths(
+  paths: string[],
+): Promise<DroppedRaster[]> {
+  const rasterPaths = paths.filter(isRasterFileName);
+  const rasters: DroppedRaster[] = [];
+  for (const path of rasterPaths) {
+    const bytes = await readFile(path);
+    const blob = new Blob([bytes], { type: "image/tiff" });
+    rasters.push({ name: fileBaseName(path), url: URL.createObjectURL(blob) });
+  }
+  return rasters;
+}
+
 export async function loadDroppedVectorPaths(
   paths: string[],
 ): Promise<LoadedVectorLayer[]> {

@@ -1181,6 +1181,21 @@ body,
   min-height: 30px;
 }
 
+/*
+ * Enlarge the native number-input spinner arrows inside dialogs (e.g. the
+ * Raster/Conversion tool dialogs). The default WebKit stepper is tiny and only
+ * visible on hover; make it always visible and comfortably clickable. Scoped to
+ * [role="dialog"] so the carefully sized map-control inputs above are untouched.
+ */
+[role="dialog"] input[type="number"]::-webkit-inner-spin-button,
+[role="dialog"] input[type="number"]::-webkit-outer-spin-button {
+  opacity: 1;
+  height: 1.9rem;
+  width: 1.15rem;
+  margin-left: 0.35rem;
+  cursor: pointer;
+}
+
 .geolibre-splatting-control .maplibre-gl-splat-panel {
   background: hsl(var(--popover)) !important;
   border: 1px solid hsl(var(--border));
