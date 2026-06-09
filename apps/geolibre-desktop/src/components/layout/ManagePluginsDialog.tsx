@@ -1,5 +1,6 @@
 import { isAllowedPluginManifestUrl } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   Button,
   Dialog,
@@ -39,7 +40,7 @@ import {
   type PluginRegistryEntry,
 } from "../../lib/plugin-registry";
 import { mergeStringLists } from "../../lib/string-lists";
-import { pickLocalPathWithFallback } from "../../lib/tauri-io";
+import { isTauri, pickLocalPathWithFallback } from "../../lib/tauri-io";
 
 type ManageSection =
   | "all"
@@ -58,6 +59,17 @@ const APP_VERSION = __GEOLIBRE_VERSION__;
 // Stable empty reference so the visibleEntries memo doesn't churn on every
 // render while the registry is loading or errored.
 const EMPTY_ENTRIES: PluginRegistryEntry[] = [];
+
+// Open a link in the system browser. The Tauri webview ignores
+// target="_blank"/window.open, so route through the opener plugin there and
+// fall back to window.open on the web build.
+async function openExternalLink(url: string): Promise<void> {
+  if (isTauri()) {
+    await openUrl(url);
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
+}
 
 // Module-level store bindings so useSyncExternalStore sees a stable subscribe /
 // snapshot identity and doesn't re-subscribe on every render.
@@ -338,6 +350,10 @@ export function ManagePluginsDialog({
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1 font-medium text-foreground underline underline-offset-2 hover:text-primary"
+              onClick={(event) => {
+                event.preventDefault();
+                void openExternalLink("https://plugins.geolibre.app");
+              }}
             >
               GeoLibre plugin registry
               <ExternalLink className="h-3 w-3" />
@@ -472,6 +488,12 @@ export function ManagePluginsDialog({
                                 rel="noreferrer"
                                 className="shrink-0 text-muted-foreground hover:text-foreground"
                                 aria-label={`Open ${entry.name} homepage`}
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  if (entry.homepage) {
+                                    void openExternalLink(entry.homepage);
+                                  }
+                                }}
                               >
                                 <ExternalLink className="h-3.5 w-3.5" />
                               </a>
