@@ -182,23 +182,30 @@ export function VectorToolsDialog({
         const overlayLayer = layers.find((l) => l.id === params.overlay);
         // A layer may have been removed from the project after the dialog
         // opened; bail out with a clear message instead of sending null GeoJSON.
-        if (!inputLayer) {
+        if (!inputLayer?.geojson) {
           appendLog("Error: input layer no longer exists in the project");
           return;
         }
-        if (params.overlay && !overlayLayer) {
+        if (params.overlay && !overlayLayer?.geojson) {
           appendLog("Error: overlay layer no longer exists in the project");
           return;
         }
         appendLog(`Running "${tool.name}" on the Python sidecar...`);
         const result = await runVectorTool({
           tool_id: tool.id,
-          geojson: inputLayer?.geojson,
+          geojson: inputLayer.geojson,
           overlay: overlayLayer?.geojson,
           parameters: params,
         });
         for (const message of result.messages) appendLog(message);
-        addResultLayer(tool.name, result.geojson as FeatureCollection);
+        // The sidecar response is untyped JSON; verify it is a FeatureCollection
+        // before handing it to the map.
+        const sidecarResult = result.geojson as { type?: string } | null;
+        if (sidecarResult?.type === "FeatureCollection") {
+          addResultLayer(tool.name, sidecarResult as unknown as FeatureCollection);
+        } else {
+          appendLog("Error: sidecar returned invalid GeoJSON");
+        }
       } else {
         const ctx: ProcessingContext = {
           layers,
@@ -434,7 +441,9 @@ function ParameterField({
           max={param.max}
           step={param.step}
           onChange={(e) =>
-            onChange(e.target.value === "" ? "" : Number(e.target.value))
+            onChange(
+              e.target.value === "" ? undefined : Number(e.target.value),
+            )
           }
         />
       </div>

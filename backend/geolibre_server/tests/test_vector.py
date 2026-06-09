@@ -1,3 +1,5 @@
+from typing import NoReturn
+
 import pytest
 from fastapi import HTTPException
 
@@ -74,7 +76,7 @@ def test_status_returns_availability_shape() -> None:
 
 
 def test_run_without_geopandas_raises_503(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _boom():
+    def _boom() -> NoReturn:
         raise ImportError("geopandas missing")
 
     monkeypatch.setattr(vector, "_import_geopandas", _boom)

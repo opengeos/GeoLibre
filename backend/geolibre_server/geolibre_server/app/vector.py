@@ -40,7 +40,7 @@ class VectorToolRequest(BaseModel):
     parameters: dict[str, Any] = {}
 
 
-def _import_geopandas():
+def _import_geopandas() -> Any:
     """Import GeoPandas, raising if the optional dependency is missing."""
     import geopandas as gpd  # noqa: PLC0415
 
@@ -56,7 +56,7 @@ def _check_size(geojson: Optional[dict], label: str) -> None:
         )
 
 
-def _load_gdf(geojson: Optional[dict], label: str):
+def _load_gdf(geojson: Optional[dict], label: str) -> Any:
     """Build a WGS84 GeoDataFrame from a GeoJSON FeatureCollection."""
     gpd = _import_geopandas()
     if not geojson or not geojson.get("features"):
