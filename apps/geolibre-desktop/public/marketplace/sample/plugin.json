@@ -3,5 +3,6 @@
   "name": "Sample Plugin",
   "version": "1.0.0",
   "description": "A minimal example plugin that adds a button control to the map.",
-  "entry": "index.js"
+  "entry": "index.js",
+  "style": "style.css"
 }

@@ -155,7 +155,7 @@ export function DesktopShell({
   const [dropError, setDropError] = useState<string | null>(null);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const diagnostics = useDiagnosticsSnapshot();
-  const externalPluginsReady = useExternalPluginsReady();
+  const externalPluginsReady = useExternalPluginsReady(mapControllerRef);
   const [layerPanelWidth, setLayerPanelWidth] = useState(
     DEFAULT_SIDE_PANEL_WIDTH,
   );

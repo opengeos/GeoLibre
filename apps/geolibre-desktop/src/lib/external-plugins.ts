@@ -1,4 +1,5 @@
 import type {
+  GeoLibreAppAPI,
   GeoLibreExternalPluginManifest,
   GeoLibrePlugin,
   PluginManager,
@@ -363,4 +364,41 @@ function injectExternalPluginStyle(
   style.dataset.geolibreExternalPlugin = pluginId;
   style.textContent = styleSource;
   document.head.append(style);
+}
+
+function removeExternalPluginStyle(pluginId: string): void {
+  document
+    .getElementById(`geolibre-external-plugin-style:${pluginId}`)
+    ?.remove();
+}
+
+// A loaded plugin came from a manifest URL (web/desktop) rather than the
+// desktop filesystem scan, whose source is an absolute path with no scheme.
+function isManagedUrlSource(source: string): boolean {
+  return /^(https?|tauri):\/\//.test(source);
+}
+
+/**
+ * Unregister URL-loaded plugins whose manifest URL is no longer present in
+ * `currentManifestUrls` (e.g. a marketplace or manual removal). Filesystem and
+ * bundled plugins are untouched: filesystem sources are not URLs, and bundled
+ * URLs are always re-injected into the current list. Deactivates each plugin
+ * (removing its map control) and drops its injected style, then the manager
+ * notifies so the Plugins menu updates without a reload.
+ */
+export function unloadRemovedUrlPlugins(
+  manager: PluginManager,
+  currentManifestUrls: string[],
+  app: GeoLibreAppAPI,
+): string[] {
+  const keep = new Set(currentManifestUrls);
+  const removed: string[] = [];
+  for (const [pluginId, source] of externallyLoadedPluginSources) {
+    if (!isManagedUrlSource(source) || keep.has(source)) continue;
+    manager.unregister(pluginId, app);
+    removeExternalPluginStyle(pluginId);
+    externallyLoadedPluginSources.delete(pluginId);
+    removed.push(pluginId);
+  }
+  return removed;
 }

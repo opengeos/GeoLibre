@@ -33,7 +33,10 @@ import { readDir, readFile } from "@tauri-apps/plugin-fs";
 import type { RefObject } from "react";
 import { useEffect, useSyncExternalStore } from "react";
 import { bundledPluginManifestPaths } from "virtual:bundled-plugins";
-import { loadExternalPlugins } from "../lib/external-plugins";
+import {
+  loadExternalPlugins,
+  unloadRemovedUrlPlugins,
+} from "../lib/external-plugins";
 import { mergeStringLists } from "../lib/string-lists";
 import {
   openLocalDataFileWithFallback,
@@ -150,7 +153,9 @@ export function usePluginRegistry() {
 // Built-in plugins are registered at module load so the toolbar can render
 // plugin menu items on the first pass. This hook additionally kicks off the
 // external plugin scan and reports whether it has finished.
-export function useExternalPluginsReady(): boolean {
+export function useExternalPluginsReady(
+  mapControllerRef: RefObject<MapController | null>,
+): boolean {
   const desktopSettings = useDesktopSettingsStore(
     (state) => state.desktopSettings,
   );
@@ -162,8 +167,9 @@ export function useExternalPluginsReady(): boolean {
     void ensureExternalPluginsLoadedWithSettings(
       desktopSettings,
       projectPluginManifestUrls,
+      createAppAPI(mapControllerRef),
     );
-  }, [desktopSettings, projectPluginManifestUrls]);
+  }, [desktopSettings, projectPluginManifestUrls, mapControllerRef]);
 
   return useSyncExternalStore(
     (listener) => {
@@ -199,6 +205,7 @@ function ensureExternalPluginsLoadedWithSettings(
     typeof useDesktopSettingsStore.getState
   >["desktopSettings"],
   projectPluginManifestUrls: string[],
+  app: ReturnType<typeof createAppAPI>,
 ): Promise<void> {
   const pluginManifestUrls = mergeStringLists(
     bundledPluginManifestUrls(),
@@ -214,6 +221,14 @@ function ensureExternalPluginsLoadedWithSettings(
   }
   if (externalPluginsLoadPromise && externalPluginsLoadKey === loadKey) {
     return externalPluginsLoadPromise;
+  }
+
+  // Unregister URL plugins whose manifest URL was removed from the merged list
+  // (e.g. uninstalled from the marketplace), so the Plugins menu updates and
+  // any active control is torn down without a reload.
+  const unloaded = unloadRemovedUrlPlugins(manager, pluginManifestUrls, app);
+  if (unloaded.length) {
+    console.info(`Unloaded external GeoLibre plugins: ${unloaded.join(", ")}`);
   }
 
   setExternalPluginsLoaded(false);

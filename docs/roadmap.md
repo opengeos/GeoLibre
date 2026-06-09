@@ -209,8 +209,8 @@ build, works in both:
   inline error handling.
 - Installing records the entry's manifest URL in the plugin manifest URL list,
   so the existing external-plugin loader fetches and registers it. No new trust
-  path is introduced. Runtime unregister is not yet supported, so removal drops
-  the URL and full unload completes on restart.
+  path is introduced. Removing a plugin unregisters it at runtime (tearing down
+  any active map control) so the Plugins menu updates without a reload.
 - `public/plugin-registry.json` ships a working same-origin sample plugin
   (`public/marketplace/sample/`) so the marketplace is usable out of the box;
   maintainers add curated external entries to the registry.

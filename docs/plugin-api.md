@@ -250,7 +250,7 @@ The registry is JSON, fetched from `VITE_GEOLIBRE_PLUGIN_REGISTRY_URL` or a bund
 }
 ```
 
-`id`, `name`, `version`, and `manifestUrl` are required; the rest are optional. A relative `manifestUrl` is resolved against the registry location, so same-origin plugins served from `public/` can be listed with a relative path. `minGeoLibreVersion` gates installation against the running app version. The bundled registry ships a working same-origin sample under `public/marketplace/sample/`; replace or extend it with curated entries for a deployment. Because runtime unregister is not yet supported, removing a plugin drops its manifest URL and the unload completes on restart.
+`id`, `name`, `version`, and `manifestUrl` are required; the rest are optional. A relative `manifestUrl` is resolved against the registry location, so same-origin plugins served from `public/` can be listed with a relative path. `minGeoLibreVersion` gates installation against the running app version. The bundled registry ships a working same-origin sample under `public/marketplace/sample/`; replace or extend it with curated entries for a deployment. Removing a plugin unregisters it at runtime (deactivating any active map control), so the Plugins menu updates without a reload.
 
 ## Future plugin work
 

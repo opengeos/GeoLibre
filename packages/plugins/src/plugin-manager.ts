@@ -57,6 +57,34 @@ export class PluginManager {
     for (const p of plugins) this.register(p);
   }
 
+  // Remove a plugin at runtime: deactivate it first (so an active plugin tears
+  // down its map control) and drop all of its tracking state, then notify so
+  // the Plugins menu updates without a reload. Used when an external plugin's
+  // source is removed.
+  unregister(id: string, app: GeoLibreAppAPI): void {
+    const plugin = this.plugins.get(id);
+    if (!plugin) return;
+    if (this.active.has(id)) {
+      try {
+        plugin.deactivate(app);
+      } catch (error) {
+        console.warn(
+          `Plugin '${id}' threw while deactivating during unregister.`,
+          error,
+        );
+      }
+      this.active.delete(id);
+    }
+    this.plugins.delete(id);
+    this.defaultActive.delete(id);
+    this.defaultMapControlPositions.delete(id);
+    this.urlParameterNamesById.delete(id);
+    for (const handled of this.handledUrlParametersByContext.values()) {
+      handled.delete(id);
+    }
+    this.notify();
+  }
+
   list(): GeoLibrePlugin[] {
     return Array.from(this.plugins.values());
   }
