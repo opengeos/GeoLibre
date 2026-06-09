@@ -55,6 +55,10 @@ type RegistryState =
 
 const APP_VERSION = __GEOLIBRE_VERSION__;
 
+// Stable empty reference so the visibleEntries memo doesn't churn on every
+// render while the registry is loading or errored.
+const EMPTY_ENTRIES: PluginRegistryEntry[] = [];
+
 interface ManagePluginsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -255,7 +259,8 @@ export function ManagePluginsDialog({
     setSettingsError(null);
   }, [newManifestUrl, installUrl]);
 
-  const entries = registry.status === "ready" ? registry.entries : [];
+  const entries =
+    registry.status === "ready" ? registry.entries : EMPTY_ENTRIES;
   const installedCount = entries.filter(isInstalled).length;
   const upgradeableCount = entries.filter(isUpgradeable).length;
 
