@@ -173,17 +173,30 @@ export class PluginManager {
           continue;
         }
 
+        // Skip before activating: a context already handled this plugin, so
+        // re-running activation side-effects (e.g. after a manual deactivate)
+        // would reactivate it without ever dispatching the handler again.
+        if (handledPluginIds.has(id)) continue;
+
         // A deep link to a parameter a plugin owns implies the user wants that
         // plugin: activate it if it is installed (registered) but inactive, so
         // e.g. ?annotate-data=... brings up its plugin. Only already-registered
         // (trusted) plugins are activated here; nothing is loaded from the URL.
-        // If activation is refused, skip dispatch.
+        // If activation is refused or throws, skip dispatch and isolate the
+        // failure to this plugin instead of aborting the whole loop.
         if (!this.active.has(id)) {
-          this.activate(id, app);
+          try {
+            this.activate(id, app);
+          } catch (error) {
+            console.warn(
+              `Plugin '${id}' could not be activated from GeoLibre URL parameters.`,
+              error,
+            );
+            continue;
+          }
           if (!this.active.has(id)) continue;
         }
 
-        if (handledPluginIds.has(id)) continue;
         // Mark before awaiting so a concurrent dispatch for the same context
         // cannot double-fire the handler.
         handledPluginIds.add(id);
