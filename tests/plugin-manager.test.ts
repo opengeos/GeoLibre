@@ -34,10 +34,10 @@ describe("PluginManager URL parameters", () => {
     );
     manager.register(
       testPlugin({
-        id: "inactive-loader",
-        urlParameterNames: ["data"],
+        id: "unmatched-loader",
+        urlParameterNames: ["missing"],
         handleUrlParameters: () => {
-          calls.push("inactive");
+          calls.push("unmatched");
         },
       }),
     );
@@ -50,6 +50,7 @@ describe("PluginManager URL parameters", () => {
       }),
     );
     manager.activate("url-loader", app);
+    manager.activate("unmatched-loader", app);
     manager.activate("undeclared-loader", app);
 
     await manager.handleUrlParameters(
@@ -77,6 +78,87 @@ describe("PluginManager URL parameters", () => {
       "https://example.com/data.geojson",
       "https://example.com/next.geojson",
     ]);
+  });
+
+  it("activates an installed-but-inactive plugin that owns a present parameter", async () => {
+    const calls: string[] = [];
+    const activateApps: GeoLibreAppAPI[] = [];
+    const manager = new PluginManager();
+
+    manager.register(
+      testPlugin({
+        id: "deep-link-loader",
+        urlParameterNames: ["data"],
+        activate: (a) => {
+          activateApps.push(a);
+        },
+        handleUrlParameters: (_app, params) => {
+          calls.push(params.get("data") ?? "");
+        },
+      }),
+    );
+    assert.equal(manager.isActive("deep-link-loader"), false);
+
+    await manager.handleUrlParameters(
+      new URLSearchParams("data=ds.zip"),
+      app,
+      "ctx",
+    );
+
+    assert.equal(manager.isActive("deep-link-loader"), true);
+    assert.deepEqual(calls, ["ds.zip"]);
+    // Activated exactly once, with the app passed to handleUrlParameters.
+    assert.deepEqual(activateApps, [app]);
+  });
+
+  it("leaves an inactive plugin inactive when its parameter is absent", async () => {
+    const manager = new PluginManager();
+    let activated = false;
+
+    manager.register(
+      testPlugin({
+        id: "deep-link-loader",
+        urlParameterNames: ["data"],
+        activate: () => {
+          activated = true;
+        },
+        handleUrlParameters: () => undefined,
+      }),
+    );
+
+    await manager.handleUrlParameters(
+      new URLSearchParams("other=1"),
+      app,
+      "ctx",
+    );
+
+    assert.equal(activated, false);
+    assert.equal(manager.isActive("deep-link-loader"), false);
+  });
+
+  it("does not run a plugin whose activation is refused", async () => {
+    const calls: string[] = [];
+    const manager = new PluginManager();
+
+    manager.register(
+      testPlugin({
+        id: "refuses-activation",
+        urlParameterNames: ["data"],
+        activate: () => false,
+        handleUrlParameters: () => {
+          calls.push("ran");
+        },
+      }),
+    );
+
+    await manager.handleUrlParameters(
+      new URLSearchParams("data=ds.zip"),
+      app,
+      "ctx",
+    );
+
+    assert.equal(manager.isActive("refuses-activation"), false);
+    assert.deepEqual(calls, []);
   });
 
   it("awaits async handlers in registration order", async () => {

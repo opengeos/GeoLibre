@@ -163,7 +163,7 @@ export class PluginManager {
 
     try {
       for (const [id, plugin] of this.plugins) {
-        if (!this.active.has(id) || !plugin.handleUrlParameters) continue;
+        if (!plugin.handleUrlParameters) continue;
 
         const parameterNames = this.urlParameterNamesById.get(id) ?? [];
         if (
@@ -171,6 +171,16 @@ export class PluginManager {
           !parameterNames.some((name) => params.has(name))
         ) {
           continue;
+        }
+
+        // A deep link to a parameter a plugin owns implies the user wants that
+        // plugin: activate it if it is installed (registered) but inactive, so
+        // e.g. ?annotate-data=... brings up its plugin. Only already-registered
+        // (trusted) plugins are activated here; nothing is loaded from the URL.
+        // If activation is refused, skip dispatch.
+        if (!this.active.has(id)) {
+          this.activate(id, app);
+          if (!this.active.has(id)) continue;
         }
 
         if (handledPluginIds.has(id)) continue;
