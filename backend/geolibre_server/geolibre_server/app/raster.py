@@ -139,7 +139,6 @@ import rasterio
 params = json.loads(sys.argv[1])
 input_path = params["input_path"]
 output_path = params["output_path"]
-z_factor = float(params.get("z_factor", 1) or 1)
 nodata = -9999.0
 
 with rasterio.open(input_path) as src:
@@ -147,7 +146,9 @@ with rasterio.open(input_path) as src:
     xres, yres = src.res
     profile = src.profile.copy()
 
-elev = np.ma.filled(elev, np.nan) * z_factor
+# Aspect is a direction, so a z_factor would cancel inside arctan2; it is
+# intentionally not applied here (and not exposed as a parameter).
+elev = np.ma.filled(elev, np.nan)
 dy, dx = np.gradient(elev, yres, xres)
 aspect = np.degrees(np.arctan2(dy, -dx))
 aspect = np.where(
@@ -291,10 +292,12 @@ print("{marker}" + json.dumps({"output_path": output_path}))
 
 
 _CLIP_MASK_SCRIPT = """
-import json, sys
+import json, re, sys
 
 import rasterio
+from rasterio.crs import CRS
 from rasterio.mask import mask as rio_mask
+from rasterio.warp import transform_geom
 
 params = json.loads(sys.argv[1])
 input_path = params["input_path"]
@@ -315,7 +318,24 @@ else:
 if not shapes:
     raise SystemExit("Mask layer has no geometries")
 
+# Resolve the mask CRS: an explicit GeoJSON ``crs`` member if present, else the
+# GeoJSON default of WGS84 (EPSG:4326).
+mask_crs = CRS.from_epsg(4326)
+crs_member = gj.get("crs")
+if isinstance(crs_member, dict):
+    name = crs_member.get("properties", {}).get("name", "")
+    digits = re.search(r"(\\d+)$", str(name))
+    if digits:
+        try:
+            mask_crs = CRS.from_epsg(int(digits.group(1)))
+        except Exception:
+            pass
+
 with rasterio.open(input_path) as src:
+    # rio_mask needs shapes in the raster's CRS; reproject the geometries when
+    # the mask CRS differs so a WGS84 mask over a projected raster still works.
+    if src.crs is not None and mask_crs != src.crs:
+        shapes = [transform_geom(mask_crs, src.crs, geom) for geom in shapes]
     out_image, out_transform = rio_mask(
         src, shapes, crop=crop, all_touched=all_touched
     )
@@ -361,6 +381,13 @@ with rasterio.open(input_path) as src:
     transform = src.transform
     crs = src.crs
 
+if np.issubdtype(arr.dtype, np.floating):
+    print(
+        "Warning: rasterio.features.shapes floor-truncates float bands to int32, "
+        "so sub-integer values are merged. Polygonize is best suited to "
+        "categorical (integer) rasters."
+    )
+
 features = []
 for geom, value in rio_shapes(
     arr, mask=valid, connectivity=connectivity, transform=transform
@@ -404,15 +431,24 @@ with rasterio.open(input_path) as src:
     crs = src.crs
 
 data = np.ma.masked_invalid(np.ma.filled(arr, np.nan))
-if not np.isfinite(data).any():
+# Evaluate finiteness on the plain filled array: ``MaskedArray.any()`` returns
+# ``np.ma.masked`` (not False) when every cell is masked, and ``not masked``
+# raises an ambiguous-truth-value error.
+filled = data.filled(np.nan)
+if not np.isfinite(filled).any():
     raise SystemExit("Raster band has no valid data to contour")
-zmin = float(np.nanmin(data.filled(np.nan)))
-zmax = float(np.nanmax(data.filled(np.nan)))
+zmin = float(np.nanmin(filled))
+zmax = float(np.nanmax(filled))
 start = base + np.ceil((zmin - base) / interval) * interval
 # Index-based generation avoids float drift from repeated ``+= interval`` that
 # could skip the final level or append a spurious one.
 n_levels = int(np.floor((zmax - start) / interval + 1e-9)) + 1
 levels = [round(start + i * interval, 6) for i in range(max(0, n_levels))]
+if not levels:
+    raise SystemExit(
+        f"No contour levels fall within the data range [{zmin:.6g}, {zmax:.6g}] "
+        f"for interval={interval} and base={base}."
+    )
 
 gen = contour_generator(z=data, line_type="Separate")
 features = []
@@ -464,7 +500,9 @@ _OUTPUT_NAMES: dict[str, str] = {
 }
 
 
-def _validate_extra_input(path: str, label: str) -> str:
+def _validate_extra_input(
+    path: str, label: str, allowed_extensions: set[str] | None = None
+) -> str:
     """Validate a secondary input file path (e.g. a clip mask)."""
     if not path.strip():
         raise HTTPException(status_code=400, detail=f"{label} is required")
@@ -475,6 +513,16 @@ def _validate_extra_input(path: str, label: str) -> str:
         raise HTTPException(
             status_code=403,
             detail="Path is outside the allowed conversion directories",
+        )
+    if allowed_extensions and source.suffix.lower() not in allowed_extensions:
+        # Catch a wrong file type here with a clear 400 rather than letting
+        # json.load fail inside the job with an opaque error.
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{label} must be one of {sorted(allowed_extensions)}, "
+                f"got '{source.suffix}'"
+            ),
         )
     return str(source.resolve())
 
@@ -553,7 +601,9 @@ def raster_run(request: RasterToolRequest):
 
     if request.tool_id == "clip-mask":
         params["mask_path"] = _validate_extra_input(
-            str(request.parameters.get("mask_path", "")), "Mask layer"
+            str(request.parameters.get("mask_path", "")),
+            "Mask layer",
+            allowed_extensions={".geojson", ".json"},
         )
 
     output_name = _OUTPUT_NAMES.get(request.tool_id, "raster")

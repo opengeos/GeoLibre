@@ -139,16 +139,8 @@ export const aspectTool: RasterTool = {
   defaultOutputName: "aspect.tif",
   inputFilters: GEOTIFF_INPUT,
   outputFilters: GEOTIFF_OUTPUT,
-  parameters: [
-    {
-      id: "z_factor",
-      label: "Z factor",
-      type: "number",
-      default: 1,
-      min: 0,
-      step: 0.1,
-    },
-  ],
+  // Aspect is a direction, so a z_factor would have no effect on the result.
+  parameters: [],
 };
 
 export const reprojectTool: RasterTool = {
