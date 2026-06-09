@@ -347,6 +347,13 @@ export function SettingsDialog({
     updateDraftLayoutSettings(DEFAULT_DESKTOP_LAYOUT_SETTINGS);
   };
 
+  const updateShareToken = (value: string) => {
+    // Persist live, like the layout toggles: saveSettings re-reads the latest
+    // store state, so an in-progress edit here is never clobbered on Save.
+    const current = useDesktopSettingsStore.getState().desktopSettings;
+    setDesktopSettings({ ...current, shareToken: value });
+  };
+
   const saveSettings = () => {
     const normalized = normalizePreferences(draftPreferences);
     const validationError = validateEnvironmentVariables(
@@ -776,7 +783,34 @@ export function SettingsDialog({
               ) : null}
               {section === "environment" ? (
                 <div className="space-y-5">
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-semibold">
+                      Share.GeoLibre API token
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      Used by Project &gt; Share to upload projects to
+                      share.geolibre.app. Create one under Settings &gt; API
+                      tokens at{" "}
+                      <a
+                        className="underline"
+                        href="https://share.geolibre.app/settings"
+                        target="_blank"
+                        rel="noreferrer noopener"
+                      >
+                        share.geolibre.app/settings
+                      </a>
+                      .
+                    </p>
+                    <Input
+                      aria-label="Share.GeoLibre API token"
+                      type="password"
+                      autoComplete="off"
+                      placeholder="glb_…"
+                      value={desktopSettings.shareToken}
+                      onChange={(event) => updateShareToken(event.target.value)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-3 border-t pt-5">
                     <div>
                       <h3 className="text-sm font-semibold">
                         Environment variables

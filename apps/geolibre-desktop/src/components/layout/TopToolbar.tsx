@@ -97,6 +97,7 @@ import {
   CircleHelp,
   Database,
   FilePen,
+  Share2,
   FilePlus2,
   FileText,
   Folder,
@@ -142,6 +143,7 @@ import { AddDataDialog, type AddDataKind } from "./AddDataDialog";
 import { AboutDialog } from "./AboutDialog";
 import { NewProjectDialog } from "./NewProjectDialog";
 import { ManagePluginsDialog } from "./ManagePluginsDialog";
+import { ShareProjectDialog } from "./ShareProjectDialog";
 import { SettingsDialog } from "./SettingsDialog";
 
 interface TopToolbarProps {
@@ -270,6 +272,7 @@ export function TopToolbar({
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
   const [projectUrlDialogOpen, setProjectUrlDialogOpen] = useState(false);
   const [managePluginsOpen, setManagePluginsOpen] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [projectUrl, setProjectUrl] = useState("");
   const [projectUrlError, setProjectUrlError] = useState<string | null>(null);
   const [projectUrlLoading, setProjectUrlLoading] = useState(false);
@@ -388,9 +391,10 @@ export function TopToolbar({
     }
   };
 
-  const saveProject = async (options?: {
-    saveAs?: boolean;
-  }): Promise<boolean> => {
+  // Build the current project from live store + map state and serialize it.
+  // Shared by Save/Save As and the Share action so they all capture identical
+  // project content (including the current map view and plugin state).
+  const buildCurrentProject = () => {
     const state = useAppStore.getState();
     const defaultProjectName = state.projectName.trim() || "Untitled Project";
     const pluginManifestUrls = mergeStringLists(
@@ -411,7 +415,14 @@ export function TopToolbar({
       },
       metadata: state.metadata,
     });
-    const content = serializeProject(project);
+    return { project, defaultProjectName, content: serializeProject(project) };
+  };
+
+  const saveProject = async (options?: {
+    saveAs?: boolean;
+  }): Promise<boolean> => {
+    const state = useAppStore.getState();
+    const { project, defaultProjectName, content } = buildCurrentProject();
     // Projects opened from a URL have no writable path, so both Save and
     // Save As fall back to the save dialog for them.
     const existingLocalPath =
@@ -768,6 +779,10 @@ export function TopToolbar({
             <FilePen className="mr-2 h-3.5 w-3.5" />
             Save As...
           </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setShareDialogOpen(true)}>
+            <Share2 className="mr-2 h-3.5 w-3.5" />
+            Share...
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={handleTogglePrintPanel}>
             <Printer className="mr-2 h-3.5 w-3.5" />
@@ -1106,6 +1121,14 @@ export function TopToolbar({
         open={managePluginsOpen}
         onOpenChange={setManagePluginsOpen}
         mapControllerRef={mapControllerRef}
+      />
+      <ShareProjectDialog
+        open={shareDialogOpen}
+        onOpenChange={setShareDialogOpen}
+        getProject={() => {
+          const { content, defaultProjectName } = buildCurrentProject();
+          return { content, filename: `${defaultProjectName}.geolibre.json` };
+        }}
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

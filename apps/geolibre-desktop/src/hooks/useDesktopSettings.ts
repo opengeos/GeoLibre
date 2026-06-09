@@ -9,6 +9,8 @@ export interface DesktopSettings {
   additionalPluginDirectories: string[];
   layout: DesktopLayoutSettings;
   pluginManifestUrls: string[];
+  /** Personal API token for uploading projects to share.geolibre.app. */
+  shareToken: string;
 }
 
 export interface DesktopLayoutSettings {
@@ -36,6 +38,7 @@ const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   additionalPluginDirectories: [],
   layout: DEFAULT_DESKTOP_LAYOUT_SETTINGS,
   pluginManifestUrls: [],
+  shareToken: "",
 };
 
 function normalizeDesktopSettings(settings: unknown): DesktopSettings {
@@ -54,6 +57,8 @@ function normalizeDesktopSettings(settings: unknown): DesktopSettings {
     pluginManifestUrls: normalizeStringList(candidate.pluginManifestUrls).filter(
       isAllowedPluginManifestUrl,
     ),
+    shareToken:
+      typeof candidate.shareToken === "string" ? candidate.shareToken.trim() : "",
   };
 }
 

@@ -1,0 +1,206 @@
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  Label,
+  Select,
+} from "@geolibre/ui";
+import { Check, Copy, ExternalLink, Loader2, Share2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
+import { openExternalLink } from "../../lib/open-external";
+import {
+  uploadProjectToShare,
+  type ShareUploadResult,
+  type ShareVisibility,
+} from "../../lib/share-geolibre";
+
+interface ShareProjectDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** Lazily serialize the current project when the user confirms the upload. */
+  getProject: () => { content: string; filename: string };
+}
+
+const SETTINGS_TOKEN_URL = "https://share.geolibre.app/settings";
+
+export function ShareProjectDialog({
+  open,
+  onOpenChange,
+  getProject,
+}: ShareProjectDialogProps) {
+  const shareToken = useDesktopSettingsStore((s) => s.desktopSettings.shareToken);
+  const [visibility, setVisibility] = useState<ShareVisibility>("unlisted");
+  const [status, setStatus] = useState<"idle" | "uploading">("idle");
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<ShareUploadResult | null>(null);
+  const [copied, setCopied] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Reset transient state whenever the dialog is (re)opened so a prior result or
+  // error never lingers into a new share.
+  useEffect(() => {
+    if (open) {
+      setStatus("idle");
+      setError(null);
+      setResult(null);
+      setCopied(false);
+    } else {
+      abortRef.current?.abort();
+      abortRef.current = null;
+    }
+  }, [open]);
+
+  const hasToken = shareToken.trim().length > 0;
+
+  const handleShare = async () => {
+    setError(null);
+    setStatus("uploading");
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      const { content, filename } = getProject();
+      const uploaded = await uploadProjectToShare({
+        token: shareToken,
+        filename,
+        content,
+        visibility,
+        signal: controller.signal,
+      });
+      setResult(uploaded);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      setError(err instanceof Error ? err.message : "Could not share the project.");
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null;
+      setStatus("idle");
+    }
+  };
+
+  const handleCopy = () => {
+    if (!result) return;
+    void navigator.clipboard.writeText(result.projectUrl);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Share2 className="h-4 w-4" />
+            Share project
+          </DialogTitle>
+          <DialogDescription>
+            Upload the current project to share.geolibre.app and get a public
+            link.
+          </DialogDescription>
+        </DialogHeader>
+
+        {!hasToken ? (
+          <div className="space-y-3 text-sm">
+            <p className="text-muted-foreground">
+              Add a share.geolibre.app API token in Settings &gt; Environment
+              before sharing. Create one under Settings &gt; API tokens on the
+              website.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void openExternalLink(SETTINGS_TOKEN_URL)}
+            >
+              <ExternalLink className="mr-2 h-3.5 w-3.5" />
+              Open share.geolibre.app settings
+            </Button>
+          </div>
+        ) : result ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Your project is live at:
+            </p>
+            <div className="flex gap-2">
+              <Input readOnly value={result.projectUrl} className="text-xs" />
+              <Button type="button" variant="secondary" onClick={handleCopy}>
+                {copied ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void openExternalLink(result.projectUrl)}
+              >
+                <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                Open
+              </Button>
+              <Button type="button" onClick={() => onOpenChange(false)}>
+                Done
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="share-visibility">Visibility</Label>
+              <Select
+                id="share-visibility"
+                value={visibility}
+                onChange={(e) =>
+                  setVisibility(e.target.value as ShareVisibility)
+                }
+                disabled={status === "uploading"}
+              >
+                <option value="unlisted">Unlisted (anyone with the link)</option>
+                <option value="public">Public (listed in the gallery)</option>
+                <option value="private">Private (only you)</option>
+              </Select>
+            </div>
+
+            {error && (
+              <p className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">
+                {error}
+              </p>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={status === "uploading"}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void handleShare()}
+                disabled={status === "uploading"}
+              >
+                {status === "uploading" ? (
+                  <>
+                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                    Sharing…
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="mr-2 h-3.5 w-3.5" />
+                    Share
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}

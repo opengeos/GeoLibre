@@ -1,6 +1,5 @@
 import { isAllowedPluginManifestUrl } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   Button,
   Dialog,
@@ -41,7 +40,8 @@ import {
   type PluginRegistryEntry,
 } from "../../lib/plugin-registry";
 import { mergeStringLists } from "../../lib/string-lists";
-import { isTauri, pickLocalPathWithFallback } from "../../lib/tauri-io";
+import { pickLocalPathWithFallback } from "../../lib/tauri-io";
+import { openExternalLink } from "../../lib/open-external";
 
 type ManageSection =
   | "all"
@@ -60,25 +60,6 @@ const APP_VERSION = __GEOLIBRE_VERSION__;
 // Stable empty reference so the visibleEntries memo doesn't churn on every
 // render while the registry is loading or errored.
 const EMPTY_ENTRIES: PluginRegistryEntry[] = [];
-
-// Open a link in the system browser. The Tauri webview ignores
-// target="_blank"/window.open, so route through the opener plugin there and
-// fall back to window.open on the web build.
-async function openExternalLink(url: string): Promise<void> {
-  // Only ever hand http(s) URLs to the opener so a future call site can't open
-  // arbitrary schemes (javascript:, file:, ...) in the system browser.
-  try {
-    const { protocol } = new URL(url);
-    if (protocol !== "https:" && protocol !== "http:") return;
-  } catch {
-    return;
-  }
-  if (isTauri()) {
-    await openUrl(url);
-    return;
-  }
-  window.open(url, "_blank", "noopener,noreferrer");
-}
 
 // Module-level store bindings so useSyncExternalStore sees a stable subscribe /
 // snapshot identity and doesn't re-subscribe on every render.
