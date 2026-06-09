@@ -68,7 +68,9 @@ input_path = params["input_path"]
 output_path = params["output_path"]
 azimuth = float(params.get("azimuth", 315))
 altitude = float(params.get("altitude", 45))
-z_factor = float(params.get("z_factor", 1) or 1)
+# Default to 1 only when absent/None; an explicit 0 is honored (flat result).
+_z = params.get("z_factor", 1)
+z_factor = float(1 if _z is None else _z)
 
 with rasterio.open(input_path) as src:
     elev = src.read(1, masked=True).astype("float64")
@@ -105,7 +107,9 @@ params = json.loads(sys.argv[1])
 input_path = params["input_path"]
 output_path = params["output_path"]
 units = str(params.get("units", "degrees"))
-z_factor = float(params.get("z_factor", 1) or 1)
+# Default to 1 only when absent/None; an explicit 0 is honored (flat result).
+_z = params.get("z_factor", 1)
+z_factor = float(1 if _z is None else _z)
 nodata = -9999.0
 
 with rasterio.open(input_path) as src:

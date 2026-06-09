@@ -133,8 +133,14 @@ export function RasterToolsDialog(): ReactElement {
     setParams(toolDefaults(tool));
     setError(null);
     setJob(null);
+  }, [open, tool]);
+
+  // Probe the runtime only when the dialog opens, not on every tool switch
+  // (each probe spawns a sidecar subprocess import check).
+  useEffect(() => {
+    if (!open) return;
     void checkRuntime();
-  }, [open, tool, checkRuntime]);
+  }, [open, checkRuntime]);
 
   // Poll the sidecar job until it settles (shared conversion job store).
   useEffect(() => {
@@ -258,7 +264,12 @@ export function RasterToolsDialog(): ReactElement {
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) setRasterToolOpen(null);
+        if (!next) {
+          // Clear the job so the poll effect's cleanup stops fetching; Radix
+          // keeps the dialog mounted for the exit animation otherwise.
+          setRasterToolOpen(null);
+          setJob(null);
+        }
       }}
     >
       <DialogContent className="max-w-3xl">
