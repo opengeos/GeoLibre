@@ -616,11 +616,11 @@ function setEditTargetStoreVisible(layerId: string, visible: boolean): void {
 
 /** Exit any active Geoman draw/edit mode so temporary edit features are cleared. */
 function disableActiveEditModes(): void {
-  try {
-    void geomanInstance?.disableAllModes();
-  } catch {
+  // disableAllModes() is async; attach a catch so a rejection (e.g. Geoman
+  // already torn down) does not surface as an unhandled promise rejection.
+  geomanInstance?.disableAllModes()?.catch(() => {
     // Geoman may already be torn down.
-  }
+  });
 }
 
 /**

@@ -219,6 +219,8 @@ export function DesktopShell({
       // check above and race into startLayerGeometryEdit for different layers.
       if (togglingGeometryEditRef.current) return;
       togglingGeometryEditRef.current = true;
+      // Clear any stale error from a previous failed attempt.
+      setDropError(null);
       try {
         // Add Vector Layer (geojson-mode) layers keep their features in a
         // MapLibre source rather than in `layer.geojson`. Read them back once so

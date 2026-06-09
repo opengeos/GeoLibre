@@ -144,11 +144,17 @@ export function reconcileEditedFeatures(
   return {
     type: "FeatureCollection",
     features: collection.features.map((feature) => {
-      const properties = {
-        ...(feature.properties ?? {}),
-      } as Record<string, unknown>;
-      const tag = properties[GEOMETRY_EDIT_FID_PROPERTY];
-      delete properties[GEOMETRY_EDIT_FID_PROPERTY];
+      const rawProps = feature.properties;
+      const tag = rawProps?.[GEOMETRY_EDIT_FID_PROPERTY];
+      // Preserve null properties as null (GeoJSON allows it, and a feature drawn
+      // during the session may have null); only strip the tag from real objects.
+      let properties: Record<string, unknown> | null;
+      if (rawProps == null) {
+        properties = null;
+      } else {
+        properties = { ...rawProps };
+        delete properties[GEOMETRY_EDIT_FID_PROPERTY];
+      }
       const id = ids.take(tag);
       return { ...feature, id, properties };
     }),
