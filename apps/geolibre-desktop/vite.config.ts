@@ -8,6 +8,7 @@ import type {
   WarningHandlerWithDefault,
 } from "rollup";
 import { defineConfig, type Plugin } from "vite";
+import { bundledPlugins } from "./vite-plugins/bundled-plugins";
 
 const GEOAGENT_BROWSER_BUNDLE = "maplibre-gl-geoagent/dist/browser-";
 const EARTH_ENGINE_CONTROL_BUNDLE = "maplibre-gl-earth-engine/dist/";
@@ -303,6 +304,7 @@ export default defineConfig({
   plugins: [
     stripDuckDbWorkerSourcemapPlugin(),
     projectUrlQueryPlugin(),
+    bundledPlugins(path.resolve(__dirname, "public/plugins")),
     react(),
     wmsProxyPlugin(),
     selectiveJsMinifyPlugin(),

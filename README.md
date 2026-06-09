@@ -28,6 +28,7 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 - Plugin system with basemap, layer control, MapLibre components, swipe, street view, Overture Maps, LiDAR, GeoAgent, and GeoEditor integrations, including configurable control positions and external plugin manifests
 - Time Slider plugin for animating time series raster and vector data
 - External plugin zip loading from the app data plugins directory and local development plugin directories
+- Bundled drop-in plugins under `public/plugins/<id>/` that bake into both the web and desktop builds and load automatically with no manifest URL
 - Browser deployment with Docker, embed-friendly URL parameters, and a `maponly` chrome-free mode
 - Optional Python FastAPI sidecar for heavier processing workflows
 
@@ -265,7 +266,7 @@ Built-in plugins live in `packages/plugins/src/plugins/` and are registered by t
 
 For external plugin development, start from the [GeoLibre plugin template](https://github.com/opengeos/geolibre-plugin-template). It includes a `plugin.json` manifest, a GeoLibre plugin wrapper entry point, and a `package:geolibre` script that creates a zip file for the desktop app data `plugins/` directory. During development, Settings > Plugins can scan an additional local plugin directory, including an unpacked bundle folder such as the template's `geolibre-plugin/` directory, or a hosted `plugin.json` manifest URL. See the [Plugin API](docs/plugin-api.md) for the external plugin contract.
 
-For web builds, an external plugin can be bundled by placing its built folder under `apps/geolibre-desktop/public/plugins/<plugin-id>/` and loading `/plugins/<plugin-id>/plugin.json` as a manifest URL. Browsers cannot scan plugin folders at runtime, so bundled web plugins still need explicit manifest URLs unless they are registered as built-in plugins.
+To bake an external plugin into the build so it loads automatically — with no Settings entry and no manifest URL — drop its built folder into `apps/geolibre-desktop/public/plugins/<plugin-id>/` (the same `plugin.json` + `dist/` a manifest URL would serve). The `bundledPlugins()` Vite plugin discovers it at build time and the app loads it through the normal external-plugin path. The same folder serves both the web build and the desktop build (which ships the same frontend), so one drop-in covers both. Private plugin bundles are git-ignored under that folder and copied in at build/deploy time. See the [Plugin API](docs/plugin-api.md#bundled-plugins-baked-into-the-build) for details and the security model.
 
 1. Create a plugin file in `packages/plugins/src/plugins/`.
 

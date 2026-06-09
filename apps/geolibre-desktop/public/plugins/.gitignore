@@ -1,0 +1,6 @@
+# Plugins baked into the build are dropped here as public/plugins/<id>/.
+# The plugin bundles themselves are not committed (they may be private and are
+# copied in at build/deploy time); only this folder's convention docs are.
+*
+!.gitignore
+!README.md

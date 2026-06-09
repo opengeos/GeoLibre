@@ -2,6 +2,13 @@
 
 declare const __GEOLIBRE_VERSION__: string;
 
+declare module "virtual:bundled-plugins" {
+  // Manifest paths (base-relative, no leading slash) for plugins dropped into
+  // public/plugins/<id>/, discovered at build time by the bundledPlugins() Vite
+  // plugin. See apps/geolibre-desktop/vite-plugins/bundled-plugins.ts.
+  export const bundledPluginManifestPaths: string[];
+}
+
 declare module "*.geojson?url" {
   const url: string;
   export default url;

@@ -185,7 +185,9 @@ The Plugins settings section can also add local development directories outside 
 
 For the web app, use manifest URLs. GeoLibre fetches the manifest, resolves `entry` and `style` relative to the manifest URL, then loads the bundled ESM entry. Browser loading requires HTTPS except for `localhost` and depends on the host allowing CORS.
 
-To include an external plugin folder in a GeoLibre web build, place the built plugin bundle under the Vite public directory:
+### Bundled plugins (baked into the build)
+
+To ship an external plugin as part of GeoLibre — loaded automatically, with no Settings entry and no manifest URL — drop its built bundle into the Vite public directory, one folder per plugin id:
 
 ```text
 apps/geolibre-desktop/public/plugins/example-plugin/
@@ -194,13 +196,13 @@ apps/geolibre-desktop/public/plugins/example-plugin/
   dist/style.css
 ```
 
-Vite copies files from `public/` into the final web build, so the manifest URL becomes:
+This is the **same content a manifest URL would serve**. A drop-in is all that is required — no source edits per plugin. The `bundledPlugins()` Vite plugin (`apps/geolibre-desktop/vite-plugins/bundled-plugins.ts`) scans `public/plugins/` at build and dev-server start, exposes the discovered manifest paths through the `virtual:bundled-plugins` module, and `usePlugins.ts` loads them through the normal external-plugin path (fetch → blob import → register). Discovery happens at build time, so restart the dev server or rebuild after adding, updating, or removing a plugin folder.
 
-```text
-/plugins/example-plugin/plugin.json
-```
+The same folder serves **both** the web and desktop builds: the desktop app bundles the identical frontend (`frontendDist` in `tauri.conf.json`) and serves it from `tauri://localhost`, which is same-origin and allowed by the desktop CSP (`connect-src 'self'`, `script-src ... blob:`). Bundled manifest URLs are injected at load time rather than stored in Settings, so a baked-in plugin always loads and cannot be removed by a user; they are deduplicated by plugin id against any user/project plugin of the same id.
 
-This works in both development and production web builds. The browser still cannot scan `/plugins/` at runtime, so each bundled plugin must be loaded by an explicit manifest URL, such as one entered in Settings > Plugins. Manifest URLs are saved in the project `plugins.manifestUrls` array so reloading a shared project can fetch its external plugins before restoring active plugin state. For plugins that should always ship as part of GeoLibre without user configuration, prefer registering them as built-in plugins.
+Private plugins should be git-ignored under `public/plugins/` (see that folder's `.gitignore`) and copied in at build/deploy time (for example in CI before `npm run build`, or by a plugin repo's own install script) so their code stays out of GeoLibre's history. The discovery code is generic and committed; only the plugin payload is excluded.
+
+If instead you want a plugin compiled into the main JS bundle (no `plugin.json`, no fetch), register it as a built-in plugin (see "Add a plugin" in the repository README).
 
 ```json
 {
