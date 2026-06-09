@@ -752,37 +752,6 @@ export function LayerPanel({
                   >
                     <MousePointerClick className="h-3.5 w-3.5" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className={`h-7 w-7 ${
-                      geometryEditActive
-                        ? "border border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 hover:text-primary-foreground"
-                        : ""
-                    }`}
-                    title={
-                      canEditGeometry
-                        ? geometryEditActive
-                          ? "Finish geometry editing (saves)"
-                          : "Edit geometry"
-                        : "Geometry editing is only available for in-memory vector layers"
-                    }
-                    aria-label={
-                      geometryEditActive
-                        ? "Finish geometry editing"
-                        : "Edit geometry"
-                    }
-                    disabled={!canEditGeometry || geometryEditElsewhere}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (!canEditGeometry) return;
-                      selectLayer(layer.id);
-                      if (identifyActive) setIdentifyLayer(null);
-                      onToggleGeometryEdit(layer.id);
-                    }}
-                  >
-                    <PencilRuler className="h-3.5 w-3.5" />
-                  </Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -817,6 +786,22 @@ export function LayerPanel({
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                         </>
+                      )}
+                      {(canEditGeometry || geometryEditActive) && (
+                        <DropdownMenuItem
+                          disabled={geometryEditElsewhere}
+                          onSelect={(e) => {
+                            e.preventDefault();
+                            selectLayer(layer.id);
+                            if (identifyActive) setIdentifyLayer(null);
+                            onToggleGeometryEdit(layer.id);
+                          }}
+                        >
+                          <PencilRuler className="mr-2 h-3.5 w-3.5" />
+                          {geometryEditActive
+                            ? "Finish editing geometry"
+                            : "Edit geometry"}
+                        </DropdownMenuItem>
                       )}
                       <DropdownMenuItem
                         disabled={!canRefresh || isRefreshing}

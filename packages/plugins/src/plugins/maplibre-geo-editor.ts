@@ -95,8 +95,6 @@ let geomanEditSyncMap: maplibregl.Map | null = null;
 let editTargetLayerId: string | null = null;
 /** Sketches stashed out of the editor for the duration of an edit session. */
 let savedSketchesCollection: FeatureCollection | null = null;
-/** Target layer's geojson captured at session start, restored on Cancel. */
-let originalTargetGeojson: FeatureCollection | null = null;
 /** Listeners notified when a geometry edit session starts or ends. */
 const geometryEditListeners = new Set<() => void>();
 
@@ -360,10 +358,11 @@ function unionFeatureCollections(
 function syncSketchesToStore(): void {
   if (!geoEditorControl || restoringSketchesToEditor) return;
 
-  if (editTargetLayerId) {
-    syncEditTargetToStore();
-    return;
-  }
+  // During a geometry-edit session edits live in the editor and are written
+  // back only on save. Writing per operation would rebuild the target layer's
+  // map source on every drag and disrupt Geoman's in-progress vertex editing,
+  // so skip store writes here; `endLayerGeometryEdit` flushes the final state.
+  if (editTargetLayerId) return;
 
   let collection = cloneFeatureCollection(
     geoEditorControl.getAllFeatureCollection(),
@@ -430,6 +429,11 @@ function notifyGeometryEdit(): void {
   for (const listener of geometryEditListeners) listener();
 }
 
+/**
+ * Write the editor's current features back to the target layer. Called only
+ * when a session ends with save, so the target's map source is rebuilt once
+ * rather than on every edit operation.
+ */
 function syncEditTargetToStore(): void {
   if (!geoEditorControl || !editTargetLayerId) return;
 
@@ -439,19 +443,12 @@ function syncEditTargetToStore(): void {
   const edited = reconcileEditedFeatures(
     cloneFeatureCollection(geoEditorControl.getAllFeatureCollection()),
   );
-  // The union path is a Sketches-only safeguard; in edit mode the editor's full
-  // collection is the source of truth.
-  unionSketchesWithStoreOnNextSync = false;
 
   pushingSketchesToStore = true;
   try {
     store.updateLayer(editTargetLayerId, { geojson: edited });
   } finally {
     pushingSketchesToStore = false;
-  }
-
-  if (!sketchesIdleDisplayOverride) {
-    scheduleApplySketchesMapDisplay();
   }
 }
 
@@ -489,7 +486,8 @@ export function startLayerGeometryEdit(
   clearSketchesFromEditor();
   setSketchesMapLayerSuppressed(false);
 
-  originalTargetGeojson = cloneFeatureCollection(layer.geojson);
+  // The store layer is left untouched until save, so Cancel simply discards the
+  // editor's copy and the original geojson is still in the store.
   editTargetLayerId = layerId;
   sketchesIdleDisplayOverride = false;
   unionSketchesWithStoreOnNextSync = false;
@@ -512,9 +510,10 @@ export function startLayerGeometryEdit(
 }
 
 /**
- * Finish the active geometry edit session. With `save`, the latest edits are
- * written to the target layer; otherwise the layer is reverted to its
- * session-start snapshot. The editor is returned to Sketches mode either way.
+ * Finish the active geometry edit session. With `save`, the editor's features
+ * are written back to the target layer; otherwise they are discarded and the
+ * layer keeps the geojson it had at session start (it was never modified). The
+ * editor is returned to Sketches mode either way.
  */
 export function endLayerGeometryEdit(
   _app: GeoLibreAppAPI,
@@ -522,25 +521,12 @@ export function endLayerGeometryEdit(
 ): void {
   if (!editTargetLayerId || !geoEditorControl) return;
 
-  const targetId = editTargetLayerId;
-  if (save) {
-    syncEditTargetToStore();
-  } else if (originalTargetGeojson) {
-    pushingSketchesToStore = true;
-    try {
-      useAppStore
-        .getState()
-        .updateLayer(targetId, { geojson: originalTargetGeojson });
-    } finally {
-      pushingSketchesToStore = false;
-    }
-  }
+  if (save) syncEditTargetToStore();
 
   // Restore the target layer's normal map rendering while it is still the
   // active layer, then switch back to Sketches mode.
   setSketchesMapLayerSuppressed(false);
   editTargetLayerId = null;
-  originalTargetGeojson = null;
   sketchesIdleDisplayOverride = false;
   unionSketchesWithStoreOnNextSync = false;
 
@@ -556,7 +542,6 @@ export function endLayerGeometryEdit(
  */
 function abortGeometryEditSession(): void {
   editTargetLayerId = null;
-  originalTargetGeojson = null;
   sketchesIdleDisplayOverride = false;
   unionSketchesWithStoreOnNextSync = false;
   restoreSketchesAfterSession();
@@ -729,9 +714,13 @@ function sketchesMapLayerIds(layerId: string): string[] {
  * GeoEditor selection and edit handles use Geoman layers for hit-testing.
  * While interacting, show Geoman and hide the Sketches store layer on the map only.
  * When idle, hide Geoman and show Sketches according to the user's layer-panel toggle.
+ *
+ * During a geometry-edit session the target layer is shown exclusively through
+ * Geoman for the whole session: its normal rendering stays suppressed even when
+ * idle, so the layer's edits are not also drawn by the (stale) store source.
  */
 function applySketchesMapDisplay(): void {
-  if (isGeoEditorInteractionMode()) {
+  if (editTargetLayerId || isGeoEditorInteractionMode()) {
     showGeomanDisplayLayers();
     scheduleShowGeomanDisplayLayersOnStyleData();
     setSketchesMapLayerSuppressed(true);
@@ -753,7 +742,7 @@ function scheduleShowGeomanDisplayLayersOnStyleData(): void {
 
   pendingStyleDataListener = () => {
     pendingStyleDataListener = null;
-    if (isGeoEditorInteractionMode()) {
+    if (editTargetLayerId || isGeoEditorInteractionMode()) {
       showGeomanDisplayLayers();
     }
   };
