@@ -45,6 +45,13 @@ export interface ExternalPluginLoadResult {
 // plugins until the app restarts.
 const externallyLoadedPluginSources = new Map<string, string>();
 
+// In-flight upgrade promises keyed by manifest URL. reloadExternalUrlPlugin is
+// otherwise not re-entrant-safe: concurrent calls for the same URL capture the
+// same existingId/wasActive snapshot and would double-register. Coalescing them
+// onto one promise makes the function safe even if the UI's busyId guard is
+// bypassed (e.g. the dialog is closed and reopened mid-upgrade).
+const inFlightUrlUpgrades = new Map<string, Promise<GeoLibrePlugin>>();
+
 export async function loadExternalPlugins(
   manager: PluginManager,
   additionalPluginDirectories: string[] = [],
@@ -419,14 +426,31 @@ export function unloadRemovedUrlPlugins(
  * plugin intact. Active state is preserved: an active plugin is reactivated
  * after the new version registers. Returns the new plugin.
  *
- * Contract: callers are expected to serialize calls per manifest URL (the
- * Manage Plugins dialog does this via its `busyId` guard). The function is not
- * re-entrant-safe for the same URL — two concurrent calls capture the same
- * `existingId`/`wasActive` snapshot before fetching and could double-register.
- * If the plugin is uninstalled mid-fetch the returned plugin is fetched and
- * validated but NOT registered in the manager; the caller discards it.
+ * Concurrent calls for the same manifest URL are coalesced onto a single
+ * in-flight promise, so the function is re-entrant-safe even if a caller's own
+ * guard (e.g. the dialog's `busyId`) is bypassed by closing and reopening the
+ * dialog mid-upgrade. If the plugin is uninstalled mid-fetch the returned
+ * plugin is fetched and validated but NOT registered in the manager.
  */
-export async function reloadExternalUrlPlugin(
+export function reloadExternalUrlPlugin(
+  manager: PluginManager,
+  manifestUrl: string,
+  app: GeoLibreAppAPI,
+): Promise<GeoLibrePlugin> {
+  const inFlight = inFlightUrlUpgrades.get(manifestUrl);
+  if (inFlight) return inFlight;
+  const promise = reloadExternalUrlPluginUncoalesced(
+    manager,
+    manifestUrl,
+    app,
+  ).finally(() => {
+    inFlightUrlUpgrades.delete(manifestUrl);
+  });
+  inFlightUrlUpgrades.set(manifestUrl, promise);
+  return promise;
+}
+
+async function reloadExternalUrlPluginUncoalesced(
   manager: PluginManager,
   manifestUrl: string,
   app: GeoLibreAppAPI,

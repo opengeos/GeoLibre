@@ -100,13 +100,14 @@ export function ManagePluginsDialog({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
+    const abortController = new AbortController();
     setRegistry({ status: "loading" });
     setConfirmRemoveId(null);
     // Don't reset busyId here: an in-flight upgrade's finally block owns it.
     // Clearing it on Refresh would re-enable the Update button mid-flight and
     // could start a second concurrent upgrade for the same manifest URL.
     setActionError(null);
-    fetchPluginRegistry()
+    fetchPluginRegistry(undefined, abortController.signal)
       .then((result) => {
         if (!cancelled) {
           setRegistry({ status: "ready", entries: result.entries });
@@ -127,6 +128,9 @@ export function ManagePluginsDialog({
       });
     return () => {
       cancelled = true;
+      // Abort the in-flight request so closing/refreshing the dialog doesn't
+      // leave it running to completion on a slow connection.
+      abortController.abort();
     };
   }, [open, reloadToken]);
 

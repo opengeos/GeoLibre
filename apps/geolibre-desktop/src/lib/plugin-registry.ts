@@ -45,19 +45,30 @@ export function resolveRegistryUrl(): string {
   return DEFAULT_REGISTRY_URL;
 }
 
+// 5 MB ceiling on the registry payload. The Content-Length check is only a
+// fast path; the streaming reader below is the real enforcement for chunked or
+// compressed responses that omit the header.
+const MAX_REGISTRY_BYTES = 5 * 1024 * 1024;
+
 /**
  * Fetch and normalize the plugin registry. Entry manifest URLs are resolved to
  * absolute URLs against the registry location; malformed entries are dropped.
  * Throws on a failed fetch or non-array payload so the UI can surface the error.
+ * Pass `signal` to cancel the request when the caller unmounts.
  */
 export async function fetchPluginRegistry(
   registryUrl: string = resolveRegistryUrl(),
+  signal?: AbortSignal,
 ): Promise<PluginRegistry> {
   // Bound the request so a slow or stalled registry endpoint cannot leave the
   // UI stuck in its loading state indefinitely. The timeout stays armed until
   // the body is consumed so a trickled response can't outlive the deadline.
+  // An external signal (caller unmount) aborts the same controller.
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
+  const onExternalAbort = () => controller.abort();
+  signal?.addEventListener("abort", onExternalAbort, { once: true });
+  if (signal?.aborted) controller.abort();
   try {
     const response = await fetch(registryUrl, { signal: controller.signal });
     if (!response.ok) {
@@ -65,16 +76,8 @@ export async function fetchPluginRegistry(
         `Could not fetch plugin registry: HTTP ${response.status}`,
       );
     }
-    // Guard against a pathologically large payload buffering into memory, the
-    // way fetchPluginText caps streamed plugin assets.
-    const MAX_REGISTRY_BYTES = 5 * 1024 * 1024; // 5 MB ceiling
-    const declaredLength = Number(response.headers.get("content-length"));
-    if (Number.isFinite(declaredLength) && declaredLength > MAX_REGISTRY_BYTES) {
-      throw new Error(
-        "Could not fetch plugin registry: response exceeds the 5 MB size limit.",
-      );
-    }
-    const payload = (await response.json()) as unknown;
+    const text = await readBodyWithCap(response, MAX_REGISTRY_BYTES);
+    const payload = JSON.parse(text) as unknown;
     const rawEntries = extractEntries(payload);
     const entries = rawEntries
       .map((entry) => normalizeEntry(entry, registryUrl))
@@ -82,7 +85,57 @@ export async function fetchPluginRegistry(
     return { entries, registryUrl };
   } finally {
     clearTimeout(timeout);
+    signal?.removeEventListener("abort", onExternalAbort);
   }
+}
+
+/**
+ * Read a response body as text, enforcing a hard byte ceiling. The
+ * Content-Length header is a fast-fail; the streaming reader is the real
+ * enforcement for responses that omit it (chunked/compressed). Mirrors the
+ * cap in fetchPluginText for plugin assets.
+ */
+async function readBodyWithCap(
+  response: Response,
+  maxBytes: number,
+): Promise<string> {
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new Error(
+      "Could not fetch plugin registry: response exceeds the 5 MB size limit.",
+    );
+  }
+  const reader = response.body?.getReader();
+  if (!reader) {
+    const text = await response.text();
+    if (new TextEncoder().encode(text).byteLength > maxBytes) {
+      throw new Error(
+        "Could not fetch plugin registry: response exceeds the 5 MB size limit.",
+      );
+    }
+    return text;
+  }
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalBytes += value.byteLength;
+    if (totalBytes > maxBytes) {
+      await reader.cancel();
+      throw new Error(
+        "Could not fetch plugin registry: response exceeds the 5 MB size limit.",
+      );
+    }
+    chunks.push(value);
+  }
+  const merged = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(merged);
 }
 
 /** Accept either a bare array or `{ plugins: [...] }` / `{ entries: [...] }`. */
