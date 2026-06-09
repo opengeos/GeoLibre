@@ -161,8 +161,10 @@ code.
     it persists and loads on startup through the existing scan.
   - Web: record the entry's `manifestUrl` in desktop settings (and, for shared
     projects, in the project `plugins.manifestUrls`) so it loads on next open.
-- Remove unregisters the plugin and deletes the downloaded bundle (desktop) or
-  drops the recorded manifest URL (web).
+- Remove drops the recorded manifest URL and unregisters the plugin at runtime
+  (tearing down any active control), so the change takes effect without a
+  restart. (The MVP records manifest URLs rather than downloading bundles; the
+  desktop bundle-download path above is a later enhancement.)
 
 ### Updates and versioning
 

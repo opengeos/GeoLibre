@@ -113,16 +113,20 @@ export function ManagePluginsDialog({
   }, [open, reloadToken]);
 
   // Re-render when the plugin manager changes so installed/version state stays
-  // live as plugins register, unregister, or upgrade.
-  useSyncExternalStore(
+  // live as plugins register, unregister, or upgrade. The version drives the
+  // loadedVersions memo so it only rebuilds when the manager actually changes.
+  const managerVersion = useSyncExternalStore(
     (listener) => getPluginManager().subscribe(listener),
     () => getPluginManager().getVersion(),
     () => getPluginManager().getVersion(),
   );
-  const loadedVersions = new Map<string, string>();
-  for (const plugin of getPluginManager().list()) {
-    loadedVersions.set(plugin.id, plugin.version);
-  }
+  const loadedVersions = useMemo(() => {
+    const versions = new Map<string, string>();
+    for (const plugin of getPluginManager().list()) {
+      versions.set(plugin.id, plugin.version);
+    }
+    return versions;
+  }, [managerVersion]);
 
   const installedSet = useMemo(
     () => new Set(desktopSettings.pluginManifestUrls.map((url) => url.trim())),
@@ -244,7 +248,7 @@ export function ManagePluginsDialog({
     return (
       installedSet.has(entry.manifestUrl.trim()) &&
       loaded !== undefined &&
-      loaded !== entry.version
+      !satisfiesMinVersion(loaded, entry.version)
     );
   }).length;
 
@@ -271,7 +275,9 @@ export function ManagePluginsDialog({
       const installed = installedSet.has(entry.manifestUrl.trim());
       const loaded = loadedVersions.get(entry.id);
       const upgradeable =
-        installed && loaded !== undefined && loaded !== entry.version;
+        installed &&
+        loaded !== undefined &&
+        !satisfiesMinVersion(loaded, entry.version);
       switch (section) {
         case "installed":
           return installed;
@@ -409,7 +415,7 @@ export function ManagePluginsDialog({
                     const updateAvailable =
                       installed &&
                       loadedVersion !== undefined &&
-                      loadedVersion !== entry.version;
+                      !satisfiesMinVersion(loadedVersion, entry.version);
                     return (
                       <div
                         key={entry.id}

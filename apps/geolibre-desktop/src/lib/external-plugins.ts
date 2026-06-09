@@ -429,6 +429,15 @@ export async function reloadExternalUrlPlugin(
   const bundle = await loadPluginUrlBundle(manifestUrl);
   const plugin = await importExternalPlugin(bundle);
 
+  // A version that changes its plugin id (e.g. the author renamed it) would
+  // leave the marketplace's installed/version state pointing at the old id.
+  // Refuse rather than silently register a mismatched plugin.
+  if (existingId && existingId !== plugin.id) {
+    throw new Error(
+      `Cannot update plugin: the published version exports id '${plugin.id}' but the installed version has id '${existingId}'. Reinstall it manually.`,
+    );
+  }
+
   if (existingId) {
     manager.unregister(existingId, app);
     removeExternalPluginStyle(existingId);

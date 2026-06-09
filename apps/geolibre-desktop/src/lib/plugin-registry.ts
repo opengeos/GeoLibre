@@ -4,6 +4,8 @@
 // external-plugin loader then fetches and registers - the registry adds no new
 // trust path. See docs/plugin-api.md and docs/roadmap.md.
 
+import { isAllowedPluginManifestUrl } from "@geolibre/core";
+
 /** A single curated plugin in the marketplace registry. */
 export interface PluginRegistryEntry {
   id: string;
@@ -50,7 +52,16 @@ export function resolveRegistryUrl(): string {
 export async function fetchPluginRegistry(
   registryUrl: string = resolveRegistryUrl(),
 ): Promise<PluginRegistry> {
-  const response = await fetch(registryUrl, { cache: "no-cache" });
+  // Bound the request so a slow or stalled registry endpoint cannot leave the
+  // UI stuck in its loading state indefinitely.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  let response: Response;
+  try {
+    response = await fetch(registryUrl, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!response.ok) {
     throw new Error(`Could not fetch plugin registry: HTTP ${response.status}`);
   }
@@ -91,6 +102,11 @@ function normalizeEntry(
   } catch {
     return null;
   }
+  // Only accept manifest URLs that survive the scheme allow-list applied when
+  // settings are read back on the next launch (https, or http on loopback).
+  // This drops e.g. a relative entry that resolves to tauri://localhost on the
+  // desktop build, which would install for the session but vanish on restart.
+  if (!isAllowedPluginManifestUrl(manifestUrl)) return null;
 
   return {
     id,
@@ -99,7 +115,7 @@ function normalizeEntry(
     manifestUrl,
     description: trimmedString(record.description) || undefined,
     author: trimmedString(record.author) || undefined,
-    homepage: trimmedString(record.homepage) || undefined,
+    homepage: httpUrlOrUndefined(trimmedString(record.homepage)),
     categories: stringArray(record.categories),
     minGeoLibreVersion: trimmedString(record.minGeoLibreVersion) || undefined,
   };
@@ -107,6 +123,18 @@ function normalizeEntry(
 
 function trimmedString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+// Only http(s) homepages are kept so a registry cannot inject a javascript: or
+// data: URL that would execute when rendered as an anchor href.
+function httpUrlOrUndefined(url: string): string | undefined {
+  if (!url) return undefined;
+  try {
+    const { protocol } = new URL(url);
+    return protocol === "https:" || protocol === "http:" ? url : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function stringArray(value: unknown): string[] | undefined {
