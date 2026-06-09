@@ -207,8 +207,8 @@ build, works in both:
 - `apps/geolibre-desktop/src/lib/plugin-registry.ts` fetches and normalizes a
   registry (`{ "plugins": [...] }`), resolving each entry's `manifestUrl`
   against the registry location. The registry URL is
-  `VITE_GEOLIBRE_PLUGIN_REGISTRY_URL` or a bundled
-  `public/plugin-registry.json` fallback.
+  `VITE_GEOLIBRE_PLUGIN_REGISTRY_URL` or, by default, the hosted registry at
+  `https://plugins.geolibre.app/plugin-registry.json`.
 - `apps/geolibre-desktop/src/components/layout/ManagePluginsDialog.tsx` is a
   standalone dialog (Settings menu > Manage Plugins) with All / Installed / Not
   installed / Upgradeable / Settings sections: search, install, a confirm step
@@ -223,6 +223,7 @@ build, works in both:
   without a reload. Update re-fetches the manifest URL and re-registers the
   published version in place, fetching the new version before tearing down the
   old one so a failed update leaves the installed plugin intact.
-- `public/plugin-registry.json` ships a working same-origin sample plugin
-  (`public/marketplace/sample/`) so the marketplace is usable out of the box;
-  maintainers add curated external entries to the registry.
+- The registry and plugin bundles live in the
+  [opengeos/geolibre-plugins](https://github.com/opengeos/geolibre-plugins) repo,
+  published to GitHub Pages at `plugins.geolibre.app`; it ships a `sample/`
+  template and maintainers add curated entries there.

@@ -27,21 +27,22 @@ export interface PluginRegistry {
   registryUrl: string;
 }
 
+// The curated registry is hosted at plugins.geolibre.app (the geolibre-plugins
+// repo, deployed to GitHub Pages). Override per build via env for forks or
+// local testing.
+const DEFAULT_REGISTRY_URL = "https://plugins.geolibre.app/plugin-registry.json";
+
 /**
- * Resolve the registry URL. Honors VITE_GEOLIBRE_PLUGIN_REGISTRY_URL and falls
- * back to a registry bundled with the build (so the marketplace works offline
- * and in both the web and desktop builds). Both are made absolute against the
- * app origin so the entry-relative manifest URLs resolve correctly.
+ * Resolve the registry URL. Honors VITE_GEOLIBRE_PLUGIN_REGISTRY_URL (resolved
+ * against the app origin so a relative value works) and otherwise falls back to
+ * the hosted default registry.
  */
 export function resolveRegistryUrl(): string {
   const configured = import.meta.env.VITE_GEOLIBRE_PLUGIN_REGISTRY_URL;
   if (configured && configured.trim()) {
     return new URL(configured.trim(), window.location.href).href;
   }
-  const base = import.meta.env.BASE_URL.endsWith("/")
-    ? import.meta.env.BASE_URL
-    : `${import.meta.env.BASE_URL}/`;
-  return new URL(`${base}plugin-registry.json`, window.location.href).href;
+  return DEFAULT_REGISTRY_URL;
 }
 
 /**
