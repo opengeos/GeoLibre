@@ -200,8 +200,13 @@ export function VectorToolsDialog({
         for (const message of result.messages) appendLog(message);
         // The sidecar response is untyped JSON; verify it is a FeatureCollection
         // before handing it to the map.
-        const sidecarResult = result.geojson as { type?: string } | null;
-        if (sidecarResult?.type === "FeatureCollection") {
+        const sidecarResult = result.geojson as
+          | { type?: string; features?: unknown }
+          | null;
+        if (
+          sidecarResult?.type === "FeatureCollection" &&
+          Array.isArray(sidecarResult.features)
+        ) {
           addResultLayer(tool.name, sidecarResult as unknown as FeatureCollection);
         } else {
           appendLog("Error: sidecar returned invalid GeoJSON");

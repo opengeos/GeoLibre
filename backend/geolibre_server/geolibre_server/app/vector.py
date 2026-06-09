@@ -80,7 +80,13 @@ def _buffer(request: VectorToolRequest) -> tuple[dict, list[str]]:
     params = request.parameters
     distance = float(params.get("distance", 1) or 0)
     units = str(params.get("units", "kilometers"))
-    meters = distance * _DISTANCE_UNITS.get(units, 1000.0)
+    factor = _DISTANCE_UNITS.get(units)
+    if factor is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown unit '{units}'. Accepted: {list(_DISTANCE_UNITS)}",
+        )
+    meters = distance * factor
     if meters < 0:
         # The UI enforces a non-negative distance; keep the server consistent
         # rather than silently performing an inward (erosion) buffer.
@@ -98,9 +104,13 @@ def _buffer(request: VectorToolRequest) -> tuple[dict, list[str]]:
 
 def _centroids(request: VectorToolRequest) -> tuple[dict, list[str]]:
     gdf = _load_gdf(request.geojson, "Input layer")
-    result = gdf.copy()
-    # Computed on geographic (WGS84) coordinates, matching the client engine.
-    result["geometry"] = gdf.geometry.centroid
+    # Compute centroids in a local metric CRS (like _buffer) so the result is
+    # accurate for large or elongated features, then reproject back to WGS84.
+    metric_crs = gdf.estimate_utm_crs()
+    projected = gdf.to_crs(metric_crs)
+    result = projected.copy()
+    result["geometry"] = projected.geometry.centroid
+    result = result.to_crs(WGS84)
     return _to_feature_collection(result), [f"Computed {len(result)} centroid(s)"]
 
 
@@ -115,7 +125,12 @@ def _convex_hull(request: VectorToolRequest) -> tuple[dict, list[str]]:
 def _dissolve(request: VectorToolRequest) -> tuple[dict, list[str]]:
     gdf = _load_gdf(request.geojson, "Input layer")
     field = str(request.parameters.get("field", "") or "").strip()
-    if field and field in gdf.columns:
+    if field and field not in gdf.columns:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Dissolve field '{field}' not found in layer attributes.",
+        )
+    if field:
         dissolved = gdf.dissolve(by=field).reset_index()
     else:
         dissolved = gdf.dissolve()

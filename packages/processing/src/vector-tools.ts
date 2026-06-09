@@ -199,6 +199,12 @@ export const dissolveTool: ProcessingAlgorithm = {
       ctx.log("Error: Dissolve requires (single-part) Polygon features");
       return;
     }
+    const skipped = fc.features.length - polys.length;
+    if (skipped > 0) {
+      ctx.log(
+        `Warning: skipped ${skipped} MultiPolygon feature(s) — Turf Dissolve requires single-part Polygons`,
+      );
+    }
     const field = (ctx.parameters.field as string)?.trim();
     const dissolved = dissolve(featureCollection(polys), {
       propertyName: field || undefined,
