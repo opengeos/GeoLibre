@@ -177,6 +177,11 @@ export class PluginManager {
         // re-running activation side-effects (e.g. after a manual deactivate)
         // would reactivate it without ever dispatching the handler again.
         if (handledPluginIds.has(id)) continue;
+        // Reserve dedup before activating: activate() notifies listeners
+        // synchronously, and a re-entrant URL dispatch for the same context
+        // must not double-run this plugin. Rolled back on every path that
+        // ends without dispatching the handler.
+        handledPluginIds.add(id);
 
         // A deep link to a parameter a plugin owns implies the user wants that
         // plugin: activate it if it is installed (registered) but inactive, so
@@ -188,18 +193,18 @@ export class PluginManager {
           try {
             this.activate(id, app);
           } catch (error) {
+            handledPluginIds.delete(id);
             console.warn(
               `Plugin '${id}' could not be activated from GeoLibre URL parameters.`,
               error,
             );
             continue;
           }
-          if (!this.active.has(id)) continue;
+          if (!this.active.has(id)) {
+            handledPluginIds.delete(id);
+            continue;
+          }
         }
-
-        // Mark before awaiting so a concurrent dispatch for the same context
-        // cannot double-fire the handler.
-        handledPluginIds.add(id);
 
         try {
           await plugin.handleUrlParameters(app, new URLSearchParams(params));

@@ -28,8 +28,14 @@ export interface GeoLibrePlugin {
   name: string;
   version: string;
   activeByDefault?: boolean;
+  /** At least one name is required for handleUrlParameters to be called. */
+  urlParameterNames?: string[];
   activate: (app: GeoLibreAppAPI) => boolean | void;
   deactivate: (app: GeoLibreAppAPI) => void;
+  handleUrlParameters?: (
+    app: GeoLibreAppAPI,
+    params: URLSearchParams,
+  ) => void | Promise<void>;
   getMapControlPosition?: () => GeoLibreMapControlPosition;
   setMapControlPosition?: (
     app: GeoLibreAppAPI,

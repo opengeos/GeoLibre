@@ -109,6 +109,16 @@ describe("PluginManager URL parameters", () => {
     assert.deepEqual(calls, ["ds.zip"]);
     // Activated exactly once, with the app passed to handleUrlParameters.
     assert.deepEqual(activateApps, [app]);
+
+    // Second dispatch for the same context: dedup means neither the handler
+    // nor activation re-fires for the auto-activated plugin.
+    await manager.handleUrlParameters(
+      new URLSearchParams("data=ds.zip"),
+      app,
+      "ctx",
+    );
+    assert.deepEqual(calls, ["ds.zip"]);
+    assert.deepEqual(activateApps, [app]);
   });
 
   it("leaves an inactive plugin inactive when its parameter is absent", async () => {
