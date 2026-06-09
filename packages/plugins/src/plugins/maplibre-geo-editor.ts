@@ -95,6 +95,10 @@ let geomanEditSyncMap: maplibregl.Map | null = null;
 let editTargetLayerId: string | null = null;
 /** Sketches stashed out of the editor for the duration of an edit session. */
 let savedSketchesCollection: FeatureCollection | null = null;
+/** The live Geoman instance backing the editor, used for clean teardown. */
+let geomanInstance: Geoman | null = null;
+/** Target layer's store visibility captured at session start, restored on end. */
+let editTargetOriginalVisible: boolean | null = null;
 /** Listeners notified when a geometry edit session starts or ends. */
 const geometryEditListeners = new Set<() => void>();
 
@@ -116,12 +120,11 @@ export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
       geoEditorControl = new GeoEditor(getGeoEditorOptions());
       const map = app.getMap?.();
       if (map) {
-        geoEditorControl.setGeoman(
-          new Geoman(map, {
-            layerStyles: geomanLayerStylesForMap(map),
-            settings: { useControlsUi: false },
-          }),
-        );
+        geomanInstance = new Geoman(map, {
+          layerStyles: geomanLayerStylesForMap(map),
+          settings: { useControlsUi: false },
+        });
+        geoEditorControl.setGeoman(geomanInstance);
         bindGeomanEditSync(map);
       }
     }
@@ -155,6 +158,8 @@ export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
     if (!geoEditorControl) return;
     app.removeMapControl(geoEditorControl);
     geoEditorControl = null;
+    void geomanInstance?.destroy({ removeSources: true });
+    geomanInstance = null;
   },
   getMapControlPosition: () => geoEditorPosition,
   setMapControlPosition: (
@@ -438,7 +443,8 @@ function syncEditTargetToStore(): void {
   if (!geoEditorControl || !editTargetLayerId) return;
 
   const store = useAppStore.getState();
-  if (!store.layers.some((layer) => layer.id === editTargetLayerId)) return;
+  const layer = store.layers.find((l) => l.id === editTargetLayerId);
+  if (!layer) return;
 
   const edited = reconcileEditedFeatures(
     cloneFeatureCollection(geoEditorControl.getAllFeatureCollection()),
@@ -449,6 +455,33 @@ function syncEditTargetToStore(): void {
     store.updateLayer(editTargetLayerId, { geojson: edited });
   } finally {
     pushingSketchesToStore = false;
+  }
+
+  // Add Vector Layer control layers render from a MapLibre GeoJSON source they
+  // own rather than from `layer.geojson`, so push the edits there too or the map
+  // would keep showing the pre-edit geometry.
+  writeBackToVectorSource(layer, edited);
+}
+
+/** Source id of an Add-Vector-Layer geojson-mode layer, or null. */
+function vectorSourceIdForLayer(layer: GeoLibreLayer): string | null {
+  if (layer.metadata.sourceKind !== "maplibre-gl-vector") return null;
+  const sourceIds = layer.metadata.sourceIds;
+  const sourceId = Array.isArray(sourceIds) ? sourceIds[0] : undefined;
+  return typeof sourceId === "string" ? sourceId : null;
+}
+
+function writeBackToVectorSource(
+  layer: GeoLibreLayer,
+  collection: FeatureCollection,
+): void {
+  const sourceId = vectorSourceIdForLayer(layer);
+  if (!sourceId) return;
+  const source = appApi?.getMap?.()?.getSource(sourceId) as
+    | { setData?: (data: FeatureCollection) => void }
+    | undefined;
+  if (source && typeof source.setData === "function") {
+    source.setData(collection);
   }
 }
 
@@ -492,6 +525,14 @@ export function startLayerGeometryEdit(
   sketchesIdleDisplayOverride = false;
   unionSketchesWithStoreOnNextSync = false;
 
+  // Hide the target's normal rendering through the store, not via a map-layer
+  // visibility toggle: the store value is authoritative for the layer sync, so
+  // it survives any re-render and the editable features are shown only once
+  // (through Geoman), avoiding the double-render that left some features
+  // appearing editable but not interactive.
+  editTargetOriginalVisible = layer.visible;
+  setEditTargetStoreVisible(layerId, false);
+
   let loaded = false;
   restoringSketchesToEditor = true;
   try {
@@ -508,8 +549,10 @@ export function startLayerGeometryEdit(
 
   // If the load failed the editor is empty; do NOT keep the session active or a
   // later Save would overwrite the layer with an empty collection. Roll back:
-  // restore the stashed sketches and report failure so the caller can retry.
+  // restore visibility and the stashed sketches and report failure.
   if (!loaded) {
+    setEditTargetStoreVisible(layerId, editTargetOriginalVisible ?? true);
+    editTargetOriginalVisible = null;
     editTargetLayerId = null;
     restoreSketchesAfterSession();
     applySketchesMapDisplay();
@@ -519,6 +562,22 @@ export function startLayerGeometryEdit(
   applySketchesMapDisplay();
   notifyGeometryEdit();
   return true;
+}
+
+/** Set the target layer's store visibility without provoking a sketches sync. */
+function setEditTargetStoreVisible(layerId: string, visible: boolean): void {
+  const state = useAppStore.getState();
+  if (!state.layers.some((layer) => layer.id === layerId)) return;
+  state.setLayerVisibility(layerId, visible);
+}
+
+/** Exit any active Geoman draw/edit mode so temporary edit features are cleared. */
+function disableActiveEditModes(): void {
+  try {
+    void geomanInstance?.disableAllModes();
+  } catch {
+    // Geoman may already be torn down.
+  }
 }
 
 /**
@@ -533,14 +592,21 @@ export function endLayerGeometryEdit(
 ): void {
   if (!editTargetLayerId || !geoEditorControl) return;
 
+  const targetId = editTargetLayerId;
   if (save) syncEditTargetToStore();
 
-  // Restore the target layer's normal map rendering while it is still the
-  // active layer, then switch back to Sketches mode.
-  setSketchesMapLayerSuppressed(false);
+  // Exit edit modes and clear the editor before restoring Sketches, so Geoman's
+  // temporary edit features do not linger on the map.
+  disableActiveEditModes();
+
   editTargetLayerId = null;
   sketchesIdleDisplayOverride = false;
   unionSketchesWithStoreOnNextSync = false;
+
+  // Restore the target layer's normal rendering (it now reflects the saved
+  // edits, or the untouched original on cancel).
+  setEditTargetStoreVisible(targetId, editTargetOriginalVisible ?? true);
+  editTargetOriginalVisible = null;
 
   restoreSketchesAfterSession();
   applySketchesMapDisplay();
@@ -557,6 +623,9 @@ function abortGeometryEditSession(): void {
     "Geometry edit session aborted: the target layer was removed; " +
       "in-progress geometry edits were discarded.",
   );
+  disableActiveEditModes();
+  // The layer is gone, so there is no visibility to restore; just drop the flag.
+  editTargetOriginalVisible = null;
   editTargetLayerId = null;
   sketchesIdleDisplayOverride = false;
   unionSketchesWithStoreOnNextSync = false;
@@ -571,6 +640,7 @@ function restoreSketchesAfterSession(): void {
     savedSketchesCollection = null;
     return;
   }
+  disableActiveEditModes();
   clearSketchesFromEditor();
   if (savedSketchesCollection?.features.length) {
     restoringSketchesToEditor = true;
@@ -736,7 +806,16 @@ function sketchesMapLayerIds(layerId: string): string[] {
  * idle, so the layer's edits are not also drawn by the (stale) store source.
  */
 function applySketchesMapDisplay(): void {
-  if (editTargetLayerId || isGeoEditorInteractionMode()) {
+  // During a geometry-edit session the target's normal rendering is hidden via
+  // store visibility, so only Geoman needs to be shown here; toggling map-layer
+  // visibility for the target is unnecessary and would race the layer sync.
+  if (editTargetLayerId) {
+    showGeomanDisplayLayers();
+    scheduleShowGeomanDisplayLayersOnStyleData();
+    return;
+  }
+
+  if (isGeoEditorInteractionMode()) {
     showGeomanDisplayLayers();
     scheduleShowGeomanDisplayLayersOnStyleData();
     setSketchesMapLayerSuppressed(true);
@@ -798,8 +877,13 @@ function setGeomanDisplayLayersVisibility(visibility: "visible" | "none"): void 
   const map = appApi?.getMap?.();
   if (!map) return;
   const sketchesLayer = activeEditableLayer(useAppStore.getState().layers);
+  // In a session the target is intentionally store-hidden, so its `visible`
+  // flag must not also hide the Geoman display layers that present the features
+  // being edited.
   const effectiveVisibility =
-    visibility === "visible" && sketchesLayer?.visible === false
+    visibility === "visible" &&
+    !editTargetLayerId &&
+    sketchesLayer?.visible === false
       ? "none"
       : visibility;
 

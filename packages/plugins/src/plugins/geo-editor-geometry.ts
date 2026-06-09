@@ -37,11 +37,22 @@ export function canEditLayerGeometry(
   layer: GeoLibreLayer | undefined,
 ): boolean {
   if (!layer) return false;
+  // Only geojson-mode vector layers; "vector-tiles" (DuckDB tiles) are excluded.
   if (layer.type !== "geojson") return false;
   if (isDuckDBQueryLayer(layer)) return false;
   if (layer.metadata.sourceKind === SKETCHES_SOURCE_KIND) return false;
-  if (layer.metadata.sourceKind === "maplibre-gl-vector") return false;
-  if (layer.metadata.externalNativeLayer === true) return false;
+
+  if (layer.metadata.externalNativeLayer === true) {
+    // Externally-rendered layers are only editable when they are Add-Vector-Layer
+    // geojson-mode layers, whose features live in a MapLibre GeoJSON source that
+    // can be read and written back. Other external layers are not editable.
+    return (
+      layer.metadata.sourceKind === "maplibre-gl-vector" &&
+      Array.isArray(layer.metadata.sourceIds)
+    );
+  }
+
+  // Plain in-memory geojson layers carry their features in `layer.geojson`.
   return Array.isArray(layer.geojson?.features);
 }
 

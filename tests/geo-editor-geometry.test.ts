@@ -91,23 +91,17 @@ describe("canEditLayerGeometry", () => {
     );
   });
 
-  it("rejects Add-Vector-Layer control layers", () => {
-    // sourceKind alone is enough to reject.
-    assert.equal(
-      canEditLayerGeometry(
-        makeLayer({ metadata: { sourceKind: "maplibre-gl-vector" } }),
-      ),
-      false,
-    );
-    // externalNativeLayer alone is also enough.
+  it("rejects generic external native layers", () => {
+    // externalNativeLayer that is not an Add-Vector-Layer source is not editable.
     assert.equal(
       canEditLayerGeometry(makeLayer({ metadata: { externalNativeLayer: true } })),
       false,
     );
-    // Both together (the original combined case).
+    // maplibre-gl-vector but missing sourceIds: no readable source to edit.
     assert.equal(
       canEditLayerGeometry(
         makeLayer({
+          geojson: undefined,
           metadata: {
             sourceKind: "maplibre-gl-vector",
             externalNativeLayer: true,
@@ -115,6 +109,22 @@ describe("canEditLayerGeometry", () => {
         }),
       ),
       false,
+    );
+  });
+
+  it("allows Add-Vector-Layer geojson-mode layers (features in a source)", () => {
+    assert.equal(
+      canEditLayerGeometry(
+        makeLayer({
+          geojson: undefined,
+          metadata: {
+            sourceKind: "maplibre-gl-vector",
+            externalNativeLayer: true,
+            sourceIds: ["src-1"],
+          },
+        }),
+      ),
+      true,
     );
   });
 });
