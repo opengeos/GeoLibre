@@ -392,15 +392,19 @@ export function unloadRemovedUrlPlugins(
   app: GeoLibreAppAPI,
 ): string[] {
   const keep = new Set(currentManifestUrls);
-  const removed: string[] = [];
+  // Collect first, then mutate: manager.unregister notifies subscribers
+  // synchronously, so removing entries in a separate pass avoids mutating the
+  // map while iterating it.
+  const toRemove: string[] = [];
   for (const [pluginId, source] of externallyLoadedPluginSources) {
-    if (!isManagedUrlSource(source) || keep.has(source)) continue;
+    if (isManagedUrlSource(source) && !keep.has(source)) toRemove.push(pluginId);
+  }
+  for (const pluginId of toRemove) {
     manager.unregister(pluginId, app);
     removeExternalPluginStyle(pluginId);
     externallyLoadedPluginSources.delete(pluginId);
-    removed.push(pluginId);
   }
-  return removed;
+  return toRemove;
 }
 
 /**

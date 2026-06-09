@@ -292,9 +292,7 @@ export function ManagePluginsDialog({
           return true;
       }
     });
-    // managerVersion gates loadedVersions, so include it here too: otherwise the
-    // memo returns stale entries when a load/upgrade changes only the manager.
-  }, [entries, installedSet, query, section, managerVersion]);
+  }, [entries, installedSet, loadedVersions, query, section]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
