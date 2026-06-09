@@ -30,14 +30,14 @@ try:
     import rasterio  # noqa: F401
 
     HAS_RASTERIO = True
-except Exception:  # pragma: no cover - depends on the optional extra
+except ImportError:  # pragma: no cover - depends on the optional extra
     HAS_RASTERIO = False
 
 try:
     import contourpy  # noqa: F401
 
     HAS_CONTOURPY = True
-except Exception:  # pragma: no cover - depends on the optional extra
+except ImportError:  # pragma: no cover - depends on the optional extra
     HAS_CONTOURPY = False
 
 requires_rasterio = pytest.mark.skipif(
@@ -233,4 +233,5 @@ def test_contour_writes_geojson(tmp_path: Path) -> None:
     )
     fc = json.loads(out.read_text())
     assert fc["type"] == "FeatureCollection"
+    assert len(fc["features"]) >= 1
     assert all(f["geometry"]["type"] == "LineString" for f in fc["features"])

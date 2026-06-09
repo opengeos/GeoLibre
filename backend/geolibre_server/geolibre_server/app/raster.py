@@ -179,7 +179,10 @@ output_path = params["output_path"]
 dst_crs = str(params.get("dst_crs", "") or "").strip()
 if not dst_crs:
     raise SystemExit("Target CRS (dst_crs) is required")
-method = getattr(Resampling, str(params.get("resampling", "nearest")), Resampling.nearest)
+resampling_name = str(params.get("resampling", "nearest"))
+if not hasattr(Resampling, resampling_name):
+    raise SystemExit(f"Unsupported resampling method: {resampling_name}")
+method = getattr(Resampling, resampling_name)
 
 with rasterio.open(input_path) as src:
     transform, width, height = calculate_default_transform(
@@ -218,7 +221,10 @@ output_path = params["output_path"]
 resolution = float(params.get("resolution", 0) or 0)
 if resolution <= 0:
     raise SystemExit("Target pixel size (resolution) must be > 0")
-method = getattr(Resampling, str(params.get("resampling", "bilinear")), Resampling.bilinear)
+resampling_name = str(params.get("resampling", "bilinear"))
+if not hasattr(Resampling, resampling_name):
+    raise SystemExit(f"Unsupported resampling method: {resampling_name}")
+method = getattr(Resampling, resampling_name)
 
 with rasterio.open(input_path) as src:
     bounds = src.bounds

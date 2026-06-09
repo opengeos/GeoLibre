@@ -45,10 +45,10 @@ describe("raster tools registry", () => {
 
   it("writes raster output to .tif and vector output to .geojson", () => {
     for (const tool of RASTER_TOOLS) {
-      const expected = tool.outputKind === "vector" ? "geojson" : "tif";
+      const expectedExt = tool.outputKind === "vector" ? ".geojson" : ".tif";
       assert.ok(
-        tool.defaultOutputName.endsWith(expected),
-        `${tool.id} default output ends with .${expected}`,
+        tool.defaultOutputName.endsWith(expectedExt),
+        `${tool.id} default output ends with ${expectedExt}`,
       );
     }
   });
