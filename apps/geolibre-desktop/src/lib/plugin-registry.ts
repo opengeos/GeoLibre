@@ -39,7 +39,10 @@ const DEFAULT_REGISTRY_URL = "https://plugins.geolibre.app/plugin-registry.json"
  */
 export function resolveRegistryUrl(): string {
   const configured = import.meta.env.VITE_GEOLIBRE_PLUGIN_REGISTRY_URL;
-  if (configured && configured.trim()) {
+  // Resolving a configured value needs window.location as its base; outside a
+  // browser (tests, SSR, Node scripts) fall back to the absolute default, the
+  // same way bundledPluginManifestUrls guards window access.
+  if (configured && configured.trim() && typeof window !== "undefined") {
     return new URL(configured.trim(), window.location.href).href;
   }
   return DEFAULT_REGISTRY_URL;
@@ -117,17 +120,23 @@ async function readBodyWithCap(
   }
   const chunks: Uint8Array[] = [];
   let totalBytes = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    totalBytes += value.byteLength;
-    if (totalBytes > maxBytes) {
-      await reader.cancel();
-      throw new Error(
-        "Could not fetch plugin registry: response exceeds the 5 MB size limit.",
-      );
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        throw new Error(
+          "Could not fetch plugin registry: response exceeds the 5 MB size limit.",
+        );
+      }
+      chunks.push(value);
     }
-    chunks.push(value);
+  } catch (error) {
+    // Release the stream lock on a mid-stream read failure (or the size abort
+    // above) so the connection can be reused or collected.
+    await reader.cancel().catch(() => {});
+    throw error;
   }
   const merged = new Uint8Array(totalBytes);
   let offset = 0;
@@ -157,10 +166,13 @@ function normalizeEntry(
 ): PluginRegistryEntry | null {
   if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
-  const id = trimmedString(record.id);
-  const name = trimmedString(record.name);
-  const version = trimmedString(record.version);
-  const rawManifestUrl = trimmedString(record.manifestUrl);
+  // Bound every field so a compromised or malicious registry can't distort the
+  // UI or saturate memory with pathologically long strings. The registry is
+  // curated today, but the caps are cheap insurance.
+  const id = trimmedString(record.id, 128);
+  const name = trimmedString(record.name, 128);
+  const version = trimmedString(record.version, 64);
+  const rawManifestUrl = trimmedString(record.manifestUrl, 2048);
   if (!id || !name || !version || !rawManifestUrl) return null;
 
   let manifestUrl: string;
@@ -180,16 +192,20 @@ function normalizeEntry(
     name,
     version,
     manifestUrl,
-    description: trimmedString(record.description) || undefined,
-    author: trimmedString(record.author) || undefined,
-    homepage: httpUrlOrUndefined(trimmedString(record.homepage)),
+    description: trimmedString(record.description, 1024) || undefined,
+    author: trimmedString(record.author, 128) || undefined,
+    homepage: httpUrlOrUndefined(trimmedString(record.homepage, 2048)),
     categories: stringArray(record.categories),
-    minGeoLibreVersion: trimmedString(record.minGeoLibreVersion) || undefined,
+    minGeoLibreVersion: trimmedString(record.minGeoLibreVersion, 64) || undefined,
   };
 }
 
-function trimmedString(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
+// Trim and, when a cap is given, bound the length so untrusted registry data
+// cannot grow without limit.
+function trimmedString(value: unknown, maxLength?: number): string {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  return maxLength === undefined ? trimmed : trimmed.slice(0, maxLength);
 }
 
 // Only http(s) homepages are kept so a registry cannot inject a javascript: or
@@ -207,8 +223,9 @@ function httpUrlOrUndefined(url: string): string | undefined {
 function stringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const items = value
-    .map((item) => trimmedString(item))
-    .filter((item) => item.length > 0);
+    .map((item) => trimmedString(item, 64))
+    .filter((item) => item.length > 0)
+    .slice(0, 16);
   return items.length ? items : undefined;
 }
 

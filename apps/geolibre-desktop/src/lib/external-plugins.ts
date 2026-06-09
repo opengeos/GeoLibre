@@ -470,33 +470,37 @@ async function reloadExternalUrlPluginUncoalesced(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
   let bundle: ExternalPluginBundle;
+  let plugin: GeoLibrePlugin;
   try {
     bundle = await loadPluginUrlBundle(manifestUrl, controller.signal);
+    // Keep the deadline armed across the dynamic import too, so a module that
+    // hangs during evaluation can't leave the Update spinner stuck forever.
+    plugin = await importExternalPlugin(bundle);
   } finally {
     clearTimeout(timeout);
   }
-  const plugin = await importExternalPlugin(bundle);
+
+  // Nothing was loaded for this URL (existingId null — e.g. the initial load
+  // failed). There is nothing to upgrade, so don't register the fetched plugin
+  // as a side effect; the function expects an already-loaded plugin.
+  if (existingId === null) return plugin;
 
   // If the plugin was uninstalled while we were fetching (its source was
   // removed from the loaded map by unloadRemovedUrlPlugins), don't resurrect it.
-  if (existingId !== null && !externallyLoadedPluginSources.has(existingId)) {
-    return plugin;
-  }
+  if (!externallyLoadedPluginSources.has(existingId)) return plugin;
 
   // A version that changes its plugin id (e.g. the author renamed it) would
   // leave the marketplace's installed/version state pointing at the old id.
   // Refuse rather than silently register a mismatched plugin.
-  if (existingId && existingId !== plugin.id) {
+  if (existingId !== plugin.id) {
     throw new Error(
       `Cannot update plugin: the published version exports id '${plugin.id}' but the installed version has id '${existingId}'. Reinstall it manually.`,
     );
   }
 
-  if (existingId) {
-    manager.unregister(existingId, app);
-    removeExternalPluginStyle(existingId);
-    externallyLoadedPluginSources.delete(existingId);
-  }
+  manager.unregister(existingId, app);
+  removeExternalPluginStyle(existingId);
+  externallyLoadedPluginSources.delete(existingId);
   manager.register(plugin);
   externallyLoadedPluginSources.set(plugin.id, manifestUrl);
   if (bundle.styleSource) {

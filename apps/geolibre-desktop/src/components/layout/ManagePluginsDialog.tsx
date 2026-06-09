@@ -106,6 +106,9 @@ export function ManagePluginsDialog({
     // Don't reset busyId here: an in-flight upgrade's finally block owns it.
     // Clearing it on Refresh would re-enable the Update button mid-flight and
     // could start a second concurrent upgrade for the same manifest URL.
+    // Note: closing and reopening the dialog mid-upgrade remounts the component
+    // with busyId null, so the button is briefly clickable again; the per-URL
+    // coalescing lock in reloadExternalUrlPlugin keeps that from double-running.
     setActionError(null);
     fetchPluginRegistry(undefined, abortController.signal)
       .then((result) => {
