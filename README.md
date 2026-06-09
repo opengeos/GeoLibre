@@ -24,6 +24,8 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 - Conversion menu for Vector to GeoParquet/FlatGeobuf/PMTiles, CSV to GeoParquet, and Raster to COG; GeoParquet and CSV conversions run in the browser with DuckDB-WASM, while FlatGeobuf, PMTiles, and COG require the optional Python sidecar
 - Whitebox toolbox with batch tools run against a selected input directory
 - Vector menu with common geometry tools (buffer, centroids, convex hull, dissolve, bounding box, simplify, clip, intersection, difference, union) that run in the browser with Turf.js, with an optional GeoPandas sidecar engine for every tool
+- Raster menu with common raster tools (hillshade, slope, aspect, reproject, resample, clip by extent, clip by mask layer, polygonize, contour) backed by a rasterio Python sidecar, with a file path in and a file path out
+- Drag and drop vector and GeoTIFF/COG raster files onto the map to add them as layers
 - Project menu to create, open, save, and Save As `.geolibre.json` projects
 - Desktop diagnostics panel, update check, and MSIX packaging support
 - Plugin system with basemap, layer control, MapLibre components, swipe, street view, Overture Maps, LiDAR, GeoAgent, and GeoEditor integrations, including configurable control positions and external plugin manifests
@@ -55,7 +57,7 @@ Bun users can run `bun install`. The root `trustedDependencies` list allows the 
 npm run dev
 ```
 
-Open http://localhost:5173. The map and browser vector import support local vector files that DuckDB-WASM Spatial can read, including common formats such as GeoJSON, GeoParquet, GeoPackage, Shapefile, FlatGeobuf, KML/KMZ, and GML, with direct handling for GeoJSON, zipped Shapefiles, and KMZ archives. You can choose files from Add Vector Layer or drag them onto the app. Desktop filesystem dialogs, local MBTiles, and local raster file reads require Tauri.
+Open http://localhost:5173. The map and browser vector import support local vector files that DuckDB-WASM Spatial can read, including common formats such as GeoJSON, GeoParquet, GeoPackage, Shapefile, FlatGeobuf, KML/KMZ, and GML, with direct handling for GeoJSON, zipped Shapefiles, and KMZ archives. You can choose files from Add Vector Layer or drag them onto the app. GeoTIFF/COG rasters can also be dragged onto the map to add them as raster layers. Desktop filesystem dialogs, local MBTiles, and local raster file reads require Tauri.
 
 ## Run with Docker
 
@@ -149,6 +151,24 @@ To enable the sidecar engine, install the optional `vector` extra (it is not bun
 ```bash
 # install the vector extras (GeoPandas, Shapely)
 pip install -e "backend/geolibre_server[vector]"
+# run it
+geolibre-server   # or: uvicorn geolibre_server.app.main:app --host 127.0.0.1 --port 8765
+```
+
+## Raster tools
+
+The **Processing → Raster** menu opens a single Raster tools dialog with common raster operations. Because raster processing cannot run in the browser, these tools run on the Python sidecar (rasterio) with a file path in and a file path out: pick a tool, choose an input raster and an output file, set the parameters, and run the job.
+
+- **Terrain.** **Hillshade**, **Slope** (degrees or percent), and **Aspect** from an elevation model.
+- **Reproject.** **Reproject** to a target CRS and **Resample** to a new pixel size, with selectable resampling (nearest, bilinear, cubic).
+- **Clip.** **Clip by extent** (a bounding box in the raster's CRS) and **Clip by mask layer** (a GeoJSON mask, reprojected to the raster automatically).
+- **Raster to vector.** **Polygonize** (vector polygons grouped by pixel value) and **Contour** (contour lines from an elevation model), written as GeoJSON.
+
+The tools share the conversion sidecar job runner. Install the optional `raster` extra (rasterio is also pulled in by the `conversion` extra):
+
+```bash
+# install the raster extras (rasterio, numpy, contourpy)
+pip install -e "backend/geolibre_server[raster]"
 # run it
 geolibre-server   # or: uvicorn geolibre_server.app.main:app --host 127.0.0.1 --port 8765
 ```

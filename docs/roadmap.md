@@ -96,6 +96,8 @@
 - [x] Identify, selection, and attribute table support for DuckDB layers
 - [x] Conversion menu under Processing for Vector to GeoParquet/FlatGeobuf/PMTiles, CSV to GeoParquet, and Raster to COG, backed by a hardened conversion sidecar with a path allowlist
 - [x] Vector menu under Processing with common geometry tools (buffer, centroids, convex hull, dissolve, bounding box, simplify, clip, intersection, difference, union) running client-side with Turf.js, plus an optional GeoPandas sidecar engine
+- [x] Raster menu under Processing with common raster tools (hillshade, slope, aspect, reproject, resample, clip by extent, clip by mask layer, polygonize, contour) backed by a rasterio sidecar, path in and path out
+- [x] Drag and drop vector and GeoTIFF/COG raster files onto the map to add them as layers
 - [x] Whitebox batch tools run against a selected input directory
 - [x] Controls menu with Measure, Bookmark, Minimap, and View State tools
 - [x] Print menu backed by `PrintControl`
@@ -110,17 +112,16 @@
 
 ## v1.0: Processing pipelines, external plugin system, and stable prototype
 
-- [ ] GDAL / Rasterio / GeoPandas pipelines
-- [ ] Buffer, reproject, and export GeoJSON processing tools
+- [x] GDAL / Rasterio / GeoPandas pipelines
+- [x] Buffer, reproject, and export GeoJSON processing tools
 - [x] Expanded WhiteboxTools coverage
-- [ ] Leafmap, GeoAI, and SamGeo integrations (selective)
 - [x] External plugin package distribution workflow
 - [x] Plugin marketplace / registry design (see [Plugin marketplace and registry](#plugin-marketplace-and-registry-design))
 - [x] Plugin marketplace MVP: curated registry plus browse and install UI
 - [x] Plugin update (in-place re-fetch) and uninstall with confirmation
 - [x] Project menu Share action that uploads to share.geolibre.app using a personal API token
 - [x] Performance tuning and test suite
-- [ ] Cross-platform installers
+- [x] Cross-platform installers
 - [ ] Documentation and tutorials
 
 ## Plugin marketplace and registry (design)

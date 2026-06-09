@@ -71,6 +71,12 @@ Run DuckDB Spatial SQL in the browser against loaded layers, local files, and re
 Common geometry tools under Processing → Vector: buffer, centroids, convex hull, dissolve, bounding box, simplify, clip, intersection, difference, and union. They run in the browser with Turf.js, with an optional GeoPandas sidecar engine for every tool.
 </div>
 
+<div class="feature-card" markdown>
+### Raster tools
+
+Common raster tools under Processing → Raster: hillshade, slope, aspect, reproject, resample, clip by extent, clip by mask layer, polygonize, and contour. They run on a rasterio Python sidecar with a file path in and a file path out. Drag a GeoTIFF/COG onto the map to add it as a raster layer.
+</div>
+
 </div>
 
 ## Try it in the browser
