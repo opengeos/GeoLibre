@@ -3,8 +3,11 @@ import { describe, it } from "node:test";
 import {
   DEFAULT_PROJECT_TITLE,
   isShareableTitle,
+  resolveShareBaseUrl,
   uploadProjectToShare,
 } from "../apps/geolibre-desktop/src/lib/share-geolibre";
+
+const DEFAULT_SHARE_BASE_URL = "https://share.geolibre.app";
 
 const PROJECT_DTO = {
   username: "giswqs",
@@ -49,6 +52,53 @@ describe("isShareableTitle", () => {
   it("accepts a real, non-default title", () => {
     assert.equal(isShareableTitle("My Flood Map"), true);
     assert.equal(isShareableTitle("  Trimmed Title  "), true);
+  });
+});
+
+describe("resolveShareBaseUrl", () => {
+  it("falls back to production when no override is configured", () => {
+    assert.equal(resolveShareBaseUrl(undefined), DEFAULT_SHARE_BASE_URL);
+    assert.equal(resolveShareBaseUrl("   "), DEFAULT_SHARE_BASE_URL);
+  });
+
+  it("accepts an HTTPS override and trims trailing slashes", () => {
+    assert.equal(
+      resolveShareBaseUrl("https://staging.geolibre.app/"),
+      "https://staging.geolibre.app",
+    );
+  });
+
+  it("accepts HTTP only on loopback hosts", () => {
+    assert.equal(
+      resolveShareBaseUrl("http://localhost:8787"),
+      "http://localhost:8787",
+    );
+    assert.equal(
+      resolveShareBaseUrl("http://127.0.0.1:8787"),
+      "http://127.0.0.1:8787",
+    );
+  });
+
+  it("rejects plaintext HTTP to non-loopback hosts", () => {
+    assert.equal(
+      resolveShareBaseUrl("http://internal.corp"),
+      DEFAULT_SHARE_BASE_URL,
+    );
+  });
+
+  it("rejects loopback-lookalike hosts that a prefix check would allow", () => {
+    assert.equal(
+      resolveShareBaseUrl("http://localhost.evil.com"),
+      DEFAULT_SHARE_BASE_URL,
+    );
+    assert.equal(
+      resolveShareBaseUrl("http://127.0.0.1.evil.com"),
+      DEFAULT_SHARE_BASE_URL,
+    );
+  });
+
+  it("falls back to production for an unparseable override", () => {
+    assert.equal(resolveShareBaseUrl("not a url"), DEFAULT_SHARE_BASE_URL);
   });
 });
 

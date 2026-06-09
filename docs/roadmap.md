@@ -119,7 +119,7 @@
 - [x] Plugin update (in-place re-fetch) and uninstall with confirmation
 - [x] Project menu Share action that uploads to share.geolibre.app using a personal API token
 - [x] Performance tuning and test suite
-- [x] Cross-platform installers
+- [ ] Cross-platform installers
 - [ ] Documentation and tutorials
 
 ## Plugin marketplace and registry (design)

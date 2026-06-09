@@ -15,6 +15,7 @@ import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
 import { openExternalLink } from "../../lib/open-external";
 import {
   isShareableTitle,
+  resolveShareBaseUrl,
   uploadProjectToShare,
   type ShareUploadResult,
   type ShareVisibility,
@@ -32,7 +33,7 @@ interface ShareProjectDialogProps {
   getProject: (title: string) => { content: string; filename: string };
 }
 
-const SETTINGS_TOKEN_URL = "https://share.geolibre.app/settings";
+const SETTINGS_TOKEN_URL = `${resolveShareBaseUrl()}/settings`;
 
 export function ShareProjectDialog({
   open,
@@ -57,6 +58,7 @@ export function ShareProjectDialog({
   useEffect(() => {
     if (open) {
       setTitle(isShareableTitle(currentTitle) ? currentTitle.trim() : "");
+      setVisibility("unlisted");
       setStatus("idle");
       setError(null);
       setResult(null);

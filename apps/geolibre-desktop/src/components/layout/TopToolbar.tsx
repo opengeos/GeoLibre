@@ -144,6 +144,7 @@ import { AboutDialog } from "./AboutDialog";
 import { NewProjectDialog } from "./NewProjectDialog";
 import { ManagePluginsDialog } from "./ManagePluginsDialog";
 import { ShareProjectDialog } from "./ShareProjectDialog";
+import { DEFAULT_PROJECT_TITLE } from "../../lib/share-geolibre";
 import { SettingsDialog } from "./SettingsDialog";
 
 interface TopToolbarProps {
@@ -397,7 +398,7 @@ export function TopToolbar({
   const buildCurrentProject = (nameOverride?: string) => {
     const state = useAppStore.getState();
     const defaultProjectName =
-      nameOverride?.trim() || state.projectName.trim() || "Untitled Project";
+      nameOverride?.trim() || state.projectName.trim() || DEFAULT_PROJECT_TITLE;
     const pluginManifestUrls = mergeStringLists(
       state.projectPlugins?.manifestUrls ?? [],
       useDesktopSettingsStore.getState().desktopSettings.pluginManifestUrls,
@@ -416,16 +417,23 @@ export function TopToolbar({
       },
       metadata: state.metadata,
     });
-    return { project, defaultProjectName, content: serializeProject(project) };
+    return {
+      project,
+      defaultProjectName,
+      content: serializeProject(project),
+      // Expose the path read from this same snapshot so callers don't take a
+      // second `getState()` read that could be misread as a separate instant.
+      projectPath: state.projectPath,
+    };
   };
 
   const saveProject = async (options?: {
     saveAs?: boolean;
   }): Promise<boolean> => {
-    const { project, defaultProjectName, content } = buildCurrentProject();
+    const { project, defaultProjectName, content, projectPath } =
+      buildCurrentProject();
     // Projects opened from a URL have no writable path, so both Save and
     // Save As fall back to the save dialog for them.
-    const { projectPath } = useAppStore.getState();
     const existingLocalPath =
       projectPath && !isHttpUrl(projectPath) ? projectPath : null;
     let path: string | null;
@@ -1130,8 +1138,10 @@ export function TopToolbar({
           // Strip path separators, control chars, and other characters that are
           // illegal in filenames so the server gets a predictable name.
           const safeName = defaultProjectName.replace(
+            // Includes U+007F (DEL) alongside the C0 control range; both are
+            // non-printing and rejected by some filesystems and HTTP servers.
             // eslint-disable-next-line no-control-regex
-            /[\u0000-\u001f/\\:*?"<>|]/g,
+            /[\u0000-\u001f\u007f/\\:*?"<>|]/g,
             "_",
           );
           return { content, filename: `${safeName}.geolibre.json` };

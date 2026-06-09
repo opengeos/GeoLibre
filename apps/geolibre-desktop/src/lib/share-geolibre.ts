@@ -41,19 +41,32 @@ export function isShareableTitle(title: string): boolean {
   return trimmed.length > 0 && trimmed !== DEFAULT_PROJECT_TITLE;
 }
 
-/** Resolve the share host from the Vite env, falling back to production. */
-export function resolveShareBaseUrl(): string {
-  const configured = import.meta.env?.VITE_GEOLIBRE_SHARE_URL;
+/**
+ * Resolve the share host from the Vite env, falling back to production. The
+ * `configured` value is read from the env by default but can be passed directly
+ * in tests.
+ */
+export function resolveShareBaseUrl(
+  configured: unknown = import.meta.env?.VITE_GEOLIBRE_SHARE_URL,
+): string {
   if (typeof configured === "string" && configured.trim()) {
     const trimmed = configured.trim().replace(/\/+$/, "");
     // Only accept HTTPS (or HTTP on loopback for local dev) so a misconfigured
-    // env var can't send the Bearer token over a plaintext connection.
-    if (
-      trimmed.startsWith("https://") ||
-      trimmed.startsWith("http://localhost") ||
-      trimmed.startsWith("http://127.0.0.1")
-    ) {
-      return trimmed;
+    // env var can't send the Bearer token over a plaintext connection. Parse the
+    // URL and match the hostname exactly: a prefix check like
+    // `startsWith("http://localhost")` would also accept hosts such as
+    // `http://localhost.evil.com`.
+    try {
+      const url = new URL(trimmed);
+      if (
+        url.protocol === "https:" ||
+        (url.protocol === "http:" &&
+          (url.hostname === "localhost" || url.hostname === "127.0.0.1"))
+      ) {
+        return trimmed;
+      }
+    } catch {
+      // Invalid URL; fall through to the production default.
     }
   }
   return DEFAULT_SHARE_BASE_URL;
