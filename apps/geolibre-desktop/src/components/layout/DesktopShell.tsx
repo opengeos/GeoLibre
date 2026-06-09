@@ -220,7 +220,7 @@ export function DesktopShell({
       if (!manager.isActive("maplibre-gl-geo-editor")) {
         manager.activate("maplibre-gl-geo-editor", appAPI);
       }
-      const started = startLayerGeometryEdit(appAPI, layerId);
+      const started = await startLayerGeometryEdit(appAPI, layerId);
       if (!started) {
         setDropError(
           "Could not start geometry editing. Try again once the map has loaded.",

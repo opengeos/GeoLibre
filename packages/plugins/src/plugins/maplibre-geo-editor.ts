@@ -8,6 +8,7 @@ import {
   canEditLayerGeometry,
   reconcileEditedFeatures,
   tagFeatureKeys,
+  withSacrificialFirstFeature,
 } from "./geo-editor-geometry";
 import type {
   GeoLibreAppAPI,
@@ -486,16 +487,32 @@ function writeBackToVectorSource(
 }
 
 /**
+ * Wait until Geoman has finished its asynchronous initialization. Geoman creates
+ * its feature sources during an async `init()`, so importing features before it
+ * is loaded fails with "Missing source for feature creation" and the features
+ * are silently dropped (they render but cannot be edited).
+ */
+async function ensureGeomanReady(): Promise<void> {
+  const geoman = geomanInstance;
+  if (!geoman || geoman.loaded) return;
+  try {
+    await geoman.waitForGeomanLoaded();
+  } catch {
+    // If readiness cannot be awaited, the caller's load will no-op safely.
+  }
+}
+
+/**
  * Begin editing the geometry of an existing vector layer in place, reusing the
  * shared Geoman editor. Stashes any current sketches out of the editor, loads
  * the target layer's features (id-tagged), and re-targets the sync/display
  * helpers at the target layer. Returns false when the plugin is not active or
  * the layer is not editable.
  */
-export function startLayerGeometryEdit(
+export async function startLayerGeometryEdit(
   _app: GeoLibreAppAPI,
   layerId: string,
-): boolean {
+): Promise<boolean> {
   if (!pluginActive || !geoEditorControl) return false;
 
   // Only one session at a time; finish any open one first (saving its work).
@@ -508,6 +525,11 @@ export function startLayerGeometryEdit(
     .getState()
     .layers.find((candidate) => candidate.id === layerId);
   if (!layer || !canEditLayerGeometry(layer) || !layer.geojson) return false;
+
+  // Geoman may have only just been created (the plugin was activated for this
+  // edit); wait for it to finish initializing so the import below succeeds.
+  await ensureGeomanReady();
+  if (!pluginActive || !geoEditorControl) return false;
 
   // Flush sketches to the store, stash them out of the editor, and restore the
   // Sketches store layer's normal rendering (it stays visible as a plain layer
@@ -537,20 +559,11 @@ export function startLayerGeometryEdit(
   restoringSketchesToEditor = true;
   try {
     const tagged = tagFeatureKeys(cloneFeatureCollection(layer.geojson));
-    const result = geoEditorControl.loadGeoJson(tagged, SKETCHES_SOURCE_PATH);
+    geoEditorControl.loadGeoJson(
+      withSacrificialFirstFeature(tagged),
+      SKETCHES_SOURCE_PATH,
+    );
     loaded = true;
-    // Geoman skips features whose geometry shape it cannot map (e.g. some
-    // MultiPolygon/GeometryCollection inputs); those render but are not editable.
-    // Surface the count so the cause is visible instead of looking like a bug.
-    const importedCount = result?.count ?? tagged.features.length;
-    if (importedCount < tagged.features.length) {
-      console.warn(
-        `Geometry edit: ${
-          tagged.features.length - importedCount
-        } of ${tagged.features.length} features could not be loaded into the ` +
-          "editor and will not be editable (unsupported geometry shape).",
-      );
-    }
   } catch {
     // Geoman may not be ready until the map style finishes loading.
   } finally {

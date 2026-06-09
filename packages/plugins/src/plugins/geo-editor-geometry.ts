@@ -24,6 +24,49 @@ export const SKETCHES_SOURCE_KIND = "geoeditor-sketches";
 export const GEOMETRY_EDIT_FID_PROPERTY = "__geolibre_fid";
 
 /**
+ * Id of a throwaway feature prepended to the collection loaded into the editor.
+ * Geoman's batch `importGeoJson` silently drops the FIRST feature of every batch
+ * (confirmed empirically: the loss is position-based, not geometry-based), so a
+ * sacrificial first feature absorbs that loss and every real feature is loaded.
+ * It is filtered out again on write-back in case it survives.
+ */
+export const GEOMETRY_EDIT_SACRIFICE_ID = "__geolibre_sacrifice__";
+
+/**
+ * Prepend a sacrificial placeholder feature so Geoman's drop-the-first-feature
+ * batch-import bug consumes the placeholder instead of a real feature.
+ *
+ * @param collection The tagged feature collection about to be loaded.
+ * @returns A collection with the placeholder as its first feature.
+ */
+export function withSacrificialFirstFeature(
+  collection: FeatureCollection,
+): FeatureCollection {
+  const placeholder = {
+    type: "Feature" as const,
+    id: GEOMETRY_EDIT_SACRIFICE_ID,
+    properties: { [GEOMETRY_EDIT_FID_PROPERTY]: GEOMETRY_EDIT_SACRIFICE_ID },
+    // A tiny polygon at null island; same geometry family as typical layers so
+    // Geoman treats it as an ordinary first feature.
+    geometry: {
+      type: "Polygon" as const,
+      coordinates: [
+        [
+          [0, 0],
+          [0, 0.0001],
+          [0.0001, 0.0001],
+          [0, 0],
+        ],
+      ],
+    },
+  };
+  return {
+    type: "FeatureCollection",
+    features: [placeholder, ...collection.features],
+  };
+}
+
+/**
  * Whether a layer's geometry can be edited in place. Mirrors the exclusions the
  * attribute table already applies so the two rules cannot drift: only in-memory
  * geojson vector layers qualify. DuckDB query layers and Add-Vector-Layer
@@ -123,14 +166,25 @@ export function reconcileEditedFeatures(
   const ids = makeIdAllocator();
   return {
     type: "FeatureCollection",
-    features: collection.features.map((feature) => {
-      const properties = {
-        ...(feature.properties ?? {}),
-      } as Record<string, unknown>;
-      const tag = properties[GEOMETRY_EDIT_FID_PROPERTY];
-      delete properties[GEOMETRY_EDIT_FID_PROPERTY];
-      const id = ids.take(tag);
-      return { ...feature, id, properties };
-    }),
+    features: collection.features
+      // Drop the sacrificial placeholder if it survived the import.
+      .filter((feature) => {
+        const tag = (feature.properties as Record<string, unknown> | null)?.[
+          GEOMETRY_EDIT_FID_PROPERTY
+        ];
+        return (
+          tag !== GEOMETRY_EDIT_SACRIFICE_ID &&
+          feature.id !== GEOMETRY_EDIT_SACRIFICE_ID
+        );
+      })
+      .map((feature) => {
+        const properties = {
+          ...(feature.properties ?? {}),
+        } as Record<string, unknown>;
+        const tag = properties[GEOMETRY_EDIT_FID_PROPERTY];
+        delete properties[GEOMETRY_EDIT_FID_PROPERTY];
+        const id = ids.take(tag);
+        return { ...feature, id, properties };
+      }),
   };
 }

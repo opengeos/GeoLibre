@@ -4,9 +4,11 @@ import type { FeatureCollection } from "geojson";
 import type { GeoLibreLayer } from "../packages/core/src/types";
 import {
   GEOMETRY_EDIT_FID_PROPERTY,
+  GEOMETRY_EDIT_SACRIFICE_ID,
   canEditLayerGeometry,
   reconcileEditedFeatures,
   tagFeatureKeys,
+  withSacrificialFirstFeature,
 } from "../packages/plugins/src/plugins/geo-editor-geometry";
 
 function makeLayer(overrides: Partial<GeoLibreLayer>): GeoLibreLayer {
@@ -211,6 +213,22 @@ describe("reconcileEditedFeatures", () => {
     );
   });
 
+  it("drops the sacrificial placeholder if it survived import", () => {
+    const collection: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          ...point(undefined),
+          properties: { [GEOMETRY_EDIT_FID_PROPERTY]: GEOMETRY_EDIT_SACRIFICE_ID },
+        },
+        { ...point(undefined), properties: { [GEOMETRY_EDIT_FID_PROPERTY]: "3" } },
+      ],
+    };
+    const reconciled = reconcileEditedFeatures(collection);
+    assert.equal(reconciled.features.length, 1);
+    assert.equal(reconciled.features[0].id, "3");
+  });
+
   it("de-duplicates ids when a tag was cloned (e.g. a copied feature)", () => {
     // Two features share the same tag, as a Geoman copy that cloned properties
     // would produce. Reconcile must give them distinct ids so Geoman does not
@@ -227,5 +245,28 @@ describe("reconcileEditedFeatures", () => {
     assert.equal(ids[0], "7");
     assert.notEqual(ids[1], "7");
     assert.equal(new Set(ids).size, ids.length);
+  });
+});
+
+describe("withSacrificialFirstFeature", () => {
+  it("prepends a placeholder so a real feature is not the first imported", () => {
+    const tagged = tagFeatureKeys({
+      type: "FeatureCollection",
+      features: [point("a"), point("b")],
+    });
+    const guarded = withSacrificialFirstFeature(tagged);
+    assert.equal(guarded.features.length, 3);
+    assert.equal(guarded.features[0].id, GEOMETRY_EDIT_SACRIFICE_ID);
+    // The real features follow the placeholder, unchanged and in order.
+    assert.deepEqual(
+      guarded.features.slice(1).map((f) => f.id),
+      ["a", "b"],
+    );
+    // A full round-trip yields exactly the real features (placeholder removed).
+    const reconciled = reconcileEditedFeatures(guarded);
+    assert.deepEqual(
+      reconciled.features.map((f) => f.id),
+      ["a", "b"],
+    );
   });
 });
