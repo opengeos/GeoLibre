@@ -113,14 +113,13 @@
 - [ ] Buffer, reproject, and export GeoJSON processing tools
 - [x] Expanded WhiteboxTools coverage
 - [ ] Leafmap, GeoAI, and SamGeo integrations (selective)
-- [ ] External plugin package distribution workflow
+- [x] External plugin package distribution workflow
 - [x] Plugin marketplace / registry design (see [Plugin marketplace and registry](#plugin-marketplace-and-registry-design))
 - [x] Plugin marketplace MVP: curated registry plus browse and install UI
 - [x] Plugin update (in-place re-fetch) and uninstall with confirmation
-- [ ] Plugin integrity verification (hashes and signing)
-- [ ] Sandboxed worker plugins
+- [x] Project menu Share action that uploads to share.geolibre.app using a personal API token
 - [x] Performance tuning and test suite
-- [ ] Cross-platform installers
+- [x] Cross-platform installers
 - [ ] Documentation and tutorials
 
 ## Plugin marketplace and registry (design)
@@ -129,7 +128,7 @@ This captures the design for the `v1.0` "Plugin marketplace / registry" item. It
 builds on the existing external-plugin foundation, the `plugin.json` manifest
 contract, HTTPS manifest-URL loading, the desktop app data `plugins/` scan, and
 the bundled `public/plugins/` drop-in mechanism, and it relates to the "External
-plugin package distribution workflow" and "Sandboxed worker plugins" items.
+plugin package distribution workflow" item.
 
 ### Goal
 
@@ -144,8 +143,8 @@ code.
   `registry.json` hosted on `geolibre.app`, or generated from a GitHub
   repository of submissions). No live backend is required for the MVP.
 - Each entry carries `id`, `name`, `version`, `description`, `author`,
-  `homepage`, `manifestUrl`, `categories`, `minGeoLibreVersion`, optional
-  `screenshots`, and an integrity `hash` for the entry bundle.
+  `homepage`, `manifestUrl`, `categories`, `minGeoLibreVersion`, and optional
+  `screenshots`.
 - The index is fetched over HTTPS and cached; entries point at the same
   `plugin.json` manifests the existing loader already understands.
 
@@ -176,13 +175,10 @@ code.
 ### Trust and security
 
 - The registry is an allowlist; only curated entries are offered for install.
-- HTTPS-only manifests (the existing `isAllowedPluginManifestUrl` rule), plus
-  integrity verification of the downloaded entry against the registry `hash`.
+- HTTPS-only manifests (the existing `isAllowedPluginManifestUrl` rule).
 - Explicit user consent on install, because plugin entries execute as trusted
   code (the desktop CSP permits `blob:` script execution by design).
-- Plugin signing and the separate "Sandboxed worker plugins" item harden this
-  further; until then the curated registry and integrity checks are the primary
-  controls.
+- The curated registry and explicit install consent are the primary controls.
 
 ### Relationship to bundled plugins
 
@@ -195,9 +191,8 @@ code.
 
 1. Curated static registry plus browse and install through manifest URLs
    (reuses the current loader; records the manifest URL in settings). **Done.**
-2. Version checks, update and removal flows, and integrity hashes.
-3. Submission workflow for third-party authors, plugin signing, and sandboxed
-   execution.
+2. Version checks, update and removal flows.
+3. Submission workflow for third-party authors.
 
 ### Implementation (phase 1)
 
