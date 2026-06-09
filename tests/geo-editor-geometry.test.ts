@@ -229,6 +229,19 @@ describe("reconcileEditedFeatures", () => {
     assert.equal(reconciled.features[0].id, "3");
   });
 
+  it("avoids id collision when an index-based fallback could match an explicit id", () => {
+    // Feature at index 2 has id undefined; another feature carries explicit id 2.
+    // The unique-id allocator must not assign "2" to both.
+    const original: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [point(2), point(5), point(undefined)],
+    };
+    const reconciled = reconcileEditedFeatures(tagFeatureKeys(original));
+    const ids = reconciled.features.map((f) => String(f.id));
+    assert.equal(new Set(ids).size, ids.length, `duplicate ids: ${ids}`);
+    assert.equal(ids[0], "2"); // the explicit id 2 must survive
+  });
+
   it("de-duplicates ids when a tag was cloned (e.g. a copied feature)", () => {
     // Two features share the same tag, as a Geoman copy that cloned properties
     // would produce. Reconcile must give them distinct ids so Geoman does not

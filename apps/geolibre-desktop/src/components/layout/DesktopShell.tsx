@@ -141,6 +141,7 @@ export function DesktopShell({
   const mapControllerRef = useRef<MapController | null>(null);
   const dragDepthRef = useRef(0);
   const dropMessageTimeoutRef = useRef<number | null>(null);
+  const materializingRef = useRef(false);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
   const geometryEditLayerId = useSyncExternalStore(
@@ -219,11 +220,18 @@ export function DesktopShell({
       const manager = getPluginManager();
       if (!manager.isActive("maplibre-gl-geo-editor")) {
         manager.activate("maplibre-gl-geo-editor", appAPI);
+        if (!manager.isActive("maplibre-gl-geo-editor")) {
+          setDropError(
+            "Could not activate the geometry editor. Try again once the map has fully loaded.",
+          );
+          clearDropMessageLater();
+          return;
+        }
       }
       const started = await startLayerGeometryEdit(appAPI, layerId);
       if (!started) {
         setDropError(
-          "Could not start geometry editing. Try again once the map has loaded.",
+          "Could not start geometry editing for this layer. Its data may still be loading.",
         );
         clearDropMessageLater();
       }
@@ -237,6 +245,9 @@ export function DesktopShell({
 
   const handleMaterializeDuckDBLayer = useCallback(
     async (layer: GeoLibreLayer) => {
+      // Guard against concurrent triggers (double-click, or two layers in quick
+      // succession) so we do not add duplicate materialized layers.
+      if (materializingRef.current) return;
       const query =
         typeof layer.metadata.query === "string" ? layer.metadata.query : null;
       if (!query) {
@@ -244,9 +255,12 @@ export function DesktopShell({
         clearDropMessageLater();
         return;
       }
+      materializingRef.current = true;
       setDropError(null);
       setDropMessage("Materializing DuckDB layer...");
       try {
+        // The query is the layer's own stored SQL from the user's project; it is
+        // intentionally run unrestricted against the in-memory DuckDB instance.
         const result = await runSqlQuery(query, useAppStore.getState().layers);
         if (!result.geojson) {
           throw new Error("The query did not return a geometry column.");
@@ -267,6 +281,7 @@ export function DesktopShell({
             : "Could not materialize this layer.",
         );
       } finally {
+        materializingRef.current = false;
         clearDropMessageLater();
       }
     },

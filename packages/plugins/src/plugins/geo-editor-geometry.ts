@@ -67,11 +67,12 @@ export function withSacrificialFirstFeature(
 }
 
 /**
- * Whether a layer's geometry can be edited in place. Mirrors the exclusions the
- * attribute table already applies so the two rules cannot drift: only in-memory
- * geojson vector layers qualify. DuckDB query layers and Add-Vector-Layer
- * control layers keep their features outside `layer.geojson`, so they are
- * excluded (DuckDB layers are materialized to an editable copy first).
+ * Whether a layer's geometry can be edited in place. Only geojson-mode vector
+ * layers qualify ("vector-tiles" / DuckDB-tiles layers do not). DuckDB query
+ * layers are excluded and must be materialized to an editable GeoJSON copy
+ * first. Add-Vector-Layer geojson-mode layers ARE included: their features live
+ * in a MapLibre GeoJSON source and are read back (via the caller's
+ * `ensureLayerGeojsonFromSource`) before editing begins.
  *
  * @param layer The candidate layer, or undefined.
  * @returns True when the layer's geometry can be edited in place.
@@ -135,9 +136,24 @@ export function tagFeatureKeys(
   collection: FeatureCollection,
 ): FeatureCollection {
   const ids = makeIdAllocator();
+  let warnedCollision = false;
   return {
     type: "FeatureCollection",
     features: collection.features.map((feature) => {
+      // Warn once if real data already uses the reserved tag key: that value is
+      // overwritten for the session and stripped on save, so the user would
+      // otherwise silently lose it.
+      if (
+        !warnedCollision &&
+        feature.properties != null &&
+        GEOMETRY_EDIT_FID_PROPERTY in feature.properties
+      ) {
+        warnedCollision = true;
+        console.warn(
+          `Geometry edit: features already contain a "${GEOMETRY_EDIT_FID_PROPERTY}" ` +
+            "property; it will be overwritten for the edit session and removed on save.",
+        );
+      }
       const id = ids.take(feature.id);
       return {
         ...feature,

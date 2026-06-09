@@ -508,6 +508,9 @@ async function ensureGeomanReady(): Promise<void> {
  * the target layer's features (id-tagged), and re-targets the sync/display
  * helpers at the target layer. Returns false when the plugin is not active or
  * the layer is not editable.
+ *
+ * `_app` is accepted for API symmetry with the other plugin entry points but is
+ * not used: this function operates through the module-level `appApi`/store.
  */
 export async function startLayerGeometryEdit(
   _app: GeoLibreAppAPI,
@@ -564,8 +567,16 @@ export async function startLayerGeometryEdit(
       SKETCHES_SOURCE_PATH,
     );
     loaded = true;
-  } catch {
-    // Geoman may not be ready until the map style finishes loading.
+  } catch (error) {
+    // A "Missing source" failure means Geoman is not ready yet (handled by the
+    // rollback below). Log anything else so unexpected failures (e.g. malformed
+    // geojson) are not silently swallowed.
+    if (
+      !(error instanceof Error) ||
+      !error.message.includes("Missing source")
+    ) {
+      console.warn("startLayerGeometryEdit: loadGeoJson failed", error);
+    }
   } finally {
     restoringSketchesToEditor = false;
   }
@@ -613,27 +624,39 @@ export function endLayerGeometryEdit(
   _app: GeoLibreAppAPI,
   { save }: { save: boolean },
 ): void {
-  if (!editTargetLayerId || !geoEditorControl) return;
+  if (!editTargetLayerId) return;
+
+  // Defensive: if the control was torn down while a session id lingered, clear
+  // the session state so the UI does not get stuck in the "editing" state.
+  if (!geoEditorControl) {
+    editTargetLayerId = null;
+    editTargetOriginalVisible = null;
+    sketchesIdleDisplayOverride = false;
+    unionSketchesWithStoreOnNextSync = false;
+    notifyGeometryEdit();
+    return;
+  }
 
   const targetId = editTargetLayerId;
-  if (save) syncEditTargetToStore();
-
-  // Exit edit modes and clear the editor before restoring Sketches, so Geoman's
-  // temporary edit features do not linger on the map.
-  disableActiveEditModes();
-
-  editTargetLayerId = null;
-  sketchesIdleDisplayOverride = false;
-  unionSketchesWithStoreOnNextSync = false;
-
-  // Restore the target layer's normal rendering (it now reflects the saved
-  // edits, or the untouched original on cancel).
-  setEditTargetStoreVisible(targetId, editTargetOriginalVisible ?? true);
-  editTargetOriginalVisible = null;
-
-  restoreSketchesAfterSession();
-  applySketchesMapDisplay();
-  notifyGeometryEdit();
+  // Run the write-back in try/finally so a throw (e.g. from the store update)
+  // cannot leave the session half-torn-down with the target layer still hidden
+  // and the user unable to exit.
+  try {
+    if (save) syncEditTargetToStore();
+  } finally {
+    editTargetLayerId = null;
+    sketchesIdleDisplayOverride = false;
+    unionSketchesWithStoreOnNextSync = false;
+    // Restore the target layer's normal rendering (it now reflects the saved
+    // edits, or the untouched original on cancel).
+    setEditTargetStoreVisible(targetId, editTargetOriginalVisible ?? true);
+    editTargetOriginalVisible = null;
+    // restoreSketchesAfterSession() exits Geoman edit modes and clears the
+    // editor before reloading sketches.
+    restoreSketchesAfterSession();
+    applySketchesMapDisplay();
+    notifyGeometryEdit();
+  }
 }
 
 /**
@@ -646,8 +669,8 @@ function abortGeometryEditSession(): void {
     "Geometry edit session aborted: the target layer was removed; " +
       "in-progress geometry edits were discarded.",
   );
-  disableActiveEditModes();
   // The layer is gone, so there is no visibility to restore; just drop the flag.
+  // (restoreSketchesAfterSession exits Geoman edit modes.)
   editTargetOriginalVisible = null;
   editTargetLayerId = null;
   sketchesIdleDisplayOverride = false;
@@ -752,6 +775,11 @@ function bindSketchesStoreSync(): void {
           target.opacity !== previousTarget.opacity ||
           target.style !== previousTarget.style)
       ) {
+        // If the user toggled the target layer back on while editing, re-hide it
+        // so its stale normal rendering does not double-draw over Geoman.
+        if (target.visible && !previousTarget.visible) {
+          setEditTargetStoreVisible(editTargetLayerId, false);
+        }
         scheduleApplySketchesMapDisplay();
       }
       return;
