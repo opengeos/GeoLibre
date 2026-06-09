@@ -184,8 +184,13 @@ export function useExternalPluginsReady(): boolean {
 // applied to user/project URLs, so the desktop tauri:// origin is accepted.
 function bundledPluginManifestUrls(): string[] {
   if (typeof window === "undefined") return [];
+  // Resolve against a base that always ends in "/" so a non-trailing-slash
+  // BASE_URL (e.g. "/geolibre") cannot mangle the path into "/geolibreplugins".
+  const base = import.meta.env.BASE_URL.endsWith("/")
+    ? import.meta.env.BASE_URL
+    : `${import.meta.env.BASE_URL}/`;
   return bundledPluginManifestPaths.map(
-    (path) => new URL(import.meta.env.BASE_URL + path, window.location.href).href,
+    (path) => new URL(path, new URL(base, window.location.href)).href,
   );
 }
 

@@ -10,7 +10,7 @@ frontend, so one folder serves both).
 One folder per plugin, named by its plugin id, with a `plugin.json` at its root
 (the exact same content a manifest URL would serve):
 
-```
+```text
 public/plugins/
   my-plugin/
     plugin.json        # { "id", "name", "version", "entry", "style"? }
