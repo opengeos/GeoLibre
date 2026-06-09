@@ -8,7 +8,6 @@ import {
   canEditLayerGeometry,
   reconcileEditedFeatures,
   tagFeatureKeys,
-  withSacrificialFirstFeature,
 } from "./geo-editor-geometry";
 import type {
   GeoLibreAppAPI,
@@ -139,7 +138,7 @@ export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
     }
 
     bindSketchesStoreSync();
-    restoreSketchesLayerToEditor();
+    void restoreSketchesLayerToEditor();
     setTimeout(() => geoEditorControl?.expand(), 0);
   },
   deactivate: (app: GeoLibreAppAPI) => {
@@ -541,7 +540,7 @@ export async function startLayerGeometryEdit(
   savedSketchesCollection = cloneFeatureCollection(
     geoEditorControl.getAllFeatureCollection(),
   );
-  clearSketchesFromEditor();
+  await clearSketchesFromEditor();
   setSketchesMapLayerSuppressed(false);
 
   // The store layer is left untouched until save, so Cancel simply discards the
@@ -562,10 +561,7 @@ export async function startLayerGeometryEdit(
   restoringSketchesToEditor = true;
   try {
     const tagged = tagFeatureKeys(cloneFeatureCollection(layer.geojson));
-    geoEditorControl.loadGeoJson(
-      withSacrificialFirstFeature(tagged),
-      SKETCHES_SOURCE_PATH,
-    );
+    await geoEditorControl.loadGeoJson(tagged, SKETCHES_SOURCE_PATH);
     loaded = true;
   } catch (error) {
     // A "Missing source" failure means Geoman is not ready yet (handled by the
@@ -588,7 +584,7 @@ export async function startLayerGeometryEdit(
     setEditTargetStoreVisible(layerId, editTargetOriginalVisible ?? true);
     editTargetOriginalVisible = null;
     editTargetLayerId = null;
-    restoreSketchesAfterSession();
+    await restoreSketchesAfterSession();
     applySketchesMapDisplay();
     return false;
   }
@@ -652,8 +648,9 @@ export function endLayerGeometryEdit(
     setEditTargetStoreVisible(targetId, editTargetOriginalVisible ?? true);
     editTargetOriginalVisible = null;
     // restoreSketchesAfterSession() exits Geoman edit modes and clears the
-    // editor before reloading sketches.
-    restoreSketchesAfterSession();
+    // editor before reloading sketches. It is async (it awaits Geoman); the
+    // internal awaits keep its own steps ordered, so it is fire-and-forget here.
+    void restoreSketchesAfterSession();
     applySketchesMapDisplay();
     notifyGeometryEdit();
   }
@@ -675,23 +672,26 @@ function abortGeometryEditSession(): void {
   editTargetLayerId = null;
   sketchesIdleDisplayOverride = false;
   unionSketchesWithStoreOnNextSync = false;
-  restoreSketchesAfterSession();
+  void restoreSketchesAfterSession();
   applySketchesMapDisplay();
   notifyGeometryEdit();
 }
 
 /** Clear the editor and reload the sketches stashed at session start. */
-function restoreSketchesAfterSession(): void {
+async function restoreSketchesAfterSession(): Promise<void> {
   if (!geoEditorControl) {
     savedSketchesCollection = null;
     return;
   }
   disableActiveEditModes();
-  clearSketchesFromEditor();
+  await clearSketchesFromEditor();
   if (savedSketchesCollection?.features.length) {
     restoringSketchesToEditor = true;
     try {
-      geoEditorControl.loadGeoJson(savedSketchesCollection, SKETCHES_SOURCE_PATH);
+      await geoEditorControl.loadGeoJson(
+        savedSketchesCollection,
+        SKETCHES_SOURCE_PATH,
+      );
     } catch {
       // Geoman may not be ready; the store subscription will re-restore.
     } finally {
@@ -701,7 +701,7 @@ function restoreSketchesAfterSession(): void {
   savedSketchesCollection = null;
 }
 
-function restoreSketchesLayerToEditor(): void {
+async function restoreSketchesLayerToEditor(): Promise<void> {
   if (!geoEditorControl || !pluginActive) return;
 
   const layer = findSketchesLayer(useAppStore.getState().layers);
@@ -722,12 +722,12 @@ function restoreSketchesLayerToEditor(): void {
     // Geoman may not be ready yet.
   }
 
-  // `loadGeoJson` invokes `onGeoJsonLoad` synchronously, so clearing the guard
-  // in `finally` is safe; if it ever became async the guard would already be
-  // false when the callback runs and `syncSketchesToStore` could loop.
+  // `loadGeoJson` is async, so the guard is awaited through the load: it stays
+  // set while Geoman imports and fires onGeoJsonLoad, then is cleared in
+  // `finally`, preventing `syncSketchesToStore` from looping.
   restoringSketchesToEditor = true;
   try {
-    geoEditorControl.loadGeoJson(storeCollection, SKETCHES_SOURCE_PATH);
+    await geoEditorControl.loadGeoJson(storeCollection, SKETCHES_SOURCE_PATH);
   } catch {
     // Geoman may not be ready until the map style finishes loading.
   } finally {
@@ -736,11 +736,13 @@ function restoreSketchesLayerToEditor(): void {
   scheduleApplySketchesMapDisplay();
 }
 
-function clearSketchesFromEditor(): void {
+async function clearSketchesFromEditor(): Promise<void> {
   if (!geoEditorControl) return;
+  // loadGeoJson is async (it awaits Geoman's import); keep the guard set for the
+  // whole load so the onGeoJsonLoad callback it fires cannot re-enter the sync.
   restoringSketchesToEditor = true;
   try {
-    geoEditorControl.loadGeoJson(
+    await geoEditorControl.loadGeoJson(
       { type: "FeatureCollection", features: [] },
       SKETCHES_SOURCE_PATH,
     );
@@ -790,13 +792,13 @@ function bindSketchesStoreSync(): void {
 
     if (previousSketches && !sketches) {
       sketchesLayerId = null;
-      clearSketchesFromEditor();
+      void clearSketchesFromEditor();
       return;
     }
 
     if (sketches && sketches.id !== sketchesLayerId && !pushingSketchesToStore) {
       sketchesLayerId = sketches.id;
-      restoreSketchesLayerToEditor();
+      void restoreSketchesLayerToEditor();
       return;
     }
 
@@ -808,7 +810,7 @@ function bindSketchesStoreSync(): void {
       !restoringSketchesToEditor &&
       !pushingSketchesToStore
     ) {
-      restoreSketchesLayerToEditor();
+      void restoreSketchesLayerToEditor();
       return;
     }
 
