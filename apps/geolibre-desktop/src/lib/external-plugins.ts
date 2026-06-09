@@ -481,10 +481,15 @@ async function reloadExternalUrlPluginUncoalesced(
     clearTimeout(timeout);
   }
 
-  // Nothing was loaded for this URL (existingId null — e.g. the initial load
-  // failed). There is nothing to upgrade, so don't register the fetched plugin
-  // as a side effect; the function expects an already-loaded plugin.
-  if (existingId === null) return plugin;
+  // Nothing was loaded for this URL (existingId null — e.g. the manifest is in
+  // settings but its initial load failed). Throw rather than registering the
+  // fetched plugin as a side effect, so the caller surfaces the inconsistency
+  // instead of the UI reporting a silent, invisible "success".
+  if (existingId === null) {
+    throw new Error(
+      `Cannot update plugin: no loaded version was found for '${manifestUrl}'. Try reloading the app.`,
+    );
+  }
 
   // If the plugin was uninstalled while we were fetching (its source was
   // removed from the loaded map by unloadRemovedUrlPlugins), don't resurrect it.
@@ -505,7 +510,7 @@ async function reloadExternalUrlPluginUncoalesced(
   manager.register(plugin);
   externallyLoadedPluginSources.set(plugin.id, manifestUrl);
   if (bundle.styleSource) {
-    injectExternalPluginStyle(bundle.manifest.id, bundle.styleSource);
+    injectExternalPluginStyle(plugin.id, bundle.styleSource);
   }
   if (wasActive) manager.activate(plugin.id, app);
   return plugin;

@@ -80,7 +80,16 @@ export async function fetchPluginRegistry(
       );
     }
     const text = await readBodyWithCap(response, MAX_REGISTRY_BYTES);
-    const payload = JSON.parse(text) as unknown;
+    let payload: unknown;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      // A captive portal or misconfigured proxy can return an HTML body with a
+      // 200 status; surface a clear message instead of a raw JSON SyntaxError.
+      throw new Error(
+        "Could not fetch plugin registry: the response was not valid JSON.",
+      );
+    }
     const rawEntries = extractEntries(payload);
     const entries = rawEntries
       .map((entry) => normalizeEntry(entry, registryUrl))
@@ -110,13 +119,16 @@ async function readBodyWithCap(
   }
   const reader = response.body?.getReader();
   if (!reader) {
-    const text = await response.text();
-    if (new TextEncoder().encode(text).byteLength > maxBytes) {
+    // No stream available (some environments/test mocks). arrayBuffer() lets us
+    // measure the byte length before decoding, so an oversized body is rejected
+    // without first building the full string.
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength > maxBytes) {
       throw new Error(
         "Could not fetch plugin registry: response exceeds the 5 MB size limit.",
       );
     }
-    return text;
+    return new TextDecoder().decode(buffer);
   }
   const chunks: Uint8Array[] = [];
   let totalBytes = 0;
@@ -232,12 +244,11 @@ function stringArray(value: unknown): string[] | undefined {
 /**
  * Compare dotted numeric versions. Returns true when `current` is greater than
  * or equal to `required`. Pre-release and build suffixes (e.g. `-rc.1`, `+sha`)
- * are stripped before comparison, so `1.0.0-rc.1` is treated as equal to
- * `1.0.0` rather than ordered before it. A consequence is that the "update
- * available" check (which negates this) will not flag a registry's `1.0.0`
- * release for a user running `1.0.0-rc.1`; the marketplace is expected to
- * publish stable versions only. Non-numeric or missing requirements are treated
- * as satisfied so a malformed `minGeoLibreVersion` never blocks installation.
+ * are stripped before comparison, which is the right behaviour for the
+ * `minGeoLibreVersion` install gate: a coarse numeric floor. Non-numeric or
+ * missing requirements are treated as satisfied so a malformed
+ * `minGeoLibreVersion` never blocks installation. For detecting an available
+ * upgrade (which must order `1.0.0-rc.1` below `1.0.0`), use isNewerVersion.
  */
 export function satisfiesMinVersion(current: string, required?: string): boolean {
   if (!required) return true;
@@ -254,6 +265,36 @@ export function satisfiesMinVersion(current: string, required?: string): boolean
     if (a !== b) return a > b;
   }
   return true;
+}
+
+/**
+ * Returns true when `candidate` is a strictly newer version than `current`,
+ * for driving the marketplace's "update available" badge. Numeric cores are
+ * compared first; when they tie, a pre-release `current` with a stable
+ * `candidate` counts as an upgrade (e.g. `1.0.0-rc.1` -> `1.0.0`) so a user on
+ * a release candidate is offered the final release. This stays coarse: it does
+ * not order pre-release identifiers against each other (`rc.1` vs `rc.2`).
+ * Unparseable versions return false so a malformed string never shows a
+ * spurious update.
+ */
+export function isNewerVersion(candidate: string, current: string): boolean {
+  const candidateParts = parseVersion(candidate);
+  const currentParts = parseVersion(current);
+  if (!candidateParts || !currentParts) return false;
+  const length = Math.max(candidateParts.length, currentParts.length);
+  for (let index = 0; index < length; index += 1) {
+    const a = candidateParts[index] ?? 0;
+    const b = currentParts[index] ?? 0;
+    if (a !== b) return a > b;
+  }
+  // Equal numeric cores: only a pre-release -> stable transition is an upgrade.
+  return hasPreRelease(current) && !hasPreRelease(candidate);
+}
+
+// A version carries a pre-release suffix when a `-` segment precedes any `+`
+// build metadata, e.g. `1.0.0-rc.1` or `1.0.0-beta+sha`.
+function hasPreRelease(value: string): boolean {
+  return value.trim().replace(/^v/, "").split("+")[0].includes("-");
 }
 
 // Compares only the dotted numeric core; pre-release/build suffixes are dropped,

@@ -36,6 +36,7 @@ import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
 import { getPluginManager, upgradeExternalPlugin } from "../../hooks/usePlugins";
 import {
   fetchPluginRegistry,
+  isNewerVersion,
   satisfiesMinVersion,
   type PluginRegistryEntry,
 } from "../../lib/plugin-registry";
@@ -64,6 +65,14 @@ const EMPTY_ENTRIES: PluginRegistryEntry[] = [];
 // target="_blank"/window.open, so route through the opener plugin there and
 // fall back to window.open on the web build.
 async function openExternalLink(url: string): Promise<void> {
+  // Only ever hand http(s) URLs to the opener so a future call site can't open
+  // arbitrary schemes (javascript:, file:, ...) in the system browser.
+  try {
+    const { protocol } = new URL(url);
+    if (protocol !== "https:" && protocol !== "http:") return;
+  } catch {
+    return;
+  }
   if (isTauri()) {
     await openUrl(url);
     return;
@@ -177,16 +186,27 @@ export function ManagePluginsDialog({
     [installedSet],
   );
   // An update is available only when the registry version is strictly newer
-  // than the loaded one (directional, not any mismatch).
+  // than the loaded one (directional, not any mismatch). isNewerVersion orders
+  // a pre-release below its release, so an rc user is offered the GA build.
   const isUpgradeable = useCallback(
     (entry: PluginRegistryEntry) => {
       const loaded = loadedVersions.get(entry.id);
       return (
         isInstalled(entry) &&
         loaded !== undefined &&
-        !satisfiesMinVersion(loaded, entry.version)
+        isNewerVersion(entry.version, loaded)
       );
     },
+    [isInstalled, loadedVersions],
+  );
+
+  // True when the entry is in settings (so the badge reads "Installed") but the
+  // plugin manager has not registered it yet — the async load is still pending
+  // or failed. Used to show a "Loading…" state instead of a premature
+  // "Installed" confirmation.
+  const isLoadPending = useCallback(
+    (entry: PluginRegistryEntry) =>
+      isInstalled(entry) && !loadedVersions.has(entry.id),
     [isInstalled, loadedVersions],
   );
 
@@ -298,8 +318,14 @@ export function ManagePluginsDialog({
 
   const entries =
     registry.status === "ready" ? registry.entries : EMPTY_ENTRIES;
-  const installedCount = entries.filter(isInstalled).length;
-  const upgradeableCount = entries.filter(isUpgradeable).length;
+  const installedCount = useMemo(
+    () => entries.filter(isInstalled).length,
+    [entries, isInstalled],
+  );
+  const upgradeableCount = useMemo(
+    () => entries.filter(isUpgradeable).length,
+    [entries, isUpgradeable],
+  );
 
   const sectionItems: Array<{ id: ManageSection; label: string }> = [
     { id: "all", label: `All (${entries.length})` },
@@ -317,8 +343,8 @@ export function ManagePluginsDialog({
     const matches = (entry: PluginRegistryEntry) =>
       !term ||
       [entry.name, entry.id, entry.description, ...(entry.categories ?? [])]
-        .filter(Boolean)
-        .some((field) => field!.toLowerCase().includes(term));
+        .filter((field): field is string => Boolean(field))
+        .some((field) => field.toLowerCase().includes(term));
     return entries.filter((entry) => {
       if (!matches(entry)) return false;
       switch (section) {
@@ -468,6 +494,7 @@ export function ManagePluginsDialog({
                       entry.minGeoLibreVersion,
                     );
                     const updateAvailable = isUpgradeable(entry);
+                    const loadPending = isLoadPending(entry);
                     return (
                       <div
                         key={entry.id}
@@ -590,10 +617,17 @@ export function ManagePluginsDialog({
                                   Update
                                 </Button>
                               ) : null}
-                              <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
-                                <Check className="h-3.5 w-3.5" />
-                                Installed
-                              </span>
+                              {loadPending ? (
+                                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  Loading…
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                                  <Check className="h-3.5 w-3.5" />
+                                  Installed
+                                </span>
+                              )}
                               <Button
                                 type="button"
                                 size="icon"
