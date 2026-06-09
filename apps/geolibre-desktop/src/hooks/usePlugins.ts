@@ -35,6 +35,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { bundledPluginManifestPaths } from "virtual:bundled-plugins";
 import {
   loadExternalPlugins,
+  reloadExternalUrlPlugin,
   unloadRemovedUrlPlugins,
 } from "../lib/external-plugins";
 import { mergeStringLists } from "../lib/string-lists";
@@ -119,6 +120,20 @@ const EMPTY_PLUGIN_MANIFEST_URLS: string[] = [];
 
 export function getPluginManager(): PluginManager {
   return manager;
+}
+
+// Upgrade an installed external plugin in place by re-fetching its manifest URL
+// and re-registering the published version. Used by the marketplace's Update
+// action.
+export async function upgradeExternalPlugin(
+  manifestUrl: string,
+  mapControllerRef: RefObject<MapController | null>,
+): Promise<void> {
+  await reloadExternalUrlPlugin(
+    manager,
+    manifestUrl,
+    createAppAPI(mapControllerRef),
+  );
 }
 
 export function usePluginRegistry() {

@@ -56,7 +56,7 @@ import {
   type DesktopSettings,
   type DesktopLayoutSettings,
 } from "../../hooks/useDesktopSettings";
-import { getPluginManager } from "../../hooks/usePlugins";
+import { getPluginManager, upgradeExternalPlugin } from "../../hooks/usePlugins";
 import { mergeStringLists, normalizeStringList } from "../../lib/string-lists";
 import { pickLocalPathWithFallback } from "../../lib/tauri-io";
 import { PluginMarketplace } from "./PluginMarketplace";
@@ -1166,6 +1166,9 @@ export function SettingsDialog({
                     )}
                     onInstall={installMarketplacePlugin}
                     onRemove={removeMarketplacePlugin}
+                    onUpgrade={(manifestUrl) =>
+                      upgradeExternalPlugin(manifestUrl, mapControllerRef)
+                    }
                   />
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-3">

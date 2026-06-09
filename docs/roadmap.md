@@ -116,7 +116,8 @@
 - [ ] External plugin package distribution workflow
 - [x] Plugin marketplace / registry design (see [Plugin marketplace and registry](#plugin-marketplace-and-registry-design))
 - [x] Plugin marketplace MVP: curated registry plus browse and install UI
-- [ ] Plugin update, removal, and integrity verification
+- [x] Plugin update (in-place re-fetch) and uninstall with confirmation
+- [ ] Plugin integrity verification (hashes and signing)
 - [ ] Sandboxed worker plugins
 - [ ] Performance tuning and test suite
 - [ ] Cross-platform installers
@@ -204,13 +205,16 @@ build, works in both:
   `VITE_GEOLIBRE_PLUGIN_REGISTRY_URL` or a bundled
   `public/plugin-registry.json` fallback.
 - `apps/geolibre-desktop/src/components/layout/PluginMarketplace.tsx` renders a
-  Browse list in Settings > Plugins with search, install/installed/remove,
-  `minGeoLibreVersion` compatibility checks, an update-available badge, and
-  inline error handling.
+  Browse list in Settings > Plugins with search, install, a confirm step before
+  uninstall, an Update action when a newer version is published,
+  `minGeoLibreVersion` compatibility checks, and inline error handling.
 - Installing records the entry's manifest URL in the plugin manifest URL list,
   so the existing external-plugin loader fetches and registers it. No new trust
-  path is introduced. Removing a plugin unregisters it at runtime (tearing down
-  any active map control) so the Plugins menu updates without a reload.
+  path is introduced. Uninstalling (after confirmation) unregisters the plugin
+  at runtime — tearing down any active map control — so the Plugins menu updates
+  without a reload. Update re-fetches the manifest URL and re-registers the
+  published version in place, fetching the new version before tearing down the
+  old one so a failed update leaves the installed plugin intact.
 - `public/plugin-registry.json` ships a working same-origin sample plugin
   (`public/marketplace/sample/`) so the marketplace is usable out of the box;
   maintainers add curated external entries to the registry.

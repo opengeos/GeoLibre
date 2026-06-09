@@ -1,21 +1,23 @@
 /*
  * Theme the sample plugin's map control with GeoLibre's design tokens (defined
- * globally on :root and .dark) so the button and its icon adapt to the in-app
- * light/dark theme instead of showing as a white square in dark mode.
+ * globally on :root and .dark) so it adapts to the in-app light/dark theme. In
+ * dark mode --background/--popover are near-black and would fuse with the map,
+ * so the control uses the lighter --secondary surface plus a border to stay
+ * visible, and the icon uses --foreground for contrast.
  */
 .geolibre-sample-plugin-control.maplibregl-ctrl-group {
-  background: hsl(var(--background));
+  background: hsl(var(--secondary));
+  border: 1px solid hsl(var(--border));
 }
 
 .geolibre-sample-plugin-control button {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: hsl(var(--foreground));
   background: transparent;
+  color: hsl(var(--foreground));
 }
 
 .geolibre-sample-plugin-control button:hover {
-  background: hsl(var(--accent));
-  color: hsl(var(--accent-foreground));
+  background: hsl(var(--foreground) / 0.1);
 }

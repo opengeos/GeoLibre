@@ -402,3 +402,43 @@ export function unloadRemovedUrlPlugins(
   }
   return removed;
 }
+
+/**
+ * Re-fetch and re-register the plugin loaded from `manifestUrl` to upgrade it to
+ * the version currently published at that URL. The new version is fetched
+ * before the old one is torn down, so a failed upgrade leaves the installed
+ * plugin intact. Active state is preserved: an active plugin is reactivated
+ * after the new version registers. Returns the new plugin.
+ */
+export async function reloadExternalUrlPlugin(
+  manager: PluginManager,
+  manifestUrl: string,
+  app: GeoLibreAppAPI,
+): Promise<GeoLibrePlugin> {
+  let existingId: string | null = null;
+  for (const [id, source] of externallyLoadedPluginSources) {
+    if (source === manifestUrl) {
+      existingId = id;
+      break;
+    }
+  }
+  const wasActive = existingId ? manager.isActive(existingId) : false;
+
+  // Fetch and validate the new version first; if this throws the old plugin is
+  // untouched.
+  const bundle = await loadPluginUrlBundle(manifestUrl);
+  const plugin = await importExternalPlugin(bundle);
+
+  if (existingId) {
+    manager.unregister(existingId, app);
+    removeExternalPluginStyle(existingId);
+    externallyLoadedPluginSources.delete(existingId);
+  }
+  manager.register(plugin);
+  externallyLoadedPluginSources.set(plugin.id, manifestUrl);
+  if (bundle.styleSource) {
+    injectExternalPluginStyle(bundle.manifest.id, bundle.styleSource);
+  }
+  if (wasActive) manager.activate(plugin.id, app);
+  return plugin;
+}

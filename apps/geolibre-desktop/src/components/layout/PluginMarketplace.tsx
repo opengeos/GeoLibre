@@ -1,6 +1,7 @@
 import { Button, Input } from "@geolibre/ui";
 import {
   AlertTriangle,
+  ArrowUpCircle,
   Check,
   Download,
   ExternalLink,
@@ -9,7 +10,13 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { getPluginManager } from "../../hooks/usePlugins";
 import {
   fetchPluginRegistry,
@@ -24,6 +31,8 @@ interface PluginMarketplaceProps {
   onInstall: (manifestUrl: string) => void;
   /** Remove a staged manifest URL. */
   onRemove: (manifestUrl: string) => void;
+  /** Re-fetch and re-register the plugin at the given manifest URL. */
+  onUpgrade: (manifestUrl: string) => Promise<void>;
 }
 
 type LoadState =
@@ -37,10 +46,17 @@ export function PluginMarketplace({
   installedUrls,
   onInstall,
   onRemove,
+  onUpgrade,
 }: PluginMarketplaceProps) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [query, setQuery] = useState("");
   const [reloadToken, setReloadToken] = useState(0);
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+  const [upgradingId, setUpgradingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{
+    id: string;
+    message: string;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,15 +80,18 @@ export function PluginMarketplace({
     };
   }, [reloadToken]);
 
-  // Versions of already-registered plugins, used to flag available updates.
-  // Captured per load; a newly installed plugin reflects after the next reload.
-  const loadedVersions = useMemo(() => {
-    const versions = new Map<string, string>();
-    for (const plugin of getPluginManager().list()) {
-      versions.set(plugin.id, plugin.version);
-    }
-    return versions;
-  }, [reloadToken, installedUrls]);
+  // Re-render when the plugin manager changes so installed-version state (and
+  // the update-available badge) stay live as plugins register, unregister, or
+  // upgrade, without a manual refresh.
+  useSyncExternalStore(
+    (listener) => getPluginManager().subscribe(listener),
+    () => getPluginManager().getVersion(),
+    () => getPluginManager().getVersion(),
+  );
+  const loadedVersions = new Map<string, string>();
+  for (const plugin of getPluginManager().list()) {
+    loadedVersions.set(plugin.id, plugin.version);
+  }
 
   const installedSet = useMemo(
     () => new Set(installedUrls.map((url) => url.trim())),
@@ -80,6 +99,25 @@ export function PluginMarketplace({
   );
 
   const refresh = useCallback(() => setReloadToken((token) => token + 1), []);
+
+  const handleUpgrade = useCallback(
+    async (entry: PluginRegistryEntry) => {
+      setActionError(null);
+      setUpgradingId(entry.id);
+      try {
+        await onUpgrade(entry.manifestUrl);
+      } catch (error: unknown) {
+        setActionError({
+          id: entry.id,
+          message:
+            error instanceof Error ? error.message : "Could not update plugin.",
+        });
+      } finally {
+        setUpgradingId(null);
+      }
+    },
+    [onUpgrade],
+  );
 
   const entries = state.status === "ready" ? state.entries : [];
   const filtered = useMemo(() => {
@@ -172,6 +210,8 @@ export function PluginMarketplace({
               installed &&
               loadedVersion !== undefined &&
               loadedVersion !== entry.version;
+            const confirming = confirmRemoveId === entry.id;
+            const upgrading = upgradingId === entry.id;
             return (
               <div
                 key={entry.id}
@@ -223,21 +263,14 @@ export function PluginMarketplace({
                       </span>
                     ) : null}
                   </div>
+                  {actionError?.id === entry.id ? (
+                    <p className="text-[11px] text-destructive">
+                      {actionError.message}
+                    </p>
+                  ) : null}
                 </div>
-                <div className="shrink-0">
-                  {installed ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      aria-label={`Remove ${entry.name}`}
-                      onClick={() => onRemove(entry.manifestUrl)}
-                    >
-                      <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                      Installed
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  ) : (
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {!installed ? (
                     <Button
                       type="button"
                       size="sm"
@@ -249,6 +282,70 @@ export function PluginMarketplace({
                       <Download className="h-3.5 w-3.5" />
                       Install
                     </Button>
+                  ) : confirming ? (
+                    <>
+                      <span className="text-xs text-muted-foreground">
+                        Remove?
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="text-destructive"
+                        aria-label={`Confirm uninstall ${entry.name}`}
+                        onClick={() => {
+                          onRemove(entry.manifestUrl);
+                          setConfirmRemoveId(null);
+                        }}
+                      >
+                        Uninstall
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setConfirmRemoveId(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      {updateAvailable ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={upgrading}
+                          aria-label={`Update ${entry.name}`}
+                          onClick={() => void handleUpgrade(entry)}
+                        >
+                          {upgrading ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <ArrowUpCircle className="h-3.5 w-3.5" />
+                          )}
+                          Update
+                        </Button>
+                      ) : null}
+                      <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                        <Check className="h-3.5 w-3.5" />
+                        Installed
+                      </span>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8"
+                        aria-label={`Uninstall ${entry.name}`}
+                        onClick={() => {
+                          setActionError(null);
+                          setConfirmRemoveId(entry.id);
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>
