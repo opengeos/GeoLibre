@@ -3,14 +3,21 @@ import { Geoman, defaultLayerStyles } from "@geoman-io/maplibre-geoman-free";
 import type { Feature, FeatureCollection } from "geojson";
 import type maplibregl from "maplibre-gl";
 import { GeoEditor, type GeoEditorOptions } from "maplibre-gl-geo-editor";
+import {
+  SKETCHES_SOURCE_KIND,
+  canEditLayerGeometry,
+  reconcileEditedFeatures,
+  tagFeatureKeys,
+} from "./geo-editor-geometry";
 import type {
   GeoLibreAppAPI,
   GeoLibreMapControlPosition,
   GeoLibrePlugin,
 } from "../types";
 
+export { canEditLayerGeometry } from "./geo-editor-geometry";
+
 const SKETCHES_LAYER_NAME = "Sketches";
-const SKETCHES_SOURCE_KIND = "geoeditor-sketches";
 const SKETCHES_SOURCE_PATH = "geoeditor://sketches";
 const GEOMAN_TEXT_PROPERTY = "__gm_text";
 
@@ -79,6 +86,20 @@ let unionSketchesWithStoreOnNextSync = false;
 let pendingStyleDataListener: (() => void) | null = null;
 let geomanEditSyncMap: maplibregl.Map | null = null;
 
+/**
+ * Id of the store layer currently being geometry-edited in place, or null when
+ * the editor is in its default "Sketches" mode. While set, the shared editor is
+ * re-targeted at this layer: the sync/display helpers resolve to it instead of
+ * the Sketches layer (see `activeEditableLayer`).
+ */
+let editTargetLayerId: string | null = null;
+/** Sketches stashed out of the editor for the duration of an edit session. */
+let savedSketchesCollection: FeatureCollection | null = null;
+/** Target layer's geojson captured at session start, restored on Cancel. */
+let originalTargetGeojson: FeatureCollection | null = null;
+/** Listeners notified when a geometry edit session starts or ends. */
+const geometryEditListeners = new Set<() => void>();
+
 const GEOMAN_EDIT_SYNC_EVENTS = [
   "gm:dragend",
   "gm:editend",
@@ -120,6 +141,10 @@ export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
     setTimeout(() => geoEditorControl?.expand(), 0);
   },
   deactivate: (app: GeoLibreAppAPI) => {
+    // Persist any in-progress geometry edit and restore the editor to Sketches
+    // mode before tearing the control down, so map rendering and store state
+    // stay consistent.
+    if (editTargetLayerId) endLayerGeometryEdit(app, { save: true });
     pluginActive = false;
     sketchesIdleDisplayOverride = false;
     unionSketchesWithStoreOnNextSync = false;
@@ -284,6 +309,21 @@ function findSketchesLayer(
   return layers.find(isSketchesLayer);
 }
 
+/**
+ * The store layer the shared editor is currently bound to: the geometry-edit
+ * target when a session is active, otherwise the Sketches layer. The map-display
+ * helpers resolve through this so they suppress/style whichever layer the editor
+ * is showing, without duplicating the suppression logic per mode.
+ */
+function activeEditableLayer(
+  layers: GeoLibreLayer[],
+): GeoLibreLayer | undefined {
+  if (editTargetLayerId) {
+    return layers.find((layer) => layer.id === editTargetLayerId);
+  }
+  return findSketchesLayer(layers);
+}
+
 function cloneFeatureCollection(
   collection: FeatureCollection,
 ): FeatureCollection {
@@ -319,6 +359,11 @@ function unionFeatureCollections(
 
 function syncSketchesToStore(): void {
   if (!geoEditorControl || restoringSketchesToEditor) return;
+
+  if (editTargetLayerId) {
+    syncEditTargetToStore();
+    return;
+  }
 
   let collection = cloneFeatureCollection(
     geoEditorControl.getAllFeatureCollection(),
@@ -362,6 +407,181 @@ function syncSketchesToStore(): void {
   if (!sketchesIdleDisplayOverride) {
     scheduleApplySketchesMapDisplay();
   }
+}
+
+// ---------------------------------------------------------------------------
+// In-place geometry editing of an existing vector layer
+// ---------------------------------------------------------------------------
+
+/** Id of the layer being geometry-edited, or null when no session is active. */
+export function getGeometryEditTargetLayerId(): string | null {
+  return editTargetLayerId;
+}
+
+/** Subscribe to geometry-edit session changes (for `useSyncExternalStore`). */
+export function subscribeGeometryEdit(listener: () => void): () => void {
+  geometryEditListeners.add(listener);
+  return () => {
+    geometryEditListeners.delete(listener);
+  };
+}
+
+function notifyGeometryEdit(): void {
+  for (const listener of geometryEditListeners) listener();
+}
+
+function syncEditTargetToStore(): void {
+  if (!geoEditorControl || !editTargetLayerId) return;
+
+  const store = useAppStore.getState();
+  if (!store.layers.some((layer) => layer.id === editTargetLayerId)) return;
+
+  const edited = reconcileEditedFeatures(
+    cloneFeatureCollection(geoEditorControl.getAllFeatureCollection()),
+  );
+  // The union path is a Sketches-only safeguard; in edit mode the editor's full
+  // collection is the source of truth.
+  unionSketchesWithStoreOnNextSync = false;
+
+  pushingSketchesToStore = true;
+  try {
+    store.updateLayer(editTargetLayerId, { geojson: edited });
+  } finally {
+    pushingSketchesToStore = false;
+  }
+
+  if (!sketchesIdleDisplayOverride) {
+    scheduleApplySketchesMapDisplay();
+  }
+}
+
+/**
+ * Begin editing the geometry of an existing vector layer in place, reusing the
+ * shared Geoman editor. Stashes any current sketches out of the editor, loads
+ * the target layer's features (id-tagged), and re-targets the sync/display
+ * helpers at the target layer. Returns false when the plugin is not active or
+ * the layer is not editable.
+ */
+export function startLayerGeometryEdit(
+  _app: GeoLibreAppAPI,
+  layerId: string,
+): boolean {
+  if (!pluginActive || !geoEditorControl) return false;
+
+  // Only one session at a time; finish any open one first (saving its work).
+  if (editTargetLayerId && editTargetLayerId !== layerId) {
+    endLayerGeometryEdit(_app, { save: true });
+  }
+  if (editTargetLayerId === layerId) return true;
+
+  const layer = useAppStore
+    .getState()
+    .layers.find((candidate) => candidate.id === layerId);
+  if (!layer || !canEditLayerGeometry(layer) || !layer.geojson) return false;
+
+  // Flush sketches to the store, stash them out of the editor, and restore the
+  // Sketches store layer's normal rendering (it stays visible as a plain layer
+  // during the target edit).
+  syncSketchesToStore();
+  savedSketchesCollection = cloneFeatureCollection(
+    geoEditorControl.getAllFeatureCollection(),
+  );
+  clearSketchesFromEditor();
+  setSketchesMapLayerSuppressed(false);
+
+  originalTargetGeojson = cloneFeatureCollection(layer.geojson);
+  editTargetLayerId = layerId;
+  sketchesIdleDisplayOverride = false;
+  unionSketchesWithStoreOnNextSync = false;
+
+  restoringSketchesToEditor = true;
+  try {
+    geoEditorControl.loadGeoJson(
+      tagFeatureKeys(cloneFeatureCollection(layer.geojson)),
+      SKETCHES_SOURCE_PATH,
+    );
+  } catch {
+    // Geoman may not be ready until the map style finishes loading.
+  } finally {
+    restoringSketchesToEditor = false;
+  }
+
+  applySketchesMapDisplay();
+  notifyGeometryEdit();
+  return true;
+}
+
+/**
+ * Finish the active geometry edit session. With `save`, the latest edits are
+ * written to the target layer; otherwise the layer is reverted to its
+ * session-start snapshot. The editor is returned to Sketches mode either way.
+ */
+export function endLayerGeometryEdit(
+  _app: GeoLibreAppAPI,
+  { save }: { save: boolean },
+): void {
+  if (!editTargetLayerId || !geoEditorControl) return;
+
+  const targetId = editTargetLayerId;
+  if (save) {
+    syncEditTargetToStore();
+  } else if (originalTargetGeojson) {
+    pushingSketchesToStore = true;
+    try {
+      useAppStore
+        .getState()
+        .updateLayer(targetId, { geojson: originalTargetGeojson });
+    } finally {
+      pushingSketchesToStore = false;
+    }
+  }
+
+  // Restore the target layer's normal map rendering while it is still the
+  // active layer, then switch back to Sketches mode.
+  setSketchesMapLayerSuppressed(false);
+  editTargetLayerId = null;
+  originalTargetGeojson = null;
+  sketchesIdleDisplayOverride = false;
+  unionSketchesWithStoreOnNextSync = false;
+
+  restoreSketchesAfterSession();
+  applySketchesMapDisplay();
+  notifyGeometryEdit();
+}
+
+/**
+ * Tear down a session whose target layer was removed from the store mid-edit:
+ * drop the editor's copy and restore Sketches without writing back to the gone
+ * layer.
+ */
+function abortGeometryEditSession(): void {
+  editTargetLayerId = null;
+  originalTargetGeojson = null;
+  sketchesIdleDisplayOverride = false;
+  unionSketchesWithStoreOnNextSync = false;
+  restoreSketchesAfterSession();
+  applySketchesMapDisplay();
+  notifyGeometryEdit();
+}
+
+/** Clear the editor and reload the sketches stashed at session start. */
+function restoreSketchesAfterSession(): void {
+  if (!geoEditorControl) {
+    savedSketchesCollection = null;
+    return;
+  }
+  clearSketchesFromEditor();
+  if (savedSketchesCollection?.features.length) {
+    restoringSketchesToEditor = true;
+    try {
+      geoEditorControl.loadGeoJson(savedSketchesCollection, SKETCHES_SOURCE_PATH);
+    } catch {
+      // Geoman may not be ready; the store subscription will re-restore.
+    } finally {
+      restoringSketchesToEditor = false;
+    }
+  }
+  savedSketchesCollection = null;
 }
 
 function restoreSketchesLayerToEditor(): void {
@@ -417,6 +637,31 @@ function clearSketchesFromEditor(): void {
 function bindSketchesStoreSync(): void {
   geoEditorStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     if (!pluginActive) return;
+
+    // During a geometry-edit session the editor holds the target layer's
+    // features, not sketches. Skip the Sketches reconciliation entirely and
+    // only watch the target: abort if it was removed, reflect display changes.
+    if (editTargetLayerId) {
+      const target = state.layers.find(
+        (layer) => layer.id === editTargetLayerId,
+      );
+      if (!target) {
+        abortGeometryEditSession();
+        return;
+      }
+      const previousTarget = previous.layers.find(
+        (layer) => layer.id === editTargetLayerId,
+      );
+      if (
+        previousTarget &&
+        (target.visible !== previousTarget.visible ||
+          target.opacity !== previousTarget.opacity ||
+          target.style !== previousTarget.style)
+      ) {
+        scheduleApplySketchesMapDisplay();
+      }
+      return;
+    }
 
     const sketches = findSketchesLayer(state.layers);
     const previousSketches = findSketchesLayer(previous.layers);
@@ -516,7 +761,7 @@ function scheduleShowGeomanDisplayLayersOnStyleData(): void {
 }
 
 function setSketchesMapLayerSuppressed(suppress: boolean): void {
-  const layer = findSketchesLayer(useAppStore.getState().layers);
+  const layer = activeEditableLayer(useAppStore.getState().layers);
   if (!layer) {
     sketchesMapLayerSuppressed = false;
     return;
@@ -547,7 +792,7 @@ function setSketchesMapLayersVisibility(layer: GeoLibreLayer): void {
 function setGeomanDisplayLayersVisibility(visibility: "visible" | "none"): void {
   const map = appApi?.getMap?.();
   if (!map) return;
-  const sketchesLayer = findSketchesLayer(useAppStore.getState().layers);
+  const sketchesLayer = activeEditableLayer(useAppStore.getState().layers);
   const effectiveVisibility =
     visibility === "visible" && sketchesLayer?.visible === false
       ? "none"

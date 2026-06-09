@@ -5,6 +5,8 @@ import {
 } from "@geolibre/core";
 import {
   getDuckDBLayerRows,
+  getGeometryEditTargetLayerId,
+  subscribeGeometryEdit,
   updateDuckDBLayerRows,
   type DuckDBAttributeRow,
 } from "@geolibre/plugins";
@@ -43,6 +45,7 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import {
   isTauri,
@@ -312,6 +315,14 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   // Edits made here would neither redraw on the map nor survive a save, so the
   // attribute table is read-only for them.
   const isReadOnlyVectorLayer = geojsonVectorSourceId(layer) !== null;
+  // While this layer's geometry is being edited in place, attribute edits would
+  // race the editor's geometry write-back, so the inline editor is disabled.
+  const geometryEditLayerId = useSyncExternalStore(
+    subscribeGeometryEdit,
+    getGeometryEditTargetLayerId,
+  );
+  const isGeometryEditing =
+    layer != null && geometryEditLayerId === layer.id;
 
   // Vector layers added via the Add Vector Layer control keep their features in
   // a MapLibre GeoJSON source rather than in `layer.geojson`. Read the data back
@@ -376,7 +387,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   useEffect(() => {
     setIsEditing(false);
     setDrafts({});
-  }, [selectedLayerId, hasLayer]);
+  }, [selectedLayerId, hasLayer, isGeometryEditing]);
 
   const filterLower = attributeFilter.toLowerCase();
   const filtered = attributeRows.filter(({ properties, featureId }) => {
@@ -806,15 +817,17 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           size="sm"
           className="ml-auto h-7 px-2"
           title={
-            isReadOnlyVectorLayer
-              ? "Editing is not available for Add Vector Layer layers"
-              : isEditing
-                ? hasEdits
-                  ? "Use Save or Cancel to finish editing"
-                  : "Exit edit mode"
-                : isDuckDBLayer
-                  ? "Edit displayed DuckDB query attributes in memory"
-                  : "Edit attribute values"
+            isGeometryEditing
+              ? "Finish geometry editing to edit attributes"
+              : isReadOnlyVectorLayer
+                ? "Editing is not available for Add Vector Layer layers"
+                : isEditing
+                  ? hasEdits
+                    ? "Use Save or Cancel to finish editing"
+                    : "Exit edit mode"
+                  : isDuckDBLayer
+                    ? "Edit displayed DuckDB query attributes in memory"
+                    : "Edit attribute values"
           }
           aria-label={
             isEditing && !hasEdits ? "Exit edit mode" : "Edit attribute values"
@@ -822,6 +835,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           disabled={
             !hasAttributeSource ||
             isReadOnlyVectorLayer ||
+            isGeometryEditing ||
             (isEditing && hasEdits)
           }
           onClick={toggleEditing}

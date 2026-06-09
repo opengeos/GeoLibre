@@ -1,10 +1,14 @@
-import { useAppStore } from "@geolibre/core";
+import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { MapController, MapDiagnosticEvent } from "@geolibre/map";
 import { MapCanvas } from "@geolibre/map";
 import {
+  endLayerGeometryEdit,
+  getGeometryEditTargetLayerId,
   restoreRasterLayers,
   restoreThreeDTilesLayers,
   restoreVectorLayers,
+  startLayerGeometryEdit,
+  subscribeGeometryEdit,
 } from "@geolibre/plugins";
 import {
   type CSSProperties,
@@ -16,7 +20,9 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
+import { runSqlQuery } from "../../lib/sql-workspace";
 import {
   isTauri,
   loadDroppedVectorFiles,
@@ -136,6 +142,10 @@ export function DesktopShell({
   const dropMessageTimeoutRef = useRef<number | null>(null);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
+  const geometryEditLayerId = useSyncExternalStore(
+    subscribeGeometryEdit,
+    getGeometryEditTargetLayerId,
+  );
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [mapReadyGeneration, setMapReadyGeneration] = useState(0);
   const [dropMessage, setDropMessage] = useState<string | null>(null);
@@ -165,6 +175,61 @@ export function DesktopShell({
       setDropError(null);
     }, 4000);
   }, []);
+
+  const handleToggleGeometryEdit = useCallback((layerId: string) => {
+    const appAPI = createAppAPI(mapControllerRef);
+    if (getGeometryEditTargetLayerId() === layerId) {
+      endLayerGeometryEdit(appAPI, { save: true });
+      return;
+    }
+    const manager = getPluginManager();
+    if (!manager.isActive("maplibre-gl-geo-editor")) {
+      manager.activate("maplibre-gl-geo-editor", appAPI);
+    }
+    startLayerGeometryEdit(appAPI, layerId);
+  }, []);
+
+  const handleCancelGeometryEdit = useCallback(() => {
+    endLayerGeometryEdit(createAppAPI(mapControllerRef), { save: false });
+  }, []);
+
+  const handleMaterializeDuckDBLayer = useCallback(
+    async (layer: GeoLibreLayer) => {
+      const query =
+        typeof layer.metadata.query === "string" ? layer.metadata.query : null;
+      if (!query) {
+        setDropError("This DuckDB layer has no stored query to materialize.");
+        clearDropMessageLater();
+        return;
+      }
+      setDropError(null);
+      setDropMessage("Materializing DuckDB layer...");
+      try {
+        const result = await runSqlQuery(query, useAppStore.getState().layers);
+        if (!result.geojson) {
+          throw new Error("The query did not return a geometry column.");
+        }
+        const id = addGeoJsonLayer(`${layer.name} (editable)`, result.geojson);
+        const created = useAppStore
+          .getState()
+          .layers.find((candidate) => candidate.id === id);
+        if (created) mapControllerRef.current?.fitLayer(created);
+        setDropMessage(
+          `Materialized ${result.geojson.features.length.toLocaleString()} features.`,
+        );
+      } catch (error) {
+        setDropMessage(null);
+        setDropError(
+          error instanceof Error
+            ? error.message
+            : "Could not materialize this layer.",
+        );
+      } finally {
+        clearDropMessageLater();
+      }
+    },
+    [addGeoJsonLayer, clearDropMessageLater],
+  );
 
   useEffect(() => {
     if (isTauri()) {
@@ -521,6 +586,10 @@ export function DesktopShell({
           <LayerPanel
             mapControllerRef={mapControllerRef}
             onResizeStart={startLayerPanelResize}
+            geometryEditLayerId={geometryEditLayerId}
+            onToggleGeometryEdit={handleToggleGeometryEdit}
+            onCancelGeometryEdit={handleCancelGeometryEdit}
+            onMaterializeDuckDBLayer={handleMaterializeDuckDBLayer}
           />
         ) : null}
         <main

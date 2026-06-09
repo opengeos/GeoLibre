@@ -9,6 +9,7 @@ import {
 } from "react";
 import { isDuckDBQueryLayer, useAppStore } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
+import { canEditLayerGeometry } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
 import { isPlaceholderLayer, placeholderMessage } from "@geolibre/map";
 import {
@@ -42,7 +43,9 @@ import {
   MousePointerClick,
   PanelLeftClose,
   PanelLeftOpen,
+  PencilRuler,
   RefreshCw,
+  Table2,
   Timer,
   Trash2,
   ZoomIn,
@@ -58,6 +61,14 @@ import {
 interface LayerPanelProps {
   mapControllerRef: RefObject<MapController | null>;
   onResizeStart: (event: ReactMouseEvent<HTMLDivElement>) => void;
+  /** Id of the layer currently in a geometry-edit session, or null. */
+  geometryEditLayerId: string | null;
+  /** Toggle in-place geometry editing for a layer (toggling off saves). */
+  onToggleGeometryEdit: (layerId: string) => void;
+  /** Discard the active geometry-edit session without saving. */
+  onCancelGeometryEdit: () => void;
+  /** Materialize a DuckDB query layer into an editable GeoJSON layer. */
+  onMaterializeDuckDBLayer: (layer: GeoLibreLayer) => void;
 }
 
 const BACKGROUND_SELECTION_ID = "__geolibre-background__";
@@ -129,6 +140,10 @@ function isMobileViewport(): boolean {
 export function LayerPanel({
   mapControllerRef,
   onResizeStart,
+  geometryEditLayerId,
+  onToggleGeometryEdit,
+  onCancelGeometryEdit,
+  onMaterializeDuckDBLayer,
 }: LayerPanelProps) {
   const layers = useAppStore((s) => s.layers);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
@@ -525,6 +540,13 @@ export function LayerPanel({
                 layer.metadata.tileType === "vector") ||
               hasNativeIdentifyLayers(layer);
             const identifyActive = identifyLayerId === layer.id;
+            const canEditGeometry = canEditLayerGeometry(layer);
+            const geometryEditActive = geometryEditLayerId === layer.id;
+            const geometryEditElsewhere =
+              geometryEditLayerId !== null && !geometryEditActive;
+            const canMaterializeDuckDB =
+              isDuckDBQueryLayer(layer) &&
+              typeof layer.metadata.query === "string";
             const canRefresh = isRefreshableLayer(layer);
             const refreshConfig = getLayerRefreshConfig(layer);
             const refreshStatus = refreshStatuses[layer.id];
@@ -610,6 +632,38 @@ export function LayerPanel({
                     {refreshStatus.message}
                   </p>
                 )}
+                {geometryEditActive && (
+                  <div className="mt-1 flex items-center gap-1 rounded-sm bg-primary/10 px-1.5 py-1">
+                    <PencilRuler className="h-3 w-3 text-primary" />
+                    <span className="flex-1 text-[10px] font-medium text-primary">
+                      Editing geometry
+                    </span>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="h-6 px-2 text-[10px]"
+                      title="Save geometry edits"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleGeometryEdit(layer.id);
+                      }}
+                    >
+                      Save
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-[10px]"
+                      title="Discard geometry edits"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onCancelGeometryEdit();
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                )}
                 <div className="mt-2 flex items-center gap-1">
                   <span className="text-[10px] text-muted-foreground">
                     Opacity
@@ -688,7 +742,7 @@ export function LayerPanel({
                           : "Identify features"
                         : "Identify is only available for vector and WMS layers"
                     }
-                    disabled={!canIdentify}
+                    disabled={!canIdentify || geometryEditActive}
                     onClick={(e) => {
                       e.stopPropagation();
                       if (!canIdentify) return;
@@ -697,6 +751,37 @@ export function LayerPanel({
                     }}
                   >
                     <MousePointerClick className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={`h-7 w-7 ${
+                      geometryEditActive
+                        ? "border border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 hover:text-primary-foreground"
+                        : ""
+                    }`}
+                    title={
+                      canEditGeometry
+                        ? geometryEditActive
+                          ? "Finish geometry editing (saves)"
+                          : "Edit geometry"
+                        : "Geometry editing is only available for in-memory vector layers"
+                    }
+                    aria-label={
+                      geometryEditActive
+                        ? "Finish geometry editing"
+                        : "Edit geometry"
+                    }
+                    disabled={!canEditGeometry || geometryEditElsewhere}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!canEditGeometry) return;
+                      selectLayer(layer.id);
+                      if (identifyActive) setIdentifyLayer(null);
+                      onToggleGeometryEdit(layer.id);
+                    }}
+                  >
+                    <PencilRuler className="h-3.5 w-3.5" />
                   </Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -719,6 +804,20 @@ export function LayerPanel({
                       align="end"
                       onClick={(e) => e.stopPropagation()}
                     >
+                      {canMaterializeDuckDB && (
+                        <>
+                          <DropdownMenuItem
+                            onSelect={(e) => {
+                              e.preventDefault();
+                              onMaterializeDuckDBLayer(layer);
+                            }}
+                          >
+                            <Table2 className="mr-2 h-3.5 w-3.5" />
+                            Materialize to editable layer
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                        </>
+                      )}
                       <DropdownMenuItem
                         disabled={!canRefresh || isRefreshing}
                         onSelect={(e) => {

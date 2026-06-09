@@ -101,7 +101,14 @@ export {
 export { maplibreEnviroAtlasPlugin } from "./plugins/maplibre-enviroatlas";
 export { maplibreEsriWaybackPlugin } from "./plugins/maplibre-esri-wayback";
 export { maplibreFemaWmsPlugin } from "./plugins/maplibre-fema-wms";
-export { maplibreGeoEditorPlugin } from "./plugins/maplibre-geo-editor";
+export {
+  maplibreGeoEditorPlugin,
+  canEditLayerGeometry,
+  startLayerGeometryEdit,
+  endLayerGeometryEdit,
+  getGeometryEditTargetLayerId,
+  subscribeGeometryEdit,
+} from "./plugins/maplibre-geo-editor";
 export { maplibreGeoAgentPlugin } from "./plugins/maplibre-geoagent";
 export { maplibreLidarPlugin } from "./plugins/maplibre-lidar";
 export { maplibreNasaEarthdataPlugin } from "./plugins/maplibre-nasa-earthdata";
