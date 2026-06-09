@@ -12,11 +12,10 @@ the user leaving the app.
 
 This spans two repositories:
 
-- **GeoLibre** (`/home/qiusheng/Documents/GitHub/GeoLibre`) — the Share UI and
-  upload client.
-- **share.geolibre.app** (`/home/qiusheng/Documents/GitHub/share.geolibre.app`) —
-  a Cloudflare Workers + Hono + D1 + R2 app, Clerk auth, whose `POST /api/projects`
-  endpoint currently accepts only a Clerk **browser session** JWT.
+- **GeoLibre** (this repo) — the Share UI and upload client.
+- **share.geolibre.app** (the `opengeos/share.geolibre.app` repo) — a Cloudflare
+  Workers + Hono + D1 + R2 app, Clerk auth, whose `POST /api/projects` endpoint
+  currently accepts only a Clerk **browser session** JWT.
 
 ## The core problem and decision
 

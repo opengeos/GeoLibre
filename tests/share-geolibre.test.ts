@@ -130,6 +130,16 @@ describe("uploadProjectToShare", () => {
     );
   });
 
+  it("maps a TimeoutError to a timeout message", async () => {
+    const fn = (async () => {
+      throw new DOMException("The operation timed out.", "TimeoutError");
+    }) as unknown as typeof fetch;
+    await assert.rejects(
+      () => uploadProjectToShare({ ...baseArgs, fetchImpl: fn }),
+      /timed out/i,
+    );
+  });
+
   it("re-throws AbortError without wrapping it", async () => {
     const fn = (async () => {
       throw new DOMException("The operation was aborted.", "AbortError");

@@ -221,11 +221,12 @@ export function ShareProjectDialog({
             )}
 
             <div className="flex justify-end gap-2">
+              {/* Stays enabled during upload: closing the dialog aborts the
+                  in-flight request via the open effect's cleanup. */}
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => onOpenChange(false)}
-                disabled={status === "uploading"}
               >
                 Cancel
               </Button>

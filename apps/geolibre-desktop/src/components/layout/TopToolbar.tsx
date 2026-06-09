@@ -1129,7 +1129,14 @@ export function TopToolbar({
         currentTitle={projectName}
         getProject={(title) => {
           const { content, defaultProjectName } = buildCurrentProject(title);
-          return { content, filename: `${defaultProjectName}.geolibre.json` };
+          // Strip path separators, control chars, and other characters that are
+          // illegal in filenames so the server gets a predictable name.
+          const safeName = defaultProjectName.replace(
+            // eslint-disable-next-line no-control-regex
+            /[\u0000-\u001f/\\:*?"<>|]/g,
+            "_",
+          );
+          return { content, filename: `${safeName}.geolibre.json` };
         }}
       />
       <DropdownMenu>
