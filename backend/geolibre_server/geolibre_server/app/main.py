@@ -21,6 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from .conversion import router as conversion_router
+from .raster import router as raster_router
 from .vector import router as vector_router
 from .whitebox import router as whitebox_router
 
@@ -40,6 +41,7 @@ app.add_middleware(
 )
 app.include_router(whitebox_router)
 app.include_router(conversion_router)
+app.include_router(raster_router)
 app.include_router(vector_router)
 
 

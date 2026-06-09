@@ -7,6 +7,13 @@ export {
 } from "./registry";
 export { VECTOR_TOOLS, getVectorTool } from "./vector-tools";
 export {
+  RASTER_TOOLS,
+  getRasterTool,
+  type RasterTool,
+  type RasterToolId,
+  type FileFilter,
+} from "./raster-tools";
+export {
   checkSidecarHealth,
   clearRemoteWhiteboxCatalogSnapshotCache,
   fetchConversionJob,
@@ -18,8 +25,10 @@ export {
   fetchWhiteboxTool,
   fetchWhiteboxTools,
   fetchRemoteWhiteboxCatalogSnapshot,
+  fetchRasterStatus,
   runCsvToGeoParquet,
   runRasterToCog,
+  runRasterTool,
   runVectorToFlatGeobuf,
   runVectorToGeoParquet,
   runVectorToPmtiles,
@@ -31,6 +40,8 @@ export {
   type ConversionStatus,
   type CsvToGeoParquetRequest,
   type RasterToCogRequest,
+  type RasterStatus,
+  type RasterToolRequest,
   type RunWhiteboxToolRequest,
   type VectorToFlatGeobufRequest,
   type VectorToGeoParquetRequest,

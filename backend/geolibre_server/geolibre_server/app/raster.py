@@ -1,0 +1,529 @@
+"""Raster processing sidecar endpoints (rasterio / numpy / contourpy).
+
+QGIS-inspired raster tools that run on the managed conversion runtime with a
+file path in and a file path out, mirroring the ``/conversion`` jobs. They reuse
+the conversion job store and background runner, so the client polls results with
+the same ``GET /conversion/jobs/{id}`` endpoint.
+
+rasterio and numpy already ship in the managed runtime (pulled in transitively
+by ``rio-cogeo``); ``contourpy`` is added for the Contour tool. When the runtime
+cannot be resolved, ``/raster/status`` reports ``available: false`` and the
+desktop app disables the Run button.
+"""
+
+from __future__ import annotations
+
+import logging
+import subprocess
+from pathlib import Path
+from typing import Any
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+from .conversion import (
+    _RESULT_MARKER,
+    _is_within_roots,
+    _runtime_python,
+    _start_job,
+    _validate_paths,
+)
+from .runtime import (
+    RUNTIME_DISCOVERY_TIMEOUT_SECS,
+    RuntimeBootstrapError,
+    _clean_env,
+    _subprocess_startup_kwargs,
+)
+
+router = APIRouter(prefix="/raster", tags=["raster"])
+logger = logging.getLogger(__name__)
+
+
+class RasterToolRequest(BaseModel):
+    tool_id: str
+    input_path: str
+    output_path: str
+    parameters: dict[str, Any] = {}
+
+
+# --- Embedded tool scripts -------------------------------------------------
+#
+# Each script reads ``json.loads(sys.argv[1])`` for its parameters, prints
+# progress lines, and ends with ``_RESULT_MARKER + json.dumps({...})``. The
+# scripts use ``.replace("{marker}", _RESULT_MARKER)`` (not ``str.format``) so
+# the dict/f-string braces inside them are left untouched.
+
+_HILLSHADE_SCRIPT = """
+import json, sys
+
+import numpy as np
+import rasterio
+
+params = json.loads(sys.argv[1])
+input_path = params["input_path"]
+output_path = params["output_path"]
+azimuth = float(params.get("azimuth", 315))
+altitude = float(params.get("altitude", 45))
+z_factor = float(params.get("z_factor", 1) or 1)
+
+with rasterio.open(input_path) as src:
+    elev = src.read(1, masked=True).astype("float64")
+    xres, yres = src.res
+    profile = src.profile.copy()
+
+elev = np.ma.filled(elev, np.nan) * z_factor
+dy, dx = np.gradient(elev, yres, xres)
+slope = np.pi / 2.0 - np.arctan(np.sqrt(dx * dx + dy * dy))
+aspect = np.arctan2(-dx, dy)
+az = np.radians(360.0 - azimuth + 90.0)
+alt = np.radians(altitude)
+shaded = np.sin(alt) * np.sin(slope) + np.cos(alt) * np.cos(slope) * np.cos(az - aspect)
+shaded = np.clip((shaded + 1.0) / 2.0 * 255.0, 0, 255)
+shaded = np.where(np.isnan(shaded), 0, shaded).astype("uint8")
+
+profile.update(dtype="uint8", count=1, nodata=0, compress="deflate")
+with rasterio.open(output_path, "w", **profile) as dst:
+    dst.write(shaded, 1)
+print(f"Wrote hillshade to {output_path}")
+print("{marker}" + json.dumps({"output_path": output_path}))
+""".replace("{marker}", _RESULT_MARKER)
+
+
+_SLOPE_SCRIPT = """
+import json, sys
+
+import numpy as np
+import rasterio
+
+params = json.loads(sys.argv[1])
+input_path = params["input_path"]
+output_path = params["output_path"]
+units = str(params.get("units", "degrees"))
+z_factor = float(params.get("z_factor", 1) or 1)
+nodata = -9999.0
+
+with rasterio.open(input_path) as src:
+    elev = src.read(1, masked=True).astype("float64")
+    xres, yres = src.res
+    profile = src.profile.copy()
+
+elev = np.ma.filled(elev, np.nan) * z_factor
+dy, dx = np.gradient(elev, yres, xres)
+rise_run = np.sqrt(dx * dx + dy * dy)
+if units == "percent":
+    out = rise_run * 100.0
+else:
+    out = np.degrees(np.arctan(rise_run))
+out = np.where(np.isnan(out), nodata, out).astype("float32")
+
+profile.update(dtype="float32", count=1, nodata=nodata, compress="deflate")
+with rasterio.open(output_path, "w", **profile) as dst:
+    dst.write(out, 1)
+print(f"Wrote slope ({units}) to {output_path}")
+print("{marker}" + json.dumps({"output_path": output_path}))
+""".replace("{marker}", _RESULT_MARKER)
+
+
+_ASPECT_SCRIPT = """
+import json, sys
+
+import numpy as np
+import rasterio
+
+params = json.loads(sys.argv[1])
+input_path = params["input_path"]
+output_path = params["output_path"]
+z_factor = float(params.get("z_factor", 1) or 1)
+nodata = -9999.0
+
+with rasterio.open(input_path) as src:
+    elev = src.read(1, masked=True).astype("float64")
+    xres, yres = src.res
+    profile = src.profile.copy()
+
+elev = np.ma.filled(elev, np.nan) * z_factor
+dy, dx = np.gradient(elev, yres, xres)
+aspect = np.degrees(np.arctan2(dy, -dx))
+aspect = np.where(
+    aspect < 0,
+    90.0 - aspect,
+    np.where(aspect > 90.0, 360.0 - aspect + 90.0, 90.0 - aspect),
+)
+# Flat cells (no gradient) have an undefined aspect; flag them with nodata.
+flat = (dx == 0) & (dy == 0)
+aspect = np.where(flat | np.isnan(aspect), nodata, aspect).astype("float32")
+
+profile.update(dtype="float32", count=1, nodata=nodata, compress="deflate")
+with rasterio.open(output_path, "w", **profile) as dst:
+    dst.write(aspect, 1)
+print(f"Wrote aspect to {output_path}")
+print("{marker}" + json.dumps({"output_path": output_path}))
+""".replace("{marker}", _RESULT_MARKER)
+
+
+_REPROJECT_SCRIPT = """
+import json, sys
+
+import rasterio
+from rasterio.warp import Resampling, calculate_default_transform, reproject
+
+params = json.loads(sys.argv[1])
+input_path = params["input_path"]
+output_path = params["output_path"]
+dst_crs = str(params.get("dst_crs", "") or "").strip()
+if not dst_crs:
+    raise SystemExit("Target CRS (dst_crs) is required")
+method = getattr(Resampling, str(params.get("resampling", "nearest")), Resampling.nearest)
+
+with rasterio.open(input_path) as src:
+    transform, width, height = calculate_default_transform(
+        src.crs, dst_crs, src.width, src.height, *src.bounds
+    )
+    profile = src.profile.copy()
+    profile.update(
+        crs=dst_crs, transform=transform, width=width, height=height, compress="deflate"
+    )
+    with rasterio.open(output_path, "w", **profile) as dst:
+        for i in range(1, src.count + 1):
+            reproject(
+                source=rasterio.band(src, i),
+                destination=rasterio.band(dst, i),
+                src_transform=src.transform,
+                src_crs=src.crs,
+                dst_transform=transform,
+                dst_crs=dst_crs,
+                resampling=method,
+            )
+print(f"Reprojected to {dst_crs} -> {output_path}")
+print("{marker}" + json.dumps({"output_path": output_path}))
+""".replace("{marker}", _RESULT_MARKER)
+
+
+_RESAMPLE_SCRIPT = """
+import json, sys
+
+import rasterio
+from rasterio.transform import from_origin
+from rasterio.warp import Resampling, reproject
+
+params = json.loads(sys.argv[1])
+input_path = params["input_path"]
+output_path = params["output_path"]
+resolution = float(params.get("resolution", 0) or 0)
+if resolution <= 0:
+    raise SystemExit("Target pixel size (resolution) must be > 0")
+method = getattr(Resampling, str(params.get("resampling", "bilinear")), Resampling.bilinear)
+
+with rasterio.open(input_path) as src:
+    bounds = src.bounds
+    width = max(1, int(round((bounds.right - bounds.left) / resolution)))
+    height = max(1, int(round((bounds.top - bounds.bottom) / resolution)))
+    transform = from_origin(bounds.left, bounds.top, resolution, resolution)
+    profile = src.profile.copy()
+    profile.update(transform=transform, width=width, height=height, compress="deflate")
+    with rasterio.open(output_path, "w", **profile) as dst:
+        for i in range(1, src.count + 1):
+            reproject(
+                source=rasterio.band(src, i),
+                destination=rasterio.band(dst, i),
+                src_transform=src.transform,
+                src_crs=src.crs,
+                dst_transform=transform,
+                dst_crs=src.crs,
+                resampling=method,
+            )
+print(f"Resampled to {resolution} units/pixel ({width}x{height}) -> {output_path}")
+print("{marker}" + json.dumps({"output_path": output_path}))
+""".replace("{marker}", _RESULT_MARKER)
+
+
+_CLIP_EXTENT_SCRIPT = """
+import json, sys
+
+import rasterio
+from rasterio.windows import from_bounds
+
+params = json.loads(sys.argv[1])
+input_path = params["input_path"]
+output_path = params["output_path"]
+minx = float(params["minx"])
+miny = float(params["miny"])
+maxx = float(params["maxx"])
+maxy = float(params["maxy"])
+if minx >= maxx or miny >= maxy:
+    raise SystemExit("Extent must satisfy minx < maxx and miny < maxy")
+
+with rasterio.open(input_path) as src:
+    window = from_bounds(minx, miny, maxx, maxy, src.transform)
+    window = window.round_offsets().round_lengths()
+    data = src.read(window=window)
+    if data.shape[1] == 0 or data.shape[2] == 0:
+        raise SystemExit("Extent does not overlap the raster")
+    transform = src.window_transform(window)
+    profile = src.profile.copy()
+    profile.update(
+        height=data.shape[1], width=data.shape[2], transform=transform, compress="deflate"
+    )
+    with rasterio.open(output_path, "w", **profile) as dst:
+        dst.write(data)
+print(f"Clipped to extent -> {output_path}")
+print("{marker}" + json.dumps({"output_path": output_path}))
+""".replace("{marker}", _RESULT_MARKER)
+
+
+_CLIP_MASK_SCRIPT = """
+import json, sys
+
+import rasterio
+from rasterio.mask import mask as rio_mask
+
+params = json.loads(sys.argv[1])
+input_path = params["input_path"]
+output_path = params["output_path"]
+mask_path = params["mask_path"]
+crop = bool(params.get("crop", True))
+all_touched = bool(params.get("all_touched", False))
+
+with open(mask_path) as f:
+    gj = json.load(f)
+gtype = gj.get("type")
+if gtype == "FeatureCollection":
+    shapes = [feat["geometry"] for feat in gj.get("features", []) if feat.get("geometry")]
+elif gtype == "Feature":
+    shapes = [gj["geometry"]]
+else:
+    shapes = [gj]
+if not shapes:
+    raise SystemExit("Mask layer has no geometries")
+
+with rasterio.open(input_path) as src:
+    out_image, out_transform = rio_mask(
+        src, shapes, crop=crop, all_touched=all_touched
+    )
+    profile = src.profile.copy()
+    profile.update(
+        height=out_image.shape[1],
+        width=out_image.shape[2],
+        transform=out_transform,
+        compress="deflate",
+    )
+    with rasterio.open(output_path, "w", **profile) as dst:
+        dst.write(out_image)
+print(f"Clipped by {len(shapes)} mask geometry(ies) -> {output_path}")
+print("{marker}" + json.dumps({"output_path": output_path}))
+""".replace("{marker}", _RESULT_MARKER)
+
+
+_POLYGONIZE_SCRIPT = """
+import json, sys
+
+import rasterio
+from rasterio.features import shapes as rio_shapes
+
+params = json.loads(sys.argv[1])
+input_path = params["input_path"]
+output_path = params["output_path"]
+band = int(params.get("band", 1))
+connectivity = int(params.get("connectivity", 4))
+field = str(params.get("field", "value"))
+
+with rasterio.open(input_path) as src:
+    arr = src.read(band)
+    valid = None
+    if src.nodata is not None:
+        valid = arr != src.nodata
+    transform = src.transform
+    crs = src.crs
+
+features = []
+for geom, value in rio_shapes(
+    arr, mask=valid, connectivity=connectivity, transform=transform
+):
+    features.append(
+        {"type": "Feature", "properties": {field: value}, "geometry": geom}
+    )
+fc = {"type": "FeatureCollection", "features": features}
+if crs is not None and crs.to_epsg() and crs.to_epsg() != 4326:
+    fc["crs"] = {
+        "type": "name",
+        "properties": {"name": f"urn:ogc:def:crs:EPSG::{crs.to_epsg()}"},
+    }
+with open(output_path, "w") as f:
+    json.dump(fc, f)
+print(f"Polygonized into {len(features)} feature(s) -> {output_path}")
+print("{marker}" + json.dumps({"output_path": output_path}))
+""".replace("{marker}", _RESULT_MARKER)
+
+
+_CONTOUR_SCRIPT = """
+import json, sys
+
+import numpy as np
+import rasterio
+from contourpy import contour_generator
+
+params = json.loads(sys.argv[1])
+input_path = params["input_path"]
+output_path = params["output_path"]
+band = int(params.get("band", 1))
+interval = float(params.get("interval", 0) or 0)
+if interval <= 0:
+    raise SystemExit("Contour interval must be > 0")
+base = float(params.get("base", 0) or 0)
+attribute = str(params.get("attribute", "elev"))
+
+with rasterio.open(input_path) as src:
+    arr = src.read(band, masked=True).astype("float64")
+    transform = src.transform
+    crs = src.crs
+
+data = np.ma.masked_invalid(np.ma.filled(arr, np.nan))
+if not np.isfinite(data).any():
+    raise SystemExit("Raster band has no valid data to contour")
+zmin = float(np.nanmin(data.filled(np.nan)))
+zmax = float(np.nanmax(data.filled(np.nan)))
+start = base + np.ceil((zmin - base) / interval) * interval
+levels = []
+level = start
+while level <= zmax:
+    levels.append(round(float(level), 6))
+    level += interval
+
+gen = contour_generator(z=data, line_type="Separate")
+features = []
+for value in levels:
+    for line in gen.lines(value):
+        coords = []
+        for col, row in line:
+            x, y = transform * (float(col), float(row))
+            coords.append([x, y])
+        if len(coords) >= 2:
+            features.append(
+                {
+                    "type": "Feature",
+                    "properties": {attribute: value},
+                    "geometry": {"type": "LineString", "coordinates": coords},
+                }
+            )
+fc = {"type": "FeatureCollection", "features": features}
+if crs is not None and crs.to_epsg() and crs.to_epsg() != 4326:
+    fc["crs"] = {
+        "type": "name",
+        "properties": {"name": f"urn:ogc:def:crs:EPSG::{crs.to_epsg()}"},
+    }
+with open(output_path, "w") as f:
+    json.dump(fc, f)
+print(
+    f"Generated {len(features)} contour line(s) across {len(levels)} level(s) -> {output_path}"
+)
+print("{marker}" + json.dumps({"output_path": output_path}))
+""".replace("{marker}", _RESULT_MARKER)
+
+
+_RASTER_TOOL_SCRIPTS: dict[str, str] = {
+    "hillshade": _HILLSHADE_SCRIPT,
+    "slope": _SLOPE_SCRIPT,
+    "aspect": _ASPECT_SCRIPT,
+    "reproject": _REPROJECT_SCRIPT,
+    "resample": _RESAMPLE_SCRIPT,
+    "clip-extent": _CLIP_EXTENT_SCRIPT,
+    "clip-mask": _CLIP_MASK_SCRIPT,
+    "polygonize": _POLYGONIZE_SCRIPT,
+    "contour": _CONTOUR_SCRIPT,
+}
+
+# Output kind per tool, used only as the key under ``JobState.outputs``.
+_OUTPUT_NAMES: dict[str, str] = {
+    "polygonize": "vector",
+    "contour": "vector",
+}
+
+
+def _validate_extra_input(path: str, label: str) -> str:
+    """Validate a secondary input file path (e.g. a clip mask)."""
+    if not path.strip():
+        raise HTTPException(status_code=400, detail=f"{label} is required")
+    source = Path(path).expanduser()
+    if not source.is_file():
+        raise HTTPException(status_code=400, detail=f"{label} not found: {path}")
+    if not _is_within_roots(source):
+        raise HTTPException(
+            status_code=403,
+            detail="Path is outside the allowed conversion directories",
+        )
+    return str(source.resolve())
+
+
+def _check_raster_import(python_executable: str) -> None:
+    """Raise if the runtime cannot import the raster processing stack."""
+    completed = subprocess.run(
+        [python_executable, "-c", "import rasterio, numpy, contourpy"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=_clean_env(),
+        timeout=RUNTIME_DISCOVERY_TIMEOUT_SECS,
+        **_subprocess_startup_kwargs(),
+    )
+    if completed.returncode != 0:
+        detail = (
+            completed.stderr.strip()
+            or completed.stdout.strip()
+            or "rasterio / contourpy import failed"
+        )
+        raise RuntimeBootstrapError(f"{python_executable}: {detail}")
+
+
+@router.get("/status")
+def raster_status():
+    """Return raster (rasterio + contourpy) runtime availability."""
+    try:
+        python = _runtime_python()
+        _check_raster_import(python)
+        return {
+            "available": True,
+            "message": "Raster runtime (rasterio) is available.",
+        }
+    except RuntimeBootstrapError as exc:
+        logger.warning("Raster runtime unavailable: %s", exc)
+        return {
+            "available": False,
+            "message": "Raster runtime is unavailable. Check the sidecar logs.",
+        }
+    except Exception:
+        logger.exception("Unexpected error while checking raster runtime")
+        return {
+            "available": False,
+            "message": "Raster runtime status check failed.",
+        }
+
+
+@router.post("/run")
+def raster_run(request: RasterToolRequest):
+    """Run a single raster processing tool as a background job.
+
+    Reuses the conversion job store and runner, so the result is polled via
+    ``GET /conversion/jobs/{job_id}``.
+    """
+    script = _RASTER_TOOL_SCRIPTS.get(request.tool_id)
+    if script is None:
+        raise HTTPException(
+            status_code=400, detail=f"Unknown raster tool: {request.tool_id}"
+        )
+
+    input_path, output_path = _validate_paths(request.input_path, request.output_path)
+    params: dict[str, Any] = {
+        **request.parameters,
+        "input_path": input_path,
+        "output_path": output_path,
+    }
+
+    if request.tool_id == "clip-mask":
+        params["mask_path"] = _validate_extra_input(
+            str(request.parameters.get("mask_path", "")), "Mask layer"
+        )
+
+    output_name = _OUTPUT_NAMES.get(request.tool_id, "raster")
+    return _start_job(request.tool_id, script, params, output_name)

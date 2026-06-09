@@ -1,7 +1,13 @@
 import type { FeatureCollection } from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
 
-export type ParameterType = "layer" | "number" | "string" | "boolean" | "select";
+export type ParameterType =
+  | "layer"
+  | "number"
+  | "string"
+  | "boolean"
+  | "select"
+  | "path";
 
 /** A single geometry family used to filter layer pickers. */
 export type GeometryFamily = "point" | "line" | "polygon";
@@ -27,6 +33,8 @@ export interface AlgorithmParameter {
   step?: number;
   /** Restrict a `type: "layer"` picker to layers with these geometry families. */
   geometryFilter?: GeometryFamily[];
+  /** File-dialog filters for `type: "path"` (a native file picker field). */
+  fileFilters?: { name: string; extensions: string[] }[];
 }
 
 export interface ProcessingContext {

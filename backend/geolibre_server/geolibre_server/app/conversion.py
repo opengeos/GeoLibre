@@ -37,9 +37,13 @@ CONVERSION_PYTHON_VERSION = os.environ.get(
 )
 # Whitespace-separated so a single requirement may carry a comma-joined version
 # range (e.g. "duckdb>=1.1.0,<2.0.0") without being split into two tokens.
+# rasterio + numpy already arrive transitively via rio-cogeo; they are listed
+# explicitly so the Raster processing tools' dependency is intentional, and
+# contourpy is added for the Contour tool.
 CONVERSION_RUNTIME_PACKAGES = os.environ.get(
     "GEOLIBRE_CONVERSION_PACKAGES",
-    "duckdb>=1.1.0 rio-cogeo>=5.0.0 freestiler>=0.1.0",
+    "duckdb>=1.1.0 rio-cogeo>=5.0.0 freestiler>=0.1.0 "
+    "rasterio>=1.3.0 numpy>=1.24 contourpy>=1.2.0",
 ).split()
 
 VECTOR_COMPRESSIONS = {"zstd", "snappy", "gzip", "lz4", "uncompressed"}

@@ -28,6 +28,14 @@ vector = [
   "geopandas>=1.0",
   "shapely>=2.0",
 ]
+# Raster processing tools (hillshade, slope, reproject, polygonize, contour...).
+# rasterio + numpy already arrive via the `conversion` extra (rio-cogeo); they
+# are listed here too so the raster feature can be installed on its own.
+raster = [
+  "rasterio>=1.3.0",
+  "numpy>=1.24",
+  "contourpy>=1.2.0",
+]
 # Future geospatial stack (not required for MVP UI):
 # geo = [
 #   "gdal",

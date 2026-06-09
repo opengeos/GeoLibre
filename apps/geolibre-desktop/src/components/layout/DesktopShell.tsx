@@ -94,6 +94,20 @@ const VectorToolsDialog = lazy(() =>
     }),
 );
 
+const RasterToolsDialog = lazy(() =>
+  import("../processing/RasterToolsDialog")
+    .then((module) => ({
+      default: module.RasterToolsDialog,
+    }))
+    .catch((error) => {
+      // Same chunk-load fallback rationale as ProcessingDialog above.
+      console.error("Failed to load RasterToolsDialog", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/RasterToolsDialog").RasterToolsDialog;
+      return { default: Fallback };
+    }),
+);
+
 const SqlWorkspaceDialog = lazy(() =>
   import("../processing/SqlWorkspaceDialog")
     .then((module) => ({
@@ -718,6 +732,9 @@ export function DesktopShell({
       </Suspense>
       <Suspense fallback={null}>
         <VectorToolsDialog mapControllerRef={mapControllerRef} />
+      </Suspense>
+      <Suspense fallback={null}>
+        <RasterToolsDialog />
       </Suspense>
       <Suspense fallback={null}>
         <SqlWorkspaceDialog />

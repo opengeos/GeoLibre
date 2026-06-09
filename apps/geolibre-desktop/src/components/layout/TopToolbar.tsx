@@ -249,6 +249,7 @@ export function TopToolbar({
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
   const setConversionOpen = useAppStore((s) => s.setConversionOpen);
   const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
+  const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
   const projectName = useAppStore((s) => s.projectName);
   const projectPath = useAppStore((s) => s.projectPath);
@@ -999,6 +1000,57 @@ export function TopToolbar({
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setVectorToolOpen("union")}>
                 Union
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>Raster</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuLabel className="text-xs text-muted-foreground">
+                Terrain
+              </DropdownMenuLabel>
+              <DropdownMenuItem onSelect={() => setRasterToolOpen("hillshade")}>
+                Hillshade
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setRasterToolOpen("slope")}>
+                Slope
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setRasterToolOpen("aspect")}>
+                Aspect
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs text-muted-foreground">
+                Reproject
+              </DropdownMenuLabel>
+              <DropdownMenuItem onSelect={() => setRasterToolOpen("reproject")}>
+                Reproject
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setRasterToolOpen("resample")}>
+                Resample
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs text-muted-foreground">
+                Clip
+              </DropdownMenuLabel>
+              <DropdownMenuItem
+                onSelect={() => setRasterToolOpen("clip-extent")}
+              >
+                Clip by extent
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setRasterToolOpen("clip-mask")}>
+                Clip by mask layer
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs text-muted-foreground">
+                Raster to Vector
+              </DropdownMenuLabel>
+              <DropdownMenuItem
+                onSelect={() => setRasterToolOpen("polygonize")}
+              >
+                Polygonize
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setRasterToolOpen("contour")}>
+                Contour
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>

@@ -411,12 +411,53 @@ export async function runRasterToCog(
   return startConversion(`${baseUrl}/conversion/raster-to-cog`, request, baseUrl);
 }
 
+export interface RasterStatus {
+  available: boolean;
+  message: string;
+}
+
+export interface RasterToolRequest {
+  tool_id: string;
+  input_path: string;
+  output_path: string;
+  /** Tool parameters (azimuth, dst_crs, interval, ...). */
+  parameters?: Record<string, unknown>;
+}
+
+/** Return raster-processing (rasterio) runtime availability. */
+export async function fetchRasterStatus(
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<RasterStatus> {
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}/raster/status`);
+  } catch (error) {
+    throw sidecarConnectionError(baseUrl, error);
+  }
+  if (!res.ok) {
+    throw new Error(`Raster status failed: HTTP ${res.status}`);
+  }
+  return (await res.json()) as RasterStatus;
+}
+
+/**
+ * Start a raster processing job. Raster jobs share the conversion job store,
+ * so callers poll the result with `fetchConversionJob`.
+ */
+export async function runRasterTool(
+  request: RasterToolRequest,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<ConversionJob> {
+  return startConversion(`${baseUrl}/raster/run`, request, baseUrl);
+}
+
 type ConversionRequest =
   | VectorToGeoParquetRequest
   | VectorToFlatGeobufRequest
   | CsvToGeoParquetRequest
   | VectorToPmtilesRequest
-  | RasterToCogRequest;
+  | RasterToCogRequest
+  | RasterToolRequest;
 
 async function startConversion(
   url: string,

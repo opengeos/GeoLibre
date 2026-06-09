@@ -1,0 +1,573 @@
+import { useAppStore } from "@geolibre/core";
+import {
+  RASTER_TOOLS,
+  getRasterTool,
+  fetchRasterStatus,
+  fetchConversionJob,
+  runRasterTool,
+  type AlgorithmParameter,
+  type ConversionJob,
+  type RasterTool,
+} from "@geolibre/processing";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  Label,
+  ScrollArea,
+  Select,
+  cn,
+} from "@geolibre/ui";
+import {
+  AlertCircle,
+  CheckCircle2,
+  FolderOpen,
+  Loader2,
+  Play,
+  Save,
+  Server,
+} from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+} from "react";
+import {
+  isTauri,
+  pickLocalPathWithFallback,
+  pickSavePathWithFallback,
+} from "../../lib/tauri-io";
+import { startGeoLibreSidecar } from "../../lib/sidecar";
+
+const RUNNING_JOB_STATUSES = new Set(["pending", "running"]);
+
+/** Tools grouped by their `group` label, preserving registry order. */
+function groupedTools(): { group: string; tools: RasterTool[] }[] {
+  const groups: { group: string; tools: RasterTool[] }[] = [];
+  for (const tool of RASTER_TOOLS) {
+    let entry = groups.find((g) => g.group === tool.group);
+    if (!entry) {
+      entry = { group: tool.group, tools: [] };
+      groups.push(entry);
+    }
+    entry.tools.push(tool);
+  }
+  return groups;
+}
+
+/** Collect the default values declared by a tool's parameters. */
+function toolDefaults(tool: RasterTool): Record<string, unknown> {
+  const defaults: Record<string, unknown> = {};
+  for (const param of tool.parameters) {
+    if (param.default !== undefined) defaults[param.id] = param.default;
+  }
+  return defaults;
+}
+
+export function RasterToolsDialog(): ReactElement {
+  const openTool = useAppStore((s) => s.ui.rasterToolOpen);
+  const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
+
+  const open = openTool !== null;
+  const desktop = isTauri();
+  const [selectedId, setSelectedId] = useState<string>(
+    openTool ?? RASTER_TOOLS[0].id,
+  );
+  const [inputPath, setInputPath] = useState("");
+  const [outputPath, setOutputPath] = useState("");
+  const [params, setParams] = useState<Record<string, unknown>>({});
+  const [job, setJob] = useState<ConversionJob | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [runtimeAvailable, setRuntimeAvailable] = useState<boolean | null>(null);
+  const [runtimeMessage, setRuntimeMessage] = useState("");
+  const [startingServer, setStartingServer] = useState(false);
+  const logEndRef = useRef<HTMLDivElement>(null);
+
+  const tool = useMemo(
+    () => getRasterTool(selectedId) ?? RASTER_TOOLS[0],
+    [selectedId],
+  );
+  const groups = useMemo(groupedTools, []);
+
+  // When the menu opens the dialog with a specific tool, preselect it.
+  useEffect(() => {
+    if (openTool) setSelectedId(openTool);
+  }, [openTool]);
+
+  const checkRuntime = useCallback(async () => {
+    if (!desktop) {
+      // Raster tools are sidecar-only and the file pickers cannot resolve real
+      // paths in a browser, so a pure web build cannot run them.
+      setRuntimeAvailable(false);
+      setRuntimeMessage(
+        "Raster tools need the GeoLibre desktop app with a running sidecar.",
+      );
+      return;
+    }
+    setRuntimeAvailable(null);
+    setRuntimeMessage("Checking raster runtime.");
+    try {
+      const status = await fetchRasterStatus();
+      setRuntimeAvailable(status.available);
+      setRuntimeMessage(status.message);
+    } catch (err) {
+      setRuntimeAvailable(false);
+      setRuntimeMessage(
+        err instanceof Error ? err.message : "Could not connect to sidecar.",
+      );
+    }
+  }, [desktop]);
+
+  // Reset per-tool state whenever the dialog opens or the selected tool changes.
+  useEffect(() => {
+    if (!open) return;
+    setInputPath("");
+    setOutputPath("");
+    setParams(toolDefaults(tool));
+    setError(null);
+    setJob(null);
+    void checkRuntime();
+  }, [open, tool, checkRuntime]);
+
+  // Poll the sidecar job until it settles (shared conversion job store).
+  useEffect(() => {
+    if (!job || !RUNNING_JOB_STATUSES.has(job.status)) return;
+    let cancelled = false;
+    let timer: number;
+    const poll = async () => {
+      if (cancelled) return;
+      try {
+        const next = await fetchConversionJob(job.id);
+        if (cancelled) return;
+        setJob(next);
+        if (RUNNING_JOB_STATUSES.has(next.status)) {
+          timer = window.setTimeout(poll, 1000);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Could not poll job.");
+        }
+      }
+    };
+    timer = window.setTimeout(poll, 1000);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [job]);
+
+  // Keep the newest log lines in view as messages stream in.
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ block: "end" });
+  }, [job?.messages.length]);
+
+  const setParam = useCallback(
+    (id: string, value: unknown) =>
+      setParams((prev) => ({ ...prev, [id]: value })),
+    [],
+  );
+
+  const pickInput = useCallback(async () => {
+    const path = await pickLocalPathWithFallback({ filters: tool.inputFilters });
+    if (path) setInputPath(path);
+  }, [tool]);
+
+  const pickOutput = useCallback(async () => {
+    const path = await pickSavePathWithFallback({
+      defaultName: tool.defaultOutputName,
+      filters: tool.outputFilters,
+    });
+    if (path) setOutputPath(path);
+  }, [tool]);
+
+  const pickPathParam = useCallback(
+    async (param: AlgorithmParameter) => {
+      const path = await pickLocalPathWithFallback({
+        filters: param.fileFilters,
+      });
+      if (path) setParam(param.id, path);
+    },
+    [setParam],
+  );
+
+  const startServer = useCallback(async () => {
+    setStartingServer(true);
+    setError(null);
+    try {
+      await startGeoLibreSidecar();
+      await checkRuntime();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not start GeoLibre sidecar.",
+      );
+    } finally {
+      setStartingServer(false);
+    }
+  }, [checkRuntime]);
+
+  const handleRun = useCallback(async () => {
+    setError(null);
+    if (!inputPath.trim()) {
+      setError("Choose an input file.");
+      return;
+    }
+    if (!outputPath.trim()) {
+      setError("Choose an output file.");
+      return;
+    }
+    // Validate required operation parameters before submitting the job.
+    for (const param of tool.parameters) {
+      if (!param.required) continue;
+      const value = params[param.id];
+      if (
+        value === undefined ||
+        value === null ||
+        value === "" ||
+        (param.type === "number" && Number.isNaN(value))
+      ) {
+        setError(`"${param.label}" is required.`);
+        return;
+      }
+    }
+    try {
+      setJob(
+        await runRasterTool({
+          tool_id: tool.id,
+          input_path: inputPath.trim(),
+          output_path: outputPath.trim(),
+          parameters: params,
+        }),
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not start raster tool.",
+      );
+    }
+  }, [tool, inputPath, outputPath, params]);
+
+  const running = Boolean(job && RUNNING_JOB_STATUSES.has(job.status));
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) setRasterToolOpen(null);
+      }}
+    >
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Raster tools</DialogTitle>
+          <DialogDescription>
+            Run common raster operations on the Python sidecar (rasterio/GDAL).
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex gap-4">
+          {/* Tool list */}
+          <ScrollArea className="h-[26rem] w-48 shrink-0 rounded-md border">
+            <div className="p-1">
+              {groups.map((group) => (
+                <div key={group.group} className="mb-1">
+                  <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                    {group.group}
+                  </div>
+                  {group.tools.map((entry) => (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      onClick={() => setSelectedId(entry.id)}
+                      className={cn(
+                        "w-full rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent",
+                        entry.id === selectedId &&
+                          "bg-accent font-medium text-accent-foreground",
+                      )}
+                    >
+                      {entry.name}
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+
+          {/* Parameter form + run + log */}
+          <div className="flex min-w-0 flex-1 flex-col gap-3">
+            <p className="text-sm text-muted-foreground">{tool.description}</p>
+
+            {runtimeAvailable === false && (
+              <div className="grid gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3">
+                <p className="flex items-start gap-2 text-sm text-destructive">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  {runtimeMessage}
+                </p>
+                {desktop && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void startServer()}
+                    disabled={startingServer}
+                    className="gap-2"
+                  >
+                    {startingServer ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Server className="h-4 w-4" />
+                    )}
+                    Start server
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* Input file */}
+            <div className="grid gap-1.5">
+              <Label htmlFor="raster-input" className="text-xs">
+                Input raster<span className="text-destructive"> *</span>
+              </Label>
+              <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2">
+                <Input
+                  id="raster-input"
+                  value={inputPath}
+                  placeholder="File path"
+                  onChange={(event) => setInputPath(event.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  title="Choose input file"
+                  onClick={() => void pickInput()}
+                >
+                  <FolderOpen className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Output file */}
+            <div className="grid gap-1.5">
+              <Label htmlFor="raster-output" className="text-xs">
+                Output file<span className="text-destructive"> *</span>
+              </Label>
+              <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2">
+                <Input
+                  id="raster-output"
+                  value={outputPath}
+                  placeholder="File path"
+                  onChange={(event) => setOutputPath(event.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  title="Choose output file"
+                  onClick={() => void pickOutput()}
+                >
+                  <Save className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Operation parameters */}
+            {tool.parameters.map((param) => (
+              <RasterParameterField
+                key={param.id}
+                param={param}
+                value={params[param.id]}
+                onChange={(value) => setParam(param.id, value)}
+                onPick={() => void pickPathParam(param)}
+              />
+            ))}
+
+            <div>
+              <Button
+                onClick={() => void handleRun()}
+                disabled={running || runtimeAvailable !== true}
+                className="gap-2"
+              >
+                {running ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
+                Run
+              </Button>
+            </div>
+
+            {error && (
+              <p className="flex items-center gap-2 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4" />
+                {error}
+              </p>
+            )}
+
+            {job && (
+              <div className="grid gap-2">
+                <p
+                  className={cn(
+                    "flex items-center gap-2 text-sm font-medium",
+                    job.status === "succeeded" && "text-emerald-700",
+                    job.status === "failed" && "text-destructive",
+                  )}
+                >
+                  {job.status === "succeeded" ? (
+                    <CheckCircle2 className="h-4 w-4" />
+                  ) : job.status === "failed" ? (
+                    <AlertCircle className="h-4 w-4" />
+                  ) : (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  )}
+                  {job.status}
+                  {job.error ? `: ${job.error}` : ""}
+                </p>
+                <ScrollArea className="h-24 rounded-md border bg-muted/30 p-2 font-mono text-xs">
+                  {job.messages.length === 0 ? (
+                    <span className="text-muted-foreground">
+                      No output yet.
+                    </span>
+                  ) : (
+                    <>
+                      {job.messages.map((line, index) => (
+                        <div key={index} className="whitespace-pre-wrap">
+                          {line}
+                        </div>
+                      ))}
+                      <div ref={logEndRef} />
+                    </>
+                  )}
+                </ScrollArea>
+              </div>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface RasterParameterFieldProps {
+  param: AlgorithmParameter;
+  value: unknown;
+  onChange: (value: unknown) => void;
+  onPick: () => void;
+}
+
+function RasterParameterField({
+  param,
+  value,
+  onChange,
+  onPick,
+}: RasterParameterFieldProps): ReactElement {
+  const label = (
+    <Label htmlFor={param.id} className="text-xs">
+      {param.label}
+      {param.required ? <span className="text-destructive"> *</span> : null}
+    </Label>
+  );
+
+  if (param.type === "select") {
+    return (
+      <div className="flex flex-col gap-1">
+        {label}
+        <Select
+          id={param.id}
+          value={(value as string) ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          {param.options?.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+      </div>
+    );
+  }
+
+  if (param.type === "boolean") {
+    return (
+      <label className="flex items-center gap-2 text-sm" htmlFor={param.id}>
+        <input
+          id={param.id}
+          type="checkbox"
+          checked={Boolean(value)}
+          onChange={(e) => onChange(e.target.checked)}
+          className="h-4 w-4 rounded border-input"
+        />
+        {param.label}
+      </label>
+    );
+  }
+
+  if (param.type === "number") {
+    return (
+      <div className="flex flex-col gap-1">
+        {label}
+        <Input
+          id={param.id}
+          type="number"
+          value={value === undefined || value === null ? "" : String(value)}
+          min={param.min}
+          max={param.max}
+          step={param.step}
+          onChange={(e) =>
+            onChange(e.target.value === "" ? undefined : Number(e.target.value))
+          }
+        />
+        {param.description ? (
+          <p className="text-xs text-muted-foreground">{param.description}</p>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (param.type === "path") {
+    return (
+      <div className="flex flex-col gap-1">
+        {label}
+        <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2">
+          <Input
+            id={param.id}
+            value={(value as string) ?? ""}
+            placeholder="File path"
+            onChange={(e) => onChange(e.target.value)}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            title="Choose file"
+            onClick={onPick}
+          >
+            <FolderOpen className="h-4 w-4" />
+          </Button>
+        </div>
+        {param.description ? (
+          <p className="text-xs text-muted-foreground">{param.description}</p>
+        ) : null}
+      </div>
+    );
+  }
+
+  // string
+  return (
+    <div className="flex flex-col gap-1">
+      {label}
+      <Input
+        id={param.id}
+        type="text"
+        value={(value as string) ?? ""}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {param.description ? (
+        <p className="text-xs text-muted-foreground">{param.description}</p>
+      ) : null}
+    </div>
+  );
+}

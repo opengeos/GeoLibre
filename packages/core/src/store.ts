@@ -45,6 +45,22 @@ export type VectorToolKind =
   | "difference"
   | "union";
 
+/**
+ * Identifiers of the raster processing tools. Kept in sync by hand with the
+ * `id` fields of `RASTER_TOOLS` in `@geolibre/processing` (`raster-tools.ts`);
+ * deriving the type there would create a core -> processing circular import.
+ */
+export type RasterToolKind =
+  | "hillshade"
+  | "slope"
+  | "aspect"
+  | "reproject"
+  | "resample"
+  | "clip-extent"
+  | "clip-mask"
+  | "polygonize"
+  | "contour";
+
 export interface AppState {
   projectName: string;
   projectPath: string | null;
@@ -68,6 +84,7 @@ export interface AppState {
     processingOpen: boolean;
     conversionOpen: ConversionToolKind | null;
     vectorToolOpen: VectorToolKind | null;
+    rasterToolOpen: RasterToolKind | null;
     sqlWorkspaceOpen: boolean;
     attributeTableOpen: boolean;
     zoomToSelectedFeature: boolean;
@@ -90,6 +107,7 @@ export interface AppState {
   setProcessingOpen: (open: boolean) => void;
   setConversionOpen: (kind: ConversionToolKind | null) => void;
   setVectorToolOpen: (kind: VectorToolKind | null) => void;
+  setRasterToolOpen: (kind: RasterToolKind | null) => void;
   setSqlWorkspaceOpen: (open: boolean) => void;
   setAttributeTableOpen: (open: boolean) => void;
   setZoomToSelectedFeature: (enabled: boolean) => void;
@@ -176,6 +194,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     processingOpen: false,
     conversionOpen: null,
     vectorToolOpen: null,
+    rasterToolOpen: null,
     sqlWorkspaceOpen: false,
     attributeTableOpen: false,
     zoomToSelectedFeature: false,
@@ -210,6 +229,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((s) => ({ ui: { ...s.ui, conversionOpen: kind } })),
   setVectorToolOpen: (kind) =>
     set((s) => ({ ui: { ...s.ui, vectorToolOpen: kind } })),
+  setRasterToolOpen: (kind) =>
+    set((s) => ({ ui: { ...s.ui, rasterToolOpen: kind } })),
   setSqlWorkspaceOpen: (open) =>
     set((s) => ({ ui: { ...s.ui, sqlWorkspaceOpen: open } })),
   setAttributeTableOpen: (open) =>
