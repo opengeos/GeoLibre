@@ -15,6 +15,11 @@ export const SKETCHES_SOURCE_KIND = "geoeditor-sketches";
  * loaded in the editor. Geoman reassigns `feature.id` on load, so the original
  * id is preserved here and restored on write-back, then stripped so it never
  * reaches a saved project or the attribute table.
+ *
+ * The name is deliberately `__`-prefixed and namespaced to avoid colliding with
+ * real user attributes. A feature that already carries a property with this
+ * exact name would have it overwritten for the session and stripped on save, so
+ * this name must stay unusual enough that real data never uses it.
  */
 export const GEOMETRY_EDIT_FID_PROPERTY = "__geolibre_fid";
 

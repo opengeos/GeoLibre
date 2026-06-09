@@ -92,6 +92,19 @@ describe("canEditLayerGeometry", () => {
   });
 
   it("rejects Add-Vector-Layer control layers", () => {
+    // sourceKind alone is enough to reject.
+    assert.equal(
+      canEditLayerGeometry(
+        makeLayer({ metadata: { sourceKind: "maplibre-gl-vector" } }),
+      ),
+      false,
+    );
+    // externalNativeLayer alone is also enough.
+    assert.equal(
+      canEditLayerGeometry(makeLayer({ metadata: { externalNativeLayer: true } })),
+      false,
+    );
+    // Both together (the original combined case).
     assert.equal(
       canEditLayerGeometry(
         makeLayer({
@@ -101,10 +114,6 @@ describe("canEditLayerGeometry", () => {
           },
         }),
       ),
-      false,
-    );
-    assert.equal(
-      canEditLayerGeometry(makeLayer({ metadata: { externalNativeLayer: true } })),
       false,
     );
   });

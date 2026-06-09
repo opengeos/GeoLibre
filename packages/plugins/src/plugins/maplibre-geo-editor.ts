@@ -492,16 +492,28 @@ export function startLayerGeometryEdit(
   sketchesIdleDisplayOverride = false;
   unionSketchesWithStoreOnNextSync = false;
 
+  let loaded = false;
   restoringSketchesToEditor = true;
   try {
     geoEditorControl.loadGeoJson(
       tagFeatureKeys(cloneFeatureCollection(layer.geojson)),
       SKETCHES_SOURCE_PATH,
     );
+    loaded = true;
   } catch {
     // Geoman may not be ready until the map style finishes loading.
   } finally {
     restoringSketchesToEditor = false;
+  }
+
+  // If the load failed the editor is empty; do NOT keep the session active or a
+  // later Save would overwrite the layer with an empty collection. Roll back:
+  // restore the stashed sketches and report failure so the caller can retry.
+  if (!loaded) {
+    editTargetLayerId = null;
+    restoreSketchesAfterSession();
+    applySketchesMapDisplay();
+    return false;
   }
 
   applySketchesMapDisplay();
@@ -541,6 +553,10 @@ export function endLayerGeometryEdit(
  * layer.
  */
 function abortGeometryEditSession(): void {
+  console.warn(
+    "Geometry edit session aborted: the target layer was removed; " +
+      "in-progress geometry edits were discarded.",
+  );
   editTargetLayerId = null;
   sketchesIdleDisplayOverride = false;
   unionSketchesWithStoreOnNextSync = false;

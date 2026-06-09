@@ -186,8 +186,14 @@ export function DesktopShell({
     if (!manager.isActive("maplibre-gl-geo-editor")) {
       manager.activate("maplibre-gl-geo-editor", appAPI);
     }
-    startLayerGeometryEdit(appAPI, layerId);
-  }, []);
+    const started = startLayerGeometryEdit(appAPI, layerId);
+    if (!started) {
+      setDropError(
+        "Could not start geometry editing. Try again once the map has loaded.",
+      );
+      clearDropMessageLater();
+    }
+  }, [clearDropMessageLater]);
 
   const handleCancelGeometryEdit = useCallback(() => {
     endLayerGeometryEdit(createAppAPI(mapControllerRef), { save: false });
