@@ -354,16 +354,38 @@ export const intersectionTool: ProcessingAlgorithm = {
       geometryFilter: ["polygon"],
     },
   ],
-  run: (ctx) =>
-    overlay(
-      ctx,
-      (a, b) =>
-        intersect(featureCollection([a, b])) as Feature<
+  run: (ctx) => {
+    const input = requireFeatures(ctx, "layer");
+    const overlayFc = requireFeatures(ctx, "overlay");
+    if (!input || !overlayFc) return;
+    const inputPolys = polygonFeatures(input);
+    const overlayPolys = polygonFeatures(overlayFc);
+    if (!inputPolys.length || !overlayPolys.length) {
+      ctx.log("Error: both layers must contain polygon features");
+      return;
+    }
+    // Unlike Clip (which keeps only input attributes), Intersection carries
+    // merged attributes from both layers, so pair each input feature with each
+    // overlay feature rather than a dissolved overlay geometry. This mirrors
+    // the sidecar's gpd.overlay(how="intersection").
+    const results: Feature[] = [];
+    for (const a of inputPolys) {
+      for (const b of overlayPolys) {
+        const piece = intersect(featureCollection([a, b])) as Feature<
           Polygon | MultiPolygon
-        > | null,
-      "Intersection",
-      true,
-    ),
+        > | null;
+        if (piece?.geometry) {
+          piece.properties = {
+            ...(a.properties ?? {}),
+            ...(b.properties ?? {}),
+          };
+          results.push(piece);
+        }
+      }
+    }
+    ctx.log(`Intersection: produced ${results.length} feature(s)`);
+    ctx.addResultLayer?.("Intersection", featureCollection(results));
+  },
 };
 
 export const differenceTool: ProcessingAlgorithm = {

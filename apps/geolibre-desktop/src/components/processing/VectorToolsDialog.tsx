@@ -164,7 +164,12 @@ export function VectorToolsDialog({
     for (const param of tool.parameters) {
       if (!param.required) continue;
       const value = params[param.id];
-      if (value === undefined || value === "" || value === null) {
+      if (
+        value === undefined ||
+        value === "" ||
+        value === null ||
+        (param.type === "number" && Number.isNaN(value))
+      ) {
         appendLog(`Error: "${param.label}" is required`);
         return;
       }
@@ -175,6 +180,16 @@ export function VectorToolsDialog({
       if (engine === "sidecar") {
         const inputLayer = layers.find((l) => l.id === params.layer);
         const overlayLayer = layers.find((l) => l.id === params.overlay);
+        // A layer may have been removed from the project after the dialog
+        // opened; bail out with a clear message instead of sending null GeoJSON.
+        if (!inputLayer) {
+          appendLog("Error: input layer no longer exists in the project");
+          return;
+        }
+        if (params.overlay && !overlayLayer) {
+          appendLog("Error: overlay layer no longer exists in the project");
+          return;
+        }
         appendLog(`Running "${tool.name}" on the Python sidecar...`);
         const result = await runVectorTool({
           tool_id: tool.id,
@@ -294,7 +309,10 @@ export function VectorToolsDialog({
             <div>
               <Button
                 onClick={handleRun}
-                disabled={running}
+                disabled={
+                  running ||
+                  (engine === "sidecar" && sidecarAvailable === false)
+                }
                 className="gap-2"
               >
                 {running ? (

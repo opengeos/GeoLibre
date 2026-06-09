@@ -21,6 +21,10 @@ logger = logging.getLogger(__name__)
 
 WGS84 = "EPSG:4326"
 
+# Cap the input size so a very large layer cannot block the event loop or
+# exhaust memory (GeoPandas runs synchronously on the main thread).
+MAX_FEATURES = 50_000
+
 # Conversion factors from the requested unit to meters.
 _DISTANCE_UNITS = {
     "kilometers": 1000.0,
@@ -41,6 +45,15 @@ def _import_geopandas():
     import geopandas as gpd  # noqa: PLC0415
 
     return gpd
+
+
+def _check_size(geojson: Optional[dict], label: str) -> None:
+    """Reject payloads with more than ``MAX_FEATURES`` features."""
+    if geojson and len(geojson.get("features", [])) > MAX_FEATURES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"{label} exceeds the {MAX_FEATURES}-feature limit",
+        )
 
 
 def _load_gdf(geojson: Optional[dict], label: str):
@@ -68,6 +81,10 @@ def _buffer(request: VectorToolRequest) -> tuple[dict, list[str]]:
     distance = float(params.get("distance", 1) or 0)
     units = str(params.get("units", "kilometers"))
     meters = distance * _DISTANCE_UNITS.get(units, 1000.0)
+    if meters < 0:
+        # The UI enforces a non-negative distance; keep the server consistent
+        # rather than silently performing an inward (erosion) buffer.
+        raise HTTPException(status_code=400, detail="Buffer distance must be >= 0")
     # Buffer in a local metric CRS so the distance is in real-world meters,
     # then reproject the result back to WGS84.
     metric_crs = gdf.estimate_utm_crs()
@@ -82,6 +99,7 @@ def _buffer(request: VectorToolRequest) -> tuple[dict, list[str]]:
 def _centroids(request: VectorToolRequest) -> tuple[dict, list[str]]:
     gdf = _load_gdf(request.geojson, "Input layer")
     result = gdf.copy()
+    # Computed on geographic (WGS84) coordinates, matching the client engine.
     result["geometry"] = gdf.geometry.centroid
     return _to_feature_collection(result), [f"Computed {len(result)} centroid(s)"]
 
@@ -119,6 +137,9 @@ def _bounding_box(request: VectorToolRequest) -> tuple[dict, list[str]]:
 
 def _simplify(request: VectorToolRequest) -> tuple[dict, list[str]]:
     gdf = _load_gdf(request.geojson, "Input layer")
+    # Tolerance is in degrees (the geometry stays in WGS84), matching the UI
+    # label and the client engine. Do not introduce a metric-projected path
+    # here without also reinterpreting the tolerance unit.
     tolerance = float(request.parameters.get("tolerance", 0.01) or 0)
     result = gdf.copy()
     result["geometry"] = gdf.geometry.simplify(tolerance)
@@ -132,7 +153,11 @@ def _overlay(request: VectorToolRequest, how: str) -> tuple[dict, list[str]]:
     gpd = _import_geopandas()
     left = _load_gdf(request.geojson, "Input layer")
     right = _load_gdf(request.overlay, "Overlay layer")
-    result = gpd.overlay(left, right, how=how, keep_geom_type=False)
+    # Keep only polygonal output for difference so degenerate boundary slivers
+    # (lines/points at shared edges) are dropped, per GIS convention.
+    result = gpd.overlay(
+        left, right, how=how, keep_geom_type=(how == "difference")
+    )
     return (
         _to_feature_collection(result),
         [f"{how.capitalize()}: produced {len(result)} feature(s)"],
@@ -195,6 +220,9 @@ def vector_run(request: VectorToolRequest):
         raise HTTPException(
             status_code=400, detail=f"Unknown vector tool: {request.tool_id}"
         )
+
+    _check_size(request.geojson, "Input layer")
+    _check_size(request.overlay, "Overlay layer")
 
     try:
         geojson, messages = handler(request)
