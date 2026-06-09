@@ -13,6 +13,9 @@ import {
   type RuntimeEnvironmentVariable,
 } from "./types";
 
+/** Placeholder name a project carries before the user names it. */
+export const DEFAULT_PROJECT_NAME = "Untitled Project";
+
 export interface CreateProjectOptions {
   basemapStyleUrl?: string;
   mapView?: MapViewState;
@@ -28,7 +31,7 @@ export function createDefaultMapView(): MapViewState {
 }
 
 export function createEmptyProject(
-  name = "Untitled Project",
+  name = DEFAULT_PROJECT_NAME,
   options: CreateProjectOptions = {},
 ): GeoLibreProject {
   return {

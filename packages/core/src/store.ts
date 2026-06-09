@@ -6,6 +6,7 @@ import {
   type CreateProjectOptions,
   createDefaultMapView,
   createEmptyProject,
+  DEFAULT_PROJECT_NAME,
 } from "./project";
 import {
   DEFAULT_BASEMAP,
@@ -134,7 +135,7 @@ function normalizeRecentProjects(
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
-  projectName: "Untitled Project",
+  projectName: DEFAULT_PROJECT_NAME,
   projectPath: null,
   projectGeneration: 0,
   isDirty: false,

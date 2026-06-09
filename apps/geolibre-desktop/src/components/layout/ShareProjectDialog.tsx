@@ -205,6 +205,7 @@ export function ShareProjectDialog({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Name your project"
+                maxLength={100}
                 disabled={status === "uploading"}
                 autoFocus={!titleValid}
               />

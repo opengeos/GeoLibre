@@ -807,7 +807,7 @@ export function SettingsDialog({
                     <Input
                       aria-label="Share.GeoLibre API token"
                       type="password"
-                      autoComplete="off"
+                      autoComplete="new-password"
                       placeholder="glb_…"
                       value={draftDesktopSettings.shareToken}
                       onChange={(event) => updateShareToken(event.target.value)}

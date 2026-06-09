@@ -1,4 +1,5 @@
 import {
+  DEFAULT_PROJECT_NAME,
   projectFromStore,
   projectPathLabel,
   serializeProject,
@@ -144,7 +145,6 @@ import { AboutDialog } from "./AboutDialog";
 import { NewProjectDialog } from "./NewProjectDialog";
 import { ManagePluginsDialog } from "./ManagePluginsDialog";
 import { ShareProjectDialog } from "./ShareProjectDialog";
-import { DEFAULT_PROJECT_TITLE } from "../../lib/share-geolibre";
 import { SettingsDialog } from "./SettingsDialog";
 
 interface TopToolbarProps {
@@ -398,7 +398,7 @@ export function TopToolbar({
   const buildCurrentProject = (nameOverride?: string) => {
     const state = useAppStore.getState();
     const defaultProjectName =
-      nameOverride?.trim() || state.projectName.trim() || DEFAULT_PROJECT_TITLE;
+      nameOverride?.trim() || state.projectName.trim() || DEFAULT_PROJECT_NAME;
     const pluginManifestUrls = mergeStringLists(
       state.projectPlugins?.manifestUrls ?? [],
       useDesktopSettingsStore.getState().desktopSettings.pluginManifestUrls,
