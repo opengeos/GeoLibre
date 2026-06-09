@@ -422,14 +422,12 @@ export function TopToolbar({
   const saveProject = async (options?: {
     saveAs?: boolean;
   }): Promise<boolean> => {
-    const state = useAppStore.getState();
     const { project, defaultProjectName, content } = buildCurrentProject();
     // Projects opened from a URL have no writable path, so both Save and
     // Save As fall back to the save dialog for them.
+    const { projectPath } = useAppStore.getState();
     const existingLocalPath =
-      state.projectPath && !isHttpUrl(state.projectPath)
-        ? state.projectPath
-        : null;
+      projectPath && !isHttpUrl(projectPath) ? projectPath : null;
     let path: string | null;
     try {
       path =

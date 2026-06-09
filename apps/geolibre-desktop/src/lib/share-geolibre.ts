@@ -45,7 +45,16 @@ export function isShareableTitle(title: string): boolean {
 export function resolveShareBaseUrl(): string {
   const configured = import.meta.env?.VITE_GEOLIBRE_SHARE_URL;
   if (typeof configured === "string" && configured.trim()) {
-    return configured.trim().replace(/\/+$/, "");
+    const trimmed = configured.trim().replace(/\/+$/, "");
+    // Only accept HTTPS (or HTTP on loopback for local dev) so a misconfigured
+    // env var can't send the Bearer token over a plaintext connection.
+    if (
+      trimmed.startsWith("https://") ||
+      trimmed.startsWith("http://localhost") ||
+      trimmed.startsWith("http://127.0.0.1")
+    ) {
+      return trimmed;
+    }
   }
   return DEFAULT_SHARE_BASE_URL;
 }

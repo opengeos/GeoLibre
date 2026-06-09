@@ -113,12 +113,21 @@ export function ShareProjectDialog({
 
   const handleCopy = () => {
     if (!result) return;
-    void navigator.clipboard.writeText(result.projectUrl);
-    if (copyTimeoutRef.current !== null) {
-      window.clearTimeout(copyTimeoutRef.current);
-    }
-    setCopied(true);
-    copyTimeoutRef.current = window.setTimeout(() => setCopied(false), 2000);
+    // Only show the "copied" checkmark if the write actually succeeds; the
+    // promise rejects when clipboard permission is denied or the page is
+    // unfocused, and swallowing it would flip the icon misleadingly.
+    navigator.clipboard
+      .writeText(result.projectUrl)
+      .then(() => {
+        if (copyTimeoutRef.current !== null) {
+          window.clearTimeout(copyTimeoutRef.current);
+        }
+        setCopied(true);
+        copyTimeoutRef.current = window.setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => {
+        // Clipboard unavailable; leave the icon unchanged.
+      });
   };
 
   return (
@@ -130,7 +139,7 @@ export function ShareProjectDialog({
             Share project
           </DialogTitle>
           <DialogDescription>
-            Upload the current project to share.geolibre.app and get a public
+            Upload the current project to share.geolibre.app and get a shareable
             link.
           </DialogDescription>
         </DialogHeader>
@@ -158,7 +167,12 @@ export function ShareProjectDialog({
             </p>
             <div className="flex gap-2">
               <Input readOnly value={result.projectUrl} className="text-xs" />
-              <Button type="button" variant="secondary" onClick={handleCopy}>
+              <Button
+                type="button"
+                variant="secondary"
+                aria-label="Copy link"
+                onClick={handleCopy}
+              >
                 {copied ? (
                   <Check className="h-3.5 w-3.5" />
                 ) : (
