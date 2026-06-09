@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "plugins": [
+    {
+      "id": "geolibre-sample-plugin",
+      "name": "Sample Plugin",
+      "version": "1.0.0",
+      "description": "A minimal example plugin that adds a button control to the map. Use it as a template for marketplace entries.",
+      "author": "GeoLibre",
+      "homepage": "https://github.com/opengeos/GeoLibre",
+      "manifestUrl": "marketplace/sample/plugin.json",
+      "categories": ["Example"],
+      "minGeoLibreVersion": "0.9.0"
+    }
+  ]
+}

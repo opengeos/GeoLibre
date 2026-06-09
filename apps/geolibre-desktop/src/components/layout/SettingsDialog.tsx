@@ -59,6 +59,7 @@ import {
 import { getPluginManager } from "../../hooks/usePlugins";
 import { mergeStringLists, normalizeStringList } from "../../lib/string-lists";
 import { pickLocalPathWithFallback } from "../../lib/tauri-io";
+import { PluginMarketplace } from "./PluginMarketplace";
 
 type SettingsSection =
   | "map"
@@ -429,6 +430,36 @@ export function SettingsDialog({
       ...current,
       pluginManifestUrls: current.pluginManifestUrls.filter(
         (_, i) => i !== index,
+      ),
+    }));
+    setError(null);
+  };
+
+  // Marketplace install/remove operate on the same draft manifest URL list as
+  // manual entry, so a curated plugin behaves exactly like a hand-added URL and
+  // persists through the dialog's Save flow.
+  const installMarketplacePlugin = (manifestUrl: string) => {
+    const url = manifestUrl.trim();
+    setDraftDesktopSettings((current) =>
+      current.pluginManifestUrls.some((entry) => entry.value.trim() === url)
+        ? current
+        : {
+            ...current,
+            pluginManifestUrls: [
+              ...current.pluginManifestUrls,
+              toDraftListEntry(url),
+            ],
+          },
+    );
+    setError(null);
+  };
+
+  const removeMarketplacePlugin = (manifestUrl: string) => {
+    const url = manifestUrl.trim();
+    setDraftDesktopSettings((current) => ({
+      ...current,
+      pluginManifestUrls: current.pluginManifestUrls.filter(
+        (entry) => entry.value.trim() !== url,
       ),
     }));
     setError(null);
@@ -1129,6 +1160,13 @@ export function SettingsDialog({
                       </div>
                     )}
                   </div>
+                  <PluginMarketplace
+                    installedUrls={draftDesktopSettings.pluginManifestUrls.map(
+                      (entry) => entry.value,
+                    )}
+                    onInstall={installMarketplacePlugin}
+                    onRemove={removeMarketplacePlugin}
+                  />
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-3">
                       <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

@@ -225,6 +225,33 @@ The optional `style` CSS is injected globally into the host document, not scoped
 
 When using the template, update `geolibre-plugin/plugin.json` and `src/geolibre.ts` together so `id`, `name`, and `version` stay in sync. Run `npm run package:geolibre`, then either copy the generated zip into the desktop app data `plugins/` directory, add the template's `geolibre-plugin/` directory in Settings > Plugins for local development, or host the `geolibre-plugin/` directory and add its `plugin.json` URL.
 
+### Plugin marketplace
+
+Settings > Plugins includes a Marketplace section that lists curated external plugins so users can install them without hand-entering manifest URLs. It is a thin layer over the manifest-URL loader above: installing an entry records its manifest URL in the plugin manifest URL list, and the existing loader fetches and registers it. The marketplace introduces no new trust path.
+
+The registry is JSON, fetched from `VITE_GEOLIBRE_PLUGIN_REGISTRY_URL` or a bundled `public/plugin-registry.json` fallback (so it works offline and in both the web and desktop builds). It is an array, or an object with a `plugins` array, of entries:
+
+```json
+{
+  "version": 1,
+  "plugins": [
+    {
+      "id": "example-plugin",
+      "name": "Example Plugin",
+      "version": "1.0.0",
+      "description": "Optional short description",
+      "author": "Example Author",
+      "homepage": "https://github.com/example/example-plugin",
+      "manifestUrl": "https://example.com/example-plugin/plugin.json",
+      "categories": ["Example"],
+      "minGeoLibreVersion": "0.9.0"
+    }
+  ]
+}
+```
+
+`id`, `name`, `version`, and `manifestUrl` are required; the rest are optional. A relative `manifestUrl` is resolved against the registry location, so same-origin plugins served from `public/` can be listed with a relative path. `minGeoLibreVersion` gates installation against the running app version. The bundled registry ships a working same-origin sample under `public/marketplace/sample/`; replace or extend it with curated entries for a deployment. Because runtime unregister is not yet supported, removing a plugin drops its manifest URL and the unload completes on restart.
+
 ## Future plugin work
 
 - Sandboxed worker plugins

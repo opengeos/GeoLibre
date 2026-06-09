@@ -115,7 +115,7 @@
 - [ ] Leafmap, GeoAI, and SamGeo integrations (selective)
 - [ ] External plugin package distribution workflow
 - [x] Plugin marketplace / registry design (see [Plugin marketplace and registry](#plugin-marketplace-and-registry-design))
-- [ ] Plugin marketplace MVP: curated registry plus browse and install UI
+- [x] Plugin marketplace MVP: curated registry plus browse and install UI
 - [ ] Plugin update, removal, and integrity verification
 - [ ] Sandboxed worker plugins
 - [ ] Performance tuning and test suite
@@ -188,8 +188,29 @@ code.
 ### Phasing
 
 1. Curated static registry plus browse and install through manifest URLs
-   (reuses the current loader; desktop downloads to the app data directory, web
-   records the URL).
+   (reuses the current loader; records the manifest URL in settings). **Done.**
 2. Version checks, update and removal flows, and integrity hashes.
 3. Submission workflow for third-party authors, plugin signing, and sandboxed
    execution.
+
+### Implementation (phase 1)
+
+The MVP ships in the desktop app and, because the same frontend serves the web
+build, works in both:
+
+- `apps/geolibre-desktop/src/lib/plugin-registry.ts` fetches and normalizes a
+  registry (`{ "plugins": [...] }`), resolving each entry's `manifestUrl`
+  against the registry location. The registry URL is
+  `VITE_GEOLIBRE_PLUGIN_REGISTRY_URL` or a bundled
+  `public/plugin-registry.json` fallback.
+- `apps/geolibre-desktop/src/components/layout/PluginMarketplace.tsx` renders a
+  Browse list in Settings > Plugins with search, install/installed/remove,
+  `minGeoLibreVersion` compatibility checks, an update-available badge, and
+  inline error handling.
+- Installing records the entry's manifest URL in the plugin manifest URL list,
+  so the existing external-plugin loader fetches and registers it. No new trust
+  path is introduced. Runtime unregister is not yet supported, so removal drops
+  the URL and full unload completes on restart.
+- `public/plugin-registry.json` ships a working same-origin sample plugin
+  (`public/marketplace/sample/`) so the marketplace is usable out of the box;
+  maintainers add curated external entries to the registry.
