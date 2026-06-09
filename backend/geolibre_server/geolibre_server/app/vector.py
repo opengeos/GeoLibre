@@ -187,6 +187,20 @@ def _clip(request: VectorToolRequest) -> tuple[dict, list[str]]:
     return _to_feature_collection(clipped), [f"Clip: produced {len(clipped)} feature(s)"]
 
 
+def _union(request: VectorToolRequest) -> tuple[dict, list[str]]:
+    gpd = _import_geopandas()
+    left = _load_gdf(request.geojson, "Input layer")
+    right = _load_gdf(request.overlay, "Overlay layer")
+    # Match the client engine: dissolve both layers into a single merged
+    # geometry rather than gpd.overlay(how="union")'s full-outer-join, which
+    # would return many attributed parts and diverge from the Turf.js result.
+    merged = gpd.GeoSeries(
+        [left.geometry.union_all(), right.geometry.union_all()], crs=WGS84
+    ).union_all()
+    result = gpd.GeoDataFrame(geometry=[merged], crs=WGS84)
+    return _to_feature_collection(result), ["Union: produced 1 feature"]
+
+
 _DISPATCH = {
     "buffer": _buffer,
     "centroids": _centroids,
@@ -197,7 +211,7 @@ _DISPATCH = {
     "clip": _clip,
     "intersection": lambda r: _overlay(r, "intersection"),
     "difference": lambda r: _overlay(r, "difference"),
-    "union": lambda r: _overlay(r, "union"),
+    "union": _union,
 }
 
 
@@ -220,7 +234,14 @@ def vector_status():
 
 @router.post("/run")
 def vector_run(request: VectorToolRequest):
-    """Run a single vector geometry operation and return the result GeoJSON."""
+    """Run a single vector geometry operation and return the result GeoJSON.
+
+    Intentionally a plain ``def``: GeoPandas/Shapely are CPU-bound and
+    synchronous, so FastAPI dispatches this to its thread pool and the event
+    loop is not blocked. Do not convert this (or the handlers it calls) to
+    ``async def`` without moving the work to an executor. The ``MAX_FEATURES``
+    cap bounds the per-request cost.
+    """
     try:
         _import_geopandas()
     except Exception as exc:  # noqa: BLE001

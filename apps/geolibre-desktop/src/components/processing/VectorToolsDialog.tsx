@@ -309,6 +309,11 @@ export function VectorToolsDialog({
                   <option value="client">Client (Turf.js)</option>
                   <option value="sidecar">Sidecar (GeoPandas)</option>
                 </Select>
+                {engine === "sidecar" && sidecarAvailable === null ? (
+                  <p className="text-xs text-muted-foreground">
+                    Checking sidecar availability...
+                  </p>
+                ) : null}
                 {engine === "sidecar" && sidecarAvailable === false ? (
                   <p className="text-xs text-destructive">
                     The GeoPandas sidecar is not available. Start the sidecar
@@ -323,7 +328,7 @@ export function VectorToolsDialog({
                 onClick={handleRun}
                 disabled={
                   running ||
-                  (engine === "sidecar" && sidecarAvailable === false)
+                  (engine === "sidecar" && sidecarAvailable !== true)
                 }
                 className="gap-2"
               >

@@ -115,3 +115,79 @@ def test_unknown_tool_returns_400() -> None:
     with pytest.raises(HTTPException) as exc:
         vector_run(VectorToolRequest(tool_id="nonsense", geojson=SQUARE))
     assert exc.value.status_code == 400
+
+
+@requires_geopandas
+@pytest.mark.parametrize(
+    "tool_id",
+    ["centroids", "convex-hull", "dissolve", "bounding-box", "simplify"],
+)
+def test_single_layer_tools_return_feature_collection(tool_id: str) -> None:
+    result = vector_run(VectorToolRequest(tool_id=tool_id, geojson=SQUARE))
+    fc = result["geojson"]
+    assert fc["type"] == "FeatureCollection"
+    assert len(fc["features"]) >= 1
+
+
+@requires_geopandas
+@pytest.mark.parametrize("tool_id", ["clip", "difference", "union"])
+def test_overlay_tools_return_feature_collection(tool_id: str) -> None:
+    result = vector_run(
+        VectorToolRequest(tool_id=tool_id, geojson=SQUARE, overlay=OVERLAP)
+    )
+    fc = result["geojson"]
+    assert fc["type"] == "FeatureCollection"
+    assert len(fc["features"]) >= 1
+
+
+@requires_geopandas
+def test_union_dissolves_to_single_feature() -> None:
+    # The sidecar union must match the client engine (one merged geometry).
+    result = vector_run(
+        VectorToolRequest(tool_id="union", geojson=SQUARE, overlay=OVERLAP)
+    )
+    assert len(result["geojson"]["features"]) == 1
+
+
+@requires_geopandas
+def test_buffer_rejects_negative_distance() -> None:
+    with pytest.raises(HTTPException) as exc:
+        vector_run(
+            VectorToolRequest(
+                tool_id="buffer", geojson=SQUARE, parameters={"distance": -1}
+            )
+        )
+    assert exc.value.status_code == 400
+
+
+@requires_geopandas
+def test_buffer_rejects_unknown_unit() -> None:
+    with pytest.raises(HTTPException) as exc:
+        vector_run(
+            VectorToolRequest(
+                tool_id="buffer",
+                geojson=SQUARE,
+                parameters={"distance": 1, "units": "furlongs"},
+            )
+        )
+    assert exc.value.status_code == 400
+
+
+@requires_geopandas
+def test_dissolve_rejects_unknown_field() -> None:
+    with pytest.raises(HTTPException) as exc:
+        vector_run(
+            VectorToolRequest(
+                tool_id="dissolve", geojson=SQUARE, parameters={"field": "missing"}
+            )
+        )
+    assert exc.value.status_code == 400
+
+
+@requires_geopandas
+def test_run_rejects_oversized_input(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(vector, "MAX_FEATURES", 2)
+    big = {"type": "FeatureCollection", "features": [{}, {}, {}]}
+    with pytest.raises(HTTPException) as exc:
+        vector_run(VectorToolRequest(tool_id="buffer", geojson=big))
+    assert exc.value.status_code == 413

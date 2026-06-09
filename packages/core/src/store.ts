@@ -28,7 +28,11 @@ export type ConversionToolKind =
   | "vector-to-pmtiles"
   | "raster-to-cog";
 
-/** Identifiers of the vector processing tools (see `@geolibre/processing`). */
+/**
+ * Identifiers of the vector processing tools. Kept in sync by hand with the
+ * `id` fields of `VECTOR_TOOLS` in `@geolibre/processing` (`vector-tools.ts`);
+ * deriving the type there would create a core -> processing circular import.
+ */
 export type VectorToolKind =
   | "buffer"
   | "centroids"

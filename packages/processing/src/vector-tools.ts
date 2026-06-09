@@ -19,6 +19,9 @@ import type {
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { GeometryFamily, ProcessingAlgorithm, ProcessingContext } from "./types";
 
+/** Upper bound on input×overlay pairs for the main-thread intersection loop. */
+const MAX_CLIENT_PAIRS = 250_000;
+
 function getLayer(
   ctx: ProcessingContext,
   paramId = "layer",
@@ -68,6 +71,26 @@ function polygonFeatures(
   ) as Feature<Polygon | MultiPolygon>[];
 }
 
+/** Split Polygon/MultiPolygon features into single-part Polygon features. */
+function explodeToPolygons(features: Feature[]): Feature<Polygon>[] {
+  const result: Feature<Polygon>[] = [];
+  for (const feature of features) {
+    const geometry = feature.geometry;
+    if (geometry?.type === "Polygon") {
+      result.push(feature as Feature<Polygon>);
+    } else if (geometry?.type === "MultiPolygon") {
+      for (const coordinates of geometry.coordinates) {
+        result.push({
+          type: "Feature",
+          properties: feature.properties ?? {},
+          geometry: { type: "Polygon", coordinates },
+        });
+      }
+    }
+  }
+  return result;
+}
+
 /** Merge all polygons of a collection into a single (multi)polygon feature. */
 function mergePolygons(
   fc: FeatureCollection,
@@ -77,6 +100,8 @@ function mergePolygons(
   let merged: Feature<Polygon | MultiPolygon> = polys[0];
   for (let i = 1; i < polys.length; i += 1) {
     const next = union(featureCollection([merged, polys[i]]));
+    // Turf can return null for degenerate/self-intersecting geometry; keep the
+    // last good accumulation rather than aborting the whole merge.
     if (next) merged = next as Feature<Polygon | MultiPolygon>;
   }
   return merged;
@@ -94,6 +119,7 @@ export const bufferTool: ProcessingAlgorithm = {
       id: "distance",
       label: "Distance",
       type: "number",
+      required: true,
       default: 1,
       min: 0,
       step: 0.1,
@@ -131,6 +157,7 @@ export const centroidsTool: ProcessingAlgorithm = {
   name: "Centroids",
   description: "Compute the centroid point of each feature",
   group: "Geometry",
+  supportsSidecar: true,
   parameters: [
     { id: "layer", label: "Input layer", type: "layer", required: true },
   ],
@@ -150,6 +177,7 @@ export const convexHullTool: ProcessingAlgorithm = {
   name: "Convex hull",
   description: "Compute the convex hull enclosing all features",
   group: "Geometry",
+  supportsSidecar: true,
   parameters: [
     { id: "layer", label: "Input layer", type: "layer", required: true },
   ],
@@ -191,19 +219,13 @@ export const dissolveTool: ProcessingAlgorithm = {
   run: (ctx) => {
     const fc = requireFeatures(ctx);
     if (!fc) return;
-    // Turf's dissolve only accepts single Polygon features (not MultiPolygon).
-    const polys = fc.features.filter(
-      (f) => f.geometry?.type === "Polygon",
-    ) as Feature<Polygon>[];
+    // Turf's dissolve only accepts single Polygon features, so explode any
+    // MultiPolygon into its constituent Polygons first (mirroring the sidecar,
+    // which handles both through GeoPandas) rather than dropping them.
+    const polys = explodeToPolygons(fc.features);
     if (!polys.length) {
-      ctx.log("Error: Dissolve requires (single-part) Polygon features");
+      ctx.log("Error: Dissolve requires polygon features");
       return;
-    }
-    const skipped = fc.features.length - polys.length;
-    if (skipped > 0) {
-      ctx.log(
-        `Warning: skipped ${skipped} MultiPolygon feature(s) — Turf Dissolve requires single-part Polygons`,
-      );
     }
     const field = (ctx.parameters.field as string)?.trim();
     const dissolved = dissolve(featureCollection(polys), {
@@ -221,6 +243,7 @@ export const boundingBoxTool: ProcessingAlgorithm = {
   name: "Bounding box",
   description: "Compute the rectangular envelope of all features",
   group: "Geometry",
+  supportsSidecar: true,
   parameters: [
     { id: "layer", label: "Input layer", type: "layer", required: true },
   ],
@@ -238,6 +261,7 @@ export const simplifyTool: ProcessingAlgorithm = {
   name: "Simplify",
   description: "Reduce the number of vertices using Douglas-Peucker",
   group: "Geometry",
+  supportsSidecar: true,
   parameters: [
     { id: "layer", label: "Input layer", type: "layer", required: true },
     {
@@ -368,6 +392,15 @@ export const intersectionTool: ProcessingAlgorithm = {
     const overlayPolys = polygonFeatures(overlayFc);
     if (!inputPolys.length || !overlayPolys.length) {
       ctx.log("Error: both layers must contain polygon features");
+      return;
+    }
+    // This pairwise loop runs on the main thread; cap it so very large layers
+    // cannot freeze the browser tab. Use the sidecar engine for bigger jobs.
+    const pairs = inputPolys.length * overlayPolys.length;
+    if (pairs > MAX_CLIENT_PAIRS) {
+      ctx.log(
+        `Error: intersection needs ${pairs} comparisons (limit ${MAX_CLIENT_PAIRS}); use the Sidecar engine for large layers`,
+      );
       return;
     }
     // Unlike Clip (which keeps only input attributes), Intersection carries
