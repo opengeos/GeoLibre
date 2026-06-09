@@ -120,25 +120,26 @@ export function openRasterLayerPanel(app: GeoLibreAppAPI): void {
 }
 
 /**
- * Adds a raster (GeoTIFF/COG) to the map from a URL or blob URL, mounting the
- * raster control on first use and zooming to the new layer. Used by the map
- * drag and drop handler. The control's `rasteradd` event syncs the layer into
- * the store, so it appears in the layer list and renders like any raster layer.
+ * Adds a raster (GeoTIFF/COG) to the map from a remote URL or a local File,
+ * mounting the raster control on first use and zooming to the new layer. Used by
+ * the map drag and drop handler. The control's `rasteradd` event syncs the layer
+ * into the store, so it appears in the layer list and renders like any raster
+ * layer.
  *
  * @param app - The GeoLibre app API.
- * @param url - The raster URL (remote http(s) or a local blob/object URL).
+ * @param source - A remote COG URL or a local GeoTIFF File.
  * @param options - Optional display name for the layer.
  */
 export async function addRasterToMap(
   app: GeoLibreAppAPI,
-  url: string,
+  source: string | File,
   options: { name?: string } = {},
 ): Promise<void> {
   const control = await ensureRasterControl(app);
   if (!control) {
     throw new Error("The raster control could not be initialized.");
   }
-  await control.addRaster(url, { name: options.name, zoomTo: true });
+  await control.addRaster(source, { name: options.name, zoomTo: true });
 }
 
 export function closeRasterLayerPanel(app: GeoLibreAppAPI): void {

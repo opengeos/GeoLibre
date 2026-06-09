@@ -418,7 +418,7 @@ export function DesktopShell({
       if (!rasters.length) return 0;
       const appAPI = createAppAPI(mapControllerRef);
       for (const raster of rasters) {
-        await addRasterToMap(appAPI, raster.url, { name: raster.name });
+        await addRasterToMap(appAPI, raster.source, { name: raster.name });
       }
       return rasters.length;
     },
