@@ -167,6 +167,9 @@ export function satisfiesMinVersion(current: string, required?: string): boolean
   return true;
 }
 
+// Compares only the dotted numeric core; pre-release/build suffixes are dropped,
+// so "1.0.0-rc.1" is treated as equal to "1.0.0" rather than ordered before it.
+// This is a deliberate simplification for the marketplace's coarse gating.
 function parseVersion(value: string): number[] | null {
   const core = value.trim().replace(/^v/, "").split(/[-+]/)[0];
   if (!core) return null;

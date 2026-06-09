@@ -136,6 +136,19 @@ export function ManagePluginsDialog({
     [desktopSettings.pluginManifestUrls],
   );
 
+  const isInstalled = (entry: PluginRegistryEntry) =>
+    installedSet.has(entry.manifestUrl.trim());
+  // An update is available only when the registry version is strictly newer
+  // than the loaded one (directional, not any mismatch).
+  const isUpgradeable = (entry: PluginRegistryEntry) => {
+    const loaded = loadedVersions.get(entry.id);
+    return (
+      isInstalled(entry) &&
+      loaded !== undefined &&
+      !satisfiesMinVersion(loaded, entry.version)
+    );
+  };
+
   const refresh = useCallback(() => setReloadToken((token) => token + 1), []);
 
   const installUrl = useCallback(
@@ -243,17 +256,8 @@ export function ManagePluginsDialog({
   }, [newManifestUrl, installUrl]);
 
   const entries = registry.status === "ready" ? registry.entries : [];
-  const installedCount = entries.filter((entry) =>
-    installedSet.has(entry.manifestUrl.trim()),
-  ).length;
-  const upgradeableCount = entries.filter((entry) => {
-    const loaded = loadedVersions.get(entry.id);
-    return (
-      installedSet.has(entry.manifestUrl.trim()) &&
-      loaded !== undefined &&
-      !satisfiesMinVersion(loaded, entry.version)
-    );
-  }).length;
+  const installedCount = entries.filter(isInstalled).length;
+  const upgradeableCount = entries.filter(isUpgradeable).length;
 
   const sectionItems: Array<{ id: ManageSection; label: string }> = [
     { id: "all", label: `All (${entries.length})` },
@@ -275,19 +279,13 @@ export function ManagePluginsDialog({
         .some((field) => field!.toLowerCase().includes(term));
     return entries.filter((entry) => {
       if (!matches(entry)) return false;
-      const installed = installedSet.has(entry.manifestUrl.trim());
-      const loaded = loadedVersions.get(entry.id);
-      const upgradeable =
-        installed &&
-        loaded !== undefined &&
-        !satisfiesMinVersion(loaded, entry.version);
       switch (section) {
         case "installed":
-          return installed;
+          return isInstalled(entry);
         case "not-installed":
-          return !installed;
+          return !isInstalled(entry);
         case "upgradeable":
-          return upgradeable;
+          return isUpgradeable(entry);
         default:
           return true;
       }
@@ -407,16 +405,12 @@ export function ManagePluginsDialog({
 
                 {registry.status === "ready" &&
                   visibleEntries.map((entry) => {
-                    const installed = installedSet.has(entry.manifestUrl.trim());
+                    const installed = isInstalled(entry);
                     const compatible = satisfiesMinVersion(
                       APP_VERSION,
                       entry.minGeoLibreVersion,
                     );
-                    const loadedVersion = loadedVersions.get(entry.id);
-                    const updateAvailable =
-                      installed &&
-                      loadedVersion !== undefined &&
-                      !satisfiesMinVersion(loadedVersion, entry.version);
+                    const updateAvailable = isUpgradeable(entry);
                     return (
                       <div
                         key={entry.id}

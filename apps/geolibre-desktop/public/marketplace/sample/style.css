@@ -21,3 +21,8 @@
 .geolibre-sample-plugin-control button:hover {
   background: hsl(var(--foreground) / 0.1);
 }
+
+.geolibre-sample-plugin-control button.is-active {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}

@@ -20,7 +20,10 @@ const control = {
     button.setAttribute("aria-label", "GeoLibre Sample Plugin");
     button.innerHTML = STAR_SVG;
     button.addEventListener("click", () => {
-      window.alert("Hello from the GeoLibre Sample Plugin!");
+      // Non-blocking feedback for the template. A real plugin would act on the
+      // map here, e.g. app.addGeoJsonLayer(...) captured from activate(app).
+      button.classList.toggle("is-active");
+      console.info("GeoLibre Sample Plugin button clicked.");
     });
     container.appendChild(button);
     this._container = container;
