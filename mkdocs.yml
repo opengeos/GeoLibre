@@ -65,6 +65,7 @@ nav:
       - Project Format: project-format.md
       - Plugin API: plugin-api.md
       - Roadmap: roadmap.md
+      - Contributing: contributing.md
 
 plugins:
   - search

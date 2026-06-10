@@ -1,0 +1,182 @@
+# Contributing
+
+Thanks for your interest in improving GeoLibre. This guide covers how to set up
+a development environment, the project layout, the local quality gate, and the
+pull request workflow. Contributions of all sizes are welcome, from fixing a
+typo to adding a new processing tool or plugin.
+
+By participating, you agree to keep interactions respectful and constructive.
+
+## Ways to contribute
+
+- **Report a bug or request a feature** by opening an
+  [issue](https://github.com/opengeos/GeoLibre/issues). Include steps to
+  reproduce, what you expected, and what happened, plus your OS and whether you
+  hit it in the web or desktop build.
+- **Improve the documentation** under `docs/` (this site).
+- **Fix a bug or build a feature** in the app or one of the packages.
+- **Write a plugin** using the external plugin API (see
+  [Plugins](#plugins-and-extensions) below).
+
+If you plan a large change, open an issue first so we can agree on the approach
+before you invest time in a pull request.
+
+## Prerequisites
+
+- **Node.js** 22 or newer
+- **Rust** toolchain ([rustup](https://rustup.rs/)) for Tauri desktop builds
+- Linux only: `webkit2gtk` and `libayatana-appindicator` (see the
+  [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/))
+- **Python** 3.12 is optional, and only needed for the conversion sidecar and
+  the backend tests
+
+## Set up
+
+```bash
+git clone https://github.com/opengeos/GeoLibre.git
+cd GeoLibre
+npm install
+```
+
+GeoLibre is an npm workspaces monorepo, so a single `npm install` at the root
+wires up every package. Bun users can run `bun install` instead.
+
+## Run it locally
+
+Web build (map in the browser):
+
+```bash
+npm run dev
+```
+
+Open <http://localhost:5173>.
+
+Desktop build (Tauri, required for filesystem dialogs, local MBTiles, and local
+raster reads):
+
+```bash
+npm run tauri:dev
+```
+
+## Repository layout
+
+```text
+apps/geolibre-desktop   # Tauri + React app (shell, composition, Tauri I/O)
+packages/core           # Domain types, Zustand store, project format
+packages/map            # MapLibre integration and layer sync
+packages/ui             # Tailwind + shadcn/ui primitives
+packages/plugins        # Plugin API and built-in plugins
+packages/processing     # Client-side algorithm registry
+backend/geolibre_server # Optional FastAPI conversion sidecar (Python)
+sample-data/            # Sample GeoJSON and an example project
+docs/                   # This documentation site (MkDocs)
+```
+
+See the [Architecture](architecture.md) reference for how these fit together,
+and the [Project Format](project-format.md) reference for the saved project
+schema.
+
+## Development workflow
+
+1. Create a feature branch off `main`. Never commit directly to `main`.
+
+    ```bash
+    git switch -c feat/short-description
+    ```
+
+2. Make your change, keeping it focused. Match the style of the surrounding
+   code rather than introducing new patterns.
+3. Run the [quality checks](#quality-checks) and confirm they pass.
+4. Commit with a clear message. The history follows a
+   [Conventional Commits](https://www.conventionalcommits.org/) style prefix,
+   for example `feat:`, `fix:`, `docs:`, `refactor:`, or `chore:`.
+5. Push your branch and open a pull request against `main`. Describe what
+   changed and why, and link any related issue.
+
+Pull requests are reviewed before merging. Automated reviewers may leave inline
+comments; address them or explain why a suggestion does not apply.
+
+## Quality checks
+
+Run the fast TypeScript unit tests while you work:
+
+```bash
+npm run test:frontend
+```
+
+Before opening a pull request, run the formatting hooks and the full local
+quality gate:
+
+```bash
+pre-commit run --all-files
+npm run ci
+```
+
+`npm run ci` runs the complete gate that mirrors continuous integration:
+
+| Step | Command | Covers |
+| --- | --- | --- |
+| Build | `npm run build` | TypeScript compile and Vite build |
+| Frontend tests | `npm run test:frontend` | Fast unit tests under `tests/` |
+| Worker typecheck | `npm run test:worker` | The viewer worker package |
+| Backend tests | `npm run test:backend` | `pytest` for the Python sidecar |
+| Rust check | `npm run check:rust` | `cargo check` for the Tauri shell |
+
+You only need the toolchains for the areas you touched. A docs-only or
+frontend-only change does not require Rust or Python, though the full `npm run
+ci` gate does.
+
+### Coding conventions
+
+- TypeScript and formatting are enforced by the pre-commit hooks, so let them
+  format your changes rather than hand-tuning whitespace.
+- Do not edit files in `node_modules`. If a third-party MapLibre control needs
+  app-specific styling, add a scoped override in
+  `apps/geolibre-desktop/src/index.css` limited to that control's class.
+- Keep changes scoped to the package they belong to, and prefer reusing the
+  shared primitives in `packages/ui` and helpers in `packages/core`.
+
+## Documentation
+
+The site is built with [MkDocs Material](https://squidfunk.github.io/mkdocs-material/).
+To preview your changes locally:
+
+```bash
+python -m pip install -r requirements-docs.txt
+mkdocs serve
+```
+
+Open <http://localhost:8000>. When you add a new page, add it to the `nav` in
+`mkdocs.yml`. The site is built with `mkdocs build --strict` in CI, so broken
+links and pages left out of the navigation fail the build. Link to other docs
+pages with a relative path (for example `architecture.md`), and link to files
+outside `docs/` with a full GitHub URL.
+
+## Plugins and extensions
+
+GeoLibre supports external plugins loaded from a zip, a local directory, or a
+hosted manifest URL. To build one, start from the
+[GeoLibre plugin template](https://github.com/opengeos/geolibre-plugin-template)
+and follow the [Plugin API](plugin-api.md) contract. You do not need to fork
+GeoLibre itself to ship a plugin.
+
+## Backend sidecar
+
+The optional [FastAPI sidecar](https://github.com/opengeos/GeoLibre/blob/main/backend/geolibre_server/README.md)
+powers the server-side conversion tools. To work on it:
+
+```bash
+cd backend/geolibre_server
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[conversion]"
+geolibre-server
+```
+
+Run its tests with `npm run test:backend` from the repository root, or
+`python -m pytest` from the backend directory.
+
+## License
+
+GeoLibre is released under the [MIT License](https://github.com/opengeos/GeoLibre/blob/main/LICENSE).
+By contributing, you agree that your contributions are licensed under the same
+terms.
