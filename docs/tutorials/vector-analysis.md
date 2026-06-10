@@ -26,7 +26,7 @@ With the buffer (or any polygon layer) and a second layer, run an overlay:
 - **Clip** keeps the part of the input that falls inside the overlay, preserving the input's attributes.
 - **Intersection** keeps only the overlapping areas of two polygon layers.
 - **Difference** removes the overlay's area from the input.
-- **Union** merges two polygon layers into one.
+- **Union** merges two polygon layers into one (attributes are not preserved, on either engine).
 
 Open the tool from **Processing → Vector**, pick the input and overlay layers, and **Run**.
 
