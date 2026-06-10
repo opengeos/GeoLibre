@@ -15,7 +15,7 @@ npm run dev            # web dev server → http://localhost:5173
 npm run tauri:dev      # desktop app (required for filesystem dialogs, local MBTiles, local raster reads)
 npm run build          # production web build → apps/geolibre-desktop/dist/
 npm run tauri:build    # desktop installers → apps/geolibre-desktop/src-tauri/target/release/bundle/
-npm run typecheck      # alias for the build (tsc -b && vite build)
+npm run typecheck      # alias for the full build (tsc -b && vite build) — writes to dist/, not a pure type-check
 npm run ci             # full local gate: build + frontend + worker + backend + rust check
 ```
 
