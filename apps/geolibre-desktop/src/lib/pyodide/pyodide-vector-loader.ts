@@ -59,6 +59,9 @@ function createHandle(): Promise<WorkerHandle> {
           emitProgress(data.phase);
           break;
         case "ready":
+          // Clear the last phase so a later subscriber (a warm re-run) is not
+          // replayed a stale "Loading…" line after loading has finished.
+          lastPhase = null;
           resolve();
           break;
         case "result": {
