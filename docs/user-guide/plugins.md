@@ -10,7 +10,7 @@ For plugins that add an on-map control, a submenu lets you **position** the cont
 
 ## Manage Plugins
 
-Open **Settings > Manage Plugins** to browse the marketplace. The dialog is modeled on QGIS, with sections for **All**, **Installed**, **Not installed**, **Upgradeable**, and **Settings**.
+Open **Settings → Manage Plugins** to browse the marketplace. The dialog is modeled on QGIS, with sections for **All**, **Installed**, **Not installed**, **Upgradeable**, and **Settings**.
 
 ![Manage Plugins dialog](https://data.geolibre.app/images/geolibre-manage-plugins.webp)
 
@@ -33,4 +33,4 @@ Compatibility is checked against each entry's `minGeoLibreVersion`, so incompati
 
 ## Writing your own plugin
 
-To build a plugin, see [Reference > Plugin API](../plugin-api.md) for the TypeScript interfaces, the `plugin.json` manifest contract, and the list of built-in plugins.
+To build a plugin, see [Reference → Plugin API](../plugin-api.md) for the TypeScript interfaces, the `plugin.json` manifest contract, and the list of built-in plugins.

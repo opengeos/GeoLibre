@@ -12,7 +12,7 @@ Open a public project by passing its `.geolibre.json` URL with the `url` paramet
 https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json
 ```
 
-A project URL like this comes from **Project > Share**. See [Projects](projects.md#share).
+A project URL like this comes from **Project → Share**. See [Projects](projects.md#share).
 
 ## URL parameters
 

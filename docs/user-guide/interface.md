@@ -21,7 +21,7 @@ The toolbar across the top of the window groups every action into seven menus:
 On the right side of the toolbar are the light/dark theme toggle and the editable project name.
 
 !!! tip "Toolbar labels"
-    On narrow windows the toolbar collapses to icon-only buttons. You can also force icon-only buttons from **Settings > Layout**, or with the `toolbar=icons` URL parameter. See [Embedding & Sharing](embedding.md).
+    On narrow windows the toolbar collapses to icon-only buttons. You can also force icon-only buttons from **Settings → Layout**, or with the `toolbar=icons` URL parameter. See [Embedding & Sharing](embedding.md).
 
 ## The three panels
 
@@ -31,7 +31,7 @@ GeoLibre has three dockable panels around the map:
 - **Style panel** (right): the styling controls for the selected layer, including data-driven styling for vector layers and image adjustments for rasters. See [Styling Layers](styling.md).
 - **Attribute table** (bottom): the attributes of the selected vector or DuckDB layer. Expand it from the status bar. See [Attribute Table](attribute-table.md).
 
-Each panel can be shown or hidden from **Settings > Layout**, and panels auto-hide on small screens. You can resize the Layers and Style panels by dragging their inner edge.
+Each panel can be shown or hidden from **Settings → Layout**, and panels auto-hide on small screens. You can resize the Layers and Style panels by dragging their inner edge.
 
 ## The map
 

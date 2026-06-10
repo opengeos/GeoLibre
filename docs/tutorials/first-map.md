@@ -8,7 +8,7 @@ Open [viewer.geolibre.app](https://viewer.geolibre.app/), or launch the desktop 
 
 ## 2. Add a layer
 
-1. Open **Add Data > Vector Layer**.
+1. Open **Add Data → Vector Layer**.
 2. In the Add Vector panel, enter a vector URL. You can use the sample countries dataset:
    ```text
    https://data.source.coop/giswqs/opengeos/countries.parquet
@@ -31,8 +31,8 @@ See [Adding Data](../user-guide/adding-data.md) for every supported source.
 
 ## 5. Save or share
 
-- In the desktop app, use **Project > Save** to write a `.geolibre.json` file.
-- Anywhere, use **Project > Share** to upload the project and get a public link. See [Sharing & Embedding](sharing-embedding.md).
+- In the desktop app, use **Project → Save** to write a `.geolibre.json` file.
+- Anywhere, use **Project → Share** to upload the project and get a public link. See [Sharing & Embedding](sharing-embedding.md).
 
 ## Next steps
 

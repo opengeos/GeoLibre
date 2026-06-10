@@ -4,16 +4,16 @@ A GeoLibre project captures your whole workspace in a single `.geolibre.json` fi
 
 ## New
 
-**Project > New...** starts a fresh project. GeoLibre offers to save the current project first, then resets the layers, map view, controls, and plugin state to defaults.
+**Project → New...** starts a fresh project. GeoLibre offers to save the current project first, then resets the layers, map view, controls, and plugin state to defaults.
 
 ## Open
 
-**Project > Open From** has two sources:
+**Project → Open From** has two sources:
 
 - **File...** opens a `.geolibre.json` file from disk (desktop app).
 - **URL...** loads a public `.geolibre.json` from an HTTP or HTTPS URL. This works in the browser too and adds the project to your recent list.
 
-**Project > Open Recent** lists the projects you have opened before, each with its name, path, and the time you last opened it. Click an entry to reopen it, use the small remove button to drop a single entry, or choose **Clear Recent Projects** to empty the list. On the desktop app the recent list persists across sessions; in the browser it tracks URL-based projects.
+**Project → Open Recent** lists the projects you have opened before, each with its name, path, and the time you last opened it. Click an entry to reopen it, use the small remove button to drop a single entry, or choose **Clear Recent Projects** to empty the list. On the desktop app the recent list persists across sessions; in the browser it tracks URL-based projects.
 
 !!! note "Loading a project at startup"
     You can open a project directly by passing its URL with the `url` query parameter, for example `?url=https://share.geolibre.app/you/project.geolibre.json`. See [Embedding & Sharing](embedding.md).
@@ -27,12 +27,12 @@ Both capture the current map view, basemap, layers, styles, preferences, and plu
 
 ## Share
 
-**Project > Share...** uploads the current project to `share.geolibre.app` and returns a public URL you can send to anyone or open in the live viewer. Sharing uses a personal API token, which you set once in **Settings > Project Settings**. The shared file is the same `.geolibre.json` the app saves locally, so anyone who opens the link sees the same layers, styles, and map view. See the [Sharing & Embedding tutorial](../tutorials/sharing-embedding.md).
+**Project → Share...** uploads the current project to `share.geolibre.app` and returns a public URL you can send to anyone or open in the live viewer. Sharing uses a personal API token, which you set once in **Settings → Project Settings**. The shared file is the same `.geolibre.json` the app saves locally, so anyone who opens the link sees the same layers, styles, and map view. See the [Sharing & Embedding tutorial](../tutorials/sharing-embedding.md).
 
 ## Print
 
-**Project > Print...** opens the Print panel, which exports the current map to a PDF or image. Choose the page size and orientation, then export. The Print panel is backed by the MapLibre components plugin.
+**Project → Print...** opens the Print panel, which exports the current map to a PDF or image. Choose the page size and orientation, then export. The Print panel is backed by the MapLibre components plugin.
 
 ## The project format
 
-For the full schema of `.geolibre.json`, including how layers, styles, and plugin state are serialized, see [Reference > Project Format](../project-format.md).
+For the full schema of `.geolibre.json`, including how layers, styles, and plugin state are serialized, see [Reference → Project Format](../project-format.md).

@@ -12,7 +12,7 @@ Beyond the [Add Data](adding-data.md) menu, GeoLibre connects to several hosted 
 | **STAC** | Add Data menu | Search any STAC catalog and add matching raster items. See [Adding Data](adding-data.md#web-services). |
 
 !!! note "Credentials"
-    Earth Engine requires authentication, and some providers expect an API key or token. Set these in **Settings > Environment Variables**. See [Settings & Preferences](settings.md).
+    Earth Engine requires authentication, and some providers expect an API key or token. Set these in **Settings → Environment Variables**. See [Settings & Preferences](settings.md).
 
 ## Federal Web Services
 

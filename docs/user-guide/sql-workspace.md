@@ -1,6 +1,6 @@
 # SQL Workspace
 
-The **SQL Workspace** runs DuckDB Spatial SQL right in the app, against your loaded layers, local files, and remote URLs. Open it from **Processing > SQL Workspace**. The spatial extension is loaded for you, so `ST_*` functions are available.
+The **SQL Workspace** runs DuckDB Spatial SQL right in the app, against your loaded layers, local files, and remote URLs. Open it from **Processing → SQL Workspace**. The spatial extension is loaded for you, so `ST_*` functions are available.
 
 ![SQL Workspace](https://data.geolibre.app/images/geolibre-sql-workspace.webp)
 
@@ -9,9 +9,9 @@ The **SQL Workspace** runs DuckDB Spatial SQL right in the app, against your loa
 Every loaded vector layer is exposed as a queryable table; the dialog lists the available table names at the top. Write a query in the editor and click **Run** to see the results.
 
 ```sql
-SELECT name, ST_Area(geometry) AS area
+SELECT NAME, CONTINENT, POP_EST
 FROM countries
-ORDER BY area DESC
+ORDER BY POP_EST DESC
 LIMIT 10;
 ```
 
@@ -20,8 +20,8 @@ LIMIT 10;
 You can query files and remote URLs directly. The workspace auto-wraps a bare URL into the matching reader (for example Parquet, CSV, JSON, or GeoJSON) and streams remote files over HTTP range requests, so you do not have to download them first.
 
 ```sql
-SELECT *
-FROM 'https://data.source.coop/giswqs/opengeos/countries.parquet'
+SELECT NAME, CONTINENT, POP_EST, geom
+FROM https://data.source.coop/giswqs/opengeos/countries.parquet
 LIMIT 100;
 ```
 

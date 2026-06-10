@@ -4,7 +4,7 @@ The **Settings** menu holds the workspace preferences: how the map behaves, whic
 
 ## Map Preferences
 
-**Settings > Map Preferences** controls how the map can be navigated:
+**Settings → Map Preferences** controls how the map can be navigated:
 
 | Setting | Description |
 | --- | --- |
@@ -18,7 +18,7 @@ You can **apply the current view** to set the bounds from where the map is now, 
 
 ## Layout
 
-**Settings > Layout** toggles the chrome around the map:
+**Settings → Layout** toggles the chrome around the map:
 
 - **Show toolbar labels**: text labels next to toolbar buttons, or icon-only.
 - **Show project info**: the project name and path in the toolbar.
@@ -28,18 +28,18 @@ Panels also auto-hide on small screens for a responsive layout.
 
 ## Environment Variables
 
-**Settings > Environment Variables** stores runtime key-value pairs that GeoLibre and its plugins read, such as API keys and tokens. You can enable or disable individual variables, and secret values are masked. Variable names must start with a letter or underscore and contain only letters, numbers, and underscores.
+**Settings → Environment Variables** stores runtime key-value pairs that GeoLibre and its plugins read, such as API keys and tokens. You can enable or disable individual variables, and secret values are masked. Variable names must start with a letter or underscore and contain only letters, numbers, and underscores.
 
 !!! tip "Where credentials go"
     Provider credentials for integrations like Earth Engine, Street View, or other keyed services belong here. See [Data Integrations](data-integrations.md) and [Getting Started](../getting-started.md#optional-imagery-credentials).
 
 ## Project Settings
 
-**Settings > Project Settings** holds project-level options:
+**Settings → Project Settings** holds project-level options:
 
 - **Project name**: the name shown in the toolbar and saved in the project file.
-- **Share token**: the personal API token used by **Project > Share** to upload to `share.geolibre.app`. See [Projects](projects.md#share).
+- **Share token**: the personal API token used by **Project → Share** to upload to `share.geolibre.app`. See [Projects](projects.md#share).
 
 ## Manage Plugins
 
-**Settings > Manage Plugins** opens the plugin marketplace. See [Plugins & Marketplace](plugins.md).
+**Settings → Manage Plugins** opens the plugin marketplace. See [Plugins & Marketplace](plugins.md).

@@ -303,7 +303,7 @@ docs/                   # Architecture & API docs
 
 Built-in plugins live in `packages/plugins/src/plugins/` and are registered by the desktop app in `apps/geolibre-desktop/src/hooks/usePlugins.ts`. Map control plugins can expose a control position through `getMapControlPosition()` and `setMapControlPosition()` so the Plugins menu can move them between map corners.
 
-For external plugin development, start from the [GeoLibre plugin template](https://github.com/opengeos/geolibre-plugin-template). It includes a `plugin.json` manifest, a GeoLibre plugin wrapper entry point, and a `package:geolibre` script that creates a zip file for the desktop app data `plugins/` directory. During development, Settings > Plugins can scan an additional local plugin directory, including an unpacked bundle folder such as the template's `geolibre-plugin/` directory, or a hosted `plugin.json` manifest URL. See the [Plugin API](docs/plugin-api.md) for the external plugin contract.
+For external plugin development, start from the [GeoLibre plugin template](https://github.com/opengeos/geolibre-plugin-template). It includes a `plugin.json` manifest, a GeoLibre plugin wrapper entry point, and a `package:geolibre` script that creates a zip file for the desktop app data `plugins/` directory. During development, Settings → Manage Plugins can scan an additional local plugin directory, including an unpacked bundle folder such as the template's `geolibre-plugin/` directory, or a hosted `plugin.json` manifest URL. See the [Plugin API](docs/plugin-api.md) for the external plugin contract.
 
 To bake an external plugin into the build so it loads automatically — with no Settings entry and no manifest URL — drop its built folder into `apps/geolibre-desktop/public/plugins/<plugin-id>/` (the same `plugin.json` + `dist/` a manifest URL would serve). The `bundledPlugins()` Vite plugin discovers it at build time and the app loads it through the normal external-plugin path. The same folder serves both the web build and the desktop build (which ships the same frontend), so one drop-in covers both. Private plugin bundles are git-ignored under that folder and copied in at build/deploy time. See the [Plugin API](docs/plugin-api.md#bundled-plugins-baked-into-the-build) for details and the security model.
 
@@ -375,10 +375,16 @@ pre-commit run --all-files
 
 ## Documentation
 
-- [Architecture](docs/architecture.md)
-- [Project format](docs/project-format.md)
-- [Plugin API](docs/plugin-api.md)
-- [Roadmap](docs/roadmap.md)
+Full documentation, including the User Guide and Tutorials, is published at
+**[geolibre.app](https://geolibre.app)**.
+
+- **User Guide** - a [feature-by-feature reference](https://geolibre.app/user-guide/interface/) for the interface, adding data, layers, styling, the attribute table, map controls, processing, the SQL Workspace, data integrations, plugins, settings, and embedding.
+- **Tutorials** - [hands-on, end-to-end workflows](https://geolibre.app/tutorials/): your first map, cloud-native data, vector analysis, terrain analysis, spatial SQL, and sharing and embedding.
+- **Reference**
+  - [Architecture](docs/architecture.md)
+  - [Project format](docs/project-format.md)
+  - [Plugin API](docs/plugin-api.md)
+  - [Roadmap](docs/roadmap.md)
 
 ## License
 

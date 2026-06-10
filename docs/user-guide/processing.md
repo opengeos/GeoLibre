@@ -6,7 +6,7 @@ The **Processing** menu collects GeoLibre's analysis and conversion tools: vecto
 
 ## Vector
 
-**Processing > Vector** opens the Vector tools dialog. Pick a tool from the list, choose the input layer and parameters, select an engine, then **Run**. Output appears as a new layer.
+**Processing → Vector** opens the Vector tools dialog. Pick a tool from the list, choose the input layer and parameters, select an engine, then **Run**. Output appears as a new layer.
 
 **Geometry**
 
@@ -39,7 +39,7 @@ See the [Vector Analysis tutorial](../tutorials/vector-analysis.md).
 
 ## Raster
 
-**Processing > Raster** opens the Raster tools dialog. Raster tools run on the rasterio Python sidecar: they take a file path in and write a file path out, then add the result to the map.
+**Processing → Raster** opens the Raster tools dialog. Raster tools run on the rasterio Python sidecar: they take a file path in and write a file path out, then add the result to the map.
 
 **Terrain**
 
@@ -74,7 +74,7 @@ See the [Terrain Analysis tutorial](../tutorials/terrain-analysis.md).
 
 ## Conversion
 
-**Processing > Conversion** writes data to cloud-native formats:
+**Processing → Conversion** writes data to cloud-native formats:
 
 | Tool | Engine | Description |
 | --- | --- | --- |
@@ -88,7 +88,7 @@ The conversion sidecar is hardened with a path allowlist.
 
 ## Whitebox
 
-**Processing > Whitebox** opens the Whitebox toolbox for batch geoprocessing, backed by a managed Python sidecar. Point it at an input directory and run tools across the files in it.
+**Processing → Whitebox** opens the Whitebox toolbox for batch geoprocessing, backed by a managed Python sidecar. Point it at an input directory and run tools across the files in it.
 
 ## Planetary Computer and Earth Engine
 
@@ -96,7 +96,7 @@ The Processing menu also opens the **Planetary Computer** and **Earth Engine** p
 
 ## The Python sidecar
 
-The raster tools, the sidecar conversion tools, the Whitebox toolbox, and the optional GeoPandas vector engine all use a local FastAPI sidecar that the desktop app starts on demand. The vector tools' client engine and the browser-based conversions need no sidecar. See [Getting Started](../getting-started.md#optional-python-sidecar) for setup and [Reference > Architecture](../architecture.md#python-sidecar) for how it works.
+The raster tools, the sidecar conversion tools, the Whitebox toolbox, and the optional GeoPandas vector engine all use a local FastAPI sidecar that the desktop app starts on demand. The vector tools' client engine and the browser-based conversions need no sidecar. See [Getting Started](../getting-started.md#optional-python-sidecar) for setup and [Reference → Architecture](../architecture.md#python-sidecar) for how it works.
 
 !!! note "Browser vs desktop"
     The client-side vector tools and the browser conversions (Vector to GeoParquet, CSV to GeoParquet) run in the browser. The raster tools, sidecar conversions, and Whitebox require the desktop app and the Python sidecar.

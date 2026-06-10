@@ -6,7 +6,7 @@ Once you have a map you like, you can publish it as a public link and embed it i
 
 Sharing uploads to `share.geolibre.app` using a personal API token.
 
-1. Open **Settings > Project Settings**.
+1. Open **Settings → Project Settings**.
 2. Paste your share token into the **Share token** field.
 
 You only need to do this once.
@@ -14,7 +14,7 @@ You only need to do this once.
 ## 2. Share the project
 
 1. Build your map: add layers, style them, and set the map view you want viewers to land on.
-2. Open **Project > Share...**.
+2. Open **Project → Share...**.
 3. Confirm the project title and upload. GeoLibre returns a public URL to a `.geolibre.json` file, for example:
    ```text
    https://share.geolibre.app/you/my-map.geolibre.json

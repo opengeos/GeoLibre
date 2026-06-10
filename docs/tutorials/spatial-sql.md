@@ -1,15 +1,15 @@
 # Spatial SQL
 
-The [SQL Workspace](../user-guide/sql-workspace.md) lets you analyze data with DuckDB Spatial SQL and add the results to the map. It runs on DuckDB-WASM, so it works in the browser as well as the desktop app. Open it from **Processing > SQL Workspace**.
+The [SQL Workspace](../user-guide/sql-workspace.md) lets you analyze data with DuckDB Spatial SQL and add the results to the map. It runs on DuckDB-WASM, so it works in the browser as well as the desktop app. Open it from **Processing → SQL Workspace**.
 
 ## 1. Query a loaded layer
 
 Every loaded vector layer is a queryable table. Load the sample countries layer (see [Your First Map](first-map.md)), then run:
 
 ```sql
-SELECT ADMIN AS name, GDP_MD_EST AS gdp
+SELECT NAME, CONTINENT, GDP_MD_EST
 FROM countries
-ORDER BY gdp DESC
+ORDER BY GDP_MD_EST DESC
 LIMIT 10;
 ```
 
@@ -21,18 +21,16 @@ You do not have to load a file first. The workspace auto-wraps a bare URL into t
 
 ```sql
 SELECT COUNT(*) AS n
-FROM 'https://data.source.coop/giswqs/opengeos/countries.parquet';
+FROM https://data.source.coop/giswqs/opengeos/countries.parquet;
 ```
 
 ## 3. Use spatial functions
 
-The spatial extension is loaded, so `ST_*` functions are available. For example, compute area and keep the geometry so the result can be mapped:
+The spatial extension is loaded, so `ST_*` functions are available. For example, compute area and keep the `geom` column so the result can be mapped:
 
 ```sql
-SELECT ADMIN AS name,
-       ST_Area(geometry) AS area,
-       geometry
-FROM countries
+SELECT NAME, ST_Area(geom) AS area, geom
+FROM https://data.source.coop/giswqs/opengeos/countries.parquet
 WHERE CONTINENT = 'Africa'
 ORDER BY area DESC;
 ```
