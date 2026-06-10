@@ -44,10 +44,15 @@ describe("getInitialThemeMode", () => {
     assert.equal(getInitialThemeMode(), "light");
   });
 
-  it("ignores an unrecognized theme value and uses the OS preference", () => {
+  it("ignores an unrecognized or empty theme value and uses the OS preference", () => {
     withWindow("?theme=neon", true);
     assert.equal(getInitialThemeMode(), "dark");
     withWindow("?theme=neon", false);
+    assert.equal(getInitialThemeMode(), "light");
+    // A bare `?theme=` yields "" and should also fall back to the OS preference.
+    withWindow("?theme=", true);
+    assert.equal(getInitialThemeMode(), "dark");
+    withWindow("?theme=", false);
     assert.equal(getInitialThemeMode(), "light");
   });
 
