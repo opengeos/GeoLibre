@@ -397,6 +397,15 @@ export function createAppAPI(
     ) =>
       mapControllerRef?.current?.setBuiltInControlPosition(control, position) ??
       false,
+    // Hand external plugins GeoLibre's own deck.gl modules so they render on the
+    // host's single deck.gl instance (a bundled second copy throws on the
+    // deck.gl/luma.gl version guards and fails to render).
+    getDeckGL: () =>
+      Promise.all([
+        import("@deck.gl/core"),
+        import("@deck.gl/layers"),
+        import("@deck.gl/mapbox"),
+      ]).then(([core, layers, mapbox]) => ({ core, layers, mapbox })),
   };
 }
 

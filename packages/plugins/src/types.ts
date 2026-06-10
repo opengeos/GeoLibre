@@ -49,6 +49,17 @@ export interface GeoLibreFileDialogOptions {
   mimeType?: string;
 }
 
+/**
+ * GeoLibre's own deck.gl modules, handed to a plugin via
+ * {@link GeoLibreAppAPI.getDeckGL}. Lets an external plugin render deck.gl
+ * layers using the host's single deck.gl instance instead of bundling its own.
+ */
+export interface GeoLibreDeckGL {
+  core: typeof import("@deck.gl/core");
+  layers: typeof import("@deck.gl/layers");
+  mapbox: typeof import("@deck.gl/mapbox");
+}
+
 export interface GeoLibreAppAPI {
   setBasemap: (styleUrl: string) => void;
   addGeoJsonLayer: (
@@ -123,6 +134,14 @@ export interface GeoLibreAppAPI {
     control: GeoLibreBuiltInMapControl,
     position: GeoLibreMapControlPosition,
   ) => boolean;
+  /**
+   * Resolve GeoLibre's own deck.gl modules so an external plugin can render
+   * deck.gl layers (e.g. an `ArcLayer`) on the host's single deck.gl instance.
+   * Bundling a second copy is not viable: deck.gl and luma.gl throw on a
+   * version mismatch and share global singletons, so a plugin's own copy fails
+   * to render. Present only on hosts that ship deck.gl.
+   */
+  getDeckGL?: () => Promise<GeoLibreDeckGL>;
 }
 
 export interface GeoLibrePlugin {
