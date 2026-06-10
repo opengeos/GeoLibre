@@ -38,7 +38,29 @@ nav:
   - Getting Started: getting-started.md
   - Downloads: downloads.md
   - Live Demo: /demo/
-  - Documentation:
+  - User Guide:
+      - Interface Overview: user-guide/interface.md
+      - Projects: user-guide/projects.md
+      - Adding Data: user-guide/adding-data.md
+      - Managing Layers: user-guide/layers.md
+      - Styling Layers: user-guide/styling.md
+      - Attribute Table: user-guide/attribute-table.md
+      - Map Controls & Tools: user-guide/map-controls.md
+      - Processing Tools: user-guide/processing.md
+      - SQL Workspace: user-guide/sql-workspace.md
+      - Data Integrations: user-guide/data-integrations.md
+      - Plugins & Marketplace: user-guide/plugins.md
+      - Settings & Preferences: user-guide/settings.md
+      - Embedding & Sharing: user-guide/embedding.md
+  - Tutorials:
+      - Overview: tutorials/index.md
+      - Your First Map: tutorials/first-map.md
+      - Cloud-Native Data: tutorials/cloud-native-data.md
+      - Vector Analysis: tutorials/vector-analysis.md
+      - Terrain Analysis: tutorials/terrain-analysis.md
+      - Spatial SQL: tutorials/spatial-sql.md
+      - Sharing & Embedding: tutorials/sharing-embedding.md
+  - Reference:
       - Architecture: architecture.md
       - Project Format: project-format.md
       - Plugin API: plugin-api.md

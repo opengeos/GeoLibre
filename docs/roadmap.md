@@ -123,7 +123,7 @@
 - [x] Project menu Share action that uploads to share.geolibre.app using a personal API token
 - [x] Performance tuning and test suite
 - [x] Cross-platform installers
-- [ ] Documentation and tutorials
+- [x] Documentation and tutorials
 
 ## Plugin marketplace and registry (design)
 

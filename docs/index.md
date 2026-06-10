@@ -17,6 +17,7 @@ hide:
     <div class="hero__actions">
       <a class="md-button md-button--primary" href="https://viewer.geolibre.app/">Open live demo</a>
       <a class="md-button" href="getting-started/">Get started</a>
+      <a class="md-button" href="user-guide/interface/">User guide</a>
       <a class="md-button" href="downloads/">Download app</a>
     </div>
   </div>
@@ -79,6 +80,19 @@ Common raster tools under Processing → Raster: hillshade, slope, aspect, repro
 
 </div>
 
+## Learn GeoLibre
+
+New to GeoLibre? Start with the [User Guide](user-guide/interface.md) for a feature-by-feature tour of the workspace, menus, panels, and tools, then follow the [Tutorials](tutorials/index.md) for hands-on, end-to-end workflows.
+
+- [Interface Overview](user-guide/interface.md): the toolbar, panels, map, and status bar.
+- [Adding Data](user-guide/adding-data.md): every file, web service, cloud, 3D, and database source.
+- [Processing Tools](user-guide/processing.md) and [SQL Workspace](user-guide/sql-workspace.md): analysis with vector, raster, conversion, Whitebox, and DuckDB Spatial SQL.
+- [Plugins & Marketplace](user-guide/plugins.md): activate built-ins and install from the registry.
+- [Your First Map](tutorials/first-map.md): add a layer, style it, inspect it, and share it.
+
+[Read the User Guide](user-guide/interface.md){ .md-button .md-button--primary }
+[Browse the Tutorials](tutorials/index.md){ .md-button }
+
 ## Try it in the browser
 
 The live demo is the browser-capable version of the GeoLibre desktop UI. It is useful for exploring the map, loading browser-selected vector data supported by DuckDB-WASM Spatial, adding URL-based layers, styling layers, and testing plugins. Desktop-only file dialogs, local MBTiles, local raster reads, and filesystem save/open operations still require the installed Tauri app.
@@ -109,18 +123,10 @@ For a fully chrome-free, map-only embed, add `&maponly` to hide the toolbar menu
 https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&maponly
 ```
 
-| Parameter | Example | Description |
-| --- | --- | --- |
-| `url` | `url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json` | Loads a `.geolibre.json` project from a public URL. |
-| `layout` | `layout=compact` | Uses the compact embed layout with icon-only toolbar buttons and hidden project metadata. `embed` and `iframe` are aliases. |
-| `toolbar` | `toolbar=icons` | Shows icon-only toolbar buttons without enabling the full compact layout. |
-| `panels` | `panels=none` | Hides the Layers, Style, and Attribute table panels. `hidden`, `hide`, and `off` are aliases. |
-| `hidePanels` | `hidePanels=true` | Alternative way to hide the Layers, Style, and Attribute table panels. |
-| `maponly` | `maponly` | Hides all chrome (toolbar menu, Layers/Style/Attribute panels, and status bar), leaving only the map. The bare flag or any of `true`, `1`, `yes`, `on` enable it. |
-| `theme` | `theme=dark` | Sets the initial color theme on load, overriding the OS preference. Accepts `dark` or `light`; the in-app toggle still works afterwards. |
+Other parameters control the toolbar, panels, and theme. See [Embedding & Sharing](user-guide/embedding.md) for the full parameter reference and `<iframe>` examples.
 
 [Open the live demo](https://viewer.geolibre.app/){ .md-button .md-button--primary }
-[Read the architecture](architecture.md){ .md-button }
+[Embedding & Sharing](user-guide/embedding.md){ .md-button }
 
 ## Project status
 
