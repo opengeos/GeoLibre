@@ -144,7 +144,9 @@ export function useEmbedBridge(
           typeof message.project === "string"
             ? parseProject(message.project)
             : parseProject(JSON.stringify(message.project));
-        if (typeof message.seq === "number") lastLoadedSeq = message.seq;
+        // Reset (not retain) when a load omits seq, so a later snapshot never
+        // echoes a stale, unrelated sequence number.
+        lastLoadedSeq = typeof message.seq === "number" ? message.seq : 0;
         // Suppress the snapshot this load would otherwise echo: the host
         // already has this project, and re-posting it is wasted traffic.
         lastPostedContent = serializeProject(project);

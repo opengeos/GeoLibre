@@ -12,6 +12,7 @@ import json
 import uuid
 from pathlib import Path
 from typing import Any
+from urllib.error import URLError
 from urllib.request import urlopen
 
 from .basemaps import DEFAULT_BASEMAP
@@ -272,8 +273,15 @@ def load_featurecollection(data: Any) -> dict[str, Any]:
             # kernel or exhaust memory. read(limit + 1) detects an over-limit
             # body without buffering the whole thing.
             limit = 50 * 1024 * 1024  # 50 MB
-            with urlopen(text, timeout=30) as response:  # noqa: S310 - user URL
-                raw = response.read(limit + 1)
+            try:
+                with urlopen(text, timeout=30) as response:  # noqa: S310 - user URL
+                    raw = response.read(limit + 1)
+            except (URLError, TimeoutError) as exc:
+                # Normalize transport failures to the documented ValueError
+                # contract (decode/JSON errors are already ValueError-derived).
+                raise ValueError(
+                    f"Could not load GeoJSON from URL: {text}"
+                ) from exc
             if len(raw) > limit:
                 raise ValueError("GeoJSON response exceeds the 50 MB size limit")
             data = json.loads(raw.decode("utf-8"))

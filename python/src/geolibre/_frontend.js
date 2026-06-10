@@ -57,6 +57,9 @@ function render({ model, el }) {
 
   const onMessage = (event) => {
     if (event.source !== iframe.contentWindow) return;
+    // Defense in depth alongside the source check: reject messages that did not
+    // originate from the app's own origin.
+    if (event.origin !== iframeOrigin) return;
     const data = event.data;
     if (!data || typeof data !== "object") return;
     if (data.type === "geolibre:ready") {
