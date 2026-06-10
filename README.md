@@ -191,6 +191,7 @@ Supported query parameters:
 | `panels`     | `panels=none`                                            | Hides the Layers, Style, and Attribute table panels. `hidden`, `hide`, and `off` are aliases.                               |
 | `hidePanels` | `hidePanels=true`                                        | Alternative way to hide the Layers, Style, and Attribute table panels.                                                      |
 | `maponly`    | `maponly`                                                | Hides all chrome (toolbar menu, Layers/Style/Attribute panels, and status bar), leaving only the map. The bare flag or any of `true`, `1`, `yes`, `on` enable it. |
+| `theme`      | `theme=dark`                                             | Sets the initial color theme on load, overriding the OS preference. Accepts `dark` or `light`; the in-app toggle still works afterwards. |
 
 Use compact mode for narrow embeds. This shows icon-only toolbar buttons and hides project metadata:
 

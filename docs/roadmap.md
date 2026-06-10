@@ -107,6 +107,7 @@
 - [x] Component panels persisted and controls reset on new project
 - [x] Plugins can declare and handle URL query parameters
 - [x] `maponly` query parameter for chrome-free map embeds
+- [x] `theme` query parameter to set the initial light/dark theme for embeds
 - [x] Docker support for the browser app
 - [x] `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` for offline spatial extension loading
 

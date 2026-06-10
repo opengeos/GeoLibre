@@ -117,6 +117,7 @@ https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geol
 | `panels` | `panels=none` | Hides the Layers, Style, and Attribute table panels. `hidden`, `hide`, and `off` are aliases. |
 | `hidePanels` | `hidePanels=true` | Alternative way to hide the Layers, Style, and Attribute table panels. |
 | `maponly` | `maponly` | Hides all chrome (toolbar menu, Layers/Style/Attribute panels, and status bar), leaving only the map. The bare flag or any of `true`, `1`, `yes`, `on` enable it. |
+| `theme` | `theme=dark` | Sets the initial color theme on load, overriding the OS preference. Accepts `dark` or `light`; the in-app toggle still works afterwards. |
 
 [Open the live demo](https://viewer.geolibre.app/){ .md-button .md-button--primary }
 [Read the architecture](architecture.md){ .md-button }
