@@ -23,6 +23,7 @@ dependencies = ["anywidget>=0.9", "traitlets>=5"]
 
 [project.optional-dependencies]
 all = ["geopandas", "shapely"]
+hub = ["jupyter-server-proxy"]
 dev = ["pytest", "build", "anywidget[dev]"]
 
 [project.urls]

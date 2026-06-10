@@ -106,11 +106,21 @@ UI edits flow back the same way.
 
 !!! note "Environment support"
 
-    The interactive widget works in **local Jupyter, VS Code, and Google Colab**.
-    On Colab it routes the app through Colab's built-in port proxy
-    (`google.colab.kernel.proxyPort`) automatically. Other remote setups (e.g.
-    JupyterHub or Binder) where the browser cannot reach the kernel's `localhost`
-    and no port proxy is wired up are not yet supported.
+    The interactive widget works in **local Jupyter, VS Code, Google Colab, and
+    JupyterHub / remote servers**:
+
+    - **Local Jupyter / VS Code** - the app is served directly from localhost.
+    - **Google Colab** - routes through Colab's built-in port proxy
+      (`google.colab.kernel.proxyPort`) automatically.
+    - **JupyterHub** - routes through
+      [`jupyter-server-proxy`](https://jupyter-server-proxy.readthedocs.io)
+      automatically (detected via `JUPYTERHUB_SERVICE_PREFIX`). Install it in the
+      single-user image with `pip install "geolibre[hub]"` (or
+      `pip install jupyter-server-proxy`).
+    - **Other remote servers** (Binder, remote JupyterLab over SSH/network) -
+      pass `Map(server_proxy=True)`, which also requires `jupyter-server-proxy`.
+
+    Set `Map(server_proxy=False)` to force the direct localhost path.
 
 !!! warning "URL fetching"
 
@@ -129,6 +139,8 @@ The bundled app is produced from the monorepo with:
 
 ```bash
 npm run build:embed      # builds the app and stages it into the wheel
+python -m build          # builds the wheel
+python -m twine upload dist/*  # upload to PyPI
 pip install -e python    # editable install for development
 ```
 

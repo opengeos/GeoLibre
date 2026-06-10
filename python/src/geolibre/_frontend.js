@@ -9,10 +9,25 @@
 // compares the current value against the last object received from the app
 // (`lastRemoteProject`) and only pushes Python-initiated changes.
 
+// The Jupyter server's base URL, read from the page config that JupyterLab and
+// Notebook 7 inject. Used to build a jupyter-server-proxy URL. Defaults to "/".
+function jupyterBaseUrl() {
+  try {
+    const el = document.getElementById("jupyter-config-data");
+    if (el && el.textContent) {
+      const base = JSON.parse(el.textContent).baseUrl;
+      if (base) return base.endsWith("/") ? base : `${base}/`;
+    }
+  } catch (error) {
+    console.warn("[GeoLibre] Could not read jupyter-config-data", error);
+  }
+  return "/";
+}
+
 // Resolve the base URL of the app server. The kernel serves it on localhost,
 // which the browser reaches directly in local Jupyter / VS Code. On hosts where
-// the browser cannot reach the kernel's localhost (e.g. Google Colab), route
-// through the host's port proxy instead.
+// the browser cannot reach the kernel's localhost, route through a proxy:
+// Google Colab's port proxy, or jupyter-server-proxy (JupyterHub / remote).
 async function resolveBase(model) {
   const port = model.get("_app_port");
   const colab =
@@ -27,6 +42,11 @@ async function resolveBase(model) {
     } catch (error) {
       console.warn("[GeoLibre] Colab proxyPort failed; using direct URL", error);
     }
+  }
+  if (port && model.get("_use_server_proxy")) {
+    // jupyter-server-proxy serves kernel-side ports at {base_url}proxy/{port}/.
+    return new URL(`${jupyterBaseUrl()}proxy/${port}/`, window.location.href)
+      .href;
   }
   return model.get("_app_url");
 }
