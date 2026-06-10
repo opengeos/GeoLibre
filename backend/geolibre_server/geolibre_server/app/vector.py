@@ -5,32 +5,27 @@ but run on GeoPandas/Shapely, giving projection-aware results (notably buffers
 in real-world distance units). GeoPandas is an optional dependency: when it is
 not installed, ``/vector/status`` reports ``available: false`` and the desktop
 app falls back to the client engine.
+
+The actual geometry operations live in :mod:`geolibre_server.vector_ops`, a
+framework-free module shared with the in-browser Pyodide engine so both produce
+identical results. This module is only the HTTP boundary: it unpacks the
+request, calls :func:`vector_ops.run_vector_tool`, and maps its exceptions to
+HTTP status codes.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from geolibre_server import vector_ops
+from geolibre_server.vector_ops import VectorInputTooLarge
+
 router = APIRouter(prefix="/vector", tags=["vector"])
 logger = logging.getLogger(__name__)
-
-WGS84 = "EPSG:4326"
-
-# Cap the input size so a very large layer cannot block the event loop or
-# exhaust memory (GeoPandas runs synchronously on the main thread).
-MAX_FEATURES = 50_000
-
-# Conversion factors from the requested unit to meters.
-_DISTANCE_UNITS = {
-    "kilometers": 1000.0,
-    "meters": 1.0,
-    "miles": 1609.344,
-}
 
 
 class VectorToolRequest(BaseModel):
@@ -40,196 +35,19 @@ class VectorToolRequest(BaseModel):
     parameters: dict[str, Any] = {}
 
 
-def _import_geopandas() -> Any:
-    """Import GeoPandas, raising if the optional dependency is missing."""
-    import geopandas as gpd  # noqa: PLC0415
-
-    return gpd
-
-
-def _check_size(geojson: Optional[dict], label: str) -> None:
-    """Reject payloads with more than ``MAX_FEATURES`` features."""
-    if geojson and len(geojson.get("features", [])) > MAX_FEATURES:
-        raise HTTPException(
-            status_code=413,
-            detail=f"{label} exceeds the {MAX_FEATURES}-feature limit",
-        )
-
-
-def _load_gdf(geojson: Optional[dict], label: str) -> Any:
-    """Build a WGS84 GeoDataFrame from a GeoJSON FeatureCollection."""
-    gpd = _import_geopandas()
-    if not geojson or not geojson.get("features"):
-        raise HTTPException(status_code=400, detail=f"{label} has no features")
-    gdf = gpd.GeoDataFrame.from_features(geojson["features"], crs=WGS84)
-    if gdf.empty:
-        raise HTTPException(status_code=400, detail=f"{label} has no features")
-    return gdf
-
-
-def _to_feature_collection(gdf) -> dict:
-    """Serialize a GeoDataFrame back to a GeoJSON FeatureCollection dict."""
-    # GeoPandas only emits valid GeoJSON in WGS84; reproject if needed.
-    if gdf.crs is not None and gdf.crs.to_epsg() != 4326:
-        gdf = gdf.to_crs(WGS84)
-    return json.loads(gdf.to_json())
-
-
-def _buffer(request: VectorToolRequest) -> tuple[dict, list[str]]:
-    gdf = _load_gdf(request.geojson, "Input layer")
-    params = request.parameters
-    distance = float(params.get("distance", 1) or 0)
-    units = str(params.get("units", "kilometers"))
-    factor = _DISTANCE_UNITS.get(units)
-    if factor is None:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown unit '{units}'. Accepted: {list(_DISTANCE_UNITS)}",
-        )
-    meters = distance * factor
-    if meters < 0:
-        # The UI enforces a non-negative distance; keep the server consistent
-        # rather than silently performing an inward (erosion) buffer.
-        raise HTTPException(status_code=400, detail="Buffer distance must be >= 0")
-    # Buffer in a local metric CRS so the distance is in real-world meters,
-    # then reproject the result back to WGS84.
-    metric_crs = gdf.estimate_utm_crs()
-    projected = gdf.to_crs(metric_crs)
-    projected["geometry"] = projected.geometry.buffer(meters)
-    return (
-        _to_feature_collection(projected),
-        [f"Buffered {len(gdf)} feature(s) by {distance} {units}"],
-    )
-
-
-def _centroids(request: VectorToolRequest) -> tuple[dict, list[str]]:
-    gdf = _load_gdf(request.geojson, "Input layer")
-    # Compute centroids in a local metric CRS (like _buffer) so the result is
-    # accurate for large or elongated features, then reproject back to WGS84.
-    metric_crs = gdf.estimate_utm_crs()
-    projected = gdf.to_crs(metric_crs)
-    result = projected.copy()
-    result["geometry"] = projected.geometry.centroid
-    result = result.to_crs(WGS84)
-    return _to_feature_collection(result), [f"Computed {len(result)} centroid(s)"]
-
-
-def _convex_hull(request: VectorToolRequest) -> tuple[dict, list[str]]:
-    gpd = _import_geopandas()
-    gdf = _load_gdf(request.geojson, "Input layer")
-    hull = gdf.geometry.union_all().convex_hull
-    result = gpd.GeoDataFrame(geometry=[hull], crs=WGS84)
-    return _to_feature_collection(result), ["Computed convex hull"]
-
-
-def _dissolve(request: VectorToolRequest) -> tuple[dict, list[str]]:
-    gdf = _load_gdf(request.geojson, "Input layer")
-    field = str(request.parameters.get("field", "") or "").strip()
-    if field and field not in gdf.columns:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Dissolve field '{field}' not found in layer attributes.",
-        )
-    if field:
-        dissolved = gdf.dissolve(by=field).reset_index()
-    else:
-        dissolved = gdf.dissolve()
-    return (
-        _to_feature_collection(dissolved),
-        [f"Dissolved {len(gdf)} feature(s) into {len(dissolved)} feature(s)"],
-    )
-
-
-def _bounding_box(request: VectorToolRequest) -> tuple[dict, list[str]]:
-    gpd = _import_geopandas()
-    from shapely.geometry import box  # noqa: PLC0415
-
-    gdf = _load_gdf(request.geojson, "Input layer")
-    minx, miny, maxx, maxy = gdf.total_bounds
-    result = gpd.GeoDataFrame(geometry=[box(minx, miny, maxx, maxy)], crs=WGS84)
-    return _to_feature_collection(result), ["Computed bounding box"]
-
-
-def _simplify(request: VectorToolRequest) -> tuple[dict, list[str]]:
-    gdf = _load_gdf(request.geojson, "Input layer")
-    # Tolerance is in degrees (the geometry stays in WGS84), matching the UI
-    # label and the client engine. Do not introduce a metric-projected path
-    # here without also reinterpreting the tolerance unit.
-    tolerance = float(request.parameters.get("tolerance", 0.01) or 0)
-    result = gdf.copy()
-    result["geometry"] = gdf.geometry.simplify(tolerance)
-    return (
-        _to_feature_collection(result),
-        [f"Simplified {len(result)} feature(s) (tolerance {tolerance})"],
-    )
-
-
-def _overlay(request: VectorToolRequest, how: str) -> tuple[dict, list[str]]:
-    gpd = _import_geopandas()
-    left = _load_gdf(request.geojson, "Input layer")
-    right = _load_gdf(request.overlay, "Overlay layer")
-    # Keep only polygonal output for difference so degenerate boundary slivers
-    # (lines/points at shared edges) are dropped, per GIS convention.
-    result = gpd.overlay(
-        left, right, how=how, keep_geom_type=(how == "difference")
-    )
-    return (
-        _to_feature_collection(result),
-        [f"{how.capitalize()}: produced {len(result)} feature(s)"],
-    )
-
-
-def _clip(request: VectorToolRequest) -> tuple[dict, list[str]]:
-    gpd = _import_geopandas()
-    left = _load_gdf(request.geojson, "Input layer")
-    right = _load_gdf(request.overlay, "Overlay layer")
-    clipped = gpd.clip(left, right)
-    return _to_feature_collection(clipped), [f"Clip: produced {len(clipped)} feature(s)"]
-
-
-def _union(request: VectorToolRequest) -> tuple[dict, list[str]]:
-    gpd = _import_geopandas()
-    left = _load_gdf(request.geojson, "Input layer")
-    right = _load_gdf(request.overlay, "Overlay layer")
-    # Match the client engine: dissolve both layers into a single merged
-    # geometry rather than gpd.overlay(how="union")'s full-outer-join, which
-    # would return many attributed parts and diverge from the Turf.js result.
-    merged = gpd.GeoSeries(
-        [left.geometry.union_all(), right.geometry.union_all()], crs=WGS84
-    ).union_all()
-    result = gpd.GeoDataFrame(geometry=[merged], crs=WGS84)
-    return _to_feature_collection(result), ["Union: produced 1 feature"]
-
-
-_DISPATCH = {
-    "buffer": _buffer,
-    "centroids": _centroids,
-    "convex-hull": _convex_hull,
-    "dissolve": _dissolve,
-    "bounding-box": _bounding_box,
-    "simplify": _simplify,
-    "clip": _clip,
-    "intersection": lambda r: _overlay(r, "intersection"),
-    "difference": lambda r: _overlay(r, "difference"),
-    "union": _union,
-}
-
-
 @router.get("/status")
 def vector_status():
     """Return vector (GeoPandas) runtime availability."""
-    try:
-        _import_geopandas()
+    if vector_ops.geopandas_available():
         return {
             "available": True,
             "message": "Vector runtime (GeoPandas) is available.",
         }
-    except Exception as exc:  # noqa: BLE001 - report any import failure as unavailable
-        logger.info("GeoPandas runtime unavailable: %s", exc)
-        return {
-            "available": False,
-            "message": "Vector runtime (GeoPandas) is not installed.",
-        }
+    logger.info("GeoPandas runtime unavailable")
+    return {
+        "available": False,
+        "message": "Vector runtime (GeoPandas) is not installed.",
+    }
 
 
 @router.post("/run")
@@ -238,32 +56,28 @@ def vector_run(request: VectorToolRequest):
 
     Intentionally a plain ``def``: GeoPandas/Shapely are CPU-bound and
     synchronous, so FastAPI dispatches this to its thread pool and the event
-    loop is not blocked. Do not convert this (or the handlers it calls) to
-    ``async def`` without moving the work to an executor. The ``MAX_FEATURES``
-    cap bounds the per-request cost.
+    loop is not blocked. Do not convert this to ``async def`` without moving the
+    work to an executor. The ``MAX_FEATURES`` cap in :mod:`vector_ops` bounds the
+    per-request cost.
     """
-    try:
-        _import_geopandas()
-    except Exception as exc:  # noqa: BLE001
-        logger.info("GeoPandas runtime unavailable: %s", exc)
+    if not vector_ops.geopandas_available():
         raise HTTPException(
             status_code=503,
             detail="GeoPandas is not installed in the sidecar.",
-        ) from exc
-
-    handler = _DISPATCH.get(request.tool_id)
-    if handler is None:
-        raise HTTPException(
-            status_code=400, detail=f"Unknown vector tool: {request.tool_id}"
         )
 
-    _check_size(request.geojson, "Input layer")
-    _check_size(request.overlay, "Overlay layer")
-
     try:
-        geojson, messages = handler(request)
-    except HTTPException:
-        raise
+        geojson, messages = vector_ops.run_vector_tool(
+            request.tool_id,
+            request.geojson,
+            request.overlay,
+            request.parameters,
+        )
+    except VectorInputTooLarge as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    except ValueError as exc:
+        # Unknown tool id, missing features, or invalid parameters.
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - surface a stable error to the client
         logger.exception("Vector tool %s failed", request.tool_id)
         raise HTTPException(

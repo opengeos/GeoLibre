@@ -1,15 +1,13 @@
-from typing import NoReturn
-
 import pytest
 from fastapi import HTTPException
 
-from geolibre_server.app import vector
+from geolibre_server import vector_ops
 from geolibre_server.app.vector import (
-    _DISPATCH,
     VectorToolRequest,
     vector_run,
     vector_status,
 )
+from geolibre_server.vector_ops import _DISPATCH
 
 try:
     import geopandas  # noqa: F401
@@ -76,10 +74,7 @@ def test_status_returns_availability_shape() -> None:
 
 
 def test_run_without_geopandas_raises_503(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _boom() -> NoReturn:
-        raise ImportError("geopandas missing")
-
-    monkeypatch.setattr(vector, "_import_geopandas", _boom)
+    monkeypatch.setattr(vector_ops, "geopandas_available", lambda: False)
     with pytest.raises(HTTPException) as exc:
         vector_run(VectorToolRequest(tool_id="buffer", geojson=SQUARE))
     assert exc.value.status_code == 503
@@ -186,7 +181,7 @@ def test_dissolve_rejects_unknown_field() -> None:
 
 @requires_geopandas
 def test_run_rejects_oversized_input(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(vector, "MAX_FEATURES", 2)
+    monkeypatch.setattr(vector_ops, "MAX_FEATURES", 2)
     big = {"type": "FeatureCollection", "features": [{}, {}, {}]}
     with pytest.raises(HTTPException) as exc:
         vector_run(VectorToolRequest(tool_id="buffer", geojson=big))

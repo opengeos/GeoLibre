@@ -9,6 +9,7 @@ import type {
 } from "rollup";
 import { defineConfig, type Plugin } from "vite";
 import { bundledPlugins } from "./vite-plugins/bundled-plugins";
+import { copyVectorOps } from "./vite-plugins/copy-vector-ops";
 
 const GEOAGENT_BROWSER_BUNDLE = "maplibre-gl-geoagent/dist/browser-";
 const EARTH_ENGINE_CONTROL_BUNDLE = "maplibre-gl-earth-engine/dist/";
@@ -305,6 +306,13 @@ export default defineConfig({
     stripDuckDbWorkerSourcemapPlugin(),
     projectUrlQueryPlugin(),
     bundledPlugins(path.resolve(__dirname, "public/plugins")),
+    copyVectorOps(
+      path.resolve(
+        __dirname,
+        "../../backend/geolibre_server/geolibre_server/vector_ops.py",
+      ),
+      path.resolve(__dirname, "src/lib/pyodide/vector_ops.generated.py"),
+    ),
     react(),
     wmsProxyPlugin(),
     selectiveJsMinifyPlugin(),

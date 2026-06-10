@@ -33,10 +33,11 @@ The **Processing** menu collects GeoLibre's analysis and conversion tools: vecto
 
 ### Engines
 
-Every vector tool can run on one of two engines, selectable in the dialog:
+Every vector tool can run on one of three engines, selectable in the dialog:
 
 - **Client (Turf.js)**: runs entirely in the browser. No setup, works offline, and operates on the layer's GeoJSON.
 - **Sidecar (GeoPandas)**: runs on the optional Python sidecar for projection-aware results, backed by GeoPandas and Shapely. The dialog falls back to the client engine when the sidecar's optional `vector` extra is not installed.
+- **Python (Pyodide)**: runs the same GeoPandas/Shapely code as the sidecar, but **entirely in your browser** via [Pyodide](https://pyodide.org) — no server, so it works on the web build and the public demo too. The first run downloads the Python runtime once (a few tens of MB, fetched lazily from a CDN, so an internet connection is needed the first time); later runs reuse the warmed-up runtime. Because it shares the sidecar's Python, results match the Sidecar engine. To self-host the runtime for offline use, point `VITE_PYODIDE_INDEX_URL` at a mirrored copy of the Pyodide distribution.
 
 See the [Vector Analysis tutorial](../tutorials/vector-analysis.md).
 

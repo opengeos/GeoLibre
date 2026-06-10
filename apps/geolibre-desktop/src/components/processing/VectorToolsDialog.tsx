@@ -9,7 +9,13 @@ import {
   type GeometryFamily,
   type ProcessingAlgorithm,
   type ProcessingContext,
+  type VectorToolRequest,
+  type VectorToolResult,
 } from "@geolibre/processing";
+import {
+  onPyodideProgress,
+  runVectorToolInPyodide,
+} from "../../lib/pyodide/pyodide-vector-loader";
 import {
   Button,
   Dialog,
@@ -38,7 +44,7 @@ interface VectorToolsDialogProps {
   mapControllerRef: React.RefObject<MapController | null>;
 }
 
-type Engine = "client" | "sidecar";
+type Engine = "client" | "sidecar" | "pyodide";
 
 /** Tools grouped by their `group` label, preserving registry order. */
 function groupedTools(): { group: string; tools: ProcessingAlgorithm[] }[] {
@@ -158,6 +164,52 @@ export function VectorToolsDialog({
     [addGeoJsonLayer, appendLog, mapControllerRef],
   );
 
+  // Shared tail for the two Python engines (sidecar and Pyodide): both take the
+  // same {tool_id, geojson, overlay, parameters} request and return
+  // {geojson, messages}. Resolve the layers, invoke, then validate and add the
+  // result. `label` describes where it ran, for the log line.
+  const runRemoteEngine = useCallback(
+    async (
+      label: string,
+      invoke: (request: VectorToolRequest) => Promise<VectorToolResult>,
+    ) => {
+      const inputLayer = layers.find((l) => l.id === params.layer);
+      const overlayLayer = layers.find((l) => l.id === params.overlay);
+      // A layer may have been removed from the project after the dialog opened;
+      // bail out with a clear message instead of sending null GeoJSON.
+      if (!inputLayer?.geojson) {
+        appendLog("Error: input layer no longer exists in the project");
+        return;
+      }
+      if (params.overlay && !overlayLayer?.geojson) {
+        appendLog("Error: overlay layer no longer exists in the project");
+        return;
+      }
+      appendLog(`Running "${tool.name}" ${label}...`);
+      const result = await invoke({
+        tool_id: tool.id,
+        geojson: inputLayer.geojson,
+        overlay: overlayLayer?.geojson,
+        parameters: params,
+      });
+      for (const message of result.messages) appendLog(message);
+      // The engine response is untyped JSON; verify it is a FeatureCollection
+      // before handing it to the map.
+      const remoteResult = result.geojson as
+        | { type?: string; features?: unknown }
+        | null;
+      if (
+        remoteResult?.type === "FeatureCollection" &&
+        Array.isArray(remoteResult.features)
+      ) {
+        addResultLayer(tool.name, remoteResult as unknown as FeatureCollection);
+      } else {
+        appendLog("Error: engine returned invalid GeoJSON");
+      }
+    },
+    [layers, params, tool, appendLog, addResultLayer],
+  );
+
   const handleRun = useCallback(async () => {
     setLog([]);
     // Validate required parameters before doing any work.
@@ -178,38 +230,20 @@ export function VectorToolsDialog({
     setRunning(true);
     try {
       if (engine === "sidecar") {
-        const inputLayer = layers.find((l) => l.id === params.layer);
-        const overlayLayer = layers.find((l) => l.id === params.overlay);
-        // A layer may have been removed from the project after the dialog
-        // opened; bail out with a clear message instead of sending null GeoJSON.
-        if (!inputLayer?.geojson) {
-          appendLog("Error: input layer no longer exists in the project");
-          return;
-        }
-        if (params.overlay && !overlayLayer?.geojson) {
-          appendLog("Error: overlay layer no longer exists in the project");
-          return;
-        }
-        appendLog(`Running "${tool.name}" on the Python sidecar...`);
-        const result = await runVectorTool({
-          tool_id: tool.id,
-          geojson: inputLayer.geojson,
-          overlay: overlayLayer?.geojson,
-          parameters: params,
-        });
-        for (const message of result.messages) appendLog(message);
-        // The sidecar response is untyped JSON; verify it is a FeatureCollection
-        // before handing it to the map.
-        const sidecarResult = result.geojson as
-          | { type?: string; features?: unknown }
-          | null;
-        if (
-          sidecarResult?.type === "FeatureCollection" &&
-          Array.isArray(sidecarResult.features)
-        ) {
-          addResultLayer(tool.name, sidecarResult as unknown as FeatureCollection);
-        } else {
-          appendLog("Error: sidecar returned invalid GeoJSON");
+        await runRemoteEngine("on the Python sidecar", runVectorTool);
+      } else if (engine === "pyodide") {
+        // Progress phases (one-time runtime + GeoPandas download) stream into
+        // the log; the subscription is dropped once the run finishes.
+        const unsubscribe = onPyodideProgress((phase) =>
+          appendLog(`${phase}...`),
+        );
+        try {
+          await runRemoteEngine(
+            "in your browser (Pyodide)",
+            runVectorToolInPyodide,
+          );
+        } finally {
+          unsubscribe();
         }
       } else {
         const ctx: ProcessingContext = {
@@ -233,6 +267,7 @@ export function VectorToolsDialog({
     layers,
     appendLog,
     addResultLayer,
+    runRemoteEngine,
     mapControllerRef,
   ]);
 
@@ -308,6 +343,7 @@ export function VectorToolsDialog({
                 >
                   <option value="client">Client (Turf.js)</option>
                   <option value="sidecar">Sidecar (GeoPandas)</option>
+                  <option value="pyodide">Python (Pyodide)</option>
                 </Select>
                 {engine === "sidecar" && sidecarAvailable === null ? (
                   <p className="text-xs text-muted-foreground">
@@ -318,6 +354,12 @@ export function VectorToolsDialog({
                   <p className="text-xs text-destructive">
                     The GeoPandas sidecar is not available. Start the sidecar
                     with the vector extra, or switch to the client engine.
+                  </p>
+                ) : null}
+                {engine === "pyodide" ? (
+                  <p className="text-xs text-muted-foreground">
+                    Runs GeoPandas in your browser. The first run downloads the
+                    Python runtime (one-time, needs an internet connection).
                   </p>
                 ) : null}
               </div>

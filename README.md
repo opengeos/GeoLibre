@@ -23,7 +23,7 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 - Controls menu with Measure, Bookmark, Minimap, and View State tools, plus a Print menu and a Search panel
 - Conversion menu for Vector to GeoParquet/FlatGeobuf/PMTiles, CSV to GeoParquet, and Raster to COG; GeoParquet and CSV conversions run in the browser with DuckDB-WASM, while FlatGeobuf, PMTiles, and COG require the optional Python sidecar
 - Whitebox toolbox with batch tools run against a selected input directory
-- Vector menu with common geometry tools (buffer, centroids, convex hull, dissolve, bounding box, simplify, clip, intersection, difference, union) that run in the browser with Turf.js, with an optional GeoPandas sidecar engine for every tool
+- Vector menu with common geometry tools (buffer, centroids, convex hull, dissolve, bounding box, simplify, clip, intersection, difference, union) that run in the browser with Turf.js, an optional GeoPandas sidecar engine for every tool, and an in-browser GeoPandas engine via Pyodide (no server, same results as the sidecar)
 - Raster menu with common raster tools (hillshade, slope, aspect, reproject, resample, clip by extent, clip by mask layer, polygonize, contour) backed by a rasterio Python sidecar, with a file path in and a file path out
 - Drag and drop vector and GeoTIFF/COG raster files onto the map to add them as layers
 - Project menu to create, open, save, and Save As `.geolibre.json` projects
@@ -157,7 +157,7 @@ The **Processing → Vector** menu opens a single Vector tools dialog with commo
 
 - **Geometry tools.** **Buffer** (by a distance in kilometers, meters, or miles), **Centroids** (one centroid point per feature), **Convex hull** (a single polygon enclosing all features), **Dissolve** (merge polygons, optionally grouped by an attribute field), **Bounding box** (the rectangular envelope of all features), and **Simplify** (Douglas-Peucker vertex reduction).
 - **Overlay tools.** **Clip** (clip the input to an overlay layer, keeping input attributes), **Intersection**, **Difference**, and **Union** between two polygon layers.
-- **Two engines.** Every tool runs fully in the browser with [Turf.js](https://turfjs.org/), so no sidecar is required. Every tool can also run on the optional GeoPandas sidecar for projection-aware results; when the sidecar is unavailable the dialog falls back to the client engine.
+- **Three engines.** Every tool runs fully in the browser with [Turf.js](https://turfjs.org/), so no sidecar is required. Every tool can also run on the optional GeoPandas sidecar for projection-aware results; when the sidecar is unavailable the dialog falls back to the client engine. A third **Python (Pyodide)** engine runs the same GeoPandas/Shapely code as the sidecar but **entirely in the browser** via [Pyodide](https://pyodide.org) — no server, so it works on the web build too. The first run lazily downloads the Python runtime from a CDN (override with `VITE_PYODIDE_INDEX_URL` to self-host for offline use); results match the sidecar because both share one `vector_ops.py`.
 
 To enable the sidecar engine, install the optional `vector` extra (it is not bundled by default to keep the sidecar small):
 
