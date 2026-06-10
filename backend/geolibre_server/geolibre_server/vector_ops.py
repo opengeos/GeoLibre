@@ -63,11 +63,6 @@ def geopandas_import_error() -> Optional[str]:
         return str(exc)
 
 
-def geopandas_available() -> bool:
-    """Return whether the GeoPandas runtime can be imported."""
-    return geopandas_import_error() is None
-
-
 def _check_size(geojson: Optional[dict], label: str) -> None:
     """Reject payloads with more than ``MAX_FEATURES`` features."""
     if geojson and len(geojson.get("features", [])) > MAX_FEATURES:

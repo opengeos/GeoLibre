@@ -12,10 +12,14 @@ import { getPyodideIndexUrl } from "./pyodide-config";
 type ProgressListener = (phase: string) => void;
 
 // Generous bound on the one-time runtime download (tens of MB on a cold cache);
-// large enough for slow connections, small enough to escape a dead CDN. This
-// guards initialization only — a run itself is not timed, since geoprocessing
-// can legitimately take a while.
+// large enough for slow connections, small enough to escape a dead CDN.
 const PYODIDE_INIT_TIMEOUT_MS = 120_000;
+
+// Per-run wall-clock bound so a pathological operation (e.g. one that exhausts
+// WASM memory without raising) can't leave the dialog stuck on "Running…"
+// forever. Generous, since MAX_FEATURES already caps the input size. On expiry
+// the worker is torn down and the next run re-initializes.
+const PYODIDE_RUN_TIMEOUT_MS = 300_000;
 
 interface PendingRun {
   resolve: (result: VectorToolResult) => void;
@@ -32,21 +36,21 @@ let handlePromise: Promise<WorkerHandle> | null = null;
 let nextRunId = 0;
 const pending = new Map<number, PendingRun>();
 const progressListeners = new Set<ProgressListener>();
-let lastPhase: string | null = null;
 
 /**
  * Subscribe to Pyodide load-progress phases ("Downloading Python runtime",
- * "Loading GeoPandas"). Fires immediately with the last known phase if loading
- * is already in flight. Returns an unsubscribe function.
+ * "Loading GeoPandas") as they happen. Returns an unsubscribe function.
+ *
+ * Phases are delivered live only — there is no replay of an already-emitted
+ * phase, so a subscriber sees the chronological order alongside its own log
+ * lines (a subscriber that attaches mid-init simply picks up the next phase).
  */
 export function onPyodideProgress(listener: ProgressListener): () => void {
   progressListeners.add(listener);
-  if (lastPhase) listener(lastPhase);
   return () => progressListeners.delete(listener);
 }
 
 function emitProgress(phase: string): void {
-  lastPhase = phase;
   for (const listener of progressListeners) listener(phase);
 }
 
@@ -62,11 +66,15 @@ function createHandle(): Promise<WorkerHandle> {
     // the dead worker, drop the cached singleton so the next call rebuilds it,
     // and fail every in-flight run so nothing hangs behind a broken worker.
     let initTimer: ReturnType<typeof setTimeout> | undefined;
+    // Both the init "error" message and worker.onerror can fire for the same
+    // failure; the guard makes the second call a no-op.
+    let settled = false;
     const failWorker = (message: string) => {
+      if (settled) return;
+      settled = true;
       if (initTimer) clearTimeout(initTimer);
       worker.terminate();
       handlePromise = null;
-      lastPhase = null;
       for (const [id, run] of pending) {
         pending.delete(id);
         run.reject(new Error(message));
@@ -89,10 +97,9 @@ function createHandle(): Promise<WorkerHandle> {
           emitProgress(data.phase);
           break;
         case "ready":
-          // Clear the last phase so a later subscriber (a warm re-run) is not
-          // replayed a stale "Loading…" line after loading has finished.
+          // Note: do not set `settled` here — a crash after init must still be
+          // able to run failWorker(). The init timer is no longer relevant.
           if (initTimer) clearTimeout(initTimer);
-          lastPhase = null;
           resolve();
           break;
         case "result": {
@@ -143,7 +150,6 @@ function getHandle(): Promise<WorkerHandle> {
   // ensureSpatialExtension in duckdb-vector-loader.ts).
   handlePromise ??= createHandle().catch((error) => {
     handlePromise = null;
-    lastPhase = null;
     throw error;
   });
   return handlePromise;
@@ -168,7 +174,31 @@ export async function runVectorToolInPyodide(
   const { worker } = await getHandle();
   const id = nextRunId++;
   return new Promise<VectorToolResult>((resolve, reject) => {
-    pending.set(id, { resolve, reject });
+    const timer = setTimeout(() => {
+      if (!pending.has(id)) return;
+      pending.delete(id);
+      // Presume the worker is wedged: tear it down so the next run re-inits,
+      // and fail any other in-flight runs too.
+      worker.terminate();
+      handlePromise = null;
+      for (const [otherId, run] of pending) {
+        pending.delete(otherId);
+        run.reject(new Error("Pyodide worker was reset after a timeout."));
+      }
+      reject(new Error("The Python (Pyodide) operation timed out."));
+    }, PYODIDE_RUN_TIMEOUT_MS);
+    // Wrap the callbacks so the timer is always cleared, whether the run
+    // resolves, errors, or is rejected by failWorker on a crash.
+    pending.set(id, {
+      resolve: (result) => {
+        clearTimeout(timer);
+        resolve(result);
+      },
+      reject: (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    });
     worker.postMessage({ type: "run", id, request });
   });
 }

@@ -57,7 +57,9 @@ self.onmessage = async (event) => {
           message:
             err && err.message ? err.message : "Failed to load Python runtime",
         });
-        throw err;
+        // Do not re-throw: the posted "error" message is the sole error
+        // channel, and re-throwing would reject this catch() promise with no
+        // live awaiter (readyPromise is already null) — an unhandled rejection.
       },
     );
     return;

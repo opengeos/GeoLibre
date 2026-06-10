@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Plugin } from "vite";
 
@@ -63,10 +63,4 @@ export function copyVectorOps(sourcePath: string, destPath: string): Plugin {
       server.watcher.on("add", onChange);
     },
   };
-}
-
-// Exported so a one-off copy is also possible outside Vite if ever needed.
-export function copyVectorOpsOnce(sourcePath: string, destPath: string): void {
-  mkdirSync(dirname(destPath), { recursive: true });
-  copyFileSync(sourcePath, destPath);
 }
