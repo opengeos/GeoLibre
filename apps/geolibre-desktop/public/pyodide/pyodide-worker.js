@@ -66,8 +66,14 @@ self.onmessage = async (event) => {
       // JSON-string boundary: avoids PyProxy lifetime management and matches the
       // sidecar's JSON contract exactly.
       const fn = pyodide.globals.get("run_vector_tool_json");
-      const out = fn(JSON.stringify(request));
-      fn.destroy();
+      // fn is a PyProxy and must be destroyed even if the call throws (e.g. a
+      // GeoPandas ValueError), or it leaks the underlying Python object.
+      let out;
+      try {
+        out = fn(JSON.stringify(request));
+      } finally {
+        fn.destroy();
+      }
       const parsed = JSON.parse(out);
       self.postMessage({
         type: "result",

@@ -49,13 +49,23 @@ def _import_geopandas() -> Any:
     return gpd
 
 
-def geopandas_available() -> bool:
-    """Return whether the GeoPandas runtime can be imported."""
+def geopandas_import_error() -> Optional[str]:
+    """Return the GeoPandas import error message, or None if it imports cleanly.
+
+    Lets callers log *why* the runtime is unavailable (a missing package vs. a
+    subtler failure such as a compiled-extension ABI mismatch) rather than a
+    generic "unavailable".
+    """
     try:
         _import_geopandas()
-        return True
-    except Exception:  # noqa: BLE001 - any import failure means unavailable
-        return False
+        return None
+    except Exception as exc:  # noqa: BLE001 - report any import failure
+        return str(exc)
+
+
+def geopandas_available() -> bool:
+    """Return whether the GeoPandas runtime can be imported."""
+    return geopandas_import_error() is None
 
 
 def _check_size(geojson: Optional[dict], label: str) -> None:

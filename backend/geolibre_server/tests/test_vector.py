@@ -74,7 +74,9 @@ def test_status_returns_availability_shape() -> None:
 
 
 def test_run_without_geopandas_raises_503(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(vector_ops, "geopandas_available", lambda: False)
+    monkeypatch.setattr(
+        vector_ops, "geopandas_import_error", lambda: "No module named 'geopandas'"
+    )
     with pytest.raises(HTTPException) as exc:
         vector_run(VectorToolRequest(tool_id="buffer", geojson=SQUARE))
     assert exc.value.status_code == 503

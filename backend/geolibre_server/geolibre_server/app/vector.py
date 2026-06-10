@@ -38,12 +38,13 @@ class VectorToolRequest(BaseModel):
 @router.get("/status")
 def vector_status():
     """Return vector (GeoPandas) runtime availability."""
-    if vector_ops.geopandas_available():
+    import_error = vector_ops.geopandas_import_error()
+    if import_error is None:
         return {
             "available": True,
             "message": "Vector runtime (GeoPandas) is available.",
         }
-    logger.info("GeoPandas runtime unavailable")
+    logger.info("GeoPandas runtime unavailable: %s", import_error)
     return {
         "available": False,
         "message": "Vector runtime (GeoPandas) is not installed.",
@@ -60,7 +61,9 @@ def vector_run(request: VectorToolRequest):
     work to an executor. The ``MAX_FEATURES`` cap in :mod:`vector_ops` bounds the
     per-request cost.
     """
-    if not vector_ops.geopandas_available():
+    import_error = vector_ops.geopandas_import_error()
+    if import_error is not None:
+        logger.info("GeoPandas runtime unavailable: %s", import_error)
         raise HTTPException(
             status_code=503,
             detail="GeoPandas is not installed in the sidecar.",

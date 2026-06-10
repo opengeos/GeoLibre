@@ -52,6 +52,19 @@ function workerUrl(): string {
 function createHandle(): Promise<WorkerHandle> {
   const worker = new Worker(workerUrl());
   const ready = new Promise<void>((resolve, reject) => {
+    // A fatal worker failure (failed init, or a crash after init): tear down
+    // the dead worker, drop the cached singleton so the next call rebuilds it,
+    // and fail every in-flight run so nothing hangs behind a broken worker.
+    const failWorker = (message: string) => {
+      worker.terminate();
+      handlePromise = null;
+      lastPhase = null;
+      for (const [id, run] of pending) {
+        pending.delete(id);
+        run.reject(new Error(message));
+      }
+    };
+
     worker.onmessage = (event: MessageEvent) => {
       const data = event.data ?? {};
       switch (data.type) {
@@ -75,12 +88,9 @@ function createHandle(): Promise<WorkerHandle> {
         case "error": {
           const message = data.message || "Pyodide error";
           if (data.id === undefined) {
-            // An init failure: reject the ready promise and fail in-flight runs.
+            // An init failure (no run id): tear down and fail any in-flight runs.
+            failWorker(message);
             reject(new Error(message));
-            for (const [id, run] of pending) {
-              run.reject(new Error(message));
-              pending.delete(id);
-            }
           } else {
             const run = pending.get(data.id);
             if (run) {
@@ -95,7 +105,9 @@ function createHandle(): Promise<WorkerHandle> {
       }
     };
     worker.onerror = (event) => {
-      reject(new Error(event.message || "Pyodide worker failed to start"));
+      const message = event.message || "Pyodide worker failed";
+      failWorker(message);
+      reject(new Error(message));
     };
   });
 
