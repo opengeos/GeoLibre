@@ -59,6 +59,7 @@ m.to_project()["mapView"]["center"]
 | `add_cog(url, name=, bands=, colormap=, rescale=)` | Add a Cloud Optimized GeoTIFF. |
 | `add_basemap(basemap)` | Set the background basemap. |
 | `set_center(lng, lat, zoom=None)` | Center (and optionally zoom) the map. |
+| `set_center_zoom(lng, lat, zoom=None)` | Alias of `set_center` (leafmap compatibility). |
 | `remove_layer(layer_id)` / `clear_layers()` | Remove layers. |
 | `to_project()` / `load_project(src)` / `save_project(path)` | Project I/O. |
 

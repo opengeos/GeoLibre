@@ -8,6 +8,7 @@ a project produced entirely from Python.
 
 from __future__ import annotations
 
+import copy
 import json
 import uuid
 from pathlib import Path
@@ -119,7 +120,7 @@ def build_empty_project(
         "basemapOpacity": 1,
         "layers": [],
         "styles": {},
-        "preferences": json.loads(json.dumps(DEFAULT_PROJECT_PREFERENCES)),
+        "preferences": copy.deepcopy(DEFAULT_PROJECT_PREFERENCES),
         "metadata": {},
     }
 

@@ -63,6 +63,14 @@ function isEmbedded(): boolean {
  * received from the app back into the iframe. Outside an embedding host the
  * hook is an inert no-op.
  *
+ * Trust model: the embedding host is fully trusted and receives the entire
+ * project state. Project snapshots are not broadcast until the host sends its
+ * first message (which is also when the bridge learns its origin and scopes
+ * subsequent posts to it); only the version-only `geolibre:ready` ping precedes
+ * the handshake and is the single message sent to `"*"`. Any page that frames
+ * the app (not just the Jupyter widget) therefore becomes that trusted host, so
+ * `?embed=1` standalone exports should only be served from a trusted context.
+ *
  * @param mapControllerRef - Ref to the live map controller, read so the emitted
  *   snapshot captures the current camera (pan/zoom) rather than only the store.
  */

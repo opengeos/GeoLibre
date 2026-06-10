@@ -88,6 +88,7 @@ Map(
 | `add_cog(url, name=, bands=, colormap=, rescale=)` | Add a Cloud Optimized GeoTIFF. |
 | `add_basemap(basemap)` | Set the background basemap. |
 | `set_center(lng, lat, zoom=None)` | Center (and optionally zoom) the map. |
+| `set_center_zoom(lng, lat, zoom=None)` | Alias of `set_center` (leafmap compatibility). |
 | `remove_layer(layer_id)` / `clear_layers()` | Remove layers. |
 | `to_project()` | Return the current project as a dict. |
 | `load_project(src)` | Replace the project from a dict, JSON string, or `.geolibre.json` path. |

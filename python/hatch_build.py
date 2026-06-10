@@ -46,12 +46,18 @@ class CustomBuildHook(BuildHookInterface):
         self.app.display_info(
             "Building embedded GeoLibre web app (npm run build:embed)..."
         )
-        subprocess.run(
-            ["npm", "run", "build:embed"],
-            cwd=REPO_ROOT,
-            check=True,
-            timeout=600,  # 10 minutes; fail loudly rather than hang pip forever
-        )
+        try:
+            subprocess.run(
+                ["npm", "run", "build:embed"],
+                cwd=REPO_ROOT,
+                check=True,
+                timeout=600,  # 10 minutes; fail loudly rather than hang pip forever
+            )
+        except FileNotFoundError as exc:
+            raise RuntimeError(
+                "npm was not found. Install Node.js and run `npm ci` from the "
+                "repository root before building the wheel."
+            ) from exc
 
         if not (STATIC_APP / "index.html").is_file():
             raise RuntimeError(

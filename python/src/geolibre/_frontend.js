@@ -128,12 +128,13 @@ async function render({ model, el }) {
   window.addEventListener("message", onMessage);
 
   const onProjectChange = () => {
-    // A project that originated from the app is still the identical object on
-    // the trait; do not echo it back. A Python-initiated change deserializes
-    // into a fresh object, so identity differs and it is pushed. The kernel does
-    // not re-broadcast the value we just sent (traitlets.Dict change detection
-    // is value-based), so the identity check is not defeated by the save round
-    // trip.
+    // Loop guard. The PRIMARY protection is on the Python side: traitlets.Dict
+    // change detection is value-based, so the kernel never re-broadcasts the
+    // value we just sent back to the front end. This identity check is the
+    // SECONDARY fast-path guard that avoids the round-trip entirely: a project
+    // that originated from the app is still the identical object on the trait,
+    // so don't echo it back; a Python-initiated change deserializes into a fresh
+    // object, so identity differs and it is pushed.
     //
     // Invariant: this relies on anywidget/backbone returning from model.get()
     // the same JS object reference passed to model.set() on this side (no

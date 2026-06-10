@@ -308,7 +308,14 @@ class Map(anywidget.AnyWidget):
         else:
             text = str(source)
             if text.strip().startswith("{"):
-                project = json.loads(text)
+                try:
+                    project = json.loads(text)
+                except json.JSONDecodeError:
+                    # Not JSON after all (e.g. a path like `{backup}/map.json`);
+                    # fall back to treating the source as a file path.
+                    project = json.loads(
+                        pathlib.Path(text).expanduser().read_text(encoding="utf-8")
+                    )
             else:
                 project = json.loads(
                     pathlib.Path(text).expanduser().read_text(encoding="utf-8")
