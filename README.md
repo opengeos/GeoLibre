@@ -6,7 +6,7 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 
 [![GeoLibre demo showing 3D Tiles rendered on a MapLibre map](https://files.opengeos.org/GeoLibre-demo.webp)](https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json)
 
-## Features (v0.9.0)
+## Features (v1.0)
 
 - Runs across desktop (Tauri), web (browser), and mobile or small screens, with a responsive layout that adapts menus, dialogs, and panels, plus per-panel visibility through Layout settings
 - MapLibre map workspace with OpenFreeMap basemaps, blank background support, and toggleable navigation, fullscreen, geolocation, globe, terrain, scale, attribution, and logo controls

@@ -17,7 +17,7 @@ export interface PluginRegistryEntry {
   author?: string;
   homepage?: string;
   categories?: string[];
-  /** Minimum GeoLibre app version this plugin supports, e.g. "0.9.0". */
+  /** Minimum GeoLibre app version this plugin supports, e.g. "1.0.0". */
   minGeoLibreVersion?: string;
 }
 

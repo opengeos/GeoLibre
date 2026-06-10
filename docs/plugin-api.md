@@ -244,7 +244,7 @@ The registry is JSON, fetched from `VITE_GEOLIBRE_PLUGIN_REGISTRY_URL` or, by de
       "homepage": "https://github.com/example/example-plugin",
       "manifestUrl": "https://example.com/example-plugin/plugin.json",
       "categories": ["Example"],
-      "minGeoLibreVersion": "0.9.0"
+      "minGeoLibreVersion": "1.0.0"
     }
   ]
 }

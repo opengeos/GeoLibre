@@ -83,7 +83,7 @@
 - [x] Desktop diagnostics panel and improved diagnostics/status bar contrast
 - [x] Toolbar toggles for Colorbar, Legend, and HTML panels
 
-## v0.9: Data integrations, processing, and menu reorganization (current)
+## v0.9: Data integrations, processing, and menu reorganization
 
 - [x] SQL Workspace for running DuckDB Spatial SQL against loaded layers, local files, and remote URLs, with sample queries, query history, and adding results to the map or exporting them
 - [x] Planetary Computer panel for browsing and loading STAC data
@@ -111,7 +111,7 @@
 - [x] Docker support for the browser app
 - [x] `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` for offline spatial extension loading
 
-## v1.0: Processing pipelines, external plugin system, and stable prototype
+## v1.0: Processing pipelines, external plugin system, and stable prototype (current)
 
 - [x] GDAL / Rasterio / GeoPandas pipelines
 - [x] Buffer, reproject, and export GeoJSON processing tools
