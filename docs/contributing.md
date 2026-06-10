@@ -27,8 +27,9 @@ before you invest time in a pull request.
 - **Rust** toolchain ([rustup](https://rustup.rs/)) for Tauri desktop builds
 - Linux only: `webkit2gtk` and `libayatana-appindicator` (see the
   [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/))
-- **Python** 3.10 or newer is optional, and only needed for the conversion
-  sidecar and the backend tests
+- **Python** 3.10 or newer for [pre-commit](https://pre-commit.com/) (the
+  commit hooks below) and, if you work on the backend, the conversion sidecar
+  and its tests
 
 ## Set up
 
@@ -39,7 +40,7 @@ npm install
 ```
 
 GeoLibre is an npm workspaces monorepo, so a single `npm install` at the root
-wires up every package. Bun users can run `bun install` instead.
+wires up every package. Use npm; the repository tracks `package-lock.json`.
 
 ## Run it locally
 
@@ -129,10 +130,11 @@ ci` gate does.
 
 ### Coding conventions
 
-- The pre-commit hooks enforce TypeScript compile errors (`npm run build`) and
-  basic whitespace (the end-of-file and trailing-whitespace fixers). There is no
-  Prettier or ESLint hook, so match the style of the surrounding code and fix
-  any build errors the hooks surface before committing.
+- The pre-commit hooks enforce TypeScript compile errors (`npm run build`), LF
+  line endings (`mixed-line-ending --fix=lf`), and basic whitespace (the
+  end-of-file and trailing-whitespace fixers). There is no Prettier or ESLint
+  hook, so match the style of the surrounding code and fix any build errors the
+  hooks surface before committing.
 - Do not edit files in `node_modules`. If a third-party MapLibre control needs
   app-specific styling, add a scoped override in
   `apps/geolibre-desktop/src/index.css` limited to that control's class.
@@ -172,7 +174,7 @@ the test runner, so install both when working on it:
 
 ```bash
 cd backend/geolibre_server
-python -m venv .venv && source .venv/bin/activate
+python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e ".[conversion,dev]"
 geolibre-server
 ```
