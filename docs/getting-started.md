@@ -25,11 +25,11 @@ To update an existing source checkout to the latest version, pull the changes, r
 ```bash
 cd GeoLibre          # your GeoLibre folder
 git pull origin main
-npm install
+npm install          # or: bun install
 npm run build        # web build; use npm run tauri:build for the desktop app
 ```
 
-The build step is only needed for a production build. If you work from the dev servers (`npm run dev` or `npm run tauri:dev`), `git pull` followed by `npm install` is enough — restart the dev server to pick up the changes.
+The `npm run build` (or `npm run tauri:build`) step is only needed for a production build. If you work from the dev servers (`npm run dev` or `npm run tauri:dev`), `git pull` followed by `npm install` is enough — restart the dev server to pick up the changes.
 
 ## Run the browser UI
 
