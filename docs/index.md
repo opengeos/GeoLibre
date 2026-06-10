@@ -97,6 +97,9 @@ New to GeoLibre? Start with the [User Guide](user-guide/interface.md) for a feat
 
 The live demo is the browser-capable version of the GeoLibre desktop UI. It is useful for exploring the map, loading browser-selected vector data supported by DuckDB-WASM Spatial, adding URL-based layers, styling layers, and testing plugins. Desktop-only file dialogs, local MBTiles, local raster reads, and filesystem save/open operations still require the installed Tauri app.
 
+!!! note "Hosted on GitHub Pages, private by design"
+    The live demo is a static site deployed on GitHub Pages and runs entirely in your browser. It is secure and does not track users: there is no analytics or account, and the data you load is processed client-side in your browser session. Data leaves your browser only when you choose to add a remote URL or explicitly share a project.
+
 Open a project by passing a public `.geolibre.json` URL with the `url` query parameter:
 
 ```text
