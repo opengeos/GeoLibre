@@ -27,8 +27,8 @@ before you invest time in a pull request.
 - **Rust** toolchain ([rustup](https://rustup.rs/)) for Tauri desktop builds
 - Linux only: `webkit2gtk` and `libayatana-appindicator` (see the
   [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/))
-- **Python** 3.12 is optional, and only needed for the conversion sidecar and
-  the backend tests
+- **Python** 3.10 or newer is optional, and only needed for the conversion
+  sidecar and the backend tests
 
 ## Set up
 
@@ -67,6 +67,7 @@ packages/map            # MapLibre integration and layer sync
 packages/ui             # Tailwind + shadcn/ui primitives
 packages/plugins        # Plugin API and built-in plugins
 packages/processing     # Client-side algorithm registry
+workers/viewer          # Cloudflare viewer worker (geolibre-viewer-worker)
 backend/geolibre_server # Optional FastAPI conversion sidecar (Python)
 sample-data/            # Sample GeoJSON and an example project
 docs/                   # This documentation site (MkDocs)
@@ -128,8 +129,10 @@ ci` gate does.
 
 ### Coding conventions
 
-- TypeScript and formatting are enforced by the pre-commit hooks, so let them
-  format your changes rather than hand-tuning whitespace.
+- The pre-commit hooks enforce TypeScript compile errors (`npm run build`) and
+  basic whitespace (the end-of-file and trailing-whitespace fixers). There is no
+  Prettier or ESLint hook, so match the style of the surrounding code and fix
+  any build errors the hooks surface before committing.
 - Do not edit files in `node_modules`. If a third-party MapLibre control needs
   app-specific styling, add a scoped override in
   `apps/geolibre-desktop/src/index.css` limited to that control's class.
@@ -163,14 +166,19 @@ GeoLibre itself to ship a plugin.
 ## Backend sidecar
 
 The optional [FastAPI sidecar](https://github.com/opengeos/GeoLibre/blob/main/backend/geolibre_server/README.md)
-powers the server-side conversion tools. To work on it:
+powers the server-side conversion tools. The `conversion` extra installs the
+conversion runtime (DuckDB, rio-cogeo, and friends) and the `dev` extra installs
+the test runner, so install both when working on it:
 
 ```bash
 cd backend/geolibre_server
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[conversion]"
+pip install -e ".[conversion,dev]"
 geolibre-server
 ```
+
+For a base, conversion-free run (`pip install -e .` plus a plain `uvicorn`
+launch), see the [sidecar README](https://github.com/opengeos/GeoLibre/blob/main/backend/geolibre_server/README.md).
 
 Run its tests with `npm run test:backend` from the repository root, or
 `python -m pytest` from the backend directory.
