@@ -134,6 +134,13 @@ async function render({ model, el }) {
     // not re-broadcast the value we just sent (traitlets.Dict change detection
     // is value-based), so the identity check is not defeated by the save round
     // trip.
+    //
+    // Invariant: this relies on anywidget/backbone returning from model.get()
+    // the same JS object reference passed to model.set() on this side (no
+    // serialization round-trip on the front end). If a future anywidget release
+    // ever deep-clones or JSON-normalizes the Dict trait on set, the reference
+    // check would always fail and every app snapshot would be echoed back —
+    // replace this with the primitive `_seq` counter comparison instead.
     if (model.get("project") === lastRemoteProject) return;
     lastRemoteProject = null;
     pushProject();

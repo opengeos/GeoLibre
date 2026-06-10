@@ -103,9 +103,9 @@ def build_empty_project(
     """
     map_view = default_map_view()
     if center is not None:
-        if len(center) < 2:
+        if len(center) != 2:
             raise ValueError(
-                "center must be a [lng, lat] sequence with 2 elements"
+                "center must be a [lng, lat] sequence with exactly 2 elements"
             )
         map_view["center"] = [float(center[0]), float(center[1])]
     if zoom is not None:
@@ -228,7 +228,9 @@ def cog_layer(
         A layer dict for the project's ``layers`` array.
     """
     layer = _layer_base(name, "cog", **style)
-    raster_state: dict[str, Any] = {"rescale": rescale}
+    raster_state: dict[str, Any] = {}
+    if rescale is not None:
+        raster_state["rescale"] = rescale
     if bands is not None:
         raster_state["bands"] = bands
         raster_state["mode"] = "rgb" if len(bands) >= 3 else "single"
@@ -305,6 +307,8 @@ def load_featurecollection(data: Any) -> dict[str, Any]:
 
     geom_type = data["type"]
     if geom_type == "FeatureCollection":
+        if not isinstance(data.get("features"), list):
+            raise ValueError("FeatureCollection must have a 'features' list")
         return data
     if geom_type == "Feature":
         return {"type": "FeatureCollection", "features": [data]}

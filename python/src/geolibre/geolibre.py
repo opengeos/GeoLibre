@@ -156,6 +156,12 @@ class Map(anywidget.AnyWidget):
 
         Returns:
             The id of the added layer.
+
+        Note:
+            File and URL sources are fetched and inlined into the project (up to
+            the 50 MB GeoJSON limit), so a large dataset is carried in memory and
+            re-synced over the widget bus on every subsequent project update. For
+            very large layers, prefer a tile/COG source the app fetches directly.
         """
         source_url = (
             data
@@ -277,6 +283,7 @@ class Map(anywidget.AnyWidget):
 
         self._update_project(mutate)
 
+    # leafmap compatibility alias for set_center
     set_center_zoom = set_center
 
     # -- project I/O -----------------------------------------------------

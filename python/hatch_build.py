@@ -50,6 +50,7 @@ class CustomBuildHook(BuildHookInterface):
             ["npm", "run", "build:embed"],
             cwd=REPO_ROOT,
             check=True,
+            timeout=600,  # 10 minutes; fail loudly rather than hang pip forever
         )
 
         if not (STATIC_APP / "index.html").is_file():

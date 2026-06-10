@@ -89,6 +89,12 @@ export function useEmbedBridge(
     // (only the version-only `ready` ping precedes any inbound message) we fall
     // back to "*".
     let hostOrigin: string | null = null;
+    // Whether the host has sent at least one message. Until it has, the bridge
+    // must not proactively broadcast project state: a third-party page that
+    // frames a `?embed=1` export but never speaks would otherwise receive every
+    // snapshot through the "*" fallback below. The version-only `ready` ping is
+    // the sole message sent before the handshake completes.
+    let hostHandshakeComplete = false;
     const targetOrigin = () => hostOrigin ?? "*";
 
     const buildProject = (): GeoLibreProject => {
@@ -114,6 +120,10 @@ export function useEmbedBridge(
 
     const postState = () => {
       if (disposed) return;
+      // Don't broadcast state before the host has identified itself (see
+      // hostHandshakeComplete); otherwise an uncooperative third-party frame
+      // that never speaks would keep receiving snapshots via the "*" fallback.
+      if (!hostHandshakeComplete) return;
       const content = serializeProject(buildProject());
       // Many store writes (selection, hover) do not change the serialized
       // project; skip posting an identical snapshot to keep the host quiet.
@@ -182,6 +192,8 @@ export function useEmbedBridge(
       // for the standalone `?embed=1` (`to_html()`) export, where the app may be
       // framed by a third-party page.
       if (event.source !== host) return;
+      // The host has spoken: proactive state pushes are safe from here on.
+      hostHandshakeComplete = true;
       // Learn the host's origin from its first message and scope outbound
       // messages to it from then on. "null" (opaque/file origins) stays "*".
       if (event.origin && event.origin !== "null") hostOrigin = event.origin;
@@ -210,5 +222,7 @@ export function useEmbedBridge(
       unsubscribe();
       if (debounceTimer !== null) window.clearTimeout(debounceTimer);
     };
-  }, [mapControllerRef]);
+    // Mount-only: mapControllerRef is a stable ref, so the bridge is set up
+    // once and reads the live controller through the ref inside buildProject.
+  }, []);
 }
