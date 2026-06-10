@@ -33,31 +33,31 @@ hide:
 <div class="feature-card" markdown>
 ### MapLibre map workspace
 
-Use OpenFreeMap basemaps, a blank background, smooth pan and zoom, and toggle built-in map controls for navigation, terrain, globe view, geolocation, scale, attribution, and logo display.
+Pan, zoom, rotate, and tilt a MapLibre map with OpenFreeMap basemaps or a blank background. Toggle built-in controls for navigation, globe, terrain, geolocation, scale, attribution, and logo, plus on-map tools like Measure, Bookmark, Minimap, and View State.
 </div>
 
 <div class="feature-card" markdown>
 ### Local and remote data
 
-Load local vector data supported by DuckDB-WASM Spatial, add web tile and service layers, inspect attributes, style layers, reorder visibility, and save or reopen `.geolibre.json` projects from the desktop app.
+Load local and remote vector and raster data, inspect attributes in the table, style layers with data-driven symbology, reorder and refresh layers, and save, reopen, or share `.geolibre.json` projects.
 </div>
 
 <div class="feature-card" markdown>
-### Plugin-ready UI
+### Plugins and marketplace
 
-Built-in plugins cover basemaps, sample data, layer control, MapLibre components, swipe, street view, time slider, Overture Maps, LiDAR, GeoAgent, and GeoEditor integrations.
+Activate built-in plugins for layer control, basemaps, MapLibre components, swipe, street view, time slider, Overture Maps, LiDAR, GeoAgent, and GeoEditor, and install, update, or remove external plugins from the built-in marketplace.
 </div>
 
 <div class="feature-card" markdown>
 ### Advanced layer formats
 
-Add Data supports XYZ, WMS, GeoJSON URLs, vector tiles, COG and GeoTIFF rasters, MBTiles, ArcGIS layers, FlatGeobuf, PMTiles, Zarr, LiDAR, and Gaussian splats.
+Add Data covers XYZ, WMS, WFS, WMTS, ArcGIS, and STAC services; GeoParquet, FlatGeobuf, PMTiles, and Zarr cloud formats; COG and GeoTIFF rasters and MBTiles; LiDAR, Gaussian splats, and 3D Tiles; and DuckDB and PostgreSQL databases.
 </div>
 
 <div class="feature-card" markdown>
-### Processing foundation
+### Conversion and Whitebox
 
-The processing toolbox includes client-side algorithms now, with a roadmap toward DuckDB Spatial and an optional Python sidecar for heavier geoprocessing.
+Convert data to cloud-native GeoParquet, FlatGeobuf, PMTiles, and COG from the Conversion menu, and run batch geoprocessing with the Whitebox toolbox on the optional Python sidecar.
 </div>
 
 <div class="feature-card" markdown>
