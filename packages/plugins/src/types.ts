@@ -55,8 +55,15 @@ export interface GeoLibreFileDialogOptions {
  * layers using the host's single deck.gl instance instead of bundling its own.
  */
 export interface GeoLibreDeckGL {
+  /** `@deck.gl/core` (Deck, the Layer base classes, view/state helpers). */
   core: typeof import("@deck.gl/core");
+  /** `@deck.gl/layers` (ArcLayer, ScatterplotLayer, GeoJsonLayer, ...). */
   layers: typeof import("@deck.gl/layers");
+  /** `@deck.gl/geo-layers` (TileLayer, H3HexagonLayer, S2Layer, ...). */
+  geoLayers: typeof import("@deck.gl/geo-layers");
+  /** `@deck.gl/mesh-layers` (SimpleMeshLayer, ScenegraphLayer). */
+  meshLayers: typeof import("@deck.gl/mesh-layers");
+  /** `@deck.gl/mapbox` - use `mapbox.MapboxOverlay` for interleaved MapLibre rendering. */
   mapbox: typeof import("@deck.gl/mapbox");
 }
 
@@ -139,7 +146,9 @@ export interface GeoLibreAppAPI {
    * deck.gl layers (e.g. an `ArcLayer`) on the host's single deck.gl instance.
    * Bundling a second copy is not viable: deck.gl and luma.gl throw on a
    * version mismatch and share global singletons, so a plugin's own copy fails
-   * to render. Present only on hosts that ship deck.gl.
+   * to render. Always present on the GeoLibre desktop and web hosts; typed
+   * optional for forward-compatibility with host variants that may not ship
+   * deck.gl, so plugins should still call it with optional chaining.
    */
   getDeckGL?: () => Promise<GeoLibreDeckGL>;
 }

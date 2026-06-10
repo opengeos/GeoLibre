@@ -23,6 +23,7 @@ import {
 } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
 import type {
+  GeoLibreDeckGL,
   GeoLibreExternalNativeLayerRegistration,
   GeoLibreFileDialogOptions,
   GeoLibreMapControlPosition,
@@ -399,13 +400,25 @@ export function createAppAPI(
       false,
     // Hand external plugins GeoLibre's own deck.gl modules so they render on the
     // host's single deck.gl instance (a bundled second copy throws on the
-    // deck.gl/luma.gl version guards and fails to render).
-    getDeckGL: () =>
-      Promise.all([
-        import("@deck.gl/core"),
-        import("@deck.gl/layers"),
-        import("@deck.gl/mapbox"),
-      ]).then(([core, layers, mapbox]) => ({ core, layers, mapbox })),
+    // deck.gl/luma.gl version guards and fails to render). Memoized so repeated
+    // calls reuse one resolved module set.
+    getDeckGL: (() => {
+      let cached: Promise<GeoLibreDeckGL> | undefined;
+      return () =>
+        (cached ??= Promise.all([
+          import("@deck.gl/core"),
+          import("@deck.gl/layers"),
+          import("@deck.gl/geo-layers"),
+          import("@deck.gl/mesh-layers"),
+          import("@deck.gl/mapbox"),
+        ]).then(([core, layers, geoLayers, meshLayers, mapbox]) => ({
+          core,
+          layers,
+          geoLayers,
+          meshLayers,
+          mapbox,
+        })));
+    })(),
   };
 }
 
