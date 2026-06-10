@@ -29,7 +29,7 @@ The **Processing** menu collects GeoLibre's analysis and conversion tools: vecto
 | **Clip** | Clip the input layer to the area covered by an overlay layer (keeps input attributes). |
 | **Intersection** | Keep only the areas where both polygon layers overlap (merges attributes from both). |
 | **Difference** | Remove the overlay layer's area from the input layer (keeps input attributes). |
-| **Union** | Merge two polygon layers into a single combined geometry (attributes are not preserved). |
+| **Union** | Merge two polygon layers into a single combined geometry (attributes are not preserved on either engine). |
 
 ### Engines
 
