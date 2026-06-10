@@ -32,6 +32,9 @@ Optional extras for `add_geojson()` from a GeoDataFrame:
 pip install "geolibre[all]"   # adds GeoPandas and Shapely
 ```
 
+The optional extras (`[all]`, `[hub]`) are pip-only. If you installed via conda,
+add them with `pip install "geolibre[all]"` inside the same environment.
+
 ## Quickstart
 
 ```python

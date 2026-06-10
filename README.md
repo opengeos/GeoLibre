@@ -249,7 +249,13 @@ ways through a single `.geolibre.json` project, so data you add from Python
 appears in the UI, and edits you make in the UI are readable back from Python.
 
 ```bash
-pip install geolibre          # or: conda install -c conda-forge geolibre
+pip install geolibre
+```
+
+Or with conda:
+
+```bash
+conda install -c conda-forge geolibre
 ```
 
 ```python
