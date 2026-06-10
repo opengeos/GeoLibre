@@ -105,6 +105,26 @@
   text-transform: uppercase;
 }
 
+/* Sidebar section headers (User Guide, Tutorials, Reference) */
+.md-nav--primary .md-nav__item--section > .md-nav__link {
+  border-top: 1px solid var(--md-default-fg-color--lightest);
+  color: var(--md-primary-fg-color);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin-top: 1rem;
+  opacity: 1;
+  padding-top: 0.75rem;
+  text-transform: uppercase;
+}
+
+[data-md-color-scheme="slate"]
+  .md-nav--primary
+  .md-nav__item--section
+  > .md-nav__link {
+  border-top-color: rgba(255, 255, 255, 0.12);
+}
+
 .feature-grid {
   display: grid;
   gap: 1rem;
