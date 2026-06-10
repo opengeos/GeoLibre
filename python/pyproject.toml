@@ -12,7 +12,7 @@ license = "MIT"
 authors = [{ name = "Qiusheng Wu", email = "giswqs@gmail.com" }]
 keywords = ["geolibre", "gis", "maplibre", "jupyter", "anywidget", "mapping"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Framework :: Jupyter",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",

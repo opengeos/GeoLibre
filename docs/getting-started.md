@@ -23,10 +23,10 @@ Bun users can run `bun install`. The root `trustedDependencies` list allows the 
 To update an existing source checkout to the latest version, pull the changes, reinstall dependencies (in case `package.json` changed), and rebuild:
 
 ```bash
-cd GeoLibre          # your GeoLibre folder
+cd /path/to/GeoLibre   # your GeoLibre checkout
 git pull origin main
-npm install          # or: bun install
-npm run build        # web build; use npm run tauri:build for the desktop app
+npm install            # or: bun install
+npm run build          # production web build only; use npm run tauri:build for the desktop app. Skip if you run npm run dev / npm run tauri:dev
 ```
 
 The `npm run build` (or `npm run tauri:build`) step is only needed for a production build. If you work from the dev servers (`npm run dev` or `npm run tauri:dev`), `git pull` followed by `npm install` is enough — restart the dev server to pick up the changes.
@@ -83,7 +83,7 @@ npm run tauri:build
 Where to find the output:
 
 - **Web build** — static files in `apps/geolibre-desktop/dist/`. Serve this directory with any static web server (or the Docker image above).
-- **Desktop installers** — `apps/geolibre-desktop/src-tauri/target/release/bundle/`, with per-platform subfolders: `deb/`, `rpm/`, and `appimage/` on Linux; `msi/` and `nsis/` on Windows; `dmg/` and `macos/` on macOS. The unbundled executable is in `apps/geolibre-desktop/src-tauri/target/release/`. On Linux, `npm run tauri:build` builds `deb` and `rpm` by default; pass targets explicitly to build others, for example `npm run tauri:build -- --bundles appimage`.
+- **Desktop installers** — `apps/geolibre-desktop/src-tauri/target/release/bundle/`, with per-platform subfolders: `deb/`, `rpm/`, and `appimage/` on Linux; `msi/` and `nsis/` on Windows; `dmg/` and `macos/` on macOS. The unbundled executable is in `apps/geolibre-desktop/src-tauri/target/release/`. On Linux, `npm run tauri:build` builds `deb` and `rpm` by default; passing `--bundles` replaces that default selection rather than adding to it, so list every format you want, for example `npm run tauri:build -- --bundles deb,rpm,appimage` for all three.
 
 ## Optional imagery credentials
 
