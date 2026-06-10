@@ -27,6 +27,11 @@ let pyodide = null;
 async function initialize(indexURL, vectorOpsSource) {
   self.postMessage({ type: "progress", phase: "Downloading Python runtime" });
   // The UMD build attaches loadPyodide to the worker global scope.
+  // Trust note: importScripts has no SRI, and Pyodide loads its own
+  // pyodide.asm.js/WASM from indexURL internally, so verifying this entry
+  // script alone would not secure the runtime. The default CDN therefore
+  // carries a trust assumption; self-host via VITE_PYODIDE_INDEX_URL to remove
+  // the external dependency (see docs/user-guide/processing.md).
   self.importScripts(`${indexURL}pyodide.js`);
   pyodide = await self.loadPyodide({ indexURL });
 

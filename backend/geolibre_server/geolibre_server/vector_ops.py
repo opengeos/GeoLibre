@@ -248,9 +248,11 @@ def run_vector_tool(
         VectorInputTooLarge: An input layer exceeds :data:`MAX_FEATURES`.
         ValueError: Unknown ``tool_id`` or invalid input/parameters.
     """
+    if not tool_id:
+        raise ValueError("tool_id is required")
     handler = _DISPATCH.get(tool_id)
     if handler is None:
-        raise ValueError(f"Unknown vector tool: {tool_id}")
+        raise ValueError(f"Unknown vector tool: {tool_id!r}")
 
     _check_size(geojson, "Input layer")
     _check_size(overlay, "Overlay layer")
