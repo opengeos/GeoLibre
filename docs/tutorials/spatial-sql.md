@@ -20,7 +20,7 @@ Click **Run** to see the ten countries with the highest estimated GDP.
 
 ## 2. Query a remote file directly
 
-You do not have to load a file first. The workspace auto-wraps a bare URL into the right reader and streams it over HTTP range requests:
+You do not have to load a file first. The Workspace detects a bare URL in a `FROM` clause and wraps it in the right reader automatically, then streams the file over HTTP range requests so you do not download it in full. This bare-URL shorthand is a SQL Workspace convenience; in the standard DuckDB CLI you would write `read_parquet('https://...')` explicitly.
 
 ```sql
 SELECT COUNT(*) AS n
@@ -32,6 +32,8 @@ FROM https://data.source.coop/giswqs/opengeos/countries.parquet;
 The spatial extension is loaded, so `ST_*` functions are available. For example, compute area and keep the `geom` column so the result can be mapped:
 
 ```sql
+-- area is in square degrees because the data is in EPSG:4326;
+-- the ranking is valid, but use ST_Area_Spheroid(geom) / 1e6 for km2.
 SELECT NAME, ST_Area(geom) AS area, geom
 FROM https://data.source.coop/giswqs/opengeos/countries.parquet
 WHERE CONTINENT = 'Africa'
