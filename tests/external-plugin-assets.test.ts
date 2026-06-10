@@ -66,4 +66,17 @@ describe("pluginAssetUrlFromSource", () => {
       null,
     );
   });
+
+  it("rejects percent-encoded path traversal (%2e%2e)", () => {
+    // The literal-segment checks pass "%2e%2e", but URL normalization decodes
+    // it to ".." and the resolved URL lands outside the plugin directory, so
+    // the directory-containment guard still rejects it.
+    assert.equal(
+      pluginAssetUrlFromSource(
+        "https://geolibre.app/plugins/x/plugin.json",
+        "%2e%2e/secrets",
+      ),
+      null,
+    );
+  });
 });

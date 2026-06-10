@@ -318,8 +318,7 @@ export function createAppAPI(
         }
       }),
     fetchArrayBuffer: fetchRemoteArrayBuffer,
-    resolvePluginAssetUrl: (pluginId: string, relativePath: string) =>
-      resolvePluginAssetUrlForLoadedPlugin(pluginId, relativePath),
+    resolvePluginAssetUrl: resolvePluginAssetUrlForLoadedPlugin,
     fitBounds: (bounds: [number, number, number, number]) =>
       mapControllerRef?.current?.fitBounds(bounds),
     getMap: () => mapControllerRef?.current?.getMap() ?? null,
