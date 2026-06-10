@@ -110,6 +110,16 @@ UI edits flow back the same way.
     such as JupyterHub or Google Colab, where the browser cannot reach the
     kernel's `localhost`, are not yet supported.
 
+!!! warning "URL fetching"
+
+    `add_geojson(url)` fetches the URL from the **kernel**, following redirects,
+    so a notebook can reach any host the kernel can (including private and
+    link-local addresses such as cloud metadata endpoints). This is intended for
+    single-user local notebooks, where you already control the kernel. Private
+    and localhost URLs are intentionally allowed so you can load from a local
+    tile server. Do not load untrusted `.geolibre.json` projects or URLs on a
+    shared/multi-tenant kernel.
+
 ## Building from source
 
 The package lives in [`python/`](https://github.com/opengeos/GeoLibre/tree/main/python).

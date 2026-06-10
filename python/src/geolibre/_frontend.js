@@ -35,7 +35,11 @@ function render({ model, el }) {
   el.appendChild(iframe);
 
   let ready = false;
-  let applyingRemoteState = false;
+  // The last project object received from the app. onProjectChange compares the
+  // current trait value against it by reference to decide whether a change came
+  // from the app (skip) or from Python (push). Reference identity avoids any
+  // dependency on whether anywidget fires change:project synchronously.
+  let lastRemoteProject = null;
 
   // Restrict delivery to the app's own origin (the localhost app server), so a
   // future misconfiguration of `_app_url` cannot leak the project to a third
@@ -66,15 +70,12 @@ function render({ model, el }) {
       ready = true;
       pushProject();
     } else if (data.type === "geolibre:state") {
-      // Set the flag before model.set() and clear it after: anywidget fires
-      // change:project synchronously inside set(), and the flag must be true
-      // during that callback or onProjectChange would echo the app's own state
-      // back into the iframe as a new load. If a future anywidget defers
-      // change events, this guard must be revisited.
-      applyingRemoteState = true;
+      // Record the project object that came from the app, then write it back to
+      // Python. onProjectChange skips pushing whatever value is still identical
+      // to this reference, so the app's own state is never echoed back.
+      lastRemoteProject = data.project;
       model.set("project", data.project);
       model.save_changes();
-      applyingRemoteState = false;
     } else if (data.type === "geolibre:error") {
       model.set("error", String(data.message || ""));
       model.save_changes();
@@ -84,7 +85,12 @@ function render({ model, el }) {
   window.addEventListener("message", onMessage);
 
   const onProjectChange = () => {
-    if (!applyingRemoteState) pushProject();
+    // A project that originated from the app is still the identical object on
+    // the trait; do not echo it back. A Python-initiated change deserializes
+    // into a fresh object, so identity differs and it is pushed.
+    if (model.get("project") === lastRemoteProject) return;
+    lastRemoteProject = null;
+    pushProject();
   };
   const onHeight = () => {
     iframe.style.height = model.get("height") || "800px";

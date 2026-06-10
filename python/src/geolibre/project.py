@@ -19,6 +19,10 @@ from .basemaps import DEFAULT_BASEMAP
 
 PROJECT_VERSION = "0.1.0"
 
+# Cap GeoJSON inputs (URL fetches and local files alike) so a huge source cannot
+# silently exhaust kernel memory when inlined into the project.
+_MAX_GEOJSON_BYTES = 50 * 1024 * 1024  # 50 MB
+
 # Mirror of DEFAULT_LAYER_STYLE in packages/core/src/types.ts. The app fills in
 # any missing fields on load, so layers only need to override what differs, but
 # carrying the full default keeps round-tripped projects stable.
@@ -272,17 +276,16 @@ def load_featurecollection(data: Any) -> dict[str, Any]:
             # Bound the request so a slow or oversized response cannot hang the
             # kernel or exhaust memory. read(limit + 1) detects an over-limit
             # body without buffering the whole thing.
-            limit = 50 * 1024 * 1024  # 50 MB
             try:
                 with urlopen(text, timeout=30) as response:  # noqa: S310 - user URL
-                    raw = response.read(limit + 1)
+                    raw = response.read(_MAX_GEOJSON_BYTES + 1)
             except (URLError, TimeoutError) as exc:
                 # Normalize transport failures to the documented ValueError
                 # contract (decode/JSON errors are already ValueError-derived).
                 raise ValueError(
                     f"Could not load GeoJSON from URL: {text}"
                 ) from exc
-            if len(raw) > limit:
+            if len(raw) > _MAX_GEOJSON_BYTES:
                 raise ValueError("GeoJSON response exceeds the 50 MB size limit")
             data = json.loads(raw.decode("utf-8"))
         elif text.startswith(("{", "[")):
@@ -291,6 +294,10 @@ def load_featurecollection(data: Any) -> dict[str, Any]:
             path = Path(text).expanduser()
             if not path.is_file():
                 raise ValueError(f"GeoJSON file not found: {text}")
+            if path.stat().st_size > _MAX_GEOJSON_BYTES:
+                raise ValueError(
+                    f"GeoJSON file exceeds the 50 MB size limit: {text}"
+                )
             data = json.loads(path.read_text(encoding="utf-8"))
 
     if not isinstance(data, dict) or "type" not in data:

@@ -147,12 +147,14 @@ export function useEmbedBridge(
         // Reset (not retain) when a load omits seq, so a later snapshot never
         // echoes a stale, unrelated sequence number.
         lastLoadedSeq = typeof message.seq === "number" ? message.seq : 0;
-        // Suppress the snapshot this load would otherwise echo: the host
-        // already has this project, and re-posting it is wasted traffic.
-        lastPostedContent = serializeProject(project);
         useAppStore
           .getState()
           .loadProject(project, null, { rememberRecent: false });
+        // Suppress the snapshot this load would otherwise echo. loadProject is
+        // synchronous, so cache the post-normalisation project (merged styles,
+        // computed defaults) rather than the raw input; otherwise the first
+        // snapshot would differ from this string and be re-posted to the host.
+        lastPostedContent = serializeProject(buildProject());
       } catch (error) {
         host.postMessage(
           {

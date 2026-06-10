@@ -252,6 +252,10 @@ class Map(anywidget.AnyWidget):
         Args:
             source: A project dict, a JSON string, or a path to a
                 ``.geolibre.json`` file.
+
+        Raises:
+            ValueError: If the project is not a dict or is missing required
+                top-level keys (``version``, ``name``, ``mapView``).
         """
         if isinstance(source, dict):
             project = copy.deepcopy(source)
@@ -263,6 +267,16 @@ class Map(anywidget.AnyWidget):
                 project = json.loads(
                     pathlib.Path(text).expanduser().read_text(encoding="utf-8")
                 )
+        # Validate the required keys up front (matching parseProject in
+        # @geolibre/core) so an invalid project raises here instead of failing
+        # silently in the app and only surfacing through the `error` trait.
+        if not isinstance(project, dict):
+            raise ValueError("Project must be a JSON object")
+        missing = {"version", "name", "mapView"} - project.keys()
+        if missing:
+            raise ValueError(
+                f"Invalid project: missing required keys {sorted(missing)}"
+            )
         self._seq += 1
         self.project = project
 
