@@ -28,8 +28,6 @@ interface PendingRun {
 
 interface WorkerHandle {
   worker: Worker;
-  /** Resolves when the runtime + GeoPandas have finished loading. */
-  ready: Promise<void>;
 }
 
 let handlePromise: Promise<WorkerHandle> | null = null;
@@ -142,7 +140,7 @@ function createHandle(): Promise<WorkerHandle> {
     vectorOpsSource,
   });
 
-  return ready.then(() => ({ worker, ready }));
+  return ready.then(() => ({ worker }));
 }
 
 function getHandle(): Promise<WorkerHandle> {

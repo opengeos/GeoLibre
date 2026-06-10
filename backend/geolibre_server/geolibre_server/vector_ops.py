@@ -269,6 +269,8 @@ def run_vector_tool_json(payload: str) -> str:
         JSON-encoded ``{"geojson": ..., "messages": [...]}`` result.
     """
     request = json.loads(payload)
+    if not isinstance(request, dict):
+        raise ValueError(f"Expected a JSON object, got {type(request).__name__}")
     geojson, messages = run_vector_tool(
         request.get("tool_id"),
         request.get("geojson"),

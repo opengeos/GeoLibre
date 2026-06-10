@@ -70,16 +70,20 @@ self.onmessage = async (event) => {
     try {
       if (!readyPromise) throw new Error("Pyodide worker not initialized");
       await readyPromise;
+      // A run that was awaiting readyPromise when init failed lands here with no
+      // runtime; surface a clean error rather than a null dereference below.
+      if (!pyodide) throw new Error("Python runtime is not available");
       // JSON-string boundary: avoids PyProxy lifetime management and matches the
       // sidecar's JSON contract exactly.
       const fn = pyodide.globals.get("run_vector_tool_json");
       // fn is a PyProxy and must be destroyed even if the call throws (e.g. a
-      // GeoPandas ValueError), or it leaks the underlying Python object.
+      // GeoPandas ValueError), or it leaks the underlying Python object. Use
+      // optional chaining so a missing global doesn't mask the original error.
       let out;
       try {
         out = fn(JSON.stringify(request));
       } finally {
-        fn.destroy();
+        fn?.destroy();
       }
       const parsed = JSON.parse(out);
       self.postMessage({
