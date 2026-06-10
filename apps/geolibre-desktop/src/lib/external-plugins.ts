@@ -5,6 +5,11 @@ import type {
   PluginManager,
 } from "@geolibre/plugins";
 import { invoke } from "@tauri-apps/api/core";
+import {
+  isManagedUrlSource,
+  pluginAssetUrlFromSource,
+  resolvePluginAssetUrl,
+} from "./plugin-asset-url";
 import { isTauri } from "./tauri-io";
 
 interface ExternalPluginBundle {
@@ -263,26 +268,6 @@ async function fetchPluginText(
   return new TextDecoder().decode(merged);
 }
 
-function resolvePluginAssetUrl(manifestUrl: string, path: string): string {
-  if (
-    path.startsWith("/") ||
-    path.includes("\\") ||
-    /^[a-z][a-z\d+.-]*:/i.test(path) ||
-    path.split("/").some((part) => !part || part === "." || part === "..")
-  ) {
-    throw new Error("Plugin manifest paths must be relative safe paths.");
-  }
-  // Percent-encoded dot segments ("%2e%2e") pass the textual check above but
-  // the URL parser still normalizes them, so confirm the resolved URL stays
-  // under the manifest directory.
-  const resolved = new URL(path, manifestUrl);
-  const manifestDirectory = new URL(".", manifestUrl);
-  if (!resolved.href.startsWith(manifestDirectory.href)) {
-    throw new Error("Plugin manifest paths must be relative safe paths.");
-  }
-  return resolved.toString();
-}
-
 // Matches the Rust validate_required_manifest_string: non-empty with no
 // leading or trailing whitespace.
 function isRequiredManifestString(value: unknown): value is string {
@@ -384,10 +369,24 @@ function removeExternalPluginStyle(pluginId: string): void {
     ?.remove();
 }
 
-// A loaded plugin came from a manifest URL (web/desktop) rather than the
-// desktop filesystem scan, whose source is an absolute path with no scheme.
-function isManagedUrlSource(source: string): boolean {
-  return /^(https?|tauri):\/\//.test(source);
+/**
+ * Resolve a fetchable URL for an asset shipped alongside a loaded plugin's
+ * manifest (e.g. sample data bundled in the plugin folder). The plugin's
+ * recorded source is its manifest URL, so `relativePath` resolves against the
+ * plugin's own directory. Returns null when the plugin is unknown, was loaded
+ * from the desktop filesystem (no URL base), or when `relativePath` would
+ * escape the plugin directory. This is exposed to plugins via the app API so a
+ * plugin can locate its own bundled assets without GeoLibre knowing anything
+ * about that specific plugin.
+ */
+export function resolvePluginAssetUrlForLoadedPlugin(
+  pluginId: string,
+  relativePath: string,
+): string | null {
+  return pluginAssetUrlFromSource(
+    externallyLoadedPluginSources.get(pluginId),
+    relativePath,
+  );
 }
 
 /**

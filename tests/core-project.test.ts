@@ -174,7 +174,7 @@ describe("project parsing", () => {
           source: { type: "geojson" },
           metadata: {
             externalNativeLayer: true,
-            sourceKind: "annotate-geocodes",
+            sourceKind: "plugin-control",
           },
           geojson: {
             type: "FeatureCollection",

@@ -213,8 +213,9 @@ export class PluginManager {
 
         // A deep link to a parameter a plugin owns implies the user wants that
         // plugin: activate it if it is installed (registered) but inactive, so
-        // e.g. ?annotate-data=... brings up its plugin. Only already-registered
-        // (trusted) plugins are activated here; nothing is loaded from the URL.
+        // a parameter a plugin declares brings up that plugin. Only
+        // already-registered (trusted) plugins are activated here; nothing is
+        // loaded from the URL.
         // If activation is refused or throws, skip dispatch and isolate the
         // failure to this plugin instead of aborting the whole loop.
         if (!this.active.has(id)) {

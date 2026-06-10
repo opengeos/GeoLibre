@@ -36,6 +36,7 @@ import { bundledPluginManifestPaths } from "virtual:bundled-plugins";
 import {
   loadExternalPlugins,
   reloadExternalUrlPlugin,
+  resolvePluginAssetUrlForLoadedPlugin,
   unloadRemovedUrlPlugins,
 } from "../lib/external-plugins";
 import { mergeStringLists } from "../lib/string-lists";
@@ -317,6 +318,8 @@ export function createAppAPI(
         }
       }),
     fetchArrayBuffer: fetchRemoteArrayBuffer,
+    resolvePluginAssetUrl: (pluginId: string, relativePath: string) =>
+      resolvePluginAssetUrlForLoadedPlugin(pluginId, relativePath),
     fitBounds: (bounds: [number, number, number, number]) =>
       mapControllerRef?.current?.fitBounds(bounds),
     getMap: () => mapControllerRef?.current?.getMap() ?? null,
