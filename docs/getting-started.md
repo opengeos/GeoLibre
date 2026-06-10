@@ -11,6 +11,10 @@
 
 GeoLibre is a lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data across desktop and web environments, with a responsive layout for mobile screens. It is an npm workspaces monorepo: the main app lives in `apps/geolibre-desktop` and is built with Tauri, React, TypeScript, and MapLibre GL JS. The same workspace runs as a native desktop app and as a browser-based web app, and adapts responsively to mobile and small screens.
 
+## Video tutorial
+
+Watch the introduction: [GeoLibre 1.0: A Free, Open-Source Cloud-Native GIS That Runs Anywhere (Browser, Desktop & Jupyter)](https://youtu.be/87Cm0QagtxI)
+
 ## Prerequisites
 
 - Node.js 22 or newer

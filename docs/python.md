@@ -1,5 +1,10 @@
 # Python package (Jupyter)
 
+[![image](https://img.shields.io/pypi/v/geolibre.svg)](https://pypi.python.org/pypi/geolibre)
+[![image](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/opengeos/GeoLibre/blob/main/python/examples/getting-started.ipynb)
+[![image](https://img.shields.io/conda/vn/conda-forge/geolibre.svg)](https://anaconda.org/conda-forge/geolibre)
+[![Conda Recipe](https://img.shields.io/badge/recipe-geolibre-green.svg)](https://github.com/conda-forge/geolibre-feedstock)
+
 GeoLibre ships a Python package, **`geolibre`**, that embeds the full GeoLibre
 app inside a Jupyter notebook cell as an [anywidget](https://anywidget.dev),
 with a [leafmap](https://leafmap.org)-style API.
@@ -13,6 +18,12 @@ data you add from Python appears in the UI, and edits you make in the UI
 
 ```bash
 pip install geolibre
+```
+
+Or with conda from [conda-forge](https://anaconda.org/conda-forge/geolibre):
+
+```bash
+conda install -c conda-forge geolibre
 ```
 
 Optional extras for `add_geojson()` from a GeoDataFrame:

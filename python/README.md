@@ -1,5 +1,10 @@
 # geolibre
 
+[![image](https://img.shields.io/pypi/v/geolibre.svg)](https://pypi.python.org/pypi/geolibre)
+[![image](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/opengeos/GeoLibre/blob/main/python/examples/getting-started.ipynb)
+[![image](https://img.shields.io/conda/vn/conda-forge/geolibre.svg)](https://anaconda.org/conda-forge/geolibre)
+[![Conda Recipe](https://img.shields.io/badge/recipe-geolibre-green.svg)](https://github.com/conda-forge/geolibre-feedstock)
+
 GeoLibre in Jupyter: the full [GeoLibre](https://geolibre.app) GIS app as an
 [anywidget](https://anywidget.dev), with a leafmap-style Python API.
 
@@ -12,6 +17,12 @@ edits you make in the UI are readable back from Python.
 
 ```bash
 pip install geolibre
+```
+
+Or with conda from [conda-forge](https://anaconda.org/conda-forge/geolibre):
+
+```bash
+conda install -c conda-forge geolibre
 ```
 
 ## Quickstart
