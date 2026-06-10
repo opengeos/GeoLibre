@@ -106,9 +106,11 @@ UI edits flow back the same way.
 
 !!! note "Environment support"
 
-    The interactive widget works in **local Jupyter and VS Code**. Remote setups
-    such as JupyterHub or Google Colab, where the browser cannot reach the
-    kernel's `localhost`, are not yet supported.
+    The interactive widget works in **local Jupyter, VS Code, and Google Colab**.
+    On Colab it routes the app through Colab's built-in port proxy
+    (`google.colab.kernel.proxyPort`) automatically. Other remote setups (e.g.
+    JupyterHub or Binder) where the browser cannot reach the kernel's `localhost`
+    and no port proxy is wired up are not yet supported.
 
 !!! warning "URL fetching"
 

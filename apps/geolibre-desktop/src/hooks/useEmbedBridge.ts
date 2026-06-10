@@ -107,21 +107,23 @@ export function useEmbedBridge(
 
     const postState = () => {
       if (disposed) return;
-      const project = buildProject();
-      const content = serializeProject(project);
+      const content = serializeProject(buildProject());
       // Many store writes (selection, hover) do not change the serialized
       // project; skip posting an identical snapshot to keep the host quiet.
       if (content === lastPostedContent) return;
       lastPostedContent = content;
       try {
-        // Posted to the parent window object directly. "*" is used as the target
-        // origin because the framed app does not know the embedding host's
-        // origin; the message still only reaches that one parent window.
+        // Post the JSON-parsed snapshot (not the raw store object) so the wire
+        // payload exactly matches the serialized `.geolibre.json` form and is
+        // guaranteed structured-clone-safe even if a layer's free-form metadata
+        // ever holds a non-clone value. Posted to the parent window object
+        // directly; "*" is used because the framed app does not know the host's
+        // origin, and the message still only reaches that one parent window.
         host.postMessage(
           {
             type: "geolibre:state",
             seq: lastLoadedSeq,
-            project,
+            project: JSON.parse(content) as GeoLibreProject,
           },
           "*",
         );
@@ -161,7 +163,7 @@ export function useEmbedBridge(
             type: "geolibre:error",
             message: error instanceof Error ? error.message : String(error),
           },
-          "*",
+          "*", // host origin unknown; error text only, no project data
         );
       }
     };

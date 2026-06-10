@@ -22,6 +22,7 @@ from pathlib import Path
 _lock = threading.Lock()
 _server: ThreadingHTTPServer | None = None
 _base_url: str | None = None
+_port: int | None = None
 
 
 class _QuietHandler(SimpleHTTPRequestHandler):
@@ -55,6 +56,8 @@ def serve_app(static_dir: Path) -> str:
 
     Args:
         static_dir: Directory containing the built app (``index.html`` etc.).
+            On the second and subsequent calls this argument is ignored; the
+            singleton server started by the first call is reused.
 
     Returns:
         The base URL of the running server, ending with ``/``.
@@ -62,7 +65,7 @@ def serve_app(static_dir: Path) -> str:
     Raises:
         FileNotFoundError: If the bundled app is not present.
     """
-    global _server, _base_url
+    global _server, _base_url, _port
 
     if not (static_dir / "index.html").is_file():
         raise FileNotFoundError(
@@ -72,7 +75,9 @@ def serve_app(static_dir: Path) -> str:
         )
 
     with _lock:
-        if _server is None or _base_url is None:
+        # _base_url, _server, and _port are always set together, so one check
+        # covers all three.
+        if _base_url is None:
             handler = partial(_QuietHandler, directory=str(static_dir))
             server = _QuietServer(("127.0.0.1", 0), handler)
             thread = threading.Thread(
@@ -84,4 +89,15 @@ def serve_app(static_dir: Path) -> str:
             host, port = server.server_address[:2]
             _server = server
             _base_url = f"http://{host}:{port}/"
+            _port = port
         return _base_url
+
+
+def app_port() -> int | None:
+    """Return the port the static app server is listening on, if started.
+
+    The port lets the front-end route through a host proxy (for example
+    ``google.colab.kernel.proxyPort``) when the browser cannot reach the
+    kernel's ``localhost`` directly.
+    """
+    return _port

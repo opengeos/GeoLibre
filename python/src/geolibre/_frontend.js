@@ -5,10 +5,33 @@
 // `.geolibre.json` project object.
 //
 // Loop prevention: a project the app reports back (geolibre:state) is written
-// into the `project` trait but NOT pushed back into the iframe, guarded by
-// `applyingRemoteState`. Only Python-initiated project changes are pushed.
+// into the `project` trait but NOT pushed back into the iframe. onProjectChange
+// compares the current value against the last object received from the app
+// (`lastRemoteProject`) and only pushes Python-initiated changes.
 
-function render({ model, el }) {
+// Resolve the base URL of the app server. The kernel serves it on localhost,
+// which the browser reaches directly in local Jupyter / VS Code. On hosts where
+// the browser cannot reach the kernel's localhost (e.g. Google Colab), route
+// through the host's port proxy instead.
+async function resolveBase(model) {
+  const port = model.get("_app_port");
+  const colab =
+    typeof window !== "undefined" &&
+    window.google &&
+    window.google.colab &&
+    window.google.colab.kernel;
+  if (port && colab && typeof colab.proxyPort === "function") {
+    try {
+      const url = await colab.proxyPort(port, { cache: true });
+      if (url) return url.endsWith("/") ? url : `${url}/`;
+    } catch (error) {
+      console.warn("[GeoLibre] Colab proxyPort failed; using direct URL", error);
+    }
+  }
+  return model.get("_app_url");
+}
+
+async function render({ model, el }) {
   const iframe = document.createElement("iframe");
   iframe.style.width = "100%";
   iframe.style.height = model.get("height") || "800px";
@@ -17,7 +40,7 @@ function render({ model, el }) {
   iframe.allow = "fullscreen; clipboard-read; clipboard-write; geolocation";
   iframe.allowFullscreen = true;
 
-  const base = model.get("_app_url");
+  const base = await resolveBase(model);
   if (!base) {
     el.textContent =
       "GeoLibre: the local app server is not running. Re-create the Map().";
@@ -41,9 +64,9 @@ function render({ model, el }) {
   // dependency on whether anywidget fires change:project synchronously.
   let lastRemoteProject = null;
 
-  // Restrict delivery to the app's own origin (the localhost app server), so a
-  // future misconfiguration of `_app_url` cannot leak the project to a third
-  // party.
+  // Restrict delivery to the app server's own origin (localhost, or the host
+  // proxy origin on Colab), so a future misconfiguration cannot leak the project
+  // to a third party.
   const iframeOrigin = new URL(base).origin;
   const post = (message) => {
     const win = iframe.contentWindow;

@@ -11,7 +11,7 @@ import anywidget
 import traitlets
 
 from . import project as _project
-from ._server import serve_app
+from ._server import app_port, serve_app
 from .basemaps import resolve_basemap
 
 _HERE = pathlib.Path(__file__).parent
@@ -40,6 +40,10 @@ class Map(anywidget.AnyWidget):
     project = traitlets.Dict().tag(sync=True)
     # Base URL of the localhost server hosting the bundled app.
     _app_url = traitlets.Unicode("").tag(sync=True)
+    # Port of that server, so the front-end can route through a host proxy (e.g.
+    # google.colab.kernel.proxyPort) when localhost is not reachable from the
+    # browser, as on Google Colab.
+    _app_port = traitlets.Int(0).tag(sync=True)
     height = traitlets.Unicode("800px").tag(sync=True)
     # "embed" (compact chrome), "full" (desktop chrome), or "maponly".
     layout = traitlets.Unicode("embed").tag(sync=True)
@@ -77,6 +81,7 @@ class Map(anywidget.AnyWidget):
         self.layout = layout
         self.theme = theme
         self._app_url = serve_app(_STATIC_APP)
+        self._app_port = app_port() or 0
         self.project = _project.build_empty_project(
             center=center,
             zoom=zoom,
@@ -200,6 +205,7 @@ class Map(anywidget.AnyWidget):
         Args:
             layer_id: The id returned when the layer was added.
         """
+
         def _drop(p: dict[str, Any]) -> None:
             p["layers"] = [
                 layer for layer in p["layers"] if layer.get("id") != layer_id
@@ -284,8 +290,9 @@ class Map(anywidget.AnyWidget):
         """Write the current project to a ``.geolibre.json`` file.
 
         Args:
-            path: Destination file path.
+            path: Destination file path. Parent directories are created if
+                they do not already exist.
         """
-        pathlib.Path(path).expanduser().write_text(
-            json.dumps(self.project, indent=2), encoding="utf-8"
-        )
+        out = pathlib.Path(path).expanduser()
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(self.project, indent=2), encoding="utf-8")

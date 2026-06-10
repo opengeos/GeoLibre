@@ -103,6 +103,10 @@ def build_empty_project(
     """
     map_view = default_map_view()
     if center is not None:
+        if len(center) < 2:
+            raise ValueError(
+                "center must be a [lng, lat] sequence with 2 elements"
+            )
         map_view["center"] = [float(center[0]), float(center[1])]
     if zoom is not None:
         map_view["zoom"] = float(zoom)
@@ -282,9 +286,7 @@ def load_featurecollection(data: Any) -> dict[str, Any]:
             except (URLError, TimeoutError) as exc:
                 # Normalize transport failures to the documented ValueError
                 # contract (decode/JSON errors are already ValueError-derived).
-                raise ValueError(
-                    f"Could not load GeoJSON from URL: {text}"
-                ) from exc
+                raise ValueError(f"Could not load GeoJSON from URL: {text}") from exc
             if len(raw) > _MAX_GEOJSON_BYTES:
                 raise ValueError("GeoJSON response exceeds the 50 MB size limit")
             data = json.loads(raw.decode("utf-8"))
@@ -295,9 +297,7 @@ def load_featurecollection(data: Any) -> dict[str, Any]:
             if not path.is_file():
                 raise ValueError(f"GeoJSON file not found: {text}")
             if path.stat().st_size > _MAX_GEOJSON_BYTES:
-                raise ValueError(
-                    f"GeoJSON file exceeds the 50 MB size limit: {text}"
-                )
+                raise ValueError(f"GeoJSON file exceeds the 50 MB size limit: {text}")
             data = json.loads(path.read_text(encoding="utf-8"))
 
     if not isinstance(data, dict) or "type" not in data:
