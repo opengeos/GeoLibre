@@ -72,7 +72,7 @@ Map(
     center=(-100, 40),   # [lng, lat]
     zoom=4,
     basemap="dark",      # a basemap name or a MapLibre style URL
-    height="600px",
+    height="800px",
     layout="embed",      # "embed" (compact UI), "full" (desktop UI), or "maponly"
     theme="light",       # "light" or "dark"
 )

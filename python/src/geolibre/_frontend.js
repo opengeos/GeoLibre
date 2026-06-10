@@ -11,7 +11,7 @@
 function render({ model, el }) {
   const iframe = document.createElement("iframe");
   iframe.style.width = "100%";
-  iframe.style.height = model.get("height") || "600px";
+  iframe.style.height = model.get("height") || "800px";
   iframe.style.border = "0";
   iframe.style.display = "block";
   iframe.allow = "fullscreen; clipboard-read; clipboard-write; geolocation";
@@ -37,9 +37,13 @@ function render({ model, el }) {
   let ready = false;
   let applyingRemoteState = false;
 
+  // Restrict delivery to the app's own origin (the localhost app server), so a
+  // future misconfiguration of `_app_url` cannot leak the project to a third
+  // party.
+  const iframeOrigin = new URL(base).origin;
   const post = (message) => {
     const win = iframe.contentWindow;
-    if (win) win.postMessage(message, "*");
+    if (win) win.postMessage(message, iframeOrigin);
   };
 
   const pushProject = () => {
@@ -59,6 +63,11 @@ function render({ model, el }) {
       ready = true;
       pushProject();
     } else if (data.type === "geolibre:state") {
+      // Set the flag before model.set() and clear it after: anywidget fires
+      // change:project synchronously inside set(), and the flag must be true
+      // during that callback or onProjectChange would echo the app's own state
+      // back into the iframe as a new load. If a future anywidget defers
+      // change events, this guard must be revisited.
       applyingRemoteState = true;
       model.set("project", data.project);
       model.save_changes();
@@ -75,7 +84,7 @@ function render({ model, el }) {
     if (!applyingRemoteState) pushProject();
   };
   const onHeight = () => {
-    iframe.style.height = model.get("height") || "600px";
+    iframe.style.height = model.get("height") || "800px";
   };
   model.on("change:project", onProjectChange);
   model.on("change:height", onHeight);

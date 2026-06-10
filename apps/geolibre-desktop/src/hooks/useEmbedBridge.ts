@@ -71,9 +71,11 @@ export function useEmbedBridge(
 ): void {
   useEffect(() => {
     if (!isEmbedded()) return;
-    // `window.parent` is the host even when the app is the top-level document
-    // (the `?embed=1` self-test case falls back to posting to itself).
-    const host = window.parent ?? window;
+    // The host is the embedding parent (the Jupyter/embed widget). In a browser
+    // `window.parent` is always defined; when the app is the top-level document
+    // (the `?embed=1` self-test) it is `window` itself, so the bridge naturally
+    // posts to and receives from itself.
+    const host = window.parent;
 
     let disposed = false;
     let debounceTimer: number | null = null;
@@ -105,17 +107,21 @@ export function useEmbedBridge(
 
     const postState = () => {
       if (disposed) return;
-      const content = serializeProject(buildProject());
+      const project = buildProject();
+      const content = serializeProject(project);
       // Many store writes (selection, hover) do not change the serialized
       // project; skip posting an identical snapshot to keep the host quiet.
       if (content === lastPostedContent) return;
       lastPostedContent = content;
       try {
+        // Posted to the parent window object directly. "*" is used as the target
+        // origin because the framed app does not know the embedding host's
+        // origin; the message still only reaches that one parent window.
         host.postMessage(
           {
             type: "geolibre:state",
             seq: lastLoadedSeq,
-            project: JSON.parse(content) as GeoLibreProject,
+            project,
           },
           "*",
         );
@@ -157,6 +163,11 @@ export function useEmbedBridge(
     };
 
     const handleMessage = (event: MessageEvent) => {
+      // Only accept messages from the embedding host (the parent window), so an
+      // arbitrary same-page script cannot inject a project. This matters most
+      // for the standalone `?embed=1` (`to_html()`) export, where the app may be
+      // framed by a third-party page.
+      if (event.source !== host) return;
       const data = event.data as Partial<InboundMessage> | null;
       if (!data || typeof data !== "object") return;
       if (data.type === "geolibre:load-project") {

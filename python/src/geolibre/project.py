@@ -268,8 +268,15 @@ def load_featurecollection(data: Any) -> dict[str, Any]:
     if isinstance(data, str):
         text = data.strip()
         if text.startswith(("http://", "https://")):
-            with urlopen(text) as response:  # noqa: S310 - user-provided URL
-                data = json.loads(response.read().decode("utf-8"))
+            # Bound the request so a slow or oversized response cannot hang the
+            # kernel or exhaust memory. read(limit + 1) detects an over-limit
+            # body without buffering the whole thing.
+            limit = 50 * 1024 * 1024  # 50 MB
+            with urlopen(text, timeout=30) as response:  # noqa: S310 - user URL
+                raw = response.read(limit + 1)
+            if len(raw) > limit:
+                raise ValueError("GeoJSON response exceeds the 50 MB size limit")
+            data = json.loads(raw.decode("utf-8"))
         elif text.startswith(("{", "[")):
             data = json.loads(text)
         else:

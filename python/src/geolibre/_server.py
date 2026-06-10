@@ -13,6 +13,7 @@ setups (JupyterHub, Colab) would need a proxy; that is a known limitation.
 
 from __future__ import annotations
 
+import sys
 import threading
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -40,8 +41,13 @@ class _QuietServer(ThreadingHTTPServer):
     daemon_threads = True
 
     def handle_error(self, request: object, client_address: object) -> None:
-        # Connection resets / broken pipes are expected and not actionable.
-        pass
+        # Silently discard connection resets and broken pipes; these are
+        # expected when browsers abort in-flight asset requests. Any other
+        # exception is a genuine handler bug, so surface it as usual.
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (ConnectionResetError, BrokenPipeError)):
+            return
+        super().handle_error(request, client_address)
 
 
 def serve_app(static_dir: Path) -> str:

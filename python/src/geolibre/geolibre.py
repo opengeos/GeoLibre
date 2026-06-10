@@ -40,7 +40,7 @@ class Map(anywidget.AnyWidget):
     project = traitlets.Dict().tag(sync=True)
     # Base URL of the localhost server hosting the bundled app.
     _app_url = traitlets.Unicode("").tag(sync=True)
-    height = traitlets.Unicode("600px").tag(sync=True)
+    height = traitlets.Unicode("800px").tag(sync=True)
     # "embed" (compact chrome), "full" (desktop chrome), or "maponly".
     layout = traitlets.Unicode("embed").tag(sync=True)
     theme = traitlets.Unicode("light").tag(sync=True)
@@ -55,7 +55,7 @@ class Map(anywidget.AnyWidget):
         zoom: float | None = None,
         *,
         basemap: str | None = None,
-        height: str = "600px",
+        height: str = "800px",
         layout: str = "embed",
         theme: str = "light",
         **kwargs: Any,
@@ -66,7 +66,7 @@ class Map(anywidget.AnyWidget):
             center: Initial ``[lng, lat]`` map center.
             zoom: Initial zoom level.
             basemap: A basemap name or MapLibre style URL for the background.
-            height: CSS height of the widget (e.g. ``"600px"``).
+            height: CSS height of the widget (e.g. ``"800px"``).
             layout: ``"embed"`` (compact UI), ``"full"`` (full desktop UI), or
                 ``"maponly"`` (map without chrome).
             theme: ``"light"`` or ``"dark"``.
@@ -200,11 +200,12 @@ class Map(anywidget.AnyWidget):
         Args:
             layer_id: The id returned when the layer was added.
         """
-        self._update_project(
-            lambda p: p.__setitem__(
-                "layers", [l for l in p["layers"] if l.get("id") != layer_id]
-            )
-        )
+        def _drop(p: dict[str, Any]) -> None:
+            p["layers"] = [
+                layer for layer in p["layers"] if layer.get("id") != layer_id
+            ]
+
+        self._update_project(_drop)
 
     def clear_layers(self) -> None:
         """Remove all layers from the map."""
