@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "geolibre"
+dynamic = ["version"]
+description = "GeoLibre in Jupyter: the full GeoLibre GIS app as an anywidget, with a leafmap-style Python API."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "Qiusheng Wu", email = "giswqs@gmail.com" }]
+keywords = ["geolibre", "gis", "maplibre", "jupyter", "anywidget", "mapping"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: Jupyter",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: GIS",
+]
+dependencies = ["anywidget>=0.9", "traitlets>=5"]
+
+[project.optional-dependencies]
+all = ["geopandas", "shapely"]
+dev = ["pytest", "build", "anywidget[dev]"]
+
+[project.urls]
+Homepage = "https://geolibre.app"
+Repository = "https://github.com/opengeos/GeoLibre"
+
+[tool.hatch.version]
+path = "src/geolibre/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/geolibre"]
+# The bundled app under static/ is produced by the build hook and git-ignored,
+# so it must be re-included explicitly here (VCS file discovery skips it).
+artifacts = ["src/geolibre/static/**"]
+
+[tool.hatch.build.targets.sdist]
+artifacts = ["src/geolibre/static/**"]
+
+[tool.hatch.build.targets.wheel.hooks.custom]
+path = "hatch_build.py"
+
+[tool.hatch.build.targets.sdist.hooks.custom]
+path = "hatch_build.py"

@@ -64,6 +64,7 @@ nav:
       - Architecture: architecture.md
       - Project Format: project-format.md
       - Plugin API: plugin-api.md
+      - Python Package: python.md
       - Roadmap: roadmap.md
       - Contributing: contributing.md
 

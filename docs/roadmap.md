@@ -121,6 +121,7 @@
 - [x] Plugin marketplace MVP: curated registry plus browse and install UI
 - [x] Plugin update (in-place re-fetch) and uninstall with confirmation
 - [x] Project menu Share action that uploads to share.geolibre.app using a personal API token
+- [x] Python package (`geolibre`) for Jupyter notebooks: embeds the full app as an [anywidget](https://anywidget.dev) with a leafmap-style API (`add_geojson`, `add_tile_layer`, `add_cog`) and two-way `.geolibre.json` project sync
 - [x] Performance tuning and test suite
 - [x] Cross-platform installers
 - [x] Documentation and tutorials

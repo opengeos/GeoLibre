@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-embed/
 site/
 target/
 .tauri/
@@ -23,3 +24,4 @@ uv.lock
 # Documentation screenshots are hosted on Cloudflare R2 (data.geolibre.app/images),
 # not committed to the repo, to save space.
 docs/assets/screenshots/
+python/examples/my-map.geolibre.json

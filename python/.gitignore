@@ -1,0 +1,13 @@
+# Bundled web app, produced by `npm run build:embed` at build time.
+src/geolibre/static/
+
+# Python build artifacts
+dist/
+build/
+*.egg-info/
+__pycache__/
+.pytest_cache/
+
+# Jupyter and example run artifacts
+.ipynb_checkpoints/
+examples/*.geolibre.json

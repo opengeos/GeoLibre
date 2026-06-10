@@ -40,6 +40,7 @@ import {
 } from "../../hooks/usePlugins";
 import { registerMbtilesProtocol } from "../../lib/mbtiles";
 import { registerXyzTileProtocol } from "../../lib/xyz-url";
+import { useEmbedBridge } from "../../hooks/useEmbedBridge";
 import {
   appendDiagnostic,
   useDiagnosticsSnapshot,
@@ -188,6 +189,9 @@ export function DesktopShell({
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const diagnostics = useDiagnosticsSnapshot();
   const externalPluginsReady = useExternalPluginsReady(mapControllerRef);
+  // Sync the project with an embedding host (the GeoLibre Jupyter widget) over
+  // postMessage. Inert when the app is not embedded.
+  useEmbedBridge(mapControllerRef);
   const [layerPanelWidth, setLayerPanelWidth] = useState(
     DEFAULT_SIDE_PANEL_WIDTH,
   );

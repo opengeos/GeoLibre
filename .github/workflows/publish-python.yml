@@ -1,0 +1,94 @@
+name: Publish Python package
+
+on:
+  release:
+    types: [published]
+  pull_request:
+    branches: [main]
+    paths:
+      - "python/**"
+      - "apps/geolibre-desktop/src/**"
+      - "packages/**"
+      - "scripts/build-embed.mjs"
+      - ".github/workflows/publish-python.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-python-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test Python package
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      # Tests cover the pure-Python builders and do not need the bundled web
+      # app, so install only the runtime/test deps and run against the sources.
+      - name: Install test dependencies
+        run: python -m pip install anywidget traitlets pytest
+
+      - name: Run tests
+        run: python -m pytest python/tests
+        env:
+          PYTHONPATH: python/src
+
+  publish:
+    name: Build wheel and publish
+    runs-on: ubuntu-22.04
+    needs: test
+    if: github.event_name == 'release'
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write # PyPI Trusted Publishing (OIDC)
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install build backend
+        run: python -m pip install build
+
+      - name: Build wheel and sdist
+        working-directory: python
+        run: python -m build
+        env:
+          # Force a fresh embed build so the published wheel always carries the
+          # current app bundle.
+          GEOLIBRE_FORCE_JS_BUILD: "1"
+          NODE_OPTIONS: --max-old-space-size=4096
+          VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python/dist

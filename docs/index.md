@@ -78,6 +78,12 @@ Common geometry tools under Processing → Vector: buffer, centroids, convex hul
 Common raster tools under Processing → Raster: hillshade, slope, aspect, reproject, resample, clip by extent, clip by mask layer, polygonize, and contour. They run on a rasterio Python sidecar with a file path in and a file path out. Drag a GeoTIFF/COG onto the map to add it as a raster layer.
 </div>
 
+<div class="feature-card" markdown>
+### Python and Jupyter
+
+Embed the full GeoLibre app in a Jupyter notebook with the [`geolibre`](python.md) Python package. A leafmap-style API (`add_geojson`, `add_tile_layer`, `add_cog`) drives the map, and the project syncs both ways so UI edits are readable back from Python.
+</div>
+
 </div>
 
 ## Learn GeoLibre

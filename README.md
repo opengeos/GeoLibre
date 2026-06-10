@@ -33,6 +33,7 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 - External plugin zip loading from the app data plugins directory and local development plugin directories
 - Bundled drop-in plugins under `public/plugins/<id>/` that bake into both the web and desktop builds and load automatically with no manifest URL
 - Browser deployment with Docker, embed-friendly URL parameters, and a `maponly` chrome-free mode
+- Python package (`geolibre`) that embeds the full app in Jupyter notebooks as an [anywidget](https://anywidget.dev), with a leafmap-style API and two-way project sync
 - Optional Python FastAPI sidecar for heavier processing workflows
 
 ## Prerequisites
@@ -213,6 +214,42 @@ For a fully chrome-free, map-only embed, use `maponly`. It hides the toolbar men
 https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&maponly
 ```
 
+## Python package (Jupyter)
+
+GeoLibre ships a Python package that embeds the **full** GeoLibre app (menus,
+panels, processing tools) in a Jupyter notebook cell as an
+[anywidget](https://anywidget.dev), with a leafmap-style API. State syncs both
+ways through a single `.geolibre.json` project, so data you add from Python
+appears in the UI, and edits you make in the UI are readable back from Python.
+
+```bash
+pip install geolibre
+```
+
+```python
+from geolibre import Map
+
+m = Map(center=(-100, 40), zoom=4)
+m.add_geojson("https://example.com/data.geojson", name="Data")
+m.add_tile_layer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", name="OpenStreetMap")
+m.add_cog("https://example.com/dem.tif", name="DEM")
+m  # the full GeoLibre UI renders in the cell
+```
+
+Read state edited in the UI, and round-trip projects:
+
+```python
+m.to_project()["mapView"]["center"]   # reflects the live UI view after panning
+m.save_project("my-map.geolibre.json")
+Map().load_project("my-map.geolibre.json")
+```
+
+The package source lives in [`python/`](python/), and the bundled web app is
+built into the wheel by `npm run build:embed`. The interactive widget works in
+local Jupyter and VS Code; remote setups (JupyterHub, Colab) where the browser
+cannot reach the kernel's `localhost` are not yet supported. See the
+[Python package guide](docs/python.md) for the full API.
+
 ## Environment variables
 
 The Street View plugin can use Google Street View and Mapillary imagery. Create `apps/geolibre-desktop/.env.local` and set one or both provider credentials:
@@ -295,6 +332,7 @@ packages/ui             # Tailwind + shadcn/ui
 packages/plugins        # Plugin API
 packages/processing     # Algorithm registry
 backend/geolibre_server # FastAPI sidecar
+python/                 # geolibre Python package (Jupyter anywidget)
 sample-data/            # Sample GeoJSON & project
 docs/                   # Architecture & API docs
 ```
@@ -384,6 +422,7 @@ Full documentation, including the User Guide and Tutorials, is published at
   - [Architecture](docs/architecture.md)
   - [Project format](docs/project-format.md)
   - [Plugin API](docs/plugin-api.md)
+  - [Python package (Jupyter)](docs/python.md)
   - [Roadmap](docs/roadmap.md)
 
 ## License
