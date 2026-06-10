@@ -44,4 +44,4 @@ The **Print** tool lives under the [Project menu](projects.md#print).
 - **Pan**: drag the map.
 - **Zoom**: scroll wheel, pinch, or the navigation control.
 - **Rotate**: hold the right mouse button and drag, or use the compass.
-- **Tilt**: hold `Ctrl`/`Cmd` and drag, then look around in 3D.
+- **Tilt**: hold `Ctrl`/`Cmd` and drag to tilt the map into a perspective view.

@@ -40,6 +40,11 @@ The **Web Services** submenu of the [Plugins menu](plugins.md) bundles four Unit
 | --- | --- |
 | **Time Slider** | Animate time series raster and vector data (COG, XYZ/WMTS, WMS-Time, and time-filtered GeoJSON) through a docked timeline. |
 | **Layer Swipe** | Compare two layers side by side with a swipe handle. |
+
+## AI analysis
+
+| Plugin | What it does |
+| --- | --- |
 | **GeoAgent** | AI-assisted geospatial analysis. |
 
 All of these are activated from the [Plugins menu](plugins.md), where you can also set their on-map position.

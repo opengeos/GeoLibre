@@ -31,7 +31,7 @@ Vector files are reprojected to EPSG:4326 on load. In the browser, vector import
 
 | Item | Notes |
 | --- | --- |
-| **GeoParquet Layer** | Cloud-native columnar vector format. Can be streamed in place with HTTP range requests for large remote files. |
+| **GeoParquet Layer** | Cloud-native columnar vector format. Opens the same Add Vector panel as **Vector Layer**. Can be streamed in place with HTTP range requests for large remote files. |
 | **FlatGeobuf Layer** | Cloud-optimized vector format with spatial indexing. |
 | **PMTiles Layer** | A single-file vector or raster tile archive. |
 | **Zarr Layer** | Chunked, cloud-native multidimensional arrays. |
