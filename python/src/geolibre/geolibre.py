@@ -215,7 +215,7 @@ class Map(anywidget.AnyWidget):
 
     def clear_layers(self) -> None:
         """Remove all layers from the map."""
-        self._update_project(lambda p: p.__setitem__("layers", []))
+        self._update_project(lambda p: p.update({"layers": []}))
 
     # -- view / basemap API ---------------------------------------------
 
@@ -226,7 +226,7 @@ class Map(anywidget.AnyWidget):
             basemap: A basemap name or MapLibre style URL.
         """
         url = resolve_basemap(basemap)
-        self._update_project(lambda p: p.__setitem__("basemapStyleUrl", url))
+        self._update_project(lambda p: p.update({"basemapStyleUrl": url}))
 
     def set_center(self, lng: float, lat: float, zoom: float | None = None) -> None:
         """Center the map, optionally setting the zoom.
@@ -283,6 +283,14 @@ class Map(anywidget.AnyWidget):
             raise ValueError(
                 f"Invalid project: missing required keys {sorted(missing)}"
             )
+        # The app defaults a missing `layers` to [], but the Map API mutates
+        # project["layers"] directly (add_*/remove_layer), so backfill it and
+        # reject a non-list to avoid a later KeyError / type error.
+        layers = project.get("layers")
+        if layers is None:
+            project["layers"] = []
+        elif not isinstance(layers, list):
+            raise ValueError("Invalid project: 'layers' must be a list")
         self._seq += 1
         self.project = project
 

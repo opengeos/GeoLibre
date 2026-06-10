@@ -83,6 +83,13 @@ export function useEmbedBridge(
     // correlate a snapshot with the load that triggered it.
     let lastLoadedSeq = 0;
     let lastPostedContent: string | null = null;
+    // The host's origin, learned from the first message it sends (a lightweight
+    // handshake). Outbound project/error messages are scoped to it once known,
+    // so a project a third party frames can never receive the data. Until then
+    // (only the version-only `ready` ping precedes any inbound message) we fall
+    // back to "*".
+    let hostOrigin: string | null = null;
+    const targetOrigin = () => hostOrigin ?? "*";
 
     const buildProject = (): GeoLibreProject => {
       const state = useAppStore.getState();
@@ -116,16 +123,14 @@ export function useEmbedBridge(
         // Post the JSON-parsed snapshot (not the raw store object) so the wire
         // payload exactly matches the serialized `.geolibre.json` form and is
         // guaranteed structured-clone-safe even if a layer's free-form metadata
-        // ever holds a non-clone value. Posted to the parent window object
-        // directly; "*" is used because the framed app does not know the host's
-        // origin, and the message still only reaches that one parent window.
+        // ever holds a non-clone value. Scoped to the host origin once known.
         host.postMessage(
           {
             type: "geolibre:state",
             seq: lastLoadedSeq,
             project: JSON.parse(content) as GeoLibreProject,
           },
-          "*",
+          targetOrigin(),
         );
       } catch (error) {
         console.error("[GeoLibre] Failed to post embed state", error);
@@ -142,6 +147,9 @@ export function useEmbedBridge(
 
     const applyLoad = (message: LoadProjectMessage) => {
       try {
+        // parseProject takes a JSON string and runs the schema validation and
+        // normalisation the app relies on, so an object payload is re-stringified
+        // to feed it through the same path.
         const project =
           typeof message.project === "string"
             ? parseProject(message.project)
@@ -163,7 +171,7 @@ export function useEmbedBridge(
             type: "geolibre:error",
             message: error instanceof Error ? error.message : String(error),
           },
-          "*", // host origin unknown; error text only, no project data
+          targetOrigin(),
         );
       }
     };
@@ -174,6 +182,9 @@ export function useEmbedBridge(
       // for the standalone `?embed=1` (`to_html()`) export, where the app may be
       // framed by a third-party page.
       if (event.source !== host) return;
+      // Learn the host's origin from its first message and scope outbound
+      // messages to it from then on. "null" (opaque/file origins) stays "*".
+      if (event.origin && event.origin !== "null") hostOrigin = event.origin;
       const data = event.data as Partial<InboundMessage> | null;
       if (!data || typeof data !== "object") return;
       if (data.type === "geolibre:load-project") {

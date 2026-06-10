@@ -110,7 +110,10 @@ async function render({ model, el }) {
   const onProjectChange = () => {
     // A project that originated from the app is still the identical object on
     // the trait; do not echo it back. A Python-initiated change deserializes
-    // into a fresh object, so identity differs and it is pushed.
+    // into a fresh object, so identity differs and it is pushed. The kernel does
+    // not re-broadcast the value we just sent (traitlets.Dict change detection
+    // is value-based), so the identity check is not defeated by the save round
+    // trip.
     if (model.get("project") === lastRemoteProject) return;
     lastRemoteProject = null;
     pushProject();
