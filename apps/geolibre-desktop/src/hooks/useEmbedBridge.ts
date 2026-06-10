@@ -37,15 +37,19 @@ type InboundMessage = LoadProjectMessage | RequestStateMessage;
  */
 function isEmbedded(): boolean {
   if (typeof window === "undefined") return false;
-  try {
-    if (window.parent && window.parent !== window) return true;
-  } catch {
-    // A cross-origin parent throws on access; being unable to read it at all
-    // still means we are framed.
-    return true;
-  }
+  // An explicit opt-in always activates the bridge — this is how the Jupyter
+  // widget and `to_html()` exports run (they load the app with `?embed=1`).
   const embed = new URLSearchParams(window.location.search).get("embed");
-  return embed === "1" || embed === "true";
+  if (embed === "1" || embed === "true") return true;
+  try {
+    // A same-origin framing host (readable parent) is trusted, so activate.
+    return Boolean(window.parent && window.parent !== window);
+  } catch {
+    // A cross-origin parent throws on access. Without the explicit `?embed=1`
+    // opt-in, don't activate the bridge — otherwise any third-party page that
+    // iframes a deployed app would start receiving project state.
+    return false;
+  }
 }
 
 /**
@@ -164,6 +168,10 @@ export function useEmbedBridge(
     };
 
     const applyLoad = (message: LoadProjectMessage) => {
+      // Advance the seq before parsing so a later snapshot carries the right
+      // correlation id even when the load fails. Reset (not retain) when a load
+      // omits seq, so a snapshot never echoes a stale, unrelated sequence number.
+      lastLoadedSeq = typeof message.seq === "number" ? message.seq : 0;
       try {
         // parseProject takes a JSON string and runs the schema validation and
         // normalisation the app relies on, so an object payload is re-stringified
@@ -172,9 +180,6 @@ export function useEmbedBridge(
           typeof message.project === "string"
             ? parseProject(message.project)
             : parseProject(JSON.stringify(message.project));
-        // Reset (not retain) when a load omits seq, so a later snapshot never
-        // echoes a stale, unrelated sequence number.
-        lastLoadedSeq = typeof message.seq === "number" ? message.seq : 0;
         useAppStore
           .getState()
           .loadProject(project, null, { rememberRecent: false });

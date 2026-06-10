@@ -355,6 +355,10 @@ class Map(anywidget.AnyWidget):
             raise ValueError(
                 f"Invalid project: missing required keys {sorted(missing)}"
             )
+        # Presence isn't enough: set_center et al. index into mapView, so a
+        # non-dict here would surface as a confusing TypeError later.
+        if not isinstance(project.get("mapView"), dict):
+            raise ValueError("Invalid project: 'mapView' must be an object")
         # The app defaults a missing `layers` to [], but the Map API mutates
         # project["layers"] directly (add_*/remove_layer), so backfill it and
         # reject a non-list to avoid a later KeyError / type error.

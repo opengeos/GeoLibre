@@ -74,3 +74,7 @@ m.to_project()["mapView"]["center"]
   `jupyter-server-proxy`); `Map(server_proxy=False)` forces the direct path.
 - Optional extras: `pip install geolibre[all]` adds GeoPandas/Shapely support
   for `add_geojson(geodataframe)`.
+- `add_geojson` inlines file/URL data into the project (up to 50 MB), so a large
+  dataset is held in memory and re-synced on every project update. For very large
+  layers, prefer a tile or COG source (`add_tile_layer`/`add_cog`) the app fetches
+  directly.
