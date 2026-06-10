@@ -18,6 +18,11 @@ from .basemaps import resolve_basemap
 _HERE = pathlib.Path(__file__).parent
 _STATIC_APP = _HERE / "static" / "app"
 
+# Accepted values for the constructor's layout/theme args, validated up front so
+# a typo surfaces immediately instead of silently falling back in the front-end.
+_VALID_LAYOUTS = frozenset({"embed", "full", "maponly"})
+_VALID_THEMES = frozenset({"light", "dark"})
+
 
 class Map(anywidget.AnyWidget):
     """An interactive GeoLibre map for Jupyter notebooks.
@@ -90,6 +95,14 @@ class Map(anywidget.AnyWidget):
                 and always uses its own port proxy.
             **kwargs: Forwarded to ``anywidget.AnyWidget``.
         """
+        if layout not in _VALID_LAYOUTS:
+            raise ValueError(
+                f"layout must be one of {sorted(_VALID_LAYOUTS)}, got {layout!r}"
+            )
+        if theme not in _VALID_THEMES:
+            raise ValueError(
+                f"theme must be one of {sorted(_VALID_THEMES)}, got {theme!r}"
+            )
         super().__init__(**kwargs)
         self.height = height
         self.layout = layout
@@ -300,26 +313,38 @@ class Map(anywidget.AnyWidget):
                 ``.geolibre.json`` file.
 
         Raises:
-            ValueError: If the project is not a dict or is missing required
-                top-level keys (``version``, ``name``, ``mapView``).
+            ValueError: If the source is not valid JSON or an existing file, or
+                if the project is not a dict or is missing required top-level
+                keys (``version``, ``name``, ``mapView``).
         """
         if isinstance(source, dict):
             project = copy.deepcopy(source)
         else:
             text = str(source)
+            project = None
             if text.strip().startswith("{"):
                 try:
                     project = json.loads(text)
                 except json.JSONDecodeError:
-                    # Not JSON after all (e.g. a path like `{backup}/map.json`);
-                    # fall back to treating the source as a file path.
-                    project = json.loads(
-                        pathlib.Path(text).expanduser().read_text(encoding="utf-8")
-                    )
-            else:
-                project = json.loads(
-                    pathlib.Path(text).expanduser().read_text(encoding="utf-8")
-                )
+                    # Looks like JSON but isn't; it may be a path that begins
+                    # with "{" (e.g. `{backup}/map.json`), so fall through to
+                    # the file-read branch below.
+                    project = None
+            if project is None:
+                path = pathlib.Path(text).expanduser()
+                try:
+                    project = json.loads(path.read_text(encoding="utf-8"))
+                except FileNotFoundError as exc:
+                    # Honour the documented ValueError contract instead of
+                    # leaking a raw FileNotFoundError/JSONDecodeError.
+                    raise ValueError(
+                        f"Project source is not valid JSON nor an existing "
+                        f"file: {text}"
+                    ) from exc
+                except json.JSONDecodeError as exc:
+                    raise ValueError(
+                        f"Invalid project JSON in file {text}: {exc}"
+                    ) from exc
         # Validate the required keys up front (matching parseProject in
         # @geolibre/core) so an invalid project raises here instead of failing
         # silently in the app and only surfacing through the `error` trait.

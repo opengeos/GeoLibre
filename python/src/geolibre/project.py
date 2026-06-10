@@ -9,12 +9,15 @@ a project produced entirely from Python.
 from __future__ import annotations
 
 import copy
+import ipaddress
 import json
+import socket
 import uuid
 from pathlib import Path
 from typing import Any
 from urllib.error import URLError
-from urllib.request import urlopen
+from urllib.parse import urlsplit
+from urllib.request import HTTPRedirectHandler, build_opener
 
 from .basemaps import DEFAULT_BASEMAP
 
@@ -23,6 +26,49 @@ PROJECT_VERSION = "0.1.0"
 # Cap GeoJSON inputs (URL fetches and local files alike) so a huge source cannot
 # silently exhaust kernel memory when inlined into the project.
 _MAX_GEOJSON_BYTES = 50 * 1024 * 1024  # 50 MB
+
+
+def _assert_public_url(url: str) -> None:
+    """Reject a URL whose host resolves to a non-public address.
+
+    Guards the kernel-side fetch against SSRF: without this a redirect (or a
+    crafted URL) could reach a private/loopback/link-local address such as a
+    cloud metadata endpoint (``169.254.169.254``) and inline the response into
+    the project. Every address the host resolves to must be globally routable.
+
+    Args:
+        url: The URL about to be fetched (or a redirect target).
+
+    Raises:
+        ValueError: If the host is missing, unresolvable, or maps to any
+            non-public address.
+    """
+    host = urlsplit(url).hostname
+    if not host:
+        raise ValueError(f"URL has no host: {url}")
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror as exc:
+        raise ValueError(f"Could not resolve host for URL: {url}") from exc
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if not ip.is_global:
+            raise ValueError(
+                f"Refusing to fetch from a non-public address ({ip}): {url}"
+            )
+
+
+class _PublicOnlyRedirectHandler(HTTPRedirectHandler):
+    """Redirect handler that re-validates every hop against ``_assert_public_url``."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001, D102
+        _assert_public_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+# Opener used for all remote GeoJSON fetches: follows redirects but rejects any
+# hop that points at a non-public address (SSRF defence).
+_GEOJSON_OPENER = build_opener(_PublicOnlyRedirectHandler)
 
 # Mirror of DEFAULT_LAYER_STYLE in packages/core/src/types.ts. The app fills in
 # any missing fields on load, so layers only need to override what differs, but
@@ -126,7 +172,10 @@ def build_empty_project(
 
 
 def _layer_base(name: str, layer_type: str, **style: Any) -> dict[str, Any]:
-    merged_style = {**DEFAULT_LAYER_STYLE, **style}
+    # Deep-copy the defaults so nested values (e.g. the vectorStyleStops list)
+    # are not shared with the module constant; a caller mutating a returned
+    # layer's style must not corrupt DEFAULT_LAYER_STYLE for later layers.
+    merged_style = {**copy.deepcopy(DEFAULT_LAYER_STYLE), **style}
     return {
         "id": str(uuid.uuid4()),
         "name": name,
@@ -280,11 +329,15 @@ def load_featurecollection(data: Any) -> dict[str, Any]:
     if isinstance(data, str):
         text = data.strip()
         if text.startswith(("http://", "https://")):
+            # Reject non-public hosts up front, then fetch through an opener that
+            # re-checks every redirect hop, so a redirect to a private/metadata
+            # address cannot be followed (SSRF defence).
+            _assert_public_url(text)
             # Bound the request so a slow or oversized response cannot hang the
             # kernel or exhaust memory. read(limit + 1) detects an over-limit
             # body without buffering the whole thing.
             try:
-                with urlopen(text, timeout=30) as response:  # noqa: S310 - user URL
+                with _GEOJSON_OPENER.open(text, timeout=30) as response:  # noqa: S310 - user URL
                     raw = response.read(_MAX_GEOJSON_BYTES + 1)
             except (URLError, TimeoutError) as exc:
                 # Normalize transport failures to the documented ValueError
