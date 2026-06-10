@@ -49,7 +49,15 @@ export function copyVectorOps(sourcePath: string, destPath: string): Plugin {
     configureServer(server) {
       server.watcher.add(sourcePath);
       const onChange = (changed: string) => {
-        if (changed === sourcePath) sync();
+        if (changed !== sourcePath) return;
+        // An atomic save can briefly remove the file, so readFileSync may throw;
+        // swallow it (the next event re-syncs) rather than crash the watcher's
+        // event loop and take down the dev server.
+        try {
+          sync();
+        } catch (err) {
+          server.config.logger.error(`[geolibre:copy-vector-ops] ${err}`);
+        }
       };
       server.watcher.on("change", onChange);
       server.watcher.on("add", onChange);

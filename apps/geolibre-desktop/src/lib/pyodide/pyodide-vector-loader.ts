@@ -11,6 +11,12 @@ import { getPyodideIndexUrl } from "./pyodide-config";
 
 type ProgressListener = (phase: string) => void;
 
+// Generous bound on the one-time runtime download (tens of MB on a cold cache);
+// large enough for slow connections, small enough to escape a dead CDN. This
+// guards initialization only — a run itself is not timed, since geoprocessing
+// can legitimately take a while.
+const PYODIDE_INIT_TIMEOUT_MS = 120_000;
+
 interface PendingRun {
   resolve: (result: VectorToolResult) => void;
   reject: (error: Error) => void;
@@ -55,7 +61,9 @@ function createHandle(): Promise<WorkerHandle> {
     // A fatal worker failure (failed init, or a crash after init): tear down
     // the dead worker, drop the cached singleton so the next call rebuilds it,
     // and fail every in-flight run so nothing hangs behind a broken worker.
+    let initTimer: ReturnType<typeof setTimeout> | undefined;
     const failWorker = (message: string) => {
+      if (initTimer) clearTimeout(initTimer);
       worker.terminate();
       handlePromise = null;
       lastPhase = null;
@@ -64,6 +72,15 @@ function createHandle(): Promise<WorkerHandle> {
         run.reject(new Error(message));
       }
     };
+
+    // Bound the one-time runtime download/init so a hung or unreachable CDN
+    // cannot leave the dialog spinning forever; clears once the worker is ready.
+    initTimer = setTimeout(() => {
+      const message =
+        "Timed out loading the Python runtime. Check your connection and try again.";
+      failWorker(message);
+      reject(new Error(message));
+    }, PYODIDE_INIT_TIMEOUT_MS);
 
     worker.onmessage = (event: MessageEvent) => {
       const data = event.data ?? {};
@@ -74,6 +91,7 @@ function createHandle(): Promise<WorkerHandle> {
         case "ready":
           // Clear the last phase so a later subscriber (a warm re-run) is not
           // replayed a stale "Loading…" line after loading has finished.
+          if (initTimer) clearTimeout(initTimer);
           lastPhase = null;
           resolve();
           break;
