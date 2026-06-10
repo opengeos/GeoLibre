@@ -22,7 +22,7 @@ Open **Settings → Manage Plugins** to browse the marketplace. The dialog is mo
 Compatibility is checked against each entry's `minGeoLibreVersion`, so incompatible plugins are flagged rather than installed.
 
 !!! note "Trust model"
-    The registry is a curated allowlist, manifests are HTTPS-only, and every install requires explicit consent, because plugins run as trusted code. The curated registry and the install confirmation are the primary safeguards.
+    The registry is a curated allowlist, manifests require HTTPS (or HTTP on localhost, 127.0.0.1, or [::1] for development), and every install requires explicit consent, because plugins run as trusted code. The curated registry and the install confirmation are the primary safeguards.
 
 ## Where plugins come from
 

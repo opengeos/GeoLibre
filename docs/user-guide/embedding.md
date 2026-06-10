@@ -24,7 +24,7 @@ A chrome-free `maponly` embed shows only the map, as in this shared 3D Tiles pro
 | --- | --- | --- |
 | `url` | `url=https://share.geolibre.app/you/project.geolibre.json` | Loads a `.geolibre.json` project from a public URL. |
 | `layout` | `layout=compact` | Compact embed layout: icon-only toolbar buttons and hidden project metadata. `embed` and `iframe` are aliases. |
-| `toolbar` | `toolbar=icons` | Icon-only toolbar buttons without the full compact layout. |
+| `toolbar` | `toolbar=icons` | Icon-only toolbar buttons without the full compact layout. `icon` and `icon-only` are aliases. |
 | `panels` | `panels=none` | Hides the Layers, Style, and Attribute table panels. `hidden`, `hide`, and `off` are aliases. |
 | `hidePanels` | `hidePanels=true` | Alternative way to hide those panels. |
 | `maponly` | `maponly` | Hides all chrome (toolbar, panels, and status bar), leaving only the map. The bare flag or `true`, `1`, `yes`, `on` enable it. |
@@ -42,12 +42,13 @@ Drop the viewer into an `<iframe>`:
 
 ```html
 <iframe
-  src="https://viewer.geolibre.app/?url=https://share.geolibre.app/you/project.geolibre.json&maponly"
+  src="https://viewer.geolibre.app/?url=https://share.geolibre.app/you/project.geolibre.json&amp;maponly"
+  title="GeoLibre map"
   width="100%"
   height="600"
   style="border: 0;"
   loading="lazy"
-  allowfullscreen
+  allow="fullscreen; geolocation"
 ></iframe>
 ```
 

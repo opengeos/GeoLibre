@@ -105,7 +105,9 @@
   text-transform: uppercase;
 }
 
-/* Sidebar section headers (User Guide, Tutorials, Reference) */
+/* Sidebar section headers (User Guide, Tutorials, Reference).
+   Targets internal Material for MkDocs nav classes; tested against
+   mkdocs-material 9.x. Re-verify these selectors after a major theme upgrade. */
 .md-nav--primary .md-nav__item--section > .md-nav__link {
   border-top: 1px solid var(--md-default-fg-color--lightest);
   color: var(--md-primary-fg-color);

@@ -6,8 +6,8 @@ Once you have a map you like, you can publish it as a public link and embed it i
 
 Sharing uploads to `share.geolibre.app` using a personal API token.
 
-1. Open **Settings → Project Settings**.
-2. Paste your share token into the **Share token** field.
+1. Open **Settings → Environment Variables**.
+2. Paste your token into the **Share.GeoLibre API token** field. Create one under Settings → API tokens at [share.geolibre.app/settings](https://share.geolibre.app/settings).
 
 You only need to do this once.
 
@@ -36,12 +36,13 @@ Use an `<iframe>` and the embed parameters to control the chrome. For a clean, m
 
 ```html
 <iframe
-  src="https://viewer.geolibre.app/?url=https://share.geolibre.app/you/my-map.geolibre.json&maponly"
+  src="https://viewer.geolibre.app/?url=https://share.geolibre.app/you/my-map.geolibre.json&amp;maponly"
+  title="GeoLibre map"
   width="100%"
   height="600"
   style="border: 0;"
   loading="lazy"
-  allowfullscreen
+  allow="fullscreen; geolocation"
 ></iframe>
 ```
 

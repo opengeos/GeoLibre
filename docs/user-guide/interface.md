@@ -35,7 +35,7 @@ Each panel can be shown or hidden from **Settings → Layout**, and panels auto-
 
 ## The map
 
-The map fills the center of the workspace. It uses MapLibre GL JS for vector and raster rendering, with deck.gl for point clouds, 3D tiles, and other advanced overlays. Pan by dragging, zoom with the scroll wheel or the on-map zoom buttons, rotate and tilt by holding the right mouse button (or `Ctrl`/`Cmd` and drag), and reset north with the compass button.
+The map fills the center of the workspace. It uses MapLibre GL JS for vector and raster rendering, with deck.gl for point clouds, 3D tiles, and other advanced overlays. Pan by dragging, zoom with the scroll wheel or the on-map zoom buttons, **rotate** by holding the right mouse button and dragging, **tilt** by holding `Ctrl`/`Cmd` and dragging, and reset north with the compass button.
 
 On-map controls such as zoom, globe, fullscreen, and the Layer Control appear in the corners. Which controls are shown is set from the [Controls menu](map-controls.md).
 

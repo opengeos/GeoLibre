@@ -10,13 +10,13 @@ The **Settings** menu holds the workspace preferences: how the map behaves, whic
 
 | Setting | Description |
 | --- | --- |
-| **Restrict bounds** | Limit panning to a bounding box. |
+| **Restrict map bounds** | Limit panning to a bounding box. |
 | **Bounds** | The west, south, east, and north limits of that box. |
 | **Min zoom / Max zoom** | The allowed zoom range (0 to 24). |
 | **Max pitch** | The maximum tilt angle (0 to 85 degrees). |
 | **Render world copies** | Show repeated copies of the world when zoomed out. |
 
-You can **apply the current view** to set the bounds from where the map is now, or **reset to defaults**. These preferences are saved in the project file.
+Use **Use Current View** to set the bounds from where the map is now, or **Reset** to restore the defaults. These preferences are saved in the project file.
 
 ## Layout
 
@@ -30,17 +30,21 @@ Panels also auto-hide on small screens for a responsive layout.
 
 ## Environment Variables
 
-**Settings → Environment Variables** stores runtime key-value pairs that GeoLibre and its plugins read, such as API keys and tokens. You can enable or disable individual variables, and secret values are masked. Variable names must start with a letter or underscore and contain only letters, numbers, and underscores.
+**Settings → Environment Variables** (the **Environment** tab in the Settings dialog) holds the share token and the runtime key-value pairs that GeoLibre and its plugins read, such as API keys:
+
+- **Share.GeoLibre API token**: the personal API token used by **Project → Share** to upload to `share.geolibre.app`. See [Projects](projects.md#share).
+- **Environment variables**: named key-value pairs (for example, API keys for Earth Engine, Street View, and other integrations). You can enable or disable individual variables, and secret values are masked. Variable names must start with a letter or underscore and contain only letters, numbers, and underscores.
 
 !!! tip "Where credentials go"
     Provider credentials for integrations like Earth Engine, Street View, or other keyed services belong here. See [Data Integrations](data-integrations.md) and [Getting Started](../getting-started.md#optional-imagery-credentials).
 
 ## Project Settings
 
-**Settings → Project Settings** holds project-level options:
+**Settings → Project Settings** (the **Project** tab) holds project-level options saved with the `.geolibre.json` file:
 
 - **Project name**: the name shown in the toolbar and saved in the project file.
-- **Share token**: the personal API token used by **Project → Share** to upload to `share.geolibre.app`. See [Projects](projects.md#share).
+- **Project file**: the read-only path the project was opened from or last saved to.
+- **Project format**: the read-only project format version.
 
 ## Manage Plugins
 

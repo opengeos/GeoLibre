@@ -11,7 +11,7 @@ GeoParquet is a compressed, columnar vector format that reads well over HTTP.
    ```text
    https://data.source.coop/giswqs/opengeos/countries.parquet
    ```
-3. To avoid copying a large file into memory, enable **Stream GeoParquet (no copy)**, which queries it in place with HTTP range requests. This works best for large remote files that have a bounding-box column.
+3. To avoid copying a large file into memory, enable **Stream GeoParquet (no copy)**, which queries it in place with HTTP range requests. This works best for large remote files whose rows are spatially sorted (for example, Hilbert order, as written by GeoLibre's own Conversion tools), so only the relevant row groups are fetched.
 4. Click **Load**.
 
 ## Load a FlatGeobuf

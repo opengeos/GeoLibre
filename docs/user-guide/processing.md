@@ -2,6 +2,9 @@
 
 The **Processing** menu collects GeoLibre's analysis and conversion tools: vector geometry and overlay tools, raster terrain and clipping tools, format conversion, and the Whitebox toolbox. The [SQL Workspace](sql-workspace.md) also lives here and has its own page.
 
+!!! note "Page order"
+    This page groups the tools by theme. In the menu itself the items appear in a different order: Whitebox, SQL Workspace, Conversion, Vector, Raster, Planetary Computer, Earth Engine.
+
 ![Vector tools dialog](https://data.geolibre.app/images/geolibre-processing-vector.webp)
 
 ## Vector
@@ -26,7 +29,7 @@ The **Processing** menu collects GeoLibre's analysis and conversion tools: vecto
 | **Clip** | Clip the input layer to the area covered by an overlay layer (keeps input attributes). |
 | **Intersection** | Keep only the areas where both polygon layers overlap. |
 | **Difference** | Remove the overlay layer's area from the input layer. |
-| **Union** | Merge two polygon layers into a single combined geometry. |
+| **Union** | Merge two polygon layers into a single combined geometry (attributes are not preserved). |
 
 ### Engines
 
@@ -79,7 +82,7 @@ See the [Terrain Analysis tutorial](../tutorials/terrain-analysis.md).
 | Tool | Engine | Description |
 | --- | --- | --- |
 | **Vector to GeoParquet** | Browser (DuckDB-WASM) | Hilbert-sorted, compressed GeoParquet. |
-| **Vector to FlatGeobuf** | Sidecar | Cloud-optimized, spatially indexed vector. |
+| **Vector to FlatGeobuf** | Sidecar | Hilbert-sorted, cloud-optimized, spatially indexed vector. |
 | **CSV to GeoParquet** | Browser (DuckDB-WASM) | Convert a CSV with coordinates to GeoParquet. |
 | **Vector to PMTiles** | Sidecar | Build a vector tile archive. |
 | **Raster to COG** | Sidecar | Write a Cloud-Optimized GeoTIFF. |

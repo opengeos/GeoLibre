@@ -15,6 +15,9 @@ LIMIT 10;
 
 Click **Run** to see the ten countries with the highest estimated GDP.
 
+!!! note "Sample dataset columns"
+    `NAME`, `CONTINENT`, `POP_EST`, and `GDP_MD_EST` are Natural Earth field names in the sample `countries.parquet`. Several numeric columns are available, so you can sort or filter by `POP_EST`, `GDP_MD_EST`, and others. A different dataset will have its own column names.
+
 ## 2. Query a remote file directly
 
 You do not have to load a file first. The workspace auto-wraps a bare URL into the right reader and streams it over HTTP range requests:
