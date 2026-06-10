@@ -15,6 +15,8 @@ Open [viewer.geolibre.app](https://viewer.geolibre.app/), or launch the desktop 
    ```
 3. Click **Load**. The countries appear on the map and a `countries` layer is added to the Layers panel.
 
+![Add Vector Layer panel with the sample URL ready to load](https://data.geolibre.app/images/geolibre-add-vector-panel.webp)
+
 See [Adding Data](../user-guide/adding-data.md) for every supported source.
 
 ## 3. Style the layer

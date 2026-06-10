@@ -14,6 +14,10 @@ https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geol
 
 A project URL like this comes from **Project → Share**. See [Projects](projects.md#share).
 
+A chrome-free `maponly` embed shows only the map, as in this shared 3D Tiles project:
+
+![Chrome-free maponly embed of a 3D Tiles project](https://data.geolibre.app/images/geolibre-embed-maponly.webp)
+
 ## URL parameters
 
 | Parameter | Example | Description |

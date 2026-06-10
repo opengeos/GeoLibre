@@ -2,6 +2,8 @@
 
 The **Layers panel** on the left lists every layer in the project, from the topmost drawing layer down to the basemap. Selecting a layer here drives the [Style panel](styling.md) and the [Attribute table](attribute-table.md).
 
+![Layers panel with a vector layer and the basemap](https://data.geolibre.app/images/geolibre-layer-panel.webp)
+
 ## Layer order and visibility
 
 - **Visibility**: click the eye button to show or hide a layer. The **Hide all layers** button at the top of the panel hides every layer at once.

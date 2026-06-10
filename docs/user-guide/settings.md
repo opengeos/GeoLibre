@@ -6,6 +6,8 @@ The **Settings** menu holds the workspace preferences: how the map behaves, whic
 
 **Settings → Map Preferences** controls how the map can be navigated:
 
+![Settings dialog showing Map Preferences](https://data.geolibre.app/images/geolibre-settings.webp)
+
 | Setting | Description |
 | --- | --- |
 | **Restrict bounds** | Limit panning to a bounding box. |

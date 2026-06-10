@@ -2,6 +2,8 @@
 
 A GeoLibre project captures your whole workspace in a single `.geolibre.json` file: the map view, the basemap, every layer with its source and style, map preferences, plugin state, and environment variables. Everything in this section lives under the **Project** menu.
 
+![The Project menu](https://data.geolibre.app/images/geolibre-project-menu.webp)
+
 ## New
 
 **Project → New...** starts a fresh project. GeoLibre offers to save the current project first, then resets the layers, map view, controls, and plugin state to defaults.
