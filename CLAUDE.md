@@ -1,0 +1,64 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Repository shape
+
+GeoLibre is a single **npm workspaces monorepo** (`apps/*`, `packages/*`, `workers/*`) plus two non-npm components: a Python FastAPI sidecar (`backend/geolibre_server`) and a separate Python package (`python/`, the `geolibre` Jupyter anywidget). One `npm install` at the root wires up every JS workspace. Use **npm** (the repo tracks `package-lock.json`), Node **22+**.
+
+The same React app ships three ways: native desktop via **Tauri v2** (`apps/geolibre-desktop/src-tauri`), a browser web build served by nginx (Docker), and embedded in Jupyter (the `python/` package bundles a build of the web app into its wheel).
+
+## Commands
+
+```bash
+npm run dev            # web dev server → http://localhost:5173
+npm run tauri:dev      # desktop app (required for filesystem dialogs, local MBTiles, local raster reads)
+npm run build          # production web build → apps/geolibre-desktop/dist/
+npm run tauri:build    # desktop installers → apps/geolibre-desktop/src-tauri/target/release/bundle/
+npm run typecheck      # alias for the build (tsc -b && vite build)
+npm run ci             # full local gate: build + frontend + worker + backend + rust check
+```
+
+Tests:
+
+```bash
+npm run test:frontend                              # node --test over tests/*.test.ts (tsx loader)
+node --import tsx --test tests/<name>.test.ts      # a single frontend test file
+npm run test:backend                               # pytest backend/geolibre_server/tests
+python -m pytest backend/geolibre_server/tests/test_x.py::test_y   # a single backend test
+npm run test:worker                                # typecheck workers/viewer
+npm run check:rust                                 # cargo check the Tauri crate
+```
+
+The `python/` package has its own pytest suite (`cd python && pytest`) and is built into a wheel via `npm run build:embed` (produces `apps/geolibre-desktop/dist-embed`, consumed by `python/hatch_build.py`). Its version is dynamic, sourced from `python/src/geolibre/__init__.py`.
+
+## Pre-commit
+
+`.pre-commit-config.yaml` includes a **local `npm-build` hook**, so `pre-commit run` compiles the whole app — it is slow and can touch unrelated build state. Scope it to the files you changed: `pre-commit run --files <paths>`. Run it before pushing.
+
+## Architecture (the parts that span files)
+
+The app is **store-driven**. `@geolibre/core` holds the Zustand store, domain types, and the `.geolibre.json` project schema — it is the single source of truth. Data flows one way:
+
+1. Data enters through the Add Data menus, Tauri dialogs, the browser file picker, drag-and-drop, or a plugin control.
+2. Local vector files that MapLibre can't render directly are converted to GeoJSON in-browser by **DuckDB-WASM Spatial** (`INSTALL spatial; LOAD spatial;` → `ST_Read`; GeoParquet via the Parquet reader; zipped Shapefiles via `shpjs` with a DuckDB fallback; KMZ unzipped client-side). The result calls `addGeoJsonLayer`.
+3. Tile/service/raster/ArcGIS/MBTiles/plugin layers become `GeoLibreLayer` records.
+4. `MapCanvas` subscribes to `layers`; `MapController.syncLayers` (`@geolibre/map`) reconciles MapLibre sources/layers and the layer control. **You don't mutate MapLibre directly from UI** — you change store state and let sync apply it.
+
+Rendering is MapLibre GL JS in the webview, with **deck.gl** for raster/point-cloud/3D overlays.
+
+**Packages:** `@geolibre/core` (types, project format, store) · `@geolibre/map` (MapLibre lifecycle + layer sync) · `@geolibre/ui` (shadcn-style primitives) · `@geolibre/processing` (client-side algorithm registry) · `@geolibre/plugins` (plugin interface + built-in plugins) · `geolibre-desktop` (shell layout, Tauri I/O, composition).
+
+**Plugins:** Built-in plugins live in `packages/plugins/src/plugins/`, are exported from that package's `index.ts`, and registered in `apps/geolibre-desktop/src/hooks/usePlugins.ts`. External plugins load from zips or a `plugin.json` manifest; bundled drop-ins under `apps/geolibre-desktop/public/plugins/<id>/` bake into both web and desktop builds. See `docs/plugin-api.md`.
+
+**Python sidecar** (`backend/geolibre_server`, FastAPI on `127.0.0.1:8765`): backs the Whitebox toolbox, format Conversion tools, and Raster tools (rasterio). The desktop app starts it on demand. It is **optional** — Vector tools (Processing → Vector) run client-side with Turf.js and only use the sidecar's `/vector` endpoints (GeoPandas/Shapely) when the optional `vector` extra is installed; the dialog falls back to the client engine via `/vector/status`. Optional extras: `conversion`, `vector`, `raster`. Some conversions (PMTiles, Whitebox) are amd64-only.
+
+The browser build proxies the sidecar at `/sidecar` (same-origin, no CORS); confined to `GEOLIBRE_CONVERSION_ROOTS` (default `/data`). Local MBTiles use a custom MapLibre protocol backed by Tauri commands.
+
+## Conventions
+
+- Never commit directly to `main`; branch and open a PR.
+- Tauri CSP allowlists tile/style hosts (OpenFreeMap, CARTO) — new external map/tile hosts must be added there.
+- Map/tile-host CORS for selected release assets is handled by a dev-server raster proxy.
+- For MapLibre control styling fixes, add scoped overrides in `apps/geolibre-desktop/src/index.css`, never edit `node_modules`.
+- Reference docs: `docs/architecture.md`, `docs/project-format.md`, `docs/plugin-api.md`, `docs/python.md`, `docs/contributing.md`.
