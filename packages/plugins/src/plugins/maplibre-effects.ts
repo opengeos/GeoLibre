@@ -16,16 +16,20 @@ import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
  * article "Globe atmosphere, halo, and comets":
  * https://leoneljdias.github.io/posts/globe-atmosphere-halo-comets/
  * — specifically the layered Canvas 2D approach, the halo gradient stops and
- * "screen" blend, the limb-sampling that keeps the halo aligned under pitch,
- * and the starfield/comet parameters. Re-implemented for GeoLibre's plugin
- * lifecycle (single on-top canvas that punches out the globe disc so the
- * effects show only around the globe regardless of the active basemap).
+ * "screen" blend, and the starfield/comet parameters. Re-implemented for
+ * GeoLibre's plugin lifecycle (single on-top canvas that punches out the globe
+ * silhouette so the effects show only around the globe regardless of the active
+ * basemap).
+ *
+ * The silhouette is recovered by sampling the *rendered* globe limb (see
+ * {@link getGlobeEllipse}) and fitting an ellipse, rather than projecting a fixed
+ * great-circle limb from the map center. Under MapLibre's perspective globe the
+ * visible silhouette is an ellipse that is smaller than the 90° limb and offset
+ * from the screen center under pitch, so the fitted ellipse keeps the halo and
+ * punch-out hugging the globe at any zoom, pitch, and bearing.
  */
 
 export const EFFECTS_PLUGIN_ID = "maplibre-atmosphere-effects";
-
-const D2R = Math.PI / 180;
-const R2D = 180 / Math.PI;
 
 // Effects are fully visible at/below ZOOM_FADE_START and fully hidden at/above
 // ZOOM_FADE_END, with a linear fade between (the reference gates around zoom
@@ -44,6 +48,16 @@ const PARALLAX_PX_PER_DEGREE = 0.6;
 // Halo radial gradient — color stops are fractions of the gradient span, which
 // runs from the globe edge out to HALO_RADIUS_SCALE × the globe radius.
 const HALO_RADIUS_SCALE = 2.8;
+// Globe-silhouette sampling: rays cast from the projected map center, each
+// bisected to the rendered limb. The silhouette is a conic (a circle top-down,
+// an ellipse under pitch), so a handful of rays over-determine the 3-parameter
+// ellipse fit; the bisection depth pins each limb crossing to sub-pixel.
+const SILHOUETTE_RAYS = 24;
+const SILHOUETTE_BISECTIONS = 18;
+// A screen point is "on the globe" when it round-trips through unproject→project
+// to within this many pixels; points off the globe clamp to the limb and miss by
+// tens to hundreds of pixels, so the threshold is not sensitive.
+const ON_GLOBE_TOLERANCE_PX = 1;
 const HALO_STOPS: Array<[number, string]> = [
   [0.0, "rgba(200, 235, 255, 1.0)"],
   [0.03, "rgba(130, 200, 250, 0.6)"],
@@ -72,10 +86,15 @@ interface Comet {
   maxLife: number;
 }
 
-interface GlobeDisc {
-  x: number;
-  y: number;
-  r: number;
+export interface GlobeEllipse {
+  // Center of the projected globe silhouette (screen px).
+  cx: number;
+  cy: number;
+  // Semi-axes (screen px). rx runs along `angle`, ry perpendicular to it.
+  rx: number;
+  ry: number;
+  // Rotation of the rx axis, radians.
+  angle: number;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -97,56 +116,196 @@ function isGlobeProjection(map: MapLibreMap): boolean {
 }
 
 /**
- * Screen-space center and radius of the rendered globe disc.
+ * Is this screen point on the rendered globe?
  *
- * Samples 16 points on the globe limb (great-circle distance π/2 from the map
- * center) and projects them; the bounding box of those points gives a disc
- * that stays aligned even when the map is pitched. Returns null when too few
- * points project to finite coordinates (e.g. the globe is off-screen).
+ * MapLibre's `unproject` clamps points outside the globe to the nearest limb
+ * location, so an off-globe pixel does not round-trip back to itself through
+ * `project`. On-globe pixels round-trip to within a pixel; off-globe pixels miss
+ * by tens to hundreds of pixels. This is the only signal we have for the
+ * *rendered* silhouette, which (under perspective + pitch) is neither the
+ * geometric 90° limb nor centered on the projected map center.
  */
-function getGlobeDisc(map: MapLibreMap): GlobeDisc | null {
-  const center = map.getCenter();
-  const clng = center.lng * D2R;
-  const clat = center.lat * D2R;
+function isOnGlobe(map: MapLibreMap, x: number, y: number): boolean {
+  const back = map.project(map.unproject([x, y]));
+  return Math.hypot(back.x - x, back.y - y) <= ON_GLOBE_TOLERANCE_PX;
+}
+
+/**
+ * Distance from (cx,cy) along (dx,dy) to the globe limb, by bisection.
+ *
+ * Assumes the start point is on the globe; expands until a point is off-globe,
+ * then bisects the on/off boundary. `maxR` caps the search so a globe larger
+ * than the search window (very rare in the effect's low-zoom range) terminates.
+ */
+function rayToLimb(
+  map: MapLibreMap,
+  cx: number,
+  cy: number,
+  dx: number,
+  dy: number,
+  maxR: number,
+): number {
+  let lo = 0;
+  let hi = 8;
+  while (hi < maxR && isOnGlobe(map, cx + dx * hi, cy + dy * hi)) {
+    lo = hi;
+    hi *= 2;
+  }
+  if (hi > maxR) hi = maxR;
+  for (let i = 0; i < SILHOUETTE_BISECTIONS; i++) {
+    const mid = (lo + hi) / 2;
+    if (isOnGlobe(map, cx + dx * mid, cy + dy * mid)) lo = mid;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/**
+ * The rendered globe silhouette as a screen-space ellipse.
+ *
+ * Casts {@link SILHOUETTE_RAYS} rays from the projected map center (always
+ * inside the silhouette) out to the rendered limb, then fits an ellipse to those
+ * limb points. The silhouette of a sphere under a pinhole camera is exactly a
+ * conic — a circle when viewed top-down, an ellipse under pitch — so the fit is
+ * exact: its bounding-box center is the ellipse center, and a 3-parameter
+ * quadratic-form least-squares solve recovers the axes and rotation. This tracks
+ * the globe under any zoom, pitch, and bearing, unlike a fixed great-circle
+ * limb measured from the map center. Returns null when the globe is off-screen.
+ */
+function getGlobeEllipse(map: MapLibreMap): GlobeEllipse | null {
+  const center = map.project(map.getCenter());
+  const cx = center.x;
+  const cy = center.y;
+  if (!Number.isFinite(cx) || !Number.isFinite(cy)) return null;
+  if (!isOnGlobe(map, cx, cy)) return null;
+
+  const canvas = map.getCanvas();
+  const maxR = Math.max(canvas.clientWidth, canvas.clientHeight) * 8;
+
+  const pts: Array<[number, number]> = [];
+  for (let i = 0; i < SILHOUETTE_RAYS; i++) {
+    const a = (i / SILHOUETTE_RAYS) * 2 * Math.PI;
+    const dx = Math.cos(a);
+    const dy = Math.sin(a);
+    const r = rayToLimb(map, cx, cy, dx, dy, maxR);
+    pts.push([cx + dx * r, cy + dy * r]);
+  }
+
+  return fitEllipse(pts);
+}
+
+/**
+ * Fit an ellipse to points sampled around its boundary.
+ *
+ * Exact for points that lie on a real ellipse (such as the conic silhouette of a
+ * sphere): the axis-aligned bounding box of any ellipse is centered on the
+ * ellipse, so its center is recovered directly; the shape comes from a
+ * 3-parameter quadratic-form least-squares solve of A·dx² + 2B·dx·dy + C·dy² = 1.
+ * Returns null for a degenerate (non-positive-definite) fit — e.g. collinear or
+ * too few points.
+ */
+export function fitEllipse(
+  pts: ReadonlyArray<readonly [number, number]>,
+): GlobeEllipse | null {
+  if (pts.length < 3) return null;
 
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
-  let count = 0;
-
-  for (let i = 0; i < 16; i++) {
-    const bearing = (i / 16) * 2 * Math.PI;
-    // Destination point at angular distance π/2 (the visible limb) along
-    // `bearing`; the great-circle formulas simplify since cos(π/2)=0, sin(π/2)=1.
-    const lat2 = Math.asin(Math.cos(clat) * Math.cos(bearing));
-    const lng2 =
-      clng +
-      Math.atan2(
-        Math.sin(bearing) * Math.cos(clat),
-        -Math.sin(clat) * Math.sin(lat2),
-      );
-
-    const point = map.project([lng2 * R2D, lat2 * R2D]);
-    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
-    minX = Math.min(minX, point.x);
-    minY = Math.min(minY, point.y);
-    maxX = Math.max(maxX, point.x);
-    maxY = Math.max(maxY, point.y);
-    count++;
+  for (const [px, py] of pts) {
+    if (!Number.isFinite(px) || !Number.isFinite(py)) return null;
+    minX = Math.min(minX, px);
+    minY = Math.min(minY, py);
+    maxX = Math.max(maxX, px);
+    maxY = Math.max(maxY, py);
   }
+  const ex = (minX + maxX) / 2;
+  const ey = (minY + maxY) / 2;
 
-  if (count < 8) return null;
-  const halfWidth = (maxX - minX) / 2;
-  const halfHeight = (maxY - minY) / 2;
+  // Normal equations for A·dx² + 2B·dx·dy + C·dy² = 1 about the center.
+  let s00 = 0;
+  let s01 = 0;
+  let s02 = 0;
+  let s11 = 0;
+  let s12 = 0;
+  let s22 = 0;
+  let t0 = 0;
+  let t1 = 0;
+  let t2 = 0;
+  for (const [px, py] of pts) {
+    const dx = px - ex;
+    const dy = py - ey;
+    const f0 = dx * dx;
+    const f1 = 2 * dx * dy;
+    const f2 = dy * dy;
+    s00 += f0 * f0;
+    s01 += f0 * f1;
+    s02 += f0 * f2;
+    s11 += f1 * f1;
+    s12 += f1 * f2;
+    s22 += f2 * f2;
+    t0 += f0;
+    t1 += f1;
+    t2 += f2;
+  }
+  const conic = solve3(
+    [
+      [s00, s01, s02],
+      [s01, s11, s12],
+      [s02, s12, s22],
+    ],
+    [t0, t1, t2],
+  );
+  if (!conic) return null;
+  const [A, B, C] = conic;
+
+  // Eigen-decompose [[A,B],[B,C]]: semi-axis = 1/√eigenvalue, axis direction =
+  // eigenvector. A non-positive-definite fit is not a real ellipse, so bail.
+  const tr = A + C;
+  const det = A * C - B * B;
+  const gap = Math.sqrt(Math.max(0, (tr * tr) / 4 - det));
+  const l1 = tr / 2 + gap;
+  const l2 = tr / 2 - gap;
+  if (!(l1 > 0) || !(l2 > 0)) return null;
+
   return {
-    x: minX + halfWidth,
-    y: minY + halfHeight,
-    // The projected globe is an ellipse under pitch; use the larger half-extent
-    // so the circular punch-out fully covers the silhouette (slightly over-cuts
-    // at steep pitch) rather than leaving deep space bleeding over the poles.
-    r: Math.max(halfWidth, halfHeight),
+    cx: ex,
+    cy: ey,
+    rx: 1 / Math.sqrt(l1),
+    ry: 1 / Math.sqrt(l2),
+    // Eigenvector for l1 is (B, l1 - A); this is the rx axis direction.
+    angle: Math.atan2(l1 - A, B),
   };
+}
+
+/**
+ * Solve the 3×3 system M·x = b by Gaussian elimination with partial pivoting.
+ * Returns null if the matrix is singular (degenerate fit).
+ */
+function solve3(
+  m: [number, number, number][],
+  b: [number, number, number],
+): [number, number, number] | null {
+  const aug: number[][] = [
+    [m[0][0], m[0][1], m[0][2], b[0]],
+    [m[1][0], m[1][1], m[1][2], b[1]],
+    [m[2][0], m[2][1], m[2][2], b[2]],
+  ];
+  for (let col = 0; col < 3; col++) {
+    let pivot = col;
+    for (let row = col + 1; row < 3; row++) {
+      if (Math.abs(aug[row][col]) > Math.abs(aug[pivot][col])) pivot = row;
+    }
+    if (Math.abs(aug[pivot][col]) < 1e-12) return null;
+    [aug[col], aug[pivot]] = [aug[pivot], aug[col]];
+    for (let row = 0; row < 3; row++) {
+      if (row === col) continue;
+      const factor = aug[row][col] / aug[col][col];
+      for (let k = col; k < 4; k++) aug[row][k] -= factor * aug[col][k];
+    }
+  }
+  return [aug[0][3] / aug[0][0], aug[1][3] / aug[1][1], aug[2][3] / aug[2][2]];
 }
 
 /**
@@ -170,6 +329,12 @@ class EffectsEngine {
   private width = 0;
   private height = 0;
   private dpr = 1;
+
+  // Cached globe silhouette. Fitting it costs many project/unproject round-trips,
+  // but it only changes when the camera moves, so recompute lazily on a dirty
+  // flag set by move/zoom/resize rather than every animation frame.
+  private globeEllipse: GlobeEllipse | null = null;
+  private ellipseDirty = true;
 
   private rafId: number | null = null;
   private destroyed = false;
@@ -242,7 +407,10 @@ class EffectsEngine {
   }
 
   // move/zoom restart a loop that stopped because the effects had faded out.
+  // MapLibre's "move" fires for pan, zoom, pitch, and rotate, so this also marks
+  // the cached silhouette stale on any camera change.
   private handleMapChange(): void {
+    this.ellipseDirty = true;
     if (!document.hidden) this.start();
   }
 
@@ -263,6 +431,7 @@ class EffectsEngine {
     }
     this.starfield = null; // regenerate at the new size on the next frame
     this.spaceGradient = null; // rebuild for the new dimensions
+    this.ellipseDirty = true; // silhouette depends on viewport size
   }
 
   private start(): void {
@@ -455,14 +624,22 @@ class EffectsEngine {
     };
   }
 
-  private punchOutGlobe(disc: GlobeDisc): void {
-    // Remove the deep-space layer over the globe disc so the real basemap globe
-    // shows through; the halo (drawn on its own canvas) hides any seam.
+  private punchOutGlobe(disc: GlobeEllipse): void {
+    // Remove the deep-space layer over the globe silhouette so the real basemap
+    // globe shows through; the halo (drawn on its own canvas) hides any seam.
     this.spaceCtx.save();
     this.spaceCtx.globalCompositeOperation = "destination-out";
     this.spaceCtx.fillStyle = "rgba(0, 0, 0, 1)";
     this.spaceCtx.beginPath();
-    this.spaceCtx.arc(disc.x, disc.y, disc.r, 0, Math.PI * 2);
+    this.spaceCtx.ellipse(
+      disc.cx,
+      disc.cy,
+      disc.rx,
+      disc.ry,
+      disc.angle,
+      0,
+      Math.PI * 2,
+    );
     this.spaceCtx.fill();
     this.spaceCtx.restore();
   }
@@ -489,31 +666,32 @@ class EffectsEngine {
     ctx.restore();
   }
 
-  private drawHalo(disc: GlobeDisc, alpha: number): void {
+  private drawHalo(disc: GlobeEllipse, alpha: number): void {
     const ctx = this.haloCtx;
-    const outer = disc.r * HALO_RADIUS_SCALE;
-    const gradient = ctx.createRadialGradient(
-      disc.x,
-      disc.y,
-      disc.r,
-      disc.x,
-      disc.y,
-      outer,
-    );
+    ctx.save();
+    // Work in a normalized space where the silhouette is the unit circle: shift
+    // to the center, rotate to the ellipse axes, then scale by the semi-axes.
+    // A circular radial gradient and annulus drawn here map to an ellipse that
+    // hugs the globe at any pitch — the halo thickens along the major axis, as a
+    // real atmospheric rim does under perspective.
+    ctx.translate(disc.cx, disc.cy);
+    ctx.rotate(disc.angle);
+    ctx.scale(disc.rx, disc.ry);
+
+    const gradient = ctx.createRadialGradient(0, 0, 1, 0, 0, HALO_RADIUS_SCALE);
     for (const [stop, color] of HALO_STOPS) {
       gradient.addColorStop(stop, color);
     }
-    ctx.save();
     // The screen blend is applied via the canvas element's mix-blend-mode
     // (set in createCanvas); here we just paint the gradient normally.
     ctx.globalAlpha = alpha;
     ctx.fillStyle = gradient;
-    // Paint only the annulus outside the globe (outer circle CW, inner circle
-    // CCW cancels the winding in the hole — nonzero rule), so the rim glows
-    // without tinting the globe disc.
+    // Paint only the annulus outside the globe (outer ring CW, inner ring CCW
+    // cancels the winding in the hole — nonzero rule), so the rim glows without
+    // tinting the globe disc.
     ctx.beginPath();
-    ctx.arc(disc.x, disc.y, outer, 0, Math.PI * 2, false);
-    ctx.arc(disc.x, disc.y, disc.r, 0, Math.PI * 2, true);
+    ctx.arc(0, 0, HALO_RADIUS_SCALE, 0, Math.PI * 2, false);
+    ctx.arc(0, 0, 1, 0, Math.PI * 2, true);
     ctx.fill();
     ctx.restore();
   }
@@ -531,7 +709,11 @@ class EffectsEngine {
       return;
     }
 
-    const disc = getGlobeDisc(this.map);
+    if (this.ellipseDirty) {
+      this.globeEllipse = getGlobeEllipse(this.map);
+      this.ellipseDirty = false;
+    }
+    const disc = this.globeEllipse;
     this.drawSpaceBackground(alpha);
     this.drawStarfield(alpha);
     this.updateAndDrawComets(alpha);
