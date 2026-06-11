@@ -356,6 +356,12 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   useEffect(() => {
     setIsEditing(false);
     setDrafts({});
+    // Clear column-management state too, so a rename input or pending delete
+    // started on the previous layer cannot apply to a same-named column on the
+    // newly selected layer.
+    setEditingColumn(null);
+    setEditingColumnName("");
+    setColumnPendingDelete(null);
   }, [selectedLayerId, hasLayer, isGeometryEditing]);
 
   const filterLower = attributeFilter.toLowerCase();
@@ -388,6 +394,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   // Columns rendered in the table, honoring saved order and hidden state.
   const columns = visibleColumns(discoveredColumns, columnSettings);
   const hiddenCols = hiddenColumns(discoveredColumns, columnSettings);
+  const hiddenColSet = new Set(hiddenCols);
   const tableColumns = ["__featureId", ...columns];
   // Column management mutates layer.geojson/style/metadata, so it is offered
   // only for in-store, editable GeoJSON layers — not DuckDB query results or
@@ -729,6 +736,13 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
               }
             }}
           />
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={`Resize ${col} column`}
+            className="absolute -right-2 top-0 h-full w-3 cursor-col-resize select-none border-r border-transparent hover:border-primary"
+            onMouseDown={(event) => startColumnResize(col, event)}
+          />
         </div>
       );
     }
@@ -941,7 +955,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                 discoveredColumns.map((col) => (
                   <DropdownMenuCheckboxItem
                     key={col}
-                    checked={!hiddenCols.includes(col)}
+                    checked={!hiddenColSet.has(col)}
                     // Keep the menu open so several fields can be toggled at once.
                     onSelect={(event: Event) => event.preventDefault()}
                     onCheckedChange={() => handleToggleHidden(col)}
