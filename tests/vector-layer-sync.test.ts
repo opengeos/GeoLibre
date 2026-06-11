@@ -73,6 +73,8 @@ function fakeControl(
       calls.push({ method: "setLayerOpacity", args: [id, opacity] }),
     setLayerVisibility: (id, visible) =>
       calls.push({ method: "setLayerVisibility", args: [id, visible] }),
+    setLayerStyle: (id, style) =>
+      calls.push({ method: "setLayerStyle", args: [id, style] }),
   };
   return { control, calls };
 }
@@ -364,6 +366,35 @@ describe("wireVectorStoreSync", () => {
     assert.deepEqual(calls, [
       { method: "setLayerVisibility", args: ["vector-1", false] },
       { method: "setLayerOpacity", args: ["vector-1", 0.25] },
+    ]);
+  });
+
+  it("applies panel style changes through the control", () => {
+    const { control, calls } = fakeControl([vectorInfo()]);
+    syncVectorLayersToStore(control);
+    wireVectorStoreSync(control);
+
+    useAppStore.getState().setLayerStyle("vector-1", { fillColor: "#ff0000" });
+
+    // GeoLibre's shared fillColor/strokeColor/fillOpacity/strokeWidth map onto
+    // the control's per-geometry fill/line/circle style; the unedited fields
+    // come from the style seeded off the control's own style.
+    assert.deepEqual(calls, [
+      {
+        method: "setLayerStyle",
+        args: [
+          "vector-1",
+          {
+            fillColor: "#ff0000",
+            fillOpacity: 0.4,
+            lineColor: "#3388ff",
+            lineWidth: 2,
+            circleColor: "#ff0000",
+            circleOpacity: 0.4,
+            circleRadius: 5,
+          },
+        ],
+      },
     ]);
   });
 
