@@ -560,8 +560,11 @@ export function TopToolbar({
         appApi.fitBounds?.(layers.bounds);
       }
     } catch (err) {
+      const base =
+        err instanceof Error ? err.message : "Could not load the OSM PBF file.";
+      // Bare .pbf is also the Mapbox Vector Tile extension; hint at it on failure.
       setActionError(
-        err instanceof Error ? err.message : "Could not load the OSM PBF file.",
+        `${base} If this is a Mapbox Vector Tile (.pbf), it cannot be loaded as an OSM extract.`,
       );
     } finally {
       setOsmPbfLoading(false);
@@ -949,7 +952,10 @@ export function TopToolbar({
           <DropdownMenuItem onSelect={() => setAddDataKind("mbtiles")}>
             MBTiles Layer
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setOsmPbfDialogOpen(true)}>
+          <DropdownMenuItem
+            disabled={osmPbfLoading || osmPbfConfirm !== null}
+            onSelect={() => setOsmPbfDialogOpen(true)}
+          >
             OSM PBF Layer
           </DropdownMenuItem>
           <DropdownMenuSeparator />

@@ -490,10 +490,63 @@ export function DesktopShell({
 
           try {
             const paths = event.payload.paths;
-            const rasterCount = await addDroppedRasters(
-              await loadDroppedRasterPaths(paths),
+            // OSM PBF files split into three layers, so they bypass the normal
+            // single-FeatureCollection pipeline (which would otherwise route a
+            // .pbf to DuckDB ST_Read and merge it).
+            const pbfPaths = paths.filter((path) => isOsmPbfFileName(path));
+            const otherPaths = paths.filter(
+              (path) => !isOsmPbfFileName(path),
             );
-            finishDrop(await loadDroppedVectorPaths(paths), rasterCount);
+
+            let addedPbfLayers = 0;
+            if (pbfPaths.length > 0) {
+              const { readFile } = await import("@tauri-apps/plugin-fs");
+              for (const path of pbfPaths) {
+                const name = path.split(/[/\\]/).pop() || "osm";
+                const bytes = await readFile(path);
+                if (bytes.byteLength >= OSM_PBF_SIZE_WARN_BYTES) {
+                  const sizeMb = Math.round(bytes.byteLength / (1024 * 1024));
+                  if (
+                    !window.confirm(
+                      `${name} is about ${sizeMb} MB. Parsing it may use a lot of memory. Continue?`,
+                    )
+                  ) {
+                    continue;
+                  }
+                }
+                setDropMessage(`Parsing ${name}…`);
+                const layers = await loadOsmPbf(bytes.buffer as ArrayBuffer);
+                const added = addOsmPbfLayers(
+                  addGeoJsonLayer,
+                  osmPbfBaseName(name),
+                  path,
+                  layers,
+                );
+                addedPbfLayers += added;
+                if (added > 0 && layers.bounds) {
+                  mapControllerRef.current?.fitBounds(layers.bounds);
+                }
+                setDropMessage(
+                  added > 0
+                    ? `Added ${added} layer${added === 1 ? "" : "s"} from ${name}.`
+                    : `No features found in ${name}.`,
+                );
+              }
+            }
+
+            if (otherPaths.length > 0) {
+              const rasterCount = await addDroppedRasters(
+                await loadDroppedRasterPaths(otherPaths),
+              );
+              const importedLayers = await loadDroppedVectorPaths(otherPaths);
+              if (
+                importedLayers.length > 0 ||
+                rasterCount > 0 ||
+                addedPbfLayers === 0
+              ) {
+                finishDrop(importedLayers, rasterCount);
+              }
+            }
           } catch (error) {
             setDropMessage(null);
             setDropError(
@@ -521,7 +574,7 @@ export function DesktopShell({
       disposed = true;
       unlisten?.();
     };
-  }, [clearDropMessageLater, finishDrop, addDroppedRasters]);
+  }, [clearDropMessageLater, finishDrop, addDroppedRasters, addGeoJsonLayer]);
 
   const handleDragEnter = useCallback((event: DragEvent<HTMLDivElement>) => {
     if (!hasDroppedFiles(event)) return;

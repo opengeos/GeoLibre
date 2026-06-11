@@ -8,6 +8,11 @@ export type { OsmPbfLayers } from "./osm-pbf";
  */
 export const OSM_PBF_SIZE_WARN_BYTES = 50 * 1024 * 1024; // 50 MB
 
+// Hard cap so a worker that the browser silently OOM-kills (firing no event)
+// cannot leave the promise — and the loading dialog — pending forever. Whole-
+// country extracts can take a couple of minutes, so the cap is generous.
+const OSM_PBF_PARSE_TIMEOUT_MS = 5 * 60 * 1000;
+
 // Trade-off: a bare ".pbf" also names Mapbox Vector Tiles (protobuf-encoded
 // tiles), so dragging an MVT ".pbf" file routes it here and produces an OSM
 // parse error. We accept the rare collision because most OSM extracts (and the
@@ -79,24 +84,32 @@ export function loadOsmPbf(bytes: ArrayBuffer): Promise<OsmPbfLayers> {
       new URL("./osm-pbf.worker.ts", import.meta.url),
       { type: "module" },
     );
+    const timeout = setTimeout(() => {
+      worker.terminate();
+      reject(new Error("OSM PBF parsing timed out."));
+    }, OSM_PBF_PARSE_TIMEOUT_MS);
+    const finish = () => {
+      clearTimeout(timeout);
+      worker.terminate();
+    };
     worker.addEventListener(
       "message",
       (event: MessageEvent<OsmPbfWorkerMessage>) => {
-        worker.terminate();
+        finish();
         const data = event.data;
         if (data?.ok) resolve(data.result);
         else reject(new Error(data?.error || "Could not parse the OSM PBF file."));
       },
     );
     worker.addEventListener("error", (event) => {
-      worker.terminate();
+      finish();
       reject(new Error(event.message || "The OSM PBF worker failed."));
     });
     // `error` does not fire if the worker is OOM-killed or the response message
-    // fails to deserialize; messageerror covers the latter so the promise can't
-    // hang silently.
+    // fails to deserialize; messageerror covers the latter and the timeout above
+    // covers a silent OOM kill, so the promise can't hang forever.
     worker.addEventListener("messageerror", () => {
-      worker.terminate();
+      finish();
       reject(new Error("The OSM PBF worker posted an undeserializable message."));
     });
     worker.postMessage(bytes, [bytes]);
