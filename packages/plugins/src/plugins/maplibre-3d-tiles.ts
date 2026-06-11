@@ -389,9 +389,9 @@ function createThreeDTilesStoreLayer(
       url: tileset.tilesetUrl,
       // Persisted so a saved project reloads an authenticated tileset; this
       // means any credential in a header is stored in the project file.
-      ...(tileset.requestHeaders
-        ? { requestHeaders: tileset.requestHeaders }
-        : {}),
+      // JSON.stringify drops the key when undefined, so a header-less tileset
+      // is not written to the project file.
+      requestHeaders: tileset.requestHeaders,
     },
     visible: tileset.visible,
     opacity,
@@ -702,8 +702,12 @@ function stringRecordValue(
   value: unknown,
 ): Record<string, string> | undefined {
   if (!isRecord(value)) return undefined;
+  // Keep only valid string-valued headers with a non-empty name (an empty
+  // header name is invalid per RFC 7230); drop malformed entries from a
+  // hand-edited project file rather than discarding the whole set.
   const entries = Object.entries(value).filter(
-    (entry): entry is [string, string] => typeof entry[1] === "string",
+    (entry): entry is [string, string] =>
+      entry[0].trim() !== "" && typeof entry[1] === "string",
   );
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
