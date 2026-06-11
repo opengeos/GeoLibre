@@ -444,10 +444,16 @@ function savedVectorStyle(raw: unknown): Partial<VectorLayerStyle> | null {
   // are far under this cap, and MapLibre validates the expression contents.
   const colorExpression = (
     value: unknown,
-  ): value is PropertyValueSpecification<string> =>
-    Array.isArray(value) &&
-    value.length > 0 &&
-    JSON.stringify(value).length <= MAX_COLOR_EXPRESSION_CHARS;
+  ): value is PropertyValueSpecification<string> => {
+    if (!Array.isArray(value) || value.length === 0) return false;
+    try {
+      return JSON.stringify(value).length <= MAX_COLOR_EXPRESSION_CHARS;
+    } catch {
+      // A circular or pathologically deep array makes JSON.stringify throw;
+      // reject it so a hand-edited project file cannot break restore.
+      return false;
+    }
+  };
   if (colorExpression(candidate.fillColorExpression)) {
     style.fillColorExpression = candidate.fillColorExpression;
   }

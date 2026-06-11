@@ -661,6 +661,27 @@ describe("savedVectorState", () => {
     assert.equal("lineColorExpression" in restored, false);
   });
 
+  it("drops a malformed color expression without throwing", () => {
+    // A circular (or pathologically deep) array from a hand-edited project file
+    // would make JSON.stringify throw; the guard must reject it and keep the
+    // rest of the restore working rather than aborting it. Empty arrays are
+    // rejected too, since [] is not a valid MapLibre expression.
+    const circular: unknown[] = [];
+    circular.push(circular);
+    const layer = createVectorStoreLayer(vectorInfo());
+    (layer.metadata.vectorState as Record<string, unknown>).style = {
+      fillColor: "#123456",
+      fillColorExpression: circular,
+      lineColorExpression: [],
+    };
+
+    const restored = savedVectorState(layer).style;
+    assert.ok(restored != null);
+    assert.equal(restored.fillColor, "#123456");
+    assert.equal("fillColorExpression" in restored, false);
+    assert.equal("lineColorExpression" in restored, false);
+  });
+
   it("drops malformed fields from hand-edited project files", () => {
     const layer = createVectorStoreLayer(vectorInfo());
     layer.metadata.vectorState = {
