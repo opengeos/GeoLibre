@@ -67,4 +67,15 @@ describe("isVectorControlRefreshLayer / isRefreshableLayer", () => {
 
     assert.equal(isRefreshableLayer(layer), true);
   });
+
+  it("legacy untagged geojson-url layer is refreshable via the store path", () => {
+    const layer = makeLayer({
+      type: "geojson",
+      source: { type: "geojson", url: "https://example.com/data.geojson" },
+      metadata: {},
+    });
+
+    assert.equal(isRefreshableLayer(layer), true);
+    assert.equal(isVectorControlRefreshLayer(layer), false);
+  });
 });
