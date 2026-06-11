@@ -410,6 +410,11 @@ function savedVectorStyle(raw: unknown): Partial<VectorLayerStyle> | null {
  * and the stroke fields drive lines and polygon outlines; the control applies
  * only the fields relevant to each layer's actual geometry.
  *
+ * The collapse is intentionally lossy: circleColor/circleOpacity always track
+ * fillColor/fillOpacity. Single-geometry layers round-trip cleanly; a "mixed"
+ * layer's point circles unify with its fill from the first panel edit onward,
+ * since GeoLibre has no separate point-fill control.
+ *
  * @param style - The GeoLibre layer style.
  * @returns The equivalent control style patch.
  */
@@ -437,14 +442,22 @@ function layerStyleToVectorStyle(style: LayerStyle): VectorLayerStyle {
  */
 function vectorStyleToLayerStyle(info: VectorLayerInfo): Partial<LayerStyle> {
   const style = info.style;
-  const shared: Partial<LayerStyle> = {
-    strokeColor: style.lineColor,
-    strokeWidth: style.lineWidth,
-    circleRadius: style.circleRadius,
-  };
-  return info.geometryType === "point"
-    ? { ...shared, fillColor: style.circleColor, fillOpacity: style.circleOpacity }
-    : { ...shared, fillColor: style.fillColor, fillOpacity: style.fillOpacity };
+  // Only emit fields the control actually provided; otherwise a missing value
+  // would spread an explicit `undefined` over DEFAULT_LAYER_STYLE at the seed
+  // site and clobber a valid default.
+  const seed: Partial<LayerStyle> = {};
+  if (style.lineColor !== undefined) seed.strokeColor = style.lineColor;
+  if (style.lineWidth !== undefined) seed.strokeWidth = style.lineWidth;
+  if (style.circleRadius !== undefined) seed.circleRadius = style.circleRadius;
+
+  const [fillColor, fillOpacity] =
+    info.geometryType === "point"
+      ? [style.circleColor, style.circleOpacity]
+      : [style.fillColor, style.fillOpacity];
+  if (fillColor !== undefined) seed.fillColor = fillColor;
+  if (fillOpacity !== undefined) seed.fillOpacity = fillOpacity;
+
+  return seed;
 }
 
 /**

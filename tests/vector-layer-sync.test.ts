@@ -188,6 +188,45 @@ describe("createVectorStoreLayer", () => {
 
     assert.equal(layer.metadata.panelCollapsed, false);
   });
+
+  it("seeds the panel style from polygon fill/outline", () => {
+    const layer = createVectorStoreLayer(
+      vectorInfo({
+        geometryType: "polygon",
+        style: vectorStyle({
+          fillColor: "#112233",
+          fillOpacity: 0.3,
+          lineColor: "#445566",
+          lineWidth: 4,
+        }),
+      }),
+    );
+
+    assert.equal(layer.style.fillColor, "#112233");
+    assert.equal(layer.style.fillOpacity, 0.3);
+    assert.equal(layer.style.strokeColor, "#445566");
+    assert.equal(layer.style.strokeWidth, 4);
+  });
+
+  it("seeds the panel fill from the circle style for point layers", () => {
+    const layer = createVectorStoreLayer(
+      vectorInfo({
+        geometryType: "point",
+        style: vectorStyle({
+          fillColor: "#ffffff",
+          circleColor: "#abc123",
+          circleOpacity: 0.7,
+          circleRadius: 9,
+        }),
+      }),
+    );
+
+    // Points fold the circle color/opacity onto GeoLibre's shared fill fields,
+    // not the polygon fillColor.
+    assert.equal(layer.style.fillColor, "#abc123");
+    assert.equal(layer.style.fillOpacity, 0.7);
+    assert.equal(layer.style.circleRadius, 9);
+  });
 });
 
 describe("syncVectorLayersToStore", () => {
@@ -282,6 +321,7 @@ describe("syncVectorLayersToStore", () => {
       removeLayer: () => {},
       setLayerOpacity: () => {},
       setLayerVisibility: () => {},
+      setLayerStyle: () => {},
     };
     handlers.push(() => syncVectorLayersToStore(control));
     const expand = () => {
