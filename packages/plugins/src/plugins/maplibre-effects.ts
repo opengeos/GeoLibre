@@ -194,6 +194,11 @@ class EffectsEngine {
     this.start();
   }
 
+  /** The map this engine is bound to (used to detect a map re-init). */
+  getMapInstance(): MapLibreMap {
+    return this.map;
+  }
+
   destroy(): void {
     this.destroyed = true;
     this.stop();
@@ -394,6 +399,7 @@ class EffectsEngine {
       const offscreen =
         comet.x < -comet.len ||
         comet.x > this.width + comet.len ||
+        comet.y < -comet.len ||
         comet.y > this.height + comet.len;
       if (comet.life >= comet.maxLife || offscreen) continue;
       survivors.push(comet);
@@ -488,7 +494,8 @@ class EffectsEngine {
     ctx.globalAlpha = alpha;
     ctx.fillStyle = gradient;
     // Paint only the annulus outside the globe (outer circle CW, inner circle
-    // CCW = an even-odd hole), so the rim glows without tinting the globe disc.
+    // CCW cancels the winding in the hole — nonzero rule), so the rim glows
+    // without tinting the globe disc.
     ctx.beginPath();
     ctx.arc(disc.x, disc.y, outer, 0, Math.PI * 2, false);
     ctx.arc(disc.x, disc.y, disc.r, 0, Math.PI * 2, true);
@@ -534,6 +541,9 @@ let engine: EffectsEngine | null = null;
 function attachEngine(app: GeoLibreAppAPI): boolean {
   const map = app.getMap?.();
   if (!map) return false;
+  // A map re-init hands back a different MapLibreMap instance; tear down the
+  // engine bound to the old map (its canvases/listeners) before rebinding.
+  if (engine && engine.getMapInstance() !== map) detachEngine();
   if (!engine) engine = new EffectsEngine(map);
   return true;
 }
@@ -563,5 +573,5 @@ export const maplibreEffectsPlugin: GeoLibrePlugin = {
   version: "1.0.0",
   activeByDefault: true,
   activate: (app: GeoLibreAppAPI) => attachEngine(app),
-  deactivate: () => detachEngine(),
+  deactivate: (_app: GeoLibreAppAPI) => detachEngine(),
 };
