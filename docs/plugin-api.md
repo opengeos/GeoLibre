@@ -45,6 +45,16 @@ export interface GeoLibrePlugin {
   applyProjectState?: (app: GeoLibreAppAPI, state: unknown) => boolean | void;
 }
 
+// Resolved by app.getDeckGL(): GeoLibre's own deck.gl modules, so a plugin
+// renders on the host's single instance instead of bundling its own copy.
+export interface GeoLibreDeckGL {
+  core: typeof import("@deck.gl/core");
+  layers: typeof import("@deck.gl/layers");
+  geoLayers: typeof import("@deck.gl/geo-layers");
+  meshLayers: typeof import("@deck.gl/mesh-layers");
+  mapbox: typeof import("@deck.gl/mapbox");
+}
+
 export interface GeoLibreAppAPI {
   setBasemap: (styleUrl: string) => void;
   addGeoJsonLayer: (
@@ -74,16 +84,6 @@ export interface GeoLibreAppAPI {
     position: GeoLibreMapControlPosition,
   ) => boolean;
   getDeckGL?: () => Promise<GeoLibreDeckGL>;
-}
-
-// Resolved by app.getDeckGL(): GeoLibre's own deck.gl modules, so a plugin
-// renders on the host's single instance instead of bundling its own copy.
-export interface GeoLibreDeckGL {
-  core: typeof import("@deck.gl/core");
-  layers: typeof import("@deck.gl/layers");
-  geoLayers: typeof import("@deck.gl/geo-layers");
-  meshLayers: typeof import("@deck.gl/mesh-layers");
-  mapbox: typeof import("@deck.gl/mapbox");
 }
 ```
 
