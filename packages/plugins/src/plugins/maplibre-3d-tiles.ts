@@ -248,6 +248,7 @@ function restoreThreeDTilesMapLayer(
   const layerName = layer.name || layerNameFromUrl(url, id);
   const beforeId = validThreeDTilesBeforeId(control, layer.beforeId);
   const altitudeOffset = numberValue(layer.source.altitudeOffset, 0);
+  const requestHeaders = stringRecordValue(layer.source.requestHeaders);
   const existingTilesets = control
     .getState()
     .tilesets.filter((tileset) => tileset.id !== id);
@@ -267,6 +268,7 @@ function restoreThreeDTilesMapLayer(
     status,
     center: savedCenter,
     altitude: savedAltitude,
+    requestHeaders,
   };
 
   runWithThreeDTilesStoreSyncSuspended(() => {
@@ -279,6 +281,7 @@ function restoreThreeDTilesMapLayer(
       error: undefined,
       layerName,
       opacity: layer.opacity,
+      requestHeaders,
       status,
       tilesetUrl: url,
       tilesets: [...existingTilesets, restoredTileset],
@@ -297,6 +300,7 @@ function restoreThreeDTilesMapLayer(
     altitudeOffset,
     opacity: layer.opacity,
     visible: layer.visible,
+    requestHeaders,
     ...getThreeDTilesDecoderOptions(control),
     onLoad: (metadata) => updateThreeDTilesLoaded(control, id, metadata),
     onError: (error) => updateThreeDTilesError(control, id, error),
@@ -383,6 +387,11 @@ function createThreeDTilesStoreLayer(
       sourceId: tileset.id,
       type: "3d-tiles",
       url: tileset.tilesetUrl,
+      // Persisted so a saved project reloads an authenticated tileset; this
+      // means any credential in a header is stored in the project file.
+      ...(tileset.requestHeaders
+        ? { requestHeaders: tileset.requestHeaders }
+        : {}),
     },
     visible: tileset.visible,
     opacity,
@@ -687,6 +696,16 @@ function lngLatPairValue(value: unknown): [number, number] | undefined {
     return [value[0], value[1]];
   }
   return undefined;
+}
+
+function stringRecordValue(
+  value: unknown,
+): Record<string, string> | undefined {
+  if (!isRecord(value)) return undefined;
+  const entries = Object.entries(value).filter(
+    (entry): entry is [string, string] => typeof entry[1] === "string",
+  );
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
 function recordsEqual(
