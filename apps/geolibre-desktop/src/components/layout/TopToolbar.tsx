@@ -1240,6 +1240,7 @@ export function TopToolbar({
             {isActive(EFFECTS_PLUGIN_ID) ? " ✓" : ""}
           </DropdownMenuItem>
           <DropdownMenuItem
+            title="Routing sends your waypoints to the public OSRM demo server (router.project-osrm.org)."
             onClick={() => toggle(DIRECTIONS_PLUGIN_ID, appApi)}
           >
             Directions

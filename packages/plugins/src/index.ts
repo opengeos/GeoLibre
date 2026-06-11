@@ -103,6 +103,7 @@ export {
 export {
   DIRECTIONS_PLUGIN_ID,
   maplibreDirectionsPlugin,
+  restoreDirections,
 } from "./plugins/maplibre-directions";
 export {
   EFFECTS_PLUGIN_ID,

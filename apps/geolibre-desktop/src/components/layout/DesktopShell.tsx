@@ -4,9 +4,11 @@ import type { MapController, MapDiagnosticEvent } from "@geolibre/map";
 import { MapCanvas } from "@geolibre/map";
 import {
   addRasterToMap,
+  DIRECTIONS_PLUGIN_ID,
   EFFECTS_PLUGIN_ID,
   endLayerGeometryEdit,
   getGeometryEditTargetLayerId,
+  restoreDirections,
   restoreEffects,
   restoreRasterLayers,
   restoreThreeDTilesLayers,
@@ -377,6 +379,9 @@ export function DesktopShell({
     // called, so the effects engine must be kicked explicitly to match the
     // restored active state (idempotent).
     restoreEffects(appAPI, pluginManager.isActive(EFFECTS_PLUGIN_ID));
+    // Rebind the directions tool to the (possibly new) map instance after a
+    // map re-init, since restoreProjectState skips an already-active plugin.
+    restoreDirections(appAPI, pluginManager.isActive(DIRECTIONS_PLUGIN_ID));
     const search = window.location.search;
     void pluginManager
       .handleUrlParameters(
