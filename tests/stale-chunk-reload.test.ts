@@ -51,6 +51,8 @@ describe("reloadForStaleChunk", () => {
     const { state, deps } = makeDeps({ now: 0, lastReloadAt: null });
 
     assert.equal(reloadForStaleChunk(deps), true);
+    // The guard is strict `< cooldown`, so a diff of exactly the cooldown is
+    // already past it (the just-expired edge) and reloads again.
     state.now += STALE_CHUNK_RELOAD_COOLDOWN_MS;
 
     // A later redeploy in a long-lived session should recover too.

@@ -14,10 +14,11 @@ import shp from "shpjs";
 import { parseDelimitedTextFields } from "./delimited-text";
 import type { DuckDbVectorFile } from "./duckdb-vector-loader";
 import { parseGpxLayer } from "./gpx";
+import { isTauri } from "./is-tauri";
 
-export function isTauri(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
+// Re-exported so existing `import { isTauri } from "./tauri-io"` consumers keep
+// working; the implementation lives in the lightweight ./is-tauri module.
+export { isTauri };
 
 function browserSafeFileName(path: string): string {
   return path.split(/[/\\]/).pop() || "project.geolibre.json";

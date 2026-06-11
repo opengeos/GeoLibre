@@ -16,6 +16,8 @@
  * rather than a stale chunk.
  */
 
+import { isTauri } from "./is-tauri";
+
 const RELOAD_TIMESTAMP_KEY = "geolibre:stale-chunk-reload-at";
 
 /**
@@ -24,15 +26,6 @@ const RELOAD_TIMESTAMP_KEY = "geolibre:stale-chunk-reload-at";
  * refresh loop. Long enough to cover a reload's network round-trip.
  */
 export const STALE_CHUNK_RELOAD_COOLDOWN_MS = 15_000;
-
-/**
- * Whether the app runs inside the Tauri desktop webview. Checked inline (rather
- * than importing the heavier tauri-io module) so this can run in the eager
- * entry without pulling extra code into the initial bundle.
- */
-function isTauriRuntime(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
 
 export interface StaleChunkReloadDeps {
   /** Current epoch milliseconds. */
@@ -77,12 +70,15 @@ export function reloadForStaleChunk(deps: StaleChunkReloadDeps): boolean {
 export function installStaleChunkReload(options?: {
   enabled?: boolean;
 }): () => void {
-  const enabled = options?.enabled ?? !isTauriRuntime();
+  const enabled = options?.enabled ?? !isTauri();
   if (!enabled || typeof window === "undefined") {
     return () => {};
   }
 
   const handler = (event: Event) => {
+    // Vite dispatches a plain Event with the underlying error on `.payload`
+    // (not a CustomEvent `.detail`); surface it so a recovery is visible.
+    const payload = (event as Event & { payload?: unknown }).payload;
     let reloaded = false;
     try {
       reloaded = reloadForStaleChunk({
@@ -103,10 +99,17 @@ export function installStaleChunkReload(options?: {
       // The cooldown loop-guard needs that persistence, so without it skip the
       // reload and let Vite surface the original error rather than risk a
       // refresh loop.
+      console.warn(
+        "[GeoLibre] Stale-chunk reload guard unavailable (storage blocked); leaving the preload error to surface.",
+        payload,
+      );
     }
-    // Only suppress Vite's rethrow when we are recovering by reloading; a
-    // cooldown-suppressed (broken-build) error should still surface.
-    if (reloaded) event.preventDefault();
+    if (reloaded) {
+      // Only suppress Vite's rethrow when we are recovering by reloading; a
+      // cooldown-suppressed (broken-build) error should still surface.
+      console.warn("[GeoLibre] Reloading to recover from a stale chunk.", payload);
+      event.preventDefault();
+    }
   };
 
   window.addEventListener("vite:preloadError", handler);
