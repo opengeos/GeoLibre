@@ -10,9 +10,17 @@ import type { MapController } from "@geolibre/map";
 import type { GeoJSONSource } from "maplibre-gl";
 import {
   Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
   Input,
   ScrollArea,
@@ -25,14 +33,20 @@ import {
 import type { Feature, FeatureCollection } from "geojson";
 import {
   ArrowDown,
+  ArrowLeft,
+  ArrowRight,
   ArrowUp,
+  Columns3,
   Download,
+  EyeOff,
+  MoreHorizontal,
   Pencil,
   PanelBottomClose,
   PanelBottomOpen,
   RotateCcw,
   Save,
   TableProperties,
+  Trash2,
   X,
 } from "lucide-react";
 import {
@@ -44,6 +58,17 @@ import {
   useSyncExternalStore,
 } from "react";
 import { isTauri } from "../../lib/tauri-io";
+import {
+  deleteColumn,
+  getColumnSettings,
+  hiddenColumns,
+  moveColumn,
+  showAllColumns,
+  toggleColumnHidden,
+  renameColumn,
+  visibleColumns,
+  type ColumnMoveDirection,
+} from "../../lib/attribute-columns";
 import {
   exportVectorLayer,
   formatAttributeValue,
@@ -232,6 +257,15 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const deferTableResize = isTauri();
 
   const [loadingVectorGeojson, setLoadingVectorGeojson] = useState(false);
+  // Inline field-rename editing in a column header.
+  const [editingColumn, setEditingColumn] = useState<string | null>(null);
+  const [editingColumnName, setEditingColumnName] = useState("");
+  // Set true by Escape/commit so the input's blur does not re-commit a rename
+  // from a stale closure (mirrors LayerPanel's rename guard).
+  const suppressColumnBlurRef = useRef(false);
+  const [columnPendingDelete, setColumnPendingDelete] = useState<string | null>(
+    null,
+  );
 
   const layer = layers.find((l) => l.id === selectedLayerId);
   const hasLayer = Boolean(layer);
@@ -349,8 +383,17 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       propKeys.add(k);
     }
   }
-  const columns = Array.from(propKeys);
+  const discoveredColumns = Array.from(propKeys);
+  const columnSettings = getColumnSettings(layer);
+  // Columns rendered in the table, honoring saved order and hidden state.
+  const columns = visibleColumns(discoveredColumns, columnSettings);
+  const hiddenCols = hiddenColumns(discoveredColumns, columnSettings);
   const tableColumns = ["__featureId", ...columns];
+  // Column management mutates layer.geojson/style/metadata, so it is offered
+  // only for in-store, editable GeoJSON layers — not DuckDB query results or
+  // Add Vector Layer layers (whose geojson is not persisted).
+  const canManageColumns =
+    Boolean(layer?.geojson) && !isDuckDBLayer && !isReadOnlyVectorLayer;
 
   const columnWidth = (key: SortKey) =>
     columnWidths[key] ??
@@ -577,6 +620,71 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     }
   };
 
+  const beginColumnRename = (col: string) => {
+    suppressColumnBlurRef.current = false;
+    setEditingColumn(col);
+    setEditingColumnName(col);
+  };
+
+  const cancelColumnRename = () => {
+    suppressColumnBlurRef.current = true;
+    setEditingColumn(null);
+    setEditingColumnName("");
+  };
+
+  const commitColumnRename = () => {
+    if (suppressColumnBlurRef.current || !editingColumn || !layer) {
+      suppressColumnBlurRef.current = false;
+      return;
+    }
+    suppressColumnBlurRef.current = true;
+    const oldKey = editingColumn;
+    const patch = renameColumn(
+      layer,
+      discoveredColumns,
+      oldKey,
+      editingColumnName,
+    );
+    if (patch) {
+      const newKey = editingColumnName.trim();
+      updateLayer(layer.id, patch);
+      // Keep view state pointing at the renamed column.
+      setColumnWidths((current) => {
+        if (!(oldKey in current)) return current;
+        const { [oldKey]: width, ...rest } = current;
+        return { ...rest, [newKey]: width };
+      });
+      setSort((current) =>
+        current.key === oldKey ? { ...current, key: newKey } : current,
+      );
+    }
+    setEditingColumn(null);
+    setEditingColumnName("");
+  };
+
+  const handleToggleHidden = (col: string) => {
+    if (!layer) return;
+    updateLayer(layer.id, toggleColumnHidden(layer, col));
+  };
+
+  const handleShowAllColumns = () => {
+    if (!layer) return;
+    updateLayer(layer.id, showAllColumns(layer));
+  };
+
+  const handleMoveColumn = (col: string, direction: ColumnMoveDirection) => {
+    if (!layer) return;
+    const patch = moveColumn(layer, discoveredColumns, col, direction);
+    if (patch) updateLayer(layer.id, patch);
+  };
+
+  const confirmDeleteColumn = () => {
+    if (!layer || !columnPendingDelete) return;
+    const patch = deleteColumn(layer, columnPendingDelete);
+    if (patch) updateLayer(layer.id, patch);
+    setColumnPendingDelete(null);
+  };
+
   const sortableHeader = (key: SortKey, label: string) => (
     <div className="relative flex h-full min-h-10 items-center">
       <button
@@ -596,6 +704,105 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       />
     </div>
   );
+
+  const attributeColumnHeader = (col: string, index: number) => {
+    if (editingColumn === col) {
+      return (
+        <div className="relative flex h-full min-h-10 items-center">
+          <Input
+            autoFocus
+            className="h-7 min-w-0 flex-1 px-2 text-xs"
+            aria-label={`Rename field ${col}`}
+            value={editingColumnName}
+            onClick={(event) => event.stopPropagation()}
+            onFocus={(event) => event.currentTarget.select()}
+            onChange={(event) => setEditingColumnName(event.target.value)}
+            onBlur={commitColumnRename}
+            onKeyDown={(event) => {
+              event.stopPropagation();
+              if (event.key === "Enter") {
+                event.preventDefault();
+                commitColumnRename();
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                cancelColumnRename();
+              }
+            }}
+          />
+        </div>
+      );
+    }
+
+    // Read-only / non-manageable layers (DuckDB, Add Vector Layer) keep the
+    // plain sortable header with no management affordances.
+    if (!canManageColumns || isEditing) return sortableHeader(col, col);
+
+    return (
+      <div className="relative flex h-full min-h-10 items-center">
+        <button
+          type="button"
+          className="flex h-full min-w-0 flex-1 items-center gap-1 pr-1 text-left font-medium"
+          onClick={() => toggleSort(col)}
+        >
+          <span className="truncate">{col}</span>
+          {renderSortIcon(col)}
+        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5 shrink-0 text-muted-foreground"
+              title={`Manage field "${col}"`}
+              aria-label={`Manage field ${col}`}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <MoreHorizontal className="h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => beginColumnRename(col)}>
+              <Pencil className="mr-2 h-3.5 w-3.5" />
+              Rename field
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => handleToggleHidden(col)}>
+              <EyeOff className="mr-2 h-3.5 w-3.5" />
+              Hide field
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={index === 0}
+              onSelect={() => handleMoveColumn(col, "left")}
+            >
+              <ArrowLeft className="mr-2 h-3.5 w-3.5" />
+              Move left
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={index === columns.length - 1}
+              onSelect={() => handleMoveColumn(col, "right")}
+            >
+              <ArrowRight className="mr-2 h-3.5 w-3.5" />
+              Move right
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onSelect={() => setColumnPendingDelete(col)}
+            >
+              <Trash2 className="mr-2 h-3.5 w-3.5" />
+              Delete field
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={`Resize ${col} column`}
+          className="absolute -right-2 top-0 h-full w-3 cursor-col-resize select-none border-r border-transparent hover:border-primary"
+          onMouseDown={(event) => startColumnResize(col, event)}
+        />
+      </div>
+    );
+  };
 
   if (!attributeTableOpen) {
     return (
@@ -711,6 +918,49 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           <Save className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">Save</span>
         </Button>
+        {canManageColumns && !isEditing ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-2"
+                title="Show or hide fields"
+                aria-label="Manage fields"
+              >
+                <Columns3 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Fields</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="max-h-72 overflow-y-auto">
+              <DropdownMenuLabel>Visible fields</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {discoveredColumns.length === 0 ? (
+                <DropdownMenuItem disabled>No fields</DropdownMenuItem>
+              ) : (
+                discoveredColumns.map((col) => (
+                  <DropdownMenuCheckboxItem
+                    key={col}
+                    checked={!hiddenCols.includes(col)}
+                    // Keep the menu open so several fields can be toggled at once.
+                    onSelect={(event: Event) => event.preventDefault()}
+                    onCheckedChange={() => handleToggleHidden(col)}
+                  >
+                    <span className="truncate">{col}</span>
+                  </DropdownMenuCheckboxItem>
+                ))
+              )}
+              {hiddenCols.length > 0 ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={handleShowAllColumns}>
+                    Show all fields
+                  </DropdownMenuItem>
+                </>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -812,9 +1062,9 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                 <TableHead className="bg-card">
                   {sortableHeader("__featureId", "#")}
                 </TableHead>
-                {columns.map((col) => (
+                {columns.map((col, index) => (
                   <TableHead key={col} className="bg-card">
-                    {sortableHeader(col, col)}
+                    {attributeColumnHeader(col, index)}
                   </TableHead>
                 ))}
               </TableRow>
@@ -882,6 +1132,32 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           </table>
         )}
       </ScrollArea>
+      <Dialog
+        open={columnPendingDelete !== null}
+        onOpenChange={(open: boolean) => {
+          if (!open) setColumnPendingDelete(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete field</DialogTitle>
+            <DialogDescription>
+              {`This permanently removes the field "${columnPendingDelete ?? ""}" from every feature in "${layer?.name ?? ""}". Styling or labels that reference it will be cleared. This cannot be undone.`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setColumnPendingDelete(null)}
+            >
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDeleteColumn}>
+              Delete field
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
