@@ -609,7 +609,10 @@ export function TopToolbar({
       const data = await appApi.fetchArrayBuffer?.(url);
       if (!data) throw new Error("Could not download the OSM PBF file.");
       const fileName = url.split("/").pop()?.split("?")[0] || "osm";
-      setOsmPbfLoading(false);
+      // Keep the loading indicator up through the parse for small files
+      // (runOsmPbf re-sets it and clears it in finally); only stop it here when
+      // a large file will instead show the confirm dialog, to avoid a flicker.
+      if (data.byteLength >= OSM_PBF_SIZE_WARN_BYTES) setOsmPbfLoading(false);
       startOsmPbf(data, osmPbfBaseName(fileName), url);
     } catch (err) {
       setOsmPbfLoading(false);
@@ -1568,7 +1571,15 @@ export function TopToolbar({
           </form>
         </DialogContent>
       </Dialog>
-      <Dialog open={osmPbfLoading}>
+      <Dialog
+        open={osmPbfLoading}
+        onOpenChange={(open: boolean) => {
+          // Best-effort: dismissing only hides the indicator (the worker has no
+          // cancel handle, so a running parse still finishes and adds layers).
+          // This keeps the dialog from getting stuck open if the worker hangs.
+          if (!open) setOsmPbfLoading(false);
+        }}
+      >
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Loading OSM PBF…</DialogTitle>

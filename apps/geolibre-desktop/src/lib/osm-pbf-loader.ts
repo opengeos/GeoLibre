@@ -8,6 +8,11 @@ export type { OsmPbfLayers } from "./osm-pbf";
  */
 export const OSM_PBF_SIZE_WARN_BYTES = 50 * 1024 * 1024; // 50 MB
 
+// Trade-off: a bare ".pbf" also names Mapbox Vector Tiles (protobuf-encoded
+// tiles), so dragging an MVT ".pbf" file routes it here and produces an OSM
+// parse error. We accept the rare collision because most OSM extracts (and the
+// ones users drag in) are named ".osm.pbf" or ".pbf"; vector tiles are normally
+// served as tiles, not dropped as files.
 const OSM_PBF_EXTENSIONS = [".osm.pbf", ".pbf"];
 
 /** Does this file name look like an OSM PBF file? */
@@ -86,6 +91,13 @@ export function loadOsmPbf(bytes: ArrayBuffer): Promise<OsmPbfLayers> {
     worker.addEventListener("error", (event) => {
       worker.terminate();
       reject(new Error(event.message || "The OSM PBF worker failed."));
+    });
+    // `error` does not fire if the worker is OOM-killed or the response message
+    // fails to deserialize; messageerror covers the latter so the promise can't
+    // hang silently.
+    worker.addEventListener("messageerror", () => {
+      worker.terminate();
+      reject(new Error("The OSM PBF worker posted an undeserializable message."));
     });
     worker.postMessage(bytes, [bytes]);
   });

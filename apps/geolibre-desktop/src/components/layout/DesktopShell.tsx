@@ -40,6 +40,7 @@ import {
   isOsmPbfFileName,
   loadOsmPbf,
   osmPbfBaseName,
+  OSM_PBF_SIZE_WARN_BYTES,
 } from "../../lib/osm-pbf-loader";
 import {
   createAppAPI,
@@ -563,7 +564,20 @@ export function DesktopShell({
           (file) => !isOsmPbfFileName(file.name),
         );
 
+        let addedPbfLayers = 0;
         for (const file of pbfFiles) {
+          // Mirror the file-picker path's large-file guard (parsing a huge
+          // extract can exhaust memory even off the main thread).
+          if (file.size >= OSM_PBF_SIZE_WARN_BYTES) {
+            const sizeMb = Math.round(file.size / (1024 * 1024));
+            if (
+              !window.confirm(
+                `${file.name} is about ${sizeMb} MB. Parsing it may use a lot of memory. Continue?`,
+              )
+            ) {
+              continue;
+            }
+          }
           setDropMessage(`Parsing ${file.name}…`);
           const layers = await loadOsmPbf(await file.arrayBuffer());
           const added = addOsmPbfLayers(
@@ -572,6 +586,7 @@ export function DesktopShell({
             file.name,
             layers,
           );
+          addedPbfLayers += added;
           if (added > 0 && layers.bounds) {
             mapControllerRef.current?.fitBounds(layers.bounds);
           }
@@ -586,7 +601,17 @@ export function DesktopShell({
           const rasterCount = await addDroppedRasters(
             loadDroppedRasterFiles(otherFiles),
           );
-          finishDrop(await loadDroppedVectorFiles(otherFiles), rasterCount);
+          const importedLayers = await loadDroppedVectorFiles(otherFiles);
+          // Only report/throw via finishDrop when the other files actually
+          // produced something, or when no PBF layers were added — otherwise
+          // finishDrop's empty-input error would clobber the PBF success.
+          if (
+            importedLayers.length > 0 ||
+            rasterCount > 0 ||
+            addedPbfLayers === 0
+          ) {
+            finishDrop(importedLayers, rasterCount);
+          }
         }
       } catch (error) {
         setDropMessage(null);

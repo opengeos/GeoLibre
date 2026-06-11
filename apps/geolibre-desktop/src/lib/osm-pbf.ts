@@ -50,10 +50,6 @@ function extendBounds(bounds: MutableBounds, geometry: Geometry | null): void {
   walk((geometry as { coordinates?: unknown }).coordinates);
 }
 
-function emptyCollection(): FeatureCollection {
-  return { type: "FeatureCollection", features: [] };
-}
-
 function hasTags(tags: Record<string, unknown> | undefined): boolean {
   return tags != null && Object.keys(tags).length > 0;
 }
@@ -121,7 +117,9 @@ function geometryBucket(
  * untagged geometry vertices for ways and would otherwise flood the points
  * layer. Ways and relations are always converted (they are meaningful features).
  *
- * Runs synchronously and can be heavy for large extracts; call it from a worker.
+ * The entity-classification loop runs without yielding and can be heavy for
+ * large extracts (the PBF read above is async, but this part is not), so call
+ * it from a worker.
  */
 export async function parseOsmPbf(bytes: Uint8Array): Promise<OsmPbfLayers> {
   const osm = await buildOsmFromPbf(bytes);
@@ -132,27 +130,30 @@ export async function parseOsmPbf(bytes: Uint8Array): Promise<OsmPbfLayers> {
   let skipped = 0;
   const bounds: MutableBounds = [Infinity, Infinity, -Infinity, -Infinity];
 
-  const place = (feature: Feature) => {
-    const bucket = geometryBucket(feature.geometry);
-    if (bucket === "points") points.push(feature);
-    else if (bucket === "lines") lines.push(feature);
-    else if (bucket === "polygons") polygons.push(feature);
-    else {
+  // Defensive: osmEntityToGeoJSONFeature is typed non-null, but guard against a
+  // null/undefined result (e.g. an entity whose geometry cannot be resolved)
+  // rather than dereferencing .geometry and aborting the whole parse.
+  const place = (feature: Feature | null | undefined) => {
+    const bucket = feature ? geometryBucket(feature.geometry) : null;
+    if (!feature || bucket === null) {
       skipped += 1;
       return;
     }
+    if (bucket === "points") points.push(feature);
+    else if (bucket === "lines") lines.push(feature);
+    else polygons.push(feature);
     extendBounds(bounds, feature.geometry);
   };
 
   for (const node of osm.nodes) {
     if (!hasTags(node.tags)) continue;
-    place(osmEntityToGeoJSONFeature(osm, node) as Feature);
+    place(osmEntityToGeoJSONFeature(osm, node) as Feature | null);
   }
   for (const way of osm.ways) {
-    place(osmEntityToGeoJSONFeature(osm, way) as Feature);
+    place(osmEntityToGeoJSONFeature(osm, way) as Feature | null);
   }
   for (const relation of osm.relations) {
-    place(osmEntityToGeoJSONFeature(osm, relation) as Feature);
+    place(osmEntityToGeoJSONFeature(osm, relation) as Feature | null);
   }
 
   return {
@@ -173,5 +174,3 @@ export async function parseOsmPbf(bytes: Uint8Array): Promise<OsmPbfLayers> {
     },
   };
 }
-
-export { emptyCollection };
