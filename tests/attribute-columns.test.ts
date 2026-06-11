@@ -152,6 +152,10 @@ describe("deleteColumn (destructive)", () => {
       .columnSettings as { order: string[] };
     assert.deepEqual(settings.order, ["name", "area"]);
   });
+
+  it("is a no-op for a key absent from every feature", () => {
+    assert.equal(deleteColumn(makeLayer(), "missing"), null);
+  });
 });
 
 describe("visibility toggles", () => {

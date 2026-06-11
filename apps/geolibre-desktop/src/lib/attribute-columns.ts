@@ -233,6 +233,12 @@ export function deleteColumn(
   key: string,
 ): Partial<GeoLibreLayer> | null {
   if (!layer.geojson) return null;
+  // Mirror renameColumn's guard: a key absent from every feature is a no-op, so
+  // don't return a patch that would touch style/settings without changing data.
+  const keyExists = layer.geojson.features.some(
+    (feature) => feature.properties != null && key in feature.properties,
+  );
+  if (!keyExists) return null;
   const settings = getColumnSettings(layer);
   return {
     geojson: deleteFieldInGeojson(layer.geojson, key),

@@ -358,7 +358,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     setDrafts({});
     // Clear column-management state too, so a rename input or pending delete
     // started on the previous layer cannot apply to a same-named column on the
-    // newly selected layer.
+    // newly selected layer. Suppress the rename Input's onBlur first: clearing
+    // editingColumn unmounts it, which fires onBlur -> commitColumnRename with
+    // the old column but the new layer, so the guard must already be set.
+    suppressColumnBlurRef.current = true;
     setEditingColumn(null);
     setEditingColumnName("");
     setColumnPendingDelete(null);
@@ -646,8 +649,9 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     }
     suppressColumnBlurRef.current = true;
     const oldKey = editingColumn;
-    // Trim once here and pass the normalized key, so the data written by
-    // renameColumn and the view-state updates below cannot drift apart.
+    // Normalize the key here so the view-state updates below use exactly what
+    // renameColumn writes. (renameColumn also trims defensively for other
+    // callers; passing the already-trimmed value keeps the two in agreement.)
     const newKey = editingColumnName.trim();
     const patch = renameColumn(layer, discoveredColumns, oldKey, newKey);
     if (patch) {
@@ -686,6 +690,13 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     if (!layer || !columnPendingDelete) return;
     const patch = deleteColumn(layer, columnPendingDelete);
     if (patch) updateLayer(layer.id, patch);
+    // Drop a sort that pointed at the deleted column, which would otherwise
+    // leave sort.key referencing an absent field (every row compares equal).
+    setSort((current) =>
+      current.key === columnPendingDelete
+        ? { key: "__featureId", direction: "asc" }
+        : current,
+    );
     setColumnPendingDelete(null);
   };
 
