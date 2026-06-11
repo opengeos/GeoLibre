@@ -239,6 +239,21 @@ describe("app store", () => {
     assert.equal(useAppStore.getState().selectedLayerId, second);
   });
 
+  it("renames a layer without changing its id (keeps MapLibre sync stable)", () => {
+    const id = useAppStore.getState().addGeoJsonLayer("Original", {
+      type: "FeatureCollection",
+      features: [],
+    });
+
+    useAppStore.getState().updateLayer(id, { name: "Renamed" });
+
+    const layer = useAppStore.getState().layers.find((l) => l.id === id);
+    assert.ok(layer);
+    assert.equal(layer.name, "Renamed");
+    // The id is the MapLibre source/layer key — renaming must not touch it.
+    assert.equal(layer.id, id);
+  });
+
   it("deduplicates recent projects and normalizes empty names", () => {
     useAppStore.getState().setRecentProjects([
       { path: "/tmp/a.geolibre.json", name: "", openedAt: "2026-01-01T00:00:00Z" },
