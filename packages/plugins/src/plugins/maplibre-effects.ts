@@ -149,6 +149,12 @@ function isOnGlobe(map: MapLibreMap, x: number, y: number): boolean {
  * Assumes the start point is on the globe; expands until a point is off-globe,
  * then bisects the on/off boundary. `maxR` caps the search so a globe larger
  * than the search window (very rare in the effect's low-zoom range) terminates.
+ *
+ * `seedR` is the previous frame's limb radius. During a pan/zoom the limb moves
+ * little between frames, so starting the doubling phase there usually brackets
+ * the limb in zero or one steps instead of climbing from 8px — the bisection
+ * still pins it to sub-pixel regardless. `lo = 0` (the on-globe center) stays a
+ * valid lower bound whether the seed lands inside or outside the limb.
  */
 function rayToLimb(
   map: MapLibreMap,
@@ -157,9 +163,10 @@ function rayToLimb(
   dx: number,
   dy: number,
   maxR: number,
+  seedR: number,
 ): number {
   let lo = 0;
-  let hi = 8;
+  let hi = seedR > 0 ? Math.min(seedR, maxR) : 8;
   while (hi < maxR && isOnGlobe(map, cx + dx * hi, cy + dy * hi)) {
     lo = hi;
     hi *= 2;
@@ -179,13 +186,17 @@ function rayToLimb(
  * Casts {@link SILHOUETTE_RAYS} rays from the projected map center (always
  * inside the silhouette) out to the rendered limb, then fits an ellipse to those
  * limb points. The silhouette of a sphere under a pinhole camera is exactly a
- * conic — a circle when viewed top-down, an ellipse under pitch — so the fit is
- * exact: its bounding-box center is the ellipse center, and a 3-parameter
- * quadratic-form least-squares solve recovers the axes and rotation. This tracks
- * the globe under any zoom, pitch, and bearing, unlike a fixed great-circle
- * limb measured from the map center. Returns null when the globe is off-screen.
+ * conic — a circle when viewed top-down, an ellipse under pitch — so {@link
+ * fitEllipse} recovers the center, axes, and rotation exactly. This tracks the
+ * globe under any zoom, pitch, and bearing, unlike a fixed great-circle limb
+ * measured from the map center. `seedRadius` (the previous frame's limb radius,
+ * or 0) just speeds up the ray search. Returns null when the globe is off-screen
+ * or larger than the search window.
  */
-function getGlobeEllipse(map: MapLibreMap): GlobeEllipse | null {
+function getGlobeEllipse(
+  map: MapLibreMap,
+  seedRadius: number,
+): GlobeEllipse | null {
   const center = map.project(map.getCenter());
   const cx = center.x;
   const cy = center.y;
@@ -200,7 +211,11 @@ function getGlobeEllipse(map: MapLibreMap): GlobeEllipse | null {
     const a = (i / SILHOUETTE_RAYS) * 2 * Math.PI;
     const dx = Math.cos(a);
     const dy = Math.sin(a);
-    const r = rayToLimb(map, cx, cy, dx, dy, maxR);
+    const r = rayToLimb(map, cx, cy, dx, dy, maxR, seedRadius);
+    // A ray that never leaves the globe within the window means the globe is
+    // larger than 8× the viewport (vanishingly rare before the effect fades at
+    // zoom ≈ 4.5). The clustered points would fit a huge bogus ellipse, so bail.
+    if (r >= maxR) return null;
     pts.push([cx + dx * r, cy + dy * r]);
   }
 
@@ -211,17 +226,25 @@ function getGlobeEllipse(map: MapLibreMap): GlobeEllipse | null {
  * Fit an ellipse to points sampled around its boundary.
  *
  * Exact for points that lie on a real ellipse (such as the conic silhouette of a
- * sphere): the axis-aligned bounding box of any ellipse is centered on the
- * ellipse, so its center is recovered directly; the shape comes from a
- * 3-parameter quadratic-form least-squares solve of A·dx² + 2B·dx·dy + C·dy² = 1.
- * Returns null for a degenerate (non-positive-definite) fit — e.g. collinear or
- * too few points.
+ * sphere), for any sampling — including the production rays, which are cast at
+ * uniform angles from the projected map center, a point that under pitch is
+ * offset from the silhouette center. A bounding-box center would only be exact
+ * for samples symmetric about the center (e.g. uniform in the ellipse parameter
+ * t); off-center ray casts are not, and the error grows with pitch (tens of
+ * pixels past ~50°). So fit the general conic A·u² + 2B·uv + C·v² + D·u + E·v = 1
+ * (u,v relative to a shift origin for conditioning) and recover the center from
+ * ∇ = 0; this solves for the center rather than assuming it. Returns null for a
+ * degenerate (non-elliptical) fit — collinear or fewer than five points.
  */
 export function fitEllipse(
   pts: ReadonlyArray<readonly [number, number]>,
 ): GlobeEllipse | null {
-  if (pts.length < 3) return null;
+  if (pts.length < 5) return null;
 
+  // Shift origin to the sample bounding-box center: it lies inside the ellipse,
+  // keeping the conic's constant term away from zero and the |u|,|v| magnitudes
+  // small so the normal equations stay well conditioned. It is only a numerical
+  // origin here — the true center is solved for below, not assumed from it.
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -233,92 +256,85 @@ export function fitEllipse(
     maxX = Math.max(maxX, px);
     maxY = Math.max(maxY, py);
   }
-  const ex = (minX + maxX) / 2;
-  const ey = (minY + maxY) / 2;
+  const ox = (minX + maxX) / 2;
+  const oy = (minY + maxY) / 2;
 
-  // Normal equations for A·dx² + 2B·dx·dy + C·dy² = 1 about the center.
-  let s00 = 0;
-  let s01 = 0;
-  let s02 = 0;
-  let s11 = 0;
-  let s12 = 0;
-  let s22 = 0;
-  let t0 = 0;
-  let t1 = 0;
-  let t2 = 0;
+  // Normal equations for A·u² + 2B·uv + C·v² + D·u + E·v = 1.
+  const s = Array.from({ length: 5 }, () => new Array<number>(5).fill(0));
+  const t = new Array<number>(5).fill(0);
   for (const [px, py] of pts) {
-    const dx = px - ex;
-    const dy = py - ey;
-    const f0 = dx * dx;
-    const f1 = 2 * dx * dy;
-    const f2 = dy * dy;
-    s00 += f0 * f0;
-    s01 += f0 * f1;
-    s02 += f0 * f2;
-    s11 += f1 * f1;
-    s12 += f1 * f2;
-    s22 += f2 * f2;
-    t0 += f0;
-    t1 += f1;
-    t2 += f2;
+    const u = px - ox;
+    const v = py - oy;
+    const f = [u * u, 2 * u * v, v * v, u, v];
+    for (let i = 0; i < 5; i++) {
+      for (let j = 0; j < 5; j++) s[i][j] += f[i] * f[j];
+      t[i] += f[i];
+    }
   }
-  const conic = solve3(
-    [
-      [s00, s01, s02],
-      [s01, s11, s12],
-      [s02, s12, s22],
-    ],
-    [t0, t1, t2],
-  );
+  const conic = solveLinear(s, t);
   if (!conic) return null;
-  const [A, B, C] = conic;
+  const [A, B, C, D, E] = conic;
 
-  // Eigen-decompose [[A,B],[B,C]]: semi-axis = 1/√eigenvalue, axis direction =
-  // eigenvector. A non-positive-definite fit is not a real ellipse, so bail.
-  const tr = A + C;
-  const det = A * C - B * B;
+  // Ellipse center solves ∇(conic) = 0: [[2A,2B],[2B,2C]]·[u0,v0] = [-D,-E].
+  const center = solveLinear(
+    [
+      [2 * A, 2 * B],
+      [2 * B, 2 * C],
+    ],
+    [-D, -E],
+  );
+  if (!center) return null;
+  const [u0, v0] = center;
+
+  // Translate to the center: A·p² + 2B·pq + C·q² = G (the constant moves over).
+  const g = -(A * u0 * u0 + 2 * B * u0 * v0 + C * v0 * v0 + D * u0 + E * v0 - 1);
+  if (!(g > 0)) return null; // not a real, centered ellipse
+  const a2 = A / g;
+  const b2 = B / g;
+  const c2 = C / g;
+
+  // Eigen-decompose [[a2,b2],[b2,c2]]: semi-axis = 1/√eigenvalue, axis direction
+  // = eigenvector. A non-positive-definite form is not a real ellipse, so bail.
+  const tr = a2 + c2;
+  const det = a2 * c2 - b2 * b2;
   const gap = Math.sqrt(Math.max(0, (tr * tr) / 4 - det));
   const l1 = tr / 2 + gap;
   const l2 = tr / 2 - gap;
   if (!(l1 > 0) || !(l2 > 0)) return null;
 
   return {
-    cx: ex,
-    cy: ey,
+    cx: ox + u0,
+    cy: oy + v0,
     rx: 1 / Math.sqrt(l1),
     ry: 1 / Math.sqrt(l2),
-    // Eigenvector for l1 is (B, l1 - A); this is the rx axis direction.
-    angle: Math.atan2(l1 - A, B),
+    // Eigenvector for l1 is (b2, l1 - a2); this is the rx axis direction. For a
+    // circle (l1 == l2, b2 == 0) atan2(0, 0) == 0 — fine, since any angle is
+    // equivalent when rx == ry.
+    angle: Math.atan2(l1 - a2, b2),
   };
 }
 
 /**
- * Solve the 3×3 system M·x = b by Gaussian elimination with partial pivoting.
- * Returns null if the matrix is singular (degenerate fit).
+ * Solve the square system M·x = b by Gaussian elimination with partial pivoting.
+ * `m` is row-major and `b` has the same length; returns null if singular.
  */
-function solve3(
-  m: [number, number, number][],
-  b: [number, number, number],
-): [number, number, number] | null {
-  const aug: number[][] = [
-    [m[0][0], m[0][1], m[0][2], b[0]],
-    [m[1][0], m[1][1], m[1][2], b[1]],
-    [m[2][0], m[2][1], m[2][2], b[2]],
-  ];
-  for (let col = 0; col < 3; col++) {
+function solveLinear(m: number[][], b: number[]): number[] | null {
+  const n = b.length;
+  const aug = m.map((row, i) => [...row, b[i]]);
+  for (let col = 0; col < n; col++) {
     let pivot = col;
-    for (let row = col + 1; row < 3; row++) {
+    for (let row = col + 1; row < n; row++) {
       if (Math.abs(aug[row][col]) > Math.abs(aug[pivot][col])) pivot = row;
     }
     if (Math.abs(aug[pivot][col]) < 1e-12) return null;
     [aug[col], aug[pivot]] = [aug[pivot], aug[col]];
-    for (let row = 0; row < 3; row++) {
+    for (let row = 0; row < n; row++) {
       if (row === col) continue;
       const factor = aug[row][col] / aug[col][col];
-      for (let k = col; k < 4; k++) aug[row][k] -= factor * aug[col][k];
+      for (let k = col; k <= n; k++) aug[row][k] -= factor * aug[col][k];
     }
   }
-  return [aug[0][3] / aug[0][0], aug[1][3] / aug[1][1], aug[2][3] / aug[2][2]];
+  return aug.map((row, i) => row[n] / row[i]);
 }
 
 /**
@@ -345,9 +361,12 @@ class EffectsEngine {
 
   // Cached globe silhouette. Fitting it costs many project/unproject round-trips,
   // but it only changes when the camera moves, so recompute lazily on a dirty
-  // flag set by move/zoom/resize rather than every animation frame.
+  // flag set by move/resize rather than every animation frame.
   private globeEllipse: GlobeEllipse | null = null;
   private ellipseDirty = true;
+  // Last fitted mean limb radius, fed back as the ray-search seed so the next
+  // recompute (e.g. the next frame of a drag) brackets the limb almost immediately.
+  private lastLimbRadius = 0;
 
   private rafId: number | null = null;
   private destroyed = false;
@@ -369,8 +388,9 @@ class EffectsEngine {
     this.tick = this.tick.bind(this);
 
     map.on("resize", this.handleResize);
+    // "move" already fires for pan, zoom, pitch, and rotate, so it covers every
+    // camera change; no separate "zoom" listener is needed.
     map.on("move", this.handleMapChange);
-    map.on("zoom", this.handleMapChange);
     document.addEventListener("visibilitychange", this.handleVisibility);
 
     this.handleResize();
@@ -387,7 +407,6 @@ class EffectsEngine {
     this.stop();
     this.map.off("resize", this.handleResize);
     this.map.off("move", this.handleMapChange);
-    this.map.off("zoom", this.handleMapChange);
     document.removeEventListener("visibilitychange", this.handleVisibility);
     this.spaceCanvas.remove();
     this.haloCanvas.remove();
@@ -419,7 +438,7 @@ class EffectsEngine {
     }
   }
 
-  // move/zoom restart a loop that stopped because the effects had faded out.
+  // A move restarts a loop that stopped because the effects had faded out.
   // MapLibre's "move" fires for pan, zoom, pitch, and rotate, so this also marks
   // the cached silhouette stale on any camera change.
   private handleMapChange(): void {
@@ -432,6 +451,9 @@ class EffectsEngine {
     const mapCanvas = this.map.getCanvas();
     this.width = mapCanvas.clientWidth;
     this.height = mapCanvas.clientHeight;
+    // Cap the backing-store scale at 2× — beyond that the overlay canvases cost
+    // more to clear/redraw each frame than the extra crispness is worth for a
+    // soft glow, so 3×+ displays render the effect (not the map) at 2×.
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
 
     for (const ctx of [this.spaceCtx, this.haloCtx]) {
@@ -741,7 +763,11 @@ class EffectsEngine {
     }
 
     if (this.ellipseDirty) {
-      this.globeEllipse = getGlobeEllipse(this.map);
+      this.globeEllipse = getGlobeEllipse(this.map, this.lastLimbRadius);
+      if (this.globeEllipse) {
+        this.lastLimbRadius =
+          (this.globeEllipse.rx + this.globeEllipse.ry) / 2;
+      }
       this.ellipseDirty = false;
     }
     const disc = this.globeEllipse;

@@ -6,10 +6,12 @@ import {
 } from "../packages/plugins/src/plugins/maplibre-effects";
 
 /**
- * Sample `n` points on the boundary of an ellipse with the given center,
- * semi-axes, and rotation. Sampling is uneven on purpose (rays from an interior
- * point that is *not* the center, mimicking how the silhouette is sampled from
- * the projected map center) to prove the fit does not depend on uniform spacing.
+ * Sample `n` boundary points by casting rays at uniform angles from `from` (an
+ * interior point) to the ellipse — exactly how the production code samples the
+ * silhouette from the projected map center. When `from` is the ellipse center
+ * the rays are radial; when it is offset (as it is under pitch) the hit points
+ * are *not* symmetric about the center, which is the case a bounding-box-center
+ * fit would get wrong and a true conic fit must get right.
  */
 function ellipsePoints(
   e: GlobeEllipse,
@@ -18,23 +20,28 @@ function ellipsePoints(
 ): Array<[number, number]> {
   const cos = Math.cos(e.angle);
   const sin = Math.sin(e.angle);
+  // Ray origin in the ellipse-local frame, scaled so the ellipse is the unit
+  // circle: translate to center, unrotate, divide by the semi-axes.
+  const ox = ((from[0] - e.cx) * cos + (from[1] - e.cy) * sin) / e.rx;
+  const oy = (-(from[0] - e.cx) * sin + (from[1] - e.cy) * cos) / e.ry;
   const pts: Array<[number, number]> = [];
   for (let i = 0; i < n; i++) {
-    // Boundary point at parameter t, in ellipse-local then world coords.
-    const t = (i / n) * 2 * Math.PI;
-    const lx = e.rx * Math.cos(t);
-    const ly = e.ry * Math.sin(t);
-    const bx = e.cx + lx * cos - ly * sin;
-    const by = e.cy + lx * sin + ly * cos;
-    // Re-parameterize by angle from `from` so spacing is uneven (irrelevant to
-    // the fit, but matches the real ray-cast sampling).
-    const ang = Math.atan2(by - from[1], bx - from[0]);
-    pts.push([ang, bx, by] as unknown as [number, number]);
+    const ang = (i / n) * 2 * Math.PI;
+    const cosA = Math.cos(ang);
+    const sinA = Math.sin(ang);
+    // Same ray direction in the unit-circle frame, then the far intersection
+    // with the unit circle: |origin + t·dir| = 1.
+    const dx = (cosA * cos + sinA * sin) / e.rx;
+    const dy = (-cosA * sin + sinA * cos) / e.ry;
+    const qa = dx * dx + dy * dy;
+    const qb = ox * dx + oy * dy;
+    const qc = ox * ox + oy * oy - 1;
+    const disc = qb * qb - qa * qc;
+    if (disc < 0) continue; // ray misses (only if `from` is outside the ellipse)
+    const t = (-qb + Math.sqrt(disc)) / qa; // far (forward) intersection
+    pts.push([from[0] + cosA * t, from[1] + sinA * t]);
   }
-  // sort by angle from `from`, keep coords
-  return (pts as unknown as Array<[number, number, number]>)
-    .sort((a, b) => a[0] - b[0])
-    .map(([, x, y]) => [x, y]);
+  return pts;
 }
 
 /** Largest absolute residual: how far each point sits off the fitted ellipse. */
@@ -63,9 +70,11 @@ describe("fitEllipse", () => {
     assert.ok(fit, "expected a fit");
     assert.ok(Math.abs(fit.cx - 344) < 1e-6);
     assert.ok(Math.abs(fit.cy - 392) < 1e-6);
-    assert.ok(Math.abs(fit.rx - 325) < 1e-6);
-    assert.ok(Math.abs(fit.ry - 325) < 1e-6);
-    assert.ok(maxResidual(fit, ellipsePoints(truth, 64)) < 1e-6);
+    // The 5-parameter conic fit is well within a thousandth of a pixel — far
+    // tighter than the sub-pixel accuracy the effect needs.
+    assert.ok(Math.abs(fit.rx - 325) < 1e-3, `rx ${fit.rx}`);
+    assert.ok(Math.abs(fit.ry - 325) < 1e-3, `ry ${fit.ry}`);
+    assert.ok(maxResidual(fit, ellipsePoints(truth, 64)) < 1e-5);
   });
 
   it("recovers an axis-aligned ellipse (pitched globe)", () => {
@@ -94,12 +103,12 @@ describe("fitEllipse", () => {
     // The fit may report axes/angle for either principal direction; verify by
     // residual rather than comparing angle directly (atan2 sign ambiguity).
     assert.ok(maxResidual(fit, ellipsePoints(truth, 96)) < 1e-5);
-    // Center is exact regardless of rotation (bbox-center property).
+    // Center is solved from the conic, so it is exact regardless of rotation.
     assert.ok(Math.abs(fit.cx - 100) < 1e-6);
     assert.ok(Math.abs(fit.cy + 50) < 1e-6);
   });
 
-  it("uses the bounding-box center even from off-center sampling", () => {
+  it("solves the center from off-center ray-cast sampling", () => {
     const truth: GlobeEllipse = {
       cx: 200,
       cy: 300,
@@ -116,6 +125,25 @@ describe("fitEllipse", () => {
     assert.ok(maxResidual(fit, pts) < 1e-5);
   });
 
+  it("recovers the center when rays are cast far from it (steep pitch)", () => {
+    // Replicates the production case: an eccentric, offset silhouette sampled by
+    // rays from the projected map center, ~1200px from the ellipse center. A
+    // bounding-box-center fit is off by ~16px here; solving the conic is exact.
+    const truth: GlobeEllipse = {
+      cx: 344,
+      cy: 1578,
+      rx: 1337,
+      ry: 1072,
+      angle: -2.2,
+    };
+    const pts = ellipsePoints(truth, 24, [344, 392]);
+    const fit = fitEllipse(pts);
+    assert.ok(fit, "expected a fit");
+    assert.ok(Math.abs(fit.cx - 344) < 1e-4, `cx ${fit.cx}`);
+    assert.ok(Math.abs(fit.cy - 1578) < 1e-4, `cy ${fit.cy}`);
+    assert.ok(maxResidual(fit, pts) < 1e-6);
+  });
+
   it("returns null for degenerate input", () => {
     assert.equal(fitEllipse([]), null);
     assert.equal(
@@ -125,13 +153,16 @@ describe("fitEllipse", () => {
       ]),
       null,
     );
-    // Collinear points do not bound an ellipse.
+    // Six collinear points (enough for the 5-parameter fit) do not bound an
+    // ellipse, so the normal equations are singular and the fit bails.
     assert.equal(
       fitEllipse([
         [0, 0],
         [1, 1],
         [2, 2],
         [3, 3],
+        [4, 4],
+        [5, 5],
       ]),
       null,
     );
