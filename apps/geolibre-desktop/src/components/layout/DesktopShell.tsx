@@ -500,13 +500,18 @@ export function DesktopShell({
 
             let addedPbfLayers = 0;
             if (pbfPaths.length > 0) {
-              const { readFile } = await import("@tauri-apps/plugin-fs");
+              const { readFile, stat } = await import("@tauri-apps/plugin-fs");
               for (const path of pbfPaths) {
                 const name = path.split(/[/\\]/).pop() || "osm";
                 try {
-                  const bytes = await readFile(path);
-                  if (bytes.byteLength >= OSM_PBF_SIZE_WARN_BYTES) {
-                    const sizeMb = Math.round(bytes.byteLength / (1024 * 1024));
+                  // Check the size via metadata before reading the file into
+                  // memory, so the guard runs before a huge extract is loaded.
+                  const { size } = await stat(path);
+                  if (size >= OSM_PBF_SIZE_WARN_BYTES) {
+                    const sizeMb = Math.round(size / (1024 * 1024));
+                    // window.confirm is blocking and adequate here; note that a
+                    // few webview builds may suppress JS dialogs, in which case
+                    // it returns false and the file is skipped.
                     if (
                       !window.confirm(
                         `${name} is about ${sizeMb} MB. Parsing it may use a lot of memory. Continue?`,
@@ -516,7 +521,18 @@ export function DesktopShell({
                     }
                   }
                   setDropMessage(`Parsing ${name}…`);
-                  const layers = await loadOsmPbf(bytes.buffer as ArrayBuffer);
+                  const bytes = await readFile(path);
+                  // Guard against a subview Uint8Array: .buffer would include
+                  // extra bytes and corrupt the parse, so slice to the exact view.
+                  const buffer =
+                    bytes.byteOffset === 0 &&
+                    bytes.byteLength === bytes.buffer.byteLength
+                      ? (bytes.buffer as ArrayBuffer)
+                      : (bytes.buffer.slice(
+                          bytes.byteOffset,
+                          bytes.byteOffset + bytes.byteLength,
+                        ) as ArrayBuffer);
+                  const layers = await loadOsmPbf(buffer);
                   const added = addOsmPbfLayers(
                     addGeoJsonLayer,
                     osmPbfBaseName(name),
