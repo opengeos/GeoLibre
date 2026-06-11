@@ -1,4 +1,5 @@
 @import "@geolibre/ui/globals.css";
+@config "../tailwind.config.js";
 
 html,
 body,

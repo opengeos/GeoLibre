@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@config "../../../apps/geolibre-desktop/tailwind.config.js";
+@import "tw-animate-css";
 
 @layer base {
   :root {

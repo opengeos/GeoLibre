@@ -330,9 +330,6 @@ export default defineConfig({
   },
   envPrefix: ["VITE_", "TAURI_"],
   optimizeDeps: {
-    esbuildOptions: {
-      target: "esnext",
-    },
     exclude: RADIX_OPTIMIZE_EXCLUDES,
   },
   build: {
