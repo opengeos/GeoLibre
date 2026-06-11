@@ -181,12 +181,14 @@ export function LayerPanel({
   const [dropTargetLayerId, setDropTargetLayerId] = useState<string | null>(
     null,
   );
-  // Escape cancels a rename by clearing editing state, but the input's onBlur
-  // (fired when React unmounts the focused input) would otherwise run
-  // commitRename with the pre-update closure and commit the edit anyway. This
-  // ref is read synchronously by commitRename, so it reflects the cancel
-  // regardless of which render's closure is executing.
-  const isCancelingRenameRef = useRef(false);
+  // Ending a rename (commit or cancel) clears the editing state, which
+  // unmounts the focused input. React then delivers that input's onBlur (the
+  // browser's native blur on the removed element) to commitRename from the
+  // pre-update closure, which would re-commit the edit. This ref, read
+  // synchronously by commitRename, suppresses that stray blur commit. It is
+  // reset in beginRename so a flag left set by a cancel whose blur never fired
+  // cannot leak into the next rename session.
+  const suppressBlurCommitRef = useRef(false);
   const refreshingLayerIdsRef = useRef(new Set<string>());
   const refreshTimersRef = useRef(new Map<string, LayerRefreshTimer>());
   const refreshStatusTimersRef = useRef(new Map<string, number>());
@@ -225,15 +227,21 @@ export function LayerPanel({
   };
 
   const beginRename = (layer: GeoLibreLayer) => {
+    // Clear any flag left set by a prior cancel/commit whose blur never fired,
+    // so it cannot swallow the first commit of this rename session.
+    suppressBlurCommitRef.current = false;
     setEditingLayerId(layer.id);
     setEditingName(layer.name);
   };
 
   const commitRename = () => {
-    if (isCancelingRenameRef.current || !editingLayerId) {
-      isCancelingRenameRef.current = false;
+    if (suppressBlurCommitRef.current || !editingLayerId) {
+      suppressBlurCommitRef.current = false;
       return;
     }
+    // Suppress the onBlur that fires when clearing editing state unmounts the
+    // input, so the edit is not committed a second time from the stale closure.
+    suppressBlurCommitRef.current = true;
     const trimmed = editingName.trim();
     const current = layers.find((l) => l.id === editingLayerId);
     if (trimmed && current && trimmed !== current.name) {
@@ -244,7 +252,7 @@ export function LayerPanel({
   };
 
   const cancelRename = () => {
-    isCancelingRenameRef.current = true;
+    suppressBlurCommitRef.current = true;
     setEditingLayerId(null);
     setEditingName("");
   };
