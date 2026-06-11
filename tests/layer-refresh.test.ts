@@ -78,6 +78,20 @@ describe("isVectorControlRefreshLayer / isRefreshableLayer", () => {
     assert.equal(isRefreshableLayer(layer), true);
   });
 
+  it("treats a tiles-mode (vector-tiles) vector-control layer as refreshable", () => {
+    const layer = makeLayer({
+      type: "vector-tiles",
+      source: { type: "vector", url: "https://x.com/a.pmtiles" },
+      metadata: {
+        sourceKind: "maplibre-gl-vector",
+        externalNativeLayer: true,
+      },
+    });
+
+    assert.equal(isVectorControlRefreshLayer(layer), true);
+    assert.equal(isRefreshableLayer(layer), true);
+  });
+
   it("does not treat a plain store layer as a vector-control refresh layer", () => {
     const layer = makeLayer({
       type: "geojson",
