@@ -94,6 +94,7 @@ export {
 export {
   closeVectorLayerPanel,
   openVectorLayerPanel,
+  reloadVectorControlLayer,
   restoreVectorLayers,
 } from "./plugins/maplibre-vector";
 // The raster-layer-sync and vector-layer-sync internals are not

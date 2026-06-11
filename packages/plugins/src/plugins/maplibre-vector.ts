@@ -2,6 +2,7 @@ import { useAppStore } from "@geolibre/core";
 import type {
   VectorControl,
   VectorControlEventHandler,
+  VectorLayerInfo,
 } from "maplibre-gl-vector";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
 import {
@@ -103,6 +104,22 @@ export function closeVectorLayerPanel(app: GeoLibreAppAPI): void {
   resetVectorStoreSyncSuspension();
   vectorControl = null;
   vectorControlMounted = false;
+}
+
+/**
+ * Re-fetches a URL-backed Add Vector Layer layer in place through the
+ * control's reloadLayer API, preserving the layer id. Returns the refreshed
+ * layer info, or undefined when the control is not mounted or does not know
+ * the layer (e.g. the panel was fully torn down).
+ *
+ * @param id - The store/control layer id.
+ * @returns The refreshed layer info, or undefined.
+ */
+export async function reloadVectorControlLayer(
+  id: string,
+): Promise<VectorLayerInfo | undefined> {
+  if (!vectorControl) return undefined;
+  return vectorControl.reloadLayer(id);
 }
 
 /**
