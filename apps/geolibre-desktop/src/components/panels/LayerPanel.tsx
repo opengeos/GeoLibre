@@ -43,6 +43,7 @@ import {
   MousePointerClick,
   PanelLeftClose,
   PanelLeftOpen,
+  Pencil,
   PencilRuler,
   RefreshCw,
   Table2,
@@ -160,6 +161,8 @@ export function LayerPanel({
   const moveLayer = useAppStore((s) => s.moveLayer);
   const removeLayer = useAppStore((s) => s.removeLayer);
   const updateLayer = useAppStore((s) => s.updateLayer);
+  const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
   const [metadataLayer, setMetadataLayer] = useState<GeoLibreLayer | null>(
     null,
   );
@@ -213,6 +216,27 @@ export function LayerPanel({
   const resetDragState = () => {
     setDraggedLayerId(null);
     setDropTargetLayerId(null);
+  };
+
+  const beginRename = (layer: GeoLibreLayer) => {
+    setEditingLayerId(layer.id);
+    setEditingName(layer.name);
+  };
+
+  const commitRename = () => {
+    if (!editingLayerId) return;
+    const trimmed = editingName.trim();
+    const current = layers.find((l) => l.id === editingLayerId);
+    if (trimmed && current && trimmed !== current.name) {
+      updateLayer(editingLayerId, { name: trimmed });
+    }
+    setEditingLayerId(null);
+    setEditingName("");
+  };
+
+  const cancelRename = () => {
+    setEditingLayerId(null);
+    setEditingName("");
   };
 
   const clearRefreshStatusTimer = useCallback((layerId: string) => {
