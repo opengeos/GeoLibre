@@ -69,6 +69,7 @@ import {
 } from "../../lib/layer-refresh";
 import {
   exportVectorLayer,
+  geojsonVectorSourceId,
   resolveLayerGeojson,
   sanitizeExportFileName,
   type VectorExportFormat,
@@ -408,21 +409,33 @@ export function LayerPanel({
           mapControllerRef.current?.getMap() ?? undefined,
         );
         if (!geojson) {
+          // A source-backed (Add Vector Layer) layer whose features could not be
+          // read is usually a not-yet-ready map source, not a layer that lacks
+          // features, so the two cases get different diagnostics.
+          const message =
+            geojsonVectorSourceId(layer) !== null
+              ? "Layer data is not ready yet. Try again in a moment."
+              : "Export requires a vector layer with features.";
           setRefreshStatuses((current) => ({
             ...current,
-            [layer.id]: {
-              type: "error",
-              message: "Export requires a vector layer with features.",
-            },
+            [layer.id]: { type: "error", message },
           }));
           scheduleStatusClear(layer.id);
           return;
         }
-        await exportVectorLayer(
+        const savedPath = await exportVectorLayer(
           geojson,
           format,
           sanitizeExportFileName(layer.name),
         );
+        // A null path means the user cancelled the save dialog, so no note.
+        if (savedPath !== null) {
+          setRefreshStatuses((current) => ({
+            ...current,
+            [layer.id]: { type: "success", message: "Layer exported." },
+          }));
+          scheduleStatusClear(layer.id);
+        }
       } catch (error) {
         const message =
           error instanceof Error

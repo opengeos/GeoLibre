@@ -83,12 +83,12 @@ async function exportTextLayer(
   format: "geojson" | "csv",
   geojson: FeatureCollection,
   baseName: string,
-) {
+): Promise<string | null> {
   const isCsv = format === "csv";
   const content = isCsv
     ? geojsonToCsv(geojson)
     : JSON.stringify(geojson, null, 2);
-  await saveTextFileWithFallback(content, {
+  return saveTextFileWithFallback(content, {
     defaultName: `${baseName}.${isCsv ? "csv" : "geojson"}`,
     filters: [
       isCsv
@@ -111,11 +111,11 @@ async function exportBinaryLayer(
   format: BinaryVectorExportFormat,
   geojson: FeatureCollection,
   baseName: string,
-) {
+): Promise<string | null> {
   const result = await exportBinaryVectorLayer(geojson, format, baseName);
   const label = exportFormatLabel(format);
   const extension = exportFileExtension(format);
-  await saveBinaryFileWithFallback(result.data, {
+  return saveBinaryFileWithFallback(result.data, {
     defaultName: `${baseName}.${extension}`,
     filters: [{ name: label, extensions: [extension] }],
     browserTypes: [
@@ -130,18 +130,18 @@ async function exportBinaryLayer(
 
 /**
  * Save a vector layer's features to disk in the requested format, prompting
- * with the native (Tauri) or browser file-save dialog.
+ * with the native (Tauri) or browser file-save dialog. Returns the saved path
+ * (a name in the browser), or null when the user cancels the save dialog.
  */
 export async function exportVectorLayer(
   geojson: FeatureCollection,
   format: VectorExportFormat,
   baseName: string,
-): Promise<void> {
+): Promise<string | null> {
   if (format === "geojson" || format === "csv") {
-    await exportTextLayer(format, geojson, baseName);
-    return;
+    return exportTextLayer(format, geojson, baseName);
   }
-  await exportBinaryLayer(format, geojson, baseName);
+  return exportBinaryLayer(format, geojson, baseName);
 }
 
 /**
@@ -188,7 +188,8 @@ export async function resolveLayerGeojson(
   if (
     data &&
     typeof data === "object" &&
-    (data as { type?: string }).type === "FeatureCollection"
+    (data as { type?: string }).type === "FeatureCollection" &&
+    Array.isArray((data as { features?: unknown }).features)
   ) {
     return data as FeatureCollection;
   }
