@@ -22,6 +22,8 @@
     "@developmentseed/deck.gl-raster": "^0.7.0",
     "@duckdb/duckdb-wasm": "1.33.1-dev45.0",
     "@dvt3d/maplibre-three-plugin": "^1.6.0",
+    "@electric-sql/pglite": "^0.5.2",
+    "@electric-sql/pglite-postgis": "^0.2.2",
     "@geolibre/core": "*",
     "@geolibre/map": "*",
     "@geolibre/plugins": "*",

@@ -42,6 +42,9 @@ const RADIX_OPTIMIZE_EXCLUDES = [
 function manualChunks(id: string): string | undefined {
   if (!id.includes("node_modules")) return undefined;
   if (id.includes("@duckdb/duckdb-wasm")) return "duckdb";
+  // PGlite + the ~18.8 MB PostGIS extension only load when the user picks the
+  // PostGIS SQL engine; keep them in their own lazily-fetched chunk.
+  if (id.includes("@electric-sql/pglite")) return "pglite";
   if (id.includes("maplibre-gl-earth-engine")) {
     return "maplibre-earth-engine";
   }
@@ -345,7 +348,13 @@ export default defineConfig({
   },
   envPrefix: ["VITE_", "TAURI_"],
   optimizeDeps: {
-    exclude: RADIX_OPTIMIZE_EXCLUDES,
+    // PGlite ships its own WASM + filesystem bundles and must not be pre-bundled
+    // by esbuild, which mangles those asset references (per PGlite's Vite guide).
+    exclude: [
+      ...RADIX_OPTIMIZE_EXCLUDES,
+      "@electric-sql/pglite",
+      "@electric-sql/pglite-postgis",
+    ],
   },
   build: {
     target: "esnext",

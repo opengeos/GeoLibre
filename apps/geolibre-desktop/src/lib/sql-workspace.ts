@@ -18,7 +18,7 @@ import {
 // GeoJSON for the "Add as layer" / export paths without disturbing the columns
 // the user sees in the results grid. This is a reserved name: a user column of
 // the same name is filtered out of both the grid and the GeoJSON properties.
-const GEOMETRY_JSON_COLUMN = "__geolibre_sql_geometry_geojson";
+export const GEOMETRY_JSON_COLUMN = "__geolibre_sql_geometry_geojson";
 
 // Reserved alias wrapping the user's statement when geometry is detected; kept
 // deliberately obscure so it does not collide with a user's own CTE/subquery.
@@ -126,7 +126,7 @@ function sanitizeTableName(layerName: string, layerId: string): string {
  * numeric suffix on collision. Shared by registration and the UI preview so the
  * names cannot drift.
  */
-function assignTableNames(
+export function assignTableNames(
   layers: GeoLibreLayer[],
 ): Array<{ layer: GeoLibreLayer; tableName: string }> {
   const assigned: Array<{ layer: GeoLibreLayer; tableName: string }> = [];
@@ -222,7 +222,7 @@ function columnNamesFromResult(result: {
  * matching the loader's `normalizePropertyValue`; otherwise a nested bigint
  * would make `JSON.stringify` throw during CSV/GeoJSON export.
  */
-function normalizeValue(value: unknown): unknown {
+export function normalizeValue(value: unknown): unknown {
   if (typeof value === "bigint") {
     const asNumber = Number(value);
     return Number.isSafeInteger(asNumber) ? asNumber : value.toString();
@@ -238,7 +238,7 @@ function normalizeValue(value: unknown): unknown {
   return value;
 }
 
-function normalizeRow(
+export function normalizeRow(
   row: Record<string, unknown>,
   columns: string[],
 ): Record<string, unknown> {
@@ -310,7 +310,7 @@ async function describeQuery(
  * (e.g. `cleanStatement`) pass `false` so a trailing string literal is not
  * mistaken for trailing whitespace.
  */
-function maskSqlLiterals(sql: string, blankLiterals = true): string {
+export function maskSqlLiterals(sql: string, blankLiterals = true): string {
   const out = sql.split("");
   const blank = (start: number, end: number): void => {
     for (let k = start; k < end && k < out.length; k += 1) {
@@ -370,7 +370,7 @@ function maskSqlLiterals(sql: string, blankLiterals = true): string {
  * geometry detection. Operates via {@link maskSqlLiterals} so a semicolon or
  * comment inside a literal is never mistaken for the terminator.
  */
-function cleanStatement(sql: string): string {
+export function cleanStatement(sql: string): string {
   const src = sql.trim();
   // Blank comments only (keep string literals): trimming the mask then drops a
   // trailing comment without mistaking a trailing string literal — e.g. the
@@ -388,7 +388,7 @@ function cleanStatement(sql: string): string {
  * so the caller rejects multi-statement input instead of discarding earlier
  * results. Expects a statement already cleaned of its trailing semicolon.
  */
-function containsMultipleStatements(sql: string): boolean {
+export function containsMultipleStatements(sql: string): boolean {
   const masked = maskSqlLiterals(sql);
   const semicolon = masked.indexOf(";");
   // A semicolon is only a statement separator when real content follows it;
@@ -510,7 +510,7 @@ async function registerRemoteSources(
   return { statement: rewritten, readerCalls };
 }
 
-function rowsToFeatureCollection(
+export function rowsToFeatureCollection(
   rows: Record<string, unknown>[],
   geometryColumn: string,
 ): FeatureCollection {
