@@ -48,16 +48,19 @@ const PARALLAX_PX_PER_DEGREE = 0.6;
 // Halo radial gradient — color stops are fractions of the gradient span, which
 // runs from the globe edge out to HALO_RADIUS_SCALE × the globe radius.
 const HALO_RADIUS_SCALE = 2.8;
-// The space punch-out and the halo's opaque inner edge sit slightly inside the
-// fitted limb. The 2D overlay edge and the WebGL globe edge are rasterized
-// independently, so aligning them exactly leaves a thin seam wherever they
-// disagree by a sub-pixel — the dark space gradient bleeds onto the globe rim
-// (a dark line) or the page background shows through (a light line), most
-// visible on HiDPI displays and at high zoom. Overlapping the bright, opaque
-// inner glow a few percent onto the limb hides that seam, the way the original
-// (smaller) great-circle disc did. The fitted ellipse still sets the center,
-// shape, and rotation, so the halo tracks the globe under zoom and pitch.
-const LIMB_INSET = 0.965;
+// The 2D overlay edge and the WebGL globe edge are rasterized independently, so
+// a hard punch-out at the limb leaves a thin seam wherever the two disagree by a
+// sub-pixel — the dark space gradient bleeds onto the globe rim (a dark line) or
+// the page background shows through (a light one), most visible on HiDPI
+// displays. Rather than insetting the punch-out (which drapes dark space over a
+// zoom-proportional band of the globe that the faded high-zoom halo can't
+// repaint), feather its edge: the destination-out alpha is solid out to
+// PUNCH_FADE_INNER × the limb and ramps to zero by PUNCH_FADE_OUTER × the limb.
+// The globe is revealed in full, and the soft edge straddling the limb hides the
+// sub-pixel mismatch without a visible band. Fractions of the fitted limb, so
+// the feather stays a roughly constant share of the rim at every zoom.
+const PUNCH_FADE_INNER = 0.99;
+const PUNCH_FADE_OUTER = 1.012;
 // Globe-silhouette sampling: rays cast from the projected map center, each
 // bisected to the rendered limb. The silhouette is a conic (a circle top-down,
 // an ellipse under pitch), so a handful of rays over-determine the 3-parameter
@@ -636,22 +639,30 @@ class EffectsEngine {
 
   private punchOutGlobe(disc: GlobeEllipse): void {
     // Remove the deep-space layer over the globe silhouette so the real basemap
-    // globe shows through; the halo (drawn on its own canvas) hides any seam.
-    this.spaceCtx.save();
-    this.spaceCtx.globalCompositeOperation = "destination-out";
-    this.spaceCtx.fillStyle = "rgba(0, 0, 0, 1)";
-    this.spaceCtx.beginPath();
-    this.spaceCtx.ellipse(
-      disc.cx,
-      disc.cy,
-      disc.rx * LIMB_INSET,
-      disc.ry * LIMB_INSET,
-      disc.angle,
+    // globe shows through. Work in the ellipse's normalized frame (unit circle =
+    // limb) so the radial alpha ramp maps to an ellipse under pitch, and feather
+    // the edge across the limb so no hard seam shows against the WebGL globe.
+    const ctx = this.spaceCtx;
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.translate(disc.cx, disc.cy);
+    ctx.rotate(disc.angle);
+    ctx.scale(disc.rx, disc.ry);
+    const gradient = ctx.createRadialGradient(
       0,
-      Math.PI * 2,
+      0,
+      PUNCH_FADE_INNER,
+      0,
+      0,
+      PUNCH_FADE_OUTER,
     );
-    this.spaceCtx.fill();
-    this.spaceCtx.restore();
+    gradient.addColorStop(0, "rgba(0, 0, 0, 1)"); // fully remove space (globe shows)
+    gradient.addColorStop(1, "rgba(0, 0, 0, 0)"); // leave space intact beyond the limb
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(0, 0, PUNCH_FADE_OUTER, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 
   private drawSpaceBackground(alpha: number): void {
@@ -686,11 +697,19 @@ class EffectsEngine {
     // real atmospheric rim does under perspective.
     ctx.translate(disc.cx, disc.cy);
     ctx.rotate(disc.angle);
-    // Same inset as the punch-out so the two edges coincide; the unit circle in
-    // this frame is then the inset limb, where the halo's opaque inner stop sits.
-    ctx.scale(disc.rx * LIMB_INSET, disc.ry * LIMB_INSET);
+    ctx.scale(disc.rx, disc.ry);
 
-    const gradient = ctx.createRadialGradient(0, 0, 1, 0, 0, HALO_RADIUS_SCALE);
+    // Start the glow just inside the limb (matching the punch-out feather) so the
+    // bright inner stops sit over the soft edge and blend onto the rim, leaving
+    // no gap between the globe and the glow.
+    const gradient = ctx.createRadialGradient(
+      0,
+      0,
+      PUNCH_FADE_INNER,
+      0,
+      0,
+      HALO_RADIUS_SCALE,
+    );
     for (const [stop, color] of HALO_STOPS) {
       gradient.addColorStop(stop, color);
     }
@@ -698,12 +717,12 @@ class EffectsEngine {
     // (set in createCanvas); here we just paint the gradient normally.
     ctx.globalAlpha = alpha;
     ctx.fillStyle = gradient;
-    // Paint only the annulus outside the globe (outer ring CW, inner ring CCW
+    // Paint only the annulus around the limb (outer ring CW, inner ring CCW
     // cancels the winding in the hole — nonzero rule), so the rim glows without
-    // tinting the globe disc.
+    // washing out the globe disc.
     ctx.beginPath();
     ctx.arc(0, 0, HALO_RADIUS_SCALE, 0, Math.PI * 2, false);
-    ctx.arc(0, 0, 1, 0, Math.PI * 2, true);
+    ctx.arc(0, 0, PUNCH_FADE_INNER, 0, Math.PI * 2, true);
     ctx.fill();
     ctx.restore();
   }
