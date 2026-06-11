@@ -48,6 +48,16 @@ const PARALLAX_PX_PER_DEGREE = 0.6;
 // Halo radial gradient — color stops are fractions of the gradient span, which
 // runs from the globe edge out to HALO_RADIUS_SCALE × the globe radius.
 const HALO_RADIUS_SCALE = 2.8;
+// The space punch-out and the halo's opaque inner edge sit slightly inside the
+// fitted limb. The 2D overlay edge and the WebGL globe edge are rasterized
+// independently, so aligning them exactly leaves a thin seam wherever they
+// disagree by a sub-pixel — the dark space gradient bleeds onto the globe rim
+// (a dark line) or the page background shows through (a light line), most
+// visible on HiDPI displays and at high zoom. Overlapping the bright, opaque
+// inner glow a few percent onto the limb hides that seam, the way the original
+// (smaller) great-circle disc did. The fitted ellipse still sets the center,
+// shape, and rotation, so the halo tracks the globe under zoom and pitch.
+const LIMB_INSET = 0.965;
 // Globe-silhouette sampling: rays cast from the projected map center, each
 // bisected to the rendered limb. The silhouette is a conic (a circle top-down,
 // an ellipse under pitch), so a handful of rays over-determine the 3-parameter
@@ -634,8 +644,8 @@ class EffectsEngine {
     this.spaceCtx.ellipse(
       disc.cx,
       disc.cy,
-      disc.rx,
-      disc.ry,
+      disc.rx * LIMB_INSET,
+      disc.ry * LIMB_INSET,
       disc.angle,
       0,
       Math.PI * 2,
@@ -676,7 +686,9 @@ class EffectsEngine {
     // real atmospheric rim does under perspective.
     ctx.translate(disc.cx, disc.cy);
     ctx.rotate(disc.angle);
-    ctx.scale(disc.rx, disc.ry);
+    // Same inset as the punch-out so the two edges coincide; the unit circle in
+    // this frame is then the inset limb, where the halo's opaque inner stop sits.
+    ctx.scale(disc.rx * LIMB_INSET, disc.ry * LIMB_INSET);
 
     const gradient = ctx.createRadialGradient(0, 0, 1, 0, 0, HALO_RADIUS_SCALE);
     for (const [stop, color] of HALO_STOPS) {
