@@ -44,6 +44,7 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 - Desktop diagnostics panel, update check, and MSIX packaging support
 - Plugin system with basemap, layer control, MapLibre components, swipe, street view, Overture Maps, LiDAR, GeoAgent, and GeoEditor integrations, including configurable control positions and external plugin manifests
 - Time Slider plugin for animating time series raster and vector data
+- Atmosphere Effects plugin that renders a deep-space backdrop, parallax starfield, comets, and an atmospheric halo around the globe at low zoom (technique adapted from [Leonel Dias](https://leoneljdias.github.io/posts/globe-atmosphere-halo-comets/))
 - External plugin zip loading from the app data plugins directory and local development plugin directories
 - Bundled drop-in plugins under `public/plugins/<id>/` that bake into both the web and desktop builds and load automatically with no manifest URL
 - Browser deployment with Docker, embed-friendly URL parameters, and a `maponly` chrome-free mode
@@ -469,6 +470,10 @@ Full documentation, including the User Guide and Tutorials, is published at
   - [Plugin API](docs/plugin-api.md)
   - [Python package (Jupyter)](docs/python.md)
   - [Roadmap](docs/roadmap.md)
+
+## Acknowledgements
+
+- The **Atmosphere Effects** plugin (deep-space backdrop, parallax starfield, comets, and the globe atmosphere halo) adapts the technique and visual design from [Leonel Dias](https://leoneljdias.github.io/)'s article [*Globe atmosphere, halo, and comets*](https://leoneljdias.github.io/posts/globe-atmosphere-halo-comets/) — the layered Canvas 2D approach, the halo gradient and "screen" blend, the limb-sampling that keeps the halo aligned under pitch, and the starfield/comet parameters.
 
 ## License
 

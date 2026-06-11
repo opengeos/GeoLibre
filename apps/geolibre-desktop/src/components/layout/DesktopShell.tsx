@@ -4,8 +4,10 @@ import type { MapController, MapDiagnosticEvent } from "@geolibre/map";
 import { MapCanvas } from "@geolibre/map";
 import {
   addRasterToMap,
+  EFFECTS_PLUGIN_ID,
   endLayerGeometryEdit,
   getGeometryEditTargetLayerId,
+  restoreEffects,
   restoreRasterLayers,
   restoreThreeDTilesLayers,
   restoreVectorLayers,
@@ -364,6 +366,10 @@ export function DesktopShell({
     restoreThreeDTilesLayers(appAPI);
     restoreRasterLayers(appAPI);
     restoreVectorLayers(appAPI);
+    // activeByDefault plugins are marked active without activate() being
+    // called, so the effects engine must be kicked explicitly to match the
+    // restored active state (idempotent).
+    restoreEffects(appAPI, pluginManager.isActive(EFFECTS_PLUGIN_ID));
     const search = window.location.search;
     void pluginManager
       .handleUrlParameters(

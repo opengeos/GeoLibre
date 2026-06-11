@@ -6,6 +6,7 @@ import {
 import {
   maplibreBasemapControlPlugin,
   maplibreComponentsPlugin,
+  maplibreEffectsPlugin,
   maplibreEnviroAtlasPlugin,
   maplibreEsriWaybackPlugin,
   maplibreFemaWmsPlugin,
@@ -71,6 +72,7 @@ manager.registerAll([
   maplibreLidarPlugin,
   maplibreStreetViewPlugin,
   maplibreSwipePlugin,
+  maplibreEffectsPlugin,
   maplibreComponentsPlugin,
 ]);
 

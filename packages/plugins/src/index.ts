@@ -100,6 +100,11 @@ export {
 // The raster-layer-sync and vector-layer-sync internals are not
 // re-exported: the app drives the panels through the functions above, and
 // the tests import the sync helpers from the module paths directly.
+export {
+  EFFECTS_PLUGIN_ID,
+  maplibreEffectsPlugin,
+  restoreEffects,
+} from "./plugins/maplibre-effects";
 export { maplibreEnviroAtlasPlugin } from "./plugins/maplibre-enviroatlas";
 export { maplibreEsriWaybackPlugin } from "./plugins/maplibre-esri-wayback";
 export { maplibreFemaWmsPlugin } from "./plugins/maplibre-fema-wms";
