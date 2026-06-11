@@ -32,6 +32,14 @@ describe("OSM PBF parsing", () => {
     assert.equal(cafe.properties?.name, "Test Cafe");
   });
 
+  it("reports the combined bounds of all features", async () => {
+    const bytes = new Uint8Array(readFileSync(fixturePath));
+    const result = await parseOsmPbf(bytes);
+
+    // Fixture coordinates span lng 0..2, lat 0..3.
+    assert.deepEqual(result.bounds, [0, 0, 2, 3]);
+  });
+
   it("skips untagged geometry-vertex nodes from the points layer", async () => {
     const bytes = new Uint8Array(readFileSync(fixturePath));
     const result = await parseOsmPbf(bytes);

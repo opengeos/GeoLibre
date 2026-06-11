@@ -15,6 +15,8 @@ export interface OsmPbfLayers {
   points: FeatureCollection;
   lines: FeatureCollection;
   polygons: FeatureCollection;
+  /** Combined [minLng, minLat, maxLng, maxLat] of all features, or null if empty. */
+  bounds: [number, number, number, number] | null;
   counts: {
     nodes: number;
     ways: number;
@@ -24,6 +26,28 @@ export interface OsmPbfLayers {
     polygons: number;
     skipped: number;
   };
+}
+
+type MutableBounds = [number, number, number, number];
+
+function extendBounds(bounds: MutableBounds, geometry: Geometry | null): void {
+  if (!geometry || geometry.type === "GeometryCollection") return;
+  const walk = (coords: unknown): void => {
+    if (
+      Array.isArray(coords) &&
+      typeof coords[0] === "number" &&
+      typeof coords[1] === "number"
+    ) {
+      const [x, y] = coords as [number, number];
+      if (x < bounds[0]) bounds[0] = x;
+      if (y < bounds[1]) bounds[1] = y;
+      if (x > bounds[2]) bounds[2] = x;
+      if (y > bounds[3]) bounds[3] = y;
+      return;
+    }
+    if (Array.isArray(coords)) for (const part of coords) walk(part);
+  };
+  walk((geometry as { coordinates?: unknown }).coordinates);
 }
 
 function emptyCollection(): FeatureCollection {
@@ -106,13 +130,18 @@ export async function parseOsmPbf(bytes: Uint8Array): Promise<OsmPbfLayers> {
   const lines: Feature[] = [];
   const polygons: Feature[] = [];
   let skipped = 0;
+  const bounds: MutableBounds = [Infinity, Infinity, -Infinity, -Infinity];
 
   const place = (feature: Feature) => {
     const bucket = geometryBucket(feature.geometry);
     if (bucket === "points") points.push(feature);
     else if (bucket === "lines") lines.push(feature);
     else if (bucket === "polygons") polygons.push(feature);
-    else skipped += 1;
+    else {
+      skipped += 1;
+      return;
+    }
+    extendBounds(bounds, feature.geometry);
   };
 
   for (const node of osm.nodes) {
@@ -130,6 +159,9 @@ export async function parseOsmPbf(bytes: Uint8Array): Promise<OsmPbfLayers> {
     points: { type: "FeatureCollection", features: points },
     lines: { type: "FeatureCollection", features: lines },
     polygons: { type: "FeatureCollection", features: polygons },
+    bounds: Number.isFinite(bounds[0])
+      ? [bounds[0], bounds[1], bounds[2], bounds[3]]
+      : null,
     counts: {
       nodes: osm.nodes.size,
       ways: osm.ways.size,

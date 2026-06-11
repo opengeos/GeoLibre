@@ -572,6 +572,9 @@ export function DesktopShell({
             file.name,
             layers,
           );
+          if (added > 0 && layers.bounds) {
+            mapControllerRef.current?.fitBounds(layers.bounds);
+          }
           setDropMessage(
             added > 0
               ? `Added ${added} layer${added === 1 ? "" : "s"} from ${file.name}.`

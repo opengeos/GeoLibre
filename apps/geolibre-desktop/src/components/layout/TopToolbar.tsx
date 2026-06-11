@@ -289,6 +289,8 @@ export function TopToolbar({
   const [projectUrlLoading, setProjectUrlLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [osmPbfLoading, setOsmPbfLoading] = useState(false);
+  const [osmPbfDialogOpen, setOsmPbfDialogOpen] = useState(false);
+  const [osmPbfUrl, setOsmPbfUrl] = useState("");
   const [osmPbfConfirm, setOsmPbfConfirm] = useState<{
     data: ArrayBuffer;
     baseName: string;
@@ -550,6 +552,8 @@ export function TopToolbar({
         setActionError(
           "No point, line, or polygon features were found in this OSM PBF file.",
         );
+      } else if (layers.bounds) {
+        appApi.fitBounds?.(layers.bounds);
       }
     } catch (err) {
       setActionError(
@@ -559,7 +563,25 @@ export function TopToolbar({
       setOsmPbfLoading(false);
     }
   };
-  const handleAddOsmPbfLayer = async () => {
+  // Large extracts can exhaust browser memory; confirm before parsing.
+  const startOsmPbf = (
+    data: ArrayBuffer,
+    baseName: string,
+    sourcePath: string,
+  ) => {
+    if (data.byteLength >= OSM_PBF_SIZE_WARN_BYTES) {
+      setOsmPbfConfirm({
+        data,
+        baseName,
+        sourcePath,
+        sizeMb: Math.round(data.byteLength / (1024 * 1024)),
+      });
+      return;
+    }
+    void runOsmPbf(data, baseName, sourcePath);
+  };
+  const handleChooseOsmPbfFile = async () => {
+    setOsmPbfDialogOpen(false);
     try {
       const result = await openLocalDataFileWithFallback({
         filters: [{ name: "OSM PBF", extensions: ["pbf", "osm.pbf"] }],
@@ -568,21 +590,33 @@ export function TopToolbar({
       });
       if (!result?.data) return;
       const fileName = result.path.split(/[/\\]/).pop() || "osm";
-      const baseName = osmPbfBaseName(fileName);
-      // Large extracts can exhaust browser memory; confirm before parsing.
-      if (result.data.byteLength >= OSM_PBF_SIZE_WARN_BYTES) {
-        setOsmPbfConfirm({
-          data: result.data,
-          baseName,
-          sourcePath: result.path,
-          sizeMb: Math.round(result.data.byteLength / (1024 * 1024)),
-        });
-        return;
-      }
-      await runOsmPbf(result.data, baseName, result.path);
+      startOsmPbf(result.data, osmPbfBaseName(fileName), result.path);
     } catch (err) {
       setActionError(
         err instanceof Error ? err.message : "Could not open the OSM PBF file.",
+      );
+    }
+  };
+  const handleLoadOsmPbfUrl = async () => {
+    const url = osmPbfUrl.trim();
+    if (!isHttpUrl(url)) {
+      setActionError("Enter a valid http(s) URL to an .osm.pbf file.");
+      return;
+    }
+    setOsmPbfDialogOpen(false);
+    setOsmPbfLoading(true);
+    try {
+      const data = await appApi.fetchArrayBuffer?.(url);
+      if (!data) throw new Error("Could not download the OSM PBF file.");
+      const fileName = url.split("/").pop()?.split("?")[0] || "osm";
+      setOsmPbfLoading(false);
+      startOsmPbf(data, osmPbfBaseName(fileName), url);
+    } catch (err) {
+      setOsmPbfLoading(false);
+      setActionError(
+        err instanceof Error
+          ? err.message
+          : "Could not download the OSM PBF file.",
       );
     }
   };
@@ -908,7 +942,7 @@ export function TopToolbar({
           <DropdownMenuItem onSelect={() => setAddDataKind("mbtiles")}>
             MBTiles Layer
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => void handleAddOsmPbfLayer()}>
+          <DropdownMenuItem onSelect={() => setOsmPbfDialogOpen(true)}>
             OSM PBF Layer
           </DropdownMenuItem>
           <DropdownMenuSeparator />
@@ -1484,6 +1518,54 @@ export function TopToolbar({
               Continue
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={osmPbfDialogOpen}
+        onOpenChange={(open: boolean) => setOsmPbfDialogOpen(open)}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add OSM PBF Layer</DialogTitle>
+            <DialogDescription>
+              Load an OpenStreetMap .osm.pbf file. It is parsed in your browser
+              and split into separate point, line, and polygon layers.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-3"
+            onSubmit={(event: FormEvent) => {
+              event.preventDefault();
+              void handleLoadOsmPbfUrl();
+            }}
+          >
+            <div className="space-y-1.5">
+              <Label htmlFor="osm-pbf-url">URL</Label>
+              <Input
+                id="osm-pbf-url"
+                type="url"
+                placeholder="https://download.geofabrik.de/europe/monaco-latest.osm.pbf"
+                value={osmPbfUrl}
+                onChange={(e) => setOsmPbfUrl(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Remote URLs load in the desktop app; in the browser the server
+                must allow cross-origin requests (CORS).
+              </p>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void handleChooseOsmPbfFile()}
+              >
+                Choose local file…
+              </Button>
+              <Button type="submit" disabled={!osmPbfUrl.trim()}>
+                Load from URL
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
       <Dialog open={osmPbfLoading}>
