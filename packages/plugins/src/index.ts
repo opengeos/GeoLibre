@@ -101,6 +101,10 @@ export {
 // re-exported: the app drives the panels through the functions above, and
 // the tests import the sync helpers from the module paths directly.
 export {
+  DIRECTIONS_PLUGIN_ID,
+  maplibreDirectionsPlugin,
+} from "./plugins/maplibre-directions";
+export {
   EFFECTS_PLUGIN_ID,
   maplibreEffectsPlugin,
   restoreEffects,

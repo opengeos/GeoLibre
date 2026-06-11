@@ -68,6 +68,7 @@ import {
   subscribeSearchPlacesPanel,
   subscribeViewStatePanel,
   toggleEarthEnginePanel,
+  DIRECTIONS_PLUGIN_ID,
   EFFECTS_PLUGIN_ID,
   WEB_SERVICE_PLUGIN_IDS,
   type GeoLibreMapControlPosition,
@@ -1238,6 +1239,12 @@ export function TopToolbar({
             Atmosphere Effects
             {isActive(EFFECTS_PLUGIN_ID) ? " ✓" : ""}
           </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => toggle(DIRECTIONS_PLUGIN_ID, appApi)}
+          >
+            Directions
+            {isActive(DIRECTIONS_PLUGIN_ID) ? " ✓" : ""}
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={handleToggleSearchPlacesPanel}>
             Search
@@ -1348,9 +1355,12 @@ export function TopToolbar({
             // above Esri Wayback).
             let webServicesRendered = false;
             return plugins.map((p) => {
-              // Atmosphere Effects is toggled from the Controls menu instead, so
-              // it is omitted here to avoid a duplicate toggle.
-              if (p.id === EFFECTS_PLUGIN_ID) return null;
+              // Atmosphere Effects and Directions are toggled from the Controls
+              // menu instead, so they are omitted here to avoid a duplicate
+              // toggle.
+              if (p.id === EFFECTS_PLUGIN_ID || p.id === DIRECTIONS_PLUGIN_ID) {
+                return null;
+              }
               if (!WEB_SERVICE_PLUGIN_ID_SET.has(p.id)) {
                 return renderPluginMenuItem(p);
               }

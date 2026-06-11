@@ -2,6 +2,7 @@ import "./lib/symbol-dispose-polyfill";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import "@geoman-io/maplibre-geoman-free/dist/maplibre-geoman.css";
+import "@maplibre/maplibre-gl-directions/dist/style.css";
 import "maplibre-gl-3d-tiles/style.css";
 import "maplibre-gl-basemap-control/style.css";
 import "maplibre-gl-components/style.css";

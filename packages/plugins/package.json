@@ -22,6 +22,7 @@
     "@esri/maplibre-arcgis": "^1.3.0",
     "@geolibre/core": "*",
     "@geoman-io/maplibre-geoman-free": "^0.7.1",
+    "@maplibre/maplibre-gl-directions": "^0.9.1",
     "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-opener": "^2.5.4",
     "geotiff": "^3.0.5",
