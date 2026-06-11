@@ -331,7 +331,10 @@ function solveLinear(m: number[][], b: number[]): number[] | null {
     for (let row = 0; row < n; row++) {
       if (row === col) continue;
       const factor = aug[row][col] / aug[col][col];
-      for (let k = col; k <= n; k++) aug[row][k] -= factor * aug[col][k];
+      // Start at col+1: the col-th cell is being zeroed by definition, and the
+      // solution reads only each row's diagonal and right-hand side, so the
+      // skipped off-diagonal writes are never read.
+      for (let k = col + 1; k <= n; k++) aug[row][k] -= factor * aug[col][k];
     }
   }
   return aug.map((row, i) => row[n] / row[i]);
@@ -359,9 +362,11 @@ class EffectsEngine {
   private height = 0;
   private dpr = 1;
 
-  // Cached globe silhouette. Fitting it costs many project/unproject round-trips,
-  // but it only changes when the camera moves, so recompute lazily on a dirty
-  // flag set by move/resize rather than every animation frame.
+  // Cached globe silhouette. Fitting it costs many project/unproject round-trips.
+  // It changes on every camera change — so once per frame during an animated
+  // pan/zoom, since MapLibre fires "move" each frame — but a dirty flag (set by
+  // move/resize) skips the recompute on comet/starfield-only frames where the
+  // camera is stationary.
   private globeEllipse: GlobeEllipse | null = null;
   private ellipseDirty = true;
   // Last fitted mean limb radius, fed back as the ray-search seed so the next
