@@ -43,13 +43,14 @@ function geojsonToCsv(geojson: FeatureCollection): string {
     }
   }
 
-  const headers = ["feature_id", ...propertyKeys];
+  const orderedKeys = Array.from(propertyKeys);
+  const headers = ["feature_id", ...orderedKeys];
   const rows = geojson.features.map((feature, index) => {
     const featureId = String(feature.id ?? index);
     const properties = feature.properties ?? {};
     const values = [
       featureId,
-      ...Array.from(propertyKeys).map((key) => properties[key]),
+      ...orderedKeys.map((key) => properties[key]),
     ];
     return values.map(csvCell).join(",");
   });
