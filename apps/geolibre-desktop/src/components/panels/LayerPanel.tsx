@@ -9,7 +9,10 @@ import {
 } from "react";
 import { isDuckDBQueryLayer, useAppStore } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
-import { canEditLayerGeometry } from "@geolibre/plugins";
+import {
+  canEditLayerGeometry,
+  reloadVectorControlLayer,
+} from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
 import { isPlaceholderLayer, placeholderMessage } from "@geolibre/map";
 import {
@@ -53,6 +56,7 @@ import {
 import {
   getLayerRefreshConfig,
   isRefreshableLayer,
+  isVectorControlRefreshLayer,
   MIN_REFRESH_INTERVAL_MS,
   refreshGeoJsonLayer,
   setLayerRefreshConfig,
@@ -257,6 +261,28 @@ export function LayerPanel({
       }));
 
       try {
+        if (isVectorControlRefreshLayer(layer)) {
+          const info = await reloadVectorControlLayer(layer.id);
+          if (!info) {
+            throw new Error(
+              "Open the Add Vector Layer panel to refresh this layer.",
+            );
+          }
+          const featureCount =
+            typeof info.featureCount === "number" ? info.featureCount : null;
+          setRefreshStatuses((current) => ({
+            ...current,
+            [layer.id]: {
+              type: "success",
+              message:
+                featureCount === null
+                  ? "Refreshed."
+                  : `Refreshed ${featureCount.toLocaleString()} features.`,
+            },
+          }));
+          scheduleStatusClear(layer.id);
+          return;
+        }
         const { geojson, featureCount } = await refreshGeoJsonLayer(layer);
         const latest = useAppStore
           .getState()
