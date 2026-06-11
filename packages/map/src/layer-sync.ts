@@ -1203,7 +1203,7 @@ type VideoCoordinates = [
   [number, number],
 ];
 
-/** Validate persisted video corners: four [lng, lat] pairs of finite numbers. */
+/** Validate persisted video corners: four in-range [lng, lat] pairs. */
 function isVideoCoordinates(value: unknown): value is VideoCoordinates {
   return (
     Array.isArray(value) &&
@@ -1213,7 +1213,11 @@ function isVideoCoordinates(value: unknown): value is VideoCoordinates {
         Array.isArray(corner) &&
         corner.length === 2 &&
         Number.isFinite(corner[0]) &&
-        Number.isFinite(corner[1]),
+        Number.isFinite(corner[1]) &&
+        corner[0] >= -180 &&
+        corner[0] <= 180 &&
+        corner[1] >= -90 &&
+        corner[1] <= 90,
     )
   );
 }
