@@ -33,7 +33,7 @@
     "node": ">=22"
   },
   "devDependencies": {
-    "@types/node": "^25.9.3",
+    "@types/node": "^22.19.21",
     "tsx": "^4.22.4"
   }
 }
