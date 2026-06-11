@@ -208,6 +208,10 @@ const PLUGIN_POSITION_ITEMS: Array<{
 const WEB_SERVICE_PLUGIN_ID_SET = new Set<string>(WEB_SERVICE_PLUGIN_IDS);
 
 const FEEDBACK_URL = "https://github.com/opengeos/GeoLibre/issues";
+// A small (~350 KB) CORS-enabled Las Vegas Strip sample, so the URL field works
+// out of the box on both the desktop and web builds.
+const DEFAULT_OSM_PBF_URL =
+  "https://data.source.coop/giswqs/opengeos/LasVegas.osm.pbf";
 
 async function openExternalLink(url: string): Promise<void> {
   if (isTauri()) {
@@ -290,7 +294,7 @@ export function TopToolbar({
   const [actionError, setActionError] = useState<string | null>(null);
   const [osmPbfLoading, setOsmPbfLoading] = useState(false);
   const [osmPbfDialogOpen, setOsmPbfDialogOpen] = useState(false);
-  const [osmPbfUrl, setOsmPbfUrl] = useState("");
+  const [osmPbfUrl, setOsmPbfUrl] = useState(DEFAULT_OSM_PBF_URL);
   const [osmPbfConfirm, setOsmPbfConfirm] = useState<{
     data: ArrayBuffer;
     baseName: string;
@@ -1547,7 +1551,7 @@ export function TopToolbar({
               <Input
                 id="osm-pbf-url"
                 type="url"
-                placeholder="https://download.geofabrik.de/europe/monaco-latest.osm.pbf"
+                placeholder={DEFAULT_OSM_PBF_URL}
                 value={osmPbfUrl}
                 onChange={(e) => setOsmPbfUrl(e.target.value)}
               />
