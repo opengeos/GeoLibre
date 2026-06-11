@@ -666,6 +666,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
         current.key === oldKey ? { ...current, key: newKey } : current,
       );
     }
+    // Always close the editor when committing, even on a no-op (empty,
+    // unchanged, or a name that collides with an existing — possibly hidden —
+    // column); the original name is kept. This matches the layer-rename UX in
+    // LayerPanel. Use Escape to cancel.
     setEditingColumn(null);
     setEditingColumnName("");
   };
@@ -697,6 +701,13 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
         ? { key: "__featureId", direction: "asc" }
         : current,
     );
+    // Drop the deleted column's width so columnWidths doesn't accumulate stale
+    // entries across a session (mirrors the migration in commitColumnRename).
+    setColumnWidths((current) => {
+      if (!(columnPendingDelete in current)) return current;
+      const { [columnPendingDelete]: _removed, ...rest } = current;
+      return rest;
+    });
     setColumnPendingDelete(null);
   };
 

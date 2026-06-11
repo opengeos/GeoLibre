@@ -122,6 +122,12 @@ export function hiddenColumns(
   return orderColumns(discovered, settings).filter((key) => hidden.has(key));
 }
 
+// NOTE: renameFieldInGeojson/deleteFieldInGeojson rewrite every feature's
+// property object synchronously on the main thread. This is fine for typical
+// in-browser GeoJSON sizes but will visibly jank on very large layers (tens of
+// thousands of features); chunking or a worker would be needed if that becomes
+// a real workflow. Kept synchronous deliberately — these run on a user-initiated
+// one-off action, not in a hot path.
 function renameFieldInGeojson(
   geojson: FeatureCollection,
   oldKey: string,
