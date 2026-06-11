@@ -71,6 +71,21 @@ function onwarn(
     return;
   }
 
+  // Prebuilt third-party bundles (e.g. maplibre-gl-lidar's Emscripten/WASM
+  // glue, a UMD lib inside maplibre-gl-components) assign to `module.exports`
+  // behind `typeof module` guards. Rolldown flags this as a CommonJS variable
+  // in an ESM file, but the guard makes it a no-op in the browser. Silence it
+  // for vendored files only; a real occurrence in our own source still warns.
+  if (warning.code === "COMMONJS_VARIABLE_IN_ESM") {
+    const file =
+      (typeof warning.id === "string" ? warning.id : undefined) ??
+      warning.loc?.file ??
+      "";
+    if (file.includes("node_modules")) {
+      return;
+    }
+  }
+
   defaultHandler(warning);
 }
 
