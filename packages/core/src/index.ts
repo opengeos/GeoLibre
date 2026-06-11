@@ -1,4 +1,5 @@
 export * from "./types";
+export * from "./vector-color";
 export * from "./project";
 export {
   projectPathLabel,

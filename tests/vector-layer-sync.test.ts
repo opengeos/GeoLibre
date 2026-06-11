@@ -450,7 +450,8 @@ describe("wireVectorStoreSync", () => {
 
     // GeoLibre's shared fillColor/strokeColor/fillOpacity/strokeWidth map onto
     // the control's per-geometry fill/line/circle style; the unedited fields
-    // come from the style seeded off the control's own style.
+    // come from the style seeded off the control's own style. The color
+    // expression fields are undefined for a single-color (non-data-driven) edit.
     const expectedStyle = {
       fillColor: "#ff0000",
       fillOpacity: 0.4,
@@ -459,6 +460,9 @@ describe("wireVectorStoreSync", () => {
       circleColor: "#ff0000",
       circleOpacity: 0.4,
       circleRadius: 5,
+      fillColorExpression: undefined,
+      lineColorExpression: undefined,
+      circleColorExpression: undefined,
     };
     assert.deepEqual(calls, [
       { method: "setLayerStyle", args: ["vector-1", expectedStyle] },
@@ -471,6 +475,47 @@ describe("wireVectorStoreSync", () => {
       (stored.metadata.vectorState as { style: unknown }).style,
       expectedStyle,
     );
+  });
+
+  it("pushes a categorized color expression through the control", () => {
+    const { control, calls } = fakeControl([vectorInfo()]);
+    syncVectorLayersToStore(control);
+    wireVectorStoreSync(control);
+
+    useAppStore.getState().setLayerStyle("vector-1", {
+      vectorStyleMode: "categorized",
+      vectorStyleProperty: "continent",
+      vectorStyleStops: [
+        { value: "Asia", color: "#ff0000" },
+        { value: "Europe", color: "#00ff00" },
+      ],
+    });
+
+    assert.equal(calls.length, 1);
+    const [method, args] = [calls[0].method, calls[0].args];
+    assert.equal(method, "setLayerStyle");
+    const pushed = args[1] as VectorLayerStyle;
+    // The fill (and circle) color becomes a MapLibre `match` expression on the
+    // chosen attribute, with the flat fillColor as the fallback.
+    const matchExpr = [
+      "match",
+      ["to-string", ["get", "continent"]],
+      "Asia",
+      "#ff0000",
+      "Europe",
+      "#00ff00",
+      "#3388ff",
+    ];
+    assert.deepEqual(pushed.fillColorExpression, matchExpr);
+    assert.deepEqual(pushed.circleColorExpression, matchExpr);
+    // Polygon outlines keep the flat stroke color; only line geometry takes the
+    // categorized color, expressed via a geometry-type case.
+    assert.deepEqual(pushed.lineColorExpression, [
+      "case",
+      ["==", ["geometry-type"], "Polygon"],
+      "#3388ff",
+      matchExpr,
+    ]);
   });
 
   it("does not touch the control for GeoLibre-only style fields", () => {

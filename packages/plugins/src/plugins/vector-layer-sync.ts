@@ -1,9 +1,15 @@
 import {
   DEFAULT_LAYER_STYLE,
+  isVectorColorExpression,
+  vectorCircleColorValue,
+  vectorFillColorValue,
+  vectorLineColorValue,
   type GeoLibreLayer,
   type LayerStyle,
+  type VectorColorValue,
   useAppStore,
 } from "@geolibre/core";
+import type { PropertyValueSpecification } from "maplibre-gl";
 import type {
   VectorLayerInfo,
   VectorLayerOptions,
@@ -437,6 +443,13 @@ function savedVectorStyle(raw: unknown): Partial<VectorLayerStyle> | null {
  * layer's point circles unify with its fill from the first panel edit onward,
  * since GeoLibre has no separate point-fill control.
  *
+ * Categorized/graduated/expression style modes produce a data-driven MapLibre
+ * color expression that a flat color cannot represent, so it is carried in the
+ * control's optional *ColorExpression fields (the flat colors remain the
+ * fallback). The expression fields are always set — to the expression in a
+ * data-driven mode, or to undefined in `single` mode — so reverting to a single
+ * color clears any previously pushed expression on the control.
+ *
  * @param style - The GeoLibre layer style.
  * @returns The equivalent control style patch.
  */
@@ -453,7 +466,26 @@ function layerStyleToVectorStyle(style: LayerStyle): VectorLayerStyle {
     circleColor: style.fillColor,
     circleOpacity: style.fillOpacity,
     circleRadius: style.circleRadius,
+    fillColorExpression: colorExpressionField(vectorFillColorValue(style)),
+    lineColorExpression: colorExpressionField(vectorLineColorValue(style)),
+    circleColorExpression: colorExpressionField(vectorCircleColorValue(style)),
   };
+}
+
+/**
+ * Narrows a computed vector color to the control's expression field: the
+ * expression when the style mode is data-driven, or undefined when it resolves
+ * to a flat color (so the control falls back to fillColor/lineColor/circleColor).
+ *
+ * @param value - A color value from the @geolibre/core color builders.
+ * @returns The expression, or undefined for a flat color.
+ */
+function colorExpressionField(
+  value: VectorColorValue,
+): PropertyValueSpecification<string> | undefined {
+  return isVectorColorExpression(value)
+    ? (value as PropertyValueSpecification<string>)
+    : undefined;
 }
 
 /**
@@ -505,7 +537,13 @@ function vectorStylesEqual(
     left.lineWidth === right.lineWidth &&
     left.circleColor === right.circleColor &&
     left.circleOpacity === right.circleOpacity &&
-    left.circleRadius === right.circleRadius
+    left.circleRadius === right.circleRadius &&
+    // Color expressions are arrays (or undefined), so compare them deeply: a
+    // categorized/graduated stop change reuses the same flat colors but yields
+    // a different expression, which must still register as a style change.
+    valuesEqual(left.fillColorExpression, right.fillColorExpression) &&
+    valuesEqual(left.lineColorExpression, right.lineColorExpression) &&
+    valuesEqual(left.circleColorExpression, right.circleColorExpression)
   );
 }
 
