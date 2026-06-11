@@ -984,7 +984,7 @@ function NumberStepperInput({
   };
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] overflow-hidden rounded-md border border-input bg-background shadow-sm focus-within:border-2 focus-within:border-ring">
+    <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] overflow-hidden rounded-md border border-input bg-background shadow-xs focus-within:border-2 focus-within:border-ring">
       <input
         id={id}
         inputMode={integer ? "numeric" : "decimal"}

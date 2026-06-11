@@ -957,7 +957,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                 <col key={col} style={{ width: columnWidth(col) }} />
               ))}
             </colgroup>
-            <TableHeader className="sticky top-0 z-10 bg-card shadow-sm">
+            <TableHeader className="sticky top-0 z-10 bg-card shadow-xs">
               <TableRow>
                 <TableHead className="bg-card">
                   {sortableHeader("__featureId", "#")}

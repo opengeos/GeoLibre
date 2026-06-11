@@ -1,4 +1,7 @@
 @import "@geolibre/ui/globals.css";
+/* Supplies the custom-color/border-radius theme that @geolibre/ui's globals.css
+   relies on via @apply (background, border, etc.). globals.css is intentionally
+   config-agnostic; the consuming app provides the Tailwind config here. */
 @config "../tailwind.config.js";
 
 html,

@@ -81,7 +81,7 @@ function onwarn(
       (typeof warning.id === "string" ? warning.id : undefined) ??
       warning.loc?.file ??
       "";
-    if (file.includes("node_modules")) {
+    if (file.includes("/node_modules/") || file.includes("\\node_modules\\")) {
       return;
     }
   }

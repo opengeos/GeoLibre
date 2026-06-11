@@ -725,7 +725,7 @@ export function LayerPanel({
                     size="icon"
                     className={`h-7 w-7 ${
                       identifyActive
-                        ? "border border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 hover:text-primary-foreground"
+                        ? "border border-primary bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 hover:text-primary-foreground"
                         : ""
                     }`}
                     title={
