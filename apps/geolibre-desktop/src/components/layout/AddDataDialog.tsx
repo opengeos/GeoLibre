@@ -247,10 +247,15 @@ function parseVideoCorner(value: string, label: string): [number, number] {
   if (parts.length !== 2) {
     throw new Error(`Enter the ${label} corner as "longitude, latitude".`);
   }
-  return [
-    parseRequiredNumber(parts[0], `${label} longitude`),
-    parseRequiredNumber(parts[1], `${label} latitude`),
-  ];
+  const lng = parseRequiredNumber(parts[0], `${label} longitude`);
+  const lat = parseRequiredNumber(parts[1], `${label} latitude`);
+  if (lng < -180 || lng > 180) {
+    throw new Error(`${label} longitude must be between -180 and 180.`);
+  }
+  if (lat < -90 || lat > 90) {
+    throw new Error(`${label} latitude must be between -90 and 90.`);
+  }
+  return [lng, lat];
 }
 
 function readSavedPostgresConnections(): string[] {

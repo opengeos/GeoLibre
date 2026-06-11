@@ -146,6 +146,7 @@ export function syncLayer(
 
   if (layer.type === "video") {
     syncVideoLayer(map, layer, beforeId);
+    return;
   }
 }
 
