@@ -142,7 +142,10 @@ function getGlobeDisc(map: MapLibreMap): GlobeDisc | null {
   return {
     x: minX + halfWidth,
     y: minY + halfHeight,
-    r: (halfWidth + halfHeight) / 2,
+    // The projected globe is an ellipse under pitch; use the larger half-extent
+    // so the circular punch-out fully covers the silhouette (slightly over-cuts
+    // at steep pitch) rather than leaving deep space bleeding over the poles.
+    r: Math.max(halfWidth, halfHeight),
   };
 }
 
@@ -161,6 +164,8 @@ class EffectsEngine {
   private starfieldOriginLng = 0;
   private starfieldOriginLat = 0;
   private comets: Comet[] = [];
+  // Cached space-background gradient; only depends on size, so rebuilt on resize.
+  private spaceGradient: CanvasGradient | null = null;
 
   private width = 0;
   private height = 0;
@@ -172,7 +177,7 @@ class EffectsEngine {
   constructor(map: MapLibreMap) {
     this.map = map;
     this.spaceCanvas = this.createCanvas(0);
-    this.haloCanvas = this.createCanvas(1);
+    this.haloCanvas = this.createCanvas(1, "screen");
     this.spaceCtx = this.spaceCanvas.getContext("2d")!;
     this.haloCtx = this.haloCanvas.getContext("2d")!;
 
@@ -210,7 +215,7 @@ class EffectsEngine {
     this.haloCanvas.remove();
   }
 
-  private createCanvas(zIndex: number): HTMLCanvasElement {
+  private createCanvas(zIndex: number, blendMode?: string): HTMLCanvasElement {
     const canvas = document.createElement("canvas");
     canvas.className = "geolibre-effects-canvas";
     canvas.style.position = "absolute";
@@ -220,6 +225,11 @@ class EffectsEngine {
     // collapses to 0 height, so a percentage height would resolve to 0.
     canvas.style.pointerEvents = "none";
     canvas.style.zIndex = String(zIndex);
+    // The halo screen-blends against the layers below it (space canvas + map)
+    // at the compositor level. This must be a CSS blend on the element: a 2D
+    // context `globalCompositeOperation` would only blend against this canvas's
+    // own pixels, which are cleared transparent each frame (i.e. a no-op).
+    if (blendMode) canvas.style.mixBlendMode = blendMode;
     return canvas;
   }
 
@@ -252,6 +262,7 @@ class EffectsEngine {
       ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     }
     this.starfield = null; // regenerate at the new size on the next frame
+    this.spaceGradient = null; // rebuild for the new dimensions
   }
 
   private start(): void {
@@ -458,19 +469,22 @@ class EffectsEngine {
 
   private drawSpaceBackground(alpha: number): void {
     const ctx = this.spaceCtx;
-    const gradient = ctx.createRadialGradient(
-      this.width / 2,
-      this.height / 2,
-      0,
-      this.width / 2,
-      this.height / 2,
-      Math.max(this.width, this.height) * 0.75,
-    );
-    gradient.addColorStop(0, "#0c1b33");
-    gradient.addColorStop(1, "#081222");
+    if (!this.spaceGradient) {
+      const gradient = ctx.createRadialGradient(
+        this.width / 2,
+        this.height / 2,
+        0,
+        this.width / 2,
+        this.height / 2,
+        Math.max(this.width, this.height) * 0.75,
+      );
+      gradient.addColorStop(0, "#0c1b33");
+      gradient.addColorStop(1, "#081222");
+      this.spaceGradient = gradient;
+    }
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = gradient;
+    ctx.fillStyle = this.spaceGradient;
     ctx.fillRect(0, 0, this.width, this.height);
     ctx.restore();
   }
@@ -490,7 +504,8 @@ class EffectsEngine {
       gradient.addColorStop(stop, color);
     }
     ctx.save();
-    ctx.globalCompositeOperation = "screen";
+    // The screen blend is applied via the canvas element's mix-blend-mode
+    // (set in createCanvas); here we just paint the gradient normally.
     ctx.globalAlpha = alpha;
     ctx.fillStyle = gradient;
     // Paint only the annulus outside the globe (outer circle CW, inner circle
