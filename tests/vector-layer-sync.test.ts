@@ -613,6 +613,31 @@ describe("savedVectorState", () => {
     });
   });
 
+  it("restores data-driven color expressions from the persisted style", () => {
+    // A saved categorized/graduated style persists a color expression in
+    // vectorState.style; restore must hand it back so the control seeds the
+    // expression and the reopened project renders the data-driven colors.
+    const matchExpr = [
+      "match",
+      ["to-string", ["get", "continent"]],
+      "Asia",
+      "#ff0000",
+      "#3388ff",
+    ];
+    const layer = createVectorStoreLayer(vectorInfo());
+    (layer.metadata.vectorState as Record<string, unknown>).style = {
+      ...vectorStyle(),
+      fillColorExpression: matchExpr,
+      circleColorExpression: matchExpr,
+    };
+
+    const restored = savedVectorState(layer).style;
+    assert.deepEqual(restored?.fillColorExpression, matchExpr);
+    assert.deepEqual(restored?.circleColorExpression, matchExpr);
+    // No lineColorExpression was persisted, so none is restored.
+    assert.equal(restored != null && "lineColorExpression" in restored, false);
+  });
+
   it("drops malformed fields from hand-edited project files", () => {
     const layer = createVectorStoreLayer(vectorInfo());
     layer.metadata.vectorState = {

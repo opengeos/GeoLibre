@@ -149,7 +149,13 @@ export function vectorFillColorValue(style: LayerStyle): VectorColorValue {
   return vectorColorExpression(style, styleValue(style, "fillColor"));
 }
 
-/** Circle color value for a point layer (fallback: the layer fill color). */
+/**
+ * Circle color value for a point layer. Intentionally identical to
+ * `vectorFillColorValue`: GeoLibre has no separate point-fill color, so point
+ * circles share the polygon fill color (matching `circlePaint` in the map
+ * package). Kept as its own function so the per-geometry callers read in
+ * parallel and a future dedicated circle color stays a one-line change here.
+ */
 export function vectorCircleColorValue(style: LayerStyle): VectorColorValue {
   return vectorColorExpression(style, styleValue(style, "fillColor"));
 }

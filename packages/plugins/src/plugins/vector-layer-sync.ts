@@ -428,6 +428,24 @@ function savedVectorStyle(raw: unknown): Partial<VectorLayerStyle> | null {
     style.circleOpacity = candidate.circleOpacity;
   }
 
+  // Restore the data-driven color expressions so a saved categorized/graduated/
+  // expression style renders on reload: restoreVectorLayers seeds the control's
+  // addData from this style, and the post-load sync does not re-push (the
+  // recomputed expression matches the persisted one). Like the colors above,
+  // these are validated by MapLibre itself rather than parsed here.
+  const colorExpression = (
+    value: unknown,
+  ): value is PropertyValueSpecification<string> => Array.isArray(value);
+  if (colorExpression(candidate.fillColorExpression)) {
+    style.fillColorExpression = candidate.fillColorExpression;
+  }
+  if (colorExpression(candidate.lineColorExpression)) {
+    style.lineColorExpression = candidate.lineColorExpression;
+  }
+  if (colorExpression(candidate.circleColorExpression)) {
+    style.circleColorExpression = candidate.circleColorExpression;
+  }
+
   return Object.keys(style).length > 0 ? style : null;
 }
 
