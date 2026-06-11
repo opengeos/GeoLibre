@@ -503,34 +503,42 @@ export function DesktopShell({
               const { readFile } = await import("@tauri-apps/plugin-fs");
               for (const path of pbfPaths) {
                 const name = path.split(/[/\\]/).pop() || "osm";
-                const bytes = await readFile(path);
-                if (bytes.byteLength >= OSM_PBF_SIZE_WARN_BYTES) {
-                  const sizeMb = Math.round(bytes.byteLength / (1024 * 1024));
-                  if (
-                    !window.confirm(
-                      `${name} is about ${sizeMb} MB. Parsing it may use a lot of memory. Continue?`,
-                    )
-                  ) {
-                    continue;
+                try {
+                  const bytes = await readFile(path);
+                  if (bytes.byteLength >= OSM_PBF_SIZE_WARN_BYTES) {
+                    const sizeMb = Math.round(bytes.byteLength / (1024 * 1024));
+                    if (
+                      !window.confirm(
+                        `${name} is about ${sizeMb} MB. Parsing it may use a lot of memory. Continue?`,
+                      )
+                    ) {
+                      continue;
+                    }
                   }
+                  setDropMessage(`Parsing ${name}…`);
+                  const layers = await loadOsmPbf(bytes.buffer as ArrayBuffer);
+                  const added = addOsmPbfLayers(
+                    addGeoJsonLayer,
+                    osmPbfBaseName(name),
+                    path,
+                    layers,
+                  );
+                  addedPbfLayers += added;
+                  if (added > 0 && layers.bounds) {
+                    mapControllerRef.current?.fitBounds(layers.bounds);
+                  }
+                  setDropMessage(
+                    added > 0
+                      ? `Added ${added} layer${added === 1 ? "" : "s"} from ${name}.`
+                      : `No features found in ${name}.`,
+                  );
+                } catch (err) {
+                  // Isolate per-file failures so one bad PBF doesn't abandon the
+                  // rest of the drop.
+                  setDropError(
+                    `Could not parse ${name}: ${err instanceof Error ? err.message : String(err)}`,
+                  );
                 }
-                setDropMessage(`Parsing ${name}…`);
-                const layers = await loadOsmPbf(bytes.buffer as ArrayBuffer);
-                const added = addOsmPbfLayers(
-                  addGeoJsonLayer,
-                  osmPbfBaseName(name),
-                  path,
-                  layers,
-                );
-                addedPbfLayers += added;
-                if (added > 0 && layers.bounds) {
-                  mapControllerRef.current?.fitBounds(layers.bounds);
-                }
-                setDropMessage(
-                  added > 0
-                    ? `Added ${added} layer${added === 1 ? "" : "s"} from ${name}.`
-                    : `No features found in ${name}.`,
-                );
               }
             }
 
@@ -632,7 +640,17 @@ export function DesktopShell({
             }
           }
           setDropMessage(`Parsing ${file.name}…`);
-          const layers = await loadOsmPbf(await file.arrayBuffer());
+          let layers;
+          try {
+            layers = await loadOsmPbf(await file.arrayBuffer());
+          } catch (err) {
+            // Isolate per-file failures so one bad PBF doesn't abandon the rest
+            // of the drop (including any co-dropped non-PBF files).
+            setDropError(
+              `Could not parse ${file.name}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+            continue;
+          }
           const added = addOsmPbfLayers(
             addGeoJsonLayer,
             osmPbfBaseName(file.name),

@@ -615,7 +615,8 @@ export function TopToolbar({
     try {
       const data = await appApi.fetchArrayBuffer?.(url);
       if (!data) throw new Error("Could not download the OSM PBF file.");
-      const fileName = url.split("/").pop()?.split("?")[0] || "osm";
+      const fileName =
+        url.split("/").pop()?.split("?")[0].split("#")[0] || "osm";
       // Keep the loading indicator up through the parse for small files
       // (runOsmPbf re-sets it and clears it in finally); only stop it here when
       // a large file will instead show the confirm dialog, to avoid a flicker.
