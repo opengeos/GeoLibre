@@ -518,6 +518,28 @@ describe("wireVectorStoreSync", () => {
     ]);
   });
 
+  it("clears the color expression when reverting to a single color", () => {
+    const { control, calls } = fakeControl([vectorInfo()]);
+    syncVectorLayersToStore(control);
+    wireVectorStoreSync(control);
+
+    useAppStore.getState().setLayerStyle("vector-1", {
+      vectorStyleMode: "categorized",
+      vectorStyleProperty: "continent",
+      vectorStyleStops: [{ value: "Asia", color: "#ff0000" }],
+    });
+    useAppStore.getState().setLayerStyle("vector-1", {
+      vectorStyleMode: "single",
+    });
+
+    // Two pushes: one applying the expression, one reverting to flat color.
+    assert.equal(calls.length, 2);
+    const reverted = calls[1].args[1] as VectorLayerStyle;
+    assert.equal(reverted.fillColorExpression, undefined);
+    assert.equal(reverted.lineColorExpression, undefined);
+    assert.equal(reverted.circleColorExpression, undefined);
+  });
+
   it("does not touch the control for GeoLibre-only style fields", () => {
     const { control, calls } = fakeControl([vectorInfo()]);
     syncVectorLayersToStore(control);
@@ -632,10 +654,11 @@ describe("savedVectorState", () => {
     };
 
     const restored = savedVectorState(layer).style;
-    assert.deepEqual(restored?.fillColorExpression, matchExpr);
-    assert.deepEqual(restored?.circleColorExpression, matchExpr);
+    assert.ok(restored != null);
+    assert.deepEqual(restored.fillColorExpression, matchExpr);
+    assert.deepEqual(restored.circleColorExpression, matchExpr);
     // No lineColorExpression was persisted, so none is restored.
-    assert.equal(restored != null && "lineColorExpression" in restored, false);
+    assert.equal("lineColorExpression" in restored, false);
   });
 
   it("drops malformed fields from hand-edited project files", () => {

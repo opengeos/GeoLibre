@@ -18,6 +18,12 @@ import type {
 
 export const VECTOR_SOURCE_KIND = "maplibre-gl-vector";
 
+// Upper bound on a restored color expression's serialized size. Generous for a
+// real categorized/graduated style (hundreds of stops are well under this) but
+// blocks a hand-edited project file from smuggling a large blob into a paint
+// property, matching the length caps on restored color strings.
+const MAX_COLOR_EXPRESSION_CHARS = 20_000;
+
 /**
  * The slice of the maplibre-gl-vector VectorControl surface the store sync
  * drives. Structural (rather than the concrete class) so tests can pass
@@ -431,11 +437,16 @@ function savedVectorStyle(raw: unknown): Partial<VectorLayerStyle> | null {
   // Restore the data-driven color expressions so a saved categorized/graduated/
   // expression style renders on reload: restoreVectorLayers seeds the control's
   // addData from this style, and the post-load sync does not re-push (the
-  // recomputed expression matches the persisted one). Like the colors above,
-  // these are validated by MapLibre itself rather than parsed here.
+  // recomputed expression matches the persisted one). Bounded like the color
+  // strings above: an array passes only when its serialized form stays small,
+  // so a hand-edited project file cannot smuggle a multi-kilobyte (or deeply
+  // nested) blob into a paint property. Real categorized/graduated expressions
+  // are far under this cap, and MapLibre validates the expression contents.
   const colorExpression = (
     value: unknown,
-  ): value is PropertyValueSpecification<string> => Array.isArray(value);
+  ): value is PropertyValueSpecification<string> =>
+    Array.isArray(value) &&
+    JSON.stringify(value).length <= MAX_COLOR_EXPRESSION_CHARS;
   if (colorExpression(candidate.fillColorExpression)) {
     style.fillColorExpression = candidate.fillColorExpression;
   }
