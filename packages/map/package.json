@@ -1,6 +1,6 @@
 {
   "name": "@geolibre/map",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
@@ -15,8 +15,8 @@
     "maplibre-gl": "^5.24.0",
     "maplibre-gl-layer-control": "^0.14.1",
     "pmtiles": "^4.4.1",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",

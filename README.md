@@ -20,7 +20,7 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 
 **Video tutorial:** [GeoLibre 1.0: A Free, Open-Source Cloud-Native GIS That Runs Anywhere (Browser, Desktop & Jupyter)](https://youtu.be/87Cm0QagtxI)
 
-## Features (v1.0)
+## Features (v1.1)
 
 - Runs across desktop (Tauri), web (browser), and mobile or small screens, with a responsive layout that adapts menus, dialogs, and panels, plus per-panel visibility through Layout settings
 - MapLibre map workspace with OpenFreeMap basemaps, blank background support, and toggleable navigation, fullscreen, geolocation, globe, terrain, scale, attribution, and logo controls
@@ -28,10 +28,10 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 - Reproject vector layers to EPSG:4326 on load and split dragged GPX files into named waypoint, track, and route layers
 - Add Data menu for XYZ tiles, WMS, WFS, GeoJSON URLs, vector tiles, COG and GeoTIFF rasters, MBTiles, ArcGIS FeatureServer and VectorTileServer layers, PMTiles, Zarr, LiDAR, 3D Tiles, and Gaussian splats
 - Cloud data integrations through the Planetary Computer and Earth Engine panels, the Overture Maps plugin, and federal Web Services plugins
-- Manual and automatic refresh for WFS and GeoJSON URL layers
-- Layer panel for visibility, opacity, reordering, zoom-to-layer, identify, labels, and remove actions
-- Live style panel (fill, stroke, opacity, circle radius)
-- Attribute table with filtering, sorting, resize controls, feature highlighting, and optional zoom to selected features
+- Manual and automatic refresh for WFS, GeoJSON URL, and Add Vector Layer URL layers
+- Layer panel for visibility, opacity, reordering, rename, zoom-to-layer, identify, labels, open attribute table, export, and remove actions
+- Live style panel with single, categorized, graduated, and expression symbology (fill, stroke, opacity, circle radius), including for Add Vector Layer layers
+- Attribute table with filtering, sorting, resize controls, feature highlighting, optional zoom to selected features, column management (rename, delete, hide/show, reorder), and export to GeoJSON/GeoParquet/CSV
 - SQL Workspace for running DuckDB Spatial SQL against loaded layers, local files, and remote URLs, with sample queries, query history, and adding results to the map or exporting them
 - Multiple DuckDB SQL query-result layers with identify, selection, and attribute table support
 - Controls menu with Measure, Bookmark, Minimap, and View State tools, plus a Print menu and a Search panel
@@ -42,7 +42,7 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 - Drag and drop vector and GeoTIFF/COG raster files onto the map to add them as layers
 - Project menu to create, open, save, and Save As `.geolibre.json` projects
 - Desktop diagnostics panel, update check, and MSIX packaging support
-- Plugin system with basemap, layer control, MapLibre components, swipe, street view, Overture Maps, LiDAR, GeoAgent, and GeoEditor integrations, including configurable control positions and external plugin manifests
+- Plugin system with basemap, layer control, MapLibre components, swipe, street view, Overture Maps, LiDAR, GeoAgent, and GeoEditor integrations, including configurable control positions and external plugin manifests; external plugins can render on the host's shared deck.gl instance via `app.getDeckGL()`
 - Time Slider plugin for animating time series raster and vector data
 - Atmosphere Effects plugin that renders a deep-space backdrop, parallax starfield, comets, and an atmospheric halo around the globe at low zoom (technique adapted from [Leonel Dias](https://leoneljdias.github.io/posts/globe-atmosphere-halo-comets/))
 - External plugin zip loading from the app data plugins directory and local development plugin directories

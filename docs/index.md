@@ -39,13 +39,13 @@ Pan, zoom, rotate, and tilt a MapLibre map with OpenFreeMap basemaps or a blank 
 <div class="feature-card" markdown>
 ### Local and remote data
 
-Load local and remote vector and raster data, inspect attributes in the table, style layers with data-driven symbology, reorder and refresh layers, and save, reopen, or share `.geolibre.json` projects.
+Load local and remote vector and raster data, inspect and manage attributes in the table (rename, hide, reorder, and delete fields, plus export), style layers with single, categorized, graduated, and expression symbology, reorder, rename, and refresh layers, and save, reopen, or share `.geolibre.json` projects.
 </div>
 
 <div class="feature-card" markdown>
 ### Plugins and marketplace
 
-Activate built-in plugins for layer control, basemaps, MapLibre components, swipe, street view, time slider, Overture Maps, LiDAR, GeoAgent, and GeoEditor, and install, update, or remove external plugins from the built-in marketplace.
+Activate built-in plugins for layer control, basemaps, MapLibre components, swipe, street view, time slider, Overture Maps, LiDAR, GeoAgent, GeoEditor, and atmosphere effects, and install, update, or remove external plugins from the built-in marketplace.
 </div>
 
 <div class="feature-card" markdown>

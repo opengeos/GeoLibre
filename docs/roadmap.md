@@ -111,7 +111,7 @@
 - [x] Docker support for the browser app
 - [x] `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` for offline spatial extension loading
 
-## v1.0: Processing pipelines, external plugin system, and stable prototype (current)
+## v1.0: Processing pipelines, external plugin system, and stable prototype
 
 - [x] GDAL / Rasterio / GeoPandas pipelines
 - [x] Buffer, reproject, and export GeoJSON processing tools
@@ -125,6 +125,20 @@
 - [x] Performance tuning and test suite
 - [x] Cross-platform installers
 - [x] Documentation and tutorials
+
+## v1.1: Vector styling, attribute table management, and atmosphere effects (current)
+
+- [x] In-browser GeoPandas engine for the Vector tools via Pyodide (no server, same results as the optional sidecar)
+- [x] Host deck.gl exposed to external plugins via `app.getDeckGL()`, so plugins render on the shared instance instead of bundling their own copy
+- [x] Style panel support for Add Vector Layer (`maplibre-gl-vector`) layers, including single, categorized, graduated, and expression symbology applied to the control's native layers
+- [x] Rename layers from the layer panel by double-clicking the name or from the layer actions menu
+- [x] Open attribute table and Export actions added to the layer actions menu
+- [x] Manual and automatic (timed) refresh extended to Add Vector Layer URL layers
+- [x] Attribute table column management: rename, delete, hide/show, and reorder fields, persisted with the project
+- [x] Atmosphere Effects plugin: deep-space backdrop, parallax starfield, comets, and a globe atmosphere halo at low zoom (toggled from the Controls menu)
+- [x] conda-forge install instructions and a video tutorial in the documentation
+- [x] MIT license
+- [x] CSP allowance for `cdn.jsdelivr.net` so DuckDB-WASM loads its bundles in the browser build
 
 ## Plugin marketplace and registry (design)
 

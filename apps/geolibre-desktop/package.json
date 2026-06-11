@@ -1,6 +1,6 @@
 {
   "name": "geolibre-desktop",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -61,13 +61,13 @@
     "three": "^0.184.0"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.0",
     "@tauri-apps/cli": "^2.11.2",
     "@types/geojson": "^7946.0.16",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
     "esbuild": "^0.28.0",
-    "@tailwindcss/postcss": "^4.3.0",
     "postcss": "^8.5.15",
     "tailwindcss": "^4.3.0",
     "typescript": "^6.0.3",
