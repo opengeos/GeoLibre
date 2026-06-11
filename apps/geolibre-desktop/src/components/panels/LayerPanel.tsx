@@ -631,9 +631,40 @@ export function LayerPanel({
                       <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
                     )}
                   </button>
-                  <span className="flex-1 truncate text-sm font-medium">
-                    {layer.name}
-                  </span>
+                  {editingLayerId === layer.id ? (
+                    <input
+                      autoFocus
+                      type="text"
+                      className="flex-1 min-w-0 rounded border border-input bg-background px-1 py-0.5 text-sm font-medium outline-none focus:ring-1 focus:ring-ring"
+                      value={editingName}
+                      aria-label={`Rename ${layer.name}`}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      onClick={(e: ReactMouseEvent) => e.stopPropagation()}
+                      onFocus={(e) => e.currentTarget.select()}
+                      onBlur={commitRename}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          commitRename();
+                        } else if (e.key === "Escape") {
+                          e.preventDefault();
+                          cancelRename();
+                        }
+                      }}
+                    />
+                  ) : (
+                    <span
+                      className="flex-1 truncate text-sm font-medium"
+                      title="Double-click to rename"
+                      onDoubleClick={(e: ReactMouseEvent) => {
+                        e.stopPropagation();
+                        beginRename(layer);
+                      }}
+                    >
+                      {layer.name}
+                    </span>
+                  )}
                   <span className="text-[10px] uppercase text-muted-foreground">
                     {layerTypeLabel(layer)}
                   </span>
