@@ -1196,6 +1196,28 @@ function syncRasterTileLayer(
   );
 }
 
+type VideoCoordinates = [
+  [number, number],
+  [number, number],
+  [number, number],
+  [number, number],
+];
+
+/** Validate persisted video corners: four [lng, lat] pairs of finite numbers. */
+function isVideoCoordinates(value: unknown): value is VideoCoordinates {
+  return (
+    Array.isArray(value) &&
+    value.length === 4 &&
+    value.every(
+      (corner) =>
+        Array.isArray(corner) &&
+        corner.length === 2 &&
+        Number.isFinite(corner[0]) &&
+        Number.isFinite(corner[1]),
+    )
+  );
+}
+
 /**
  * A georeferenced video overlay (MapLibre `type: "video"` source rendered as a
  * raster layer). The source carries the media `urls` (format fallbacks) and the
@@ -1210,10 +1232,17 @@ function syncVideoLayer(
 ): void {
   const src = sourceId(layer.id);
   const lid = `layer-${layer.id}-video`;
-  const urls = (layer.source.urls as string[] | undefined) ?? [];
-  const coordinates = layer.source.coordinates as
-    | [[number, number], [number, number], [number, number], [number, number]]
-    | undefined;
+  // Validate the persisted source payload — a malformed project must not make
+  // map.addSource throw and abort the rest of the layer-sync pass.
+  const urls = Array.isArray(layer.source.urls)
+    ? layer.source.urls.filter(
+        (value): value is string =>
+          typeof value === "string" && value.trim().length > 0,
+      )
+    : [];
+  const coordinates = isVideoCoordinates(layer.source.coordinates)
+    ? layer.source.coordinates
+    : undefined;
   if (urls.length === 0 || !coordinates) return;
   if (!map.getSource(src)) {
     map.addSource(src, { type: "video", urls, coordinates });
