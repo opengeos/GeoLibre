@@ -141,6 +141,11 @@ export function syncLayer(
 
   if (layer.type === "mbtiles") {
     syncMbtilesLayer(map, layer, beforeId);
+    return;
+  }
+
+  if (layer.type === "video") {
+    syncVideoLayer(map, layer, beforeId);
   }
 }
 
@@ -1190,6 +1195,43 @@ function syncRasterTileLayer(
   );
 }
 
+/**
+ * A georeferenced video overlay (MapLibre `type: "video"` source rendered as a
+ * raster layer). The source carries the media `urls` (format fallbacks) and the
+ * four corner `coordinates` in [lng, lat] order: top-left, top-right,
+ * bottom-right, bottom-left. The video host must send CORS headers so MapLibre
+ * can read its frames into the map texture.
+ */
+function syncVideoLayer(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+  beforeId?: string,
+): void {
+  const src = sourceId(layer.id);
+  const lid = `layer-${layer.id}-video`;
+  const urls = (layer.source.urls as string[] | undefined) ?? [];
+  const coordinates = layer.source.coordinates as
+    | [[number, number], [number, number], [number, number], [number, number]]
+    | undefined;
+  if (urls.length === 0 || !coordinates) return;
+  if (!map.getSource(src)) {
+    map.addSource(src, { type: "video", urls, coordinates });
+  }
+  ensureLayer(
+    map,
+    lid,
+    {
+      id: lid,
+      type: "raster",
+      source: src,
+      ...styleLayerZoomRange(layer.style),
+      paint: rasterPaint(layer.style, layer.opacity),
+      layout: { visibility: layer.visible ? "visible" : "none" },
+    },
+    beforeId,
+  );
+}
+
 function getRenderableRasterTiles(layer: GeoLibreLayer): string[] {
   const tiles = (layer.source.tiles as string[]) ?? [];
   if (layer.type !== "wms" || !isViteDevServer()) return tiles;
@@ -1761,6 +1803,7 @@ export function removeLayerFromMap(
     circleLayerId(layerId),
     textLayerId(layerId),
     `layer-${layerId}-raster`,
+    `layer-${layerId}-video`,
     ...(layer ? vectorTileAllStyleLayerIds(layer) : []),
     vectorTileCircleLayerId(layerId),
     vectorTileLineLayerId(layerId),

@@ -79,7 +79,8 @@ export type AddDataKind =
   | "delimited-text"
   | "mbtiles"
   | "arcgis"
-  | "postgres";
+  | "postgres"
+  | "video";
 
 interface AddDataDialogProps {
   kind: AddDataKind | null;
@@ -102,6 +103,7 @@ const KIND_LABELS: Record<AddDataKind, string> = {
   mbtiles: "Add MBTiles Layer",
   arcgis: "Add ArcGIS Layer",
   postgres: "Add PostgreSQL Layer",
+  video: "Add Video Layer",
 };
 
 const DEFAULT_XYZ_URL =
@@ -119,6 +121,16 @@ const DEFAULT_DELIMITED_TEXT_URL =
   "https://data.source.coop/giswqs/opengeos/us_cities.csv";
 const DEFAULT_DELIMITED_TEXT_LATITUDE_FIELD = "latitude";
 const DEFAULT_DELIMITED_TEXT_LONGITUDE_FIELD = "longitude";
+// MapLibre's "Add a video" sample (a drone clip over San Francisco), pre-filled
+// so the dialog works out of the box. The corners are [lng, lat] pairs.
+const DEFAULT_VIDEO_MP4_URL =
+  "https://static-assets.mapbox.com/mapbox-gl-js/drone.mp4";
+const DEFAULT_VIDEO_WEBM_URL =
+  "https://static-assets.mapbox.com/mapbox-gl-js/drone.webm";
+const DEFAULT_VIDEO_TOP_LEFT = "-122.51596391201019, 37.56238816766053";
+const DEFAULT_VIDEO_TOP_RIGHT = "-122.51467645168304, 37.56410183312965";
+const DEFAULT_VIDEO_BOTTOM_RIGHT = "-122.51309394836426, 37.563391708549425";
+const DEFAULT_VIDEO_BOTTOM_LEFT = "-122.51423120498657, 37.56161849366671";
 const DEFAULT_ARCGIS_FEATURE_URL =
   "https://services3.arcgis.com/GVgbJbqm8hXASVYi/arcgis/rest/services/USA_Major_Cities/FeatureServer/0";
 const DEFAULT_ARCGIS_VECTOR_TILE_URL =
@@ -227,6 +239,18 @@ function parseRequiredNumber(value: string, label: string): number {
 function parseOptionalNumber(value: string, label: string): number | undefined {
   if (!value.trim()) return undefined;
   return parseRequiredNumber(value, label);
+}
+
+/** Parse a `"longitude, latitude"` corner string into a [lng, lat] pair. */
+function parseVideoCorner(value: string, label: string): [number, number] {
+  const parts = value.split(",").map((part) => part.trim());
+  if (parts.length !== 2) {
+    throw new Error(`Enter the ${label} corner as "longitude, latitude".`);
+  }
+  return [
+    parseRequiredNumber(parts[0], `${label} longitude`),
+    parseRequiredNumber(parts[1], `${label} latitude`),
+  ];
 }
 
 function readSavedPostgresConnections(): string[] {
@@ -346,6 +370,16 @@ export function AddDataDialog({
   const [xyzUrl, setXyzUrl] = useState(DEFAULT_XYZ_URL);
   const [xyzTileSize, setXyzTileSize] = useState("256");
   const [xyzShortUrl, setXyzShortUrl] = useState(false);
+  const [videoMp4Url, setVideoMp4Url] = useState(DEFAULT_VIDEO_MP4_URL);
+  const [videoWebmUrl, setVideoWebmUrl] = useState(DEFAULT_VIDEO_WEBM_URL);
+  const [videoTopLeft, setVideoTopLeft] = useState(DEFAULT_VIDEO_TOP_LEFT);
+  const [videoTopRight, setVideoTopRight] = useState(DEFAULT_VIDEO_TOP_RIGHT);
+  const [videoBottomRight, setVideoBottomRight] = useState(
+    DEFAULT_VIDEO_BOTTOM_RIGHT,
+  );
+  const [videoBottomLeft, setVideoBottomLeft] = useState(
+    DEFAULT_VIDEO_BOTTOM_LEFT,
+  );
 
   const [wmsEndpoint, setWmsEndpoint] = useState(DEFAULT_WMS_ENDPOINT);
   const [wmsLayers, setWmsLayers] = useState(DEFAULT_WMS_LAYERS);
@@ -441,6 +475,7 @@ export function AddDataDialog({
         mbtiles: "MBTiles Layer",
         arcgis: "ArcGIS Layer",
         postgres: "PostgreSQL Layer",
+        video: "Video Layer",
       }[kind],
     );
     setBeforeLayerId("");
@@ -937,6 +972,44 @@ export function AddDataDialog({
         return;
       }
 
+      if (kind === "video") {
+        const primary = videoMp4Url.trim();
+        if (!primary) {
+          throw new Error("Enter a video URL.");
+        }
+        const urls = [primary];
+        const webm = videoWebmUrl.trim();
+        if (webm) urls.push(webm);
+        const coordinates: [
+          [number, number],
+          [number, number],
+          [number, number],
+          [number, number],
+        ] = [
+          parseVideoCorner(videoTopLeft, "top-left"),
+          parseVideoCorner(videoTopRight, "top-right"),
+          parseVideoCorner(videoBottomRight, "bottom-right"),
+          parseVideoCorner(videoBottomLeft, "bottom-left"),
+        ];
+        const layer = createBaseLayer(
+          name,
+          "video",
+          { type: "video", urls, coordinates },
+          { sourceKind: "video-url" },
+        );
+        addLayer(layer, beforeLayer);
+        const lngs = coordinates.map((corner) => corner[0]);
+        const lats = coordinates.map((corner) => corner[1]);
+        mapControllerRef.current?.fitBounds([
+          Math.min(...lngs),
+          Math.min(...lats),
+          Math.max(...lngs),
+          Math.max(...lats),
+        ]);
+        closeDialog();
+        return;
+      }
+
       if (kind === "wms") {
         if (!wmsEndpoint.trim()) throw new Error("Enter a WMS service URL.");
         if (!wmsLayers.trim()) {
@@ -1358,6 +1431,74 @@ export function AddDataDialog({
                 />
                 Short URL
               </label>
+            </div>
+          )}
+
+          {kind === "video" && (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="video-mp4-url">Video URL (MP4)</Label>
+                <Input
+                  id="video-mp4-url"
+                  placeholder="https://example.com/clip.mp4"
+                  value={videoMp4Url}
+                  onChange={(event) => setVideoMp4Url(event.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="video-webm-url">Video URL (WebM, optional)</Label>
+                <Input
+                  id="video-webm-url"
+                  placeholder="https://example.com/clip.webm"
+                  value={videoWebmUrl}
+                  onChange={(event) => setVideoWebmUrl(event.target.value)}
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="video-top-left">Top-left (lng, lat)</Label>
+                  <Input
+                    id="video-top-left"
+                    value={videoTopLeft}
+                    onChange={(event) => setVideoTopLeft(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="video-top-right">Top-right (lng, lat)</Label>
+                  <Input
+                    id="video-top-right"
+                    value={videoTopRight}
+                    onChange={(event) => setVideoTopRight(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="video-bottom-right">
+                    Bottom-right (lng, lat)
+                  </Label>
+                  <Input
+                    id="video-bottom-right"
+                    value={videoBottomRight}
+                    onChange={(event) =>
+                      setVideoBottomRight(event.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="video-bottom-left">
+                    Bottom-left (lng, lat)
+                  </Label>
+                  <Input
+                    id="video-bottom-left"
+                    value={videoBottomLeft}
+                    onChange={(event) => setVideoBottomLeft(event.target.value)}
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                The four corners georeference the video on the map. The video
+                host must allow cross-origin requests (CORS) for the frames to
+                render.
+              </p>
             </div>
           )}
 

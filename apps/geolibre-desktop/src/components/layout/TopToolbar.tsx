@@ -1035,6 +1035,9 @@ export function TopToolbar({
           <DropdownMenuItem onSelect={handleAddStacLayer}>
             STAC Layer
           </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setAddDataKind("video")}>
+            Video Layer
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-xs text-muted-foreground">
             Cloud formats
