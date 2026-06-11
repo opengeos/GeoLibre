@@ -498,7 +498,6 @@ export function DesktopShell({
               (path) => !isOsmPbfFileName(path),
             );
 
-            let addedPbfLayers = 0;
             if (pbfPaths.length > 0) {
               const { readFile, stat } = await import("@tauri-apps/plugin-fs");
               for (const path of pbfPaths) {
@@ -539,7 +538,6 @@ export function DesktopShell({
                     path,
                     layers,
                   );
-                  addedPbfLayers += added;
                   if (added > 0 && layers.bounds) {
                     mapControllerRef.current?.fitBounds(layers.bounds);
                   }
@@ -551,6 +549,7 @@ export function DesktopShell({
                 } catch (err) {
                   // Isolate per-file failures so one bad PBF doesn't abandon the
                   // rest of the drop.
+                  setDropMessage(null);
                   setDropError(
                     `Could not parse ${name}: ${err instanceof Error ? err.message : String(err)}`,
                   );
@@ -563,10 +562,12 @@ export function DesktopShell({
                 await loadDroppedRasterPaths(otherPaths),
               );
               const importedLayers = await loadDroppedVectorPaths(otherPaths);
+              // See the browser handler: skip finishDrop's empty-input error
+              // when PBF files were present (even if rejected/failed).
               if (
                 importedLayers.length > 0 ||
                 rasterCount > 0 ||
-                addedPbfLayers === 0
+                pbfPaths.length === 0
               ) {
                 finishDrop(importedLayers, rasterCount);
               }
@@ -641,7 +642,6 @@ export function DesktopShell({
           (file) => !isOsmPbfFileName(file.name),
         );
 
-        let addedPbfLayers = 0;
         for (const file of pbfFiles) {
           // Mirror the file-picker path's large-file guard (parsing a huge
           // extract can exhaust memory even off the main thread).
@@ -662,6 +662,7 @@ export function DesktopShell({
           } catch (err) {
             // Isolate per-file failures so one bad PBF doesn't abandon the rest
             // of the drop (including any co-dropped non-PBF files).
+            setDropMessage(null);
             setDropError(
               `Could not parse ${file.name}: ${err instanceof Error ? err.message : String(err)}`,
             );
@@ -673,7 +674,6 @@ export function DesktopShell({
             file.name,
             layers,
           );
-          addedPbfLayers += added;
           if (added > 0 && layers.bounds) {
             mapControllerRef.current?.fitBounds(layers.bounds);
           }
@@ -689,13 +689,15 @@ export function DesktopShell({
             loadDroppedRasterFiles(otherFiles),
           );
           const importedLayers = await loadDroppedVectorFiles(otherFiles);
-          // Only report/throw via finishDrop when the other files actually
-          // produced something, or when no PBF layers were added — otherwise
-          // finishDrop's empty-input error would clobber the PBF success.
+          // Call finishDrop (which reports success or throws the empty-input
+          // error) only when the other files produced something, or when the
+          // drop contained no PBF files at all. If PBF files were present —
+          // even if they were all rejected or failed — its empty-input error
+          // would wrongly clobber the PBF outcome.
           if (
             importedLayers.length > 0 ||
             rasterCount > 0 ||
-            addedPbfLayers === 0
+            pbfFiles.length === 0
           ) {
             finishDrop(importedLayers, rasterCount);
           }

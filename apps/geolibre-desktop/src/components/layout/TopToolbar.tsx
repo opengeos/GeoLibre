@@ -293,6 +293,7 @@ export function TopToolbar({
   const [projectUrlLoading, setProjectUrlLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [osmPbfLoading, setOsmPbfLoading] = useState(false);
+  const osmPbfAbortRef = useRef<AbortController | null>(null);
   const [osmPbfDialogOpen, setOsmPbfDialogOpen] = useState(false);
   const [osmPbfUrl, setOsmPbfUrl] = useState(DEFAULT_OSM_PBF_URL);
   const [osmPbfConfirm, setOsmPbfConfirm] = useState<{
@@ -543,9 +544,18 @@ export function TopToolbar({
     baseName: string,
     sourcePath: string,
   ) => {
+    // Reuse a controller already started for the URL fetch, else make one, so
+    // the loading dialog's Cancel/dismiss can abort the in-flight parse.
+    const controller = osmPbfAbortRef.current ?? new AbortController();
+    osmPbfAbortRef.current = controller;
+    if (controller.signal.aborted) {
+      osmPbfAbortRef.current = null;
+      setOsmPbfLoading(false);
+      return;
+    }
     setOsmPbfLoading(true);
     try {
-      const layers = await loadOsmPbf(data);
+      const layers = await loadOsmPbf(data, controller.signal);
       const added = addOsmPbfLayers(
         appApi.addGeoJsonLayer,
         baseName,
@@ -560,6 +570,8 @@ export function TopToolbar({
         appApi.fitBounds?.(layers.bounds);
       }
     } catch (err) {
+      // A user cancel (abort) is not an error.
+      if (err instanceof DOMException && err.name === "AbortError") return;
       const base =
         err instanceof Error ? err.message : "Could not load the OSM PBF file.";
       // Bare .pbf is also the Mapbox Vector Tile extension; hint at it on failure.
@@ -568,7 +580,13 @@ export function TopToolbar({
       );
     } finally {
       setOsmPbfLoading(false);
+      if (osmPbfAbortRef.current === controller) osmPbfAbortRef.current = null;
     }
+  };
+  const cancelOsmPbf = () => {
+    osmPbfAbortRef.current?.abort();
+    osmPbfAbortRef.current = null;
+    setOsmPbfLoading(false);
   };
   // Large extracts can exhaust browser memory; confirm before parsing.
   const startOsmPbf = (
@@ -611,9 +629,15 @@ export function TopToolbar({
       return;
     }
     setOsmPbfDialogOpen(false);
+    // Start the controller before the fetch so a dismiss during download is
+    // honored (the download itself isn't abortable through the shared fetcher,
+    // but we drop the result instead of parsing/adding it).
+    const controller = new AbortController();
+    osmPbfAbortRef.current = controller;
     setOsmPbfLoading(true);
     try {
       const data = await appApi.fetchArrayBuffer?.(url);
+      if (controller.signal.aborted) return;
       if (!data) throw new Error("Could not download the OSM PBF file.");
       const fileName =
         url.split("/").pop()?.split("?")[0].split("#")[0] || "osm";
@@ -624,6 +648,7 @@ export function TopToolbar({
       startOsmPbf(data, osmPbfBaseName(fileName), url);
     } catch (err) {
       setOsmPbfLoading(false);
+      if (osmPbfAbortRef.current === controller) osmPbfAbortRef.current = null;
       setActionError(
         err instanceof Error
           ? err.message
@@ -1585,10 +1610,9 @@ export function TopToolbar({
       <Dialog
         open={osmPbfLoading}
         onOpenChange={(open: boolean) => {
-          // Best-effort: dismissing only hides the indicator (the worker has no
-          // cancel handle, so a running parse still finishes and adds layers).
-          // This keeps the dialog from getting stuck open if the worker hangs.
-          if (!open) setOsmPbfLoading(false);
+          // Dismissing (Escape/backdrop) cancels: abort the worker parse and
+          // drop a pending fetch result so no layers are added after dismissal.
+          if (!open) cancelOsmPbf();
         }}
       >
         <DialogContent className="max-w-sm">
@@ -1599,6 +1623,11 @@ export function TopToolbar({
               the background and may take a moment for large extracts.
             </DialogDescription>
           </DialogHeader>
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={cancelOsmPbf}>
+              Cancel
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
       <AboutDialog

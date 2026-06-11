@@ -78,8 +78,15 @@ type OsmPbfWorkerMessage = OsmPbfWorkerSuccess | OsmPbfWorkerFailure;
  * Parse OSM PBF bytes into split GeoJSON layers on a Web Worker. The buffer is
  * transferred (not copied) to the worker; do not reuse it after calling.
  */
-export function loadOsmPbf(bytes: ArrayBuffer): Promise<OsmPbfLayers> {
+export function loadOsmPbf(
+  bytes: ArrayBuffer,
+  signal?: AbortSignal,
+): Promise<OsmPbfLayers> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("OSM PBF load aborted.", "AbortError"));
+      return;
+    }
     const worker = new Worker(
       new URL("./osm-pbf.worker.ts", import.meta.url),
       { type: "module" },
@@ -88,10 +95,16 @@ export function loadOsmPbf(bytes: ArrayBuffer): Promise<OsmPbfLayers> {
       worker.terminate();
       reject(new Error("OSM PBF parsing timed out."));
     }, OSM_PBF_PARSE_TIMEOUT_MS);
+    const onAbort = () => {
+      finish();
+      reject(new DOMException("OSM PBF load aborted.", "AbortError"));
+    };
     const finish = () => {
       clearTimeout(timeout);
+      signal?.removeEventListener("abort", onAbort);
       worker.terminate();
     };
+    signal?.addEventListener("abort", onAbort, { once: true });
     worker.addEventListener(
       "message",
       (event: MessageEvent<OsmPbfWorkerMessage>) => {
