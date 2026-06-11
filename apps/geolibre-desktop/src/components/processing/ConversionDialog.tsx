@@ -593,7 +593,7 @@ export function ConversionDialog() {
   return (
     <Dialog
       open={Boolean(kind)}
-      onOpenChange={(open) => {
+      onOpenChange={(open: boolean) => {
         if (!open) setConversionOpen(null);
       }}
     >

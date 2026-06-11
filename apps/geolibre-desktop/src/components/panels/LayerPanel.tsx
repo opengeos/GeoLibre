@@ -586,7 +586,7 @@ export function LayerPanel({
                     title="Drag to reorder"
                     aria-label={`Drag ${layer.name} to reorder`}
                     className="cursor-grab rounded p-0.5 text-muted-foreground hover:bg-muted active:cursor-grabbing"
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={(e: ReactMouseEvent) => e.stopPropagation()}
                     onDragStart={(e) => handleLayerDragStart(e, layer.id)}
                   >
                     <GripVertical className="h-3.5 w-3.5" />
@@ -674,10 +674,10 @@ export function LayerPanel({
                     max={1}
                     step={0.05}
                     value={[layer.opacity]}
-                    onValueChange={([v]) =>
+                    onValueChange={([v]: number[]) =>
                       setLayerOpacity(layer.id, v ?? layer.opacity)
                     }
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={(e: ReactMouseEvent) => e.stopPropagation()}
                   />
                 </div>
                 <div className="mt-2 flex gap-1">
@@ -764,19 +764,19 @@ export function LayerPanel({
                         }`}
                         title="Layer actions"
                         aria-label="Layer actions"
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e: ReactMouseEvent) => e.stopPropagation()}
                       >
                         <MoreHorizontal className="h-3.5 w-3.5" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
                       align="end"
-                      onClick={(e) => e.stopPropagation()}
+                      onClick={(e: ReactMouseEvent) => e.stopPropagation()}
                     >
                       {canMaterializeDuckDB && (
                         <>
                           <DropdownMenuItem
-                            onSelect={(e) => {
+                            onSelect={(e: Event) => {
                               e.preventDefault();
                               onMaterializeDuckDBLayer(layer);
                             }}
@@ -790,7 +790,7 @@ export function LayerPanel({
                       {(canEditGeometry || geometryEditActive) && (
                         <DropdownMenuItem
                           disabled={geometryEditElsewhere}
-                          onSelect={(e) => {
+                          onSelect={(e: Event) => {
                             e.preventDefault();
                             selectLayer(layer.id);
                             if (identifyActive) setIdentifyLayer(null);
@@ -805,7 +805,7 @@ export function LayerPanel({
                       )}
                       <DropdownMenuItem
                         disabled={!canRefresh || isRefreshing}
-                        onSelect={(e) => {
+                        onSelect={(e: Event) => {
                           e.preventDefault();
                           void handleRefreshLayer(layer);
                         }}
@@ -819,7 +819,7 @@ export function LayerPanel({
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         disabled={!canRefresh}
-                        onSelect={(e) => {
+                        onSelect={(e: Event) => {
                           e.preventDefault();
                           setRefreshSettingsLayerId(layer.id);
                         }}
@@ -923,8 +923,8 @@ export function LayerPanel({
                 max={1}
                 step={0.05}
                 value={[basemapOpacity]}
-                onValueChange={([v]) => setBasemapOpacity(v ?? basemapOpacity)}
-                onClick={(e) => e.stopPropagation()}
+                onValueChange={([v]: number[]) => setBasemapOpacity(v ?? basemapOpacity)}
+                onClick={(e: ReactMouseEvent) => e.stopPropagation()}
               />
             </div>
           </div>
@@ -937,7 +937,7 @@ export function LayerPanel({
       </p>
       <Dialog
         open={!!refreshSettingsLayerId}
-        onOpenChange={(open) => {
+        onOpenChange={(open: boolean) => {
           if (!open) setRefreshSettingsLayerId(null);
         }}
       >
@@ -1042,7 +1042,7 @@ export function LayerPanel({
       </Dialog>
       <Dialog
         open={!!metadataLayer}
-        onOpenChange={(open) => {
+        onOpenChange={(open: boolean) => {
           if (!open) setMetadataLayer(null);
         }}
       >
@@ -1070,7 +1070,7 @@ export function LayerPanel({
       </Dialog>
       <Dialog
         open={!!layerPendingRemoval}
-        onOpenChange={(open) => {
+        onOpenChange={(open: boolean) => {
           if (!open) setLayerPendingRemoval(null);
         }}
       >

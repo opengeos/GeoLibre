@@ -263,7 +263,7 @@ export function RasterToolsDialog(): ReactElement {
   return (
     <Dialog
       open={open}
-      onOpenChange={(next) => {
+      onOpenChange={(next: boolean) => {
         if (!next) {
           // Clear the job so the poll effect's cleanup stops fetching; Radix
           // keeps the dialog mounted for the exit animation otherwise.

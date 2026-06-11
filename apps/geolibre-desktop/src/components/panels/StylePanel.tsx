@@ -891,7 +891,7 @@ function RasterStyleSlider({
         max={max}
         step={step}
         value={[value]}
-        onValueChange={([next]) => {
+        onValueChange={([next]: number[]) => {
           if (typeof next === "number") onChange(next);
         }}
       />

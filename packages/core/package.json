@@ -9,11 +9,11 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "uuid": "^11.1.0",
-    "zustand": "^5.0.3"
+    "uuid": "^14.0.0",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",
-    "typescript": "^5.7.3"
+    "typescript": "^6.0.3"
   }
 }

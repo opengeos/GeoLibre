@@ -10,19 +10,19 @@
   },
   "dependencies": {
     "@geolibre/core": "*",
-    "@turf/bbox": "^7.2.0",
-    "@turf/helpers": "^7.2.0",
+    "@turf/bbox": "^7.3.5",
+    "@turf/helpers": "^7.3.5",
     "maplibre-gl": "^5.24.0",
     "maplibre-gl-layer-control": "^0.14.1",
     "pmtiles": "^4.4.1",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",
-    "@types/react": "^18.3.18",
-    "@types/react-dom": "^18.3.5",
-    "typescript": "^5.7.3"
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^6.0.3"
   },
   "peerDependencies": {
     "react": "^18.3.1",

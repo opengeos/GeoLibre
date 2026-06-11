@@ -3,8 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.0.0",
-    "wrangler": "^4.0.0"
+    "@cloudflare/workers-types": "^4.20260610.1",
+    "wrangler": "^4.99.0"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

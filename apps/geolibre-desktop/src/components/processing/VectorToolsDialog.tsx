@@ -276,7 +276,7 @@ export function VectorToolsDialog({
   return (
     <Dialog
       open={open}
-      onOpenChange={(next) => {
+      onOpenChange={(next: boolean) => {
         if (!next) setVectorToolOpen(null);
       }}
     >

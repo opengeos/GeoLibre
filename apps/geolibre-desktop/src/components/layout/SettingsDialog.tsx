@@ -436,55 +436,55 @@ export function SettingsDialog({
             <DropdownMenuSubContent className="geolibre-layout-submenu w-40 sm:w-72">
               <DropdownMenuCheckboxItem
                 checked={desktopSettings.layout.toolbarLabels}
-                onCheckedChange={(checked) =>
+                onCheckedChange={(checked: boolean) =>
                   updateSavedLayoutSettings({ toolbarLabels: checked === true })
                 }
-                onSelect={(event) => event.preventDefault()}
+                onSelect={(event: Event) => event.preventDefault()}
               >
                 Show toolbar labels
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={desktopSettings.layout.showProjectInfo}
-                onCheckedChange={(checked) =>
+                onCheckedChange={(checked: boolean) =>
                   updateSavedLayoutSettings({
                     showProjectInfo: checked === true,
                   })
                 }
-                onSelect={(event) => event.preventDefault()}
+                onSelect={(event: Event) => event.preventDefault()}
               >
                 Show project info
               </DropdownMenuCheckboxItem>
               <DropdownMenuSeparator />
               <DropdownMenuCheckboxItem
                 checked={desktopSettings.layout.layerPanelVisible}
-                onCheckedChange={(checked) =>
+                onCheckedChange={(checked: boolean) =>
                   updateSavedLayoutSettings({
                     layerPanelVisible: checked === true,
                   })
                 }
-                onSelect={(event) => event.preventDefault()}
+                onSelect={(event: Event) => event.preventDefault()}
               >
                 Show Layers panel
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={desktopSettings.layout.stylePanelVisible}
-                onCheckedChange={(checked) =>
+                onCheckedChange={(checked: boolean) =>
                   updateSavedLayoutSettings({
                     stylePanelVisible: checked === true,
                   })
                 }
-                onSelect={(event) => event.preventDefault()}
+                onSelect={(event: Event) => event.preventDefault()}
               >
                 Show Style panel
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={desktopSettings.layout.attributePanelVisible}
-                onCheckedChange={(checked) =>
+                onCheckedChange={(checked: boolean) =>
                   updateSavedLayoutSettings({
                     attributePanelVisible: checked === true,
                   })
                 }
-                onSelect={(event) => event.preventDefault()}
+                onSelect={(event: Event) => event.preventDefault()}
               >
                 Show Attribute panel
               </DropdownMenuCheckboxItem>

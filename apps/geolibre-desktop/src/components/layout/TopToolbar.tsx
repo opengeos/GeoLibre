@@ -1178,7 +1178,7 @@ export function TopToolbar({
                         <DropdownMenuRadioItem
                           key={position.value}
                           value={position.value}
-                          onSelect={(event) => event.preventDefault()}
+                          onSelect={(event: Event) => event.preventDefault()}
                         >
                           {position.label}
                         </DropdownMenuRadioItem>
@@ -1298,13 +1298,13 @@ export function TopToolbar({
       <AddDataDialog
         kind={addDataKind}
         mapControllerRef={mapControllerRef}
-        onOpenChange={(open) => {
+        onOpenChange={(open: boolean) => {
           if (!open) setAddDataKind(null);
         }}
       />
       <Dialog
         open={projectUrlDialogOpen}
-        onOpenChange={(open) => {
+        onOpenChange={(open: boolean) => {
           setProjectUrlDialogOpen(open);
           if (!open) {
             projectUrlAbortRef.current?.abort();
@@ -1356,7 +1356,7 @@ export function TopToolbar({
       </Dialog>
       <Dialog
         open={actionError !== null}
-        onOpenChange={(open) => {
+        onOpenChange={(open: boolean) => {
           if (!open) setActionError(null);
         }}
       >
