@@ -293,6 +293,7 @@ export function TopToolbar({
   const [projectUrlError, setProjectUrlError] = useState<string | null>(null);
   const [projectUrlLoading, setProjectUrlLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [directionsNoticeOpen, setDirectionsNoticeOpen] = useState(false);
   const [osmPbfLoading, setOsmPbfLoading] = useState(false);
   const osmPbfAbortRef = useRef<AbortController | null>(null);
   const [osmPbfDialogOpen, setOsmPbfDialogOpen] = useState(false);
@@ -499,6 +500,33 @@ export function TopToolbar({
     setMapControlPosition,
   } = usePluginRegistry();
   const appApi = createAppAPI(mapControllerRef);
+  // Show a one-time consent notice the first time routing is enabled, since it
+  // sends the user's waypoints to a public third-party server. A hover-only
+  // tooltip is invisible on touch, so this is the real disclosure.
+  const handleToggleDirections = () => {
+    if (isActive(DIRECTIONS_PLUGIN_ID)) {
+      toggle(DIRECTIONS_PLUGIN_ID, appApi);
+      return;
+    }
+    let acknowledged = false;
+    try {
+      acknowledged =
+        localStorage.getItem("geolibre:directions-osrm-notice") === "1";
+    } catch {
+      // localStorage unavailable (private mode): fall back to showing the notice.
+    }
+    if (acknowledged) toggle(DIRECTIONS_PLUGIN_ID, appApi);
+    else setDirectionsNoticeOpen(true);
+  };
+  const confirmEnableDirections = () => {
+    try {
+      localStorage.setItem("geolibre:directions-osrm-notice", "1");
+    } catch {
+      // Ignore: the notice will simply show again next time.
+    }
+    setDirectionsNoticeOpen(false);
+    toggle(DIRECTIONS_PLUGIN_ID, appApi);
+  };
   const resetRuntimeControlsForNewProject = () => {
     closeMaplibreComponentControls(appApi);
     closeRasterLayerPanel(appApi);
@@ -1241,7 +1269,7 @@ export function TopToolbar({
           </DropdownMenuItem>
           <DropdownMenuItem
             title="Routing sends your waypoints to the public OSRM demo server (router.project-osrm.org)."
-            onClick={() => toggle(DIRECTIONS_PLUGIN_ID, appApi)}
+            onClick={handleToggleDirections}
           >
             Directions
             {isActive(DIRECTIONS_PLUGIN_ID) ? " ✓" : ""}
@@ -1532,6 +1560,31 @@ export function TopToolbar({
           </DialogHeader>
           <div className="flex justify-end">
             <Button onClick={() => setActionError(null)}>Dismiss</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={directionsNoticeOpen}
+        onOpenChange={setDirectionsNoticeOpen}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Directions uses a public routing server</DialogTitle>
+            <DialogDescription>
+              Turning on Directions sends the waypoints you place to the public
+              OSRM demo server (router.project-osrm.org) to calculate routes —
+              your coordinates leave your device for those requests. The demo
+              server is rate-limited and supports driving only.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setDirectionsNoticeOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={confirmEnableDirections}>Continue</Button>
           </div>
         </DialogContent>
       </Dialog>

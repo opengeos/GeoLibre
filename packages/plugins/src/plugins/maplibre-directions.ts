@@ -36,11 +36,16 @@ function attach(app: GeoLibreAppAPI): void {
   const token = ++loadToken;
   void import("@maplibre/maplibre-gl-directions")
     .then(({ default: DirectionsClass, LoadingIndicatorControl }) => {
-      // Stale (toggled off/on during import) or already attached — discard.
+      // Stale token means a newer attach()/teardown() superseded this import, so
+      // discard it. The `|| directions` check is a defensive belt-and-braces:
+      // every attach() bumps loadToken first, so a surviving token implies
+      // directions is still null — but it guards against ever double-creating.
       if (token !== loadToken || directions) return;
       const currentMap = app.getMap?.();
       if (!currentMap) return;
       directions = new DirectionsClass(currentMap);
+      // `interactive` is an instance setter, not a constructor config option in
+      // this library version (it's absent from MapLibreGlDirectionsConfiguration).
       directions.interactive = true;
       directionsMap = currentMap;
       loadingControl = new LoadingIndicatorControl(directions);
@@ -56,7 +61,7 @@ function attach(app: GeoLibreAppAPI): void {
 
 function teardown(app: GeoLibreAppAPI): void {
   // Invalidate any in-flight import so it doesn't reattach after teardown.
-  loadToken += 1;
+  ++loadToken;
   if (loadingControl) {
     app.removeMapControl(loadingControl);
     loadingControl = null;
