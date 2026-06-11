@@ -10,6 +10,12 @@ const REFRESHABLE_GEOJSON_SOURCE_KINDS = new Set([
   "geojson-url",
 ]);
 
+// Add Vector Layer (maplibre-gl-vector) tags its store layers with this
+// sourceKind. Mirrors VECTOR_SOURCE_KIND in @geolibre/plugins; kept local so
+// this module stays dependency-light (it is exercised in node tests). The
+// same literal is already used in AttributeTable.tsx.
+const VECTOR_CONTROL_SOURCE_KIND = "maplibre-gl-vector";
+
 export interface LayerRefreshConfig {
   enabled: boolean;
   intervalMs: number;
@@ -95,8 +101,25 @@ export async function refreshGeoJsonLayer(
   };
 }
 
+/**
+ * True when the layer is an Add Vector Layer (maplibre-gl-vector) layer
+ * backed by an HTTP(S) URL. These render through the external control's own
+ * native sources, so they refresh via VectorControl.reloadLayer rather than
+ * the store-GeoJSON path. Covers both GeoJSON and tile render modes.
+ *
+ * @param layer - The store layer to test.
+ * @returns Whether the layer refreshes through the vector control.
+ */
+export function isVectorControlRefreshLayer(layer: GeoLibreLayer): boolean {
+  return (
+    layer.metadata.sourceKind === VECTOR_CONTROL_SOURCE_KIND &&
+    layer.metadata.externalNativeLayer === true &&
+    layerHttpUrl(layer) !== null
+  );
+}
+
 export function isRefreshableLayer(layer: GeoLibreLayer): boolean {
-  return Boolean(refreshSourceUrl(layer));
+  return Boolean(refreshSourceUrl(layer)) || isVectorControlRefreshLayer(layer);
 }
 
 export function getLayerRefreshConfig(
@@ -174,15 +197,20 @@ function parseGeoJsonFeatureCollection(value: unknown): FeatureCollection {
   return value as FeatureCollection;
 }
 
-function refreshSourceUrl(layer: GeoLibreLayer): string | null {
-  if (layer.type !== "geojson") return null;
-
+function layerHttpUrl(layer: GeoLibreLayer): string | null {
   const sourcePath =
     typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
   const sourceUrl =
     typeof layer.source.url === "string" ? layer.source.url.trim() : "";
   const url = sourceUrl || sourcePath;
-  if (!isHttpUrl(url)) return null;
+  return isHttpUrl(url) ? url : null;
+}
+
+function refreshSourceUrl(layer: GeoLibreLayer): string | null {
+  if (layer.type !== "geojson") return null;
+
+  const url = layerHttpUrl(layer);
+  if (!url) return null;
 
   if (isWfsLayer(layer)) return url;
   if (layer.metadata.externalNativeLayer === true) return null;
