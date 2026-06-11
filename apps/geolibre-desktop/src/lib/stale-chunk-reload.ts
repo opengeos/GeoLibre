@@ -83,18 +83,27 @@ export function installStaleChunkReload(options?: {
   }
 
   const handler = (event: Event) => {
-    const reloaded = reloadForStaleChunk({
-      now: () => Date.now(),
-      getLastReloadAt: () => {
-        const raw = window.sessionStorage.getItem(RELOAD_TIMESTAMP_KEY);
-        if (raw === null) return null;
-        const parsed = Number(raw);
-        return Number.isFinite(parsed) ? parsed : null;
-      },
-      setLastReloadAt: (value) =>
-        window.sessionStorage.setItem(RELOAD_TIMESTAMP_KEY, String(value)),
-      reload: () => window.location.reload(),
-    });
+    let reloaded = false;
+    try {
+      reloaded = reloadForStaleChunk({
+        now: () => Date.now(),
+        getLastReloadAt: () => {
+          const raw = window.sessionStorage.getItem(RELOAD_TIMESTAMP_KEY);
+          if (raw === null) return null;
+          const parsed = Number(raw);
+          return Number.isFinite(parsed) ? parsed : null;
+        },
+        setLastReloadAt: (value) =>
+          window.sessionStorage.setItem(RELOAD_TIMESTAMP_KEY, String(value)),
+        reload: () => window.location.reload(),
+      });
+    } catch {
+      // sessionStorage can throw when storage is blocked (private modes,
+      // Safari ITP, sandboxed iframes), mirroring the guard in diagnostics.ts.
+      // The cooldown loop-guard needs that persistence, so without it skip the
+      // reload and let Vite surface the original error rather than risk a
+      // refresh loop.
+    }
     // Only suppress Vite's rethrow when we are recovering by reloading; a
     // cooldown-suppressed (broken-build) error should still surface.
     if (reloaded) event.preventDefault();
