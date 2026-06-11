@@ -828,6 +828,16 @@ export function LayerPanel({
                       align="end"
                       onClick={(e: ReactMouseEvent) => e.stopPropagation()}
                     >
+                      <DropdownMenuItem
+                        onSelect={(e: Event) => {
+                          e.preventDefault();
+                          beginRename(layer);
+                        }}
+                      >
+                        <Pencil className="mr-2 h-3.5 w-3.5" />
+                        Rename
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
                       {canMaterializeDuckDB && (
                         <>
                           <DropdownMenuItem
