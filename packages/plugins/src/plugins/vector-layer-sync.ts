@@ -446,6 +446,7 @@ function savedVectorStyle(raw: unknown): Partial<VectorLayerStyle> | null {
     value: unknown,
   ): value is PropertyValueSpecification<string> =>
     Array.isArray(value) &&
+    value.length > 0 &&
     JSON.stringify(value).length <= MAX_COLOR_EXPRESSION_CHARS;
   if (colorExpression(candidate.fillColorExpression)) {
     style.fillColorExpression = candidate.fillColorExpression;

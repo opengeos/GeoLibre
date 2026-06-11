@@ -1,4 +1,4 @@
-import { DEFAULT_LAYER_STYLE, type LayerStyle } from "./types";
+import { styleValue, type LayerStyle } from "./types";
 
 /**
  * A data-driven color value for a vector paint property: either a plain CSS
@@ -14,13 +14,6 @@ export function isVectorColorExpression(
   value: VectorColorValue,
 ): value is unknown[] {
   return Array.isArray(value);
-}
-
-function styleValue<K extends keyof LayerStyle>(
-  style: LayerStyle,
-  key: K,
-): LayerStyle[K] {
-  return style[key] ?? DEFAULT_LAYER_STYLE[key];
 }
 
 function isColor(value: string): boolean {
