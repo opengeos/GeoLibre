@@ -994,6 +994,11 @@ export function AddDataDialog({
         const urls = [primary];
         const webm = videoWebmUrl.trim();
         if (webm) urls.push(webm);
+        // The media-src CSP is HTTPS-only, so an http:// URL would be silently
+        // blocked — reject it up front with a clear message.
+        if (urls.some((url) => !/^https:\/\//i.test(url))) {
+          throw new Error("Video URLs must start with https://.");
+        }
         const coordinates: [
           [number, number],
           [number, number],
@@ -1007,11 +1012,15 @@ export function AddDataDialog({
         ];
         const lngs = coordinates.map((corner) => corner[0]);
         const lats = coordinates.map((corner) => corner[1]);
+        const west = Math.min(...lngs);
+        const south = Math.min(...lats);
+        const east = Math.max(...lngs);
+        const north = Math.max(...lats);
         const bounds: [number, number, number, number] = [
-          Math.min(...lngs),
-          Math.min(...lats),
-          Math.max(...lngs),
-          Math.max(...lats),
+          west,
+          south,
+          east,
+          north,
         ];
         const layer = createBaseLayer(
           name,
@@ -1022,7 +1031,11 @@ export function AddDataDialog({
           { sourceKind: "video-url", bounds },
         );
         addLayer(layer, beforeLayer);
-        mapControllerRef.current?.fitBounds(bounds);
+        // Skip the fit for a degenerate (zero-area) bbox, which would otherwise
+        // snap to a single point at max zoom.
+        if (west !== east || south !== north) {
+          mapControllerRef.current?.fitBounds(bounds);
+        }
         closeDialog();
         return;
       }
@@ -1454,7 +1467,7 @@ export function AddDataDialog({
           {kind === "video" && (
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label htmlFor="video-mp4-url">Video URL (MP4)</Label>
+                <Label htmlFor="video-mp4-url">Primary video URL</Label>
                 <Input
                   id="video-mp4-url"
                   placeholder="https://example.com/clip.mp4"
@@ -1463,7 +1476,9 @@ export function AddDataDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="video-webm-url">Video URL (WebM, optional)</Label>
+                <Label htmlFor="video-webm-url">
+                  Fallback video URL (optional)
+                </Label>
                 <Input
                   id="video-webm-url"
                   placeholder="https://example.com/clip.webm"

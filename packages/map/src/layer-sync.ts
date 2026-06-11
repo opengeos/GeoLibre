@@ -1246,6 +1246,8 @@ function syncVideoLayer(
   if (urls.length === 0 || !coordinates) return;
   if (!map.getSource(src)) {
     map.addSource(src, { type: "video", urls, coordinates });
+    // MapLibre's VideoSource exposes setCoordinates() but no URL setter, so a
+    // future edit-layer flow would need to remove + re-add to change urls.
   }
   ensureLayer(
     map,
