@@ -487,6 +487,12 @@ export function AddDataDialog({
     setXyzUrl(DEFAULT_XYZ_URL);
     setXyzTileSize("256");
     setXyzShortUrl(false);
+    setVideoMp4Url(DEFAULT_VIDEO_MP4_URL);
+    setVideoWebmUrl(DEFAULT_VIDEO_WEBM_URL);
+    setVideoTopLeft(DEFAULT_VIDEO_TOP_LEFT);
+    setVideoTopRight(DEFAULT_VIDEO_TOP_RIGHT);
+    setVideoBottomRight(DEFAULT_VIDEO_BOTTOM_RIGHT);
+    setVideoBottomLeft(DEFAULT_VIDEO_BOTTOM_LEFT);
     setWmsEndpoint(DEFAULT_WMS_ENDPOINT);
     setWmsLayers(DEFAULT_WMS_LAYERS);
     setWmsStyles("");
@@ -568,6 +574,9 @@ export function AddDataDialog({
     }
     if (kind === "postgres") {
       return "Start Martin locally, discover PostGIS sources, and add a source as vector tiles.";
+    }
+    if (kind === "video") {
+      return "Add a georeferenced video overlay by supplying an MP4 URL and four corner coordinates.";
     }
     return "";
   }, [kind]);
