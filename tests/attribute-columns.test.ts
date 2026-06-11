@@ -93,11 +93,26 @@ describe("renameColumn (destructive)", () => {
     assert.deepEqual(settings.order, ["Population", "name"]);
   });
 
-  it("is a no-op for empty, unchanged, or colliding names", () => {
+  it("rewrites every style field that references the renamed column", () => {
+    const layer = makeLayer({
+      style: {
+        ...DEFAULT_LAYER_STYLE,
+        vectorStyleProperty: "pop",
+        extrusionHeightProperty: "pop",
+      },
+    });
+    const patch = renameColumn(layer, DISCOVERED, "pop", "Population");
+    assert.equal(patch?.style?.vectorStyleProperty, "Population");
+    assert.equal(patch?.style?.extrusionHeightProperty, "Population");
+  });
+
+  it("is a no-op for empty, unchanged, colliding, or absent names", () => {
     const layer = makeLayer();
     assert.equal(renameColumn(layer, DISCOVERED, "pop", "  "), null);
     assert.equal(renameColumn(layer, DISCOVERED, "pop", "pop"), null);
     assert.equal(renameColumn(layer, DISCOVERED, "pop", "area"), null);
+    // oldKey not among the discovered columns: nothing to rename.
+    assert.equal(renameColumn(layer, DISCOVERED, "missing", "New"), null);
   });
 });
 
@@ -115,12 +130,17 @@ describe("deleteColumn (destructive)", () => {
     ]);
   });
 
-  it("clears a style field that referenced the deleted column", () => {
+  it("clears every style field that referenced the deleted column", () => {
     const layer = makeLayer({
-      style: { ...DEFAULT_LAYER_STYLE, extrusionHeightProperty: "pop" },
+      style: {
+        ...DEFAULT_LAYER_STYLE,
+        extrusionHeightProperty: "pop",
+        vectorStyleProperty: "pop",
+      },
     });
     const patch = deleteColumn(layer, "pop");
     assert.equal(patch?.style?.extrusionHeightProperty, "");
+    assert.equal(patch?.style?.vectorStyleProperty, "");
   });
 
   it("drops the key from column settings", () => {

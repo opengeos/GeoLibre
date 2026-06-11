@@ -1,5 +1,4 @@
 import {
-  DEFAULT_LAYER_STYLE,
   styleValue,
   type GeoLibreLayer,
   type LayerStyle,
@@ -215,6 +214,7 @@ export function renameColumn(
 ): Partial<GeoLibreLayer> | null {
   const newKey = rawNewKey.trim();
   if (!layer.geojson || !newKey || newKey === oldKey) return null;
+  if (!discovered.includes(oldKey)) return null; // nothing to rename
   if (discovered.includes(newKey)) return null; // would clobber another column
   const settings = getColumnSettings(layer);
   return {

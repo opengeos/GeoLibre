@@ -646,14 +646,11 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     }
     suppressColumnBlurRef.current = true;
     const oldKey = editingColumn;
-    const patch = renameColumn(
-      layer,
-      discoveredColumns,
-      oldKey,
-      editingColumnName,
-    );
+    // Trim once here and pass the normalized key, so the data written by
+    // renameColumn and the view-state updates below cannot drift apart.
+    const newKey = editingColumnName.trim();
+    const patch = renameColumn(layer, discoveredColumns, oldKey, newKey);
     if (patch) {
-      const newKey = editingColumnName.trim();
       updateLayer(layer.id, patch);
       // Keep view state pointing at the renamed column.
       setColumnWidths((current) => {
@@ -947,7 +944,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="max-h-72 overflow-y-auto">
-              <DropdownMenuLabel>Visible fields</DropdownMenuLabel>
+              <DropdownMenuLabel>Show fields</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {discoveredColumns.length === 0 ? (
                 <DropdownMenuItem disabled>No fields</DropdownMenuItem>
