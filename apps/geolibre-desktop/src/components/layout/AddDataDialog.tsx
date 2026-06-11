@@ -1005,21 +1005,24 @@ export function AddDataDialog({
           parseVideoCorner(videoBottomRight, "bottom-right"),
           parseVideoCorner(videoBottomLeft, "bottom-left"),
         ];
-        const layer = createBaseLayer(
-          name,
-          "video",
-          { type: "video", urls, coordinates },
-          { sourceKind: "video-url" },
-        );
-        addLayer(layer, beforeLayer);
         const lngs = coordinates.map((corner) => corner[0]);
         const lats = coordinates.map((corner) => corner[1]);
-        mapControllerRef.current?.fitBounds([
+        const bounds: [number, number, number, number] = [
           Math.min(...lngs),
           Math.min(...lats),
           Math.max(...lngs),
           Math.max(...lats),
-        ]);
+        ];
+        const layer = createBaseLayer(
+          name,
+          "video",
+          { type: "video", urls, coordinates },
+          // Persist the corner bbox so "Zoom to layer" works — a video source
+          // exposes no bounds for fitLayer to fall back on.
+          { sourceKind: "video-url", bounds },
+        );
+        addLayer(layer, beforeLayer);
+        mapControllerRef.current?.fitBounds(bounds);
         closeDialog();
         return;
       }
@@ -1510,8 +1513,8 @@ export function AddDataDialog({
               </div>
               <p className="text-xs text-muted-foreground">
                 The four corners georeference the video on the map. The video
-                host must allow cross-origin requests (CORS) for the frames to
-                render.
+                must be served over HTTPS and the host must allow cross-origin
+                requests (CORS) for the frames to render.
               </p>
             </div>
           )}
