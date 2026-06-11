@@ -1875,6 +1875,14 @@ html:not(.dark) .vector-control-popup,
   color-scheme: dark;
 }
 
+/* The panel content scrolls vertically (overflow-y: auto), which forces
+   overflow-x to clip and cuts off the Load button's offset focus ring on
+   the right edge. Give the scroll area a little horizontal breathing room
+   so the ring is not clipped. */
+.vector-control-panel.geolibre-vector-panel .vector-control-content {
+  padding-inline: 5px;
+}
+
 /* The upstream stylesheet themes the MapLibre popup chrome around the
    picker popup from prefers-color-scheme; re-key it to the app theme. The
    html prefixes also outrank the upstream :has() rules when the OS scheme

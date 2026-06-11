@@ -43,6 +43,7 @@ import {
   MousePointerClick,
   PanelLeftClose,
   PanelLeftOpen,
+  Pencil,
   PencilRuler,
   RefreshCw,
   Table2,
@@ -160,6 +161,8 @@ export function LayerPanel({
   const moveLayer = useAppStore((s) => s.moveLayer);
   const removeLayer = useAppStore((s) => s.removeLayer);
   const updateLayer = useAppStore((s) => s.updateLayer);
+  const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
   const [metadataLayer, setMetadataLayer] = useState<GeoLibreLayer | null>(
     null,
   );
@@ -178,6 +181,12 @@ export function LayerPanel({
   const [dropTargetLayerId, setDropTargetLayerId] = useState<string | null>(
     null,
   );
+  // Escape cancels a rename by clearing editing state, but the input's onBlur
+  // (fired when React unmounts the focused input) would otherwise run
+  // commitRename with the pre-update closure and commit the edit anyway. This
+  // ref is read synchronously by commitRename, so it reflects the cancel
+  // regardless of which render's closure is executing.
+  const isCancelingRenameRef = useRef(false);
   const refreshingLayerIdsRef = useRef(new Set<string>());
   const refreshTimersRef = useRef(new Map<string, LayerRefreshTimer>());
   const refreshStatusTimersRef = useRef(new Map<string, number>());
@@ -213,6 +222,31 @@ export function LayerPanel({
   const resetDragState = () => {
     setDraggedLayerId(null);
     setDropTargetLayerId(null);
+  };
+
+  const beginRename = (layer: GeoLibreLayer) => {
+    setEditingLayerId(layer.id);
+    setEditingName(layer.name);
+  };
+
+  const commitRename = () => {
+    if (isCancelingRenameRef.current || !editingLayerId) {
+      isCancelingRenameRef.current = false;
+      return;
+    }
+    const trimmed = editingName.trim();
+    const current = layers.find((l) => l.id === editingLayerId);
+    if (trimmed && current && trimmed !== current.name) {
+      updateLayer(editingLayerId, { name: trimmed });
+    }
+    setEditingLayerId(null);
+    setEditingName("");
+  };
+
+  const cancelRename = () => {
+    isCancelingRenameRef.current = true;
+    setEditingLayerId(null);
+    setEditingName("");
   };
 
   const clearRefreshStatusTimer = useCallback((layerId: string) => {
@@ -314,6 +348,14 @@ export function LayerPanel({
       setRefreshSettingsLayerId(null);
     }
 
+    if (
+      editingLayerId &&
+      !layers.some((layer) => layer.id === editingLayerId)
+    ) {
+      setEditingLayerId(null);
+      setEditingName("");
+    }
+
     const layerIds = new Set(layers.map((layer) => layer.id));
     for (const id of refreshStatusTimersRef.current.keys()) {
       if (!layerIds.has(id)) clearRefreshStatusTimer(id);
@@ -329,7 +371,7 @@ export function LayerPanel({
       }
       return changed ? next : current;
     });
-  }, [clearRefreshStatusTimer, layers, refreshSettingsLayerId]);
+  }, [clearRefreshStatusTimer, editingLayerId, layers, refreshSettingsLayerId]);
 
   useEffect(() => {
     if (refreshSettingsIntervalMs === null) {
@@ -607,9 +649,40 @@ export function LayerPanel({
                       <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
                     )}
                   </button>
-                  <span className="flex-1 truncate text-sm font-medium">
-                    {layer.name}
-                  </span>
+                  {editingLayerId === layer.id ? (
+                    <input
+                      autoFocus
+                      type="text"
+                      className="flex-1 min-w-0 rounded border border-input bg-background px-1 py-0.5 text-sm font-medium outline-none focus:ring-1 focus:ring-ring"
+                      value={editingName}
+                      aria-label={`Rename ${layer.name}`}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      onClick={(e: ReactMouseEvent) => e.stopPropagation()}
+                      onFocus={(e) => e.currentTarget.select()}
+                      onBlur={commitRename}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          commitRename();
+                        } else if (e.key === "Escape") {
+                          e.preventDefault();
+                          cancelRename();
+                        }
+                      }}
+                    />
+                  ) : (
+                    <span
+                      className="flex-1 truncate text-sm font-medium"
+                      title="Double-click to rename"
+                      onDoubleClick={(e: ReactMouseEvent) => {
+                        e.stopPropagation();
+                        beginRename(layer);
+                      }}
+                    >
+                      {layer.name}
+                    </span>
+                  )}
                   <span className="text-[10px] uppercase text-muted-foreground">
                     {layerTypeLabel(layer)}
                   </span>
@@ -773,6 +846,20 @@ export function LayerPanel({
                       align="end"
                       onClick={(e: ReactMouseEvent) => e.stopPropagation()}
                     >
+                      {/* Rename is always available — name is a display-only
+                          label, so no per-layer-type guard is needed here.
+                          preventDefault keeps the menu's default close from
+                          racing autoFocus on the rename input. */}
+                      <DropdownMenuItem
+                        onSelect={(e: Event) => {
+                          e.preventDefault();
+                          beginRename(layer);
+                        }}
+                      >
+                        <Pencil className="mr-2 h-3.5 w-3.5" />
+                        Rename
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
                       {canMaterializeDuckDB && (
                         <>
                           <DropdownMenuItem
