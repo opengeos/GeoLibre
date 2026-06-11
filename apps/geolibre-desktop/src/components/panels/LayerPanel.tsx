@@ -26,6 +26,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
   Input,
   Label,
@@ -37,6 +40,7 @@ import {
 import {
   ChevronDown,
   ChevronUp,
+  Download,
   Eye,
   EyeOff,
   GripVertical,
@@ -50,6 +54,7 @@ import {
   PencilRuler,
   RefreshCw,
   Table2,
+  TableProperties,
   Timer,
   Trash2,
   ZoomIn,
@@ -62,6 +67,12 @@ import {
   refreshGeoJsonLayer,
   setLayerRefreshConfig,
 } from "../../lib/layer-refresh";
+import {
+  exportVectorLayer,
+  resolveLayerGeojson,
+  sanitizeExportFileName,
+  type VectorExportFormat,
+} from "../../lib/vector-export";
 
 interface LayerPanelProps {
   mapControllerRef: RefObject<MapController | null>;
@@ -165,6 +176,7 @@ export function LayerPanel({
   const moveLayer = useAppStore((s) => s.moveLayer);
   const removeLayer = useAppStore((s) => s.removeLayer);
   const updateLayer = useAppStore((s) => s.updateLayer);
+  const setAttributeTableOpen = useAppStore((s) => s.setAttributeTableOpen);
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [metadataLayer, setMetadataLayer] = useState<GeoLibreLayer | null>(
@@ -385,6 +397,45 @@ export function LayerPanel({
       }
     },
     [clearRefreshStatusTimer, scheduleStatusClear, updateLayer],
+  );
+
+  const handleExportLayer = useCallback(
+    async (layer: GeoLibreLayer, format: VectorExportFormat) => {
+      clearRefreshStatusTimer(layer.id);
+      try {
+        const geojson = await resolveLayerGeojson(
+          layer,
+          mapControllerRef.current?.getMap() ?? undefined,
+        );
+        if (!geojson) {
+          setRefreshStatuses((current) => ({
+            ...current,
+            [layer.id]: {
+              type: "error",
+              message: "Export requires a vector layer with features.",
+            },
+          }));
+          scheduleStatusClear(layer.id);
+          return;
+        }
+        await exportVectorLayer(
+          geojson,
+          format,
+          sanitizeExportFileName(layer.name),
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Could not export this layer.";
+        setRefreshStatuses((current) => ({
+          ...current,
+          [layer.id]: { type: "error", message },
+        }));
+        scheduleStatusClear(layer.id);
+      }
+    },
+    [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear],
   );
 
   // Read through a ref inside interval callbacks so long-lived timers never
@@ -643,6 +694,13 @@ export function LayerPanel({
             const canMaterializeDuckDB =
               isDuckDBQueryLayer(layer) &&
               typeof layer.metadata.query === "string";
+            // The attribute table reads features from geojson layers (including
+            // Add Vector Layer geojson-mode) and DuckDB query layers.
+            const canOpenAttributeTable =
+              layer.type === "geojson" || isDuckDBQueryLayer(layer);
+            // Export writes the layer's GeoJSON features to disk; only
+            // geojson-backed vector layers carry those features.
+            const canExportLayer = layer.type === "geojson";
             const canRefresh = isRefreshableLayer(layer);
             const refreshConfig = getLayerRefreshConfig(layer);
             const refreshStatus = refreshStatuses[layer.id];
@@ -943,6 +1001,52 @@ export function LayerPanel({
                             ? "Finish editing geometry"
                             : "Edit geometry"}
                         </DropdownMenuItem>
+                      )}
+                      {canOpenAttributeTable && (
+                        <DropdownMenuItem
+                          onSelect={(e: Event) => {
+                            e.preventDefault();
+                            selectLayer(layer.id);
+                            setAttributeTableOpen(true);
+                          }}
+                        >
+                          <TableProperties className="mr-2 h-3.5 w-3.5" />
+                          Open attribute table
+                        </DropdownMenuItem>
+                      )}
+                      {canExportLayer && (
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>
+                            <Download className="h-3.5 w-3.5" />
+                            Export
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent>
+                            <DropdownMenuItem
+                              onSelect={(e: Event) => {
+                                e.preventDefault();
+                                void handleExportLayer(layer, "geojson");
+                              }}
+                            >
+                              GeoJSON
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={(e: Event) => {
+                                e.preventDefault();
+                                void handleExportLayer(layer, "geoparquet");
+                              }}
+                            >
+                              GeoParquet
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={(e: Event) => {
+                                e.preventDefault();
+                                void handleExportLayer(layer, "csv");
+                              }}
+                            >
+                              CSV (attributes only)
+                            </DropdownMenuItem>
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
                       )}
                       <DropdownMenuItem
                         disabled={!canRefresh || isRefreshing}

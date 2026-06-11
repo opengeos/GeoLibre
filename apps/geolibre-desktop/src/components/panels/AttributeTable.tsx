@@ -1,8 +1,4 @@
-import {
-  isDuckDBQueryLayer,
-  useAppStore,
-  type GeoLibreLayer,
-} from "@geolibre/core";
+import { isDuckDBQueryLayer, useAppStore } from "@geolibre/core";
 import {
   getDuckDBLayerRows,
   getGeometryEditTargetLayerId,
@@ -47,18 +43,19 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { isTauri } from "../../lib/tauri-io";
 import {
-  isTauri,
-  saveBinaryFileWithFallback,
-  saveTextFileWithFallback,
-} from "../../lib/tauri-io";
-import type { BinaryVectorExportFormat } from "../../lib/vector-exporter";
+  exportVectorLayer,
+  formatAttributeValue,
+  geojsonVectorSourceId,
+  sanitizeExportFileName,
+  type VectorExportFormat,
+} from "../../lib/vector-export";
 
 type SortDirection = "asc" | "desc";
 type SortKey = "__featureId" | string;
 type ColumnWidths = Record<string, number>;
 type AttributeDrafts = Record<string, Record<string, string>>;
-type ExportFormat = "geojson" | "csv" | BinaryVectorExportFormat;
 type AttributeTableRow = {
   featureId: string;
   properties: Record<string, unknown>;
@@ -93,12 +90,6 @@ function compareAttributeValues(a: unknown, b: unknown): number {
     numeric: true,
     sensitivity: "base",
   });
-}
-
-function formatAttributeValue(value: unknown): string {
-  if (value == null) return "";
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
 }
 
 function parseAttributeDraft(draft: string, previousValue: unknown): unknown {
@@ -202,62 +193,6 @@ function applyDraftsToDuckDBRows(
   }
 
   return updates;
-}
-
-function sanitizeExportFileName(name: string): string {
-  const sanitized = name
-    .trim()
-    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-  return sanitized || "layer";
-}
-
-function csvCell(value: unknown): string {
-  const text = formatAttributeValue(value);
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
-function exportFormatLabel(format: BinaryVectorExportFormat): string {
-  switch (format) {
-    case "geoparquet":
-      return "GeoParquet";
-  }
-}
-
-function exportFileExtension(format: BinaryVectorExportFormat): string {
-  switch (format) {
-    case "geoparquet":
-      return "parquet";
-  }
-}
-
-function exportMimeType(format: BinaryVectorExportFormat): string {
-  switch (format) {
-    case "geoparquet":
-      return "application/vnd.apache.parquet";
-  }
-}
-
-/**
- * Source id of a geojson-render-mode vector layer created by the Add Vector
- * Layer control, or null. These layers hold their features in a MapLibre
- * GeoJSON source rather than in `layer.geojson`, so the attribute table reads
- * the data back from the map. Tiles-mode (DuckDB) vector layers are excluded.
- */
-function geojsonVectorSourceId(layer: GeoLibreLayer | undefined): string | null {
-  if (
-    !layer ||
-    layer.type !== "geojson" ||
-    layer.metadata.sourceKind !== "maplibre-gl-vector" ||
-    layer.metadata.externalNativeLayer !== true
-  ) {
-    return null;
-  }
-  const sourceIds = layer.metadata.sourceIds;
-  const sourceId = Array.isArray(sourceIds) ? sourceIds[0] : undefined;
-  return typeof sourceId === "string" ? sourceId : null;
 }
 
 interface AttributeTableProps {
@@ -622,87 +557,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     };
   };
 
-  const geojsonToCsv = (
-    geojson: NonNullable<ReturnType<typeof geojsonWithDrafts>>,
-  ) => {
-    const propertyKeys = new Set<string>();
-    for (const feature of geojson.features) {
-      for (const key of Object.keys(feature.properties ?? {})) {
-        propertyKeys.add(key);
-      }
-    }
-
-    const headers = ["feature_id", ...propertyKeys];
-    const rows = geojson.features.map((feature, index) => {
-      const featureId = String(feature.id ?? index);
-      const properties = feature.properties ?? {};
-      const values = [
-        featureId,
-        ...Array.from(propertyKeys).map((key) => properties[key]),
-      ];
-      return values
-        .map(csvCell)
-        .join(",");
-    });
-
-    return [headers.map(csvCell).join(","), ...rows].join("\n");
-  };
-
-  const exportTextLayer = async (
-    format: Extract<ExportFormat, "geojson" | "csv">,
-    exportGeojson: NonNullable<ReturnType<typeof geojsonWithDrafts>>,
-    baseName: string,
-  ) => {
-    const isCsv = format === "csv";
-    const content = isCsv
-      ? geojsonToCsv(exportGeojson)
-      : JSON.stringify(exportGeojson, null, 2);
-    await saveTextFileWithFallback(content, {
-      defaultName: `${baseName}.${isCsv ? "csv" : "geojson"}`,
-      filters: [
-        isCsv
-          ? { name: "CSV", extensions: ["csv"] }
-          : { name: "GeoJSON", extensions: ["geojson", "json"] },
-      ],
-      browserTypes: [
-        {
-          description: isCsv ? "CSV" : "GeoJSON",
-          accept: isCsv
-            ? { "text/csv": [".csv"] }
-            : { "application/geo+json": [".geojson", ".json"] },
-        },
-      ],
-      mimeType: isCsv ? "text/csv" : "application/geo+json",
-    });
-  };
-
-  const exportBinaryLayer = async (
-    format: BinaryVectorExportFormat,
-    exportGeojson: NonNullable<ReturnType<typeof geojsonWithDrafts>>,
-    baseName: string,
-  ) => {
-    const { exportBinaryVectorLayer } = await import("../../lib/vector-exporter");
-    const result = await exportBinaryVectorLayer(
-      exportGeojson,
-      format,
-      baseName,
-    );
-    const label = exportFormatLabel(format);
-    const extension = exportFileExtension(format);
-    await saveBinaryFileWithFallback(result.data, {
-      defaultName: `${baseName}.${extension}`,
-      filters: [{ name: label, extensions: [extension] }],
-      browserTypes: [
-        {
-          description: label,
-          accept: { [exportMimeType(format)]: [`.${extension}`] },
-        },
-      ],
-      mimeType: result.mimeType,
-    });
-  };
-
-  const exportLayer = async (format: ExportFormat) => {
+  const exportLayer = async (format: VectorExportFormat) => {
     if (!layer?.geojson) return;
 
     try {
@@ -711,12 +566,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       if (!exportGeojson) return;
 
       const baseName = sanitizeExportFileName(layer.name);
-      if (format === "geojson" || format === "csv") {
-        await exportTextLayer(format, exportGeojson, baseName);
-        return;
-      }
-
-      await exportBinaryLayer(format, exportGeojson, baseName);
+      await exportVectorLayer(exportGeojson, format, baseName);
     } catch (error) {
       console.error("Failed to export attribute table", error);
       setExportError(
