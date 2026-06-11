@@ -227,6 +227,38 @@ describe("createVectorStoreLayer", () => {
     assert.equal(layer.style.fillOpacity, 0.7);
     assert.equal(layer.style.circleRadius, 9);
   });
+
+  it("seeds a line layer from the line style and keeps default fill", () => {
+    const layer = createVectorStoreLayer(
+      vectorInfo({
+        geometryType: "line",
+        style: vectorStyle({
+          fillColor: "#ffffff",
+          lineColor: "#0a0b0c",
+          lineWidth: 5,
+        }),
+      }),
+    );
+
+    // The non-point branch seeds stroke from lineColor; the shared fillColor
+    // tracks the control's fillColor field (irrelevant to a line, but harmless).
+    assert.equal(layer.style.strokeColor, "#0a0b0c");
+    assert.equal(layer.style.strokeWidth, 5);
+    assert.equal(layer.style.fillColor, "#ffffff");
+  });
+
+  it("seeds a mixed layer from the polygon fill (lossy collapse)", () => {
+    const layer = createVectorStoreLayer(
+      vectorInfo({
+        geometryType: "mixed",
+        style: vectorStyle({ fillColor: "#101112", circleColor: "#dddddd" }),
+      }),
+    );
+
+    // "mixed" takes the non-point branch: the shared fillColor comes from the
+    // polygon fill, so the circle color is unified with it from the first edit.
+    assert.equal(layer.style.fillColor, "#101112");
+  });
 });
 
 describe("syncVectorLayersToStore", () => {
@@ -419,23 +451,38 @@ describe("wireVectorStoreSync", () => {
     // GeoLibre's shared fillColor/strokeColor/fillOpacity/strokeWidth map onto
     // the control's per-geometry fill/line/circle style; the unedited fields
     // come from the style seeded off the control's own style.
+    const expectedStyle = {
+      fillColor: "#ff0000",
+      fillOpacity: 0.4,
+      lineColor: "#3388ff",
+      lineWidth: 2,
+      circleColor: "#ff0000",
+      circleOpacity: 0.4,
+      circleRadius: 5,
+    };
     assert.deepEqual(calls, [
-      {
-        method: "setLayerStyle",
-        args: [
-          "vector-1",
-          {
-            fillColor: "#ff0000",
-            fillOpacity: 0.4,
-            lineColor: "#3388ff",
-            lineWidth: 2,
-            circleColor: "#ff0000",
-            circleOpacity: 0.4,
-            circleRadius: 5,
-          },
-        ],
-      },
+      { method: "setLayerStyle", args: ["vector-1", expectedStyle] },
     ]);
+
+    // The control-seed style is kept in sync so a saved project restores the
+    // edited colors (restoreVectorLayers seeds addData from vectorState.style).
+    const stored = useAppStore.getState().layers[0];
+    assert.deepEqual(
+      (stored.metadata.vectorState as { style: unknown }).style,
+      expectedStyle,
+    );
+  });
+
+  it("does not touch the control for GeoLibre-only style fields", () => {
+    const { control, calls } = fakeControl([vectorInfo()]);
+    syncVectorLayersToStore(control);
+    wireVectorStoreSync(control);
+
+    // textColor has no VectorLayerStyle equivalent, so the mapped style is
+    // unchanged and no setLayerStyle is pushed.
+    useAppStore.getState().setLayerStyle("vector-1", { textColor: "#abcdef" });
+
+    assert.deepEqual(calls, []);
   });
 
   it("drops the control layer when the panel removes the layer", () => {

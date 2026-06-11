@@ -226,6 +226,28 @@ export function wireVectorStoreSync(control: VectorSyncableControl): void {
         const nextStyle = layerStyleToVectorStyle(current.style);
         if (!vectorStylesEqual(layerStyleToVectorStyle(layer.style), nextStyle)) {
           activeControl.setLayerStyle(layer.id, nextStyle);
+          // Keep the persisted control-seed style in sync so a saved project
+          // restores the user-edited colors: restoreVectorLayers seeds the
+          // control's addData from metadata.vectorState.style. (The control's
+          // layerupdated event would normally refresh this via
+          // syncVectorLayersToStore, but the suspension around this push
+          // suppresses it.)
+          const vectorState = current.metadata.vectorState;
+          if (
+            vectorState &&
+            typeof vectorState === "object" &&
+            !Array.isArray(vectorState)
+          ) {
+            useAppStore.getState().updateLayer(layer.id, {
+              metadata: {
+                ...current.metadata,
+                vectorState: {
+                  ...(vectorState as Record<string, unknown>),
+                  style: nextStyle,
+                },
+              },
+            });
+          }
         }
       }
     });
@@ -424,6 +446,10 @@ function layerStyleToVectorStyle(style: LayerStyle): VectorLayerStyle {
     fillOpacity: style.fillOpacity,
     lineColor: style.strokeColor,
     lineWidth: style.strokeWidth,
+    // circleColor/circleOpacity intentionally track fillColor/fillOpacity (see
+    // the doc comment): one fill edit drives both polygon fills and point
+    // circles on mixed layers. Pure polygon/line layers ignore these fields;
+    // pure point layers ignore fillColor/fillOpacity instead.
     circleColor: style.fillColor,
     circleOpacity: style.fillOpacity,
     circleRadius: style.circleRadius,
