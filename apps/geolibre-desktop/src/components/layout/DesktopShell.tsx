@@ -36,6 +36,12 @@ import {
   type DroppedRaster,
 } from "../../lib/tauri-io";
 import {
+  addOsmPbfLayers,
+  isOsmPbfFileName,
+  loadOsmPbf,
+  osmPbfBaseName,
+} from "../../lib/osm-pbf-loader";
+import {
   createAppAPI,
   getPluginManager,
   useExternalPluginsReady,
@@ -546,11 +552,39 @@ export function DesktopShell({
       setDropMessage("Importing data...");
 
       try {
-        const files = event.dataTransfer.files;
-        const rasterCount = await addDroppedRasters(
-          loadDroppedRasterFiles(files),
+        const allFiles = Array.from(event.dataTransfer.files);
+        // OSM PBF files produce three separate layers (points/lines/polygons),
+        // so they bypass the single-FeatureCollection vector drop pipeline.
+        // Handle them first, then run the rest through the normal pipeline —
+        // finishDrop throws on an empty list, so only call it when non-PBF
+        // files were dropped.
+        const pbfFiles = allFiles.filter((file) => isOsmPbfFileName(file.name));
+        const otherFiles = allFiles.filter(
+          (file) => !isOsmPbfFileName(file.name),
         );
-        finishDrop(await loadDroppedVectorFiles(files), rasterCount);
+
+        for (const file of pbfFiles) {
+          setDropMessage(`Parsing ${file.name}…`);
+          const layers = await loadOsmPbf(await file.arrayBuffer());
+          const added = addOsmPbfLayers(
+            addGeoJsonLayer,
+            osmPbfBaseName(file.name),
+            file.name,
+            layers,
+          );
+          setDropMessage(
+            added > 0
+              ? `Added ${added} layer${added === 1 ? "" : "s"} from ${file.name}.`
+              : `No features found in ${file.name}.`,
+          );
+        }
+
+        if (otherFiles.length > 0) {
+          const rasterCount = await addDroppedRasters(
+            loadDroppedRasterFiles(otherFiles),
+          );
+          finishDrop(await loadDroppedVectorFiles(otherFiles), rasterCount);
+        }
       } catch (error) {
         setDropMessage(null);
         setDropError(
@@ -560,7 +594,7 @@ export function DesktopShell({
         clearDropMessageLater();
       }
     },
-    [clearDropMessageLater, finishDrop, addDroppedRasters],
+    [clearDropMessageLater, finishDrop, addDroppedRasters, addGeoJsonLayer],
   );
 
   const startLayerPanelResize = useCallback(

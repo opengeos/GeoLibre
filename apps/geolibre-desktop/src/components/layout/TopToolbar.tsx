@@ -132,12 +132,19 @@ import type { ThemeMode } from "../../hooks/useThemeMode";
 import {
   isHttpUrl,
   isTauri,
+  openLocalDataFileWithFallback,
   openProjectFile,
   openRecentProjectFile,
   RecentProjectGoneError,
   saveProjectFile,
   saveProjectFileToPath,
 } from "../../lib/tauri-io";
+import {
+  addOsmPbfLayers,
+  loadOsmPbf,
+  osmPbfBaseName,
+  OSM_PBF_SIZE_WARN_BYTES,
+} from "../../lib/osm-pbf-loader";
 import { mergeStringLists } from "../../lib/string-lists";
 import { normalizeProjectUrl } from "../../lib/urls";
 import { resolveProjectXyzLayers } from "../../lib/xyz-url";
@@ -281,6 +288,13 @@ export function TopToolbar({
   const [projectUrlError, setProjectUrlError] = useState<string | null>(null);
   const [projectUrlLoading, setProjectUrlLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [osmPbfLoading, setOsmPbfLoading] = useState(false);
+  const [osmPbfConfirm, setOsmPbfConfirm] = useState<{
+    data: ArrayBuffer;
+    baseName: string;
+    sourcePath: string;
+    sizeMb: number;
+  } | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [checkForUpdatesRequest, setCheckForUpdatesRequest] = useState(0);
   const projectUrlAbortRef = useRef<AbortController | null>(null);
@@ -517,6 +531,60 @@ export function TopToolbar({
   };
   const handleAddVectorLayer = () => {
     openVectorLayerPanel(appApi);
+  };
+  const runOsmPbf = async (
+    data: ArrayBuffer,
+    baseName: string,
+    sourcePath: string,
+  ) => {
+    setOsmPbfLoading(true);
+    try {
+      const layers = await loadOsmPbf(data);
+      const added = addOsmPbfLayers(
+        appApi.addGeoJsonLayer,
+        baseName,
+        sourcePath,
+        layers,
+      );
+      if (added === 0) {
+        setActionError(
+          "No point, line, or polygon features were found in this OSM PBF file.",
+        );
+      }
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Could not load the OSM PBF file.",
+      );
+    } finally {
+      setOsmPbfLoading(false);
+    }
+  };
+  const handleAddOsmPbfLayer = async () => {
+    try {
+      const result = await openLocalDataFileWithFallback({
+        filters: [{ name: "OSM PBF", extensions: ["pbf", "osm.pbf"] }],
+        accept: ".pbf,.osm.pbf",
+        readBinary: true,
+      });
+      if (!result?.data) return;
+      const fileName = result.path.split(/[/\\]/).pop() || "osm";
+      const baseName = osmPbfBaseName(fileName);
+      // Large extracts can exhaust browser memory; confirm before parsing.
+      if (result.data.byteLength >= OSM_PBF_SIZE_WARN_BYTES) {
+        setOsmPbfConfirm({
+          data: result.data,
+          baseName,
+          sourcePath: result.path,
+          sizeMb: Math.round(result.data.byteLength / (1024 * 1024)),
+        });
+        return;
+      }
+      await runOsmPbf(result.data, baseName, result.path);
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Could not open the OSM PBF file.",
+      );
+    }
   };
   const searchPlacesVisible = useSyncExternalStore(
     subscribeSearchPlacesPanel,
@@ -839,6 +907,9 @@ export function TopToolbar({
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setAddDataKind("mbtiles")}>
             MBTiles Layer
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void handleAddOsmPbfLayer()}>
+            OSM PBF Layer
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-xs text-muted-foreground">
@@ -1378,6 +1449,52 @@ export function TopToolbar({
           <div className="flex justify-end">
             <Button onClick={() => setActionError(null)}>Dismiss</Button>
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={osmPbfConfirm !== null}
+        onOpenChange={(open: boolean) => {
+          if (!open) setOsmPbfConfirm(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Large OSM PBF file</DialogTitle>
+            <DialogDescription>
+              {`This file is about ${osmPbfConfirm?.sizeMb} MB. Parsing it converts every feature to GeoJSON in memory, which can be slow and may use a lot of memory in the browser. Continue?`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setOsmPbfConfirm(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                const pending = osmPbfConfirm;
+                setOsmPbfConfirm(null);
+                if (pending) {
+                  void runOsmPbf(
+                    pending.data,
+                    pending.baseName,
+                    pending.sourcePath,
+                  );
+                }
+              }}
+            >
+              Continue
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={osmPbfLoading}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Loading OSM PBF…</DialogTitle>
+            <DialogDescription>
+              Parsing the file and converting features to GeoJSON. This runs in
+              the background and may take a moment for large extracts.
+            </DialogDescription>
+          </DialogHeader>
         </DialogContent>
       </Dialog>
       <AboutDialog

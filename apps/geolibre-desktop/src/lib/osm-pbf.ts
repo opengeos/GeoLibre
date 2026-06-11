@@ -1,0 +1,145 @@
+// Must precede the @osmix imports: it aliases SharedArrayBuffer to ArrayBuffer
+// before @osmix/core reads it at module-load time.
+import "./osm-shared-array-buffer-shim";
+import { Osm } from "@osmix/core";
+import { osmEntityToGeoJSONFeature } from "@osmix/geojson";
+import { readOsmPbf } from "@osmix/pbf";
+import type { Feature, FeatureCollection, Geometry } from "geojson";
+
+/**
+ * The three GeoJSON layers an OSM PBF file is split into, by geometry type.
+ * OSM mixes points, lines, and areas in one file, and MapLibre styles each
+ * geometry type differently, so we surface them as separate layers.
+ */
+export interface OsmPbfLayers {
+  points: FeatureCollection;
+  lines: FeatureCollection;
+  polygons: FeatureCollection;
+  counts: {
+    nodes: number;
+    ways: number;
+    relations: number;
+    points: number;
+    lines: number;
+    polygons: number;
+    skipped: number;
+  };
+}
+
+function emptyCollection(): FeatureCollection {
+  return { type: "FeatureCollection", features: [] };
+}
+
+function hasTags(tags: Record<string, unknown> | undefined): boolean {
+  return tags != null && Object.keys(tags).length > 0;
+}
+
+/**
+ * Parse OSM PBF bytes into an in-memory Osm index.
+ *
+ * This mirrors osmix's own `fromPbf` block loop (string-table mapping, dense
+ * nodes, then ways, then relations, then index building) but pulls in only
+ * `@osmix/core` and `@osmix/pbf` — not the full `osmix` meta-package, which
+ * re-exports unrelated raster/router/gtfs modules. Spatial indexes are skipped:
+ * GeoJSON conversion only needs the ID indexes for ref/member lookups.
+ */
+async function buildOsmFromPbf(bytes: Uint8Array): Promise<Osm> {
+  const { header, blocks } = await readOsmPbf(bytes);
+  const osm = new Osm({ header });
+
+  for await (const block of blocks) {
+    const blockStringIndexMap = osm.stringTable.createBlockIndexMap(
+      block.stringtable,
+    );
+    for (const group of block.primitivegroup) {
+      const { ways, relations, dense } = group;
+      if (dense) {
+        osm.nodes.addDenseNodes(dense, block, blockStringIndexMap);
+      }
+      if (ways.length > 0) {
+        if (!osm.nodes.isReady()) osm.nodes.buildIndex();
+        osm.ways.addWays(ways, blockStringIndexMap);
+      }
+      if (relations.length > 0) {
+        if (!osm.ways.isReady()) osm.ways.buildIndex();
+        osm.relations.addRelations(relations, blockStringIndexMap);
+      }
+    }
+  }
+
+  osm.buildIndexes();
+  return osm;
+}
+
+function geometryBucket(
+  geometry: Geometry | null,
+): "points" | "lines" | "polygons" | null {
+  switch (geometry?.type) {
+    case "Point":
+    case "MultiPoint":
+      return "points";
+    case "LineString":
+    case "MultiLineString":
+      return "lines";
+    case "Polygon":
+    case "MultiPolygon":
+      return "polygons";
+    default:
+      // GeometryCollection (some relations) and null geometries are skipped.
+      return null;
+  }
+}
+
+/**
+ * Parse OSM PBF bytes into GeoJSON layers split by geometry type.
+ *
+ * Only tagged nodes become point features — the vast majority of OSM nodes are
+ * untagged geometry vertices for ways and would otherwise flood the points
+ * layer. Ways and relations are always converted (they are meaningful features).
+ *
+ * Runs synchronously and can be heavy for large extracts; call it from a worker.
+ */
+export async function parseOsmPbf(bytes: Uint8Array): Promise<OsmPbfLayers> {
+  const osm = await buildOsmFromPbf(bytes);
+
+  const points: Feature[] = [];
+  const lines: Feature[] = [];
+  const polygons: Feature[] = [];
+  let skipped = 0;
+
+  const place = (feature: Feature) => {
+    const bucket = geometryBucket(feature.geometry);
+    if (bucket === "points") points.push(feature);
+    else if (bucket === "lines") lines.push(feature);
+    else if (bucket === "polygons") polygons.push(feature);
+    else skipped += 1;
+  };
+
+  for (const node of osm.nodes) {
+    if (!hasTags(node.tags)) continue;
+    place(osmEntityToGeoJSONFeature(osm, node) as Feature);
+  }
+  for (const way of osm.ways) {
+    place(osmEntityToGeoJSONFeature(osm, way) as Feature);
+  }
+  for (const relation of osm.relations) {
+    place(osmEntityToGeoJSONFeature(osm, relation) as Feature);
+  }
+
+  return {
+    points: { type: "FeatureCollection", features: points },
+    lines: { type: "FeatureCollection", features: lines },
+    polygons: { type: "FeatureCollection", features: polygons },
+    counts: {
+      nodes: osm.nodes.size,
+      ways: osm.ways.size,
+      relations: osm.relations.size,
+      points: points.length,
+      lines: lines.length,
+      polygons: polygons.length,
+      skipped,
+    },
+  };
+}
+
+export { emptyCollection };
