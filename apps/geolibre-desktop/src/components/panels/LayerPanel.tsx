@@ -264,10 +264,30 @@ export function LayerPanel({
         if (isVectorControlRefreshLayer(layer)) {
           const info = await reloadVectorControlLayer(layer.id);
           if (!info) {
+            // The control is unavailable (panel never opened, or torn down
+            // and not yet replayed) or no longer knows this layer id.
+            // Automatic ticks fire on a timer the user didn't initiate, so
+            // skip silently and clear the transient note instead of surfacing
+            // an error every interval until the control comes back.
+            if (automatic) {
+              setRefreshStatuses((current) => {
+                if (!current[layer.id]) return current;
+                const next = { ...current };
+                delete next[layer.id];
+                return next;
+              });
+              return;
+            }
             throw new Error(
-              "Open the Add Vector Layer panel to refresh this layer.",
+              "Could not refresh this layer. Try re-opening the Add Vector Layer panel.",
             );
           }
+          // reloadLayer fires `layerupdated`, which drives
+          // syncVectorLayersToStore to persist the refreshed featureCount (and
+          // bounds) into the store. We intentionally don't call updateLayer
+          // here: the metadata write is handled by that event, and a second
+          // write would risk clobbering the synced values. `info` feeds only
+          // the toast below.
           const featureCount =
             typeof info.featureCount === "number" ? info.featureCount : null;
           setRefreshStatuses((current) => ({

@@ -46,6 +46,36 @@ describe("isVectorControlRefreshLayer / isRefreshableLayer", () => {
     });
 
     assert.equal(isVectorControlRefreshLayer(layer), false);
+    assert.equal(isRefreshableLayer(layer), false);
+  });
+
+  it("does not treat a vector-control layer without the externalNativeLayer flag as refreshable", () => {
+    const layer = makeLayer({
+      type: "geojson",
+      source: { type: "geojson", url: "https://x.com/a.geojson" },
+      metadata: {
+        sourceKind: "maplibre-gl-vector",
+        // externalNativeLayer intentionally absent — exercises the three-way AND
+      },
+    });
+
+    assert.equal(isVectorControlRefreshLayer(layer), false);
+    assert.equal(isRefreshableLayer(layer), false);
+  });
+
+  it("treats a vector-control layer whose URL comes from sourcePath as refreshable", () => {
+    const layer = makeLayer({
+      type: "geojson",
+      source: { type: "geojson" },
+      sourcePath: "https://x.com/a.geojson",
+      metadata: {
+        sourceKind: "maplibre-gl-vector",
+        externalNativeLayer: true,
+      },
+    });
+
+    assert.equal(isVectorControlRefreshLayer(layer), true);
+    assert.equal(isRefreshableLayer(layer), true);
   });
 
   it("does not treat a plain store layer as a vector-control refresh layer", () => {

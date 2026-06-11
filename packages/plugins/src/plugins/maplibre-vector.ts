@@ -109,8 +109,8 @@ export function closeVectorLayerPanel(app: GeoLibreAppAPI): void {
 /**
  * Re-fetches a URL-backed Add Vector Layer layer in place through the
  * control's reloadLayer API, preserving the layer id. Returns the refreshed
- * layer info, or undefined when the control is not mounted or does not know
- * the layer (e.g. the panel was fully torn down).
+ * layer info, or undefined when the control singleton is null (not yet
+ * created or already removed) or the layer id is unknown to the control.
  *
  * @param id - The store/control layer id.
  * @returns The refreshed layer info, or undefined.

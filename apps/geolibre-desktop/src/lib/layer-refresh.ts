@@ -11,9 +11,11 @@ const REFRESHABLE_GEOJSON_SOURCE_KINDS = new Set([
 ]);
 
 // Add Vector Layer (maplibre-gl-vector) tags its store layers with this
-// sourceKind. Mirrors VECTOR_SOURCE_KIND in @geolibre/plugins; kept local so
-// this module stays dependency-light (it is exercised in node tests). The
-// same literal is already used in AttributeTable.tsx.
+// sourceKind. Canonical source is VECTOR_SOURCE_KIND in
+// packages/plugins/src/plugins/vector-layer-sync.ts; kept local (not imported)
+// so this module stays dependency-light for the node test runner. If the
+// canonical value ever changes, update this copy and the literal in
+// AttributeTable.tsx — there is no compile-time link between them.
 const VECTOR_CONTROL_SOURCE_KIND = "maplibre-gl-vector";
 
 export interface LayerRefreshConfig {
