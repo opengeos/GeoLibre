@@ -26,7 +26,9 @@ Or with conda from [conda-forge](https://anaconda.org/conda-forge/geolibre):
 conda install -c conda-forge geolibre
 ```
 
-Optional extras for `add_geojson()` from a GeoDataFrame:
+Optional extras for `add_geojson()` from a GeoDataFrame and for reading **local**
+vector files with `add_vector()` / `add_geoparquet()` / `add_flatgeobuf()` /
+`add_shp()` (remote URLs for those formats need no extras):
 
 ```bash
 pip install "geolibre[all]"   # adds GeoPandas and Shapely
@@ -98,8 +100,20 @@ Map(
 | --- | --- |
 | `Map(center, zoom, basemap=, height=, layout=, theme=)` | Create a map. |
 | `add_geojson(data, name=, **style)` | Add GeoJSON from a dict, file path, URL, JSON string, or GeoDataFrame. |
+| `add_vector(data, name=, render_mode=, data_format=, source_layer=, **style)` | Add a vector dataset from a URL (GeoParquet, FlatGeobuf, zipped Shapefile, GeoJSON, …) or a local file (read via GeoPandas and inlined). |
+| `add_geoparquet(data, name=, **style)` | Add a GeoParquet dataset (URL or local file). |
+| `add_flatgeobuf(data, name=, **style)` | Add a FlatGeobuf dataset (URL or local file). |
+| `add_shp(data, name=, **style)` | Add a Shapefile (zipped URL or local `.shp`). |
+| `add_vector_tiles(url, name=, source_layers=, source_layer=, **style)` | Add a vector tile layer from a TileJSON endpoint. |
+| `add_pmtiles(url, name=, tile_type=, source_layers=, **style)` | Add a PMTiles archive (vector or raster). |
 | `add_tile_layer(url, name=, tile_size=, attribution=)` | Add a raster XYZ tile layer. |
+| `add_wms(endpoint, layers, name=, styles=, image_format=, transparent=, tile_size=, **style)` | Add a WMS layer (GetMap, tiled raster). |
+| `add_wmts(url, name=, tile_size=, **style)` | Add a WMTS layer from a tile URL template. |
+| `add_wfs(endpoint, type_name, name=, version=, output_format=, srs_name=, max_features=, **style)` | Add a WFS layer (GetFeature GeoJSON, fetched and inlined). |
 | `add_cog(url, name=, bands=, colormap=, rescale=)` | Add a Cloud Optimized GeoTIFF. |
+| `add_raster(url, name=, bands=, colormap=, rescale=)` | Add a raster (COG/GeoTIFF); alias of `add_cog`. |
+| `add_3d_tiles(url, name=, altitude_offset=, request_headers=, **style)` | Add a 3D Tiles `tileset.json`. |
+| `add_video(urls, coordinates, name=, **style)` | Add a georeferenced video (four `[lng, lat]` corners). |
 | `add_basemap(basemap)` | Set the background basemap. |
 | `set_center(lng, lat, zoom=None)` | Center (and optionally zoom) the map. |
 | `set_center_zoom(lng, lat, zoom=None)` | Alias of `set_center` (leafmap compatibility). |

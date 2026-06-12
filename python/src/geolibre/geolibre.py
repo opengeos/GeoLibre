@@ -24,6 +24,43 @@ _VALID_LAYOUTS = frozenset({"embed", "full", "maponly"})
 _VALID_THEMES = frozenset({"light", "dark"})
 
 
+def _read_local_vector(path: Any) -> dict[str, Any]:
+    """Read a local vector file into a GeoJSON FeatureCollection via GeoPandas.
+
+    The browser cannot read a file that lives on the kernel host, so a local
+    vector dataset is read here and inlined as GeoJSON (reprojected to EPSG:4326)
+    instead of being streamed by the in-browser vector control. GeoPandas is an
+    optional dependency, imported lazily so the rest of the API works without it.
+
+    Args:
+        path: Filesystem path to a vector file (Shapefile, GeoParquet,
+            FlatGeobuf, GeoPackage, ...).
+
+    Returns:
+        A GeoJSON FeatureCollection dict in EPSG:4326.
+
+    Raises:
+        ValueError: If the file does not exist.
+        ImportError: If GeoPandas is not installed.
+    """
+    file_path = pathlib.Path(str(path)).expanduser()
+    if not file_path.exists():
+        raise ValueError(f"Vector file not found: {path}")
+    try:
+        import geopandas
+    except ImportError as exc:
+        raise ImportError(
+            "Reading a local vector file requires GeoPandas. Install it with "
+            "`pip install geopandas`, or pass a URL to a hosted dataset instead."
+        ) from exc
+    gdf = geopandas.read_file(file_path)
+    if gdf.crs is not None:
+        gdf = gdf.to_crs(epsg=4326)
+    # Round-trip through GeoPandas' own GeoJSON writer so numpy/datetime property
+    # values become plain JSON the widget bus can serialize.
+    return json.loads(gdf.to_json())
+
+
 class Map(anywidget.AnyWidget):
     """An interactive GeoLibre map for Jupyter notebooks.
 
@@ -288,6 +325,350 @@ class Map(anywidget.AnyWidget):
             )
         )
 
+    def add_raster(
+        self,
+        url: str,
+        name: str = "Raster",
+        *,
+        bands: list[int] | None = None,
+        colormap: str | None = None,
+        rescale: list[list[float]] | None = None,
+        **style: Any,
+    ) -> str:
+        """Add a raster (COG / GeoTIFF) layer.
+
+        Alias of :meth:`add_cog` with a generic default name.
+
+        Args:
+            url: URL of the COG / GeoTIFF.
+            name: Layer display name.
+            bands: Optional 1-based band indices to render.
+            colormap: Optional colormap name (single-band rendering).
+            rescale: Optional ``[[min, max], ...]`` ranges per band.
+            **style: Style overrides.
+
+        Returns:
+            The id of the added layer.
+        """
+        return self.add_cog(
+            url, name, bands=bands, colormap=colormap, rescale=rescale, **style
+        )
+
+    def add_wms(
+        self,
+        endpoint: str,
+        layers: str,
+        name: str = "WMS Layer",
+        *,
+        styles: str = "",
+        image_format: str = "image/png",
+        transparent: bool = True,
+        tile_size: int = 256,
+        **style: Any,
+    ) -> str:
+        """Add a WMS layer rendered as tiled raster (a WMS GetMap request).
+
+        Args:
+            endpoint: WMS service endpoint (the GetMap base URL).
+            layers: Comma-separated WMS layer name(s).
+            name: Layer display name.
+            styles: Comma-separated WMS style name(s) (empty for the default).
+            image_format: WMS image format (e.g. ``"image/png"``).
+            transparent: Whether to request transparent tiles.
+            tile_size: Tile size in pixels.
+            **style: Style overrides.
+
+        Returns:
+            The id of the added layer.
+        """
+        return self._add_layer(
+            _project.wms_layer(
+                name,
+                endpoint,
+                layers,
+                styles=styles,
+                image_format=image_format,
+                transparent=transparent,
+                tile_size=tile_size,
+                **style,
+            )
+        )
+
+    def add_wmts(
+        self,
+        url: str,
+        name: str = "WMTS Layer",
+        *,
+        tile_size: int = 256,
+        **style: Any,
+    ) -> str:
+        """Add a WMTS layer from a tile URL template.
+
+        Args:
+            url: A WMTS tile URL template (``{z}/{y}/{x}``).
+            name: Layer display name.
+            tile_size: Tile size in pixels.
+            **style: Style overrides.
+
+        Returns:
+            The id of the added layer.
+        """
+        return self._add_layer(
+            _project.wmts_layer(name, url, tile_size=tile_size, **style)
+        )
+
+    def add_wfs(
+        self,
+        endpoint: str,
+        type_name: str,
+        name: str = "WFS Layer",
+        *,
+        version: str = "2.0.0",
+        output_format: str = "application/json",
+        srs_name: str = "EPSG:4326",
+        max_features: int | None = None,
+        **style: Any,
+    ) -> str:
+        """Add a WFS layer.
+
+        The WFS GetFeature response (GeoJSON) is fetched and inlined into the
+        project, so the endpoint must support a GeoJSON ``output_format``.
+
+        Args:
+            endpoint: WFS service endpoint.
+            type_name: WFS feature type name (e.g. ``"topp:states"``).
+            name: Layer display name.
+            version: WFS protocol version (e.g. ``"2.0.0"`` or ``"1.1.0"``).
+            output_format: Requested output format (must yield GeoJSON).
+            srs_name: Spatial reference of the response.
+            max_features: Optional cap on the number of returned features.
+            **style: Style overrides.
+
+        Returns:
+            The id of the added layer.
+        """
+        url = _project.wfs_getfeature_url(
+            endpoint,
+            type_name,
+            version=version,
+            output_format=output_format,
+            srs_name=srs_name,
+            max_features=max_features,
+        )
+        fc = _project.load_featurecollection(url)
+        layer = _project.geojson_layer(name, fc, source_url=url, **style)
+        layer["metadata"].update(
+            {"service": "wfs", "sourceKind": "wfs-getfeature", "typeName": type_name}
+        )
+        return self._add_layer(layer)
+
+    def add_vector(
+        self,
+        data: Any,
+        name: str = "Vector",
+        *,
+        render_mode: str = "geojson",
+        data_format: str | None = None,
+        source_layer: str | None = None,
+        **style: Any,
+    ) -> str:
+        """Add a vector layer from a URL, a local file, or a geo object.
+
+        A remote URL is handed to the in-browser vector control (so any
+        GDAL-readable format streams without being inlined). A local file path is
+        read with GeoPandas and inlined as GeoJSON, since the browser cannot read
+        a kernel-side file. An object exposing ``__geo_interface__`` (e.g. a
+        GeoDataFrame) is inlined directly.
+
+        Args:
+            data: A dataset URL, a local file path, or a ``__geo_interface__``
+                object.
+            name: Layer display name.
+            render_mode: ``"geojson"`` or ``"tiles"`` (remote URLs only).
+            data_format: Optional GDAL format hint for remote URLs
+                (e.g. ``"parquet"``, ``"flatgeobuf"``).
+            source_layer: Optional source/container layer for multi-layer files.
+            **style: Style overrides.
+
+        Returns:
+            The id of the added layer.
+
+        Raises:
+            ImportError: If a local file is given but GeoPandas is not installed.
+            ValueError: If a local file path does not exist.
+        """
+        if isinstance(data, str) and data.startswith(("http://", "https://")):
+            return self._add_layer(
+                _project.vector_layer(
+                    name,
+                    data,
+                    render_mode=render_mode,
+                    data_format=data_format,
+                    source_layer=source_layer,
+                    **style,
+                )
+            )
+        if hasattr(data, "__geo_interface__"):
+            return self.add_geojson(data, name=name, **style)
+        fc = _read_local_vector(data)
+        return self._add_layer(_project.geojson_layer(name, fc, **style))
+
+    def add_geoparquet(self, data: Any, name: str = "GeoParquet", **style: Any) -> str:
+        """Add a GeoParquet layer from a URL or local file.
+
+        Args:
+            data: A GeoParquet URL or local file path.
+            name: Layer display name.
+            **style: Style overrides.
+
+        Returns:
+            The id of the added layer.
+        """
+        return self.add_vector(data, name=name, data_format="parquet", **style)
+
+    def add_flatgeobuf(self, data: Any, name: str = "FlatGeobuf", **style: Any) -> str:
+        """Add a FlatGeobuf layer from a URL or local file.
+
+        Args:
+            data: A FlatGeobuf URL or local file path.
+            name: Layer display name.
+            **style: Style overrides.
+
+        Returns:
+            The id of the added layer.
+        """
+        return self.add_vector(data, name=name, data_format="flatgeobuf", **style)
+
+    def add_shp(self, data: Any, name: str = "Shapefile", **style: Any) -> str:
+        """Add a Shapefile layer from a URL (zipped) or local file.
+
+        Args:
+            data: A zipped Shapefile URL or a local ``.shp`` path.
+            name: Layer display name.
+            **style: Style overrides.
+
+        Returns:
+            The id of the added layer.
+        """
+        return self.add_vector(data, name=name, data_format="shp", **style)
+
+    def add_vector_tiles(
+        self,
+        url: str,
+        name: str = "Vector Tiles",
+        *,
+        source_layers: list[str] | None = None,
+        source_layer: str | None = None,
+        **style: Any,
+    ) -> str:
+        """Add a vector tile layer from a TileJSON endpoint.
+
+        Args:
+            url: TileJSON endpoint for the vector tileset.
+            name: Layer display name.
+            source_layers: Source-layer names to render (multi-layer tilesets).
+            source_layer: A single source-layer name (single-layer convenience).
+            **style: Style overrides.
+
+        Returns:
+            The id of the added layer.
+        """
+        return self._add_layer(
+            _project.vector_tiles_layer(
+                name,
+                url,
+                source_layers=source_layers,
+                source_layer=source_layer,
+                **style,
+            )
+        )
+
+    def add_pmtiles(
+        self,
+        url: str,
+        name: str = "PMTiles",
+        *,
+        tile_type: str = "vector",
+        source_layers: list[str] | None = None,
+        **style: Any,
+    ) -> str:
+        """Add a PMTiles layer from a ``.pmtiles`` URL.
+
+        Args:
+            url: URL of the ``.pmtiles`` archive.
+            name: Layer display name.
+            tile_type: ``"vector"`` or ``"raster"``.
+            source_layers: Vector source-layer names to render (vector only).
+            **style: Style overrides.
+
+        Returns:
+            The id of the added layer.
+        """
+        return self._add_layer(
+            _project.pmtiles_layer(
+                name,
+                url,
+                tile_type=tile_type,
+                source_layers=source_layers,
+                **style,
+            )
+        )
+
+    def add_3d_tiles(
+        self,
+        url: str,
+        name: str = "3D Tiles",
+        *,
+        altitude_offset: float = 0,
+        request_headers: dict[str, str] | None = None,
+        **style: Any,
+    ) -> str:
+        """Add a 3D Tiles layer from a ``tileset.json`` URL.
+
+        Args:
+            url: URL of the 3D Tiles ``tileset.json``.
+            name: Layer display name.
+            altitude_offset: Vertical offset applied to the tileset, in meters.
+            request_headers: Optional request headers (persisted in the project).
+            **style: Style overrides.
+
+        Returns:
+            The id of the added layer.
+        """
+        return self._add_layer(
+            _project.three_d_tiles_layer(
+                name,
+                url,
+                altitude_offset=altitude_offset,
+                request_headers=request_headers,
+                **style,
+            )
+        )
+
+    def add_video(
+        self,
+        urls: str | list[str],
+        coordinates: list[list[float]],
+        name: str = "Video",
+        **style: Any,
+    ) -> str:
+        """Add a georeferenced video layer.
+
+        Args:
+            urls: One video URL or a list of format fallbacks (e.g. MP4, WebM).
+            coordinates: Four ``[lng, lat]`` corners in top-left, top-right,
+                bottom-right, bottom-left order.
+            name: Layer display name.
+            **style: Style overrides.
+
+        Returns:
+            The id of the added layer.
+        """
+        url_list = [urls] if isinstance(urls, str) else list(urls)
+        return self._add_layer(
+            _project.video_layer(name, url_list, coordinates, **style)
+        )
+
     def remove_layer(self, layer_id: str) -> None:
         """Remove a layer by id.
 
@@ -375,8 +756,7 @@ class Map(anywidget.AnyWidget):
                     # Honour the documented ValueError contract instead of
                     # leaking a raw FileNotFoundError/JSONDecodeError.
                     raise ValueError(
-                        f"Project source is not valid JSON nor an existing "
-                        f"file: {text}"
+                        f"Project source is not valid JSON nor an existing file: {text}"
                     ) from exc
                 except json.JSONDecodeError as exc:
                     raise ValueError(
