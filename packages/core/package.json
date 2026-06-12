@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "uuid": "^14.0.0",
+    "zundo": "^2.3.0",
     "zustand": "^5.0.14"
   },
   "devDependencies": {

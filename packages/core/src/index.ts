@@ -7,3 +7,7 @@ export {
   type AppState,
   type ConversionToolKind,
 } from "./store";
+export {
+  getHistoryCoalesceMs,
+  setHistoryCoalesceMs,
+} from "./history";
