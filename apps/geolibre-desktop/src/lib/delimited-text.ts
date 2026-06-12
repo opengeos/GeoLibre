@@ -104,6 +104,41 @@ export function parseDelimitedTextLayer(
   };
 }
 
+/**
+ * Parses delimited text into row objects keyed by the (de-duplicated) header
+ * names. Unlike {@link parseDelimitedTextLayer}, this keeps every column as a
+ * raw string and does not build GeoJSON, so callers (e.g. the Deck.gl Layer
+ * builder) can map arbitrary columns to layer roles themselves.
+ *
+ * @param text - The delimited text, optionally starting with a BOM.
+ * @param delimiter - The field delimiter, e.g. ",", "\t", or ";".
+ * @returns The header names and one record per data row.
+ */
+export function parseDelimitedTextRows(
+  text: string,
+  delimiter: string,
+): { fields: string[]; rows: Record<string, string>[] } {
+  if (!delimiter) throw new Error("Enter a delimiter.");
+
+  const rawRows = parseDelimitedRows(text, delimiter).filter((row) =>
+    row.some((value) => value.trim()),
+  );
+  if (rawRows.length < 2) {
+    throw new Error("The delimited text must include a header and data rows.");
+  }
+
+  const fields = uniqueFieldNames(rawRows[0].map((field) => field.trim()));
+  const rows = rawRows.slice(1).map((row) => {
+    const record: Record<string, string> = {};
+    fields.forEach((field, index) => {
+      record[field] = (row[index] ?? "").trim();
+    });
+    return record;
+  });
+
+  return { fields, rows };
+}
+
 function parseDelimitedRows(text: string, delimiter: string): string[][] {
   const rows: string[][] = [];
   let field = "";

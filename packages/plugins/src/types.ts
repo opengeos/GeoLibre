@@ -59,6 +59,8 @@ export interface GeoLibreDeckGL {
   core: typeof import("@deck.gl/core");
   /** `@deck.gl/layers` (ArcLayer, ScatterplotLayer, GeoJsonLayer, ...). */
   layers: typeof import("@deck.gl/layers");
+  /** `@deck.gl/aggregation-layers` (HexagonLayer, HeatmapLayer, GridLayer, ScreenGridLayer, ContourLayer). */
+  aggregationLayers: typeof import("@deck.gl/aggregation-layers");
   /** `@deck.gl/geo-layers` (TileLayer, H3HexagonLayer, S2Layer, ...). */
   geoLayers: typeof import("@deck.gl/geo-layers");
   /** `@deck.gl/mesh-layers` (SimpleMeshLayer, ScenegraphLayer). */

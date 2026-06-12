@@ -6,6 +6,7 @@ import {
 import {
   maplibreBasemapControlPlugin,
   maplibreComponentsPlugin,
+  maplibreDeckGlVizPlugin,
   maplibreDirectionsPlugin,
   maplibreEffectsPlugin,
   maplibreEnviroAtlasPlugin,
@@ -75,6 +76,7 @@ manager.registerAll([
   maplibreSwipePlugin,
   maplibreEffectsPlugin,
   maplibreDirectionsPlugin,
+  maplibreDeckGlVizPlugin,
   maplibreComponentsPlugin,
 ]);
 
@@ -412,16 +414,20 @@ export function createAppAPI(
         (cached ??= Promise.all([
           import("@deck.gl/core"),
           import("@deck.gl/layers"),
+          import("@deck.gl/aggregation-layers"),
           import("@deck.gl/geo-layers"),
           import("@deck.gl/mesh-layers"),
           import("@deck.gl/mapbox"),
-        ]).then(([core, layers, geoLayers, meshLayers, mapbox]) => ({
-          core,
-          layers,
-          geoLayers,
-          meshLayers,
-          mapbox,
-        })));
+        ]).then(
+          ([core, layers, aggregationLayers, geoLayers, meshLayers, mapbox]) => ({
+            core,
+            layers,
+            aggregationLayers,
+            geoLayers,
+            meshLayers,
+            mapbox,
+          }),
+        ));
     })(),
   };
 }

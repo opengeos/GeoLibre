@@ -4,10 +4,12 @@ import type { MapController, MapDiagnosticEvent } from "@geolibre/map";
 import { MapCanvas } from "@geolibre/map";
 import {
   addRasterToMap,
+  DECK_VIZ_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
   EFFECTS_PLUGIN_ID,
   endLayerGeometryEdit,
   getGeometryEditTargetLayerId,
+  restoreDeckViz,
   restoreDirections,
   restoreEffects,
   restoreRasterLayers,
@@ -382,6 +384,9 @@ export function DesktopShell({
     // Rebind the directions tool to the (possibly new) map instance after a
     // map re-init, since restoreProjectState skips an already-active plugin.
     restoreDirections(appAPI, pluginManager.isActive(DIRECTIONS_PLUGIN_ID));
+    // Same contract for the deck.gl overlay: re-attach it to the current map
+    // and re-render any deckgl-viz layers a restored project carries.
+    restoreDeckViz(appAPI, pluginManager.isActive(DECK_VIZ_PLUGIN_ID));
     const search = window.location.search;
     void pluginManager
       .handleUrlParameters(

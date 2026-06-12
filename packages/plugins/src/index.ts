@@ -110,6 +110,31 @@ export {
   maplibreEffectsPlugin,
   restoreEffects,
 } from "./plugins/maplibre-effects";
+export {
+  DECK_VIZ_PLUGIN_ID,
+  maplibreDeckGlVizPlugin,
+} from "./plugins/maplibre-deckgl-viz";
+export { restoreDeckViz } from "./plugins/deckgl-viz/overlay";
+export {
+  DECK_VIZ_CATEGORY_LABELS,
+  DEFAULT_DECK_VIZ_STYLE,
+  getDeckVizLayerDef,
+  listDeckVizLayerDefs,
+  type DeckVizCategory,
+  type DeckVizConfig,
+  type DeckVizFieldMapping,
+  type DeckVizFormat,
+  type DeckVizInputKind,
+  type DeckVizLayerDef,
+  type DeckVizRole,
+  type DeckVizStyle,
+  type DeckVizStyleControl,
+} from "./plugins/deckgl-viz/registry";
+export {
+  createDeckVizStoreLayer,
+  DECK_VIZ_SOURCE_KIND,
+  isDeckVizLayer,
+} from "./plugins/deckgl-viz/store-layer";
 export { maplibreEnviroAtlasPlugin } from "./plugins/maplibre-enviroatlas";
 export { maplibreEsriWaybackPlugin } from "./plugins/maplibre-esri-wayback";
 export { maplibreFemaWmsPlugin } from "./plugins/maplibre-fema-wms";

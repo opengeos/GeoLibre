@@ -57,6 +57,7 @@ export type LayerType =
   | "flatgeobuf"
   | "geoparquet"
   | "duckdb-query"
+  | "deckgl-viz"
   | "video";
 
 export type VectorStyleMode =
