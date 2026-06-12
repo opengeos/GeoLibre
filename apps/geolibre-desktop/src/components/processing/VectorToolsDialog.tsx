@@ -184,6 +184,9 @@ export function VectorToolsDialog({
   // depends on the data it actually reads rather than the params-derived
   // fieldOptions callback.
   useEffect(() => {
+    // While closed, `fieldsByLayer` is empty by design; skip so we don't wipe
+    // valid field selections that should survive a close/reopen.
+    if (!open) return;
     for (const param of tool.parameters) {
       if (param.type !== "field") continue;
       const current = params[param.id] as string | undefined;
@@ -194,7 +197,7 @@ export function VectorToolsDialog({
       const options = (sourceId && fieldsByLayer.get(sourceId)) || [];
       if (!options.includes(current)) setParam(param.id, undefined);
     }
-  }, [tool, params, fieldsByLayer, setParam]);
+  }, [open, tool, params, fieldsByLayer, setParam]);
 
   const addResultLayer = useCallback(
     (name: string, fc: FeatureCollection) => {

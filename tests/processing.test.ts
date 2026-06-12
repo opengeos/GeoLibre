@@ -311,6 +311,28 @@ describe("processing registry", () => {
       "delta",
       "gamma",
     ]);
+    // is-not-null is the inverse: only the features with a real pop value.
+    assert.deepEqual(names(run({ field: "pop", operator: "is-not-null" })), [
+      "alpha",
+      "beta",
+    ]);
+    // starts-with is case-insensitive.
+    assert.deepEqual(
+      names(run({ field: "name", operator: "starts-with", value: "AL" })),
+      ["alpha"],
+    );
+    // neq excludes the matched value (nulls/missing never compare equal).
+    assert.deepEqual(
+      names(run({ field: "name", operator: "neq", value: "alpha" })),
+      ["beta", "delta", "gamma"],
+    );
+    // gte / lte boundary checks.
+    assert.deepEqual(names(run({ field: "pop", operator: "gte", value: "20" })), [
+      "beta",
+    ]);
+    assert.deepEqual(names(run({ field: "pop", operator: "lte", value: "10" })), [
+      "alpha",
+    ]);
     // A field absent from every feature is schemaless all-empty, not an error:
     // eq matches nothing, is-null matches every feature.
     assert.equal(

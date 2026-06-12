@@ -269,6 +269,36 @@ def test_select_by_value_is_null_matches_empty_string() -> None:
     assert [f["properties"]["name"] for f in geojson["features"]] == [""]
 
 
+def test_select_by_value_is_not_null_matches_real_values() -> None:
+    geojson, _ = run_vector_tool(
+        "select-by-value",
+        ATTR_LAYER,
+        parameters={"field": "pop", "operator": "is-not-null"},
+    )
+    names = sorted(f["properties"]["name"] for f in geojson["features"])
+    assert names == ["alpha", "beta"]
+
+
+@pytest.mark.parametrize(
+    ("operator", "value", "expected"),
+    [
+        ("neq", "alpha", ["beta", "delta", "gamma"]),
+        ("starts-with", "AL", ["alpha"]),
+        ("gte", "20", ["beta"]),
+        ("lt", "20", ["alpha"]),
+        ("lte", "10", ["alpha"]),
+    ],
+)
+def test_select_by_value_operators(operator, value, expected) -> None:
+    field = "name" if operator in ("neq", "starts-with") else "pop"
+    geojson, _ = run_vector_tool(
+        "select-by-value",
+        ATTR_LAYER,
+        parameters={"field": field, "operator": operator, "value": value},
+    )
+    assert sorted(f["properties"]["name"] for f in geojson["features"]) == expected
+
+
 def test_select_by_value_unknown_operator_raises() -> None:
     with pytest.raises(ValueError, match="operator"):
         run_vector_tool(
