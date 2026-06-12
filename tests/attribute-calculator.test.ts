@@ -73,6 +73,16 @@ describe("expression compilation", () => {
     assert.equal(compiled.evaluate({ "my field": 41 }, 0), 42);
   });
 
+  it("compiles when a field name is a JS keyword (e.g. OSM 'class')", () => {
+    // `class` is a reserved word and cannot be a `new Function` parameter, so it
+    // must be reachable only via props — compiling must not throw.
+    const compiled = compileExpression('props["class"]', ["class", "name"]);
+    assert.equal(compiled.evaluate({ class: "road", name: "x" }, 0), "road");
+    assert.doesNotThrow(() =>
+      compileExpression("name", ["class", "let", "name"]),
+    );
+  });
+
   it("throws a SyntaxError for an unparseable or empty expression", () => {
     assert.throws(() => compileExpression("pop +", DISCOVERED), SyntaxError);
     assert.throws(() => compileExpression("   ", DISCOVERED), SyntaxError);
@@ -84,8 +94,11 @@ describe("identifier helpers", () => {
     assert.equal(isBareIdentifier("pop"), true);
     assert.equal(isBareIdentifier("my field"), false);
     assert.equal(isBareIdentifier("round"), false); // collides with a helper
+    assert.equal(isBareIdentifier("class"), false); // JS keyword
+    assert.equal(isBareIdentifier("let"), false); // strict-mode reserved
     assert.equal(fieldReference("pop"), "pop");
     assert.equal(fieldReference("my field"), 'props["my field"]');
+    assert.equal(fieldReference("class"), 'props["class"]');
   });
 });
 

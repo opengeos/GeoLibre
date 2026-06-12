@@ -58,6 +58,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type RefObject,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -404,6 +405,13 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     setCalcError(null);
     setCalcSelectedOnly(false);
   }, [selectedLayerId, hasLayer, isGeometryEditing]);
+
+  // If the selected feature is cleared while the calculator is open, drop the
+  // "selected only" flag too: leaving it checked-but-disabled would mislead the
+  // user, and the submit guard would silently widen the scope to all features.
+  useEffect(() => {
+    if (!selectedFeatureId) setCalcSelectedOnly(false);
+  }, [selectedFeatureId]);
 
   const filterLower = attributeFilter.toLowerCase();
   const filtered = attributeRows.filter(({ properties, featureId }) => {
@@ -801,7 +809,9 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
 
   // Insert a field reference (or function call) into the expression at the
   // caret, then restore focus so chips can be clicked without losing position.
-  const insertExpressionSnippet = (snippet: string) => {
+  // `caretOffset` overrides where the caret lands relative to the inserted text
+  // (default: at its end) — function chips use it to land inside the parens.
+  const insertExpressionSnippet = (snippet: string, caretOffset?: number) => {
     const el = calcExpressionRef.current;
     if (!el) {
       setCalcExpression((current) => current + snippet);
@@ -812,7 +822,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     setCalcExpression(
       (current) => current.slice(0, start) + snippet + current.slice(end),
     );
-    const caret = start + snippet.length;
+    const caret = start + (caretOffset ?? snippet.length);
     window.requestAnimationFrame(() => {
       el.focus();
       el.setSelectionRange(caret, caret);
@@ -838,41 +848,52 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     (calcSelectedOnly && calcHasSelection
       ? attributeRows.find((row) => row.featureId === selectedFeatureId)
       : undefined) ?? attributeRows[0];
-  let calcPreview:
+  const calcSampleIndex = calcSampleRow
+    ? attributeRows.indexOf(calcSampleRow)
+    : -1;
+  // Stable string keys so the memo skips recompiling the expression on renders
+  // that don't change the inputs (discoveredColumns / the sample row are rebuilt
+  // with fresh identities every render, so they can't be deps directly).
+  const calcColumnsKey = discoveredColumns.join(" ");
+  const calcSampleKey = calcSampleRow
+    ? JSON.stringify(calcSampleRow.properties)
+    : "";
+  const calcPreview = useMemo<
     | { kind: "empty" }
     | { kind: "ok"; value: unknown }
     | { kind: "syntax"; message: string }
-    | { kind: "runtime"; message: string } = { kind: "empty" };
-  if (calcOpen && calcExpression.trim() !== "") {
+    | { kind: "runtime"; message: string }
+  >(() => {
+    if (!calcOpen || calcExpression.trim() === "") return { kind: "empty" };
     try {
       const compiled = compileExpression(calcExpression, discoveredColumns);
-      if (calcSampleRow) {
-        try {
-          const raw = compiled.evaluate(
-            calcSampleRow.properties,
-            attributeRows.indexOf(calcSampleRow),
-          );
-          calcPreview = {
-            kind: "ok",
-            value: coerceComputedValue(raw, calcOutputType),
-          };
-        } catch (error) {
-          calcPreview = {
-            kind: "runtime",
-            message:
-              error instanceof Error ? error.message : "Evaluation failed.",
-          };
-        }
-      } else {
-        calcPreview = { kind: "ok", value: null };
+      if (!calcSampleRow) return { kind: "ok", value: null };
+      try {
+        const raw = compiled.evaluate(calcSampleRow.properties, calcSampleIndex);
+        return { kind: "ok", value: coerceComputedValue(raw, calcOutputType) };
+      } catch (error) {
+        return {
+          kind: "runtime",
+          message:
+            error instanceof Error ? error.message : "Evaluation failed.",
+        };
       }
     } catch (error) {
-      calcPreview = {
+      return {
         kind: "syntax",
         message: error instanceof Error ? error.message : "Invalid expression.",
       };
     }
-  }
+    // Keyed on the stable strings above rather than the rebuilt arrays/objects.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    calcOpen,
+    calcExpression,
+    calcOutputType,
+    calcColumnsKey,
+    calcSampleKey,
+    calcSampleIndex,
+  ]);
   const calcCanSubmit =
     features.length > 0 &&
     calcHasTarget &&
@@ -1621,7 +1642,11 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                     type="button"
                     className="rounded border border-input bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] hover:bg-muted"
                     title={`Insert ${fn}()`}
-                    onClick={() => insertExpressionSnippet(`${fn}()`)}
+                    onClick={() =>
+                      // Land the caret between the parens so the user can type
+                      // the argument straight away.
+                      insertExpressionSnippet(`${fn}()`, fn.length + 1)
+                    }
                   >
                     {fn}
                   </button>

@@ -105,13 +105,34 @@ const RESERVED_NAMES = new Set<string>([
 
 const IDENTIFIER_RE = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 
+// ECMAScript keywords (plus the strict-mode future-reserved words and the
+// strict-mode-restricted `eval`/`arguments`) are illegal as `new Function`
+// parameter names. A field whose name matches one — `class` and `type`-style
+// names are common in OSM data — must fall back to the `props["name"]` path,
+// otherwise compiling ANY expression for that layer throws a SyntaxError.
+const JS_KEYWORDS = new Set([
+  "break", "case", "catch", "class", "const", "continue", "debugger",
+  "default", "delete", "do", "else", "export", "extends", "false", "finally",
+  "for", "function", "if", "import", "in", "instanceof", "new", "null",
+  "return", "super", "switch", "this", "throw", "true", "try", "typeof",
+  "var", "void", "while", "with", "yield",
+  // strict-mode future-reserved words and restricted names
+  "let", "static", "implements", "interface", "package", "private",
+  "protected", "public", "eval", "arguments",
+]);
+
 /**
  * Whether a field name can be exposed as a bare identifier in an expression.
- * Names that collide with a helper/constant fall back to `props["name"]` access
- * so the helper is never shadowed.
+ * Names that collide with a helper/constant, or with a JavaScript keyword that
+ * cannot be a function parameter, fall back to `props["name"]` access — so
+ * neither a helper is shadowed nor the parser is broken.
  */
 export function isBareIdentifier(name: string): boolean {
-  return IDENTIFIER_RE.test(name) && !RESERVED_NAMES.has(name);
+  return (
+    IDENTIFIER_RE.test(name) &&
+    !RESERVED_NAMES.has(name) &&
+    !JS_KEYWORDS.has(name)
+  );
 }
 
 /**
