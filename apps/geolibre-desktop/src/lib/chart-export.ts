@@ -101,9 +101,13 @@ export async function downloadChartPng(
   ctx.scale(scale, scale);
   ctx.drawImage(image, 0, 0, width, height);
 
-  await new Promise<void>((resolve) => {
+  await new Promise<void>((resolve, reject) => {
     canvas.toBlob((blob) => {
-      if (blob) triggerDownload(blob, filename);
+      if (!blob) {
+        reject(new Error("Could not encode the chart image."));
+        return;
+      }
+      triggerDownload(blob, filename);
       resolve();
     }, "image/png");
   });

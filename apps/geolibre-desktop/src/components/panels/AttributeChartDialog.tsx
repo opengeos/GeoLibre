@@ -88,6 +88,7 @@ export function AttributeChartDialog({
   const [catField, setCatField] = useState("");
   const [barAgg, setBarAgg] = useState<BarAggregation>("count");
   const [barValueField, setBarValueField] = useState("");
+  const [exportError, setExportError] = useState<string | null>(null);
   const chartRef = useRef<HTMLDivElement>(null);
 
   // Seed the pickers when the dialog opens. Keyed on `open` only: `rows` and
@@ -96,13 +97,10 @@ export function AttributeChartDialog({
   // selections constantly. They are read from the render where `open` flipped.
   useEffect(() => {
     if (!open) return;
-    setChartType(
-      numericCols.length > 0
-        ? "histogram"
-        : categoryCols.length > 0
-          ? "bar"
-          : "histogram",
-    );
+    // No numeric fields → default to bar (the only category-only type). When
+    // there are no chartable fields at all the dialog shows an empty state, so
+    // the chosen type is irrelevant.
+    setChartType(numericCols.length > 0 ? "histogram" : "bar");
     setBins(DEFAULT_HISTOGRAM_BINS);
     setField(numericCols[0] ?? "");
     setXField(numericCols[0] ?? "");
@@ -110,6 +108,7 @@ export function AttributeChartDialog({
     setCatField(categoryCols[0] ?? "");
     setBarAgg("count");
     setBarValueField(numericCols[0] ?? "");
+    setExportError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -155,11 +154,22 @@ export function AttributeChartDialog({
   const downloadChart = (format: "svg" | "png") => {
     const svg = chartRef.current?.querySelector("svg");
     if (!svg) return;
+    setExportError(null);
     const base = `${sanitizeExportFileName(layerName || "chart")}-${chartType}`;
+    const onError = (error: unknown) =>
+      setExportError(
+        error instanceof Error ? error.message : "Could not export the chart.",
+      );
     if (format === "svg") {
-      downloadChartSvg(svg, CHART_W, CHART_H, `${base}.svg`);
+      try {
+        downloadChartSvg(svg, CHART_W, CHART_H, `${base}.svg`);
+      } catch (error) {
+        onError(error);
+      }
     } else {
-      void downloadChartPng(svg, CHART_W, CHART_H, `${base}.png`);
+      // PNG rasterization is async (image load + canvas), so surface a
+      // rejection rather than letting it become an unhandled promise.
+      downloadChartPng(svg, CHART_W, CHART_H, `${base}.png`).catch(onError);
     }
   };
 
@@ -338,7 +348,12 @@ export function AttributeChartDialog({
           </div>
         )}
 
-        <div className="flex justify-end gap-2">
+        <div className="flex items-center justify-end gap-2">
+          {exportError ? (
+            <span className="mr-auto truncate text-xs text-destructive">
+              {exportError}
+            </span>
+          ) : null}
           {hasChartable ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -570,8 +585,16 @@ function ScatterChart({
   return (
     <>
       <ChartFrame label={`Scatter plot of ${yField} versus ${xField}`}>
-        {tickText(MARGIN.left - 6, MARGIN.top, formatAxisValue(yMax), "end", "middle")}
-        {tickText(MARGIN.left - 6, MARGIN.top + INNER_H, formatAxisValue(yMin), "end", "middle")}
+        {/* Single centered tick when an axis is flat (all values identical),
+            mirroring the histogram, rather than the same value at both ends. */}
+        {yMin === yMax ? (
+          tickText(MARGIN.left - 6, MARGIN.top + INNER_H / 2, formatAxisValue(yMin), "end", "middle")
+        ) : (
+          <>
+            {tickText(MARGIN.left - 6, MARGIN.top, formatAxisValue(yMax), "end", "middle")}
+            {tickText(MARGIN.left - 6, MARGIN.top + INNER_H, formatAxisValue(yMin), "end", "middle")}
+          </>
+        )}
         {points.map((point, index) => {
           const cx = MARGIN.left + fraction(point.x, xMin, xMax) * INNER_W;
           const cy =
@@ -582,8 +605,14 @@ function ScatterChart({
             </circle>
           );
         })}
-        {tickText(MARGIN.left, MARGIN.top + INNER_H + 14, formatAxisValue(xMin), "start")}
-        {tickText(MARGIN.left + INNER_W, MARGIN.top + INNER_H + 14, formatAxisValue(xMax), "end")}
+        {xMin === xMax ? (
+          tickText(MARGIN.left + INNER_W / 2, MARGIN.top + INNER_H + 14, formatAxisValue(xMin), "middle")
+        ) : (
+          <>
+            {tickText(MARGIN.left, MARGIN.top + INNER_H + 14, formatAxisValue(xMin), "start")}
+            {tickText(MARGIN.left + INNER_W, MARGIN.top + INNER_H + 14, formatAxisValue(xMax), "end")}
+          </>
+        )}
         {axisTitle(xField)}
         {yAxisTitle(yField)}
       </ChartFrame>
@@ -623,7 +652,11 @@ function BarChart({
   return (
     <>
       <ChartFrame label={`Bar chart of ${aggregation} by ${category}`}>
-        {tickText(MARGIN.left - 6, MARGIN.top, formatAxisValue(domainMax), "end", "middle")}
+        {/* Top tick only when the domain extends above 0; when all bars are
+            <= 0 the domain tops at 0 and the baseline tick already labels it. */}
+        {domainMax > 0
+          ? tickText(MARGIN.left - 6, MARGIN.top, formatAxisValue(domainMax), "end", "middle")
+          : null}
         {tickText(MARGIN.left - 6, baselineY, "0", "end", "middle")}
         {/* Lower-bound tick when bars go negative (sum/mean of negative values). */}
         {minValue < 0

@@ -356,6 +356,11 @@ export interface LineResult {
  * The finite values of a numeric field plotted against original row order.
  * Rows without a finite value are skipped (leaving a gap), keeping each point's
  * x at its true feature index. Returns null when no row has a value.
+ *
+ * Like the other compute helpers, this runs synchronously over every row and is
+ * meant for the in-memory feature sets the attribute table already holds; it
+ * does not page very large layers (the rendered marker count is capped in the
+ * dialog, but the path spans all points).
  */
 export function computeLine(rows: ChartRow[], key: string): LineResult | null {
   const points: LinePoint[] = [];
@@ -396,7 +401,9 @@ function quantileSorted(sorted: number[], p: number): number {
 
 /**
  * Five-number summary (min, Q1, median, Q3, max) of a set of values. Returns
- * null when empty.
+ * null when empty. Sorts a copy of all values synchronously — intended for the
+ * attribute table's in-memory feature sets, not as a pager for arbitrarily
+ * large query results.
  */
 export function computeBox(values: number[]): BoxResult | null {
   if (values.length === 0) return null;
