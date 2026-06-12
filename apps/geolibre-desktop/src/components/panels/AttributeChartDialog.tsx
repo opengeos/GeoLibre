@@ -47,14 +47,6 @@ const AXIS = "hsl(var(--border))";
 const TICK = "hsl(var(--muted-foreground))";
 const SERIES = "hsl(var(--primary))";
 
-/** Chart types that plot one or more numeric fields. */
-const NUMERIC_TYPES: ReadonlySet<ChartType> = new Set([
-  "histogram",
-  "scatter",
-  "line",
-  "box",
-]);
-
 /** Map a value within [min, max] to a 0..1 fraction, centering a flat range. */
 function fraction(value: number, min: number, max: number): number {
   if (max === min) return 0.5;
@@ -558,7 +550,11 @@ function BarChart({
 
   const { bars, maxValue, minValue, truncated } = result;
   const domainMin = Math.min(0, minValue);
-  const domainMax = Math.max(0, maxValue) || 1;
+  // Keep 0 as the top of the scale when every bar is <= 0 (possible for
+  // sum/mean); only fall back to 1 when the domain would otherwise be zero-width
+  // (all bars exactly 0). `Math.max(0, maxValue) || 1` wrongly made an
+  // all-negative domain top out at 1.
+  const domainMax = maxValue > 0 ? maxValue : minValue < 0 ? 0 : 1;
   const slot = INNER_W / bars.length;
   const gap = Math.min(6, slot * 0.2);
   const scaleY = (value: number) =>

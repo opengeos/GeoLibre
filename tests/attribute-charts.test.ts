@@ -195,6 +195,13 @@ describe("computeBar", () => {
     assert.equal(mean?.bars.find((b) => b.label === "a")?.value, 20);
   });
 
+  it("reports a negative minValue and zero maxValue for all-negative sums", () => {
+    const data = rows({ k: "a", v: -5 }, { k: "a", v: -3 }, { k: "b", v: -1 });
+    const result = computeBar(data, "k", "sum", "v");
+    assert.equal(result?.maxValue, 0);
+    assert.equal(result?.minValue, -8);
+  });
+
   it("omits sum/mean categories that have no numeric samples", () => {
     const data = rows(
       { kind: "a", v: 5 },
