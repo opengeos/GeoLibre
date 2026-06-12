@@ -172,3 +172,11 @@ def test_add_vector_geo_interface_inlined(m):
     layer = _last_layer(m)
     assert layer["type"] == "geojson"
     assert layer["name"] == "GDF"
+
+
+def test_add_vector_geo_interface_warns_on_ignored_kwargs(m):
+    class Fake:
+        __geo_interface__ = {"type": "FeatureCollection", "features": []}
+
+    with pytest.warns(UserWarning, match="__geo_interface__ objects"):
+        m.add_vector(Fake(), render_mode="tiles")

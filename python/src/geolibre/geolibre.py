@@ -549,6 +549,18 @@ class Map(anywidget.AnyWidget):
                 )
             )
         if hasattr(data, "__geo_interface__"):
+            # The object is inlined as GeoJSON; none of the vector-control
+            # options apply, so flag them rather than dropping them silently.
+            if (
+                render_mode != "geojson"
+                or data_format is not None
+                or source_layer is not None
+            ):
+                warnings.warn(
+                    "render_mode, data_format, and source_layer are ignored for "
+                    "__geo_interface__ objects; they only apply to remote URLs.",
+                    stacklevel=2,
+                )
             return self.add_geojson(data, name=name, **style)
         # A local file is read and inlined as GeoJSON; render_mode and
         # source_layer only apply to the in-browser vector control (remote URLs),

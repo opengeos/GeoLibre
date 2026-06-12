@@ -13,6 +13,7 @@ import ipaddress
 import json
 import socket
 import uuid
+import warnings
 from pathlib import Path
 from typing import Any
 from urllib.error import URLError
@@ -325,8 +326,13 @@ def _append_query(endpoint: str, params: list[tuple[str, str]]) -> str:
     Returns:
         The endpoint with the encoded query string appended.
     """
-    if "?" in endpoint:
-        separator = "" if endpoint.endswith(("?", "&")) else "&"
+    # Split off any fragment first: a query string must precede the "#", so
+    # appending after it would push the params past the fragment where the
+    # server never sees them. (Service endpoints rarely carry one, but this is
+    # cheap to handle correctly.)
+    base, sep, fragment = endpoint.partition("#")
+    if "?" in base:
+        separator = "" if base.endswith(("?", "&")) else "&"
     else:
         separator = "?"
     query = "&".join(
@@ -338,7 +344,7 @@ def _append_query(endpoint: str, params: list[tuple[str, str]]) -> str:
         )
         for key, value in params
     )
-    return f"{endpoint}{separator}{query}"
+    return f"{base}{separator}{query}{sep}{fragment}"
 
 
 def wms_layer(
@@ -577,6 +583,12 @@ def vector_tiles_layer(
     layer = _layer_base(name, "vector-tiles", **style)
     source: dict[str, Any] = {"type": "vector", "url": url}
     if source_layers:
+        if source_layer is not None:
+            warnings.warn(
+                "source_layer is ignored when source_layers is provided; pass "
+                "one or the other.",
+                stacklevel=2,
+            )
         source["sourceLayers"] = list(source_layers)
     elif source_layer:
         source["sourceLayer"] = source_layer

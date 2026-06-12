@@ -116,6 +116,22 @@ def test_wms_layer_transparent_false():
     assert layer["source"]["tileSize"] == 512
 
 
+def test_append_query_keeps_fragment_after_query():
+    # A "#fragment" must stay at the end so the query is not pushed past it.
+    layer = project.wms_layer("x", "https://e/ows#v2", "a")
+    tile = layer["source"]["tiles"][0]
+    assert tile.startswith("https://e/ows?SERVICE=WMS")
+    assert tile.endswith("#v2")
+    assert tile.index("SERVICE=WMS") < tile.index("#v2")
+
+
+def test_vector_tiles_layer_warns_on_both_source_layer_args():
+    with pytest.warns(UserWarning, match="source_layer is ignored"):
+        project.vector_tiles_layer(
+            "VT", "https://e/t.json", source_layers=["a"], source_layer="b"
+        )
+
+
 def test_wmts_layer_shape():
     layer = project.wmts_layer("W", "https://t/{z}/{y}/{x}.png")
     assert layer["type"] == "wmts"
