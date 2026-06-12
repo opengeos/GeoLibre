@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
   Input,
   Label,
+  Select,
 } from "@geolibre/ui";
 import type { MapController } from "@geolibre/map";
 import {
@@ -49,12 +50,14 @@ import {
   Puzzle,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type RefObject } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import {
   DEFAULT_DESKTOP_LAYOUT_SETTINGS,
   useDesktopSettingsStore,
   type DesktopSettings,
   type DesktopLayoutSettings,
 } from "../../hooks/useDesktopSettings";
+import { useLanguage } from "../../hooks/useLanguage";
 
 type SettingsSection = "map" | "layout" | "environment" | "project";
 
@@ -71,13 +74,17 @@ interface SettingsDialogProps {
 
 const SECTION_ITEMS: Array<{
   id: SettingsSection;
-  label: string;
+  labelKey: `settings.section.${SettingsSection}`;
   icon: typeof MapPinned;
 }> = [
-  { id: "map", label: "Map", icon: MapPinned },
-  { id: "layout", label: "Layout", icon: LayoutPanelTop },
-  { id: "environment", label: "Environment", icon: Braces },
-  { id: "project", label: "Project", icon: FolderCog },
+  { id: "map", labelKey: "settings.section.map", icon: MapPinned },
+  { id: "layout", labelKey: "settings.section.layout", icon: LayoutPanelTop },
+  {
+    id: "environment",
+    labelKey: "settings.section.environment",
+    icon: Braces,
+  },
+  { id: "project", labelKey: "settings.section.project", icon: FolderCog },
 ];
 
 const VARIABLE_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -168,20 +175,27 @@ function normalizePreferences(
   };
 }
 
+// Returned as a code (not a message) so the user-facing string is resolved
+// through i18n at the call site, where `t` is in scope.
+type EnvironmentValidationError =
+  | { kind: "pattern" }
+  | { kind: "duplicate"; name: string };
+
 function validateEnvironmentVariables(
   variables: RuntimeEnvironmentVariable[],
-): string | null {
+): EnvironmentValidationError | null {
   const keys = new Set<string>();
 
   for (const variable of variables) {
-    if (!variable.key.trim()) continue;
-    if (!VARIABLE_NAME_PATTERN.test(variable.key.trim())) {
-      return "Environment variable names must start with a letter or underscore and contain only letters, numbers, and underscores.";
+    const key = variable.key.trim();
+    if (!key) continue;
+    if (!VARIABLE_NAME_PATTERN.test(key)) {
+      return { kind: "pattern" };
     }
-    if (keys.has(variable.key.trim())) {
-      return `Environment variable "${variable.key.trim()}" is duplicated.`;
+    if (keys.has(key)) {
+      return { kind: "duplicate", name: key };
     }
-    keys.add(variable.key.trim());
+    keys.add(key);
   }
 
   return null;
@@ -197,6 +211,12 @@ export function SettingsDialog({
   onOpenCommandPalette,
   onOpenKeyboardShortcuts,
 }: SettingsDialogProps) {
+  const { t } = useTranslation();
+  const {
+    language,
+    options: languageOptions,
+    setLanguage,
+  } = useLanguage();
   const preferences = useAppStore((s) => s.preferences);
   const setPreferences = useAppStore((s) => s.setPreferences);
   const desktopSettings = useDesktopSettingsStore((s) => s.desktopSettings);
@@ -315,7 +335,7 @@ export function SettingsDialog({
   const applyCurrentViewBounds = () => {
     const bounds = mapControllerRef.current?.readView().bbox;
     if (!bounds) {
-      setError("The map bounds are not available yet.");
+      setError(t("settings.map.errorBoundsUnavailable"));
       return;
     }
     updateMapPreferences({
@@ -368,7 +388,11 @@ export function SettingsDialog({
       normalized.environmentVariables,
     );
     if (validationError) {
-      setError(validationError);
+      setError(
+        validationError.kind === "duplicate"
+          ? t("settings.env.errorDuplicate", { name: validationError.name })
+          : t("settings.env.errorNamePattern"),
+      );
       setSection("environment");
       return;
     }
@@ -401,7 +425,7 @@ export function SettingsDialog({
         }}
       >
         <Icon className="h-4 w-4" />
-        {item.label}
+        {t(item.labelKey)}
       </Button>
     );
   };
@@ -414,16 +438,16 @@ export function SettingsDialog({
             className={buttonClassName}
             variant="ghost"
             size={buttonSize}
-            aria-label="Settings"
+            aria-label={t("settings.title")}
           >
             <Settings className={iconClassName} />
             {showLabels ? (
-              <span className="hidden sm:inline">Settings</span>
+              <span className="hidden sm:inline">{t("settings.title")}</span>
             ) : null}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-56">
-          <DropdownMenuLabel>Settings</DropdownMenuLabel>
+          <DropdownMenuLabel>{t("settings.title")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onSelect={() => {
@@ -432,12 +456,12 @@ export function SettingsDialog({
             }}
           >
             <MapPinned className="mr-2 h-3.5 w-3.5" />
-            Map Preferences
+            {t("settings.menu.mapPreferences")}
           </DropdownMenuItem>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
               <LayoutPanelTop className="mr-2 h-3.5 w-3.5" />
-              Layout
+              {t("settings.section.layout")}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="geolibre-layout-submenu w-40 sm:w-72">
               <DropdownMenuCheckboxItem
@@ -447,7 +471,7 @@ export function SettingsDialog({
                 }
                 onSelect={(event: Event) => event.preventDefault()}
               >
-                Show toolbar labels
+                {t("settings.layout.showToolbarLabels")}
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={desktopSettings.layout.showProjectInfo}
@@ -458,7 +482,7 @@ export function SettingsDialog({
                 }
                 onSelect={(event: Event) => event.preventDefault()}
               >
-                Show project info
+                {t("settings.layout.showProjectInfo")}
               </DropdownMenuCheckboxItem>
               <DropdownMenuSeparator />
               <DropdownMenuCheckboxItem
@@ -470,7 +494,7 @@ export function SettingsDialog({
                 }
                 onSelect={(event: Event) => event.preventDefault()}
               >
-                Show Layers panel
+                {t("settings.layout.showLayersPanel")}
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={desktopSettings.layout.stylePanelVisible}
@@ -481,7 +505,7 @@ export function SettingsDialog({
                 }
                 onSelect={(event: Event) => event.preventDefault()}
               >
-                Show Style panel
+                {t("settings.layout.showStylePanel")}
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={desktopSettings.layout.attributePanelVisible}
@@ -492,7 +516,7 @@ export function SettingsDialog({
                 }
                 onSelect={(event: Event) => event.preventDefault()}
               >
-                Show Attribute panel
+                {t("settings.layout.showAttributePanel")}
               </DropdownMenuCheckboxItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -501,11 +525,11 @@ export function SettingsDialog({
                   setOpen(true);
                 }}
               >
-                Layout Settings
+                {t("settings.menu.layoutSettings")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="px-2 py-1 text-xs font-normal text-muted-foreground">
-                URL layout parameters override saved settings.
+                {t("settings.menu.urlOverrideNote")}
               </DropdownMenuLabel>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
@@ -516,7 +540,7 @@ export function SettingsDialog({
             }}
           >
             <Braces className="mr-2 h-3.5 w-3.5" />
-            Environment Variables
+            {t("settings.menu.environmentVariables")}
           </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={() => {
@@ -525,20 +549,20 @@ export function SettingsDialog({
             }}
           >
             <FolderCog className="mr-2 h-3.5 w-3.5" />
-            Project Settings
+            {t("settings.menu.projectSettings")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => onOpenManagePlugins()}>
             <Puzzle className="mr-2 h-3.5 w-3.5" />
-            Manage Plugins
+            {t("settings.menu.managePlugins")}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => onOpenCommandPalette()}>
             <Search className="mr-2 h-3.5 w-3.5" />
-            Command Palette
+            {t("settings.menu.commandPalette")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => onOpenKeyboardShortcuts()}>
             <Keyboard className="mr-2 h-3.5 w-3.5" />
-            Keyboard Shortcuts
+            {t("settings.menu.keyboardShortcuts")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -548,10 +572,8 @@ export function SettingsDialog({
           bodyClassName="overflow-hidden p-0"
         >
           <DialogHeader className="border-b px-6 pb-4 pt-6">
-            <DialogTitle>Settings</DialogTitle>
-            <DialogDescription>
-              Configure project preferences and runtime settings.
-            </DialogDescription>
+            <DialogTitle>{t("settings.title")}</DialogTitle>
+            <DialogDescription>{t("settings.description")}</DialogDescription>
           </DialogHeader>
           <div className="grid min-h-0 grid-cols-1 md:grid-cols-[12rem_1fr]">
             <nav className="flex gap-1 border-b p-3 md:flex-col md:border-b-0 md:border-r">
@@ -562,9 +584,11 @@ export function SettingsDialog({
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <h3 className="text-sm font-semibold">Map constraints</h3>
+                      <h3 className="text-sm font-semibold">
+                        {t("settings.map.constraintsTitle")}
+                      </h3>
                       <p className="text-xs text-muted-foreground">
-                        Limits apply while the project is open.
+                        {t("settings.map.constraintsDescription")}
                       </p>
                     </div>
                     <Button
@@ -574,7 +598,7 @@ export function SettingsDialog({
                       onClick={resetMapPreferences}
                     >
                       <RotateCcw className="h-3.5 w-3.5" />
-                      Reset
+                      {t("common.reset")}
                     </Button>
                   </div>
                   <label className="flex items-center gap-2 text-sm">
@@ -588,18 +612,20 @@ export function SettingsDialog({
                         })
                       }
                     />
-                    Restrict map bounds
+                    {t("settings.map.restrictBounds")}
                   </label>
                   <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                    {[
-                      ["West", 0, -180, 180],
-                      ["South", 1, -85, 85],
-                      ["East", 2, -180, 180],
-                      ["North", 3, -85, 85],
-                    ].map(([label, index, min, max]) => (
-                      <div key={label} className="space-y-1.5">
+                    {(
+                      [
+                        ["settings.map.west", 0, -180, 180],
+                        ["settings.map.south", 1, -85, 85],
+                        ["settings.map.east", 2, -180, 180],
+                        ["settings.map.north", 3, -85, 85],
+                      ] as const
+                    ).map(([labelKey, index, min, max]) => (
+                      <div key={labelKey} className="space-y-1.5">
                         <Label htmlFor={`settings-bounds-${index}`}>
-                          {label}
+                          {t(labelKey)}
                         </Label>
                         <Input
                           id={`settings-bounds-${index}`}
@@ -625,11 +651,13 @@ export function SettingsDialog({
                     onClick={applyCurrentViewBounds}
                   >
                     <Crosshair className="h-3.5 w-3.5" />
-                    Use Current View
+                    {t("settings.map.useCurrentView")}
                   </Button>
                   <div className="grid gap-3 sm:grid-cols-3">
                     <div className="space-y-1.5">
-                      <Label htmlFor="settings-min-zoom">Min zoom</Label>
+                      <Label htmlFor="settings-min-zoom">
+                        {t("settings.map.minZoom")}
+                      </Label>
                       <Input
                         id="settings-min-zoom"
                         type="number"
@@ -645,7 +673,9 @@ export function SettingsDialog({
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="settings-max-zoom">Max zoom</Label>
+                      <Label htmlFor="settings-max-zoom">
+                        {t("settings.map.maxZoom")}
+                      </Label>
                       <Input
                         id="settings-max-zoom"
                         type="number"
@@ -661,7 +691,9 @@ export function SettingsDialog({
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="settings-max-pitch">Max pitch</Label>
+                      <Label htmlFor="settings-max-pitch">
+                        {t("settings.map.maxPitch")}
+                      </Label>
                       <Input
                         id="settings-max-pitch"
                         type="number"
@@ -688,7 +720,7 @@ export function SettingsDialog({
                         })
                       }
                     />
-                    Render world copies
+                    {t("settings.map.renderWorldCopies")}
                   </label>
                 </div>
               ) : null}
@@ -696,9 +728,11 @@ export function SettingsDialog({
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <h3 className="text-sm font-semibold">Layout</h3>
+                      <h3 className="text-sm font-semibold">
+                        {t("settings.layout.title")}
+                      </h3>
                       <p className="text-xs text-muted-foreground">
-                        Workspace visibility and toolbar presentation.
+                        {t("settings.layout.description")}
                       </p>
                     </div>
                     <Button
@@ -708,12 +742,38 @@ export function SettingsDialog({
                       onClick={resetLayoutSettings}
                     >
                       <RotateCcw className="h-3.5 w-3.5" />
-                      Reset
+                      {t("common.reset")}
                     </Button>
                   </div>
                   <div className="space-y-3">
                     <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Toolbar
+                      {t("language.label")}
+                    </h4>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="settings-language">
+                        {t("language.label")}
+                      </Label>
+                      <Select
+                        id="settings-language"
+                        value={language}
+                        onChange={(event) => setLanguage(event.target.value)}
+                      >
+                        {languageOptions.map((option) => (
+                          <option key={option.code} value={option.code}>
+                            {option.nativeName === option.englishName
+                              ? option.nativeName
+                              : `${option.nativeName} (${option.englishName})`}
+                          </option>
+                        ))}
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        {t("language.description")}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {t("settings.layout.toolbar")}
                     </h4>
                     <label className="flex items-center gap-3 rounded-md border p-3 text-sm">
                       <input
@@ -727,7 +787,7 @@ export function SettingsDialog({
                         }
                       />
                       <Type className="h-4 w-4 text-muted-foreground" />
-                      <span>Show toolbar labels</span>
+                      <span>{t("settings.layout.showToolbarLabels")}</span>
                     </label>
                     <label className="flex items-center gap-3 rounded-md border p-3 text-sm">
                       <input
@@ -741,12 +801,12 @@ export function SettingsDialog({
                         }
                       />
                       <FolderCog className="h-4 w-4 text-muted-foreground" />
-                      <span>Show project info in the toolbar</span>
+                      <span>{t("settings.layout.showProjectInfoToolbar")}</span>
                     </label>
                   </div>
                   <div className="space-y-3">
                     <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Panels
+                      {t("settings.layout.panels")}
                     </h4>
                     <label className="flex items-center gap-3 rounded-md border p-3 text-sm">
                       <input
@@ -760,7 +820,7 @@ export function SettingsDialog({
                         }
                       />
                       <PanelLeft className="h-4 w-4 text-muted-foreground" />
-                      <span>Show Layers panel</span>
+                      <span>{t("settings.layout.showLayersPanel")}</span>
                     </label>
                     <label className="flex items-center gap-3 rounded-md border p-3 text-sm">
                       <input
@@ -774,7 +834,7 @@ export function SettingsDialog({
                         }
                       />
                       <PanelRight className="h-4 w-4 text-muted-foreground" />
-                      <span>Show Style panel</span>
+                      <span>{t("settings.layout.showStylePanel")}</span>
                     </label>
                     <label className="flex items-center gap-3 rounded-md border p-3 text-sm">
                       <input
@@ -790,12 +850,11 @@ export function SettingsDialog({
                         }
                       />
                       <TableProperties className="h-4 w-4 text-muted-foreground" />
-                      <span>Show Attribute panel</span>
+                      <span>{t("settings.layout.showAttributePanel")}</span>
                     </label>
                   </div>
                   <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
-                    URL layout parameters still apply when present in shared
-                    viewer links.
+                    {t("settings.layout.urlParamsNote")}
                   </div>
                 </div>
               ) : null}
@@ -803,46 +862,44 @@ export function SettingsDialog({
                 <div className="space-y-5">
                   <div className="space-y-2">
                     <h3 className="text-sm font-semibold">
-                      Share.GeoLibre API token
+                      {t("settings.env.tokenTitle")}
                     </h3>
                     <p className="text-xs text-muted-foreground">
-                      Used by Project &gt; Share to upload projects to
-                      share.geolibre.app. Create one under Settings &gt; API
-                      tokens at{" "}
-                      <a
-                        className="underline"
-                        href="https://share.geolibre.app/settings"
-                        target="_blank"
-                        rel="noreferrer noopener"
-                      >
-                        share.geolibre.app/settings
-                      </a>
-                      .
+                      <Trans
+                        i18nKey="settings.env.tokenDescription"
+                        components={{
+                          tokenLink: (
+                            <a
+                              className="underline"
+                              href="https://share.geolibre.app/settings"
+                              target="_blank"
+                              rel="noreferrer noopener"
+                            />
+                          ),
+                        }}
+                      />
                     </p>
                     <Input
-                      aria-label="Share.GeoLibre API token"
+                      aria-label={t("settings.env.tokenTitle")}
                       type="password"
                       autoComplete="new-password"
-                      placeholder="glb_…"
+                      placeholder={t("settings.env.tokenPlaceholder")}
                       value={draftDesktopSettings.shareToken}
                       onChange={(event) => updateShareToken(event.target.value)}
                     />
                     <p className="text-xs text-muted-foreground">
-                      Stored locally on this device and sent only to
-                      share.geolibre.app to authenticate uploads. On the web
-                      build it shares the same browser storage as other site
-                      data, so revoke it on share.geolibre.app if your machine
-                      is compromised.
+                      {t("settings.env.tokenStorageNote")}
                     </p>
                   </div>
                   <div className="flex items-center justify-between gap-3 border-t pt-5">
                     <div>
                       <h3 className="text-sm font-semibold">
-                        Environment variables
+                        {t("settings.env.variablesTitle")}
                       </h3>
                       <p className="text-xs text-muted-foreground">
-                        {enabledVariableCount} enabled runtime variable
-                        {enabledVariableCount === 1 ? "" : "s"}.
+                        {t("settings.env.variablesCount", {
+                          count: enabledVariableCount,
+                        })}
                       </p>
                     </div>
                     <Button
@@ -852,31 +909,33 @@ export function SettingsDialog({
                       onClick={addEnvironmentVariable}
                     >
                       <Plus className="h-3.5 w-3.5" />
-                      Add
+                      {t("common.add")}
                     </Button>
                   </div>
                   <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
                     <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                    <span>
-                      Values are stored in plain text in the project file and
-                      may be exposed when the project is shared. Avoid putting
-                      secrets here unless the project file stays private.
-                    </span>
+                    <span>{t("settings.env.secretsWarning")}</span>
                   </div>
                   {draftPreferences.environmentVariables.length === 0 ? (
                     <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                      No environment variables configured.
+                      {t("settings.env.empty")}
                     </div>
                   ) : (
                     <div className="space-y-2">
                       {draftPreferences.environmentVariables.map(
-                        (variable, index) => (
+                        (variable, index) => {
+                          const variableName =
+                            variable.key ||
+                            t("settings.env.variableFallback");
+                          return (
                           <div
                             key={variable.id}
                             className="grid grid-cols-[1.25rem_minmax(7rem,1fr)_minmax(7rem,1fr)_2rem_2rem] items-center gap-2"
                           >
                             <input
-                              aria-label={`Enable ${variable.key || "variable"}`}
+                              aria-label={t("settings.env.enableAria", {
+                                name: variableName,
+                              })}
                               className="h-4 w-4"
                               type="checkbox"
                               checked={variable.enabled}
@@ -887,8 +946,8 @@ export function SettingsDialog({
                               }
                             />
                             <Input
-                              aria-label="Variable name"
-                              placeholder="VITE_EXAMPLE_KEY"
+                              aria-label={t("settings.env.nameAria")}
+                              placeholder={t("settings.env.namePlaceholder")}
                               value={variable.key}
                               onChange={(event) =>
                                 updateEnvironmentVariable(index, {
@@ -897,8 +956,8 @@ export function SettingsDialog({
                               }
                             />
                             <Input
-                              aria-label="Variable value"
-                              placeholder="Value"
+                              aria-label={t("settings.env.valueAria")}
+                              placeholder={t("settings.env.valuePlaceholder")}
                               type={
                                 revealedValueIds.has(variable.id)
                                   ? "text"
@@ -915,8 +974,12 @@ export function SettingsDialog({
                             <Button
                               aria-label={
                                 revealedValueIds.has(variable.id)
-                                  ? `Hide value for ${variable.key || "variable"}`
-                                  : `Show value for ${variable.key || "variable"}`
+                                  ? t("settings.env.hideValueAria", {
+                                      name: variableName,
+                                    })
+                                  : t("settings.env.showValueAria", {
+                                      name: variableName,
+                                    })
                               }
                               className="h-8 w-8"
                               type="button"
@@ -931,7 +994,9 @@ export function SettingsDialog({
                               )}
                             </Button>
                             <Button
-                              aria-label={`Remove ${variable.key || "variable"}`}
+                              aria-label={t("settings.env.removeAria", {
+                                name: variableName,
+                              })}
                               className="h-8 w-8"
                               type="button"
                               size="icon"
@@ -941,7 +1006,8 @@ export function SettingsDialog({
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </div>
-                        ),
+                          );
+                        },
                       )}
                     </div>
                   )}
@@ -950,13 +1016,17 @@ export function SettingsDialog({
               {section === "project" ? (
                 <div className="space-y-5">
                   <div>
-                    <h3 className="text-sm font-semibold">Project</h3>
+                    <h3 className="text-sm font-semibold">
+                      {t("settings.project.title")}
+                    </h3>
                     <p className="text-xs text-muted-foreground">
-                      Settings are saved with the `.geolibre.json` project.
+                      {t("settings.project.description")}
                     </p>
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="settings-project-name">Name</Label>
+                    <Label htmlFor="settings-project-name">
+                      {t("settings.project.name")}
+                    </Label>
                     <Input
                       id="settings-project-name"
                       value={draftProjectName}
@@ -967,13 +1037,13 @@ export function SettingsDialog({
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1.5">
-                      <Label>Project file</Label>
+                      <Label>{t("settings.project.file")}</Label>
                       <div className="min-h-9 truncate rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground">
-                        {projectPath ?? "Not saved"}
+                        {projectPath ?? t("settings.project.notSaved")}
                       </div>
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Project format</Label>
+                      <Label>{t("settings.project.format")}</Label>
                       <div className="min-h-9 rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground">
                         {PROJECT_VERSION}
                       </div>
@@ -994,10 +1064,10 @@ export function SettingsDialog({
               variant="outline"
               onClick={() => setOpen(false)}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="button" onClick={saveSettings}>
-              Save Settings
+              {t("settings.saveButton")}
             </Button>
           </div>
         </DialogContent>

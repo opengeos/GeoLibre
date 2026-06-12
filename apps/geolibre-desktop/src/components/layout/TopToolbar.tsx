@@ -137,6 +137,8 @@ import {
 import { useStore } from "zustand";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { type FormEvent, useRef, useState, useSyncExternalStore } from "react";
+import type { ParseKeys } from "i18next";
+import { useTranslation } from "react-i18next";
 import {
   createAppAPI,
   getPluginManager,
@@ -190,16 +192,16 @@ type ToolbarMapControl = Exclude<BuiltInMapControl, "layer-control">;
 
 const MAP_CONTROL_ITEMS: Array<{
   id: ToolbarMapControl;
-  label: string;
+  labelKey: ParseKeys;
 }> = [
-  { id: "navigation", label: "Navigation" },
-  { id: "fullscreen", label: "Fullscreen" },
-  { id: "geolocate", label: "Geolocate" },
-  { id: "globe", label: "Globe" },
-  { id: "terrain", label: "Terrain" },
-  { id: "scale", label: "Scale" },
-  { id: "attribution", label: "Attribution" },
-  { id: "logo", label: "MapLibre logo" },
+  { id: "navigation", labelKey: "toolbar.mapControl.navigation" },
+  { id: "fullscreen", labelKey: "toolbar.mapControl.fullscreen" },
+  { id: "geolocate", labelKey: "toolbar.mapControl.geolocate" },
+  { id: "globe", labelKey: "toolbar.mapControl.globe" },
+  { id: "terrain", labelKey: "toolbar.mapControl.terrain" },
+  { id: "scale", labelKey: "toolbar.mapControl.scale" },
+  { id: "attribution", labelKey: "toolbar.mapControl.attribution" },
+  { id: "logo", labelKey: "toolbar.mapControl.logo" },
 ];
 
 const NEW_PROJECT_VISIBLE_BUILT_IN_CONTROLS = new Set<BuiltInMapControl>([
@@ -216,12 +218,12 @@ const ALL_BUILT_IN_CONTROL_IDS: BuiltInMapControl[] = [
 
 const PLUGIN_POSITION_ITEMS: Array<{
   value: GeoLibreMapControlPosition;
-  label: string;
+  labelKey: ParseKeys;
 }> = [
-  { value: "top-left", label: "Top left" },
-  { value: "top-right", label: "Top right" },
-  { value: "bottom-left", label: "Bottom left" },
-  { value: "bottom-right", label: "Bottom right" },
+  { value: "top-left", labelKey: "toolbar.position.topLeft" },
+  { value: "top-right", labelKey: "toolbar.position.topRight" },
+  { value: "bottom-left", labelKey: "toolbar.position.bottomLeft" },
+  { value: "bottom-right", labelKey: "toolbar.position.bottomRight" },
 ];
 
 // Plugins grouped under the "Web Services" submenu of the Plugins menu.
@@ -237,58 +239,71 @@ const DEFAULT_OSM_PBF_URL =
 // drive the command palette so it stays in sync with the menus without each
 // action being defined twice. The `run` closures are built in the component
 // where the store setters are in scope.
-const ADD_DATA_KIND_COMMANDS: Array<{ kind: AddDataKind; title: string }> = [
-  { kind: "delimited-text", title: "Delimited Text Layer" },
-  { kind: "gpx", title: "GPX Layer" },
-  { kind: "mbtiles", title: "MBTiles Layer" },
-  { kind: "xyz", title: "XYZ Layer" },
-  { kind: "wms", title: "WMS Layer" },
-  { kind: "wfs", title: "WFS Layer" },
-  { kind: "wmts", title: "WMTS Layer" },
-  { kind: "arcgis", title: "ArcGIS Layer" },
-  { kind: "video", title: "Video Layer" },
-  { kind: "deckgl-viz", title: "Deck.gl Layer" },
-  { kind: "postgres", title: "PostgreSQL Layer" },
+const ADD_DATA_KIND_COMMANDS: Array<{ kind: AddDataKind; titleKey: ParseKeys }> = [
+  { kind: "delimited-text", titleKey: "toolbar.layerType.delimitedText" },
+  { kind: "gpx", titleKey: "toolbar.layerType.gpx" },
+  { kind: "mbtiles", titleKey: "toolbar.layerType.mbtiles" },
+  { kind: "xyz", titleKey: "toolbar.layerType.xyz" },
+  { kind: "wms", titleKey: "toolbar.layerType.wms" },
+  { kind: "wfs", titleKey: "toolbar.layerType.wfs" },
+  { kind: "wmts", titleKey: "toolbar.layerType.wmts" },
+  { kind: "arcgis", titleKey: "toolbar.layerType.arcgis" },
+  { kind: "video", titleKey: "toolbar.layerType.video" },
+  { kind: "deckgl-viz", titleKey: "toolbar.layerType.deckglViz" },
+  { kind: "postgres", titleKey: "toolbar.layerType.postgres" },
 ];
 
-const CONVERSION_COMMANDS: Array<{ kind: ConversionToolKind; title: string }> =
+const CONVERSION_COMMANDS: Array<{
+  kind: ConversionToolKind;
+  titleKey: ParseKeys;
+}> = [
+  {
+    kind: "vector-to-geoparquet",
+    titleKey: "toolbar.conversion.vectorToGeoparquet",
+  },
+  {
+    kind: "vector-to-flatgeobuf",
+    titleKey: "toolbar.conversion.vectorToFlatgeobuf",
+  },
+  { kind: "csv-to-geoparquet", titleKey: "toolbar.conversion.csvToGeoparquet" },
+  { kind: "vector-to-pmtiles", titleKey: "toolbar.conversion.vectorToPmtiles" },
+  { kind: "raster-to-cog", titleKey: "toolbar.conversion.rasterToCog" },
+];
+
+const VECTOR_TOOL_COMMANDS: Array<{ kind: VectorToolKind; titleKey: ParseKeys }> =
   [
-    { kind: "vector-to-geoparquet", title: "Vector to GeoParquet" },
-    { kind: "vector-to-flatgeobuf", title: "Vector to FlatGeobuf" },
-    { kind: "csv-to-geoparquet", title: "CSV to GeoParquet" },
-    { kind: "vector-to-pmtiles", title: "Vector to PMTiles" },
-    { kind: "raster-to-cog", title: "Raster to COG" },
+    { kind: "buffer", titleKey: "toolbar.vectorTool.buffer" },
+    { kind: "centroids", titleKey: "toolbar.vectorTool.centroids" },
+    { kind: "convex-hull", titleKey: "toolbar.vectorTool.convexHull" },
+    { kind: "dissolve", titleKey: "toolbar.vectorTool.dissolve" },
+    { kind: "bounding-box", titleKey: "toolbar.vectorTool.boundingBox" },
+    { kind: "simplify", titleKey: "toolbar.vectorTool.simplify" },
+    { kind: "clip", titleKey: "toolbar.vectorTool.clip" },
+    { kind: "intersection", titleKey: "toolbar.vectorTool.intersection" },
+    { kind: "difference", titleKey: "toolbar.vectorTool.difference" },
+    { kind: "union", titleKey: "toolbar.vectorTool.union" },
+    { kind: "spatial-join", titleKey: "toolbar.vectorTool.spatialJoin" },
+    { kind: "select-by-value", titleKey: "toolbar.vectorTool.selectByValue" },
+    {
+      kind: "select-by-location",
+      titleKey: "toolbar.vectorTool.selectByLocation",
+    },
+    { kind: "h3-grid", titleKey: "toolbar.vectorTool.h3Grid" },
+    { kind: "h3-bin-points", titleKey: "toolbar.vectorTool.h3BinPoints" },
   ];
 
-const VECTOR_TOOL_COMMANDS: Array<{ kind: VectorToolKind; title: string }> = [
-  { kind: "buffer", title: "Buffer" },
-  { kind: "centroids", title: "Centroids" },
-  { kind: "convex-hull", title: "Convex hull" },
-  { kind: "dissolve", title: "Dissolve" },
-  { kind: "bounding-box", title: "Bounding box" },
-  { kind: "simplify", title: "Simplify" },
-  { kind: "clip", title: "Clip" },
-  { kind: "intersection", title: "Intersection" },
-  { kind: "difference", title: "Difference" },
-  { kind: "union", title: "Union" },
-  { kind: "spatial-join", title: "Spatial join" },
-  { kind: "select-by-value", title: "Select by value" },
-  { kind: "select-by-location", title: "Select by location" },
-  { kind: "h3-grid", title: "Create H3 grid" },
-  { kind: "h3-bin-points", title: "Bin points to H3" },
-];
-
-const RASTER_TOOL_COMMANDS: Array<{ kind: RasterToolKind; title: string }> = [
-  { kind: "hillshade", title: "Hillshade" },
-  { kind: "slope", title: "Slope" },
-  { kind: "aspect", title: "Aspect" },
-  { kind: "reproject", title: "Reproject" },
-  { kind: "resample", title: "Resample" },
-  { kind: "clip-extent", title: "Clip by extent" },
-  { kind: "clip-mask", title: "Clip by mask layer" },
-  { kind: "polygonize", title: "Polygonize" },
-  { kind: "contour", title: "Contour" },
-];
+const RASTER_TOOL_COMMANDS: Array<{ kind: RasterToolKind; titleKey: ParseKeys }> =
+  [
+    { kind: "hillshade", titleKey: "toolbar.rasterTool.hillshade" },
+    { kind: "slope", titleKey: "toolbar.rasterTool.slope" },
+    { kind: "aspect", titleKey: "toolbar.rasterTool.aspect" },
+    { kind: "reproject", titleKey: "toolbar.rasterTool.reproject" },
+    { kind: "resample", titleKey: "toolbar.rasterTool.resample" },
+    { kind: "clip-extent", titleKey: "toolbar.rasterTool.clipExtent" },
+    { kind: "clip-mask", titleKey: "toolbar.rasterTool.clipMask" },
+    { kind: "polygonize", titleKey: "toolbar.rasterTool.polygonize" },
+    { kind: "contour", titleKey: "toolbar.rasterTool.contour" },
+  ];
 
 async function openExternalLink(url: string): Promise<void> {
   if (isTauri()) {
@@ -334,6 +349,7 @@ export function TopToolbar({
   onOpenDiagnostics,
   onToggleThemeMode,
 }: TopToolbarProps) {
+  const { t } = useTranslation();
   const loadProject = useAppStore((s) => s.loadProject);
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
   const setConversionOpen = useAppStore((s) => s.setConversionOpen);
@@ -408,7 +424,9 @@ export function TopToolbar({
       } catch (error) {
         console.error("Failed to open project", error);
         setActionError(
-          error instanceof Error ? error.message : "Could not open project.",
+          error instanceof Error
+            ? error.message
+            : t("toolbar.error.couldNotOpenProject"),
         );
       }
     }
@@ -418,7 +436,7 @@ export function TopToolbar({
     event.preventDefault();
     const normalizedUrl = normalizeProjectUrl(projectUrl);
     if (!normalizedUrl) {
-      setProjectUrlError("Enter a valid HTTP or HTTPS project URL.");
+      setProjectUrlError(t("toolbar.error.invalidProjectUrl"));
       return;
     }
 
@@ -446,7 +464,9 @@ export function TopToolbar({
       if (controller.signal.aborted) return;
       console.error("Failed to open project URL", error);
       setProjectUrlError(
-        error instanceof Error ? error.message : "Could not open project URL.",
+        error instanceof Error
+          ? error.message
+          : t("toolbar.error.couldNotOpenProjectUrl"),
       );
     } finally {
       if (projectUrlAbortRef.current === controller) {
@@ -478,7 +498,7 @@ export function TopToolbar({
       setActionError(
         error instanceof Error
           ? error.message
-          : "Could not open the recent project.",
+          : t("toolbar.error.couldNotOpenRecentProject"),
       );
       return;
     }
@@ -496,7 +516,7 @@ export function TopToolbar({
       setActionError(
         error instanceof Error
           ? error.message
-          : "Could not load the recent project.",
+          : t("toolbar.error.couldNotLoadRecentProject"),
       );
     } finally {
       if (recentAbortRef.current === controller) {
@@ -561,7 +581,9 @@ export function TopToolbar({
     } catch (error) {
       console.error("Failed to save project", error);
       setActionError(
-        error instanceof Error ? error.message : "Could not save the project.",
+        error instanceof Error
+          ? error.message
+          : t("toolbar.error.couldNotSaveProject"),
       );
       return false;
     }
@@ -679,9 +701,7 @@ export function TopToolbar({
         layers,
       );
       if (added === 0) {
-        setActionError(
-          "No point, line, or polygon features were found in this OSM PBF file.",
-        );
+        setActionError(t("toolbar.error.osmPbfNoFeatures"));
       } else if (layers.bounds) {
         appApi.fitBounds?.(layers.bounds);
       }
@@ -689,10 +709,12 @@ export function TopToolbar({
       // A user cancel (abort) is not an error.
       if (err instanceof DOMException && err.name === "AbortError") return;
       const base =
-        err instanceof Error ? err.message : "Could not load the OSM PBF file.";
+        err instanceof Error
+          ? err.message
+          : t("toolbar.error.couldNotLoadOsmPbf");
       // Bare .pbf is also the Mapbox Vector Tile extension; hint at it on failure.
       setActionError(
-        `${base} If this is a Mapbox Vector Tile (.pbf), it cannot be loaded as an OSM extract.`,
+        `${base} ${t("toolbar.error.osmPbfMvtHint")}`,
       );
     } finally {
       setOsmPbfLoading(false);
@@ -734,14 +756,16 @@ export function TopToolbar({
       startOsmPbf(result.data, osmPbfBaseName(fileName), result.path);
     } catch (err) {
       setActionError(
-        err instanceof Error ? err.message : "Could not open the OSM PBF file.",
+        err instanceof Error
+          ? err.message
+          : t("toolbar.error.couldNotOpenOsmPbf"),
       );
     }
   };
   const handleLoadOsmPbfUrl = async () => {
     const url = osmPbfUrl.trim();
     if (!isHttpUrl(url)) {
-      setActionError("Enter a valid http(s) URL to an .osm.pbf file.");
+      setActionError(t("toolbar.error.invalidOsmPbfUrl"));
       return;
     }
     setOsmPbfDialogOpen(false);
@@ -754,7 +778,7 @@ export function TopToolbar({
     try {
       const data = await appApi.fetchArrayBuffer?.(url);
       if (controller.signal.aborted) return;
-      if (!data) throw new Error("Could not download the OSM PBF file.");
+      if (!data) throw new Error(t("toolbar.error.couldNotDownloadOsmPbf"));
       const fileName =
         url.split("/").pop()?.split("?")[0].split("#")[0] || "osm";
       // Keep the loading indicator up through the parse for small files
@@ -768,7 +792,7 @@ export function TopToolbar({
       setActionError(
         err instanceof Error
           ? err.message
-          : "Could not download the OSM PBF file.",
+          : t("toolbar.error.couldNotDownloadOsmPbf"),
       );
     }
   };
@@ -924,8 +948,8 @@ export function TopToolbar({
     // Project
     {
       id: "project.new",
-      title: "New Project",
-      group: "Project",
+      title: t("toolbar.command.projectNew"),
+      group: t("toolbar.commandGroup.project"),
       keywords: "create",
       icon: FilePlus2,
       shortcut: { key: "n", mod: true, shift: false },
@@ -933,8 +957,8 @@ export function TopToolbar({
     },
     {
       id: "project.open-file",
-      title: "Open Project from File",
-      group: "Project",
+      title: t("toolbar.command.projectOpenFile"),
+      group: t("toolbar.commandGroup.project"),
       keywords: "load",
       icon: FolderOpen,
       shortcut: { key: "o", mod: true, shift: false },
@@ -942,251 +966,255 @@ export function TopToolbar({
     },
     {
       id: "project.open-url",
-      title: "Open Project from URL",
-      group: "Project",
+      title: t("toolbar.command.projectOpenUrl"),
+      group: t("toolbar.commandGroup.project"),
       keywords: "load",
       icon: Link2,
       run: () => setProjectUrlDialogOpen(true),
     },
     {
       id: "project.save",
-      title: "Save Project",
-      group: "Project",
+      title: t("toolbar.command.projectSave"),
+      group: t("toolbar.commandGroup.project"),
       icon: Save,
       shortcut: { key: "s", mod: true, shift: false },
       run: () => void handleSave(),
     },
     {
       id: "project.save-as",
-      title: "Save Project As…",
-      group: "Project",
+      title: t("toolbar.command.projectSaveAs"),
+      group: t("toolbar.commandGroup.project"),
       icon: FilePen,
       shortcut: { key: "s", mod: true, shift: true },
       run: () => void handleSaveAs(),
     },
     {
       id: "project.share",
-      title: "Share Project…",
-      group: "Project",
+      title: t("toolbar.command.projectShare"),
+      group: t("toolbar.commandGroup.project"),
       icon: Share2,
       run: () => setShareDialogOpen(true),
     },
     {
       id: "project.print",
-      title: "Print…",
-      group: "Project",
+      title: t("toolbar.command.projectPrint"),
+      group: t("toolbar.commandGroup.project"),
       icon: Printer,
       run: handleTogglePrintPanel,
     },
     // Add Data
     {
       id: "add.vector",
-      title: "Add Vector Layer",
-      group: "Add Data",
+      title: t("toolbar.command.addVectorLayer"),
+      group: t("toolbar.commandGroup.addData"),
       icon: Database,
       run: handleAddVectorLayer,
     },
     {
       id: "add.raster",
-      title: "Add Raster Layer",
-      group: "Add Data",
+      title: t("toolbar.command.addRasterLayer"),
+      group: t("toolbar.commandGroup.addData"),
       icon: Database,
       run: handleAddRasterLayer,
     },
     {
       id: "add.osm-pbf",
-      title: "Add OSM PBF Layer",
-      group: "Add Data",
+      title: t("toolbar.command.addOsmPbfLayer"),
+      group: t("toolbar.commandGroup.addData"),
       run: () => setOsmPbfDialogOpen(true),
     },
-    ...ADD_DATA_KIND_COMMANDS.map(({ kind, title }) => ({
+    ...ADD_DATA_KIND_COMMANDS.map(({ kind, titleKey }) => ({
       id: `add.${kind}`,
-      title: `Add ${title}`,
-      group: "Add Data",
+      title: t("toolbar.command.addLayer", { name: t(titleKey) }),
+      group: t("toolbar.commandGroup.addData"),
       run: () => setAddDataKind(kind),
     })),
     {
       id: "add.stac",
-      title: "Add STAC Layer",
-      group: "Add Data",
+      title: t("toolbar.command.addStacLayer"),
+      group: t("toolbar.commandGroup.addData"),
       run: handleAddStacLayer,
     },
     {
       id: "add.geoparquet",
-      title: "Add GeoParquet Layer",
-      group: "Add Data",
+      title: t("toolbar.command.addGeoparquetLayer"),
+      group: t("toolbar.commandGroup.addData"),
       run: handleAddVectorLayer,
     },
     {
       id: "add.flatgeobuf",
-      title: "Add FlatGeobuf Layer",
-      group: "Add Data",
+      title: t("toolbar.command.addFlatgeobufLayer"),
+      group: t("toolbar.commandGroup.addData"),
       run: handleAddFlatGeobufLayer,
     },
     {
       id: "add.pmtiles",
-      title: "Add PMTiles Layer",
-      group: "Add Data",
+      title: t("toolbar.command.addPmtilesLayer"),
+      group: t("toolbar.commandGroup.addData"),
       run: handleAddPMTilesLayer,
     },
     {
       id: "add.zarr",
-      title: "Add Zarr Layer",
-      group: "Add Data",
+      title: t("toolbar.command.addZarrLayer"),
+      group: t("toolbar.commandGroup.addData"),
       run: handleAddZarrLayer,
     },
     {
       id: "add.netcdf",
-      title: "Add NetCDF / HDF Layer",
-      group: "Add Data",
+      title: t("toolbar.command.addNetcdfLayer"),
+      group: t("toolbar.commandGroup.addData"),
       run: handleAddNetcdfLayer,
     },
     {
       id: "add.lidar",
-      title: "Add LiDAR Layer",
-      group: "Add Data",
+      title: t("toolbar.command.addLidarLayer"),
+      group: t("toolbar.commandGroup.addData"),
       run: handleAddLidarLayer,
     },
     {
       id: "add.splatting",
-      title: "Add Splatting Layer",
-      group: "Add Data",
+      title: t("toolbar.command.addSplattingLayer"),
+      group: t("toolbar.commandGroup.addData"),
       run: handleAddSplattingLayer,
     },
     {
       id: "add.3d-tiles",
-      title: "Add 3D Tiles Layer",
-      group: "Add Data",
+      title: t("toolbar.command.add3dTilesLayer"),
+      group: t("toolbar.commandGroup.addData"),
       run: handleAddThreeDTilesLayer,
     },
     {
       id: "add.duckdb",
-      title: "Add DuckDB Layer",
-      group: "Add Data",
+      title: t("toolbar.command.addDuckdbLayer"),
+      group: t("toolbar.commandGroup.addData"),
       run: handleAddDuckDBLayer,
     },
     // Processing
     {
       id: "proc.whitebox",
-      title: "Whitebox Tools",
-      group: "Processing",
+      title: t("toolbar.command.whiteboxTools"),
+      group: t("toolbar.commandGroup.processing"),
       icon: Wrench,
       run: () => setProcessingOpen(true),
     },
     {
       id: "proc.sql",
-      title: "SQL Workspace",
-      group: "Processing",
+      title: t("toolbar.command.sqlWorkspace"),
+      group: t("toolbar.commandGroup.processing"),
       icon: Wrench,
       run: () => setSqlWorkspaceOpen(true),
     },
-    ...CONVERSION_COMMANDS.map(({ kind, title }) => ({
+    ...CONVERSION_COMMANDS.map(({ kind, titleKey }) => ({
       id: `proc.conversion.${kind}`,
-      title,
-      group: "Processing",
+      title: t(titleKey),
+      group: t("toolbar.commandGroup.processing"),
       keywords: "conversion convert",
       run: () => setConversionOpen(kind),
     })),
-    ...VECTOR_TOOL_COMMANDS.map(({ kind, title }) => ({
+    ...VECTOR_TOOL_COMMANDS.map(({ kind, titleKey }) => ({
       id: `proc.vector.${kind}`,
-      title,
-      group: "Processing",
+      title: t(titleKey),
+      group: t("toolbar.commandGroup.processing"),
       keywords: "vector tool",
       run: () => setVectorToolOpen(kind),
     })),
-    ...RASTER_TOOL_COMMANDS.map(({ kind, title }) => ({
+    ...RASTER_TOOL_COMMANDS.map(({ kind, titleKey }) => ({
       id: `proc.raster.${kind}`,
-      title,
-      group: "Processing",
+      title: t(titleKey),
+      group: t("toolbar.commandGroup.processing"),
       keywords: "raster tool",
       run: () => setRasterToolOpen(kind),
     })),
     {
       id: "proc.planetary-computer",
-      title: "Planetary Computer",
-      group: "Processing",
+      title: t("toolbar.command.planetaryComputer"),
+      group: t("toolbar.commandGroup.processing"),
       run: handleOpenPlanetaryComputerPanel,
     },
     {
       id: "proc.earth-engine",
-      title: "Earth Engine",
-      group: "Processing",
+      title: t("toolbar.command.earthEngine"),
+      group: t("toolbar.commandGroup.processing"),
       run: handleToggleEarthEnginePanel,
     },
     // Controls
     ...MAP_CONTROL_ITEMS.map((control) => ({
       id: `control.${control.id}`,
-      title: `Toggle ${control.label} Control`,
-      group: "Controls",
+      title: t("toolbar.command.toggleControl", {
+        name: t(control.labelKey),
+      }),
+      group: t("toolbar.commandGroup.controls"),
       keywords: "control toggle map",
       run: () => toggleMapControl(control.id),
     })),
     {
       id: "control.effects",
-      title: "Toggle Atmosphere Effects",
-      group: "Controls",
+      title: t("toolbar.command.toggleAtmosphereEffects"),
+      group: t("toolbar.commandGroup.controls"),
       run: () => toggle(EFFECTS_PLUGIN_ID, appApi),
     },
     {
       id: "control.directions",
-      title: "Toggle Directions",
-      group: "Controls",
+      title: t("toolbar.command.toggleDirections"),
+      group: t("toolbar.commandGroup.controls"),
       run: handleToggleDirections,
     },
     {
       id: "control.search",
-      title: "Toggle Search",
-      group: "Controls",
+      title: t("toolbar.command.toggleSearch"),
+      group: t("toolbar.commandGroup.controls"),
       run: handleToggleSearchPlacesPanel,
     },
     {
       id: "control.colorbar",
-      title: "Toggle Colorbar",
-      group: "Controls",
+      title: t("toolbar.command.toggleColorbar"),
+      group: t("toolbar.commandGroup.controls"),
       run: handleToggleColorbarPanel,
     },
     {
       id: "control.legend",
-      title: "Toggle Legend",
-      group: "Controls",
+      title: t("toolbar.command.toggleLegend"),
+      group: t("toolbar.commandGroup.controls"),
       run: handleToggleLegendPanel,
     },
     {
       id: "control.html",
-      title: "Toggle HTML Panel",
-      group: "Controls",
+      title: t("toolbar.command.toggleHtmlPanel"),
+      group: t("toolbar.commandGroup.controls"),
       run: handleToggleHtmlPanel,
     },
     {
       id: "control.measure",
-      title: "Toggle Measure",
-      group: "Controls",
+      title: t("toolbar.command.toggleMeasure"),
+      group: t("toolbar.commandGroup.controls"),
       run: handleToggleMeasurePanel,
     },
     {
       id: "control.bookmark",
-      title: "Toggle Bookmark",
-      group: "Controls",
+      title: t("toolbar.command.toggleBookmark"),
+      group: t("toolbar.commandGroup.controls"),
       run: handleToggleBookmarkPanel,
     },
     {
       id: "control.minimap",
-      title: "Toggle Minimap",
-      group: "Controls",
+      title: t("toolbar.command.toggleMinimap"),
+      group: t("toolbar.commandGroup.controls"),
       run: handleToggleMinimapPanel,
     },
     {
       id: "control.view-state",
-      title: "Toggle View State",
-      group: "Controls",
+      title: t("toolbar.command.toggleViewState"),
+      group: t("toolbar.commandGroup.controls"),
       run: handleToggleViewStatePanel,
     },
     // View
     {
       id: "view.theme",
       title:
-        themeMode === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode",
-      group: "View",
+        themeMode === "dark"
+          ? t("toolbar.command.switchToLight")
+          : t("toolbar.command.switchToDark"),
+      group: t("toolbar.commandGroup.view"),
       keywords: "theme dark light appearance",
       icon: themeMode === "dark" ? Sun : Moon,
       run: onToggleThemeMode,
@@ -1194,30 +1222,30 @@ export function TopToolbar({
     // Help
     {
       id: "help.shortcuts",
-      title: "Keyboard Shortcuts",
-      group: "Help",
+      title: t("toolbar.command.keyboardShortcuts"),
+      group: t("toolbar.commandGroup.help"),
       keywords: "hotkeys cheat sheet",
       icon: Keyboard,
       run: () => setShortcutsOpen(true),
     },
     {
       id: "help.diagnostics",
-      title: "Diagnostics",
-      group: "Help",
+      title: t("toolbar.command.diagnostics"),
+      group: t("toolbar.commandGroup.help"),
       icon: Bug,
       run: onOpenDiagnostics,
     },
     {
       id: "help.feedback",
-      title: "Give Feedback",
-      group: "Help",
+      title: t("toolbar.command.giveFeedback"),
+      group: t("toolbar.commandGroup.help"),
       icon: MessageSquare,
       run: () => void openExternalLink(FEEDBACK_URL),
     },
     {
       id: "help.updates",
-      title: "Check for Updates",
-      group: "Help",
+      title: t("toolbar.command.checkForUpdates"),
+      group: t("toolbar.commandGroup.help"),
       icon: RefreshCw,
       run: () => {
         setAboutOpen(true);
@@ -1226,8 +1254,8 @@ export function TopToolbar({
     },
     {
       id: "help.about",
-      title: "About",
-      group: "Help",
+      title: t("toolbar.command.about"),
+      group: t("toolbar.commandGroup.help"),
       icon: Info,
       run: () => setAboutOpen(true),
     },
@@ -1243,16 +1271,16 @@ export function TopToolbar({
       )
       .map((plugin) => ({
         id: `plugin.${plugin.id}`,
-        title: `Toggle ${plugin.name}`,
-        group: "Plugins",
+        title: t("toolbar.command.togglePlugin", { name: plugin.name }),
+        group: t("toolbar.commandGroup.plugins"),
         keywords: isActive(plugin.id) ? "plugin deactivate" : "plugin activate",
         run: () => toggle(plugin.id, appApi),
       })),
     // Settings
     {
       id: "settings.manage-plugins",
-      title: "Manage Plugins",
-      group: "Settings",
+      title: t("toolbar.command.managePlugins"),
+      group: t("toolbar.commandGroup.settings"),
       keywords: "install external plugin marketplace",
       run: () => setManagePluginsOpen(true),
     },
@@ -1300,43 +1328,45 @@ export function TopToolbar({
             className={toolbarButtonClass}
             variant="ghost"
             size={toolbarButtonSize}
-            aria-label="Project"
+            aria-label={t("toolbar.menu.project")}
           >
             <Folder className={toolbarIconClassName} />
-            {renderToolbarLabel("Project")}
+            {renderToolbarLabel(t("toolbar.menu.project"))}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-64">
-          <DropdownMenuLabel>Project</DropdownMenuLabel>
+          <DropdownMenuLabel>{t("toolbar.menu.project")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setNewProjectDialogOpen(true)}>
             <FilePlus2 className="mr-2 h-3.5 w-3.5" />
-            New...
+            {t("toolbar.item.newEllipsis")}
           </DropdownMenuItem>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
               <FolderOpen className="mr-2 h-3.5 w-3.5" />
-              Open From
+              {t("toolbar.item.openFrom")}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
               <DropdownMenuItem onSelect={() => void handleOpenFromFile()}>
                 <FileText className="mr-2 h-3.5 w-3.5" />
-                File...
+                {t("toolbar.item.fileEllipsis")}
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setProjectUrlDialogOpen(true)}>
                 <Link2 className="mr-2 h-3.5 w-3.5" />
-                URL...
+                {t("toolbar.item.urlEllipsis")}
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger disabled={recentProjects.length === 0}>
               <History className="mr-2 h-3.5 w-3.5" />
-              Open Recent
+              {t("toolbar.item.openRecent")}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="w-80">
               {recentProjects.length === 0 ? (
-                <DropdownMenuItem disabled>No recent projects</DropdownMenuItem>
+                <DropdownMenuItem disabled>
+                  {t("toolbar.item.noRecentProjects")}
+                </DropdownMenuItem>
               ) : (
                 recentProjects.map((project) => {
                   const openedAt = formatRecentProjectTime(project.openedAt);
@@ -1369,7 +1399,9 @@ export function TopToolbar({
                       </span>
                       <button
                         type="button"
-                        aria-label={`Remove ${label} from recent projects`}
+                        aria-label={t("toolbar.item.removeFromRecent", {
+                          name: label,
+                        })}
                         className="mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
                         onClick={(event) => {
                           // Keep the menu open and prevent the row's onSelect
@@ -1390,27 +1422,27 @@ export function TopToolbar({
                 disabled={recentProjects.length === 0}
                 onSelect={clearRecentProjects}
               >
-                Clear Recent Projects
+                {t("toolbar.item.clearRecentProjects")}
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => void handleSave()}>
             <Save className="mr-2 h-3.5 w-3.5" />
-            Save
+            {t("common.save")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => void handleSaveAs()}>
             <FilePen className="mr-2 h-3.5 w-3.5" />
-            Save As...
+            {t("toolbar.item.saveAsEllipsis")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setShareDialogOpen(true)}>
             <Share2 className="mr-2 h-3.5 w-3.5" />
-            Share...
+            {t("toolbar.item.shareEllipsis")}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={handleTogglePrintPanel}>
             <Printer className="mr-2 h-3.5 w-3.5" />
-            Print...
+            {t("toolbar.item.printEllipsis")}
             {printPanelVisible ? " ✓" : ""}
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -1421,25 +1453,25 @@ export function TopToolbar({
             className={toolbarSecondaryButtonClass}
             variant="ghost"
             size={toolbarButtonSize}
-            aria-label="Edit"
+            aria-label={t("toolbar.menu.edit")}
           >
             <Pencil className={toolbarIconClassName} />
-            {renderToolbarLabel("Edit")}
+            {renderToolbarLabel(t("toolbar.menu.edit"))}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-56">
-          <DropdownMenuLabel>Edit</DropdownMenuLabel>
+          <DropdownMenuLabel>{t("toolbar.menu.edit")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem disabled={!canUndo} onSelect={undo}>
             <Undo2 className="mr-2 h-3.5 w-3.5" />
-            Undo
+            {t("toolbar.item.undo")}
             <span className="ml-auto text-xs text-muted-foreground">
               Ctrl/Cmd+Z
             </span>
           </DropdownMenuItem>
           <DropdownMenuItem disabled={!canRedo} onSelect={redo}>
             <Redo2 className="mr-2 h-3.5 w-3.5" />
-            Redo
+            {t("toolbar.item.redo")}
             <span className="ml-auto text-xs text-muted-foreground">
               Ctrl/Cmd+Shift+Z / Ctrl+Y
             </span>
@@ -1458,108 +1490,108 @@ export function TopToolbar({
             className={toolbarButtonClass}
             variant="ghost"
             size={toolbarButtonSize}
-            aria-label="Add Data"
+            aria-label={t("toolbar.menu.addData")}
           >
             <Database className={toolbarIconClassName} />
-            {renderToolbarLabel("Add Data")}
+            {renderToolbarLabel(t("toolbar.menu.addData"))}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-64">
-          <DropdownMenuLabel>Add data</DropdownMenuLabel>
+          <DropdownMenuLabel>{t("toolbar.menu.addData")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-xs text-muted-foreground">
-            Files
+            {t("toolbar.item.sectionFiles")}
           </DropdownMenuLabel>
           <DropdownMenuItem onSelect={handleAddVectorLayer}>
-            Vector Layer
+            {t("toolbar.item.vectorLayer")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddRasterLayer}>
-            Raster Layer
+            {t("toolbar.item.rasterLayer")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setAddDataKind("delimited-text")}>
-            Delimited Text Layer
+            {t("toolbar.layerType.delimitedText")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setAddDataKind("gpx")}>
-            GPX Layer
+            {t("toolbar.layerType.gpx")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setAddDataKind("mbtiles")}>
-            MBTiles Layer
+            {t("toolbar.layerType.mbtiles")}
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={osmPbfLoading || osmPbfConfirm !== null}
             onSelect={() => setOsmPbfDialogOpen(true)}
           >
-            OSM PBF Layer
+            {t("toolbar.item.osmPbfLayer")}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-xs text-muted-foreground">
-            Web services
+            {t("toolbar.item.sectionWebServices")}
           </DropdownMenuLabel>
           <DropdownMenuItem onSelect={() => setAddDataKind("xyz")}>
-            XYZ Layer
+            {t("toolbar.layerType.xyz")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setAddDataKind("wms")}>
-            WMS Layer
+            {t("toolbar.layerType.wms")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setAddDataKind("wfs")}>
-            WFS Layer
+            {t("toolbar.layerType.wfs")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setAddDataKind("wmts")}>
-            WMTS Layer
+            {t("toolbar.layerType.wmts")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setAddDataKind("arcgis")}>
-            ArcGIS Layer
+            {t("toolbar.layerType.arcgis")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddStacLayer}>
-            STAC Layer
+            {t("toolbar.item.stacLayer")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setAddDataKind("video")}>
-            Video Layer
+            {t("toolbar.layerType.video")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setAddDataKind("deckgl-viz")}>
-            Deck.gl Layer
+            {t("toolbar.layerType.deckglViz")}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-xs text-muted-foreground">
-            Cloud formats
+            {t("toolbar.item.sectionCloudFormats")}
           </DropdownMenuLabel>
           <DropdownMenuItem onSelect={handleAddVectorLayer}>
-            GeoParquet Layer
+            {t("toolbar.item.geoparquetLayer")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddFlatGeobufLayer}>
-            FlatGeobuf Layer
+            {t("toolbar.item.flatgeobufLayer")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddPMTilesLayer}>
-            PMTiles Layer
+            {t("toolbar.item.pmtilesLayer")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddZarrLayer}>
-            Zarr Layer
+            {t("toolbar.item.zarrLayer")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddNetcdfLayer}>
-            NetCDF / HDF
+            {t("toolbar.item.netcdfHdf")}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-xs text-muted-foreground">
-            3D layers
+            {t("toolbar.item.section3dLayers")}
           </DropdownMenuLabel>
           <DropdownMenuItem onSelect={handleAddLidarLayer}>
-            LiDAR Layer
+            {t("toolbar.item.lidarLayer")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddSplattingLayer}>
-            Splatting Layer
+            {t("toolbar.item.splattingLayer")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddThreeDTilesLayer}>
-            3D Tiles Layer
+            {t("toolbar.item.threeDTilesLayer")}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-xs text-muted-foreground">
-            Databases
+            {t("toolbar.item.sectionDatabases")}
           </DropdownMenuLabel>
           <DropdownMenuItem onSelect={handleAddDuckDBLayer}>
-            DuckDB Layer
+            {t("toolbar.item.duckdbLayer")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setAddDataKind("postgres")}>
-            PostgreSQL Layer
+            {t("toolbar.layerType.postgres")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -1569,192 +1601,198 @@ export function TopToolbar({
             className={toolbarButtonClass}
             variant="ghost"
             size={toolbarButtonSize}
-            aria-label="Processing"
+            aria-label={t("toolbar.menu.processing")}
           >
             <Wrench className={toolbarIconClassName} />
-            {renderToolbarLabel("Processing")}
+            {renderToolbarLabel(t("toolbar.menu.processing"))}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
-          <DropdownMenuLabel>Processing</DropdownMenuLabel>
+          <DropdownMenuLabel>{t("toolbar.menu.processing")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setProcessingOpen(true)}>
-            Whitebox
+            {t("toolbar.item.whitebox")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setSqlWorkspaceOpen(true)}>
-            SQL Workspace
+            {t("toolbar.command.sqlWorkspace")}
           </DropdownMenuItem>
           <DropdownMenuSub>
-            <DropdownMenuSubTrigger>Conversion</DropdownMenuSubTrigger>
+            <DropdownMenuSubTrigger>
+              {t("toolbar.item.conversion")}
+            </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
               <DropdownMenuItem
                 onSelect={() => setConversionOpen("vector-to-geoparquet")}
               >
-                Vector to GeoParquet
+                {t("toolbar.conversion.vectorToGeoparquet")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => setConversionOpen("vector-to-flatgeobuf")}
               >
-                Vector to FlatGeobuf
+                {t("toolbar.conversion.vectorToFlatgeobuf")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => setConversionOpen("csv-to-geoparquet")}
               >
-                CSV to GeoParquet
+                {t("toolbar.conversion.csvToGeoparquet")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => setConversionOpen("vector-to-pmtiles")}
               >
-                Vector to PMTiles
+                {t("toolbar.conversion.vectorToPmtiles")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => setConversionOpen("raster-to-cog")}
               >
-                Raster to COG
+                {t("toolbar.conversion.rasterToCog")}
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
           <DropdownMenuSub>
-            <DropdownMenuSubTrigger>Vector</DropdownMenuSubTrigger>
+            <DropdownMenuSubTrigger>
+              {t("toolbar.item.vector")}
+            </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
               <DropdownMenuLabel className="text-xs text-muted-foreground">
-                Geometry
+                {t("toolbar.item.subGroupGeometry")}
               </DropdownMenuLabel>
               <DropdownMenuItem onSelect={() => setVectorToolOpen("buffer")}>
-                Buffer
+                {t("toolbar.vectorTool.buffer")}
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setVectorToolOpen("centroids")}>
-                Centroids
+                {t("toolbar.vectorTool.centroids")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => setVectorToolOpen("convex-hull")}
               >
-                Convex hull
+                {t("toolbar.vectorTool.convexHull")}
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setVectorToolOpen("dissolve")}>
-                Dissolve
+                {t("toolbar.vectorTool.dissolve")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => setVectorToolOpen("bounding-box")}
               >
-                Bounding box
+                {t("toolbar.vectorTool.boundingBox")}
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setVectorToolOpen("simplify")}>
-                Simplify
+                {t("toolbar.vectorTool.simplify")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-xs text-muted-foreground">
-                Overlay
+                {t("toolbar.item.subGroupOverlay")}
               </DropdownMenuLabel>
               <DropdownMenuItem onSelect={() => setVectorToolOpen("clip")}>
-                Clip
+                {t("toolbar.vectorTool.clip")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => setVectorToolOpen("intersection")}
               >
-                Intersection
+                {t("toolbar.vectorTool.intersection")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => setVectorToolOpen("difference")}
               >
-                Difference
+                {t("toolbar.vectorTool.difference")}
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setVectorToolOpen("union")}>
-                Union
+                {t("toolbar.vectorTool.union")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-xs text-muted-foreground">
-                Join
+                {t("toolbar.item.subGroupJoin")}
               </DropdownMenuLabel>
               <DropdownMenuItem
                 onSelect={() => setVectorToolOpen("spatial-join")}
               >
-                Spatial join
+                {t("toolbar.vectorTool.spatialJoin")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-xs text-muted-foreground">
-                Select
+                {t("toolbar.item.subGroupSelect")}
               </DropdownMenuLabel>
               <DropdownMenuItem
                 onSelect={() => setVectorToolOpen("select-by-value")}
               >
-                Select by value
+                {t("toolbar.vectorTool.selectByValue")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => setVectorToolOpen("select-by-location")}
               >
-                Select by location
+                {t("toolbar.vectorTool.selectByLocation")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-xs text-muted-foreground">
-                H3
+                {t("toolbar.item.subGroupH3")}
               </DropdownMenuLabel>
               <DropdownMenuItem onSelect={() => setVectorToolOpen("h3-grid")}>
-                Create H3 grid
+                {t("toolbar.vectorTool.h3Grid")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => setVectorToolOpen("h3-bin-points")}
               >
-                Bin points to H3
+                {t("toolbar.vectorTool.h3BinPoints")}
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
           <DropdownMenuSub>
-            <DropdownMenuSubTrigger>Raster</DropdownMenuSubTrigger>
+            <DropdownMenuSubTrigger>
+              {t("toolbar.item.raster")}
+            </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
               <DropdownMenuLabel className="text-xs text-muted-foreground">
-                Terrain
+                {t("toolbar.item.subGroupTerrain")}
               </DropdownMenuLabel>
               <DropdownMenuItem onSelect={() => setRasterToolOpen("hillshade")}>
-                Hillshade
+                {t("toolbar.rasterTool.hillshade")}
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setRasterToolOpen("slope")}>
-                Slope
+                {t("toolbar.rasterTool.slope")}
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setRasterToolOpen("aspect")}>
-                Aspect
+                {t("toolbar.rasterTool.aspect")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-xs text-muted-foreground">
-                Reproject
+                {t("toolbar.item.subGroupReproject")}
               </DropdownMenuLabel>
               <DropdownMenuItem onSelect={() => setRasterToolOpen("reproject")}>
-                Reproject
+                {t("toolbar.rasterTool.reproject")}
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setRasterToolOpen("resample")}>
-                Resample
+                {t("toolbar.rasterTool.resample")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-xs text-muted-foreground">
-                Clip
+                {t("toolbar.item.subGroupClip")}
               </DropdownMenuLabel>
               <DropdownMenuItem
                 onSelect={() => setRasterToolOpen("clip-extent")}
               >
-                Clip by extent
+                {t("toolbar.rasterTool.clipExtent")}
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setRasterToolOpen("clip-mask")}>
-                Clip by mask layer
+                {t("toolbar.rasterTool.clipMask")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-xs text-muted-foreground">
-                Raster to Vector
+                {t("toolbar.item.subGroupRasterToVector")}
               </DropdownMenuLabel>
               <DropdownMenuItem
                 onSelect={() => setRasterToolOpen("polygonize")}
               >
-                Polygonize
+                {t("toolbar.rasterTool.polygonize")}
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setRasterToolOpen("contour")}>
-                Contour
+                {t("toolbar.rasterTool.contour")}
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
           <DropdownMenuItem onSelect={handleOpenPlanetaryComputerPanel}>
-            Planetary Computer
+            {t("toolbar.command.planetaryComputer")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleToggleEarthEnginePanel}>
-            Earth Engine
+            {t("toolbar.command.earthEngine")}
             {earthEnginePanelVisible ? " ✓" : ""}
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -1765,68 +1803,66 @@ export function TopToolbar({
             className={toolbarButtonClass}
             variant="ghost"
             size={toolbarButtonSize}
-            aria-label="Controls"
+            aria-label={t("toolbar.menu.controls")}
           >
             <SlidersHorizontal className={toolbarIconClassName} />
-            {renderToolbarLabel("Controls")}
+            {renderToolbarLabel(t("toolbar.menu.controls"))}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
-          <DropdownMenuLabel>Map controls</DropdownMenuLabel>
+          <DropdownMenuLabel>{t("toolbar.item.mapControls")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
           {MAP_CONTROL_ITEMS.map((control) => (
             <DropdownMenuItem
               key={control.id}
               onClick={() => toggleMapControl(control.id)}
             >
-              {control.label}
+              {t(control.labelKey)}
               {controlsVisible[control.id] ? " ✓" : ""}
             </DropdownMenuItem>
           ))}
-          <DropdownMenuItem
-            onClick={() => toggle(EFFECTS_PLUGIN_ID, appApi)}
-          >
-            Atmosphere Effects
+          <DropdownMenuItem onClick={() => toggle(EFFECTS_PLUGIN_ID, appApi)}>
+            {t("toolbar.item.atmosphereEffects")}
             {isActive(EFFECTS_PLUGIN_ID) ? " ✓" : ""}
           </DropdownMenuItem>
           <DropdownMenuItem
-            title="Routing sends your waypoints to the public OSRM demo server (router.project-osrm.org)."
+            title={t("toolbar.item.directionsTooltip")}
             onClick={handleToggleDirections}
           >
-            Directions
+            {t("toolbar.item.directions")}
             {isActive(DIRECTIONS_PLUGIN_ID) ? " ✓" : ""}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={handleToggleSearchPlacesPanel}>
-            Search
+            {t("toolbar.item.search")}
             {searchPlacesVisible ? " ✓" : ""}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleToggleColorbarPanel}>
-            Colorbar
+            {t("toolbar.item.colorbar")}
             {colorbarPanelVisible ? " ✓" : ""}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleToggleLegendPanel}>
-            Legend
+            {t("toolbar.item.legend")}
             {legendPanelVisible ? " ✓" : ""}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleToggleHtmlPanel}>
-            HTML
+            {t("toolbar.item.html")}
             {htmlPanelVisible ? " ✓" : ""}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleToggleMeasurePanel}>
-            Measure
+            {t("toolbar.item.measure")}
             {measurePanelVisible ? " ✓" : ""}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleToggleBookmarkPanel}>
-            Bookmark
+            {t("toolbar.item.bookmark")}
             {bookmarkPanelVisible ? " ✓" : ""}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleToggleMinimapPanel}>
-            Minimap
+            {t("toolbar.item.minimap")}
             {minimapPanelVisible ? " ✓" : ""}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleToggleViewStatePanel}>
-            View State
+            {t("toolbar.item.viewState")}
             {viewStatePanelVisible ? " ✓" : ""}
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -1837,14 +1873,14 @@ export function TopToolbar({
             className={toolbarButtonClass}
             variant="ghost"
             size={toolbarButtonSize}
-            aria-label="Plugins"
+            aria-label={t("toolbar.menu.plugins")}
           >
             <Puzzle className={toolbarIconClassName} />
-            {renderToolbarLabel("Plugins")}
+            {renderToolbarLabel(t("toolbar.menu.plugins"))}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
-          <DropdownMenuLabel>Activate plugin</DropdownMenuLabel>
+          <DropdownMenuLabel>{t("toolbar.item.activatePlugin")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
           {(() => {
             const renderPluginMenuItem = (p: (typeof plugins)[number]) => {
@@ -1869,10 +1905,14 @@ export function TopToolbar({
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent>
                     <DropdownMenuItem onClick={() => toggle(p.id, appApi)}>
-                      {isActive(p.id) ? "Deactivate" : "Activate"}
+                      {isActive(p.id)
+                        ? t("toolbar.item.deactivate")
+                        : t("toolbar.item.activate")}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuLabel>Position</DropdownMenuLabel>
+                    <DropdownMenuLabel>
+                      {t("toolbar.item.position")}
+                    </DropdownMenuLabel>
                     <DropdownMenuRadioGroup
                       value={pluginPosition}
                       onValueChange={(position: string) =>
@@ -1889,7 +1929,7 @@ export function TopToolbar({
                           value={position.value}
                           onSelect={(event: Event) => event.preventDefault()}
                         >
-                          {position.label}
+                          {t(position.labelKey)}
                         </DropdownMenuRadioItem>
                       ))}
                     </DropdownMenuRadioGroup>
@@ -1926,7 +1966,7 @@ export function TopToolbar({
               return (
                 <DropdownMenuSub key="web-services">
                   <DropdownMenuSubTrigger>
-                    Web Services
+                    {t("toolbar.item.webServices")}
                     {webServicePlugins.some((plugin) => isActive(plugin.id))
                       ? " ✓"
                       : ""}
@@ -1979,27 +2019,27 @@ export function TopToolbar({
             className={toolbarButtonClass}
             variant="ghost"
             size={toolbarButtonSize}
-            aria-label="Help"
+            aria-label={t("toolbar.menu.help")}
           >
             <CircleHelp className={toolbarIconClassName} />
-            {renderToolbarLabel("Help")}
+            {renderToolbarLabel(t("toolbar.menu.help"))}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
-          <DropdownMenuLabel>Help</DropdownMenuLabel>
+          <DropdownMenuLabel>{t("toolbar.menu.help")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setCommandPaletteOpen(true)}>
             <Search className="mr-2 h-3.5 w-3.5" />
-            Command Palette
+            {t("toolbar.item.commandPalette")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setShortcutsOpen(true)}>
             <Keyboard className="mr-2 h-3.5 w-3.5" />
-            Keyboard Shortcuts
+            {t("toolbar.command.keyboardShortcuts")}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={onOpenDiagnostics}>
             <Bug className="mr-2 h-3.5 w-3.5" />
-            Diagnostics
+            {t("toolbar.command.diagnostics")}
             {diagnosticsErrorCount > 0 ? (
               <span className="ml-2 rounded bg-destructive px-1.5 py-0.5 text-[10px] leading-none text-destructive-foreground">
                 {diagnosticsErrorCount}
@@ -2010,7 +2050,7 @@ export function TopToolbar({
             onSelect={() => void openExternalLink(FEEDBACK_URL)}
           >
             <MessageSquare className="mr-2 h-3.5 w-3.5" />
-            Give feedback
+            {t("toolbar.command.giveFeedback")}
           </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={() => {
@@ -2019,11 +2059,11 @@ export function TopToolbar({
             }}
           >
             <RefreshCw className="mr-2 h-3.5 w-3.5" />
-            Check for updates
+            {t("toolbar.command.checkForUpdates")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setAboutOpen(true)}>
             <Info className="mr-2 h-3.5 w-3.5" />
-            About
+            {t("toolbar.command.about")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -2054,15 +2094,14 @@ export function TopToolbar({
       >
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Open project from URL</DialogTitle>
+            <DialogTitle>{t("toolbar.item.openProjectFromUrl")}</DialogTitle>
             <DialogDescription>
-              Load a public `.geolibre.json` project and add it to recent
-              projects.
+              {t("toolbar.item.openProjectFromUrlDesc")}
             </DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={handleOpenFromUrl}>
             <div className="space-y-2">
-              <Label htmlFor="project-url">Project URL</Label>
+              <Label htmlFor="project-url">{t("toolbar.item.projectUrl")}</Label>
               <Input
                 id="project-url"
                 placeholder="https://example.com/project.geolibre.json"
@@ -2082,10 +2121,12 @@ export function TopToolbar({
                 variant="outline"
                 onClick={() => setProjectUrlDialogOpen(false)}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button type="submit" disabled={projectUrlLoading}>
-                {projectUrlLoading ? "Opening..." : "Open"}
+                {projectUrlLoading
+                  ? t("toolbar.item.opening")
+                  : t("toolbar.item.open")}
               </Button>
             </div>
           </form>
@@ -2099,11 +2140,13 @@ export function TopToolbar({
       >
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Something went wrong</DialogTitle>
+            <DialogTitle>{t("toolbar.item.somethingWentWrong")}</DialogTitle>
             <DialogDescription>{actionError}</DialogDescription>
           </DialogHeader>
           <div className="flex justify-end">
-            <Button onClick={() => setActionError(null)}>Dismiss</Button>
+            <Button onClick={() => setActionError(null)}>
+              {t("toolbar.item.dismiss")}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -2113,12 +2156,11 @@ export function TopToolbar({
       >
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Directions uses a public routing server</DialogTitle>
+            <DialogTitle>
+              {t("toolbar.item.directionsNoticeTitle")}
+            </DialogTitle>
             <DialogDescription>
-              Turning on Directions sends the waypoints you place to the public
-              OSRM demo server (router.project-osrm.org) to calculate routes —
-              your coordinates leave your device for those requests. The demo
-              server is rate-limited and supports driving only.
+              {t("toolbar.item.directionsNoticeDesc")}
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2">
@@ -2126,9 +2168,11 @@ export function TopToolbar({
               variant="outline"
               onClick={() => setDirectionsNoticeOpen(false)}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
-            <Button onClick={confirmEnableDirections}>Continue</Button>
+            <Button onClick={confirmEnableDirections}>
+              {t("toolbar.item.continue")}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -2140,14 +2184,16 @@ export function TopToolbar({
       >
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Large OSM PBF file</DialogTitle>
+            <DialogTitle>{t("toolbar.item.largeOsmPbfTitle")}</DialogTitle>
             <DialogDescription>
-              {`This file is about ${osmPbfConfirm?.sizeMb} MB. Parsing it converts every feature to GeoJSON in memory, which can be slow and may use a lot of memory in the browser. Continue?`}
+              {t("toolbar.item.largeOsmPbfDesc", {
+                sizeMb: osmPbfConfirm?.sizeMb,
+              })}
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setOsmPbfConfirm(null)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               onClick={() => {
@@ -2162,7 +2208,7 @@ export function TopToolbar({
                 }
               }}
             >
-              Continue
+              {t("toolbar.item.continue")}
             </Button>
           </div>
         </DialogContent>
@@ -2173,10 +2219,9 @@ export function TopToolbar({
       >
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Add OSM PBF Layer</DialogTitle>
+            <DialogTitle>{t("toolbar.item.addOsmPbfLayerTitle")}</DialogTitle>
             <DialogDescription>
-              Load an OpenStreetMap .osm.pbf file. It is parsed in your browser
-              and split into separate point, line, and polygon layers.
+              {t("toolbar.item.addOsmPbfLayerDesc")}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -2187,7 +2232,7 @@ export function TopToolbar({
             }}
           >
             <div className="space-y-1.5">
-              <Label htmlFor="osm-pbf-url">URL</Label>
+              <Label htmlFor="osm-pbf-url">{t("toolbar.item.urlLabel")}</Label>
               <Input
                 id="osm-pbf-url"
                 type="url"
@@ -2196,8 +2241,7 @@ export function TopToolbar({
                 onChange={(e) => setOsmPbfUrl(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                Remote URLs load in the desktop app; in the browser the server
-                must allow cross-origin requests (CORS).
+                {t("toolbar.item.osmPbfUrlHint")}
               </p>
             </div>
             <div className="flex items-center justify-between gap-2">
@@ -2206,10 +2250,10 @@ export function TopToolbar({
                 variant="outline"
                 onClick={() => void handleChooseOsmPbfFile()}
               >
-                Choose local file…
+                {t("toolbar.item.chooseLocalFile")}
               </Button>
               <Button type="submit" disabled={!osmPbfUrl.trim()}>
-                Load from URL
+                {t("toolbar.item.loadFromUrl")}
               </Button>
             </div>
           </form>
@@ -2225,15 +2269,14 @@ export function TopToolbar({
       >
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Loading OSM PBF…</DialogTitle>
+            <DialogTitle>{t("toolbar.item.loadingOsmPbf")}</DialogTitle>
             <DialogDescription>
-              Parsing the file and converting features to GeoJSON. This runs in
-              the background and may take a moment for large extracts.
+              {t("toolbar.item.loadingOsmPbfDesc")}
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end">
             <Button variant="outline" onClick={cancelOsmPbf}>
-              Cancel
+              {t("common.cancel")}
             </Button>
           </div>
         </DialogContent>
@@ -2258,16 +2301,16 @@ export function TopToolbar({
         <Button
           aria-label={
             themeMode === "dark"
-              ? "Switch to light mode"
-              : "Switch to dark mode"
+              ? t("toolbar.command.switchToLight")
+              : t("toolbar.command.switchToDark")
           }
           className="h-7 w-7 shrink-0"
           onClick={onToggleThemeMode}
           size="icon"
           title={
             themeMode === "dark"
-              ? "Switch to light mode"
-              : "Switch to dark mode"
+              ? t("toolbar.command.switchToLight")
+              : t("toolbar.command.switchToDark")
           }
           variant="ghost"
         >
@@ -2281,13 +2324,13 @@ export function TopToolbar({
           <>
             <Layers className="mr-1 hidden h-3 w-3 md:inline" />
             <Input
-              aria-label="Project name"
+              aria-label={t("toolbar.item.projectName")}
               className="hidden h-7 w-44 border-transparent px-2 text-xs shadow-none focus-visible:border-input md:block"
               value={projectName}
               onChange={(event) => setProjectName(event.target.value)}
               onBlur={(event) => {
                 const nextName = event.target.value.trim();
-                if (!nextName) setProjectName("Untitled Project");
+                if (!nextName) setProjectName(t("toolbar.item.untitledProject"));
               }}
             />
             {projectPath ? (

@@ -39,6 +39,7 @@
     "@tauri-apps/plugin-fs": "^2.5.1",
     "@tauri-apps/plugin-opener": "^2.5.4",
     "fflate": "^0.8.3",
+    "i18next": "^25.10.10",
     "jspdf": "^4.2.1",
     "mapillary-js": "^4.1.2",
     "maplibre-gl": "^5.24.0",
@@ -63,6 +64,7 @@
     "maplibre-gl-vector": "^0.3.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "react-i18next": "^16.6.6",
     "shpjs": "^6.2.0",
     "sql.js": "^1.14.0",
     "three": "^0.184.0"

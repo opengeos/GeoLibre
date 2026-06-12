@@ -29,6 +29,11 @@ import "./lib/geoagent-style";
 import "./lib/lidar-style";
 import "./lib/swipe-style";
 import { registerSW } from "virtual:pwa-register";
+import { I18nextProvider } from "react-i18next";
+// Initializes i18next (resolves the UI language from the `?locale`/`?lang` query
+// param, stored settings, or the browser) before React renders, so the first
+// paint is already in the right language.
+import i18n from "./i18n";
 import { installDiagnosticsCapture } from "./lib/diagnostics";
 import { installStaleChunkReload } from "./lib/stale-chunk-reload";
 
@@ -58,9 +63,11 @@ void Promise.all([import("./App"), import("./components/common/error-boundaries"
   .then(([{ default: App }, { AppErrorBoundary }]) => {
     ReactDOM.createRoot(document.getElementById("root")!).render(
       <React.StrictMode>
-        <AppErrorBoundary>
-          <App />
-        </AppErrorBoundary>
+        <I18nextProvider i18n={i18n}>
+          <AppErrorBoundary>
+            <App />
+          </AppErrorBoundary>
+        </I18nextProvider>
       </React.StrictMode>,
     );
   })

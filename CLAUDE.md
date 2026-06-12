@@ -67,4 +67,5 @@ The browser build proxies the sidecar at `/sidecar` (same-origin, no CORS); conf
 - Tauri CSP allowlists tile/style hosts (OpenFreeMap, CARTO) — new external map/tile hosts must be added there.
 - Map/tile-host CORS for selected release assets is handled by a dev-server raster proxy.
 - For MapLibre control styling fixes, add scoped overrides in `apps/geolibre-desktop/src/index.css`, never edit `node_modules`.
-- Reference docs: `docs/architecture.md`, `docs/project-format.md`, `docs/plugin-api.md`, `docs/python.md`, `docs/contributing.md`.
+- UI strings are translatable via **react-i18next**; catalogs live in `apps/geolibre-desktop/src/i18n/locales/*.json` (`en.json` is the source of truth, typed by `i18next.d.ts`). Use `t()` for new user-facing strings; a `?locale`/`?lang` query param sets the embed language. See `docs/i18n.md`.
+- Reference docs: `docs/architecture.md`, `docs/project-format.md`, `docs/plugin-api.md`, `docs/python.md`, `docs/i18n.md`, `docs/contributing.md`.
