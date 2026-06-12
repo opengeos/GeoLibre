@@ -269,6 +269,11 @@ describe("processing registry", () => {
             properties: { name: "gamma", pop: null },
             geometry: { type: "Point", coordinates: [2, 0] },
           },
+          {
+            type: "Feature",
+            properties: { name: "delta" }, // no "pop" key at all
+            geometry: { type: "Point", coordinates: [3, 0] },
+          },
         ],
       },
     };
@@ -284,30 +289,37 @@ describe("processing registry", () => {
       });
       return out;
     };
+    const names = (fc: FeatureCollection): (string | undefined)[] =>
+      fc.features.map((f) => f.properties?.name as string | undefined).sort();
 
     // Numeric comparison: pop > 15 → only beta.
-    const gt = run({ field: "pop", operator: "gt", value: "15" });
-    assert.deepEqual(
-      gt.features.map((f) => f.properties?.name),
-      ["beta"],
-    );
+    assert.deepEqual(names(run({ field: "pop", operator: "gt", value: "15" })), [
+      "beta",
+    ]);
     // String equals.
-    const eq = run({ field: "name", operator: "eq", value: "alpha" });
     assert.deepEqual(
-      eq.features.map((f) => f.properties?.name),
+      names(run({ field: "name", operator: "eq", value: "alpha" })),
       ["alpha"],
     );
     // Case-insensitive contains.
-    const has = run({ field: "name", operator: "contains", value: "ET" });
     assert.deepEqual(
-      has.features.map((f) => f.properties?.name),
+      names(run({ field: "name", operator: "contains", value: "ET" })),
       ["beta"],
     );
-    // is-null matches the missing value only.
-    const nul = run({ field: "pop", operator: "is-null" });
-    assert.deepEqual(
-      nul.features.map((f) => f.properties?.name),
-      ["gamma"],
+    // is-null matches both an explicit null (gamma) and a missing key (delta).
+    assert.deepEqual(names(run({ field: "pop", operator: "is-null" })), [
+      "delta",
+      "gamma",
+    ]);
+    // A field absent from every feature is schemaless all-empty, not an error:
+    // eq matches nothing, is-null matches every feature.
+    assert.equal(
+      run({ field: "missing", operator: "eq", value: "x" }).features.length,
+      0,
+    );
+    assert.equal(
+      run({ field: "missing", operator: "is-null" }).features.length,
+      4,
     );
   });
 

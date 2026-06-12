@@ -77,13 +77,19 @@ def _attr_point(name: str, pop, x: float) -> dict:
     }
 
 
-# Attribute layer for Select by value: numeric "pop" (with a null) and string "name".
+# Attribute layer for Select by value: numeric "pop" with both a null (gamma) and
+# a feature that omits the key entirely (delta), plus a string "name".
 ATTR_LAYER = {
     "type": "FeatureCollection",
     "features": [
         _attr_point("alpha", 10, 0.0),
         _attr_point("beta", 20, 1.0),
         _attr_point("gamma", None, 2.0),
+        {
+            "type": "Feature",
+            "properties": {"name": "delta"},  # no "pop" key at all
+            "geometry": {"type": "Point", "coordinates": [3.0, 0.0]},
+        },
     ],
 }
 
@@ -222,7 +228,7 @@ def test_select_by_value_numeric_comparison() -> None:
     )
     names = [f["properties"]["name"] for f in geojson["features"]]
     assert names == ["beta"]
-    assert messages and "1 of 3" in messages[0]
+    assert messages and "1 of 4" in messages[0]
 
 
 def test_select_by_value_string_equals() -> None:
@@ -243,11 +249,24 @@ def test_select_by_value_contains_is_case_insensitive() -> None:
     assert [f["properties"]["name"] for f in geojson["features"]] == ["beta"]
 
 
-def test_select_by_value_is_null_matches_missing() -> None:
+def test_select_by_value_is_null_matches_null_and_missing() -> None:
+    # gamma has pop=None and delta omits the key entirely; both are "empty".
     geojson, _ = run_vector_tool(
         "select-by-value", ATTR_LAYER, parameters={"field": "pop", "operator": "is-null"}
     )
-    assert [f["properties"]["name"] for f in geojson["features"]] == ["gamma"]
+    names = sorted(f["properties"]["name"] for f in geojson["features"])
+    assert names == ["delta", "gamma"]
+
+
+def test_select_by_value_is_null_matches_empty_string() -> None:
+    layer = {
+        "type": "FeatureCollection",
+        "features": [_attr_point("", 1, 0.0), _attr_point("named", 1, 1.0)],
+    }
+    geojson, _ = run_vector_tool(
+        "select-by-value", layer, parameters={"field": "name", "operator": "is-null"}
+    )
+    assert [f["properties"]["name"] for f in geojson["features"]] == [""]
 
 
 def test_select_by_value_unknown_operator_raises() -> None:
@@ -259,13 +278,21 @@ def test_select_by_value_unknown_operator_raises() -> None:
         )
 
 
-def test_select_by_value_unknown_field_raises() -> None:
-    with pytest.raises(ValueError, match="not found"):
-        run_vector_tool(
-            "select-by-value",
-            ATTR_LAYER,
-            parameters={"field": "missing", "operator": "eq", "value": "x"},
-        )
+def test_select_by_value_absent_field_runs_schemaless() -> None:
+    # A field absent from every feature is all-empty, not an error: eq matches
+    # nothing while is-null matches every feature.
+    none_geojson, _ = run_vector_tool(
+        "select-by-value",
+        ATTR_LAYER,
+        parameters={"field": "missing", "operator": "eq", "value": "x"},
+    )
+    assert none_geojson["features"] == []
+    all_geojson, _ = run_vector_tool(
+        "select-by-value",
+        ATTR_LAYER,
+        parameters={"field": "missing", "operator": "is-null"},
+    )
+    assert len(all_geojson["features"]) == len(ATTR_LAYER["features"])
 
 
 def test_select_by_value_missing_value_raises() -> None:

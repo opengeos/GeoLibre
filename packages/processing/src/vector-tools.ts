@@ -683,27 +683,43 @@ const SELECT_VALUE_OPERATORS = new Set([
   "is-not-null",
 ]);
 
-/** Render a GeoJSON property value as a string the way the backend's `str()` does. */
+/** Stable JSON for arrays/objects (sorted keys) so both engines stringify alike. */
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  const obj = value as Record<string, unknown>;
+  const body = Object.keys(obj)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableStringify(obj[key])}`)
+    .join(",");
+  return `{${body}}`;
+}
+
+/** Render a GeoJSON property value as a string, matching the backend's `_value_to_string`. */
 function valueToString(value: unknown): string {
   if (typeof value === "boolean") return value ? "true" : "false";
+  // Arrays/objects: canonical JSON (sorted keys), matching json.dumps on the
+  // Python side, so eq/contains agree across engines for non-scalar values.
+  if (value !== null && typeof value === "object") return stableStringify(value);
   return String(value);
 }
 
 /**
  * Evaluate one feature's attribute value against an operator and the user's
  * input string. Comparisons are numeric only when both sides are finite
- * numbers, otherwise string-based. Null/undefined values match only the
- * is-null/is-not-null operators (SQL-like). Mirrors `_match_value` in the
- * Python backend so all three engines agree.
+ * numbers, otherwise string-based. Empty values (null/undefined/NaN/empty
+ * string) match only the is-empty/is-not-empty operators (SQL-like). Mirrors
+ * `_match_value` in the Python backend so all three engines agree.
  */
 function matchesValue(value: unknown, operator: string, raw: string): boolean {
-  const isNull =
+  const isEmpty =
     value === null ||
     value === undefined ||
-    (typeof value === "number" && Number.isNaN(value));
-  if (operator === "is-null") return isNull;
-  if (operator === "is-not-null") return !isNull;
-  if (isNull) return false;
+    (typeof value === "number" && Number.isNaN(value)) ||
+    valueToString(value) === "";
+  if (operator === "is-null") return isEmpty;
+  if (operator === "is-not-null") return !isEmpty;
+  if (isEmpty) return false;
 
   const sv = valueToString(value);
   if (operator === "contains") return sv.toLowerCase().includes(raw.toLowerCase());
@@ -798,10 +814,9 @@ export const selectByValueTool: ProcessingAlgorithm = {
       ctx.log("Error: a value is required for this operator");
       return;
     }
-    if (!fc.features.some((f) => field in (f.properties ?? {}))) {
-      ctx.log(`Error: field '${field}' not found in layer attributes`);
-      return;
-    }
+    // A field absent from every feature is treated as all-empty (schemaless
+    // GeoJSON), so is-empty matches everything and the rest match nothing —
+    // rather than erroring. matchesValue handles the missing value per feature.
     const selected = fc.features.filter((f) =>
       matchesValue(f.properties?.[field], operator, raw),
     );

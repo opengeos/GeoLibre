@@ -256,6 +256,10 @@ def _value_to_string(value: Any) -> str:
     if isinstance(value, float) and math.isfinite(value) and value.is_integer():
         # Match JS, where 5.0 prints as "5"; avoids "5.0" vs "5" divergence.
         return str(int(value))
+    if isinstance(value, (list, dict)):
+        # Canonical JSON (sorted keys, no spaces) matching the client's
+        # stableStringify, so eq/contains agree across engines for non-scalars.
+        return json.dumps(value, sort_keys=True, separators=(",", ":"))
     return str(value)
 
 
@@ -270,15 +274,19 @@ def _match_value(value: Any, operator: str, raw: str) -> bool:
     """Evaluate one attribute value against an operator and the user's input.
 
     Mirrors ``matchesValue`` in the client engine: comparisons are numeric only
-    when both sides are finite numbers, otherwise string-based; null values match
-    only the is-null/is-not-null operators.
+    when both sides are finite numbers, otherwise string-based; empty values
+    (None/NaN/empty string) match only the is-empty/is-not-empty operators.
     """
-    is_null = value is None or (isinstance(value, float) and math.isnan(value))
+    is_empty = (
+        value is None
+        or (isinstance(value, float) and math.isnan(value))
+        or _value_to_string(value) == ""
+    )
     if operator == "is-null":
-        return is_null
+        return is_empty
     if operator == "is-not-null":
-        return not is_null
-    if is_null:
+        return not is_empty
+    if is_empty:
         return False
 
     sv = _value_to_string(value)
@@ -331,8 +339,9 @@ def _select_by_value(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     if operator not in ("is-null", "is-not-null") and raw == "":
         raise ValueError("A value is required for this operator")
     features = geojson["features"]
-    if not any(field in (f.get("properties") or {}) for f in features):
-        raise ValueError(f"Field '{field}' not found in layer attributes")
+    # A field absent from every feature is treated as all-empty (schemaless
+    # GeoJSON): is-empty matches everything, the rest match nothing. _match_value
+    # handles the missing value per feature; mirrors the client engine.
     selected = [
         f
         for f in features
