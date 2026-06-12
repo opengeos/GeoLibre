@@ -193,6 +193,47 @@ describe("h3 tools", () => {
     assert.match(added[0], /res 5/);
   });
 
+  it("creates a grid from a manual bounding box without a layer", async () => {
+    const { ctx, added } = baseCtx([], {
+      source: "bbox",
+      west: 0,
+      south: 0,
+      east: 1,
+      north: 1,
+      resolution: 5,
+    });
+    await createH3GridTool.run(ctx);
+    assert.equal(added.length, 1);
+    assert.match(added[0], /res 5/);
+  });
+
+  it("rejects a degenerate manual bounding box", async () => {
+    const { ctx, added, logs } = baseCtx([], {
+      source: "bbox",
+      west: 2,
+      south: 0,
+      east: 1,
+      north: 1,
+      resolution: 5,
+    });
+    await createH3GridTool.run(ctx);
+    assert.equal(added.length, 0);
+    assert.ok(logs.some((l) => /west < east/i.test(l)));
+  });
+
+  it("rejects a manual bounding box with missing values", async () => {
+    const { ctx, added, logs } = baseCtx([], {
+      source: "bbox",
+      west: 0,
+      south: 0,
+      east: 1,
+      resolution: 5,
+    });
+    await createH3GridTool.run(ctx);
+    assert.equal(added.length, 0);
+    assert.ok(logs.some((l) => /numeric/i.test(l)));
+  });
+
   it("auto-suggests a resolution when none is given", async () => {
     const { ctx, logs } = baseCtx([], { source: "viewport" });
     await createH3GridTool.run(ctx);

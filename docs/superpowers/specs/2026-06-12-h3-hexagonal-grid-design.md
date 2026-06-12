@@ -11,8 +11,9 @@ Let users generate H3 hexagonal grids and aggregate point data into H3 cells, en
 Two processing tools, group `"H3"`, defined in a new file `packages/processing/src/h3-tools.ts` and registered in the vector tools registry:
 
 1. **Create H3 Grid** — fill an area with H3 hexagons at a chosen resolution.
-   - Area source (`select`): `Layer geometry (polyfill)` | `Layer extent (bbox)` | `Map viewport`.
-   - Input layer (`layer`) — visible when source is polyfill or extent.
+   - Area source (`select`): `Layer geometry (polyfill)` | `Layer extent (bbox)` | `Map viewport` | `Manual bounding box`.
+   - Input layer (`layer`) — visible/required only when source is polyfill or extent (viewport and manual bbox need no layer).
+   - Manual bbox (`west`/`south`/`east`/`north` numbers) — visible when source is `bbox`; the dialog prefills them from the current viewport, editable before running.
    - Resolution (`number`, 0–15) — pre-filled with an auto-suggested value.
    - Output: polygon layer; each hexagon carries its `h3` index string as a property.
 2. **Bin Points to H3** — aggregate a point layer into H3 cells.
@@ -80,6 +81,7 @@ FROM cells;
   - `Layer geometry (polyfill)`: union of the input layer's features → WKT (`ST_Union_Agg` / `ST_AsText`). For multi-feature layers, dissolve to a single (multi)polygon first.
   - `Layer extent (bbox)`: build a rectangle WKT from the layer's bounds.
   - `Map viewport`: rectangle WKT from `map.getBounds()` provided by the dialog.
+  - `Manual bounding box`: rectangle WKT from user-entered west/south/east/north (validated: west < east, south < north).
 
 **Bin Points to H3:**
 ```sql

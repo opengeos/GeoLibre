@@ -105,6 +105,35 @@ export function VectorToolsDialog({
     if (!tool.supportsSidecar) setEngine("client");
   }, [tool]);
 
+  // Prefill the H3 grid's manual bounding-box fields from the current map
+  // viewport when the user first switches to that source, so they can tweak the
+  // box rather than type it from scratch. Only fills empty fields, so it never
+  // clobbers manual edits. Keyed on the source value, not every keystroke.
+  useEffect(() => {
+    if (selectedId !== "h3-grid" || params.source !== "bbox") return;
+    if (
+      params.west !== undefined ||
+      params.south !== undefined ||
+      params.east !== undefined ||
+      params.north !== undefined
+    )
+      return;
+    const map = mapControllerRef.current?.getMap();
+    if (!map) return;
+    const b = map.getBounds();
+    const round = (n: number) => Number(n.toFixed(6));
+    setParams((prev) => ({
+      ...prev,
+      west: round(b.getWest()),
+      south: round(b.getSouth()),
+      east: round(b.getEast()),
+      north: round(b.getNorth()),
+    }));
+    // params.west/south/east/north are read as a one-time guard; re-running only
+    // when the source changes is intentional.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, params.source, mapControllerRef]);
+
   // Probe the sidecar's vector capability when the dialog opens.
   useEffect(() => {
     if (!open) return;

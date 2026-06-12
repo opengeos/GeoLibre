@@ -177,6 +177,36 @@ function getLayer(
   return ctx.layers.find((l) => l.id === id);
 }
 
+/** Read a numeric parameter, returning NaN when missing or non-numeric. */
+function numberParam(ctx: ProcessingContext, id: string): number {
+  const raw = ctx.parameters[id];
+  if (raw === undefined || raw === null || raw === "") return NaN;
+  return typeof raw === "string" ? Number(raw) : (raw as number);
+}
+
+/**
+ * Read and validate the manual [west, south, east, north] bbox parameters.
+ * Logs a clear error and returns null when any value is missing or the box is
+ * degenerate (west >= east or south >= north).
+ */
+function bboxFromParams(
+  ctx: ProcessingContext,
+): [number, number, number, number] | null {
+  const west = numberParam(ctx, "west");
+  const south = numberParam(ctx, "south");
+  const east = numberParam(ctx, "east");
+  const north = numberParam(ctx, "north");
+  if ([west, south, east, north].some((n) => !Number.isFinite(n))) {
+    ctx.log("Error: enter numeric west, south, east, and north values");
+    return null;
+  }
+  if (west >= east || south >= north) {
+    ctx.log("Error: bounding box must have west < east and south < north");
+    return null;
+  }
+  return [west, south, east, north];
+}
+
 /** Parse the `resolution` param, or auto-suggest from area. Logs + returns null on bad input. */
 function resolveResolution(
   ctx: ProcessingContext,
@@ -200,7 +230,7 @@ export const createH3GridTool: ProcessingAlgorithm = {
   id: "h3-grid",
   name: "Create H3 grid",
   description:
-    "Fill an area with H3 hexagons (DuckDB h3 extension). Source: a layer's geometry, a layer's extent, or the current map view.",
+    "Fill an area with H3 hexagons (DuckDB h3 extension). Source: a layer's geometry, a layer's extent, the current map view, or a manual bounding box.",
   group: "H3",
   parameters: [
     {
@@ -212,6 +242,7 @@ export const createH3GridTool: ProcessingAlgorithm = {
         { value: "polyfill", label: "Layer geometry (polyfill)" },
         { value: "extent", label: "Layer extent (bbox)" },
         { value: "viewport", label: "Map viewport" },
+        { value: "bbox", label: "Manual bounding box" },
       ],
     },
     {
@@ -220,8 +251,46 @@ export const createH3GridTool: ProcessingAlgorithm = {
       type: "layer",
       required: true,
       // No geometry filter: "extent" fills any layer's bounding box, while
-      // "polyfill" needs polygons (validated at run time below).
+      // "polyfill" needs polygons (validated at run time below). The layer is
+      // only required for the layer-based sources, so it stays hidden (and
+      // skips required validation) for the viewport and bbox sources.
       visibleWhen: { param: "source", in: ["polyfill", "extent"] },
+    },
+    {
+      id: "west",
+      label: "West (min lon)",
+      type: "number",
+      required: true,
+      min: -180,
+      max: 180,
+      visibleWhen: { param: "source", in: ["bbox"] },
+    },
+    {
+      id: "south",
+      label: "South (min lat)",
+      type: "number",
+      required: true,
+      min: -90,
+      max: 90,
+      visibleWhen: { param: "source", in: ["bbox"] },
+    },
+    {
+      id: "east",
+      label: "East (max lon)",
+      type: "number",
+      required: true,
+      min: -180,
+      max: 180,
+      visibleWhen: { param: "source", in: ["bbox"] },
+    },
+    {
+      id: "north",
+      label: "North (max lat)",
+      type: "number",
+      required: true,
+      min: -90,
+      max: 90,
+      visibleWhen: { param: "source", in: ["bbox"] },
     },
     {
       id: "resolution",
@@ -246,6 +315,11 @@ export const createH3GridTool: ProcessingAlgorithm = {
         ctx.log("Error: map viewport is unavailable");
         return;
       }
+      areaKm2 = bboxAreaKm2(bounds);
+      wkt = bboxToWktPolygon(bounds);
+    } else if (source === "bbox") {
+      const bounds = bboxFromParams(ctx);
+      if (!bounds) return;
       areaKm2 = bboxAreaKm2(bounds);
       wkt = bboxToWktPolygon(bounds);
     } else {
