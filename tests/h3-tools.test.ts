@@ -200,6 +200,17 @@ describe("h3 tools", () => {
     assert.match(added[0], /res 5/);
   });
 
+  it("rejects an antimeridian-crossing viewport", async () => {
+    const { ctx, added, logs } = baseCtx([], {
+      source: "viewport",
+      resolution: 4,
+    });
+    ctx.viewportBounds = () => [170, 0, -170, 1]; // west >= east
+    await createH3GridTool.run(ctx);
+    assert.equal(added.length, 0);
+    assert.ok(logs.some((l) => /antimeridian/i.test(l)));
+  });
+
   it("creates a grid from a manual bounding box without a layer", async () => {
     const { ctx, added } = baseCtx([], {
       source: "bbox",
@@ -394,6 +405,9 @@ describe("h3 SQL + geometry builders", () => {
     const sql = buildBinSql("ST_Read('p.geojson')", 9, "mean", "pop");
     assert.match(sql, /avg\(CAST\("pop" AS DOUBLE\)\) AS value/);
     assert.match(sql, /count, value,/);
+    // The field must be in the SELECT list, not appended after the WHERE clause.
+    assert.match(sql, /SELECT ST_Centroid\(geom\) AS pt, "pop" FROM/);
+    assert.doesNotMatch(sql, /MULTIPOINT'\), "pop"/);
   });
 
   it("converts result rows to a FeatureCollection with h3/count/value props", () => {

@@ -146,10 +146,10 @@ export function buildBinSql(
   // MULTIPOINT, so MultiPoint features are binned by their centroid rather than
   // being silently dropped by an `ST_X`/`ST_Y`-on-a-point-only filter.
   return (
-    `WITH pts AS (SELECT ST_Centroid(geom) AS pt FROM ${sourceSql} ` +
-    `WHERE geom IS NOT NULL AND ST_GeometryType(geom) IN ('POINT', 'MULTIPOINT')` +
+    `WITH pts AS (SELECT ST_Centroid(geom) AS pt` +
     (field ? `, ${sqlIdent(field)}` : "") +
-    `), ` +
+    ` FROM ${sourceSql} ` +
+    `WHERE geom IS NOT NULL AND ST_GeometryType(geom) IN ('POINT', 'MULTIPOINT')), ` +
     `binned AS (SELECT h3_latlng_to_cell(ST_Y(pt), ST_X(pt), ${res}) AS cell, ` +
     `count(*) AS count${aggSelect} FROM pts GROUP BY cell) ` +
     `SELECT h3_h3_to_string(cell) AS h3, count${aggOut}, ` +
@@ -173,7 +173,7 @@ export function rowsToFeatureCollection(
       // throwing out of this exported pure helper if it ever does not.
       continue;
     }
-    const properties: Record<string, unknown> = { h3: row.h3 };
+    const properties: Record<string, unknown> = { h3: String(row.h3) };
     if (row.count !== undefined && row.count !== null) {
       properties.count = Number(row.count);
     }
@@ -340,6 +340,15 @@ export const createH3GridTool: ProcessingAlgorithm = {
       const bounds = ctx.viewportBounds?.();
       if (!bounds) {
         ctx.log("Error: map viewport is unavailable");
+        return;
+      }
+      if (bounds[0] >= bounds[2]) {
+        // west >= east means the viewport wraps the antimeridian; the rectangle
+        // WKT would self-cross and fill the wrong (340deg) span. Bail with a
+        // clear message rather than producing wrong cells.
+        ctx.log(
+          "Error: the map view crosses the antimeridian; pan so it doesn't wrap +/-180, or use a manual bounding box",
+        );
         return;
       }
       areaKm2 = bboxAreaKm2(bounds);
