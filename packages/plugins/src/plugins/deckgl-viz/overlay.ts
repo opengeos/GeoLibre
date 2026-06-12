@@ -72,7 +72,20 @@ export function restoreDeckViz(app: GeoLibreAppAPI, active: boolean): void {
   void ensureDeckVizOverlay(app);
 }
 
-async function ensureDeckVizOverlay(app: GeoLibreAppAPI): Promise<void> {
+// Serialises concurrent setup calls (plugin activate() and the shell's restore
+// hook can both fire before the first getDeckGL() resolves) so two overlays are
+// never created for the same map.
+let ensureInFlight: Promise<void> | null = null;
+
+function ensureDeckVizOverlay(app: GeoLibreAppAPI): Promise<void> {
+  if (ensureInFlight) return ensureInFlight;
+  ensureInFlight = runEnsureDeckVizOverlay(app).finally(() => {
+    ensureInFlight = null;
+  });
+  return ensureInFlight;
+}
+
+async function runEnsureDeckVizOverlay(app: GeoLibreAppAPI): Promise<void> {
   appRef = app;
   if (!app.getDeckGL) return;
   deckGL ??= await app.getDeckGL();
