@@ -213,9 +213,17 @@ export function AttributeChartDialog({
                     className="w-24"
                     min={MIN_HISTOGRAM_BINS}
                     max={MAX_HISTOGRAM_BINS}
-                    value={bins}
+                    // 0 is the "empty" sentinel so the field can be cleared and
+                    // retyped; computeHistogram treats it as 1, and onBlur snaps
+                    // it back to the minimum.
+                    value={bins === 0 ? "" : bins}
                     onChange={(event) => {
-                      const next = Number(event.target.value);
+                      const raw = event.target.value;
+                      if (raw === "") {
+                        setBins(0);
+                        return;
+                      }
+                      const next = Number(raw);
                       if (Number.isFinite(next)) {
                         setBins(
                           Math.max(
@@ -224,6 +232,9 @@ export function AttributeChartDialog({
                           ),
                         );
                       }
+                    }}
+                    onBlur={() => {
+                      if (bins < MIN_HISTOGRAM_BINS) setBins(MIN_HISTOGRAM_BINS);
                     }}
                   />
                 </div>
@@ -297,7 +308,11 @@ export function AttributeChartDialog({
                 <ScatterChart result={scatter} xField={xField} yField={yField} />
               )}
               {chartType === "bar" && (
-                <BarChart result={bar} aggregation={barAgg} />
+                <BarChart
+                  result={bar}
+                  aggregation={barAgg}
+                  category={catField}
+                />
               )}
               {chartType === "line" && (
                 <LineChart result={line} field={field} />
@@ -349,12 +364,19 @@ function FieldSelect({
   );
 }
 
-function ChartFrame({ children }: { children: ReactNode }) {
+function ChartFrame({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
   return (
     <svg
       viewBox={`0 0 ${CHART_W} ${CHART_H}`}
       width="100%"
       role="img"
+      aria-label={label}
       className="h-auto w-full"
       preserveAspectRatio="xMidYMid meet"
     >
@@ -439,7 +461,7 @@ function HistogramChart({
 
   return (
     <>
-      <ChartFrame>
+      <ChartFrame label={`Histogram of ${field}`}>
         {tickText(MARGIN.left - 6, MARGIN.top + INNER_H, "0", "end", "middle")}
         {tickText(MARGIN.left - 6, MARGIN.top, String(maxCount), "end", "middle")}
         {bins.map((bin, index) => {
@@ -460,8 +482,16 @@ function HistogramChart({
             </rect>
           );
         })}
-        {tickText(MARGIN.left, MARGIN.top + INNER_H + 14, formatAxisValue(min), "start")}
-        {tickText(MARGIN.left + INNER_W, MARGIN.top + INNER_H + 14, formatAxisValue(max), "end")}
+        {/* A collapsed (min === max) histogram spans the full width, so show a
+            single centered label instead of identical min/max labels. */}
+        {min === max ? (
+          tickText(MARGIN.left + INNER_W / 2, MARGIN.top + INNER_H + 14, formatAxisValue(min), "middle")
+        ) : (
+          <>
+            {tickText(MARGIN.left, MARGIN.top + INNER_H + 14, formatAxisValue(min), "start")}
+            {tickText(MARGIN.left + INNER_W, MARGIN.top + INNER_H + 14, formatAxisValue(max), "end")}
+          </>
+        )}
         {axisTitle(field)}
       </ChartFrame>
       <Caption>
@@ -484,11 +514,12 @@ function ScatterChart({
     return <EmptyChart message="No rows have both fields set to a number." />;
   }
 
-  const { points, xMin, xMax, yMin, yMax } = result;
+  const { points, total, xMin, xMax, yMin, yMax } = result;
+  const sampled = total > points.length;
 
   return (
     <>
-      <ChartFrame>
+      <ChartFrame label={`Scatter plot of ${yField} versus ${xField}`}>
         {tickText(MARGIN.left - 6, MARGIN.top, formatAxisValue(yMax), "end", "middle")}
         {tickText(MARGIN.left - 6, MARGIN.top + INNER_H, formatAxisValue(yMin), "end", "middle")}
         {points.map((point, index) => {
@@ -506,8 +537,9 @@ function ScatterChart({
         {axisTitle(xField)}
       </ChartFrame>
       <Caption>
-        {points.length.toLocaleString()} point{points.length === 1 ? "" : "s"} ·{" "}
-        {yField} vs {xField}
+        {total.toLocaleString()} point{total === 1 ? "" : "s"} · {yField} vs{" "}
+        {xField}
+        {sampled ? ` · showing ${points.length.toLocaleString()} sampled` : ""}
       </Caption>
     </>
   );
@@ -516,9 +548,11 @@ function ScatterChart({
 function BarChart({
   result,
   aggregation,
+  category,
 }: {
   result: ReturnType<typeof computeBar>;
   aggregation: BarAggregation;
+  category: string;
 }) {
   if (!result) return <EmptyChart message="No rows to group." />;
 
@@ -533,7 +567,7 @@ function BarChart({
 
   return (
     <>
-      <ChartFrame>
+      <ChartFrame label={`Bar chart of ${aggregation} by ${category}`}>
         {tickText(MARGIN.left - 6, MARGIN.top, formatAxisValue(domainMax), "end", "middle")}
         {tickText(MARGIN.left - 6, baselineY, "0", "end", "middle")}
         {bars.map((datum, index) => {
@@ -598,7 +632,7 @@ function LineChart({
 
   return (
     <>
-      <ChartFrame>
+      <ChartFrame label={`Line chart of ${field} by feature order`}>
         {tickText(MARGIN.left - 6, MARGIN.top, formatAxisValue(max), "end", "middle")}
         {tickText(MARGIN.left - 6, MARGIN.top + INNER_H, formatAxisValue(min), "end", "middle")}
         <path d={path} fill="none" stroke={SERIES} strokeWidth={1.5} />
@@ -652,7 +686,7 @@ function BoxChart({
 
   return (
     <>
-      <ChartFrame>
+      <ChartFrame label={`Box plot of ${field}`}>
         {/* whisker */}
         <line x1={centerX} y1={scaleY(min)} x2={centerX} y2={scaleY(max)} stroke={AXIS} />
         <line x1={centerX - 20} y1={scaleY(max)} x2={centerX + 20} y2={scaleY(max)} stroke={AXIS} />

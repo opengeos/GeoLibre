@@ -107,10 +107,26 @@ describe("computeScatter", () => {
       { x: 1, y: 10 },
       { x: 2, y: 20 },
     ]);
+    assert.equal(result.total, 2);
     assert.equal(result.xMin, 1);
     assert.equal(result.xMax, 2);
     assert.equal(result.yMin, 10);
     assert.equal(result.yMax, 20);
+  });
+
+  it("caps rendered points but keeps full count and extents", () => {
+    const data = rows(
+      { x: 1, y: 1 },
+      { x: 2, y: 2 },
+      { x: 3, y: 3 },
+      { x: 9, y: 9 },
+    );
+    const result = computeScatter(data, "x", "y", 2);
+    assert.ok(result);
+    assert.equal(result.points.length, 2); // capped sample
+    assert.equal(result.total, 4); // full count
+    assert.equal(result.xMax, 9); // extents span all points, not just the sample
+    assert.equal(result.yMax, 9);
   });
 
   it("returns null when no row has both values", () => {
@@ -243,5 +259,10 @@ describe("formatAxisValue", () => {
     assert.equal(formatAxisValue(0.5), "0.5");
     assert.equal(formatAxisValue(1234567), "1234567");
     assert.equal(formatAxisValue(0.0001), "1.0e-4");
+    // negatives mirror their positive counterparts
+    assert.equal(formatAxisValue(-42), "-42");
+    assert.equal(formatAxisValue(-0.0001), "-1.0e-4");
+    // very large integers switch to exponential so labels stay short
+    assert.equal(formatAxisValue(9007199254740991), "9.0e+15");
   });
 });

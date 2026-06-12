@@ -146,8 +146,14 @@ export interface ScatterPoint {
   y: number;
 }
 
+/** Cap on scatter points actually rendered, to bound SVG node count. */
+export const MAX_SCATTER_POINTS = 2000;
+
 export interface ScatterResult {
+  /** Points to render — a leading sample capped at `MAX_SCATTER_POINTS`. */
   points: ScatterPoint[];
+  /** All valid (x, y) pairs; `points` is a sample of these when capped. */
+  total: number;
   xMin: number;
   xMax: number;
   yMin: number;
@@ -156,35 +162,42 @@ export interface ScatterResult {
 
 /**
  * Extract the (x, y) pairs where both columns hold a finite number. Returns null
- * when no row has both. Single-axis degenerate ranges (all x equal, etc.) are
- * left to the renderer to pad.
+ * when no row has both. Extents span every valid pair, but `points` is capped at
+ * `maxPoints` so a huge layer doesn't render tens of thousands of SVG nodes;
+ * `total` reports the full count. Degenerate single-axis ranges are left to the
+ * renderer to pad.
  */
 export function computeScatter(
   rows: ChartRow[],
   xKey: string,
   yKey: string,
+  maxPoints: number = MAX_SCATTER_POINTS,
 ): ScatterResult | null {
   const points: ScatterPoint[] = [];
+  let total = 0;
+  let xMin = 0;
+  let xMax = 0;
+  let yMin = 0;
+  let yMax = 0;
   for (const row of rows) {
     const x = toFiniteNumber(row.properties[xKey]);
     const y = toFiniteNumber(row.properties[yKey]);
     if (x === null || y === null) continue;
-    points.push({ x, y });
+    if (total === 0) {
+      xMin = xMax = x;
+      yMin = yMax = y;
+    } else {
+      if (x < xMin) xMin = x;
+      if (x > xMax) xMax = x;
+      if (y < yMin) yMin = y;
+      if (y > yMax) yMax = y;
+    }
+    total += 1;
+    if (points.length < maxPoints) points.push({ x, y });
   }
-  if (points.length === 0) return null;
+  if (total === 0) return null;
 
-  let xMin = points[0].x;
-  let xMax = points[0].x;
-  let yMin = points[0].y;
-  let yMax = points[0].y;
-  for (const point of points) {
-    if (point.x < xMin) xMin = point.x;
-    if (point.x > xMax) xMax = point.x;
-    if (point.y < yMin) yMin = point.y;
-    if (point.y > yMax) yMax = point.y;
-  }
-
-  return { points, xMin, xMax, yMin, yMax };
+  return { points, total, xMin, xMax, yMin, yMax };
 }
 
 /**
@@ -194,11 +207,13 @@ export function computeScatter(
  */
 export function formatAxisValue(value: number): string {
   if (!Number.isFinite(value)) return "";
-  if (Number.isInteger(value)) return String(value);
   const abs = Math.abs(value);
-  if (abs !== 0 && (abs < 1e-3 || abs >= 1e6)) {
+  // Exponential for extreme magnitudes — checked before the integer path so a
+  // huge integer (e.g. 9e15) doesn't print 16 digits and overflow the label.
+  if (abs !== 0 && (abs < 1e-3 || abs >= 1e7)) {
     return value.toExponential(1);
   }
+  if (Number.isInteger(value)) return String(value);
   return parseFloat(value.toFixed(3)).toString();
 }
 
