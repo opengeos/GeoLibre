@@ -48,7 +48,7 @@
     "maplibre-gl-streetview": "^0.5.0",
     "maplibre-gl-swipe": "^0.7.1",
     "maplibre-gl-time-slider": "^1.0.3",
-    "maplibre-gl-vector": "^0.2.5",
+    "maplibre-gl-vector": "^0.3.0",
     "proj4": "^2.20.9",
     "shpjs": "^6.2.0",
     "three": "^0.184.0"

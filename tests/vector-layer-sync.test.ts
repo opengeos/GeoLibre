@@ -463,6 +463,13 @@ describe("wireVectorStoreSync", () => {
       fillColorExpression: undefined,
       lineColorExpression: undefined,
       circleColorExpression: undefined,
+      // Point renderer fields default through from DEFAULT_LAYER_STYLE
+      // ("single" -> "circle"); they ride along on every style push.
+      pointMode: "circle",
+      heatmapRadius: 30,
+      heatmapIntensity: 1,
+      clusterRadius: 50,
+      clusterMaxZoom: 14,
     };
     assert.deepEqual(calls, [
       { method: "setLayerStyle", args: ["vector-1", expectedStyle] },
@@ -475,6 +482,23 @@ describe("wireVectorStoreSync", () => {
       (stored.metadata.vectorState as { style: unknown }).style,
       expectedStyle,
     );
+  });
+
+  it("pushes the point renderer (heatmap/cluster) through the control", () => {
+    const { control, calls } = fakeControl([vectorInfo({ geometryType: "point" })]);
+    syncVectorLayersToStore(control);
+    wireVectorStoreSync(control);
+
+    useAppStore.getState().setLayerStyle("vector-1", {
+      pointRenderer: "cluster",
+      clusterRadius: 40,
+    });
+
+    assert.equal(calls.length, 1);
+    const pushed = calls[0].args[1] as VectorLayerStyle;
+    // GeoLibre's "cluster" maps to the control's pointMode, with cluster params.
+    assert.equal(pushed.pointMode, "cluster");
+    assert.equal(pushed.clusterRadius, 40);
   });
 
   it("pushes a categorized color expression through the control", () => {

@@ -101,6 +101,11 @@ export function createVectorStoreLayer(
     metadata: {
       customLayerType: vectorCustomLayerType(info.geometryType),
       externalNativeLayer: true,
+      // The control owns its layers' paint: GeoLibre pushes style edits through
+      // control.setLayerStyle (see wireVectorStoreSync), so the core sync must
+      // not also re-apply paint — that would clobber control-only renderers like
+      // the cluster bubble's stepped radius.
+      controlOwnsPaint: true,
       // The control's own picker popup handles feature inspection; the
       // app-level identify tool does not target these layers.
       identifiable: false,
@@ -238,6 +243,19 @@ export function wireVectorStoreSync(control: VectorSyncableControl): void {
         const nextStyle = layerStyleToVectorStyle(current.style);
         if (!vectorStylesEqual(layerStyleToVectorStyle(layer.style), nextStyle)) {
           activeControl.setLayerStyle(layer.id, nextStyle);
+          // A pointMode change makes the control rebuild its map layers, so the
+          // new layer ids replace the old ones. Refresh nativeLayerIds/sourceIds
+          // from the control so the core sync orders/toggles the new layers.
+          const updated = activeControl
+            .getLayers()
+            .find((info) => info.id === layer.id);
+          const metadataPatch: Record<string, unknown> = {
+            ...current.metadata,
+          };
+          if (updated) {
+            metadataPatch.nativeLayerIds = [...updated.layerIds];
+            metadataPatch.sourceIds = [updated.sourceId];
+          }
           // Keep the persisted control-seed style in sync so a saved project
           // restores the user-edited colors: restoreVectorLayers seeds the
           // control's addData from metadata.vectorState.style. (The control's
@@ -250,16 +268,14 @@ export function wireVectorStoreSync(control: VectorSyncableControl): void {
             typeof vectorState === "object" &&
             !Array.isArray(vectorState)
           ) {
-            useAppStore.getState().updateLayer(layer.id, {
-              metadata: {
-                ...current.metadata,
-                vectorState: {
-                  ...(vectorState as Record<string, unknown>),
-                  style: nextStyle,
-                },
-              },
-            });
+            metadataPatch.vectorState = {
+              ...(vectorState as Record<string, unknown>),
+              style: nextStyle,
+            };
           }
+          useAppStore.getState().updateLayer(layer.id, {
+            metadata: metadataPatch,
+          });
         }
       }
     });
@@ -505,6 +521,15 @@ function layerStyleToVectorStyle(style: LayerStyle): VectorLayerStyle {
     fillColorExpression: colorExpressionField(vectorFillColorValue(style)),
     lineColorExpression: colorExpressionField(vectorLineColorValue(style)),
     circleColorExpression: colorExpressionField(vectorCircleColorValue(style)),
+    // Point renderer: GeoLibre's "single" maps to the control's "circle".
+    pointMode:
+      (style.pointRenderer ?? "single") === "single"
+        ? "circle"
+        : (style.pointRenderer as "heatmap" | "cluster"),
+    heatmapRadius: style.heatmapRadius,
+    heatmapIntensity: style.heatmapIntensity,
+    clusterRadius: style.clusterRadius,
+    clusterMaxZoom: style.clusterMaxZoom,
   };
 }
 
@@ -551,6 +576,19 @@ function vectorStyleToLayerStyle(info: VectorLayerInfo): Partial<LayerStyle> {
   if (fillColor !== undefined) seed.fillColor = fillColor;
   if (fillOpacity !== undefined) seed.fillOpacity = fillOpacity;
 
+  // Reflect the control's point render mode in the panel ("circle" -> "single").
+  if (style.pointMode !== undefined) {
+    seed.pointRenderer = style.pointMode === "circle" ? "single" : style.pointMode;
+  }
+  if (typeof style.heatmapRadius === "number") seed.heatmapRadius = style.heatmapRadius;
+  if (typeof style.heatmapIntensity === "number") {
+    seed.heatmapIntensity = style.heatmapIntensity;
+  }
+  if (typeof style.clusterRadius === "number") seed.clusterRadius = style.clusterRadius;
+  if (typeof style.clusterMaxZoom === "number") {
+    seed.clusterMaxZoom = style.clusterMaxZoom;
+  }
+
   return seed;
 }
 
@@ -579,7 +617,14 @@ function vectorStylesEqual(
     // a different expression, which must still register as a style change.
     valuesEqual(left.fillColorExpression, right.fillColorExpression) &&
     valuesEqual(left.lineColorExpression, right.lineColorExpression) &&
-    valuesEqual(left.circleColorExpression, right.circleColorExpression)
+    valuesEqual(left.circleColorExpression, right.circleColorExpression) &&
+    // Point renderer fields: a pointMode/heatmap/cluster change must register so
+    // it is pushed to the control (which rebuilds the layers structurally).
+    left.pointMode === right.pointMode &&
+    left.heatmapRadius === right.heatmapRadius &&
+    left.heatmapIntensity === right.heatmapIntensity &&
+    left.clusterRadius === right.clusterRadius &&
+    left.clusterMaxZoom === right.clusterMaxZoom
   );
 }
 

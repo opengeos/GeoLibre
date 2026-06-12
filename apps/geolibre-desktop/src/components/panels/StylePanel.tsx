@@ -1152,17 +1152,23 @@ export function StylePanel({
     isRasterPaintLayer(layer.type) || isRasterTileLayer || isDeckRasterLayer;
   const hasTextMarkerControls =
     layer.type === "geojson" && hasTextMarkerFeatures(layer);
-  // Heatmap/cluster are rendered by the core GeoJSON sync, so only offer them
-  // for layers it actually paints — not control-owned or deck.gl layers. Memoize
+  // Heatmap/cluster apply to point layers in two render paths: core GeoJSON
+  // layers (drag-drop, processing results) and Add Vector Layer point layers in
+  // the geojson render mode (the maplibre-gl-vector control renders those, so
+  // type stays "geojson"; tile-rendered layers become "vector-tiles"). Memoize
   // the point-only scan so a large layer isn't re-scanned on every panel render.
-  const isPointOnly = useMemo(
-    () => isPointOnlyGeoJsonLayer(layer),
-    [layer],
-  );
-  const supportsPointRenderer =
+  const isPointOnly = useMemo(() => isPointOnlyGeoJsonLayer(layer), [layer]);
+  const isCoreGeoJsonPoint =
     isPointOnly &&
     !hasExternalNativeLayers(layer) &&
     !hasExternalDeckLayer(layer);
+  const isVectorControlPoint =
+    hasExternalNativeLayers(layer) &&
+    !hasExternalDeckLayer(layer) &&
+    layer.type === "geojson" &&
+    layer.metadata.sourceKind === "maplibre-gl-vector" &&
+    layer.metadata.geometryType === "point";
+  const supportsPointRenderer = isCoreGeoJsonPoint || isVectorControlPoint;
   const pointRenderer = styleValue(style, "pointRenderer");
   const extrusionEnabled = styleValue(style, "extrusionEnabled");
   const extrusionHeightPropertyOptions = getAttributePropertyNames(layer);
