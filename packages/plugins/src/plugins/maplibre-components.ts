@@ -74,6 +74,7 @@ import { ensureMercatorProjection } from "./map-projection-utils";
 import {
   KerchunkReferenceStore,
   loadKerchunkReference,
+  type KerchunkRefs,
 } from "./kerchunk-reference-store";
 
 type ControlGridConstructor =
@@ -1647,6 +1648,11 @@ export function openZarrLayerPanel(app: GeoLibreAppAPI): void {
 export interface CloudNetcdfLayerOptions {
   /** URL of the kerchunk reference manifest (JSON) for the NetCDF/HDF file. */
   url: string;
+  /**
+   * Pre-loaded, normalized reference map. When provided, the manifest is not
+   * fetched again (avoids a second download of a potentially large manifest).
+   */
+  refs?: KerchunkRefs;
   /** Variable (array) to render. */
   variable: string;
   /** Dimension selector for non-spatial dims, e.g. `{ time: 0 }`. */
@@ -1694,9 +1700,9 @@ export async function addCloudNetcdfLayer(
   // (matching the COG raster flow) so the layer paints.
   ensureMercatorProjection(app.getMap?.());
 
-  const refs = await loadKerchunkReference(options.url, {
-    headers: options.headers,
-  });
+  const refs =
+    options.refs ??
+    (await loadKerchunkReference(options.url, { headers: options.headers }));
   const store = new KerchunkReferenceStore(refs, { headers: options.headers });
 
   // The control is a module-level singleton and may have been torn down (set to

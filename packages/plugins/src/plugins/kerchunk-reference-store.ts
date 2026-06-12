@@ -33,9 +33,14 @@ type FetchImpl = (
 ) => Promise<{
   status: number;
   arrayBuffer(): Promise<ArrayBuffer>;
+  headers?: { get(name: string): string | null };
 }>;
 
 const BASE64_PREFIX = "base64:";
+
+// Best-effort guard against a user-supplied URL pointing at an oversized
+// manifest exhausting memory. Honored only when Content-Length is present.
+const MAX_MANIFEST_BYTES = 256 * 1024 * 1024;
 
 function decodeBase64(b64: string): Uint8Array {
   const binary = atob(b64);
@@ -82,19 +87,24 @@ export function normalizeKerchunkReference(
   const resolved: KerchunkRefs = {};
   for (const [key, value] of Object.entries(refs)) {
     if (Array.isArray(value) && typeof value[0] === "string") {
-      const url = resolveUrl(value[0], referenceUrl);
+      // The declared type is a lie for untrusted input; validate the raw array.
+      const arr = value as unknown[];
+      const url = resolveUrl(arr[0] as string, referenceUrl);
+      if (arr.length === 2) {
+        throw new Error(
+          `Invalid kerchunk reference for key "${key}": array refs must have 1 element (whole file) or 3 (url, offset, length), got 2.`
+        );
+      }
       if (
-        value.length >= 3 &&
-        (typeof value[1] !== "number" || typeof value[2] !== "number")
+        arr.length >= 3 &&
+        (typeof arr[1] !== "number" || typeof arr[2] !== "number")
       ) {
         throw new Error(
           `Invalid kerchunk reference for key "${key}": offset and length must be numbers.`
         );
       }
       resolved[key] =
-        value.length >= 3
-          ? [url, value[1] as number, value[2] as number]
-          : [url];
+        arr.length >= 3 ? [url, arr[1] as number, arr[2] as number] : [url];
     } else {
       resolved[key] = value;
     }
@@ -254,6 +264,12 @@ export async function loadKerchunkReference(
   );
   if (res.status !== 200) {
     throw new Error(`Failed to fetch kerchunk reference: HTTP ${res.status}`);
+  }
+  const contentLength = Number(res.headers?.get?.("content-length") ?? 0);
+  if (contentLength > MAX_MANIFEST_BYTES) {
+    throw new Error(
+      `Kerchunk manifest too large: ${contentLength} bytes (limit ${MAX_MANIFEST_BYTES}).`
+    );
   }
   const text = new TextDecoder().decode(await res.arrayBuffer());
   const doc = JSON.parse(text) as KerchunkDocument;

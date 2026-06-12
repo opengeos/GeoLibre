@@ -4,6 +4,7 @@ import {
   listKerchunkVariables,
   loadKerchunkReference,
   type GeoLibreAppAPI,
+  type KerchunkRefs,
   type KerchunkVariable,
 } from "@geolibre/plugins";
 import {
@@ -46,6 +47,9 @@ export function AddNetcdfDialog({
   const [url, setUrl] = useState(SAMPLE_URL);
   const [variables, setVariables] = useState<KerchunkVariable[]>([]);
   const [variable, setVariable] = useState("");
+  // The normalized reference from the last successful load, reused on submit so
+  // the (potentially large) manifest is not fetched a second time.
+  const [loadedRefs, setLoadedRefs] = useState<KerchunkRefs | null>(null);
   const [dimIndex, setDimIndex] = useState<Record<string, string>>({});
   const [climMin, setClimMin] = useState("");
   const [climMax, setClimMax] = useState("");
@@ -68,6 +72,7 @@ export function AddNetcdfDialog({
     setUrl(SAMPLE_URL);
     setVariables([]);
     setVariable("");
+    setLoadedRefs(null);
     setDimIndex({});
     setClimMin("");
     setClimMax("");
@@ -81,6 +86,11 @@ export function AddNetcdfDialog({
     const gen = opGen.current;
     setError(null);
     setStatus(null);
+    // Clear any prior result so the picker hides and "Add layer" disables while
+    // a new URL is loading (avoids submitting a variable from the old manifest).
+    setVariables([]);
+    setVariable("");
+    setLoadedRefs(null);
     setLoadingVars(true);
     try {
       const refs = await loadKerchunkReference(url.trim());
@@ -93,6 +103,7 @@ export function AddNetcdfDialog({
       }
       setVariables(vars);
       setVariable(vars[0].name);
+      setLoadedRefs(refs);
       setStatus(`Found ${vars.length} variable${vars.length > 1 ? "s" : ""}.`);
     } catch (err) {
       if (gen !== opGen.current) return;
@@ -122,12 +133,14 @@ export function AddNetcdfDialog({
         min !== undefined &&
         max !== undefined &&
         Number.isFinite(min) &&
-        Number.isFinite(max)
+        Number.isFinite(max) &&
+        min < max
           ? ([min, max] as [number, number])
           : undefined;
 
       await addCloudNetcdfLayer(appApi, {
         url: url.trim(),
+        refs: loadedRefs ?? undefined,
         variable,
         selector: leadingDims.length > 0 ? selector : undefined,
         clim,
@@ -171,7 +184,14 @@ export function AddNetcdfDialog({
                 id="netcdf-url"
                 placeholder="https://example.com/data.kerchunk.json"
                 value={url}
-                onChange={(event) => setUrl(event.target.value)}
+                onChange={(event) => {
+                  setUrl(event.target.value);
+                  // Invalidate variables loaded from a different URL.
+                  setVariables([]);
+                  setVariable("");
+                  setLoadedRefs(null);
+                  setStatus(null);
+                }}
               />
               <Button
                 type="button"

@@ -179,6 +179,34 @@ describe("normalizeKerchunkReference", () => {
     assert.equal((refs["air/0.0.0"] as [string, number, number])[0], "");
   });
 
+  it("rejects a length-2 array ref (ambiguous: not whole-file or range)", () => {
+    assert.throws(
+      () =>
+        normalizeKerchunkReference({
+          version: 1,
+          refs: { "air/0.0.0": ["air.nc", 10] as unknown as [string] },
+        }),
+      /got 2/
+    );
+  });
+
+  it("rejects an array ref with non-numeric offset/length", () => {
+    assert.throws(
+      () =>
+        normalizeKerchunkReference({
+          version: 1,
+          refs: {
+            "air/0.0.0": ["air.nc", "x", 5] as unknown as [
+              string,
+              number,
+              number,
+            ],
+          },
+        }),
+      /must be numbers/
+    );
+  });
+
   it("throws when there are no refs", () => {
     assert.throws(
       () => normalizeKerchunkReference({ version: 1 }),
