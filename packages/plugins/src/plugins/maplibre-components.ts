@@ -1723,6 +1723,11 @@ export async function addCloudNetcdfLayer(
     colormap: options.colormap,
     opacity: options.opacity,
   });
+
+  // Unlike openZarrLayerPanel, the dialog-based flow intentionally leaves the
+  // Zarr control collapsed/hidden: the layer is managed from the layer and
+  // style panels. Users can still open the Zarr panel from the menu to tweak
+  // colormap/clim.
 }
 
 export function openLidarLayerPanel(app: GeoLibreAppAPI): void {

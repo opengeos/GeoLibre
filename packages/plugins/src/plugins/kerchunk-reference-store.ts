@@ -34,6 +34,7 @@ type FetchImpl = (
   status: number;
   arrayBuffer(): Promise<ArrayBuffer>;
   headers?: { get(name: string): string | null };
+  body?: ReadableStream<Uint8Array> | null;
 }>;
 
 const BASE64_PREFIX = "base64:";
@@ -105,8 +106,12 @@ export function normalizeKerchunkReference(
       }
       resolved[key] =
         arr.length >= 3 ? [url, arr[1] as number, arr[2] as number] : [url];
-    } else {
+    } else if (typeof value === "string") {
       resolved[key] = value;
+    } else {
+      throw new Error(
+        `Invalid kerchunk reference for key "${key}": unexpected value type "${typeof value}".`
+      );
     }
   }
   return resolved;
@@ -245,6 +250,45 @@ export function listKerchunkVariables(refs: KerchunkRefs): KerchunkVariable[] {
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/** Read a response body into bytes, rejecting once it exceeds the size cap. */
+async function readCappedBody(res: {
+  arrayBuffer(): Promise<ArrayBuffer>;
+  body?: ReadableStream<Uint8Array> | null;
+}): Promise<Uint8Array> {
+  const reader = res.body?.getReader?.();
+  if (!reader) {
+    // No streamable body (e.g. a mocked fetch): buffer, then size-check.
+    const buf = new Uint8Array(await res.arrayBuffer());
+    if (buf.byteLength > MAX_MANIFEST_BYTES) throw manifestTooLargeError();
+    return buf;
+  }
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_MANIFEST_BYTES) {
+      await reader.cancel();
+      throw manifestTooLargeError();
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
+}
+
+function manifestTooLargeError(): Error {
+  return new Error(
+    `Kerchunk manifest too large (limit ${MAX_MANIFEST_BYTES} bytes).`
+  );
+}
+
 /**
  * Fetch and normalize a kerchunk reference manifest from a URL.
  *
@@ -265,13 +309,16 @@ export async function loadKerchunkReference(
   if (res.status !== 200) {
     throw new Error(`Failed to fetch kerchunk reference: HTTP ${res.status}`);
   }
+  // Fast reject when the server advertises a too-large body...
   const contentLength = Number(res.headers?.get?.("content-length") ?? 0);
   if (contentLength > MAX_MANIFEST_BYTES) {
     throw new Error(
       `Kerchunk manifest too large: ${contentLength} bytes (limit ${MAX_MANIFEST_BYTES}).`
     );
   }
-  const text = new TextDecoder().decode(await res.arrayBuffer());
+  // ...and cap the actual bytes read, so chunked/compressed/header-less
+  // responses can't buffer an unbounded body into memory.
+  const text = new TextDecoder().decode(await readCappedBody(res));
   const doc = JSON.parse(text) as KerchunkDocument;
   return normalizeKerchunkReference(doc, url);
 }

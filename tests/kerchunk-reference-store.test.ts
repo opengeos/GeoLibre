@@ -207,6 +207,17 @@ describe("normalizeKerchunkReference", () => {
     );
   });
 
+  it("rejects a ref value that is neither a string nor an array", () => {
+    assert.throws(
+      () =>
+        normalizeKerchunkReference({
+          version: 1,
+          refs: { "air/.zattrs": 42 as unknown as string },
+        }),
+      /unexpected value type/
+    );
+  });
+
   it("throws when there are no refs", () => {
     assert.throws(
       () => normalizeKerchunkReference({ version: 1 }),

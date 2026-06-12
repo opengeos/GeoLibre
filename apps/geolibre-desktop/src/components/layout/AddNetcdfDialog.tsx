@@ -124,8 +124,9 @@ export function AddNetcdfDialog({
     try {
       const selector: Record<string, number> = {};
       for (const dim of leadingDims) {
+        // Zarr indices are non-negative integers; clamp/truncate user input.
         const parsed = Number(dimIndex[dim] ?? "0");
-        selector[dim] = Number.isFinite(parsed) ? parsed : 0;
+        selector[dim] = Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : 0;
       }
       const min = climMin.trim() === "" ? undefined : Number(climMin);
       const max = climMax.trim() === "" ? undefined : Number(climMax);
@@ -191,6 +192,7 @@ export function AddNetcdfDialog({
                   setVariable("");
                   setLoadedRefs(null);
                   setStatus(null);
+                  setError(null);
                 }}
               />
               <Button
