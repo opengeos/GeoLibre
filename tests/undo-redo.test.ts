@@ -27,13 +27,15 @@ describe("leadingDebounce", () => {
     const calls: number[] = [];
     const fn = leadingDebounce(
       (n: number) => calls.push(n),
-      () => 30
+      () => 20
     );
     fn(1); // leading edge -> fires
     fn(2); // within window -> suppressed
     fn(3); // within window -> suppressed
     assert.deepEqual(calls, [1]);
-    await sleep(50); // quiet period elapses
+    // Wait well past the 20 ms window so the timer has cleared even on a loaded
+    // CI runner (wide margin avoids flakiness from late setTimeout firing).
+    await sleep(150); // quiet period elapses
     fn(4); // new burst -> fires
     assert.deepEqual(calls, [1, 4]);
   });

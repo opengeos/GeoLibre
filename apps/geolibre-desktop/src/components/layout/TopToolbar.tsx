@@ -1022,7 +1022,7 @@ export function TopToolbar({
             <Redo2 className="mr-2 h-3.5 w-3.5" />
             Redo
             <span className="ml-auto text-xs text-muted-foreground">
-              Ctrl/Cmd+Shift+Z
+              Ctrl/Cmd+Shift+Z / Ctrl+Y
             </span>
           </DropdownMenuItem>
         </DropdownMenuContent>
