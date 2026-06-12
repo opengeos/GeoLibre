@@ -60,7 +60,7 @@
     "maplibre-gl-streetview": "^0.5.0",
     "maplibre-gl-swipe": "^0.7.1",
     "maplibre-gl-time-slider": "^1.0.3",
-    "maplibre-gl-vector": "^0.2.4",
+    "maplibre-gl-vector": "^0.3.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "shpjs": "^6.2.0",
