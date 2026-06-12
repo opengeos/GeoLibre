@@ -65,6 +65,18 @@ A third Vector engine, **Python (Pyodide)**, runs the same GeoPandas/Shapely cod
 
 Future processing releases are expected to expand the same sidecar pattern for GDAL, Rasterio, DuckDB Spatial SQL, Leafmap, GeoAI, and SamGeo workflows.
 
+## Offline support (PWA)
+
+The standalone web build is an installable Progressive Web App. `vite-plugin-pwa` (configured in `apps/geolibre-desktop/vite.config.ts`) emits a web manifest plus a Workbox service worker, and `src/main.tsx` registers it next to `installStaleChunkReload` so the two coordinate. The service worker is built only for the web build; it is disabled for the Tauri desktop build (already offline via bundled assets) and the embedded Jupyter wheel (`GEOLIBRE_PGLITE_CDN=1`), where `registerSW` resolves to a no-op.
+
+Caching is split to keep the first visit light:
+
+- **Precache (app shell).** The HTML and the JS/CSS chunks that boot the map are precached, so the shell loads with no network after the first visit. The heavy chunks below are excluded from the precache to avoid a large first-load download.
+- **Runtime cache, CacheFirst.** Lazily fetched, content-hashed binaries are cached on first use: the **MapLibre** bundle, **DuckDB-WASM and its spatial extension**, **PGlite/PostGIS**, the MapLibre feature-plugin chunks, and the **Pyodide** runtime. Hashed filenames make CacheFirst safe — a redeploy mints new URLs, so a stale entry is never served as current. This is what makes local-file workflows (DuckDB Spatial conversion, the Pyodide vector engine) work offline after they have run online once. Self-hosting the spatial extension via `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` keeps it same-origin so it is cached too.
+- **Basemaps.** Tiles and styles from the CORS-friendly default hosts (OpenFreeMap, CARTO) are runtime-cached. Other remote tiles, services, and ArcGIS/WMS/WFS sources stay network-only by design and are unavailable offline.
+
+A new deploy is picked up via `registerType: "autoUpdate"`: the new service worker installs in the background, then reloads the page to re-evaluate the current build's import graph. That is the same recovery `installStaleChunkReload` performs for orphaned lazy chunks, so the service worker does not regress it — precached chunks are served from cache and never 404, and the stale-chunk reload remains the fallback for any chunk not in the precache.
+
 ## Container image
 
 The root Dockerfile packages the browser version of the app. It uses a Node build stage to run the workspace build for `geolibre-desktop`, then copies `apps/geolibre-desktop/dist` into an nginx runtime image. The nginx config serves static assets and falls back to `index.html` for browser-entry URLs.

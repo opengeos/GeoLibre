@@ -9,6 +9,7 @@ import type {
   WarningHandlerWithDefault,
 } from "rollup";
 import { defineConfig, type Plugin } from "vite";
+import { VitePWA } from "vite-plugin-pwa";
 import { bundledPlugins } from "./vite-plugins/bundled-plugins";
 import { copyVectorOps } from "./vite-plugins/copy-vector-ops";
 
@@ -27,6 +28,16 @@ const APP_VERSION = JSON.parse(
 // CDN URLs are pinned to the installed versions so they cannot drift from the
 // lockfile; PGlite resolves its own .wasm/.data/postgis.tar relative to these.
 const PGLITE_CDN = process.env.GEOLIBRE_PGLITE_CDN === "1";
+
+// PWA/offline support targets the standalone web build only. The Tauri desktop
+// shell already works offline (assets are bundled in the binary), and the
+// embedded Jupyter wheel (GEOLIBRE_PGLITE_CDN=1) is served from inside a
+// notebook where a service worker is meaningless and could even hijack the
+// host page's scope. Tauri sets TAURI_ENV_* env vars while running its
+// beforeBuildCommand (`npm run build`), so their presence flags a desktop build.
+const IS_TAURI_BUILD = !!process.env.TAURI_ENV_PLATFORM;
+const PWA_DISABLED = IS_TAURI_BUILD || PGLITE_CDN;
+
 const pgliteCdnRequire = createRequire(import.meta.url);
 // The ESM entry of a package's manifest. Prefer the `module` field and the
 // `import` condition of `exports` (both point at the ESM build); never fall back
@@ -392,6 +403,128 @@ async function proxyBinaryRequest(
   res.end(body);
 }
 
+// Installable, offline-capable web build. See docs/architecture.md (Offline /
+// PWA). The service worker precaches the app shell (HTML + the JS/CSS chunks the
+// map needs to boot) and runtime-caches the heavy, lazily-fetched binaries
+// (DuckDB-WASM + spatial extension, PGlite/PostGIS, Pyodide, MapLibre feature
+// plugins) with a hash-keyed CacheFirst strategy, so a feature works offline
+// after its first online use without bloating the first-visit precache.
+function pwaPlugin(): Plugin[] {
+  // Hashed build chunks/binaries that are lazily fetched. Excluded from the
+  // precache so first visit stays light; the same-origin CacheFirst rule below
+  // caches them on first use for offline. Hashed filenames make CacheFirst safe
+  // (a redeploy mints new URLs, so a stale entry is never served as current).
+  const HEAVY_PRECACHE_IGNORES = [
+    // MapLibre core (~13 MB) and its feature-plugin chunks. The map boots from
+    // its first runtime fetch and is CacheFirst-cached thereafter.
+    "**/maplibre-*",
+    "**/duckdb-*",
+    "**/pglite-*",
+    "**/earth-engine-browser-*",
+    "**/mapillary-*",
+    "**/pyodide/**",
+    "**/*.wasm",
+    "**/*.data",
+  ];
+
+  return VitePWA({
+    disable: PWA_DISABLED,
+    // autoUpdate installs a new SW and reloads on the next deploy. That reload
+    // re-evaluates the import graph against the fresh build, which is the same
+    // recovery installStaleChunkReload performs for orphaned lazy chunks (see
+    // src/lib/stale-chunk-reload.ts) — the two are complementary, not at odds:
+    // precached chunks are served from the cache so they never 404, and the
+    // stale-chunk reload remains the fallback for any non-precached chunk.
+    registerType: "autoUpdate",
+    // We register the SW by hand in main.tsx so registration lives next to the
+    // stale-chunk reload it coordinates with; no auto-injected snippet.
+    injectRegister: false,
+    includeAssets: ["favicon.ico", "favicon.png", "apple-touch-icon.png"],
+    manifest: {
+      name: "GeoLibre",
+      short_name: "GeoLibre",
+      description:
+        "A lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data.",
+      theme_color: "#2f8f85",
+      background_color: "#ffffff",
+      display: "standalone",
+      orientation: "any",
+      categories: ["productivity", "utilities", "education"],
+      icons: [
+        { src: "pwa-192x192.png", sizes: "192x192", type: "image/png" },
+        { src: "pwa-512x512.png", sizes: "512x512", type: "image/png" },
+        {
+          src: "maskable-icon-512x512.png",
+          sizes: "512x512",
+          type: "image/png",
+          purpose: "maskable",
+        },
+      ],
+    },
+    workbox: {
+      // Precache the app shell: HTML plus the JS/CSS/fonts that boot the map.
+      // The heavy lazily-fetched chunks/binaries are runtime-cached instead.
+      globPatterns: ["**/*.{js,css,html,woff,woff2}"],
+      globIgnores: HEAVY_PRECACHE_IGNORES,
+      // deck.gl/vendor shell chunks can run a few MB; allow them into the
+      // precache. MapLibre and the huge binaries are globIgnored above.
+      maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+      cleanupOutdatedCaches: true,
+      clientsClaim: true,
+      skipWaiting: true,
+      navigateFallback: "index.html",
+      // Never SPA-fallback the sidecar proxy or any asset request; let those hit
+      // the network/precache directly.
+      navigateFallbackDenylist: [/^\/sidecar\//, /^\/__geolibre_/, /\/[^/?]+\.[^/]+$/],
+      runtimeCaching: [
+        {
+          // Same-origin hashed build assets and WASM/data not in the precache
+          // (DuckDB, PGlite/PostGIS, MapLibre feature plugins). Hash-immutable,
+          // so CacheFirst — this is what makes DuckDB-WASM + the spatial
+          // extension work offline after their first online use.
+          urlPattern: ({ url, sameOrigin }: { url: URL; sameOrigin: boolean }) =>
+            sameOrigin && /\.(?:js|css|wasm|data|woff2?)$/.test(url.pathname),
+          handler: "CacheFirst",
+          options: {
+            cacheName: "geolibre-assets",
+            expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 30 },
+            cacheableResponse: { statuses: [0, 200] },
+          },
+        },
+        {
+          // Pyodide runtime (public/pyodide/**) for the Python-in-browser tools.
+          urlPattern: ({ url, sameOrigin }: { url: URL; sameOrigin: boolean }) =>
+            sameOrigin && url.pathname.includes("/pyodide/"),
+          handler: "CacheFirst",
+          options: {
+            cacheName: "geolibre-pyodide",
+            expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 },
+            cacheableResponse: { statuses: [0, 200] },
+          },
+        },
+        {
+          // Basemap tiles/styles from the CORS-friendly default hosts only
+          // (OpenFreeMap, CARTO). Other remote tiles/services stay network-only
+          // by design — see docs for what is and isn't available offline.
+          urlPattern: ({ url }: { url: URL }) =>
+            /(?:^|\.)(?:openfreemap\.org|cartocdn\.com)$/.test(url.hostname),
+          handler: "CacheFirst",
+          options: {
+            cacheName: "geolibre-basemaps",
+            expiration: { maxEntries: 600, maxAgeSeconds: 60 * 60 * 24 * 7 },
+            cacheableResponse: { statuses: [0, 200] },
+          },
+        },
+      ],
+    },
+    devOptions: {
+      // Keep the SW out of `vite dev`; it complicates HMR and the stale-chunk
+      // flow. PWA behavior is validated against the production build / preview.
+      enabled: false,
+    },
+  }) as Plugin[];
+}
+
 export default defineConfig({
   base: APP_BASE,
   plugins: [
@@ -409,6 +542,7 @@ export default defineConfig({
     react(),
     wmsProxyPlugin(),
     selectiveJsMinifyPlugin(),
+    ...pwaPlugin(),
   ],
   clearScreen: false,
   define: {

@@ -28,6 +28,7 @@ import "./lib/basemap-style";
 import "./lib/geoagent-style";
 import "./lib/lidar-style";
 import "./lib/swipe-style";
+import { registerSW } from "virtual:pwa-register";
 import { installDiagnosticsCapture } from "./lib/diagnostics";
 import { installStaleChunkReload } from "./lib/stale-chunk-reload";
 
@@ -35,6 +36,13 @@ installDiagnosticsCapture();
 // Recover from chunks orphaned by a web redeploy (stale lazy import → 404). A
 // no-op in the desktop build, whose chunks are bundled locally.
 installStaleChunkReload();
+// Register the offline/PWA service worker (web build only). `registerSW` is a
+// no-op stub in the Tauri desktop and embedded Jupyter builds, where the plugin
+// is disabled (see vite.config.ts pwaPlugin). autoUpdate reloads the page when a
+// new deploy is detected; precached chunks are served from cache so they never
+// 404, and installStaleChunkReload above stays as the fallback for any chunk not
+// covered by the precache.
+registerSW({ immediate: true });
 
 // Fetch both chunks in parallel rather than waterfalling the boundary import
 // after App resolves — a free win, and it matters over the network in the web
