@@ -248,6 +248,9 @@ export function categoricalColumns(
       if (distinct.size > maxCardinality) return false;
     }
     if (distinct.size < 1) return false;
+    // A field where every populated row is unique is an id, not a category —
+    // reject it even in a small sample where the limit below would let it pass.
+    if (nonNull > 1 && distinct.size === nonNull) return false;
     const limit = Math.max(CATEGORY_ABSOLUTE_LIMIT, nonNull * CATEGORY_RATIO);
     return distinct.size <= limit;
   });
@@ -307,14 +310,17 @@ export function computeBar(
   }
   if (groups.size === 0) return null;
 
-  const all: BarDatum[] = [...groups.entries()].map(([label, group]) => {
-    let value = group.count;
-    if (aggregation === "sum") value = group.sum;
-    else if (aggregation === "mean") {
-      value = group.numericCount > 0 ? group.sum / group.numericCount : 0;
-    }
-    return { label, value, count: group.count };
-  });
+  const all: BarDatum[] = [...groups.entries()]
+    // For sum/mean, drop categories with no numeric samples rather than show a
+    // misleading zero bar that could also displace a real category from top-N.
+    .filter(([, group]) => aggregation === "count" || group.numericCount > 0)
+    .map(([label, group]) => {
+      let value = group.count;
+      if (aggregation === "sum") value = group.sum;
+      else if (aggregation === "mean") value = group.sum / group.numericCount;
+      return { label, value, count: group.count };
+    });
+  if (all.length === 0) return null;
   all.sort((a, b) => b.value - a.value);
 
   const bars = all.slice(0, Math.max(1, maxBars));

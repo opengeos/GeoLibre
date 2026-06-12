@@ -152,6 +152,11 @@ describe("categoricalColumns", () => {
     assert.deepEqual(categoricalColumns(data, ["year"]), ["year"]);
   });
 
+  it("rejects fully-unique fields even in a small sample", () => {
+    const data = rows({ code: "a" }, { code: "b" }, { code: "c" });
+    assert.deepEqual(categoricalColumns(data, ["code"]), []);
+  });
+
   it("rejects mostly-unique id-like columns relative to row count", () => {
     // 20 rows: `name` is unique per row (id-like) and excluded; `kind` repeats.
     const data = Array.from({ length: 20 }, (_, i) => ({
@@ -188,6 +193,20 @@ describe("computeBar", () => {
     const mean = computeBar(data, "kind", "mean", "pop");
     // category "a": values 10 and 30 (null skipped) → mean 20
     assert.equal(mean?.bars.find((b) => b.label === "a")?.value, 20);
+  });
+
+  it("omits sum/mean categories that have no numeric samples", () => {
+    const data = rows(
+      { kind: "a", v: 5 },
+      { kind: "b", v: null },
+      { kind: "b", v: "x" },
+    );
+    // "b" has no finite value → excluded from sum (not shown as a zero bar).
+    const result = computeBar(data, "kind", "sum", "v");
+    assert.deepEqual(
+      result?.bars.map((b) => b.label),
+      ["a"],
+    );
   });
 
   it("buckets null/blank categories as (blank) and caps to top-N", () => {

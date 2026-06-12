@@ -627,7 +627,14 @@ function LineChart({
   const scaleY = (value: number) =>
     MARGIN.top + INNER_H - fraction(value, min, max) * INNER_H;
   const path = points
-    .map((p, i) => `${i === 0 ? "M" : "L"}${scaleX(p.index)} ${scaleY(p.value)}`)
+    .map((p, i) => {
+      // Break the line (start a new subpath) when rows are non-consecutive, so
+      // a gap from skipped (non-numeric) rows shows as a gap rather than a
+      // straight segment across it.
+      const command =
+        i === 0 || p.index !== points[i - 1].index + 1 ? "M" : "L";
+      return `${command}${scaleX(p.index)} ${scaleY(p.value)}`;
+    })
     .join(" ");
 
   return (
