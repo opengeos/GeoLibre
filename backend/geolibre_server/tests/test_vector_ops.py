@@ -269,6 +269,16 @@ def test_select_by_value_is_null_matches_empty_string() -> None:
     assert [f["properties"]["name"] for f in geojson["features"]] == [""]
 
 
+def test_select_by_value_neq_excludes_null_and_missing() -> None:
+    # SQL-like: neq does not match null (gamma) or missing (delta) values.
+    geojson, _ = run_vector_tool(
+        "select-by-value",
+        ATTR_LAYER,
+        parameters={"field": "pop", "operator": "neq", "value": "10"},
+    )
+    assert sorted(f["properties"]["name"] for f in geojson["features"]) == ["beta"]
+
+
 def test_select_by_value_is_not_null_matches_real_values() -> None:
     geojson, _ = run_vector_tool(
         "select-by-value",
@@ -398,6 +408,14 @@ def test_select_by_location_within_and_contains() -> None:
         "select-by-location", big, SQUARE, parameters={"predicate": "contains"}
     )
     assert len(contains["features"]) == 1
+
+
+@requires_geopandas
+def test_select_by_location_empty_filter_intersects_selects_none() -> None:
+    geojson, _ = run_vector_tool(
+        "select-by-location", SQUARE, EMPTY, parameters={"predicate": "intersects"}
+    )
+    assert geojson["features"] == []
 
 
 @requires_geopandas

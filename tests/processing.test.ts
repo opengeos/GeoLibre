@@ -326,6 +326,12 @@ describe("processing registry", () => {
       names(run({ field: "name", operator: "neq", value: "alpha" })),
       ["beta", "delta", "gamma"],
     );
+    // SQL-like: neq on a numeric field excludes the null (gamma) and missing
+    // (delta) rows, not just the equal one.
+    assert.deepEqual(
+      names(run({ field: "pop", operator: "neq", value: "10" })),
+      ["beta"],
+    );
     // gte / lte boundary checks.
     assert.deepEqual(names(run({ field: "pop", operator: "gte", value: "20" })), [
       "beta",

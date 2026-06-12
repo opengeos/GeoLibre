@@ -363,7 +363,11 @@ def _select_by_location(geojson, overlay, parameters) -> tuple[dict, list[str]]:
             f"Accepted: {sorted(_SELECT_LOCATION_PREDICATES)}"
         )
     left = _load_gdf(geojson, "Input layer")
+    # `total` is every input feature (matching the client's input.features.length
+    # in the log); drop null-geometry rows from the candidates the same way the
+    # client (`f.geometry` filter) does, so they never count as a disjoint match.
     total = len(left)
+    left = left[left.geometry.notna()]
     # An empty filter layer selects everything for "disjoint" (nothing to
     # intersect) and nothing for the positive predicates. Matches the client.
     if not overlay or not overlay.get("features"):
