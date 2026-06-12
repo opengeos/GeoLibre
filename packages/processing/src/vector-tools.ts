@@ -827,8 +827,11 @@ export const selectByValueTool: ProcessingAlgorithm = {
   },
 };
 
+/** Select by location adds "disjoint" (the complement of intersects). */
+type SelectLocationPredicate = SpatialPredicate | "disjoint";
+
 /** Spatial predicates for Select by location; kept in sync with the backend. */
-const SELECT_LOCATION_PREDICATES = new Set([
+const SELECT_LOCATION_PREDICATES = new Set<SelectLocationPredicate>([
   "intersects",
   "within",
   "contains",
@@ -866,11 +869,12 @@ export const selectByLocationTool: ProcessingAlgorithm = {
       ctx.log('Error: parameter "overlay" has no layer selected');
       return;
     }
-    const predicate = (ctx.parameters.predicate as string) || "intersects";
-    if (!SELECT_LOCATION_PREDICATES.has(predicate)) {
-      ctx.log(`Error: unknown predicate '${predicate}'`);
+    const rawPredicate = (ctx.parameters.predicate as string) || "intersects";
+    if (!SELECT_LOCATION_PREDICATES.has(rawPredicate as SelectLocationPredicate)) {
+      ctx.log(`Error: unknown predicate '${rawPredicate}'`);
       return;
     }
+    const predicate = rawPredicate as SelectLocationPredicate;
     const inputFeatures = input.features.filter((f) => f.geometry);
     const filterFeatures = (filterLayer.geojson?.features ?? []).filter(
       (f) => f.geometry,
@@ -892,8 +896,10 @@ export const selectByLocationTool: ProcessingAlgorithm = {
     // features matching the predicate against any filter feature. With an empty
     // filter layer `some(...)` is false, so disjoint keeps everything and the
     // rest keep nothing — matching the backend.
+    // In the else branch TS narrows `predicate` to SpatialPredicate, so this is
+    // checked — no cast — and would error if the "disjoint" guard were removed.
     const test: SpatialPredicate =
-      predicate === "disjoint" ? "intersects" : (predicate as SpatialPredicate);
+      predicate === "disjoint" ? "intersects" : predicate;
     const selected = inputFeatures.filter((f) => {
       const matchesAny = filterFeatures.some((g) => matchesPredicate(f, g, test));
       return predicate === "disjoint" ? !matchesAny : matchesAny;

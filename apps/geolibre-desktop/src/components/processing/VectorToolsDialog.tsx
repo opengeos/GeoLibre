@@ -180,16 +180,21 @@ export function VectorToolsDialog({
 
   // Clear a `type: "field"` value once its source layer no longer offers it
   // (e.g. the user switched the input layer), so the dropdown never shows a
-  // stale, unselectable field name.
+  // stale, unselectable field name. Inline the field lookup so the effect
+  // depends on the data it actually reads rather than the params-derived
+  // fieldOptions callback.
   useEffect(() => {
     for (const param of tool.parameters) {
       if (param.type !== "field") continue;
       const current = params[param.id] as string | undefined;
-      if (current && !fieldOptions(param).includes(current)) {
-        setParam(param.id, undefined);
-      }
+      if (!current) continue;
+      const sourceId = params[param.fieldSource ?? "layer"] as
+        | string
+        | undefined;
+      const options = (sourceId && fieldsByLayer.get(sourceId)) || [];
+      if (!options.includes(current)) setParam(param.id, undefined);
     }
-  }, [tool, params, fieldOptions, setParam]);
+  }, [tool, params, fieldsByLayer, setParam]);
 
   const addResultLayer = useCallback(
     (name: string, fc: FeatureCollection) => {
