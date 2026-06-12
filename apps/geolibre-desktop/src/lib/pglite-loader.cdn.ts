@@ -27,6 +27,7 @@ export async function loadPgliteModules(): Promise<PgliteModules> {
         "embed build (GEOLIBRE_PGLITE_CDN=1).",
     );
   }
+  let modules: { PGlite: unknown; postgis: unknown };
   try {
     // Version-pinned but not integrity-checked: dynamic import() has no
     // `integrity` option, so there is no Subresource Integrity guard on the
@@ -37,13 +38,32 @@ export async function loadPgliteModules(): Promise<PgliteModules> {
       import(/* @vite-ignore */ __PGLITE_CDN_URL__),
       import(/* @vite-ignore */ __PGLITE_POSTGIS_CDN_URL__),
     ]);
-    return { PGlite: PGlite as PgliteModules["PGlite"], postgis };
+    modules = { PGlite, postgis };
   } catch (err) {
+    // The import itself failed: no network, jsDelivr unreachable, or a strict
+    // JupyterHub CSP blocking script-src cdn.jsdelivr.net. Name all three so the
+    // failure is diagnosable.
     throw new Error(
       "Could not load the PostGIS SQL engine from the CDN. The embedded " +
         "GeoLibre app fetches PGlite from jsDelivr on first use, so this " +
-        "feature needs network access.",
+        "feature needs network access and a Content-Security-Policy that " +
+        "allows loading scripts from cdn.jsdelivr.net.",
       { cause: err },
     );
   }
+  // Validate the export shape outside the catch (so this specific message is not
+  // rewrapped as the network error above). If the pinned CDN bundle ever ships
+  // an incompatible module (e.g. a CJS shim that nests everything under
+  // `default`), these would be undefined and otherwise surface later as an
+  // opaque "PGlite is not a constructor" in pglite-workspace.ts.
+  if (typeof modules.PGlite !== "function" || !modules.postgis) {
+    throw new Error(
+      "The CDN module did not export the expected PGlite/postgis symbols; " +
+        "the pinned jsDelivr URL may point to an incompatible bundle.",
+    );
+  }
+  return {
+    PGlite: modules.PGlite as PgliteModules["PGlite"],
+    postgis: modules.postgis,
+  };
 }

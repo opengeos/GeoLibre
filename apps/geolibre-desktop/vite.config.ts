@@ -28,16 +28,38 @@ const APP_VERSION = JSON.parse(
 // lockfile; PGlite resolves its own .wasm/.data/postgis.tar relative to these.
 const PGLITE_CDN = process.env.GEOLIBRE_PGLITE_CDN === "1";
 const pgliteCdnRequire = createRequire(import.meta.url);
+// The ESM entry of a package's manifest. Prefer the `module` field and the
+// `import` condition of `exports` (both point at the ESM build); never fall back
+// to `main`, which is the CJS entry (`dist/index.cjs` for PGlite) and would
+// break the jsDelivr `import()` at runtime. Falls back to `dist/index.js`, the
+// historical PGlite layout, if neither is declared.
+function esmEntry(manifest: Record<string, unknown>): string {
+  if (typeof manifest.module === "string") return manifest.module;
+  const exportsRoot = (manifest.exports as Record<string, unknown> | undefined)?.[
+    "."
+  ];
+  const importEntry = (exportsRoot as Record<string, unknown> | undefined)
+    ?.import;
+  const importDefault =
+    typeof importEntry === "string"
+      ? importEntry
+      : (importEntry as Record<string, unknown> | undefined)?.default;
+  if (typeof importDefault === "string") return importDefault;
+  return "dist/index.js";
+}
 // The PGlite packages do not expose "./package.json" via their `exports`, so
 // resolve the package entry and walk up to its package.json to read the
-// installed version.
-function installedVersion(pkg: string): string {
+// installed version and ESM entry path (so the CDN URL tracks the lockfile and
+// any future dist restructuring instead of hardcoding `/dist/index.js`).
+function installedPackage(pkg: string): { version: string; entry: string } {
   let dir = path.dirname(pgliteCdnRequire.resolve(pkg));
   while (dir !== path.dirname(dir)) {
     const manifest = path.join(dir, "package.json");
     try {
       const parsed = JSON.parse(readFileSync(manifest, "utf8"));
-      if (parsed.name === pkg) return parsed.version as string;
+      if (parsed.name === pkg) {
+        return { version: parsed.version as string, entry: esmEntry(parsed) };
+      }
     } catch {
       // Not this directory's package.json; keep walking up.
     }
@@ -47,7 +69,10 @@ function installedVersion(pkg: string): string {
 }
 function pgliteCdnUrl(pkg: string): string | null {
   if (!PGLITE_CDN) return null;
-  return `https://cdn.jsdelivr.net/npm/${pkg}@${installedVersion(pkg)}/dist/index.js`;
+  const { version, entry } = installedPackage(pkg);
+  // Normalize a leading "./" from the manifest entry into the jsDelivr path.
+  const entryPath = entry.replace(/^\.?\//, "");
+  return `https://cdn.jsdelivr.net/npm/${pkg}@${version}/${entryPath}`;
 }
 const PGLITE_CDN_URL = pgliteCdnUrl("@electric-sql/pglite");
 const PGLITE_POSTGIS_CDN_URL = pgliteCdnUrl("@electric-sql/pglite-postgis");
