@@ -1068,6 +1068,17 @@ export function StylePanel({
     layer?.style.vectorStyleStops,
   ]);
 
+  // Heatmap/cluster apply to point layers in two render paths: core GeoJSON
+  // layers (drag-drop, processing results) and Add Vector Layer point layers in
+  // the geojson render mode (the maplibre-gl-vector control renders those, so
+  // type stays "geojson"; tile-rendered layers become "vector-tiles"). Memoize
+  // the point-only scan so a large layer isn't re-scanned on every panel render.
+  // Must run before the early returns below so the hook order stays stable.
+  const isPointOnly = useMemo(
+    () => (layer ? isPointOnlyGeoJsonLayer(layer) : false),
+    [layer],
+  );
+
   const resizeHandle = (
     <div
       role="separator"
@@ -1152,12 +1163,7 @@ export function StylePanel({
     isRasterPaintLayer(layer.type) || isRasterTileLayer || isDeckRasterLayer;
   const hasTextMarkerControls =
     layer.type === "geojson" && hasTextMarkerFeatures(layer);
-  // Heatmap/cluster apply to point layers in two render paths: core GeoJSON
-  // layers (drag-drop, processing results) and Add Vector Layer point layers in
-  // the geojson render mode (the maplibre-gl-vector control renders those, so
-  // type stays "geojson"; tile-rendered layers become "vector-tiles"). Memoize
-  // the point-only scan so a large layer isn't re-scanned on every panel render.
-  const isPointOnly = useMemo(() => isPointOnlyGeoJsonLayer(layer), [layer]);
+  // isPointOnly is memoized above the early returns to keep hook order stable.
   const isCoreGeoJsonPoint =
     isPointOnly &&
     !hasExternalNativeLayers(layer) &&

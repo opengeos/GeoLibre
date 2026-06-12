@@ -18,12 +18,13 @@
     "build": "npm run build -w geolibre-desktop",
     "build:embed": "node scripts/build-embed.mjs",
     "typecheck": "npm run build",
+    "lint": "eslint apps packages workers tests",
     "test": "npm run test:frontend",
     "test:frontend": "node --import tsx --test tests/*.test.ts",
     "test:backend": "python -m pytest backend/geolibre_server/tests",
     "test:worker": "npm run typecheck -w geolibre-viewer-worker",
     "check:rust": "cargo check --manifest-path apps/geolibre-desktop/src-tauri/Cargo.toml",
-    "ci": "npm run build && npm run test:frontend && npm run test:worker && npm run test:backend && npm run check:rust",
+    "ci": "npm run lint && npm run build && npm run test:frontend && npm run test:worker && npm run test:backend && npm run check:rust",
     "tauri": "npm run tauri -w geolibre-desktop",
     "tauri:dev": "npm run tauri dev -w geolibre-desktop",
     "tauri:build": "node scripts/tauri-build.mjs",
@@ -34,6 +35,9 @@
   },
   "devDependencies": {
     "@types/node": "^22.19.21",
-    "tsx": "^4.22.4"
+    "eslint": "^10.4.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "tsx": "^4.22.4",
+    "typescript-eslint": "^8.61.0"
   }
 }

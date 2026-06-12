@@ -68,6 +68,9 @@ jobs:
       - name: Install backend test dependencies
         run: python -m pip install -e "backend/geolibre_server[dev]"
 
+      - name: Lint
+        run: npm run lint
+
       - name: Build web app
         run: npm run build
         env:
