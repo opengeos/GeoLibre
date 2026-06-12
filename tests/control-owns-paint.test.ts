@@ -24,6 +24,7 @@ function makeMapStub(nativeLayerId: string, nativeType: string) {
     getSource: () => undefined,
     setLayoutProperty: record("setLayoutProperty"),
     setPaintProperty: record("setPaintProperty"),
+    setLayerZoomRange: record("setLayerZoomRange"),
     moveLayer: record("moveLayer"),
     removeLayer: record("removeLayer"),
     addLayer: record("addLayer"),
@@ -78,6 +79,33 @@ describe("controlOwnsPaint external native layers", () => {
     );
 
     // The control owns the paint, so the host must not touch it.
+    assert.ok(
+      !calls.some((c) => c.method === "setPaintProperty"),
+      "expected paint to be left untouched",
+    );
+  });
+
+  it("still manages a non-default zoom range without touching paint", () => {
+    // A distinct id keeps this layer out of the module-level
+    // managedZoomRangeLayerIds set the other tests touch.
+    const { map, calls } = makeMapStub("mub-zoomed", "circle");
+    const layer = externalNativeLayer({
+      id: "mub-zoomed",
+      style: { ...DEFAULT_LAYER_STYLE, minZoom: 5 },
+      metadata: {
+        externalNativeLayer: true,
+        nativeLayerIds: ["mub-zoomed"],
+        sourceIds: ["mub-zoomed"],
+        controlOwnsPaint: true,
+      },
+    });
+
+    syncLayer(map as never, layer);
+
+    assert.ok(
+      calls.some((c) => c.method === "setLayerZoomRange"),
+      "expected the non-default zoom range to be applied",
+    );
     assert.ok(
       !calls.some((c) => c.method === "setPaintProperty"),
       "expected paint to be left untouched",

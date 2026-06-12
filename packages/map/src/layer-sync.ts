@@ -196,7 +196,11 @@ function syncExternalNativeLayer(
     .map((nativeLayerId) => getStyleLayerSpec(map, nativeLayerId))
     .filter(isFillStyleLayerSpec);
 
-  if (layer.style.extrusionEnabled && nativeFillLayerSpecs.length > 0) {
+  if (
+    layer.style.extrusionEnabled &&
+    nativeFillLayerSpecs.length > 0 &&
+    !controlOwnsPaint(layer)
+  ) {
     for (const nativeLayerId of nativeLayerIds) {
       setNativeLayerVisibility(map, nativeLayerId, "none");
     }
