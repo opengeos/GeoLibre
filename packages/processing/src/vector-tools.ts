@@ -612,19 +612,27 @@ export const spatialJoinTool: ProcessingAlgorithm = {
       );
       return;
     }
+    // Collect every join-layer attribute key so unmatched left-join rows get a
+    // null for each one. This keeps the output schema consistent with matched
+    // rows and mirrors GeoPandas, which fills NaN (→ null in GeoJSON) there.
+    const nullJoinProps: GeoJsonProperties = {};
+    for (const j of joinFeatures) {
+      for (const key of Object.keys(j.properties ?? {})) nullJoinProps[key] = null;
+    }
     const results: Feature[] = [];
     for (const feature of inputFeatures) {
       const matches = joinFeatures.filter((j) =>
         matchesPredicate(feature, j, predicate as SpatialPredicate),
       );
       if (!matches.length) {
-        // Left join keeps unmatched input features (with only their own
-        // attributes); inner join drops them, mirroring gpd.sjoin(how=...).
+        // Left join keeps unmatched input features; inner join drops them,
+        // mirroring gpd.sjoin(how=...). Null-fill the join columns so the
+        // schema matches matched rows and the sidecar.
         if (how === "left") {
           results.push({
             type: "Feature",
             geometry: feature.geometry,
-            properties: { ...(feature.properties ?? {}) },
+            properties: { ...nullJoinProps, ...(feature.properties ?? {}) },
           });
         }
         continue;

@@ -131,7 +131,9 @@ describe("processing registry", () => {
     const outside = left!.features.find(
       (f) => f.properties?.name === "outside",
     );
-    assert.equal(outside?.properties?.region, undefined);
+    // Unmatched left-join rows null-fill the join columns (consistent schema,
+    // mirrors the sidecar), so `region` is present and null rather than absent.
+    assert.equal(outside?.properties?.region, null);
   });
 
   it("spatial join drops feature ids, validates inputs, and handles empty join layers", () => {
@@ -193,6 +195,10 @@ describe("processing registry", () => {
     });
     assert.equal(res!.features.length, 2);
     assert.ok(res!.features.every((f) => f.id === undefined));
+    // The one input feature matching two zones yields one output per match,
+    // each carrying that join feature's distinct attribute.
+    const regions = res!.features.map((f) => f.properties?.region).sort();
+    assert.deepEqual(regions, ["north", "south"]);
 
     // Empty join layer: left keeps the input, inner returns nothing.
     const emptyJoin: GeoLibreLayer = {
