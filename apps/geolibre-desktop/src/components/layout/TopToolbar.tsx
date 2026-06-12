@@ -115,6 +115,7 @@ import {
   Map,
   MessageSquare,
   Moon,
+  Pencil,
   Printer,
   Puzzle,
   Redo2,
@@ -987,6 +988,37 @@ export function TopToolbar({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            className={toolbarButtonClass}
+            variant="ghost"
+            size={toolbarButtonSize}
+            aria-label="Edit"
+          >
+            <Pencil className={toolbarIconClassName} />
+            {renderToolbarLabel("Edit")}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-56">
+          <DropdownMenuLabel>Edit</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem disabled={!canUndo} onSelect={undo}>
+            <Undo2 className="mr-2 h-3.5 w-3.5" />
+            Undo
+            <span className="ml-auto text-xs text-muted-foreground">
+              Ctrl/Cmd+Z
+            </span>
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!canRedo} onSelect={redo}>
+            <Redo2 className="mr-2 h-3.5 w-3.5" />
+            Redo
+            <span className="ml-auto text-xs text-muted-foreground">
+              Ctrl/Cmd+Shift+Z
+            </span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <NewProjectDialog
         open={newProjectDialogOpen}
         onOpenChange={setNewProjectDialogOpen}
@@ -1775,28 +1807,6 @@ export function TopToolbar({
         onOpenChange={setAboutOpen}
       />
       <div className="ml-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-        <Button
-          aria-label="Undo"
-          className="h-7 w-7 shrink-0"
-          disabled={!canUndo}
-          onClick={undo}
-          size="icon"
-          title="Undo (Ctrl/Cmd+Z)"
-          variant="ghost"
-        >
-          <Undo2 className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          aria-label="Redo"
-          className="h-7 w-7 shrink-0"
-          disabled={!canRedo}
-          onClick={redo}
-          size="icon"
-          title="Redo (Ctrl/Cmd+Shift+Z / Ctrl+Y)"
-          variant="ghost"
-        >
-          <Redo2 className="h-3.5 w-3.5" />
-        </Button>
         <Button
           aria-label={
             themeMode === "dark"
