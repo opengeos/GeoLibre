@@ -131,6 +131,20 @@ describe("addColumn (destructive)", () => {
     const layer = makeLayer({ geojson: fc([]) });
     assert.equal(addColumn(layer, [], "label", "text", "x"), null);
   });
+
+  it("seeds the new key for a feature whose properties are null", () => {
+    const layer = makeLayer({
+      geojson: fc([
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [0, 0] },
+          properties: null,
+        },
+      ]),
+    });
+    const patch = addColumn(layer, [], "label", "text", "x");
+    assert.deepEqual(patch!.geojson!.features[0].properties, { label: "x" });
+  });
 });
 
 describe("renameColumn (destructive)", () => {

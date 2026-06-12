@@ -376,6 +376,9 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     setEditingColumnName("");
     setColumnPendingDelete(null);
     setAddingColumn(false);
+    setNewColumnName("");
+    setNewColumnType("text");
+    setNewColumnDefault("");
   }, [selectedLayerId, hasLayer, isGeometryEditing]);
 
   const filterLower = attributeFilter.toLowerCase();
