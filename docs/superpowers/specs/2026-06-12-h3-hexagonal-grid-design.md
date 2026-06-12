@@ -124,6 +124,10 @@ In `tests/` (frontend `node --test`):
 
 Manual verification (desktop dev): load a polygon layer, create grid (each of the 3 sources); load a point layer, bin with count and with a sum field; confirm extension loads and grids render.
 
-## Risk to verify early
+## Feasibility — verified (2026-06-12)
 
-The installed `@duckdb/duckdb-wasm` version must have a matching `h3` community-extension WASM build. Confirm the version and a successful `LOAD h3` before building out the tools; if unavailable, fall back to pinning a compatible duckdb-wasm version or revisit Approach C (`h3-js`).
+- Installed `@duckdb/duckdb-wasm` is `1.33.1-dev45.0`, which wraps **DuckDB core v1.5.1**.
+- The `h3` community extension is published for v1.5.1 on all WASM platforms — `wasm_eh`, `wasm_mvp`, and `wasm_threads` (`https://community-extensions.duckdb.org/v1.5.1/<platform>/h3.duckdb_extension.wasm` → HTTP 200). `INSTALL h3 FROM community; LOAD h3;` is therefore valid in this app.
+- All required functions exist in the extension: `h3_polygon_wkt_to_cells(wkt, res)`, `h3_cell_to_boundary_wkt(cell)`, `h3_h3_to_string(cell)`, `h3_latlng_to_cell(lat, lng, res)`. Convenience variants `h3_latlng_to_cell_string` and `h3_string_to_h3` are also available.
+
+Residual risk: none blocking. The `LOAD h3` fetch (~MB, signature-checked) requires network on first use; surface failures in the dialog log and reset the memoized promise for retry.
