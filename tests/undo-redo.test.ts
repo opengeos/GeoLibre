@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { beforeEach, describe, it } from "node:test";
 import {
   getHistoryCoalesceMs,
   leadingDebounce,
@@ -12,7 +12,10 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 describe("leadingDebounce", () => {
   it("passes every call through when the wait is <= 0", () => {
     const calls: number[] = [];
-    const fn = leadingDebounce((n: number) => calls.push(n), () => 0);
+    const fn = leadingDebounce(
+      (n: number) => calls.push(n),
+      () => 0
+    );
     fn(1);
     fn(2);
     fn(3);
@@ -21,7 +24,10 @@ describe("leadingDebounce", () => {
 
   it("fires on the leading edge and suppresses the rest of a burst", async () => {
     const calls: number[] = [];
-    const fn = leadingDebounce((n: number) => calls.push(n), () => 30);
+    const fn = leadingDebounce(
+      (n: number) => calls.push(n),
+      () => 30
+    );
     fn(1); // leading edge -> fires
     fn(2); // within window -> suppressed
     fn(3); // within window -> suppressed
@@ -50,6 +56,12 @@ function pastLen(): number {
 }
 
 describe("store history tracking", () => {
+  beforeEach(() => {
+    setHistoryCoalesceMs(0);
+    useAppStore.getState().newProject({ name: "reset" });
+    useAppStore.temporal.getState().clear();
+  });
+
   it("records tracked changes and ignores transient changes", () => {
     setHistoryCoalesceMs(0);
     useAppStore.getState().newProject({ name: "T" });

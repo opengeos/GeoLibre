@@ -106,7 +106,7 @@ export interface AppState {
   setPreferences: (preferences: ProjectPreferences) => void;
   setProjectPlugins: (
     projectPlugins: ProjectPluginState | null,
-    shouldMarkDirty?: boolean,
+    shouldMarkDirty?: boolean
   ) => void;
   selectLayer: (id: string | null) => void;
   selectFeature: (id: string | null) => void;
@@ -124,7 +124,7 @@ export interface AppState {
   loadProject: (
     project: GeoLibreProject,
     path?: string | null,
-    options?: { rememberRecent?: boolean },
+    options?: { rememberRecent?: boolean }
   ) => void;
   setProjectPath: (path: string | null) => void;
   setProjectName: (name: string) => void;
@@ -146,7 +146,7 @@ export interface AppState {
     name: string,
     geojson: FeatureCollection,
     sourcePath?: string,
-    beforeLayerId?: string | null,
+    beforeLayerId?: string | null
   ) => string;
 }
 
@@ -158,7 +158,7 @@ export function projectPathLabel(path: string): string {
 }
 
 function normalizeRecentProjects(
-  projects: RecentProjectEntry[],
+  projects: RecentProjectEntry[]
 ): RecentProjectEntry[] {
   const seen = new Set<string>();
   const normalized: RecentProjectEntry[] = [];
@@ -182,226 +182,226 @@ function normalizeRecentProjects(
 export const useAppStore = create<AppState>()(
   temporal(
     (set, get) => ({
-  projectName: DEFAULT_PROJECT_NAME,
-  projectPath: null,
-  projectGeneration: 0,
-  isDirty: false,
-  mapView: createDefaultMapView(),
-  basemapStyleUrl: DEFAULT_BASEMAP,
-  basemapVisible: true,
-  basemapOpacity: 1,
-  layers: [],
-  preferences: DEFAULT_PROJECT_PREFERENCES,
-  projectPlugins: null,
-  selectedLayerId: null,
-  selectedFeatureId: null,
-  identifyLayerId: null,
-  pointerCoords: null,
-  metadata: {},
-  recentProjects: [],
-  attributeFilter: "",
-  ui: {
-    processingOpen: false,
-    conversionOpen: null,
-    vectorToolOpen: null,
-    rasterToolOpen: null,
-    sqlWorkspaceOpen: false,
-    attributeTableOpen: false,
-    zoomToSelectedFeature: false,
-  },
-
-  setPointerCoords: (coords) => set({ pointerCoords: coords }),
-  setMapView: (view, markDirty = false) =>
-    set((s) => ({
-      mapView: { ...s.mapView, ...view },
-      isDirty: markDirty || s.isDirty,
-    })),
-  setBasemapStyleUrl: (url) => set({ basemapStyleUrl: url, isDirty: true }),
-  setBasemapVisible: (visible) =>
-    set({ basemapVisible: visible, isDirty: true }),
-  setBasemapOpacity: (opacity) =>
-    set({ basemapOpacity: opacity, isDirty: true }),
-  setPreferences: (preferences) => set({ preferences, isDirty: true }),
-  // When shouldMarkDirty is false the existing dirty flag is preserved rather
-  // than set; it cannot clear the flag (only markSaved() does that).
-  setProjectPlugins: (projectPlugins, shouldMarkDirty = true) =>
-    set((s) => ({
-      projectPlugins,
-      isDirty: shouldMarkDirty || s.isDirty,
-    })),
-  selectLayer: (id) => set({ selectedLayerId: id, selectedFeatureId: null }),
-  selectFeature: (id) => set({ selectedFeatureId: id }),
-  setIdentifyLayer: (id) => set({ identifyLayerId: id }),
-  setAttributeFilter: (filter) => set({ attributeFilter: filter }),
-  setProcessingOpen: (open) =>
-    set((s) => ({ ui: { ...s.ui, processingOpen: open } })),
-  setConversionOpen: (kind) =>
-    set((s) => ({ ui: { ...s.ui, conversionOpen: kind } })),
-  setVectorToolOpen: (kind) =>
-    set((s) => ({ ui: { ...s.ui, vectorToolOpen: kind } })),
-  setRasterToolOpen: (kind) =>
-    set((s) => ({ ui: { ...s.ui, rasterToolOpen: kind } })),
-  setSqlWorkspaceOpen: (open) =>
-    set((s) => ({ ui: { ...s.ui, sqlWorkspaceOpen: open } })),
-  setAttributeTableOpen: (open) =>
-    set((s) => ({ ui: { ...s.ui, attributeTableOpen: open } })),
-  setZoomToSelectedFeature: (enabled) =>
-    set((s) => ({ ui: { ...s.ui, zoomToSelectedFeature: enabled } })),
-
-  newProject: (options = {}) => {
-    const project = createEmptyProject(options.name, options);
-    const applied = applyProjectToStore(project);
-    set((s) => ({
-      ...applied,
+      projectName: DEFAULT_PROJECT_NAME,
       projectPath: null,
-      projectGeneration: s.projectGeneration + 1,
+      projectGeneration: 0,
       isDirty: false,
+      mapView: createDefaultMapView(),
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [],
+      preferences: DEFAULT_PROJECT_PREFERENCES,
+      projectPlugins: null,
       selectedLayerId: null,
       selectedFeatureId: null,
       identifyLayerId: null,
       pointerCoords: null,
-      attributeFilter: "",
-    }));
-  },
-
-  loadProject: (project, path = null, options = {}) => {
-    const applied = applyProjectToStore(project);
-    set((s) => ({
-      ...applied,
-      projectPath: path,
-      projectGeneration: s.projectGeneration + 1,
-      isDirty: false,
-      selectedLayerId: applied.layers[0]?.id ?? null,
-      selectedFeatureId: null,
-      identifyLayerId: null,
-    }));
-    if (path && options.rememberRecent !== false) {
-      get().rememberRecentProject({
-        path,
-        name: project.name,
-        openedAt: new Date().toISOString(),
-      });
-    }
-  },
-
-  setProjectPath: (path) => set({ projectPath: path }),
-  setProjectName: (name) => set({ projectName: name, isDirty: true }),
-  setRecentProjects: (projects) =>
-    set({ recentProjects: normalizeRecentProjects(projects) }),
-  rememberRecentProject: (entry) =>
-    set((s) => ({
-      recentProjects: normalizeRecentProjects([entry, ...s.recentProjects]),
-    })),
-  forgetRecentProject: (path) => {
-    // Compare with separators normalized so a backslash/forward-slash mismatch
-    // on Windows does not leave a stale entry behind.
-    const normalized = path.replace(/\\/g, "/");
-    set((s) => ({
-      recentProjects: s.recentProjects.filter(
-        (project) => project.path.replace(/\\/g, "/") !== normalized,
-      ),
-    }));
-  },
-  clearRecentProjects: () => set({ recentProjects: [] }),
-  markSaved: () => set({ isDirty: false }),
-
-  addLayer: (layer, beforeLayerId = null) =>
-    set((s) => {
-      const layers = [...s.layers];
-      const beforeIndex = beforeLayerId
-        ? layers.findIndex((l) => l.id === beforeLayerId)
-        : -1;
-      const layerWithBeforeId =
-        beforeLayerId && beforeIndex < 0
-          ? { ...layer, beforeId: beforeLayerId }
-          : { ...layer, beforeId: layer.beforeId };
-      if (beforeIndex >= 0) {
-        layers.splice(beforeIndex, 0, layerWithBeforeId);
-      } else {
-        layers.push(layerWithBeforeId);
-      }
-      return {
-        layers,
-        selectedLayerId: layer.id,
-        isDirty: true,
-      };
-    }),
-
-  removeLayer: (id) =>
-    set((s) => ({
-      layers: s.layers.filter((l) => l.id !== id),
-      selectedLayerId:
-        s.selectedLayerId === id
-          ? (s.layers.find((l) => l.id !== id)?.id ?? null)
-          : s.selectedLayerId,
-      selectedFeatureId: s.selectedLayerId === id ? null : s.selectedFeatureId,
-      identifyLayerId: s.identifyLayerId === id ? null : s.identifyLayerId,
-      isDirty: true,
-    })),
-
-  updateLayer: (id, patch) =>
-    set((s) => ({
-      layers: s.layers.map((l) => (l.id === id ? { ...l, ...patch } : l)),
-      isDirty: true,
-    })),
-
-  setLayerVisibility: (id, visible) =>
-    get().updateLayer(id, { visible }),
-
-  setLayerOpacity: (id, opacity) =>
-    get().updateLayer(id, { opacity }),
-
-  setLayerStyle: (id, style) =>
-    set((s) => ({
-      layers: s.layers.map((l) =>
-        l.id === id ? { ...l, style: { ...l.style, ...style } } : l,
-      ),
-      isDirty: true,
-    })),
-
-  reorderLayer: (id, direction) =>
-    set((s) => {
-      const idx = s.layers.findIndex((l) => l.id === id);
-      if (idx < 0) return s;
-      const target = direction === "up" ? idx + 1 : idx - 1;
-      if (target < 0 || target >= s.layers.length) return s;
-      const next = [...s.layers];
-      const [item] = next.splice(idx, 1);
-      next.splice(target, 0, item);
-      return { layers: next, isDirty: true };
-    }),
-
-  moveLayer: (id, targetIndex) =>
-    set((s) => {
-      const currentIndex = s.layers.findIndex((layer) => layer.id === id);
-      if (currentIndex < 0) return s;
-      const next = [...s.layers];
-      const [layer] = next.splice(currentIndex, 1);
-      const nextIndex = Math.min(Math.max(targetIndex, 0), next.length);
-      next.splice(nextIndex, 0, layer);
-      if (next.every((item, index) => item.id === s.layers[index]?.id)) {
-        return s;
-      }
-      return { layers: next, isDirty: true };
-    }),
-
-  addGeoJsonLayer: (name, geojson, sourcePath, beforeLayerId = null) => {
-    const id = uuidv4();
-    const layer: GeoLibreLayer = {
-      id,
-      name,
-      type: "geojson",
-      source: { type: "geojson" },
-      visible: true,
-      opacity: 1,
-      style: { ...DEFAULT_LAYER_STYLE },
       metadata: {},
-      geojson,
-      sourcePath,
-    };
-    get().addLayer(layer, beforeLayerId);
-    return id;
-  },
+      recentProjects: [],
+      attributeFilter: "",
+      ui: {
+        processingOpen: false,
+        conversionOpen: null,
+        vectorToolOpen: null,
+        rasterToolOpen: null,
+        sqlWorkspaceOpen: false,
+        attributeTableOpen: false,
+        zoomToSelectedFeature: false,
+      },
+
+      setPointerCoords: (coords) => set({ pointerCoords: coords }),
+      setMapView: (view, markDirty = false) =>
+        set((s) => ({
+          mapView: { ...s.mapView, ...view },
+          isDirty: markDirty || s.isDirty,
+        })),
+      setBasemapStyleUrl: (url) => set({ basemapStyleUrl: url, isDirty: true }),
+      setBasemapVisible: (visible) =>
+        set({ basemapVisible: visible, isDirty: true }),
+      setBasemapOpacity: (opacity) =>
+        set({ basemapOpacity: opacity, isDirty: true }),
+      setPreferences: (preferences) => set({ preferences, isDirty: true }),
+      // When shouldMarkDirty is false the existing dirty flag is preserved rather
+      // than set; it cannot clear the flag (only markSaved() does that).
+      setProjectPlugins: (projectPlugins, shouldMarkDirty = true) =>
+        set((s) => ({
+          projectPlugins,
+          isDirty: shouldMarkDirty || s.isDirty,
+        })),
+      selectLayer: (id) =>
+        set({ selectedLayerId: id, selectedFeatureId: null }),
+      selectFeature: (id) => set({ selectedFeatureId: id }),
+      setIdentifyLayer: (id) => set({ identifyLayerId: id }),
+      setAttributeFilter: (filter) => set({ attributeFilter: filter }),
+      setProcessingOpen: (open) =>
+        set((s) => ({ ui: { ...s.ui, processingOpen: open } })),
+      setConversionOpen: (kind) =>
+        set((s) => ({ ui: { ...s.ui, conversionOpen: kind } })),
+      setVectorToolOpen: (kind) =>
+        set((s) => ({ ui: { ...s.ui, vectorToolOpen: kind } })),
+      setRasterToolOpen: (kind) =>
+        set((s) => ({ ui: { ...s.ui, rasterToolOpen: kind } })),
+      setSqlWorkspaceOpen: (open) =>
+        set((s) => ({ ui: { ...s.ui, sqlWorkspaceOpen: open } })),
+      setAttributeTableOpen: (open) =>
+        set((s) => ({ ui: { ...s.ui, attributeTableOpen: open } })),
+      setZoomToSelectedFeature: (enabled) =>
+        set((s) => ({ ui: { ...s.ui, zoomToSelectedFeature: enabled } })),
+
+      newProject: (options = {}) => {
+        const project = createEmptyProject(options.name, options);
+        const applied = applyProjectToStore(project);
+        set((s) => ({
+          ...applied,
+          projectPath: null,
+          projectGeneration: s.projectGeneration + 1,
+          isDirty: false,
+          selectedLayerId: null,
+          selectedFeatureId: null,
+          identifyLayerId: null,
+          pointerCoords: null,
+          attributeFilter: "",
+        }));
+      },
+
+      loadProject: (project, path = null, options = {}) => {
+        const applied = applyProjectToStore(project);
+        set((s) => ({
+          ...applied,
+          projectPath: path,
+          projectGeneration: s.projectGeneration + 1,
+          isDirty: false,
+          selectedLayerId: applied.layers[0]?.id ?? null,
+          selectedFeatureId: null,
+          identifyLayerId: null,
+        }));
+        if (path && options.rememberRecent !== false) {
+          get().rememberRecentProject({
+            path,
+            name: project.name,
+            openedAt: new Date().toISOString(),
+          });
+        }
+      },
+
+      setProjectPath: (path) => set({ projectPath: path }),
+      setProjectName: (name) => set({ projectName: name, isDirty: true }),
+      setRecentProjects: (projects) =>
+        set({ recentProjects: normalizeRecentProjects(projects) }),
+      rememberRecentProject: (entry) =>
+        set((s) => ({
+          recentProjects: normalizeRecentProjects([entry, ...s.recentProjects]),
+        })),
+      forgetRecentProject: (path) => {
+        // Compare with separators normalized so a backslash/forward-slash mismatch
+        // on Windows does not leave a stale entry behind.
+        const normalized = path.replace(/\\/g, "/");
+        set((s) => ({
+          recentProjects: s.recentProjects.filter(
+            (project) => project.path.replace(/\\/g, "/") !== normalized
+          ),
+        }));
+      },
+      clearRecentProjects: () => set({ recentProjects: [] }),
+      markSaved: () => set({ isDirty: false }),
+
+      addLayer: (layer, beforeLayerId = null) =>
+        set((s) => {
+          const layers = [...s.layers];
+          const beforeIndex = beforeLayerId
+            ? layers.findIndex((l) => l.id === beforeLayerId)
+            : -1;
+          const layerWithBeforeId =
+            beforeLayerId && beforeIndex < 0
+              ? { ...layer, beforeId: beforeLayerId }
+              : { ...layer, beforeId: layer.beforeId };
+          if (beforeIndex >= 0) {
+            layers.splice(beforeIndex, 0, layerWithBeforeId);
+          } else {
+            layers.push(layerWithBeforeId);
+          }
+          return {
+            layers,
+            selectedLayerId: layer.id,
+            isDirty: true,
+          };
+        }),
+
+      removeLayer: (id) =>
+        set((s) => ({
+          layers: s.layers.filter((l) => l.id !== id),
+          selectedLayerId:
+            s.selectedLayerId === id
+              ? s.layers.find((l) => l.id !== id)?.id ?? null
+              : s.selectedLayerId,
+          selectedFeatureId:
+            s.selectedLayerId === id ? null : s.selectedFeatureId,
+          identifyLayerId: s.identifyLayerId === id ? null : s.identifyLayerId,
+          isDirty: true,
+        })),
+
+      updateLayer: (id, patch) =>
+        set((s) => ({
+          layers: s.layers.map((l) => (l.id === id ? { ...l, ...patch } : l)),
+          isDirty: true,
+        })),
+
+      setLayerVisibility: (id, visible) => get().updateLayer(id, { visible }),
+
+      setLayerOpacity: (id, opacity) => get().updateLayer(id, { opacity }),
+
+      setLayerStyle: (id, style) =>
+        set((s) => ({
+          layers: s.layers.map((l) =>
+            l.id === id ? { ...l, style: { ...l.style, ...style } } : l
+          ),
+          isDirty: true,
+        })),
+
+      reorderLayer: (id, direction) =>
+        set((s) => {
+          const idx = s.layers.findIndex((l) => l.id === id);
+          if (idx < 0) return s;
+          const target = direction === "up" ? idx + 1 : idx - 1;
+          if (target < 0 || target >= s.layers.length) return s;
+          const next = [...s.layers];
+          const [item] = next.splice(idx, 1);
+          next.splice(target, 0, item);
+          return { layers: next, isDirty: true };
+        }),
+
+      moveLayer: (id, targetIndex) =>
+        set((s) => {
+          const currentIndex = s.layers.findIndex((layer) => layer.id === id);
+          if (currentIndex < 0) return s;
+          const next = [...s.layers];
+          const [layer] = next.splice(currentIndex, 1);
+          const nextIndex = Math.min(Math.max(targetIndex, 0), next.length);
+          next.splice(nextIndex, 0, layer);
+          if (next.every((item, index) => item.id === s.layers[index]?.id)) {
+            return s;
+          }
+          return { layers: next, isDirty: true };
+        }),
+
+      addGeoJsonLayer: (name, geojson, sourcePath, beforeLayerId = null) => {
+        const id = uuidv4();
+        const layer: GeoLibreLayer = {
+          id,
+          name,
+          type: "geojson",
+          source: { type: "geojson" },
+          visible: true,
+          opacity: 1,
+          style: { ...DEFAULT_LAYER_STYLE },
+          metadata: {},
+          geojson,
+          sourcePath,
+        };
+        get().addLayer(layer, beforeLayerId);
+        return id;
+      },
     }),
     {
       // Only these fields participate in undo/redo; everything else (selection,
@@ -413,10 +413,11 @@ export const useAppStore = create<AppState>()(
         basemapVisible: s.basemapVisible,
         basemapOpacity: s.basemapOpacity,
       }),
-      // A set that leaves the partialized slice effectively equal records nothing.
-      // Primitive fields are compared with ===; the layers array is compared
-      // element-by-element via shallow so that resetting to an empty array
-      // (e.g. newProject) is correctly detected as unchanged.
+      // Records a history entry only when the tracked slice really changed.
+      // Basemap fields compare with ===; `layers` is compared element-by-element
+      // (Object.is per element) via shallow. Every mutating action creates new
+      // layer objects, so real changes differ; two distinct empty arrays compare
+      // equal, so resetting layers (e.g. newProject) records nothing.
       equality: (a, b) =>
         a.basemapStyleUrl === b.basemapStyleUrl &&
         a.basemapVisible === b.basemapVisible &&
@@ -424,8 +425,8 @@ export const useAppStore = create<AppState>()(
         shallow(a.layers, b.layers),
       limit: 100,
       // Group rapid bursts (slider drags) into one entry; window is 0 in tests.
-      handleSet: (handleSet) =>
-        leadingDebounce(handleSet, getHistoryCoalesceMs),
-    },
-  ),
+      handleSet: (baseHandleSet) =>
+        leadingDebounce(baseHandleSet, getHistoryCoalesceMs),
+    }
+  )
 );
