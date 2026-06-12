@@ -1,5 +1,5 @@
 ci:
-  skip: [npm-build]
+  skip: [npm-build, eslint]
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -19,6 +19,12 @@ repos:
 
   - repo: local
     hooks:
+      - id: eslint
+        name: eslint
+        entry: npm run lint
+        language: system
+        pass_filenames: false
+        types_or: [ts, tsx, javascript, jsx]
       - id: npm-build
         name: npm build
         entry: npm run build

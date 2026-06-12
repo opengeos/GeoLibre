@@ -368,7 +368,7 @@ export function ProcessingDialog({
     // changes; calls within this load still dedup once it is repopulated.
     clearRemoteWhiteboxCatalogSnapshotCache();
 
-    const useRemoteCatalogSnapshot = async (
+    const applyRemoteCatalogSnapshot = async (
       message: string,
       available: boolean,
     ) => {
@@ -400,7 +400,7 @@ export function ProcessingDialog({
       setRuntimeAvailable(status.available);
       setRuntimeMessage(status.message);
       if (!status.available) {
-        await useRemoteCatalogSnapshot(
+        await applyRemoteCatalogSnapshot(
           `${status.message} Showing GitHub catalog only.`,
           false,
         );
@@ -410,7 +410,7 @@ export function ProcessingDialog({
       try {
         nextTools = await fetchWhiteboxTools();
       } catch (err) {
-        await useRemoteCatalogSnapshot(
+        await applyRemoteCatalogSnapshot(
           `${
             err instanceof Error ? err.message : "Could not load live catalog."
           } Showing GitHub catalog only.`,
@@ -419,7 +419,7 @@ export function ProcessingDialog({
         return;
       }
       if (nextTools.length === 0) {
-        await useRemoteCatalogSnapshot(
+        await applyRemoteCatalogSnapshot(
           "Live catalog is empty. Showing GitHub catalog only.",
           true,
         );
@@ -439,7 +439,7 @@ export function ProcessingDialog({
       );
     } catch (err) {
       setRuntimeAvailable(false);
-      await useRemoteCatalogSnapshot(
+      await applyRemoteCatalogSnapshot(
         `${
           err instanceof Error ? err.message : "Could not connect to sidecar."
         } Showing GitHub catalog only.`,

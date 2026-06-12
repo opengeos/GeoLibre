@@ -68,6 +68,7 @@ import {
   subscribeSearchPlacesPanel,
   subscribeViewStatePanel,
   toggleEarthEnginePanel,
+  DECK_VIZ_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
   EFFECTS_PLUGIN_ID,
   WEB_SERVICE_PLUGIN_IDS,
@@ -1423,8 +1424,14 @@ export function TopToolbar({
             return plugins.map((p) => {
               // Atmosphere Effects and Directions are toggled from the Controls
               // menu instead, so they are omitted here to avoid a duplicate
-              // toggle.
-              if (p.id === EFFECTS_PLUGIN_ID || p.id === DIRECTIONS_PLUGIN_ID) {
+              // toggle. The deck.gl viz overlay is an internal renderer driven
+              // by the Add Data → "Deck.gl Layer" dialog, not a user-facing
+              // toggle, so it is hidden here too.
+              if (
+                p.id === EFFECTS_PLUGIN_ID ||
+                p.id === DIRECTIONS_PLUGIN_ID ||
+                p.id === DECK_VIZ_PLUGIN_ID
+              ) {
                 return null;
               }
               if (!WEB_SERVICE_PLUGIN_ID_SET.has(p.id)) {
