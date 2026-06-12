@@ -818,7 +818,10 @@ export const selectByValueTool: ProcessingAlgorithm = {
       id: "value",
       label: "Value",
       type: "string",
+      required: true,
       description: "Compared as a number when both sides are numeric.",
+      // Hidden (and so skipped by required validation) for the operators that
+      // ignore a value; required and form-validated for all the others.
       visibleWhen: { param: "operator", notIn: ["is-null", "is-not-null"] },
     },
   ],

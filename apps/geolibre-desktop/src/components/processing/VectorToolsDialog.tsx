@@ -201,9 +201,8 @@ export function VectorToolsDialog({
       const vw = param.visibleWhen;
       if (!vw) return true;
       const current = params[vw.param] as string | undefined;
-      if (vw.in) return current != null && vw.in.includes(current);
-      if (vw.notIn) return current == null || !vw.notIn.includes(current);
-      return true;
+      if ("in" in vw) return current != null && vw.in.includes(current);
+      return current == null || !vw.notIn.includes(current);
     },
     [params],
   );

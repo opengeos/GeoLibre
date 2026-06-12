@@ -474,6 +474,15 @@ describe("processing registry", () => {
     assert.equal(run(tiny, "within").features.length, 0);
     assert.equal(run(tiny, "contains").features.length, 1);
     assert.equal(run(big, "contains").features.length, 0);
+    // Empty filter layer: disjoint keeps everything, the rest keep nothing.
+    const empty: GeoLibreLayer = {
+      ...layer,
+      id: "emptyfilter",
+      name: "emptyfilter",
+      geojson: { type: "FeatureCollection", features: [] },
+    };
+    assert.equal(run(empty, "disjoint").features.length, 1);
+    assert.equal(run(empty, "intersects").features.length, 0);
   });
 
   it("calculates and fits layer bounds", () => {

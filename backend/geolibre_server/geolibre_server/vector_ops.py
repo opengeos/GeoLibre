@@ -291,6 +291,7 @@ def _match_value(value: Any, operator: str, raw: str) -> bool:
 
     sv = _value_to_string(value)
     if operator == "contains":
+        # Python `in` puts the needle on the left: sv contains raw.
         return raw.lower() in sv.lower()
     if operator == "starts-with":
         return sv.lower().startswith(raw.lower())

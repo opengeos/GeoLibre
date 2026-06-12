@@ -43,8 +43,11 @@ export interface AlgorithmParameter {
    * Show this parameter only when another parameter's current value is `in`
    * (or `notIn`) the given list — e.g. hide a value field for operators that
    * ignore it. A hidden parameter is also skipped during required validation.
+   * `in` and `notIn` are mutually exclusive.
    */
-  visibleWhen?: { param: string; in?: string[]; notIn?: string[] };
+  visibleWhen?:
+    | { param: string; in: string[] }
+    | { param: string; notIn: string[] };
   /** File-dialog filters for `type: "path"` (a native file picker field). */
   fileFilters?: { name: string; extensions: string[] }[];
 }
