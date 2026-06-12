@@ -16,6 +16,7 @@ import {
   onPyodideProgress,
   runVectorToolInPyodide,
 } from "../../lib/pyodide/pyodide-vector-loader";
+import { createDuckDbCapability } from "../../lib/duckdb-processing";
 import {
   Button,
   Dialog,
@@ -84,6 +85,9 @@ export function VectorToolsDialog({
     () => getVectorTool(selectedId) ?? VECTOR_TOOLS[0],
     [selectedId],
   );
+
+  // One DuckDB capability per dialog instance; the H3 tools use it via ctx.
+  const duckdb = useMemo(() => createDuckDbCapability(), []);
 
   // When the menu opens the dialog with a specific tool, preselect it.
   useEffect(() => {
@@ -310,6 +314,13 @@ export function VectorToolsDialog({
           log: appendLog,
           fitBounds: (bounds) => mapControllerRef.current?.fitBounds(bounds),
           addResultLayer,
+          duckdb,
+          viewportBounds: () => {
+            const map = mapControllerRef.current?.getMap();
+            if (!map) return null;
+            const b = map.getBounds();
+            return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+          },
         };
         await tool.run(ctx);
       }
@@ -328,6 +339,7 @@ export function VectorToolsDialog({
     runRemoteEngine,
     mapControllerRef,
     isParamVisible,
+    duckdb,
   ]);
 
   const groups = useMemo(groupedTools, []);
