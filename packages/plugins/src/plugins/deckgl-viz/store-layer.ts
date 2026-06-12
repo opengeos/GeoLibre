@@ -53,10 +53,25 @@ export interface CreateDeckVizLayerParams {
  * @param params - Layer name, viz config, and inline data.
  * @returns The corresponding GeoLibre store layer.
  */
+/**
+ * Row count above which the inline data noticeably bloats the saved project
+ * file. Surfaced as a warning, not a hard cap, so large datasets still work.
+ */
+const DECK_VIZ_ROW_WARN_COUNT = 50_000;
+
 export function createDeckVizStoreLayer(
   params: CreateDeckVizLayerParams,
 ): GeoLibreLayer {
   const id = params.id ?? crypto.randomUUID();
+  const rowCount =
+    params.rows?.length ?? params.geojson?.features.length ?? 0;
+  if (rowCount > DECK_VIZ_ROW_WARN_COUNT) {
+    console.warn(
+      "[GeoLibre] deck-viz: storing",
+      rowCount,
+      "rows inline; this will enlarge the saved project file",
+    );
+  }
   return {
     id,
     name: params.name,

@@ -139,11 +139,21 @@ const COLOR_RANGE: [number, number, number][] = [
 
 type AnyRecord = Record<string, unknown> | ReadonlyArray<unknown>;
 
-/** Reads `record[key]` as a finite number (NaN-safe, returns 0 on failure). */
+/** Reads `record[key]` as a number, falling back to 0 for non-finite values. */
 function readNumber(record: AnyRecord, key: string | number): number {
   const value = (record as Record<string | number, unknown>)[key];
   const num = typeof value === "number" ? value : Number(value);
   return Number.isFinite(num) ? num : 0;
+}
+
+/**
+ * Reads `record[key]` as a coordinate, returning NaN (not 0) for
+ * missing/invalid values so deck.gl skips the record instead of plotting it at
+ * null-island (0°N, 0°E).
+ */
+function readCoordinate(record: AnyRecord, key: string | number): number {
+  const value = (record as Record<string | number, unknown>)[key];
+  return typeof value === "number" ? value : Number(value);
 }
 
 /** A `[lng, lat]` accessor from two mapped roles. */
@@ -154,7 +164,10 @@ function positionAccessor(
 ): (record: AnyRecord) => [number, number] {
   const lngKey = mapping[lngRole];
   const latKey = mapping[latRole];
-  return (record) => [readNumber(record, lngKey), readNumber(record, latKey)];
+  return (record) => [
+    readCoordinate(record, lngKey),
+    readCoordinate(record, latKey),
+  ];
 }
 
 function rowsOf(ctx: DeckVizBuildContext): AnyRecord[] {

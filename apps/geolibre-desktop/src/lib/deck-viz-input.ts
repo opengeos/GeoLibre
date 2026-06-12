@@ -27,7 +27,7 @@ export interface DeckVizParsedInput {
   rowCount: number;
 }
 
-const SAMPLE_FEATURE_LIMIT = 50;
+const SAMPLE_FEATURE_LIMIT = 500;
 
 /**
  * Detects the format of a text payload (CSV, JSON tuple array, JSON object
@@ -296,12 +296,19 @@ function normalizeFeatureCollection(value: {
 }
 
 function collectFeatureProperties(geojson: FeatureCollection): DeckVizColumn[] {
-  const keys = new Set<string>();
+  // Keep the first value seen per key so the picker can show a sample preview,
+  // matching the CSV/JSON-object columns.
+  const firstValues = new Map<string, unknown>();
   for (const feature of geojson.features.slice(0, SAMPLE_FEATURE_LIMIT)) {
     const properties = feature.properties;
     if (properties && typeof properties === "object") {
-      for (const key of Object.keys(properties)) keys.add(key);
+      for (const [key, value] of Object.entries(properties)) {
+        if (!firstValues.has(key)) firstValues.set(key, value);
+      }
     }
   }
-  return Array.from(keys, (key) => ({ value: key, label: key }));
+  return Array.from(firstValues, ([key, value]) => ({
+    value: key,
+    label: sampleLabel(key, value),
+  }));
 }
