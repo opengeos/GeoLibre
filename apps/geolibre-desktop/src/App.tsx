@@ -5,6 +5,7 @@ import { useProjectUrlLoader } from "./hooks/useProjectUrlLoader";
 import { useRecentProjectsPersistence } from "./hooks/useRecentProjectsPersistence";
 import { useRuntimeEnvironmentVariables } from "./hooks/useRuntimeEnvironmentVariables";
 import { useThemeMode } from "./hooks/useThemeMode";
+import { useUndoRedoShortcuts } from "./hooks/useUndoRedoShortcuts";
 
 export default function App() {
   const layoutOptions = useLayoutOptions();
@@ -14,6 +15,7 @@ export default function App() {
   useDesktopSettingsPersistence();
   useRecentProjectsPersistence();
   useRuntimeEnvironmentVariables();
+  useUndoRedoShortcuts();
   return (
     <DesktopShell
       layoutOptions={layoutOptions}
