@@ -61,10 +61,18 @@ def load_jupyter_server_extension(serverapp: Any) -> None:
         ``default_filename`` kwarg passed below.
         """
 
+        def set_extra_headers(self, path: str) -> None:
+            # Defense in depth: the bundle is served from the Jupyter Server's
+            # authenticated origin, so block MIME sniffing that could coax a
+            # browser into executing a mistyped asset in that origin.
+            self.set_header("X-Content-Type-Options", "nosniff")
+
     web_app = serverapp.web_app
     base_url = web_app.settings["base_url"]
     route = url_path_join(base_url, APP_ROUTE, "(.*)")
-    bundle_present = _STATIC_APP.is_dir()
+    # Match ensure_bundle()'s index.html check (not a bare is_dir) so an empty
+    # bundle dir reports as missing rather than logging a misleading success.
+    bundle_present = (_STATIC_APP / "index.html").is_file()
     web_app.add_handlers(
         ".*$",
         [
