@@ -33,12 +33,14 @@ import {
   Eye,
   EyeOff,
   FolderCog,
+  Keyboard,
   MapPinned,
   LayoutPanelTop,
   PanelLeft,
   PanelRight,
   Plus,
   RotateCcw,
+  Search,
   Settings,
   TableProperties,
   Type,
@@ -63,6 +65,8 @@ interface SettingsDialogProps {
   mapControllerRef: RefObject<MapController | null>;
   showLabels?: boolean;
   onOpenManagePlugins: () => void;
+  onOpenCommandPalette: () => void;
+  onOpenKeyboardShortcuts: () => void;
 }
 
 const SECTION_ITEMS: Array<{
@@ -190,6 +194,8 @@ export function SettingsDialog({
   mapControllerRef,
   showLabels = true,
   onOpenManagePlugins,
+  onOpenCommandPalette,
+  onOpenKeyboardShortcuts,
 }: SettingsDialogProps) {
   const preferences = useAppStore((s) => s.preferences);
   const setPreferences = useAppStore((s) => s.setPreferences);
@@ -524,6 +530,15 @@ export function SettingsDialog({
           <DropdownMenuItem onSelect={() => onOpenManagePlugins()}>
             <Puzzle className="mr-2 h-3.5 w-3.5" />
             Manage Plugins
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => onOpenCommandPalette()}>
+            <Search className="mr-2 h-3.5 w-3.5" />
+            Command Palette
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onOpenKeyboardShortcuts()}>
+            <Keyboard className="mr-2 h-3.5 w-3.5" />
+            Keyboard Shortcuts
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
