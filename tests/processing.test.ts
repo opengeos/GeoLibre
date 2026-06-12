@@ -343,6 +343,38 @@ describe("processing registry", () => {
       run({ field: "missing", operator: "is-null" }).features.length,
       4,
     );
+
+    // A hex-looking string compares as text, not coerced to a number — matching
+    // Python's float(), which rejects "0x10" (so the engines stay in sync).
+    const hexLayer: GeoLibreLayer = {
+      ...layer,
+      id: "hex",
+      name: "Hex",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { code: "0x10" },
+            geometry: { type: "Point", coordinates: [0, 0] },
+          },
+        ],
+      },
+    };
+    const runHex = (parameters: Record<string, unknown>): number => {
+      let n = 0;
+      tool.run({
+        layers: [hexLayer],
+        parameters: { layer: "hex", field: "code", ...parameters },
+        log: () => {},
+        addResultLayer: (_n, g) => {
+          n = g.features.length;
+        },
+      });
+      return n;
+    };
+    assert.equal(runHex({ operator: "eq", value: "16" }), 0);
+    assert.equal(runHex({ operator: "eq", value: "0x10" }), 1);
   });
 
   it("selects features by location, including disjoint", () => {

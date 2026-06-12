@@ -199,6 +199,20 @@ export function VectorToolsDialog({
     }
   }, [open, tool, params, fieldsByLayer, setParam]);
 
+  // Whether a parameter should be shown, given another parameter's value
+  // (e.g. hide the Value field for is-empty/is-not-empty operators).
+  const isParamVisible = useCallback(
+    (param: AlgorithmParameter): boolean => {
+      const vw = param.visibleWhen;
+      if (!vw) return true;
+      const current = params[vw.param] as string | undefined;
+      if (vw.in) return current != null && vw.in.includes(current);
+      if (vw.notIn) return current == null || !vw.notIn.includes(current);
+      return true;
+    },
+    [params],
+  );
+
   const addResultLayer = useCallback(
     (name: string, fc: FeatureCollection) => {
       if (!fc.features.length) {
@@ -264,7 +278,7 @@ export function VectorToolsDialog({
     setLog([]);
     // Validate required parameters before doing any work.
     for (const param of tool.parameters) {
-      if (!param.required) continue;
+      if (!param.required || !isParamVisible(param)) continue;
       const value = params[param.id];
       if (
         value === undefined ||
@@ -319,6 +333,7 @@ export function VectorToolsDialog({
     addResultLayer,
     runRemoteEngine,
     mapControllerRef,
+    isParamVisible,
   ]);
 
   const groups = useMemo(groupedTools, []);
@@ -371,7 +386,7 @@ export function VectorToolsDialog({
             <p className="text-sm text-muted-foreground">{tool.description}</p>
 
             <div className="flex flex-col gap-3">
-              {tool.parameters.map((param) => (
+              {tool.parameters.filter(isParamVisible).map((param) => (
                 <ParameterField
                   key={param.id}
                   param={param}

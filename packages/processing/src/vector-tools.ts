@@ -695,6 +695,18 @@ function stableStringify(value: unknown): string {
   return `{${body}}`;
 }
 
+/**
+ * Parse a string to a finite number accepting exactly the forms Python's
+ * `float()` does — decimal/scientific notation only (no hex/octal/binary),
+ * surrounding whitespace allowed — so the client and Python numeric coercion
+ * agree. (`Number("0x10")` is 16 and `parseFloat("0x10")` is 0, but
+ * `float("0x10")` raises, so neither built-in matches.) Returns NaN otherwise.
+ */
+function parseFiniteNumber(text: string): number {
+  if (!/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(text.trim())) return NaN;
+  return Number(text);
+}
+
 /** Render a GeoJSON property value as a string, matching the backend's `_value_to_string`. */
 function valueToString(value: unknown): string {
   if (typeof value === "boolean") return value ? "true" : "false";
@@ -727,10 +739,12 @@ function matchesValue(value: unknown, operator: string, raw: string): boolean {
     return sv.toLowerCase().startsWith(raw.toLowerCase());
 
   // Numeric comparison only when the value and the input both parse as numbers.
-  const vNum = typeof value === "number" ? value : Number(sv);
-  const rNum = Number(raw);
+  // Use parseFiniteNumber (not Number()) so we accept exactly what Python's
+  // float() does — decimal/scientific only, no hex/octal/binary — keeping the
+  // client and Python engines in agreement.
+  const vNum = typeof value === "number" ? value : parseFiniteNumber(sv);
+  const rNum = parseFiniteNumber(raw);
   const numeric =
-    raw.trim() !== "" &&
     typeof value !== "boolean" &&
     Number.isFinite(vNum) &&
     Number.isFinite(rNum);
@@ -793,6 +807,7 @@ export const selectByValueTool: ProcessingAlgorithm = {
       label: "Value",
       type: "string",
       description: "Compared as a number when both sides are numeric.",
+      visibleWhen: { param: "operator", notIn: ["is-null", "is-not-null"] },
     },
   ],
   run: (ctx) => {

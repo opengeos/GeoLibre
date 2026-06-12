@@ -39,6 +39,12 @@ export interface AlgorithmParameter {
    * layer supplies the attribute-field options. Defaults to `"layer"`.
    */
   fieldSource?: string;
+  /**
+   * Show this parameter only when another parameter's current value is `in`
+   * (or `notIn`) the given list — e.g. hide a value field for operators that
+   * ignore it. A hidden parameter is also skipped during required validation.
+   */
+  visibleWhen?: { param: string; in?: string[]; notIn?: string[] };
   /** File-dialog filters for `type: "path"` (a native file picker field). */
   fileFilters?: { name: string; extensions: string[] }[];
 }

@@ -299,6 +299,31 @@ def test_select_by_value_operators(operator, value, expected) -> None:
     assert sorted(f["properties"]["name"] for f in geojson["features"]) == expected
 
 
+def test_select_by_value_hexlike_string_compared_as_text() -> None:
+    # "0x10" must not be coerced to 16 (Python float() rejects it); the client
+    # engine matches via parseFiniteNumber, so both compare it as text.
+    layer = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"code": "0x10"},
+                "geometry": {"type": "Point", "coordinates": [0.0, 0.0]},
+            }
+        ],
+    }
+    miss, _ = run_vector_tool(
+        "select-by-value", layer, parameters={"field": "code", "operator": "eq", "value": "16"}
+    )
+    assert miss["features"] == []
+    hit, _ = run_vector_tool(
+        "select-by-value",
+        layer,
+        parameters={"field": "code", "operator": "eq", "value": "0x10"},
+    )
+    assert len(hit["features"]) == 1
+
+
 def test_select_by_value_unknown_operator_raises() -> None:
     with pytest.raises(ValueError, match="operator"):
         run_vector_tool(
