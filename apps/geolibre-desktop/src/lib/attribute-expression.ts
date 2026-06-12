@@ -20,8 +20,7 @@ type Helper = (...args: unknown[]) => unknown;
 
 function toNumber(value: unknown): number {
   if (value == null || value === "") return Number.NaN;
-  const next = Number(value);
-  return next;
+  return Number(value);
 }
 
 function isNullish(value: unknown): boolean {
@@ -85,6 +84,9 @@ export const EXPRESSION_HELPERS: Record<string, Helper> = {
   },
   // iif(condition, thenValue, elseValue) — `if` is a reserved word in JS, so it
   // cannot be a bare identifier; ternaries (`cond ? a : b`) also work directly.
+  // Note: unlike SQL CASE or a ternary, all three arguments are evaluated before
+  // iif() runs — use a ternary when a branch may throw (e.g. null-property
+  // access: `obj != null ? obj.child : "default"`).
   iif: (condition, thenValue, elseValue) =>
     condition ? thenValue : elseValue,
 };
@@ -119,6 +121,11 @@ const JS_KEYWORDS = new Set([
   // strict-mode future-reserved words and restricted names
   "let", "static", "implements", "interface", "package", "private",
   "protected", "public", "eval", "arguments",
+  // future-reserved in all modes
+  "enum",
+  // global constants — not reserved words, but as bare params they would
+  // silently shadow the JS globals (e.g. a field named `NaN`).
+  "undefined", "NaN", "Infinity",
 ]);
 
 /**

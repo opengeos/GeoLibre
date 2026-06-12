@@ -854,7 +854,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   // Stable string keys so the memo skips recompiling the expression on renders
   // that don't change the inputs (discoveredColumns / the sample row are rebuilt
   // with fresh identities every render, so they can't be deps directly).
-  const calcColumnsKey = discoveredColumns.join(" ");
+  const calcColumnsKey = JSON.stringify(discoveredColumns);
   const calcSampleKey = calcSampleRow
     ? JSON.stringify(calcSampleRow.properties)
     : "";
@@ -925,6 +925,15 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       return;
     }
     updateLayer(layer.id, result.patch);
+    if (result.errors > 0) {
+      // The calculation was applied, but some rows threw and were written as
+      // null. Keep the dialog open and report it rather than showing a silent
+      // success over a column of nulls.
+      setCalcError(
+        `Applied with ${result.errors} of ${result.evaluated} feature(s) errored and written as null.`,
+      );
+      return;
+    }
     setCalcError(null);
     setCalcOpen(false);
   };

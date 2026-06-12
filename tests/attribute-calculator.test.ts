@@ -96,6 +96,8 @@ describe("identifier helpers", () => {
     assert.equal(isBareIdentifier("round"), false); // collides with a helper
     assert.equal(isBareIdentifier("class"), false); // JS keyword
     assert.equal(isBareIdentifier("let"), false); // strict-mode reserved
+    assert.equal(isBareIdentifier("enum"), false); // reserved in all modes
+    assert.equal(isBareIdentifier("NaN"), false); // global constant
     assert.equal(fieldReference("pop"), "pop");
     assert.equal(fieldReference("my field"), 'props["my field"]');
     assert.equal(fieldReference("class"), 'props["class"]');
