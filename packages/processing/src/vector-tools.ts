@@ -697,6 +697,9 @@ const SELECT_VALUE_OPERATORS = new Set([
 
 /** Stable JSON for arrays/objects (sorted keys) so both engines stringify alike. */
 function stableStringify(value: unknown): string {
+  // JSON.stringify(undefined) is the value `undefined`, which would join to "" in
+  // an array (e.g. "[1,,3]"); emit "null" to match Python's None ("[1,null,3]").
+  if (value === undefined) return "null";
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
   const obj = value as Record<string, unknown>;
@@ -932,6 +935,10 @@ export const selectByLocationTool: ProcessingAlgorithm = {
     // checked — no cast — and would error if the "disjoint" guard were removed.
     const test: SpatialPredicate =
       predicate === "disjoint" ? "intersects" : predicate;
+    // For disjoint, a feature dropped only because a pair was unevaluable is not
+    // a confident result; count those to warn the user (the sidecar, via
+    // GeoPandas, can evaluate geometries Turf cannot, e.g. GeometryCollections).
+    let unevaluableDropped = 0;
     const selected = inputFeatures.filter((f) => {
       let matchesAny = false;
       let unevaluable = false;
@@ -949,7 +956,11 @@ export const selectByLocationTool: ProcessingAlgorithm = {
       // For positive predicates an unevaluable pair is just a non-match. For the
       // complement (disjoint) we must NOT claim "no intersection" when a pair
       // couldn't be checked, so require every pair to have been evaluable.
-      return predicate === "disjoint" ? !matchesAny && !unevaluable : matchesAny;
+      if (predicate === "disjoint") {
+        if (!matchesAny && unevaluable) unevaluableDropped += 1;
+        return !matchesAny && !unevaluable;
+      }
+      return matchesAny;
     });
     // Report the total the user sees in the layer list; note any geometry-less
     // features that were skipped (the sidecar drops them too).
@@ -958,6 +969,11 @@ export const selectByLocationTool: ProcessingAlgorithm = {
       `Select by location: ${selected.length} of ${input.features.length} feature(s) matched` +
         (skipped > 0 ? ` (${skipped} skipped, no geometry)` : ""),
     );
+    if (unevaluableDropped > 0) {
+      ctx.log(
+        `Note: ${unevaluableDropped} feature(s) excluded from disjoint because Turf could not evaluate their geometry; use the Sidecar engine for full support`,
+      );
+    }
     ctx.addResultLayer?.("Select by location", featureCollection(selected));
   },
 };
