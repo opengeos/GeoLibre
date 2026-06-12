@@ -111,8 +111,9 @@ export function readDeckVizConfig(layer: GeoLibreLayer): DeckVizConfig | null {
     def &&
     def.roles.some((role) => {
       if (!role.required) return false;
-      const value = fieldMapping[role.key];
-      return value === undefined || value === "";
+      // Typed string | number, but a hand-edited JSON file may carry null.
+      const value: unknown = fieldMapping[role.key];
+      return value === undefined || value === null || value === "";
     })
   ) {
     return null;
