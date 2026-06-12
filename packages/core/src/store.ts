@@ -43,7 +43,8 @@ export type VectorToolKind =
   | "clip"
   | "intersection"
   | "difference"
-  | "union";
+  | "union"
+  | "spatial-join";
 
 /**
  * Identifiers of the raster processing tools. Kept in sync by hand with the

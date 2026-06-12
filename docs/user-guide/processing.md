@@ -31,6 +31,12 @@ The **Processing** menu collects GeoLibre's analysis and conversion tools: vecto
 | **Difference** | Remove the overlay layer's area from the input layer (keeps input attributes). |
 | **Union** | Merge two polygon layers into a single combined geometry (attributes are not preserved on either engine). |
 
+**Join**
+
+| Tool | Description |
+| --- | --- |
+| **Spatial join** | Attach attributes from a join layer to each input feature based on a spatial relationship (intersects, within, or contains). Choose an *inner* join to keep only matched features or a *left* join to keep all input features. Works with any geometry type. |
+
 ### Engines
 
 Every vector tool can run on one of three engines, selectable in the dialog:

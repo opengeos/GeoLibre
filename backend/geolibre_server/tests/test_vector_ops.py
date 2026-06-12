@@ -55,6 +55,7 @@ def _square(name: str, x: float = 0.0, y: float = 0.0) -> dict:
 
 SQUARE = _square("a")
 OVERLAP = _square("b", x=0.5, y=0.5)
+DISJOINT = _square("c", x=10.0, y=10.0)
 
 
 def test_unknown_tool_raises_value_error() -> None:
@@ -96,6 +97,48 @@ def test_overlay_tools(tool_id: str) -> None:
     geojson, _ = run_vector_tool(tool_id, SQUARE, OVERLAP)
     assert geojson["type"] == "FeatureCollection"
     assert len(geojson["features"]) >= 1
+
+
+@requires_geopandas
+def test_spatial_join_attaches_join_attributes() -> None:
+    geojson, messages = run_vector_tool(
+        "spatial-join",
+        SQUARE,
+        OVERLAP,
+        parameters={"predicate": "intersects", "how": "inner"},
+    )
+    assert geojson["type"] == "FeatureCollection"
+    assert len(geojson["features"]) == 1
+    props = geojson["features"][0]["properties"]
+    # Both layers carry a "name" column, so gpd.sjoin suffixes the collision.
+    assert props.get("name_left") == "a"
+    assert props.get("name_right") == "b"
+    assert "index_right" not in props
+    assert messages and "Spatial join" in messages[0]
+
+
+@requires_geopandas
+def test_spatial_join_left_keeps_unmatched_input() -> None:
+    geojson, _ = run_vector_tool(
+        "spatial-join", SQUARE, DISJOINT, parameters={"how": "left"}
+    )
+    assert len(geojson["features"]) == 1
+
+
+@requires_geopandas
+def test_spatial_join_inner_drops_unmatched_input() -> None:
+    geojson, _ = run_vector_tool(
+        "spatial-join", SQUARE, DISJOINT, parameters={"how": "inner"}
+    )
+    assert geojson["features"] == []
+
+
+@requires_geopandas
+def test_spatial_join_invalid_predicate_raises_value_error() -> None:
+    with pytest.raises(ValueError, match="predicate"):
+        run_vector_tool(
+            "spatial-join", SQUARE, OVERLAP, parameters={"predicate": "bogus"}
+        )
 
 
 @requires_geopandas

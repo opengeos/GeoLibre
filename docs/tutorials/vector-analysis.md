@@ -27,6 +27,7 @@ With the buffer (or any polygon layer) and a second layer, run an overlay:
 - **Intersection** keeps only the overlapping areas of two polygon layers.
 - **Difference** removes the overlay's area from the input.
 - **Union** merges two polygon layers into one (attributes are not preserved, on either engine).
+- **Spatial join** attaches a join layer's attributes to each input feature based on a spatial relationship (intersects, within, or contains) — for example, tagging each point with the polygon that contains it. Works with any geometry type.
 
 Open the tool from **Processing → Vector**, pick the input and overlay layers, and **Run**.
 

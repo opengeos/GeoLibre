@@ -1189,6 +1189,15 @@ export function TopToolbar({
               <DropdownMenuItem onSelect={() => setVectorToolOpen("union")}>
                 Union
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs text-muted-foreground">
+                Join
+              </DropdownMenuLabel>
+              <DropdownMenuItem
+                onSelect={() => setVectorToolOpen("spatial-join")}
+              >
+                Spatial join
+              </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
           <DropdownMenuSub>

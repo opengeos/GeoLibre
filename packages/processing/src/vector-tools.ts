@@ -7,6 +7,9 @@ import simplify from "@turf/simplify";
 import intersect from "@turf/intersect";
 import difference from "@turf/difference";
 import union from "@turf/union";
+import booleanIntersects from "@turf/boolean-intersects";
+import booleanContains from "@turf/boolean-contains";
+import booleanWithin from "@turf/boolean-within";
 import { featureCollection } from "@turf/helpers";
 import type {
   Feature,
@@ -507,6 +510,111 @@ export const unionTool: ProcessingAlgorithm = {
   },
 };
 
+/** Spatial relationship used to match input features against join features. */
+type SpatialPredicate = "intersects" | "within" | "contains";
+
+/**
+ * Test an input feature against a join feature for the given predicate, mirroring
+ * GeoPandas `sjoin(predicate=...)` semantics (the relationship reads left→right):
+ * `within` is "input within join" and `contains` is "input contains join".
+ */
+function matchesPredicate(
+  input: Feature,
+  join: Feature,
+  predicate: SpatialPredicate,
+): boolean {
+  if (predicate === "within") return booleanWithin(input, join);
+  if (predicate === "contains") return booleanContains(input, join);
+  return booleanIntersects(input, join);
+}
+
+export const spatialJoinTool: ProcessingAlgorithm = {
+  id: "spatial-join",
+  name: "Spatial join",
+  description:
+    "Attach attributes from a join layer to each input feature based on a spatial relationship",
+  group: "Join",
+  supportsSidecar: true,
+  parameters: [
+    { id: "layer", label: "Input layer", type: "layer", required: true },
+    { id: "overlay", label: "Join layer", type: "layer", required: true },
+    {
+      id: "predicate",
+      label: "Spatial relationship",
+      type: "select",
+      default: "intersects",
+      options: [
+        { value: "intersects", label: "Intersects" },
+        { value: "within", label: "Within" },
+        { value: "contains", label: "Contains" },
+      ],
+    },
+    {
+      id: "how",
+      label: "Join type",
+      type: "select",
+      default: "inner",
+      options: [
+        { value: "inner", label: "Inner (keep only matched features)" },
+        { value: "left", label: "Left (keep all input features)" },
+      ],
+    },
+  ],
+  run: (ctx) => {
+    const input = requireFeatures(ctx, "layer");
+    const joinFc = requireFeatures(ctx, "overlay");
+    if (!input || !joinFc) return;
+    const inputFeatures = input.features.filter((f) => f.geometry);
+    const joinFeatures = joinFc.features.filter((f) => f.geometry);
+    if (!inputFeatures.length || !joinFeatures.length) {
+      ctx.log("Error: both layers must contain features");
+      return;
+    }
+    const predicate = ((ctx.parameters.predicate as string) ||
+      "intersects") as SpatialPredicate;
+    const how = (ctx.parameters.how as string) || "inner";
+    // This pairwise test runs on the main thread; cap it so very large layers
+    // cannot freeze the browser tab. Use the Sidecar engine for bigger jobs.
+    const pairs = inputFeatures.length * joinFeatures.length;
+    if (pairs > MAX_CLIENT_PAIRS) {
+      ctx.log(
+        `Error: spatial join needs ${pairs} comparisons (limit ${MAX_CLIENT_PAIRS}); use the Sidecar engine for large layers`,
+      );
+      return;
+    }
+    const results: Feature[] = [];
+    for (const feature of inputFeatures) {
+      const matches = joinFeatures.filter((j) =>
+        matchesPredicate(feature, j, predicate),
+      );
+      if (!matches.length) {
+        // Left join keeps unmatched input features (with only their own
+        // attributes); inner join drops them, mirroring gpd.sjoin(how=...).
+        if (how === "left") {
+          results.push({
+            ...feature,
+            properties: { ...(feature.properties ?? {}) },
+          });
+        }
+        continue;
+      }
+      // One output feature per match, like GeoPandas sjoin. Input attributes win
+      // on name collisions (the sidecar instead suffixes them _left/_right).
+      for (const match of matches) {
+        results.push({
+          ...feature,
+          properties: {
+            ...(match.properties ?? {}),
+            ...(feature.properties ?? {}),
+          },
+        });
+      }
+    }
+    ctx.log(`Spatial join: produced ${results.length} feature(s)`);
+    ctx.addResultLayer?.("Spatial join", featureCollection(results));
+  },
+};
+
 export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   bufferTool,
   centroidsTool,
@@ -518,6 +626,7 @@ export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   intersectionTool,
   differenceTool,
   unionTool,
+  spatialJoinTool,
 ];
 
 export function getVectorTool(id: string): ProcessingAlgorithm | undefined {
