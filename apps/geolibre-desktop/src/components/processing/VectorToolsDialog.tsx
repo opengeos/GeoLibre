@@ -149,6 +149,24 @@ export function VectorToolsDialog({
     [layers],
   );
 
+  // Attribute-field options for a `type: "field"` parameter, read from the
+  // layer chosen in its `fieldSource` parameter (default "layer").
+  const fieldOptions = useCallback(
+    (param: AlgorithmParameter): string[] => {
+      const sourceId = params[param.fieldSource ?? "layer"] as
+        | string
+        | undefined;
+      const layer = layers.find((l) => l.id === sourceId);
+      if (!layer?.geojson) return [];
+      const keys = new Set<string>();
+      for (const feature of layer.geojson.features) {
+        for (const key of Object.keys(feature.properties ?? {})) keys.add(key);
+      }
+      return [...keys];
+    },
+    [layers, params],
+  );
+
   const addResultLayer = useCallback(
     (name: string, fc: FeatureCollection) => {
       if (!fc.features.length) {
@@ -327,6 +345,9 @@ export function VectorToolsDialog({
                   param={param}
                   value={params[param.id]}
                   layerOptions={layerOptions(param.geometryFilter)}
+                  fieldOptions={
+                    param.type === "field" ? fieldOptions(param) : undefined
+                  }
                   onChange={(value) => setParam(param.id, value)}
                 />
               ))}
@@ -408,6 +429,8 @@ interface ParameterFieldProps {
   param: AlgorithmParameter;
   value: unknown;
   layerOptions: { id: string; name: string }[];
+  /** Attribute-field names for a `type: "field"` parameter. */
+  fieldOptions?: string[];
   onChange: (value: unknown) => void;
 }
 
@@ -415,6 +438,7 @@ function ParameterField({
   param,
   value,
   layerOptions,
+  fieldOptions,
   onChange,
 }: ParameterFieldProps): ReactElement {
   const label = (
@@ -462,6 +486,31 @@ function ParameterField({
             </option>
           ))}
         </Select>
+      </div>
+    );
+  }
+
+  if (param.type === "field") {
+    return (
+      <div className="flex flex-col gap-1">
+        {label}
+        <Select
+          id={param.id}
+          value={(value as string) ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          <option value="">
+            {fieldOptions?.length ? "Select a field..." : "Select a layer first"}
+          </option>
+          {fieldOptions?.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </Select>
+        {param.description ? (
+          <p className="text-xs text-muted-foreground">{param.description}</p>
+        ) : null}
       </div>
     );
   }

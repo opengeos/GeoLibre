@@ -69,6 +69,25 @@ POINT_IN_SQUARE = {
 }
 
 
+def _attr_point(name: str, pop, x: float) -> dict:
+    return {
+        "type": "Feature",
+        "properties": {"name": name, "pop": pop},
+        "geometry": {"type": "Point", "coordinates": [x, 0.0]},
+    }
+
+
+# Attribute layer for Select by value: numeric "pop" (with a null) and string "name".
+ATTR_LAYER = {
+    "type": "FeatureCollection",
+    "features": [
+        _attr_point("alpha", 10, 0.0),
+        _attr_point("beta", 20, 1.0),
+        _attr_point("gamma", None, 2.0),
+    ],
+}
+
+
 def test_unknown_tool_raises_value_error() -> None:
     with pytest.raises(ValueError, match="Unknown vector tool"):
         run_vector_tool("nonsense", SQUARE)
@@ -190,6 +209,114 @@ def test_spatial_join_invalid_predicate_raises_value_error() -> None:
 def test_spatial_join_invalid_how_raises_value_error() -> None:
     with pytest.raises(ValueError, match="join type"):
         run_vector_tool("spatial-join", SQUARE, OVERLAP, parameters={"how": "outer"})
+
+
+# --- Select by value (pure attribute filter; no GeoPandas required) ---
+
+
+def test_select_by_value_numeric_comparison() -> None:
+    geojson, messages = run_vector_tool(
+        "select-by-value",
+        ATTR_LAYER,
+        parameters={"field": "pop", "operator": "gt", "value": "15"},
+    )
+    names = [f["properties"]["name"] for f in geojson["features"]]
+    assert names == ["beta"]
+    assert messages and "1 of 3" in messages[0]
+
+
+def test_select_by_value_string_equals() -> None:
+    geojson, _ = run_vector_tool(
+        "select-by-value",
+        ATTR_LAYER,
+        parameters={"field": "name", "operator": "eq", "value": "alpha"},
+    )
+    assert [f["properties"]["name"] for f in geojson["features"]] == ["alpha"]
+
+
+def test_select_by_value_contains_is_case_insensitive() -> None:
+    geojson, _ = run_vector_tool(
+        "select-by-value",
+        ATTR_LAYER,
+        parameters={"field": "name", "operator": "contains", "value": "ET"},
+    )
+    assert [f["properties"]["name"] for f in geojson["features"]] == ["beta"]
+
+
+def test_select_by_value_is_null_matches_missing() -> None:
+    geojson, _ = run_vector_tool(
+        "select-by-value", ATTR_LAYER, parameters={"field": "pop", "operator": "is-null"}
+    )
+    assert [f["properties"]["name"] for f in geojson["features"]] == ["gamma"]
+
+
+def test_select_by_value_unknown_operator_raises() -> None:
+    with pytest.raises(ValueError, match="operator"):
+        run_vector_tool(
+            "select-by-value",
+            ATTR_LAYER,
+            parameters={"field": "pop", "operator": "bogus", "value": "1"},
+        )
+
+
+def test_select_by_value_unknown_field_raises() -> None:
+    with pytest.raises(ValueError, match="not found"):
+        run_vector_tool(
+            "select-by-value",
+            ATTR_LAYER,
+            parameters={"field": "missing", "operator": "eq", "value": "x"},
+        )
+
+
+def test_select_by_value_missing_value_raises() -> None:
+    with pytest.raises(ValueError, match="value is required"):
+        run_vector_tool(
+            "select-by-value", ATTR_LAYER, parameters={"field": "pop", "operator": "eq"}
+        )
+
+
+# --- Select by location ---
+
+
+@requires_geopandas
+def test_select_by_location_intersects() -> None:
+    geojson, messages = run_vector_tool(
+        "select-by-location", SQUARE, OVERLAP, parameters={"predicate": "intersects"}
+    )
+    assert len(geojson["features"]) == 1
+    assert messages and "1 of 1" in messages[0]
+
+
+@requires_geopandas
+def test_select_by_location_disjoint_selects_non_overlapping() -> None:
+    geojson, _ = run_vector_tool(
+        "select-by-location", SQUARE, DISJOINT, parameters={"predicate": "disjoint"}
+    )
+    assert len(geojson["features"]) == 1
+
+
+@requires_geopandas
+def test_select_by_location_intersects_disjoint_layer_selects_none() -> None:
+    geojson, _ = run_vector_tool(
+        "select-by-location", SQUARE, DISJOINT, parameters={"predicate": "intersects"}
+    )
+    assert geojson["features"] == []
+
+
+@requires_geopandas
+def test_select_by_location_empty_filter_disjoint_keeps_all() -> None:
+    geojson, _ = run_vector_tool(
+        "select-by-location", SQUARE, EMPTY, parameters={"predicate": "disjoint"}
+    )
+    assert len(geojson["features"]) == 1
+
+
+@requires_geopandas
+def test_select_by_location_unknown_predicate_raises() -> None:
+    with pytest.raises(ValueError, match="predicate"):
+        run_vector_tool(
+            "select-by-location", SQUARE, OVERLAP, parameters={"predicate": "bogus"}
+        )
 
 
 @requires_geopandas

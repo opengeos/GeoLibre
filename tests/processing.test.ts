@@ -244,6 +244,128 @@ describe("processing registry", () => {
     assert.ok(logs.some((m) => m.includes("unknown predicate")));
   });
 
+  it("selects features by attribute value", () => {
+    const tool = getVectorTool("select-by-value");
+    assert.ok(tool);
+    const attr: GeoLibreLayer = {
+      ...layer,
+      id: "attr",
+      name: "Attr",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { name: "alpha", pop: 10 },
+            geometry: { type: "Point", coordinates: [0, 0] },
+          },
+          {
+            type: "Feature",
+            properties: { name: "beta", pop: 20 },
+            geometry: { type: "Point", coordinates: [1, 0] },
+          },
+          {
+            type: "Feature",
+            properties: { name: "gamma", pop: null },
+            geometry: { type: "Point", coordinates: [2, 0] },
+          },
+        ],
+      },
+    };
+    const run = (parameters: Record<string, unknown>): FeatureCollection => {
+      let out: FeatureCollection = { type: "FeatureCollection", features: [] };
+      tool.run({
+        layers: [attr],
+        parameters: { layer: "attr", ...parameters },
+        log: () => {},
+        addResultLayer: (_n, g) => {
+          out = g;
+        },
+      });
+      return out;
+    };
+
+    // Numeric comparison: pop > 15 → only beta.
+    const gt = run({ field: "pop", operator: "gt", value: "15" });
+    assert.deepEqual(
+      gt.features.map((f) => f.properties?.name),
+      ["beta"],
+    );
+    // String equals.
+    const eq = run({ field: "name", operator: "eq", value: "alpha" });
+    assert.deepEqual(
+      eq.features.map((f) => f.properties?.name),
+      ["alpha"],
+    );
+    // Case-insensitive contains.
+    const has = run({ field: "name", operator: "contains", value: "ET" });
+    assert.deepEqual(
+      has.features.map((f) => f.properties?.name),
+      ["beta"],
+    );
+    // is-null matches the missing value only.
+    const nul = run({ field: "pop", operator: "is-null" });
+    assert.deepEqual(
+      nul.features.map((f) => f.properties?.name),
+      ["gamma"],
+    );
+  });
+
+  it("selects features by location, including disjoint", () => {
+    const tool = getVectorTool("select-by-location");
+    assert.ok(tool);
+    const square = (id: string, x: number): GeoLibreLayer => ({
+      ...layer,
+      id,
+      name: id,
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { id },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [x, 0],
+                  [x, 1],
+                  [x + 1, 1],
+                  [x + 1, 0],
+                  [x, 0],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+    });
+    const a = square("a", 0); // covers x in [0,1]
+    const overlap = square("overlap", 0.5); // intersects a
+    const far = square("far", 10); // disjoint from a
+
+    const run = (
+      filter: GeoLibreLayer,
+      predicate: string,
+    ): FeatureCollection => {
+      let out: FeatureCollection = { type: "FeatureCollection", features: [] };
+      tool.run({
+        layers: [a, filter],
+        parameters: { layer: "a", overlay: filter.id, predicate },
+        log: () => {},
+        addResultLayer: (_n, g) => {
+          out = g;
+        },
+      });
+      return out;
+    };
+
+    assert.equal(run(overlap, "intersects").features.length, 1);
+    assert.equal(run(far, "intersects").features.length, 0);
+    assert.equal(run(far, "disjoint").features.length, 1);
+    assert.equal(run(overlap, "disjoint").features.length, 0);
+  });
+
   it("calculates and fits layer bounds", () => {
     const messages: string[] = [];
     let fittedBounds: [number, number, number, number] | null = null;

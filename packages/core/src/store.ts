@@ -44,7 +44,9 @@ export type VectorToolKind =
   | "intersection"
   | "difference"
   | "union"
-  | "spatial-join";
+  | "spatial-join"
+  | "select-by-value"
+  | "select-by-location";
 
 /**
  * Identifiers of the raster processing tools. Kept in sync by hand with the

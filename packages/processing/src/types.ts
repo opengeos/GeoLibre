@@ -7,6 +7,7 @@ export type ParameterType =
   | "string"
   | "boolean"
   | "select"
+  | "field"
   | "path";
 
 /** A single geometry family used to filter layer pickers. */
@@ -33,6 +34,11 @@ export interface AlgorithmParameter {
   step?: number;
   /** Restrict a `type: "layer"` picker to layers with these geometry families. */
   geometryFilter?: GeometryFamily[];
+  /**
+   * For `type: "field"`: the id of the `type: "layer"` parameter whose selected
+   * layer supplies the attribute-field options. Defaults to `"layer"`.
+   */
+  fieldSource?: string;
   /** File-dialog filters for `type: "path"` (a native file picker field). */
   fileFilters?: { name: string; extensions: string[] }[];
 }

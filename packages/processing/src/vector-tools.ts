@@ -669,6 +669,227 @@ export const spatialJoinTool: ProcessingAlgorithm = {
   },
 };
 
+/** Comparison operators for the Select by value tool; kept in sync with the backend. */
+const SELECT_VALUE_OPERATORS = [
+  "eq",
+  "neq",
+  "gt",
+  "gte",
+  "lt",
+  "lte",
+  "contains",
+  "starts-with",
+  "is-null",
+  "is-not-null",
+];
+
+/** Render a GeoJSON property value as a string the way the backend's `str()` does. */
+function valueToString(value: unknown): string {
+  if (typeof value === "boolean") return value ? "true" : "false";
+  return String(value);
+}
+
+/**
+ * Evaluate one feature's attribute value against an operator and the user's
+ * input string. Comparisons are numeric only when both sides are finite
+ * numbers, otherwise string-based. Null/undefined values match only the
+ * is-null/is-not-null operators (SQL-like). Mirrors `_match_value` in the
+ * Python backend so all three engines agree.
+ */
+function matchesValue(value: unknown, operator: string, raw: string): boolean {
+  const isNull =
+    value === null ||
+    value === undefined ||
+    (typeof value === "number" && Number.isNaN(value));
+  if (operator === "is-null") return isNull;
+  if (operator === "is-not-null") return !isNull;
+  if (isNull) return false;
+
+  const sv = valueToString(value);
+  if (operator === "contains") return sv.toLowerCase().includes(raw.toLowerCase());
+  if (operator === "starts-with")
+    return sv.toLowerCase().startsWith(raw.toLowerCase());
+
+  // Numeric comparison only when the value and the input both parse as numbers.
+  const vNum = typeof value === "number" ? value : Number(sv);
+  const rNum = Number(raw);
+  const numeric =
+    raw.trim() !== "" &&
+    typeof value !== "boolean" &&
+    Number.isFinite(vNum) &&
+    Number.isFinite(rNum);
+  const a: number | string = numeric ? vNum : sv;
+  const b: number | string = numeric ? rNum : raw;
+  switch (operator) {
+    case "eq":
+      return a === b;
+    case "neq":
+      return a !== b;
+    case "gt":
+      return a > b;
+    case "gte":
+      return a >= b;
+    case "lt":
+      return a < b;
+    case "lte":
+      return a <= b;
+    default:
+      return false;
+  }
+}
+
+export const selectByValueTool: ProcessingAlgorithm = {
+  id: "select-by-value",
+  name: "Select by value",
+  description:
+    "Extract features whose attribute value matches a condition into a new layer",
+  group: "Select",
+  supportsSidecar: true,
+  parameters: [
+    { id: "layer", label: "Input layer", type: "layer", required: true },
+    {
+      id: "field",
+      label: "Field",
+      type: "field",
+      fieldSource: "layer",
+      required: true,
+    },
+    {
+      id: "operator",
+      label: "Operator",
+      type: "select",
+      default: "eq",
+      options: [
+        { value: "eq", label: "= (equals)" },
+        { value: "neq", label: "≠ (not equals)" },
+        { value: "gt", label: "> (greater than)" },
+        { value: "gte", label: "≥ (greater than or equal)" },
+        { value: "lt", label: "< (less than)" },
+        { value: "lte", label: "≤ (less than or equal)" },
+        { value: "contains", label: "contains (text)" },
+        { value: "starts-with", label: "starts with (text)" },
+        { value: "is-null", label: "is empty" },
+        { value: "is-not-null", label: "is not empty" },
+      ],
+    },
+    {
+      id: "value",
+      label: "Value",
+      type: "string",
+      description: "Compared as a number when both sides are numeric.",
+    },
+  ],
+  run: (ctx) => {
+    const fc = requireFeatures(ctx, "layer");
+    if (!fc) return;
+    const field = (ctx.parameters.field as string)?.trim();
+    if (!field) {
+      ctx.log("Error: a field is required");
+      return;
+    }
+    const operator = (ctx.parameters.operator as string) || "eq";
+    if (!SELECT_VALUE_OPERATORS.includes(operator)) {
+      ctx.log(`Error: unknown operator '${operator}'`);
+      return;
+    }
+    const raw = (ctx.parameters.value as string) ?? "";
+    const needsValue = operator !== "is-null" && operator !== "is-not-null";
+    if (needsValue && raw === "") {
+      ctx.log("Error: a value is required for this operator");
+      return;
+    }
+    if (!fc.features.some((f) => field in (f.properties ?? {}))) {
+      ctx.log(`Error: field '${field}' not found in layer attributes`);
+      return;
+    }
+    const selected = fc.features.filter((f) =>
+      matchesValue(f.properties?.[field], operator, raw),
+    );
+    ctx.log(
+      `Select by value: ${selected.length} of ${fc.features.length} feature(s) matched`,
+    );
+    ctx.addResultLayer?.("Select by value", featureCollection(selected));
+  },
+};
+
+/** Spatial predicates for Select by location; kept in sync with the backend. */
+const SELECT_LOCATION_PREDICATES = [
+  "intersects",
+  "within",
+  "contains",
+  "disjoint",
+];
+
+export const selectByLocationTool: ProcessingAlgorithm = {
+  id: "select-by-location",
+  name: "Select by location",
+  description:
+    "Extract features by their spatial relationship to a second layer into a new layer",
+  group: "Select",
+  supportsSidecar: true,
+  parameters: [
+    { id: "layer", label: "Input layer", type: "layer", required: true },
+    { id: "overlay", label: "Filter layer", type: "layer", required: true },
+    {
+      id: "predicate",
+      label: "Spatial relationship",
+      type: "select",
+      default: "intersects",
+      options: [
+        { value: "intersects", label: "Intersects" },
+        { value: "within", label: "Within" },
+        { value: "contains", label: "Contains" },
+        { value: "disjoint", label: "Disjoint (no intersection)" },
+      ],
+    },
+  ],
+  run: (ctx) => {
+    const input = requireFeatures(ctx, "layer");
+    if (!input) return;
+    const filterLayer = getLayer(ctx, "overlay");
+    if (!filterLayer) {
+      ctx.log('Error: parameter "overlay" has no layer selected');
+      return;
+    }
+    const predicate = (ctx.parameters.predicate as string) || "intersects";
+    if (!SELECT_LOCATION_PREDICATES.includes(predicate)) {
+      ctx.log(`Error: unknown predicate '${predicate}'`);
+      return;
+    }
+    const inputFeatures = input.features.filter((f) => f.geometry);
+    const filterFeatures = (filterLayer.geojson?.features ?? []).filter(
+      (f) => f.geometry,
+    );
+    if (!inputFeatures.length) {
+      ctx.log("Error: input layer has no features with geometry");
+      return;
+    }
+    // This pairwise test runs on the main thread; cap it so very large layers
+    // cannot freeze the browser tab. Use the Sidecar engine for bigger jobs.
+    const pairs = inputFeatures.length * filterFeatures.length;
+    if (pairs > MAX_CLIENT_PAIRS) {
+      ctx.log(
+        `Error: select by location needs ${pairs} comparisons (limit ${MAX_CLIENT_PAIRS}); use the Sidecar engine for large layers`,
+      );
+      return;
+    }
+    // "disjoint" selects features that intersect nothing; the others select
+    // features matching the predicate against any filter feature. With an empty
+    // filter layer `some(...)` is false, so disjoint keeps everything and the
+    // rest keep nothing — matching the backend.
+    const test: SpatialPredicate =
+      predicate === "disjoint" ? "intersects" : (predicate as SpatialPredicate);
+    const selected = inputFeatures.filter((f) => {
+      const matchesAny = filterFeatures.some((g) => matchesPredicate(f, g, test));
+      return predicate === "disjoint" ? !matchesAny : matchesAny;
+    });
+    ctx.log(
+      `Select by location: ${selected.length} of ${inputFeatures.length} feature(s) matched`,
+    );
+    ctx.addResultLayer?.("Select by location", featureCollection(selected));
+  },
+};
+
 export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   bufferTool,
   centroidsTool,
@@ -681,6 +902,8 @@ export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   differenceTool,
   unionTool,
   spatialJoinTool,
+  selectByValueTool,
+  selectByLocationTool,
 ];
 
 export function getVectorTool(id: string): ProcessingAlgorithm | undefined {

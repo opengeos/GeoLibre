@@ -1198,6 +1198,20 @@ export function TopToolbar({
               >
                 Spatial join
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs text-muted-foreground">
+                Select
+              </DropdownMenuLabel>
+              <DropdownMenuItem
+                onSelect={() => setVectorToolOpen("select-by-value")}
+              >
+                Select by value
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setVectorToolOpen("select-by-location")}
+              >
+                Select by location
+              </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
           <DropdownMenuSub>

@@ -17,6 +17,7 @@ translates those to 400/413 responses.
 from __future__ import annotations
 
 import json
+import math
 from typing import Any, Callable, Optional
 
 WGS84 = "EPSG:4326"
@@ -231,6 +232,150 @@ def _spatial_join(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     )
 
 
+# Comparison operators for Select by value; kept in sync with the client engine.
+_VALUE_OPERATORS = {
+    "eq",
+    "neq",
+    "gt",
+    "gte",
+    "lt",
+    "lte",
+    "contains",
+    "starts-with",
+    "is-null",
+    "is-not-null",
+}
+# Spatial predicates for Select by location.
+_SELECT_LOCATION_PREDICATES = {"intersects", "within", "contains", "disjoint"}
+
+
+def _value_to_string(value: Any) -> str:
+    """Stringify a property value the way the client's ``valueToString`` does."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, float) and math.isfinite(value) and value.is_integer():
+        # Match JS, where 5.0 prints as "5"; avoids "5.0" vs "5" divergence.
+        return str(int(value))
+    return str(value)
+
+
+def _is_finite_number(text: str) -> bool:
+    try:
+        return math.isfinite(float(text))
+    except (TypeError, ValueError):
+        return False
+
+
+def _match_value(value: Any, operator: str, raw: str) -> bool:
+    """Evaluate one attribute value against an operator and the user's input.
+
+    Mirrors ``matchesValue`` in the client engine: comparisons are numeric only
+    when both sides are finite numbers, otherwise string-based; null values match
+    only the is-null/is-not-null operators.
+    """
+    is_null = value is None or (isinstance(value, float) and math.isnan(value))
+    if operator == "is-null":
+        return is_null
+    if operator == "is-not-null":
+        return not is_null
+    if is_null:
+        return False
+
+    sv = _value_to_string(value)
+    if operator == "contains":
+        return raw.lower() in sv.lower()
+    if operator == "starts-with":
+        return sv.lower().startswith(raw.lower())
+
+    numeric = (
+        raw.strip() != ""
+        and not isinstance(value, bool)
+        and _is_finite_number(sv)
+        and _is_finite_number(raw)
+    )
+    if numeric:
+        a: Any = float(sv)
+        b: Any = float(raw)
+    else:
+        a, b = sv, raw
+    if operator == "eq":
+        return a == b
+    if operator == "neq":
+        return a != b
+    if operator == "gt":
+        return a > b
+    if operator == "gte":
+        return a >= b
+    if operator == "lt":
+        return a < b
+    if operator == "lte":
+        return a <= b
+    return False
+
+
+def _select_by_value(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+    # Pure attribute filter on the raw GeoJSON properties (no geometry), so it
+    # produces byte-identical results to the client engine and needs no GeoPandas.
+    if not geojson or not geojson.get("features"):
+        raise ValueError("Input layer has no features")
+    field = str(parameters.get("field", "") or "").strip()
+    if not field:
+        raise ValueError("A field is required")
+    operator = str(parameters.get("operator", "eq") or "eq")
+    if operator not in _VALUE_OPERATORS:
+        raise ValueError(
+            f"Unknown operator '{operator}'. Accepted: {sorted(_VALUE_OPERATORS)}"
+        )
+    raw_param = parameters.get("value", "")
+    raw = "" if raw_param is None else str(raw_param)
+    if operator not in ("is-null", "is-not-null") and raw == "":
+        raise ValueError("A value is required for this operator")
+    features = geojson["features"]
+    if not any(field in (f.get("properties") or {}) for f in features):
+        raise ValueError(f"Field '{field}' not found in layer attributes")
+    selected = [
+        f
+        for f in features
+        if _match_value((f.get("properties") or {}).get(field), operator, raw)
+    ]
+    fc = {"type": "FeatureCollection", "features": selected}
+    return (
+        fc,
+        [f"Select by value: {len(selected)} of {len(features)} feature(s) matched"],
+    )
+
+
+def _select_by_location(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+    gpd = _import_geopandas()
+    predicate = str(parameters.get("predicate", "intersects") or "intersects")
+    if predicate not in _SELECT_LOCATION_PREDICATES:
+        raise ValueError(
+            f"Unknown predicate '{predicate}'. "
+            f"Accepted: {sorted(_SELECT_LOCATION_PREDICATES)}"
+        )
+    left = _load_gdf(geojson, "Input layer")
+    total = len(left)
+    # An empty filter layer selects everything for "disjoint" (nothing to
+    # intersect) and nothing for the positive predicates. Matches the client.
+    if not overlay or not overlay.get("features"):
+        result = left if predicate == "disjoint" else left.iloc[0:0]
+        return (
+            _to_feature_collection(result),
+            [f"Select by location: {len(result)} of {total} feature(s) matched"],
+        )
+    right = _load_gdf(overlay, "Filter layer")
+    test = "intersects" if predicate == "disjoint" else predicate
+    matched = gpd.sjoin(left, right, predicate=test, how="inner").index.unique()
+    # Preserve input order and emit one row per input feature (sjoin can match
+    # several filter features). For disjoint, keep the features that matched none.
+    mask = left.index.isin(matched)
+    result = left[~mask] if predicate == "disjoint" else left[mask]
+    return (
+        _to_feature_collection(result),
+        [f"Select by location: {len(result)} of {total} feature(s) matched"],
+    )
+
+
 def _union(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     gpd = _import_geopandas()
     left = _load_gdf(geojson, "Input layer")
@@ -258,6 +403,8 @@ _DISPATCH: dict[str, Callable[..., tuple[dict, list[str]]]] = {
     "difference": lambda g, o, p: _overlay_op(g, o, p, "difference"),
     "union": _union,
     "spatial-join": _spatial_join,
+    "select-by-value": _select_by_value,
+    "select-by-location": _select_by_location,
 }
 
 

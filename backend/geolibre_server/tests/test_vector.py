@@ -63,6 +63,8 @@ def test_dispatch_covers_all_tools() -> None:
         "difference",
         "union",
         "spatial-join",
+        "select-by-value",
+        "select-by-location",
     }
     assert set(_DISPATCH) == expected
 

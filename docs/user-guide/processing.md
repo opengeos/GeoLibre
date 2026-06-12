@@ -37,6 +37,13 @@ The **Processing** menu collects GeoLibre's analysis and conversion tools: vecto
 | --- | --- |
 | **Spatial join** | Attach attributes from a join layer to each input feature based on a spatial relationship (intersects, within, or contains). Choose an *inner* join to keep only matched features or a *left* join to keep all input features. Works with any geometry type. |
 
+**Select**
+
+| Tool | Description |
+| --- | --- |
+| **Select by value** | Extract features whose attribute matches a condition into a new layer. Pick a field, an operator (=, ≠, >, ≥, <, ≤, contains, starts with, is empty, is not empty) and a value. Comparisons are numeric when both sides are numbers, otherwise text. |
+| **Select by location** | Extract features by their spatial relationship to a second layer (intersects, within, contains, or disjoint) into a new layer. Works with any geometry type. |
+
 ### Engines
 
 Every vector tool can run on one of three engines, selectable in the dialog:
