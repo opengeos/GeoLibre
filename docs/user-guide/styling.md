@@ -18,7 +18,7 @@ You can also set a per-style minimum and maximum zoom so a style only applies wi
 
 ### Point renderer (heatmap and clustering)
 
-For point-only GeoJSON layers that GeoLibre renders itself (dropped on the map or produced by a tool), the Style panel adds a **Point renderer** control:
+For point-only GeoJSON layers — whether dropped on the map, produced by a tool, or loaded through **Add Vector Layer** in the geojson render mode — the Style panel adds a **Point renderer** control:
 
 | Renderer | Description |
 | --- | --- |

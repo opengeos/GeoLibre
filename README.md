@@ -30,7 +30,7 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 - Cloud data integrations through the Planetary Computer and Earth Engine panels, the Overture Maps plugin, and federal Web Services plugins
 - Manual and automatic refresh for WFS, GeoJSON URL, and Add Vector Layer URL layers
 - Layer panel for visibility, opacity, reordering, rename, zoom-to-layer, identify, labels, open attribute table, export, and remove actions
-- Live style panel with single, categorized, graduated, and expression symbology (fill, stroke, opacity, circle radius), including for Add Vector Layer layers, plus point heatmap and clustering renderers for GeoJSON point layers
+- Live style panel with single, categorized, graduated, and expression symbology (fill, stroke, opacity, circle radius), plus point heatmap and clustering renderers — all including for Add Vector Layer point layers
 - Attribute table with filtering, sorting, resize controls, feature highlighting, optional zoom to selected features, column management (rename, delete, hide/show, reorder), and export to GeoJSON/GeoParquet/CSV
 - SQL Workspace for running DuckDB Spatial SQL against loaded layers, local files, and remote URLs, with sample queries, query history, and adding results to the map or exporting them
 - Multiple DuckDB SQL query-result layers with identify, selection, and attribute table support
