@@ -4,26 +4,22 @@ import {
   H3_AVG_AREA_KM2,
   H3_HARD_CAP,
   bboxAreaKm2,
-  estimateCellCount,
-  suggestResolution,
-} from "../packages/processing/src/h3-tools";
-import {
   bboxToWktPolygon,
+  binPointsTool,
   buildBinSql,
   buildGridFromSourceSql,
   buildGridFromWktSql,
+  createH3GridTool,
+  estimateCellCount,
+  getH3Tool,
   rowsToFeatureCollection,
+  suggestResolution,
 } from "../packages/processing/src/h3-tools";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 import type {
   DuckDbCapability,
   ProcessingContext,
 } from "../packages/processing/src/types";
-import {
-  binPointsTool,
-  createH3GridTool,
-  getH3Tool,
-} from "../packages/processing/src/h3-tools";
 
 describe("h3 resolution math", () => {
   it("exposes 16 average-area entries (res 0..15), strictly decreasing", () => {

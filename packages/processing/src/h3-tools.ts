@@ -153,6 +153,9 @@ function requireDuckDb(ctx: ProcessingContext): DuckDbCapability {
   return ctx.duckdb;
 }
 
+// Mirrors the same helper in vector-tools.ts and registry.ts; intentionally
+// duplicated because vector-tools.ts imports from this file, so importing the
+// other direction would create a cycle. Keep the three copies in sync.
 function getLayer(
   ctx: ProcessingContext,
   paramId = "layer",
@@ -222,6 +225,7 @@ export const createH3GridTool: ProcessingAlgorithm = {
 
     let areaKm2: number;
     let wkt: string | null = null;
+    let inputGeojson: FeatureCollection | null = null;
     if (source === "viewport") {
       const bounds = ctx.viewportBounds?.();
       if (!bounds) {
@@ -236,6 +240,7 @@ export const createH3GridTool: ProcessingAlgorithm = {
         ctx.log('Error: parameter "layer" has no GeoJSON features');
         return;
       }
+      inputGeojson = layer.geojson;
       const bb = bbox(layer.geojson) as [number, number, number, number];
       areaKm2 = bboxAreaKm2(bb);
       if (source === "extent") wkt = bboxToWktPolygon(bb);
@@ -261,8 +266,7 @@ export const createH3GridTool: ProcessingAlgorithm = {
       if (wkt) {
         sql = buildGridFromWktSql(wkt, res);
       } else {
-        const layer = getLayer(ctx, "layer");
-        registered = await duckdb.registerGeoJson(layer!.geojson!);
+        registered = await duckdb.registerGeoJson(inputGeojson!); // non-null: polyfill path only runs after the layer guard above set inputGeojson
         sql = buildGridFromSourceSql(registered.sql, res);
       }
       const rows = await duckdb.query(sql);
