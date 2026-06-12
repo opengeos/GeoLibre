@@ -197,14 +197,23 @@ function buildContext(layer: GeoLibreLayer): RenderEntry | null {
   const def = getDeckVizLayerDef(config.layerKind);
   if (!def) return null;
   const isGeoJson = def.format === "geojson";
+  // Bridge the Style panel: color/radius/line width come from the live
+  // LayerStyle (which the panel edits) while deck-specific props (cellSize,
+  // extrusion) stay on the viz config. Fill opacity folds into deck opacity.
+  const style: DeckVizBuildContext["style"] = {
+    ...config.style,
+    color: layer.style.fillColor || config.style.color,
+    radius: layer.style.circleRadius || config.style.radius,
+    lineWidth: layer.style.strokeWidth || config.style.lineWidth,
+  };
   const ctx: DeckVizBuildContext = {
     rows: isGeoJson
       ? undefined
       : (deckVizRows(layer) as DeckVizBuildContext["rows"]),
     geojson: isGeoJson ? layer.geojson : undefined,
     fieldMapping: config.fieldMapping,
-    style: config.style,
-    opacity: layer.opacity,
+    style,
+    opacity: layer.opacity * layer.style.fillOpacity,
   };
   return { id: layer.id, def, ctx };
 }

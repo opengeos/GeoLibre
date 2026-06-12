@@ -865,6 +865,10 @@ export function AddDataDialog({
       );
     }
 
+    const bounds =
+      parsed.format === "geojson"
+        ? undefined
+        : (computeDeckVizBounds(parsed.rows ?? [], mapping) ?? undefined);
     const layer = createDeckVizStoreLayer({
       name: layerName.trim() || def.label,
       config: {
@@ -876,13 +880,15 @@ export function AddDataDialog({
       rows: parsed.format === "geojson" ? undefined : parsed.rows,
       geojson: parsed.geojson,
       sourcePath,
+      bounds,
     });
     addLayer(layer, beforeLayer);
+    // GeoJSON fits from its geometry; row-based layers fit from the stored
+    // bounds (also used by the layer panel's "Zoom to layer").
     if (def.format === "geojson") {
       mapControllerRef.current?.fitLayer(layer);
-    } else {
-      const bounds = computeDeckVizBounds(parsed.rows ?? [], mapping);
-      if (bounds) mapControllerRef.current?.fitBounds(bounds);
+    } else if (bounds) {
+      mapControllerRef.current?.fitBounds(bounds);
     }
     closeDialog();
   };

@@ -39,6 +39,24 @@ export interface CreateDeckVizLayerParams {
   geojson?: FeatureCollection;
   /** Origin URL or file name, shown in the layer panel. */
   sourcePath?: string;
+  /** `[west, south, east, north]` extent, so "Zoom to layer" works. */
+  bounds?: [number, number, number, number];
+}
+
+/**
+ * Seeds the standard LayerStyle from the viz config so the Style panel opens on
+ * the values chosen in the dialog (and editing them flows back into rendering,
+ * since the overlay reads these fields).
+ */
+function deckVizLayerStyle(config: DeckVizConfig) {
+  return {
+    ...DEFAULT_LAYER_STYLE,
+    fillColor: config.style.color,
+    strokeColor: config.style.color,
+    circleRadius: config.style.radius,
+    strokeWidth: config.style.lineWidth,
+    fillOpacity: 1,
+  };
 }
 
 /**
@@ -82,7 +100,7 @@ export function createDeckVizStoreLayer(
     },
     visible: true,
     opacity: 1,
-    style: { ...DEFAULT_LAYER_STYLE },
+    style: deckVizLayerStyle(params.config),
     metadata: {
       sourceKind: DECK_VIZ_SOURCE_KIND,
       // The picker/identify code keys off customLayerType for deck overlays;
@@ -91,6 +109,7 @@ export function createDeckVizStoreLayer(
       externalDeckLayer: true,
       identifiable: false,
       vizConfig: params.config,
+      ...(params.bounds ? { bounds: params.bounds } : {}),
     },
     geojson: params.geojson,
     sourcePath: params.sourcePath,
