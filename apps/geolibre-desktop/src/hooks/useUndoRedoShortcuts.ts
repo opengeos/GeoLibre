@@ -5,12 +5,9 @@ import { useEffect } from "react";
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   const tag = target.tagName;
-  return (
-    tag === "INPUT" ||
-    tag === "TEXTAREA" ||
-    tag === "SELECT" ||
-    target.isContentEditable
-  );
+  // SELECT is intentionally omitted: a <select> has no native text undo, so we
+  // let the app's undo/redo run even when one is focused.
+  return tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable;
 }
 
 /**
@@ -23,8 +20,10 @@ export function useUndoRedoShortcuts(): void {
       if (!(e.ctrlKey || e.metaKey)) return;
       if (isEditableTarget(e.target)) return;
       const key = e.key.toLowerCase();
+      // Ctrl/Cmd+Shift+Z, or the Windows-style Ctrl+Y (Ctrl only, not Cmd+Y).
       const isRedo =
-        (key === "z" && e.shiftKey) || (key === "y" && !e.shiftKey);
+        (key === "z" && e.shiftKey) ||
+        (key === "y" && e.ctrlKey && !e.shiftKey);
       const isUndo = key === "z" && !e.shiftKey;
       if (!isUndo && !isRedo) return;
       // Only consume the event when there is actually something to do, so an

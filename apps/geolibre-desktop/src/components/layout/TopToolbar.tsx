@@ -1779,9 +1779,9 @@ export function TopToolbar({
           aria-label="Undo"
           className="h-7 w-7 shrink-0"
           disabled={!canUndo}
-          onClick={() => undo()}
+          onClick={undo}
           size="icon"
-          title="Undo (Ctrl+Z)"
+          title="Undo (Ctrl/Cmd+Z)"
           variant="ghost"
         >
           <Undo2 className="h-3.5 w-3.5" />
@@ -1790,9 +1790,9 @@ export function TopToolbar({
           aria-label="Redo"
           className="h-7 w-7 shrink-0"
           disabled={!canRedo}
-          onClick={() => redo()}
+          onClick={redo}
           size="icon"
-          title="Redo (Ctrl+Shift+Z / Ctrl+Y)"
+          title="Redo (Ctrl/Cmd+Shift+Z / Ctrl+Y)"
           variant="ghost"
         >
           <Redo2 className="h-3.5 w-3.5" />

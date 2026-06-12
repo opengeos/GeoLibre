@@ -36,6 +36,20 @@ describe("leadingDebounce", () => {
     fn(4); // new burst -> fires
     assert.deepEqual(calls, [1, 4]);
   });
+
+  it("cancel() resets the window so the next call fires immediately", () => {
+    const calls: number[] = [];
+    const fn = leadingDebounce(
+      (n: number) => calls.push(n),
+      () => 1000
+    );
+    fn(1); // leading edge -> fires
+    fn(2); // within window -> suppressed
+    assert.deepEqual(calls, [1]);
+    fn.cancel(); // clear the active window
+    fn(3); // window reset -> fires again
+    assert.deepEqual(calls, [1, 3]);
+  });
 });
 
 describe("history coalesce config", () => {
@@ -176,5 +190,40 @@ describe("undo/redo behavior", () => {
     clearHistory();
     assert.equal(pastLen(), 0);
     assert.equal(futureLen(), 0);
+  });
+
+  it("clears the redo stack when a new action follows an undo", () => {
+    useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    useAppStore.getState().addGeoJsonLayer("B", emptyFC);
+    undo(); // removes B -> futureStates has 1
+    assert.equal(futureLen(), 1);
+    useAppStore.getState().addGeoJsonLayer("C", emptyFC); // new branch
+    assert.equal(futureLen(), 0); // redo stack discarded
+  });
+
+  it("undo/redo are no-ops on an empty stack and leave isDirty unchanged", () => {
+    useAppStore.getState().markSaved();
+    assert.equal(pastLen(), 0);
+    undo(); // nothing to undo
+    assert.equal(useAppStore.getState().isDirty, false);
+    redo(); // nothing to redo
+    assert.equal(useAppStore.getState().isDirty, false);
+  });
+
+  it("drops a selectedLayerId that no longer exists after undo", () => {
+    const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    assert.equal(useAppStore.getState().selectedLayerId, a); // add selects it
+    undo(); // removes A; selection would otherwise dangle
+    assert.equal(useAppStore.getState().selectedLayerId, null);
+  });
+
+  it("resets the coalesce window when history is cleared mid-burst", () => {
+    setHistoryCoalesceMs(50); // non-zero so a burst window is active
+    useAppStore.getState().addGeoJsonLayer("A", emptyFC); // opens the window
+    assert.equal(pastLen(), 1);
+    clearHistory(); // must cancel the active window
+    useAppStore.getState().addGeoJsonLayer("B", emptyFC); // would be suppressed
+    assert.equal(pastLen(), 1); // records despite being within the window
+    setHistoryCoalesceMs(0);
   });
 });

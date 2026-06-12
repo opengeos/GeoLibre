@@ -13,6 +13,12 @@ export function getHistoryCoalesceMs(): number {
   return historyCoalesceMs;
 }
 
+/** A debounced function with a `cancel` to clear its in-flight burst window. */
+export type DebouncedFn<A extends unknown[]> = ((...args: A) => void) & {
+  /** Clear the active burst timer so the next call fires on its leading edge. */
+  cancel: () => void;
+};
+
 /**
  * Leading-edge debounce. Fires `fn` immediately on the first call of a burst,
  * then suppresses further calls until `getWait()` ms of quiet have elapsed.
@@ -20,13 +26,15 @@ export function getHistoryCoalesceMs(): number {
  *
  * Used as zundo's `handleSet`: `fn` is zundo's "save previous state to history"
  * function, so firing only on the leading edge records the pre-burst state once.
+ * `cancel()` resets the window so that clearing history mid-burst doesn't
+ * suppress the next edit's save.
  */
 export function leadingDebounce<A extends unknown[]>(
   fn: (...args: A) => void,
   getWait: () => number,
-): (...args: A) => void {
+): DebouncedFn<A> {
   let timer: ReturnType<typeof setTimeout> | null = null;
-  return (...args: A) => {
+  const wrapped = (...args: A) => {
     const wait = getWait();
     if (wait <= 0) {
       fn(...args);
@@ -39,4 +47,11 @@ export function leadingDebounce<A extends unknown[]>(
     }, wait);
     if (atBurstStart) fn(...args);
   };
+  wrapped.cancel = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
+  return wrapped;
 }

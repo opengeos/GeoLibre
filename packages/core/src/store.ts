@@ -179,6 +179,9 @@ function normalizeRecentProjects(
   return normalized.slice(0, MAX_RECENT_PROJECTS);
 }
 
+/** Cancels the active history coalesce window (assigned by zundo's handleSet). */
+let cancelHistoryCoalesce: () => void = () => {};
+
 export const useAppStore = create<AppState>()(
   temporal(
     (set, get) => ({
@@ -427,11 +430,32 @@ export const useAppStore = create<AppState>()(
         shallow(a.layers, b.layers),
       limit: 100,
       // Group rapid bursts (slider drags) into one entry; window is 0 in tests.
-      handleSet: (baseHandleSet) =>
-        leadingDebounce(baseHandleSet, getHistoryCoalesceMs),
+      // Keep the debounced wrapper so clearHistory can reset an in-flight burst.
+      handleSet: (baseHandleSet) => {
+        const debounced = leadingDebounce(baseHandleSet, getHistoryCoalesceMs);
+        cancelHistoryCoalesce = debounced.cancel;
+        return debounced;
+      },
     }
   )
 );
+
+/**
+ * After an undo/redo restores the tracked slice, mark the project dirty and
+ * drop a `selectedLayerId` that no longer points at an existing layer (selection
+ * is intentionally not tracked in history, so it can dangle after a restore).
+ */
+function finishHistoryStep(): void {
+  const s = useAppStore.getState();
+  const selectionDangling =
+    s.selectedLayerId !== null &&
+    !s.layers.some((layer) => layer.id === s.selectedLayerId);
+  useAppStore.setState(
+    selectionDangling
+      ? { isDirty: true, selectedLayerId: null, selectedFeatureId: null }
+      : { isDirty: true },
+  );
+}
 
 /**
  * Step the layer/basemap history back one entry and mark the project dirty.
@@ -440,17 +464,22 @@ export const useAppStore = create<AppState>()(
  * reconciles through MapController.syncLayers (never mutated directly here).
  */
 export function undo(): void {
-  useAppStore.temporal.getState().undo();
-  useAppStore.setState({ isDirty: true });
+  const temporal = useAppStore.temporal.getState();
+  if (temporal.pastStates.length === 0) return; // nothing to undo; stay clean
+  temporal.undo();
+  finishHistoryStep();
 }
 
 /** Step the history forward one entry and mark the project dirty. */
 export function redo(): void {
-  useAppStore.temporal.getState().redo();
-  useAppStore.setState({ isDirty: true });
+  const temporal = useAppStore.temporal.getState();
+  if (temporal.futureStates.length === 0) return; // nothing to redo; stay clean
+  temporal.redo();
+  finishHistoryStep();
 }
 
 /** Empty both the undo and redo stacks (e.g. on new/loaded project). */
 export function clearHistory(): void {
+  cancelHistoryCoalesce(); // reset any in-flight burst so the next edit records
   useAppStore.temporal.getState().clear();
 }
