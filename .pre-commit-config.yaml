@@ -24,8 +24,8 @@ repos:
         entry: npm run build
         language: system
         pass_filenames: false
-        
-    - repo: https://github.com/kynan/nbstripout
-      rev: 0.9.1
-      hooks:
-          - id: nbstripout
+
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.9.1
+    hooks:
+        - id: nbstripout
