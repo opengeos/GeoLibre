@@ -5,11 +5,18 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   Input,
   Label,
   Select,
 } from "@geolibre/ui";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { Download } from "lucide-react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { downloadChartPng, downloadChartSvg } from "../../lib/chart-export";
+import { sanitizeExportFileName } from "../../lib/vector-export";
 import {
   categoricalColumns,
   computeBar,
@@ -81,6 +88,7 @@ export function AttributeChartDialog({
   const [catField, setCatField] = useState("");
   const [barAgg, setBarAgg] = useState<BarAggregation>("count");
   const [barValueField, setBarValueField] = useState("");
+  const chartRef = useRef<HTMLDivElement>(null);
 
   // Seed the pickers when the dialog opens. Keyed on `open` only: `rows` and
   // `columns` are rebuilt with fresh identities on every parent render, so
@@ -138,6 +146,22 @@ export function AttributeChartDialog({
   const hasNumeric = numericCols.length > 0;
   const hasCategory = categoryCols.length > 0;
   const hasChartable = hasNumeric || hasCategory;
+  // A chart is only downloadable when the active type produced a result (an SVG
+  // is on screen); empty states render no <svg>.
+  const chartRendered = Boolean(
+    histogram || scatter || bar || line || box,
+  );
+
+  const downloadChart = (format: "svg" | "png") => {
+    const svg = chartRef.current?.querySelector("svg");
+    if (!svg) return;
+    const base = `${sanitizeExportFileName(layerName || "chart")}-${chartType}`;
+    if (format === "svg") {
+      downloadChartSvg(svg, CHART_W, CHART_H, `${base}.svg`);
+    } else {
+      void downloadChartPng(svg, CHART_W, CHART_H, `${base}.png`);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -292,7 +316,7 @@ export function AttributeChartDialog({
               )}
             </div>
 
-            <div className="rounded-md border bg-background p-2">
+            <div ref={chartRef} className="rounded-md border bg-background p-2">
               {chartType === "histogram" && (
                 <HistogramChart result={histogram} field={field} />
               )}
@@ -314,7 +338,25 @@ export function AttributeChartDialog({
           </div>
         )}
 
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          {hasChartable ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" disabled={!chartRendered}>
+                  <Download className="h-4 w-4" />
+                  Download
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => downloadChart("png")}>
+                  PNG image
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => downloadChart("svg")}>
+                  SVG vector
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>
