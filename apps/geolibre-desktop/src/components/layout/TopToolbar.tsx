@@ -5,6 +5,11 @@ import {
   serializeProject,
   useAppStore,
 } from "@geolibre/core";
+import type {
+  ConversionToolKind,
+  RasterToolKind,
+  VectorToolKind,
+} from "@geolibre/core";
 import {
   type BuiltInMapControl,
   DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
@@ -108,6 +113,7 @@ import {
   FolderOpen,
   History,
   Info,
+  Keyboard,
   Layers,
   Link2,
   Map,
@@ -117,6 +123,7 @@ import {
   Puzzle,
   RefreshCw,
   Save,
+  Search,
   SlidersHorizontal,
   Sun,
   Wrench,
@@ -150,6 +157,10 @@ import {
 import { mergeStringLists } from "../../lib/string-lists";
 import { normalizeProjectUrl } from "../../lib/urls";
 import { resolveProjectXyzLayers } from "../../lib/xyz-url";
+import { CommandPalette } from "../command/CommandPalette";
+import { KeyboardShortcutsDialog } from "../command/KeyboardShortcutsDialog";
+import { useGlobalShortcuts } from "../../hooks/useGlobalShortcuts";
+import type { Command } from "../../lib/commands";
 import { AddDataDialog, type AddDataKind } from "./AddDataDialog";
 import { AddNetcdfDialog } from "./AddNetcdfDialog";
 import { AboutDialog } from "./AboutDialog";
@@ -215,6 +226,63 @@ const FEEDBACK_URL = "https://github.com/opengeos/GeoLibre/issues";
 // out of the box on both the desktop and web builds.
 const DEFAULT_OSM_PBF_URL =
   "https://data.source.coop/giswqs/opengeos/LasVegas.osm.pbf";
+
+// Static command metadata for the menus that map a single id to a label. These
+// drive the command palette so it stays in sync with the menus without each
+// action being defined twice. The `run` closures are built in the component
+// where the store setters are in scope.
+const ADD_DATA_KIND_COMMANDS: Array<{ kind: AddDataKind; title: string }> = [
+  { kind: "delimited-text", title: "Delimited Text Layer" },
+  { kind: "gpx", title: "GPX Layer" },
+  { kind: "mbtiles", title: "MBTiles Layer" },
+  { kind: "xyz", title: "XYZ Layer" },
+  { kind: "wms", title: "WMS Layer" },
+  { kind: "wfs", title: "WFS Layer" },
+  { kind: "wmts", title: "WMTS Layer" },
+  { kind: "arcgis", title: "ArcGIS Layer" },
+  { kind: "video", title: "Video Layer" },
+  { kind: "deckgl-viz", title: "Deck.gl Layer" },
+  { kind: "postgres", title: "PostgreSQL Layer" },
+];
+
+const CONVERSION_COMMANDS: Array<{ kind: ConversionToolKind; title: string }> =
+  [
+    { kind: "vector-to-geoparquet", title: "Vector to GeoParquet" },
+    { kind: "vector-to-flatgeobuf", title: "Vector to FlatGeobuf" },
+    { kind: "csv-to-geoparquet", title: "CSV to GeoParquet" },
+    { kind: "vector-to-pmtiles", title: "Vector to PMTiles" },
+    { kind: "raster-to-cog", title: "Raster to COG" },
+  ];
+
+const VECTOR_TOOL_COMMANDS: Array<{ kind: VectorToolKind; title: string }> = [
+  { kind: "buffer", title: "Buffer" },
+  { kind: "centroids", title: "Centroids" },
+  { kind: "convex-hull", title: "Convex hull" },
+  { kind: "dissolve", title: "Dissolve" },
+  { kind: "bounding-box", title: "Bounding box" },
+  { kind: "simplify", title: "Simplify" },
+  { kind: "clip", title: "Clip" },
+  { kind: "intersection", title: "Intersection" },
+  { kind: "difference", title: "Difference" },
+  { kind: "union", title: "Union" },
+  { kind: "spatial-join", title: "Spatial join" },
+  { kind: "select-by-value", title: "Select by value" },
+  { kind: "select-by-location", title: "Select by location" },
+  { kind: "h3-grid", title: "Create H3 grid" },
+  { kind: "h3-bin-points", title: "Bin points to H3" },
+];
+
+const RASTER_TOOL_COMMANDS: Array<{ kind: RasterToolKind; title: string }> = [
+  { kind: "hillshade", title: "Hillshade" },
+  { kind: "slope", title: "Slope" },
+  { kind: "aspect", title: "Aspect" },
+  { kind: "reproject", title: "Reproject" },
+  { kind: "resample", title: "Resample" },
+  { kind: "clip-extent", title: "Clip by extent" },
+  { kind: "clip-mask", title: "Clip by mask layer" },
+  { kind: "polygonize", title: "Polygonize" },
+  { kind: "contour", title: "Contour" },
+];
 
 async function openExternalLink(url: string): Promise<void> {
   if (isTauri()) {
@@ -308,6 +376,8 @@ export function TopToolbar({
     sizeMb: number;
   } | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [checkForUpdatesRequest, setCheckForUpdatesRequest] = useState(0);
   const projectUrlAbortRef = useRef<AbortController | null>(null);
   const recentAbortRef = useRef<AbortController | null>(null);
@@ -831,6 +901,330 @@ export function TopToolbar({
       return updated ? { ...current, [control]: visible } : current;
     });
   };
+  // The command registry: the single source of truth shared by the command
+  // palette, the global shortcut layer, and the keyboard cheat sheet. Each
+  // entry reuses the same handler the matching menu item calls, so behaviour is
+  // defined once. Only file operations get global shortcuts to avoid clobbering
+  // MapLibre or browser keys; everything else is reachable through the palette.
+  const commands: Command[] = [
+    // Project
+    {
+      id: "project.new",
+      title: "New Project",
+      group: "Project",
+      keywords: "create",
+      icon: FilePlus2,
+      shortcut: { key: "n", mod: true },
+      run: () => setNewProjectDialogOpen(true),
+    },
+    {
+      id: "project.open-file",
+      title: "Open Project from File",
+      group: "Project",
+      keywords: "load",
+      icon: FolderOpen,
+      shortcut: { key: "o", mod: true },
+      run: () => void handleOpenFromFile(),
+    },
+    {
+      id: "project.open-url",
+      title: "Open Project from URL",
+      group: "Project",
+      keywords: "load",
+      icon: Link2,
+      run: () => setProjectUrlDialogOpen(true),
+    },
+    {
+      id: "project.save",
+      title: "Save Project",
+      group: "Project",
+      icon: Save,
+      shortcut: { key: "s", mod: true, shift: false },
+      run: () => void handleSave(),
+    },
+    {
+      id: "project.save-as",
+      title: "Save Project As…",
+      group: "Project",
+      icon: FilePen,
+      shortcut: { key: "s", mod: true, shift: true },
+      run: () => void handleSaveAs(),
+    },
+    {
+      id: "project.share",
+      title: "Share Project…",
+      group: "Project",
+      icon: Share2,
+      run: () => setShareDialogOpen(true),
+    },
+    {
+      id: "project.print",
+      title: "Print…",
+      group: "Project",
+      icon: Printer,
+      run: handleTogglePrintPanel,
+    },
+    // Add Data
+    {
+      id: "add.vector",
+      title: "Add Vector Layer",
+      group: "Add Data",
+      icon: Database,
+      run: handleAddVectorLayer,
+    },
+    {
+      id: "add.raster",
+      title: "Add Raster Layer",
+      group: "Add Data",
+      icon: Database,
+      run: handleAddRasterLayer,
+    },
+    {
+      id: "add.osm-pbf",
+      title: "Add OSM PBF Layer",
+      group: "Add Data",
+      run: () => setOsmPbfDialogOpen(true),
+    },
+    ...ADD_DATA_KIND_COMMANDS.map(({ kind, title }) => ({
+      id: `add.${kind}`,
+      title: `Add ${title}`,
+      group: "Add Data",
+      run: () => setAddDataKind(kind),
+    })),
+    {
+      id: "add.stac",
+      title: "Add STAC Layer",
+      group: "Add Data",
+      run: handleAddStacLayer,
+    },
+    {
+      id: "add.geoparquet",
+      title: "Add GeoParquet Layer",
+      group: "Add Data",
+      run: handleAddVectorLayer,
+    },
+    {
+      id: "add.flatgeobuf",
+      title: "Add FlatGeobuf Layer",
+      group: "Add Data",
+      run: handleAddFlatGeobufLayer,
+    },
+    {
+      id: "add.pmtiles",
+      title: "Add PMTiles Layer",
+      group: "Add Data",
+      run: handleAddPMTilesLayer,
+    },
+    {
+      id: "add.zarr",
+      title: "Add Zarr Layer",
+      group: "Add Data",
+      run: handleAddZarrLayer,
+    },
+    {
+      id: "add.netcdf",
+      title: "Add NetCDF / HDF Layer",
+      group: "Add Data",
+      run: handleAddNetcdfLayer,
+    },
+    {
+      id: "add.lidar",
+      title: "Add LiDAR Layer",
+      group: "Add Data",
+      run: handleAddLidarLayer,
+    },
+    {
+      id: "add.splatting",
+      title: "Add Splatting Layer",
+      group: "Add Data",
+      run: handleAddSplattingLayer,
+    },
+    {
+      id: "add.3d-tiles",
+      title: "Add 3D Tiles Layer",
+      group: "Add Data",
+      run: handleAddThreeDTilesLayer,
+    },
+    {
+      id: "add.duckdb",
+      title: "Add DuckDB Layer",
+      group: "Add Data",
+      run: handleAddDuckDBLayer,
+    },
+    // Processing
+    {
+      id: "proc.whitebox",
+      title: "Whitebox Tools",
+      group: "Processing",
+      icon: Wrench,
+      run: () => setProcessingOpen(true),
+    },
+    {
+      id: "proc.sql",
+      title: "SQL Workspace",
+      group: "Processing",
+      icon: Wrench,
+      run: () => setSqlWorkspaceOpen(true),
+    },
+    ...CONVERSION_COMMANDS.map(({ kind, title }) => ({
+      id: `proc.conversion.${kind}`,
+      title,
+      group: "Processing",
+      keywords: "conversion convert",
+      run: () => setConversionOpen(kind),
+    })),
+    ...VECTOR_TOOL_COMMANDS.map(({ kind, title }) => ({
+      id: `proc.vector.${kind}`,
+      title,
+      group: "Processing",
+      keywords: "vector tool",
+      run: () => setVectorToolOpen(kind),
+    })),
+    ...RASTER_TOOL_COMMANDS.map(({ kind, title }) => ({
+      id: `proc.raster.${kind}`,
+      title,
+      group: "Processing",
+      keywords: "raster tool",
+      run: () => setRasterToolOpen(kind),
+    })),
+    {
+      id: "proc.planetary-computer",
+      title: "Planetary Computer",
+      group: "Processing",
+      run: handleOpenPlanetaryComputerPanel,
+    },
+    {
+      id: "proc.earth-engine",
+      title: "Earth Engine",
+      group: "Processing",
+      run: handleToggleEarthEnginePanel,
+    },
+    // Controls
+    ...MAP_CONTROL_ITEMS.map((control) => ({
+      id: `control.${control.id}`,
+      title: `Toggle ${control.label} Control`,
+      group: "Controls",
+      keywords: "control toggle map",
+      run: () => toggleMapControl(control.id),
+    })),
+    {
+      id: "control.effects",
+      title: "Toggle Atmosphere Effects",
+      group: "Controls",
+      run: () => toggle(EFFECTS_PLUGIN_ID, appApi),
+    },
+    {
+      id: "control.directions",
+      title: "Toggle Directions",
+      group: "Controls",
+      run: handleToggleDirections,
+    },
+    {
+      id: "control.search",
+      title: "Toggle Search",
+      group: "Controls",
+      run: handleToggleSearchPlacesPanel,
+    },
+    {
+      id: "control.colorbar",
+      title: "Toggle Colorbar",
+      group: "Controls",
+      run: handleToggleColorbarPanel,
+    },
+    {
+      id: "control.legend",
+      title: "Toggle Legend",
+      group: "Controls",
+      run: handleToggleLegendPanel,
+    },
+    {
+      id: "control.html",
+      title: "Toggle HTML Panel",
+      group: "Controls",
+      run: handleToggleHtmlPanel,
+    },
+    {
+      id: "control.measure",
+      title: "Toggle Measure",
+      group: "Controls",
+      run: handleToggleMeasurePanel,
+    },
+    {
+      id: "control.bookmark",
+      title: "Toggle Bookmark",
+      group: "Controls",
+      run: handleToggleBookmarkPanel,
+    },
+    {
+      id: "control.minimap",
+      title: "Toggle Minimap",
+      group: "Controls",
+      run: handleToggleMinimapPanel,
+    },
+    {
+      id: "control.view-state",
+      title: "Toggle View State",
+      group: "Controls",
+      run: handleToggleViewStatePanel,
+    },
+    // View
+    {
+      id: "view.theme",
+      title:
+        themeMode === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode",
+      group: "View",
+      keywords: "theme dark light appearance",
+      icon: themeMode === "dark" ? Sun : Moon,
+      run: onToggleThemeMode,
+    },
+    // Help
+    {
+      id: "help.shortcuts",
+      title: "Keyboard Shortcuts",
+      group: "Help",
+      keywords: "hotkeys cheat sheet",
+      icon: Keyboard,
+      run: () => setShortcutsOpen(true),
+    },
+    {
+      id: "help.diagnostics",
+      title: "Diagnostics",
+      group: "Help",
+      icon: Bug,
+      run: onOpenDiagnostics,
+    },
+    {
+      id: "help.feedback",
+      title: "Give Feedback",
+      group: "Help",
+      icon: MessageSquare,
+      run: () => void openExternalLink(FEEDBACK_URL),
+    },
+    {
+      id: "help.updates",
+      title: "Check for Updates",
+      group: "Help",
+      icon: RefreshCw,
+      run: () => {
+        setAboutOpen(true);
+        setCheckForUpdatesRequest((value) => value + 1);
+      },
+    },
+    {
+      id: "help.about",
+      title: "About",
+      group: "Help",
+      icon: Info,
+      run: () => setAboutOpen(true),
+    },
+  ];
+
+  useGlobalShortcuts({
+    commands,
+    onOpenPalette: () => setCommandPaletteOpen(true),
+    onOpenShortcuts: () => setShortcutsOpen(true),
+  });
+
   const toolbarButtonSize = compact ? "icon" : "sm";
   const toolbarButtonClass = compact ? "h-8 w-8 shrink-0" : "shrink-0";
   const toolbarIconClassName = cn("h-3.5 w-3.5", showLabels && "sm:mr-1");
@@ -1514,6 +1908,15 @@ export function TopToolbar({
         <DropdownMenuContent align="start">
           <DropdownMenuLabel>Help</DropdownMenuLabel>
           <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => setCommandPaletteOpen(true)}>
+            <Search className="mr-2 h-3.5 w-3.5" />
+            Command Palette
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setShortcutsOpen(true)}>
+            <Keyboard className="mr-2 h-3.5 w-3.5" />
+            Keyboard Shortcuts
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={onOpenDiagnostics}>
             <Bug className="mr-2 h-3.5 w-3.5" />
             Diagnostics
@@ -1760,6 +2163,16 @@ export function TopToolbar({
         open={aboutOpen}
         renderTrigger={false}
         onOpenChange={setAboutOpen}
+      />
+      <CommandPalette
+        open={commandPaletteOpen}
+        commands={commands}
+        onOpenChange={setCommandPaletteOpen}
+      />
+      <KeyboardShortcutsDialog
+        open={shortcutsOpen}
+        commands={commands}
+        onOpenChange={setShortcutsOpen}
       />
       <div className="ml-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
         <Button

@@ -6,4 +6,6 @@ export {
   useAppStore,
   type AppState,
   type ConversionToolKind,
+  type RasterToolKind,
+  type VectorToolKind,
 } from "./store";

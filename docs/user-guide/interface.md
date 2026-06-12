@@ -16,12 +16,32 @@ The toolbar across the top of the window groups every action into seven menus:
 | **Controls** | Toggle map controls and component panels (Measure, Bookmark, Minimap, and more). See [Map Controls & Tools](map-controls.md). |
 | **Plugins** | Activate built-in plugins and set their on-map position. See [Plugins & Marketplace](plugins.md). |
 | **Settings** | Map preferences, layout, environment variables, project settings, and Manage Plugins. See [Settings & Preferences](settings.md). |
-| **Help** | Diagnostics, feedback, update checks, and the About dialog. |
+| **Help** | The command palette, keyboard shortcuts, diagnostics, feedback, update checks, and the About dialog. |
 
 On the right side of the toolbar are the light/dark theme toggle and the editable project name.
 
 !!! tip "Toolbar labels"
     On narrow windows the toolbar collapses to icon-only buttons. You can also force icon-only buttons from **Settings → Layout**, or with the `toolbar=icons` URL parameter. See [Embedding & Sharing](embedding.md).
+
+## Command palette and keyboard shortcuts
+
+Every menu and toolbar action is also reachable from the keyboard, so you don't have to hunt through nested menus.
+
+- **Command palette** — press `Ctrl`/`Cmd` + `K` (or **Help → Command Palette**) to open a searchable list of every action: Add Data sources, Processing tools, Controls, Help, and more. Type to filter, move the highlight with the arrow keys, and press `Enter` to run the highlighted command.
+- **Keyboard shortcuts cheat sheet** — press `?` (or **Help → Keyboard Shortcuts**) to see the full list of global shortcuts.
+
+The built-in global shortcuts are:
+
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl`/`Cmd` + `K` | Open the command palette |
+| `?` | Show the keyboard shortcuts |
+| `Ctrl`/`Cmd` + `N` | New project |
+| `Ctrl`/`Cmd` + `O` | Open project from file |
+| `Ctrl`/`Cmd` + `S` | Save project |
+| `Ctrl`/`Cmd` + `Shift` + `S` | Save project as… |
+
+Shortcuts are ignored while you are typing in a text field, so they never interfere with search boxes or attribute editing. On macOS the `Cmd` key is used; on Windows and Linux the `Ctrl` key is used.
 
 ## The three panels
 
