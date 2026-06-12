@@ -7,6 +7,12 @@ export {
 } from "./registry";
 export { VECTOR_TOOLS, getVectorTool } from "./vector-tools";
 export {
+  H3_TOOLS,
+  getH3Tool,
+  createH3GridTool,
+  binPointsTool,
+} from "./h3-tools";
+export {
   RASTER_TOOLS,
   getRasterTool,
   type RasterTool,

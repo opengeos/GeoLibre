@@ -1213,6 +1213,18 @@ export function TopToolbar({
               >
                 Select by location
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs text-muted-foreground">
+                H3
+              </DropdownMenuLabel>
+              <DropdownMenuItem onSelect={() => setVectorToolOpen("h3-grid")}>
+                Create H3 grid
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setVectorToolOpen("h3-bin-points")}
+              >
+                Bin points to H3
+              </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
           <DropdownMenuSub>

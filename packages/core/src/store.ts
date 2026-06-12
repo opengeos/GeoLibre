@@ -46,7 +46,9 @@ export type VectorToolKind =
   | "union"
   | "spatial-join"
   | "select-by-value"
-  | "select-by-location";
+  | "select-by-location"
+  | "h3-grid"
+  | "h3-bin-points";
 
 /**
  * Identifiers of the raster processing tools. Kept in sync by hand with the

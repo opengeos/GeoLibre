@@ -21,6 +21,7 @@ import type {
 } from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { GeometryFamily, ProcessingAlgorithm, ProcessingContext } from "./types";
+import { createH3GridTool, binPointsTool } from "./h3-tools";
 
 /** Upper bound on input×overlay pairs for the main-thread intersection loop. */
 const MAX_CLIENT_PAIRS = 250_000;
@@ -997,6 +998,8 @@ export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   spatialJoinTool,
   selectByValueTool,
   selectByLocationTool,
+  createH3GridTool,
+  binPointsTool,
 ];
 
 export function getVectorTool(id: string): ProcessingAlgorithm | undefined {

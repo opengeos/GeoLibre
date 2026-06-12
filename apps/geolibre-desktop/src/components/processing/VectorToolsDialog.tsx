@@ -16,6 +16,7 @@ import {
   onPyodideProgress,
   runVectorToolInPyodide,
 } from "../../lib/pyodide/pyodide-vector-loader";
+import { createDuckDbCapability } from "../../lib/duckdb-processing";
 import {
   Button,
   Dialog,
@@ -85,6 +86,9 @@ export function VectorToolsDialog({
     [selectedId],
   );
 
+  // One DuckDB capability per dialog instance; the H3 tools use it via ctx.
+  const duckdb = useMemo(() => createDuckDbCapability(), []);
+
   // When the menu opens the dialog with a specific tool, preselect it.
   useEffect(() => {
     if (openTool) setSelectedId(openTool);
@@ -100,6 +104,35 @@ export function VectorToolsDialog({
     setLog([]);
     if (!tool.supportsSidecar) setEngine("client");
   }, [tool]);
+
+  // Prefill the H3 grid's manual bounding-box fields from the current map
+  // viewport when the user first switches to that source, so they can tweak the
+  // box rather than type it from scratch. Only fills empty fields, so it never
+  // clobbers manual edits. Keyed on the source value, not every keystroke.
+  useEffect(() => {
+    if (selectedId !== "h3-grid" || params.source !== "bbox") return;
+    if (
+      params.west !== undefined ||
+      params.south !== undefined ||
+      params.east !== undefined ||
+      params.north !== undefined
+    )
+      return;
+    const map = mapControllerRef.current?.getMap();
+    if (!map) return;
+    const b = map.getBounds();
+    const round = (n: number) => Number(n.toFixed(6));
+    setParams((prev) => ({
+      ...prev,
+      west: round(b.getWest()),
+      south: round(b.getSouth()),
+      east: round(b.getEast()),
+      north: round(b.getNorth()),
+    }));
+    // params.west/south/east/north are read as a one-time guard; re-running only
+    // when the source changes is intentional.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, params.source, mapControllerRef]);
 
   // Probe the sidecar's vector capability when the dialog opens.
   useEffect(() => {
@@ -310,6 +343,13 @@ export function VectorToolsDialog({
           log: appendLog,
           fitBounds: (bounds) => mapControllerRef.current?.fitBounds(bounds),
           addResultLayer,
+          duckdb,
+          viewportBounds: () => {
+            const map = mapControllerRef.current?.getMap();
+            if (!map) return null;
+            const b = map.getBounds();
+            return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+          },
         };
         await tool.run(ctx);
       }
@@ -328,6 +368,7 @@ export function VectorToolsDialog({
     runRemoteEngine,
     mapControllerRef,
     isParamVisible,
+    duckdb,
   ]);
 
   const groups = useMemo(groupedTools, []);
