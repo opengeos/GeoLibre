@@ -126,6 +126,34 @@ describe("ensureGpkgFeatureCountSync", () => {
     ]);
   });
 
+  it("fills gaps when gpkg_ogr_contents exists but is incomplete", () => {
+    const db: Database = new SQL.Database();
+    db.run(`
+      CREATE TABLE gpkg_contents (
+        table_name TEXT NOT NULL PRIMARY KEY, data_type TEXT NOT NULL, srs_id INTEGER
+      );
+      CREATE TABLE roads (fid INTEGER PRIMARY KEY, geom BLOB);
+      CREATE TABLE rivers (fid INTEGER PRIMARY KEY, geom BLOB);
+      INSERT INTO gpkg_contents VALUES ('roads', 'features', 4326);
+      INSERT INTO gpkg_contents VALUES ('rivers', 'features', 4326);
+      INSERT INTO roads (geom) VALUES (NULL);
+      INSERT INTO rivers (geom) VALUES (NULL), (NULL), (NULL);
+      CREATE TABLE gpkg_ogr_contents (
+        table_name TEXT NOT NULL PRIMARY KEY, feature_count INTEGER
+      );
+      INSERT INTO gpkg_ogr_contents VALUES ('roads', 1);
+    `);
+    const original = db.export();
+    db.close();
+
+    const patched = ensureGpkgFeatureCountSync(SQL, original);
+    assert.notEqual(patched, original);
+    assert.deepEqual(readOgrContents(patched), [
+      { table_name: "rivers", feature_count: 3 },
+      { table_name: "roads", feature_count: 1 },
+    ]);
+  });
+
   it("leaves a complete GeoPackage untouched", () => {
     const original = buildGpkg({ withOgrContents: true, featureCount: 3 });
     const patched = ensureGpkgFeatureCountSync(SQL, original);

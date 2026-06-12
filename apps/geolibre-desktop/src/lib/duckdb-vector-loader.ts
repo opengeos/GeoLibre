@@ -160,7 +160,7 @@ async function registerVectorFileBuffers(
     file.extension === "gpkg"
       ? await ensureGpkgFeatureCount(file.data)
       : file.data;
-  await db.registerFileBuffer(file.name, data as Uint8Array<ArrayBuffer>);
+  await db.registerFileBuffer(file.name, data);
   for (const sibling of file.siblingFiles ?? []) {
     await db.registerFileBuffer(sibling.name, sibling.data);
   }

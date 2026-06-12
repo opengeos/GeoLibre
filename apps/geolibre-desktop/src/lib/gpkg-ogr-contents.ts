@@ -45,18 +45,23 @@ function tableExists(db: Database, name: string): boolean {
  * unit-tested with an already-initialised sql.js factory. Returns the original
  * buffer unchanged when the file is not a GeoPackage or already has a count for
  * every feature table; otherwise returns a patched buffer.
+ *
+ * Loads the whole file into the sql.js WASM heap. When patching is needed the
+ * exported buffer is a second full-size allocation, so peak memory is roughly
+ * 2x the file size. Fine for typical browser-side GeoPackages.
  */
 export function ensureGpkgFeatureCountSync(
   SQL: SqlJsStatic,
-  bytes: Uint8Array,
-): Uint8Array {
+  bytes: Uint8Array<ArrayBuffer>,
+): Uint8Array<ArrayBuffer> {
   const db = new SQL.Database(bytes);
   try {
     // Only touch real GeoPackages; gpkg_contents is mandatory in the spec.
     if (!tableExists(db, "gpkg_contents")) return bytes;
 
     const featureTablesResult = db.exec(
-      "SELECT table_name FROM gpkg_contents WHERE data_type='features'",
+      // lower() so out-of-spec producers writing 'Features'/'FEATURES' still match.
+      "SELECT table_name FROM gpkg_contents WHERE lower(data_type)='features'",
     );
     if (
       featureTablesResult.length === 0 ||
@@ -101,7 +106,8 @@ export function ensureGpkgFeatureCountSync(
       );
     }
 
-    return db.export();
+    // sql.js always exports an ArrayBuffer-backed Uint8Array; re-narrow the type.
+    return db.export() as Uint8Array<ArrayBuffer>;
   } finally {
     db.close();
   }
@@ -134,8 +140,8 @@ async function loadSqlJs(): Promise<SqlJsStatic> {
  * normal `ST_Read` error path still applies.
  */
 export async function ensureGpkgFeatureCount(
-  bytes: Uint8Array,
-): Promise<Uint8Array> {
+  bytes: Uint8Array<ArrayBuffer>,
+): Promise<Uint8Array<ArrayBuffer>> {
   if (!looksLikeSqlite(bytes)) return bytes;
   try {
     const SQL = await loadSqlJs();
