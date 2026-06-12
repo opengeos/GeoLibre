@@ -40,6 +40,7 @@ import {
   ArrowRight,
   ArrowUp,
   Calculator,
+  ChartColumn,
   Columns3,
   Download,
   EyeOff,
@@ -85,6 +86,7 @@ import {
   fieldReference,
   type CalcOutputType,
 } from "../../lib/attribute-expression";
+import { AttributeChartDialog } from "./AttributeChartDialog";
 import {
   exportVectorLayer,
   formatAttributeValue,
@@ -287,6 +289,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const [newColumnName, setNewColumnName] = useState("");
   const [newColumnType, setNewColumnType] = useState<NewColumnType>("text");
   const [newColumnDefault, setNewColumnDefault] = useState("");
+  // Charts dialog state.
+  const [chartOpen, setChartOpen] = useState(false);
   // Field-calculator dialog state.
   const [calcOpen, setCalcOpen] = useState(false);
   const [calcMode, setCalcMode] = useState<"update" | "create">("update");
@@ -1250,6 +1254,24 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             </DropdownMenuContent>
           </DropdownMenu>
         ) : null}
+        {!isEditing ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2"
+            title={
+              hasAttributeSource
+                ? "Chart numeric fields"
+                : "Charts require a vector or DuckDB query layer"
+            }
+            aria-label="Charts"
+            disabled={!hasAttributeSource}
+            onClick={() => setChartOpen(true)}
+          >
+            <ChartColumn className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Charts</span>
+          </Button>
+        ) : null}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -1704,6 +1726,13 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           </div>
         </DialogContent>
       </Dialog>
+      <AttributeChartDialog
+        open={chartOpen}
+        onOpenChange={setChartOpen}
+        rows={attributeRows}
+        columns={discoveredColumns}
+        layerName={layer?.name ?? ""}
+      />
     </section>
   );
 }
