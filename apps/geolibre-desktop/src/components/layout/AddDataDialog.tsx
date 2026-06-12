@@ -510,7 +510,8 @@ export function AddDataDialog({
         mbtiles: "MBTiles Layer",
         arcgis: "ArcGIS Layer",
         postgres: "PostgreSQL Layer",
-        "deckgl-viz": getDeckVizLayerDef(deckVizKind)?.label ?? "Deck.gl Layer",
+        // Matches the deckVizKind reset to "scatterplot" below.
+        "deckgl-viz": getDeckVizLayerDef("scatterplot")?.label ?? "Deck.gl Layer",
         video: "Video Layer",
       }[kind],
     );
@@ -576,6 +577,7 @@ export function AddDataDialog({
       setSelectedMartinSourceId("");
       setMartinStatus(null);
     }
+    setDeckVizKind("scatterplot");
     setDeckVizMode("url");
     setDeckVizUrl("");
     setDeckVizSourcePath("");
@@ -785,10 +787,15 @@ export function AddDataDialog({
     setLayerName(getDeckVizLayerDef(nextKind)?.label ?? "Deck.gl Layer");
   };
 
+  // ~10 MB; deck-viz data is stored inline in the project file, so warn (but
+  // do not block) when a very large payload would bloat saved projects.
+  const DECK_VIZ_SIZE_WARN_BYTES = 10 * 1024 * 1024;
+
   const readDeckVizSource = async (): Promise<{
     sourcePath: string;
     text: string;
   }> => {
+    let source: { sourcePath: string; text: string };
     if (deckVizMode === "file") {
       const selected = await openLocalDataFileWithFallback({
         filters: [
@@ -801,15 +808,24 @@ export function AddDataDialog({
         readText: true,
       });
       if (!selected?.text) throw new Error("Choose a CSV, JSON, or GeoJSON file.");
-      return { sourcePath: selected.path, text: selected.text };
+      source = { sourcePath: selected.path, text: selected.text };
+    } else {
+      const sourcePath = deckVizUrl.trim();
+      if (!sourcePath) throw new Error("Enter a data URL.");
+      const response = await fetch(sourcePath);
+      if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`);
+      }
+      source = { sourcePath, text: await response.text() };
     }
-    const sourcePath = deckVizUrl.trim();
-    if (!sourcePath) throw new Error("Enter a data URL.");
-    const response = await fetch(sourcePath);
-    if (!response.ok) {
-      throw new Error(`Request failed with status ${response.status}`);
+    if (source.text.length > DECK_VIZ_SIZE_WARN_BYTES) {
+      console.warn(
+        "[GeoLibre] deck-viz: large payload stored inline in the project",
+        source.text.length,
+        "bytes",
+      );
     }
-    return { sourcePath, text: await response.text() };
+    return source;
   };
 
   // Validates format/role completeness, then writes the deck-viz store layer

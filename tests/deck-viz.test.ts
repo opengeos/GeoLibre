@@ -7,6 +7,7 @@ import {
   detectAndParseDeckVizInput,
 } from "../apps/geolibre-desktop/src/lib/deck-viz-input";
 import {
+  DEFAULT_DECK_VIZ_STYLE,
   getDeckVizLayerDef,
   listDeckVizLayerDefs,
 } from "../packages/plugins/src/plugins/deckgl-viz/registry";
@@ -203,15 +204,14 @@ describe("deck-viz registry & store layer", () => {
   });
 
   it("creates a detectable store layer carrying the viz config", () => {
+    const scatterplotDef = getDeckVizLayerDef("scatterplot")!;
     const layer = createDeckVizStoreLayer({
       name: "Test",
       config: {
         layerKind: "scatterplot",
         format: "json-array",
         fieldMapping: { lng: 0, lat: 1 },
-        style: getDeckVizLayerDef("scatterplot")!.example.style
-          ? { ...defaultStyle(), ...getDeckVizLayerDef("scatterplot")!.example.style }
-          : defaultStyle(),
+        style: { ...DEFAULT_DECK_VIZ_STYLE, ...(scatterplotDef.example.style ?? {}) },
       },
       rows: [[-1, 2]],
       sourcePath: "memory://test",
@@ -256,7 +256,7 @@ describe("deck-viz registry & store layer", () => {
         format: "json-array",
         // lat is required but absent (e.g. a hand-edited project file)
         fieldMapping: { lng: 0 },
-        style: defaultStyle(),
+        style: DEFAULT_DECK_VIZ_STYLE,
       },
       rows: [],
     });
@@ -273,15 +273,13 @@ describe("detectAndParseDeckVizInput tuple width", () => {
       [0, 1, 2],
     );
   });
-});
 
-function defaultStyle() {
-  return {
-    color: "#3b82f6",
-    radius: 40,
-    cellSize: 1000,
-    lineWidth: 2,
-    extruded: false,
-    elevationScale: 30,
-  };
-}
+  it("sniffs a tab delimiter for TSV content", () => {
+    const parsed = detectAndParseDeckVizInput("lng\tlat\n-1\t2\n");
+    assert.equal(parsed.format, "csv-rows");
+    assert.deepEqual(
+      parsed.columns.map((column) => column.value),
+      ["lng", "lat"],
+    );
+  });
+});

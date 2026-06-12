@@ -35,12 +35,13 @@ const SAMPLE_FEATURE_LIMIT = 50;
  * can map. Throws a user-facing Error when the payload is empty or unsupported.
  *
  * @param text - The raw file/URL contents.
- * @param delimiter - Delimiter to use when the payload is delimited text.
+ * @param delimiter - Delimiter for delimited text; sniffed from the header
+ *   (comma/tab/semicolon/pipe) when omitted, so .tsv/.txt files parse correctly.
  * @returns The detected format, columns, and parsed data.
  */
 export function detectAndParseDeckVizInput(
   text: string,
-  delimiter = ",",
+  delimiter?: string,
 ): DeckVizParsedInput {
   const trimmed = text.replace(/^﻿/, "").trimStart();
   if (!trimmed) throw new Error("The file is empty.");
@@ -55,7 +56,10 @@ export function detectAndParseDeckVizInput(
     return parseJsonInput(parsed);
   }
 
-  const { fields, rows } = parseDelimitedTextRows(text, delimiter);
+  const { fields, rows } = parseDelimitedTextRows(
+    text,
+    delimiter ?? sniffDelimiter(trimmed),
+  );
   const sample = rows[0];
   return {
     format: "csv-rows",
@@ -245,6 +249,26 @@ export function computeDeckVizBounds(
 
   if (west > east || south > north) return null;
   return [west, south, east, north];
+}
+
+/**
+ * Picks the most likely delimiter for tabular text by counting candidates in
+ * the header line. Lets `.tsv`/`.txt`/semicolon files parse without the caller
+ * knowing the format up front; defaults to a comma.
+ */
+export function sniffDelimiter(text: string): string {
+  const header = text.split(/\r?\n/, 1)[0] ?? "";
+  const candidates = [",", "\t", ";", "|"];
+  let best = ",";
+  let bestCount = 0;
+  for (const candidate of candidates) {
+    const count = header.split(candidate).length - 1;
+    if (count > bestCount) {
+      bestCount = count;
+      best = candidate;
+    }
+  }
+  return best;
 }
 
 function sampleLabel(name: string, sample: unknown): string {

@@ -83,8 +83,9 @@ async function ensureDeckVizOverlay(app: GeoLibreAppAPI): Promise<void> {
   if (overlay && overlayMounted) {
     try {
       app.removeMapControl(overlay);
-    } catch {
-      // The old map may already be gone; nothing to remove.
+    } catch (error) {
+      // The old map may already be gone; surface anything unexpected.
+      console.debug("[GeoLibre] deckgl-viz: overlay cleanup", error);
     }
   }
   boundMap = map;
