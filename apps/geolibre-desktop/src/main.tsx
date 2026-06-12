@@ -37,10 +37,15 @@ installDiagnosticsCapture();
 installStaleChunkReload();
 
 void import("./App")
-  .then(({ default: App }) => {
+  .then(async ({ default: App }) => {
+    const { AppErrorBoundary } = await import(
+      "./components/common/error-boundaries"
+    );
     ReactDOM.createRoot(document.getElementById("root")!).render(
       <React.StrictMode>
-        <App />
+        <AppErrorBoundary>
+          <App />
+        </AppErrorBoundary>
       </React.StrictMode>,
     );
   })

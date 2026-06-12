@@ -58,6 +58,7 @@ import {
   appendDiagnostic,
   useDiagnosticsSnapshot,
 } from "../../lib/diagnostics";
+import { SectionErrorBoundary } from "../common/error-boundaries";
 import { AttributeTable } from "../panels/AttributeTable";
 import { LayerPanel } from "../panels/LayerPanel";
 import { StylePanel } from "../panels/StylePanel";
@@ -867,56 +868,68 @@ export function DesktopShell({
       onDrop={handleDrop}
     >
       {layoutOptions.toolbarVisible ? (
-        <TopToolbar
-          compact={layoutOptions.compact}
-          diagnosticsErrorCount={diagnostics.errorCount}
-          mapControllerRef={mapControllerRef}
-          showLabels={layoutOptions.toolbarLabels}
-          showProjectInfo={layoutOptions.showProjectInfo}
-          themeMode={themeMode}
-          onOpenDiagnostics={() => setDiagnosticsOpen(true)}
-          onToggleThemeMode={onToggleThemeMode}
-        />
+        <SectionErrorBoundary label="Toolbar">
+          <TopToolbar
+            compact={layoutOptions.compact}
+            diagnosticsErrorCount={diagnostics.errorCount}
+            mapControllerRef={mapControllerRef}
+            showLabels={layoutOptions.toolbarLabels}
+            showProjectInfo={layoutOptions.showProjectInfo}
+            themeMode={themeMode}
+            onOpenDiagnostics={() => setDiagnosticsOpen(true)}
+            onToggleThemeMode={onToggleThemeMode}
+          />
+        </SectionErrorBoundary>
       ) : null}
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         {layoutOptions.layerPanelVisible ? (
-          <LayerPanel
-            mapControllerRef={mapControllerRef}
-            onResizeStart={startLayerPanelResize}
-            geometryEditLayerId={geometryEditLayerId}
-            onToggleGeometryEdit={handleToggleGeometryEdit}
-            onCancelGeometryEdit={handleCancelGeometryEdit}
-            onMaterializeDuckDBLayer={handleMaterializeDuckDBLayer}
-          />
+          <SectionErrorBoundary label="Layer panel">
+            <LayerPanel
+              mapControllerRef={mapControllerRef}
+              onResizeStart={startLayerPanelResize}
+              geometryEditLayerId={geometryEditLayerId}
+              onToggleGeometryEdit={handleToggleGeometryEdit}
+              onCancelGeometryEdit={handleCancelGeometryEdit}
+              onMaterializeDuckDBLayer={handleMaterializeDuckDBLayer}
+            />
+          </SectionErrorBoundary>
         ) : null}
         <main
           className={`relative min-w-0 flex-1 overflow-hidden ${
             layoutOptions.compact ? "min-h-0" : "min-h-72 md:min-h-0"
           }`}
         >
-          <MapCanvas
-            controllerRef={mapControllerRef}
-            onMapDiagnosticEvent={handleMapDiagnosticEvent}
-            onControllerReady={handleMapControllerReady}
-          />
+          <SectionErrorBoundary label="Map" className="h-full w-full">
+            <MapCanvas
+              controllerRef={mapControllerRef}
+              onMapDiagnosticEvent={handleMapDiagnosticEvent}
+              onControllerReady={handleMapControllerReady}
+            />
+          </SectionErrorBoundary>
         </main>
         {layoutOptions.stylePanelVisible ? (
-          <StylePanel
-            mapControllerRef={mapControllerRef}
-            onResizeStart={startStylePanelResize}
-          />
+          <SectionErrorBoundary label="Style panel">
+            <StylePanel
+              mapControllerRef={mapControllerRef}
+              onResizeStart={startStylePanelResize}
+            />
+          </SectionErrorBoundary>
         ) : null}
       </div>
       {layoutOptions.attributePanelVisible ? (
-        <AttributeTable mapControllerRef={mapControllerRef} />
+        <SectionErrorBoundary label="Attribute table">
+          <AttributeTable mapControllerRef={mapControllerRef} />
+        </SectionErrorBoundary>
       ) : null}
       {layoutOptions.statusBarVisible ? (
-        <StatusBar
-          compact={layoutOptions.compact}
-          diagnosticsErrorCount={diagnostics.errorCount}
-          diagnosticsWarningCount={diagnostics.warningCount}
-          onOpenDiagnostics={() => setDiagnosticsOpen(true)}
-        />
+        <SectionErrorBoundary label="Status bar">
+          <StatusBar
+            compact={layoutOptions.compact}
+            diagnosticsErrorCount={diagnostics.errorCount}
+            diagnosticsWarningCount={diagnostics.warningCount}
+            onOpenDiagnostics={() => setDiagnosticsOpen(true)}
+          />
+        </SectionErrorBoundary>
       ) : null}
       <DiagnosticsDialog
         diagnostics={diagnostics}

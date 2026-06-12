@@ -43,6 +43,7 @@ import {
   resolvePluginAssetUrlForLoadedPlugin,
   unloadRemovedUrlPlugins,
 } from "../lib/external-plugins";
+import { appendDiagnostic } from "../lib/diagnostics";
 import { mergeStringLists } from "../lib/string-lists";
 import {
   openLocalDataFileWithFallback,
@@ -51,6 +52,22 @@ import {
 import { useDesktopSettingsStore } from "./useDesktopSettings";
 
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
+
+/** Records a plugin failure in the diagnostics panel without crashing the app. */
+function reportPluginError(
+  pluginId: string,
+  action: string,
+  error: unknown,
+): void {
+  const normalized = error instanceof Error ? error : new Error(String(error));
+  appendDiagnostic({
+    category: "runtime",
+    level: "error",
+    message: `Plugin "${pluginId}" failed to ${action}: ${normalized.message}`,
+    detail: normalized.stack,
+    source: `plugin:${pluginId}`,
+  });
+}
 
 interface TauriRuntimeWindow extends Window {
   __TAURI_INTERNALS__?: unknown;
@@ -158,7 +175,14 @@ export function usePluginRegistry() {
     getProjectState: () => manager.getProjectState(),
     toggle: (id: string, appApi: ReturnType<typeof createAppAPI>) => {
       const before = JSON.stringify(projectPluginStateSnapshot());
-      manager.toggle(id, appApi);
+      // Plugin controls are imperative MapLibre code, so a throw here escapes
+      // React's error boundaries. Contain it so one bad plugin can't break the
+      // toggle handler — surface it in diagnostics instead.
+      try {
+        manager.toggle(id, appApi);
+      } catch (error) {
+        reportPluginError(id, "toggle", error);
+      }
       persistProjectPluginState(before);
     },
     setMapControlPosition: (
@@ -167,7 +191,11 @@ export function usePluginRegistry() {
       position: GeoLibreMapControlPosition,
     ) => {
       const before = JSON.stringify(projectPluginStateSnapshot());
-      manager.setMapControlPosition(id, appApi, position);
+      try {
+        manager.setMapControlPosition(id, appApi, position);
+      } catch (error) {
+        reportPluginError(id, "reposition", error);
+      }
       persistProjectPluginState(before);
     },
   };
