@@ -249,42 +249,6 @@ export const useAppStore = create<AppState>()(
       setZoomToSelectedFeature: (enabled) =>
         set((s) => ({ ui: { ...s.ui, zoomToSelectedFeature: enabled } })),
 
-      newProject: (options = {}) => {
-        const project = createEmptyProject(options.name, options);
-        const applied = applyProjectToStore(project);
-        set((s) => ({
-          ...applied,
-          projectPath: null,
-          projectGeneration: s.projectGeneration + 1,
-          isDirty: false,
-          selectedLayerId: null,
-          selectedFeatureId: null,
-          identifyLayerId: null,
-          pointerCoords: null,
-          attributeFilter: "",
-        }));
-      },
-
-      loadProject: (project, path = null, options = {}) => {
-        const applied = applyProjectToStore(project);
-        set((s) => ({
-          ...applied,
-          projectPath: path,
-          projectGeneration: s.projectGeneration + 1,
-          isDirty: false,
-          selectedLayerId: applied.layers[0]?.id ?? null,
-          selectedFeatureId: null,
-          identifyLayerId: null,
-        }));
-        if (path && options.rememberRecent !== false) {
-          get().rememberRecentProject({
-            path,
-            name: project.name,
-            openedAt: new Date().toISOString(),
-          });
-        }
-      },
-
       setProjectPath: (path) => set({ projectPath: path }),
       setProjectName: (name) => set({ projectName: name, isDirty: true }),
       setRecentProjects: (projects) =>
@@ -402,6 +366,44 @@ export const useAppStore = create<AppState>()(
         get().addLayer(layer, beforeLayerId);
         return id;
       },
+
+      newProject: (options = {}) => {
+        const project = createEmptyProject(options.name, options);
+        const applied = applyProjectToStore(project);
+        set((s) => ({
+          ...applied,
+          projectPath: null,
+          projectGeneration: s.projectGeneration + 1,
+          isDirty: false,
+          selectedLayerId: null,
+          selectedFeatureId: null,
+          identifyLayerId: null,
+          pointerCoords: null,
+          attributeFilter: "",
+        }));
+        clearHistory();
+      },
+
+      loadProject: (project, path = null, options = {}) => {
+        const applied = applyProjectToStore(project);
+        set((s) => ({
+          ...applied,
+          projectPath: path,
+          projectGeneration: s.projectGeneration + 1,
+          isDirty: false,
+          selectedLayerId: applied.layers[0]?.id ?? null,
+          selectedFeatureId: null,
+          identifyLayerId: null,
+        }));
+        clearHistory();
+        if (path && options.rememberRecent !== false) {
+          get().rememberRecentProject({
+            path,
+            name: project.name,
+            openedAt: new Date().toISOString(),
+          });
+        }
+      },
     }),
     {
       // Only these fields participate in undo/redo; everything else (selection,
@@ -430,3 +432,25 @@ export const useAppStore = create<AppState>()(
     }
   )
 );
+
+/**
+ * Step the layer/basemap history back one entry and mark the project dirty.
+ * zundo restores the partialized slice via the store's set; the resulting new
+ * `layers`/basemap refs drive MapCanvas's existing effects, so the map
+ * reconciles through MapController.syncLayers (never mutated directly here).
+ */
+export function undo(): void {
+  useAppStore.temporal.getState().undo();
+  useAppStore.setState({ isDirty: true });
+}
+
+/** Step the history forward one entry and mark the project dirty. */
+export function redo(): void {
+  useAppStore.temporal.getState().redo();
+  useAppStore.setState({ isDirty: true });
+}
+
+/** Empty both the undo and redo stacks (e.g. on new/loaded project). */
+export function clearHistory(): void {
+  useAppStore.temporal.getState().clear();
+}

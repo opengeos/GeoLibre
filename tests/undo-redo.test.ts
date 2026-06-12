@@ -5,7 +5,7 @@ import {
   leadingDebounce,
   setHistoryCoalesceMs,
 } from "../packages/core/src/history";
-import { useAppStore } from "../packages/core/src/store";
+import { clearHistory, redo, undo, useAppStore } from "../packages/core/src/store";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -84,5 +84,97 @@ describe("store history tracking", () => {
     useAppStore.getState().setPointerCoords([1, 2]);
     useAppStore.getState().setAttributeFilter("abc");
     assert.equal(pastLen(), before);
+  });
+});
+
+function futureLen(): number {
+  return useAppStore.temporal.getState().futureStates.length;
+}
+
+describe("undo/redo behavior", () => {
+  beforeEach(() => {
+    setHistoryCoalesceMs(0);
+    useAppStore.getState().newProject({ name: "reset" });
+  });
+
+  it("restores a removed layer with its style and stack position", () => {
+    const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    useAppStore.getState().addGeoJsonLayer("B", emptyFC);
+    useAppStore.getState().setLayerStyle(a, { fillColor: "#abcdef" });
+    useAppStore.getState().removeLayer(a);
+    assert.equal(
+      useAppStore.getState().layers.find((l) => l.id === a),
+      undefined,
+    );
+
+    undo(); // reverts the remove
+    const restored = useAppStore.getState().layers;
+    assert.equal(restored[0].id, a); // original index 0
+    assert.equal(restored[0].style.fillColor, "#abcdef"); // style preserved
+
+    redo(); // re-removes it
+    assert.equal(
+      useAppStore.getState().layers.find((l) => l.id === a),
+      undefined,
+    );
+  });
+
+  it("undoes and redoes a style edit", () => {
+    const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    useAppStore.getState().setLayerStyle(a, { fillColor: "#abcdef" });
+
+    undo();
+    assert.equal(useAppStore.getState().layers[0].style.fillColor, "#3b82f6");
+    redo();
+    assert.equal(useAppStore.getState().layers[0].style.fillColor, "#abcdef");
+  });
+
+  it("undoes a reorder", () => {
+    const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    const b = useAppStore.getState().addGeoJsonLayer("B", emptyFC);
+    useAppStore.getState().moveLayer(a, 1); // [B, A]
+    assert.deepEqual(
+      useAppStore.getState().layers.map((l) => l.id),
+      [b, a],
+    );
+    undo();
+    assert.deepEqual(
+      useAppStore.getState().layers.map((l) => l.id),
+      [a, b],
+    );
+  });
+
+  it("undoes a basemap change", () => {
+    useAppStore.getState().setBasemapOpacity(0.4);
+    assert.equal(useAppStore.getState().basemapOpacity, 0.4);
+    undo();
+    assert.equal(useAppStore.getState().basemapOpacity, 1);
+  });
+
+  it("marks the project dirty on undo and redo", () => {
+    useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    useAppStore.getState().markSaved();
+    assert.equal(useAppStore.getState().isDirty, false);
+    undo();
+    assert.equal(useAppStore.getState().isDirty, true);
+    useAppStore.getState().markSaved();
+    redo();
+    assert.equal(useAppStore.getState().isDirty, true);
+  });
+
+  it("clears history when a new project is created", () => {
+    useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    assert.ok(pastLen() > 0);
+    useAppStore.getState().newProject({ name: "U" });
+    assert.equal(pastLen(), 0);
+    assert.equal(futureLen(), 0);
+  });
+
+  it("clearHistory empties both stacks", () => {
+    useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    assert.ok(pastLen() > 0);
+    clearHistory();
+    assert.equal(pastLen(), 0);
+    assert.equal(futureLen(), 0);
   });
 });
