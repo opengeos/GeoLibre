@@ -71,6 +71,45 @@ describe("resetKeysChanged", () => {
   });
 });
 
+describe("ErrorBoundary recovery wiring (componentDidUpdate)", () => {
+  // reset() uses setState, which is a no-op on an instance that React has not
+  // mounted, so spy on reset to assert the control flow instead.
+  function makeBoundary(resetKeys: readonly unknown[] | undefined) {
+    const props = {
+      children: null,
+      fallback: () => null,
+      resetKeys,
+    };
+    const boundary = new ErrorBoundary(props);
+    let resetCalls = 0;
+    boundary.reset = () => {
+      resetCalls += 1;
+    };
+    return { boundary, props, resetCalls: () => resetCalls };
+  }
+
+  it("resets when a resetKey changes while in the error state", () => {
+    const { boundary, props, resetCalls } = makeBoundary(["a"]);
+    boundary.state = { error: new Error("boom") };
+    boundary.componentDidUpdate({ ...props, resetKeys: ["b"] });
+    assert.equal(resetCalls(), 1);
+  });
+
+  it("does not reset when resetKeys are unchanged", () => {
+    const { boundary, props, resetCalls } = makeBoundary(["a"]);
+    boundary.state = { error: new Error("boom") };
+    boundary.componentDidUpdate(props);
+    assert.equal(resetCalls(), 0);
+  });
+
+  it("does not reset when there is no active error", () => {
+    const { boundary, props, resetCalls } = makeBoundary(["a"]);
+    // state.error stays null
+    boundary.componentDidUpdate({ ...props, resetKeys: ["b"] });
+    assert.equal(resetCalls(), 0);
+  });
+});
+
 describe("reportBoundaryError", () => {
   beforeEach(() => {
     clearDiagnostics();

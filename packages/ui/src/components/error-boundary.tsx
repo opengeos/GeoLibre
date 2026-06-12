@@ -18,6 +18,10 @@ export interface ErrorBoundaryProps {
    * its captured error and re-renders its children. Use it to recover
    * automatically when the inputs that caused the crash change (for example a
    * different selected layer).
+   *
+   * Note: adding or removing the prop entirely (undefined ↔ non-empty array)
+   * also counts as a change and will trigger a reset. Absent and empty (`[]`)
+   * are treated as equivalent, so toggling between those two does not reset.
    */
   resetKeys?: readonly unknown[];
 }

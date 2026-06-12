@@ -899,7 +899,7 @@ export function DesktopShell({
             layoutOptions.compact ? "min-h-0" : "min-h-72 md:min-h-0"
           }`}
         >
-          <SectionErrorBoundary label="Map" className="h-full w-full">
+          <SectionErrorBoundary label="Map" fallbackClassName="h-full w-full">
             <MapCanvas
               controllerRef={mapControllerRef}
               onMapDiagnosticEvent={handleMapDiagnosticEvent}

@@ -182,6 +182,10 @@ export function usePluginRegistry() {
       try {
         manager.toggle(id, appApi);
       } catch (error) {
+        // Known limitation: if toggle throws after a partial mutation (e.g. the
+        // control attached but a later step failed), the in-memory PluginManager
+        // state may be inconsistent. Project persistence is protected by the
+        // early return below; in-memory state is not rolled back.
         reportPluginError(id, "toggle", error);
         return;
       }

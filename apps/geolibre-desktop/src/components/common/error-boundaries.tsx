@@ -60,7 +60,8 @@ export function AppErrorBoundary({ children }: { children: ReactNode }) {
               may be unsaved — try recovering before reloading.
             </p>
             <p className="max-w-md break-words font-mono text-xs text-muted-foreground/80">
-              {error.message}
+              {/* Non-Error throws (common from plugin code) have no .message. */}
+              {error.message || String(error)}
             </p>
           </div>
           <div className="flex gap-2">
@@ -87,12 +88,16 @@ export function AppErrorBoundary({ children }: { children: ReactNode }) {
 export function SectionErrorBoundary({
   label,
   children,
-  className,
+  fallbackClassName,
   resetKeys,
 }: {
   label: string;
   children: ReactNode;
-  className?: string;
+  /**
+   * Class applied to the error fallback container. It has no effect during
+   * normal rendering — the boundary injects no wrapper around its children.
+   */
+  fallbackClassName?: string;
   resetKeys?: readonly unknown[];
 }) {
   return (
@@ -103,7 +108,7 @@ export function SectionErrorBoundary({
         <SectionErrorFallback
           label={label}
           reset={reset}
-          className={className}
+          className={fallbackClassName}
         />
       )}
     >
