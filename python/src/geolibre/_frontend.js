@@ -60,15 +60,23 @@ async function resolveBase(model) {
 // missing/disabled server extension surfaces an actionable message instead of a
 // bare 404 page inside the iframe.
 async function appReachable(base) {
+  // render() awaits this before the iframe exists, so a stalled request (slow
+  // proxy / auth layer) would otherwise hang widget rendering indefinitely.
+  // Abort after a short deadline and treat that as unreachable.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
   try {
     const res = await fetch(`${base}index.html`, {
       method: "HEAD",
       credentials: "same-origin",
+      signal: controller.signal,
     });
     return res.ok;
   } catch (error) {
     console.warn("[GeoLibre] App reachability check failed", error);
     return false;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -93,7 +101,7 @@ async function render({ model, el }) {
       "GeoLibre: the bundled app could not be loaded from the Jupyter server. " +
       "Make sure the geolibre server extension is enabled (restart your Jupyter " +
       "server after installing geolibre, or run " +
-      "`jupyter server extension enable geolibre`).";
+      "`jupyter server extension enable geolibre`), then re-run this cell.";
     return;
   }
 

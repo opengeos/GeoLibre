@@ -87,12 +87,13 @@ def serve_app(static_dir: Path) -> str:
     """
     global _server, _base_url, _port
 
-    ensure_bundle(static_dir)
-
     with _lock:
         # _base_url, _server, and _port are always set together, so one check
-        # covers all three.
+        # covers all three. Validate the bundle only when actually booting the
+        # singleton, so a later call with a different/missing path reuses the
+        # running server instead of raising.
         if _base_url is None:
+            ensure_bundle(static_dir)
             handler = partial(_QuietHandler, directory=str(static_dir))
             server = _QuietServer(("127.0.0.1", 0), handler)
             thread = threading.Thread(

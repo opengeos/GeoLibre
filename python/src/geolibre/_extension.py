@@ -19,6 +19,11 @@ The extension auto-enables on install via the
 wheel; the package-level ``_jupyter_server_extension_points`` /
 ``_load_jupyter_server_extension`` hooks (in ``geolibre/__init__.py``) delegate
 to :func:`load_jupyter_server_extension` below.
+
+Note: tornado is imported lazily inside :func:`load_jupyter_server_extension`
+(not at module load) so this module can be imported -- and the package tested --
+without tornado installed. tornado is always present wherever a Jupyter Server
+actually runs the extension.
 """
 
 from __future__ import annotations
@@ -26,24 +31,12 @@ from __future__ import annotations
 import pathlib
 from typing import Any
 
-from tornado.web import StaticFileHandler
-
 # Mount point under the Jupyter Server base URL. Kept in sync with the front-end
 # (_frontend.js), which loads "{base_url}geolibre/app/index.html".
 APP_ROUTE = "geolibre/app"
 
 _HERE = pathlib.Path(__file__).parent
 _STATIC_APP = _HERE / "static" / "app"
-
-
-class _AppStaticHandler(StaticFileHandler):
-    """Serve the bundled app, defaulting a bare directory request to index.html.
-
-    A plain tornado ``StaticFileHandler`` (not a ``JupyterHandler``) is used on
-    purpose: the static app bundle carries no user data, so it is served like any
-    other static asset, and this also keeps Jupyter Server from flagging it as an
-    unauthenticated handler.
-    """
 
 
 def load_jupyter_server_extension(serverapp: Any) -> None:
@@ -54,10 +47,30 @@ def load_jupyter_server_extension(serverapp: Any) -> None:
             Jupyter Server when it loads the extension.
     """
     from jupyter_server.utils import url_path_join
+    from tornado.web import StaticFileHandler
+
+    class _AppStaticHandler(StaticFileHandler):
+        """Serve the bundled app's static files.
+
+        A plain tornado ``StaticFileHandler`` (not a ``JupyterHandler``) is used
+        on purpose: the static app bundle carries no user data, so it is served
+        like any other static asset, and this also keeps Jupyter Server from
+        flagging it as an unauthenticated handler. Bare-directory requests fall
+        back to ``index.html`` via the ``default_filename`` kwarg passed below.
+        """
 
     web_app = serverapp.web_app
     base_url = web_app.settings["base_url"]
     route = url_path_join(base_url, APP_ROUTE, "(.*)")
+    if not _STATIC_APP.is_dir():
+        # A wheel built/installed without running the JS build (e.g. a dev
+        # checkout) would otherwise 404 on every request with no explanation.
+        serverapp.log.warning(
+            "[geolibre] Bundled app not found at %s; the %s/ route will return "
+            "404. Reinstall the geolibre wheel or run `npm run build:embed`.",
+            _STATIC_APP,
+            APP_ROUTE,
+        )
     web_app.add_handlers(
         ".*$",
         [
