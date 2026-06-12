@@ -200,6 +200,27 @@ describe("h3 tools", () => {
     assert.equal(added.length, 1);
   });
 
+  it("rejects polyfill of a non-polygon layer", async () => {
+    const { ctx, added, logs } = baseCtx([pointLayer()], {
+      source: "polyfill",
+      layer: "pts",
+      resolution: 6,
+    });
+    await createH3GridTool.run(ctx);
+    assert.equal(added.length, 0);
+    assert.ok(logs.some((l) => /polygon/i.test(l)));
+  });
+
+  it("fills the extent of a non-polygon layer", async () => {
+    const { ctx, added } = baseCtx([pointLayer()], {
+      source: "extent",
+      layer: "pts",
+      resolution: 6,
+    });
+    await createH3GridTool.run(ctx);
+    assert.equal(added.length, 1);
+  });
+
   it("bins points and requires a field for non-count aggregates", async () => {
     const missing = baseCtx([pointLayer()], {
       layer: "pts",

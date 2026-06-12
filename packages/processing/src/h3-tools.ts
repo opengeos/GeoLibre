@@ -206,7 +206,8 @@ export const createH3GridTool: ProcessingAlgorithm = {
       label: "Input layer",
       type: "layer",
       required: true,
-      geometryFilter: ["polygon"],
+      // No geometry filter: "extent" fills any layer's bounding box, while
+      // "polyfill" needs polygons (validated at run time below).
       visibleWhen: { param: "source", in: ["polyfill", "extent"] },
     },
     {
@@ -239,6 +240,19 @@ export const createH3GridTool: ProcessingAlgorithm = {
       if (!layer?.geojson?.features?.length) {
         ctx.log('Error: parameter "layer" has no GeoJSON features');
         return;
+      }
+      if (source === "polyfill") {
+        const hasPolygon = layer.geojson.features.some(
+          (f) =>
+            f.geometry?.type === "Polygon" ||
+            f.geometry?.type === "MultiPolygon",
+        );
+        if (!hasPolygon) {
+          ctx.log(
+            'Error: polyfill needs a polygon layer; use the "Layer extent" source for point or line layers',
+          );
+          return;
+        }
       }
       inputGeojson = layer.geojson;
       const bb = bbox(layer.geojson) as [number, number, number, number];
