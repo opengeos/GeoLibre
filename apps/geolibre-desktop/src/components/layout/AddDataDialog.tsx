@@ -11,6 +11,7 @@ import {
   createDeckVizStoreLayer,
   DECK_VIZ_CATEGORY_LABELS,
   DEFAULT_DECK_VIZ_STYLE,
+  ensureMercatorProjection,
   getDeckVizLayerDef,
   listDeckVizLayerDefs,
   type DeckVizCategory,
@@ -576,6 +577,11 @@ export function AddDataDialog({
       setMartinSources([]);
       setSelectedMartinSourceId("");
       setMartinStatus(null);
+    }
+    // The deck.gl overlay only aligns in a Mercator viewport, so switch away
+    // from globe as soon as the Deck.gl Layer dialog opens.
+    if (kind === "deckgl-viz") {
+      ensureMercatorProjection(mapControllerRef.current?.getMap());
     }
     setDeckVizKind("scatterplot");
     setDeckVizMode("url");

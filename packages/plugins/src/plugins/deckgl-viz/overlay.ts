@@ -2,6 +2,7 @@ import { type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { Layer } from "@deck.gl/core";
 import type { MapboxOverlay } from "@deck.gl/mapbox";
 import type { GeoLibreAppAPI, GeoLibreDeckGL } from "../../types";
+import { ensureMercatorProjection } from "../map-projection-utils";
 import {
   type DeckVizBuildContext,
   getDeckVizLayerDef,
@@ -120,6 +121,13 @@ function renderDeckVizLayers(): void {
   if (!overlay || !deckGL || !appRef) return;
 
   const vizLayers = useAppStore.getState().layers.filter(isDeckVizLayer);
+
+  // The deck.gl overlay renders in a Mercator viewport and does not align with
+  // MapLibre's globe projection, so force Mercator while deck layers are shown
+  // (same contract as the DuckDB deck overlay).
+  if (vizLayers.length > 0) {
+    ensureMercatorProjection(appRef.getMap?.());
+  }
 
   // Mount lazily: the map must be ready for addMapControl to succeed, so retry
   // on the next store change until it does.

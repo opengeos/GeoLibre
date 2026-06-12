@@ -115,6 +115,7 @@ export {
   maplibreDeckGlVizPlugin,
 } from "./plugins/maplibre-deckgl-viz";
 export { restoreDeckViz } from "./plugins/deckgl-viz/overlay";
+export { ensureMercatorProjection } from "./plugins/map-projection-utils";
 export {
   DECK_VIZ_CATEGORY_LABELS,
   DEFAULT_DECK_VIZ_STYLE,
