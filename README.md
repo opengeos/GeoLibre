@@ -281,10 +281,10 @@ Map().load_project("my-map.geolibre.json")
 The package source lives in [`python/`](python/), and the bundled web app is
 built into the wheel by `npm run build:embed`. The interactive widget works in
 local Jupyter, VS Code, Google Colab (its built-in port proxy is used
-automatically), and JupyterHub / remote servers (through `jupyter-server-proxy`;
-install with `pip install "geolibre[hub]"`, and pass `Map(server_proxy=True)` on
-non-Hub remote setups). See the [Python package guide](docs/python.md) for the
-full API.
+automatically), and JupyterHub / remote servers (through a Jupyter Server
+extension bundled with the wheel and auto-enabled on install, so managed hubs
+work without `jupyter-server-proxy`; pass `Map(server_proxy=True)` on non-Hub
+remote setups). See the [Python package guide](docs/python.md) for the full API.
 
 ## Environment variables
 
