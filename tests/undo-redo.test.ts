@@ -6,6 +6,7 @@ import {
   setHistoryCoalesceMs,
 } from "../packages/core/src/history";
 import { clearHistory, redo, undo, useAppStore } from "../packages/core/src/store";
+import { createEmptyProject } from "../packages/core/src/project";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -225,5 +226,24 @@ describe("undo/redo behavior", () => {
     useAppStore.getState().addGeoJsonLayer("B", emptyFC); // would be suppressed
     assert.equal(pastLen(), 1); // records despite being within the window
     setHistoryCoalesceMs(0);
+  });
+
+  it("cancels an in-flight coalesce window on undo so the next edit records", () => {
+    setHistoryCoalesceMs(50); // non-zero so a burst window is active
+    useAppStore.getState().addGeoJsonLayer("A", emptyFC); // opens the window
+    assert.equal(pastLen(), 1);
+    undo(); // must cancel the active window while stepping back
+    assert.equal(pastLen(), 0);
+    useAppStore.getState().addGeoJsonLayer("B", emptyFC); // would be suppressed
+    assert.equal(pastLen(), 1); // records despite being within the window
+    setHistoryCoalesceMs(0);
+  });
+
+  it("clears history when a project is loaded", () => {
+    useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    assert.ok(pastLen() > 0);
+    useAppStore.getState().loadProject(createEmptyProject("loaded"));
+    assert.equal(pastLen(), 0);
+    assert.equal(futureLen(), 0);
   });
 });

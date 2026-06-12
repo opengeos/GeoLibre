@@ -455,6 +455,8 @@ function finishHistoryStep(): void {
       ? { isDirty: true, selectedLayerId: null, selectedFeatureId: null }
       : { isDirty: true },
   );
+  // The setState above must not leave a coalesce window open for the next edit.
+  cancelHistoryCoalesce();
 }
 
 /**
@@ -466,6 +468,7 @@ function finishHistoryStep(): void {
 export function undo(): void {
   const temporal = useAppStore.temporal.getState();
   if (temporal.pastStates.length === 0) return; // nothing to undo; stay clean
+  cancelHistoryCoalesce(); // break any in-flight burst so the next edit records
   temporal.undo();
   finishHistoryStep();
 }
@@ -474,6 +477,7 @@ export function undo(): void {
 export function redo(): void {
   const temporal = useAppStore.temporal.getState();
   if (temporal.futureStates.length === 0) return; // nothing to redo; stay clean
+  cancelHistoryCoalesce(); // break any in-flight burst so the next edit records
   temporal.redo();
   finishHistoryStep();
 }
