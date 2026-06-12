@@ -14,7 +14,9 @@
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
     --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    /* Darkened from 46.9% L so secondary text meets WCAG AA (4.5:1) even on the
+       muted/secondary backgrounds it is paired with (e.g. kbd badges). */
+    --muted-foreground: 215.4 16.3% 40%;
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
     --destructive: 0 84.2% 60.2%;
@@ -53,5 +55,15 @@
 
   body {
     @apply bg-background text-foreground;
+  }
+
+  /* Keyboard focus fallback: a visible, theme-aware focus ring for any
+     interactive element that doesn't already manage its own. Components that
+     render their own ring (Button, Input, dialog close, etc.) set
+     `focus-visible:outline-none`, whose utility layer wins over this base rule,
+     so they keep their existing indicator and don't double up. */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
   }
 }

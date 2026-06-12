@@ -906,6 +906,7 @@ function RasterStyleSlider({
         </span>
       </div>
       <Slider
+        aria-label={label}
         min={min}
         max={max}
         step={step}
@@ -1091,7 +1092,10 @@ export function StylePanel({
 
   if (isCollapsed) {
     return (
-      <aside className="flex h-11 w-full shrink-0 items-center gap-2 border-t bg-card px-2 md:h-auto md:w-11 md:flex-col md:border-l md:border-t-0 md:py-2">
+      <aside
+        aria-label="Layer style (collapsed)"
+        className="flex h-11 w-full shrink-0 items-center gap-2 border-t bg-card px-2 md:h-auto md:w-11 md:flex-col md:border-l md:border-t-0 md:py-2"
+      >
         <Button
           variant="ghost"
           size="icon"
@@ -1114,7 +1118,7 @@ export function StylePanel({
 
   if (!layer) {
     return (
-      <aside className={STYLE_PANEL_ASIDE_CLASS}>
+      <aside aria-label="Layer style" className={STYLE_PANEL_ASIDE_CLASS}>
         {resizeHandle}
         <div className="flex items-center justify-between border-b px-3 py-1.5">
           <span className="text-sm font-semibold">Style</span>
@@ -2008,7 +2012,7 @@ export function StylePanel({
 
   if (hasRasterPaintControls) {
     return (
-      <aside className={STYLE_PANEL_ASIDE_CLASS}>
+      <aside aria-label="Layer style" className={STYLE_PANEL_ASIDE_CLASS}>
         {resizeHandle}
         <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
           <span className="truncate text-sm font-semibold">
@@ -2106,7 +2110,7 @@ export function StylePanel({
 
   if (!hasVectorPaintControls) {
     return (
-      <aside className={STYLE_PANEL_ASIDE_CLASS}>
+      <aside aria-label="Layer style" className={STYLE_PANEL_ASIDE_CLASS}>
         {resizeHandle}
         <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
           <span className="truncate text-sm font-semibold">
@@ -2136,7 +2140,7 @@ export function StylePanel({
   }
 
   return (
-    <aside className={STYLE_PANEL_ASIDE_CLASS}>
+    <aside aria-label="Layer style" className={STYLE_PANEL_ASIDE_CLASS}>
       {resizeHandle}
       <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
         <span className="truncate text-sm font-semibold">

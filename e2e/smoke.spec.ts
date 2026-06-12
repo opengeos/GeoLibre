@@ -1,4 +1,3 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -77,22 +76,5 @@ test("loads a GeoJSON layer, opens the attribute table, and toggles visibility",
   );
 });
 
-test("has no critical accessibility violations on the initial view", async ({
-  page,
-}, testInfo) => {
-  await waitForMap(page);
-
-  const results = await new AxeBuilder({ page }).analyze();
-  await testInfo.attach("axe-violations", {
-    body: JSON.stringify(results.violations, null, 2),
-    contentType: "application/json",
-  });
-
-  // A full a11y gate lands with the accessibility pass (#272); this smoke check
-  // guards only against the most severe (critical-impact) regressions.
-  const critical = results.violations.filter((v) => v.impact === "critical");
-  expect(
-    critical,
-    `critical a11y violations: ${critical.map((v) => v.id).join(", ") || "none"}`,
-  ).toEqual([]);
-});
+// The accessibility gate now lives in its own multi-screen suite (a11y.spec.ts,
+// added with the #272 accessibility pass).

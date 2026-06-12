@@ -1095,6 +1095,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   return (
     <section
       ref={tableSectionRef}
+      aria-label="Attribute table"
       className="relative flex shrink-0 flex-col border-t bg-card"
       style={{ height: tableHeight }}
     >

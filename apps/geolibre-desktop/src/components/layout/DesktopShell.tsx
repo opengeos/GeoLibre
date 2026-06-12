@@ -899,6 +899,12 @@ export function DesktopShell({
             layoutOptions.compact ? "min-h-0" : "min-h-72 md:min-h-0"
           }`}
         >
+          {/* Visually-hidden page title: gives the document the single
+              top-level heading that assistive tech (and the axe
+              `page-has-heading-one` check) expect, without altering the
+              chrome-free visual layout. Placed inside the main landmark so it
+              is not flagged as content outside a landmark. */}
+          <h1 className="sr-only">GeoLibre map workspace</h1>
           <SectionErrorBoundary label="Map" fallbackClassName="h-full w-full">
             <MapCanvas
               controllerRef={mapControllerRef}

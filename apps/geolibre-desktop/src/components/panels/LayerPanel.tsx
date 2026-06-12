@@ -615,7 +615,10 @@ export function LayerPanel({
 
   if (isCollapsed) {
     return (
-      <aside className="flex h-11 w-full shrink-0 items-center gap-2 border-b bg-card px-2 md:h-auto md:w-11 md:flex-col md:border-b-0 md:border-r md:py-2">
+      <aside
+        aria-label="Layers (collapsed)"
+        className="flex h-11 w-full shrink-0 items-center gap-2 border-b bg-card px-2 md:h-auto md:w-11 md:flex-col md:border-b-0 md:border-r md:py-2"
+      >
         <Button
           variant="ghost"
           size="icon"
@@ -637,7 +640,10 @@ export function LayerPanel({
   }
 
   return (
-    <aside className="relative flex max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-b bg-card md:max-h-none md:w-[var(--layer-panel-width)] md:border-b-0 md:border-r">
+    <aside
+      aria-label="Layers"
+      className="relative flex max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-b bg-card md:max-h-none md:w-[var(--layer-panel-width)] md:border-b-0 md:border-r"
+    >
       <div
         role="separator"
         aria-orientation="vertical"
@@ -869,6 +875,7 @@ export function LayerPanel({
                     Opacity
                   </span>
                   <Slider
+                    aria-label={`Opacity for ${layer.name}`}
                     className="flex-1"
                     min={0}
                     max={1}
@@ -1178,6 +1185,7 @@ export function LayerPanel({
             <div className="mt-2 flex items-center gap-1">
               <span className="text-[10px] text-muted-foreground">Opacity</span>
               <Slider
+                aria-label="Basemap opacity"
                 className="flex-1"
                 min={0}
                 max={1}
