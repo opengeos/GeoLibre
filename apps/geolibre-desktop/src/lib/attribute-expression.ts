@@ -1,0 +1,227 @@
+/**
+ * A small, self-contained expression evaluator for the attribute-table Field
+ * Calculator. Expressions are plain JavaScript so familiar arithmetic, string,
+ * and ternary syntax all work (e.g. `pop / area`, `upper(name)`,
+ * `pop > 100 ? "big" : "small"`). They run on the user's own data in the local
+ * webview — analogous to a spreadsheet formula bar — so the evaluator favors
+ * ergonomics over a hardened sandbox. It is NOT a security boundary; it must
+ * never be used to run expressions from an untrusted source.
+ *
+ * Field values are exposed two ways:
+ *  - as bare identifiers when the field name is a valid JS identifier (`pop`),
+ *  - always through the `props` object so fields with spaces/punctuation are
+ *    reachable as `props["my field"]`.
+ * A curated set of helper functions and the `$index` (row position) variable
+ * are also in scope.
+ */
+
+/** A helper exposed to expressions by name. */
+type Helper = (...args: unknown[]) => unknown;
+
+function toNumber(value: unknown): number {
+  if (value == null || value === "") return Number.NaN;
+  const next = Number(value);
+  return next;
+}
+
+function isNullish(value: unknown): boolean {
+  return value == null || (typeof value === "number" && Number.isNaN(value));
+}
+
+/**
+ * Helper functions available inside an expression. Kept small and GIS-flavored;
+ * arithmetic/comparison/ternary come for free from JavaScript itself.
+ */
+export const EXPRESSION_HELPERS: Record<string, Helper> = {
+  // Math
+  abs: (x) => Math.abs(toNumber(x)),
+  ceil: (x) => Math.ceil(toNumber(x)),
+  floor: (x) => Math.floor(toNumber(x)),
+  sqrt: (x) => Math.sqrt(toNumber(x)),
+  exp: (x) => Math.exp(toNumber(x)),
+  ln: (x) => Math.log(toNumber(x)),
+  log10: (x) => Math.log10(toNumber(x)),
+  pow: (x, y) => Math.pow(toNumber(x), toNumber(y)),
+  min: (...args) => Math.min(...args.map(toNumber)),
+  max: (...args) => Math.max(...args.map(toNumber)),
+  // round(x) → nearest integer; round(x, n) → n decimal places.
+  round: (x, digits) => {
+    const value = toNumber(x);
+    const places = digits == null ? 0 : Math.trunc(toNumber(digits));
+    if (!Number.isFinite(value) || !Number.isFinite(places)) return value;
+    const factor = 10 ** places;
+    return Math.round(value * factor) / factor;
+  },
+  // Conversion
+  toNumber: (x) => {
+    const next = toNumber(x);
+    return Number.isNaN(next) ? null : next;
+  },
+  // Param annotated because `toString` collides with Object.prototype's own
+  // signature, which would otherwise win the contextual type over Helper.
+  toString: (x: unknown) => (x == null ? "" : String(x)),
+  // String
+  upper: (x) => (x == null ? "" : String(x).toUpperCase()),
+  lower: (x) => (x == null ? "" : String(x).toLowerCase()),
+  trim: (x) => (x == null ? "" : String(x).trim()),
+  length: (x) => (x == null ? 0 : String(x).length),
+  concat: (...args) => args.map((a) => (a == null ? "" : String(a))).join(""),
+  substr: (x, start, len) => {
+    const str = x == null ? "" : String(x);
+    const from = Math.trunc(toNumber(start)) || 0;
+    if (len == null) return str.substring(from);
+    return str.substring(from, from + (Math.trunc(toNumber(len)) || 0));
+  },
+  replace: (x, search, replacement) =>
+    (x == null ? "" : String(x)).split(String(search)).join(String(replacement)),
+  // Logic
+  isNull: (x) => isNullish(x),
+  // First argument that is neither null nor NaN; null when all are nullish.
+  coalesce: (...args) => {
+    for (const arg of args) {
+      if (!isNullish(arg)) return arg;
+    }
+    return null;
+  },
+  // iif(condition, thenValue, elseValue) — `if` is a reserved word in JS, so it
+  // cannot be a bare identifier; ternaries (`cond ? a : b`) also work directly.
+  iif: (condition, thenValue, elseValue) =>
+    condition ? thenValue : elseValue,
+};
+
+/** Math constants exposed as bare identifiers. */
+const EXPRESSION_CONSTANTS: Record<string, number> = {
+  PI: Math.PI,
+  E: Math.E,
+};
+
+/** Names that are always in scope and therefore cannot be used as field idents. */
+const RESERVED_NAMES = new Set<string>([
+  ...Object.keys(EXPRESSION_HELPERS),
+  ...Object.keys(EXPRESSION_CONSTANTS),
+  "props",
+  "$index",
+]);
+
+const IDENTIFIER_RE = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+/**
+ * Whether a field name can be exposed as a bare identifier in an expression.
+ * Names that collide with a helper/constant fall back to `props["name"]` access
+ * so the helper is never shadowed.
+ */
+export function isBareIdentifier(name: string): boolean {
+  return IDENTIFIER_RE.test(name) && !RESERVED_NAMES.has(name);
+}
+
+/**
+ * The snippet that references a field inside an expression: the bare name when
+ * it is a safe identifier, otherwise a quoted `props[...]` lookup.
+ */
+export function fieldReference(name: string): string {
+  return isBareIdentifier(name) ? name : `props[${JSON.stringify(name)}]`;
+}
+
+/** A compiled expression ready to run against each feature's properties. */
+export interface CompiledExpression {
+  evaluate: (props: Record<string, unknown>, index: number) => unknown;
+}
+
+/**
+ * Compile an expression once for a known set of field names. Throws a
+ * SyntaxError (with a readable message) when the expression cannot be parsed, so
+ * callers can surface the problem before touching any feature.
+ */
+export function compileExpression(
+  expression: string,
+  fieldNames: string[],
+): CompiledExpression {
+  const trimmed = expression.trim();
+  if (trimmed === "") {
+    throw new SyntaxError("Expression is empty.");
+  }
+
+  const bareFields = fieldNames.filter(isBareIdentifier);
+  const helperNames = Object.keys(EXPRESSION_HELPERS);
+  const constantNames = Object.keys(EXPRESSION_CONSTANTS);
+  const argNames = [
+    ...bareFields,
+    ...helperNames,
+    ...constantNames,
+    "props",
+    "$index",
+  ];
+
+  let fn: (...args: unknown[]) => unknown;
+  try {
+    // "use strict" disables `with` and silent global creation; the expression
+    // only sees the named arguments we pass in.
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    fn = new Function(
+      ...argNames,
+      `"use strict"; return (${trimmed});`,
+    ) as (...args: unknown[]) => unknown;
+  } catch (error) {
+    throw new SyntaxError(
+      error instanceof Error ? error.message : "Invalid expression.",
+    );
+  }
+
+  const helperValues = helperNames.map((name) => EXPRESSION_HELPERS[name]);
+  const constantValues = constantNames.map((name) => EXPRESSION_CONSTANTS[name]);
+
+  return {
+    evaluate(props, index) {
+      const fieldValues = bareFields.map((name) => props[name]);
+      return fn(
+        ...fieldValues,
+        ...helperValues,
+        ...constantValues,
+        props,
+        index,
+      );
+    },
+  };
+}
+
+/** Output type for a calculated field. `auto` keeps the raw computed value. */
+export type CalcOutputType = "auto" | "text" | "number" | "boolean";
+
+/**
+ * Coerce a computed value to the chosen output type. `auto` passes the raw value
+ * through (numbers stay numbers, strings stay strings). A value that cannot be
+ * represented in the target type — a non-finite number, an unparseable text →
+ * number — becomes null so a calculation never persists a type-corrupted cell.
+ */
+export function coerceComputedValue(
+  value: unknown,
+  type: CalcOutputType,
+): unknown {
+  if (value === undefined) return null;
+  if (type === "auto") {
+    // Normalize the JS "no result" values to null for a clean cell.
+    if (typeof value === "number" && !Number.isFinite(value)) return null;
+    return value;
+  }
+  if (value === null) return null;
+  if (type === "number") {
+    const next = Number(value);
+    return Number.isFinite(next) ? next : null;
+  }
+  if (type === "boolean") {
+    if (typeof value === "boolean") return value;
+    const normalized = String(value).trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+    return Boolean(value);
+  }
+  // text
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+}

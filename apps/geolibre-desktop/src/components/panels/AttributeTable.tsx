@@ -26,6 +26,7 @@ import {
   Label,
   ScrollArea,
   Select,
+  Textarea,
   TableBody,
   TableCell,
   TableHead,
@@ -38,6 +39,7 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
+  Calculator,
   Columns3,
   Download,
   EyeOff,
@@ -63,6 +65,7 @@ import {
 import { isTauri } from "../../lib/tauri-io";
 import {
   addColumn,
+  calculateField,
   deleteColumn,
   getColumnSettings,
   hiddenColumns,
@@ -74,6 +77,13 @@ import {
   type ColumnMoveDirection,
   type NewColumnType,
 } from "../../lib/attribute-columns";
+import {
+  coerceComputedValue,
+  compileExpression,
+  EXPRESSION_HELPERS,
+  fieldReference,
+  type CalcOutputType,
+} from "../../lib/attribute-expression";
 import {
   exportVectorLayer,
   formatAttributeValue,
@@ -276,6 +286,16 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const [newColumnName, setNewColumnName] = useState("");
   const [newColumnType, setNewColumnType] = useState<NewColumnType>("text");
   const [newColumnDefault, setNewColumnDefault] = useState("");
+  // Field-calculator dialog state.
+  const [calcOpen, setCalcOpen] = useState(false);
+  const [calcMode, setCalcMode] = useState<"update" | "create">("update");
+  const [calcTargetField, setCalcTargetField] = useState("");
+  const [calcNewName, setCalcNewName] = useState("");
+  const [calcOutputType, setCalcOutputType] = useState<CalcOutputType>("auto");
+  const [calcExpression, setCalcExpression] = useState("");
+  const [calcSelectedOnly, setCalcSelectedOnly] = useState(false);
+  const [calcError, setCalcError] = useState<string | null>(null);
+  const calcExpressionRef = useRef<HTMLTextAreaElement>(null);
 
   const layer = layers.find((l) => l.id === selectedLayerId);
   const hasLayer = Boolean(layer);
@@ -379,6 +399,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     setNewColumnName("");
     setNewColumnType("text");
     setNewColumnDefault("");
+    setCalcOpen(false);
+    setCalcExpression("");
+    setCalcError(null);
+    setCalcSelectedOnly(false);
   }, [selectedLayerId, hasLayer, isGeometryEditing]);
 
   const filterLower = attributeFilter.toLowerCase();
@@ -763,6 +787,127 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     setAddingColumn(false);
   };
 
+  const openCalculator = () => {
+    const hasColumns = discoveredColumns.length > 0;
+    setCalcMode(hasColumns ? "update" : "create");
+    setCalcTargetField(hasColumns ? discoveredColumns[0] : "");
+    setCalcNewName("");
+    setCalcOutputType("auto");
+    setCalcExpression("");
+    setCalcSelectedOnly(false);
+    setCalcError(null);
+    setCalcOpen(true);
+  };
+
+  // Insert a field reference (or function call) into the expression at the
+  // caret, then restore focus so chips can be clicked without losing position.
+  const insertExpressionSnippet = (snippet: string) => {
+    const el = calcExpressionRef.current;
+    if (!el) {
+      setCalcExpression((current) => current + snippet);
+      return;
+    }
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    setCalcExpression(
+      (current) => current.slice(0, start) + snippet + current.slice(end),
+    );
+    const caret = start + snippet.length;
+    window.requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(caret, caret);
+    });
+  };
+
+  const calcNewNameTrimmed = calcNewName.trim();
+  const calcNameCollides =
+    calcMode === "create" &&
+    calcNewNameTrimmed !== "" &&
+    discoveredColumns.includes(calcNewNameTrimmed);
+  const calcHasTarget =
+    calcMode === "create"
+      ? calcNewNameTrimmed !== "" && !calcNameCollides
+      : calcTargetField !== "";
+  const calcHasSelection = Boolean(selectedFeatureId);
+
+  // Live preview of the expression against a sample feature: the selected row
+  // when present (and a single feature is targeted), else the first row. A
+  // syntax error blocks submission; a runtime error on the sample does not,
+  // since other features may still evaluate cleanly.
+  const calcSampleRow =
+    (calcSelectedOnly && calcHasSelection
+      ? attributeRows.find((row) => row.featureId === selectedFeatureId)
+      : undefined) ?? attributeRows[0];
+  let calcPreview:
+    | { kind: "empty" }
+    | { kind: "ok"; value: unknown }
+    | { kind: "syntax"; message: string }
+    | { kind: "runtime"; message: string } = { kind: "empty" };
+  if (calcOpen && calcExpression.trim() !== "") {
+    try {
+      const compiled = compileExpression(calcExpression, discoveredColumns);
+      if (calcSampleRow) {
+        try {
+          const raw = compiled.evaluate(
+            calcSampleRow.properties,
+            attributeRows.indexOf(calcSampleRow),
+          );
+          calcPreview = {
+            kind: "ok",
+            value: coerceComputedValue(raw, calcOutputType),
+          };
+        } catch (error) {
+          calcPreview = {
+            kind: "runtime",
+            message:
+              error instanceof Error ? error.message : "Evaluation failed.",
+          };
+        }
+      } else {
+        calcPreview = { kind: "ok", value: null };
+      }
+    } catch (error) {
+      calcPreview = {
+        kind: "syntax",
+        message: error instanceof Error ? error.message : "Invalid expression.",
+      };
+    }
+  }
+  const calcCanSubmit =
+    features.length > 0 &&
+    calcHasTarget &&
+    calcExpression.trim() !== "" &&
+    calcPreview.kind !== "syntax";
+
+  const confirmCalculate = () => {
+    if (!layer || !calcCanSubmit) return;
+    const targetName = calcMode === "create" ? calcNewName : calcTargetField;
+    const scope =
+      calcSelectedOnly && selectedFeatureId
+        ? new Set([selectedFeatureId])
+        : undefined;
+    const result = calculateField(
+      layer,
+      discoveredColumns,
+      targetName,
+      calcMode === "create",
+      calcExpression,
+      calcOutputType,
+      scope,
+    );
+    if (!result) {
+      setCalcError("Could not apply the calculation to this layer.");
+      return;
+    }
+    if ("error" in result) {
+      setCalcError(result.error);
+      return;
+    }
+    updateLayer(layer.id, result.patch);
+    setCalcError(null);
+    setCalcOpen(false);
+  };
+
   const sortableHeader = (key: SortKey, label: string) => (
     <div className="relative flex h-full min-h-10 items-center">
       <button
@@ -1014,6 +1159,19 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           >
             <Plus className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Add field</span>
+          </Button>
+        ) : null}
+        {canManageColumns && !isEditing ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2"
+            title="Calculate field values from an expression"
+            aria-label="Field calculator"
+            onClick={openCalculator}
+          >
+            <Calculator className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Calculate</span>
           </Button>
         ) : null}
         {canManageColumns && !isEditing ? (
@@ -1344,6 +1502,167 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             </Button>
             <Button disabled={!canSubmitNewColumn} onClick={confirmAddColumn}>
               Add field
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={calcOpen}
+        onOpenChange={(open: boolean) => {
+          setCalcOpen(open);
+          if (!open) setCalcError(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Field calculator</DialogTitle>
+            <DialogDescription>
+              {`Compute values from a JavaScript expression and write them to a field in "${layer?.name ?? ""}".`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 py-1">
+            <div className="grid gap-1.5">
+              <Label htmlFor="calc-target">Target field</Label>
+              <div className="flex gap-2">
+                <Select
+                  id="calc-target-mode"
+                  className="w-40 shrink-0"
+                  value={calcMode}
+                  onChange={(event) =>
+                    setCalcMode(event.target.value as "update" | "create")
+                  }
+                >
+                  <option
+                    value="update"
+                    disabled={discoveredColumns.length === 0}
+                  >
+                    Update field
+                  </option>
+                  <option value="create">Create field</option>
+                </Select>
+                {calcMode === "create" ? (
+                  <Input
+                    id="calc-target"
+                    className="flex-1"
+                    value={calcNewName}
+                    placeholder="New field name"
+                    aria-invalid={calcNameCollides || undefined}
+                    onChange={(event) => setCalcNewName(event.target.value)}
+                  />
+                ) : (
+                  <Select
+                    id="calc-target"
+                    className="flex-1"
+                    value={calcTargetField}
+                    onChange={(event) => setCalcTargetField(event.target.value)}
+                  >
+                    {discoveredColumns.map((col) => (
+                      <option key={col} value={col}>
+                        {col}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </div>
+              {calcNameCollides ? (
+                <span className="text-xs text-destructive">
+                  A field named "{calcNewNameTrimmed}" already exists.
+                </span>
+              ) : null}
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="calc-output-type">Output type</Label>
+              <Select
+                id="calc-output-type"
+                value={calcOutputType}
+                onChange={(event) =>
+                  setCalcOutputType(event.target.value as CalcOutputType)
+                }
+              >
+                <option value="auto">Auto (keep computed type)</option>
+                <option value="text">Text</option>
+                <option value="number">Number</option>
+                <option value="boolean">Boolean</option>
+              </Select>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="calc-expression">Expression</Label>
+              <Textarea
+                id="calc-expression"
+                ref={calcExpressionRef}
+                className="min-h-20 font-mono text-xs"
+                value={calcExpression}
+                placeholder='e.g. pop / area, or upper(name), or pop > 100 ? "big" : "small"'
+                onChange={(event) => setCalcExpression(event.target.value)}
+              />
+              {discoveredColumns.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-1">
+                  <span className="text-xs text-muted-foreground">Fields:</span>
+                  {discoveredColumns.map((col) => (
+                    <button
+                      key={col}
+                      type="button"
+                      className="rounded border border-input bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] hover:bg-muted"
+                      title={`Insert ${col}`}
+                      onClick={() => insertExpressionSnippet(fieldReference(col))}
+                    >
+                      {col}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <div className="flex flex-wrap items-center gap-1">
+                <span className="text-xs text-muted-foreground">
+                  Functions:
+                </span>
+                {Object.keys(EXPRESSION_HELPERS).map((fn) => (
+                  <button
+                    key={fn}
+                    type="button"
+                    className="rounded border border-input bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] hover:bg-muted"
+                    title={`Insert ${fn}()`}
+                    onClick={() => insertExpressionSnippet(`${fn}()`)}
+                  >
+                    {fn}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {calcPreview.kind === "syntax" ? (
+              <span className="text-xs text-destructive">
+                {calcPreview.message}
+              </span>
+            ) : calcPreview.kind === "runtime" ? (
+              <span className="text-xs text-amber-600 dark:text-amber-500">
+                {`Sample row errored (other rows may still compute): ${calcPreview.message}`}
+              </span>
+            ) : calcPreview.kind === "ok" ? (
+              <span className="truncate text-xs text-muted-foreground">
+                Preview:{" "}
+                <span className="font-mono text-foreground">
+                  {formatAttributeValue(calcPreview.value)}
+                </span>
+              </span>
+            ) : null}
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={calcSelectedOnly}
+                disabled={!calcHasSelection}
+                onChange={(event) => setCalcSelectedOnly(event.target.checked)}
+              />
+              Only update the selected feature
+            </label>
+            {calcError ? (
+              <span className="text-xs text-destructive">{calcError}</span>
+            ) : null}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setCalcOpen(false)}>
+              Cancel
+            </Button>
+            <Button disabled={!calcCanSubmit} onClick={confirmCalculate}>
+              Calculate
             </Button>
           </div>
         </DialogContent>

@@ -4,6 +4,11 @@ import {
   type LayerStyle,
 } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
+import {
+  coerceComputedValue,
+  compileExpression,
+  type CalcOutputType,
+} from "./attribute-expression";
 
 /**
  * Per-layer attribute-table column settings, persisted under
@@ -281,6 +286,106 @@ export function addColumn(
     geojson: addFieldInGeojson(layer.geojson, name, value),
     metadata: metadataWithSettings(layer, appendKeyToOrder(settings, name)),
   };
+}
+
+/** The id the attribute table uses for a feature: its own id, else its index. */
+function featureKey(
+  feature: FeatureCollection["features"][number],
+  index: number,
+): string {
+  return String(feature.id ?? index);
+}
+
+/** Outcome of a field calculation: a layer patch plus per-run statistics. */
+export interface FieldCalculationResult {
+  patch: Partial<GeoLibreLayer>;
+  /** How many features had the expression evaluated against them. */
+  evaluated: number;
+  /** How many of those threw at runtime and were written as null instead. */
+  errors: number;
+}
+
+/**
+ * Compute a field's values from a JavaScript expression and return a layer patch
+ * that writes them into the GeoJSON. The target is either an existing field or a
+ * new one (`createField: true`), and values can be limited to a subset of
+ * features (`targetFeatureIds`) — e.g. only the selected row.
+ *
+ * A SyntaxError from the expression compiler is returned as a string in
+ * `{ error }` so the caller can surface it without mutating the layer. Features
+ * whose expression throws at runtime keep a null value and are counted in
+ * `errors`. When creating a field while scoped to a subset, out-of-scope
+ * features still receive the field (as null) so the column is consistent.
+ *
+ * Returns null (no-op) when the layer has no in-store GeoJSON or no features,
+ * when a new field's name is empty or collides, or when an existing target is
+ * absent.
+ */
+export function calculateField(
+  layer: GeoLibreLayer,
+  discovered: string[],
+  rawTargetName: string,
+  createField: boolean,
+  expression: string,
+  outputType: CalcOutputType,
+  targetFeatureIds?: ReadonlySet<string>,
+): FieldCalculationResult | { error: string } | null {
+  if (!layer.geojson || layer.geojson.features.length === 0) return null;
+
+  const target = rawTargetName.trim();
+  if (!target) return null;
+  if (createField && discovered.includes(target)) return null; // would clobber
+  if (!createField && !discovered.includes(target)) return null; // nothing to set
+
+  let compiled;
+  try {
+    compiled = compileExpression(expression, discovered);
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Invalid expression.",
+    };
+  }
+
+  const scoped = targetFeatureIds ?? null;
+  let evaluated = 0;
+  let errors = 0;
+
+  const features = layer.geojson.features.map((feature, index) => {
+    const inScope =
+      scoped === null || scoped.has(featureKey(feature, index));
+    if (!inScope) {
+      // Out-of-scope feature on a new field: seed null so the column exists for
+      // every feature. An existing field is left exactly as it was.
+      if (!createField) return feature;
+      return {
+        ...feature,
+        properties: { ...(feature.properties ?? {}), [target]: null },
+      };
+    }
+
+    const props = (feature.properties ?? {}) as Record<string, unknown>;
+    let value: unknown;
+    try {
+      value = coerceComputedValue(compiled.evaluate(props, index), outputType);
+      evaluated += 1;
+    } catch {
+      value = null;
+      evaluated += 1;
+      errors += 1;
+    }
+    return { ...feature, properties: { ...props, [target]: value } };
+  });
+
+  const geojson: FeatureCollection = { ...layer.geojson, features };
+  const settings = getColumnSettings(layer);
+  const patch: Partial<GeoLibreLayer> = createField
+    ? {
+        geojson,
+        metadata: metadataWithSettings(layer, appendKeyToOrder(settings, target)),
+      }
+    : { geojson };
+
+  return { patch, evaluated, errors };
 }
 
 /**
