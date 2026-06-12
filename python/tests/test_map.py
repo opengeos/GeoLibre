@@ -118,7 +118,10 @@ def test_add_video_wraps_single_url(m):
 
 
 def test_add_wfs_inlines_geojson(monkeypatch, m):
-    fake_fc = {"type": "FeatureCollection", "features": []}
+    fake_fc = {
+        "type": "FeatureCollection",
+        "features": [{"type": "Feature", "properties": {}, "geometry": None}],
+    }
     monkeypatch.setattr(gmod._project, "load_featurecollection", lambda _url: fake_fc)
     m.add_wfs("https://e/wfs", "topp:states")
     layer = _last_layer(m)
@@ -127,6 +130,12 @@ def test_add_wfs_inlines_geojson(monkeypatch, m):
     assert layer["metadata"]["service"] == "wfs"
     assert layer["metadata"]["sourceKind"] == "wfs-getfeature"
     assert layer["metadata"]["typeName"] == "topp:states"
+    assert layer["metadata"]["featureCount"] == 1
+    # Protocol fields are persisted on the source for round-trip editing.
+    assert layer["source"]["service"] == "wfs"
+    assert layer["source"]["typeName"] == "topp:states"
+    assert layer["source"]["version"] == "2.0.0"
+    assert layer["source"]["outputFormat"] == "application/json"
 
 
 def test_add_vector_local_file_inlined(monkeypatch, m):

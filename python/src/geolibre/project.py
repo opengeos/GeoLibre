@@ -696,21 +696,35 @@ def video_layer(
         A layer dict for the project's ``layers`` array.
 
     Raises:
-        ValueError: If ``urls`` is empty or ``coordinates`` is not four
-            ``[lng, lat]`` pairs.
+        ValueError: If ``urls`` is empty, any URL is not ``https://`` (the
+            browser's ``media-src`` CSP blocks ``http://``), or ``coordinates``
+            is not four ``[lng, lat]`` pairs.
     """
     clean_urls = [u for u in urls if isinstance(u, str) and u]
     if not clean_urls:
         raise ValueError("video_layer requires at least one non-empty URL")
+    if any(not u.lower().startswith("https://") for u in clean_urls):
+        raise ValueError(
+            "Video URLs must start with https:// (the browser CSP blocks http://)"
+        )
     if len(coordinates) != 4 or any(len(corner) != 2 for corner in coordinates):
         raise ValueError(
             "coordinates must be four [lng, lat] corners (top-left, top-right, "
             "bottom-right, bottom-left)"
         )
+    lngs = [float(c[0]) for c in coordinates]
+    lats = [float(c[1]) for c in coordinates]
     layer = _layer_base(name, "video", **style)
     layer["source"] = {
+        "type": "video",
         "urls": clean_urls,
-        "coordinates": [[float(c[0]), float(c[1])] for c in coordinates],
+        "coordinates": [[lng, lat] for lng, lat in zip(lngs, lats)],
+    }
+    # Persist the corner bbox ([west, south, east, north]) so "Zoom to layer"
+    # works — a video source exposes no bounds for fitLayer to fall back on.
+    layer["metadata"] = {
+        "sourceKind": "video-url",
+        "bounds": [min(lngs), min(lats), max(lngs), max(lats)],
     }
     layer["sourcePath"] = clean_urls[0]
     return layer

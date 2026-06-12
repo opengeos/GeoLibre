@@ -40,7 +40,8 @@ def _read_local_vector(path: Any) -> dict[str, Any]:
         A GeoJSON FeatureCollection dict in EPSG:4326.
 
     Raises:
-        ValueError: If the file does not exist.
+        ValueError: If the file does not exist or, after conversion to GeoJSON,
+            exceeds the 50 MB size limit.
         ImportError: If GeoPandas is not installed.
     """
     file_path = pathlib.Path(str(path)).expanduser()
@@ -53,12 +54,24 @@ def _read_local_vector(path: Any) -> dict[str, Any]:
             "Reading a local vector file requires GeoPandas. Install it with "
             "`pip install geopandas`, or pass a URL to a hosted dataset instead."
         ) from exc
-    gdf = geopandas.read_file(file_path)
+    # GeoPandas' GDAL-backed read_file may lack the Parquet driver depending on
+    # the GDAL build, so dispatch (Geo)Parquet to the dedicated reader.
+    if file_path.suffix.lower() in (".parquet", ".geoparquet", ".pq"):
+        gdf = geopandas.read_parquet(file_path)
+    else:
+        gdf = geopandas.read_file(file_path)
     if gdf.crs is not None:
         gdf = gdf.to_crs(epsg=4326)
     # Round-trip through GeoPandas' own GeoJSON writer so numpy/datetime property
     # values become plain JSON the widget bus can serialize.
-    return json.loads(gdf.to_json())
+    geojson = gdf.to_json()
+    # Cap the inlined payload like load_featurecollection does for URL/file
+    # GeoJSON; a format like Shapefile can expand sharply once converted.
+    if len(geojson.encode("utf-8")) > _project._MAX_GEOJSON_BYTES:
+        raise ValueError(
+            f"Vector file exceeds the 50 MB GeoJSON size limit after conversion: {path}"
+        )
+    return json.loads(geojson)
 
 
 class Map(anywidget.AnyWidget):
@@ -457,8 +470,25 @@ class Map(anywidget.AnyWidget):
         )
         fc = _project.load_featurecollection(url)
         layer = _project.geojson_layer(name, fc, source_url=url, **style)
+        # Mirror the protocol fields the UI persists on the source so the Edit
+        # Layer panel can pre-populate the WFS form and isWfsLayer() recognizes
+        # the layer when round-tripped from a Python-produced project.
+        layer["source"].update(
+            {
+                "service": "wfs",
+                "typeName": type_name,
+                "version": version,
+                "outputFormat": output_format,
+                **({"srsName": srs_name} if srs_name else {}),
+            }
+        )
         layer["metadata"].update(
-            {"service": "wfs", "sourceKind": "wfs-getfeature", "typeName": type_name}
+            {
+                "service": "wfs",
+                "sourceKind": "wfs-getfeature",
+                "typeName": type_name,
+                "featureCount": len(fc.get("features", [])),
+            }
         )
         return self._add_layer(layer)
 

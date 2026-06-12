@@ -165,7 +165,7 @@ def test_vector_layer_tiles_mode():
 
 
 def test_vector_layer_invalid_render_mode():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="render_mode must be"):
         project.vector_layer("V", "https://e/x", render_mode="bogus")
 
 
@@ -202,7 +202,7 @@ def test_pmtiles_layer_raster_shape():
 
 
 def test_pmtiles_layer_invalid_tile_type():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="tile_type must be"):
         project.pmtiles_layer("P", "https://e/x.pmtiles", tile_type="bogus")
 
 
@@ -230,19 +230,28 @@ def test_video_layer_shape():
     corners = [[-122, 38], [-121, 38], [-121, 37], [-122, 37]]
     layer = project.video_layer("Vid", ["https://e/a.mp4", "https://e/a.webm"], corners)
     assert layer["type"] == "video"
+    assert layer["source"]["type"] == "video"
     assert layer["source"]["urls"] == ["https://e/a.mp4", "https://e/a.webm"]
     assert layer["source"]["coordinates"] == corners
     assert layer["sourcePath"] == "https://e/a.mp4"
+    assert layer["metadata"]["sourceKind"] == "video-url"
+    # bounds is [west, south, east, north] of the four corners.
+    assert layer["metadata"]["bounds"] == [-122, 37, -121, 38]
 
 
 def test_video_layer_requires_url():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="non-empty URL"):
         project.video_layer("Vid", [], [[0, 0], [1, 0], [1, 1], [0, 1]])
 
 
 def test_video_layer_requires_four_corners():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r"four \[lng, lat\] corners"):
         project.video_layer("Vid", ["https://e/a.mp4"], [[0, 0], [1, 1]])
+
+
+def test_video_layer_rejects_non_https():
+    with pytest.raises(ValueError, match="https://"):
+        project.video_layer("Vid", ["http://e/a.mp4"], [[0, 0], [1, 0], [1, 1], [0, 1]])
 
 
 def test_load_featurecollection_passthrough():
