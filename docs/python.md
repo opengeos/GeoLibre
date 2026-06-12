@@ -127,21 +127,26 @@ UI edits flow back the same way.
     - **Local Jupyter / VS Code** - the app is served directly from localhost.
     - **Google Colab** - routes through Colab's built-in port proxy
       (`google.colab.kernel.proxyPort`) automatically.
-    - **JupyterHub** (including managed/shared hubs) - the app is served by a
-      Jupyter Server extension bundled with `geolibre`, mounted at
-      `{base_url}geolibre/app/` on the notebook server's own origin. It is
-      enabled automatically on `pip install geolibre` (detected at runtime via
-      `JUPYTERHUB_SERVICE_PREFIX`) and needs no `jupyter-server-proxy` and no
-      extra port, so it works on locked-down hubs that block raw-port proxying.
+    - **JupyterHub** (including managed/shared hubs, detected at runtime via
+      `JUPYTERHUB_SERVICE_PREFIX`) - the front-end probes two same-origin routes
+      and uses whichever is live, so a host needs only **one** of them:
+        - the Jupyter Server extension bundled with `geolibre`, mounted at
+          `{base_url}geolibre/app/` on the notebook server's own origin. It is
+          enabled automatically on `pip install geolibre` and needs no
+          `jupyter-server-proxy` and no extra port, so it works on locked-down
+          hubs that block raw-port proxying -- but it only registers after the
+          Jupyter server restarts, since it loads from a startup config drop-in.
+        - `jupyter-server-proxy` at `{base_url}proxy/{port}/`, which reaches the
+          kernel's localhost bundle in the **running** server with no restart,
+          wherever `jupyter-server-proxy` is installed.
     - **Other remote servers** (Binder, remote JupyterLab over SSH/network) -
-      pass `Map(server_proxy=True)` to use that same bundled server-extension
-      route.
+      pass `Map(server_proxy=True)` to use that same dual-route remote path.
 
     Set `Map(server_proxy=False)` to force the direct localhost path. If the app
-    fails to load on a hub, confirm the extension is active with
-    `jupyter server extension list` (look for `geolibre`); restart the Jupyter
-    server after installing `geolibre`, or run
-    `jupyter server extension enable geolibre`.
+    fails to load on a hub, either install `jupyter-server-proxy`, or confirm the
+    extension is enabled with `jupyter server extension list` (look for
+    `geolibre`; run `jupyter server extension enable geolibre` if absent) and
+    **restart** the Jupyter server so the extension loads.
 
 !!! warning "URL fetching"
 
