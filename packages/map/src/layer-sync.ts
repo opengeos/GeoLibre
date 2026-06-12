@@ -236,7 +236,9 @@ function syncExternalNativeLayer(
       layer.visible ? "visible" : "none",
     );
 
-    setExternalNativeLayerPaint(map, nativeLayerId, nativeLayer.type, layer);
+    if (!controlOwnsPaint(layer)) {
+      setExternalNativeLayerPaint(map, nativeLayerId, nativeLayer.type, layer);
+    }
     // External layers carry their own zoom range from the control or tile
     // service that registered them, so we leave a pristine layer's native range
     // alone. Once the user moves off the defaults GeoLibre owns the range and
@@ -393,6 +395,17 @@ function isPMTilesExternalLayer(layer: GeoLibreLayer): boolean {
 
 function isExternalCustomLayer(layer: GeoLibreLayer): boolean {
   return typeof layer.metadata.customLayerType === "string";
+}
+
+// External controls that paint their native layers with data-driven MapLibre
+// expressions (selection-based color, radius, opacity, ...) cannot express that
+// paint through GeoLibre's flat per-layer style. They opt in with this flag so
+// the sync below keeps managing visibility, zoom range, and ordering while
+// leaving the control's own paint untouched. Unlike `customLayerType`, which
+// drops the layer onto an ordering-only path, these layers still respond to the
+// panel's show/hide and reorder controls.
+function controlOwnsPaint(layer: GeoLibreLayer): boolean {
+  return layer.metadata.controlOwnsPaint === true;
 }
 
 function ensurePMTilesExternalLayer(
