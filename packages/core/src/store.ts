@@ -1,6 +1,9 @@
 import type { FeatureCollection } from "geojson";
 import { v4 as uuidv4 } from "uuid";
 import { create } from "zustand";
+import { shallow } from "zustand/shallow";
+import { temporal } from "zundo";
+import { getHistoryCoalesceMs, leadingDebounce } from "./history";
 import {
   applyProjectToStore,
   type CreateProjectOptions,
@@ -176,7 +179,9 @@ function normalizeRecentProjects(
   return normalized.slice(0, MAX_RECENT_PROJECTS);
 }
 
-export const useAppStore = create<AppState>((set, get) => ({
+export const useAppStore = create<AppState>()(
+  temporal(
+    (set, get) => ({
   projectName: DEFAULT_PROJECT_NAME,
   projectPath: null,
   projectGeneration: 0,
@@ -397,4 +402,30 @@ export const useAppStore = create<AppState>((set, get) => ({
     get().addLayer(layer, beforeLayerId);
     return id;
   },
-}));
+    }),
+    {
+      // Only these fields participate in undo/redo; everything else (selection,
+      // ui flags, mapView/camera, pointerCoords, project metadata, isDirty, ...)
+      // is excluded, so changing them never creates a history entry.
+      partialize: (s) => ({
+        layers: s.layers,
+        basemapStyleUrl: s.basemapStyleUrl,
+        basemapVisible: s.basemapVisible,
+        basemapOpacity: s.basemapOpacity,
+      }),
+      // A set that leaves the partialized slice effectively equal records nothing.
+      // Primitive fields are compared with ===; the layers array is compared
+      // element-by-element via shallow so that resetting to an empty array
+      // (e.g. newProject) is correctly detected as unchanged.
+      equality: (a, b) =>
+        a.basemapStyleUrl === b.basemapStyleUrl &&
+        a.basemapVisible === b.basemapVisible &&
+        a.basemapOpacity === b.basemapOpacity &&
+        shallow(a.layers, b.layers),
+      limit: 100,
+      // Group rapid bursts (slider drags) into one entry; window is 0 in tests.
+      handleSet: (handleSet) =>
+        leadingDebounce(handleSet, getHistoryCoalesceMs),
+    },
+  ),
+);

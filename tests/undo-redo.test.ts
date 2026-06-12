@@ -5,6 +5,7 @@ import {
   leadingDebounce,
   setHistoryCoalesceMs,
 } from "../packages/core/src/history";
+import { useAppStore } from "../packages/core/src/store";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -39,5 +40,37 @@ describe("history coalesce config", () => {
     setHistoryCoalesceMs(250);
     assert.equal(getHistoryCoalesceMs(), 250);
     setHistoryCoalesceMs(original);
+  });
+});
+
+const emptyFC = { type: "FeatureCollection" as const, features: [] };
+
+function pastLen(): number {
+  return useAppStore.temporal.getState().pastStates.length;
+}
+
+describe("store history tracking", () => {
+  it("records tracked changes and ignores transient changes", () => {
+    setHistoryCoalesceMs(0);
+    useAppStore.getState().newProject({ name: "T" });
+    assert.equal(pastLen(), 0);
+
+    // Tracked change: adding a layer.
+    useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    assert.equal(pastLen(), 1);
+
+    // Tracked change: basemap opacity.
+    useAppStore.getState().setBasemapOpacity(0.5);
+    assert.equal(pastLen(), 2);
+
+    // Transient changes must NOT create history entries.
+    const before = pastLen();
+    const id = useAppStore.getState().layers[0].id;
+    useAppStore.getState().selectLayer(id);
+    useAppStore.getState().setAttributeTableOpen(true);
+    useAppStore.getState().setMapView({ zoom: 7 });
+    useAppStore.getState().setPointerCoords([1, 2]);
+    useAppStore.getState().setAttributeFilter("abc");
+    assert.equal(pastLen(), before);
   });
 });
