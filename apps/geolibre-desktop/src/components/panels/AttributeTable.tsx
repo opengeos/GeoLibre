@@ -819,14 +819,15 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     }
     const start = el.selectionStart ?? el.value.length;
     const end = el.selectionEnd ?? el.value.length;
-    setCalcExpression(
-      (current) => current.slice(0, start) + snippet + current.slice(end),
-    );
+    const next = el.value.slice(0, start) + snippet + el.value.slice(end);
+    // Write the DOM value and caret synchronously, then sync React state. Doing
+    // this in a deferred rAF let a rapid second chip click read a stale caret
+    // (still 0) and splice at the wrong offset.
+    el.value = next;
     const caret = start + (caretOffset ?? snippet.length);
-    window.requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(caret, caret);
-    });
+    el.focus();
+    el.setSelectionRange(caret, caret);
+    setCalcExpression(next);
   };
 
   const calcNewNameTrimmed = calcNewName.trim();
@@ -854,10 +855,11 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   // Stable string keys so the memo skips recompiling the expression on renders
   // that don't change the inputs (discoveredColumns / the sample row are rebuilt
   // with fresh identities every render, so they can't be deps directly).
-  const calcColumnsKey = JSON.stringify(discoveredColumns);
-  const calcSampleKey = calcSampleRow
-    ? JSON.stringify(calcSampleRow.properties)
-    : "";
+  // Only serialize while the dialog is open — these exist solely as stable memo
+  // deps, and the memo short-circuits to "empty" when closed anyway.
+  const calcColumnsKey = calcOpen ? JSON.stringify(discoveredColumns) : "";
+  const calcSampleKey =
+    calcOpen && calcSampleRow ? JSON.stringify(calcSampleRow.properties) : "";
   const calcPreview = useMemo<
     | { kind: "empty" }
     | { kind: "ok"; value: unknown }
@@ -930,7 +932,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       // null. Keep the dialog open and report it rather than showing a silent
       // success over a column of nulls.
       setCalcError(
-        `Applied with ${result.errors} of ${result.evaluated} feature(s) errored and written as null.`,
+        `Applied, but ${result.errors} of ${result.evaluated} feature(s) errored and were written as null.`,
       );
       return;
     }

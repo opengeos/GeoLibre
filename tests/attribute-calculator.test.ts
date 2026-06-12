@@ -68,6 +68,22 @@ describe("expression compilation", () => {
     );
   });
 
+  it("handles null-ish args in string helpers without coercing to 'null'", () => {
+    // replace: a null search is a no-op; a null replacement is the empty string.
+    assert.equal(
+      compileExpression('replace("a null b", x, "X")', ["x"]).evaluate(
+        { x: null },
+        0,
+      ),
+      "a null b",
+    );
+    // substr uses slice semantics: a negative start counts from the end.
+    assert.equal(
+      compileExpression('substr("hello", -3)', []).evaluate({}, 0),
+      "llo",
+    );
+  });
+
   it("reaches non-identifier fields through props", () => {
     const compiled = compileExpression('props["my field"] + 1', ["my field"]);
     assert.equal(compiled.evaluate({ "my field": 41 }, 0), 42);
@@ -97,7 +113,9 @@ describe("identifier helpers", () => {
     assert.equal(isBareIdentifier("class"), false); // JS keyword
     assert.equal(isBareIdentifier("let"), false); // strict-mode reserved
     assert.equal(isBareIdentifier("enum"), false); // reserved in all modes
+    assert.equal(isBareIdentifier("undefined"), false); // global constant
     assert.equal(isBareIdentifier("NaN"), false); // global constant
+    assert.equal(isBareIdentifier("Infinity"), false); // global constant
     assert.equal(fieldReference("pop"), "pop");
     assert.equal(fieldReference("my field"), 'props["my field"]');
     assert.equal(fieldReference("class"), 'props["class"]');

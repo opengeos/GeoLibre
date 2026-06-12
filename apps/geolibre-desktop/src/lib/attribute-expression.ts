@@ -65,14 +65,23 @@ export const EXPRESSION_HELPERS: Record<string, Helper> = {
   trim: (x) => (x == null ? "" : String(x).trim()),
   length: (x) => (x == null ? 0 : String(x).length),
   concat: (...args) => args.map((a) => (a == null ? "" : String(a))).join(""),
+  // (start, length) with slice semantics, so a negative start counts from the
+  // end (`substr("hello", -3)` → "llo"), matching QGIS / Python / JS slice.
   substr: (x, start, len) => {
     const str = x == null ? "" : String(x);
     const from = Math.trunc(toNumber(start)) || 0;
-    if (len == null) return str.substring(from);
-    return str.substring(from, from + (Math.trunc(toNumber(len)) || 0));
+    if (len == null) return str.slice(from);
+    return str.slice(from, from + (Math.trunc(toNumber(len)) || 0));
   },
-  replace: (x, search, replacement) =>
-    (x == null ? "" : String(x)).split(String(search)).join(String(replacement)),
+  // A null/undefined search is a no-op (returns the input); a null replacement
+  // is treated as the empty string — both avoid coercing to "null"/"undefined".
+  replace: (x, search, replacement) => {
+    const str = x == null ? "" : String(x);
+    if (search == null) return str;
+    return str
+      .split(String(search))
+      .join(replacement == null ? "" : String(replacement));
+  },
   // Logic
   isNull: (x) => isNullish(x),
   // First argument that is neither null nor NaN; null when all are nullish.
