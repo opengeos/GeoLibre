@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import {
   addCloudNetcdfLayer,
   listKerchunkVariables,
@@ -53,6 +53,9 @@ export function AddNetcdfDialog({
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  // Incremented on every reset; lets in-flight async handlers detect that the
+  // dialog was closed/reopened and bail out before stomping fresh state.
+  const opGen = useRef(0);
 
   const selectedVar = variables.find((v) => v.name === variable);
   // Dimensions other than the trailing two (lat/lon) need a fixed index.
@@ -61,6 +64,7 @@ export function AddNetcdfDialog({
     : [];
 
   const reset = () => {
+    opGen.current += 1;
     setUrl(SAMPLE_URL);
     setVariables([]);
     setVariable("");
@@ -74,12 +78,14 @@ export function AddNetcdfDialog({
   };
 
   const handleLoadVariables = async () => {
+    const gen = opGen.current;
     setError(null);
     setStatus(null);
     setLoadingVars(true);
     try {
       const refs = await loadKerchunkReference(url.trim());
       const vars = listKerchunkVariables(refs);
+      if (gen !== opGen.current) return; // dialog was closed/reopened
       if (vars.length === 0) {
         throw new Error(
           "No renderable (2-D or higher) variables found in the reference."
@@ -89,17 +95,19 @@ export function AddNetcdfDialog({
       setVariable(vars[0].name);
       setStatus(`Found ${vars.length} variable${vars.length > 1 ? "s" : ""}.`);
     } catch (err) {
+      if (gen !== opGen.current) return;
       setVariables([]);
       setVariable("");
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setLoadingVars(false);
+      if (gen === opGen.current) setLoadingVars(false);
     }
   };
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!variable) return;
+    const gen = opGen.current;
     setError(null);
     setAdding(true);
     try {
@@ -113,8 +121,8 @@ export function AddNetcdfDialog({
       const clim =
         min !== undefined &&
         max !== undefined &&
-        !Number.isNaN(min) &&
-        !Number.isNaN(max)
+        Number.isFinite(min) &&
+        Number.isFinite(max)
           ? ([min, max] as [number, number])
           : undefined;
 
@@ -124,12 +132,14 @@ export function AddNetcdfDialog({
         selector: leadingDims.length > 0 ? selector : undefined,
         clim,
       });
+      if (gen !== opGen.current) return; // dialog was closed/reopened
       onOpenChange(false);
       reset();
     } catch (err) {
+      if (gen !== opGen.current) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setAdding(false);
+      if (gen === opGen.current) setAdding(false);
     }
   };
 
@@ -247,7 +257,10 @@ export function AddNetcdfDialog({
             <Button
               type="button"
               variant="outline"
-              onClick={() => onOpenChange(false)}
+              onClick={() => {
+                reset();
+                onOpenChange(false);
+              }}
             >
               Cancel
             </Button>

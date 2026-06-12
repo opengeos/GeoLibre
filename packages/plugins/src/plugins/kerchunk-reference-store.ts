@@ -83,6 +83,14 @@ export function normalizeKerchunkReference(
   for (const [key, value] of Object.entries(refs)) {
     if (Array.isArray(value) && typeof value[0] === "string") {
       const url = resolveUrl(value[0], referenceUrl);
+      if (
+        value.length >= 3 &&
+        (typeof value[1] !== "number" || typeof value[2] !== "number")
+      ) {
+        throw new Error(
+          `Invalid kerchunk reference for key "${key}": offset and length must be numbers.`
+        );
+      }
       resolved[key] =
         value.length >= 3
           ? [url, value[1] as number, value[2] as number]
@@ -96,7 +104,9 @@ export function normalizeKerchunkReference(
 
 function looksLikeFlatRefs(doc: KerchunkDocument): boolean {
   // Sufficient heuristic: real v0 manifests always include at least one Zarr
-  // metadata key at the root. A manifest with only chunk keys would fail here.
+  // metadata key at the root. A chunk-keys-only manifest would fall through to
+  // the "no `refs` found" error, which is acceptable since real stores always
+  // include `.zgroup`.
   return ".zgroup" in doc || ".zattrs" in doc || ".zarray" in doc;
 }
 
@@ -197,7 +207,11 @@ export function listKerchunkVariables(refs: KerchunkRefs): KerchunkVariable[] {
     const name = key.slice(0, -"/.zarray".length);
     let shape: number[] = [];
     try {
-      shape = (JSON.parse(value).shape as number[]) ?? [];
+      const parsed = JSON.parse(value).shape;
+      shape =
+        Array.isArray(parsed) && parsed.every((n) => typeof n === "number")
+          ? parsed
+          : [];
     } catch {
       continue;
     }
@@ -207,7 +221,11 @@ export function listKerchunkVariables(refs: KerchunkRefs): KerchunkVariable[] {
     const attrs = refs[`${name}/.zattrs`];
     if (typeof attrs === "string") {
       try {
-        dims = (JSON.parse(attrs)._ARRAY_DIMENSIONS as string[]) ?? [];
+        const parsed = JSON.parse(attrs)._ARRAY_DIMENSIONS;
+        dims =
+          Array.isArray(parsed) && parsed.every((d) => typeof d === "string")
+            ? parsed
+            : [];
       } catch {
         dims = [];
       }

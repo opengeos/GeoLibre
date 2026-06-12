@@ -77,6 +77,21 @@ describe("KerchunkReferenceStore.get", () => {
     assert.equal(calls[0].range, "bytes=2-4");
   });
 
+  it("throws when range fetch returns an unexpected HTTP status", async () => {
+    const fetchImpl = async () => ({
+      status: 416,
+      arrayBuffer: async () => new ArrayBuffer(0),
+    });
+    const store = new KerchunkReferenceStore(
+      { "air/0.0.0": ["http://data/air.nc", 2, 3] },
+      { fetchImpl }
+    );
+    await assert.rejects(
+      () => store.get("air/0.0.0"),
+      /Kerchunk range read failed/
+    );
+  });
+
   it("merges custom headers into range requests", async () => {
     const { fetchImpl, calls } = fakeRangeFetch(new Uint8Array([0, 0, 0, 0]));
     const captured: Record<string, string>[] = [];
@@ -214,6 +229,27 @@ describe("loadKerchunkReference", () => {
     assert.deepEqual(refs["air/0.0.0"], ["https://h.example/d/air.nc", 0, 4]);
   });
 
+  it("forwards custom headers to the manifest fetch", async () => {
+    const seen: Array<Record<string, string> | undefined> = [];
+    const fetchImpl = async (
+      _url: string,
+      init?: { headers?: Record<string, string> }
+    ) => {
+      seen.push(init?.headers);
+      return {
+        status: 200,
+        arrayBuffer: async () =>
+          new TextEncoder().encode(JSON.stringify({ version: 1, refs: {} }))
+            .buffer as ArrayBuffer,
+      };
+    };
+    await loadKerchunkReference("https://h.example/d/ref.json", {
+      fetchImpl,
+      headers: { Authorization: "Bearer t" },
+    });
+    assert.equal(seen[0]?.Authorization, "Bearer t");
+  });
+
   it("throws on a non-200 response", async () => {
     const fetchImpl = async () => ({
       status: 404,
@@ -222,6 +258,18 @@ describe("loadKerchunkReference", () => {
     await assert.rejects(
       () => loadKerchunkReference("https://h/ref.json", { fetchImpl }),
       /HTTP 404/
+    );
+  });
+
+  it("rejects when the response body is not valid JSON", async () => {
+    const fetchImpl = async () => ({
+      status: 200,
+      arrayBuffer: async () =>
+        new TextEncoder().encode("not json").buffer as ArrayBuffer,
+    });
+    await assert.rejects(
+      () => loadKerchunkReference("https://h/ref.json", { fetchImpl }),
+      SyntaxError
     );
   });
 });
