@@ -48,18 +48,23 @@ if (result.status !== 0) {
 // 19.6 MB postgis.tar (and PGlite wasm/data) would silently re-inflate the wheel.
 const assetsDir = resolve(distDir, "assets");
 // Matches the content-hashed PGlite assets, e.g. postgis.tar-<hash>.gz,
-// pglite-<hash>.wasm, pglite-<hash>.data, initdb-<hash>.wasm. Also catches a
-// leaked pglite-<hash>.js chunk: manualChunks() names any @electric-sql/pglite
-// import "pglite", so if the loader module-swap stops excluding the package,
-// Rollup would emit that JS chunk and the wheel would regrow even without the
-// WASM/data assets.
-const pgliteAssetRe = /^(?:postgis\.tar|pglite|initdb).*\.(?:gz|wasm|data|js)$/;
+// pglite-<hash>.wasm, pglite-<hash>.data, initdb-<hash>.wasm. The second arm
+// also catches a leaked pglite-<hash>.js chunk: manualChunks() names any
+// @electric-sql/pglite import exactly "pglite", so if the loader module-swap
+// stops excluding the package, Rollup emits `pglite-<hash>.js` and the wheel
+// would regrow even without the WASM/data assets. The JS arm is anchored to
+// `pglite-<alnum-hash>.js` so it does not spuriously match a `pglite-loader-*`
+// chunk (the `-` in `loader` breaks the `\w+` run) should Rollup ever split the
+// statically-imported loader module into its own chunk.
+const pgliteAssetRe =
+  /^(?:postgis\.tar|pglite|initdb).*\.(?:gz|wasm|data)$|^pglite-\w+\.js$/;
 const leaked = readdirSync(assetsDir).filter((name) => pgliteAssetRe.test(name));
 if (leaked.length > 0) {
   console.error(
     "[build-embed] PGlite assets leaked into the embed build despite " +
       `GEOLIBRE_PGLITE_CDN=1: ${leaked.join(", ")}. These should load from a ` +
-      "CDN at runtime; check the tree-shaken import branch in pglite-workspace.ts.",
+      "CDN at runtime; check `pgliteCdnLoaderPlugin` in vite.config.ts and the " +
+      "pglite-loader.cdn.ts / pglite-loader.ts module pair.",
   );
   process.exit(1);
 }

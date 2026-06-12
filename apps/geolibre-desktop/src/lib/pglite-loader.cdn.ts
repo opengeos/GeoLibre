@@ -28,6 +28,11 @@ export async function loadPgliteModules(): Promise<PgliteModules> {
     );
   }
   try {
+    // Version-pinned but not integrity-checked: dynamic import() has no
+    // `integrity` option, so there is no Subresource Integrity guard on the
+    // CDN code/WASM. Accepted risk for this optional, CDN-only embed feature
+    // (non-sandboxed iframe, no CSP) — see
+    // docs/superpowers/specs/2026-06-12-embed-build-cdn-pglite-design.md.
     const [{ PGlite }, { postgis }] = await Promise.all([
       import(/* @vite-ignore */ __PGLITE_CDN_URL__),
       import(/* @vite-ignore */ __PGLITE_POSTGIS_CDN_URL__),
