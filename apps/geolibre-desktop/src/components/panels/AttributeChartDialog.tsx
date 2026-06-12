@@ -468,6 +468,22 @@ function axisTitle(text: string) {
   );
 }
 
+function yAxisTitle(text: string) {
+  const cy = MARGIN.top + INNER_H / 2;
+  return (
+    <text
+      x={12}
+      y={cy}
+      textAnchor="middle"
+      fontSize={11}
+      fill={TICK}
+      transform={`rotate(-90 12 ${cy})`}
+    >
+      {text}
+    </text>
+  );
+}
+
 function EmptyChart({ message }: { message: string }) {
   return (
     <p className="py-10 text-center text-sm text-muted-foreground">{message}</p>
@@ -569,6 +585,7 @@ function ScatterChart({
         {tickText(MARGIN.left, MARGIN.top + INNER_H + 14, formatAxisValue(xMin), "start")}
         {tickText(MARGIN.left + INNER_W, MARGIN.top + INNER_H + 14, formatAxisValue(xMax), "end")}
         {axisTitle(xField)}
+        {yAxisTitle(yField)}
       </ChartFrame>
       <Caption>
         {total.toLocaleString()} point{total === 1 ? "" : "s"} · {yField} vs{" "}
@@ -608,6 +625,10 @@ function BarChart({
       <ChartFrame label={`Bar chart of ${aggregation} by ${category}`}>
         {tickText(MARGIN.left - 6, MARGIN.top, formatAxisValue(domainMax), "end", "middle")}
         {tickText(MARGIN.left - 6, baselineY, "0", "end", "middle")}
+        {/* Lower-bound tick when bars go negative (sum/mean of negative values). */}
+        {minValue < 0
+          ? tickText(MARGIN.left - 6, MARGIN.top + INNER_H, formatAxisValue(domainMin), "end", "middle")
+          : null}
         {bars.map((datum, index) => {
           const top = Math.min(baselineY, scaleY(datum.value));
           const height = Math.abs(scaleY(datum.value) - baselineY);
@@ -694,8 +715,16 @@ function LineChart({
               </circle>
             ))
           : null}
-        {tickText(MARGIN.left, MARGIN.top + INNER_H + 14, "0", "start")}
-        {tickText(MARGIN.left + INNER_W, MARGIN.top + INNER_H + 14, String(length - 1), "end")}
+        {/* A single-feature layer has only index 0; show one centered label
+            instead of "0" at both ends. */}
+        {length <= 1 ? (
+          tickText(MARGIN.left + INNER_W / 2, MARGIN.top + INNER_H + 14, "0", "middle")
+        ) : (
+          <>
+            {tickText(MARGIN.left, MARGIN.top + INNER_H + 14, "0", "start")}
+            {tickText(MARGIN.left + INNER_W, MARGIN.top + INNER_H + 14, String(length - 1), "end")}
+          </>
+        )}
         {axisTitle("feature order")}
       </ChartFrame>
       <Caption>
@@ -754,19 +783,31 @@ function BoxChart({
           stroke={SERIES}
           strokeWidth={2}
         />
-        {stats.map(([label, value]) => (
-          <text
-            key={label}
-            x={centerX + boxWidth / 2 + 8}
-            y={scaleY(value)}
-            textAnchor="start"
-            dominantBaseline="middle"
-            fontSize={10}
-            fill={TICK}
-          >
-            {`${label} ${formatAxisValue(value)}`}
-          </text>
-        ))}
+        {/* When every value is identical the five stats share one y position;
+            show a single label instead of five overlapping ones. */}
+        {min === max ? (
+          tickText(
+            centerX + boxWidth / 2 + 8,
+            scaleY(median),
+            `all = ${formatAxisValue(median)}`,
+            "start",
+            "middle",
+          )
+        ) : (
+          stats.map(([label, value]) => (
+            <text
+              key={label}
+              x={centerX + boxWidth / 2 + 8}
+              y={scaleY(value)}
+              textAnchor="start"
+              dominantBaseline="middle"
+              fontSize={10}
+              fill={TICK}
+            >
+              {`${label} ${formatAxisValue(value)}`}
+            </text>
+          ))
+        )}
         {axisTitle(field)}
       </ChartFrame>
       <Caption>

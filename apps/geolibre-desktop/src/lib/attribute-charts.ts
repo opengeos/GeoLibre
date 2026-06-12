@@ -162,10 +162,10 @@ export interface ScatterResult {
 
 /**
  * Extract the (x, y) pairs where both columns hold a finite number. Returns null
- * when no row has both. Extents span every valid pair, but `points` is capped at
- * `maxPoints` so a huge layer doesn't render tens of thousands of SVG nodes;
- * `total` reports the full count. Degenerate single-axis ranges are left to the
- * renderer to pad.
+ * when no row has both. Extents span every valid pair. When there are more than
+ * `maxPoints`, `points` is an **evenly strided** subset (not the leading rows)
+ * so a huge — and often spatially-ordered — layer renders a representative
+ * sample rather than just its first features; `total` reports the full count.
  */
 export function computeScatter(
   rows: ChartRow[],
@@ -173,8 +173,7 @@ export function computeScatter(
   yKey: string,
   maxPoints: number = MAX_SCATTER_POINTS,
 ): ScatterResult | null {
-  const points: ScatterPoint[] = [];
-  let total = 0;
+  const all: ScatterPoint[] = [];
   let xMin = 0;
   let xMax = 0;
   let yMin = 0;
@@ -183,7 +182,7 @@ export function computeScatter(
     const x = toFiniteNumber(row.properties[xKey]);
     const y = toFiniteNumber(row.properties[yKey]);
     if (x === null || y === null) continue;
-    if (total === 0) {
+    if (all.length === 0) {
       xMin = xMax = x;
       yMin = yMax = y;
     } else {
@@ -192,12 +191,16 @@ export function computeScatter(
       if (y < yMin) yMin = y;
       if (y > yMax) yMax = y;
     }
-    total += 1;
-    if (points.length < maxPoints) points.push({ x, y });
+    all.push({ x, y });
   }
-  if (total === 0) return null;
+  if (all.length === 0) return null;
 
-  return { points, total, xMin, xMax, yMin, yMax };
+  let points = all;
+  if (all.length > maxPoints) {
+    const stride = Math.ceil(all.length / maxPoints);
+    points = all.filter((_, index) => index % stride === 0);
+  }
+  return { points, total: all.length, xMin, xMax, yMin, yMax };
 }
 
 /**
@@ -281,7 +284,9 @@ export interface BarResult {
  * category; `sum`/`mean` reduce the finite values of `valueKey`. Bars are sorted
  * by value descending and capped at `maxBars` (the remainder is reported in
  * `truncated`). Null/blank category values are bucketed as "(blank)". Returns
- * null when there are no rows.
+ * null when there are no rows, or — for `sum`/`mean` — when no category has any
+ * numeric value to aggregate (those categories are dropped rather than shown as
+ * misleading zero bars).
  */
 export function computeBar(
   rows: ChartRow[],
@@ -356,13 +361,16 @@ export function computeLine(rows: ChartRow[], key: string): LineResult | null {
   const points: LinePoint[] = [];
   let min = Infinity;
   let max = -Infinity;
-  rows.forEach((row, index) => {
+  let index = 0;
+  for (const row of rows) {
     const value = toFiniteNumber(row.properties[key]);
-    if (value === null) return;
-    points.push({ index, value });
-    if (value < min) min = value;
-    if (value > max) max = value;
-  });
+    if (value !== null) {
+      points.push({ index, value });
+      if (value < min) min = value;
+      if (value > max) max = value;
+    }
+    index += 1;
+  }
   if (points.length === 0) return null;
   return { points, min, max, length: rows.length };
 }

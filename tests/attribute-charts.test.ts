@@ -129,6 +129,19 @@ describe("computeScatter", () => {
     assert.equal(result.yMax, 9);
   });
 
+  it("samples evenly across the dataset, not just the leading rows", () => {
+    const data = Array.from({ length: 10 }, (_, i) => ({
+      properties: { x: i, y: i },
+    }));
+    const result = computeScatter(data, "x", "y", 5);
+    assert.ok(result);
+    // stride = ceil(10/5) = 2 → indices 0,2,4,6,8 span the whole range.
+    assert.deepEqual(
+      result.points.map((p) => p.x),
+      [0, 2, 4, 6, 8],
+    );
+  });
+
   it("returns null when no row has both values", () => {
     const data = rows({ x: 1, y: null }, { x: null, y: 2 });
     assert.equal(computeScatter(data, "x", "y"), null);
