@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  categoricalColumns,
+  computeBar,
+  computeBox,
   computeHistogram,
+  computeLine,
   computeScatter,
   formatAxisValue,
   numericColumns,
@@ -112,6 +116,123 @@ describe("computeScatter", () => {
   it("returns null when no row has both values", () => {
     const data = rows({ x: 1, y: null }, { x: null, y: 2 });
     assert.equal(computeScatter(data, "x", "y"), null);
+  });
+});
+
+describe("categoricalColumns", () => {
+  it("keeps low-cardinality fields and drops high-cardinality ones", () => {
+    const data = rows(
+      { kind: "a", id: "u1" },
+      { kind: "b", id: "u2" },
+      { kind: "a", id: "u3" },
+      { kind: "a", id: "u4" },
+    );
+    // kind has 2 distinct values; id has 4 (one per row) → excluded at cap 3.
+    assert.deepEqual(categoricalColumns(data, ["kind", "id"], 3), ["kind"]);
+  });
+
+  it("treats low-cardinality numeric codes as categorical", () => {
+    const data = rows({ year: 2020 }, { year: 2021 }, { year: 2020 });
+    assert.deepEqual(categoricalColumns(data, ["year"]), ["year"]);
+  });
+
+  it("rejects mostly-unique id-like columns relative to row count", () => {
+    // 20 rows: `name` is unique per row (id-like) and excluded; `kind` repeats.
+    const data = Array.from({ length: 20 }, (_, i) => ({
+      properties: { name: `n${i}`, kind: i % 2 === 0 ? "x" : "y" },
+    }));
+    assert.deepEqual(categoricalColumns(data, ["name", "kind"]), ["kind"]);
+  });
+});
+
+describe("computeBar", () => {
+  const data = rows(
+    { kind: "a", pop: 10 },
+    { kind: "b", pop: 20 },
+    { kind: "a", pop: 30 },
+    { kind: "a", pop: null },
+  );
+
+  it("counts rows per category, sorted by value descending", () => {
+    const result = computeBar(data, "kind", "count", null);
+    assert.ok(result);
+    assert.deepEqual(
+      result.bars.map((b) => [b.label, b.value]),
+      [
+        ["a", 3],
+        ["b", 1],
+      ],
+    );
+    assert.equal(result.maxValue, 3);
+  });
+
+  it("sums and averages a value field over finite values only", () => {
+    const sum = computeBar(data, "kind", "sum", "pop");
+    assert.equal(sum?.bars.find((b) => b.label === "a")?.value, 40);
+    const mean = computeBar(data, "kind", "mean", "pop");
+    // category "a": values 10 and 30 (null skipped) → mean 20
+    assert.equal(mean?.bars.find((b) => b.label === "a")?.value, 20);
+  });
+
+  it("buckets null/blank categories as (blank) and caps to top-N", () => {
+    const blanks = rows({ k: null }, { k: "" }, { k: "x" });
+    const result = computeBar(blanks, "k", "count", null);
+    assert.equal(result?.bars.find((b) => b.label === "(blank)")?.value, 2);
+
+    const many = rows(
+      { k: "a" },
+      { k: "b" },
+      { k: "c" },
+      { k: "a" },
+    );
+    const capped = computeBar(many, "k", "count", null, 2);
+    assert.equal(capped?.bars.length, 2);
+    assert.equal(capped?.truncated, 1);
+  });
+});
+
+describe("computeLine", () => {
+  it("keeps original row index as x and skips non-numeric rows", () => {
+    const data = rows({ v: 5 }, { v: "x" }, { v: 9 });
+    const result = computeLine(data, "v");
+    assert.ok(result);
+    assert.deepEqual(result.points, [
+      { index: 0, value: 5 },
+      { index: 2, value: 9 },
+    ]);
+    assert.equal(result.min, 5);
+    assert.equal(result.max, 9);
+    assert.equal(result.length, 3);
+  });
+
+  it("returns null when no value is numeric", () => {
+    assert.equal(computeLine(rows({ v: "a" }), "v"), null);
+  });
+});
+
+describe("computeBox", () => {
+  it("computes the five-number summary with interpolation", () => {
+    const result = computeBox([1, 2, 3, 4, 5]);
+    assert.deepEqual(result, {
+      min: 1,
+      q1: 2,
+      median: 3,
+      q3: 4,
+      max: 5,
+      count: 5,
+    });
+  });
+
+  it("handles a single value and empty input", () => {
+    assert.deepEqual(computeBox([7]), {
+      min: 7,
+      q1: 7,
+      median: 7,
+      q3: 7,
+      max: 7,
+      count: 1,
+    });
+    assert.equal(computeBox([]), null);
   });
 });
 

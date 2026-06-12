@@ -6,7 +6,7 @@
  * already builds for both GeoJSON and DuckDB query layers.
  */
 
-export type ChartType = "histogram" | "scatter";
+export type ChartType = "histogram" | "scatter" | "bar" | "line" | "box";
 
 /** A row as seen by the chart helpers — only its property bag matters. */
 export interface ChartRow {
@@ -16,6 +16,11 @@ export interface ChartRow {
 export const MIN_HISTOGRAM_BINS = 1;
 export const MAX_HISTOGRAM_BINS = 50;
 export const DEFAULT_HISTOGRAM_BINS = 10;
+/** A field is offered as a bar category only if it has at most this many
+ * distinct values (so high-cardinality id/text columns are excluded). */
+export const MAX_CATEGORY_CARDINALITY = 50;
+/** The bar chart renders at most this many categories (top-N by value). */
+export const MAX_BAR_CATEGORIES = 20;
 
 /**
  * Parse a value into a finite number, or null when it cannot be one. Numeric
@@ -195,4 +200,184 @@ export function formatAxisValue(value: number): string {
     return value.toExponential(1);
   }
   return parseFloat(value.toFixed(3)).toString();
+}
+
+// A column also counts as categorical only when its distinct values are few:
+// at most this many in absolute terms, OR at most this fraction of its non-null
+// rows. This rejects mostly-unique id/text columns and continuous numeric fields
+// (which have ~one distinct value per row) while still accepting genuine
+// enumerations even in small datasets.
+const CATEGORY_ABSOLUTE_LIMIT = 15;
+const CATEGORY_RATIO = 0.5;
+
+/**
+ * Columns suitable as a bar-chart category: a field whose non-null values have
+ * between one and `MAX_CATEGORY_CARDINALITY` distinct entries AND are repetitive
+ * enough to be a category rather than an id (see the limits above). Low-
+ * cardinality numeric codes (e.g. a year or class id) qualify; a continuous
+ * numeric field or a unique-per-row text column does not.
+ */
+export function categoricalColumns(
+  rows: ChartRow[],
+  columns: string[],
+  maxCardinality: number = MAX_CATEGORY_CARDINALITY,
+): string[] {
+  return columns.filter((key) => {
+    const distinct = new Set<string>();
+    let nonNull = 0;
+    for (const row of rows) {
+      const raw = row.properties[key];
+      if (raw == null || raw === "") continue;
+      nonNull += 1;
+      distinct.add(String(raw));
+      if (distinct.size > maxCardinality) return false;
+    }
+    if (distinct.size < 1) return false;
+    const limit = Math.max(CATEGORY_ABSOLUTE_LIMIT, nonNull * CATEGORY_RATIO);
+    return distinct.size <= limit;
+  });
+}
+
+export type BarAggregation = "count" | "sum" | "mean";
+
+export interface BarDatum {
+  label: string;
+  /** The aggregated value the bar's length encodes. */
+  value: number;
+  /** How many rows fell into this category (independent of aggregation). */
+  count: number;
+}
+
+export interface BarResult {
+  bars: BarDatum[];
+  /** Largest bar value, for scaling (>= 0). */
+  maxValue: number;
+  /** Smallest bar value; negative when sum/mean produce negatives. */
+  minValue: number;
+  /** Categories dropped past the top-N cap. */
+  truncated: number;
+}
+
+/**
+ * Group rows by a category field and aggregate. `count` tallies rows per
+ * category; `sum`/`mean` reduce the finite values of `valueKey`. Bars are sorted
+ * by value descending and capped at `maxBars` (the remainder is reported in
+ * `truncated`). Null/blank category values are bucketed as "(blank)". Returns
+ * null when there are no rows.
+ */
+export function computeBar(
+  rows: ChartRow[],
+  categoryKey: string,
+  aggregation: BarAggregation,
+  valueKey: string | null,
+  maxBars: number = MAX_BAR_CATEGORIES,
+): BarResult | null {
+  const groups = new Map<
+    string,
+    { count: number; sum: number; numericCount: number }
+  >();
+  for (const row of rows) {
+    const raw = row.properties[categoryKey];
+    const label = raw == null || raw === "" ? "(blank)" : String(raw);
+    const group = groups.get(label) ?? { count: 0, sum: 0, numericCount: 0 };
+    group.count += 1;
+    if (aggregation !== "count" && valueKey) {
+      const value = toFiniteNumber(row.properties[valueKey]);
+      if (value !== null) {
+        group.sum += value;
+        group.numericCount += 1;
+      }
+    }
+    groups.set(label, group);
+  }
+  if (groups.size === 0) return null;
+
+  const all: BarDatum[] = [...groups.entries()].map(([label, group]) => {
+    let value = group.count;
+    if (aggregation === "sum") value = group.sum;
+    else if (aggregation === "mean") {
+      value = group.numericCount > 0 ? group.sum / group.numericCount : 0;
+    }
+    return { label, value, count: group.count };
+  });
+  all.sort((a, b) => b.value - a.value);
+
+  const bars = all.slice(0, Math.max(1, maxBars));
+  let maxValue = 0;
+  let minValue = 0;
+  for (const bar of bars) {
+    if (bar.value > maxValue) maxValue = bar.value;
+    if (bar.value < minValue) minValue = bar.value;
+  }
+  return { bars, maxValue, minValue, truncated: Math.max(0, all.length - bars.length) };
+}
+
+export interface LinePoint {
+  /** Original row index (x position). */
+  index: number;
+  value: number;
+}
+
+export interface LineResult {
+  points: LinePoint[];
+  min: number;
+  max: number;
+  /** Total row count, so x can span the full feature order. */
+  length: number;
+}
+
+/**
+ * The finite values of a numeric field plotted against original row order.
+ * Rows without a finite value are skipped (leaving a gap), keeping each point's
+ * x at its true feature index. Returns null when no row has a value.
+ */
+export function computeLine(rows: ChartRow[], key: string): LineResult | null {
+  const points: LinePoint[] = [];
+  let min = Infinity;
+  let max = -Infinity;
+  rows.forEach((row, index) => {
+    const value = toFiniteNumber(row.properties[key]);
+    if (value === null) return;
+    points.push({ index, value });
+    if (value < min) min = value;
+    if (value > max) max = value;
+  });
+  if (points.length === 0) return null;
+  return { points, min, max, length: rows.length };
+}
+
+export interface BoxResult {
+  min: number;
+  q1: number;
+  median: number;
+  q3: number;
+  max: number;
+  count: number;
+}
+
+/** Linear-interpolation quantile of an already-sorted, non-empty array. */
+function quantileSorted(sorted: number[], p: number): number {
+  if (sorted.length === 1) return sorted[0];
+  const pos = (sorted.length - 1) * p;
+  const base = Math.floor(pos);
+  const rest = pos - base;
+  const next = sorted[base + 1];
+  return next === undefined ? sorted[base] : sorted[base] + rest * (next - sorted[base]);
+}
+
+/**
+ * Five-number summary (min, Q1, median, Q3, max) of a set of values. Returns
+ * null when empty.
+ */
+export function computeBox(values: number[]): BoxResult | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return {
+    min: sorted[0],
+    q1: quantileSorted(sorted, 0.25),
+    median: quantileSorted(sorted, 0.5),
+    q3: quantileSorted(sorted, 0.75),
+    max: sorted[sorted.length - 1],
+    count: sorted.length,
+  };
 }
