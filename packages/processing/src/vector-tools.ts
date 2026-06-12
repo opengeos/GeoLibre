@@ -512,6 +512,15 @@ export const unionTool: ProcessingAlgorithm = {
 
 /** Spatial relationship used to match input features against join features. */
 type SpatialPredicate = "intersects" | "within" | "contains";
+type SpatialJoinHow = "inner" | "left";
+
+/** Valid spatial-join predicates/join-types; kept in sync with the backend guard. */
+const SPATIAL_JOIN_PREDICATES: SpatialPredicate[] = [
+  "intersects",
+  "within",
+  "contains",
+];
+const SPATIAL_JOIN_HOW: SpatialJoinHow[] = ["inner", "left"];
 
 /**
  * Test an input feature against a join feature for the given predicate, mirroring
@@ -562,17 +571,38 @@ export const spatialJoinTool: ProcessingAlgorithm = {
   ],
   run: (ctx) => {
     const input = requireFeatures(ctx, "layer");
-    const joinFc = requireFeatures(ctx, "overlay");
-    if (!input || !joinFc) return;
-    const inputFeatures = input.features.filter((f) => f.geometry);
-    const joinFeatures = joinFc.features.filter((f) => f.geometry);
-    if (!inputFeatures.length || !joinFeatures.length) {
-      ctx.log("Error: both layers must contain features");
+    if (!input) return;
+    const joinLayer = getLayer(ctx, "overlay");
+    if (!joinLayer) {
+      ctx.log('Error: parameter "overlay" has no layer selected');
       return;
     }
-    const predicate = ((ctx.parameters.predicate as string) ||
-      "intersects") as SpatialPredicate;
+    const inputFeatures = input.features.filter((f) => f.geometry);
+    if (!inputFeatures.length) {
+      ctx.log("Error: input layer has no features");
+      return;
+    }
+    // Validate up front so unknown values fail loudly instead of silently
+    // coercing to a default, matching the backend's ValueError guard.
+    const predicate = (ctx.parameters.predicate as string) || "intersects";
+    if (!SPATIAL_JOIN_PREDICATES.includes(predicate as SpatialPredicate)) {
+      ctx.log(
+        `Error: unknown predicate '${predicate}'; expected ${SPATIAL_JOIN_PREDICATES.join(", ")}`,
+      );
+      return;
+    }
     const how = (ctx.parameters.how as string) || "inner";
+    if (!SPATIAL_JOIN_HOW.includes(how as SpatialJoinHow)) {
+      ctx.log(
+        `Error: unknown join type '${how}'; expected ${SPATIAL_JOIN_HOW.join(", ")}`,
+      );
+      return;
+    }
+    // An empty join layer is still well-defined: a left join keeps every input
+    // feature unchanged, an inner join yields nothing (mirrors gpd.sjoin).
+    const joinFeatures = (joinLayer.geojson?.features ?? []).filter(
+      (f) => f.geometry,
+    );
     // This pairwise test runs on the main thread; cap it so very large layers
     // cannot freeze the browser tab. Use the Sidecar engine for bigger jobs.
     const pairs = inputFeatures.length * joinFeatures.length;
@@ -585,14 +615,15 @@ export const spatialJoinTool: ProcessingAlgorithm = {
     const results: Feature[] = [];
     for (const feature of inputFeatures) {
       const matches = joinFeatures.filter((j) =>
-        matchesPredicate(feature, j, predicate),
+        matchesPredicate(feature, j, predicate as SpatialPredicate),
       );
       if (!matches.length) {
         // Left join keeps unmatched input features (with only their own
         // attributes); inner join drops them, mirroring gpd.sjoin(how=...).
         if (how === "left") {
           results.push({
-            ...feature,
+            type: "Feature",
+            geometry: feature.geometry,
             properties: { ...(feature.properties ?? {}) },
           });
         }
@@ -600,9 +631,12 @@ export const spatialJoinTool: ProcessingAlgorithm = {
       }
       // One output feature per match, like GeoPandas sjoin. Input attributes win
       // on name collisions (the sidecar instead suffixes them _left/_right).
+      // Build a fresh feature (no `id`) so a one-to-many join does not emit
+      // duplicate feature ids, which would corrupt MapLibre feature state.
       for (const match of matches) {
         results.push({
-          ...feature,
+          type: "Feature",
+          geometry: feature.geometry,
           properties: {
             ...(match.properties ?? {}),
             ...(feature.properties ?? {}),

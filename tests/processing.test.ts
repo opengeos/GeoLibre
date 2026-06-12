@@ -134,6 +134,110 @@ describe("processing registry", () => {
     assert.equal(outside?.properties?.region, undefined);
   });
 
+  it("spatial join drops feature ids, validates inputs, and handles empty join layers", () => {
+    const tool = getVectorTool("spatial-join");
+    assert.ok(tool);
+
+    // Two overlapping zones so a single input point matches both (one-to-many).
+    const zoneFeature = (region: string) => ({
+      type: "Feature" as const,
+      properties: { region },
+      geometry: {
+        type: "Polygon" as const,
+        coordinates: [
+          [
+            [0, 0],
+            [0, 10],
+            [10, 10],
+            [10, 0],
+            [0, 0],
+          ],
+        ],
+      },
+    });
+    const zones: GeoLibreLayer = {
+      ...layer,
+      id: "zones",
+      name: "Zones",
+      geojson: {
+        type: "FeatureCollection",
+        features: [zoneFeature("north"), zoneFeature("south")],
+      },
+    };
+    // Input point carries an `id`; a one-to-many join must not duplicate it.
+    const pts: GeoLibreLayer = {
+      ...layer,
+      id: "pts",
+      name: "Pts",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: "p1",
+            properties: { name: "pt" },
+            geometry: { type: "Point", coordinates: [5, 5] },
+          },
+        ],
+      },
+    };
+
+    let res: FeatureCollection | null = null;
+    tool.run({
+      layers: [zones, pts],
+      parameters: { layer: "pts", overlay: "zones", how: "inner" },
+      log: () => {},
+      addResultLayer: (_n, g) => {
+        res = g;
+      },
+    });
+    assert.equal(res!.features.length, 2);
+    assert.ok(res!.features.every((f) => f.id === undefined));
+
+    // Empty join layer: left keeps the input, inner returns nothing.
+    const emptyJoin: GeoLibreLayer = {
+      ...layer,
+      id: "empty",
+      name: "Empty",
+      geojson: { type: "FeatureCollection", features: [] },
+    };
+    let leftEmpty: FeatureCollection | null = null;
+    tool.run({
+      layers: [pts, emptyJoin],
+      parameters: { layer: "pts", overlay: "empty", how: "left" },
+      log: () => {},
+      addResultLayer: (_n, g) => {
+        leftEmpty = g;
+      },
+    });
+    assert.equal(leftEmpty!.features.length, 1);
+
+    let innerEmpty: FeatureCollection | null = null;
+    tool.run({
+      layers: [pts, emptyJoin],
+      parameters: { layer: "pts", overlay: "empty", how: "inner" },
+      log: () => {},
+      addResultLayer: (_n, g) => {
+        innerEmpty = g;
+      },
+    });
+    assert.equal(innerEmpty!.features.length, 0);
+
+    // Unknown predicate is rejected (no result layer), mirroring the backend.
+    let produced = false;
+    const logs: string[] = [];
+    tool.run({
+      layers: [zones, pts],
+      parameters: { layer: "pts", overlay: "zones", predicate: "bogus" },
+      log: (m) => logs.push(m),
+      addResultLayer: () => {
+        produced = true;
+      },
+    });
+    assert.equal(produced, false);
+    assert.ok(logs.some((m) => m.includes("unknown predicate")));
+  });
+
   it("calculates and fits layer bounds", () => {
     const messages: string[] = [];
     let fittedBounds: [number, number, number, number] | null = null;

@@ -201,7 +201,6 @@ _SJOIN_HOW = {"inner", "left"}
 def _spatial_join(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     gpd = _import_geopandas()
     left = _load_gdf(geojson, "Input layer")
-    right = _load_gdf(overlay, "Join layer")
     predicate = str(parameters.get("predicate", "intersects") or "intersects")
     if predicate not in _SJOIN_PREDICATES:
         raise ValueError(
@@ -210,6 +209,16 @@ def _spatial_join(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     how = str(parameters.get("how", "inner") or "inner")
     if how not in _SJOIN_HOW:
         raise ValueError(f"Unknown join type '{how}'. Accepted: {sorted(_SJOIN_HOW)}")
+    # An empty join layer is still well-defined and avoids a misleading "has no
+    # features" error: a left join keeps every input feature unchanged, an inner
+    # join yields nothing. Matches the client engine.
+    if not overlay or not overlay.get("features"):
+        result = left if how == "left" else left.iloc[0:0]
+        return (
+            _to_feature_collection(result),
+            [f"Spatial join: produced {len(result)} feature(s)"],
+        )
+    right = _load_gdf(overlay, "Join layer")
     joined = gpd.sjoin(left, right, predicate=predicate, how=how)
     # sjoin appends an "index_right" bookkeeping column; drop it so the output
     # carries only the two layers' real attributes.
