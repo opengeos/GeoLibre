@@ -46,8 +46,18 @@ def load_jupyter_server_extension(serverapp: Any) -> None:
         serverapp: The ``jupyter_server.serverapp.ServerApp`` instance passed by
             Jupyter Server when it loads the extension.
     """
+    import mimetypes
+
     from jupyter_server.utils import url_path_join
     from tornado.web import StaticFileHandler
+
+    # Guarantee the WebAssembly MIME type. The bundled app loads DuckDB-WASM
+    # (and others) via WebAssembly.instantiateStreaming, which requires an
+    # `application/wasm` Content-Type -- and the nosniff header below makes the
+    # browser enforce it strictly. Python 3.11+ ships this mapping, but a host
+    # whose mimetypes DB overrides it would otherwise serve `.wasm` as
+    # octet-stream and break spatial queries.
+    mimetypes.add_type("application/wasm", ".wasm")
 
     class _AppStaticHandler(StaticFileHandler):
         """Serve the bundled app's static files.
