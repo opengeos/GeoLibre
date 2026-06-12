@@ -59,7 +59,15 @@ async function resolveBase(model) {
 // Verify the bundle is actually reachable before pointing the iframe at it, so a
 // missing/disabled server extension surfaces an actionable message instead of a
 // bare 404 page inside the iframe.
+// Base URLs confirmed reachable this session. render() can run again on every
+// re-display, so caching the (stable) positive result skips a redundant HEAD
+// round-trip each time. Only successes are cached: a negative result is left
+// uncached so re-running the cell after enabling the extension re-probes and
+// recovers, matching the "then re-run this cell" hint shown on failure.
+const _reachable = new Set();
+
 async function appReachable(base) {
+  if (_reachable.has(base)) return true;
   // render() awaits this before the iframe exists, so a stalled request (slow
   // proxy / auth layer) would otherwise hang widget rendering indefinitely.
   // Abort after a generous deadline (cold/loaded hubs can be slow) and treat
@@ -72,6 +80,7 @@ async function appReachable(base) {
       credentials: "same-origin",
       signal: controller.signal,
     });
+    if (res.ok) _reachable.add(base);
     return res.ok;
   } catch (error) {
     console.warn("[GeoLibre] App reachability check failed", error);

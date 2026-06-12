@@ -26,8 +26,8 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        # Cover the declared minimum (requires-python >= 3.10) and a current
-        # release so 3.11/3.12-only syntax can't slip in unnoticed.
+        # Cover the declared minimum (requires-python >= 3.11) and current
+        # releases so newer-only syntax can't slip in unnoticed.
         python-version: ["3.11", "3.12", "3.13"]
     steps:
       - name: Checkout repository
