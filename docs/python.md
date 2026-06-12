@@ -32,8 +32,8 @@ Optional extras for `add_geojson()` from a GeoDataFrame:
 pip install "geolibre[all]"   # adds GeoPandas and Shapely
 ```
 
-The optional extras (`[all]`, `[hub]`) are pip-only. If you installed via conda,
-add them with `pip install "geolibre[all]"` inside the same environment.
+The optional `[all]` extra is pip-only. If you installed via conda, add it with
+`pip install "geolibre[all]"` inside the same environment.
 
 ## Quickstart
 
@@ -127,15 +127,21 @@ UI edits flow back the same way.
     - **Local Jupyter / VS Code** - the app is served directly from localhost.
     - **Google Colab** - routes through Colab's built-in port proxy
       (`google.colab.kernel.proxyPort`) automatically.
-    - **JupyterHub** - routes through
-      [`jupyter-server-proxy`](https://jupyter-server-proxy.readthedocs.io)
-      automatically (detected via `JUPYTERHUB_SERVICE_PREFIX`). Install it in the
-      single-user image with `pip install "geolibre[hub]"` (or
-      `pip install jupyter-server-proxy`).
+    - **JupyterHub** (including managed/shared hubs) - the app is served by a
+      Jupyter Server extension bundled with `geolibre`, mounted at
+      `{base_url}geolibre/app/` on the notebook server's own origin. It is
+      enabled automatically on `pip install geolibre` (detected at runtime via
+      `JUPYTERHUB_SERVICE_PREFIX`) and needs no `jupyter-server-proxy` and no
+      extra port, so it works on locked-down hubs that block raw-port proxying.
     - **Other remote servers** (Binder, remote JupyterLab over SSH/network) -
-      pass `Map(server_proxy=True)`, which also requires `jupyter-server-proxy`.
+      pass `Map(server_proxy=True)` to use that same bundled server-extension
+      route.
 
-    Set `Map(server_proxy=False)` to force the direct localhost path.
+    Set `Map(server_proxy=False)` to force the direct localhost path. If the app
+    fails to load on a hub, confirm the extension is active with
+    `jupyter server extension list` (look for `geolibre`); restart the Jupyter
+    server after installing `geolibre`, or run
+    `jupyter server extension enable geolibre`.
 
 !!! warning "URL fetching"
 

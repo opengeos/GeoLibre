@@ -23,8 +23,7 @@ dependencies = ["anywidget>=0.9", "traitlets>=5"]
 
 [project.optional-dependencies]
 all = ["geopandas", "shapely"]
-hub = ["jupyter-server-proxy"]
-dev = ["pytest", "build", "anywidget[dev]"]
+dev = ["pytest", "build", "anywidget[dev]", "jupyter-server"]
 
 [project.urls]
 Homepage = "https://geolibre.app"
@@ -38,6 +37,12 @@ packages = ["src/geolibre"]
 # The bundled app under static/ is produced by the build hook and git-ignored,
 # so it must be re-included explicitly here (VCS file discovery skips it).
 artifacts = ["src/geolibre/static/**"]
+
+# Install the Jupyter Server config drop-in to {sys.prefix}/etc/jupyter so the
+# bundled app-serving extension (geolibre._load_jupyter_server_extension)
+# auto-enables on `pip install geolibre`, including on managed JupyterHubs.
+[tool.hatch.build.targets.wheel.shared-data]
+"jupyter-config/jupyter_server_config.d/geolibre.json" = "etc/jupyter/jupyter_server_config.d/geolibre.json"
 
 [tool.hatch.build.targets.sdist]
 artifacts = ["src/geolibre/static/**"]

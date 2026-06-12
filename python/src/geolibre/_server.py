@@ -8,7 +8,9 @@ process-wide singleton: every widget instance shares the one origin.
 
 Note: because it binds to 127.0.0.1, the iframe URL is only reachable when the
 browser runs on the same host as the kernel (local Jupyter, VS Code). Remote
-setups (JupyterHub, Colab) would need a proxy; that is a known limitation.
+setups reach the app a different way: Google Colab routes through its port proxy,
+and JupyterHub / remote servers load the bundle from the Jupyter Server extension
+in ``_extension.py`` instead of this localhost server.
 """
 
 from __future__ import annotations
@@ -51,6 +53,24 @@ class _QuietServer(ThreadingHTTPServer):
         super().handle_error(request, client_address)
 
 
+def ensure_bundle(static_dir: Path) -> None:
+    """Verify the bundled app is present, raising a helpful error if not.
+
+    Args:
+        static_dir: Directory expected to contain the built app
+            (``index.html`` and its assets).
+
+    Raises:
+        FileNotFoundError: If ``index.html`` is missing from ``static_dir``.
+    """
+    if not (static_dir / "index.html").is_file():
+        raise FileNotFoundError(
+            f"The bundled GeoLibre app was not found at {static_dir}. "
+            "Reinstall the geolibre wheel, or run `npm run build:embed` from a "
+            "checkout of the GeoLibre repository."
+        )
+
+
 def serve_app(static_dir: Path) -> str:
     """Start (once) the static server for ``static_dir`` and return its base URL.
 
@@ -67,12 +87,7 @@ def serve_app(static_dir: Path) -> str:
     """
     global _server, _base_url, _port
 
-    if not (static_dir / "index.html").is_file():
-        raise FileNotFoundError(
-            f"The bundled GeoLibre app was not found at {static_dir}. "
-            "Reinstall the geolibre wheel, or run `npm run build:embed` from a "
-            "checkout of the GeoLibre repository."
-        )
+    ensure_bundle(static_dir)
 
     with _lock:
         # _base_url, _server, and _port are always set together, so one check

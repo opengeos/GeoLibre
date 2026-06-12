@@ -10,7 +10,7 @@
 // (`lastRemoteProject`) and only pushes Python-initiated changes.
 
 // The Jupyter server's base URL, read from the page config that JupyterLab and
-// Notebook 7 inject. Used to build a jupyter-server-proxy URL. Defaults to "/".
+// Notebook 7 inject. Used to build the server-extension app URL. Defaults to "/".
 function jupyterBaseUrl() {
   try {
     const el = document.getElementById("jupyter-config-data");
@@ -24,10 +24,17 @@ function jupyterBaseUrl() {
   return "/";
 }
 
-// Resolve the base URL of the app server. The kernel serves it on localhost,
-// which the browser reaches directly in local Jupyter / VS Code. On hosts where
-// the browser cannot reach the kernel's localhost, route through a proxy:
-// Google Colab's port proxy, or jupyter-server-proxy (JupyterHub / remote).
+// Base URL of the app served by the GeoLibre Jupyter Server extension
+// (_extension.py), which mounts the bundle at {base_url}geolibre/app/.
+function extensionBase() {
+  return new URL(`${jupyterBaseUrl()}geolibre/app/`, window.location.href).href;
+}
+
+// Resolve the base URL of the app. The kernel serves it on localhost, which the
+// browser reaches directly in local Jupyter / VS Code. On hosts where the
+// browser cannot reach the kernel's localhost, the app comes from elsewhere:
+// Google Colab's port proxy, or the GeoLibre Jupyter Server extension
+// (JupyterHub / remote servers), which serves it from the notebook's own origin.
 async function resolveBase(model) {
   const port = model.get("_app_port");
   const colab =
@@ -43,12 +50,26 @@ async function resolveBase(model) {
       console.warn("[GeoLibre] Colab proxyPort failed; using direct URL", error);
     }
   }
-  if (port && model.get("_use_server_proxy")) {
-    // jupyter-server-proxy serves kernel-side ports at {base_url}proxy/{port}/.
-    return new URL(`${jupyterBaseUrl()}proxy/${port}/`, window.location.href)
-      .href;
+  if (model.get("_remote_mode") === "extension") {
+    return extensionBase();
   }
   return model.get("_app_url");
+}
+
+// Verify the bundle is actually reachable before pointing the iframe at it, so a
+// missing/disabled server extension surfaces an actionable message instead of a
+// bare 404 page inside the iframe.
+async function appReachable(base) {
+  try {
+    const res = await fetch(`${base}index.html`, {
+      method: "HEAD",
+      credentials: "same-origin",
+    });
+    return res.ok;
+  } catch (error) {
+    console.warn("[GeoLibre] App reachability check failed", error);
+    return false;
+  }
 }
 
 async function render({ model, el }) {
@@ -64,6 +85,15 @@ async function render({ model, el }) {
   if (!base) {
     el.textContent =
       "GeoLibre: the local app server is not running. Re-create the Map().";
+    return;
+  }
+
+  if (model.get("_remote_mode") === "extension" && !(await appReachable(base))) {
+    el.textContent =
+      "GeoLibre: the bundled app could not be loaded from the Jupyter server. " +
+      "Make sure the geolibre server extension is enabled (restart your Jupyter " +
+      "server after installing geolibre, or run " +
+      "`jupyter server extension enable geolibre`).";
     return;
   }
 

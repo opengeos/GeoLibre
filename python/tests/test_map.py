@@ -7,21 +7,21 @@ import pytest
 from geolibre.geolibre import Map
 
 
-def test_server_proxy_explicit():
-    assert Map._resolve_server_proxy(True) is True
-    assert Map._resolve_server_proxy(False) is False
+def test_remote_mode_explicit():
+    assert Map._resolve_remote_mode(True) == "extension"
+    assert Map._resolve_remote_mode(False) == ""
 
 
-def test_server_proxy_auto_local(monkeypatch):
+def test_remote_mode_auto_local(monkeypatch):
     monkeypatch.delenv("JUPYTERHUB_SERVICE_PREFIX", raising=False)
-    assert Map._resolve_server_proxy("auto") is False
+    assert Map._resolve_remote_mode("auto") == ""
 
 
-def test_server_proxy_auto_jupyterhub(monkeypatch):
+def test_remote_mode_auto_jupyterhub(monkeypatch):
     monkeypatch.setenv("JUPYTERHUB_SERVICE_PREFIX", "/user/alice/")
-    assert Map._resolve_server_proxy("auto") is True
+    assert Map._resolve_remote_mode("auto") == "extension"
 
 
-def test_server_proxy_invalid():
+def test_remote_mode_invalid():
     with pytest.raises(ValueError):
-        Map._resolve_server_proxy("bogus")
+        Map._resolve_remote_mode("bogus")

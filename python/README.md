@@ -78,11 +78,12 @@ m.to_project()["mapView"]["center"]
 
 - The bundled app is served from a localhost HTTP server, so the interactive
   widget works in local Jupyter and VS Code directly. **Google Colab** routes
-  through its built-in port proxy automatically. **JupyterHub** routes through
-  [`jupyter-server-proxy`](https://jupyter-server-proxy.readthedocs.io)
-  automatically (install it with `pip install "geolibre[hub]"`). On other remote
-  servers (Binder, remote JupyterLab), pass `Map(server_proxy=True)` (also needs
-  `jupyter-server-proxy`); `Map(server_proxy=False)` forces the direct path.
+  through its built-in port proxy automatically. **JupyterHub** (including
+  managed/shared hubs) is served by a Jupyter Server extension bundled with
+  `geolibre` at `{base_url}geolibre/app/`, enabled automatically on
+  `pip install geolibre` with no `jupyter-server-proxy` and no extra port. On
+  other remote servers (Binder, remote JupyterLab), pass `Map(server_proxy=True)`
+  to use that same route; `Map(server_proxy=False)` forces the direct path.
 - Optional extras: `pip install geolibre[all]` adds GeoPandas/Shapely support
   for `add_geojson(geodataframe)`.
 - `add_geojson` inlines file/URL data into the project (up to 50 MB), so a large

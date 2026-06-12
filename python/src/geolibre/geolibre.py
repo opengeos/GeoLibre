@@ -12,7 +12,7 @@ import anywidget
 import traitlets
 
 from . import project as _project
-from ._server import app_port, serve_app
+from ._server import app_port, ensure_bundle, serve_app
 from .basemaps import resolve_basemap
 
 _HERE = pathlib.Path(__file__).parent
@@ -50,11 +50,13 @@ class Map(anywidget.AnyWidget):
     # google.colab.kernel.proxyPort) when localhost is not reachable from the
     # browser, as on Google Colab.
     _app_port = traitlets.Int(0).tag(sync=True)
-    # When set, the front-end loads the app through jupyter-server-proxy at
-    # `{base_url}proxy/{port}/` instead of localhost, so it works on remote
-    # servers (JupyterHub, Binder, remote JupyterLab) where the browser cannot
-    # reach the kernel's localhost.
-    _use_server_proxy = traitlets.Bool(False).tag(sync=True)
+    # How the front-end reaches the app on a remote server. "" means the direct
+    # localhost path (local Jupyter, VS Code). "extension" means the bundled
+    # Jupyter Server extension at `{base_url}geolibre/app/`, which serves the app
+    # from the notebook server's own origin so it works on JupyterHub and other
+    # remote servers where the browser cannot reach the kernel's localhost.
+    # Google Colab is detected in the front-end and uses its own port proxy.
+    _remote_mode = traitlets.Unicode("").tag(sync=True)
     height = traitlets.Unicode("800px").tag(sync=True)
     # "embed" (compact chrome), "full" (desktop chrome), or "maponly".
     layout = traitlets.Unicode("embed").tag(sync=True)
@@ -86,13 +88,18 @@ class Map(anywidget.AnyWidget):
             layout: ``"embed"`` (compact UI), ``"full"`` (full desktop UI), or
                 ``"maponly"`` (map without chrome).
             theme: ``"light"`` or ``"dark"``.
-            server_proxy: How to reach the app server from the browser.
-                ``"auto"`` (default) serves the app directly from localhost, and
-                switches to ``jupyter-server-proxy`` automatically when running
-                under JupyterHub. Pass ``True`` to force the proxy on any remote
-                server (requires ``jupyter-server-proxy``), or ``False`` to force
-                the direct localhost path. Google Colab is detected separately
-                and always uses its own port proxy.
+            server_proxy: How the browser reaches the bundled app.
+                ``"auto"`` (default) serves the app directly from localhost for
+                local Jupyter and VS Code, and switches automatically to the
+                bundled GeoLibre Jupyter Server extension when running under
+                JupyterHub (detected via ``JUPYTERHUB_SERVICE_PREFIX``). That
+                extension serves the app from the notebook server's own origin at
+                ``{base_url}geolibre/app/``, so it works on managed hubs without
+                ``jupyter-server-proxy``. Pass ``True`` to force the
+                server-extension route on any other remote server (Binder, remote
+                JupyterLab), or ``False`` to force the direct localhost path.
+                Google Colab is detected separately and always uses its own port
+                proxy.
             **kwargs: Forwarded to ``anywidget.AnyWidget``.
         """
         if layout not in _VALID_LAYOUTS:
@@ -107,9 +114,17 @@ class Map(anywidget.AnyWidget):
         self.height = height
         self.layout = layout
         self.theme = theme
-        self._app_url = serve_app(_STATIC_APP)
-        self._app_port = app_port() or 0
-        self._use_server_proxy = self._resolve_server_proxy(server_proxy)
+        self._remote_mode = self._resolve_remote_mode(server_proxy)
+        if self._remote_mode == "extension":
+            # The Jupyter Server extension serves the bundled app over the
+            # notebook's own origin, so no kernel-side localhost server is
+            # needed (and binding an extra port on a shared hub is avoided).
+            ensure_bundle(_STATIC_APP)
+            self._app_url = ""
+            self._app_port = 0
+        else:
+            self._app_url = serve_app(_STATIC_APP)
+            self._app_port = app_port() or 0
         self.project = _project.build_empty_project(
             center=center,
             zoom=zoom,
@@ -117,21 +132,24 @@ class Map(anywidget.AnyWidget):
         )
 
     @staticmethod
-    def _resolve_server_proxy(server_proxy: bool | str) -> bool:
-        """Decide whether to load the app through jupyter-server-proxy.
+    def _resolve_remote_mode(server_proxy: bool | str) -> str:
+        """Decide how the front-end reaches the bundled app.
 
         Args:
-            server_proxy: ``True``/``False`` to force, or ``"auto"`` to enable
-                the proxy only when a JupyterHub single-user server is detected
-                (via the ``JUPYTERHUB_SERVICE_PREFIX`` environment variable).
+            server_proxy: ``True`` to force the server-extension route on any
+                remote server, ``False`` to force the direct localhost path, or
+                ``"auto"`` to use the extension only when a JupyterHub single-user
+                server is detected (via the ``JUPYTERHUB_SERVICE_PREFIX``
+                environment variable).
 
         Returns:
-            True to route through the server proxy, False for direct localhost.
+            ``"extension"`` to load the app through the bundled Jupyter Server
+            extension, or ``""`` for the direct localhost path.
         """
         if isinstance(server_proxy, bool):
-            return server_proxy
+            return "extension" if server_proxy else ""
         if server_proxy == "auto":
-            return bool(os.environ.get("JUPYTERHUB_SERVICE_PREFIX"))
+            return "extension" if os.environ.get("JUPYTERHUB_SERVICE_PREFIX") else ""
         raise ValueError("server_proxy must be True, False, or 'auto'")
 
     # -- internal --------------------------------------------------------
