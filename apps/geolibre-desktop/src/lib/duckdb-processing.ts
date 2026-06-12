@@ -37,7 +37,7 @@ export function createDuckDbCapability(): DuckDbCapability {
     ): Promise<DuckDbGeoJsonSource> {
       const db = await getDatabase();
       counter += 1;
-      const name = `__geolibre_h3_${Date.now()}_${counter}.geojson`;
+      const name = `__geolibre_geojson_${Date.now()}_${counter}.geojson`;
       await db.registerFileText(name, JSON.stringify(geojson));
       return {
         sql: `ST_Read(${quoteSqlString(name)})`,

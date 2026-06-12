@@ -31,14 +31,21 @@ Out of scope: server/sidecar H3, raster H3, H3 compaction/parent-child hierarchy
 
 ```ts
 // packages/processing/src/types.ts
+export interface DuckDbGeoJsonSource {
+  sql: string; // FROM-able expression; geometry column is `geom`
+  release: () => Promise<void>;
+}
+
 export interface DuckDbCapability {
   ensureExtensions: (names: string[]) => Promise<void>;
-  runQuery: (sql: string) => Promise<Record<string, unknown>[]>;
+  registerGeoJson: (geojson: FeatureCollection) => Promise<DuckDbGeoJsonSource>;
+  query: (sql: string) => Promise<Record<string, unknown>[]>;
 }
 
 export interface ProcessingContext {
   // ...existing fields...
   duckdb?: DuckDbCapability;
+  viewportBounds?: () => [number, number, number, number] | null;
 }
 ```
 
@@ -79,11 +86,11 @@ FROM cells;
 WITH binned AS (
   SELECT h3_latlng_to_cell(lat, lng, :res) AS cell,
          count(*) AS count,
-         <AGG>(value) AS agg   -- omitted when op = count
+         <AGG>(value) AS value   -- omitted when op = count
   FROM points
   GROUP BY cell
 )
-SELECT h3_h3_to_string(cell) AS h3, count, agg,
+SELECT h3_h3_to_string(cell) AS h3, count, value,
        ST_AsGeoJSON(ST_GeomFromText(h3_cell_to_boundary_wkt(cell))) AS geojson
 FROM binned;
 ```
@@ -94,7 +101,7 @@ Each result row's `geojson` (a polygon geometry) is wrapped into a `Feature` wit
 ### Auto-suggested resolution + safety cap
 
 - Compute the target area (km²) from the chosen source. Using H3 average hexagon areas per resolution, pick the **finest** resolution whose estimated cell count stays under a soft target (~10,000). This fills the default; the user can override.
-- Before running, estimate cell count for the chosen resolution. If it exceeds a hard cap (~50,000), abort with a clear message rather than generating a runaway grid. `Bin Points to H3` is naturally bounded by the data but still validates resolution range.
+- Before running, estimate cell count for the chosen resolution. If it exceeds a hard cap (200,000), abort with a clear message rather than generating a runaway grid. `Bin Points to H3` is naturally bounded by the data but still validates resolution range.
 
 ### Antimeridian / edge cases
 
@@ -104,7 +111,7 @@ Each result row's `geojson` (a polygon geometry) is wrapped into a `Feature` wit
 
 1. User opens Processing → Vector Tools, selects an H3 tool, sets parameters.
 2. `VectorToolsDialog` builds `ProcessingContext` including `duckdb` capability and (for viewport) current map bounds.
-3. Tool `run(ctx)`: `await ctx.duckdb.ensureExtensions(['spatial','h3'])`, build WKT/SQL via helpers, `runQuery`, assemble `FeatureCollection`, `ctx.addResultLayer(name, fc)`.
+3. Tool `run(ctx)`: `await ctx.duckdb.ensureExtensions(['spatial','h3'])`, build WKT/SQL via helpers, `query` (and `registerGeoJson`/`release` for the polyfill and bin paths), assemble `FeatureCollection`, `ctx.addResultLayer(name, fc)`.
 4. `addResultLayer` → `addGeoJsonLayer` → store → `MapController.syncLayers` renders it; dialog fits to the new layer.
 
 ## Error handling

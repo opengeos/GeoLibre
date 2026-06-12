@@ -54,6 +54,13 @@ describe("h3 resolution math", () => {
     assert.ok(estimateCellCount(area, 10) > estimateCellCount(area, 9));
   });
 
+  it("fails safe (Infinity) for an out-of-range resolution so the cap trips", () => {
+    const area = bboxAreaKm2([0, 0, 1, 1]);
+    assert.equal(estimateCellCount(area, 16), Number.POSITIVE_INFINITY);
+    assert.equal(estimateCellCount(area, -1), Number.POSITIVE_INFINITY);
+    assert.ok(estimateCellCount(area, 16) > H3_HARD_CAP);
+  });
+
   it("exposes a hard cap constant", () => {
     assert.equal(typeof H3_HARD_CAP, "number");
     assert.ok(H3_HARD_CAP > 10_000);
@@ -104,15 +111,22 @@ function pointLayer(): GeoLibreLayer {
   };
 }
 
-/** Capability stub that records queries and returns one canned hex row. */
-function mockDuckDb(): DuckDbCapability & { queries: string[] } {
+/** Capability stub that records queries/releases and returns one canned hex row. */
+function mockDuckDb(): DuckDbCapability & {
+  queries: string[];
+  released: number[];
+} {
   const queries: string[] = [];
+  const released: number[] = [];
   return {
     queries,
+    released,
     ensureExtensions: async () => {},
     registerGeoJson: async () => ({
       sql: "ST_Read('mock.geojson')",
-      release: async () => {},
+      release: async () => {
+        released.push(1);
+      },
     }),
     query: async (sql: string) => {
       queries.push(sql);
@@ -131,18 +145,24 @@ function mockDuckDb(): DuckDbCapability & { queries: string[] } {
 function baseCtx(
   layers: GeoLibreLayer[],
   parameters: Record<string, unknown>,
-): { ctx: ProcessingContext; logs: string[]; added: string[] } {
+): {
+  ctx: ProcessingContext;
+  logs: string[];
+  added: string[];
+  duckdb: ReturnType<typeof mockDuckDb>;
+} {
   const logs: string[] = [];
   const added: string[] = [];
+  const duckdb = mockDuckDb();
   const ctx: ProcessingContext = {
     layers,
     parameters,
     log: (m) => logs.push(m),
     addResultLayer: (name) => added.push(name),
-    duckdb: mockDuckDb(),
+    duckdb,
     viewportBounds: () => [0, 0, 1, 1],
   };
-  return { ctx, logs, added };
+  return { ctx, logs, added, duckdb };
 }
 
 describe("h3 tools", () => {
@@ -190,14 +210,16 @@ describe("h3 tools", () => {
     assert.ok(logs.some((l) => /cap/i.test(l)));
   });
 
-  it("polyfills a selected polygon layer", async () => {
-    const { ctx, added } = baseCtx([polygonLayer()], {
+  it("polyfills a selected polygon layer and releases the registered source", async () => {
+    const { ctx, added, duckdb } = baseCtx([polygonLayer()], {
       source: "polyfill",
       layer: "poly",
       resolution: 6,
     });
     await createH3GridTool.run(ctx);
     assert.equal(added.length, 1);
+    // The registered temp GeoJSON source must be released after the run.
+    assert.equal(duckdb.released.length, 1);
   });
 
   it("rejects polyfill of a non-polygon layer", async () => {
@@ -238,6 +260,8 @@ describe("h3 tools", () => {
     });
     await binPointsTool.run(ok.ctx);
     assert.equal(ok.added.length, 1);
+    // The registered temp GeoJSON source must be released after the run.
+    assert.equal(ok.duckdb.released.length, 1);
   });
 });
 
@@ -249,9 +273,11 @@ describe("h3 SQL + geometry builders", () => {
     );
   });
 
-  it("builds grid SQL from a WKT literal, escaping quotes", () => {
-    const sql = buildGridFromWktSql("POLYGON((0 0, 1 0, 1 1, 0 0))", 7);
-    assert.match(sql, /h3_polygon_wkt_to_cells\('POLYGON\(\(0 0, 1 0, 1 1, 0 0\)\)', 7\)/);
+  it("builds grid SQL from a WKT literal, escaping single quotes", () => {
+    // Include a single quote in the input so the test actually exercises the
+    // doubling done by sqlStr (a malformed escape would break this assertion).
+    const sql = buildGridFromWktSql("POLYGON((0 0, 1 0, 1 1, 0 0))'x", 7);
+    assert.match(sql, /h3_polygon_wkt_to_cells\('POLYGON\(\(0 0, 1 0, 1 1, 0 0\)\)''x', 7\)/);
     assert.match(sql, /h3_h3_to_string\(cell\) AS h3/);
     assert.match(sql, /ST_AsGeoJSON\(ST_GeomFromText\(h3_cell_to_boundary_wkt\(cell\)\)\) AS geojson/);
   });
@@ -259,7 +285,7 @@ describe("h3 SQL + geometry builders", () => {
   it("builds polyfill grid SQL that unions the source geometry", () => {
     const sql = buildGridFromSourceSql("ST_Read('a.geojson')", 8);
     assert.match(sql, /ST_Union_Agg\(geom\)/);
-    assert.match(sql, /ST_Read\('a\.geojson'\)/);
+    assert.match(sql, /ST_Read\('a\.geojson'\) WHERE geom IS NOT NULL/);
     assert.match(sql, /h3_polygon_wkt_to_cells\(\(SELECT wkt FROM merged\), 8\)/);
   });
 

@@ -38,7 +38,13 @@ export function bboxAreaKm2(bbox: [number, number, number, number]): number {
 
 /** Estimated number of H3 cells covering `areaKm2` at `res`. */
 export function estimateCellCount(areaKm2: number, res: number): number {
-  return areaKm2 / H3_AVG_AREA_KM2[res];
+  const cellArea = H3_AVG_AREA_KM2[res];
+  // Fail safe for an out-of-range resolution: return Infinity so a downstream
+  // cap check (`estimate > H3_HARD_CAP`) trips rather than silently passing on a
+  // `NaN` comparison. Internal callers validate the range first via
+  // `resolveResolution`; this guards external callers.
+  if (cellArea === undefined) return Number.POSITIVE_INFINITY;
+  return areaKm2 / cellArea;
 }
 
 /** Finest resolution whose estimated cell count stays <= the target. */
@@ -86,7 +92,7 @@ export function buildGridFromWktSql(wkt: string, res: number): string {
  */
 export function buildGridFromSourceSql(sourceSql: string, res: number): string {
   return (
-    `WITH merged AS (SELECT ST_AsText(ST_Union_Agg(geom)) AS wkt FROM ${sourceSql}), ` +
+    `WITH merged AS (SELECT ST_AsText(ST_Union_Agg(geom)) AS wkt FROM ${sourceSql} WHERE geom IS NOT NULL), ` +
     `cells AS (SELECT unnest(h3_polygon_wkt_to_cells((SELECT wkt FROM merged), ${res})) AS cell) ` +
     GRID_SELECT
   );
@@ -132,7 +138,14 @@ export function rowsToFeatureCollection(
   for (const row of rows) {
     const raw = row.geojson;
     if (typeof raw !== "string") continue;
-    const geometry = JSON.parse(raw) as Geometry;
+    let geometry: Geometry;
+    try {
+      geometry = JSON.parse(raw) as Geometry;
+    } catch {
+      // ST_AsGeoJSON should always emit valid JSON; skip a row rather than
+      // throwing out of this exported pure helper if it ever does not.
+      continue;
+    }
     const properties: Record<string, unknown> = { h3: row.h3 };
     if (row.count !== undefined && row.count !== null) {
       properties.count = Number(row.count);

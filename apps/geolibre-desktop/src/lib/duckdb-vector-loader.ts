@@ -114,6 +114,9 @@ export async function ensureH3Extension(
   connection: duckdb.AsyncDuckDBConnection,
 ): Promise<void> {
   h3ExtensionPromise ??= (async () => {
+    // Unlike `ensureSpatialExtension`, no `beforeLoad` warm-up is needed here:
+    // the duckdb-wasm v1.33.1-dev45 remote-read bug only affects `spatial`. If a
+    // similar issue ever surfaces for `h3`, add a `beforeLoad` hook to match.
     await connection.query("INSTALL h3 FROM community");
     await connection.query("LOAD h3");
   })();
