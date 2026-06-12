@@ -902,6 +902,13 @@ export const selectByLocationTool: ProcessingAlgorithm = {
       ctx.log('Error: parameter "overlay" has no layer selected');
       return;
     }
+    // A non-vector layer (raster/tile) has no `geojson`; that's distinct from an
+    // empty-but-valid filter layer, so reject it rather than silently treating
+    // it as an empty filter (which would select everything for disjoint).
+    if (!filterLayer.geojson) {
+      ctx.log("Error: the filter layer has no vector data");
+      return;
+    }
     const predicateInput = (ctx.parameters.predicate as string) || "intersects";
     if (
       !SELECT_LOCATION_PREDICATES.has(predicateInput as SelectLocationPredicate)
@@ -911,9 +918,7 @@ export const selectByLocationTool: ProcessingAlgorithm = {
     }
     const predicate = predicateInput as SelectLocationPredicate;
     const inputFeatures = input.features.filter((f) => f.geometry);
-    const filterFeatures = (filterLayer.geojson?.features ?? []).filter(
-      (f) => f.geometry,
-    );
+    const filterFeatures = filterLayer.geojson.features.filter((f) => f.geometry);
     if (!inputFeatures.length) {
       ctx.log("Error: input layer has no features with geometry");
       return;

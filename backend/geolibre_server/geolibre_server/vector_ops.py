@@ -378,6 +378,9 @@ def _select_by_location(geojson, overlay, parameters) -> tuple[dict, list[str]]:
             [f"Select by location: {len(result)} of {total} feature(s) matched"],
         )
     right = _load_gdf(overlay, "Filter layer")
+    # Drop null geometries from the filter frame too; sjoin can raise or behave
+    # unexpectedly on null-geometry rows depending on the GeoPandas version.
+    right = right[right.geometry.notna()]
     test = "intersects" if predicate == "disjoint" else predicate
     matched = gpd.sjoin(left, right, predicate=test, how="inner").index.unique()
     # Preserve input order and emit one row per input feature (sjoin can match
