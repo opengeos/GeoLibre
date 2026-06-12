@@ -60,6 +60,12 @@ function deckVizLayerStyle(config: DeckVizConfig) {
 }
 
 /**
+ * Row count above which the inline data noticeably bloats the saved project
+ * file. Surfaced as a warning, not a hard cap, so large datasets still work.
+ */
+const DECK_VIZ_ROW_WARN_COUNT = 50_000;
+
+/**
  * Builds the store layer for a deck.gl visualization.
  *
  * The deck.gl layer renders through the plugin's shared overlay, so the record
@@ -71,12 +77,6 @@ function deckVizLayerStyle(config: DeckVizConfig) {
  * @param params - Layer name, viz config, and inline data.
  * @returns The corresponding GeoLibre store layer.
  */
-/**
- * Row count above which the inline data noticeably bloats the saved project
- * file. Surfaced as a warning, not a hard cap, so large datasets still work.
- */
-const DECK_VIZ_ROW_WARN_COUNT = 50_000;
-
 export function createDeckVizStoreLayer(
   params: CreateDeckVizLayerParams,
 ): GeoLibreLayer {

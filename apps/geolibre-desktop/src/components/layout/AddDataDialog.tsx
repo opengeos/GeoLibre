@@ -1835,7 +1835,9 @@ export function AddDataDialog({
                           setDeckVizRole(role.key, event.target.value)
                         }
                       >
-                        {!role.required ? <option value="">(none)</option> : null}
+                        <option value="">
+                          {role.required ? "— select —" : "(none)"}
+                        </option>
                         {deckVizParsed.columns.map((column) => (
                           <option
                             key={String(column.value)}
@@ -1879,7 +1881,9 @@ export function AddDataDialog({
                         onChange={(event) =>
                           setDeckVizStyle((style) => ({
                             ...style,
-                            radius: Number(event.target.value) || 0,
+                            radius: Number.isFinite(Number(event.target.value))
+                              ? Number(event.target.value)
+                              : style.radius,
                           }))
                         }
                       />
@@ -1895,7 +1899,9 @@ export function AddDataDialog({
                         onChange={(event) =>
                           setDeckVizStyle((style) => ({
                             ...style,
-                            cellSize: Number(event.target.value) || 0,
+                            cellSize: Number.isFinite(Number(event.target.value))
+                              ? Number(event.target.value)
+                              : style.cellSize,
                           }))
                         }
                       />
@@ -1911,7 +1917,9 @@ export function AddDataDialog({
                         onChange={(event) =>
                           setDeckVizStyle((style) => ({
                             ...style,
-                            lineWidth: Number(event.target.value) || 0,
+                            lineWidth: Number.isFinite(Number(event.target.value))
+                              ? Number(event.target.value)
+                              : style.lineWidth,
                           }))
                         }
                       />

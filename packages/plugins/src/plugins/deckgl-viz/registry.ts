@@ -153,7 +153,12 @@ function readNumber(record: AnyRecord, key: string | number): number {
  */
 function readCoordinate(record: AnyRecord, key: string | number): number {
   const value = (record as Record<string | number, unknown>)[key];
-  return typeof value === "number" ? value : Number(value);
+  // Number("") and Number(null) are 0; treat blank/missing cells as invalid
+  // (NaN) so deck.gl skips the record instead of plotting it at [0, 0].
+  if (value === null || value === undefined) return Number.NaN;
+  if (typeof value === "string" && value.trim() === "") return Number.NaN;
+  const num = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(num) ? num : Number.NaN;
 }
 
 /** A `[lng, lat]` accessor from two mapped roles. */
@@ -241,8 +246,17 @@ function weightAccessor(
   return (record) => readNumber(record, key);
 }
 
+// Cached per data array so the per-frame Trips animation does not rescan every
+// row/timestamp; the array identity is stable until the layer's data changes.
+const timestampBoundsCache = new WeakMap<object, { min: number; max: number }>();
+
 /** Min/max of all timestamp values across the mapped `timestamps` arrays. */
 function timestampBounds(ctx: DeckVizBuildContext): { min: number; max: number } {
+  const rows = ctx.rows;
+  if (rows) {
+    const cached = timestampBoundsCache.get(rows);
+    if (cached) return cached;
+  }
   const tsKey = ctx.fieldMapping.timestamps;
   let min = Infinity;
   let max = -Infinity;
@@ -256,7 +270,9 @@ function timestampBounds(ctx: DeckVizBuildContext): { min: number; max: number }
       if (num > max) max = num;
     }
   }
-  return min === Infinity ? { min: 0, max: 0 } : { min, max };
+  const result = min === Infinity ? { min: 0, max: 0 } : { min, max };
+  if (rows) timestampBoundsCache.set(rows, result);
+  return result;
 }
 
 const DEFINITIONS: DeckVizLayerDef[] = [

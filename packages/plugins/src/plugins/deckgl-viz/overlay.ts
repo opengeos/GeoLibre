@@ -121,6 +121,9 @@ export function deactivateDeckViz(app: GeoLibreAppAPI): void {
   overlay = null;
   overlayMounted = false;
   boundMap = undefined;
+  // Reset so a session that exhausted the retries can re-mount after
+  // reactivation.
+  mountRetries = 0;
 }
 
 function renderDeckVizLayers(): void {
@@ -203,8 +206,14 @@ function buildContext(layer: GeoLibreLayer): RenderEntry | null {
   const style: DeckVizBuildContext["style"] = {
     ...config.style,
     color: layer.style.fillColor || config.style.color,
-    radius: layer.style.circleRadius || config.style.radius,
-    lineWidth: layer.style.strokeWidth || config.style.lineWidth,
+    // Number fields use a finite check (not `||`) so an explicit 0 from the
+    // panel (e.g. hiding points) is honored rather than treated as unset.
+    radius: Number.isFinite(layer.style.circleRadius)
+      ? layer.style.circleRadius
+      : config.style.radius,
+    lineWidth: Number.isFinite(layer.style.strokeWidth)
+      ? layer.style.strokeWidth
+      : config.style.lineWidth,
   };
   const ctx: DeckVizBuildContext = {
     rows: isGeoJson
