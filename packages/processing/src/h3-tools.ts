@@ -1,3 +1,5 @@
+import type { FeatureCollection, Geometry } from "geojson";
+
 /** Average area (km^2) of an H3 cell at each resolution 0..15 (official values). */
 export const H3_AVG_AREA_KM2: number[] = [
   4_357_449.416078381, 609_788.441794133, 86_801.780398997, 12_393.434655088,
@@ -41,4 +43,96 @@ export function suggestResolution(
     if (estimateCellCount(areaKm2, res) <= targetCells) return res;
   }
   return 0;
+}
+
+function sqlStr(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+function sqlIdent(value: string): string {
+  return `"${value.replaceAll('"', '""')}"`;
+}
+
+/** A closed POLYGON WKT ring for a [west, south, east, north] bbox. */
+export function bboxToWktPolygon(bbox: [number, number, number, number]): string {
+  const [w, s, e, n] = bbox;
+  return `POLYGON((${w} ${s}, ${e} ${s}, ${e} ${n}, ${w} ${n}, ${w} ${s}))`;
+}
+
+const GRID_SELECT =
+  "SELECT h3_h3_to_string(cell) AS h3, " +
+  "ST_AsGeoJSON(ST_GeomFromText(h3_cell_to_boundary_wkt(cell))) AS geojson FROM cells";
+
+/** Grid SQL from a polygon WKT literal (used for bbox / viewport sources). */
+export function buildGridFromWktSql(wkt: string, res: number): string {
+  return (
+    `WITH cells AS (SELECT unnest(h3_polygon_wkt_to_cells(${sqlStr(wkt)}, ${res})) AS cell) ` +
+    GRID_SELECT
+  );
+}
+
+/**
+ * Grid SQL that unions all geometry from a registered source into one
+ * (multi)polygon and fills it (used for the polyfill source). `sourceSql` is a
+ * FROM-able expression whose geometry column is `geom` (DuckDB `ST_Read`).
+ */
+export function buildGridFromSourceSql(sourceSql: string, res: number): string {
+  return (
+    `WITH merged AS (SELECT ST_AsText(ST_Union_Agg(geom)) AS wkt FROM ${sourceSql}), ` +
+    `cells AS (SELECT unnest(h3_polygon_wkt_to_cells((SELECT wkt FROM merged), ${res})) AS cell) ` +
+    GRID_SELECT
+  );
+}
+
+const AGG_FN: Record<string, string> = {
+  sum: "sum",
+  mean: "avg",
+  min: "min",
+  max: "max",
+};
+
+/**
+ * Aggregate point geometry from `sourceSql` (geometry column `geom`) into H3
+ * cells. `op` is one of count/sum/mean/min/max; a field is required for all but
+ * count.
+ */
+export function buildBinSql(
+  sourceSql: string,
+  res: number,
+  op: string,
+  field?: string,
+): string {
+  const fn = AGG_FN[op];
+  const aggSelect =
+    fn && field ? `, ${fn}(CAST(${sqlIdent(field)} AS DOUBLE)) AS value` : "";
+  const aggOut = fn && field ? ", value" : "";
+  return (
+    `WITH pts AS (SELECT * FROM ${sourceSql} ` +
+    `WHERE geom IS NOT NULL AND ST_GeometryType(geom) = 'POINT'), ` +
+    `binned AS (SELECT h3_latlng_to_cell(ST_Y(geom), ST_X(geom), ${res}) AS cell, ` +
+    `count(*) AS count${aggSelect} FROM pts GROUP BY cell) ` +
+    `SELECT h3_h3_to_string(cell) AS h3, count${aggOut}, ` +
+    `ST_AsGeoJSON(ST_GeomFromText(h3_cell_to_boundary_wkt(cell))) AS geojson FROM binned`
+  );
+}
+
+/** Build a FeatureCollection from rows carrying `h3`, optional `count`/`value`, and `geojson`. */
+export function rowsToFeatureCollection(
+  rows: Record<string, unknown>[],
+): FeatureCollection {
+  const features = [];
+  for (const row of rows) {
+    const raw = row.geojson;
+    if (typeof raw !== "string") continue;
+    const geometry = JSON.parse(raw) as Geometry;
+    const properties: Record<string, unknown> = { h3: row.h3 };
+    if (row.count !== undefined && row.count !== null) {
+      properties.count = Number(row.count);
+    }
+    if (row.value !== undefined && row.value !== null) {
+      properties.value = Number(row.value);
+    }
+    features.push({ type: "Feature" as const, geometry, properties });
+  }
+  return { type: "FeatureCollection", features };
 }
