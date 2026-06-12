@@ -150,6 +150,7 @@ import { mergeStringLists } from "../../lib/string-lists";
 import { normalizeProjectUrl } from "../../lib/urls";
 import { resolveProjectXyzLayers } from "../../lib/xyz-url";
 import { AddDataDialog, type AddDataKind } from "./AddDataDialog";
+import { AddNetcdfDialog } from "./AddNetcdfDialog";
 import { AboutDialog } from "./AboutDialog";
 import { NewProjectDialog } from "./NewProjectDialog";
 import { ManagePluginsDialog } from "./ManagePluginsDialog";
@@ -285,6 +286,7 @@ export function TopToolbar({
     ),
   );
   const [addDataKind, setAddDataKind] = useState<AddDataKind | null>(null);
+  const [netcdfDialogOpen, setNetcdfDialogOpen] = useState(false);
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
   const [projectUrlDialogOpen, setProjectUrlDialogOpen] = useState(false);
   const [managePluginsOpen, setManagePluginsOpen] = useState(false);
@@ -796,6 +798,9 @@ export function TopToolbar({
   const handleAddZarrLayer = () => {
     openZarrLayerPanel(appApi);
   };
+  const handleAddNetcdfLayer = () => {
+    setNetcdfDialogOpen(true);
+  };
   const handleAddLidarLayer = () => {
     openLidarLayerPanel(appApi);
   };
@@ -1053,6 +1058,9 @@ export function TopToolbar({
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddZarrLayer}>
             Zarr Layer
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleAddNetcdfLayer}>
+            NetCDF / HDF
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-xs text-muted-foreground">
@@ -1497,6 +1505,11 @@ export function TopToolbar({
         onOpenChange={(open: boolean) => {
           if (!open) setAddDataKind(null);
         }}
+      />
+      <AddNetcdfDialog
+        open={netcdfDialogOpen}
+        appApi={appApi}
+        onOpenChange={setNetcdfDialogOpen}
       />
       <Dialog
         open={projectUrlDialogOpen}

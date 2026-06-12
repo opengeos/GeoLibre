@@ -47,6 +47,8 @@ export {
   openStacSearchLayerPanel,
   openViewStatePanel,
   openZarrLayerPanel,
+  addCloudNetcdfLayer,
+  type CloudNetcdfLayerOptions,
   subscribeBookmarkPanel,
   subscribeColorbarPanel,
   subscribeHtmlPanel,
@@ -58,6 +60,14 @@ export {
   subscribeViewStatePanel,
   type CogRasterLayerOptions,
 } from "./plugins/maplibre-components";
+export {
+  KerchunkReferenceStore,
+  loadKerchunkReference,
+  listKerchunkVariables,
+  normalizeKerchunkReference,
+  type KerchunkRefs,
+  type KerchunkVariable,
+} from "./plugins/kerchunk-reference-store";
 export {
   closeDuckDBLayerPanel,
   getDuckDBFeatureBounds,
