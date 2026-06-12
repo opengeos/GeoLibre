@@ -1,5 +1,6 @@
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
+import { loadPgliteModules } from "./pglite-loader";
 import {
   buildCreateTableStatement,
   buildInsertChunk,
@@ -75,8 +76,7 @@ function runExclusive<T>(task: () => Promise<T>): Promise<T> {
 async function getState(): Promise<PgliteState> {
   if (!statePromise) {
     statePromise = (async () => {
-      const { PGlite } = await import("@electric-sql/pglite");
-      const { postgis } = await import("@electric-sql/pglite-postgis");
+      const { PGlite, postgis } = await loadPgliteModules();
       const pg = new PGlite({
         extensions: { postgis },
       }) as unknown as PgliteLike;
