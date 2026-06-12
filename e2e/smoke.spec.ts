@@ -22,19 +22,25 @@ async function waitForMap(page: Page): Promise<void> {
  * parsed in-browser with no DuckDB/CDN dependency, so this stays hermetic.
  */
 async function dropGeoJson(page: Page, name: string, text: string): Promise<void> {
-  const dataTransfer = await page.evaluateHandle((contents) => {
-    const dt = new DataTransfer();
-    dt.items.add(
-      new File([contents], "smoke.geojson", { type: "application/geo+json" }),
-    );
-    return dt;
-  }, text);
+  // `name` is test-controlled and assumed simple/ASCII: it is the dropped
+  // file's base name and, after the drop pipeline strips the extension, the
+  // layer name interpolated into the CSS attribute selector below.
+  const dataTransfer = await page.evaluateHandle(
+    ({ contents, fileName }) => {
+      const dt = new DataTransfer();
+      dt.items.add(
+        new File([contents], fileName, { type: "application/geo+json" }),
+      );
+      return dt;
+    },
+    { contents: text, fileName: `${name}.geojson` },
+  );
   for (const type of ["dragenter", "dragover", "drop"]) {
     await page.dispatchEvent('[data-testid="map-canvas"]', type, {
       dataTransfer,
     });
   }
-  // name is the layer label the drop pipeline derives from the file name.
+  await dataTransfer.dispose();
   await expect(
     page.locator(`[data-testid="layer-row"][data-layer-name="${name}"]`),
   ).toBeVisible();
