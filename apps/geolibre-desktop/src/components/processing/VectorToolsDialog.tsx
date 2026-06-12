@@ -127,12 +127,6 @@ export function VectorToolsDialog({
     [],
   );
 
-  const setParam = useCallback(
-    (id: string, value: unknown) =>
-      setParams((prev) => ({ ...prev, [id]: value })),
-    [],
-  );
-
   const layerOptions = useCallback(
     (filter?: GeometryFamily[]) =>
       layers.filter((layer) => {
@@ -149,16 +143,18 @@ export function VectorToolsDialog({
     [layers],
   );
 
-  // Attribute-field names per layer. Scanning every feature is the expensive
-  // part, so memoize it on the layer set (and the dialog being open) rather than
-  // recomputing on every keystroke in another parameter.
+  // Attribute-field names per layer, memoized on the layer set (and the dialog
+  // being open) so it doesn't recompute on every keystroke. GeoJSON is
+  // schemaless, so sample the first FIELD_SCAN_SAMPLE features rather than
+  // scanning a whole large layer on the React commit path.
   const fieldsByLayer = useMemo(() => {
+    const FIELD_SCAN_SAMPLE = 1000;
     const map = new Map<string, string[]>();
     if (!open) return map;
     for (const layer of layers) {
       if (layer.type !== "geojson" || !layer.geojson) continue;
       const keys = new Set<string>();
-      for (const feature of layer.geojson.features) {
+      for (const feature of layer.geojson.features.slice(0, FIELD_SCAN_SAMPLE)) {
         for (const key of Object.keys(feature.properties ?? {})) keys.add(key);
       }
       map.set(layer.id, [...keys]);
@@ -178,26 +174,25 @@ export function VectorToolsDialog({
     [fieldsByLayer, params],
   );
 
-  // Clear a `type: "field"` value once its source layer no longer offers it
-  // (e.g. the user switched the input layer), so the dropdown never shows a
-  // stale, unselectable field name. Inline the field lookup so the effect
-  // depends on the data it actually reads rather than the params-derived
-  // fieldOptions callback.
-  useEffect(() => {
-    // While closed, `fieldsByLayer` is empty by design; skip so we don't wipe
-    // valid field selections that should survive a close/reopen.
-    if (!open) return;
-    for (const param of tool.parameters) {
-      if (param.type !== "field") continue;
-      const current = params[param.id] as string | undefined;
-      if (!current) continue;
-      const sourceId = params[param.fieldSource ?? "layer"] as
-        | string
-        | undefined;
-      const options = (sourceId && fieldsByLayer.get(sourceId)) || [];
-      if (!options.includes(current)) setParam(param.id, undefined);
-    }
-  }, [open, tool, params, fieldsByLayer, setParam]);
+  // Update a parameter. When a layer parameter changes, also clear any
+  // `type: "field"` parameter that draws its options from it, so the field
+  // dropdown never keeps a value from the previous layer. Doing this at the
+  // mutation site (rather than in an effect) avoids re-running on every keystroke
+  // and means closing the dialog never wipes a valid selection.
+  const handleParamChange = useCallback(
+    (id: string, value: unknown) => {
+      setParams((prev) => {
+        const next = { ...prev, [id]: value };
+        for (const param of tool.parameters) {
+          if (param.type === "field" && (param.fieldSource ?? "layer") === id) {
+            next[param.id] = undefined;
+          }
+        }
+        return next;
+      });
+    },
+    [tool],
+  );
 
   // Whether a parameter should be shown, given another parameter's value
   // (e.g. hide the Value field for is-empty/is-not-empty operators).
@@ -395,7 +390,7 @@ export function VectorToolsDialog({
                   fieldOptions={
                     param.type === "field" ? fieldOptions(param) : undefined
                   }
-                  onChange={(value) => setParam(param.id, value)}
+                  onChange={(value) => handleParamChange(param.id, value)}
                 />
               ))}
             </div>

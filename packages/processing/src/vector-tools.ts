@@ -523,9 +523,26 @@ const SPATIAL_JOIN_PREDICATES: SpatialPredicate[] = [
 const SPATIAL_JOIN_HOW: SpatialJoinHow[] = ["inner", "left"];
 
 /**
- * Test an input feature against a join feature for the given predicate, mirroring
- * GeoPandas `sjoin(predicate=...)` semantics (the relationship reads left→right):
- * `within` is "input within join" and `contains` is "input contains join".
+ * Raw predicate test, mirroring GeoPandas `sjoin(predicate=...)` semantics (the
+ * relationship reads left→right): `within` is "input within join", `contains`
+ * is "input contains join". Throws on geometries Turf cannot evaluate (e.g. a
+ * GeometryCollection).
+ */
+function rawPredicate(
+  input: Feature,
+  join: Feature,
+  predicate: SpatialPredicate,
+): boolean {
+  if (predicate === "within") return booleanWithin(input, join);
+  if (predicate === "contains") return booleanContains(input, join);
+  return booleanIntersects(input, join);
+}
+
+/**
+ * Like {@link rawPredicate} but treats an unevaluable pair as a non-match rather
+ * than letting the exception abort the whole run. Safe for positive predicates
+ * (a pair that can't be evaluated simply doesn't match); the complement
+ * (`disjoint`) must instead distinguish "no match" from "couldn't evaluate".
  */
 function matchesPredicate(
   input: Feature,
@@ -533,13 +550,8 @@ function matchesPredicate(
   predicate: SpatialPredicate,
 ): boolean {
   try {
-    if (predicate === "within") return booleanWithin(input, join);
-    if (predicate === "contains") return booleanContains(input, join);
-    return booleanIntersects(input, join);
+    return rawPredicate(input, join, predicate);
   } catch {
-    // Turf's boolean predicates throw on unsupported geometries (e.g. a
-    // GeometryCollection). Treat such a pair as a non-match rather than letting
-    // the exception abort the whole join.
     return false;
   }
 }
@@ -884,12 +896,14 @@ export const selectByLocationTool: ProcessingAlgorithm = {
       ctx.log('Error: parameter "overlay" has no layer selected');
       return;
     }
-    const rawPredicate = (ctx.parameters.predicate as string) || "intersects";
-    if (!SELECT_LOCATION_PREDICATES.has(rawPredicate as SelectLocationPredicate)) {
-      ctx.log(`Error: unknown predicate '${rawPredicate}'`);
+    const predicateInput = (ctx.parameters.predicate as string) || "intersects";
+    if (
+      !SELECT_LOCATION_PREDICATES.has(predicateInput as SelectLocationPredicate)
+    ) {
+      ctx.log(`Error: unknown predicate '${predicateInput}'`);
       return;
     }
-    const predicate = rawPredicate as SelectLocationPredicate;
+    const predicate = predicateInput as SelectLocationPredicate;
     const inputFeatures = input.features.filter((f) => f.geometry);
     const filterFeatures = (filterLayer.geojson?.features ?? []).filter(
       (f) => f.geometry,
@@ -909,15 +923,30 @@ export const selectByLocationTool: ProcessingAlgorithm = {
     }
     // "disjoint" selects features that intersect nothing; the others select
     // features matching the predicate against any filter feature. With an empty
-    // filter layer `some(...)` is false, so disjoint keeps everything and the
-    // rest keep nothing — matching the backend.
+    // filter layer nothing matches, so disjoint keeps everything and the rest
+    // keep nothing — matching the backend.
     // In the else branch TS narrows `predicate` to SpatialPredicate, so this is
     // checked — no cast — and would error if the "disjoint" guard were removed.
     const test: SpatialPredicate =
       predicate === "disjoint" ? "intersects" : predicate;
     const selected = inputFeatures.filter((f) => {
-      const matchesAny = filterFeatures.some((g) => matchesPredicate(f, g, test));
-      return predicate === "disjoint" ? !matchesAny : matchesAny;
+      let matchesAny = false;
+      let unevaluable = false;
+      for (const g of filterFeatures) {
+        try {
+          if (rawPredicate(f, g, test)) {
+            matchesAny = true;
+            break;
+          }
+        } catch {
+          // Turf can't evaluate this pair (e.g. a GeometryCollection).
+          unevaluable = true;
+        }
+      }
+      // For positive predicates an unevaluable pair is just a non-match. For the
+      // complement (disjoint) we must NOT claim "no intersection" when a pair
+      // couldn't be checked, so require every pair to have been evaluable.
+      return predicate === "disjoint" ? !matchesAny && !unevaluable : matchesAny;
     });
     // Report the total the user sees in the layer list; note any geometry-less
     // features that were skipped (the sidecar drops them too).

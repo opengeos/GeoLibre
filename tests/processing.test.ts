@@ -409,6 +409,39 @@ describe("processing registry", () => {
     const a = square("a", 0); // covers x in [0,1]
     const overlap = square("overlap", 0.5); // intersects a
     const far = square("far", 10); // disjoint from a
+    // A large square that fully contains `a`, and a tiny one fully inside it.
+    const bigPoly = (
+      id: string,
+      coords: number[][],
+    ): GeoLibreLayer => ({
+      ...layer,
+      id,
+      name: id,
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { id },
+            geometry: { type: "Polygon", coordinates: [coords] },
+          },
+        ],
+      },
+    });
+    const big = bigPoly("big", [
+      [-5, -5],
+      [-5, 5],
+      [5, 5],
+      [5, -5],
+      [-5, -5],
+    ]);
+    const tiny = bigPoly("tiny", [
+      [0.2, 0.2],
+      [0.2, 0.4],
+      [0.4, 0.4],
+      [0.4, 0.2],
+      [0.2, 0.2],
+    ]);
 
     const run = (
       filter: GeoLibreLayer,
@@ -430,6 +463,11 @@ describe("processing registry", () => {
     assert.equal(run(far, "intersects").features.length, 0);
     assert.equal(run(far, "disjoint").features.length, 1);
     assert.equal(run(overlap, "disjoint").features.length, 0);
+    // within: `a` is within `big`; contains: `a` contains `tiny`.
+    assert.equal(run(big, "within").features.length, 1);
+    assert.equal(run(tiny, "within").features.length, 0);
+    assert.equal(run(tiny, "contains").features.length, 1);
+    assert.equal(run(big, "contains").features.length, 0);
   });
 
   it("calculates and fits layer bounds", () => {

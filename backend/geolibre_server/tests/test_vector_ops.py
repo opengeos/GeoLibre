@@ -370,6 +370,37 @@ def test_select_by_location_intersects() -> None:
 
 
 @requires_geopandas
+def test_select_by_location_within_and_contains() -> None:
+    big = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"name": "big"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[-5, -5], [-5, 5], [5, 5], [5, -5], [-5, -5]]],
+                },
+            }
+        ],
+    }
+    # SQUARE (0..1) is within big; big is not within SQUARE.
+    within, _ = run_vector_tool(
+        "select-by-location", SQUARE, big, parameters={"predicate": "within"}
+    )
+    assert len(within["features"]) == 1
+    none, _ = run_vector_tool(
+        "select-by-location", big, SQUARE, parameters={"predicate": "within"}
+    )
+    assert none["features"] == []
+    # big contains SQUARE.
+    contains, _ = run_vector_tool(
+        "select-by-location", big, SQUARE, parameters={"predicate": "contains"}
+    )
+    assert len(contains["features"]) == 1
+
+
+@requires_geopandas
 def test_select_by_location_disjoint_selects_non_overlapping() -> None:
     geojson, _ = run_vector_tool(
         "select-by-location", SQUARE, DISJOINT, parameters={"predicate": "disjoint"}
