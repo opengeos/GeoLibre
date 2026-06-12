@@ -54,6 +54,13 @@ describe("h3 resolution math", () => {
     assert.ok(estimateCellCount(area, 10) > estimateCellCount(area, 9));
   });
 
+  it("handles an antimeridian-crossing bbox without inflating the area", () => {
+    // west=170, east=-170 is a 20deg span across the antimeridian, not 340deg.
+    const wrapped = bboxAreaKm2([170, 0, -170, 1]);
+    const equivalent = bboxAreaKm2([0, 0, 20, 1]);
+    assert.ok(Math.abs(wrapped - equivalent) < 1, `${wrapped} vs ${equivalent}`);
+  });
+
   it("fails safe (Infinity) for an out-of-range resolution so the cap trips", () => {
     const area = bboxAreaKm2([0, 0, 1, 1]);
     assert.equal(estimateCellCount(area, 16), Number.POSITIVE_INFINITY);
@@ -304,6 +311,40 @@ describe("h3 tools", () => {
     // The registered temp GeoJSON source must be released after the run.
     assert.equal(ok.duckdb.released.length, 1);
   });
+
+  it("rejects an unknown aggregate operation", async () => {
+    const { ctx, added, logs } = baseCtx([pointLayer()], {
+      layer: "pts",
+      aggOp: "median",
+      resolution: 7,
+    });
+    await binPointsTool.run(ctx);
+    assert.equal(added.length, 0);
+    assert.ok(logs.some((l) => /unknown aggregate/i.test(l)));
+  });
+
+  it("logs a soft message and adds no layer when zero cells are produced", async () => {
+    const logs: string[] = [];
+    const added: string[] = [];
+    const ctx: ProcessingContext = {
+      layers: [],
+      parameters: { source: "viewport", resolution: 5 },
+      log: (m) => logs.push(m),
+      addResultLayer: (name) => added.push(name),
+      viewportBounds: () => [0, 0, 1, 1],
+      duckdb: {
+        ensureExtensions: async () => {},
+        registerGeoJson: async () => ({
+          sql: "ST_Read('mock.geojson')",
+          release: async () => {},
+        }),
+        query: async () => [], // no cells
+      },
+    };
+    await createH3GridTool.run(ctx);
+    assert.equal(added.length, 0);
+    assert.ok(logs.some((l) => /no h3 cells/i.test(l)));
+  });
 });
 
 describe("h3 SQL + geometry builders", () => {
@@ -323,19 +364,30 @@ describe("h3 SQL + geometry builders", () => {
     assert.match(sql, /ST_AsGeoJSON\(ST_GeomFromText\(h3_cell_to_boundary_wkt\(cell\)\)\) AS geojson/);
   });
 
-  it("builds polyfill grid SQL that unions the source geometry", () => {
+  it("builds polyfill grid SQL that unions only polygon geometry and guards NULL", () => {
     const sql = buildGridFromSourceSql("ST_Read('a.geojson')", 8);
     assert.match(sql, /ST_Union_Agg\(geom\)/);
-    assert.match(sql, /ST_Read\('a\.geojson'\) WHERE geom IS NOT NULL/);
-    assert.match(sql, /h3_polygon_wkt_to_cells\(\(SELECT wkt FROM merged\), 8\)/);
+    // Only polygonal geometry is unioned (a mixed layer would otherwise produce
+    // a GEOMETRYCOLLECTION that h3_polygon_wkt_to_cells rejects).
+    assert.match(
+      sql,
+      /WHERE geom IS NOT NULL AND ST_GeometryType\(geom\) IN \('POLYGON', 'MULTIPOLYGON'\)/,
+    );
+    // A NULL union result (no polygons) is filtered before reaching the h3 fn.
+    assert.match(sql, /h3_polygon_wkt_to_cells\(wkt, 8\)/);
+    assert.match(sql, /FROM merged WHERE wkt IS NOT NULL/);
   });
 
-  it("builds bin SQL for count (no field)", () => {
+  it("builds bin SQL for count (no field), binning POINT and MULTIPOINT by centroid", () => {
     const sql = buildBinSql("ST_Read('p.geojson')", 9, "count");
-    assert.match(sql, /h3_latlng_to_cell\(ST_Y\(geom\), ST_X\(geom\), 9\)/);
+    assert.match(sql, /h3_latlng_to_cell\(ST_Y\(pt\), ST_X\(pt\), 9\)/);
+    assert.match(sql, /ST_Centroid\(geom\) AS pt/);
     assert.match(sql, /count\(\*\) AS count/);
     assert.doesNotMatch(sql, /AS value/);
-    assert.match(sql, /ST_GeometryType\(geom\) = 'POINT'/);
+    assert.match(
+      sql,
+      /ST_GeometryType\(geom\) IN \('POINT', 'MULTIPOINT'\)/,
+    );
   });
 
   it("builds bin SQL for an aggregate, mapping mean->avg and quoting the field", () => {

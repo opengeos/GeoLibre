@@ -54,7 +54,15 @@ export interface AlgorithmParameter {
 
 /** A GeoJSON FeatureCollection registered as a queryable DuckDB source. */
 export interface DuckDbGeoJsonSource {
-  /** FROM-able SQL expression; its geometry column is named `geom`. */
+  /**
+   * FROM-able SQL expression; its geometry column is named `geom`.
+   *
+   * Trust boundary: this value is interpolated verbatim into SQL by the tools
+   * (e.g. `FROM ${sql}`). Implementations MUST produce it from
+   * host-controlled input only (the built-in capability uses
+   * `ST_Read(<quoted temp file>)`); never embed user-supplied content here, or
+   * the consuming tool becomes a SQL-injection vector.
+   */
   sql: string;
   /** Drop the registered source. Safe to call once. */
   release: () => Promise<void>;

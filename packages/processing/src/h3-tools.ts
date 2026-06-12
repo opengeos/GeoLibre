@@ -31,7 +31,12 @@ export function bboxAreaKm2(bbox: [number, number, number, number]): number {
   const [w, s, e, n] = bbox;
   const midLat = (s + n) / 2;
   const kmPerDegLon = KM_PER_DEG_LON_EQ * Math.cos((midLat * Math.PI) / 180);
-  const width = Math.abs(e - w) * kmPerDegLon;
+  // Handle a bbox that crosses the antimeridian (west > east, e.g. a viewport
+  // returning west=170, east=-170): wrap the longitude span into [0, 360) so the
+  // area isn't inflated ~17x and the hard-cap guard doesn't falsely trip.
+  let lonSpan = e - w;
+  if (lonSpan < 0) lonSpan += 360;
+  const width = lonSpan * kmPerDegLon;
   const height = Math.abs(n - s) * KM_PER_DEG_LAT;
   return Math.max(width * height, 0);
 }
@@ -91,14 +96,31 @@ export function buildGridFromWktSql(wkt: string, res: number): string {
  * FROM-able expression whose geometry column is `geom` (DuckDB `ST_Read`).
  */
 export function buildGridFromSourceSql(sourceSql: string, res: number): string {
+  // Union only polygonal geometries: a mixed layer would otherwise aggregate to
+  // a GEOMETRYCOLLECTION that `h3_polygon_wkt_to_cells` rejects. The `cells` CTE
+  // filters a NULL union result (no polygons survived) so a NULL WKT never
+  // reaches the h3 function, which can throw on NULL.
   return (
-    `WITH merged AS (SELECT ST_AsText(ST_Union_Agg(geom)) AS wkt FROM ${sourceSql} WHERE geom IS NOT NULL), ` +
-    `cells AS (SELECT unnest(h3_polygon_wkt_to_cells((SELECT wkt FROM merged), ${res})) AS cell) ` +
+    `WITH merged AS (SELECT ST_AsText(ST_Union_Agg(geom)) AS wkt FROM ${sourceSql} ` +
+    `WHERE geom IS NOT NULL AND ST_GeometryType(geom) IN ('POLYGON', 'MULTIPOLYGON')), ` +
+    `cells AS (SELECT unnest(h3_polygon_wkt_to_cells(wkt, ${res})) AS cell FROM merged WHERE wkt IS NOT NULL) ` +
     GRID_SELECT
   );
 }
 
-const AGG_FN: Record<string, string> = {
+/** Supported point-binning aggregate operations. */
+export type H3AggOp = "count" | "sum" | "mean" | "min" | "max";
+
+/** Valid aggregate operations, used to validate the `aggOp` parameter. */
+export const H3_AGG_OPS: readonly H3AggOp[] = [
+  "count",
+  "sum",
+  "mean",
+  "min",
+  "max",
+];
+
+const AGG_FN: Record<Exclude<H3AggOp, "count">, string> = {
   sum: "sum",
   mean: "avg",
   min: "min",
@@ -108,22 +130,27 @@ const AGG_FN: Record<string, string> = {
 /**
  * Aggregate point geometry from `sourceSql` (geometry column `geom`) into H3
  * cells. `op` is one of count/sum/mean/min/max; a field is required for all but
- * count.
+ * count. Both `POINT` and `MULTIPOINT` geometries are binned (by centroid).
  */
 export function buildBinSql(
   sourceSql: string,
   res: number,
-  op: string,
+  op: H3AggOp,
   field?: string,
 ): string {
-  const fn = AGG_FN[op];
+  const fn = op === "count" ? undefined : AGG_FN[op];
   const aggSelect =
     fn && field ? `, ${fn}(CAST(${sqlIdent(field)} AS DOUBLE)) AS value` : "";
   const aggOut = fn && field ? ", value" : "";
+  // ST_Centroid handles both POINT (centroid is the point itself) and
+  // MULTIPOINT, so MultiPoint features are binned by their centroid rather than
+  // being silently dropped by an `ST_X`/`ST_Y`-on-a-point-only filter.
   return (
-    `WITH pts AS (SELECT * FROM ${sourceSql} ` +
-    `WHERE geom IS NOT NULL AND ST_GeometryType(geom) = 'POINT'), ` +
-    `binned AS (SELECT h3_latlng_to_cell(ST_Y(geom), ST_X(geom), ${res}) AS cell, ` +
+    `WITH pts AS (SELECT ST_Centroid(geom) AS pt FROM ${sourceSql} ` +
+    `WHERE geom IS NOT NULL AND ST_GeometryType(geom) IN ('POINT', 'MULTIPOINT')` +
+    (field ? `, ${sqlIdent(field)}` : "") +
+    `), ` +
+    `binned AS (SELECT h3_latlng_to_cell(ST_Y(pt), ST_X(pt), ${res}) AS cell, ` +
     `count(*) AS count${aggSelect} FROM pts GROUP BY cell) ` +
     `SELECT h3_h3_to_string(cell) AS h3, count${aggOut}, ` +
     `ST_AsGeoJSON(ST_GeomFromText(h3_cell_to_boundary_wkt(cell))) AS geojson FROM binned`
@@ -372,6 +399,12 @@ export const createH3GridTool: ProcessingAlgorithm = {
       }
       const rows = await duckdb.query(sql);
       const fc = rowsToFeatureCollection(rows);
+      if (fc.features.length === 0) {
+        ctx.log(
+          `No H3 cells were produced at resolution ${res}. Try a coarser resolution or a larger area.`,
+        );
+        return;
+      }
       ctx.log(`Created ${fc.features.length} H3 cell(s) at resolution ${res}`);
       ctx.addResultLayer?.(`H3 grid (res ${res})`, fc);
     } finally {
@@ -434,6 +467,10 @@ export const binPointsTool: ProcessingAlgorithm = {
       return;
     }
     const op = (ctx.parameters.aggOp as string) || "count";
+    if (!H3_AGG_OPS.includes(op as H3AggOp)) {
+      ctx.log(`Error: unknown aggregate "${op}"`);
+      return;
+    }
     const field = ctx.parameters.field as string | undefined;
     if (op !== "count" && !field) {
       ctx.log(`Error: select a numeric field to ${op}`);
@@ -447,9 +484,15 @@ export const binPointsTool: ProcessingAlgorithm = {
     await duckdb.ensureExtensions(["spatial", "h3"]);
     const registered = await duckdb.registerGeoJson(layer.geojson);
     try {
-      const sql = buildBinSql(registered.sql, res, op, field);
+      const sql = buildBinSql(registered.sql, res, op as H3AggOp, field);
       const rows = await duckdb.query(sql);
       const fc = rowsToFeatureCollection(rows);
+      if (fc.features.length === 0) {
+        ctx.log(
+          `No points fell into H3 cells at resolution ${res}. Check the layer has point geometries.`,
+        );
+        return;
+      }
       ctx.log(
         `Binned points into ${fc.features.length} H3 cell(s) at resolution ${res}`,
       );
