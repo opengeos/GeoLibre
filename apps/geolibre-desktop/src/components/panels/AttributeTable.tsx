@@ -1360,6 +1360,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           </p>
         ) : (
           <table
+            data-testid="attribute-table"
             className="table-fixed caption-bottom text-sm"
             style={{ minWidth: "100%", width: tableWidth }}
           >

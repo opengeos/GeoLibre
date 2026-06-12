@@ -27,8 +27,14 @@ node --import tsx --test tests/<name>.test.ts      # a single frontend test file
 npm run test:backend                               # pytest backend/geolibre_server/tests
 python -m pytest backend/geolibre_server/tests/test_x.py::test_y   # a single backend test
 npm run test:worker                                # typecheck workers/viewer
+npm run test:e2e                                    # Playwright smoke tests (e2e/) against the built web app
 npm run check:rust                                 # cargo check the Tauri crate
 ```
+
+`npm run test:e2e` builds the web app, serves it with `vite preview`, and drives
+it with Playwright (`@playwright/test`). First run: `npx playwright install
+chromium`. The webServer reuses an already-running preview locally and rebuilds
+in CI; add specs under `e2e/`.
 
 The `python/` package has its own pytest suite (`cd python && pytest`) and is built into a wheel via `npm run build:embed` (produces `apps/geolibre-desktop/dist-embed`, consumed by `python/hatch_build.py`). Its version is dynamic, sourced from `python/src/geolibre/__init__.py`.
 

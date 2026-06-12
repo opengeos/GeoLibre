@@ -25,6 +25,12 @@ apps/geolibre-desktop/src/lib/pyodide/vector_ops.generated.py
 .claude/
 uv.lock
 
+# Playwright E2E artifacts
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
 # Documentation screenshots are hosted on Cloudflare R2 (data.geolibre.app/images),
 # not committed to the repo, to save space.
 docs/assets/screenshots/

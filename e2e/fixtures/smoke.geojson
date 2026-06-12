@@ -1,0 +1,20 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "Alpha", "category": "north", "value": 12 },
+      "geometry": { "type": "Point", "coordinates": [-122.42, 37.77] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Bravo", "category": "south", "value": 34 },
+      "geometry": { "type": "Point", "coordinates": [-118.24, 34.05] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Charlie", "category": "north", "value": 56 },
+      "geometry": { "type": "Point", "coordinates": [-73.99, 40.73] }
+    }
+  ]
+}
