@@ -532,9 +532,16 @@ function matchesPredicate(
   join: Feature,
   predicate: SpatialPredicate,
 ): boolean {
-  if (predicate === "within") return booleanWithin(input, join);
-  if (predicate === "contains") return booleanContains(input, join);
-  return booleanIntersects(input, join);
+  try {
+    if (predicate === "within") return booleanWithin(input, join);
+    if (predicate === "contains") return booleanContains(input, join);
+    return booleanIntersects(input, join);
+  } catch {
+    // Turf's boolean predicates throw on unsupported geometries (e.g. a
+    // GeometryCollection). Treat such a pair as a non-match rather than letting
+    // the exception abort the whole join.
+    return false;
+  }
 }
 
 export const spatialJoinTool: ProcessingAlgorithm = {
@@ -579,7 +586,7 @@ export const spatialJoinTool: ProcessingAlgorithm = {
     }
     const inputFeatures = input.features.filter((f) => f.geometry);
     if (!inputFeatures.length) {
-      ctx.log("Error: input layer has no features");
+      ctx.log("Error: input layer has no features with geometry");
       return;
     }
     // Validate up front so unknown values fail loudly instead of silently
@@ -615,9 +622,14 @@ export const spatialJoinTool: ProcessingAlgorithm = {
     // Collect every join-layer attribute key so unmatched left-join rows get a
     // null for each one. This keeps the output schema consistent with matched
     // rows and mirrors GeoPandas, which fills NaN (→ null in GeoJSON) there.
+    // Only the left path consumes this, so skip the scan for inner joins.
     const nullJoinProps: GeoJsonProperties = {};
-    for (const j of joinFeatures) {
-      for (const key of Object.keys(j.properties ?? {})) nullJoinProps[key] = null;
+    if (how === "left") {
+      for (const j of joinFeatures) {
+        for (const key of Object.keys(j.properties ?? {})) {
+          nullJoinProps[key] = null;
+        }
+      }
     }
     const results: Feature[] = [];
     for (const feature of inputFeatures) {

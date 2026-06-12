@@ -200,7 +200,8 @@ _SJOIN_HOW = {"inner", "left"}
 
 def _spatial_join(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     gpd = _import_geopandas()
-    left = _load_gdf(geojson, "Input layer")
+    # Validate parameters before loading the layers so an unknown predicate/how
+    # surfaces its actionable message instead of a generic load error.
     predicate = str(parameters.get("predicate", "intersects") or "intersects")
     if predicate not in _SJOIN_PREDICATES:
         raise ValueError(
@@ -209,6 +210,7 @@ def _spatial_join(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     how = str(parameters.get("how", "inner") or "inner")
     if how not in _SJOIN_HOW:
         raise ValueError(f"Unknown join type '{how}'. Accepted: {sorted(_SJOIN_HOW)}")
+    left = _load_gdf(geojson, "Input layer")
     # An empty join layer is still well-defined and avoids a misleading "has no
     # features" error: a left join keeps every input feature unchanged, an inner
     # join yields nothing. Matches the client engine.
