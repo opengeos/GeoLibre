@@ -2,7 +2,9 @@ import {
   DEFAULT_PROJECT_NAME,
   projectFromStore,
   projectPathLabel,
+  redo,
   serializeProject,
+  undo,
   useAppStore,
 } from "@geolibre/core";
 import {
@@ -115,13 +117,16 @@ import {
   Moon,
   Printer,
   Puzzle,
+  Redo2,
   RefreshCw,
   Save,
   SlidersHorizontal,
   Sun,
+  Undo2,
   Wrench,
   X,
 } from "lucide-react";
+import { useStore } from "zustand";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { type FormEvent, useRef, useState, useSyncExternalStore } from "react";
 import {
@@ -275,6 +280,14 @@ export function TopToolbar({
   const forgetRecentProject = useAppStore((s) => s.forgetRecentProject);
   const clearRecentProjects = useAppStore((s) => s.clearRecentProjects);
   const markSaved = useAppStore((s) => s.markSaved);
+  const canUndo = useStore(
+    useAppStore.temporal,
+    (s) => s.pastStates.length > 0,
+  );
+  const canRedo = useStore(
+    useAppStore.temporal,
+    (s) => s.futureStates.length > 0,
+  );
   const [controlsVisible, setControlsVisible] = useState<
     Record<ToolbarMapControl, boolean>
   >(() =>
@@ -1762,6 +1775,28 @@ export function TopToolbar({
         onOpenChange={setAboutOpen}
       />
       <div className="ml-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+        <Button
+          aria-label="Undo"
+          className="h-7 w-7 shrink-0"
+          disabled={!canUndo}
+          onClick={() => undo()}
+          size="icon"
+          title="Undo (Ctrl+Z)"
+          variant="ghost"
+        >
+          <Undo2 className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          aria-label="Redo"
+          className="h-7 w-7 shrink-0"
+          disabled={!canRedo}
+          onClick={() => redo()}
+          size="icon"
+          title="Redo (Ctrl+Shift+Z)"
+          variant="ghost"
+        >
+          <Redo2 className="h-3.5 w-3.5" />
+        </Button>
         <Button
           aria-label={
             themeMode === "dark"
