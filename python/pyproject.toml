@@ -7,7 +7,7 @@ name = "geolibre"
 dynamic = ["version"]
 description = "GeoLibre in Jupyter: the full GeoLibre GIS app as an anywidget, with a leafmap-style Python API."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "MIT"
 authors = [{ name = "Qiusheng Wu", email = "giswqs@gmail.com" }]
 keywords = ["geolibre", "gis", "maplibre", "jupyter", "anywidget", "mapping"]
