@@ -126,6 +126,11 @@ describe("addColumn (destructive)", () => {
     assert.equal(addColumn(layer, DISCOVERED, "  ", "text", ""), null);
     assert.equal(addColumn(layer, DISCOVERED, "pop", "text", ""), null);
   });
+
+  it("is a no-op on a layer with no features (field would never appear)", () => {
+    const layer = makeLayer({ geojson: fc([]) });
+    assert.equal(addColumn(layer, [], "label", "text", "x"), null);
+  });
 });
 
 describe("renameColumn (destructive)", () => {

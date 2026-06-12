@@ -258,7 +258,10 @@ function appendKeyToOrder(
 /**
  * Add a new attribute field, seeding every feature with a type-appropriate
  * default value. Returns null (no-op) when the name is empty, collides with an
- * existing column, or when the layer has no in-store GeoJSON.
+ * existing column, when the layer has no in-store GeoJSON, or when it has no
+ * features. A field is only discoverable through feature property keys, so on a
+ * zero-row layer the column would never appear (and the collision guard would
+ * never trip, letting the same name be added repeatedly) — reject it instead.
  */
 export function addColumn(
   layer: GeoLibreLayer,
@@ -268,7 +271,9 @@ export function addColumn(
   rawDefault: string,
 ): Partial<GeoLibreLayer> | null {
   const name = rawName.trim();
-  if (!layer.geojson || !name) return null;
+  if (!layer.geojson || layer.geojson.features.length === 0 || !name) {
+    return null;
+  }
   if (discovered.includes(name)) return null; // would clobber another column
   const value = defaultValueForType(type, rawDefault);
   const settings = getColumnSettings(layer);

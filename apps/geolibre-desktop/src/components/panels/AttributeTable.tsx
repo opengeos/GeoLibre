@@ -726,7 +726,11 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const newColumnCollides =
     newColumnNameTrimmed !== "" &&
     discoveredColumns.includes(newColumnNameTrimmed);
-  const canSubmitNewColumn = newColumnNameTrimmed !== "" && !newColumnCollides;
+  // A field is only discoverable through feature property keys, so a new column
+  // cannot be added to a layer with no features (see addColumn).
+  const canAddColumn = features.length > 0;
+  const canSubmitNewColumn =
+    newColumnNameTrimmed !== "" && !newColumnCollides && canAddColumn;
 
   const openAddColumn = () => {
     setNewColumnName("");
@@ -737,9 +741,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
 
   const changeNewColumnType = (type: NewColumnType) => {
     setNewColumnType(type);
-    // Boolean fields default to false; reset the free-form default otherwise so
-    // a value typed for one type does not carry over to an incompatible one.
-    setNewColumnDefault(type === "boolean" ? "false" : "");
+    // Reset the default to blank ("no default" → null) for every type so a value
+    // typed for one type does not carry over to an incompatible one, and so the
+    // user must explicitly choose a value rather than silently persisting one.
+    setNewColumnDefault("");
   };
 
   const confirmAddColumn = () => {
@@ -1301,9 +1306,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
               {newColumnType === "boolean" ? (
                 <Select
                   id="new-field-default"
-                  value={newColumnDefault || "false"}
+                  value={newColumnDefault}
                   onChange={(event) => setNewColumnDefault(event.target.value)}
                 >
+                  <option value="">(no default)</option>
                   <option value="false">false</option>
                   <option value="true">true</option>
                 </Select>
@@ -1323,6 +1329,11 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                 />
               )}
             </div>
+            {!canAddColumn ? (
+              <span className="text-xs text-destructive">
+                This layer has no features to add a field to.
+              </span>
+            ) : null}
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setAddingColumn(false)}>
