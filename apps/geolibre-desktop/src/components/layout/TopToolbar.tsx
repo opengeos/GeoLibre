@@ -115,7 +115,6 @@ import {
   Map,
   MessageSquare,
   Moon,
-  MoreHorizontal,
   Pencil,
   Printer,
   Puzzle,
@@ -849,10 +848,9 @@ export function TopToolbar({
   const toolbarButtonSize = compact ? "icon" : "sm";
   const toolbarButtonClass = compact ? "h-8 w-8 shrink-0" : "shrink-0";
   // Class for "secondary" toolbar menus that may be hidden on narrow screens to
-  // avoid the toolbar wrapping to a second row. The menu stays reachable other
-  // ways (e.g. Edit's actions also have keyboard shortcuts). To make a future
-  // menu hideable, give its trigger Button this class instead of
-  // `toolbarButtonClass`.
+  // reduce toolbar wrapping. The menu stays reachable other ways (e.g. Edit's
+  // actions also have keyboard shortcuts). To make a future menu hideable, give
+  // its trigger Button this class instead of `toolbarButtonClass`.
   const toolbarSecondaryButtonClass = cn(
     toolbarButtonClass,
     "hidden md:inline-flex",
@@ -862,209 +860,13 @@ export function TopToolbar({
   const renderToolbarLabel = (label: string) =>
     showLabels ? <span className="hidden sm:inline">{label}</span> : null;
 
-  const controlsMenuItems = (
-    <>
-      <DropdownMenuLabel>Map controls</DropdownMenuLabel>
-      <DropdownMenuSeparator />
-      {MAP_CONTROL_ITEMS.map((control) => (
-        <DropdownMenuItem
-          key={control.id}
-          onClick={() => toggleMapControl(control.id)}
-        >
-          {control.label}
-          {controlsVisible[control.id] ? " ✓" : ""}
-        </DropdownMenuItem>
-      ))}
-      <DropdownMenuItem
-        onClick={() => toggle(EFFECTS_PLUGIN_ID, appApi)}
-      >
-        Atmosphere Effects
-        {isActive(EFFECTS_PLUGIN_ID) ? " ✓" : ""}
-      </DropdownMenuItem>
-      <DropdownMenuItem
-        title="Routing sends your waypoints to the public OSRM demo server (router.project-osrm.org)."
-        onClick={handleToggleDirections}
-      >
-        Directions
-        {isActive(DIRECTIONS_PLUGIN_ID) ? " ✓" : ""}
-      </DropdownMenuItem>
-      <DropdownMenuSeparator />
-      <DropdownMenuItem onSelect={handleToggleSearchPlacesPanel}>
-        Search
-        {searchPlacesVisible ? " ✓" : ""}
-      </DropdownMenuItem>
-      <DropdownMenuItem onSelect={handleToggleColorbarPanel}>
-        Colorbar
-        {colorbarPanelVisible ? " ✓" : ""}
-      </DropdownMenuItem>
-      <DropdownMenuItem onSelect={handleToggleLegendPanel}>
-        Legend
-        {legendPanelVisible ? " ✓" : ""}
-      </DropdownMenuItem>
-      <DropdownMenuItem onSelect={handleToggleHtmlPanel}>
-        HTML
-        {htmlPanelVisible ? " ✓" : ""}
-      </DropdownMenuItem>
-      <DropdownMenuItem onSelect={handleToggleMeasurePanel}>
-        Measure
-        {measurePanelVisible ? " ✓" : ""}
-      </DropdownMenuItem>
-      <DropdownMenuItem onSelect={handleToggleBookmarkPanel}>
-        Bookmark
-        {bookmarkPanelVisible ? " ✓" : ""}
-      </DropdownMenuItem>
-      <DropdownMenuItem onSelect={handleToggleMinimapPanel}>
-        Minimap
-        {minimapPanelVisible ? " ✓" : ""}
-      </DropdownMenuItem>
-      <DropdownMenuItem onSelect={handleToggleViewStatePanel}>
-        View State
-        {viewStatePanelVisible ? " ✓" : ""}
-      </DropdownMenuItem>
-    </>
-  );
-
-  const pluginsMenuItems = (
-    <>
-      <DropdownMenuLabel>Activate plugin</DropdownMenuLabel>
-      <DropdownMenuSeparator />
-      {(() => {
-        const renderPluginMenuItem = (p: (typeof plugins)[number]) => {
-          const pluginPosition = getMapControlPosition(p.id);
-          if (!pluginPosition) {
-            return (
-              <DropdownMenuItem
-                key={p.id}
-                onClick={() => toggle(p.id, appApi)}
-              >
-                {p.name}
-                {isActive(p.id) ? " ✓" : ""}
-              </DropdownMenuItem>
-            );
-          }
-
-          return (
-            <DropdownMenuSub key={p.id}>
-              <DropdownMenuSubTrigger>
-                {p.name}
-                {isActive(p.id) ? " ✓" : ""}
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuItem onClick={() => toggle(p.id, appApi)}>
-                  {isActive(p.id) ? "Deactivate" : "Activate"}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuLabel>Position</DropdownMenuLabel>
-                <DropdownMenuRadioGroup
-                  value={pluginPosition}
-                  onValueChange={(position: string) =>
-                    setMapControlPosition(
-                      p.id,
-                      appApi,
-                      position as GeoLibreMapControlPosition,
-                    )
-                  }
-                >
-                  {PLUGIN_POSITION_ITEMS.map((position) => (
-                    <DropdownMenuRadioItem
-                      key={position.value}
-                      value={position.value}
-                      onSelect={(event: Event) => event.preventDefault()}
-                    >
-                      {position.label}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-          );
-        };
-
-        const webServicePlugins = plugins.filter((p) =>
-          WEB_SERVICE_PLUGIN_ID_SET.has(p.id),
-        );
-        // The web service plugins render as one grouped submenu, placed
-        // where the first of them appears in registration order (just
-        // above Esri Wayback).
-        let webServicesRendered = false;
-        return plugins.map((p) => {
-          // Atmosphere Effects and Directions are toggled from the Controls
-          // menu instead, so they are omitted here to avoid a duplicate
-          // toggle. The deck.gl viz overlay is an internal renderer driven
-          // by the Add Data → "Deck.gl Layer" dialog, not a user-facing
-          // toggle, so it is hidden here too.
-          if (
-            p.id === EFFECTS_PLUGIN_ID ||
-            p.id === DIRECTIONS_PLUGIN_ID ||
-            p.id === DECK_VIZ_PLUGIN_ID
-          ) {
-            return null;
-          }
-          if (!WEB_SERVICE_PLUGIN_ID_SET.has(p.id)) {
-            return renderPluginMenuItem(p);
-          }
-          if (webServicesRendered) return null;
-          webServicesRendered = true;
-          return (
-            <DropdownMenuSub key="web-services">
-              <DropdownMenuSubTrigger>
-                Web Services
-                {webServicePlugins.some((plugin) => isActive(plugin.id))
-                  ? " ✓"
-                  : ""}
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                {webServicePlugins.map(renderPluginMenuItem)}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-          );
-        });
-      })()}
-    </>
-  );
-
-  const helpMenuItems = (
-    <>
-      <DropdownMenuLabel>Help</DropdownMenuLabel>
-      <DropdownMenuSeparator />
-      <DropdownMenuItem onSelect={onOpenDiagnostics}>
-        <Bug className="mr-2 h-3.5 w-3.5" />
-        Diagnostics
-        {diagnosticsErrorCount > 0 ? (
-          <span className="ml-2 rounded bg-destructive px-1.5 py-0.5 text-[10px] leading-none text-destructive-foreground">
-            {diagnosticsErrorCount}
-          </span>
-        ) : null}
-      </DropdownMenuItem>
-      <DropdownMenuItem
-        onSelect={() => void openExternalLink(FEEDBACK_URL)}
-      >
-        <MessageSquare className="mr-2 h-3.5 w-3.5" />
-        Give feedback
-      </DropdownMenuItem>
-      <DropdownMenuItem
-        onSelect={() => {
-          setAboutOpen(true);
-          setCheckForUpdatesRequest((value) => value + 1);
-        }}
-      >
-        <RefreshCw className="mr-2 h-3.5 w-3.5" />
-        Check for updates
-      </DropdownMenuItem>
-      <DropdownMenuItem onSelect={() => setAboutOpen(true)}>
-        <Info className="mr-2 h-3.5 w-3.5" />
-        About
-      </DropdownMenuItem>
-    </>
-  );
-
   return (
     <header
       className={cn(
         "flex min-h-11 min-w-0 shrink-0 items-center gap-1 border-b bg-card py-1",
         compact
           ? "flex-nowrap overflow-x-auto px-1.5"
-          : "flex-nowrap overflow-x-auto px-2",
+          : "flex-wrap px-2 md:flex-nowrap",
       )}
     >
       <span className="mr-1 flex shrink-0 items-center gap-1.5 text-sm font-semibold text-primary md:mr-2">
@@ -1538,38 +1340,187 @@ export function TopToolbar({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <span className="hidden md:contents">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              className={toolbarButtonClass}
-              variant="ghost"
-              size={toolbarButtonSize}
-              aria-label="Controls"
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            className={toolbarButtonClass}
+            variant="ghost"
+            size={toolbarButtonSize}
+            aria-label="Controls"
+          >
+            <SlidersHorizontal className={toolbarIconClassName} />
+            {renderToolbarLabel("Controls")}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuLabel>Map controls</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {MAP_CONTROL_ITEMS.map((control) => (
+            <DropdownMenuItem
+              key={control.id}
+              onClick={() => toggleMapControl(control.id)}
             >
-              <SlidersHorizontal className={toolbarIconClassName} />
-              {renderToolbarLabel("Controls")}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">{controlsMenuItems}</DropdownMenuContent>
-        </DropdownMenu>
-      </span>
-      <span className="hidden md:contents">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              className={toolbarButtonClass}
-              variant="ghost"
-              size={toolbarButtonSize}
-              aria-label="Plugins"
-            >
-              <Puzzle className={toolbarIconClassName} />
-              {renderToolbarLabel("Plugins")}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">{pluginsMenuItems}</DropdownMenuContent>
-        </DropdownMenu>
-      </span>
+              {control.label}
+              {controlsVisible[control.id] ? " ✓" : ""}
+            </DropdownMenuItem>
+          ))}
+          <DropdownMenuItem
+            onClick={() => toggle(EFFECTS_PLUGIN_ID, appApi)}
+          >
+            Atmosphere Effects
+            {isActive(EFFECTS_PLUGIN_ID) ? " ✓" : ""}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            title="Routing sends your waypoints to the public OSRM demo server (router.project-osrm.org)."
+            onClick={handleToggleDirections}
+          >
+            Directions
+            {isActive(DIRECTIONS_PLUGIN_ID) ? " ✓" : ""}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={handleToggleSearchPlacesPanel}>
+            Search
+            {searchPlacesVisible ? " ✓" : ""}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleToggleColorbarPanel}>
+            Colorbar
+            {colorbarPanelVisible ? " ✓" : ""}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleToggleLegendPanel}>
+            Legend
+            {legendPanelVisible ? " ✓" : ""}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleToggleHtmlPanel}>
+            HTML
+            {htmlPanelVisible ? " ✓" : ""}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleToggleMeasurePanel}>
+            Measure
+            {measurePanelVisible ? " ✓" : ""}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleToggleBookmarkPanel}>
+            Bookmark
+            {bookmarkPanelVisible ? " ✓" : ""}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleToggleMinimapPanel}>
+            Minimap
+            {minimapPanelVisible ? " ✓" : ""}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleToggleViewStatePanel}>
+            View State
+            {viewStatePanelVisible ? " ✓" : ""}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            className={toolbarButtonClass}
+            variant="ghost"
+            size={toolbarButtonSize}
+            aria-label="Plugins"
+          >
+            <Puzzle className={toolbarIconClassName} />
+            {renderToolbarLabel("Plugins")}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuLabel>Activate plugin</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {(() => {
+            const renderPluginMenuItem = (p: (typeof plugins)[number]) => {
+              const pluginPosition = getMapControlPosition(p.id);
+              if (!pluginPosition) {
+                return (
+                  <DropdownMenuItem
+                    key={p.id}
+                    onClick={() => toggle(p.id, appApi)}
+                  >
+                    {p.name}
+                    {isActive(p.id) ? " ✓" : ""}
+                  </DropdownMenuItem>
+                );
+              }
+
+              return (
+                <DropdownMenuSub key={p.id}>
+                  <DropdownMenuSubTrigger>
+                    {p.name}
+                    {isActive(p.id) ? " ✓" : ""}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem onClick={() => toggle(p.id, appApi)}>
+                      {isActive(p.id) ? "Deactivate" : "Activate"}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel>Position</DropdownMenuLabel>
+                    <DropdownMenuRadioGroup
+                      value={pluginPosition}
+                      onValueChange={(position: string) =>
+                        setMapControlPosition(
+                          p.id,
+                          appApi,
+                          position as GeoLibreMapControlPosition,
+                        )
+                      }
+                    >
+                      {PLUGIN_POSITION_ITEMS.map((position) => (
+                        <DropdownMenuRadioItem
+                          key={position.value}
+                          value={position.value}
+                          onSelect={(event: Event) => event.preventDefault()}
+                        >
+                          {position.label}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              );
+            };
+
+            const webServicePlugins = plugins.filter((p) =>
+              WEB_SERVICE_PLUGIN_ID_SET.has(p.id),
+            );
+            // The web service plugins render as one grouped submenu, placed
+            // where the first of them appears in registration order (just
+            // above Esri Wayback).
+            let webServicesRendered = false;
+            return plugins.map((p) => {
+              // Atmosphere Effects and Directions are toggled from the Controls
+              // menu instead, so they are omitted here to avoid a duplicate
+              // toggle. The deck.gl viz overlay is an internal renderer driven
+              // by the Add Data → "Deck.gl Layer" dialog, not a user-facing
+              // toggle, so it is hidden here too.
+              if (
+                p.id === EFFECTS_PLUGIN_ID ||
+                p.id === DIRECTIONS_PLUGIN_ID ||
+                p.id === DECK_VIZ_PLUGIN_ID
+              ) {
+                return null;
+              }
+              if (!WEB_SERVICE_PLUGIN_ID_SET.has(p.id)) {
+                return renderPluginMenuItem(p);
+              }
+              if (webServicesRendered) return null;
+              webServicesRendered = true;
+              return (
+                <DropdownMenuSub key="web-services">
+                  <DropdownMenuSubTrigger>
+                    Web Services
+                    {webServicePlugins.some((plugin) => isActive(plugin.id))
+                      ? " ✓"
+                      : ""}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {webServicePlugins.map(renderPluginMenuItem)}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              );
+            });
+          })()}
+        </DropdownMenuContent>
+      </DropdownMenu>
       <SettingsDialog
         buttonClassName={toolbarButtonClass}
         buttonSize={toolbarButtonSize}
