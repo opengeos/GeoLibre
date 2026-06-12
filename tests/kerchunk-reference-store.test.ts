@@ -147,6 +147,23 @@ describe("normalizeKerchunkReference", () => {
     );
   });
 
+  it("accepts an empty templates object (a no-op)", () => {
+    const refs = normalizeKerchunkReference({
+      version: 1,
+      refs: { ".zgroup": '{"zarr_format":2}' },
+      templates: {},
+    });
+    assert.equal(refs[".zgroup"], '{"zarr_format":2}');
+  });
+
+  it("does not resolve an empty chunk URL to the manifest itself", () => {
+    const refs = normalizeKerchunkReference(
+      { version: 1, refs: { "air/0.0.0": ["", 0, 5] } },
+      "https://host.example/ref.json"
+    );
+    assert.equal((refs["air/0.0.0"] as [string, number, number])[0], "");
+  });
+
   it("throws when there are no refs", () => {
     assert.throws(
       () => normalizeKerchunkReference({ version: 1 }),

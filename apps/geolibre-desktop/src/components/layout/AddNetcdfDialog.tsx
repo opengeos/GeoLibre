@@ -105,7 +105,8 @@ export function AddNetcdfDialog({
     try {
       const selector: Record<string, number> = {};
       for (const dim of leadingDims) {
-        selector[dim] = Number(dimIndex[dim] ?? "0") || 0;
+        const parsed = Number(dimIndex[dim] ?? "0");
+        selector[dim] = Number.isFinite(parsed) ? parsed : 0;
       }
       const min = climMin.trim() === "" ? undefined : Number(climMin);
       const max = climMax.trim() === "" ? undefined : Number(climMax);

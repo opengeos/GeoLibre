@@ -70,7 +70,10 @@ export function normalizeKerchunkReference(
   if (!refs) {
     throw new Error("Invalid kerchunk reference: no `refs` found.");
   }
-  if (doc.templates || (Array.isArray(doc.gen) && doc.gen.length > 0)) {
+  if (
+    (doc.templates && Object.keys(doc.templates).length > 0) ||
+    (Array.isArray(doc.gen) && doc.gen.length > 0)
+  ) {
     throw new Error(
       "Templated kerchunk references (templates/gen) are not supported."
     );
@@ -92,11 +95,13 @@ export function normalizeKerchunkReference(
 }
 
 function looksLikeFlatRefs(doc: KerchunkDocument): boolean {
-  // A flat v0 map has Zarr metadata keys directly (e.g. ".zgroup").
+  // Sufficient heuristic: real v0 manifests always include at least one Zarr
+  // metadata key at the root. A manifest with only chunk keys would fail here.
   return ".zgroup" in doc || ".zattrs" in doc || ".zarray" in doc;
 }
 
 function resolveUrl(url: string, base?: string): string {
+  if (!url) return url; // empty URL: don't resolve to the manifest itself
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) return url; // already absolute
   if (!base) return url;
   try {

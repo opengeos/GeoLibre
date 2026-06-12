@@ -1699,6 +1699,16 @@ export async function addCloudNetcdfLayer(
   });
   const store = new KerchunkReferenceStore(refs, { headers: options.headers });
 
+  // The control is a module-level singleton and may have been torn down (set to
+  // null on plugin deactivation) during the await above.
+  if (!zarrControl) {
+    throw new Error("The Zarr control was removed while loading the reference.");
+  }
+
+  // Success is tracked by the control's "layeradd" event (see createZarrControl),
+  // which adds the layer to the store. We intentionally do not read
+  // getState().error here: the control is shared, so the error may be stale from
+  // a prior operation, and addLayer resolves before async chunk loading finishes.
   await zarrControl.addLayer(options.url, options.variable, {
     store,
     zarrVersion: 2,
@@ -1707,11 +1717,6 @@ export async function addCloudNetcdfLayer(
     colormap: options.colormap,
     opacity: options.opacity,
   });
-
-  const state = zarrControl.getState();
-  if (state.error) {
-    throw new Error(state.error);
-  }
 }
 
 export function openLidarLayerPanel(app: GeoLibreAppAPI): void {
