@@ -132,6 +132,15 @@ class Map(anywidget.AnyWidget):
         )
 
     @staticmethod
+    def _running_on_colab() -> bool:
+        """Return True when running inside a Google Colab kernel."""
+        try:
+            import google.colab  # noqa: F401
+        except ImportError:
+            return False
+        return True
+
+    @staticmethod
     def _resolve_remote_mode(server_proxy: bool | str) -> str:
         """Decide how the front-end reaches the bundled app.
 
@@ -147,10 +156,18 @@ class Map(anywidget.AnyWidget):
             extension, or ``""`` for the direct localhost path.
         """
         if isinstance(server_proxy, bool):
-            return "extension" if server_proxy else ""
-        if server_proxy == "auto":
-            return "extension" if os.environ.get("JUPYTERHUB_SERVICE_PREFIX") else ""
-        raise ValueError("server_proxy must be True, False, or 'auto'")
+            mode = "extension" if server_proxy else ""
+        elif server_proxy == "auto":
+            mode = "extension" if os.environ.get("JUPYTERHUB_SERVICE_PREFIX") else ""
+        else:
+            raise ValueError("server_proxy must be True, False, or 'auto'")
+        # Google Colab reaches the app through its own port proxy (resolved in
+        # the front-end), which needs the localhost server running and a
+        # populated _app_port. Never route Colab through the server extension,
+        # even when server_proxy=True is passed explicitly.
+        if mode == "extension" and Map._running_on_colab():
+            return ""
+        return mode
 
     # -- internal --------------------------------------------------------
 

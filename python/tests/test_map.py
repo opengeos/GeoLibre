@@ -25,3 +25,15 @@ def test_remote_mode_auto_jupyterhub(monkeypatch):
 def test_remote_mode_invalid():
     with pytest.raises(ValueError):
         Map._resolve_remote_mode("bogus")
+
+
+def test_remote_mode_colab_forces_direct(monkeypatch):
+    # Colab uses its own port proxy (front-end), which needs the localhost
+    # server; an explicit server_proxy=True must not switch it to the extension.
+    monkeypatch.setattr(Map, "_running_on_colab", staticmethod(lambda: True))
+    assert Map._resolve_remote_mode(True) == ""
+
+
+def test_remote_mode_non_colab_uses_extension(monkeypatch):
+    monkeypatch.setattr(Map, "_running_on_colab", staticmethod(lambda: False))
+    assert Map._resolve_remote_mode(True) == "extension"
