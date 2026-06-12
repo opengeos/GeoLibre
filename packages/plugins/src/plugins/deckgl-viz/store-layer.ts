@@ -8,6 +8,7 @@ import {
   type DeckVizConfig,
   type DeckVizFieldMapping,
   type DeckVizStyle,
+  getDeckVizLayerDef,
 } from "./registry";
 
 /** Marks store layers owned by the Deck.gl Layer builder. */
@@ -102,6 +103,20 @@ export function readDeckVizConfig(layer: GeoLibreLayer): DeckVizConfig | null {
   if (!candidate.fieldMapping || typeof candidate.fieldMapping !== "object") {
     return null;
   }
+  const fieldMapping = candidate.fieldMapping as DeckVizFieldMapping;
+  // Reject a corrupt/hand-edited config missing a required role mapping rather
+  // than letting an accessor silently read `undefined` and render at [0, 0].
+  const def = getDeckVizLayerDef(candidate.layerKind);
+  if (
+    def &&
+    def.roles.some((role) => {
+      if (!role.required) return false;
+      const value = fieldMapping[role.key];
+      return value === undefined || value === "";
+    })
+  ) {
+    return null;
+  }
   const style: DeckVizStyle = {
     ...DEFAULT_DECK_VIZ_STYLE,
     ...(candidate.style ?? {}),
@@ -109,7 +124,7 @@ export function readDeckVizConfig(layer: GeoLibreLayer): DeckVizConfig | null {
   return {
     layerKind: candidate.layerKind,
     format: candidate.format ?? "csv-rows",
-    fieldMapping: candidate.fieldMapping as DeckVizFieldMapping,
+    fieldMapping,
     style,
   };
 }

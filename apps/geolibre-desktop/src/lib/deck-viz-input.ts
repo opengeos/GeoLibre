@@ -87,7 +87,13 @@ function parseJsonInput(parsed: unknown): DeckVizParsedInput {
 
   const first = parsed[0];
   if (Array.isArray(first)) {
-    const width = Math.max(...parsed.slice(0, 1).map((row) => row.length));
+    // Scan the first few rows so optional trailing columns on later rows are
+    // still offered in the field-mapping picker.
+    const width = Math.max(
+      ...parsed
+        .slice(0, 10)
+        .map((row) => (Array.isArray(row) ? row.length : 0)),
+    );
     return {
       format: "json-array",
       columns: Array.from({ length: width }, (_, index) => ({

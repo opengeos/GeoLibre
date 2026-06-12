@@ -247,6 +247,32 @@ describe("deck-viz registry & store layer", () => {
     const broken = { ...layer, metadata: { ...layer.metadata, vizConfig: {} } };
     assert.equal(readDeckVizConfig(broken), null);
   });
+
+  it("readDeckVizConfig rejects a config missing a required role mapping", () => {
+    const layer = createDeckVizStoreLayer({
+      name: "Corrupt",
+      config: {
+        layerKind: "scatterplot",
+        format: "json-array",
+        // lat is required but absent (e.g. a hand-edited project file)
+        fieldMapping: { lng: 0 },
+        style: defaultStyle(),
+      },
+      rows: [],
+    });
+    assert.equal(readDeckVizConfig(layer), null);
+  });
+});
+
+describe("detectAndParseDeckVizInput tuple width", () => {
+  it("offers columns from a later, wider tuple row", () => {
+    const parsed = detectAndParseDeckVizInput("[[-1,2],[-3,4,9]]");
+    assert.equal(parsed.format, "json-array");
+    assert.deepEqual(
+      parsed.columns.map((column) => column.value),
+      [0, 1, 2],
+    );
+  });
 });
 
 function defaultStyle() {

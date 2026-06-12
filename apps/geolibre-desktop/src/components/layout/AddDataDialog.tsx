@@ -1697,6 +1697,7 @@ export function AddDataDialog({
                 <Select
                   id="deckviz-kind"
                   value={deckVizKind}
+                  disabled={isLoadingDeckViz}
                   onChange={(event) =>
                     handleDeckVizKindChange(event.target.value)
                   }
@@ -1740,10 +1741,12 @@ export function AddDataDialog({
                 <Select
                   id="deckviz-mode"
                   value={deckVizMode}
+                  disabled={isLoadingDeckViz}
                   onChange={(event) => {
                     setDeckVizMode(event.target.value as "url" | "file");
                     setDeckVizParsed(null);
                     setDeckVizStatus(null);
+                    setIsLoadingDeckViz(false);
                   }}
                 >
                   <option value="url">Data URL</option>
