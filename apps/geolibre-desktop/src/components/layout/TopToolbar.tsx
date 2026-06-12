@@ -1792,7 +1792,7 @@ export function TopToolbar({
           disabled={!canRedo}
           onClick={() => redo()}
           size="icon"
-          title="Redo (Ctrl+Shift+Z)"
+          title="Redo (Ctrl+Shift+Z / Ctrl+Y)"
           variant="ghost"
         >
           <Redo2 className="h-3.5 w-3.5" />

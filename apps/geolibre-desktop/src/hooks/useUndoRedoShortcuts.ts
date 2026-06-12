@@ -27,10 +27,14 @@ export function useUndoRedoShortcuts(): void {
         (key === "z" && e.shiftKey) || (key === "y" && !e.shiftKey);
       const isUndo = key === "z" && !e.shiftKey;
       if (!isUndo && !isRedo) return;
-      e.preventDefault();
-      if (isRedo) {
-        if (useAppStore.temporal.getState().futureStates.length > 0) redo();
-      } else if (useAppStore.temporal.getState().pastStates.length > 0) {
+      // Only consume the event when there is actually something to do, so an
+      // empty stack doesn't swallow the browser/OS shortcut (e.g. Cmd+Y).
+      const temporal = useAppStore.temporal.getState();
+      if (isRedo && temporal.futureStates.length > 0) {
+        e.preventDefault();
+        redo();
+      } else if (isUndo && temporal.pastStates.length > 0) {
+        e.preventDefault();
         undo();
       }
     };
