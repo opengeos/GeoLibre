@@ -50,6 +50,12 @@ class _RouteCases:
         assert resp.code == 200
         assert b"<!doctype html" in resp.body[:64].lower()
 
+    def test_head_probe_reaches_index_html(self):
+        # The front-end gates extension mode on a HEAD probe of index.html; make
+        # sure HEAD is served (a GET-only regression would slip past otherwise).
+        resp = self.fetch(f"{self.PREFIX}geolibre/app/index.html", method="HEAD")
+        assert resp.code == 200
+
     def test_directory_defaults_to_index(self):
         resp = self.fetch(f"{self.PREFIX}geolibre/app/")
         assert resp.code == 200

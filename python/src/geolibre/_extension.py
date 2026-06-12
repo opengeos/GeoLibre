@@ -53,10 +53,12 @@ def load_jupyter_server_extension(serverapp: Any) -> None:
         """Serve the bundled app's static files.
 
         A plain tornado ``StaticFileHandler`` (not a ``JupyterHandler``) is used
-        on purpose: the static app bundle carries no user data, so it is served
-        like any other static asset, and this also keeps Jupyter Server from
-        flagging it as an unauthenticated handler. Bare-directory requests fall
-        back to ``index.html`` via the ``default_filename`` kwarg passed below.
+        on purpose: the bundle is the same public app published at geolibre.app
+        and carries no user/project data (project state flows separately over
+        ``window.postMessage``), so it is served unauthenticated like any other
+        static asset, outside Jupyter Server's per-request auth pipeline. Bare-
+        directory requests fall back to ``index.html`` via the
+        ``default_filename`` kwarg passed below.
         """
 
     web_app = serverapp.web_app

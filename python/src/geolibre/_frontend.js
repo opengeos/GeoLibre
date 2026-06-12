@@ -62,9 +62,10 @@ async function resolveBase(model) {
 async function appReachable(base) {
   // render() awaits this before the iframe exists, so a stalled request (slow
   // proxy / auth layer) would otherwise hang widget rendering indefinitely.
-  // Abort after a short deadline and treat that as unreachable.
+  // Abort after a generous deadline (cold/loaded hubs can be slow) and treat
+  // that as unreachable; the caller shows a placeholder while this runs.
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
+  const timer = setTimeout(() => controller.abort(), 15000);
   try {
     const res = await fetch(`${base}index.html`, {
       method: "HEAD",
@@ -96,13 +97,19 @@ async function render({ model, el }) {
     return;
   }
 
-  if (model.get("_remote_mode") === "extension" && !(await appReachable(base))) {
-    el.textContent =
-      "GeoLibre: the bundled app could not be loaded from the Jupyter server. " +
-      "Make sure the geolibre server extension is enabled (restart your Jupyter " +
-      "server after installing geolibre, or run " +
-      "`jupyter server extension enable geolibre`), then re-run this cell.";
-    return;
+  if (model.get("_remote_mode") === "extension") {
+    // Probe the route first so a missing/disabled extension surfaces an
+    // actionable message instead of a bare 404 in the iframe. Show a
+    // placeholder while the probe runs so the cell is not blank on a slow hub.
+    el.textContent = "GeoLibre: connecting to the server extension…";
+    if (!(await appReachable(base))) {
+      el.textContent =
+        "GeoLibre: the bundled app could not be loaded from the Jupyter server. " +
+        "Make sure the geolibre server extension is enabled (restart your Jupyter " +
+        "server after installing geolibre, or run " +
+        "`jupyter server extension enable geolibre`), then re-run this cell.";
+      return;
+    }
   }
 
   const layout = model.get("layout") || "embed";
@@ -113,7 +120,8 @@ async function render({ model, el }) {
     params.set("layout", "embed");
   }
   iframe.src = `${base}index.html?${params.toString()}`;
-  el.appendChild(iframe);
+  // replaceChildren clears any placeholder text set above before mounting.
+  el.replaceChildren(iframe);
 
   let ready = false;
   // The last project object received from the app. onProjectChange compares the
