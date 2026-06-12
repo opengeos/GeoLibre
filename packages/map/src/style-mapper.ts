@@ -97,7 +97,7 @@ export function circlePaint(style: LayerStyle, opacity: number) {
 }
 
 // A perceptually-ordered cold→hot ramp over MapLibre's heatmap-density (0..1).
-const HEATMAP_COLOR_RAMP = [
+const HEATMAP_COLOR_RAMP: ExpressionSpecification = [
   "interpolate",
   ["linear"],
   ["heatmap-density"],
@@ -120,7 +120,7 @@ export function heatmapPaint(style: LayerStyle, opacity: number) {
     "heatmap-radius": styleValue(style, "heatmapRadius"),
     "heatmap-intensity": styleValue(style, "heatmapIntensity"),
     "heatmap-opacity": opacity,
-    "heatmap-color": HEATMAP_COLOR_RAMP as unknown as ExpressionSpecification,
+    "heatmap-color": HEATMAP_COLOR_RAMP,
   };
 }
 

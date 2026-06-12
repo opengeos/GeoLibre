@@ -30,6 +30,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type RefObject,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
@@ -1152,9 +1153,14 @@ export function StylePanel({
   const hasTextMarkerControls =
     layer.type === "geojson" && hasTextMarkerFeatures(layer);
   // Heatmap/cluster are rendered by the core GeoJSON sync, so only offer them
-  // for layers it actually paints — not control-owned or deck.gl layers.
+  // for layers it actually paints — not control-owned or deck.gl layers. Memoize
+  // the point-only scan so a large layer isn't re-scanned on every panel render.
+  const isPointOnly = useMemo(
+    () => isPointOnlyGeoJsonLayer(layer),
+    [layer],
+  );
   const supportsPointRenderer =
-    isPointOnlyGeoJsonLayer(layer) &&
+    isPointOnly &&
     !hasExternalNativeLayers(layer) &&
     !hasExternalDeckLayer(layer);
   const pointRenderer = styleValue(style, "pointRenderer");
@@ -1774,6 +1780,10 @@ export function StylePanel({
           <Separator />
         </>
       ) : null}
+      {/* The heatmap renderer ignores fill/stroke/circle/data-driven styling, so
+          hide those controls when it is selected. */}
+      {pointRenderer === "heatmap" ? null : (
+        <>
       {draftVectorStyleMode === "single" ? (
         <div className="space-y-2">
           <Label htmlFor="fillColor">Fill color</Label>
@@ -1872,6 +1882,8 @@ export function StylePanel({
           />
         </>
       ) : null}
+        </>
+      )}
     </>
   );
   const extrusionControls = (
@@ -2164,7 +2176,8 @@ export function StylePanel({
               </div>
             </div>
           )}
-          {vectorSymbologyControls}
+          {/* Data-driven coloring doesn't apply to the heatmap renderer. */}
+          {pointRenderer === "heatmap" ? null : vectorSymbologyControls}
           {!hasExtrusionControls || !extrusionEnabled ? (
             twoDimensionalControls
           ) : (

@@ -65,6 +65,22 @@ const nonTextMarkerPointFilter: maplibregl.FilterSpecification = [
   ["!", textMarkerShapeFilter],
 ];
 
+/**
+ * Filter for the unclustered-point circle layer in cluster mode: every feature
+ * without a `point_count`, excluding text markers when present so they render
+ * only through the symbol layer rather than also as plain circles.
+ */
+function unclusteredPointFilter(
+  hasTextMarkers: boolean,
+): maplibregl.FilterSpecification {
+  if (!hasTextMarkers) return ["!", ["has", "point_count"]];
+  return [
+    "all",
+    ["!", ["has", "point_count"]],
+    nonTextMarkerPointFilter,
+  ] as maplibregl.FilterSpecification;
+}
+
 // Native layer ids whose zoom range GeoLibre has taken over. A pristine external
 // layer keeps its source-declared range, but once the user sets a non-default
 // range we keep applying the style range on every sync, including a later reset
@@ -1090,7 +1106,9 @@ function syncGeoJsonLayer(
         type: "heatmap",
         source: src,
         ...styleLayerZoomRange(layer.style),
-        filter: pointGeometryFilter,
+        // Keep text-marker points out of the density, mirroring single mode;
+        // they still render through the text symbol layer below.
+        filter: hasTextMarkers ? nonTextMarkerPointFilter : pointGeometryFilter,
         paint: heatmapPaint(layer.style, opacity),
         layout: { visibility },
       },
@@ -1150,7 +1168,9 @@ function syncGeoJsonLayer(
         type: "circle",
         source: src,
         ...styleLayerZoomRange(layer.style),
-        filter: ["!", ["has", "point_count"]],
+        // Unclustered points, excluding text markers (which the symbol layer
+        // renders) so they don't also appear as plain circles.
+        filter: unclusteredPointFilter(hasTextMarkers),
         paint: circlePaint(layer.style, opacity),
         layout: { visibility },
       },
@@ -1971,11 +1991,11 @@ function geojsonSourceClusterState(
     radius:
       typeof clusterSpec.clusterRadius === "number"
         ? clusterSpec.clusterRadius
-        : 50,
+        : DEFAULT_LAYER_STYLE.clusterRadius,
     maxZoom:
       typeof clusterSpec.clusterMaxZoom === "number"
         ? clusterSpec.clusterMaxZoom
-        : 14,
+        : DEFAULT_LAYER_STYLE.clusterMaxZoom,
   };
 }
 
