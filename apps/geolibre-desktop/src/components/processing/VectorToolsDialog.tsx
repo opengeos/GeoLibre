@@ -149,23 +149,47 @@ export function VectorToolsDialog({
     [layers],
   );
 
-  // Attribute-field options for a `type: "field"` parameter, read from the
-  // layer chosen in its `fieldSource` parameter (default "layer").
+  // Attribute-field names per layer. Scanning every feature is the expensive
+  // part, so memoize it on the layer set (and the dialog being open) rather than
+  // recomputing on every keystroke in another parameter.
+  const fieldsByLayer = useMemo(() => {
+    const map = new Map<string, string[]>();
+    if (!open) return map;
+    for (const layer of layers) {
+      if (layer.type !== "geojson" || !layer.geojson) continue;
+      const keys = new Set<string>();
+      for (const feature of layer.geojson.features) {
+        for (const key of Object.keys(feature.properties ?? {})) keys.add(key);
+      }
+      map.set(layer.id, [...keys]);
+    }
+    return map;
+  }, [layers, open]);
+
+  // Attribute-field options for a `type: "field"` parameter, read from the layer
+  // chosen in its `fieldSource` parameter (default "layer"). O(1) lookup.
   const fieldOptions = useCallback(
     (param: AlgorithmParameter): string[] => {
       const sourceId = params[param.fieldSource ?? "layer"] as
         | string
         | undefined;
-      const layer = layers.find((l) => l.id === sourceId);
-      if (!layer?.geojson) return [];
-      const keys = new Set<string>();
-      for (const feature of layer.geojson.features) {
-        for (const key of Object.keys(feature.properties ?? {})) keys.add(key);
-      }
-      return [...keys];
+      return (sourceId && fieldsByLayer.get(sourceId)) || [];
     },
-    [layers, params],
+    [fieldsByLayer, params],
   );
+
+  // Clear a `type: "field"` value once its source layer no longer offers it
+  // (e.g. the user switched the input layer), so the dropdown never shows a
+  // stale, unselectable field name.
+  useEffect(() => {
+    for (const param of tool.parameters) {
+      if (param.type !== "field") continue;
+      const current = params[param.id] as string | undefined;
+      if (current && !fieldOptions(param).includes(current)) {
+        setParam(param.id, undefined);
+      }
+    }
+  }, [tool, params, fieldOptions, setParam]);
 
   const addResultLayer = useCallback(
     (name: string, fc: FeatureCollection) => {

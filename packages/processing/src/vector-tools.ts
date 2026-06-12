@@ -670,7 +670,7 @@ export const spatialJoinTool: ProcessingAlgorithm = {
 };
 
 /** Comparison operators for the Select by value tool; kept in sync with the backend. */
-const SELECT_VALUE_OPERATORS = [
+const SELECT_VALUE_OPERATORS = new Set([
   "eq",
   "neq",
   "gt",
@@ -681,7 +681,7 @@ const SELECT_VALUE_OPERATORS = [
   "starts-with",
   "is-null",
   "is-not-null",
-];
+]);
 
 /** Render a GeoJSON property value as a string the way the backend's `str()` does. */
 function valueToString(value: unknown): string {
@@ -788,7 +788,7 @@ export const selectByValueTool: ProcessingAlgorithm = {
       return;
     }
     const operator = (ctx.parameters.operator as string) || "eq";
-    if (!SELECT_VALUE_OPERATORS.includes(operator)) {
+    if (!SELECT_VALUE_OPERATORS.has(operator)) {
       ctx.log(`Error: unknown operator '${operator}'`);
       return;
     }
@@ -813,12 +813,12 @@ export const selectByValueTool: ProcessingAlgorithm = {
 };
 
 /** Spatial predicates for Select by location; kept in sync with the backend. */
-const SELECT_LOCATION_PREDICATES = [
+const SELECT_LOCATION_PREDICATES = new Set([
   "intersects",
   "within",
   "contains",
   "disjoint",
-];
+]);
 
 export const selectByLocationTool: ProcessingAlgorithm = {
   id: "select-by-location",
@@ -852,7 +852,7 @@ export const selectByLocationTool: ProcessingAlgorithm = {
       return;
     }
     const predicate = (ctx.parameters.predicate as string) || "intersects";
-    if (!SELECT_LOCATION_PREDICATES.includes(predicate)) {
+    if (!SELECT_LOCATION_PREDICATES.has(predicate)) {
       ctx.log(`Error: unknown predicate '${predicate}'`);
       return;
     }
@@ -883,8 +883,12 @@ export const selectByLocationTool: ProcessingAlgorithm = {
       const matchesAny = filterFeatures.some((g) => matchesPredicate(f, g, test));
       return predicate === "disjoint" ? !matchesAny : matchesAny;
     });
+    // Report the total the user sees in the layer list; note any geometry-less
+    // features that were skipped (the sidecar drops them too).
+    const skipped = input.features.length - inputFeatures.length;
     ctx.log(
-      `Select by location: ${selected.length} of ${inputFeatures.length} feature(s) matched`,
+      `Select by location: ${selected.length} of ${input.features.length} feature(s) matched` +
+        (skipped > 0 ? ` (${skipped} skipped, no geometry)` : ""),
     );
     ctx.addResultLayer?.("Select by location", featureCollection(selected));
   },
