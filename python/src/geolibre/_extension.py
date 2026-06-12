@@ -64,15 +64,7 @@ def load_jupyter_server_extension(serverapp: Any) -> None:
     web_app = serverapp.web_app
     base_url = web_app.settings["base_url"]
     route = url_path_join(base_url, APP_ROUTE, "(.*)")
-    if not _STATIC_APP.is_dir():
-        # A wheel built/installed without running the JS build (e.g. a dev
-        # checkout) would otherwise 404 on every request with no explanation.
-        serverapp.log.warning(
-            "[geolibre] Bundled app not found at %s; the %s/ route will return "
-            "404. Reinstall the geolibre wheel or run `npm run build:embed`.",
-            _STATIC_APP,
-            APP_ROUTE,
-        )
+    bundle_present = _STATIC_APP.is_dir()
     web_app.add_handlers(
         ".*$",
         [
@@ -83,6 +75,17 @@ def load_jupyter_server_extension(serverapp: Any) -> None:
             )
         ],
     )
-    serverapp.log.info(
-        "[geolibre] Serving the bundled app at %s%s/", base_url, APP_ROUTE
-    )
+    if bundle_present:
+        serverapp.log.info(
+            "[geolibre] Serving the bundled app at %s%s/", base_url, APP_ROUTE
+        )
+    else:
+        # A wheel built/installed without running the JS build (e.g. a dev
+        # checkout) would otherwise 404 on every request with no explanation.
+        # Emit only this warning (not the "Serving …" line) so the log is clear.
+        serverapp.log.warning(
+            "[geolibre] Bundled app not found at %s; the %s/ route will return "
+            "404. Reinstall the geolibre wheel or run `npm run build:embed`.",
+            _STATIC_APP,
+            APP_ROUTE,
+        )
