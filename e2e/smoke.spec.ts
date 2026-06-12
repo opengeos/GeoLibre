@@ -5,7 +5,11 @@ import { join } from "node:path";
 
 const FIXTURE_PATH = join(__dirname, "fixtures", "smoke.geojson");
 const FIXTURE_TEXT = readFileSync(FIXTURE_PATH, "utf8");
-const FIXTURE_FEATURE_COUNT = 3;
+// Derived from the fixture so the expected row count can't drift if a feature
+// is added or removed.
+const FIXTURE_FEATURE_COUNT = (
+  JSON.parse(FIXTURE_TEXT) as { features: unknown[] }
+).features.length;
 
 /** Waits for MapLibre to mount its WebGL canvas — the app's "map ready" signal. */
 async function waitForMap(page: Page): Promise<void> {
@@ -53,9 +57,8 @@ test("loads a GeoJSON layer, opens the attribute table, and toggles visibility",
 
   // 1. Add a layer via drag-and-drop and confirm it appears in the layer panel.
   await dropGeoJson(page, "smoke", FIXTURE_TEXT);
-  const row = page
-    .locator('[data-testid="layer-row"]', { hasText: "smoke" })
-    .first();
+  // dropGeoJson already asserted exactly one row with this name is visible.
+  const row = page.locator('[data-testid="layer-row"][data-layer-name="smoke"]');
 
   // 2. Toggle layer visibility and confirm the control reflects the new state.
   // Done before the actions menu below so no Radix dropdown overlay (which
@@ -64,6 +67,8 @@ test("loads a GeoJSON layer, opens the attribute table, and toggles visibility",
   await expect(row.locator('button[aria-label="Show layer"]')).toBeVisible();
 
   // 3. Open the attribute table from the layer actions menu and assert rows.
+  // Opening it while the layer is hidden (from step 2) is intentional and fine:
+  // the table reads features from the store, not from the rendered map.
   await row.locator('button[aria-label="Layer actions"]').click();
   await page.getByRole("menuitem", { name: "Open attribute table" }).click();
   await expect(page.getByTestId("attribute-table")).toBeVisible();
