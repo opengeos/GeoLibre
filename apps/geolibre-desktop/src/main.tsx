@@ -36,11 +36,11 @@ installDiagnosticsCapture();
 // no-op in the desktop build, whose chunks are bundled locally.
 installStaleChunkReload();
 
-void import("./App")
-  .then(async ({ default: App }) => {
-    const { AppErrorBoundary } = await import(
-      "./components/common/error-boundaries"
-    );
+// Fetch both chunks in parallel rather than waterfalling the boundary import
+// after App resolves — a free win, and it matters over the network in the web
+// build where these are separate fetches.
+void Promise.all([import("./App"), import("./components/common/error-boundaries")])
+  .then(([{ default: App }, { AppErrorBoundary }]) => {
     ReactDOM.createRoot(document.getElementById("root")!).render(
       <React.StrictMode>
         <AppErrorBoundary>

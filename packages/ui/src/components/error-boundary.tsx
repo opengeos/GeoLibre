@@ -70,11 +70,14 @@ export class ErrorBoundary extends React.Component<
   }
 }
 
-function resetKeysChanged(
+export function resetKeysChanged(
   prev: readonly unknown[] | undefined,
   next: readonly unknown[] | undefined,
 ): boolean {
   if (prev === next) return false;
+  // Treat absent and empty the same: no keys means no automatic resets, so a
+  // transition between `undefined` and `[]` must not trigger one.
+  if ((!prev || prev.length === 0) && (!next || next.length === 0)) return false;
   if (!prev || !next || prev.length !== next.length) return true;
   for (let index = 0; index < prev.length; index += 1) {
     if (!Object.is(prev[index], next[index])) return true;

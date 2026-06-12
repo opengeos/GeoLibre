@@ -25,12 +25,13 @@ type DiagnosticsModule =
   typeof import("../apps/geolibre-desktop/src/lib/diagnostics");
 
 let ErrorBoundary: ErrorBoundaryModule["ErrorBoundary"];
+let resetKeysChanged: ErrorBoundaryModule["resetKeysChanged"];
 let reportBoundaryError: BoundariesModule["reportBoundaryError"];
 let clearDiagnostics: DiagnosticsModule["clearDiagnostics"];
 let getDiagnosticsSnapshot: DiagnosticsModule["getDiagnosticsSnapshot"];
 
 before(async () => {
-  ({ ErrorBoundary } = await import(
+  ({ ErrorBoundary, resetKeysChanged } = await import(
     "../packages/ui/src/components/error-boundary"
   ));
   ({ reportBoundaryError } = await import(
@@ -45,6 +46,28 @@ describe("ErrorBoundary derived state", () => {
   it("captures the thrown error into state", () => {
     const error = new Error("boom");
     assert.deepEqual(ErrorBoundary.getDerivedStateFromError(error), { error });
+  });
+});
+
+describe("resetKeysChanged", () => {
+  it("treats absent and empty key lists the same (no reset)", () => {
+    assert.equal(resetKeysChanged(undefined, undefined), false);
+    assert.equal(resetKeysChanged(undefined, []), false);
+    assert.equal(resetKeysChanged([], undefined), false);
+    assert.equal(resetKeysChanged([], []), false);
+  });
+
+  it("does not reset when keys are unchanged", () => {
+    assert.equal(resetKeysChanged(["a", 1], ["a", 1]), false);
+  });
+
+  it("resets when a key value changes", () => {
+    assert.equal(resetKeysChanged(["a"], ["b"]), true);
+  });
+
+  it("resets when the key count changes", () => {
+    assert.equal(resetKeysChanged(["a"], ["a", "b"]), true);
+    assert.equal(resetKeysChanged([], ["a"]), true);
   });
 });
 

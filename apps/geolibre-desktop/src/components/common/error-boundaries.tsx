@@ -12,6 +12,11 @@ import { appendDiagnostic } from "../../lib/diagnostics";
  * Records a boundary-caught error in the diagnostics panel so it is visible to
  * the user (and copyable for bug reports) instead of only landing in the
  * console.
+ *
+ * Note: in development React re-throws boundary-caught errors as a synthetic
+ * `window.error` event, which `installDiagnosticsCapture` also records — so
+ * each error shows up twice in the Diagnostics panel in dev mode. Production
+ * builds (where React does not re-throw) record it once.
  */
 function reportBoundaryError(
   label: string,

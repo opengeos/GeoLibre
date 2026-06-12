@@ -177,11 +177,13 @@ export function usePluginRegistry() {
       const before = JSON.stringify(projectPluginStateSnapshot());
       // Plugin controls are imperative MapLibre code, so a throw here escapes
       // React's error boundaries. Contain it so one bad plugin can't break the
-      // toggle handler — surface it in diagnostics instead.
+      // toggle handler — surface it in diagnostics instead. Return without
+      // persisting so a half-applied failure is not written to the project.
       try {
         manager.toggle(id, appApi);
       } catch (error) {
         reportPluginError(id, "toggle", error);
+        return;
       }
       persistProjectPluginState(before);
     },
@@ -195,6 +197,7 @@ export function usePluginRegistry() {
         manager.setMapControlPosition(id, appApi, position);
       } catch (error) {
         reportPluginError(id, "reposition", error);
+        return;
       }
       persistProjectPluginState(before);
     },
