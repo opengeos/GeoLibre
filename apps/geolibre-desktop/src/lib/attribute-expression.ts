@@ -191,8 +191,11 @@ export function compileExpression(
 
   let fn: (...args: unknown[]) => unknown;
   try {
-    // "use strict" disables `with` and silent global creation; the expression
-    // only sees the named arguments we pass in.
+    // "use strict" disables `with` and silent global creation; the named
+    // arguments shadow the field/helper names. It does NOT sandbox: browser
+    // globals (fetch, window, …) stay reachable — see the file-level note. Safe
+    // here only because calculations run immediately and the expression itself
+    // is never persisted or re-evaluated from a project file.
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
     fn = new Function(
       ...argNames,
@@ -248,8 +251,15 @@ export function coerceComputedValue(
   if (type === "boolean") {
     if (typeof value === "boolean") return value;
     const normalized = String(value).trim().toLowerCase();
-    if (normalized === "true") return true;
-    if (normalized === "false") return false;
+    // Recognize the common string spellings so "0"/"no" don't become true via
+    // JS truthiness (every non-empty string is truthy) — surprising to users
+    // coming from SQL / QGIS / pandas.
+    if (normalized === "true" || normalized === "1" || normalized === "yes") {
+      return true;
+    }
+    if (normalized === "false" || normalized === "0" || normalized === "no") {
+      return false;
+    }
     return Boolean(value);
   }
   // text

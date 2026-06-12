@@ -136,6 +136,15 @@ describe("output coercion", () => {
     assert.equal(coerceComputedValue(1, "text"), "1");
     assert.equal(coerceComputedValue("true", "boolean"), true);
     assert.equal(coerceComputedValue("false", "boolean"), false);
+    // String spellings of 0/1 and yes/no are recognized rather than falling
+    // through to JS truthiness (where every non-empty string would be true).
+    assert.equal(coerceComputedValue("1", "boolean"), true);
+    assert.equal(coerceComputedValue("0", "boolean"), false);
+    assert.equal(coerceComputedValue("yes", "boolean"), true);
+    assert.equal(coerceComputedValue("no", "boolean"), false);
+    // Actual numbers use JS truthiness, which is already correct.
+    assert.equal(coerceComputedValue(1, "boolean"), true);
+    assert.equal(coerceComputedValue(0, "boolean"), false);
   });
 });
 

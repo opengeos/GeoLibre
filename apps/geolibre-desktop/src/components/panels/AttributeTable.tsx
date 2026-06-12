@@ -904,7 +904,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
 
   const confirmCalculate = () => {
     if (!layer || !calcCanSubmit) return;
-    const targetName = calcMode === "create" ? calcNewName : calcTargetField;
+    const targetName =
+      calcMode === "create" ? calcNewNameTrimmed : calcTargetField;
     const scope =
       calcSelectedOnly && selectedFeatureId
         ? new Set([selectedFeatureId])
