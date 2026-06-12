@@ -42,7 +42,14 @@ installStaleChunkReload();
 // new deploy is detected; precached chunks are served from cache so they never
 // 404, and installStaleChunkReload above stays as the fallback for any chunk not
 // covered by the precache.
-registerSW({ immediate: true });
+registerSW({
+  immediate: true,
+  onRegisterError(error) {
+    // Registration can fail in production (non-secure origin, scope conflict).
+    // The app still works without the SW, so surface it rather than fail.
+    console.error("[GeoLibre] Service worker registration failed", error);
+  },
+});
 
 // Fetch both chunks in parallel rather than waterfalling the boundary import
 // after App resolves — a free win, and it matters over the network in the web

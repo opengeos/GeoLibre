@@ -422,10 +422,14 @@ function pwaPlugin(): Plugin[] {
     "**/pglite-*",
     "**/earth-engine-browser-*",
     "**/mapillary-*",
-    "**/pyodide/**",
     "**/*.wasm",
     "**/*.data",
   ];
+  // Note: the 4 KB public/pyodide/pyodide-worker.js shim is intentionally left
+  // in the precache (revisioned, so no stale-after-deploy risk). The heavy
+  // Pyodide runtime it loads is fetched from the jsDelivr CDN (cross-origin) and
+  // is not cached — Pyodide offline needs a same-origin VITE_PYODIDE_INDEX_URL
+  // mirror. See docs/architecture.md.
 
   return VitePWA({
     disable: PWA_DISABLED,
@@ -478,27 +482,23 @@ function pwaPlugin(): Plugin[] {
       navigateFallbackDenylist: [/^\/sidecar\//, /^\/__geolibre_/, /\/[^/?]+\.[^/]+$/],
       runtimeCaching: [
         {
-          // Same-origin hashed build assets and WASM/data not in the precache
-          // (DuckDB, PGlite/PostGIS, MapLibre feature plugins). Hash-immutable,
-          // so CacheFirst — this is what makes DuckDB-WASM + the spatial
-          // extension work offline after their first online use.
+          // Hashed build assets under /assets/ that the precache skips: the
+          // MapLibre chunk, DuckDB-WASM + its spatial extension, PGlite/PostGIS,
+          // and the MapLibre feature-plugin chunks. Vite content-hashes every
+          // file it emits here, so CacheFirst is safe (a redeploy mints new
+          // URLs). This is what makes DuckDB-WASM + the spatial extension work
+          // offline after their first online use. Scoped to /assets/ so the
+          // non-hashed public files (e.g. pyodide-worker.js, dropped-in plugin
+          // bundles) are not pinned by hash-immutable CacheFirst — those are
+          // served from the revisioned precache and refresh on a SW update.
           urlPattern: ({ url, sameOrigin }: { url: URL; sameOrigin: boolean }) =>
-            sameOrigin && /\.(?:js|css|wasm|data|woff2?)$/.test(url.pathname),
+            sameOrigin &&
+            url.pathname.includes("/assets/") &&
+            /\.(?:js|css|wasm|data|woff2?)$/.test(url.pathname),
           handler: "CacheFirst",
           options: {
             cacheName: "geolibre-assets",
             expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 30 },
-            cacheableResponse: { statuses: [0, 200] },
-          },
-        },
-        {
-          // Pyodide runtime (public/pyodide/**) for the Python-in-browser tools.
-          urlPattern: ({ url, sameOrigin }: { url: URL; sameOrigin: boolean }) =>
-            sameOrigin && url.pathname.includes("/pyodide/"),
-          handler: "CacheFirst",
-          options: {
-            cacheName: "geolibre-pyodide",
-            expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 },
             cacheableResponse: { statuses: [0, 200] },
           },
         },
