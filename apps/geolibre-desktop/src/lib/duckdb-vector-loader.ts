@@ -4,6 +4,7 @@ import ehWorker from "@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url";
 import duckdbWasmMvp from "@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url";
 import mvpWorker from "@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
+import { ensureGpkgFeatureCount } from "./gpkg-ogr-contents";
 import { getSpatialExtensionPath } from "./spatial-extension-config";
 
 const GEOMETRY_JSON_COLUMN = "__geolibre_geometry_geojson";
@@ -146,6 +147,25 @@ function isParquetExtension(extension: string): boolean {
   return extension === "parquet" || extension === "geoparquet";
 }
 
+/**
+ * Register a vector file (and any siblings) as DuckDB file buffers, repairing
+ * GeoPackages that lack `gpkg_ogr_contents` first so `ST_Read` does not crash on
+ * the single-threaded WASM build. See `gpkg-ogr-contents.ts` and issue #258.
+ */
+async function registerVectorFileBuffers(
+  db: duckdb.AsyncDuckDB,
+  file: DuckDbVectorFile,
+): Promise<void> {
+  const data =
+    file.extension === "gpkg"
+      ? await ensureGpkgFeatureCount(file.data)
+      : file.data;
+  await db.registerFileBuffer(file.name, data as Uint8Array<ArrayBuffer>);
+  for (const sibling of file.siblingFiles ?? []) {
+    await db.registerFileBuffer(sibling.name, sibling.data);
+  }
+}
+
 function sourceSql(fileName: string, extension: string): string {
   const quotedName = quoteSqlString(fileName);
   if (isParquetExtension(extension)) {
@@ -266,10 +286,7 @@ export async function loadDuckDbVectorFile(
   const connection = await db.connect();
 
   try {
-    await db.registerFileBuffer(file.name, file.data);
-    for (const sibling of file.siblingFiles ?? []) {
-      await db.registerFileBuffer(sibling.name, sibling.data);
-    }
+    await registerVectorFileBuffers(db, file);
     await ensureSpatialExtension(connection);
 
     const sql = sourceSql(file.name, file.extension);
@@ -384,10 +401,7 @@ export async function convertDuckDbVectorToGeoParquet(
   ];
 
   try {
-    await db.registerFileBuffer(file.name, file.data);
-    for (const sibling of file.siblingFiles ?? []) {
-      await db.registerFileBuffer(sibling.name, sibling.data);
-    }
+    await registerVectorFileBuffers(db, file);
     await ensureSpatialExtension(connection);
 
     let geometryColumn: string;
