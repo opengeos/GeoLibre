@@ -14,6 +14,16 @@ import {
   buildGridFromWktSql,
   rowsToFeatureCollection,
 } from "../packages/processing/src/h3-tools";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
+import type {
+  DuckDbCapability,
+  ProcessingContext,
+} from "../packages/processing/src/types";
+import {
+  binPointsTool,
+  createH3GridTool,
+  getH3Tool,
+} from "../packages/processing/src/h3-tools";
 
 describe("h3 resolution math", () => {
   it("exposes 16 average-area entries (res 0..15), strictly decreasing", () => {
@@ -51,6 +61,166 @@ describe("h3 resolution math", () => {
   it("exposes a hard cap constant", () => {
     assert.equal(typeof H3_HARD_CAP, "number");
     assert.ok(H3_HARD_CAP > 10_000);
+  });
+});
+
+function polygonLayer(): GeoLibreLayer {
+  return {
+    id: "poly",
+    name: "Poly",
+    type: "geojson",
+    source: { type: "geojson" },
+    visible: true,
+    opacity: 1,
+    style: { ...DEFAULT_LAYER_STYLE },
+    metadata: {},
+    geojson: {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "Polygon",
+            coordinates: [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]],
+          },
+        },
+      ],
+    },
+  };
+}
+
+function pointLayer(): GeoLibreLayer {
+  return {
+    ...polygonLayer(),
+    id: "pts",
+    name: "Pts",
+    geojson: {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { pop: 5 },
+          geometry: { type: "Point", coordinates: [0.5, 0.5] },
+        },
+      ],
+    },
+  };
+}
+
+/** Capability stub that records queries and returns one canned hex row. */
+function mockDuckDb(): DuckDbCapability & { queries: string[] } {
+  const queries: string[] = [];
+  return {
+    queries,
+    ensureExtensions: async () => {},
+    registerGeoJson: async () => ({
+      sql: "ST_Read('mock.geojson')",
+      release: async () => {},
+    }),
+    query: async (sql: string) => {
+      queries.push(sql);
+      return [
+        {
+          h3: "8928308280fffff",
+          count: 1,
+          geojson:
+            '{"type":"Polygon","coordinates":[[[0,0],[1,0],[1,1],[0,0]]]}',
+        },
+      ];
+    },
+  };
+}
+
+function baseCtx(
+  layers: GeoLibreLayer[],
+  parameters: Record<string, unknown>,
+): { ctx: ProcessingContext; logs: string[]; added: string[] } {
+  const logs: string[] = [];
+  const added: string[] = [];
+  const ctx: ProcessingContext = {
+    layers,
+    parameters,
+    log: (m) => logs.push(m),
+    addResultLayer: (name) => added.push(name),
+    duckdb: mockDuckDb(),
+    viewportBounds: () => [0, 0, 1, 1],
+  };
+  return { ctx, logs, added };
+}
+
+describe("h3 tools", () => {
+  it("registers both tools under getH3Tool", () => {
+    assert.equal(getH3Tool("h3-grid"), createH3GridTool);
+    assert.equal(getH3Tool("h3-bin-points"), binPointsTool);
+    assert.equal(getH3Tool("missing"), undefined);
+  });
+
+  it("throws a clear error when duckdb is unavailable", async () => {
+    await assert.rejects(
+      () =>
+        Promise.resolve(
+          createH3GridTool.run({
+            layers: [],
+            parameters: { source: "viewport" },
+            log: () => {},
+          }),
+        ),
+      /requires DuckDB/,
+    );
+  });
+
+  it("creates a grid from the map viewport", async () => {
+    const { ctx, added } = baseCtx([], { source: "viewport", resolution: 5 });
+    await createH3GridTool.run(ctx);
+    assert.equal(added.length, 1);
+    assert.match(added[0], /res 5/);
+  });
+
+  it("auto-suggests a resolution when none is given", async () => {
+    const { ctx, logs } = baseCtx([], { source: "viewport" });
+    await createH3GridTool.run(ctx);
+    assert.ok(logs.some((l) => /suggested resolution/i.test(l)));
+  });
+
+  it("aborts when the requested resolution exceeds the hard cap", async () => {
+    const { ctx, added, logs } = baseCtx([polygonLayer()], {
+      source: "extent",
+      layer: "poly",
+      resolution: 15,
+    });
+    await createH3GridTool.run(ctx);
+    assert.equal(added.length, 0);
+    assert.ok(logs.some((l) => /cap/i.test(l)));
+  });
+
+  it("polyfills a selected polygon layer", async () => {
+    const { ctx, added } = baseCtx([polygonLayer()], {
+      source: "polyfill",
+      layer: "poly",
+      resolution: 6,
+    });
+    await createH3GridTool.run(ctx);
+    assert.equal(added.length, 1);
+  });
+
+  it("bins points and requires a field for non-count aggregates", async () => {
+    const missing = baseCtx([pointLayer()], {
+      layer: "pts",
+      aggOp: "sum",
+      resolution: 7,
+    });
+    await binPointsTool.run(missing.ctx);
+    assert.equal(missing.added.length, 0);
+    assert.ok(missing.logs.some((l) => /field/i.test(l)));
+
+    const ok = baseCtx([pointLayer()], {
+      layer: "pts",
+      aggOp: "count",
+      resolution: 7,
+    });
+    await binPointsTool.run(ok.ctx);
+    assert.equal(ok.added.length, 1);
   });
 });
 

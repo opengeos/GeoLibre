@@ -52,6 +52,24 @@ export interface AlgorithmParameter {
   fileFilters?: { name: string; extensions: string[] }[];
 }
 
+/** A GeoJSON FeatureCollection registered as a queryable DuckDB source. */
+export interface DuckDbGeoJsonSource {
+  /** FROM-able SQL expression; its geometry column is named `geom`. */
+  sql: string;
+  /** Drop the registered source. Safe to call once. */
+  release: () => Promise<void>;
+}
+
+/** Minimal DuckDB-WASM surface a processing tool needs. Injected by the host. */
+export interface DuckDbCapability {
+  /** Install + load the named extensions (e.g. `["spatial", "h3"]`). */
+  ensureExtensions: (names: string[]) => Promise<void>;
+  /** Register a FeatureCollection and return a SQL source handle. */
+  registerGeoJson: (geojson: FeatureCollection) => Promise<DuckDbGeoJsonSource>;
+  /** Run a query and return plain rows. */
+  query: (sql: string) => Promise<Record<string, unknown>[]>;
+}
+
 export interface ProcessingContext {
   layers: GeoLibreLayer[];
   parameters: Record<string, unknown>;
@@ -59,6 +77,10 @@ export interface ProcessingContext {
   fitBounds?: (bounds: [number, number, number, number]) => void;
   /** Add an algorithm result back to the map as a new GeoJSON layer. */
   addResultLayer?: (name: string, geojson: FeatureCollection) => void;
+  /** DuckDB-WASM capability, when the host provides it (browser/desktop). */
+  duckdb?: DuckDbCapability;
+  /** Current map viewport as [west, south, east, north], when available. */
+  viewportBounds?: () => [number, number, number, number] | null;
 }
 
 export interface ProcessingAlgorithm {
