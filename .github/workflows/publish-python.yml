@@ -28,7 +28,7 @@ jobs:
       matrix:
         # Cover the declared minimum (requires-python >= 3.10) and a current
         # release so 3.11/3.12-only syntax can't slip in unnoticed.
-        python-version: ["3.10", "3.12"]
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
