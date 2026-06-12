@@ -27,7 +27,7 @@ On the right side of the toolbar are the light/dark theme toggle and the editabl
 
 Every menu and toolbar action is also reachable from the keyboard, so you don't have to hunt through nested menus.
 
-- **Command palette** — press `Ctrl`/`Cmd` + `K` (or **Help → Command Palette**) to open a searchable list of every action: Add Data sources, Processing tools, Controls, Help, and more. Type to filter, move the highlight with the arrow keys, and press `Enter` to run the highlighted command.
+- **Command palette** — press `Ctrl`/`Cmd` + `K` (or **Help → Command Palette**) to open a searchable list of actions: Add Data sources, Processing tools, Controls, Plugins, and more. Type to filter, move the highlight with the arrow keys, and press `Enter` to run the highlighted command.
 - **Keyboard shortcuts cheat sheet** — press `?` (or **Help → Keyboard Shortcuts**) to see the full list of global shortcuts.
 
 The built-in global shortcuts are:

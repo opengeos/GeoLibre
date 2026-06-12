@@ -34,11 +34,14 @@ export function CommandPalette({
   const [activeIndex, setActiveIndex] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
   const isMac = useMemo(() => isMacPlatform(), []);
+  const listboxId = "command-palette-listbox";
+  const optionId = (command: Command) => `command-option-${command.id}`;
 
   const filtered = useMemo(
     () => filterCommands(commands, query),
     [commands, query],
   );
+  const activeCommand = filtered[activeIndex];
 
   // Reset the query each time the palette opens so it always starts fresh.
   useEffect(() => {
@@ -106,7 +109,13 @@ export function CommandPalette({
           <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
           <input
             autoFocus
+            role="combobox"
             aria-label="Search commands"
+            aria-expanded={true}
+            aria-controls={listboxId}
+            aria-activedescendant={
+              activeCommand ? optionId(activeCommand) : undefined
+            }
             className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             placeholder="Search commands…"
             value={query}
@@ -119,6 +128,7 @@ export function CommandPalette({
         </div>
         <div
           ref={listRef}
+          id={listboxId}
           className="max-h-[min(60vh,24rem)] overflow-y-auto p-1"
           role="listbox"
           aria-label="Commands"
@@ -142,6 +152,7 @@ export function CommandPalette({
                   ) : null}
                   <button
                     type="button"
+                    id={optionId(command)}
                     role="option"
                     aria-selected={isActive}
                     data-active={isActive}

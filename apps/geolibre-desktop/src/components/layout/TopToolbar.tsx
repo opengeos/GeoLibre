@@ -914,7 +914,7 @@ export function TopToolbar({
       group: "Project",
       keywords: "create",
       icon: FilePlus2,
-      shortcut: { key: "n", mod: true },
+      shortcut: { key: "n", mod: true, shift: false },
       run: () => setNewProjectDialogOpen(true),
     },
     {
@@ -923,7 +923,7 @@ export function TopToolbar({
       group: "Project",
       keywords: "load",
       icon: FolderOpen,
-      shortcut: { key: "o", mod: true },
+      shortcut: { key: "o", mod: true, shift: false },
       run: () => void handleOpenFromFile(),
     },
     {
@@ -1216,6 +1216,31 @@ export function TopToolbar({
       group: "Help",
       icon: Info,
       run: () => setAboutOpen(true),
+    },
+    // Plugins — one toggle per registered plugin. Atmosphere Effects,
+    // Directions, and the deck.gl viz renderer are excluded here because they
+    // are surfaced under Controls / Add Data instead (matching the menus).
+    ...plugins
+      .filter(
+        (plugin) =>
+          plugin.id !== EFFECTS_PLUGIN_ID &&
+          plugin.id !== DIRECTIONS_PLUGIN_ID &&
+          plugin.id !== DECK_VIZ_PLUGIN_ID,
+      )
+      .map((plugin) => ({
+        id: `plugin.${plugin.id}`,
+        title: `Toggle ${plugin.name}`,
+        group: "Plugins",
+        keywords: isActive(plugin.id) ? "plugin deactivate" : "plugin activate",
+        run: () => toggle(plugin.id, appApi),
+      })),
+    // Settings
+    {
+      id: "settings.manage-plugins",
+      title: "Manage Plugins",
+      group: "Settings",
+      keywords: "install external plugin marketplace",
+      run: () => setManagePluginsOpen(true),
     },
   ];
 

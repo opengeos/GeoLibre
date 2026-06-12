@@ -22,6 +22,7 @@ interface KeyboardShortcutsDialogProps {
 }
 
 interface ShortcutRow {
+  id: string;
   label: string;
   shortcut: Shortcut;
 }
@@ -53,10 +54,12 @@ export function KeyboardShortcutsDialog({
     // The palette and cheat-sheet shortcuts are not commands, so list them
     // first under a "General" group.
     pushRow("General", {
+      id: "general.open-command-palette",
       label: "Open command palette",
       shortcut: PALETTE_SHORTCUT,
     });
     pushRow("General", {
+      id: "general.show-keyboard-shortcuts",
       label: "Show keyboard shortcuts",
       shortcut: SHORTCUTS_HELP_SHORTCUT,
     });
@@ -64,6 +67,7 @@ export function KeyboardShortcutsDialog({
     for (const command of commands) {
       if (command.shortcut) {
         pushRow(command.group, {
+          id: command.id,
           label: command.title,
           shortcut: command.shortcut,
         });
@@ -91,7 +95,7 @@ export function KeyboardShortcutsDialog({
               <ul className="space-y-1">
                 {rows.map((row) => (
                   <li
-                    key={row.label}
+                    key={row.id}
                     className="flex items-center justify-between gap-4 text-sm"
                   >
                     <span className="min-w-0 truncate">{row.label}</span>

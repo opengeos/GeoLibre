@@ -88,6 +88,14 @@ export function matchesShortcut(
   // macOS should not fire ⌘S).
   if (otherModPressed) return false;
 
+  // `alt` and `shift` default differently on purpose:
+  //   - alt: omitted means *forbidden*. Alt is never part of an app shortcut,
+  //     and on some keyboard layouts Alt+key produces a character, so a held
+  //     Alt must not accidentally satisfy a match.
+  //   - shift: omitted means *ignored*. Shifted symbol keys such as "?" carry
+  //     Shift in the event, so requiring its absence would break them.
+  // For letter shortcuts that have a distinct shifted variant (e.g. Save vs
+  // Save As), set `shift` explicitly on both so they stay unambiguous.
   if (Boolean(shortcut.alt) !== event.altKey) return false;
   if (shortcut.shift !== undefined && shortcut.shift !== event.shiftKey) {
     return false;
