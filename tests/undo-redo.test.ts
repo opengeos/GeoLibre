@@ -1,0 +1,251 @@
+import assert from "node:assert/strict";
+import { beforeEach, describe, it } from "node:test";
+import {
+  getHistoryCoalesceMs,
+  leadingDebounce,
+  setHistoryCoalesceMs,
+} from "../packages/core/src/history";
+import { clearHistory, redo, undo, useAppStore } from "../packages/core/src/store";
+import { createEmptyProject } from "../packages/core/src/project";
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+describe("leadingDebounce", () => {
+  it("passes every call through when the wait is <= 0", () => {
+    const calls: number[] = [];
+    const fn = leadingDebounce(
+      (n: number) => calls.push(n),
+      () => 0
+    );
+    fn(1);
+    fn(2);
+    fn(3);
+    assert.deepEqual(calls, [1, 2, 3]);
+  });
+
+  it("fires on the leading edge and suppresses the rest of a burst", async () => {
+    const calls: number[] = [];
+    const fn = leadingDebounce(
+      (n: number) => calls.push(n),
+      () => 20
+    );
+    fn(1); // leading edge -> fires
+    fn(2); // within window -> suppressed
+    fn(3); // within window -> suppressed
+    assert.deepEqual(calls, [1]);
+    // Wait well past the 20 ms window so the timer has cleared even on a loaded
+    // CI runner (wide margin avoids flakiness from late setTimeout firing).
+    await sleep(150); // quiet period elapses
+    fn(4); // new burst -> fires
+    assert.deepEqual(calls, [1, 4]);
+  });
+
+  it("cancel() resets the window so the next call fires immediately", () => {
+    const calls: number[] = [];
+    const fn = leadingDebounce(
+      (n: number) => calls.push(n),
+      () => 1000
+    );
+    fn(1); // leading edge -> fires
+    fn(2); // within window -> suppressed
+    assert.deepEqual(calls, [1]);
+    fn.cancel(); // clear the active window
+    fn(3); // window reset -> fires again
+    assert.deepEqual(calls, [1, 3]);
+  });
+});
+
+describe("history coalesce config", () => {
+  it("round-trips the coalesce window", () => {
+    const original = getHistoryCoalesceMs();
+    setHistoryCoalesceMs(0);
+    assert.equal(getHistoryCoalesceMs(), 0);
+    setHistoryCoalesceMs(250);
+    assert.equal(getHistoryCoalesceMs(), 250);
+    setHistoryCoalesceMs(original);
+  });
+});
+
+const emptyFC = { type: "FeatureCollection" as const, features: [] };
+
+function pastLen(): number {
+  return useAppStore.temporal.getState().pastStates.length;
+}
+
+describe("store history tracking", () => {
+  beforeEach(() => {
+    setHistoryCoalesceMs(0);
+    useAppStore.getState().newProject({ name: "reset" });
+    useAppStore.temporal.getState().clear();
+  });
+
+  it("records tracked changes and ignores transient changes", () => {
+    setHistoryCoalesceMs(0);
+    useAppStore.getState().newProject({ name: "T" });
+    assert.equal(pastLen(), 0);
+
+    // Tracked change: adding a layer.
+    useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    assert.equal(pastLen(), 1);
+
+    // Tracked change: basemap opacity.
+    useAppStore.getState().setBasemapOpacity(0.5);
+    assert.equal(pastLen(), 2);
+
+    // Transient changes must NOT create history entries.
+    const before = pastLen();
+    const id = useAppStore.getState().layers[0].id;
+    useAppStore.getState().selectLayer(id);
+    useAppStore.getState().setAttributeTableOpen(true);
+    useAppStore.getState().setMapView({ zoom: 7 });
+    useAppStore.getState().setPointerCoords([1, 2]);
+    useAppStore.getState().setAttributeFilter("abc");
+    assert.equal(pastLen(), before);
+  });
+});
+
+function futureLen(): number {
+  return useAppStore.temporal.getState().futureStates.length;
+}
+
+describe("undo/redo behavior", () => {
+  beforeEach(() => {
+    setHistoryCoalesceMs(0);
+    useAppStore.getState().newProject({ name: "reset" });
+  });
+
+  it("restores a removed layer with its style and stack position", () => {
+    const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    useAppStore.getState().addGeoJsonLayer("B", emptyFC);
+    useAppStore.getState().setLayerStyle(a, { fillColor: "#abcdef" });
+    useAppStore.getState().removeLayer(a);
+    assert.equal(
+      useAppStore.getState().layers.find((l) => l.id === a),
+      undefined,
+    );
+
+    undo(); // reverts the remove
+    const restored = useAppStore.getState().layers;
+    assert.equal(restored[0].id, a); // original index 0
+    assert.equal(restored[0].style.fillColor, "#abcdef"); // style preserved
+
+    redo(); // re-removes it
+    assert.equal(
+      useAppStore.getState().layers.find((l) => l.id === a),
+      undefined,
+    );
+  });
+
+  it("undoes and redoes a style edit", () => {
+    const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    useAppStore.getState().setLayerStyle(a, { fillColor: "#abcdef" });
+
+    undo();
+    assert.equal(useAppStore.getState().layers[0].style.fillColor, "#3b82f6");
+    redo();
+    assert.equal(useAppStore.getState().layers[0].style.fillColor, "#abcdef");
+  });
+
+  it("undoes a reorder", () => {
+    const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    const b = useAppStore.getState().addGeoJsonLayer("B", emptyFC);
+    useAppStore.getState().moveLayer(a, 1); // [B, A]
+    assert.deepEqual(
+      useAppStore.getState().layers.map((l) => l.id),
+      [b, a],
+    );
+    undo();
+    assert.deepEqual(
+      useAppStore.getState().layers.map((l) => l.id),
+      [a, b],
+    );
+  });
+
+  it("undoes a basemap change", () => {
+    useAppStore.getState().setBasemapOpacity(0.4);
+    assert.equal(useAppStore.getState().basemapOpacity, 0.4);
+    undo();
+    assert.equal(useAppStore.getState().basemapOpacity, 1);
+  });
+
+  it("marks the project dirty on undo and redo", () => {
+    useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    useAppStore.getState().markSaved();
+    assert.equal(useAppStore.getState().isDirty, false);
+    undo();
+    assert.equal(useAppStore.getState().isDirty, true);
+    useAppStore.getState().markSaved();
+    redo();
+    assert.equal(useAppStore.getState().isDirty, true);
+  });
+
+  it("clears history when a new project is created", () => {
+    useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    assert.ok(pastLen() > 0);
+    useAppStore.getState().newProject({ name: "U" });
+    assert.equal(pastLen(), 0);
+    assert.equal(futureLen(), 0);
+  });
+
+  it("clearHistory empties both stacks", () => {
+    useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    assert.ok(pastLen() > 0);
+    clearHistory();
+    assert.equal(pastLen(), 0);
+    assert.equal(futureLen(), 0);
+  });
+
+  it("clears the redo stack when a new action follows an undo", () => {
+    useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    useAppStore.getState().addGeoJsonLayer("B", emptyFC);
+    undo(); // removes B -> futureStates has 1
+    assert.equal(futureLen(), 1);
+    useAppStore.getState().addGeoJsonLayer("C", emptyFC); // new branch
+    assert.equal(futureLen(), 0); // redo stack discarded
+  });
+
+  it("undo/redo are no-ops on an empty stack and leave isDirty unchanged", () => {
+    useAppStore.getState().markSaved();
+    assert.equal(pastLen(), 0);
+    undo(); // nothing to undo
+    assert.equal(useAppStore.getState().isDirty, false);
+    redo(); // nothing to redo
+    assert.equal(useAppStore.getState().isDirty, false);
+  });
+
+  it("drops a selectedLayerId that no longer exists after undo", () => {
+    const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    assert.equal(useAppStore.getState().selectedLayerId, a); // add selects it
+    undo(); // removes A; selection would otherwise dangle
+    assert.equal(useAppStore.getState().selectedLayerId, null);
+  });
+
+  it("resets the coalesce window when history is cleared mid-burst", () => {
+    setHistoryCoalesceMs(50); // non-zero so a burst window is active
+    useAppStore.getState().addGeoJsonLayer("A", emptyFC); // opens the window
+    assert.equal(pastLen(), 1);
+    clearHistory(); // must cancel the active window
+    useAppStore.getState().addGeoJsonLayer("B", emptyFC); // would be suppressed
+    assert.equal(pastLen(), 1); // records despite being within the window
+    setHistoryCoalesceMs(0);
+  });
+
+  it("cancels an in-flight coalesce window on undo so the next edit records", () => {
+    setHistoryCoalesceMs(50); // non-zero so a burst window is active
+    useAppStore.getState().addGeoJsonLayer("A", emptyFC); // opens the window
+    assert.equal(pastLen(), 1);
+    undo(); // must cancel the active window while stepping back
+    assert.equal(pastLen(), 0);
+    useAppStore.getState().addGeoJsonLayer("B", emptyFC); // would be suppressed
+    assert.equal(pastLen(), 1); // records despite being within the window
+    setHistoryCoalesceMs(0);
+  });
+
+  it("clears history when a project is loaded", () => {
+    useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    assert.ok(pastLen() > 0);
+    useAppStore.getState().loadProject(createEmptyProject("loaded"));
+    assert.equal(pastLen(), 0);
+    assert.equal(futureLen(), 0);
+  });
+});

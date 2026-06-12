@@ -2,7 +2,9 @@ import {
   DEFAULT_PROJECT_NAME,
   projectFromStore,
   projectPathLabel,
+  redo,
   serializeProject,
+  undo,
   useAppStore,
 } from "@geolibre/core";
 import type {
@@ -119,16 +121,20 @@ import {
   Map,
   MessageSquare,
   Moon,
+  Pencil,
   Printer,
   Puzzle,
+  Redo2,
   RefreshCw,
   Save,
   Search,
   SlidersHorizontal,
   Sun,
+  Undo2,
   Wrench,
   X,
 } from "lucide-react";
+import { useStore } from "zustand";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { type FormEvent, useRef, useState, useSyncExternalStore } from "react";
 import {
@@ -343,6 +349,14 @@ export function TopToolbar({
   const forgetRecentProject = useAppStore((s) => s.forgetRecentProject);
   const clearRecentProjects = useAppStore((s) => s.clearRecentProjects);
   const markSaved = useAppStore((s) => s.markSaved);
+  const canUndo = useStore(
+    useAppStore.temporal,
+    (s) => s.pastStates.length > 0,
+  );
+  const canRedo = useStore(
+    useAppStore.temporal,
+    (s) => s.futureStates.length > 0,
+  );
   const [controlsVisible, setControlsVisible] = useState<
     Record<ToolbarMapControl, boolean>
   >(() =>
@@ -1252,6 +1266,14 @@ export function TopToolbar({
 
   const toolbarButtonSize = compact ? "icon" : "sm";
   const toolbarButtonClass = compact ? "h-8 w-8 shrink-0" : "shrink-0";
+  // Class for "secondary" toolbar menus that may be hidden on narrow screens to
+  // reduce toolbar wrapping. The menu stays reachable other ways (e.g. Edit's
+  // actions also have keyboard shortcuts). To make a future menu hideable, give
+  // its trigger Button this class instead of `toolbarButtonClass`.
+  const toolbarSecondaryButtonClass = cn(
+    toolbarButtonClass,
+    "hidden md:inline-flex",
+  );
   const toolbarIconClassName = cn("h-3.5 w-3.5", showLabels && "sm:mr-1");
   const appTitle = isTauri() ? "GeoLibre Desktop" : "GeoLibre";
   const renderToolbarLabel = (label: string) =>
@@ -1390,6 +1412,37 @@ export function TopToolbar({
             <Printer className="mr-2 h-3.5 w-3.5" />
             Print...
             {printPanelVisible ? " ✓" : ""}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            className={toolbarSecondaryButtonClass}
+            variant="ghost"
+            size={toolbarButtonSize}
+            aria-label="Edit"
+          >
+            <Pencil className={toolbarIconClassName} />
+            {renderToolbarLabel("Edit")}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-56">
+          <DropdownMenuLabel>Edit</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem disabled={!canUndo} onSelect={undo}>
+            <Undo2 className="mr-2 h-3.5 w-3.5" />
+            Undo
+            <span className="ml-auto text-xs text-muted-foreground">
+              Ctrl/Cmd+Z
+            </span>
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!canRedo} onSelect={redo}>
+            <Redo2 className="mr-2 h-3.5 w-3.5" />
+            Redo
+            <span className="ml-auto text-xs text-muted-foreground">
+              Ctrl/Cmd+Shift+Z / Ctrl+Y
+            </span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
