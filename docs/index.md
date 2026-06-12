@@ -39,7 +39,7 @@ Pan, zoom, rotate, and tilt a MapLibre map with OpenFreeMap basemaps or a blank 
 <div class="feature-card" markdown>
 ### Local and remote data
 
-Load local and remote vector and raster data, inspect and manage attributes in the table (rename, hide, reorder, and delete fields, plus export), style layers with single, categorized, graduated, and expression symbology, reorder, rename, and refresh layers, and save, reopen, or share `.geolibre.json` projects.
+Load local and remote vector and raster data, inspect and manage attributes in the table (rename, hide, reorder, and delete fields, plus export), style layers with single, categorized, graduated, and expression symbology (plus point heatmap and clustering renderers), reorder, rename, and refresh layers, and save, reopen, or share `.geolibre.json` projects.
 </div>
 
 <div class="feature-card" markdown>

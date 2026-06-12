@@ -16,6 +16,18 @@ For vector layers the Style panel covers fill, stroke, points, labels, and 3D ex
 
 You can also set a per-style minimum and maximum zoom so a style only applies within a zoom range.
 
+### Point renderer (heatmap and clustering)
+
+For point-only layers the Style panel adds a **Point renderer** control:
+
+| Renderer | Description |
+| --- | --- |
+| **Single symbol** | One circle per point (the default). |
+| **Heatmap** | A density surface colored from cold to hot. Adjust **Heatmap radius** (the kernel size in pixels) and **Heatmap intensity**. |
+| **Clustered** | Group nearby points into bubbles labeled with the count; zooming in splits them apart. Adjust the **Cluster radius** (in pixels) and the **Cluster max zoom** above which points stop clustering. Individual (unclustered) points keep the layer's circle style. |
+
+The renderer choice is saved with the project.
+
 ### Style type (data-driven styling)
 
 The **Style type** control chooses how feature values map to color:

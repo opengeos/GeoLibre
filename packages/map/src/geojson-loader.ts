@@ -73,6 +73,18 @@ export function circleLayerId(layerId: string): string {
   return `layer-${layerId}-circle`;
 }
 
+export function heatmapLayerId(layerId: string): string {
+  return `layer-${layerId}-heatmap`;
+}
+
+export function clusterLayerId(layerId: string): string {
+  return `layer-${layerId}-cluster`;
+}
+
+export function clusterCountLayerId(layerId: string): string {
+  return `layer-${layerId}-cluster-count`;
+}
+
 export function textLayerId(layerId: string): string {
   return `layer-${layerId}-text`;
 }

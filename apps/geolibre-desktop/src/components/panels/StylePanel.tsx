@@ -1,6 +1,7 @@
 import {
   DEFAULT_LAYER_STYLE,
   type LayerType,
+  type PointRenderer,
   type VectorStyleMode,
   type VectorStyleStop,
   styleValue,
@@ -127,6 +128,23 @@ function hasPolygonGeometryMetadata(value: unknown): boolean {
       typeof geometryType === "string" &&
       geometryType.toLowerCase().includes("polygon"),
   );
+}
+
+/**
+ * True when a GeoJSON layer contains only point geometry, so the heatmap and
+ * cluster renderers (which only make sense for points) can be offered.
+ */
+function isPointOnlyGeoJsonLayer(layer: {
+  type: LayerType;
+  geojson?: { features?: Array<{ geometry?: { type?: string } | null }> };
+}): boolean {
+  if (layer.type !== "geojson") return false;
+  const features = layer.geojson?.features ?? [];
+  if (features.length === 0) return false;
+  return features.every((feature) => {
+    const type = feature.geometry?.type;
+    return type === "Point" || type === "MultiPoint";
+  });
 }
 
 function getMetadataFieldNames(metadata: Record<string, unknown>): string[] {
@@ -1133,6 +1151,13 @@ export function StylePanel({
     isRasterPaintLayer(layer.type) || isRasterTileLayer || isDeckRasterLayer;
   const hasTextMarkerControls =
     layer.type === "geojson" && hasTextMarkerFeatures(layer);
+  // Heatmap/cluster are rendered by the core GeoJSON sync, so only offer them
+  // for layers it actually paints — not control-owned or deck.gl layers.
+  const supportsPointRenderer =
+    isPointOnlyGeoJsonLayer(layer) &&
+    !hasExternalNativeLayers(layer) &&
+    !hasExternalDeckLayer(layer);
+  const pointRenderer = styleValue(style, "pointRenderer");
   const extrusionEnabled = styleValue(style, "extrusionEnabled");
   const extrusionHeightPropertyOptions = getAttributePropertyNames(layer);
   const vectorStylePropertyOptions = extrusionHeightPropertyOptions;
@@ -1676,6 +1701,79 @@ export function StylePanel({
   );
   const twoDimensionalControls = (
     <>
+      {supportsPointRenderer ? (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="pointRenderer">Point renderer</Label>
+            <Select
+              id="pointRenderer"
+              value={pointRenderer}
+              onChange={(event) =>
+                setLayerStyle(layer.id, {
+                  pointRenderer: event.target.value as PointRenderer,
+                })
+              }
+            >
+              <option value="single">Single symbol</option>
+              <option value="heatmap">Heatmap</option>
+              <option value="cluster">Clustered</option>
+            </Select>
+          </div>
+          {pointRenderer === "heatmap" ? (
+            <>
+              <NumericStyleInput
+                id="heatmapRadius"
+                label="Heatmap radius"
+                min={1}
+                max={100}
+                step={1}
+                value={styleValue(style, "heatmapRadius")}
+                onChange={(heatmapRadius) =>
+                  setLayerStyle(layer.id, { heatmapRadius })
+                }
+              />
+              <NumericStyleInput
+                id="heatmapIntensity"
+                label="Heatmap intensity"
+                min={0.1}
+                max={5}
+                step={0.1}
+                value={styleValue(style, "heatmapIntensity")}
+                onChange={(heatmapIntensity) =>
+                  setLayerStyle(layer.id, { heatmapIntensity })
+                }
+              />
+            </>
+          ) : null}
+          {pointRenderer === "cluster" ? (
+            <>
+              <NumericStyleInput
+                id="clusterRadius"
+                label="Cluster radius (px)"
+                min={10}
+                max={200}
+                step={5}
+                value={styleValue(style, "clusterRadius")}
+                onChange={(clusterRadius) =>
+                  setLayerStyle(layer.id, { clusterRadius })
+                }
+              />
+              <NumericStyleInput
+                id="clusterMaxZoom"
+                label="Cluster max zoom"
+                min={0}
+                max={24}
+                step={1}
+                value={styleValue(style, "clusterMaxZoom")}
+                onChange={(clusterMaxZoom) =>
+                  setLayerStyle(layer.id, { clusterMaxZoom })
+                }
+              />
+            </>
+          ) : null}
+          <Separator />
+        </>
+      ) : null}
       {draftVectorStyleMode === "single" ? (
         <div className="space-y-2">
           <Label htmlFor="fillColor">Fill color</Label>

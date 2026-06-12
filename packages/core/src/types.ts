@@ -66,6 +66,12 @@ export type VectorStyleMode =
   | "categorized"
   | "expression";
 
+/**
+ * How a point layer is rendered: as individual markers, a density heatmap, or
+ * clustered bubbles. Only applies to point geometry.
+ */
+export type PointRenderer = "single" | "heatmap" | "cluster";
+
 export interface VectorStyleStop {
   value: string | number;
   color: string;
@@ -100,6 +106,11 @@ export interface LayerStyle {
   vectorStyleClassificationScheme: string;
   vectorStyleStops: VectorStyleStop[];
   vectorStyleExpression: string;
+  pointRenderer: PointRenderer;
+  heatmapRadius: number;
+  heatmapIntensity: number;
+  clusterRadius: number;
+  clusterMaxZoom: number;
   rasterBrightnessMin: number;
   rasterBrightnessMax: number;
   rasterSaturation: number;
@@ -138,6 +149,11 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
     { value: 1, color: "#2563eb" },
   ],
   vectorStyleExpression: "",
+  pointRenderer: "single",
+  heatmapRadius: 30,
+  heatmapIntensity: 1,
+  clusterRadius: 50,
+  clusterMaxZoom: 14,
   rasterBrightnessMin: 0,
   rasterBrightnessMax: 1,
   rasterSaturation: 0,

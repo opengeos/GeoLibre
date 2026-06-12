@@ -7,7 +7,10 @@ import {
   vectorLineColorValue,
   type LayerStyle,
 } from "@geolibre/core";
-import type { PropertyValueSpecification } from "maplibre-gl";
+import type {
+  ExpressionSpecification,
+  PropertyValueSpecification,
+} from "maplibre-gl";
 
 function styleValue<K extends keyof LayerStyle>(
   style: LayerStyle,
@@ -87,6 +90,53 @@ export function circlePaint(style: LayerStyle, opacity: number) {
       style,
     ) as PropertyValueSpecification<string>,
     "circle-radius": styleValue(style, "circleRadius"),
+    "circle-opacity": styleValue(style, "fillOpacity") * opacity,
+    "circle-stroke-color": styleValue(style, "strokeColor"),
+    "circle-stroke-width": styleValue(style, "strokeWidth"),
+  };
+}
+
+// A perceptually-ordered cold→hot ramp over MapLibre's heatmap-density (0..1).
+const HEATMAP_COLOR_RAMP = [
+  "interpolate",
+  ["linear"],
+  ["heatmap-density"],
+  0,
+  "rgba(33,102,172,0)",
+  0.2,
+  "rgb(103,169,207)",
+  0.4,
+  "rgb(209,229,240)",
+  0.6,
+  "rgb(253,219,199)",
+  0.8,
+  "rgb(239,138,98)",
+  1,
+  "rgb(178,24,43)",
+];
+
+export function heatmapPaint(style: LayerStyle, opacity: number) {
+  return {
+    "heatmap-radius": styleValue(style, "heatmapRadius"),
+    "heatmap-intensity": styleValue(style, "heatmapIntensity"),
+    "heatmap-opacity": opacity,
+    "heatmap-color": HEATMAP_COLOR_RAMP as unknown as ExpressionSpecification,
+  };
+}
+
+export function clusterCirclePaint(style: LayerStyle, opacity: number) {
+  return {
+    // Cluster bubbles take the layer's fill color; size steps up with the count.
+    "circle-color": styleValue(style, "fillColor"),
+    "circle-radius": [
+      "step",
+      ["get", "point_count"],
+      16,
+      50,
+      22,
+      200,
+      30,
+    ] as PropertyValueSpecification<number>,
     "circle-opacity": styleValue(style, "fillOpacity") * opacity,
     "circle-stroke-color": styleValue(style, "strokeColor"),
     "circle-stroke-width": styleValue(style, "strokeWidth"),

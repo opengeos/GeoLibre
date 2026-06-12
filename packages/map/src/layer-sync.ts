@@ -9,9 +9,12 @@ import type maplibregl from "maplibre-gl";
 import { PMTiles, Protocol } from "pmtiles";
 import {
   circleLayerId,
+  clusterCountLayerId,
+  clusterLayerId,
   detectGeometryProfile,
   fillExtrusionLayerId,
   fillLayerId,
+  heatmapLayerId,
   lineLayerId,
   sourceId,
   textLayerId,
@@ -19,8 +22,10 @@ import {
 import { isPlaceholderLayer } from "./placeholders";
 import {
   circlePaint,
+  clusterCirclePaint,
   fillExtrusionPaint,
   fillPaint,
+  heatmapPaint,
   linePaint,
   rasterPaint,
 } from "./style-mapper";
@@ -948,11 +953,43 @@ function syncGeoJsonLayer(
   const src = sourceId(layer.id);
   const profile = detectGeometryProfile(layer.geojson!);
 
+  // The heatmap and cluster renderers only make sense for point geometry, so
+  // ignore the setting on layers that also carry lines/polygons.
+  const pointOnly =
+    profile.hasPoint && !profile.hasLine && !profile.hasPolygon;
+  const renderer = pointOnly ? styleValue(layer.style, "pointRenderer") : "single";
+  const clusterRadius = styleValue(layer.style, "clusterRadius");
+  const clusterMaxZoom = styleValue(layer.style, "clusterMaxZoom");
+  const wantCluster = renderer === "cluster";
+
+  // Clustering is a source-level option, so toggling it (or changing its params)
+  // means recreating the source — which first requires dropping every layer that
+  // references it. MapLibre forbids removing a source still in use.
+  const existingCluster = geojsonSourceClusterState(map, src);
+  const needsSourceRecreate =
+    existingCluster !== null &&
+    (existingCluster.cluster !== wantCluster ||
+      (wantCluster &&
+        (existingCluster.radius !== clusterRadius ||
+          existingCluster.maxZoom !== clusterMaxZoom)));
+  if (needsSourceRecreate) {
+    removeGeoJsonRenderLayers(map, layer.id);
+    map.removeSource(src);
+  }
+
   if (!map.getSource(src)) {
-    map.addSource(src, {
-      type: "geojson",
-      data: layer.geojson!,
-    });
+    map.addSource(
+      src,
+      wantCluster
+        ? {
+            type: "geojson",
+            data: layer.geojson!,
+            cluster: true,
+            clusterRadius,
+            clusterMaxZoom,
+          }
+        : { type: "geojson", data: layer.geojson! },
+    );
   } else {
     (map.getSource(src) as maplibregl.GeoJSONSource).setData(layer.geojson!);
   }
@@ -1040,7 +1077,90 @@ function syncGeoJsonLayer(
     removeIfExists(map, lineLayerId(layer.id));
   }
 
-  if (!layer.style.extrusionEnabled && profile.hasPoint) {
+  if (!layer.style.extrusionEnabled && profile.hasPoint && renderer === "heatmap") {
+    // Heatmap renderer: one density layer, no circle/cluster layers.
+    removeIfExists(map, circleLayerId(layer.id));
+    removeIfExists(map, clusterLayerId(layer.id));
+    removeIfExists(map, clusterCountLayerId(layer.id));
+    ensureLayer(
+      map,
+      heatmapLayerId(layer.id),
+      {
+        id: heatmapLayerId(layer.id),
+        type: "heatmap",
+        source: src,
+        ...styleLayerZoomRange(layer.style),
+        filter: pointGeometryFilter,
+        paint: heatmapPaint(layer.style, opacity),
+        layout: { visibility },
+      },
+      beforeId,
+    );
+  } else if (
+    !layer.style.extrusionEnabled &&
+    profile.hasPoint &&
+    renderer === "cluster"
+  ) {
+    // Cluster renderer: a bubble + count for aggregated clusters, plus a circle
+    // for the individual (unclustered) points. The source carries cluster: true.
+    removeIfExists(map, heatmapLayerId(layer.id));
+    ensureLayer(
+      map,
+      clusterLayerId(layer.id),
+      {
+        id: clusterLayerId(layer.id),
+        type: "circle",
+        source: src,
+        ...styleLayerZoomRange(layer.style),
+        filter: ["has", "point_count"],
+        paint: clusterCirclePaint(layer.style, opacity),
+        layout: { visibility },
+      },
+      beforeId,
+    );
+    ensureLayer(
+      map,
+      clusterCountLayerId(layer.id),
+      {
+        id: clusterCountLayerId(layer.id),
+        type: "symbol",
+        source: src,
+        ...styleLayerZoomRange(layer.style),
+        filter: ["has", "point_count"],
+        layout: {
+          "text-field": ["get", "point_count_abbreviated"],
+          "text-font": textFontForMapStyle(map),
+          "text-size": 12,
+          "text-allow-overlap": true,
+          "text-ignore-placement": true,
+          visibility,
+        },
+        paint: {
+          "text-color": styleValue(layer.style, "textColor"),
+          "text-opacity": opacity,
+        },
+      },
+      beforeId,
+    );
+    ensureLayer(
+      map,
+      circleLayerId(layer.id),
+      {
+        id: circleLayerId(layer.id),
+        type: "circle",
+        source: src,
+        ...styleLayerZoomRange(layer.style),
+        filter: ["!", ["has", "point_count"]],
+        paint: circlePaint(layer.style, opacity),
+        layout: { visibility },
+      },
+      beforeId,
+    );
+  } else if (!layer.style.extrusionEnabled && profile.hasPoint) {
+    // Single (default) renderer: one circle per point.
+    removeIfExists(map, heatmapLayerId(layer.id));
+    removeIfExists(map, clusterLayerId(layer.id));
+    removeIfExists(map, clusterCountLayerId(layer.id));
     ensureLayer(
       map,
       circleLayerId(layer.id),
@@ -1057,6 +1177,9 @@ function syncGeoJsonLayer(
     );
   } else {
     removeIfExists(map, circleLayerId(layer.id));
+    removeIfExists(map, heatmapLayerId(layer.id));
+    removeIfExists(map, clusterLayerId(layer.id));
+    removeIfExists(map, clusterCountLayerId(layer.id));
   }
 
   if (!layer.style.extrusionEnabled && hasTextMarkers) {
@@ -1827,6 +1950,51 @@ function removeIfExists(map: maplibregl.Map, id: string): void {
   if (map.getLayer(id)) map.removeLayer(id);
 }
 
+/**
+ * Read a GeoJSON source's clustering config from the current style, or null if
+ * the source doesn't exist yet (or isn't a GeoJSON source). Used to decide
+ * whether a cluster toggle requires recreating the source.
+ */
+function geojsonSourceClusterState(
+  map: maplibregl.Map,
+  src: string,
+): { cluster: boolean; radius: number; maxZoom: number } | null {
+  const spec = map.getStyle()?.sources?.[src];
+  if (!spec || spec.type !== "geojson") return null;
+  const clusterSpec = spec as {
+    cluster?: boolean;
+    clusterRadius?: number;
+    clusterMaxZoom?: number;
+  };
+  return {
+    cluster: Boolean(clusterSpec.cluster),
+    radius:
+      typeof clusterSpec.clusterRadius === "number"
+        ? clusterSpec.clusterRadius
+        : 50,
+    maxZoom:
+      typeof clusterSpec.clusterMaxZoom === "number"
+        ? clusterSpec.clusterMaxZoom
+        : 14,
+  };
+}
+
+/** Remove every style layer a GeoJSON layer can own (all renderer variants). */
+function removeGeoJsonRenderLayers(map: maplibregl.Map, layerId: string): void {
+  for (const id of [
+    fillLayerId(layerId),
+    fillExtrusionLayerId(layerId),
+    lineLayerId(layerId),
+    circleLayerId(layerId),
+    heatmapLayerId(layerId),
+    clusterLayerId(layerId),
+    clusterCountLayerId(layerId),
+    textLayerId(layerId),
+  ]) {
+    removeIfExists(map, id);
+  }
+}
+
 function moveLayer(map: maplibregl.Map, id: string, beforeId?: string): void {
   if (!map.getLayer(id)) return;
 
@@ -1854,6 +2022,9 @@ export function removeLayerFromMap(
     fillExtrusionLayerId(layerId),
     lineLayerId(layerId),
     circleLayerId(layerId),
+    heatmapLayerId(layerId),
+    clusterLayerId(layerId),
+    clusterCountLayerId(layerId),
     textLayerId(layerId),
     `layer-${layerId}-raster`,
     `layer-${layerId}-video`,
