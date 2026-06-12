@@ -23,7 +23,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   Input,
+  Label,
   ScrollArea,
+  Select,
   TableBody,
   TableCell,
   TableHead,
@@ -43,6 +45,7 @@ import {
   Pencil,
   PanelBottomClose,
   PanelBottomOpen,
+  Plus,
   RotateCcw,
   Save,
   TableProperties,
@@ -59,6 +62,7 @@ import {
 } from "react";
 import { isTauri } from "../../lib/tauri-io";
 import {
+  addColumn,
   deleteColumn,
   getColumnSettings,
   hiddenColumns,
@@ -68,6 +72,7 @@ import {
   renameColumn,
   visibleColumns,
   type ColumnMoveDirection,
+  type NewColumnType,
 } from "../../lib/attribute-columns";
 import {
   exportVectorLayer,
@@ -266,6 +271,11 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const [columnPendingDelete, setColumnPendingDelete] = useState<string | null>(
     null,
   );
+  // New-field creation dialog state.
+  const [addingColumn, setAddingColumn] = useState(false);
+  const [newColumnName, setNewColumnName] = useState("");
+  const [newColumnType, setNewColumnType] = useState<NewColumnType>("text");
+  const [newColumnDefault, setNewColumnDefault] = useState("");
 
   const layer = layers.find((l) => l.id === selectedLayerId);
   const hasLayer = Boolean(layer);
@@ -365,6 +375,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     setEditingColumn(null);
     setEditingColumnName("");
     setColumnPendingDelete(null);
+    setAddingColumn(false);
   }, [selectedLayerId, hasLayer, isGeometryEditing]);
 
   const filterLower = attributeFilter.toLowerCase();
@@ -711,6 +722,39 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     setColumnPendingDelete(null);
   };
 
+  const newColumnNameTrimmed = newColumnName.trim();
+  const newColumnCollides =
+    newColumnNameTrimmed !== "" &&
+    discoveredColumns.includes(newColumnNameTrimmed);
+  const canSubmitNewColumn = newColumnNameTrimmed !== "" && !newColumnCollides;
+
+  const openAddColumn = () => {
+    setNewColumnName("");
+    setNewColumnType("text");
+    setNewColumnDefault("");
+    setAddingColumn(true);
+  };
+
+  const changeNewColumnType = (type: NewColumnType) => {
+    setNewColumnType(type);
+    // Boolean fields default to false; reset the free-form default otherwise so
+    // a value typed for one type does not carry over to an incompatible one.
+    setNewColumnDefault(type === "boolean" ? "false" : "");
+  };
+
+  const confirmAddColumn = () => {
+    if (!layer || !canSubmitNewColumn) return;
+    const patch = addColumn(
+      layer,
+      discoveredColumns,
+      newColumnName,
+      newColumnType,
+      newColumnDefault,
+    );
+    if (patch) updateLayer(layer.id, patch);
+    setAddingColumn(false);
+  };
+
   const sortableHeader = (key: SortKey, label: string) => (
     <div className="relative flex h-full min-h-10 items-center">
       <button
@@ -952,6 +996,19 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           <span className="hidden sm:inline">Save</span>
         </Button>
         {canManageColumns && !isEditing ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2"
+            title="Add a new field"
+            aria-label="Add field"
+            onClick={openAddColumn}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Add field</span>
+          </Button>
+        ) : null}
+        {canManageColumns && !isEditing ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -1187,6 +1244,92 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             </Button>
             <Button variant="destructive" onClick={confirmDeleteColumn}>
               Delete field
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={addingColumn}
+        onOpenChange={(open: boolean) => setAddingColumn(open)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add field</DialogTitle>
+            <DialogDescription>
+              {`Add a new field to every feature in "${layer?.name ?? ""}".`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 py-1">
+            <div className="grid gap-1.5">
+              <Label htmlFor="new-field-name">Field name</Label>
+              <Input
+                id="new-field-name"
+                autoFocus
+                value={newColumnName}
+                placeholder="e.g. category"
+                aria-invalid={newColumnCollides || undefined}
+                onChange={(event) => setNewColumnName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && canSubmitNewColumn) {
+                    event.preventDefault();
+                    confirmAddColumn();
+                  }
+                }}
+              />
+              {newColumnCollides ? (
+                <span className="text-xs text-destructive">
+                  A field named "{newColumnNameTrimmed}" already exists.
+                </span>
+              ) : null}
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="new-field-type">Type</Label>
+              <Select
+                id="new-field-type"
+                value={newColumnType}
+                onChange={(event) =>
+                  changeNewColumnType(event.target.value as NewColumnType)
+                }
+              >
+                <option value="text">Text</option>
+                <option value="number">Number</option>
+                <option value="boolean">Boolean</option>
+              </Select>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="new-field-default">Default value</Label>
+              {newColumnType === "boolean" ? (
+                <Select
+                  id="new-field-default"
+                  value={newColumnDefault || "false"}
+                  onChange={(event) => setNewColumnDefault(event.target.value)}
+                >
+                  <option value="false">false</option>
+                  <option value="true">true</option>
+                </Select>
+              ) : (
+                <Input
+                  id="new-field-default"
+                  type={newColumnType === "number" ? "number" : "text"}
+                  value={newColumnDefault}
+                  placeholder="Leave blank for empty"
+                  onChange={(event) => setNewColumnDefault(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && canSubmitNewColumn) {
+                      event.preventDefault();
+                      confirmAddColumn();
+                    }
+                  }}
+                />
+              )}
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setAddingColumn(false)}>
+              Cancel
+            </Button>
+            <Button disabled={!canSubmitNewColumn} onClick={confirmAddColumn}>
+              Add field
             </Button>
           </div>
         </DialogContent>

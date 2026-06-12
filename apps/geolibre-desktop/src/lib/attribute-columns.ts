@@ -20,6 +20,9 @@ export interface ColumnSettings {
 
 export type ColumnMoveDirection = "left" | "right";
 
+/** Data type chosen when creating a new attribute field. */
+export type NewColumnType = "text" | "number" | "boolean";
+
 const COLUMN_SETTINGS_KEY = "columnSettings";
 
 // Style fields that hold a literal property name a destructive rename/delete
@@ -163,6 +166,39 @@ function deleteFieldInGeojson(
   };
 }
 
+function addFieldInGeojson(
+  geojson: FeatureCollection,
+  key: string,
+  value: unknown,
+): FeatureCollection {
+  return {
+    ...geojson,
+    features: geojson.features.map((feature) => ({
+      ...feature,
+      // Append the new key last so it is discovered (and thus rendered) at the
+      // end of the table. A feature with null properties gains a fresh object.
+      properties: { ...(feature.properties ?? {}), [key]: value },
+    })),
+  };
+}
+
+/**
+ * Coerce the raw default-value string into the value seeded into every feature.
+ * An empty string means "no default" → null, which mirrors how GIS tools leave
+ * a freshly added field unset. A non-null default also lets the inline cell
+ * editor infer the field's type (see parseAttributeDraft in AttributeTable).
+ */
+function defaultValueForType(type: NewColumnType, raw: string): unknown {
+  const trimmed = raw.trim();
+  if (trimmed === "") return null;
+  if (type === "number") {
+    const next = Number(trimmed);
+    return Number.isFinite(next) ? next : null;
+  }
+  if (type === "boolean") return trimmed.toLowerCase() === "true";
+  return trimmed;
+}
+
 function renameFieldInStyle(
   style: LayerStyle,
   oldKey: string,
@@ -203,6 +239,42 @@ function removeKeyFromSettings(
   return {
     hidden: settings.hidden?.filter((entry) => entry !== key),
     order: settings.order?.filter((entry) => entry !== key),
+  };
+}
+
+/**
+ * Append a key to settings.order so a new column lands at the end of an explicit
+ * ordering. When no explicit order exists, return the settings untouched and let
+ * discovery order place the (last-added) key last on its own.
+ */
+function appendKeyToOrder(
+  settings: ColumnSettings,
+  key: string,
+): ColumnSettings {
+  if (!settings.order?.length) return settings;
+  return { ...settings, order: [...settings.order, key] };
+}
+
+/**
+ * Add a new attribute field, seeding every feature with a type-appropriate
+ * default value. Returns null (no-op) when the name is empty, collides with an
+ * existing column, or when the layer has no in-store GeoJSON.
+ */
+export function addColumn(
+  layer: GeoLibreLayer,
+  discovered: string[],
+  rawName: string,
+  type: NewColumnType,
+  rawDefault: string,
+): Partial<GeoLibreLayer> | null {
+  const name = rawName.trim();
+  if (!layer.geojson || !name) return null;
+  if (discovered.includes(name)) return null; // would clobber another column
+  const value = defaultValueForType(type, rawDefault);
+  const settings = getColumnSettings(layer);
+  return {
+    geojson: addFieldInGeojson(layer.geojson, name, value),
+    metadata: metadataWithSettings(layer, appendKeyToOrder(settings, name)),
   };
 }
 

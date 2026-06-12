@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import {
+  addColumn,
   deleteColumn,
   getColumnSettings,
   hiddenColumns,
@@ -61,6 +62,69 @@ describe("column ordering and visibility", () => {
     const settings = { hidden: ["pop"] };
     assert.deepEqual(visibleColumns(DISCOVERED, settings), ["name", "area"]);
     assert.deepEqual(hiddenColumns(DISCOVERED, settings), ["pop"]);
+  });
+});
+
+describe("addColumn (destructive)", () => {
+  it("seeds a null default into every feature for an empty text default", () => {
+    const layer = makeLayer();
+    const patch = addColumn(layer, DISCOVERED, "label", "text", "");
+    assert.ok(patch);
+    const props = patch.geojson!.features.map((f) => f.properties);
+    assert.deepEqual(props[0], { name: "A", pop: 10, area: 5, label: null });
+    assert.deepEqual(props[1], { name: "B", pop: 20, area: 8, label: null });
+  });
+
+  it("appends the new key last so it is discovered at the end", () => {
+    const layer = makeLayer();
+    const patch = addColumn(layer, DISCOVERED, "label", "text", "x");
+    const keys = Object.keys(patch!.geojson!.features[0].properties ?? {});
+    assert.deepEqual(keys, ["name", "pop", "area", "label"]);
+  });
+
+  it("coerces a numeric default to a number", () => {
+    const layer = makeLayer();
+    const patch = addColumn(layer, DISCOVERED, "score", "number", "42");
+    assert.equal(patch!.geojson!.features[0].properties!.score, 42);
+  });
+
+  it("coerces a boolean default", () => {
+    const layer = makeLayer();
+    const patch = addColumn(layer, DISCOVERED, "flag", "boolean", "true");
+    assert.equal(patch!.geojson!.features[0].properties!.flag, true);
+    const off = addColumn(layer, DISCOVERED, "flag", "boolean", "false");
+    assert.equal(off!.geojson!.features[0].properties!.flag, false);
+  });
+
+  it("keeps a non-numeric default for a number field as null", () => {
+    const layer = makeLayer();
+    const patch = addColumn(layer, DISCOVERED, "score", "number", "abc");
+    assert.equal(patch!.geojson!.features[0].properties!.score, null);
+  });
+
+  it("appends the new key to an existing explicit order", () => {
+    const layer = makeLayer({
+      metadata: { columnSettings: { order: ["pop", "name", "area"] } },
+    });
+    const patch = addColumn(layer, DISCOVERED, "label", "text", "");
+    const settings = (patch?.metadata as Record<string, unknown>)
+      .columnSettings as { order: string[] };
+    assert.deepEqual(settings.order, ["pop", "name", "area", "label"]);
+  });
+
+  it("leaves order unset when none existed, relying on discovery order", () => {
+    const layer = makeLayer();
+    const patch = addColumn(layer, DISCOVERED, "label", "text", "");
+    assert.equal(
+      (patch?.metadata as Record<string, unknown>).columnSettings,
+      undefined,
+    );
+  });
+
+  it("is a no-op for empty or colliding names", () => {
+    const layer = makeLayer();
+    assert.equal(addColumn(layer, DISCOVERED, "  ", "text", ""), null);
+    assert.equal(addColumn(layer, DISCOVERED, "pop", "text", ""), null);
   });
 });
 
