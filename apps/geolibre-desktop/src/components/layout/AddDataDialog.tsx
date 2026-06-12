@@ -109,6 +109,10 @@ type GpxLayerKind = "waypoints" | "tracks" | "routes";
 type DelimitedTextMode = "url" | "file";
 type DelimitedTextDelimiter = "comma" | "tab" | "semicolon" | "pipe" | "custom";
 
+// ~10 MB; deck-viz data is stored inline in the project file, so warn (but do
+// not block) when a very large payload would bloat saved projects.
+const DECK_VIZ_SIZE_WARN_BYTES = 10 * 1024 * 1024;
+
 const KIND_LABELS: Record<AddDataKind, string> = {
   xyz: "Add XYZ Layer",
   wms: "Add WMS Layer",
@@ -792,10 +796,6 @@ export function AddDataDialog({
     setDeckVizStyle({ ...DEFAULT_DECK_VIZ_STYLE });
     setLayerName(getDeckVizLayerDef(nextKind)?.label ?? "Deck.gl Layer");
   };
-
-  // ~10 MB; deck-viz data is stored inline in the project file, so warn (but
-  // do not block) when a very large payload would bloat saved projects.
-  const DECK_VIZ_SIZE_WARN_BYTES = 10 * 1024 * 1024;
 
   const readDeckVizSource = async (): Promise<{
     sourcePath: string;

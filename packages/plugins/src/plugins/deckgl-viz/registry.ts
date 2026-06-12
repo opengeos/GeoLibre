@@ -241,6 +241,24 @@ function weightAccessor(
   return (record) => readNumber(record, key);
 }
 
+/** Min/max of all timestamp values across the mapped `timestamps` arrays. */
+function timestampBounds(ctx: DeckVizBuildContext): { min: number; max: number } {
+  const tsKey = ctx.fieldMapping.timestamps;
+  let min = Infinity;
+  let max = -Infinity;
+  for (const record of rowsOf(ctx)) {
+    const stamps = (record as Record<string | number, unknown>)[tsKey];
+    if (!Array.isArray(stamps)) continue;
+    for (const value of stamps) {
+      const num = Number(value);
+      if (!Number.isFinite(num)) continue;
+      if (num < min) min = num;
+      if (num > max) max = num;
+    }
+  }
+  return min === Infinity ? { min: 0, max: 0 } : { min, max };
+}
+
 const DEFINITIONS: DeckVizLayerDef[] = [
   // ---- Point & aggregation -------------------------------------------------
   {
@@ -695,6 +713,9 @@ const DEFINITIONS: DeckVizLayerDef[] = [
     build: (deckGL, id, ctx) => {
       const pathKey = ctx.fieldMapping.path;
       const tsKey = ctx.fieldMapping.timestamps;
+      // Normalise timestamps to start at 0 so the loop (which runs from 0)
+      // works for data whose timestamps begin far above 0.
+      const { min: minTs } = timestampBounds(ctx);
       return new deckGL.geoLayers.TripsLayer({
         id,
         data: rowsOf(ctx),
@@ -704,8 +725,12 @@ const DEFINITIONS: DeckVizLayerDef[] = [
           (record as Record<string | number, unknown>)[
             pathKey
           ] as unknown as number[],
-        getTimestamps: (record: AnyRecord) =>
-          (record as Record<string | number, unknown>)[tsKey] as number[],
+        getTimestamps: (record: AnyRecord) => {
+          const stamps = (record as Record<string | number, unknown>)[tsKey];
+          return Array.isArray(stamps)
+            ? stamps.map((value) => Number(value) - minTs)
+            : [];
+        },
         getColor: fillColor(ctx.style),
         widthMinPixels: Math.max(ctx.style.lineWidth, 1),
         rounded: true,
@@ -715,18 +740,8 @@ const DEFINITIONS: DeckVizLayerDef[] = [
       });
     },
     getTimeRange: (ctx) => {
-      const tsKey = ctx.fieldMapping.timestamps;
-      let max = 0;
-      for (const record of rowsOf(ctx)) {
-        const stamps = (record as Record<string | number, unknown>)[tsKey];
-        if (Array.isArray(stamps)) {
-          for (const value of stamps) {
-            const num = Number(value);
-            if (Number.isFinite(num) && num > max) max = num;
-          }
-        }
-      }
-      return max;
+      const { min, max } = timestampBounds(ctx);
+      return max - min;
     },
     example: {
       url: `${DATA_BASE}/trips/trips-v7.json`,
