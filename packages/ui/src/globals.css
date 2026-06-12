@@ -61,7 +61,11 @@
      interactive element that doesn't already manage its own. Components that
      render their own ring (Button, Input, dialog close, etc.) set
      `focus-visible:outline-none`, whose utility layer wins over this base rule,
-     so they keep their existing indicator and don't double up. */
+     so they keep their existing indicator and don't double up.
+     Note: the dialog close button uses the older `focus:outline-none` form,
+     which also silences this outline correctly. Any future component using
+     `focus:ring-*` WITHOUT `focus-visible:outline-none` would get both this
+     outline and its own ring, so prefer the `focus-visible:` variants. */
   :focus-visible {
     outline: 2px solid hsl(var(--ring));
     outline-offset: 2px;

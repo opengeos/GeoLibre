@@ -12,9 +12,23 @@ const FIXTURE_TEXT = readFileSync(
 // panel renders each row as a `role="button"` card that wraps interactive
 // children (visibility toggle, opacity slider, actions menu), which axe flags
 // as `nested-interactive`. The rows are already keyboard-operable; removing the
-// nesting needs a layer-panel interaction redesign. It is allowlisted here so
-// the suite still fails on any *new* serious/critical regression.
-const ALLOWED_SERIOUS = new Set<string>(["nested-interactive"]);
+// nesting needs a layer-panel interaction redesign.
+//
+// The allowlist is scoped to the LayerPanel selection cards specifically (not
+// the rule id globally), so a new `nested-interactive` violation anywhere else
+// still fails the suite. Both the per-layer rows and the basemap row carry a
+// `data-layer-card` marker (placed first so it stays within axe's truncated
+// `html` snippet); we allow the violation only when every offending node is one
+// of those cards.
+function isAllowlistedSerious(violation: {
+  id: string;
+  nodes: Array<{ target: string[]; html: string }>;
+}): boolean {
+  if (violation.id !== "nested-interactive" || violation.nodes.length === 0) {
+    return false;
+  }
+  return violation.nodes.every((node) => node.html.includes("data-layer-card"));
+}
 
 async function waitForMap(page: Page): Promise<void> {
   await page.goto("/");
@@ -62,7 +76,7 @@ async function expectAccessible(
   const blocking = violations.filter(
     (v) =>
       v.impact === "critical" ||
-      (v.impact === "serious" && !ALLOWED_SERIOUS.has(v.id)),
+      (v.impact === "serious" && !isAllowlistedSerious(v)),
   );
   expect(
     blocking,
@@ -96,8 +110,11 @@ test("no critical/serious axe violations across key screens", async ({
     .waitFor({ state: "detached" });
   await expectAccessible(page, "attribute-table", testInfo);
 
-  // Command palette (Ctrl/Cmd-K).
-  await page.keyboard.press("Control+KeyK");
+  // Command palette (Ctrl/Cmd-K). The app picks the modifier from the platform
+  // (Meta on macOS, Ctrl elsewhere), so match it here for local macOS runs.
+  await page.keyboard.press(
+    process.platform === "darwin" ? "Meta+KeyK" : "Control+KeyK",
+  );
   await expect(page.getByPlaceholder("Search commands…")).toBeVisible();
   await expectAccessible(page, "command-palette", testInfo);
   await page.keyboard.press("Escape");

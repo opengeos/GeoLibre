@@ -727,6 +727,7 @@ export function LayerPanel({
             return (
               <div
                 key={layer.id}
+                data-layer-card=""
                 data-testid="layer-row"
                 data-layer-name={layer.name}
                 className={`relative rounded-md border p-2 transition-colors ${
@@ -1137,6 +1138,7 @@ export function LayerPanel({
             );
           })}
           <div
+            data-layer-card=""
             className={`rounded-md border p-2 transition-colors ${
               backgroundSelected
                 ? "border-primary bg-primary/5"
