@@ -29,6 +29,12 @@ let appRef: GeoLibreAppAPI | null = null;
 // created and re-attached, mirroring restoreDirections.
 let boundMap: unknown;
 
+// Bounds the lazy-mount retry so a restore that races map init still mounts
+// (the store subscription only fires on layer-set changes), without spinning
+// forever if the map never becomes ready.
+const MAX_MOUNT_RETRIES = 120;
+let mountRetries = 0;
+
 let rafHandle: number | null = null;
 // Signature of the current animated-layer set; when it changes the loop length
 // is recomputed and the clock restarts so the animation stays in range.
@@ -129,11 +135,23 @@ function renderDeckVizLayers(): void {
     ensureMercatorProjection(appRef.getMap?.());
   }
 
-  // Mount lazily: the map must be ready for addMapControl to succeed, so retry
-  // on the next store change until it does.
+  // Mount lazily: the map must be ready for addMapControl to succeed. Retry on
+  // the next animation frame so a project restore that races map init does not
+  // depend on a later store change to mount.
   if (!overlayMounted) {
     if (vizLayers.length === 0) return;
-    if (!appRef.addMapControl(overlay)) return;
+    // Add at top-left: MapboxOverlay's overlaid canvas is positioned `left:0`
+    // to fill the map, which only aligns when its control container is the
+    // left corner. The host's addControl otherwise defaults to top-right,
+    // pushing the canvas a full map-width to the right (off screen).
+    if (!appRef.addMapControl(overlay, "top-left")) {
+      if (mountRetries < MAX_MOUNT_RETRIES) {
+        mountRetries += 1;
+        requestAnimationFrame(() => renderDeckVizLayers());
+      }
+      return;
+    }
+    mountRetries = 0;
     overlayMounted = true;
   }
 
