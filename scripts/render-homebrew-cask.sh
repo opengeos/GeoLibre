@@ -19,6 +19,12 @@ set -euo pipefail
 : "${SHA256_ARM:?Set SHA256_ARM to the sha256 of the aarch64 DMG}"
 : "${SHA256_INTEL:?Set SHA256_INTEL to the sha256 of the x64 DMG}"
 
+# Validate formats so a truncated hash or stray metacharacter can't silently
+# produce a malformed cask that only fails at `brew install` time.
+[[ "$SHA256_ARM" =~ ^[0-9a-f]{64}$ ]] || { echo "SHA256_ARM is not a 64-char sha256 hex string" >&2; exit 1; }
+[[ "$SHA256_INTEL" =~ ^[0-9a-f]{64}$ ]] || { echo "SHA256_INTEL is not a 64-char sha256 hex string" >&2; exit 1; }
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]] || { echo "VERSION does not look like a semver string" >&2; exit 1; }
+
 REPO="${REPO:-opengeos/GeoLibre}"
 
 cat <<RUBY

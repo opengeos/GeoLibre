@@ -116,11 +116,17 @@ jobs:
     name: Update Homebrew cask
     needs: build
     runs-on: ubuntu-latest
+    # Serialise tap pushes so two close releases can't race on a non-fast-forward.
+    concurrency:
+      group: homebrew-tap-update
+      cancel-in-progress: false
     # Only update the tap for full releases, not prereleases.
     if: ${{ !github.event.release.prerelease }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Compute DMG checksums
         id: checksums
@@ -145,22 +151,25 @@ jobs:
           repository: opengeos/homebrew-geolibre
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: tap
+          persist-credentials: false
 
       - name: Render and commit cask
         env:
           VERSION: ${{ steps.checksums.outputs.version }}
           SHA256_ARM: ${{ steps.checksums.outputs.sha_arm }}
           SHA256_INTEL: ${{ steps.checksums.outputs.sha_intel }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           mkdir -p tap/Casks
           scripts/render-homebrew-cask.sh > tap/Casks/geolibre.rb
           cd tap
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet; then
+          git add Casks/geolibre.rb
+          # --cached so an initially untracked cask (fresh tap) is still detected.
+          if git diff --cached --quiet; then
             echo "Cask already up to date for ${VERSION}."
             exit 0
           fi
-          git add Casks/geolibre.rb
           git commit -m "geolibre ${VERSION}"
-          git push
+          git push "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/opengeos/homebrew-geolibre.git" HEAD:main
