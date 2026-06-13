@@ -51,6 +51,7 @@ import {
   Plus,
   RotateCcw,
   Save,
+  Sigma,
   TableProperties,
   Trash2,
   X,
@@ -87,6 +88,7 @@ import {
   type CalcOutputType,
 } from "../../lib/attribute-expression";
 import { AttributeChartDialog } from "./AttributeChartDialog";
+import { AttributeStatsDialog } from "./AttributeStatsDialog";
 import {
   exportVectorLayer,
   formatAttributeValue,
@@ -291,6 +293,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const [newColumnDefault, setNewColumnDefault] = useState("");
   // Charts dialog state.
   const [chartOpen, setChartOpen] = useState(false);
+  // Field-statistics dialog state.
+  const [statsOpen, setStatsOpen] = useState(false);
   // Field-calculator dialog state.
   const [calcOpen, setCalcOpen] = useState(false);
   const [calcMode, setCalcMode] = useState<"update" | "create">("update");
@@ -1262,6 +1266,24 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             className="h-7 px-2"
             title={
               hasAttributeSource
+                ? "Field statistics summary"
+                : "Statistics require a vector or DuckDB query layer"
+            }
+            aria-label="Field statistics"
+            disabled={!hasAttributeSource}
+            onClick={() => setStatsOpen(true)}
+          >
+            <Sigma className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Statistics</span>
+          </Button>
+        ) : null}
+        {!isEditing ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2"
+            title={
+              hasAttributeSource
                 ? "Chart numeric fields"
                 : "Charts require a vector or DuckDB query layer"
             }
@@ -1732,6 +1754,14 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
         open={chartOpen}
         onOpenChange={setChartOpen}
         rows={attributeRows}
+        columns={discoveredColumns}
+        layerName={layer?.name ?? ""}
+      />
+      <AttributeStatsDialog
+        open={statsOpen}
+        onOpenChange={setStatsOpen}
+        rows={attributeRows}
+        filteredRows={filtered}
         columns={discoveredColumns}
         layerName={layer?.name ?? ""}
       />
