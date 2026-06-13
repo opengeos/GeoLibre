@@ -61,7 +61,11 @@ type ClassificationEntry = {
 // Per-layer classification state and built GPU textures. Module-global to
 // match the single mounted raster control (see maplibre-raster.ts).
 const entries = new Map<string, ClassificationEntry>();
-const statsCache = new Map<string, RasterBandStats>();
+// Keyed by layerId: computeAutoStats derives every band in one GeoTIFF pass,
+// so caching the whole AutoStats lets band-picker switches hit the cache
+// instead of re-scanning the file, and keeps the key aligned with the
+// disposal key below (so eviction actually matches).
+const statsCache = new Map<string, AutoStats>();
 const statsInflight = new Map<string, AbortController>();
 let storeUnsubscribe: (() => void) | null = null;
 
@@ -298,7 +302,12 @@ function sourceUrl(info: RasterInfoLike | undefined): string | null {
 }
 
 function bandStatsFromAuto(stats: AutoStats, band: number): RasterBandStats | null {
-  const perBand = stats.perBand?.get(band) ?? stats.global;
+  // Only fall back to the averaged global block when per-band stats are
+  // unavailable entirely; if the per-band map exists but lacks this band,
+  // the global average would be wrong for it, so report unknown instead.
+  const perBand = stats.perBand
+    ? (stats.perBand.get(band) ?? null)
+    : stats.global;
   if (!perBand) return null;
   return {
     min: perBand.min,
@@ -322,9 +331,8 @@ export async function getRasterBandStats(
   layerId: string,
   band: number,
 ): Promise<RasterBandStats | null> {
-  const cacheKey = `${layerId}:${band}`;
-  const cached = statsCache.get(cacheKey);
-  if (cached) return cached;
+  const cached = statsCache.get(layerId);
+  if (cached) return bandStatsFromAuto(cached, band);
 
   const info = (currentControl as ControlWithManager | null)?.getRaster?.(
     layerId,
@@ -338,9 +346,8 @@ export async function getRasterBandStats(
   try {
     const tiff = await loadGeoTIFF(url);
     const auto = await computeAutoStats(tiff, controller.signal);
-    const stats = bandStatsFromAuto(auto, band);
-    if (stats) statsCache.set(cacheKey, stats);
-    return stats;
+    statsCache.set(layerId, auto);
+    return bandStatsFromAuto(auto, band);
   } catch (error) {
     if (!controller.signal.aborted) {
       console.warn(

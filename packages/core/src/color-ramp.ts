@@ -184,6 +184,8 @@ export function interpolateHexColor(
  * @returns The red, green, and blue channels (0-255).
  */
 export function parseHexColor(value: string): { b: number; g: number; r: number } {
+  // Caller must pass a well-formed "#rrggbb" string; malformed input parses to
+  // NaN and the bitwise ops below coerce it to black ({ r: 0, g: 0, b: 0 }).
   const numeric = Number.parseInt(value.slice(1), 16);
   return {
     r: (numeric >> 16) & 255,

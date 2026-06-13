@@ -136,17 +136,22 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
     };
   }, [layer.id, band, symbology?.classified, symbology?.method]);
 
-  // Classification can be enabled before stats arrive, in which case the
-  // breaks fall back to the [0, …, 1] default range. Once real stats land,
-  // replace that fallback with data-range breaks so the user sees them
-  // without any extra interaction.
+  // Classification can be enabled before stats arrive (breaks fall back to the
+  // [0, …, 1] default range), and switching bands while classified leaves the
+  // previous band's edges in place. When fresh stats land, recompute the breaks
+  // if they're the placeholder range or no longer cover the band's data, so the
+  // classification follows the band without extra interaction. A range the user
+  // narrowed by hand (same band, so stats is unchanged) never reaches here.
   useEffect(() => {
     if (!stats || stats === lastStatsRef.current) return;
     lastStatsRef.current = stats;
     if (!symbology?.classified || symbology.method === "manual") return;
     const isDefaultRange =
       symbology.breaks[0] === 0 && symbology.breaks.at(-1) === 1;
-    if (isDefaultRange) recomputeSymbology({ ...symbology });
+    const coversData =
+      stats.min >= symbology.breaks[0] &&
+      stats.max <= symbology.breaks[symbology.breaks.length - 1];
+    if (isDefaultRange || !coversData) recomputeSymbology({ ...symbology });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stats]);
 
@@ -346,12 +351,15 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
           onReversed={(reversed) =>
             commit({ symbology: { ...symbology, reversed } })
           }
-          onManualBreaks={(breaks) =>
+          onManualBreaks={(breaks) => {
+            // Keep edges ascending: savedRasterSymbology rejects unsorted
+            // breaks, which would silently collapse the classification UI.
+            const sorted = [...breaks].sort((a, b) => a - b);
             commit({
-              statePatch: { rescale: rangeFromBreaks(breaks) },
-              symbology: { ...symbology, breaks },
-            })
-          }
+              statePatch: { rescale: rangeFromBreaks(sorted) },
+              symbology: { ...symbology, breaks: sorted },
+            });
+          }}
           onRange={(range) => recomputeSymbology({ ...symbology }, { range })}
         />
       )}
