@@ -468,10 +468,14 @@ def _aggregate(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     import pandas as pd  # noqa: PLC0415
 
     gdf = _load_gdf(geojson, "Input layer")
+    # The geometry column is in gdf.columns but is not a groupable/numeric
+    # attribute; reject it explicitly so it fails with a clean 400 instead of a
+    # later TypeError (unhashable geometry) surfacing as a 500.
+    geom_col = gdf.geometry.name
     group_field = str(parameters.get("group_field", "") or "").strip()
     if not group_field:
         raise ValueError("A group field is required")
-    if group_field not in gdf.columns:
+    if group_field not in gdf.columns or group_field == geom_col:
         raise ValueError(f"Group field '{group_field}' not found in layer attributes.")
     statistic = str(parameters.get("statistic", "count") or "count")
     if statistic not in _AGGREGATE_STATS:
@@ -482,7 +486,7 @@ def _aggregate(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     if statistic != "count":
         if not stat_field:
             raise ValueError(f"A statistic field is required for '{statistic}'")
-        if stat_field not in gdf.columns:
+        if stat_field not in gdf.columns or stat_field == geom_col:
             raise ValueError(
                 f"Statistic field '{stat_field}' not found in layer attributes."
             )
@@ -498,7 +502,9 @@ def _aggregate(geojson, overlay, parameters) -> tuple[dict, list[str]]:
         # client engine (and pandas' default skipna behaviour for these reducers).
         numeric = pd.to_numeric(gdf[stat_field], errors="coerce")
         values = numeric.groupby(gdf[group_field]).agg(statistic)
-    result[out_col] = values
+    # Align the statistic to the dissolved geometry explicitly by index label so the
+    # assignment stays correct even if either call's group ordering changes.
+    result[out_col] = values.reindex(result.index)
     result = result.reset_index()
     return (
         _to_feature_collection(result),

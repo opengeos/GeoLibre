@@ -100,5 +100,12 @@ export interface ProcessingAlgorithm {
   group?: string;
   /** Whether this algorithm can also run on the Python (GeoPandas) sidecar. */
   supportsSidecar?: boolean;
+  /**
+   * Whether this algorithm can ONLY run on a Python engine (sidecar/Pyodide) —
+   * its client `run` is a no-op that defers. The dialog defaults the engine
+   * selector to "sidecar" so the tool produces a result on the first run.
+   * Implies {@link supportsSidecar}.
+   */
+  requiresSidecar?: boolean;
   run: (ctx: ProcessingContext) => Promise<void> | void;
 }

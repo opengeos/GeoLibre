@@ -619,6 +619,52 @@ describe("processing registry", () => {
     // Mean reduces the same numeric field.
     const means = byRegion(run({ statistic: "mean", stat_field: "pop" }));
     assert.equal(means.get("north")?.pop_mean, 20);
+
+    // min/max exercise the reduce path (no Math.min/max spread).
+    const mins = byRegion(run({ statistic: "min", stat_field: "pop" }));
+    assert.equal(mins.get("north")?.pop_min, 10);
+    const maxes = byRegion(run({ statistic: "max", stat_field: "pop" }));
+    assert.equal(maxes.get("north")?.pop_max, 30);
+
+    // A feature whose group value is null is skipped (no "null" bucket), matching
+    // pandas groupby(dropna=True) on the sidecar.
+    const withNull: GeoLibreLayer = {
+      ...parcels,
+      id: "withNull",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          cell("north", 10, 0),
+          { ...cell("x", 1, 5), properties: { region: null, pop: 1 } },
+        ],
+      },
+    };
+    let nullOut: FeatureCollection = { type: "FeatureCollection", features: [] };
+    tool.run({
+      layers: [withNull],
+      parameters: { layer: "withNull", group_field: "region", statistic: "count" },
+      log: () => {},
+      addResultLayer: (_n, g) => {
+        nullOut = g;
+      },
+    });
+    assert.equal(nullOut.features.length, 1);
+    assert.equal(nullOut.features[0].properties?.region, "north");
+
+    // A group field absent from every feature errors (parity with the backend's
+    // "not found" guard) rather than producing one empty bucket.
+    let missingProduced = false;
+    const missingLogs: string[] = [];
+    tool.run({
+      layers: [parcels],
+      parameters: { layer: "parcels", group_field: "nope", statistic: "count" },
+      log: (m) => missingLogs.push(m),
+      addResultLayer: () => {
+        missingProduced = true;
+      },
+    });
+    assert.equal(missingProduced, false);
+    assert.ok(missingLogs.some((m) => m.includes("not found")));
   });
 
   it("reproject defers to the Python engine on the client", () => {

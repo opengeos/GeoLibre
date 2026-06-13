@@ -602,6 +602,18 @@ def test_aggregate_unknown_group_field_raises() -> None:
 
 
 @requires_geopandas
+def test_aggregate_geometry_group_field_raises_clean_error() -> None:
+    # "geometry" is in gdf.columns but grouping by it would raise an unhashable
+    # TypeError (a 500); it must be rejected as a clean "not found" (400) instead.
+    with pytest.raises(ValueError, match="not found"):
+        run_vector_tool(
+            "aggregate",
+            _parcels(),
+            parameters={"group_field": "geometry", "statistic": "count"},
+        )
+
+
+@requires_geopandas
 def test_json_wrapper_round_trips() -> None:
     payload = json.dumps(
         {

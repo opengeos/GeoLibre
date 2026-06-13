@@ -149,8 +149,11 @@ function computeStat(nums: number[], statistic: string): number | null {
   if (!nums.length) return null;
   if (statistic === "mean")
     return nums.reduce((a, b) => a + b, 0) / nums.length;
-  if (statistic === "min") return Math.min(...nums);
-  if (statistic === "max") return Math.max(...nums);
+  // reduce, not Math.min/max(...nums): the spread passes every element as an
+  // argument and a tens-of-thousands-element group would exceed the engine's
+  // argument-count limit and throw.
+  if (statistic === "min") return nums.reduce((a, b) => (a < b ? a : b));
+  if (statistic === "max") return nums.reduce((a, b) => (a > b ? a : b));
   if (statistic === "median") {
     const sorted = [...nums].sort((a, b) => a - b);
     const mid = Math.floor(sorted.length / 2);
@@ -1041,6 +1044,7 @@ export const reprojectTool: ProcessingAlgorithm = {
     "Reinterpret a layer's coordinates as a source CRS and transform them to WGS84 so they display in the correct location. Requires the Sidecar or Python engine.",
   group: "Geometry",
   supportsSidecar: true,
+  requiresSidecar: true,
   parameters: [
     { id: "layer", label: "Input layer", type: "layer", required: true },
     {
@@ -1142,6 +1146,15 @@ export const aggregateTool: ProcessingAlgorithm = {
       ctx.log("Error: a group field is required");
       return;
     }
+    // Mirror the backend's `group_field not in gdf.columns` guard: if no feature
+    // carries the field at all, fail rather than producing a single empty bucket.
+    const hasGroupField = fc.features.some((f) =>
+      Object.prototype.hasOwnProperty.call(f.properties ?? {}, groupField),
+    );
+    if (!hasGroupField) {
+      ctx.log(`Error: group field '${groupField}' not found in layer attributes.`);
+      return;
+    }
     const statistic = (ctx.parameters.statistic as string) || "count";
     if (!AGGREGATE_STATS.has(statistic)) {
       ctx.log(`Error: unknown statistic '${statistic}'`);
@@ -1166,6 +1179,9 @@ export const aggregateTool: ProcessingAlgorithm = {
         continue;
       }
       const raw = feature.properties?.[groupField];
+      // Skip features with no group value, matching pandas `groupby` (dropna=True),
+      // so the client never invents a "null" bucket the sidecar wouldn't produce.
+      if (raw === null || raw === undefined) continue;
       const key = stableStringify(raw);
       let group = groups.get(key);
       if (!group) {
@@ -1186,9 +1202,15 @@ export const aggregateTool: ProcessingAlgorithm = {
     const outColumn =
       statistic === "count" ? "count" : `${statField}_${statistic}`;
     const results: Feature[] = [];
+    let droppedGroups = 0;
     for (const group of groups.values()) {
       const merged = mergePolygons(featureCollection(group.features));
-      if (!merged?.geometry) continue;
+      // mergePolygons returns null for a degenerate/self-intersecting group; count
+      // it so the user understands why the output has fewer groups than expected.
+      if (!merged?.geometry) {
+        droppedGroups += 1;
+        continue;
+      }
       const statValue =
         statistic === "count"
           ? group.count
@@ -1201,7 +1223,10 @@ export const aggregateTool: ProcessingAlgorithm = {
     }
     ctx.log(
       `Aggregated ${fc.features.length - skipped} feature(s) into ${results.length} group(s) by '${groupField}'` +
-        (skipped > 0 ? ` (${skipped} skipped, not polygons)` : ""),
+        (skipped > 0 ? ` (${skipped} skipped, not polygons)` : "") +
+        (droppedGroups > 0
+          ? ` (${droppedGroups} group(s) dropped: could not merge geometry)`
+          : ""),
     );
     ctx.addResultLayer?.("Aggregate by attribute", featureCollection(results));
   },
