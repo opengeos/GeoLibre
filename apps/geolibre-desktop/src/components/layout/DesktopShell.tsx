@@ -118,6 +118,20 @@ const VectorToolsDialog = lazy(() =>
     }),
 );
 
+const NetworkToolsDialog = lazy(() =>
+  import("../processing/NetworkToolsDialog")
+    .then((module) => ({
+      default: module.NetworkToolsDialog,
+    }))
+    .catch((error) => {
+      // Same chunk-load fallback rationale as ProcessingDialog above.
+      console.error("Failed to load NetworkToolsDialog", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/NetworkToolsDialog").NetworkToolsDialog;
+      return { default: Fallback };
+    }),
+);
+
 const GeocodeDialog = lazy(() =>
   import("../processing/GeocodeDialog")
     .then((module) => ({
@@ -984,6 +998,9 @@ export function DesktopShell({
       </Suspense>
       <Suspense fallback={null}>
         <VectorToolsDialog mapControllerRef={mapControllerRef} />
+      </Suspense>
+      <Suspense fallback={null}>
+        <NetworkToolsDialog mapControllerRef={mapControllerRef} />
       </Suspense>
       <Suspense fallback={null}>
         <GeocodeDialog mapControllerRef={mapControllerRef} />

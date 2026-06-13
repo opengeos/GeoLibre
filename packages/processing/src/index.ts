@@ -6,6 +6,7 @@ export {
   countFeaturesAlgorithm,
 } from "./registry";
 export { VECTOR_TOOLS, getVectorTool } from "./vector-tools";
+export { NETWORK_TOOLS, getNetworkTool } from "./network-tools";
 export {
   H3_TOOLS,
   getH3Tool,

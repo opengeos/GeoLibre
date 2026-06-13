@@ -67,6 +67,9 @@ export type VectorToolKind =
   | "h3-grid"
   | "h3-bin-points";
 
+/** Identifiers of the network-analysis tools (`NETWORK_TOOLS` ids). */
+export type NetworkToolKind = "isochrone" | "od-matrix";
+
 /**
  * Identifiers of the raster processing tools. Kept in sync by hand with the
  * `id` fields of `RASTER_TOOLS` in `@geolibre/processing` (`raster-tools.ts`);
@@ -114,6 +117,7 @@ export interface AppState {
     processingOpen: boolean;
     conversionOpen: ConversionToolKind | null;
     vectorToolOpen: VectorToolKind | null;
+    networkToolOpen: NetworkToolKind | null;
     rasterToolOpen: RasterToolKind | null;
     geocodeOpen: boolean;
     sqlWorkspaceOpen: boolean;
@@ -141,6 +145,7 @@ export interface AppState {
   setProcessingOpen: (open: boolean) => void;
   setConversionOpen: (kind: ConversionToolKind | null) => void;
   setVectorToolOpen: (kind: VectorToolKind | null) => void;
+  setNetworkToolOpen: (kind: NetworkToolKind | null) => void;
   setRasterToolOpen: (kind: RasterToolKind | null) => void;
   setGeocodeOpen: (open: boolean) => void;
   setSqlWorkspaceOpen: (open: boolean) => void;
@@ -247,6 +252,7 @@ export const useAppStore = create<AppState>()(
         processingOpen: false,
         conversionOpen: null,
         vectorToolOpen: null,
+        networkToolOpen: null,
         rasterToolOpen: null,
         geocodeOpen: false,
         sqlWorkspaceOpen: false,
@@ -287,6 +293,8 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ ui: { ...s.ui, conversionOpen: kind } })),
       setVectorToolOpen: (kind) =>
         set((s) => ({ ui: { ...s.ui, vectorToolOpen: kind } })),
+      setNetworkToolOpen: (kind) =>
+        set((s) => ({ ui: { ...s.ui, networkToolOpen: kind } })),
       setRasterToolOpen: (kind) =>
         set((s) => ({ ui: { ...s.ui, rasterToolOpen: kind } })),
       setGeocodeOpen: (open) =>

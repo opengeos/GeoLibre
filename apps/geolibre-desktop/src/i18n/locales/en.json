@@ -218,6 +218,10 @@
       "h3Grid": "Create H3 grid",
       "h3BinPoints": "Bin points to H3"
     },
+    "networkTool": {
+      "isochrone": "Isochrone / service area",
+      "odMatrix": "OD cost matrix"
+    },
     "rasterTool": {
       "hillshade": "Hillshade",
       "slope": "Slope",
@@ -291,6 +295,7 @@
       "geocode": "Geocode Addresses",
       "conversion": "Conversion",
       "vector": "Vector",
+      "network": "Network",
       "raster": "Raster",
       "subGroupGeometry": "Geometry",
       "subGroupOverlay": "Overlay",

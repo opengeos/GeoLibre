@@ -1,4 +1,5 @@
 import type { Feature, Point } from "geojson";
+import { getRuntimeEnvironment } from "./runtime-env";
 
 /**
  * Geocoding client and pure helpers shared by the batch-geocode dialog and the
@@ -86,21 +87,6 @@ export interface ReverseGeocodeDisplay {
   parts: Record<string, string>;
 }
 
-const geocoderEnv = (
-  import.meta as ImportMeta & {
-    env?: Record<string, string | undefined>;
-  }
-).env;
-
-function getRuntimeEnvironment(): Record<string, string | undefined> {
-  if (typeof window === "undefined") return geocoderEnv ?? {};
-
-  // __GEOLIBRE_RUNTIME_ENV__ is declared globally in ./types.
-  return {
-    ...(geocoderEnv ?? {}),
-    ...(window.__GEOLIBRE_RUNTIME_ENV__ ?? {}),
-  };
-}
 
 /**
  * Resolve the geocoder configuration from runtime env, falling back to the

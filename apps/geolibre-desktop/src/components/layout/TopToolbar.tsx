@@ -402,6 +402,7 @@ export function TopToolbar({
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
   const setConversionOpen = useAppStore((s) => s.setConversionOpen);
   const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
+  const setNetworkToolOpen = useAppStore((s) => s.setNetworkToolOpen);
   const setGeocodeOpen = useAppStore((s) => s.setGeocodeOpen);
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
@@ -1877,6 +1878,23 @@ export function TopToolbar({
                 onSelect={() => setVectorToolOpen("h3-bin-points")}
               >
                 {t("toolbar.vectorTool.h3BinPoints")}
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              {t("toolbar.item.network")}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuItem
+                onSelect={() => setNetworkToolOpen("isochrone")}
+              >
+                {t("toolbar.networkTool.isochrone")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setNetworkToolOpen("od-matrix")}
+              >
+                {t("toolbar.networkTool.odMatrix")}
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
