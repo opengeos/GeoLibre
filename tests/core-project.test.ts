@@ -521,6 +521,30 @@ describe("story maps", () => {
     assert.equal(useAppStore.getState().ui.storymapPresenting, false);
   });
 
+  it("honors the presenting:false override for a story project", () => {
+    const store = useAppStore.getState();
+    store.addStoryChapter(chapter() as never);
+    const storyProject = parseProject(
+      serializeProject(
+        projectFromStore({
+          projectName: useAppStore.getState().projectName,
+          mapView: useAppStore.getState().mapView,
+          basemapStyleUrl: useAppStore.getState().basemapStyleUrl,
+          basemapVisible: useAppStore.getState().basemapVisible,
+          basemapOpacity: useAppStore.getState().basemapOpacity,
+          layers: useAppStore.getState().layers,
+          preferences: useAppStore.getState().preferences,
+          plugins: useAppStore.getState().projectPlugins,
+          storymap: useAppStore.getState().storymap,
+          metadata: useAppStore.getState().metadata,
+        }),
+      ),
+    );
+    // A caller opening the story for authoring can opt out of auto-presenting.
+    useAppStore.getState().loadProject(storyProject, null, { presenting: false });
+    assert.equal(useAppStore.getState().ui.storymapPresenting, false);
+  });
+
   it("provides a sample story that survives normalization", () => {
     const sample = createSampleStoryMap();
     assert.equal(sample.chapters.length, 5);

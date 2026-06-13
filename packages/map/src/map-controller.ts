@@ -367,7 +367,7 @@ export class MapController {
    * instant move whose `moveend` precedes attachment.
    */
   private pendingRotateHandler:
-    | ((event: { storyCameraToken?: number }) => void)
+    | ((event: maplibregl.MapLibreEvent & { storyCameraToken?: number }) => void)
     | null = null;
 
   /**
@@ -406,6 +406,10 @@ export class MapController {
     // rotation, MapLibre fires a deferred `moveend` for that halted rotation; an
     // untagged `once("moveend")` would catch it and start rotating immediately,
     // around the previous chapter's center, before the new camera has travelled.
+    // MapLibre re-fires the original move's eventData on this deferred moveend
+    // (Camera._afterEase), so the token survives cancellation. The
+    // pendingRotateHandler cleanup above and in restoreLayerStyles is the
+    // backstop should that ever change, so handlers cannot leak regardless.
     map[animation](
       {
         center: location.center,
@@ -419,10 +423,10 @@ export class MapController {
       const onMoveEnd = (
         event: maplibregl.MapLibreEvent & { storyCameraToken?: number },
       ) => {
-        // Ignore the moveend of any other move (e.g. the halted prior rotation).
-        // Do NOT call map.off here: this listener must stay attached past the
-        // deferred moveend from the cancelled rotateTo (no storyCameraToken) so
-        // it can react to the subsequent flyTo's matching moveend.
+        // Only detach once the token matches. Stay attached through any
+        // preceding moveend (e.g. the deferred moveend of a halted prior
+        // rotateTo, which carries no storyCameraToken) so we can still react to
+        // this move's own matching moveend below.
         if (event.storyCameraToken !== token) return;
         map.off("moveend", onMoveEnd);
         if (this.pendingRotateHandler === onMoveEnd) {
