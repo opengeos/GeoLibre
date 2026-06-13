@@ -396,9 +396,14 @@ export class MapController {
       { storyCameraToken: token },
     );
     if (rotate) {
-      const onMoveEnd = (event: { storyCameraToken?: number }) => {
+      const onMoveEnd = (
+        event: maplibregl.MapLibreEvent & { storyCameraToken?: number },
+      ) => {
         // Ignore the moveend of any other move (e.g. the halted prior rotation).
-        if (event?.storyCameraToken !== token) return;
+        // Do NOT call map.off here: this listener must stay attached past the
+        // deferred moveend from the cancelled rotateTo (no storyCameraToken) so
+        // it can react to the subsequent flyTo's matching moveend.
+        if (event.storyCameraToken !== token) return;
         map.off("moveend", onMoveEnd);
         if (this.storyCameraToken !== token || !this.map) return;
         this.map.rotateTo(this.map.getBearing() + 180, {

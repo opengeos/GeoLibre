@@ -160,7 +160,7 @@ export interface AppState {
   loadProject: (
     project: GeoLibreProject,
     path?: string | null,
-    options?: { rememberRecent?: boolean }
+    options?: { rememberRecent?: boolean; presenting?: boolean }
   ) => void;
   setProjectPath: (path: string | null) => void;
   setProjectName: (name: string) => void;
@@ -502,9 +502,10 @@ export const useAppStore = create<AppState>()(
         const applied = applyProjectToStore(project);
         // A project that ships a story map opens straight into the presentation
         // so the reader sees the story, not the editor. Projects without a story
-        // (or with an empty one) open normally.
+        // (or with an empty one) open normally. Callers that open a project for
+        // authoring rather than viewing can pass `presenting: false` to override.
         const presentStory =
-          (applied.storymap?.chapters.length ?? 0) > 0;
+          options.presenting ?? (applied.storymap?.chapters.length ?? 0) > 0;
         set((s) => ({
           ...applied,
           projectPath: path,
