@@ -58,7 +58,9 @@ export function languageOptions(codes: readonly string[]): LanguageOption[] {
     .sort((a, b) => {
       if (a.code === DEFAULT_LANGUAGE) return -1;
       if (b.code === DEFAULT_LANGUAGE) return 1;
-      return a.englishName.localeCompare(b.englishName);
+      // Pin the collation locale so the selector order is deterministic
+      // regardless of the runtime/OS locale (CI vs. a German desktop, etc.).
+      return a.englishName.localeCompare(b.englishName, "en");
     });
 }
 

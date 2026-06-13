@@ -38,10 +38,18 @@ export function useLanguage(): UseLanguageResult {
       // lazy-loaded or remote catalog that fails to load does not leave a
       // broken language persisted for the next boot. With today's eagerly
       // bundled catalogs this resolves synchronously.
-      void i18n.changeLanguage(code).then(() => {
-        const current = useDesktopSettingsStore.getState().desktopSettings;
-        setDesktopSettings({ ...current, language: code });
-      });
+      i18n
+        .changeLanguage(code)
+        .then(() => {
+          const current = useDesktopSettingsStore.getState().desktopSettings;
+          setDesktopSettings({ ...current, language: code });
+        })
+        .catch((error: unknown) => {
+          // Today's eager catalogs never reject; if a future async/remote
+          // catalog fails, surface it instead of silently leaving the setting
+          // unpersisted while the UI has already switched.
+          console.error("[GeoLibre] Failed to change language", error);
+        });
     },
     [i18n, setDesktopSettings],
   );

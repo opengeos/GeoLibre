@@ -50,4 +50,21 @@ describe("i18n catalogs", () => {
       );
     });
   }
+
+  // Non-English catalogs may be partial (missing keys fall back to en at
+  // runtime), so this reports coverage rather than asserting parity — it lets a
+  // reviewer see how complete each translation is without failing CI.
+  it("reports per-locale coverage vs the English baseline", () => {
+    const enBaseList = [...enBaseKeys];
+    for (const code of localeCodes.filter((c) => c !== "en")) {
+      const have = new Set(leafKeys(loadCatalog(code)).map(normalizePluralKey));
+      const missing = enBaseList.filter((k) => !have.has(k));
+      const pct = Math.round((1 - missing.length / enBaseList.length) * 100);
+      console.log(
+        `  ${code}: ${pct}% (${enBaseList.length - missing.length}/${enBaseList.length})` +
+          (missing.length ? ` — missing: ${missing.join(", ")}` : ""),
+      );
+    }
+    assert.ok(true);
+  });
 });
