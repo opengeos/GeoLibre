@@ -26,8 +26,7 @@ def is_url(value: str) -> bool:
     """
     Return True if the value appears to be url
     """
-    parsed = urlparse(value)
-    return bool(parsed.scheme and parsed.netloc)
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
 def resolve_basemap(basemap: str) -> str:
