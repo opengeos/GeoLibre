@@ -1987,8 +1987,6 @@ export function TopToolbar({
         mapControllerRef={mapControllerRef}
         showLabels={showLabels}
         onOpenManagePlugins={() => setManagePluginsOpen(true)}
-        onOpenCommandPalette={() => setCommandPaletteOpen(true)}
-        onOpenKeyboardShortcuts={() => setShortcutsOpen(true)}
       />
       <ManagePluginsDialog
         open={managePluginsOpen}

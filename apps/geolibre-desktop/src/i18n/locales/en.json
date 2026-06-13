@@ -28,8 +28,6 @@
       "environmentVariables": "Environment Variables",
       "projectSettings": "Project Settings",
       "managePlugins": "Manage Plugins",
-      "commandPalette": "Command Palette",
-      "keyboardShortcuts": "Keyboard Shortcuts",
       "urlOverrideNote": "URL layout parameters override saved settings."
     },
     "map": {

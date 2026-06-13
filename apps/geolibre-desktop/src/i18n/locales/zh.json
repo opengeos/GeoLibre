@@ -28,8 +28,6 @@
       "environmentVariables": "环境变量",
       "projectSettings": "项目设置",
       "managePlugins": "管理插件",
-      "commandPalette": "命令面板",
-      "keyboardShortcuts": "键盘快捷键",
       "urlOverrideNote": "URL 布局参数会覆盖已保存的设置。"
     },
     "map": {
