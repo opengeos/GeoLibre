@@ -2,8 +2,13 @@ import {
   DEFAULT_LAYER_STYLE,
   type LayerType,
   type PointRenderer,
+  VECTOR_COLOR_RAMPS,
   type VectorStyleMode,
   type VectorStyleStop,
+  createEqualIntervalBreaks,
+  createQuantileBreaks,
+  getVectorColorRamp,
+  interpolateRampColors,
   styleValue,
   useAppStore,
 } from "@geolibre/core";
@@ -16,7 +21,9 @@ import {
   Separator,
   Slider,
 } from "@geolibre/ui";
+import { RASTER_SOURCE_KIND } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
+import { RasterSymbologySection } from "./RasterSymbologySection";
 import {
   ChevronDown,
   ChevronUp,
@@ -233,59 +240,6 @@ const VECTOR_STYLE_CLASS_COUNTS = Array.from({ length: 12 }, (_, index) =>
   index + 1,
 );
 
-const VECTOR_COLOR_RAMPS = [
-  {
-    value: "viridis",
-    label: "Viridis",
-    colors: ["#440154", "#31688e", "#35b779", "#fde725"],
-  },
-  {
-    value: "plasma",
-    label: "Plasma",
-    colors: ["#0d0887", "#9c179e", "#ed7953", "#f0f921"],
-  },
-  {
-    value: "inferno",
-    label: "Inferno",
-    colors: ["#000004", "#781c6d", "#ed6925", "#fcffa4"],
-  },
-  {
-    value: "magma",
-    label: "Magma",
-    colors: ["#000004", "#721f81", "#f1605d", "#fcfdbf"],
-  },
-  {
-    value: "cividis",
-    label: "Cividis",
-    colors: ["#00204d", "#575d6d", "#a59c74", "#ffea46"],
-  },
-  {
-    value: "turbo",
-    label: "Turbo",
-    colors: ["#30123b", "#4777ef", "#1ccfd0", "#b9e642", "#fb8022", "#7a0403"],
-  },
-  {
-    value: "spectral",
-    label: "Spectral",
-    colors: ["#9e0142", "#f46d43", "#ffffbf", "#66c2a5", "#5e4fa2"],
-  },
-  {
-    value: "blues",
-    label: "Blues",
-    colors: ["#eff6ff", "#93c5fd", "#2563eb", "#1e3a8a"],
-  },
-  {
-    value: "greens",
-    label: "Greens",
-    colors: ["#f0fdf4", "#86efac", "#16a34a", "#14532d"],
-  },
-  {
-    value: "oranges",
-    label: "Oranges",
-    colors: ["#fff7ed", "#fdba74", "#f97316", "#7c2d12"],
-  },
-] as const;
-
 const GRADUATED_CLASSIFICATION_SCHEMES = [
   { value: "equal-interval", label: "Equal interval" },
   { value: "quantile", label: "Quantile" },
@@ -435,75 +389,6 @@ function normalizeClassificationScheme(
   return options.some((option) => option.value === scheme)
     ? scheme
     : defaultClassificationScheme(mode);
-}
-
-function getVectorColorRamp(value: string) {
-  return (
-    VECTOR_COLOR_RAMPS.find((colorRamp) => colorRamp.value === value) ??
-    VECTOR_COLOR_RAMPS[0]
-  );
-}
-
-function interpolateRampColors(colorRamp: string, count: number): string[] {
-  const colors = getVectorColorRamp(colorRamp).colors;
-  if (count <= 1) return [colors[colors.length - 1]];
-  return Array.from({ length: count }, (_, index) => {
-    const scaled = (index / (count - 1)) * (colors.length - 1);
-    const lowerIndex = Math.floor(scaled);
-    const upperIndex = Math.min(colors.length - 1, Math.ceil(scaled));
-    const ratio = scaled - lowerIndex;
-    return interpolateHexColor(colors[lowerIndex], colors[upperIndex], ratio);
-  });
-}
-
-function interpolateHexColor(from: string, to: string, ratio: number): string {
-  const start = parseHexColor(from);
-  const end = parseHexColor(to);
-  return rgbToHex({
-    r: Math.round(start.r + (end.r - start.r) * ratio),
-    g: Math.round(start.g + (end.g - start.g) * ratio),
-    b: Math.round(start.b + (end.b - start.b) * ratio),
-  });
-}
-
-function parseHexColor(value: string): { b: number; g: number; r: number } {
-  const numeric = Number.parseInt(value.slice(1), 16);
-  return {
-    r: (numeric >> 16) & 255,
-    g: (numeric >> 8) & 255,
-    b: numeric & 255,
-  };
-}
-
-function rgbToHex(color: { b: number; g: number; r: number }): string {
-  return `#${[color.r, color.g, color.b]
-    .map((channel) => channel.toString(16).padStart(2, "0"))
-    .join("")}`;
-}
-
-function createEqualIntervalBreaks(
-  min: number,
-  max: number,
-  count: number,
-): number[] {
-  return Array.from({ length: count }, (_, index) => {
-    const ratio = count === 1 ? 0 : index / (count - 1);
-    return min + (max - min) * ratio;
-  });
-}
-
-function createQuantileBreaks(values: number[], count: number): number[] {
-  const sorted = [...values].sort((a, b) => a - b);
-  return Array.from({ length: count }, (_, index) => {
-    const position =
-      count === 1 ? 0 : (index / (count - 1)) * (sorted.length - 1);
-    const lowerIndex = Math.floor(position);
-    const upperIndex = Math.min(sorted.length - 1, Math.ceil(position));
-    const ratio = position - lowerIndex;
-    return (
-      sorted[lowerIndex] + (sorted[upperIndex] - sorted[lowerIndex]) * ratio
-    );
-  });
 }
 
 const MAX_NATURAL_BREAK_SAMPLES = 1000;
@@ -2095,6 +1980,9 @@ export function StylePanel({
                   format={(value) => value.toFixed(0)}
                 />
               </>
+            )}
+            {layer.metadata.sourceKind === RASTER_SOURCE_KIND && (
+              <RasterSymbologySection layer={layer} />
             )}
           </div>
         </ScrollArea>

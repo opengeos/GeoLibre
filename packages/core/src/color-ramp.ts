@@ -1,0 +1,195 @@
+/**
+ * Color-ramp definitions and classification-break helpers shared by the
+ * vector graduated-styling panel and the raster symbology panel. Kept in
+ * `@geolibre/core` (dependency-light, map-agnostic) so both UIs derive class
+ * colors and breaks from the same source. The ramp `value`s intentionally
+ * match the named colormaps shipped by `@developmentseed/deck.gl-raster`
+ * (`COLORMAP_INDEX` keys) so a ramp choice maps 1:1 onto the raster render
+ * path.
+ */
+
+export type ColorRamp = {
+  value: string;
+  label: string;
+  colors: readonly string[];
+};
+
+/** The built-in color ramps offered by the style panels. */
+export const VECTOR_COLOR_RAMPS: readonly ColorRamp[] = [
+  {
+    value: "viridis",
+    label: "Viridis",
+    colors: ["#440154", "#31688e", "#35b779", "#fde725"],
+  },
+  {
+    value: "plasma",
+    label: "Plasma",
+    colors: ["#0d0887", "#9c179e", "#ed7953", "#f0f921"],
+  },
+  {
+    value: "inferno",
+    label: "Inferno",
+    colors: ["#000004", "#781c6d", "#ed6925", "#fcffa4"],
+  },
+  {
+    value: "magma",
+    label: "Magma",
+    colors: ["#000004", "#721f81", "#f1605d", "#fcfdbf"],
+  },
+  {
+    value: "cividis",
+    label: "Cividis",
+    colors: ["#00204d", "#575d6d", "#a59c74", "#ffea46"],
+  },
+  {
+    value: "turbo",
+    label: "Turbo",
+    colors: ["#30123b", "#4777ef", "#1ccfd0", "#b9e642", "#fb8022", "#7a0403"],
+  },
+  {
+    value: "spectral",
+    label: "Spectral",
+    colors: ["#9e0142", "#f46d43", "#ffffbf", "#66c2a5", "#5e4fa2"],
+  },
+  {
+    value: "blues",
+    label: "Blues",
+    colors: ["#eff6ff", "#93c5fd", "#2563eb", "#1e3a8a"],
+  },
+  {
+    value: "greens",
+    label: "Greens",
+    colors: ["#f0fdf4", "#86efac", "#16a34a", "#14532d"],
+  },
+  {
+    value: "oranges",
+    label: "Oranges",
+    colors: ["#fff7ed", "#fdba74", "#f97316", "#7c2d12"],
+  },
+] as const;
+
+/**
+ * Resolves a ramp definition by name, falling back to the first ramp when the
+ * name is unknown.
+ *
+ * @param value - The ramp `value` (e.g. "viridis").
+ * @returns The matching ramp, or the first ramp.
+ */
+export function getVectorColorRamp(value: string): ColorRamp {
+  return (
+    VECTOR_COLOR_RAMPS.find((colorRamp) => colorRamp.value === value) ??
+    VECTOR_COLOR_RAMPS[0]
+  );
+}
+
+/**
+ * Samples a ramp into `count` evenly spaced hex colors by linearly
+ * interpolating between the ramp's anchor colors.
+ *
+ * @param colorRamp - The ramp `value`.
+ * @param count - Number of colors to produce.
+ * @returns An array of `count` hex colors (a single end color when count <= 1).
+ */
+export function interpolateRampColors(
+  colorRamp: string,
+  count: number,
+): string[] {
+  const colors = getVectorColorRamp(colorRamp).colors;
+  if (count <= 1) return [colors[colors.length - 1]];
+  return Array.from({ length: count }, (_, index) => {
+    const scaled = (index / (count - 1)) * (colors.length - 1);
+    const lowerIndex = Math.floor(scaled);
+    const upperIndex = Math.min(colors.length - 1, Math.ceil(scaled));
+    const ratio = scaled - lowerIndex;
+    return interpolateHexColor(colors[lowerIndex], colors[upperIndex], ratio);
+  });
+}
+
+/**
+ * Linearly interpolates between two hex colors.
+ *
+ * @param from - Start hex color (e.g. "#440154").
+ * @param to - End hex color.
+ * @param ratio - Blend factor in [0, 1].
+ * @returns The interpolated hex color.
+ */
+export function interpolateHexColor(
+  from: string,
+  to: string,
+  ratio: number,
+): string {
+  const start = parseHexColor(from);
+  const end = parseHexColor(to);
+  return rgbToHex({
+    r: Math.round(start.r + (end.r - start.r) * ratio),
+    g: Math.round(start.g + (end.g - start.g) * ratio),
+    b: Math.round(start.b + (end.b - start.b) * ratio),
+  });
+}
+
+/**
+ * Parses a `#rrggbb` hex color into its RGB channels.
+ *
+ * @param value - A `#rrggbb` hex color.
+ * @returns The red, green, and blue channels (0-255).
+ */
+export function parseHexColor(value: string): { b: number; g: number; r: number } {
+  const numeric = Number.parseInt(value.slice(1), 16);
+  return {
+    r: (numeric >> 16) & 255,
+    g: (numeric >> 8) & 255,
+    b: numeric & 255,
+  };
+}
+
+/**
+ * Formats RGB channels as a `#rrggbb` hex color.
+ *
+ * @param color - The red, green, and blue channels (0-255).
+ * @returns A `#rrggbb` hex color.
+ */
+export function rgbToHex(color: { b: number; g: number; r: number }): string {
+  return `#${[color.r, color.g, color.b]
+    .map((channel) => channel.toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
+/**
+ * Builds `count` evenly spaced break values across [min, max].
+ *
+ * @param min - The minimum value.
+ * @param max - The maximum value.
+ * @param count - Number of breaks to produce.
+ * @returns The break values (min..max inclusive when count > 1).
+ */
+export function createEqualIntervalBreaks(
+  min: number,
+  max: number,
+  count: number,
+): number[] {
+  return Array.from({ length: count }, (_, index) => {
+    const ratio = count === 1 ? 0 : index / (count - 1);
+    return min + (max - min) * ratio;
+  });
+}
+
+/**
+ * Builds `count` quantile break values from a sample of numeric values.
+ *
+ * @param values - The sample values.
+ * @param count - Number of breaks to produce.
+ * @returns The quantile break values.
+ */
+export function createQuantileBreaks(values: number[], count: number): number[] {
+  const sorted = [...values].sort((a, b) => a - b);
+  return Array.from({ length: count }, (_, index) => {
+    const position =
+      count === 1 ? 0 : (index / (count - 1)) * (sorted.length - 1);
+    const lowerIndex = Math.floor(position);
+    const upperIndex = Math.min(sorted.length - 1, Math.ceil(position));
+    const ratio = position - lowerIndex;
+    return (
+      sorted[lowerIndex] + (sorted[upperIndex] - sorted[lowerIndex]) * ratio
+    );
+  });
+}

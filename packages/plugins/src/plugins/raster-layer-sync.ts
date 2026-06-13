@@ -98,6 +98,12 @@ export function createRasterStoreLayer(
       // replay URL-backed rasters when a saved project is reopened.
       rasterSource: info.source.kind,
       rasterState: serializableRasterState(info.state),
+      // Band metadata powers the symbology panel's band / RGB pickers. Known
+      // only once the GeoTIFF header loads (null until then). The Map is
+      // serialized to pairs so the store / project JSON and the deep-equal
+      // diff below can compare it.
+      bandCount: info.bandCount,
+      bandNames: serializeBandNames(info.bandNames),
       sourceIds: [],
       sourceKind: RASTER_SOURCE_KIND,
       ...(info.bounds
@@ -158,17 +164,28 @@ export function syncRasterLayersToStoreWithOptions(
         continue;
       }
 
+      // rasterSymbology (discrete classification) is GeoLibre-owned and not
+      // present on RasterLayerInfo, so carry it forward across the wholesale
+      // metadata rebuild instead of letting every control event wipe it.
+      const metadata =
+        existing.metadata.rasterSymbology !== undefined
+          ? {
+              ...layer.metadata,
+              rasterSymbology: existing.metadata.rasterSymbology,
+            }
+          : layer.metadata;
+
       if (
         existing.visible !== layer.visible ||
         existing.opacity !== layer.opacity ||
         existing.sourcePath !== layer.sourcePath ||
         !recordsEqual(existing.source, layer.source) ||
-        !recordsEqual(existing.metadata, layer.metadata)
+        !recordsEqual(existing.metadata, metadata)
       ) {
         useAppStore.getState().updateLayer(layer.id, {
           // Replace metadata wholesale so stale keys (error, bounds) cannot
           // survive a raster being swapped out under the same id.
-          metadata: layer.metadata,
+          metadata,
           opacity: layer.opacity,
           source: layer.source,
           sourcePath: layer.sourcePath,
@@ -226,9 +243,63 @@ export function wireRasterStoreSync(control: RasterSyncableControl): void {
         if (current.opacity !== layer.opacity) {
           activeControl.setRasterState(layer.id, { opacity: current.opacity });
         }
+        const patch = rasterStatePatch(layer, current);
+        if (patch) activeControl.setRasterState(layer.id, patch);
       }
     });
   });
+}
+
+// The rasterState fields the symbology panel edits and pushes back to the
+// control. opacity/visible are handled above (they live on top-level layer
+// fields); these live in metadata.rasterState.
+const SYNCED_RASTER_STATE_KEYS = [
+  "mode",
+  "bands",
+  "colormap",
+  "rescale",
+  "nodata",
+  "stretch",
+  "gamma",
+] as const;
+
+/**
+ * Diffs the editable rasterState fields between two store snapshots of the
+ * same layer and returns the changed subset to push through setRasterState,
+ * or null when nothing relevant changed.
+ *
+ * @param previous - The prior store layer.
+ * @param current - The current store layer.
+ * @returns A partial RasterLayerState patch, or null.
+ */
+function rasterStatePatch(
+  previous: GeoLibreLayer,
+  current: GeoLibreLayer,
+): Partial<RasterLayerState> | null {
+  const before = rasterStateRecord(previous);
+  const after = rasterStateRecord(current);
+  const patch: Record<string, unknown> = {};
+  let changed = false;
+  for (const key of SYNCED_RASTER_STATE_KEYS) {
+    if (!valuesEqual(before[key], after[key])) {
+      patch[key] = after[key];
+      changed = true;
+    }
+  }
+  return changed ? (patch as Partial<RasterLayerState>) : null;
+}
+
+function rasterStateRecord(layer: GeoLibreLayer): Record<string, unknown> {
+  const raw = layer.metadata.rasterState;
+  return raw && typeof raw === "object" && !Array.isArray(raw)
+    ? (raw as Record<string, unknown>)
+    : {};
+}
+
+function serializeBandNames(
+  bandNames: Map<number, string> | null,
+): [number, string][] | null {
+  return bandNames ? [...bandNames.entries()] : null;
 }
 
 /**
