@@ -66,11 +66,27 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
 
   // Scroll a chapter into view; the IntersectionObserver then activates it and
   // flies the camera, so clicking the nav reuses the same scroll-driven path.
+  // Holds the playback effect's enterChapter so the nav pane can drive the
+  // camera deterministically rather than waiting on a scroll-triggered observer.
+  const enterChapterRef = useRef<(index: number) => void>(() => {});
+  // While true, the scroll observer ignores transient intersections caused by a
+  // programmatic jump so they can't override the target we just entered.
+  const jumpingRef = useRef(false);
   const goToChapter = useCallback((index: number) => {
     const step = scrollRef.current?.querySelector<HTMLElement>(
       `[data-chapter-index="${index}"]`,
     );
-    step?.scrollIntoView({ block: "center", behavior: "smooth" });
+    // Center the card, not the step: the step carries a tall bottom padding, so
+    // centering it would push the card (and its drag bar) above the viewport.
+    const target = step?.querySelector<HTMLElement>(".glsm-card") ?? step;
+    jumpingRef.current = true;
+    target?.scrollIntoView({ block: "center" });
+    // Enter the target directly so its camera move always runs, then let the
+    // observer take over once the programmatic scroll has settled.
+    enterChapterRef.current(index);
+    window.setTimeout(() => {
+      jumpingRef.current = false;
+    }, 500);
   }, []);
 
   // Per-chapter drag offset / explicit size so the reader can move and resize a
@@ -242,9 +258,8 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
         step.classList.toggle("glsm-active", i === index),
       );
 
-      // Drive the camera through the controller (which cancels any in-progress
-      // movement and handles the optional rotation) rather than mutating the
-      // MapLibre instance directly from UI code.
+      // Drive the camera through the controller (which handles the optional
+      // rotation) rather than mutating the MapLibre instance directly.
       controller.applyStoryChapterCamera(
         chapter.location,
         chapter.mapAnimation || "flyTo",
@@ -282,9 +297,14 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
       }
       applyEffects(chapter.onChapterEnter);
     };
+    // Expose enterChapter so the nav pane can jump directly.
+    enterChapterRef.current = enterChapter;
 
     const observer = new IntersectionObserver(
       (entries) => {
+        // Ignore intersections triggered by a programmatic nav jump; the jump
+        // already entered the target directly.
+        if (jumpingRef.current) return;
         for (const entry of entries) {
           if (!entry.isIntersecting) continue;
           const index = Number(
@@ -419,7 +439,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
         <div
           className={`pointer-events-none absolute z-[71] h-44 w-44 overflow-hidden rounded-md border-2 border-white/80 shadow-lg ${
             INSET_POSITION_CLASS[storymap.insetPosition] ??
-            INSET_POSITION_CLASS["bottom-right"]
+            INSET_POSITION_CLASS["bottom-left"]
           }`}
         >
           <div ref={insetRef} className="h-full w-full" />
@@ -540,7 +560,11 @@ function StoryMapStyles() {
       .glsm-scroll a, .glsm-scroll a:hover, .glsm-scroll a:visited { color: #0071bc; }
       /* Decorative text only; never intercept pointers meant for cards/map. */
       .glsm-header { margin: auto; width: 100%; position: relative; z-index: 5; pointer-events: none; }
-      .glsm-header h1, .glsm-header h2, .glsm-header p { margin: 0; padding: 1.5vh 2%; text-align: center; }
+      /* Explicit sizes: the app's CSS reset would otherwise shrink headings to inherit. */
+      .glsm-header h1, .glsm-header h2, .glsm-header p { margin: 0; padding: 1vh 2%; text-align: center; }
+      .glsm-header h1 { font-size: 2rem; font-weight: 700; line-height: 1.2; }
+      .glsm-header h2 { font-size: 1.3rem; font-weight: 600; line-height: 1.3; }
+      .glsm-header p { font-size: 1rem; }
       .glsm-footer { width: 100%; min-height: 5vh; padding: 2vh 0; text-align: center; line-height: 22px; font-size: 13px; position: relative; z-index: 5; }
       .glsm-footer p { margin: 0; padding: 0 5%; }
       .glsm-features { padding-top: 10vh; padding-bottom: 45vh; }

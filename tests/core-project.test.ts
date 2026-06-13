@@ -319,7 +319,7 @@ describe("story maps", () => {
     // The theme/inset fall back to defaults, and only the first chapter (with a
     // valid id and center) survives; its bad enums normalize to defaults.
     assert.equal(project.storymap.theme, "dark");
-    assert.equal(project.storymap.insetPosition, "bottom-right");
+    assert.equal(project.storymap.insetPosition, "bottom-left");
     assert.equal(project.storymap.chapters.length, 1);
     assert.equal(project.storymap.chapters[0].alignment, "left");
     assert.equal(project.storymap.chapters[0].mapAnimation, "flyTo");

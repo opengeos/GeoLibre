@@ -335,7 +335,7 @@ export const DEFAULT_STORY_MAP: StoryMap = {
   showMarkers: false,
   markerColor: "#3fb1ce",
   inset: false,
-  insetPosition: "bottom-right",
+  insetPosition: "bottom-left",
   chapters: [],
 };
 

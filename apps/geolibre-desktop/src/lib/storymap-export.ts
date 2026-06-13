@@ -304,11 +304,27 @@ function renderTemplate(
         .fully { width: 100%; margin: auto; }
         .light { color: #444; background-color: #fafafa; }
         .dark { color: #fafafa; background-color: #444; }
-        .step { padding-bottom: 50vh; opacity: 0.25; }
-        .step.active { opacity: 0.9; }
-        .step div { padding: 25px 50px; line-height: 25px; font-size: 13px; }
-        .step img { width: 100%; }
-        @media (max-width: 750px) { .centered, .lefty, .righty, .fully { width: 90vw; margin: 0 auto; } }
+        .step { padding-bottom: 50vh; opacity: 0.25; transition: opacity 0.3s; }
+        .step.active { opacity: 0.95; }
+        .sm-card { position: relative; display: flex; flex-direction: column; max-height: 70vh; line-height: 22px; font-size: 14px; border-radius: 6px; box-shadow: 0 6px 20px rgba(0,0,0,0.25); overflow: hidden; }
+        .sm-bar { display: flex; align-items: center; gap: 6px; padding: 7px 10px; cursor: move; user-select: none; touch-action: none; font-weight: 600; font-size: 13px; border-bottom: 1px solid rgba(127,127,127,0.25); }
+        .sm-grip { opacity: 0.5; flex-shrink: 0; }
+        .sm-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sm-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 14px 18px; }
+        .sm-body p { margin: 0; }
+        .sm-body img { width: 100%; max-height: 38vh; object-fit: cover; border-radius: 2px; }
+        .sm-resize { position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; touch-action: none; }
+        .sm-resize::after { content: ''; position: absolute; right: 4px; bottom: 4px; width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; opacity: 0.5; }
+        #nav { position: fixed; left: 12px; top: 12px; max-height: calc(100vh - 24px); width: 220px; overflow-y: auto; z-index: 20; border-radius: 6px; padding: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.3); font-size: 13px; }
+        #nav.dark { background: rgba(40,40,40,0.85); color: #fafafa; }
+        #nav.light { background: rgba(250,250,250,0.92); color: #444; }
+        .nav-item { display: flex; gap: 8px; align-items: center; padding: 7px 9px; border-radius: 4px; cursor: pointer; }
+        .nav-item:hover { background: rgba(127,127,127,0.18); }
+        .nav-item.active { background: rgba(63,177,206,0.22); font-weight: 600; }
+        .nav-num { width: 20px; height: 20px; border-radius: 50%; background: rgba(127,127,127,0.3); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; }
+        .nav-item.active .nav-num { background: #3fb1ce; color: #fff; }
+        .nav-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        @media (max-width: 750px) { .centered, .lefty, .righty, .fully { width: 90vw; margin: 0 auto; } #nav { display: none; } }
         .maplibregl-canvas-container.maplibregl-touch-zoom-rotate.maplibregl-touch-drag-pan,
         .maplibregl-canvas-container.maplibregl-touch-zoom-rotate.maplibregl-touch-drag-pan .maplibregl-canvas { touch-action: unset; }
         #inset-map { position: fixed; width: 180px; height: 180px; border: 2px solid rgba(255, 255, 255, 0.8); border-radius: 4px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3); z-index: 10; }
@@ -363,22 +379,81 @@ function renderTemplate(
         if (config.byline) { var b = document.createElement('p'); b.innerText = config.byline; header.appendChild(b); }
         if (header.children.length > 0) { header.classList.add(config.theme); header.setAttribute('id', 'header'); story.appendChild(header); }
 
+        function makeDraggable(handle, card) {
+            var dx = 0, dy = 0;
+            handle.addEventListener('pointerdown', function (e) {
+                e.preventDefault();
+                var sx = e.clientX, sy = e.clientY, bx = dx, by = dy;
+                function move(ev) { dx = bx + (ev.clientX - sx); dy = by + (ev.clientY - sy); card.style.transform = 'translate(' + dx + 'px,' + dy + 'px)'; }
+                function up() { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); }
+                window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+            });
+            handle.addEventListener('dblclick', function () { dx = 0; dy = 0; card.style.transform = ''; });
+        }
+        function makeResizable(handle, card) {
+            handle.addEventListener('pointerdown', function (e) {
+                e.preventDefault(); e.stopPropagation();
+                var sx = e.clientX, sy = e.clientY, r = card.getBoundingClientRect(), bw = r.width, bh = r.height;
+                function move(ev) { card.style.width = Math.max(200, bw + (ev.clientX - sx)) + 'px'; card.style.height = Math.max(120, bh + (ev.clientY - sy)) + 'px'; }
+                function up() { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); }
+                window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+            });
+        }
+
         config.chapters.forEach(function (record, idx) {
             var container = document.createElement('div');
-            var chapter = document.createElement('div');
-            if (record.title) { var h = document.createElement('h3'); h.innerText = record.title; chapter.appendChild(h); }
-            if (record.image) { var img = new Image(); img.src = record.image; chapter.appendChild(img); }
-            if (record.description) { var p = document.createElement('p'); p.innerHTML = record.description; chapter.appendChild(p); }
             container.setAttribute('id', record.id);
             container.classList.add('step');
-            if (idx === 0) container.classList.add('active');
-            chapter.classList.add(config.theme);
-            container.appendChild(chapter);
             container.classList.add(alignments[record.alignment] || 'centered');
+            if (idx === 0) container.classList.add('active');
             if (record.hidden) container.classList.add('hidden');
+
+            var card = document.createElement('div');
+            card.className = 'sm-card ' + config.theme;
+
+            var bar = document.createElement('div');
+            bar.className = 'sm-bar';
+            var grip = document.createElement('span'); grip.className = 'sm-grip'; grip.textContent = '☰';
+            var barTitle = document.createElement('span'); barTitle.className = 'sm-title'; barTitle.innerText = record.title || ('Chapter ' + (idx + 1));
+            bar.appendChild(grip); bar.appendChild(barTitle);
+            makeDraggable(bar, card);
+            card.appendChild(bar);
+
+            var body = document.createElement('div');
+            body.className = 'sm-body';
+            if (record.image) { var img = new Image(); img.src = record.image; body.appendChild(img); }
+            if (record.description) { var p = document.createElement('p'); p.innerHTML = record.description; body.appendChild(p); }
+            card.appendChild(body);
+
+            var rz = document.createElement('div'); rz.className = 'sm-resize';
+            makeResizable(rz, card);
+            card.appendChild(rz);
+
+            container.appendChild(card);
             features.appendChild(container);
         });
         story.appendChild(features);
+
+        // Navigation pane: list chapters and jump to one on click.
+        var nav = document.createElement('div');
+        nav.id = 'nav';
+        nav.className = config.theme;
+        config.chapters.forEach(function (record, idx) {
+            var item = document.createElement('div');
+            item.className = 'nav-item' + (idx === 0 ? ' active' : '');
+            item.setAttribute('data-id', record.id);
+            var num = document.createElement('span'); num.className = 'nav-num'; num.innerText = (idx + 1);
+            var t = document.createElement('span'); t.className = 'nav-title'; t.innerText = record.title || ('Chapter ' + (idx + 1));
+            item.appendChild(num); item.appendChild(t);
+            item.addEventListener('click', function () {
+                var c = document.getElementById(record.id);
+                var card = c && c.querySelector('.sm-card');
+                (card || c).scrollIntoView({ block: 'center' });
+            });
+            nav.appendChild(item);
+        });
+        document.body.appendChild(nav);
+        var navItems = nav.querySelectorAll('.nav-item');
 
         var footer = document.createElement('div');
         if (config.footer) { var f = document.createElement('p'); f.innerHTML = config.footer; footer.appendChild(f); }
@@ -398,7 +473,7 @@ function renderTemplate(
         if (config.inset) {
             var insetContainer = document.createElement('div');
             insetContainer.id = 'inset-map';
-            insetContainer.classList.add(config.insetPosition || 'bottom-right');
+            insetContainer.classList.add(config.insetPosition || 'bottom-left');
             document.body.appendChild(insetContainer);
             insetMap = new maplibregl.Map({ container: 'inset-map', style: config.insetStyle, center: config.chapters[0].location.center, zoom: config.insetZoom || 1, interactive: false, attributionControl: false });
             var markerEl = document.createElement('div');
@@ -424,6 +499,7 @@ ${inlineLayerScript}
                     var chapter = config.chapters[idx];
                     if (!chapter) return;
                     response.element.classList.add('active');
+                    navItems.forEach(function (it) { it.classList.toggle('active', it.getAttribute('data-id') === response.element.id); });
                     // Cancel any in-progress move (e.g. a prior chapter's rotation)
                     // and bump the token so its pending moveend handler is ignored.
                     map.stop();

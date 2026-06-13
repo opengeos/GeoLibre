@@ -375,7 +375,10 @@ export class MapController {
   ): void {
     if (!this.map) return;
     const map = this.map;
-    map.stop();
+    // Bump the token first so any pending rotation from a prior chapter is
+    // invalidated. We do NOT call map.stop() here: flyTo/easeTo already
+    // supersede an in-progress camera animation, and calling stop() immediately
+    // before a new movement during rapid chapter changes can drop it entirely.
     const token = ++this.storyCameraToken;
     map[animation]({
       center: location.center,

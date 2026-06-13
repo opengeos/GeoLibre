@@ -22,7 +22,7 @@ export function createSampleStoryMap(): StoryMap {
     showMarkers: true,
     markerColor: "#3fb1ce",
     inset: true,
-    insetPosition: "bottom-right",
+    insetPosition: "bottom-left",
     chapters: [
       {
         id: "sample-san-francisco",
