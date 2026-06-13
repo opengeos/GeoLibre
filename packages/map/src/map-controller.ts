@@ -380,20 +380,32 @@ export class MapController {
     // supersede an in-progress camera animation, and calling stop() immediately
     // before a new movement during rapid chapter changes can drop it entirely.
     const token = ++this.storyCameraToken;
-    map[animation]({
-      center: location.center,
-      zoom: location.zoom,
-      pitch: location.pitch,
-      bearing: location.bearing,
-    });
+    // Tag the movement so the rotate-on-settle handler can recognize *this*
+    // move's `moveend`. When flyTo/easeTo supersedes a prior chapter's in-flight
+    // rotation, MapLibre fires a deferred `moveend` for that halted rotation; an
+    // untagged `once("moveend")` would catch it and start rotating immediately,
+    // around the previous chapter's center, before the new camera has travelled.
+    map[animation](
+      {
+        center: location.center,
+        zoom: location.zoom,
+        pitch: location.pitch,
+        bearing: location.bearing,
+      },
+      { storyCameraToken: token },
+    );
     if (rotate) {
-      map.once("moveend", () => {
+      const onMoveEnd = (event: { storyCameraToken?: number }) => {
+        // Ignore the moveend of any other move (e.g. the halted prior rotation).
+        if (event?.storyCameraToken !== token) return;
+        map.off("moveend", onMoveEnd);
         if (this.storyCameraToken !== token || !this.map) return;
         this.map.rotateTo(this.map.getBearing() + 180, {
           duration: 30000,
           easing: (time) => time,
         });
-      });
+      };
+      map.on("moveend", onMoveEnd);
     }
   }
 

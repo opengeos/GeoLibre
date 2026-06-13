@@ -477,6 +477,16 @@ describe("story maps", () => {
       useAppStore.getState().storymap?.chapters.map((c) => c.id),
       ["chapter-1", "chapter-2"],
     );
+    // A project that ships a story opens straight into the presentation.
+    assert.equal(useAppStore.getState().ui.storymapPresenting, true);
+  });
+
+  it("opens a story-less project without presenting", () => {
+    // Start with a presentation active to prove load clears it.
+    useAppStore.getState().setStorymapPresenting(true);
+    const empty = parseProject(serializeProject(createEmptyProject("Plain")));
+    useAppStore.getState().loadProject(empty);
+    assert.equal(useAppStore.getState().ui.storymapPresenting, false);
   });
 
   it("provides a sample story that survives normalization", () => {
