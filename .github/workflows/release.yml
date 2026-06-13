@@ -111,3 +111,56 @@ jobs:
             throw "No MSIX package was created at '$msix'."
           }
           gh release upload "${{ github.event.release.tag_name }}" $msix --clobber
+
+  homebrew:
+    name: Update Homebrew cask
+    needs: build
+    runs-on: ubuntu-latest
+    # Only update the tap for full releases, not prereleases.
+    if: ${{ !github.event.release.prerelease }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Compute DMG checksums
+        id: checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="${TAG#v}"
+          arm="GeoLibre.Desktop_${version}_aarch64.dmg"
+          intel="GeoLibre.Desktop_${version}_x64.dmg"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern "$arm" --pattern "$intel" --dir dmgs
+          {
+            echo "version=$version"
+            echo "sha_arm=$(sha256sum "dmgs/$arm" | awk '{print $1}')"
+            echo "sha_intel=$(sha256sum "dmgs/$intel" | awk '{print $1}')"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check out Homebrew tap
+        uses: actions/checkout@v6
+        with:
+          repository: opengeos/homebrew-geolibre
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Render and commit cask
+        env:
+          VERSION: ${{ steps.checksums.outputs.version }}
+          SHA256_ARM: ${{ steps.checksums.outputs.sha_arm }}
+          SHA256_INTEL: ${{ steps.checksums.outputs.sha_intel }}
+        run: |
+          mkdir -p tap/Casks
+          scripts/render-homebrew-cask.sh > tap/Casks/geolibre.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "Cask already up to date for ${VERSION}."
+            exit 0
+          fi
+          git add Casks/geolibre.rb
+          git commit -m "geolibre ${VERSION}"
+          git push

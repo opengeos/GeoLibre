@@ -18,6 +18,29 @@ The Windows build is unsigned and may require a platform-specific trust prompt. 
 
 ## macOS installation
 
+### Homebrew (recommended)
+
+GeoLibre is available as a [Homebrew Cask](https://docs.brew.sh/Cask-Cookbook)
+from a self-hosted tap:
+
+```bash
+brew tap opengeos/geolibre
+brew install --cask --no-quarantine geolibre
+```
+
+The `--no-quarantine` flag is required because the DMGs are ad-hoc signed but
+not notarized by Apple; it lets Homebrew skip the Gatekeeper quarantine that
+would otherwise show a "damaged" prompt (see below). Upgrade later with:
+
+```bash
+brew upgrade --cask --no-quarantine geolibre
+```
+
+The tap is not the official `homebrew/cask` repository, which requires a
+notarized, Apple-signed app.
+
+### Manual installation
+
 The macOS builds are not signed with an Apple Developer certificate, so
 Gatekeeper blocks them on first launch. Depending on your macOS version and
 which release you downloaded, the message is one of:

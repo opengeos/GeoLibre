@@ -68,6 +68,21 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 
 ## Install
 
+Prebuilt desktop installers for Linux, Windows, and macOS are published on the
+[Releases](https://github.com/opengeos/GeoLibre/releases) page. On macOS you can
+install and update with Homebrew:
+
+```bash
+brew tap opengeos/geolibre
+brew install --cask --no-quarantine geolibre
+```
+
+`--no-quarantine` is required because the app is ad-hoc signed but not notarized
+by Apple. See [Downloads](docs/downloads.md) for details and the manual install
+steps.
+
+To build from source instead:
+
 ```bash
 git clone https://github.com/opengeos/GeoLibre.git
 cd GeoLibre
