@@ -435,6 +435,11 @@ export function TopToolbar({
     ),
   );
   const [addDataKind, setAddDataKind] = useState<AddDataKind | null>(null);
+  // Deck.gl Layer kind the Add Data dialog opens on (e.g. the 3D-model entry
+  // jumps straight to the scenegraph layer type).
+  const [addDataDeckVizKind, setAddDataDeckVizKind] = useState<
+    string | undefined
+  >(undefined);
   const [netcdfDialogOpen, setNetcdfDialogOpen] = useState(false);
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
   const [projectUrlDialogOpen, setProjectUrlDialogOpen] = useState(false);
@@ -1660,6 +1665,14 @@ export function TopToolbar({
           <DropdownMenuItem onSelect={() => setAddDataKind("deckgl-viz")}>
             {t("toolbar.layerType.deckglViz")}
           </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => {
+              setAddDataDeckVizKind("scenegraph");
+              setAddDataKind("deckgl-viz");
+            }}
+          >
+            {t("toolbar.layerType.gltfModel")}
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-xs text-muted-foreground">
             {t("toolbar.item.sectionCloudFormats")}
@@ -2258,8 +2271,12 @@ export function TopToolbar({
       <AddDataDialog
         kind={addDataKind}
         mapControllerRef={mapControllerRef}
+        initialDeckVizKind={addDataDeckVizKind}
         onOpenChange={(open: boolean) => {
-          if (!open) setAddDataKind(null);
+          if (!open) {
+            setAddDataKind(null);
+            setAddDataDeckVizKind(undefined);
+          }
         }}
       />
       <AddNetcdfDialog

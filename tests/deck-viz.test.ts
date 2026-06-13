@@ -7,6 +7,7 @@ import {
   detectAndParseDeckVizInput,
 } from "../apps/geolibre-desktop/src/lib/deck-viz-input";
 import {
+  DEFAULT_DECK_VIZ_SCENEGRAPH,
   DEFAULT_DECK_VIZ_STYLE,
   getDeckVizLayerDef,
   listDeckVizLayerDefs,
@@ -261,6 +262,147 @@ describe("deck-viz registry & store layer", () => {
       rows: [],
     });
     assert.equal(readDeckVizConfig(layer), null);
+  });
+});
+
+describe("scenegraph (glTF 3D model) layer", () => {
+  const def = getDeckVizLayerDef("scenegraph")!;
+
+  it("declares a glTF model example with required point roles", () => {
+    assert.ok(def);
+    assert.equal(def.category, "models");
+    assert.ok(def.example.scenegraph);
+    assert.match(def.example.scenegraph.modelUrl, /\.glb$/);
+    assert.equal(def.example.fieldMapping.lng, "longitude");
+    assert.equal(def.example.fieldMapping.lat, "latitude");
+  });
+
+  it("round-trips the model URL and transform through the store layer", () => {
+    const layer = createDeckVizStoreLayer({
+      name: "Plane",
+      config: {
+        layerKind: "scenegraph",
+        format: "csv-rows",
+        fieldMapping: { lng: "lng", lat: "lat" },
+        style: { ...DEFAULT_DECK_VIZ_STYLE },
+        scenegraph: {
+          modelUrl: "https://example.com/model.glb",
+          sizeScale: 250,
+          bearing: 45,
+          altitude: 100,
+        },
+      },
+      rows: [{ lng: -122.4, lat: 37.8 }],
+      sourcePath: "https://example.com/model.glb",
+    });
+    assert.equal(layer.metadata.customLayerType, "scenegraph");
+    const config = readDeckVizConfig(layer);
+    assert.ok(config?.scenegraph);
+    assert.equal(config.scenegraph.modelUrl, "https://example.com/model.glb");
+    assert.equal(config.scenegraph.sizeScale, 250);
+    assert.equal(config.scenegraph.bearing, 45);
+    assert.equal(config.scenegraph.altitude, 100);
+  });
+
+  it("fills scenegraph defaults for a partial persisted config", () => {
+    const layer = createDeckVizStoreLayer({
+      name: "Partial",
+      config: {
+        layerKind: "scenegraph",
+        format: "csv-rows",
+        fieldMapping: { lng: "lng", lat: "lat" },
+        style: { ...DEFAULT_DECK_VIZ_STYLE },
+        scenegraph: { modelUrl: "https://example.com/m.glb" } as never,
+      },
+      rows: [],
+    });
+    const config = readDeckVizConfig(layer);
+    assert.equal(
+      config?.scenegraph?.sizeScale,
+      DEFAULT_DECK_VIZ_SCENEGRAPH.sizeScale,
+    );
+    assert.equal(config?.scenegraph?.bearing, 0);
+  });
+
+  it("builds a ScenegraphLayer whose accessors fold in transform + columns", () => {
+    const captured: { props?: Record<string, unknown> } = {};
+    const fakeDeck = {
+      meshLayers: {
+        ScenegraphLayer: class {
+          constructor(props: Record<string, unknown>) {
+            captured.props = props;
+          }
+        },
+      },
+    } as unknown as Parameters<typeof def.build>[0];
+
+    def.build(fakeDeck, "sg-1", {
+      rows: [{ lng: -122.4, lat: 37.8, alt: 50, heading: 90 }],
+      fieldMapping: {
+        lng: "lng",
+        lat: "lat",
+        altitude: "alt",
+        bearing: "heading",
+      },
+      style: { ...DEFAULT_DECK_VIZ_STYLE },
+      opacity: 0.5,
+      scenegraph: {
+        modelUrl: "https://example.com/model.glb",
+        sizeScale: 300,
+        bearing: 10,
+        altitude: 25,
+      },
+    });
+
+    const props = captured.props!;
+    assert.equal(props.scenegraph, "https://example.com/model.glb");
+    assert.equal(props.sizeScale, 300);
+    assert.equal(props.opacity, 0.5);
+    const record = { lng: -122.4, lat: 37.8, alt: 50, heading: 90 };
+    const position = (props.getPosition as (r: unknown) => number[])(record);
+    // altitude column (50) + base altitude (25)
+    assert.deepEqual(position, [-122.4, 37.8, 75]);
+    const orientation = (
+      props.getOrientation as (r: unknown) => number[]
+    )(record);
+    // bearing column (90) drives yaw; trailing 90° roll stands the model up
+    assert.deepEqual(orientation, [0, 90, 90]);
+  });
+
+  it("uses the constant bearing/altitude when no columns are mapped", () => {
+    const captured: { props?: Record<string, unknown> } = {};
+    const fakeDeck = {
+      meshLayers: {
+        ScenegraphLayer: class {
+          constructor(props: Record<string, unknown>) {
+            captured.props = props;
+          }
+        },
+      },
+    } as unknown as Parameters<typeof def.build>[0];
+
+    def.build(fakeDeck, "sg-2", {
+      rows: [{ lng: 1, lat: 2 }],
+      fieldMapping: { lng: "lng", lat: "lat" },
+      style: { ...DEFAULT_DECK_VIZ_STYLE },
+      opacity: 1,
+      scenegraph: {
+        modelUrl: "https://example.com/model.glb",
+        sizeScale: 100,
+        bearing: 30,
+        altitude: 12,
+      },
+    });
+    const props = captured.props!;
+    const record = { lng: 1, lat: 2 };
+    assert.deepEqual(
+      (props.getPosition as (r: unknown) => number[])(record),
+      [1, 2, 12],
+    );
+    assert.deepEqual(
+      (props.getOrientation as (r: unknown) => number[])(record),
+      [0, 30, 90],
+    );
   });
 });
 

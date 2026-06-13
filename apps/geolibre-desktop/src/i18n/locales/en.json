@@ -183,6 +183,7 @@
       "arcgis": "ArcGIS Layer",
       "video": "Video Layer",
       "deckglViz": "Deck.gl Layer",
+      "gltfModel": "3D Model (glTF)",
       "postgres": "PostgreSQL Layer"
     },
     "conversion": {

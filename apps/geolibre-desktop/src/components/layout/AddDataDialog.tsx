@@ -10,12 +10,14 @@ import {
   type ArcGISSourceType,
   createDeckVizStoreLayer,
   DECK_VIZ_CATEGORY_LABELS,
+  DEFAULT_DECK_VIZ_SCENEGRAPH,
   DEFAULT_DECK_VIZ_STYLE,
   ensureMercatorProjection,
   getDeckVizLayerDef,
   listDeckVizLayerDefs,
   type DeckVizCategory,
   type DeckVizFieldMapping,
+  type DeckVizScenegraphConfig,
   type DeckVizStyle,
 } from "@geolibre/plugins";
 import {
@@ -102,6 +104,11 @@ interface AddDataDialogProps {
   kind: AddDataKind | null;
   mapControllerRef: RefObject<MapController | null>;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Deck.gl Layer kind to pre-select when the dialog opens as `deckgl-viz`
+   * (e.g. a "3D model" menu entry opens it on the scenegraph layer type).
+   */
+  initialDeckVizKind?: string;
 }
 
 type GpxMode = "url" | "file";
@@ -382,6 +389,7 @@ export function AddDataDialog({
   kind,
   mapControllerRef,
   onOpenChange,
+  initialDeckVizKind,
 }: AddDataDialogProps) {
   const open = kind !== null;
   const addLayer = useAppStore((s) => s.addLayer);
@@ -498,6 +506,18 @@ export function AddDataDialog({
   });
   const [deckVizStatus, setDeckVizStatus] = useState<string | null>(null);
   const [isLoadingDeckViz, setIsLoadingDeckViz] = useState(false);
+  // Scenegraph (glTF 3D model) layer-specific inputs.
+  const [deckVizModelUrl, setDeckVizModelUrl] = useState("");
+  const [deckVizModelMode, setDeckVizModelMode] = useState<"single" | "data">(
+    "single",
+  );
+  const [deckVizModelScale, setDeckVizModelScale] = useState(
+    String(DEFAULT_DECK_VIZ_SCENEGRAPH.sizeScale),
+  );
+  const [deckVizModelBearing, setDeckVizModelBearing] = useState("0");
+  const [deckVizModelAltitude, setDeckVizModelAltitude] = useState("0");
+  const [deckVizModelLng, setDeckVizModelLng] = useState("");
+  const [deckVizModelLat, setDeckVizModelLat] = useState("");
 
   useEffect(() => {
     if (!kind) return;
@@ -587,7 +607,16 @@ export function AddDataDialog({
     if (kind === "deckgl-viz") {
       ensureMercatorProjection(mapControllerRef.current?.getMap());
     }
-    setDeckVizKind("scatterplot");
+    const startKind =
+      kind === "deckgl-viz" && initialDeckVizKind
+        ? initialDeckVizKind
+        : "scatterplot";
+    setDeckVizKind(startKind);
+    // Keep the layer-name field in step with the pre-selected kind (the name
+    // map above defaults deckgl-viz to the scatterplot label).
+    if (kind === "deckgl-viz") {
+      setLayerName(getDeckVizLayerDef(startKind)?.label ?? "Deck.gl Layer");
+    }
     setDeckVizMode("url");
     setDeckVizUrl("");
     setDeckVizSourcePath("");
@@ -596,7 +625,19 @@ export function AddDataDialog({
     setDeckVizStyle({ ...DEFAULT_DECK_VIZ_STYLE });
     setDeckVizStatus(null);
     setIsLoadingDeckViz(false);
-  }, [kind]);
+    // Pre-fill the scenegraph model + transform from the bundled example when
+    // the dialog opens directly on the 3D-model kind.
+    const startSg = getDeckVizLayerDef(startKind)?.example.scenegraph;
+    setDeckVizModelUrl(startSg?.modelUrl ?? "");
+    setDeckVizModelMode("single");
+    setDeckVizModelScale(
+      String(startSg?.sizeScale ?? DEFAULT_DECK_VIZ_SCENEGRAPH.sizeScale),
+    );
+    setDeckVizModelBearing(String(startSg?.bearing ?? 0));
+    setDeckVizModelAltitude(String(startSg?.altitude ?? 0));
+    setDeckVizModelLng("");
+    setDeckVizModelLat("");
+  }, [kind, initialDeckVizKind]);
 
   const description = useMemo(() => {
     if (kind === "xyz") {
@@ -786,6 +827,12 @@ export function AddDataDialog({
   const beforeLayer = beforeLayerId.trim() || null;
 
   const deckVizDef = getDeckVizLayerDef(deckVizKind);
+  const isScenegraphKind = deckVizKind === "scenegraph";
+  // Single-location scenegraph mode types a coordinate instead of loading a
+  // point file, so the data-loader UI is hidden then.
+  const showDeckVizDataLoader = !(
+    isScenegraphKind && deckVizModelMode === "single"
+  );
 
   const handleDeckVizKindChange = (nextKind: string) => {
     setDeckVizKind(nextKind);
@@ -794,7 +841,35 @@ export function AddDataDialog({
     setDeckVizStatus(null);
     setError(null);
     setDeckVizStyle({ ...DEFAULT_DECK_VIZ_STYLE });
-    setLayerName(getDeckVizLayerDef(nextKind)?.label ?? "Deck.gl Layer");
+    const nextDef = getDeckVizLayerDef(nextKind);
+    setLayerName(nextDef?.label ?? "Deck.gl Layer");
+    // Pre-fill the scenegraph model URL and transform from the bundled example
+    // so the user can place a model immediately (and tweak from there).
+    const exampleSg = nextDef?.example.scenegraph;
+    if (nextKind === "scenegraph" && exampleSg) {
+      setDeckVizModelUrl(exampleSg.modelUrl);
+      setDeckVizModelScale(String(exampleSg.sizeScale));
+      setDeckVizModelBearing(String(exampleSg.bearing));
+      setDeckVizModelAltitude(String(exampleSg.altitude));
+    }
+  };
+
+  // Builds the scenegraph config from the dialog inputs, falling back to the
+  // defaults for any field the user left blank/invalid.
+  const buildScenegraphConfig = (): DeckVizScenegraphConfig => {
+    const numOr = (value: string, fallback: number): number => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    };
+    return {
+      modelUrl: deckVizModelUrl.trim(),
+      sizeScale: numOr(
+        deckVizModelScale,
+        DEFAULT_DECK_VIZ_SCENEGRAPH.sizeScale,
+      ),
+      bearing: numOr(deckVizModelBearing, 0),
+      altitude: numOr(deckVizModelAltitude, 0),
+    };
   };
 
   const readDeckVizSource = async (): Promise<{
@@ -841,10 +916,14 @@ export function AddDataDialog({
     mapping: DeckVizFieldMapping;
     style: DeckVizStyle;
     sourcePath: string;
+    scenegraph?: DeckVizScenegraphConfig;
   }) => {
     const def = getDeckVizLayerDef(deckVizKind);
     if (!def) throw new Error("Unknown layer type.");
-    const { parsed, mapping, style, sourcePath } = params;
+    const { parsed, mapping, style, sourcePath, scenegraph } = params;
+    if (def.kind === "scenegraph" && !scenegraph?.modelUrl) {
+      throw new Error("Enter a glTF/GLB model URL.");
+    }
 
     if (def.format === "geojson" && parsed.format !== "geojson") {
       throw new Error(`${def.label} needs a GeoJSON file.`);
@@ -876,6 +955,7 @@ export function AddDataDialog({
         format: parsed.format,
         fieldMapping: mapping,
         style,
+        ...(scenegraph ? { scenegraph } : {}),
       },
       rows: parsed.format === "geojson" ? undefined : parsed.rows,
       geojson: parsed.geojson,
@@ -910,6 +990,7 @@ export function AddDataDialog({
         mapping: def.example.fieldMapping,
         style: { ...DEFAULT_DECK_VIZ_STYLE, ...(def.example.style ?? {}) },
         sourcePath: def.example.url,
+        scenegraph: def.example.scenegraph,
       });
     } catch (err) {
       setError(errorMessage(err, "Could not load the example data."));
@@ -1200,6 +1281,40 @@ export function AddDataDialog({
       const name = layerName.trim() || KIND_LABELS[kind].replace("Add ", "");
 
       if (kind === "deckgl-viz") {
+        const isScenegraph = deckVizKind === "scenegraph";
+        const scenegraph = isScenegraph ? buildScenegraphConfig() : undefined;
+        if (isScenegraph && !scenegraph?.modelUrl) {
+          throw new Error("Enter a glTF/GLB model URL.");
+        }
+        // Single-location mode synthesizes a one-row dataset from the typed
+        // coordinate instead of loading a point file.
+        if (isScenegraph && deckVizModelMode === "single") {
+          // Number("") is 0, so treat a blank field as missing rather than the
+          // valid coordinate 0.
+          const parseCoord = (value: string): number =>
+            value.trim() === "" ? Number.NaN : Number(value);
+          const lng = parseCoord(deckVizModelLng);
+          const lat = parseCoord(deckVizModelLat);
+          if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+            throw new Error("Enter a valid longitude and latitude.");
+          }
+          finalizeDeckVizLayer({
+            parsed: {
+              format: "csv-rows",
+              columns: [
+                { value: "lng", label: "lng" },
+                { value: "lat", label: "lat" },
+              ],
+              rows: [{ lng, lat }],
+              rowCount: 1,
+            },
+            mapping: { lng: "lng", lat: "lat" },
+            style: deckVizStyle,
+            sourcePath: scenegraph?.modelUrl ?? "",
+            scenegraph,
+          });
+          return;
+        }
         if (!deckVizParsed) {
           throw new Error("Load the example data, or a file/URL, first.");
         }
@@ -1208,6 +1323,7 @@ export function AddDataDialog({
           mapping: deckVizMapping,
           style: deckVizStyle,
           sourcePath: deckVizSourcePath,
+          scenegraph,
         });
         return;
       }
@@ -1628,7 +1744,12 @@ export function AddDataDialog({
     isLoadingDeckViz ||
     (kind === "gpx" && !hasSelectedGpxLayerKind) ||
     (kind === "delimited-text" && missingCustomDelimiter) ||
-    (kind === "deckgl-viz" && !deckVizParsed) ||
+    (kind === "deckgl-viz" &&
+      deckVizKind === "scenegraph" &&
+      !deckVizModelUrl.trim()) ||
+    (kind === "deckgl-viz" &&
+      !deckVizParsed &&
+      !(deckVizKind === "scenegraph" && deckVizModelMode === "single")) ||
     (kind === "postgres" && (!martinServer || !selectedMartinSourceId));
 
   return (
@@ -1754,18 +1875,121 @@ export function AddDataDialog({
                 ) : null}
               </div>
 
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleUseDeckVizExample}
-                disabled={isLoadingDeckViz}
-              >
-                <Globe2 className="mr-2 h-3.5 w-3.5" />
-                {isLoadingDeckViz ? "Loading..." : "Use example data"}
-              </Button>
+              {isScenegraphKind ? (
+                <div className="space-y-3 rounded-md border border-border p-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="deckviz-model-url">
+                      glTF / GLB model URL
+                    </Label>
+                    <Input
+                      id="deckviz-model-url"
+                      placeholder="https://example.com/model.glb"
+                      value={deckVizModelUrl}
+                      onChange={(event) =>
+                        setDeckVizModelUrl(event.target.value)
+                      }
+                    />
+                  </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="deckviz-mode">Or load your own</Label>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="deckviz-model-mode">Placement</Label>
+                    <Select
+                      id="deckviz-model-mode"
+                      value={deckVizModelMode}
+                      onChange={(event) => {
+                        setDeckVizModelMode(
+                          event.target.value as "single" | "data",
+                        );
+                        setDeckVizParsed(null);
+                        setDeckVizStatus(null);
+                      }}
+                    >
+                      <option value="single">Single location</option>
+                      <option value="data">From point data</option>
+                    </Select>
+                  </div>
+
+                  {deckVizModelMode === "single" ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="deckviz-model-lng">Longitude</Label>
+                        <Input
+                          id="deckviz-model-lng"
+                          inputMode="decimal"
+                          placeholder="-122.45"
+                          value={deckVizModelLng}
+                          onChange={(event) =>
+                            setDeckVizModelLng(event.target.value)
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="deckviz-model-lat">Latitude</Label>
+                        <Input
+                          id="deckviz-model-lat"
+                          inputMode="decimal"
+                          placeholder="37.78"
+                          value={deckVizModelLat}
+                          onChange={(event) =>
+                            setDeckVizModelLat(event.target.value)
+                          }
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="deckviz-model-scale">Scale</Label>
+                      <Input
+                        id="deckviz-model-scale"
+                        inputMode="numeric"
+                        value={deckVizModelScale}
+                        onChange={(event) =>
+                          setDeckVizModelScale(event.target.value)
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="deckviz-model-bearing">Bearing°</Label>
+                      <Input
+                        id="deckviz-model-bearing"
+                        inputMode="numeric"
+                        value={deckVizModelBearing}
+                        onChange={(event) =>
+                          setDeckVizModelBearing(event.target.value)
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="deckviz-model-altitude">Altitude m</Label>
+                      <Input
+                        id="deckviz-model-altitude"
+                        inputMode="numeric"
+                        value={deckVizModelAltitude}
+                        onChange={(event) =>
+                          setDeckVizModelAltitude(event.target.value)
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {showDeckVizDataLoader ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleUseDeckVizExample}
+                    disabled={isLoadingDeckViz}
+                  >
+                    <Globe2 className="mr-2 h-3.5 w-3.5" />
+                    {isLoadingDeckViz ? "Loading..." : "Use example data"}
+                  </Button>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="deckviz-mode">Or load your own</Label>
                 <Select
                   id="deckviz-mode"
                   value={deckVizMode}
@@ -1850,6 +2074,8 @@ export function AddDataDialog({
                     </div>
                   ))}
                 </div>
+                  ) : null}
+                </>
               ) : null}
 
               {deckVizDef ? (

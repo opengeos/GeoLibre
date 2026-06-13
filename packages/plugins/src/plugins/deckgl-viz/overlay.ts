@@ -236,6 +236,7 @@ function buildContext(layer: GeoLibreLayer): RenderEntry | null {
     fieldMapping: config.fieldMapping,
     style,
     opacity: layer.opacity * layer.style.fillOpacity,
+    scenegraph: config.scenegraph,
   };
   return { id: layer.id, def, ctx };
 }

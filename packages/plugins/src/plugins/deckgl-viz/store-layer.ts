@@ -4,9 +4,11 @@ import {
 } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import {
+  DEFAULT_DECK_VIZ_SCENEGRAPH,
   DEFAULT_DECK_VIZ_STYLE,
   type DeckVizConfig,
   type DeckVizFieldMapping,
+  type DeckVizScenegraphConfig,
   type DeckVizStyle,
   getDeckVizLayerDef,
 } from "./registry";
@@ -156,10 +158,36 @@ export function readDeckVizConfig(layer: GeoLibreLayer): DeckVizConfig | null {
     ...DEFAULT_DECK_VIZ_STYLE,
     ...(candidate.style ?? {}),
   };
+  const scenegraph = readScenegraphConfig(candidate.scenegraph);
   return {
     layerKind: candidate.layerKind,
     format: candidate.format ?? "csv-rows",
     fieldMapping,
     style,
+    ...(scenegraph ? { scenegraph } : {}),
+  };
+}
+
+/**
+ * Normalises the persisted scenegraph (glTF model) config, filling defaults so
+ * a hand-edited or older project still renders. Returns null when absent.
+ */
+function readScenegraphConfig(
+  raw: unknown,
+): DeckVizScenegraphConfig | null {
+  if (!raw || typeof raw !== "object") return null;
+  const candidate = raw as Partial<DeckVizScenegraphConfig>;
+  return {
+    modelUrl:
+      typeof candidate.modelUrl === "string" ? candidate.modelUrl : "",
+    sizeScale: Number.isFinite(candidate.sizeScale)
+      ? (candidate.sizeScale as number)
+      : DEFAULT_DECK_VIZ_SCENEGRAPH.sizeScale,
+    bearing: Number.isFinite(candidate.bearing)
+      ? (candidate.bearing as number)
+      : DEFAULT_DECK_VIZ_SCENEGRAPH.bearing,
+    altitude: Number.isFinite(candidate.altitude)
+      ? (candidate.altitude as number)
+      : DEFAULT_DECK_VIZ_SCENEGRAPH.altitude,
   };
 }

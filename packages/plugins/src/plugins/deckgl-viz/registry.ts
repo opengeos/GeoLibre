@@ -12,7 +12,12 @@ import type { GeoLibreDeckGL } from "../../types";
  */
 
 /** Visual grouping shown in the layer-type picker. */
-export type DeckVizCategory = "point" | "flow" | "geojson" | "advanced";
+export type DeckVizCategory =
+  | "point"
+  | "flow"
+  | "geojson"
+  | "advanced"
+  | "models";
 
 /**
  * How the source data is shaped. Drives both the dialog (file picker vs URL
@@ -71,12 +76,40 @@ export const DEFAULT_DECK_VIZ_STYLE: DeckVizStyle = {
 /** Maps a role key to a column name (string) or tuple index (number). */
 export type DeckVizFieldMapping = Record<string, string | number>;
 
+/**
+ * Configuration specific to the glTF 3D-model (`scenegraph`) layer: the model
+ * URL plus the default transform applied to every instance. Per-instance
+ * altitude/bearing/scale can additionally be data-driven via mapped columns.
+ */
+export interface DeckVizScenegraphConfig {
+  /** glTF/GLB model URL (the model itself, not the placement data). */
+  modelUrl: string;
+  /** Overall size multiplier in meters (ScenegraphLayer `sizeScale`). */
+  sizeScale: number;
+  /** Heading in degrees clockwise from north, applied as the model's yaw. */
+  bearing: number;
+  /**
+   * Constant altitude in meters, added to the per-instance altitude (or used
+   * alone when no altitude column is mapped).
+   */
+  altitude: number;
+}
+
+export const DEFAULT_DECK_VIZ_SCENEGRAPH: DeckVizScenegraphConfig = {
+  modelUrl: "",
+  sizeScale: 1000,
+  bearing: 0,
+  altitude: 0,
+};
+
 /** The serialisable description of a built visualization (stored in metadata). */
 export interface DeckVizConfig {
   layerKind: string;
   format: DeckVizFormat;
   fieldMapping: DeckVizFieldMapping;
   style: DeckVizStyle;
+  /** Present only for the `scenegraph` layer kind. */
+  scenegraph?: DeckVizScenegraphConfig;
 }
 
 /** Inputs handed to a registry `build` function. */
@@ -91,12 +124,16 @@ export interface DeckVizBuildContext {
   opacity: number;
   /** Animation clock for animated layers (same units as the data timestamps). */
   currentTime?: number;
+  /** Model URL and transform for the `scenegraph` layer kind. */
+  scenegraph?: DeckVizScenegraphConfig;
 }
 
 export interface DeckVizExample {
   url: string;
   fieldMapping: DeckVizFieldMapping;
   style?: Partial<DeckVizStyle>;
+  /** Default model + transform for the `scenegraph` layer kind. */
+  scenegraph?: DeckVizScenegraphConfig;
 }
 
 export interface DeckVizLayerDef {
@@ -230,7 +267,33 @@ const TARGET_LAT_ROLE: DeckVizRole = {
   detect: ["lat2", "target_lat", "to_lat", "dest_lat", "end_lat"],
 };
 
+const ALTITUDE_ROLE: DeckVizRole = {
+  key: "altitude",
+  label: "Altitude (optional)",
+  required: false,
+  detect: ["altitude", "alt", "elevation", "height", "z"],
+};
+const BEARING_ROLE: DeckVizRole = {
+  key: "bearing",
+  label: "Bearing / heading (optional)",
+  required: false,
+  detect: ["bearing", "heading", "azimuth", "rotation", "angle", "track"],
+};
+const SCALE_ROLE: DeckVizRole = {
+  key: "scale",
+  label: "Scale factor (optional)",
+  required: false,
+  detect: ["scale", "size"],
+};
+
 const POINT_ROLES: DeckVizRole[] = [LNG_ROLE, LAT_ROLE, WEIGHT_ROLE];
+const SCENEGRAPH_ROLES: DeckVizRole[] = [
+  LNG_ROLE,
+  LAT_ROLE,
+  ALTITUDE_ROLE,
+  BEARING_ROLE,
+  SCALE_ROLE,
+];
 const OD_ROLES: DeckVizRole[] = [
   SOURCE_LNG_ROLE,
   SOURCE_LAT_ROLE,
@@ -765,6 +828,76 @@ const DEFINITIONS: DeckVizLayerDef[] = [
       style: { lineWidth: 2, color: "#f97316" },
     },
   },
+  // ---- 3D models -----------------------------------------------------------
+  {
+    kind: "scenegraph",
+    label: "3D model (glTF)",
+    category: "models",
+    description:
+      "Place a glTF/GLB 3D model at each point. CSV/JSON with longitude & latitude, plus a model URL.",
+    inputKind: "point-csv",
+    format: "csv-rows",
+    roles: SCENEGRAPH_ROLES,
+    styleControls: [],
+    build: (deckGL, id, ctx) => {
+      const sg = ctx.scenegraph ?? DEFAULT_DECK_VIZ_SCENEGRAPH;
+      const mapping = ctx.fieldMapping;
+      const position = positionAccessor(mapping);
+      const altKey = mapping.altitude;
+      const bearingKey = mapping.bearing;
+      const scaleKey = mapping.scale;
+      const hasAlt = altKey !== undefined && altKey !== "";
+      const hasBearing = bearingKey !== undefined && bearingKey !== "";
+      const hasScale = scaleKey !== undefined && scaleKey !== "";
+      // ScenegraphLayer needs a model; with no URL there is nothing to render,
+      // so emit an empty layer rather than throwing (keeps the overlay alive).
+      const data = sg.modelUrl ? rowsOf(ctx) : [];
+      return new deckGL.meshLayers.ScenegraphLayer({
+        id,
+        data,
+        scenegraph: sg.modelUrl,
+        _lighting: "pbr",
+        sizeScale: sg.sizeScale,
+        // Keep the model visible at every zoom even when the metric size is
+        // tiny on screen.
+        sizeMinPixels: 1,
+        sizeMaxPixels: 100,
+        getPosition: (record: AnyRecord) => {
+          const [lng, lat] = position(record);
+          const altitude =
+            (hasAlt ? readNumber(record, altKey) : 0) + sg.altitude;
+          return [lng, lat, altitude];
+        },
+        // glTF models are Y-up; the trailing 90° roll stands them upright in
+        // deck.gl's Z-up frame (matching deck.gl's ScenegraphLayer examples).
+        getOrientation: (record: AnyRecord): [number, number, number] => [
+          0,
+          hasBearing ? readNumber(record, bearingKey) : sg.bearing,
+          90,
+        ],
+        ...(hasScale
+          ? {
+              getScale: (record: AnyRecord): [number, number, number] => {
+                const s = readNumber(record, scaleKey) || 1;
+                return [s, s, s];
+              },
+            }
+          : {}),
+        opacity: ctx.opacity,
+        pickable: true,
+      });
+    },
+    example: {
+      url: `${DATA_BASE}/text-layer/cities-1000.csv`,
+      fieldMapping: { lng: "longitude", lat: "latitude" },
+      scenegraph: {
+        modelUrl: `https://raw.githubusercontent.com/visgl/deck.gl-data/master/examples/scenegraph-layer/airplane.glb`,
+        sizeScale: 3000,
+        bearing: 0,
+        altitude: 0,
+      },
+    },
+  },
 ];
 
 const REGISTRY = new Map<string, DeckVizLayerDef>(
@@ -787,4 +920,5 @@ export const DECK_VIZ_CATEGORY_LABELS: Record<DeckVizCategory, string> = {
   flow: "Flow / origin-destination",
   geojson: "GeoJSON",
   advanced: "Advanced / animated",
+  models: "3D models",
 };
