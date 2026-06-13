@@ -13,7 +13,15 @@ import {
 } from "./print-layout";
 import { saveBinaryFileWithFallback } from "./tauri-io";
 
-export { buildLegend } from "./print-legend";
+export {
+  applyLegendConfig,
+  buildLegend,
+  legendEditorRows,
+  reorderLegendEntry,
+  setLegendItemLabel,
+  toggleLegendItemHidden,
+  type LegendEditorRow,
+} from "./print-legend";
 
 export interface CapturedMap {
   image: HTMLCanvasElement;

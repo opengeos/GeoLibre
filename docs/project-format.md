@@ -15,6 +15,7 @@ Projects are saved as **`.geolibre.json`** files.
 | `layers`          | array   | Layer definitions (see below)                                                                                |
 | `styles`          | object  | Map of layer id → `LayerStyle`                                                                               |
 | `plugins`         | object  | Optional external plugin manifest URLs, active plugin IDs, plugin map-control positions, and plugin settings |
+| `legend`          | object  | Optional Print Layout legend customizations (title, grouping, ordering, per-item rename/hide)                |
 | `metadata`        | object  | Free-form project metadata                                                                                   |
 
 ## Plugin state
@@ -41,6 +42,37 @@ Projects are saved as **`.geolibre.json`** files.
 ```
 
 Projects without a `plugins` section open with the built-in default plugin state.
+
+## Legend
+
+The Print Layout legend is always derived from the visible layers' symbology; the
+`legend` object stores only the user's edits layered on top, so customizations
+survive layer additions and removals.
+
+```json
+{
+  "title": "Legend",
+  "groupByLayer": true,
+  "order": ["layer-b", "layer-a"],
+  "overrides": {
+    "layer-a": { "label": "Roads", "hidden": false },
+    "layer-b::0": { "label": "Low" },
+    "layer-b::1": { "hidden": true }
+  }
+}
+```
+
+- `title` — heading drawn above the legend entries.
+- `groupByLayer` — when `true`, graduated/categorized classes are grouped under a
+  per-layer heading; when `false`, classes are listed flat.
+- `order` — top-level entry order by layer id (top-first); layers not listed keep
+  their default order after the listed ones.
+- `overrides` — per-item `label` and `hidden` edits keyed by a stable item key: a
+  layer id for a whole entry, or `${layerId}::${index}` for an individual class
+  within a graduated/categorized entry.
+
+Projects without a `legend` section open with the default legend (auto-generated
+from the layers, titled "Legend").
 
 ## Layer object
 

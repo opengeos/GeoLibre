@@ -100,6 +100,53 @@ describe("project parsing", () => {
     });
   });
 
+  it("normalizes a legend config, dropping malformed overrides", () => {
+    const project = parseProject(
+      JSON.stringify({
+        version: "0.1.0",
+        name: "Legend",
+        mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+        legend: {
+          title: "My Legend",
+          groupByLayer: false,
+          order: ["a", "a", "b", 5],
+          overrides: {
+            a: { label: "Renamed", hidden: true },
+            b: { hidden: "yes", label: 3 },
+            "": { hidden: true },
+          },
+        },
+      }),
+    );
+    assert.equal(project.legend?.title, "My Legend");
+    assert.equal(project.legend?.groupByLayer, false);
+    assert.deepEqual(project.legend?.order, ["a", "b"]);
+    assert.deepEqual(project.legend?.overrides, { a: { label: "Renamed", hidden: true } });
+  });
+
+  it("round-trips a legend config through projectFromStore", () => {
+    const legend = {
+      title: "Custom",
+      groupByLayer: false,
+      order: ["a"],
+      overrides: { a: { label: "A renamed" } },
+    };
+    const project = projectFromStore({
+      projectName: "Legend",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [],
+      preferences: createEmptyProject().preferences,
+      legend,
+      metadata: {},
+    });
+    assert.deepEqual(project.legend, legend);
+    const reparsed = parseProject(serializeProject(project));
+    assert.deepEqual(reparsed.legend, legend);
+  });
+
   it("saves original XYZ tile templates instead of resolved URLs", () => {
     const project = projectFromStore({
       projectName: "Tiles",

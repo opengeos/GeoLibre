@@ -54,6 +54,8 @@ export interface LegendSwatch {
 }
 
 export interface LegendEntry {
+  /** Stable identifier of the source layer (used to key user customizations). */
+  id: string;
   name: string;
   swatches: LegendSwatch[];
 }
@@ -70,6 +72,13 @@ export interface LayoutOptions {
   showFooter: boolean;
   footerText: string;
   legend: LegendEntry[];
+  /** Heading drawn above the legend entries. */
+  legendTitle: string;
+  /**
+   * When true, multi-class entries show a per-layer heading above their
+   * classes; when false, classes are listed flat without the layer heading.
+   */
+  legendGroupByLayer: boolean;
   /** Ground metres per source-image pixel at the map centre. */
   metersPerPixel: number;
   /** Map bearing in degrees clockwise from north. */
@@ -233,7 +242,10 @@ export function drawLayout(
     ctx.beginPath();
     ctx.rect(bodyX, bodyY, bodyW, bodyH);
     ctx.clip();
-    drawLegend(ctx, bodyX + inset, bodyY + inset, opts.legend, unit);
+    drawLegend(ctx, bodyX + inset, bodyY + inset, opts.legend, unit, {
+      title: opts.legendTitle,
+      groupByLayer: opts.legendGroupByLayer,
+    });
     ctx.restore();
   }
 
@@ -359,18 +371,19 @@ function drawLegend(
   y: number,
   entries: LegendEntry[],
   unit: number,
+  opts: { title: string; groupByLayer: boolean },
 ): void {
   const pad = unit * 1.4;
   const rowH = unit * 2.6;
   const swatch = unit * 2;
   const titleSize = unit * 2;
   const labelSize = unit * 1.7;
+  const title = opts.title.trim();
+  const hasTitle = title.length > 0;
 
-  // Measure required width.
-  ctx.save();
-  ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
-  let maxText = ctx.measureText("Legend").width;
-  ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
+  // Flatten entries into drawable rows. Single-swatch entries render inline; a
+  // multi-class entry renders a layer heading (when groupByLayer is on) above
+  // its class swatches, or just the flat class swatches when it is off.
   const rows: { color: string; text: string }[] = [];
   for (const entry of entries) {
     if (entry.swatches.length <= 1) {
@@ -379,19 +392,26 @@ function drawLegend(
         text: entry.name,
       });
     } else {
-      rows.push({ color: "", text: entry.name });
+      if (opts.groupByLayer) rows.push({ color: "", text: entry.name });
       for (const sw of entry.swatches) {
         rows.push({ color: sw.color, text: sw.label ?? "" });
       }
     }
   }
+
+  // Measure required width.
+  ctx.save();
+  ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
+  let maxText = hasTitle ? ctx.measureText(title).width : 0;
+  ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
   for (const r of rows) {
     const w = ctx.measureText(r.text).width + (r.color ? swatch + unit : 0);
     if (w > maxText) maxText = w;
   }
 
   const boxW = maxText + pad * 2;
-  const boxH = pad * 2 + titleSize + unit + rows.length * rowH;
+  const titleBlock = hasTitle ? titleSize + unit : 0;
+  const boxH = pad * 2 + titleBlock + rows.length * rowH;
 
   ctx.fillStyle = "rgba(255,255,255,0.85)";
   ctx.strokeStyle = BORDER;
@@ -400,13 +420,18 @@ function drawLegend(
   ctx.fill();
   ctx.stroke();
 
-  let cy = y + pad + titleSize;
-  ctx.fillStyle = INK;
-  ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
-  ctx.textAlign = "left";
-  ctx.textBaseline = "alphabetic";
-  ctx.fillText("Legend", x + pad, cy);
-  cy += unit;
+  // Rows advance by rowH before each draw, so seed cy at the top padding; with a
+  // title, draw it first and leave a gap before the first row.
+  let cy = y + pad;
+  if (hasTitle) {
+    cy += titleSize;
+    ctx.fillStyle = INK;
+    ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText(title, x + pad, cy);
+    cy += unit;
+  }
 
   for (const r of rows) {
     cy += rowH;

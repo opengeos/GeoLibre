@@ -1,7 +1,23 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import type { GeoLibreLayer, LayerStyle } from "../packages/core/src/types";
-import { buildLegend } from "../apps/geolibre-desktop/src/lib/print-legend";
+import {
+  DEFAULT_LEGEND_CONFIG,
+  type GeoLibreLayer,
+  type LayerStyle,
+  type LegendConfig,
+} from "../packages/core/src/types";
+import {
+  applyLegendConfig,
+  buildLegend,
+  legendEditorRows,
+  reorderLegendEntry,
+  setLegendItemLabel,
+  toggleLegendItemHidden,
+} from "../apps/geolibre-desktop/src/lib/print-legend";
+
+function config(overrides: Partial<LegendConfig> = {}): LegendConfig {
+  return { ...DEFAULT_LEGEND_CONFIG, order: [], overrides: {}, ...overrides };
+}
 
 function makeLayer(overrides: Partial<GeoLibreLayer>): GeoLibreLayer {
   return {
@@ -144,5 +160,175 @@ describe("buildLegend", () => {
       }),
     ]);
     assert.equal(legend[0].swatches[0].color, "#123456");
+  });
+
+  it("carries the source layer id on each entry", () => {
+    const legend = buildLegend([makeLayer({ id: "abc", name: "A" })]);
+    assert.equal(legend[0].id, "abc");
+  });
+});
+
+describe("applyLegendConfig", () => {
+  const base = buildLegend([
+    makeLayer({ id: "bottom", name: "Bottom" }),
+    makeLayer({ id: "top", name: "Top" }),
+  ]);
+
+  it("returns the auto legend unchanged with the default config", () => {
+    const result = applyLegendConfig(base, config());
+    assert.deepEqual(
+      result.map((e) => e.name),
+      ["Top", "Bottom"],
+    );
+  });
+
+  it("renames an entry via a label override", () => {
+    const result = applyLegendConfig(
+      base,
+      config({ overrides: { top: { label: "Renamed" } } }),
+    );
+    assert.equal(result[0].name, "Renamed");
+  });
+
+  it("hides an entry flagged hidden", () => {
+    const result = applyLegendConfig(
+      base,
+      config({ overrides: { top: { hidden: true } } }),
+    );
+    assert.deepEqual(
+      result.map((e) => e.name),
+      ["Bottom"],
+    );
+  });
+
+  it("reorders entries to follow the order list", () => {
+    const result = applyLegendConfig(base, config({ order: ["bottom", "top"] }));
+    assert.deepEqual(
+      result.map((e) => e.name),
+      ["Bottom", "Top"],
+    );
+  });
+
+  it("hides individual classes and drops an entry with all classes hidden", () => {
+    const graduated = buildLegend([
+      makeLayer({
+        id: "pop",
+        name: "Population",
+        style: {
+          vectorStyleMode: "graduated",
+          vectorStyleStops: [
+            { value: 0, color: "#eef" },
+            { value: 100, color: "#88a" },
+          ],
+        } as LayerStyle,
+      }),
+    ]);
+    const oneHidden = applyLegendConfig(
+      graduated,
+      config({ overrides: { "pop::0": { hidden: true } } }),
+    );
+    assert.equal(oneHidden[0].swatches.length, 1);
+    assert.equal(oneHidden[0].swatches[0].color, "#88a");
+
+    const allHidden = applyLegendConfig(
+      graduated,
+      config({
+        overrides: { "pop::0": { hidden: true }, "pop::1": { hidden: true } },
+      }),
+    );
+    assert.equal(allHidden.length, 0);
+  });
+
+  it("renames a class label", () => {
+    const categorized = buildLegend([
+      makeLayer({
+        id: "pop",
+        name: "Population",
+        style: {
+          vectorStyleMode: "categorized",
+          vectorStyleStops: [
+            { value: "A", color: "#eef" },
+            { value: "B", color: "#88a" },
+          ],
+        } as LayerStyle,
+      }),
+    ]);
+    const result = applyLegendConfig(
+      categorized,
+      config({ overrides: { "pop::0": { label: "Class A" } } }),
+    );
+    assert.equal(result[0].swatches[0].label, "Class A");
+    assert.equal(result[0].swatches[1].label, "B");
+  });
+});
+
+describe("legendEditorRows", () => {
+  it("flattens a graduated layer into an entry plus class rows", () => {
+    const base = buildLegend([
+      makeLayer({
+        id: "pop",
+        name: "Population",
+        style: {
+          vectorStyleMode: "graduated",
+          vectorStyleStops: [
+            { value: 0, color: "#eef" },
+            { value: 100, color: "#88a" },
+          ],
+        } as LayerStyle,
+      }),
+    ]);
+    const rows = legendEditorRows(base, config());
+    assert.equal(rows.length, 3);
+    assert.equal(rows[0].kind, "entry");
+    assert.equal(rows[0].reorderable, true);
+    assert.equal(rows[1].kind, "class");
+    assert.equal(rows[1].reorderable, false);
+    assert.equal(rows[1].key, "pop::0");
+  });
+
+  it("reflects overrides and keeps hidden rows visible in the editor", () => {
+    const base = buildLegend([makeLayer({ id: "a", name: "A" })]);
+    const rows = legendEditorRows(
+      base,
+      config({ overrides: { a: { label: "Renamed", hidden: true } } }),
+    );
+    assert.equal(rows[0].label, "Renamed");
+    assert.equal(rows[0].defaultLabel, "A");
+    assert.equal(rows[0].hidden, true);
+  });
+});
+
+describe("legend config mutations", () => {
+  it("sets a label and clears it when blank or equal to the default", () => {
+    const set = setLegendItemLabel(config(), "a", "Custom", "A");
+    assert.equal(set.overrides.a.label, "Custom");
+    const cleared = setLegendItemLabel(set, "a", "  ", "A");
+    assert.equal(cleared.overrides.a, undefined);
+    const sameAsDefault = setLegendItemLabel(config(), "a", "A", "A");
+    assert.equal(sameAsDefault.overrides.a, undefined);
+  });
+
+  it("preserves a hidden flag when the label is cleared", () => {
+    const hidden = toggleLegendItemHidden(config(), "a");
+    const cleared = setLegendItemLabel(hidden, "a", "", "A");
+    assert.equal(cleared.overrides.a.hidden, true);
+    assert.equal(cleared.overrides.a.label, undefined);
+  });
+
+  it("toggles the hidden flag and prunes when toggled back off", () => {
+    const on = toggleLegendItemHidden(config(), "a");
+    assert.equal(on.overrides.a.hidden, true);
+    const off = toggleLegendItemHidden(on, "a");
+    assert.equal(off.overrides.a, undefined);
+  });
+
+  it("reorders an entry and writes the full order list", () => {
+    const moved = reorderLegendEntry(config(), ["top", "bottom"], "bottom", "up");
+    assert.deepEqual(moved.order, ["bottom", "top"]);
+  });
+
+  it("ignores a move past the ends", () => {
+    const unchanged = reorderLegendEntry(config(), ["top", "bottom"], "top", "up");
+    assert.deepEqual(unchanged.order, []);
   });
 });

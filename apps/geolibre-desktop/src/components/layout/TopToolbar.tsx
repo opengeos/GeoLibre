@@ -564,6 +564,7 @@ export function TopToolbar({
         ...getPluginManager().getProjectState(),
         manifestUrls: pluginManifestUrls,
       },
+      legend: state.legend,
       metadata: state.metadata,
     });
     return {

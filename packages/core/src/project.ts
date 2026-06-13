@@ -1,11 +1,14 @@
 import {
   DEFAULT_BASEMAP,
   DEFAULT_LAYER_STYLE,
+  DEFAULT_LEGEND_CONFIG,
   DEFAULT_PROJECT_PREFERENCES,
   PROJECT_VERSION,
   type GeoLibreLayer,
   type GeoLibreProject,
   type LayerStyle,
+  type LegendConfig,
+  type LegendItemOverride,
   type MapViewState,
   type ProjectPluginControlPosition,
   type ProjectPluginState,
@@ -44,6 +47,7 @@ export function createEmptyProject(
     layers: [],
     styles: {},
     preferences: DEFAULT_PROJECT_PREFERENCES,
+    legend: { ...DEFAULT_LEGEND_CONFIG },
     metadata: {},
   };
 }
@@ -68,7 +72,51 @@ export function parseProject(json: string): GeoLibreProject {
     styles: data.styles ?? {},
     preferences: normalizeProjectPreferences(data.preferences),
     plugins: normalizeProjectPlugins(data.plugins) ?? undefined,
+    legend: normalizeLegendConfig(data.legend),
     metadata: data.metadata ?? {},
+  };
+}
+
+/**
+ * Coerce an untrusted (possibly hand-edited) legend config into a valid
+ * {@link LegendConfig}, dropping malformed entries. Returns undefined when no
+ * usable config is present so the default is applied downstream.
+ */
+function normalizeLegendConfig(legend: unknown): LegendConfig | undefined {
+  if (!legend || typeof legend !== "object") return undefined;
+  const candidate = legend as Partial<LegendConfig>;
+
+  const order = Array.isArray(candidate.order)
+    ? uniqueStrings(candidate.order)
+    : [];
+
+  const overrides: Record<string, LegendItemOverride> = {};
+  if (candidate.overrides && typeof candidate.overrides === "object") {
+    for (const [key, value] of Object.entries(candidate.overrides)) {
+      if (!key.trim() || !value || typeof value !== "object") continue;
+      const override = value as Partial<LegendItemOverride>;
+      const normalized: LegendItemOverride = {};
+      if (typeof override.label === "string") normalized.label = override.label;
+      if (typeof override.hidden === "boolean") {
+        normalized.hidden = override.hidden;
+      }
+      if (normalized.label !== undefined || normalized.hidden !== undefined) {
+        overrides[key.trim()] = normalized;
+      }
+    }
+  }
+
+  return {
+    title:
+      typeof candidate.title === "string"
+        ? candidate.title
+        : DEFAULT_LEGEND_CONFIG.title,
+    groupByLayer: normalizeBoolean(
+      candidate.groupByLayer,
+      DEFAULT_LEGEND_CONFIG.groupByLayer,
+    ),
+    order,
+    overrides,
   };
 }
 
@@ -302,6 +350,7 @@ export function projectFromStore(state: {
   layers: GeoLibreLayer[];
   preferences: ProjectPreferences;
   plugins?: ProjectPluginState | null;
+  legend?: LegendConfig | null;
   metadata: Record<string, unknown>;
 }): GeoLibreProject {
   const styles: Record<string, LayerStyle> = {};
@@ -309,6 +358,7 @@ export function projectFromStore(state: {
     styles[layer.id] = layer.style;
   }
   const plugins = normalizeProjectPlugins(state.plugins);
+  const legend = normalizeLegendConfig(state.legend);
   return {
     version: PROJECT_VERSION,
     name: state.projectName,
@@ -320,6 +370,7 @@ export function projectFromStore(state: {
     styles,
     preferences: state.preferences,
     ...(plugins ? { plugins } : {}),
+    ...(legend ? { legend } : {}),
     metadata: state.metadata,
   };
 }
@@ -389,6 +440,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
   layers: GeoLibreLayer[];
   preferences: ProjectPreferences;
   projectPlugins: ProjectPluginState | null;
+  legend: LegendConfig;
   metadata: Record<string, unknown>;
 } {
   const layers = project.layers.map((layer) => ({
@@ -406,6 +458,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
     layers,
     preferences: normalizeProjectPreferences(project.preferences),
     projectPlugins: normalizeProjectPlugins(project.plugins),
+    legend: normalizeLegendConfig(project.legend) ?? { ...DEFAULT_LEGEND_CONFIG },
     metadata: project.metadata,
   };
 }

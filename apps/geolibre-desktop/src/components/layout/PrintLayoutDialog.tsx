@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAppStore } from "@geolibre/core";
+import { DEFAULT_LEGEND_CONFIG, useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import {
   Button,
@@ -13,7 +13,16 @@ import {
   Select,
   Separator,
 } from "@geolibre/ui";
-import { FileImage, FileText, RefreshCw } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Eye,
+  EyeOff,
+  FileImage,
+  FileText,
+  RefreshCw,
+  RotateCcw,
+} from "lucide-react";
 import {
   drawLayout,
   pageDimensionsMm,
@@ -23,10 +32,15 @@ import {
   type PaperSizeId,
 } from "../../lib/print-layout";
 import {
+  applyLegendConfig,
   buildLegend,
   captureMapImage,
   exportLayoutPdf,
   exportLayoutPng,
+  legendEditorRows,
+  reorderLegendEntry,
+  setLegendItemLabel,
+  toggleLegendItemHidden,
   type CapturedMap,
 } from "../../lib/print-layout-export";
 
@@ -83,6 +97,8 @@ export function PrintLayoutDialog({
 }: PrintLayoutDialogProps) {
   const layers = useAppStore((s) => s.layers);
   const projectName = useAppStore((s) => s.projectName);
+  const legendConfig = useAppStore((s) => s.legend);
+  const setLegendConfig = useAppStore((s) => s.setLegend);
 
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
@@ -100,7 +116,29 @@ export function PrintLayoutDialog({
   const previewRef = useRef<HTMLCanvasElement | null>(null);
   const wasOpenRef = useRef(false);
 
-  const legend = useMemo(() => buildLegend(layers), [layers]);
+  const baseLegend = useMemo(() => buildLegend(layers), [layers]);
+  const legend = useMemo(
+    () => applyLegendConfig(baseLegend, legendConfig),
+    [baseLegend, legendConfig],
+  );
+  const editorRows = useMemo(
+    () => legendEditorRows(baseLegend, legendConfig),
+    [baseLegend, legendConfig],
+  );
+  const entryIdsInOrder = useMemo(
+    () =>
+      editorRows.filter((r) => r.kind === "entry").map((r) => r.layerId),
+    [editorRows],
+  );
+
+  const moveEntry = useCallback(
+    (layerId: string, direction: "up" | "down") => {
+      setLegendConfig(
+        reorderLegendEntry(legendConfig, entryIdsInOrder, layerId, direction),
+      );
+    },
+    [legendConfig, entryIdsInOrder, setLegendConfig],
+  );
 
   const recapture = useCallback(() => {
     const map = mapControllerRef.current?.getMap();
@@ -147,6 +185,8 @@ export function PrintLayoutDialog({
       showFooter,
       footerText,
       legend,
+      legendTitle: legendConfig.title,
+      legendGroupByLayer: legendConfig.groupByLayer,
       metersPerPixel: captured?.metersPerPixel ?? 0,
       bearingDeg: captured?.bearingDeg ?? 0,
       mapImage: captured?.image ?? null,
@@ -165,6 +205,8 @@ export function PrintLayoutDialog({
       showFooter,
       footerText,
       legend,
+      legendConfig.title,
+      legendConfig.groupByLayer,
       captured,
     ],
   );
@@ -315,6 +357,135 @@ export function PrintLayoutDialog({
                   onChange={(e) => setFooterText(e.target.value)}
                 />
               </div>
+            )}
+
+            {showLegend && (
+              <>
+                <Separator />
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium">Legend</p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        setLegendConfig({ ...DEFAULT_LEGEND_CONFIG })
+                      }
+                    >
+                      <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                      Reset
+                    </Button>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="legend-title">Legend title</Label>
+                    <Input
+                      id="legend-title"
+                      value={legendConfig.title}
+                      placeholder="Legend"
+                      onChange={(e) =>
+                        setLegendConfig({
+                          ...legendConfig,
+                          title: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <ToggleField
+                    id="legend-group"
+                    label="Group classes by layer"
+                    checked={legendConfig.groupByLayer}
+                    onChange={(next) =>
+                      setLegendConfig({ ...legendConfig, groupByLayer: next })
+                    }
+                  />
+
+                  {editorRows.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No visible layers to include in the legend.
+                    </p>
+                  ) : (
+                    <div className="max-h-56 space-y-1 overflow-auto rounded-md border p-2">
+                      {editorRows.map((row) => {
+                        const entryIndex = entryIdsInOrder.indexOf(row.layerId);
+                        return (
+                          <div
+                            key={row.key}
+                            className={`flex items-center gap-1.5 ${
+                              row.kind === "class" ? "pl-5" : ""
+                            } ${row.hidden ? "opacity-50" : ""}`}
+                          >
+                            {row.kind === "entry" ? (
+                              <div className="flex flex-col">
+                                <button
+                                  type="button"
+                                  aria-label="Move entry up"
+                                  className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                                  disabled={entryIndex <= 0}
+                                  onClick={() => moveEntry(row.layerId, "up")}
+                                >
+                                  <ArrowUp className="h-3 w-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  aria-label="Move entry down"
+                                  className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                                  disabled={
+                                    entryIndex >= entryIdsInOrder.length - 1
+                                  }
+                                  onClick={() => moveEntry(row.layerId, "down")}
+                                >
+                                  <ArrowDown className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="w-3 shrink-0" />
+                            )}
+                            {row.color ? (
+                              <span
+                                className="h-3.5 w-3.5 shrink-0 rounded-sm border"
+                                style={{ backgroundColor: row.color }}
+                              />
+                            ) : (
+                              <span className="w-3.5 shrink-0" />
+                            )}
+                            <Input
+                              className="h-7 flex-1 text-sm"
+                              value={row.label}
+                              placeholder={row.defaultLabel || "Label"}
+                              onChange={(e) =>
+                                setLegendConfig(
+                                  setLegendItemLabel(
+                                    legendConfig,
+                                    row.key,
+                                    e.target.value,
+                                    row.defaultLabel,
+                                  ),
+                                )
+                              }
+                            />
+                            <button
+                              type="button"
+                              aria-label={row.hidden ? "Show entry" : "Hide entry"}
+                              className="shrink-0 text-muted-foreground hover:text-foreground"
+                              onClick={() =>
+                                setLegendConfig(
+                                  toggleLegendItemHidden(legendConfig, row.key),
+                                )
+                              }
+                            >
+                              {row.hidden ? (
+                                <EyeOff className="h-4 w-4" />
+                              ) : (
+                                <Eye className="h-4 w-4" />
+                              )}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </div>
 

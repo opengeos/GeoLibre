@@ -263,6 +263,45 @@ export const DEFAULT_PROJECT_PREFERENCES: ProjectPreferences = {
   environmentVariables: [],
 };
 
+/**
+ * A single user override for one legend item, keyed in {@link LegendConfig.overrides}
+ * by a stable item key (a layer id for a whole entry, or `${layerId}::${index}`
+ * for an individual class within a graduated/categorized entry).
+ */
+export interface LegendItemOverride {
+  /** User-supplied label that replaces the auto-generated one. */
+  label?: string;
+  /** When true, the item is omitted from the rendered legend. */
+  hidden?: boolean;
+}
+
+/**
+ * User customizations for the Print Layout legend. The legend itself is always
+ * derived from the visible layers' symbology; this record only stores the edits
+ * layered on top (title, ordering, per-item rename/hide), so it survives layer
+ * additions and removals and is persisted in the `.geolibre.json` project.
+ */
+export interface LegendConfig {
+  /** Heading drawn above the legend entries. */
+  title: string;
+  /** When true, classes are grouped under a per-layer heading. */
+  groupByLayer: boolean;
+  /**
+   * Custom top-level entry order by layer id, top-first. Layer ids not listed
+   * keep their default order after the listed ones.
+   */
+  order: string[];
+  /** Per-item overrides keyed by stable item key. */
+  overrides: Record<string, LegendItemOverride>;
+}
+
+export const DEFAULT_LEGEND_CONFIG: LegendConfig = {
+  title: "Legend",
+  groupByLayer: true,
+  order: [],
+  overrides: {},
+};
+
 export interface GeoLibreProject {
   version: string;
   name: string;
@@ -274,6 +313,8 @@ export interface GeoLibreProject {
   styles: Record<string, LayerStyle>;
   preferences: ProjectPreferences;
   plugins?: ProjectPluginState;
+  /** User customizations for the Print Layout legend. */
+  legend?: LegendConfig;
   metadata: Record<string, unknown>;
 }
 
