@@ -157,9 +157,14 @@ export async function exportLayoutPdf(
     opts.orientation,
   );
   const canvas = renderToCanvas(opts, dpi);
-  // Provide already-oriented page dimensions and keep portrait orientation so
-  // jsPDF does not swap width/height a second time.
-  const pdf = new jsPDF({ unit: "mm", format: [widthMm, heightMm] });
+  // Pass the orientation explicitly: jsPDF normalizes the format array to match
+  // the orientation (portrait forces width <= height), so an oriented format
+  // alone would be rotated back to portrait.
+  const pdf = new jsPDF({
+    orientation: opts.orientation,
+    unit: "mm",
+    format: [widthMm, heightMm],
+  });
   pdf.addImage(
     canvas.toDataURL("image/png"),
     "PNG",
