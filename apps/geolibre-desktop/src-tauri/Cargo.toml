@@ -9,6 +9,18 @@ edition = "2021"
 name = "geolibre_desktop_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
+# Optimize the release binary for size. The frontend assets dominate the binary,
+# but these still trim the Rust code: LTO + a single codegen unit let the linker
+# drop dead code across crates, `strip` removes symbols/debuginfo, `opt-level="s"`
+# favors size while keeping reasonable runtime speed, and `panic="abort"` drops
+# unwinding tables (a panic in the desktop shell terminates the app either way).
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

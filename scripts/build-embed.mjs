@@ -6,9 +6,11 @@
 //     in the emitted index.html relative, so the app can load from inside a
 //     Python wheel (served from an arbitrary, content-hashed location) instead
 //     of the site root.
-//  2. `GEOLIBRE_PGLITE_CDN=1` makes the PostGIS SQL engine fetch PGlite and its
-//     ~25 MB PostGIS bundle from jsDelivr at runtime instead of vendoring them
-//     into the wheel. Web/desktop builds keep bundling PGlite (offline-capable).
+//  2. `GEOLIBRE_EMBED=1` disables the service worker (a SW is meaningless inside
+//     a notebook iframe). PGlite is CDN-loaded here via `GEOLIBRE_PGLITE_CDN=1`,
+//     keeping its ~25 MB PostGIS bundle out of the wheel — the web build now
+//     CDN-loads it too by default; only the offline Tauri desktop shell bundles
+//     it.
 //
 // Output: apps/geolibre-desktop/dist-embed/ -> copied to
 // python/src/geolibre/static/app/.
@@ -35,7 +37,15 @@ const result = spawnSync(
     cwd: repoRoot,
     shell: process.platform === "win32",
     stdio: "inherit",
-    env: { ...process.env, GEOLIBRE_APP_BASE: "./", GEOLIBRE_PGLITE_CDN: "1" },
+    env: {
+      ...process.env,
+      GEOLIBRE_APP_BASE: "./",
+      // CDN-load PGlite (the web build now does this by default too) and mark
+      // this as the embed build so the service worker is disabled — a SW is
+      // meaningless inside a notebook iframe and could hijack the host scope.
+      GEOLIBRE_PGLITE_CDN: "1",
+      GEOLIBRE_EMBED: "1",
+    },
   },
 );
 

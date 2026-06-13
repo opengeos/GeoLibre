@@ -22,21 +22,33 @@ const APP_VERSION = JSON.parse(
   readFileSync(new URL("./package.json", import.meta.url), "utf8"),
 ).version as string;
 
-// The embedded (Jupyter wheel) build sets GEOLIBRE_PGLITE_CDN=1 so the ~25 MB
-// PGlite + PostGIS bundle is fetched from jsDelivr at runtime instead of vendored
-// into the wheel. Web and desktop builds keep bundling it (offline-capable). The
-// CDN URLs are pinned to the installed versions so they cannot drift from the
-// lockfile; PGlite resolves its own .wasm/.data/postgis.tar relative to these.
-const PGLITE_CDN = process.env.GEOLIBRE_PGLITE_CDN === "1";
+// Tauri sets TAURI_ENV_* env vars while running its beforeBuildCommand
+// (`npm run build`), so their presence flags a desktop build. Used below to drop
+// the service worker from the desktop bundle.
+const IS_TAURI_BUILD = !!process.env.TAURI_ENV_PLATFORM;
+
+// PGlite + PostGIS is ~25 MB raw and weighs ~22 MB inside the Tauri binary
+// (postgis.tar is pre-gzipped, so brotli can't shrink it — it was the entire
+// 42 → 63 MB binary regression). By default it is fetched from jsDelivr at
+// runtime for every target — web, desktop, and embed — so it never inflates any
+// build output. Override with GEOLIBRE_PGLITE_CDN=0 to force-bundle it for a
+// fully offline build. The CDN URLs are pinned to the installed versions so they
+// cannot drift from the lockfile; PGlite resolves its own .wasm/.data/postgis.tar
+// relative to these. jsDelivr is already an allowed script-src in the web
+// (docker/nginx.conf) and desktop (tauri.conf.json) CSPs — it serves Pyodide — so
+// this adds no new external origin. Trade-off: the PostGIS SQL engine needs
+// network on first use and is not cached for offline use (the desktop app already
+// fetches map tiles, Pyodide, the DuckDB spatial extension, and H3 the same way).
+const PGLITE_CDN = process.env.GEOLIBRE_PGLITE_CDN !== "0";
 
 // PWA/offline support targets the standalone web build only. The Tauri desktop
 // shell already works offline (assets are bundled in the binary), and the
-// embedded Jupyter wheel (GEOLIBRE_PGLITE_CDN=1) is served from inside a
-// notebook where a service worker is meaningless and could even hijack the
-// host page's scope. Tauri sets TAURI_ENV_* env vars while running its
-// beforeBuildCommand (`npm run build`), so their presence flags a desktop build.
-const IS_TAURI_BUILD = !!process.env.TAURI_ENV_PLATFORM;
-const PWA_DISABLED = IS_TAURI_BUILD || PGLITE_CDN;
+// embedded Jupyter wheel (GEOLIBRE_EMBED=1) is served from inside a notebook
+// where a service worker is meaningless and could even hijack the host page's
+// scope. This is deliberately independent of PGLITE_CDN: the web build CDN-loads
+// PGlite yet still ships a service worker.
+const IS_EMBED = process.env.GEOLIBRE_EMBED === "1";
+const PWA_DISABLED = IS_TAURI_BUILD || IS_EMBED;
 
 const pgliteCdnRequire = createRequire(import.meta.url);
 // The ESM entry of a package's manifest. Prefer the `module` field and the
@@ -405,10 +417,15 @@ async function proxyBinaryRequest(
 
 // Installable, offline-capable web build. See docs/architecture.md (Offline /
 // PWA). The service worker precaches the app shell (HTML + the JS/CSS chunks the
-// map needs to boot) and runtime-caches the heavy, lazily-fetched binaries
-// (DuckDB-WASM + spatial extension, PGlite/PostGIS, Pyodide, MapLibre feature
-// plugins) with a hash-keyed CacheFirst strategy, so a feature works offline
-// after its first online use without bloating the first-visit precache.
+// map needs to boot) and runtime-caches the heavy, lazily-fetched same-origin
+// binaries (DuckDB-WASM + spatial extension, MapLibre feature plugins) with a
+// hash-keyed CacheFirst strategy, so a feature works offline after its first
+// online use without bloating the first-visit precache. PGlite/PostGIS and the
+// Pyodide runtime are fetched cross-origin from jsDelivr (see PGLITE_CDN above),
+// so they are not same-origin cacheable: the PostGIS SQL engine needs network on
+// first use and is not available offline. The pglite-*/*.wasm/*.data ignores
+// below still apply when GEOLIBRE_PGLITE_CDN=0 force-bundles PGlite into the
+// web build, keeping that variant's first visit light.
 function pwaPlugin(): Plugin[] {
   // Hashed build chunks/binaries that are lazily fetched. Excluded from the
   // precache so first visit stays light; the same-origin CacheFirst rule below
