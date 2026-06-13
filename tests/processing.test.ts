@@ -838,6 +838,43 @@ describe("processing registry", () => {
         .coordinates,
       [[]],
     );
+
+    // Z/elevation is interpolated through smoothing, not dropped.
+    const line3d: GeoLibreLayer = {
+      ...square,
+      id: "line3d",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: {},
+            geometry: {
+              type: "LineString",
+              coordinates: [
+                [0, 0, 100],
+                [0, 10, 200],
+              ],
+            },
+          },
+        ],
+      },
+    };
+    let line3dOut: FeatureCollection | null = null;
+    tool.run({
+      layers: [line3d],
+      parameters: { layer: "line3d", iterations: 1 },
+      log: () => {},
+      addResultLayer: (_n, g) => {
+        line3dOut = g;
+      },
+    });
+    const coords3d = (
+      line3dOut!.features[0].geometry as { coordinates: number[][] }
+    ).coordinates;
+    // Endpoints kept; the 1/4 cut point interpolates Z: 100*0.75 + 200*0.25 = 125.
+    assert.ok(coords3d.every((c) => c.length === 3));
+    assert.deepEqual(coords3d[1], [0, 2.5, 125]);
   });
 
   it("generates a regular grid from a bounding box", () => {
@@ -963,6 +1000,30 @@ describe("processing registry", () => {
     });
     assert.equal(produced, false);
     assert.ok(logs.some((m) => m.includes("at least 3 points")));
+
+    // Collinear points (zero-area bbox) error rather than producing a degenerate
+    // or empty result.
+    let collinearProduced = false;
+    const collinearLogs: string[] = [];
+    tool.run({
+      layers: [
+        {
+          ...points,
+          id: "collinear",
+          geojson: {
+            type: "FeatureCollection",
+            features: [pt(0, 0), pt(0, 5), pt(0, 10)],
+          },
+        },
+      ],
+      parameters: { layer: "collinear", type: "voronoi" },
+      log: (m) => collinearLogs.push(m),
+      addResultLayer: () => {
+        collinearProduced = true;
+      },
+    });
+    assert.equal(collinearProduced, false);
+    assert.ok(collinearLogs.some((m) => m.includes("collinear")));
   });
 
   it("calculates and fits layer bounds", () => {

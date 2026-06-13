@@ -529,13 +529,31 @@ def _aggregate(geojson, overlay, parameters) -> tuple[dict, list[str]]:
 _SMOOTH_MAX_ITERATIONS = 10
 
 
+def _chaikin_point(
+    a: list[float], b: list[float], wa: float
+) -> list[float]:
+    """Interpolate the point a fraction ``wa`` from ``a`` toward ``b``.
+
+    ``wa = 0.75`` lands closer to ``a``. Z/elevation is carried through and
+    interpolated when both endpoints are 3D; otherwise the result is 2D.
+    """
+    wb = 1 - wa
+    x = a[0] * wa + b[0] * wb
+    y = a[1] * wa + b[1] * wb
+    if len(a) > 2 and len(b) > 2:
+        return [x, y, a[2] * wa + b[2] * wb]
+    return [x, y]
+
+
 def _chaikin(points: list[list[float]], closed: bool) -> list[list[float]]:
-    """One pass of Chaikin's corner-cutting over a list of ``[x, y]`` positions.
+    """One pass of Chaikin's corner-cutting over a list of positions.
 
     Each segment A->B contributes two new points at 1/4 and 3/4 along it. For a
     closed ring the segments wrap (every vertex is cut); for an open line the
-    endpoints are preserved. The arithmetic and ordering mirror the client's
-    ``chaikinOnce`` exactly so both engines return bit-identical coordinates.
+    endpoints are preserved. Z is preserved/interpolated (see
+    :func:`_chaikin_point`); extra coordinate dimensions are dropped. The
+    arithmetic and ordering mirror the client's ``chaikinOnce`` exactly so both
+    engines return bit-identical coordinates.
     """
     n = len(points)
     if n < (3 if closed else 2):
@@ -545,21 +563,21 @@ def _chaikin(points: list[list[float]], closed: bool) -> list[list[float]]:
         for i in range(n):
             a = points[i]
             b = points[(i + 1) % n]
-            out.append([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25])
-            out.append([a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75])
+            out.append(_chaikin_point(a, b, 0.75))
+            out.append(_chaikin_point(a, b, 0.25))
     else:
-        out.append([points[0][0], points[0][1]])
+        out.append(list(points[0][:3]))
         for i in range(n - 1):
             a = points[i]
             b = points[i + 1]
-            out.append([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25])
-            out.append([a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75])
-        out.append([points[n - 1][0], points[n - 1][1]])
+            out.append(_chaikin_point(a, b, 0.75))
+            out.append(_chaikin_point(a, b, 0.25))
+        out.append(list(points[n - 1][:3]))
     return out
 
 
 def _smooth_line(coords: list[list[float]], iterations: int) -> list[list[float]]:
-    pts = [[p[0], p[1]] for p in coords]
+    pts = [list(p[:3]) for p in coords]
     for _ in range(iterations):
         pts = _chaikin(pts, False)
     return pts
@@ -571,14 +589,14 @@ def _smooth_ring(ring: list[list[float]], iterations: int) -> list[list[float]]:
         and ring[0][0] == ring[-1][0]
         and ring[0][1] == ring[-1][1]
     )
-    pts = [[p[0], p[1]] for p in (ring[:-1] if closed else ring)]
+    pts = [list(p[:3]) for p in (ring[:-1] if closed else ring)]
     for _ in range(iterations):
         pts = _chaikin(pts, True)
     # An invalid (empty/degenerate) ring leaves pts empty; guard so a crafted or
     # corrupt payload yields an empty ring rather than an IndexError (500).
     if not pts:
         return pts
-    pts.append([pts[0][0], pts[0][1]])
+    pts.append(list(pts[0]))
     return pts
 
 
@@ -603,6 +621,16 @@ def _smooth_geometry(geometry: dict, iterations: int) -> dict:
             "type": gtype,
             "coordinates": [
                 [_smooth_ring(ring, iterations) for ring in poly] for poly in coords
+            ],
+        }
+    if gtype == "GeometryCollection":
+        # Recurse so line/polygon members are smoothed instead of silently
+        # passing through; point members fall to the pass-through below.
+        return {
+            "type": gtype,
+            "geometries": [
+                _smooth_geometry(g, iterations)
+                for g in geometry.get("geometries", [])
             ],
         }
     return geometry
@@ -642,6 +670,7 @@ def _smooth(geojson, overlay, parameters) -> tuple[dict, list[str]]:
             "MultiLineString",
             "Polygon",
             "MultiPolygon",
+            "GeometryCollection",
         ):
             smoothed += 1
         out_features.append(
@@ -678,6 +707,15 @@ def _voronoi(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     if len(points) < 3:
         raise ValueError("Voronoi / Delaunay needs at least 3 points")
     multipoint = MultiPoint(points)
+    # Both diagrams are undefined for collinear/coincident points (a zero-area
+    # bounding box); bail with a clear message rather than a degenerate result.
+    # Mirrors the client guard.
+    minx, miny, maxx, maxy = multipoint.bounds
+    if minx == maxx or miny == maxy:
+        raise ValueError(
+            "The points are collinear or coincident; Voronoi / Delaunay needs "
+            "points that span an area"
+        )
     if kind == "delaunay":
         triangles = triangulate(multipoint)
         result = gpd.GeoDataFrame(geometry=triangles, crs=WGS84)
@@ -688,9 +726,8 @@ def _voronoi(geojson, overlay, parameters) -> tuple[dict, list[str]]:
         return _to_feature_collection(result), [message]
     # Clip the (otherwise unbounded outer) cells to the points' bbox expanded by a
     # 10% margin, matching the client, so they get a finite extent.
-    minx, miny, maxx, maxy = multipoint.bounds
-    dx = (maxx - minx) or 1
-    dy = (maxy - miny) or 1
+    dx = maxx - minx
+    dy = maxy - miny
     envelope = box(minx - dx * 0.1, miny - dy * 0.1, maxx + dx * 0.1, maxy + dy * 0.1)
     diagram = voronoi_diagram(multipoint, envelope=envelope)
     cells = [cell.intersection(envelope) for cell in diagram.geoms]

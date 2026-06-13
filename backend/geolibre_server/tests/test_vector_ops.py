@@ -783,6 +783,43 @@ def test_smooth_iterations_round_half_up_matches_js() -> None:
     assert messages and "with 4 iteration(s)" in messages[0]
 
 
+def test_smooth_iterations_zero_is_rejected() -> None:
+    # An explicit 0 must hit the range check, not be silently coerced to 3.
+    line = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {},
+                "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+            }
+        ],
+    }
+    with pytest.raises(ValueError, match="between 1 and 10"):
+        run_vector_tool("smooth", line, parameters={"iterations": 0})
+
+
+def test_smooth_preserves_z_coordinates() -> None:
+    line3d = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {},
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [[0, 0, 100], [0, 10, 200]],
+                },
+            }
+        ],
+    }
+    geojson, _ = run_vector_tool("smooth", line3d, parameters={"iterations": 1})
+    coords = geojson["features"][0]["geometry"]["coordinates"]
+    # Z is interpolated, not dropped: the 1/4 cut point is 100*0.75 + 200*0.25 = 125.
+    assert all(len(c) == 3 for c in coords)
+    assert coords[1] == [0, 2.5, 125]
+
+
 # --- Voronoi / Delaunay ---
 
 
@@ -840,6 +877,17 @@ def test_voronoi_unknown_type_raises() -> None:
             "voronoi",
             _points((0, 0), (10, 0), (0, 10)),
             parameters={"type": "bogus"},
+        )
+
+
+@requires_geopandas
+def test_voronoi_collinear_points_raise() -> None:
+    # Collinear points (zero-area bounds) yield a degenerate diagram; reject them.
+    with pytest.raises(ValueError, match="collinear or coincident"):
+        run_vector_tool(
+            "voronoi",
+            _points((0, 0), (0, 5), (0, 10)),
+            parameters={"type": "voronoi"},
         )
 
 

@@ -1249,10 +1249,24 @@ export const aggregateTool: ProcessingAlgorithm = {
 const SMOOTH_MAX_ITERATIONS = 10;
 
 /**
+ * Interpolate the point a fraction `wa` of the way from `a` toward `b` (so
+ * `wa = 0.75` lands closer to `a`). Z/elevation is carried through and
+ * interpolated when both endpoints are 3D; otherwise the result is 2D.
+ */
+function chaikinPoint(a: Position, b: Position, wa: number): Position {
+  const wb = 1 - wa;
+  const x = a[0] * wa + b[0] * wb;
+  const y = a[1] * wa + b[1] * wb;
+  if (a.length > 2 && b.length > 2) return [x, y, a[2] * wa + b[2] * wb];
+  return [x, y];
+}
+
+/**
  * One pass of Chaikin's corner-cutting algorithm over a list of positions.
  * Each segment A→B contributes two new points at 1/4 and 3/4 of the way along
  * it. For a closed ring the segments wrap (so every vertex is cut); for an open
- * line the first and last endpoints are preserved. Operates on [x, y] only.
+ * line the first and last endpoints are preserved. Z is preserved/interpolated
+ * (see {@link chaikinPoint}); extra coordinate dimensions are dropped.
  *
  * The exact same arithmetic (and ordering) runs in the Python backend's
  * ``_chaikin`` so the "Sidecar (GeoPandas)" / "Python (Pyodide)" engines return
@@ -1266,25 +1280,25 @@ function chaikinOnce(points: Position[], closed: boolean): Position[] {
     for (let i = 0; i < n; i += 1) {
       const a = points[i];
       const b = points[(i + 1) % n];
-      out.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25]);
-      out.push([a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]);
+      out.push(chaikinPoint(a, b, 0.75));
+      out.push(chaikinPoint(a, b, 0.25));
     }
   } else {
-    out.push([points[0][0], points[0][1]]);
+    out.push(points[0].slice(0, 3));
     for (let i = 0; i < n - 1; i += 1) {
       const a = points[i];
       const b = points[i + 1];
-      out.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25]);
-      out.push([a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]);
+      out.push(chaikinPoint(a, b, 0.75));
+      out.push(chaikinPoint(a, b, 0.25));
     }
-    out.push([points[n - 1][0], points[n - 1][1]]);
+    out.push(points[n - 1].slice(0, 3));
   }
   return out;
 }
 
 /** Smooth an open line's coordinates with `iterations` Chaikin passes. */
 function smoothLine(coords: Position[], iterations: number): Position[] {
-  let pts: Position[] = coords.map((p) => [p[0], p[1]]);
+  let pts: Position[] = coords.map((p) => p.slice(0, 3));
   for (let k = 0; k < iterations; k += 1) pts = chaikinOnce(pts, false);
   return pts;
 }
@@ -1295,15 +1309,14 @@ function smoothRing(ring: Position[], iterations: number): Position[] {
     ring.length > 1 &&
     ring[0][0] === ring[ring.length - 1][0] &&
     ring[0][1] === ring[ring.length - 1][1];
-  let pts: Position[] = (closed ? ring.slice(0, -1) : ring).map((p) => [
-    p[0],
-    p[1],
-  ]);
+  let pts: Position[] = (closed ? ring.slice(0, -1) : ring).map((p) =>
+    p.slice(0, 3),
+  );
   for (let k = 0; k < iterations; k += 1) pts = chaikinOnce(pts, true);
   // An invalid (empty/degenerate) ring leaves pts empty; guard so a malformed
   // feature yields an empty ring rather than throwing on pts[0].
   if (pts.length === 0) return pts;
-  pts.push([pts[0][0], pts[0][1]]);
+  pts.push(pts[0].slice());
   return pts;
 }
 
@@ -1332,6 +1345,15 @@ function smoothGeometry(geometry: Geometry, iterations: number): Geometry {
           poly.map((r) => smoothRing(r, iterations)),
         ),
       };
+    case "GeometryCollection":
+      // Recurse so line/polygon members are smoothed instead of silently
+      // passing through; point members fall to the default below.
+      return {
+        type: "GeometryCollection",
+        geometries: geometry.geometries.map((g) =>
+          smoothGeometry(g, iterations),
+        ),
+      };
     default:
       return geometry;
   }
@@ -1341,7 +1363,7 @@ export const smoothTool: ProcessingAlgorithm = {
   id: "smooth",
   name: "Smooth",
   description:
-    "Round the corners of line and polygon features with Chaikin's algorithm (adds vertices), distinct from Simplify's vertex reduction. Points pass through unchanged. Z/elevation coordinates are not preserved.",
+    "Round the corners of line and polygon features with Chaikin's algorithm (adds vertices), distinct from Simplify's vertex reduction. Z/elevation is preserved; points pass through unchanged.",
   group: "Geometry",
   supportsSidecar: true,
   parameters: [
@@ -1376,7 +1398,9 @@ export const smoothTool: ProcessingAlgorithm = {
       const geometry = feature.geometry;
       if (!geometry) return feature;
       const isSmoothable =
-        isFamily(geometry, "line") || isFamily(geometry, "polygon");
+        isFamily(geometry, "line") ||
+        isFamily(geometry, "polygon") ||
+        geometry.type === "GeometryCollection";
       if (isSmoothable) smoothed += 1;
       return {
         type: "Feature",
@@ -1527,8 +1551,18 @@ export const gridTool: ProcessingAlgorithm = {
       ctx.log("Error: cell width must be greater than 0");
       return;
     }
+    const rawHeight = ctx.parameters.cell_height;
     let cellHeight = numberParam(ctx, "cell_height", NaN);
-    if (!Number.isFinite(cellHeight) || cellHeight <= 0) cellHeight = cellWidth;
+    if (!Number.isFinite(cellHeight) || cellHeight <= 0) {
+      // A blank field intentionally means "match the cell width"; only note it
+      // when the user actually entered an invalid (non-positive/non-numeric) value.
+      if (rawHeight !== undefined && rawHeight !== null && rawHeight !== "") {
+        ctx.log(
+          `Note: cell height '${rawHeight}' is not a positive number; using the cell width (${cellWidth}°)`,
+        );
+      }
+      cellHeight = cellWidth;
+    }
 
     const [w, s, e, n] = bounds;
     const cols = Math.ceil((e - w) / cellWidth);
@@ -1645,6 +1679,21 @@ export const voronoiTool: ProcessingAlgorithm = {
       return;
     }
     const pointsFc = featureCollection(points);
+    // Both diagrams are undefined for collinear/coincident points (a zero-area
+    // bounding box). Turf's tin/voronoi would throw or return nothing; bail with
+    // a clear message instead. Mirrors the backend guard.
+    const [minX, minY, maxX, maxY] = bbox(pointsFc) as [
+      number,
+      number,
+      number,
+      number,
+    ];
+    if (minX === maxX || minY === maxY) {
+      ctx.log(
+        "Error: the points are collinear or coincident; Voronoi / Delaunay needs points that span an area",
+      );
+      return;
+    }
     if (kind === "delaunay") {
       const result = tin(pointsFc);
       ctx.log(
@@ -1656,14 +1705,8 @@ export const voronoiTool: ProcessingAlgorithm = {
     // Clip the Voronoi cells to the points' bounding box expanded by a 10% margin,
     // matching the backend, so the outer (otherwise unbounded) cells get a finite
     // extent rather than spanning the whole world.
-    const [minX, minY, maxX, maxY] = bbox(pointsFc) as [
-      number,
-      number,
-      number,
-      number,
-    ];
-    const dx = maxX - minX || 1;
-    const dy = maxY - minY || 1;
+    const dx = maxX - minX;
+    const dy = maxY - minY;
     const clip: BBox = [
       minX - dx * 0.1,
       minY - dy * 0.1,
