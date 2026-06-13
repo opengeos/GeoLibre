@@ -13,6 +13,11 @@ const EXPECTED_IDS = [
   "polygonize",
   "contour",
   "interpolate",
+  "zonal",
+  "raster-calc",
+  "reclassify",
+  "mosaic",
+  "focal",
 ];
 
 describe("raster tools registry", () => {

@@ -867,11 +867,17 @@ with rasterio.open(input_path) as src:
         )
 
 fc = {"type": "FeatureCollection", "features": out_features}
-if zone_crs.to_epsg() and zone_crs.to_epsg() != 4326:
+zone_epsg = zone_crs.to_epsg()
+if zone_epsg and zone_epsg != 4326:
     fc["crs"] = {
         "type": "name",
-        "properties": {"name": f"urn:ogc:def:crs:EPSG::{zone_crs.to_epsg()}"},
+        "properties": {"name": f"urn:ogc:def:crs:EPSG::{zone_epsg}"},
     }
+elif zone_epsg is None and zone_crs != CRS.from_epsg(4326):
+    # A projected CRS with no EPSG mapping (e.g. custom WKT) would otherwise be
+    # silently dropped, leaving consumers to assume WGS84; embed the WKT so the
+    # true CRS travels with the output rather than being mislabeled.
+    fc["crs"] = {"type": "name", "properties": {"name": zone_crs.to_wkt()}}
 with open(output_path, "w") as f:
     json.dump(fc, f)
 print(
@@ -904,38 +910,50 @@ c_path = str(params.get("c_path", "") or "").strip()
 nodata = -9999.0
 
 
-def load_bands(path, letter, namespace, base_shape):
+def load_bands(path, letter, namespace, base):
+    # ``base`` is None for raster A, else (shape, crs) of A to validate against.
     with rasterio.open(path) as ds:
-        if base_shape is not None and (ds.height, ds.width) != base_shape:
-            raise SystemExit(
-                f"Raster {letter} ({ds.width}x{ds.height}) must match the dimensions "
-                f"of raster A ({base_shape[1]}x{base_shape[0]})."
-            )
+        shape = (ds.height, ds.width)
+        crs = ds.crs
+        if base is not None:
+            if shape != base[0]:
+                raise SystemExit(
+                    f"Raster {letter} ({ds.width}x{ds.height}) must match the "
+                    f"dimensions of raster A ({base[0][1]}x{base[0][0]})."
+                )
+            # Identical dimensions over different CRSs would compute band math on
+            # spatially unaligned pixels; reject rather than emit a silent
+            # mismatch.
+            if crs != base[1]:
+                raise SystemExit(
+                    f"Raster {letter} CRS ({crs}) does not match raster A "
+                    f"({base[1]}); reproject before running the calculator."
+                )
         bands = [
             np.ma.filled(ds.read(i, masked=True).astype("float64"), np.nan)
             for i in range(1, ds.count + 1)
         ]
         profile = ds.profile.copy()
-        shape = (ds.height, ds.width)
     # ``A``/``B``/``C`` reference band 1; ``A1``, ``A2``, ... address each band.
     namespace[letter] = bands[0]
     for i, arr in enumerate(bands, start=1):
         namespace[f"{letter}{i}"] = arr
-    return profile, shape
+    return profile, shape, crs
 
 
 namespace = {}
-profile, base_shape = load_bands(input_path, "A", namespace, None)
+profile, base_shape, base_crs = load_bands(input_path, "A", namespace, None)
 for letter, path in (("B", b_path), ("C", c_path)):
     if path:
-        load_bands(path, letter, namespace, base_shape)
+        load_bands(path, letter, namespace, (base_shape, base_crs))
 
 # Evaluate the expression in a restricted namespace: no builtins, only the band
 # arrays and a curated set of NumPy functions. The sidecar is local and confined
 # to the conversion roots, but stripping ``__builtins__`` still blocks arbitrary
-# attribute/import access from a hand-typed expression.
+# attribute/import access from a hand-typed expression. The bare ``np`` module is
+# intentionally NOT exposed: it would re-open file I/O (np.load/fromfile/savetxt)
+# that bypasses the path allowlist. Every function band math needs is listed here.
 safe_funcs = {
-    "np": np,
     "where": np.where,
     "log": np.log,
     "log10": np.log10,
@@ -1075,13 +1093,28 @@ for key in ("raster_2", "raster_3", "raster_4", "raster_5"):
 if len(paths) < 2:
     raise SystemExit("Mosaic needs at least two rasters")
 
-sources = [rasterio.open(p) for p in paths]
+# Open inside the try so a failure on a later path still closes the handles
+# opened before it (a list comprehension would raise before ``finally`` is set).
+sources = []
 try:
+    for p in paths:
+        sources.append(rasterio.open(p))
     base_crs = sources[0].crs
+    if base_crs is None:
+        raise SystemExit("First raster has no CRS; mosaic requires georeferenced inputs.")
+    base_nodata = sources[0].nodata
     for s in sources[1:]:
         if s.crs != base_crs:
             raise SystemExit(
                 "All rasters must share the same CRS; reproject them first."
+            )
+        if s.nodata != base_nodata:
+            # merge masks each input by its own nodata, but the output header
+            # carries only the first source's value; warn so a mixed-nodata
+            # mosaic isn't silently mislabeled.
+            print(
+                f"Warning: inputs have different nodata values "
+                f"({base_nodata} vs {s.nodata}); output nodata will be {base_nodata}."
             )
     mosaic, out_transform = merge(sources, method=method)
     profile = sources[0].profile.copy()

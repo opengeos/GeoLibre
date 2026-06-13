@@ -505,6 +505,145 @@ def test_zonal_statistics_summarizes_each_zone(tmp_path: Path) -> None:
 
 
 @requires_rasterio
+def test_zonal_statistics_reprojects_wgs84_zones(tmp_path: Path) -> None:
+    """A WGS84 zone layer (no crs member) over a projected raster is reprojected.
+
+    Exercises the ``zone_crs != src.crs`` -> ``transform_geom`` branch, the most
+    common real-world case, which same-CRS fixtures never hit.
+    """
+    from pyproj import Transformer
+
+    src = _write_classes(tmp_path / "classes.tif")  # EPSG:32633
+    # Reproject the same left/right halves from the raster CRS to WGS84 so the
+    # zone file carries lon/lat coordinates with no explicit crs member.
+    to_wgs84 = Transformer.from_crs("EPSG:32633", "EPSG:4326", always_xy=True)
+
+    def wgs_square(minx, miny, maxx, maxy):
+        ring = [
+            (minx, miny),
+            (maxx, miny),
+            (maxx, maxy),
+            (minx, maxy),
+            (minx, miny),
+        ]
+        return {
+            "type": "Polygon",
+            "coordinates": [[list(to_wgs84.transform(x, y)) for x, y in ring]],
+        }
+
+    zones = tmp_path / "zones_wgs84.geojson"
+    zones.write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "properties": {"name": "left"},
+                        "geometry": wgs_square(500010, 4099610, 500230, 4099990),
+                    },
+                    {
+                        "type": "Feature",
+                        "properties": {"name": "right"},
+                        "geometry": wgs_square(500250, 4099610, 500470, 4099990),
+                    },
+                ],
+            }
+        )
+    )
+    out = tmp_path / "zonal.geojson"
+    _run_script(
+        _RASTER_TOOL_SCRIPTS["zonal"],
+        {
+            "input_path": str(src),
+            "output_path": str(out),
+            "zones_path": str(zones),
+            "band": 1,
+        },
+    )
+    by_name = {
+        f["properties"]["name"]: f["properties"]
+        for f in json.loads(out.read_text())["features"]
+    }
+    assert by_name["left"]["count"] > 0
+    assert by_name["left"]["mean"] == 0.0
+    assert by_name["right"]["mean"] == 1.0
+
+
+@requires_rasterio
+def test_raster_calculator_rejects_crs_mismatch(tmp_path: Path) -> None:
+    """B with A's dimensions but a different CRS is rejected, not silently mixed."""
+    import rasterio
+    from rasterio.transform import from_origin
+
+    a = _write_dem(tmp_path / "a.tif")  # EPSG:32633
+    with rasterio.open(a) as ds:
+        arr = ds.read(1)
+    b = tmp_path / "b.tif"
+    with rasterio.open(
+        b,
+        "w",
+        driver="GTiff",
+        height=arr.shape[0],
+        width=arr.shape[1],
+        count=1,
+        dtype="float32",
+        crs="EPSG:4326",
+        transform=from_origin(0, 10, 0.1, 0.1),
+    ) as dst:
+        dst.write(arr, 1)
+    out = tmp_path / "calc.tif"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            _RASTER_TOOL_SCRIPTS["raster-calc"],
+            json.dumps(
+                {
+                    "input_path": str(a),
+                    "output_path": str(out),
+                    "expression": "A + B",
+                    "b_path": str(b),
+                }
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode != 0
+    assert "does not match raster A" in (completed.stdout + completed.stderr)
+    assert not out.exists()
+
+
+@requires_rasterio
+def test_raster_calculator_blocks_numpy_io(tmp_path: Path) -> None:
+    """The bare ``np`` module is not exposed, so np.* I/O cannot be reached."""
+    src = _write_dem(tmp_path / "dem.tif")
+    out = tmp_path / "calc.tif"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            _RASTER_TOOL_SCRIPTS["raster-calc"],
+            json.dumps(
+                {
+                    "input_path": str(src),
+                    "output_path": str(out),
+                    "expression": "np.where(A > 0, 1, 0)",
+                }
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode != 0
+    assert "Failed to evaluate expression" in (completed.stdout + completed.stderr)
+    assert not out.exists()
+
+
+@requires_rasterio
 def test_raster_calculator_evaluates_expression(tmp_path: Path) -> None:
     import rasterio
 
