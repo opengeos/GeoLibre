@@ -123,7 +123,10 @@ export function installRasterClassification(control: unknown): void {
                   ...mod.props,
                   colormapTexture: texture,
                   colormapIndex: 0,
-                  reversed: entry.symbology.reversed,
+                  // The reversal is already baked into the texture's class
+                  // colors (buildSteppedColormapRgba), so the shader uniform
+                  // must stay false or the two cancel out.
+                  reversed: false,
                 },
               }
             : mod,

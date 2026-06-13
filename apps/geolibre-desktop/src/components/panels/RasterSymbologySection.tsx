@@ -291,6 +291,13 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
             }
           }}
         >
+          {/* A raster may arrive with any upstream colormap name (e.g. the
+              control's "gray"/"palette" default); surface it so the select
+              reflects what is actually rendered instead of silently showing
+              the first ramp. */}
+          {!VECTOR_COLOR_RAMPS.some((r) => r.value === ramp) && (
+            <option value={ramp}>{ramp}</option>
+          )}
           {VECTOR_COLOR_RAMPS.map((colorRamp) => (
             <option key={colorRamp.value} value={colorRamp.value}>
               {colorRamp.label}

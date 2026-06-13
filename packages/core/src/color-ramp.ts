@@ -66,6 +66,56 @@ export const VECTOR_COLOR_RAMPS: readonly ColorRamp[] = [
     label: "Oranges",
     colors: ["#fff7ed", "#fdba74", "#f97316", "#7c2d12"],
   },
+  {
+    value: "reds",
+    label: "Reds",
+    colors: ["#fff5f0", "#fcae91", "#fb6a4a", "#cb181d", "#67000d"],
+  },
+  {
+    value: "purples",
+    label: "Purples",
+    colors: ["#fcfbfd", "#bcbddc", "#807dba", "#54278f", "#3f007d"],
+  },
+  {
+    value: "terrain",
+    label: "Terrain",
+    colors: ["#333399", "#21bcb3", "#79d05a", "#e8e85a", "#a87b54", "#ffffff"],
+  },
+  {
+    value: "rdylgn",
+    label: "Red-Yellow-Green",
+    colors: ["#a50026", "#f46d43", "#ffffbf", "#66bd63", "#006837"],
+  },
+  {
+    value: "rdylbu",
+    label: "Red-Yellow-Blue",
+    colors: ["#a50026", "#f46d43", "#ffffbf", "#74add1", "#313695"],
+  },
+  {
+    value: "rdbu",
+    label: "Red-Blue",
+    colors: ["#b2182b", "#ef8a62", "#f7f7f7", "#67a9cf", "#2166ac"],
+  },
+  {
+    value: "coolwarm",
+    label: "Cool-Warm",
+    colors: ["#3b4cc0", "#7b9ff9", "#dddcdc", "#f49a7b", "#b40426"],
+  },
+  {
+    value: "jet",
+    label: "Jet",
+    colors: ["#000080", "#0000ff", "#00ffff", "#ffff00", "#ff0000", "#800000"],
+  },
+  {
+    value: "greys",
+    label: "Greys",
+    colors: ["#ffffff", "#bdbdbd", "#636363", "#000000"],
+  },
+  {
+    value: "gray",
+    label: "Grayscale",
+    colors: ["#000000", "#ffffff"],
+  },
 ] as const;
 
 /**
