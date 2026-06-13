@@ -51,6 +51,7 @@ nav:
       - Data Integrations: user-guide/data-integrations.md
       - Plugins & Marketplace: user-guide/plugins.md
       - Settings & Preferences: user-guide/settings.md
+      - Story Maps: user-guide/storymaps.md
       - Embedding & Sharing: user-guide/embedding.md
   - Tutorials:
       - Overview: tutorials/index.md

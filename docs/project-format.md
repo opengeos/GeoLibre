@@ -15,6 +15,7 @@ Projects are saved as **`.geolibre.json`** files.
 | `layers`          | array   | Layer definitions (see below)                                                                                |
 | `styles`          | object  | Map of layer id → `LayerStyle`                                                                               |
 | `plugins`         | object  | Optional external plugin manifest URLs, active plugin IDs, plugin map-control positions, and plugin settings |
+| `storymap`        | object  | Optional scroll-driven story map (chapters and presentation settings); omitted when there are no chapters    |
 | `metadata`        | object  | Free-form project metadata                                                                                   |
 
 ## Plugin state
@@ -41,6 +42,46 @@ Projects are saved as **`.geolibre.json`** files.
 ```
 
 Projects without a `plugins` section open with the built-in default plugin state.
+
+## Story map
+
+A story map turns the project into a scroll-driven narrative. Each chapter
+captures a camera view plus text, and can fade project layers in or out on
+enter/exit. The section is omitted entirely when the project has no chapters.
+
+```json
+{
+  "title": "A Tour of Three Cities",
+  "subtitle": "Built with GeoLibre",
+  "byline": "By the GeoLibre team",
+  "footer": "Source: OpenStreetMap",
+  "theme": "dark",
+  "showMarkers": true,
+  "markerColor": "#3fb1ce",
+  "inset": false,
+  "insetPosition": "bottom-right",
+  "chapters": [
+    {
+      "id": "intro",
+      "title": "San Francisco",
+      "description": "A hilly city on the tip of a peninsula. <em>HTML allowed.</em>",
+      "image": "https://example.com/sf.jpg",
+      "alignment": "left",
+      "hidden": false,
+      "location": { "center": [-122.4194, 37.7749], "zoom": 11, "pitch": 45, "bearing": 0 },
+      "mapAnimation": "flyTo",
+      "rotateAnimation": false,
+      "onChapterEnter": [{ "layerId": "layer-a", "opacity": 1, "duration": 2000 }],
+      "onChapterExit": [{ "layerId": "layer-a", "opacity": 0 }]
+    }
+  ]
+}
+```
+
+`alignment` is one of `left`, `center`, `right`, `full`; `mapAnimation` is
+`flyTo`, `easeTo`, or `jumpTo`. Layer opacity changes reference project layer
+ids. Build and present story maps from **Project → Story Map**, or export a
+self-contained HTML page for static hosting.
 
 ## Layer object
 

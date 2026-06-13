@@ -269,3 +269,118 @@ describe("app store", () => {
     ]);
   });
 });
+
+function chapter(patch: Record<string, unknown> = {}) {
+  return {
+    id: "chapter-1",
+    title: "Intro",
+    description: "Hello",
+    alignment: "left",
+    hidden: false,
+    location: { center: [10, 20], zoom: 4, pitch: 30, bearing: 45 },
+    mapAnimation: "flyTo",
+    rotateAnimation: false,
+    onChapterEnter: [],
+    onChapterExit: [],
+    ...patch,
+  };
+}
+
+describe("story maps", () => {
+  beforeEach(() => {
+    useAppStore.getState().newProject({ name: "Story Project" });
+  });
+
+  it("parses a valid story map and drops invalid chapters", () => {
+    const project = parseProject(
+      JSON.stringify({
+        version: "0.1.0",
+        name: "Story",
+        mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+        storymap: {
+          title: "My Story",
+          theme: "weird",
+          insetPosition: "nowhere",
+          chapters: [
+            chapter({ alignment: "diagonal", mapAnimation: "warp" }),
+            chapter({ id: "", location: { center: [0, 0], zoom: 1 } }),
+            { id: "no-location", title: "Bad" },
+          ],
+        },
+      }),
+    );
+
+    assert.ok(project.storymap);
+    // The theme/inset fall back to defaults, and only the first chapter (with a
+    // valid id and center) survives; its bad enums normalize to defaults.
+    assert.equal(project.storymap.theme, "dark");
+    assert.equal(project.storymap.insetPosition, "bottom-right");
+    assert.equal(project.storymap.chapters.length, 1);
+    assert.equal(project.storymap.chapters[0].alignment, "left");
+    assert.equal(project.storymap.chapters[0].mapAnimation, "flyTo");
+  });
+
+  it("omits an empty story map from a parsed project", () => {
+    const project = parseProject(
+      JSON.stringify({
+        version: "0.1.0",
+        name: "Story",
+        mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+        storymap: { title: "Empty", chapters: [] },
+      }),
+    );
+    assert.equal(project.storymap, undefined);
+  });
+
+  it("round-trips a story map through the store and back to a project", () => {
+    const store = useAppStore.getState();
+    store.addStoryChapter(chapter() as never);
+    store.addStoryChapter(chapter({ id: "chapter-2", title: "Second" }) as never);
+    store.updateStorymapSettings({ title: "Trip", showMarkers: true });
+
+    const saved = projectFromStore({
+      projectName: useAppStore.getState().projectName,
+      mapView: useAppStore.getState().mapView,
+      basemapStyleUrl: useAppStore.getState().basemapStyleUrl,
+      basemapVisible: useAppStore.getState().basemapVisible,
+      basemapOpacity: useAppStore.getState().basemapOpacity,
+      layers: useAppStore.getState().layers,
+      preferences: useAppStore.getState().preferences,
+      plugins: useAppStore.getState().projectPlugins,
+      storymap: useAppStore.getState().storymap,
+      metadata: useAppStore.getState().metadata,
+    });
+
+    assert.ok(saved.storymap);
+    assert.equal(saved.storymap.title, "Trip");
+    assert.equal(saved.storymap.showMarkers, true);
+    assert.equal(saved.storymap.chapters.length, 2);
+
+    // Reloading the serialized project restores the chapters in order.
+    const reloaded = parseProject(serializeProject(saved));
+    useAppStore.getState().loadProject(reloaded);
+    assert.deepEqual(
+      useAppStore.getState().storymap?.chapters.map((c) => c.id),
+      ["chapter-1", "chapter-2"],
+    );
+  });
+
+  it("moves and removes chapters", () => {
+    const store = useAppStore.getState();
+    store.addStoryChapter(chapter({ id: "a" }) as never);
+    store.addStoryChapter(chapter({ id: "b" }) as never);
+    store.addStoryChapter(chapter({ id: "c" }) as never);
+
+    useAppStore.getState().moveStoryChapter("c", 0);
+    assert.deepEqual(
+      useAppStore.getState().storymap?.chapters.map((c) => c.id),
+      ["c", "a", "b"],
+    );
+
+    useAppStore.getState().removeStoryChapter("a");
+    assert.deepEqual(
+      useAppStore.getState().storymap?.chapters.map((c) => c.id),
+      ["c", "b"],
+    );
+  });
+});

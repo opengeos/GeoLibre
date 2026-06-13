@@ -2,6 +2,7 @@ import {
   DEFAULT_BASEMAP,
   DEFAULT_LAYER_STYLE,
   DEFAULT_PROJECT_PREFERENCES,
+  DEFAULT_STORY_MAP,
   PROJECT_VERSION,
   type GeoLibreLayer,
   type GeoLibreProject,
@@ -11,6 +12,12 @@ import {
   type ProjectPluginState,
   type ProjectPreferences,
   type RuntimeEnvironmentVariable,
+  type StoryChapter,
+  type StoryChapterAlignment,
+  type StoryChapterAnimation,
+  type StoryInsetPosition,
+  type StoryLayerOpacityChange,
+  type StoryMap,
 } from "./types";
 
 /** Placeholder name a project carries before the user names it. */
@@ -68,8 +75,135 @@ export function parseProject(json: string): GeoLibreProject {
     styles: data.styles ?? {},
     preferences: normalizeProjectPreferences(data.preferences),
     plugins: normalizeProjectPlugins(data.plugins) ?? undefined,
+    storymap: normalizeStoryMap(data.storymap) ?? undefined,
     metadata: data.metadata ?? {},
   };
+}
+
+/**
+ * Validate and coerce a story map loaded from an untrusted project file.
+ *
+ * Returns null when the value carries no chapters so empty story maps stay out
+ * of the saved project, mirroring how plugins are only persisted when present.
+ *
+ * @param storymap Raw value read from the project JSON.
+ * @returns A normalized story map, or null when there is nothing to keep.
+ */
+function normalizeStoryMap(storymap: unknown): StoryMap | null {
+  if (!storymap || typeof storymap !== "object") return null;
+
+  const candidate = storymap as Partial<StoryMap>;
+  const chapters = Array.isArray(candidate.chapters)
+    ? candidate.chapters
+        .map(normalizeStoryChapter)
+        .filter((chapter): chapter is StoryChapter => Boolean(chapter))
+    : [];
+
+  if (chapters.length === 0) return null;
+
+  return {
+    title: normalizeString(candidate.title),
+    subtitle: normalizeString(candidate.subtitle),
+    byline: normalizeString(candidate.byline),
+    footer: normalizeString(candidate.footer),
+    theme: candidate.theme === "light" ? "light" : "dark",
+    showMarkers: normalizeBoolean(candidate.showMarkers, false),
+    markerColor:
+      normalizeString(candidate.markerColor) || DEFAULT_STORY_MAP.markerColor,
+    inset: normalizeBoolean(candidate.inset, false),
+    insetPosition: STORY_INSET_POSITIONS.has(
+      candidate.insetPosition as StoryInsetPosition,
+    )
+      ? (candidate.insetPosition as StoryInsetPosition)
+      : DEFAULT_STORY_MAP.insetPosition,
+    chapters,
+  };
+}
+
+const STORY_ALIGNMENTS = new Set<StoryChapterAlignment>([
+  "left",
+  "center",
+  "right",
+  "full",
+]);
+
+const STORY_ANIMATIONS = new Set<StoryChapterAnimation>([
+  "flyTo",
+  "easeTo",
+  "jumpTo",
+]);
+
+const STORY_INSET_POSITIONS = new Set<StoryInsetPosition>([
+  "top-left",
+  "top-right",
+  "bottom-left",
+  "bottom-right",
+]);
+
+function normalizeStoryChapter(chapter: unknown): StoryChapter | null {
+  if (!chapter || typeof chapter !== "object") return null;
+
+  const candidate = chapter as Partial<StoryChapter>;
+  const id = normalizeString(candidate.id);
+  if (!id) return null;
+
+  const location = candidate.location;
+  const center = location?.center;
+  if (
+    !Array.isArray(center) ||
+    center.length !== 2 ||
+    !center.every((value) => Number.isFinite(value))
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    title: normalizeString(candidate.title),
+    description: normalizeString(candidate.description),
+    image: normalizeString(candidate.image) || undefined,
+    alignment: STORY_ALIGNMENTS.has(candidate.alignment as StoryChapterAlignment)
+      ? (candidate.alignment as StoryChapterAlignment)
+      : "left",
+    hidden: normalizeBoolean(candidate.hidden, false),
+    location: {
+      center: [Number(center[0]), Number(center[1])],
+      zoom: normalizeNumber(location?.zoom, 2),
+      pitch: normalizeNumber(location?.pitch, 0),
+      bearing: normalizeNumber(location?.bearing, 0),
+    },
+    mapAnimation: STORY_ANIMATIONS.has(
+      candidate.mapAnimation as StoryChapterAnimation,
+    )
+      ? (candidate.mapAnimation as StoryChapterAnimation)
+      : "flyTo",
+    rotateAnimation: normalizeBoolean(candidate.rotateAnimation, false),
+    onChapterEnter: normalizeOpacityChanges(candidate.onChapterEnter),
+    onChapterExit: normalizeOpacityChanges(candidate.onChapterExit),
+  };
+}
+
+function normalizeOpacityChanges(value: unknown): StoryLayerOpacityChange[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry): StoryLayerOpacityChange | null => {
+      if (!entry || typeof entry !== "object") return null;
+      const candidate = entry as Partial<StoryLayerOpacityChange>;
+      const layerId = normalizeString(candidate.layerId);
+      if (!layerId) return null;
+      return {
+        layerId,
+        opacity: clampCoordinate(normalizeNumber(candidate.opacity, 1), 0, 1),
+        ...(Number.isFinite(candidate.duration)
+          ? { duration: Number(candidate.duration) }
+          : {}),
+      };
+    })
+    .filter((entry): entry is StoryLayerOpacityChange => Boolean(entry));
+}
+
+function normalizeString(value: unknown): string {
+  return typeof value === "string" ? value : "";
 }
 
 function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
@@ -302,6 +436,7 @@ export function projectFromStore(state: {
   layers: GeoLibreLayer[];
   preferences: ProjectPreferences;
   plugins?: ProjectPluginState | null;
+  storymap?: StoryMap | null;
   metadata: Record<string, unknown>;
 }): GeoLibreProject {
   const styles: Record<string, LayerStyle> = {};
@@ -309,6 +444,7 @@ export function projectFromStore(state: {
     styles[layer.id] = layer.style;
   }
   const plugins = normalizeProjectPlugins(state.plugins);
+  const storymap = normalizeStoryMap(state.storymap);
   return {
     version: PROJECT_VERSION,
     name: state.projectName,
@@ -320,6 +456,7 @@ export function projectFromStore(state: {
     styles,
     preferences: state.preferences,
     ...(plugins ? { plugins } : {}),
+    ...(storymap ? { storymap } : {}),
     metadata: state.metadata,
   };
 }
@@ -389,6 +526,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
   layers: GeoLibreLayer[];
   preferences: ProjectPreferences;
   projectPlugins: ProjectPluginState | null;
+  storymap: StoryMap | null;
   metadata: Record<string, unknown>;
 } {
   const layers = project.layers.map((layer) => ({
@@ -406,6 +544,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
     layers,
     preferences: normalizeProjectPreferences(project.preferences),
     projectPlugins: normalizeProjectPlugins(project.plugins),
+    storymap: normalizeStoryMap(project.storymap),
     metadata: project.metadata,
   };
 }

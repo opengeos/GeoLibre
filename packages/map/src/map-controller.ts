@@ -286,6 +286,48 @@ export class MapController {
     return this.map;
   }
 
+  /**
+   * Fade a project layer in or out for story-map playback.
+   *
+   * Story chapters change layer opacity as the reader scrolls. This writes the
+   * MapLibre paint properties directly instead of going through the store, so
+   * playback never marks the project dirty or pushes undo history. Call
+   * {@link restoreLayerStyles} when playback ends to reset opacities.
+   *
+   * @param layerId GeoLibre store layer id to fade.
+   * @param opacity Target opacity, clamped to the 0-1 range.
+   * @param durationMs Optional transition duration in milliseconds.
+   */
+  setStoryLayerOpacity(
+    layerId: string,
+    opacity: number,
+    durationMs?: number,
+  ): void {
+    if (!this.map) return;
+    const clamped = Math.min(1, Math.max(0, opacity));
+    for (const nativeId of this.getNativeLayerIdsByLayerId(layerId)) {
+      const styleLayer = this.map.getLayer(nativeId);
+      if (!styleLayer) continue;
+      const props = OPACITY_PAINT_PROPERTIES[styleLayer.type] ?? [];
+      for (const prop of props) {
+        if (durationMs && durationMs > 0) {
+          this.map.setPaintProperty(nativeId, `${prop}-transition`, {
+            duration: durationMs,
+          });
+        }
+        this.map.setPaintProperty(nativeId, prop, clamped);
+      }
+    }
+  }
+
+  /**
+   * Re-apply layer styles from the last synced layers, undoing any direct paint
+   * changes made during story-map playback by {@link setStoryLayerOpacity}.
+   */
+  restoreLayerStyles(): void {
+    this.syncLayers(this.syncedLayers);
+  }
+
   private isStyleReady(): boolean {
     return Boolean(this.map && this.styleReady);
   }
