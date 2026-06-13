@@ -14,6 +14,13 @@ function leafKeys(obj: unknown, prefix = ""): string[] {
   );
 }
 
+// Collapse i18next plural suffixes so a locale can carry the plural forms its
+// language needs (e.g. Russian `_few`/`_many`) without being flagged as having
+// keys absent from `en`, which only ships `_one`/`_other`.
+function normalizePluralKey(key: string): string {
+  return key.replace(/_(zero|one|two|few|many|other)$/, "");
+}
+
 function loadCatalog(code: string): Record<string, unknown> {
   return JSON.parse(readFileSync(`${localesDir}${code}.json`, "utf8"));
 }
@@ -24,6 +31,7 @@ const localeCodes = readdirSync(localesDir)
 
 describe("i18n catalogs", () => {
   const enKeys = new Set(leafKeys(loadCatalog("en")));
+  const enBaseKeys = new Set([...enKeys].map(normalizePluralKey));
 
   it("ships an English baseline catalog", () => {
     assert.ok(localeCodes.includes("en"));
@@ -32,7 +40,9 @@ describe("i18n catalogs", () => {
 
   for (const code of localeCodes.filter((c) => c !== "en")) {
     it(`${code}: every key exists in the English catalog (no typos/extra keys)`, () => {
-      const extra = leafKeys(loadCatalog(code)).filter((k) => !enKeys.has(k));
+      const extra = leafKeys(loadCatalog(code)).filter(
+        (k) => !enBaseKeys.has(normalizePluralKey(k)),
+      );
       assert.deepEqual(
         extra,
         [],

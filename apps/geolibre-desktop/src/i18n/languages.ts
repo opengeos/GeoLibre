@@ -28,6 +28,11 @@ export const LANGUAGE_NAMES: Record<
   ko: { nativeName: "한국어", englishName: "Korean" },
   ru: { nativeName: "Русский", englishName: "Russian" },
   ar: { nativeName: "العربية", englishName: "Arabic" },
+  nl: { nativeName: "Nederlands", englishName: "Dutch" },
+  it: { nativeName: "Italiano", englishName: "Italian" },
+  id: { nativeName: "Bahasa Indonesia", englishName: "Indonesian" },
+  tr: { nativeName: "Türkçe", englishName: "Turkish" },
+  hi: { nativeName: "हिन्दी", englishName: "Hindi" },
 };
 
 export interface LanguageOption {
