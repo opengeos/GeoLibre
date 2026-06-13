@@ -1,4 +1,4 @@
-import { type RefObject, useEffect, useRef } from "react";
+import { type RefObject, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import maplibregl from "maplibre-gl";
@@ -50,7 +50,9 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const activeIndexRef = useRef<number>(-1);
 
-  const chapters = storymap?.chapters ?? [];
+  // Memoized so the effect below does not re-run on every render from a fresh
+  // `?? []` array reference; it only changes when the story does.
+  const chapters = useMemo(() => storymap?.chapters ?? [], [storymap]);
   const hasChapters = presenting && chapters.length > 0;
 
   // Set up scroll observation and the live map side-effects while presenting.

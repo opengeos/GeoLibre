@@ -4,6 +4,7 @@ import {
   type GeoLibreLayer,
   type StoryMap,
 } from "@geolibre/core";
+import { sanitizeStoryHtml } from "./sanitize-html";
 
 export interface StoryMapExportOptions {
   storymap: StoryMap;
@@ -79,10 +80,18 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
   }
 
   // Opacity effects can only target layers that actually exist in the export;
-  // others would make the exported page throw on `map.getLayer(...).type`.
+  // others would make the exported page throw on `map.getLayer(...).type`. The
+  // template runtime reads `layer.layer` for the MapLibre id, so map our
+  // `layerId` field onto that shape as well.
   const inlinedIds = new Set(inlineLayers.map((entry) => entry.id));
   const keepChanges = (changes: StoryMap["chapters"][number]["onChapterEnter"]) =>
-    changes.filter((change) => inlinedIds.has(change.layerId));
+    changes
+      .filter((change) => inlinedIds.has(change.layerId))
+      .map((change) => ({
+        layer: change.layerId,
+        opacity: change.opacity,
+        ...(change.duration !== undefined ? { duration: change.duration } : {}),
+      }));
 
   const config = {
     style: basemapStyleUrl,
@@ -97,14 +106,16 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
     title: storymap.title,
     subtitle: storymap.subtitle,
     byline: storymap.byline,
-    footer: storymap.footer,
+    // Description and footer are written into the exported page via innerHTML,
+    // so sanitize them here just like the in-app presenter does.
+    footer: sanitizeStoryHtml(storymap.footer),
     chapters: storymap.chapters.map((chapter) => ({
       id: chapter.id,
       alignment: chapter.alignment,
       hidden: chapter.hidden,
       title: chapter.title,
       image: chapter.image ?? "",
-      description: chapter.description,
+      description: sanitizeStoryHtml(chapter.description),
       location: {
         center: chapter.location.center,
         zoom: chapter.location.zoom,

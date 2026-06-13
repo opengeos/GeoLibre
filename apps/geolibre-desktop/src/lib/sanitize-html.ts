@@ -1,5 +1,14 @@
 import DOMPurify from "dompurify";
 
+// Harden links that open in a new tab so the opened page cannot reach back
+// through `window.opener`. DOMPurify passes `target`/`rel` through but does not
+// add `rel`, so enforce it ourselves.
+DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+  if (node.tagName === "A" && node.getAttribute("target") === "_blank") {
+    node.setAttribute("rel", "noopener noreferrer");
+  }
+});
+
 /**
  * Sanitize a fragment of user-authored HTML for safe rendering.
  *
