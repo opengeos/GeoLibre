@@ -473,6 +473,8 @@ export const useAppStore = create<AppState>()(
           identifyLayerId: null,
           pointerCoords: null,
           attributeFilter: "",
+          // Don't carry an active story presentation into a different project.
+          ui: { ...s.ui, storymapPresenting: false, storymapPanelOpen: false },
         }));
         clearHistory();
       },
@@ -487,6 +489,8 @@ export const useAppStore = create<AppState>()(
           selectedLayerId: applied.layers[0]?.id ?? null,
           selectedFeatureId: null,
           identifyLayerId: null,
+          // Don't carry an active story presentation into a different project.
+          ui: { ...s.ui, storymapPresenting: false, storymapPanelOpen: false },
         }));
         clearHistory();
         if (path && options.rememberRecent !== false) {
