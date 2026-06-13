@@ -77,6 +77,7 @@ import {
   toggleEarthEnginePanel,
   DECK_VIZ_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
+  REVERSE_GEOCODE_PLUGIN_ID,
   EFFECTS_PLUGIN_ID,
   WEB_SERVICE_PLUGIN_IDS,
   type GeoLibreMapControlPosition,
@@ -119,6 +120,7 @@ import {
   Layers,
   Link2,
   Map,
+  MapPin,
   MessageSquare,
   Moon,
   Pencil,
@@ -370,6 +372,7 @@ export function TopToolbar({
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
   const setConversionOpen = useAppStore((s) => s.setConversionOpen);
   const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
+  const setGeocodeOpen = useAppStore((s) => s.setGeocodeOpen);
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
   const setStorymapPanelOpen = useAppStore((s) => s.setStorymapPanelOpen);
@@ -412,6 +415,8 @@ export function TopToolbar({
   const [projectUrlLoading, setProjectUrlLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [directionsNoticeOpen, setDirectionsNoticeOpen] = useState(false);
+  const [reverseGeocodeNoticeOpen, setReverseGeocodeNoticeOpen] =
+    useState(false);
   const [osmPbfLoading, setOsmPbfLoading] = useState(false);
   const osmPbfAbortRef = useRef<AbortController | null>(null);
   const [osmPbfDialogOpen, setOsmPbfDialogOpen] = useState(false);
@@ -654,6 +659,33 @@ export function TopToolbar({
     }
     setDirectionsNoticeOpen(false);
     toggle(DIRECTIONS_PLUGIN_ID, appApi);
+  };
+  // Reverse geocode sends the clicked coordinates to a public geocoder, so it
+  // shows the same one-time consent notice as Directions before first enabling.
+  const handleToggleReverseGeocode = () => {
+    if (isActive(REVERSE_GEOCODE_PLUGIN_ID)) {
+      toggle(REVERSE_GEOCODE_PLUGIN_ID, appApi);
+      return;
+    }
+    let acknowledged = false;
+    try {
+      acknowledged =
+        localStorage.getItem("geolibre:reverse-geocode-nominatim-notice") ===
+        "1";
+    } catch {
+      // localStorage unavailable (private mode): fall back to showing the notice.
+    }
+    if (acknowledged) toggle(REVERSE_GEOCODE_PLUGIN_ID, appApi);
+    else setReverseGeocodeNoticeOpen(true);
+  };
+  const confirmEnableReverseGeocode = () => {
+    try {
+      localStorage.setItem("geolibre:reverse-geocode-nominatim-notice", "1");
+    } catch {
+      // Ignore: the notice will simply show again next time.
+    }
+    setReverseGeocodeNoticeOpen(false);
+    toggle(REVERSE_GEOCODE_PLUGIN_ID, appApi);
   };
   const resetRuntimeControlsForNewProject = () => {
     closeMaplibreComponentControls(appApi);
@@ -1141,6 +1173,14 @@ export function TopToolbar({
       icon: Wrench,
       run: () => setSqlWorkspaceOpen(true),
     },
+    {
+      id: "proc.geocode",
+      title: t("toolbar.command.geocode"),
+      group: t("toolbar.commandGroup.processing"),
+      keywords: "geocode address csv nominatim",
+      icon: MapPin,
+      run: () => setGeocodeOpen(true),
+    },
     ...CONVERSION_COMMANDS.map(({ kind, titleKey }) => ({
       id: `proc.conversion.${kind}`,
       title: t(titleKey),
@@ -1297,13 +1337,15 @@ export function TopToolbar({
       run: () => setAboutOpen(true),
     },
     // Plugins — one toggle per registered plugin. Atmosphere Effects,
-    // Directions, and the deck.gl viz renderer are excluded here because they
-    // are surfaced under Controls / Add Data instead (matching the menus).
+    // Directions, Reverse Geocode, and the deck.gl viz renderer are excluded
+    // here because they are surfaced under Controls / Add Data instead
+    // (matching the menus).
     ...plugins
       .filter(
         (plugin) =>
           plugin.id !== EFFECTS_PLUGIN_ID &&
           plugin.id !== DIRECTIONS_PLUGIN_ID &&
+          plugin.id !== REVERSE_GEOCODE_PLUGIN_ID &&
           plugin.id !== DECK_VIZ_PLUGIN_ID,
       )
       .map((plugin) => ({
@@ -1662,6 +1704,9 @@ export function TopToolbar({
           <DropdownMenuItem onSelect={() => setSqlWorkspaceOpen(true)}>
             {t("toolbar.command.sqlWorkspace")}
           </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setGeocodeOpen(true)}>
+            {t("toolbar.item.geocode")}
+          </DropdownMenuItem>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
               {t("toolbar.item.conversion")}
@@ -1933,6 +1978,13 @@ export function TopToolbar({
             {t("toolbar.item.directions")}
             {isActive(DIRECTIONS_PLUGIN_ID) ? " ✓" : ""}
           </DropdownMenuItem>
+          <DropdownMenuItem
+            title={t("toolbar.item.reverseGeocodeTooltip")}
+            onClick={handleToggleReverseGeocode}
+          >
+            {t("toolbar.item.reverseGeocode")}
+            {isActive(REVERSE_GEOCODE_PLUGIN_ID) ? " ✓" : ""}
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={handleToggleSearchPlacesPanel}>
             {t("toolbar.item.search")}
@@ -2047,14 +2099,15 @@ export function TopToolbar({
             // above Esri Wayback).
             let webServicesRendered = false;
             return plugins.map((p) => {
-              // Atmosphere Effects and Directions are toggled from the Controls
-              // menu instead, so they are omitted here to avoid a duplicate
-              // toggle. The deck.gl viz overlay is an internal renderer driven
-              // by the Add Data → "Deck.gl Layer" dialog, not a user-facing
-              // toggle, so it is hidden here too.
+              // Atmosphere Effects, Directions, and Reverse Geocode are toggled
+              // from the Controls menu instead, so they are omitted here to
+              // avoid a duplicate toggle. The deck.gl viz overlay is an internal
+              // renderer driven by the Add Data → "Deck.gl Layer" dialog, not a
+              // user-facing toggle, so it is hidden here too.
               if (
                 p.id === EFFECTS_PLUGIN_ID ||
                 p.id === DIRECTIONS_PLUGIN_ID ||
+                p.id === REVERSE_GEOCODE_PLUGIN_ID ||
                 p.id === DECK_VIZ_PLUGIN_ID
               ) {
                 return null;
@@ -2275,6 +2328,32 @@ export function TopToolbar({
               {t("common.cancel")}
             </Button>
             <Button onClick={confirmEnableDirections}>
+              {t("toolbar.item.continue")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={reverseGeocodeNoticeOpen}
+        onOpenChange={setReverseGeocodeNoticeOpen}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {t("toolbar.item.reverseGeocodeNoticeTitle")}
+            </DialogTitle>
+            <DialogDescription>
+              {t("toolbar.item.reverseGeocodeNoticeDesc")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setReverseGeocodeNoticeOpen(false)}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button onClick={confirmEnableReverseGeocode}>
               {t("toolbar.item.continue")}
             </Button>
           </div>

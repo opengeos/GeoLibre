@@ -11,6 +11,8 @@ import {
   getGeometryEditTargetLayerId,
   restoreDeckViz,
   restoreDirections,
+  restoreReverseGeocode,
+  REVERSE_GEOCODE_PLUGIN_ID,
   restoreEffects,
   restoreRasterLayers,
   restoreThreeDTilesLayers,
@@ -111,6 +113,20 @@ const VectorToolsDialog = lazy(() =>
       console.error("Failed to load VectorToolsDialog", error);
       const Fallback = (() =>
         null) as unknown as typeof import("../processing/VectorToolsDialog").VectorToolsDialog;
+      return { default: Fallback };
+    }),
+);
+
+const GeocodeDialog = lazy(() =>
+  import("../processing/GeocodeDialog")
+    .then((module) => ({
+      default: module.GeocodeDialog,
+    }))
+    .catch((error) => {
+      // Same chunk-load fallback rationale as ProcessingDialog above.
+      console.error("Failed to load GeocodeDialog", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/GeocodeDialog").GeocodeDialog;
       return { default: Fallback };
     }),
 );
@@ -387,6 +403,11 @@ export function DesktopShell({
     // Rebind the directions tool to the (possibly new) map instance after a
     // map re-init, since restoreProjectState skips an already-active plugin.
     restoreDirections(appAPI, pluginManager.isActive(DIRECTIONS_PLUGIN_ID));
+    // Same rebind contract for the reverse-geocode click handler.
+    restoreReverseGeocode(
+      appAPI,
+      pluginManager.isActive(REVERSE_GEOCODE_PLUGIN_ID),
+    );
     // Same contract for the deck.gl overlay: re-attach it to the current map
     // and re-render any deckgl-viz layers a restored project carries.
     restoreDeckViz(appAPI, pluginManager.isActive(DECK_VIZ_PLUGIN_ID));
@@ -952,6 +973,9 @@ export function DesktopShell({
       </Suspense>
       <Suspense fallback={null}>
         <VectorToolsDialog mapControllerRef={mapControllerRef} />
+      </Suspense>
+      <Suspense fallback={null}>
+        <GeocodeDialog mapControllerRef={mapControllerRef} />
       </Suspense>
       <Suspense fallback={null}>
         <RasterToolsDialog />

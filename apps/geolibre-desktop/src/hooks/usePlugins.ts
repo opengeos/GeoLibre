@@ -19,6 +19,7 @@ import {
   maplibreNasaEarthdataPlugin,
   maplibreNationalMapPlugin,
   maplibreOvertureMapsPlugin,
+  maplibreReverseGeocodePlugin,
   maplibreStreetViewPlugin,
   maplibreSwipePlugin,
   maplibreTimeSliderPlugin,
@@ -93,6 +94,7 @@ manager.registerAll([
   maplibreSwipePlugin,
   maplibreEffectsPlugin,
   maplibreDirectionsPlugin,
+  maplibreReverseGeocodePlugin,
   maplibreDeckGlVizPlugin,
   maplibreComponentsPlugin,
 ]);

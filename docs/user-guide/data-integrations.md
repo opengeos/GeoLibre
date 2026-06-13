@@ -48,3 +48,28 @@ The **Web Services** submenu of the [Plugins menu](plugins.md) bundles four Unit
 | **GeoAgent** | AI-assisted geospatial analysis. |
 
 All of these are activated from the [Plugins menu](plugins.md), where you can also set their on-map position.
+
+## Geocoding
+
+GeoLibre can turn addresses into points and points into addresses. Both use the public [Nominatim](https://nominatim.openstreetmap.org/) service by default.
+
+| Tool | Where | What it does |
+| --- | --- | --- |
+| **Geocode Addresses** | Processing menu | Pick a CSV with an address column and geocode each row into a point layer. Each matched row keeps its original columns plus `geocode_lat`, `geocode_lon`, `geocode_display_name`, and `geocode_importance` (a match score). |
+| **Reverse Geocode** | Controls menu | A toggle. While on, click anywhere on the map to look up the address at that point, shown in a popup with a copy button. |
+
+Both send coordinates or addresses to a third-party service, so the first time you enable Reverse Geocode (and whenever you run a batch) your data leaves your device for those requests. Reverse Geocode shows a one-time notice before it is first enabled.
+
+### Usage policy and limits
+
+Requests to the public Nominatim endpoint are paced to one per second and a single batch run is capped at 1000 rows, in line with the [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/). Browsers cannot set a `User-Agent`, so the app identifies itself through the page `Referer` and the optional `email` parameter described below. For larger batches or heavier use, point GeoLibre at your own Nominatim or [Pelias](https://pelias.io/) instance, which removes the pacing and the row cap.
+
+### Configuring the provider
+
+Set these runtime environment variables (the same `VITE_`-prefixed mechanism used for [imagery credentials](../getting-started.md#optional-imagery-credentials)):
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `VITE_GEOCODER_ENDPOINT` | `https://nominatim.openstreetmap.org/search` | Forward (address to point) search endpoint. |
+| `VITE_GEOCODER_REVERSE_ENDPOINT` | `https://nominatim.openstreetmap.org/reverse` | Reverse (point to address) endpoint. |
+| `VITE_GEOCODER_EMAIL` | unset | Contact email sent as the `email` query parameter to identify your client to the public service. |
