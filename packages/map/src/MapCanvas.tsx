@@ -625,8 +625,16 @@ export const MapCanvas = memo(function MapCanvas({
       onMapDiagnosticEventRef.current?.(mapErrorDiagnosticEvent(event));
     });
 
-    const updateView = (event?: { originalEvent?: unknown }) =>
+    const updateView = (event?: { originalEvent?: unknown }) => {
+      // While presenting a story map the presenter owns the camera. Syncing its
+      // transient chapter flies and rotations back into the store would both
+      // overwrite the saved project view and, worse, re-enter the applyView
+      // effect below: its jumpTo cancels an in-flight chapter fly, after which
+      // the rotate handler starts orbiting the previous chapter instead of the
+      // one just clicked. Skipping the sync keeps the presenter authoritative.
+      if (useAppStore.getState().ui.storymapPresenting) return;
       setMapView(mc.readView(), Boolean(event?.originalEvent));
+    };
     map.on("moveend", updateView);
 
     // Persist projection toggles (the GlobeControl) into project preferences so
