@@ -743,6 +743,188 @@ export const spatialJoinTool: ProcessingAlgorithm = {
   },
 };
 
+/**
+ * Match key for the Attribute join tool: empty values (null/undefined/NaN/empty
+ * string) never match a row, mirroring a SQL/pandas NaN join key. Non-empty
+ * values are keyed by {@link valueToString}, so a numeric `5` and the string
+ * `"5"` join (both render `"5"`) while a zero-padded code like `"01001"` only
+ * matches another `"01001"`. Kept in sync with the backend's
+ * ``_attribute_join_key``.
+ */
+function attributeJoinKey(value: unknown): string | null {
+  const isEmpty =
+    value === null ||
+    value === undefined ||
+    (typeof value === "number" && Number.isNaN(value)) ||
+    valueToString(value) === "";
+  return isEmpty ? null : valueToString(value);
+}
+
+export const attributeJoinTool: ProcessingAlgorithm = {
+  id: "attribute-join",
+  name: "Attribute join",
+  description:
+    "Attach attributes from a join layer (a table) onto each input feature where a key field matches, without using geometry. One-to-one: the first matching join row wins.",
+  group: "Join",
+  supportsSidecar: true,
+  parameters: [
+    { id: "layer", label: "Target layer", type: "layer", required: true },
+    {
+      id: "overlay",
+      label: "Join layer (table)",
+      type: "layer",
+      required: true,
+      description:
+        "The layer whose attributes are brought over. Its geometry is ignored.",
+    },
+    {
+      id: "target_field",
+      label: "Target key field",
+      type: "field",
+      fieldSource: "layer",
+      required: true,
+    },
+    {
+      id: "join_field",
+      label: "Join key field",
+      type: "field",
+      fieldSource: "overlay",
+      required: true,
+    },
+    {
+      id: "how",
+      label: "Join type",
+      type: "select",
+      default: "left",
+      options: [
+        { value: "left", label: "Left (keep all target features)" },
+        { value: "inner", label: "Inner (keep only matched features)" },
+      ],
+    },
+    {
+      id: "fields",
+      label: "Fields to bring over (optional)",
+      type: "string",
+      description:
+        "Comma-separated join fields to copy. Leave blank to bring over every join field except the key.",
+    },
+  ],
+  run: (ctx) => {
+    const input = requireFeatures(ctx, "layer");
+    if (!input) return;
+    const joinLayer = getLayer(ctx, "overlay");
+    if (!joinLayer) {
+      ctx.log('Error: parameter "overlay" has no layer selected');
+      return;
+    }
+    const targetField = (ctx.parameters.target_field as string)?.trim();
+    if (!targetField) {
+      ctx.log("Error: a target key field is required");
+      return;
+    }
+    const joinField = (ctx.parameters.join_field as string)?.trim();
+    if (!joinField) {
+      ctx.log("Error: a join key field is required");
+      return;
+    }
+    const how = (ctx.parameters.how as string) || "left";
+    if (!SPATIAL_JOIN_HOW.includes(how as SpatialJoinHow)) {
+      ctx.log(
+        `Error: unknown join type '${how}'; expected ${SPATIAL_JOIN_HOW.join(", ")}`,
+      );
+      return;
+    }
+    // An empty join layer is well-defined: a left join keeps every target
+    // feature (no columns added), an inner join yields nothing.
+    const joinFeatures = (joinLayer.geojson?.features ?? []).filter(Boolean);
+
+    // Collect every join-layer attribute key in first-seen order so the output
+    // schema is deterministic across both engines.
+    const joinKeysOrder: string[] = [];
+    const joinKeySet = new Set<string>();
+    for (const jf of joinFeatures) {
+      for (const key of Object.keys(jf.properties ?? {})) {
+        if (!joinKeySet.has(key)) {
+          joinKeySet.add(key);
+          joinKeysOrder.push(key);
+        }
+      }
+    }
+
+    const fieldsRaw = (ctx.parameters.fields as string)?.trim();
+    const requestedFields = fieldsRaw
+      ? fieldsRaw
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : null;
+    let selectedFields: string[];
+    if (requestedFields) {
+      selectedFields = requestedFields.filter((f) => joinKeySet.has(f));
+      const missing = requestedFields.filter((f) => !joinKeySet.has(f));
+      if (missing.length) {
+        ctx.log(`Note: join field(s) not found and skipped: ${missing.join(", ")}`);
+      }
+      if (!selectedFields.length) {
+        ctx.log("Error: none of the requested join fields exist in the join layer");
+        return;
+      }
+    } else {
+      // Default: bring over every join field except the key (which would just
+      // duplicate the target key column).
+      selectedFields = joinKeysOrder.filter((k) => k !== joinField);
+    }
+
+    // First-match lookup: when several join rows share a key, the first wins.
+    const lookup = new Map<string, GeoJsonProperties>();
+    for (const jf of joinFeatures) {
+      const key = attributeJoinKey(jf.properties?.[joinField]);
+      if (key === null) continue;
+      if (!lookup.has(key)) lookup.set(key, jf.properties ?? {});
+    }
+
+    // Null-fill the brought-over columns for unmatched left-join rows so the
+    // output schema stays consistent (mirrors the spatial join and the sidecar).
+    const nullFill: GeoJsonProperties = {};
+    for (const f of selectedFields) nullFill[f] = null;
+
+    let matched = 0;
+    const results: Feature[] = [];
+    for (const feature of input.features) {
+      const key = attributeJoinKey(feature.properties?.[targetField]);
+      const joinProps = key === null ? undefined : lookup.get(key);
+      if (!joinProps) {
+        if (how === "left") {
+          results.push({
+            type: "Feature",
+            ...(feature.id !== undefined ? { id: feature.id } : {}),
+            // Target attributes win on a name collision with a null-filled column.
+            properties: { ...nullFill, ...(feature.properties ?? {}) },
+            geometry: feature.geometry,
+          });
+        }
+        continue;
+      }
+      matched += 1;
+      const picked: GeoJsonProperties = {};
+      for (const f of selectedFields) {
+        picked[f] = joinProps[f] !== undefined ? joinProps[f] : null;
+      }
+      results.push({
+        type: "Feature",
+        ...(feature.id !== undefined ? { id: feature.id } : {}),
+        // Target attributes win on name collisions with brought-over fields.
+        properties: { ...picked, ...(feature.properties ?? {}) },
+        geometry: feature.geometry,
+      });
+    }
+    ctx.log(
+      `Attribute join: ${matched} of ${input.features.length} feature(s) matched; produced ${results.length} feature(s)`,
+    );
+    ctx.addResultLayer?.("Attribute join", featureCollection(results));
+  },
+};
+
 /** Comparison operators for the Select by value tool; kept in sync with the backend. */
 const SELECT_VALUE_OPERATORS = new Set([
   "eq",
@@ -1774,6 +1956,7 @@ export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   differenceTool,
   unionTool,
   spatialJoinTool,
+  attributeJoinTool,
   selectByValueTool,
   selectByLocationTool,
   reprojectTool,

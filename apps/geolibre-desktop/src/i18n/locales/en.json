@@ -189,6 +189,7 @@
       "difference": "Difference",
       "union": "Union",
       "spatialJoin": "Spatial join",
+      "attributeJoin": "Attribute join",
       "selectByValue": "Select by value",
       "selectByLocation": "Select by location",
       "reproject": "Reproject",

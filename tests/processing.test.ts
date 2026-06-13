@@ -244,6 +244,123 @@ describe("processing registry", () => {
     assert.ok(logs.some((m) => m.includes("unknown predicate")));
   });
 
+  it("attribute-joins a table's fields onto features by a key", () => {
+    const tool = getVectorTool("attribute-join");
+    assert.ok(tool);
+
+    // Counties keyed by GEOID (a string with a leading zero) plus one county
+    // whose key is stored as a number, to exercise the string/number coercion.
+    const counties: GeoLibreLayer = {
+      ...layer,
+      id: "counties",
+      name: "Counties",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { GEOID: "01001" },
+            geometry: { type: "Point", coordinates: [0, 0] },
+          },
+          {
+            type: "Feature",
+            properties: { GEOID: 1003 },
+            geometry: { type: "Point", coordinates: [1, 1] },
+          },
+          {
+            type: "Feature",
+            properties: { GEOID: "09999" },
+            geometry: { type: "Point", coordinates: [2, 2] },
+          },
+        ],
+      },
+    };
+    // Stats table (geometry ignored). Two rows share key "1003"; the first wins.
+    const stats: GeoLibreLayer = {
+      ...layer,
+      id: "stats",
+      name: "Stats",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { code: "01001", pop: 100, label: "Autauga" },
+            geometry: { type: "Point", coordinates: [0, 0] },
+          },
+          {
+            // Numeric county key matched against the string "1003" via valueToString.
+            type: "Feature",
+            properties: { code: "1003", pop: 200, label: "Barbour" },
+            geometry: { type: "Point", coordinates: [0, 0] },
+          },
+          {
+            type: "Feature",
+            properties: { code: "1003", pop: 999, label: "DUPLICATE" },
+            geometry: { type: "Point", coordinates: [0, 0] },
+          },
+        ],
+      },
+    };
+
+    // Left join keeps every county; "09999" has no stats row so its brought-over
+    // columns are null-filled.
+    let left: FeatureCollection | null = null;
+    tool.run({
+      layers: [counties, stats],
+      parameters: {
+        layer: "counties",
+        overlay: "stats",
+        target_field: "GEOID",
+        join_field: "code",
+        how: "left",
+      },
+      log: () => {},
+      addResultLayer: (_name, geojson) => {
+        left = geojson;
+      },
+    });
+    assert.equal(left!.features.length, 3);
+    const autauga = left!.features.find((f) => f.properties?.GEOID === "01001");
+    assert.equal(autauga?.properties?.pop, 100);
+    assert.equal(autauga?.properties?.label, "Autauga");
+    // Numeric key 1003 matches the string "1003"; the first duplicate row wins.
+    const barbour = left!.features.find((f) => f.properties?.GEOID === 1003);
+    assert.equal(barbour?.properties?.pop, 200);
+    assert.equal(barbour?.properties?.label, "Barbour");
+    // The default field set excludes the join key ("code"), so it is not copied.
+    assert.equal("code" in (barbour?.properties ?? {}), false);
+    // Unmatched row null-fills the brought-over columns (consistent schema).
+    const unmatched = left!.features.find((f) => f.properties?.GEOID === "09999");
+    assert.equal(unmatched?.properties?.pop, null);
+    assert.equal(unmatched?.properties?.label, null);
+
+    // Inner join drops the unmatched county and honours an explicit field list.
+    let inner: FeatureCollection | null = null;
+    tool.run({
+      layers: [counties, stats],
+      parameters: {
+        layer: "counties",
+        overlay: "stats",
+        target_field: "GEOID",
+        join_field: "code",
+        how: "inner",
+        fields: "pop",
+      },
+      log: () => {},
+      addResultLayer: (_name, geojson) => {
+        inner = geojson;
+      },
+    });
+    assert.equal(inner!.features.length, 2);
+    const innerBarbour = inner!.features.find(
+      (f) => f.properties?.GEOID === 1003,
+    );
+    assert.equal(innerBarbour?.properties?.pop, 200);
+    // Only "pop" was requested, so "label" is not brought over.
+    assert.equal("label" in (innerBarbour?.properties ?? {}), false);
+  });
+
   it("selects features by attribute value", () => {
     const tool = getVectorTool("select-by-value");
     assert.ok(tool);

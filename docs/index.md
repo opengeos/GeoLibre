@@ -69,7 +69,7 @@ Run DuckDB Spatial SQL in the browser against loaded layers, local files, and re
 <div class="feature-card" markdown>
 ### Vector tools
 
-Common geometry tools under Processing → Vector: buffer, centroids, convex hull, dissolve, bounding box, simplify, clip, intersection, difference, union, spatial join, select by value, select by location, and H3 hexagonal grids and binning. They run in the browser with Turf.js, with an optional GeoPandas sidecar engine for every tool.
+Common geometry tools under Processing → Vector: buffer, centroids, convex hull, dissolve, bounding box, simplify, clip, intersection, difference, union, spatial join, attribute join, select by value, select by location, and H3 hexagonal grids and binning. They run in the browser with Turf.js, with an optional GeoPandas sidecar engine for every tool.
 </div>
 
 <div class="feature-card" markdown>

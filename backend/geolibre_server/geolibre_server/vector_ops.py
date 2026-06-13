@@ -395,6 +395,144 @@ def _select_by_location(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     )
 
 
+# Join types for Attribute join; kept in sync with the client engine.
+_ATTRIBUTE_JOIN_HOW = {"inner", "left"}
+
+
+def _attribute_join_key(value: Any) -> Optional[str]:
+    """Match key for Attribute join; mirrors the client's ``attributeJoinKey``.
+
+    Empty values (None/NaN/empty string) never match a row (like a SQL/pandas
+    NaN join key). Non-empty values are keyed by :func:`_value_to_string`, so a
+    numeric ``5`` and the string ``"5"`` join while a zero-padded code like
+    ``"01001"`` only matches another ``"01001"``.
+    """
+    is_empty = (
+        value is None
+        or (isinstance(value, float) and math.isnan(value))
+        or _value_to_string(value) == ""
+    )
+    if is_empty:
+        return None
+    return _value_to_string(value)
+
+
+def _attribute_join(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+    """Attach a join layer's attributes onto each input feature by a key field.
+
+    A pure attribute (non-spatial) join on the raw GeoJSON properties (geometry
+    is carried through untouched), so it produces results identical to the client
+    engine and needs no GeoPandas. One-to-one: the first matching join row wins.
+    """
+    if not geojson or not geojson.get("features"):
+        raise ValueError("Input layer has no features")
+    target_field = str(parameters.get("target_field", "") or "").strip()
+    if not target_field:
+        raise ValueError("A target key field is required")
+    join_field = str(parameters.get("join_field", "") or "").strip()
+    if not join_field:
+        raise ValueError("A join key field is required")
+    how = str(parameters.get("how", "left") or "left")
+    if how not in _ATTRIBUTE_JOIN_HOW:
+        raise ValueError(
+            f"Unknown join type '{how}'. Accepted: {sorted(_ATTRIBUTE_JOIN_HOW)}"
+        )
+    fields_raw = parameters.get("fields")
+    requested_fields = None
+    if isinstance(fields_raw, str) and fields_raw.strip():
+        requested_fields = [s.strip() for s in fields_raw.split(",") if s.strip()]
+
+    # An empty join layer is well-defined: a left join keeps every target feature
+    # (no columns added), an inner join yields nothing. Matches the client.
+    join_features = overlay.get("features", []) if overlay else []
+
+    # Collect every join key in first-seen order so the output schema is
+    # deterministic across both engines.
+    join_keys_order: list[str] = []
+    join_key_set: set[str] = set()
+    for jf in join_features:
+        if not isinstance(jf, dict):
+            continue
+        for key in (jf.get("properties") or {}).keys():
+            if key not in join_key_set:
+                join_key_set.add(key)
+                join_keys_order.append(key)
+
+    messages: list[str] = []
+    if requested_fields is not None:
+        selected_fields = [f for f in requested_fields if f in join_key_set]
+        missing = [f for f in requested_fields if f not in join_key_set]
+        if missing:
+            messages.append(
+                "Note: join field(s) not found and skipped: " + ", ".join(missing)
+            )
+        if not selected_fields:
+            raise ValueError(
+                "None of the requested join fields exist in the join layer"
+            )
+    else:
+        # Default: every join field except the key (which would just duplicate
+        # the target key column).
+        selected_fields = [k for k in join_keys_order if k != join_field]
+
+    # First-match lookup: when several join rows share a key, the first wins.
+    lookup: dict[str, dict] = {}
+    for jf in join_features:
+        if not isinstance(jf, dict):
+            continue
+        props = jf.get("properties") or {}
+        key = _attribute_join_key(props.get(join_field))
+        if key is None:
+            continue
+        if key not in lookup:
+            lookup[key] = props
+
+    null_fill = {f: None for f in selected_fields}
+    input_features = geojson["features"]
+    results = []
+    matched = 0
+    for feature in input_features:
+        if not isinstance(feature, dict):
+            raise ValueError("Each feature must be a GeoJSON Feature object")
+        props = feature.get("properties") or {}
+        key = _attribute_join_key(props.get(target_field))
+        join_props = lookup.get(key) if key is not None else None
+        if join_props is None:
+            if how == "left":
+                # Target attributes win on a collision with a null-filled column.
+                new_props = dict(null_fill)
+                new_props.update(props)
+                out = {
+                    "type": "Feature",
+                    "properties": new_props,
+                    "geometry": feature.get("geometry"),
+                }
+                if "id" in feature:
+                    out["id"] = feature["id"]
+                results.append(out)
+            continue
+        matched += 1
+        picked = {
+            f: (join_props[f] if f in join_props else None) for f in selected_fields
+        }
+        # Target attributes win on name collisions with brought-over fields.
+        picked.update(props)
+        out = {
+            "type": "Feature",
+            "properties": picked,
+            "geometry": feature.get("geometry"),
+        }
+        if "id" in feature:
+            out["id"] = feature["id"]
+        results.append(out)
+    fc = {"type": "FeatureCollection", "features": results}
+    messages.append(
+        f"Attribute join: {matched} of {len(input_features)} feature(s) matched; "
+        f"produced {len(results)} feature(s)"
+    )
+    return fc, messages
+
+
 def _union(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     gpd = _import_geopandas()
     left = _load_gdf(geojson, "Input layer")
@@ -790,6 +928,7 @@ _DISPATCH: dict[str, Callable[..., tuple[dict, list[str]]]] = {
     "difference": lambda g, o, p: _overlay_op(g, o, p, "difference"),
     "union": _union,
     "spatial-join": _spatial_join,
+    "attribute-join": _attribute_join,
     "select-by-value": _select_by_value,
     "select-by-location": _select_by_location,
     "reproject": _reproject,

@@ -373,6 +373,119 @@ def test_select_by_value_missing_value_raises() -> None:
         )
 
 
+# --- Attribute join (no GeoPandas; pure attribute merge) ---
+
+
+def _attr_join_feature(props: dict, x: float = 0.0) -> dict:
+    return {
+        "type": "Feature",
+        "properties": props,
+        "geometry": {"type": "Point", "coordinates": [x, x]},
+    }
+
+
+# Counties keyed by GEOID; "1003" is stored as a number to exercise the
+# string/number key coercion, and "09999" has no matching stats row.
+JOIN_COUNTIES = {
+    "type": "FeatureCollection",
+    "features": [
+        _attr_join_feature({"GEOID": "01001"}, 0.0),
+        _attr_join_feature({"GEOID": 1003}, 1.0),
+        _attr_join_feature({"GEOID": "09999"}, 2.0),
+    ],
+}
+# Stats table: two rows share key "1003" (first wins); geometry is ignored.
+JOIN_STATS = {
+    "type": "FeatureCollection",
+    "features": [
+        _attr_join_feature({"code": "01001", "pop": 100, "label": "Autauga"}),
+        _attr_join_feature({"code": "1003", "pop": 200, "label": "Barbour"}),
+        _attr_join_feature({"code": "1003", "pop": 999, "label": "DUPLICATE"}),
+    ],
+}
+
+
+def test_attribute_join_left_keeps_all_and_null_fills_unmatched() -> None:
+    geojson, messages = run_vector_tool(
+        "attribute-join",
+        JOIN_COUNTIES,
+        JOIN_STATS,
+        parameters={"target_field": "GEOID", "join_field": "code", "how": "left"},
+    )
+    features = geojson["features"]
+    assert len(features) == 3
+    by_geoid = {f["properties"]["GEOID"]: f["properties"] for f in features}
+    assert by_geoid["01001"]["pop"] == 100
+    assert by_geoid["01001"]["label"] == "Autauga"
+    # Numeric key 1003 matches the string "1003"; the first duplicate row wins.
+    assert by_geoid[1003]["pop"] == 200
+    assert by_geoid[1003]["label"] == "Barbour"
+    # The default field set excludes the join key, so "code" is not copied over.
+    assert "code" not in by_geoid[1003]
+    # Unmatched row null-fills the brought-over columns (consistent schema).
+    assert by_geoid["09999"]["pop"] is None
+    assert by_geoid["09999"]["label"] is None
+    assert messages and "2 of 3 feature(s) matched" in messages[-1]
+
+
+def test_attribute_join_inner_drops_unmatched_and_honours_field_list() -> None:
+    geojson, _ = run_vector_tool(
+        "attribute-join",
+        JOIN_COUNTIES,
+        JOIN_STATS,
+        parameters={
+            "target_field": "GEOID",
+            "join_field": "code",
+            "how": "inner",
+            "fields": "pop",
+        },
+    )
+    features = geojson["features"]
+    assert len(features) == 2
+    barbour = next(f for f in features if f["properties"]["GEOID"] == 1003)
+    assert barbour["properties"]["pop"] == 200
+    # Only "pop" was requested, so "label" is not brought over.
+    assert "label" not in barbour["properties"]
+
+
+def test_attribute_join_empty_join_layer_left_keeps_input_unchanged() -> None:
+    geojson, _ = run_vector_tool(
+        "attribute-join",
+        JOIN_COUNTIES,
+        EMPTY,
+        parameters={"target_field": "GEOID", "join_field": "code", "how": "left"},
+    )
+    assert len(geojson["features"]) == len(JOIN_COUNTIES["features"])
+
+
+def test_attribute_join_unknown_how_raises() -> None:
+    with pytest.raises(ValueError, match="Unknown join type"):
+        run_vector_tool(
+            "attribute-join",
+            JOIN_COUNTIES,
+            JOIN_STATS,
+            parameters={
+                "target_field": "GEOID",
+                "join_field": "code",
+                "how": "outer",
+            },
+        )
+
+
+def test_attribute_join_missing_requested_fields_raises() -> None:
+    with pytest.raises(ValueError, match="None of the requested join fields"):
+        run_vector_tool(
+            "attribute-join",
+            JOIN_COUNTIES,
+            JOIN_STATS,
+            parameters={
+                "target_field": "GEOID",
+                "join_field": "code",
+                "fields": "nonexistent",
+            },
+        )
+
+
 # --- Select by location ---
 
 

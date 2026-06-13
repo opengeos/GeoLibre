@@ -285,6 +285,7 @@ const VECTOR_TOOL_COMMANDS: Array<{ kind: VectorToolKind; titleKey: ParseKeys }>
     { kind: "difference", titleKey: "toolbar.vectorTool.difference" },
     { kind: "union", titleKey: "toolbar.vectorTool.union" },
     { kind: "spatial-join", titleKey: "toolbar.vectorTool.spatialJoin" },
+    { kind: "attribute-join", titleKey: "toolbar.vectorTool.attributeJoin" },
     { kind: "select-by-value", titleKey: "toolbar.vectorTool.selectByValue" },
     {
       kind: "select-by-location",
@@ -1761,6 +1762,11 @@ export function TopToolbar({
                 onSelect={() => setVectorToolOpen("spatial-join")}
               >
                 {t("toolbar.vectorTool.spatialJoin")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setVectorToolOpen("attribute-join")}
+              >
+                {t("toolbar.vectorTool.attributeJoin")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-xs text-muted-foreground">

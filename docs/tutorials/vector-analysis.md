@@ -28,6 +28,7 @@ With the buffer (or any polygon layer) and a second layer, run an overlay:
 - **Difference** removes the overlay's area from the input.
 - **Union** merges two polygon layers into one (attributes are not preserved, on either engine).
 - **Spatial join** attaches a join layer's attributes to each input feature based on a spatial relationship (intersects, within, or contains) — for example, tagging each point with the polygon that contains it. Works with any geometry type.
+- **Attribute join** attaches a join table's attributes to each input feature where a key field matches — no geometry involved (for example, joining census statistics to boundary polygons by a shared FIPS code). It is one-to-one (the first matching join row wins); pick the key field on each side, optionally list which fields to bring over, and choose an inner or left join.
 
 Open the tool from **Processing → Vector**, pick the input and overlay layers, and **Run**.
 
