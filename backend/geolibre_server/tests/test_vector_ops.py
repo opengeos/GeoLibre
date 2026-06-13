@@ -799,6 +799,56 @@ def test_smooth_iterations_zero_is_rejected() -> None:
         run_vector_tool("smooth", line, parameters={"iterations": 0})
 
 
+def test_smooth_boolean_iterations_falls_back_to_default() -> None:
+    # A JSON boolean is not a number on the client (it uses the fallback 3), so
+    # the backend must not treat False as 0 (which would error). Keeps parity.
+    line = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {},
+                "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+            }
+        ],
+    }
+    _, messages = run_vector_tool("smooth", line, parameters={"iterations": False})
+    assert messages and "with 3 iteration(s)" in messages[0]
+
+
+def test_smooth_missing_coordinates_does_not_crash() -> None:
+    # A malformed geometry with no coordinates key must not raise (TypeError ->
+    # 500); the coordinate list is treated as empty.
+    malformed = {
+        "type": "FeatureCollection",
+        "features": [
+            {"type": "Feature", "properties": {}, "geometry": {"type": "LineString"}}
+        ],
+    }
+    geojson, _ = run_vector_tool("smooth", malformed, parameters={"iterations": 2})
+    assert geojson["features"][0]["geometry"]["coordinates"] == []
+
+
+def test_smooth_degenerate_ring_collapses_to_empty() -> None:
+    # A 2-vertex (degenerate) ring can't form a valid polygon; it collapses to an
+    # empty ring rather than being re-closed into invalid GeoJSON.
+    degenerate = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[0, 0], [1, 1], [0, 0]]],
+                },
+            }
+        ],
+    }
+    geojson, _ = run_vector_tool("smooth", degenerate, parameters={"iterations": 3})
+    assert geojson["features"][0]["geometry"]["coordinates"] == [[]]
+
+
 def test_smooth_preserves_z_coordinates() -> None:
     line3d = {
         "type": "FeatureCollection",

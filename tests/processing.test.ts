@@ -935,6 +935,35 @@ describe("processing registry", () => {
     });
     assert.equal(produced, false);
     assert.ok(logs.some((m) => m.includes("west < east")));
+
+    // A zero-area layer extent (single point) errors rather than logging a
+    // 0-cell grid.
+    const pointLayer: GeoLibreLayer = {
+      ...layer,
+      id: "onept",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: {},
+            geometry: { type: "Point", coordinates: [5, 5] },
+          },
+        ],
+      },
+    };
+    let layerProduced = false;
+    const layerLogs: string[] = [];
+    tool.run({
+      layers: [pointLayer],
+      parameters: { source: "layer", layer: "onept", cell_width: 1 },
+      log: (m) => layerLogs.push(m),
+      addResultLayer: () => {
+        layerProduced = true;
+      },
+    });
+    assert.equal(layerProduced, false);
+    assert.ok(layerLogs.some((m) => m.includes("extent is empty")));
   });
 
   it("builds Voronoi cells and Delaunay triangles from points", () => {

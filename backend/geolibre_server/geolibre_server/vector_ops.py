@@ -592,10 +592,11 @@ def _smooth_ring(ring: list[list[float]], iterations: int) -> list[list[float]]:
     pts = [list(p[:3]) for p in (ring[:-1] if closed else ring)]
     for _ in range(iterations):
         pts = _chaikin(pts, True)
-    # An invalid (empty/degenerate) ring leaves pts empty; guard so a crafted or
-    # corrupt payload yields an empty ring rather than an IndexError (500).
-    if not pts:
-        return pts
+    # A ring needs >= 3 distinct vertices to form a valid polygon; an empty or
+    # otherwise degenerate (1-2 vertex) ring collapses to an empty ring rather
+    # than being re-closed into invalid GeoJSON (and never an IndexError 500).
+    if len(pts) < 3:
+        return []
     pts.append(list(pts[0]))
     return pts
 
@@ -604,23 +605,27 @@ def _smooth_geometry(geometry: dict, iterations: int) -> dict:
     """Smooth one GeoJSON geometry; non-line/polygon geometries pass through."""
     gtype = geometry.get("type")
     coords = geometry.get("coordinates")
+    # `coords or []` guards a malformed feature missing its coordinates key
+    # (e.g. {"type": "LineString"}), whose `None` would otherwise raise a
+    # TypeError (500) since the server accepts arbitrary JSON.
     if gtype == "LineString":
-        return {"type": gtype, "coordinates": _smooth_line(coords, iterations)}
+        return {"type": gtype, "coordinates": _smooth_line(coords or [], iterations)}
     if gtype == "MultiLineString":
         return {
             "type": gtype,
-            "coordinates": [_smooth_line(line, iterations) for line in coords],
+            "coordinates": [_smooth_line(line, iterations) for line in coords or []],
         }
     if gtype == "Polygon":
         return {
             "type": gtype,
-            "coordinates": [_smooth_ring(ring, iterations) for ring in coords],
+            "coordinates": [_smooth_ring(ring, iterations) for ring in coords or []],
         }
     if gtype == "MultiPolygon":
         return {
             "type": gtype,
             "coordinates": [
-                [_smooth_ring(ring, iterations) for ring in poly] for poly in coords
+                [_smooth_ring(ring, iterations) for ring in poly]
+                for poly in coords or []
             ],
         }
     if gtype == "GeometryCollection":
@@ -649,10 +654,16 @@ def _smooth(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     # non-finite/unparseable value falls back to 3, and math.floor(x + 0.5)
     # rounds half up exactly like JS Math.round (not Python round()'s
     # banker's rounding), keeping the two engines bit-identical.
-    try:
-        value = float(parameters.get("iterations", 3))
-    except (TypeError, ValueError):
+    raw_iterations = parameters.get("iterations", 3)
+    # A JSON boolean is not a number on the client (numberParam returns the
+    # fallback), so treat it as the default rather than float(True/False) = 1/0.
+    if isinstance(raw_iterations, bool):
         value = 3.0
+    else:
+        try:
+            value = float(raw_iterations)
+        except (TypeError, ValueError):
+            value = 3.0
     if not math.isfinite(value):
         value = 3.0
     iterations = math.floor(value + 0.5)
@@ -731,7 +742,14 @@ def _voronoi(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     envelope = box(minx - dx * 0.1, miny - dy * 0.1, maxx + dx * 0.1, maxy + dy * 0.1)
     diagram = voronoi_diagram(multipoint, envelope=envelope)
     cells = [cell.intersection(envelope) for cell in diagram.geoms]
-    cells = [cell for cell in cells if not cell.is_empty]
+    # Clipping a cell whose edge coincides with the envelope can yield a
+    # GeometryCollection (polygon + stray line); keep only polygonal parts so a
+    # non-Polygon geometry never lands in the output.
+    cells = [
+        cell
+        for cell in cells
+        if not cell.is_empty and cell.geom_type in ("Polygon", "MultiPolygon")
+    ]
     result = gpd.GeoDataFrame(geometry=cells, crs=WGS84)
     message = f"Voronoi: produced {len(cells)} cell(s) from {len(points)} point(s)"
     return _to_feature_collection(result), [message]

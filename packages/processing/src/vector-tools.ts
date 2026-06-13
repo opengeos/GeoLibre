@@ -1313,9 +1313,10 @@ function smoothRing(ring: Position[], iterations: number): Position[] {
     p.slice(0, 3),
   );
   for (let k = 0; k < iterations; k += 1) pts = chaikinOnce(pts, true);
-  // An invalid (empty/degenerate) ring leaves pts empty; guard so a malformed
-  // feature yields an empty ring rather than throwing on pts[0].
-  if (pts.length === 0) return pts;
+  // A ring needs >= 3 distinct vertices to form a valid polygon; an empty or
+  // otherwise degenerate (1-2 vertex) ring collapses to an empty ring rather
+  // than being re-closed into invalid GeoJSON.
+  if (pts.length < 3) return [];
   pts.push(pts[0].slice());
   return pts;
 }
@@ -1544,6 +1545,16 @@ export const gridTool: ProcessingAlgorithm = {
         return;
       }
       bounds = bbox(layer.geojson) as [number, number, number, number];
+      // Guard the layer path like the viewport/bbox paths: a zero-area extent
+      // (e.g. a single-point layer, west === east) or an antimeridian-spanning
+      // one (west > east) would otherwise make cols/rows zero or negative,
+      // slipping past the cell cap into an empty, misleadingly-logged result.
+      if (bounds[0] >= bounds[2] || bounds[1] >= bounds[3]) {
+        ctx.log(
+          "Error: the layer's extent is empty or spans the antimeridian; use a manual bounding box instead",
+        );
+        return;
+      }
     }
 
     const cellWidth = numberParam(ctx, "cell_width", NaN);
