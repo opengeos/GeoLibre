@@ -315,7 +315,7 @@
       "couldNotSaveProject": "Het project kon niet worden opgeslagen.",
       "osmPbfNoFeatures": "Er zijn geen punt-, lijn- of vlakfeatures gevonden in dit OSM PBF-bestand.",
       "couldNotLoadOsmPbf": "Het OSM PBF-bestand kon niet worden geladen.",
-      "osmPbfMvtHint": "Als dit een Mapbox Vector Tile (.pbf) is, kan het niet worden geladen als een OSM-extract.",
+      "osmPbfLoadFailedWithHint": "{{message}} Als dit een Mapbox Vector Tile (.pbf) is, kan het niet worden geladen als een OSM-extract.",
       "couldNotOpenOsmPbf": "Het OSM PBF-bestand kon niet worden geopend.",
       "invalidOsmPbfUrl": "Voer een geldige http(s) URL in naar een .osm.pbf-bestand.",
       "couldNotDownloadOsmPbf": "Het OSM PBF-bestand kon niet worden gedownload."

@@ -317,7 +317,7 @@
       "couldNotSaveProject": "Не удалось сохранить проект.",
       "osmPbfNoFeatures": "В этом файле OSM PBF не найдено ни точечных, ни линейных, ни полигональных объектов.",
       "couldNotLoadOsmPbf": "Не удалось загрузить файл OSM PBF.",
-      "osmPbfMvtHint": "Если это тайл Mapbox Vector Tile (.pbf), его нельзя загрузить как извлечение OSM.",
+      "osmPbfLoadFailedWithHint": "{{message}} Если это тайл Mapbox Vector Tile (.pbf), его нельзя загрузить как извлечение OSM.",
       "couldNotOpenOsmPbf": "Не удалось открыть файл OSM PBF.",
       "invalidOsmPbfUrl": "Введите корректный URL http(s) для файла .osm.pbf.",
       "couldNotDownloadOsmPbf": "Не удалось скачать файл OSM PBF."

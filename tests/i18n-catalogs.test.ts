@@ -25,6 +25,29 @@ function loadCatalog(code: string): Record<string, unknown> {
   return JSON.parse(readFileSync(`${localesDir}${code}.json`, "utf8"));
 }
 
+// Flatten to a map of dotted key -> string value (skips nested objects).
+function flatStrings(obj: unknown, prefix = ""): Map<string, string> {
+  const out = new Map<string, string>();
+  if (typeof obj === "string") {
+    out.set(prefix, obj);
+    return out;
+  }
+  if (obj && typeof obj === "object") {
+    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+      for (const [kk, vv] of flatStrings(v, prefix ? `${prefix}.${k}` : k)) {
+        out.set(kk, vv);
+      }
+    }
+  }
+  return out;
+}
+
+// The interpolation placeholders / markup tags a translation must carry over
+// verbatim: i18next `{{vars}}` and the <tokenLink> markup used by <Trans>.
+function placeholders(value: string): string[] {
+  return (value.match(/\{\{\s*\w+\s*\}\}|<\/?\w+>/g) ?? []).sort();
+}
+
 const localeCodes = readdirSync(localesDir)
   .filter((name) => name.endsWith(".json"))
   .map((name) => name.replace(/\.json$/, ""));
@@ -48,6 +71,31 @@ describe("i18n catalogs", () => {
         [],
         `${code}.json has keys absent from en.json: ${extra.join(", ")}`,
       );
+    });
+  }
+
+  const enStrings = flatStrings(loadCatalog("en"));
+
+  for (const code of localeCodes.filter((c) => c !== "en")) {
+    it(`${code}: preserves interpolation placeholders for translated keys`, () => {
+      const strings = flatStrings(loadCatalog(code));
+      const mismatches: string[] = [];
+      for (const [key, value] of strings) {
+        // Compare against the matching en string; for plural variants the en
+        // key may differ (e.g. _few has no en counterpart), so fall back to the
+        // plural base's _other / _one form.
+        const ref =
+          enStrings.get(key) ??
+          enStrings.get(`${normalizePluralKey(key)}_other`) ??
+          enStrings.get(`${normalizePluralKey(key)}_one`);
+        if (ref === undefined) continue;
+        const want = placeholders(ref);
+        const got = placeholders(value);
+        if (JSON.stringify(want) !== JSON.stringify(got)) {
+          mismatches.push(`${key}: expected [${want}] got [${got}]`);
+        }
+      }
+      assert.deepEqual(mismatches, [], mismatches.join("\n"));
     });
   }
 

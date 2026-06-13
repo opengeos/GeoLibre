@@ -315,7 +315,7 @@
       "couldNotSaveProject": "प्रोजेक्ट सहेजा नहीं जा सका।",
       "osmPbfNoFeatures": "इस OSM PBF फ़ाइल में कोई बिंदु, रेखा या बहुभुज फ़ीचर नहीं मिले।",
       "couldNotLoadOsmPbf": "OSM PBF फ़ाइल लोड नहीं हो सकी।",
-      "osmPbfMvtHint": "यदि यह Mapbox Vector Tile (.pbf) है, तो इसे OSM एक्सट्रैक्ट के रूप में लोड नहीं किया जा सकता।",
+      "osmPbfLoadFailedWithHint": "{{message}} यदि यह Mapbox Vector Tile (.pbf) है, तो इसे OSM एक्सट्रैक्ट के रूप में लोड नहीं किया जा सकता।",
       "couldNotOpenOsmPbf": "OSM PBF फ़ाइल नहीं खुल सकी।",
       "invalidOsmPbfUrl": "एक .osm.pbf फ़ाइल के लिए वैध http(s) URL दर्ज करें।",
       "couldNotDownloadOsmPbf": "OSM PBF फ़ाइल डाउनलोड नहीं हो सकी।"

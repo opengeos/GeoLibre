@@ -314,7 +314,7 @@
       "couldNotSaveProject": "无法保存项目。",
       "osmPbfNoFeatures": "在此 OSM PBF 文件中未找到点、线或面要素。",
       "couldNotLoadOsmPbf": "无法加载 OSM PBF 文件。",
-      "osmPbfMvtHint": "如果这是 Mapbox 矢量瓦片 (.pbf)，则无法作为 OSM 提取文件加载。",
+      "osmPbfLoadFailedWithHint": "{{message}} 如果这是 Mapbox 矢量瓦片 (.pbf)，则无法作为 OSM 提取文件加载。",
       "couldNotOpenOsmPbf": "无法打开 OSM PBF 文件。",
       "invalidOsmPbfUrl": "请输入指向 .osm.pbf 文件的有效 http(s) URL。",
       "couldNotDownloadOsmPbf": "无法下载 OSM PBF 文件。"

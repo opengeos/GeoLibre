@@ -315,7 +315,7 @@
       "couldNotSaveProject": "Não foi possível guardar o projeto.",
       "osmPbfNoFeatures": "Nenhum elemento de ponto, linha ou polígono foi encontrado neste ficheiro OSM PBF.",
       "couldNotLoadOsmPbf": "Não foi possível carregar o ficheiro OSM PBF.",
-      "osmPbfMvtHint": "Se este for um Mapbox Vector Tile (.pbf), não pode ser carregado como um extrato OSM.",
+      "osmPbfLoadFailedWithHint": "{{message}} Se este for um Mapbox Vector Tile (.pbf), não pode ser carregado como um extrato OSM.",
       "couldNotOpenOsmPbf": "Não foi possível abrir o ficheiro OSM PBF.",
       "invalidOsmPbfUrl": "Introduza um URL http(s) válido para um ficheiro .osm.pbf.",
       "couldNotDownloadOsmPbf": "Não foi possível transferir o ficheiro OSM PBF."

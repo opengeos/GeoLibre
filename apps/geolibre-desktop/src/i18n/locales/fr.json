@@ -315,7 +315,7 @@
       "couldNotSaveProject": "Impossible d'enregistrer le projet.",
       "osmPbfNoFeatures": "Aucune entité de type point, ligne ou polygone n'a été trouvée dans ce fichier OSM PBF.",
       "couldNotLoadOsmPbf": "Impossible de charger le fichier OSM PBF.",
-      "osmPbfMvtHint": "S'il s'agit d'un Mapbox Vector Tile (.pbf), il ne peut pas être chargé comme extrait OSM.",
+      "osmPbfLoadFailedWithHint": "{{message}} S'il s'agit d'un Mapbox Vector Tile (.pbf), il ne peut pas être chargé comme extrait OSM.",
       "couldNotOpenOsmPbf": "Impossible d'ouvrir le fichier OSM PBF.",
       "invalidOsmPbfUrl": "Saisissez une URL http(s) valide vers un fichier .osm.pbf.",
       "couldNotDownloadOsmPbf": "Impossible de télécharger le fichier OSM PBF."

@@ -27,7 +27,6 @@ import {
   DropdownMenuTrigger,
   Input,
   Label,
-  Select,
 } from "@geolibre/ui";
 import type { MapController } from "@geolibre/map";
 import {
@@ -756,30 +755,6 @@ export function SettingsDialog({
                       <RotateCcw className="h-3.5 w-3.5" />
                       {t("common.reset")}
                     </Button>
-                  </div>
-                  <div className="space-y-3">
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      {t("language.label")}
-                    </h4>
-                    <div className="space-y-1.5">
-                      <Select
-                        id="settings-language"
-                        aria-label={t("language.label")}
-                        value={language}
-                        onChange={(event) => setLanguage(event.target.value)}
-                      >
-                        {languageOptions.map((option) => (
-                          <option key={option.code} value={option.code}>
-                            {option.nativeName === option.englishName
-                              ? option.nativeName
-                              : `${option.nativeName} (${option.englishName})`}
-                          </option>
-                        ))}
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        {t("language.description")}
-                      </p>
-                    </div>
                   </div>
                   <div className="space-y-3">
                     <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

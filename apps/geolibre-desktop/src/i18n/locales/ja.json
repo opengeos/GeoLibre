@@ -314,7 +314,7 @@
       "couldNotSaveProject": "プロジェクトを保存できませんでした。",
       "osmPbfNoFeatures": "この OSM PBF ファイルにポイント・ライン・ポリゴンのフィーチャーが見つかりませんでした。",
       "couldNotLoadOsmPbf": "OSM PBF ファイルを読み込めませんでした。",
-      "osmPbfMvtHint": "Mapbox Vector Tile (.pbf) の場合、OSM エクストラクトとして読み込むことはできません。",
+      "osmPbfLoadFailedWithHint": "{{message}} Mapbox Vector Tile (.pbf) の場合、OSM エクストラクトとして読み込むことはできません。",
       "couldNotOpenOsmPbf": "OSM PBF ファイルを開けませんでした。",
       "invalidOsmPbfUrl": ".osm.pbf ファイルへの有効な http(s) URL を入力してください。",
       "couldNotDownloadOsmPbf": "OSM PBF ファイルをダウンロードできませんでした。"

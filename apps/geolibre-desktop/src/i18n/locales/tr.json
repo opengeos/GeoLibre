@@ -315,7 +315,7 @@
       "couldNotSaveProject": "Proje kaydedilemedi.",
       "osmPbfNoFeatures": "Bu OSM PBF dosyasında nokta, çizgi veya poligon öğesi bulunamadı.",
       "couldNotLoadOsmPbf": "OSM PBF dosyası yüklenemedi.",
-      "osmPbfMvtHint": "Bu bir Mapbox Vector Tile (.pbf) dosyasıysa, OSM veri kümesi olarak yüklenemez.",
+      "osmPbfLoadFailedWithHint": "{{message}} Bu bir Mapbox Vector Tile (.pbf) dosyasıysa, OSM veri kümesi olarak yüklenemez.",
       "couldNotOpenOsmPbf": "OSM PBF dosyası açılamadı.",
       "invalidOsmPbfUrl": "Bir .osm.pbf dosyasına geçerli bir http(s) URL'si girin.",
       "couldNotDownloadOsmPbf": "OSM PBF dosyası indirilemedi."

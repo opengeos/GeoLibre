@@ -314,7 +314,7 @@
       "couldNotSaveProject": "프로젝트를 저장할 수 없습니다.",
       "osmPbfNoFeatures": "이 OSM PBF 파일에서 포인트, 라인 또는 폴리곤 피처를 찾을 수 없습니다.",
       "couldNotLoadOsmPbf": "OSM PBF 파일을 로드할 수 없습니다.",
-      "osmPbfMvtHint": "Mapbox Vector Tile(.pbf) 파일인 경우 OSM 추출 파일로 로드할 수 없습니다.",
+      "osmPbfLoadFailedWithHint": "{{message}} Mapbox Vector Tile(.pbf) 파일인 경우 OSM 추출 파일로 로드할 수 없습니다.",
       "couldNotOpenOsmPbf": "OSM PBF 파일을 열 수 없습니다.",
       "invalidOsmPbfUrl": ".osm.pbf 파일에 대한 유효한 http(s) URL을 입력하세요.",
       "couldNotDownloadOsmPbf": "OSM PBF 파일을 다운로드할 수 없습니다."

@@ -712,9 +712,11 @@ export function TopToolbar({
         err instanceof Error
           ? err.message
           : t("toolbar.error.couldNotLoadOsmPbf");
-      // Bare .pbf is also the Mapbox Vector Tile extension; hint at it on failure.
+      // Bare .pbf is also the Mapbox Vector Tile extension; hint at it on
+      // failure. The message + hint live in one catalog key so each locale
+      // controls how the two sentences join (e.g. no space in CJK).
       setActionError(
-        `${base} ${t("toolbar.error.osmPbfMvtHint")}`,
+        t("toolbar.error.osmPbfLoadFailedWithHint", { message: base }),
       );
     } finally {
       setOsmPbfLoading(false);

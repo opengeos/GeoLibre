@@ -314,7 +314,7 @@
       "couldNotSaveProject": "Tidak dapat menyimpan proyek.",
       "osmPbfNoFeatures": "Tidak ada fitur titik, garis, atau poligon yang ditemukan dalam berkas OSM PBF ini.",
       "couldNotLoadOsmPbf": "Tidak dapat memuat berkas OSM PBF.",
-      "osmPbfMvtHint": "Jika ini adalah Mapbox Vector Tile (.pbf), berkas tidak dapat dimuat sebagai ekstrak OSM.",
+      "osmPbfLoadFailedWithHint": "{{message}} Jika ini adalah Mapbox Vector Tile (.pbf), berkas tidak dapat dimuat sebagai ekstrak OSM.",
       "couldNotOpenOsmPbf": "Tidak dapat membuka berkas OSM PBF.",
       "invalidOsmPbfUrl": "Masukkan URL http(s) yang valid ke berkas .osm.pbf.",
       "couldNotDownloadOsmPbf": "Tidak dapat mengunduh berkas OSM PBF."

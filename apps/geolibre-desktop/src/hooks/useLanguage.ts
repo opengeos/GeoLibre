@@ -19,6 +19,9 @@ export interface UseLanguageResult {
   setLanguage: (code: string) => void;
 }
 
+// Computed once at module init. AVAILABLE_LANGUAGES is populated by
+// i18n/index.ts, which must be imported before this module (main.tsx imports
+// "./i18n" first, so the order holds).
 const OPTIONS = languageOptions(AVAILABLE_LANGUAGES);
 
 /**
