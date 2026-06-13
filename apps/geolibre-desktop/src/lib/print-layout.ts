@@ -194,11 +194,17 @@ export function drawLayout(
 
   // --- North arrow (top-right inside the map) ---------------------------
   if (opts.showNorthArrow) {
+    const arrowRadius = unit * 2.6;
+    const discRadius = arrowRadius * 1.5;
+    // The "N" label extends above the arrow tip, so the disc is not the top
+    // extent; account for both so nothing is clipped by the map edge.
+    const topExtent = arrowRadius + unit * 2.4;
+    const arrowMargin = unit * 3;
     drawNorthArrow(
       ctx,
-      bodyX + bodyW - inset - unit * 3,
-      bodyY + inset + unit * 3,
-      unit * 3,
+      bodyX + bodyW - arrowMargin - discRadius,
+      bodyY + arrowMargin + topExtent,
+      arrowRadius,
       opts.bearingDeg,
       unit,
     );
