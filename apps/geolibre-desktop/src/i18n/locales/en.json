@@ -337,7 +337,8 @@
       "loadFromUrl": "Load from URL",
       "loadingOsmPbf": "Loading OSM PBF…",
       "loadingOsmPbfDesc": "Parsing the file and converting features to GeoJSON. This runs in the background and may take a moment for large extracts.",
-      "projectName": "Project name"
+      "projectName": "Project name",
+      "storymapEllipsis": "Story Map..."
     },
     "error": {
       "couldNotOpenProject": "Could not open project.",
@@ -353,5 +354,72 @@
       "invalidOsmPbfUrl": "Enter a valid http(s) URL to an .osm.pbf file.",
       "couldNotDownloadOsmPbf": "Could not download the OSM PBF file."
     }
+  },
+  "storymap": {
+    "title": "Story Map",
+    "description": "Build a scroll-driven story from map chapters. Each chapter captures a camera view and text.",
+    "chapters": "Chapters ({{count}})",
+    "addChapter": "Add chapter",
+    "empty": "No chapters yet. Navigate the map, then add a chapter to capture the current view.",
+    "defaultChapterTitle": "Chapter {{index}}",
+    "untitledChapter": "Untitled chapter",
+    "present": "Present",
+    "exportHtml": "Export HTML",
+    "exitPresentation": "Exit",
+    "preview": "Fly to this chapter",
+    "captureView": "Set to current view",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "onEnter": "On enter",
+    "onExit": "On exit",
+    "addEffect": "Add layer effect",
+    "field": {
+      "title": "Title",
+      "subtitle": "Subtitle",
+      "byline": "Byline",
+      "footer": "Footer",
+      "theme": "Panel theme",
+      "showMarkers": "Show markers",
+      "markerColor": "Marker color",
+      "inset": "Inset minimap",
+      "chapterTitle": "Chapter title",
+      "description": "Description (HTML allowed)",
+      "image": "Image URL",
+      "alignment": "Panel alignment",
+      "animation": "Map animation",
+      "hidden": "Hide panel",
+      "rotate": "Rotate camera",
+      "imagePlaceholder": "https://example.com/image.jpg"
+    },
+    "theme": {
+      "dark": "Dark",
+      "light": "Light"
+    },
+    "align": {
+      "left": "Left",
+      "center": "Center",
+      "right": "Right",
+      "full": "Full"
+    },
+    "inset": {
+      "topLeft": "Top left",
+      "topRight": "Top right",
+      "bottomLeft": "Bottom left",
+      "bottomRight": "Bottom right"
+    },
+    "loadSample": "Load sample story",
+    "htmlFile": "HTML",
+    "opacityLabel": "Opacity",
+    "toggleNav": "Toggle chapter list",
+    "chapterNav": "Story chapters",
+    "durationLabel": "Transition (ms)",
+    "dragHint": "Drag to move (double-click to reset)",
+    "resizeHint": "Drag to resize",
+    "import": "Import",
+    "importJson": "Import JSON…",
+    "importCsv": "Import CSV…",
+    "exportData": "Export",
+    "exportJson": "Export JSON",
+    "exportCsv": "Export CSV"
   }
 }

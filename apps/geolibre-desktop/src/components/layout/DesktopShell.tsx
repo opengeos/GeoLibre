@@ -62,6 +62,8 @@ import { SectionErrorBoundary } from "../common/error-boundaries";
 import { AttributeTable } from "../panels/AttributeTable";
 import { LayerPanel } from "../panels/LayerPanel";
 import { StylePanel } from "../panels/StylePanel";
+import { StoryMapPanel } from "../storymap/StoryMapPanel";
+import { StoryMapPresenter } from "../storymap/StoryMapPresenter";
 import { DiagnosticsDialog } from "./DiagnosticsDialog";
 import { StatusBar } from "./StatusBar";
 import { TopToolbar } from "./TopToolbar";
@@ -957,6 +959,8 @@ export function DesktopShell({
       <Suspense fallback={null}>
         <SqlWorkspaceDialog />
       </Suspense>
+      <StoryMapPanel mapControllerRef={mapControllerRef} />
+      <StoryMapPresenter mapControllerRef={mapControllerRef} />
       <div
         ref={verticalResizeGuideRef}
         className="pointer-events-none fixed bottom-7 top-11 z-50 hidden w-px bg-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.25)]"

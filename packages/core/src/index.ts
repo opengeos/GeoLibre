@@ -1,6 +1,13 @@
 export * from "./types";
 export * from "./vector-color";
 export * from "./project";
+export { createSampleStoryMap } from "./storymap-sample";
+export {
+  serializeStoryMapJson,
+  parseStoryMapJson,
+  serializeStoryMapCsv,
+  parseStoryMapCsv,
+} from "./storymap-io";
 export {
   clearHistory,
   projectPathLabel,

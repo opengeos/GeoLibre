@@ -124,6 +124,7 @@ import {
   Pencil,
   Printer,
   LayoutTemplate,
+  BookOpen,
   Puzzle,
   Redo2,
   RefreshCw,
@@ -371,6 +372,7 @@ export function TopToolbar({
   const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
+  const setStorymapPanelOpen = useAppStore((s) => s.setStorymapPanelOpen);
   const projectName = useAppStore((s) => s.projectName);
   const projectPath = useAppStore((s) => s.projectPath);
   const recentProjects = useAppStore((s) => s.recentProjects);
@@ -565,6 +567,7 @@ export function TopToolbar({
         manifestUrls: pluginManifestUrls,
       },
       legend: state.legend,
+      storymap: state.storymap,
       metadata: state.metadata,
     });
     return {
@@ -1483,6 +1486,11 @@ export function TopToolbar({
           <DropdownMenuItem onSelect={() => setPrintLayoutOpen(true)}>
             <LayoutTemplate className="mr-2 h-3.5 w-3.5" />
             Print Layout...
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => setStorymapPanelOpen(true)}>
+            <BookOpen className="mr-2 h-3.5 w-3.5" />
+            {t("toolbar.item.storymapEllipsis")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

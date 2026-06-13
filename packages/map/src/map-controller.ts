@@ -4,7 +4,13 @@ import {
   DEFAULT_PROJECT_PREFERENCES,
   useAppStore,
 } from "@geolibre/core";
-import type { GeoLibreLayer, MapPreferences, MapViewState } from "@geolibre/core";
+import type {
+  GeoLibreLayer,
+  MapPreferences,
+  MapViewState,
+  StoryChapterAnimation,
+  StoryChapterLocation,
+} from "@geolibre/core";
 import bbox from "@turf/bbox";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import maplibregl from "maplibre-gl";
@@ -284,6 +290,125 @@ export class MapController {
 
   getMap(): maplibregl.Map | null {
     return this.map;
+  }
+
+  /**
+   * Fade a project layer in or out for story-map playback.
+   *
+   * Story chapters change layer opacity as the reader scrolls. This writes the
+   * MapLibre paint properties directly instead of going through the store, so
+   * playback never marks the project dirty or pushes undo history. Call
+   * {@link restoreLayerStyles} when playback ends to reset opacities.
+   *
+   * @param layerId GeoLibre store layer id to fade.
+   * @param opacity Target opacity, clamped to the 0-1 range.
+   * @param durationMs Optional transition duration in milliseconds.
+   */
+  setStoryLayerOpacity(
+    layerId: string,
+    opacity: number,
+    durationMs?: number,
+  ): void {
+    if (!this.map) return;
+    const clamped = Math.min(1, Math.max(0, opacity));
+    for (const nativeId of this.getNativeLayerIdsByLayerId(layerId)) {
+      const styleLayer = this.map.getLayer(nativeId);
+      if (!styleLayer) continue;
+      const props = OPACITY_PAINT_PROPERTIES[styleLayer.type] ?? [];
+      for (const prop of props) {
+        if (durationMs && durationMs > 0) {
+          this.map.setPaintProperty(nativeId, `${prop}-transition`, {
+            duration: durationMs,
+          });
+        }
+        this.map.setPaintProperty(nativeId, prop, clamped);
+      }
+    }
+  }
+
+  /**
+   * Re-apply layer styles from the last synced layers, undoing any direct paint
+   * changes made during story-map playback by {@link setStoryLayerOpacity}.
+   */
+  restoreLayerStyles(): void {
+    // Invalidate any pending story rotation and halt an in-flight camera move so
+    // a deferred rotateTo cannot fire after the presenter has exited.
+    this.storyCameraToken++;
+    this.map?.stop();
+    // Clear any opacity transitions left over from playback first, otherwise the
+    // restored values animate back in (potentially over a multi-second fade).
+    if (this.map) {
+      for (const layer of this.syncedLayers) {
+        for (const nativeId of this.getNativeLayerIdsByLayerId(layer.id)) {
+          const styleLayer = this.map.getLayer(nativeId);
+          if (!styleLayer) continue;
+          for (const prop of OPACITY_PAINT_PROPERTIES[styleLayer.type] ?? []) {
+            this.map.setPaintProperty(nativeId, `${prop}-transition`, {
+              duration: 0,
+            });
+          }
+        }
+      }
+    }
+    this.syncLayers(this.syncedLayers);
+  }
+
+  /** Token guarding deferred story rotations against later chapter changes. */
+  private storyCameraToken = 0;
+
+  /**
+   * Move the camera to a story chapter view during presentation playback.
+   *
+   * Cancels any in-progress movement first so a prior chapter's rotation cannot
+   * fight the new transition, then optionally starts a slow rotation once the
+   * move settles. Keeping this in the controller lets the presenter drive the
+   * camera without reaching into the raw MapLibre instance.
+   *
+   * @param location Target camera (center, zoom, pitch, bearing).
+   * @param animation MapLibre camera method to use.
+   * @param rotate When true, slowly rotate 180° after the move settles.
+   */
+  applyStoryChapterCamera(
+    location: StoryChapterLocation,
+    animation: StoryChapterAnimation = "flyTo",
+    rotate = false,
+  ): void {
+    if (!this.map) return;
+    const map = this.map;
+    // Bump the token first so any pending rotation from a prior chapter is
+    // invalidated. We do NOT call map.stop() here: flyTo/easeTo already
+    // supersede an in-progress camera animation, and calling stop() immediately
+    // before a new movement during rapid chapter changes can drop it entirely.
+    const token = ++this.storyCameraToken;
+    map[animation]({
+      center: location.center,
+      zoom: location.zoom,
+      pitch: location.pitch,
+      bearing: location.bearing,
+    });
+    if (rotate) {
+      map.once("moveend", () => {
+        if (this.storyCameraToken !== token || !this.map) return;
+        this.map.rotateTo(this.map.getBearing() + 180, {
+          duration: 30000,
+          easing: (time) => time,
+        });
+      });
+    }
+  }
+
+  /**
+   * Fly the camera to a view, used for story authoring previews.
+   *
+   * @param location Target camera (center, zoom, pitch, bearing).
+   */
+  flyToView(location: StoryChapterLocation): void {
+    this.map?.flyTo({
+      center: location.center,
+      zoom: location.zoom,
+      pitch: location.pitch,
+      bearing: location.bearing,
+    });
   }
 
   private isStyleReady(): boolean {

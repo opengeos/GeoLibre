@@ -3,6 +3,7 @@ import {
   DEFAULT_LAYER_STYLE,
   DEFAULT_LEGEND_CONFIG,
   DEFAULT_PROJECT_PREFERENCES,
+  DEFAULT_STORY_MAP,
   PROJECT_VERSION,
   type GeoLibreLayer,
   type GeoLibreProject,
@@ -14,6 +15,12 @@ import {
   type ProjectPluginState,
   type ProjectPreferences,
   type RuntimeEnvironmentVariable,
+  type StoryChapter,
+  type StoryChapterAlignment,
+  type StoryChapterAnimation,
+  type StoryInsetPosition,
+  type StoryLayerOpacityChange,
+  type StoryMap,
 } from "./types";
 
 /** Placeholder name a project carries before the user names it. */
@@ -73,6 +80,7 @@ export function parseProject(json: string): GeoLibreProject {
     preferences: normalizeProjectPreferences(data.preferences),
     plugins: normalizeProjectPlugins(data.plugins) ?? undefined,
     legend: normalizeLegendConfig(data.legend),
+    storymap: normalizeStoryMap(data.storymap) ?? undefined,
     metadata: data.metadata ?? {},
   };
 }
@@ -123,6 +131,166 @@ function normalizeLegendConfig(legend: unknown): LegendConfig | undefined {
     order,
     overrides,
   };
+}
+
+/**
+ * Validate and coerce a story map loaded from an untrusted project file.
+ *
+ * Returns null when the value carries no chapters so empty story maps stay out
+ * of the saved project, mirroring how plugins are only persisted when present.
+ *
+ * @param storymap Raw value read from the project JSON.
+ * @returns A normalized story map, or null when there is nothing to keep.
+ */
+export function normalizeStoryMap(storymap: unknown): StoryMap | null {
+  if (!storymap || typeof storymap !== "object") return null;
+
+  const candidate = storymap as Partial<StoryMap>;
+  // Drop duplicate chapter ids so updates/removals stay unambiguous and keyed
+  // rendering stays stable.
+  const seenChapterIds = new Set<string>();
+  const chapters = Array.isArray(candidate.chapters)
+    ? candidate.chapters
+        .map(normalizeStoryChapter)
+        .filter((chapter): chapter is StoryChapter => {
+          if (!chapter || seenChapterIds.has(chapter.id)) return false;
+          seenChapterIds.add(chapter.id);
+          return true;
+        })
+    : [];
+
+  const normalized: StoryMap = {
+    title: normalizeString(candidate.title),
+    subtitle: normalizeString(candidate.subtitle),
+    byline: normalizeString(candidate.byline),
+    footer: normalizeString(candidate.footer),
+    theme: candidate.theme === "light" ? "light" : "dark",
+    showMarkers: normalizeBoolean(candidate.showMarkers, false),
+    markerColor:
+      normalizeString(candidate.markerColor) || DEFAULT_STORY_MAP.markerColor,
+    inset: normalizeBoolean(candidate.inset, false),
+    insetPosition: STORY_INSET_POSITIONS.has(
+      candidate.insetPosition as StoryInsetPosition,
+    )
+      ? (candidate.insetPosition as StoryInsetPosition)
+      : DEFAULT_STORY_MAP.insetPosition,
+    chapters,
+  };
+
+  // Keep the story if it has chapters or any author-entered settings; only a
+  // wholly-default, chapter-less story is dropped (so blank stories stay out of
+  // saved projects without discarding settings entered before the first chapter).
+  return storyMapHasContent(normalized) ? normalized : null;
+}
+
+/** Whether a story map carries chapters or any non-default setting. */
+function storyMapHasContent(story: StoryMap): boolean {
+  if (story.chapters.length > 0) return true;
+  return (
+    story.title.trim() !== "" ||
+    story.subtitle.trim() !== "" ||
+    story.byline.trim() !== "" ||
+    story.footer.trim() !== "" ||
+    story.theme !== DEFAULT_STORY_MAP.theme ||
+    story.showMarkers !== DEFAULT_STORY_MAP.showMarkers ||
+    story.markerColor !== DEFAULT_STORY_MAP.markerColor ||
+    story.inset !== DEFAULT_STORY_MAP.inset ||
+    story.insetPosition !== DEFAULT_STORY_MAP.insetPosition
+  );
+}
+
+const STORY_ALIGNMENTS = new Set<StoryChapterAlignment>([
+  "left",
+  "center",
+  "right",
+  "full",
+]);
+
+const STORY_ANIMATIONS = new Set<StoryChapterAnimation>([
+  "flyTo",
+  "easeTo",
+  "jumpTo",
+]);
+
+const STORY_INSET_POSITIONS = new Set<StoryInsetPosition>([
+  "top-left",
+  "top-right",
+  "bottom-left",
+  "bottom-right",
+]);
+
+function normalizeStoryChapter(chapter: unknown): StoryChapter | null {
+  if (!chapter || typeof chapter !== "object") return null;
+
+  const candidate = chapter as Partial<StoryChapter>;
+  const id = normalizeString(candidate.id);
+  if (!id) return null;
+
+  const location = candidate.location;
+  const center = location?.center;
+  if (
+    !Array.isArray(center) ||
+    center.length !== 2 ||
+    !center.every((value) => Number.isFinite(value))
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    title: normalizeString(candidate.title),
+    description: normalizeString(candidate.description),
+    image: normalizeString(candidate.image) || undefined,
+    alignment: STORY_ALIGNMENTS.has(candidate.alignment as StoryChapterAlignment)
+      ? (candidate.alignment as StoryChapterAlignment)
+      : "left",
+    hidden: normalizeBoolean(candidate.hidden, false),
+    location: {
+      // Clamp to valid lng/lat so a hand-edited file can't make flyTo throw.
+      center: [
+        clampCoordinate(Number(center[0]), -180, 180),
+        clampCoordinate(Number(center[1]), -90, 90),
+      ],
+      // Clamp to MapLibre's valid ranges so a stored value matches the camera
+      // that actually lands (bearing wraps to 0-360).
+      zoom: clamp(normalizeNumber(location?.zoom, 2), 0, 24),
+      pitch: clamp(normalizeNumber(location?.pitch, 0), 0, 85),
+      bearing: ((normalizeNumber(location?.bearing, 0) % 360) + 360) % 360,
+    },
+    mapAnimation: STORY_ANIMATIONS.has(
+      candidate.mapAnimation as StoryChapterAnimation,
+    )
+      ? (candidate.mapAnimation as StoryChapterAnimation)
+      : "flyTo",
+    rotateAnimation: normalizeBoolean(candidate.rotateAnimation, false),
+    onChapterEnter: normalizeOpacityChanges(candidate.onChapterEnter),
+    onChapterExit: normalizeOpacityChanges(candidate.onChapterExit),
+  };
+}
+
+function normalizeOpacityChanges(value: unknown): StoryLayerOpacityChange[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry): StoryLayerOpacityChange | null => {
+      if (!entry || typeof entry !== "object") return null;
+      const candidate = entry as Partial<StoryLayerOpacityChange>;
+      const layerId = normalizeString(candidate.layerId);
+      if (!layerId) return null;
+      const id = normalizeString(candidate.id);
+      return {
+        ...(id ? { id } : {}),
+        layerId,
+        opacity: clamp(normalizeNumber(candidate.opacity, 1), 0, 1),
+        ...(Number.isFinite(candidate.duration)
+          ? { duration: Math.max(0, Number(candidate.duration)) }
+          : {}),
+      };
+    })
+    .filter((entry): entry is StoryLayerOpacityChange => Boolean(entry));
+}
+
+function normalizeString(value: unknown): string {
+  return typeof value === "string" ? value : "";
 }
 
 function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
@@ -196,8 +364,12 @@ function normalizeNumber(value: unknown, fallback: number): number {
   return Number.isFinite(value) ? Number(value) : fallback;
 }
 
-function clampCoordinate(value: number, min: number, max: number): number {
+function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function clampCoordinate(value: number, min: number, max: number): number {
+  return clamp(value, min, max);
 }
 
 function normalizeBoolean(value: unknown, fallback: boolean): boolean {
@@ -356,6 +528,7 @@ export function projectFromStore(state: {
   preferences: ProjectPreferences;
   plugins?: ProjectPluginState | null;
   legend?: LegendConfig | null;
+  storymap?: StoryMap | null;
   metadata: Record<string, unknown>;
 }): GeoLibreProject {
   const styles: Record<string, LayerStyle> = {};
@@ -364,6 +537,7 @@ export function projectFromStore(state: {
   }
   const plugins = normalizeProjectPlugins(state.plugins);
   const legend = normalizeLegendConfig(state.legend);
+  const storymap = normalizeStoryMap(state.storymap);
   return {
     version: PROJECT_VERSION,
     name: state.projectName,
@@ -376,6 +550,7 @@ export function projectFromStore(state: {
     preferences: state.preferences,
     ...(plugins ? { plugins } : {}),
     ...(legend ? { legend } : {}),
+    ...(storymap ? { storymap } : {}),
     metadata: state.metadata,
   };
 }
@@ -446,6 +621,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
   preferences: ProjectPreferences;
   projectPlugins: ProjectPluginState | null;
   legend: LegendConfig;
+  storymap: StoryMap | null;
   metadata: Record<string, unknown>;
 } {
   const layers = project.layers.map((layer) => ({
@@ -464,6 +640,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
     preferences: normalizeProjectPreferences(project.preferences),
     projectPlugins: normalizeProjectPlugins(project.plugins),
     legend: normalizeLegendConfig(project.legend) ?? { ...DEFAULT_LEGEND_CONFIG },
+    storymap: normalizeStoryMap(project.storymap),
     metadata: project.metadata,
   };
 }

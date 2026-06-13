@@ -308,6 +308,82 @@ export const DEFAULT_LEGEND_CONFIG: LegendConfig = Object.freeze({
   >,
 });
 
+/** Camera target captured for a story chapter. */
+export interface StoryChapterLocation {
+  center: [number, number];
+  zoom: number;
+  pitch: number;
+  bearing: number;
+}
+
+/** Where a chapter's text panel sits over the map. */
+export type StoryChapterAlignment = "left" | "center" | "right" | "full";
+
+/** How the map transitions to a chapter's location. */
+export type StoryChapterAnimation = "flyTo" | "easeTo" | "jumpTo";
+
+/** A layer opacity change triggered when a chapter is entered or exited. */
+export interface StoryLayerOpacityChange {
+  /** Stable identity for React list keys; optional for older project files. */
+  id?: string;
+  /** GeoLibre store layer id whose opacity should change. */
+  layerId: string;
+  opacity: number;
+  /** Transition duration in milliseconds. */
+  duration?: number;
+}
+
+/** A single scene in a scroll-driven story map. */
+export interface StoryChapter {
+  id: string;
+  title: string;
+  description: string;
+  /** Optional image shown in the chapter panel (URL or data URI). */
+  image?: string;
+  alignment: StoryChapterAlignment;
+  /** Hide the text panel while still transitioning the map. */
+  hidden: boolean;
+  location: StoryChapterLocation;
+  mapAnimation: StoryChapterAnimation;
+  /** Slowly rotate the camera once the transition settles. */
+  rotateAnimation: boolean;
+  onChapterEnter: StoryLayerOpacityChange[];
+  onChapterExit: StoryLayerOpacityChange[];
+}
+
+export type StoryInsetPosition =
+  | "top-left"
+  | "top-right"
+  | "bottom-left"
+  | "bottom-right";
+
+/** Scroll-driven story map authored on top of a GeoLibre project. */
+export interface StoryMap {
+  title: string;
+  subtitle: string;
+  byline: string;
+  footer: string;
+  theme: "light" | "dark";
+  showMarkers: boolean;
+  markerColor: string;
+  inset: boolean;
+  insetPosition: StoryInsetPosition;
+  chapters: StoryChapter[];
+}
+
+export const DEFAULT_STORY_MAP: StoryMap = {
+  title: "",
+  subtitle: "",
+  byline: "",
+  footer: "",
+  theme: "dark",
+  showMarkers: false,
+  markerColor: "#3fb1ce",
+  inset: false,
+  insetPosition: "bottom-left",
+  chapters: [],
+};
+
 export interface GeoLibreProject {
   version: string;
   name: string;
@@ -321,6 +397,7 @@ export interface GeoLibreProject {
   plugins?: ProjectPluginState;
   /** User customizations for the Print Layout legend. */
   legend?: LegendConfig;
+  storymap?: StoryMap;
   metadata: Record<string, unknown>;
 }
 

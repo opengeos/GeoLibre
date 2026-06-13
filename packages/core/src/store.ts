@@ -16,6 +16,7 @@ import {
   DEFAULT_LAYER_STYLE,
   DEFAULT_LEGEND_CONFIG,
   DEFAULT_PROJECT_PREFERENCES,
+  DEFAULT_STORY_MAP,
   type GeoLibreLayer,
   type GeoLibreProject,
   type LayerStyle,
@@ -24,6 +25,8 @@ import {
   type ProjectPluginState,
   type ProjectPreferences,
   type RecentProjectEntry,
+  type StoryChapter,
+  type StoryMap,
 } from "./types";
 
 export type ConversionToolKind =
@@ -97,6 +100,7 @@ export interface AppState {
   preferences: ProjectPreferences;
   projectPlugins: ProjectPluginState | null;
   legend: LegendConfig;
+  storymap: StoryMap | null;
   selectedLayerId: string | null;
   selectedFeatureId: string | null;
   identifyLayerId: string | null;
@@ -111,6 +115,8 @@ export interface AppState {
     rasterToolOpen: RasterToolKind | null;
     sqlWorkspaceOpen: boolean;
     attributeTableOpen: boolean;
+    storymapPanelOpen: boolean;
+    storymapPresenting: boolean;
     zoomToSelectedFeature: boolean;
   };
 
@@ -135,7 +141,18 @@ export interface AppState {
   setRasterToolOpen: (kind: RasterToolKind | null) => void;
   setSqlWorkspaceOpen: (open: boolean) => void;
   setAttributeTableOpen: (open: boolean) => void;
+  setStorymapPanelOpen: (open: boolean) => void;
+  setStorymapPresenting: (presenting: boolean) => void;
   setZoomToSelectedFeature: (enabled: boolean) => void;
+
+  setStorymap: (storymap: StoryMap | null) => void;
+  updateStorymapSettings: (
+    patch: Partial<Omit<StoryMap, "chapters">>
+  ) => void;
+  addStoryChapter: (chapter: StoryChapter, atIndex?: number) => void;
+  updateStoryChapter: (id: string, patch: Partial<StoryChapter>) => void;
+  removeStoryChapter: (id: string) => void;
+  moveStoryChapter: (id: string, targetIndex: number) => void;
 
   newProject: (options?: CreateProjectOptions & { name?: string }) => void;
   loadProject: (
@@ -214,6 +231,7 @@ export const useAppStore = create<AppState>()(
       preferences: DEFAULT_PROJECT_PREFERENCES,
       projectPlugins: null,
       legend: { ...DEFAULT_LEGEND_CONFIG },
+      storymap: null,
       selectedLayerId: null,
       selectedFeatureId: null,
       identifyLayerId: null,
@@ -228,6 +246,8 @@ export const useAppStore = create<AppState>()(
         rasterToolOpen: null,
         sqlWorkspaceOpen: false,
         attributeTableOpen: false,
+        storymapPanelOpen: false,
+        storymapPresenting: false,
         zoomToSelectedFeature: false,
       },
 
@@ -268,8 +288,73 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ ui: { ...s.ui, sqlWorkspaceOpen: open } })),
       setAttributeTableOpen: (open) =>
         set((s) => ({ ui: { ...s.ui, attributeTableOpen: open } })),
+      setStorymapPanelOpen: (open) =>
+        set((s) => ({ ui: { ...s.ui, storymapPanelOpen: open } })),
+      setStorymapPresenting: (presenting) =>
+        set((s) => ({ ui: { ...s.ui, storymapPresenting: presenting } })),
       setZoomToSelectedFeature: (enabled) =>
         set((s) => ({ ui: { ...s.ui, zoomToSelectedFeature: enabled } })),
+
+      setStorymap: (storymap) => set({ storymap, isDirty: true }),
+      updateStorymapSettings: (patch) =>
+        set((s) => ({
+          storymap: { ...(s.storymap ?? DEFAULT_STORY_MAP), ...patch },
+          isDirty: true,
+        })),
+      addStoryChapter: (chapter, atIndex) =>
+        set((s) => {
+          const base = s.storymap ?? DEFAULT_STORY_MAP;
+          const chapters = [...base.chapters];
+          const index =
+            atIndex === undefined
+              ? chapters.length
+              : Math.min(Math.max(atIndex, 0), chapters.length);
+          chapters.splice(index, 0, chapter);
+          return { storymap: { ...base, chapters }, isDirty: true };
+        }),
+      updateStoryChapter: (id, patch) =>
+        set((s) => {
+          if (!s.storymap) return s;
+          return {
+            storymap: {
+              ...s.storymap,
+              chapters: s.storymap.chapters.map((chapter) =>
+                chapter.id === id ? { ...chapter, ...patch } : chapter
+              ),
+            },
+            isDirty: true,
+          };
+        }),
+      removeStoryChapter: (id) =>
+        set((s) => {
+          if (!s.storymap) return s;
+          return {
+            storymap: {
+              ...s.storymap,
+              chapters: s.storymap.chapters.filter(
+                (chapter) => chapter.id !== id
+              ),
+            },
+            isDirty: true,
+          };
+        }),
+      moveStoryChapter: (id, targetIndex) =>
+        set((s) => {
+          if (!s.storymap) return s;
+          const current = s.storymap.chapters.findIndex(
+            (chapter) => chapter.id === id
+          );
+          if (current < 0) return s;
+          const chapters = [...s.storymap.chapters];
+          const [chapter] = chapters.splice(current, 1);
+          if (!chapter) return s;
+          const next = Math.min(Math.max(targetIndex, 0), chapters.length);
+          chapters.splice(next, 0, chapter);
+          if (chapters.every((item, i) => item.id === s.storymap?.chapters[i]?.id)) {
+            return s;
+          }
+          return { storymap: { ...s.storymap, chapters }, isDirty: true };
+        }),
 
       setProjectPath: (path) => set({ projectPath: path }),
       setProjectName: (name) => set({ projectName: name, isDirty: true }),
@@ -402,6 +487,8 @@ export const useAppStore = create<AppState>()(
           identifyLayerId: null,
           pointerCoords: null,
           attributeFilter: "",
+          // Don't carry an active story presentation into a different project.
+          ui: { ...s.ui, storymapPresenting: false, storymapPanelOpen: false },
         }));
         clearHistory();
       },
@@ -416,6 +503,8 @@ export const useAppStore = create<AppState>()(
           selectedLayerId: applied.layers[0]?.id ?? null,
           selectedFeatureId: null,
           identifyLayerId: null,
+          // Don't carry an active story presentation into a different project.
+          ui: { ...s.ui, storymapPresenting: false, storymapPanelOpen: false },
         }));
         clearHistory();
         if (path && options.rememberRecent !== false) {
@@ -436,16 +525,20 @@ export const useAppStore = create<AppState>()(
         basemapStyleUrl: s.basemapStyleUrl,
         basemapVisible: s.basemapVisible,
         basemapOpacity: s.basemapOpacity,
+        storymap: s.storymap,
       }),
       // Records a history entry only when the tracked slice really changed.
       // Basemap fields compare with ===; `layers` is compared element-by-element
       // (Object.is per element) via shallow. Every mutating action creates new
       // layer objects, so real changes differ; two distinct empty arrays compare
-      // equal, so resetting layers (e.g. newProject) records nothing.
+      // equal, so resetting layers (e.g. newProject) records nothing. `storymap`
+      // is compared by reference: every authoring action creates a new object,
+      // so real edits differ while an unchanged null stays equal.
       equality: (a, b) =>
         a.basemapStyleUrl === b.basemapStyleUrl &&
         a.basemapVisible === b.basemapVisible &&
         a.basemapOpacity === b.basemapOpacity &&
+        a.storymap === b.storymap &&
         shallow(a.layers, b.layers),
       limit: 100,
       // Group rapid bursts (slider drags) into one entry; window is 0 in tests.
