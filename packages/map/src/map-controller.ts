@@ -249,6 +249,10 @@ export class MapController {
       renderWorldCopies: mapPreferences.renderWorldCopies,
       attributionControl: false,
       maplibreLogo: false,
+      // Retain the WebGL drawing buffer so the canvas can be read back for the
+      // Print Layout composer and other image exports. Without this,
+      // `canvas.toDataURL()` / `drawImage` can return a blank frame.
+      canvasContextAttributes: { preserveDrawingBuffer: true },
     });
     // The constructor options above already apply the static constraints.
     // The transform constraint is installed by the MapCanvas effect that

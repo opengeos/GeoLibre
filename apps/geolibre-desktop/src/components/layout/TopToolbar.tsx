@@ -123,6 +123,7 @@ import {
   Moon,
   Pencil,
   Printer,
+  LayoutTemplate,
   Puzzle,
   Redo2,
   RefreshCw,
@@ -174,6 +175,7 @@ import { NewProjectDialog } from "./NewProjectDialog";
 import { ManagePluginsDialog } from "./ManagePluginsDialog";
 import { ShareProjectDialog } from "./ShareProjectDialog";
 import { SettingsDialog } from "./SettingsDialog";
+import { PrintLayoutDialog } from "./PrintLayoutDialog";
 
 interface TopToolbarProps {
   compact?: boolean;
@@ -390,6 +392,7 @@ export function TopToolbar({
     sizeMb: number;
   } | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [printLayoutOpen, setPrintLayoutOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [checkForUpdatesRequest, setCheckForUpdatesRequest] = useState(0);
@@ -978,6 +981,13 @@ export function TopToolbar({
       icon: Printer,
       run: handleTogglePrintPanel,
     },
+    {
+      id: "project.print-layout",
+      title: "Print Layout…",
+      group: "Project",
+      icon: LayoutTemplate,
+      run: () => setPrintLayoutOpen(true),
+    },
     // Add Data
     {
       id: "add.vector",
@@ -1412,6 +1422,10 @@ export function TopToolbar({
             <Printer className="mr-2 h-3.5 w-3.5" />
             Print...
             {printPanelVisible ? " ✓" : ""}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setPrintLayoutOpen(true)}>
+            <LayoutTemplate className="mr-2 h-3.5 w-3.5" />
+            Print Layout...
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -1951,6 +1965,11 @@ export function TopToolbar({
       <ManagePluginsDialog
         open={managePluginsOpen}
         onOpenChange={setManagePluginsOpen}
+        mapControllerRef={mapControllerRef}
+      />
+      <PrintLayoutDialog
+        open={printLayoutOpen}
+        onOpenChange={setPrintLayoutOpen}
         mapControllerRef={mapControllerRef}
       />
       <ShareProjectDialog
