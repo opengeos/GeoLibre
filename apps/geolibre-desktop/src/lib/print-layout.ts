@@ -226,8 +226,15 @@ export function drawLayout(
   }
 
   // --- Legend (bottom-left inside the map) ------------------------------
+  // Clip to the map body so a legend with many layers cannot overflow onto the
+  // footer or off the page.
   if (opts.showLegend && opts.legend.length > 0) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(bodyX, bodyY, bodyW, bodyH);
+    ctx.clip();
     drawLegend(ctx, bodyX + inset, bodyY + inset, opts.legend, unit);
+    ctx.restore();
   }
 
   ctx.restore();
@@ -289,7 +296,10 @@ function formatDistance(meters: number): string {
     const km = meters / 1000;
     return `${km % 1 === 0 ? km : km.toFixed(1)} km`;
   }
-  return `${meters % 1 === 0 ? meters : meters.toFixed(1)} m`;
+  // Below a metre (street/parcel zoom) label in centimetres instead of showing
+  // a useless "0.0 m".
+  if (meters >= 1) return `${Math.round(meters)} m`;
+  return `${Math.round(meters * 100)} cm`;
 }
 
 /** Draw a scale bar anchored at its bottom-right corner. */

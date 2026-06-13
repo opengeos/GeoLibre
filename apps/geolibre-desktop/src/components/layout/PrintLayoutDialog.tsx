@@ -43,6 +43,29 @@ function sanitizeFilename(name: string): string {
   return cleaned || "map-layout";
 }
 
+interface ToggleFieldProps {
+  id: string;
+  label: string;
+  checked: boolean;
+  onChange: (next: boolean) => void;
+}
+
+/** A labelled checkbox row for toggling a map element on or off. */
+function ToggleField({ id, label, checked, onChange }: ToggleFieldProps) {
+  return (
+    <label htmlFor={id} className="flex cursor-pointer items-center gap-2 text-sm">
+      <input
+        id={id}
+        type="checkbox"
+        className="h-4 w-4 accent-primary"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      {label}
+    </label>
+  );
+}
+
 /**
  * Print Layout composer dialog: captures the current map view and composes it
  * with a title, legend, scale bar, north arrow, and footer onto a chosen paper
@@ -95,6 +118,7 @@ export function PrintLayoutDialog({
   // the snapshot the user is composing.
   useEffect(() => {
     if (open && !wasOpenRef.current) {
+      setError(null);
       setTitle((prev) => prev || (projectName ?? "").trim());
       setFooterText(
         (prev) =>
@@ -178,27 +202,6 @@ export function PrintLayoutDialog({
     }
   };
 
-  const toggle = (
-    id: string,
-    label: string,
-    checked: boolean,
-    onChange: (next: boolean) => void,
-  ) => (
-    <label
-      htmlFor={id}
-      className="flex cursor-pointer items-center gap-2 text-sm"
-    >
-      <input
-        id={id}
-        type="checkbox"
-        className="h-4 w-4 accent-primary"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-      />
-      {label}
-    </label>
-  );
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl">
@@ -266,16 +269,36 @@ export function PrintLayoutDialog({
 
             <div className="space-y-2">
               <p className="text-sm font-medium">Map elements</p>
-              {toggle("el-title", "Title block", showTitle, setShowTitle)}
-              {toggle("el-legend", "Legend", showLegend, setShowLegend)}
-              {toggle("el-scale", "Scale bar", showScaleBar, setShowScaleBar)}
-              {toggle(
-                "el-north",
-                "North arrow",
-                showNorthArrow,
-                setShowNorthArrow,
-              )}
-              {toggle("el-footer", "Footer", showFooter, setShowFooter)}
+              <ToggleField
+                id="el-title"
+                label="Title block"
+                checked={showTitle}
+                onChange={setShowTitle}
+              />
+              <ToggleField
+                id="el-legend"
+                label="Legend"
+                checked={showLegend}
+                onChange={setShowLegend}
+              />
+              <ToggleField
+                id="el-scale"
+                label="Scale bar"
+                checked={showScaleBar}
+                onChange={setShowScaleBar}
+              />
+              <ToggleField
+                id="el-north"
+                label="North arrow"
+                checked={showNorthArrow}
+                onChange={setShowNorthArrow}
+              />
+              <ToggleField
+                id="el-footer"
+                label="Footer"
+                checked={showFooter}
+                onChange={setShowFooter}
+              />
             </div>
 
             {showFooter && (

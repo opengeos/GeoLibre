@@ -48,11 +48,14 @@ export function buildLegend(layers: GeoLibreLayer[]): LegendEntry[] {
     if (!layer.visible) continue;
     if (NON_LEGEND_TYPES.has(layer.type)) continue;
 
-    // MBTiles can carry vector or raster tiles and is rendered as vector unless
-    // its metadata says raster, so treat vector MBTiles like the other vectors.
+    // MBTiles can carry vector or raster tiles; the app renders it as vector
+    // unless its metadata or source says raster (mirrors layer-sync), so a
+    // missing or legacy tileType is treated as vector here too.
     const isVector =
       VECTOR_TYPES.has(layer.type) ||
-      (layer.type === "mbtiles" && layer.metadata.tileType === "vector");
+      (layer.type === "mbtiles" &&
+        layer.metadata.tileType !== "raster" &&
+        layer.source.type !== "raster");
     if (isVector) {
       const mode = styleValue(layer.style, "vectorStyleMode");
       const stops = styleValue(layer.style, "vectorStyleStops");

@@ -46,16 +46,19 @@ export function captureMapImage(map: MapLike): CapturedMap {
   out.width = base.width;
   out.height = base.height;
   const ctx = out.getContext("2d");
-  if (ctx) {
-    const canvases = map.getContainer().querySelectorAll("canvas");
-    canvases.forEach((c) => {
-      try {
-        ctx.drawImage(c, 0, 0, out.width, out.height);
-      } catch {
-        // A tainted or zero-size canvas is skipped rather than aborting.
-      }
-    });
+  // Throw rather than return a blank canvas: the dialog's recapture() catch then
+  // surfaces a clear error instead of letting the user export a white page.
+  if (!ctx) {
+    throw new Error("Could not acquire a 2D canvas context for map capture");
   }
+  const canvases = map.getContainer().querySelectorAll("canvas");
+  canvases.forEach((c) => {
+    try {
+      ctx.drawImage(c, 0, 0, out.width, out.height);
+    } catch {
+      // A tainted or zero-size canvas is skipped rather than aborting.
+    }
+  });
 
   const cssWidth = base.clientWidth || base.width;
   const cssHeight = base.clientHeight || base.height;

@@ -133,4 +133,16 @@ describe("buildLegend", () => {
     ]);
     assert.notEqual(legend[0].swatches[0].color, "#00aa55");
   });
+
+  it("treats MBTiles with no tileType as vector", () => {
+    const legend = buildLegend([
+      makeLayer({
+        name: "Legacy tiles",
+        type: "mbtiles",
+        metadata: {},
+        style: { vectorStyleMode: "single", fillColor: "#123456" } as LayerStyle,
+      }),
+    ]);
+    assert.equal(legend[0].swatches[0].color, "#123456");
+  });
 });
