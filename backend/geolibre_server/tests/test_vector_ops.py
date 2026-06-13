@@ -849,6 +849,22 @@ def test_smooth_degenerate_ring_collapses_to_empty() -> None:
     assert geojson["features"][0]["geometry"]["coordinates"] == [[]]
 
 
+def test_smooth_preserves_feature_id() -> None:
+    line = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "id": "abc",
+                "properties": {},
+                "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+            }
+        ],
+    }
+    geojson, _ = run_vector_tool("smooth", line, parameters={"iterations": 1})
+    assert geojson["features"][0]["id"] == "abc"
+
+
 def test_smooth_preserves_z_coordinates() -> None:
     line3d = {
         "type": "FeatureCollection",

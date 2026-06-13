@@ -671,26 +671,32 @@ def _smooth(geojson, overlay, parameters) -> tuple[dict, list[str]]:
         raise ValueError(f"Iterations must be between 1 and {_SMOOTH_MAX_ITERATIONS}")
     out_features = []
     smoothed = 0
+    _smoothable = ("LineString", "MultiLineString", "Polygon", "MultiPolygon")
     for feature in geojson["features"]:
         geometry = feature.get("geometry")
         if not geometry:
             out_features.append(feature)
             continue
-        if geometry.get("type") in (
-            "LineString",
-            "MultiLineString",
-            "Polygon",
-            "MultiPolygon",
-            "GeometryCollection",
-        ):
+        gtype = geometry.get("type")
+        if gtype in _smoothable:
             smoothed += 1
-        out_features.append(
-            {
-                "type": "Feature",
-                "properties": feature.get("properties") or {},
-                "geometry": _smooth_geometry(geometry, iterations),
-            }
-        )
+        elif gtype == "GeometryCollection" and any(
+            g.get("type") in _smoothable
+            for g in geometry.get("geometries", [])
+        ):
+            # Only count a collection that actually has a line/polygon member;
+            # a points-only collection passes through unchanged.
+            smoothed += 1
+        new_feature = {
+            "type": "Feature",
+            "properties": feature.get("properties") or {},
+            "geometry": _smooth_geometry(geometry, iterations),
+        }
+        # Preserve the feature id (this raw-JSON path can keep it cheaply, unlike
+        # the GeoPandas handlers that lose it through the GeoDataFrame round-trip).
+        if "id" in feature:
+            new_feature["id"] = feature["id"]
+        out_features.append(new_feature)
     fc = {"type": "FeatureCollection", "features": out_features}
     return fc, [f"Smoothed {smoothed} feature(s) with {iterations} iteration(s)"]
 

@@ -1401,10 +1401,18 @@ export const smoothTool: ProcessingAlgorithm = {
       const isSmoothable =
         isFamily(geometry, "line") ||
         isFamily(geometry, "polygon") ||
-        geometry.type === "GeometryCollection";
+        // A GeometryCollection only counts if it actually has a line/polygon
+        // member; a points-only collection passes through unchanged.
+        (geometry.type === "GeometryCollection" &&
+          geometry.geometries.some(
+            (g) => isFamily(g, "line") || isFamily(g, "polygon"),
+          ));
       if (isSmoothable) smoothed += 1;
       return {
         type: "Feature",
+        // Preserve the feature id (the GeoPandas handlers lose it through the
+        // GeoDataFrame round-trip, but this raw-JSON path can keep it cheaply).
+        ...(feature.id !== undefined ? { id: feature.id } : {}),
         properties: feature.properties ?? {},
         geometry: smoothGeometry(geometry, iterations),
       };

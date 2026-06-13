@@ -875,6 +875,44 @@ describe("processing registry", () => {
     // Endpoints kept; the 1/4 cut point interpolates Z: 100*0.75 + 200*0.25 = 125.
     assert.ok(coords3d.every((c) => c.length === 3));
     assert.deepEqual(coords3d[1], [0, 2.5, 125]);
+
+    // The feature id is preserved through smoothing.
+    const withId: GeoLibreLayer = {
+      ...square,
+      id: "withId",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: "abc",
+            properties: {},
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [0, 0],
+                  [0, 10],
+                  [10, 10],
+                  [10, 0],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+    };
+    let idOut: FeatureCollection | null = null;
+    tool.run({
+      layers: [withId],
+      parameters: { layer: "withId", iterations: 1 },
+      log: () => {},
+      addResultLayer: (_n, g) => {
+        idOut = g;
+      },
+    });
+    assert.equal(idOut!.features[0].id, "abc");
   });
 
   it("generates a regular grid from a bounding box", () => {
