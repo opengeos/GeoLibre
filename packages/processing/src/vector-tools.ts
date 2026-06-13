@@ -1300,6 +1300,9 @@ function smoothRing(ring: Position[], iterations: number): Position[] {
     p[1],
   ]);
   for (let k = 0; k < iterations; k += 1) pts = chaikinOnce(pts, true);
+  // An invalid (empty/degenerate) ring leaves pts empty; guard so a malformed
+  // feature yields an empty ring rather than throwing on pts[0].
+  if (pts.length === 0) return pts;
   pts.push([pts[0][0], pts[0][1]]);
   return pts;
 }
@@ -1338,7 +1341,7 @@ export const smoothTool: ProcessingAlgorithm = {
   id: "smooth",
   name: "Smooth",
   description:
-    "Round the corners of line and polygon features with Chaikin's algorithm (adds vertices), distinct from Simplify's vertex reduction. Points pass through unchanged.",
+    "Round the corners of line and polygon features with Chaikin's algorithm (adds vertices), distinct from Simplify's vertex reduction. Points pass through unchanged. Z/elevation coordinates are not preserved.",
   group: "Geometry",
   supportsSidecar: true,
   parameters: [
@@ -1458,14 +1461,14 @@ export const gridTool: ProcessingAlgorithm = {
       type: "number",
       required: true,
       default: 1,
-      min: 0,
+      min: 0.0001,
       step: 0.1,
     },
     {
       id: "cell_height",
       label: "Cell height (degrees)",
       type: "number",
-      min: 0,
+      min: 0.0001,
       step: 0.1,
       description: "Leave blank to match the cell width.",
     },

@@ -574,6 +574,10 @@ def _smooth_ring(ring: list[list[float]], iterations: int) -> list[list[float]]:
     pts = [[p[0], p[1]] for p in (ring[:-1] if closed else ring)]
     for _ in range(iterations):
         pts = _chaikin(pts, True)
+    # An invalid (empty/degenerate) ring leaves pts empty; guard so a crafted or
+    # corrupt payload yields an empty ring rather than an IndexError (500).
+    if not pts:
+        return pts
     pts.append([pts[0][0], pts[0][1]])
     return pts
 
@@ -613,7 +617,17 @@ def _smooth(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     """
     if not geojson or not geojson.get("features"):
         raise ValueError("Input layer has no features")
-    iterations = int(parameters.get("iterations", 3) or 3)
+    # Mirror the client's `Math.round(numberParam(ctx, "iterations", 3))`: a
+    # non-finite/unparseable value falls back to 3, and math.floor(x + 0.5)
+    # rounds half up exactly like JS Math.round (not Python round()'s
+    # banker's rounding), keeping the two engines bit-identical.
+    try:
+        value = float(parameters.get("iterations", 3))
+    except (TypeError, ValueError):
+        value = 3.0
+    if not math.isfinite(value):
+        value = 3.0
+    iterations = math.floor(value + 0.5)
     if iterations < 1 or iterations > _SMOOTH_MAX_ITERATIONS:
         raise ValueError(f"Iterations must be between 1 and {_SMOOTH_MAX_ITERATIONS}")
     out_features = []

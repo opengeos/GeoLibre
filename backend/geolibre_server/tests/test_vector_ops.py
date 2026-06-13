@@ -746,6 +746,43 @@ def test_smooth_rejects_out_of_range_iterations() -> None:
         run_vector_tool("smooth", line, parameters={"iterations": 99})
 
 
+def test_smooth_empty_ring_does_not_crash() -> None:
+    # A malformed polygon with an empty ring must not raise (IndexError -> 500);
+    # the ring stays empty. Mirrors the client guard.
+    malformed = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {},
+                "geometry": {"type": "Polygon", "coordinates": [[]]},
+            }
+        ],
+    }
+    geojson, _ = run_vector_tool("smooth", malformed, parameters={"iterations": 2})
+    assert geojson["features"][0]["geometry"]["coordinates"] == [[]]
+
+
+def test_smooth_iterations_round_half_up_matches_js() -> None:
+    # 3.5 rounds up to 4 (JS Math.round semantics), not down to 3 like Python's
+    # banker's round(), keeping the client and Python engines bit-identical.
+    square = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[0, 0], [0, 10], [10, 10], [10, 0], [0, 0]]],
+                },
+            }
+        ],
+    }
+    _, messages = run_vector_tool("smooth", square, parameters={"iterations": 3.5})
+    assert messages and "with 4 iteration(s)" in messages[0]
+
+
 # --- Voronoi / Delaunay ---
 
 

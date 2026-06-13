@@ -805,6 +805,39 @@ describe("processing registry", () => {
     });
     assert.equal(produced, false);
     assert.ok(logs.some((m) => m.includes("between 1 and 10")));
+
+    // A malformed polygon with an empty ring must not throw; the ring stays empty.
+    const malformed: GeoLibreLayer = {
+      ...square,
+      id: "malformed",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: {},
+            geometry: { type: "Polygon", coordinates: [[]] },
+          },
+        ],
+      },
+    };
+    let malformedOut: FeatureCollection | null = null;
+    assert.doesNotThrow(() =>
+      tool.run({
+        layers: [malformed],
+        parameters: { layer: "malformed", iterations: 2 },
+        log: () => {},
+        addResultLayer: (_n, g) => {
+          malformedOut = g;
+        },
+      }),
+    );
+    assert.ok(malformedOut);
+    assert.deepEqual(
+      (malformedOut!.features[0].geometry as { coordinates: number[][][] })
+        .coordinates,
+      [[]],
+    );
   });
 
   it("generates a regular grid from a bounding box", () => {
