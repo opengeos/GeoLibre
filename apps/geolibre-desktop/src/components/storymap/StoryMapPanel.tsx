@@ -661,7 +661,7 @@ function LayerEffectsEditor({
             value={change.duration ?? 0}
             onChange={(e) => {
               const ms = Math.max(0, Number(e.target.value) || 0);
-              update(i, { duration: ms || undefined });
+              update(i, { duration: ms });
             }}
           />
           <Button
