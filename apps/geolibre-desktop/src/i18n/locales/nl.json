@@ -189,6 +189,7 @@
       "difference": "Verschil",
       "union": "Vereniging",
       "spatialJoin": "Ruimtelijke samenvoeging",
+      "attributeJoin": "Attribuutsamenvoeging",
       "selectByValue": "Selecteren op waarde",
       "selectByLocation": "Selecteren op locatie",
       "h3Grid": "H3-raster maken",

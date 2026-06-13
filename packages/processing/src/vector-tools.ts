@@ -760,6 +760,13 @@ function attributeJoinKey(value: unknown): string | null {
   return isEmpty ? null : valueToString(value);
 }
 
+/**
+ * Join types accepted by the Attribute join tool. Kept local (rather than
+ * reusing the spatial join's set) so a future spatial-join-only option cannot
+ * silently become valid here; kept in sync with the backend's `_ATTRIBUTE_JOIN_HOW`.
+ */
+const ATTRIBUTE_JOIN_HOW = ["inner", "left"] as const;
+
 export const attributeJoinTool: ProcessingAlgorithm = {
   id: "attribute-join",
   name: "Attribute join",
@@ -828,9 +835,9 @@ export const attributeJoinTool: ProcessingAlgorithm = {
       return;
     }
     const how = (ctx.parameters.how as string) || "left";
-    if (!SPATIAL_JOIN_HOW.includes(how as SpatialJoinHow)) {
+    if (!ATTRIBUTE_JOIN_HOW.includes(how as (typeof ATTRIBUTE_JOIN_HOW)[number])) {
       ctx.log(
-        `Error: unknown join type '${how}'; expected ${SPATIAL_JOIN_HOW.join(", ")}`,
+        `Error: unknown join type '${how}'; expected ${ATTRIBUTE_JOIN_HOW.join(", ")}`,
       );
       return;
     }
@@ -859,7 +866,9 @@ export const attributeJoinTool: ProcessingAlgorithm = {
           .filter(Boolean)
       : null;
     let selectedFields: string[];
-    if (requestedFields) {
+    // An empty array (e.g. fields = "," or ", ,") means the user effectively
+    // left the field blank, so fall through to the default rather than erroring.
+    if (requestedFields && requestedFields.length > 0) {
       selectedFields = requestedFields.filter((f) => joinKeySet.has(f));
       const missing = requestedFields.filter((f) => !joinKeySet.has(f));
       if (missing.length) {
@@ -873,6 +882,13 @@ export const attributeJoinTool: ProcessingAlgorithm = {
       // Default: bring over every join field except the key (which would just
       // duplicate the target key column).
       selectedFields = joinKeysOrder.filter((k) => k !== joinField);
+      // A join layer that carries only the key column transfers no attributes;
+      // warn so the user isn't left thinking a silent no-op succeeded.
+      if (joinFeatures.length && !selectedFields.length) {
+        ctx.log(
+          "Note: no fields to bring over (join layer only contains the key column)",
+        );
+      }
     }
 
     // First-match lookup: when several join rows share a key, the first wins.

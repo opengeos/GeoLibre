@@ -188,6 +188,7 @@
       "difference": "差集",
       "union": "联合",
       "spatialJoin": "空间连接",
+      "attributeJoin": "属性连接",
       "selectByValue": "按属性选择",
       "selectByLocation": "按位置选择",
       "h3Grid": "创建 H3 网格",

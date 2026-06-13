@@ -359,6 +359,31 @@ describe("processing registry", () => {
     assert.equal(innerBarbour?.properties?.pop, 200);
     // Only "pop" was requested, so "label" is not brought over.
     assert.equal("label" in (innerBarbour?.properties ?? {}), false);
+
+    // A fields string that is only separators (e.g. ",") is treated as blank,
+    // falling back to the default (all join fields except the key) rather than
+    // erroring.
+    let blankFields: FeatureCollection | null = null;
+    tool.run({
+      layers: [counties, stats],
+      parameters: {
+        layer: "counties",
+        overlay: "stats",
+        target_field: "GEOID",
+        join_field: "code",
+        how: "left",
+        fields: " , ",
+      },
+      log: () => {},
+      addResultLayer: (_name, geojson) => {
+        blankFields = geojson;
+      },
+    });
+    const blankAutauga = blankFields!.features.find(
+      (f) => f.properties?.GEOID === "01001",
+    );
+    assert.equal(blankAutauga?.properties?.pop, 100);
+    assert.equal(blankAutauga?.properties?.label, "Autauga");
   });
 
   it("selects features by attribute value", () => {

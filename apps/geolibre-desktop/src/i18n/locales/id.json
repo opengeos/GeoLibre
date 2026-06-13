@@ -188,6 +188,7 @@
       "difference": "Selisih",
       "union": "Gabungan",
       "spatialJoin": "Gabung spasial",
+      "attributeJoin": "Gabung atribut",
       "selectByValue": "Pilih berdasarkan nilai",
       "selectByLocation": "Pilih berdasarkan lokasi",
       "h3Grid": "Buat grid H3",

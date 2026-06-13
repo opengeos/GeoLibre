@@ -188,6 +188,7 @@
       "difference": "차집합",
       "union": "합집합",
       "spatialJoin": "공간 조인",
+      "attributeJoin": "속성 조인",
       "selectByValue": "값으로 선택",
       "selectByLocation": "위치로 선택",
       "h3Grid": "H3 격자 생성",

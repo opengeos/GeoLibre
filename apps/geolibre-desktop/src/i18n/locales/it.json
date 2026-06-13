@@ -189,6 +189,7 @@
       "difference": "Differenza",
       "union": "Unione",
       "spatialJoin": "Giunzione spaziale",
+      "attributeJoin": "Giunzione per attributi",
       "selectByValue": "Seleziona per valore",
       "selectByLocation": "Seleziona per posizione",
       "h3Grid": "Crea griglia H3",

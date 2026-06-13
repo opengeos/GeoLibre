@@ -189,6 +189,7 @@
       "difference": "Fark",
       "union": "Birleşim",
       "spatialJoin": "Konumsal birleştirme",
+      "attributeJoin": "Öznitelik birleştirme",
       "selectByValue": "Değere göre seç",
       "selectByLocation": "Konuma göre seç",
       "h3Grid": "H3 ızgarası oluştur",

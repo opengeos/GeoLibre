@@ -189,6 +189,7 @@
       "difference": "अंतर",
       "union": "संयोजन",
       "spatialJoin": "स्थानिक जुड़ाव",
+      "attributeJoin": "विशेषता जुड़ाव",
       "selectByValue": "मान द्वारा चुनें",
       "selectByLocation": "स्थान द्वारा चुनें",
       "h3Grid": "H3 ग्रिड बनाएं",

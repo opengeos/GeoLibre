@@ -458,6 +458,16 @@ def test_attribute_join_empty_join_layer_left_keeps_input_unchanged() -> None:
     assert len(geojson["features"]) == len(JOIN_COUNTIES["features"])
 
 
+def test_attribute_join_empty_join_layer_inner_is_empty() -> None:
+    geojson, _ = run_vector_tool(
+        "attribute-join",
+        JOIN_COUNTIES,
+        EMPTY,
+        parameters={"target_field": "GEOID", "join_field": "code", "how": "inner"},
+    )
+    assert geojson["features"] == []
+
+
 def test_attribute_join_unknown_how_raises() -> None:
     with pytest.raises(ValueError, match="Unknown join type"):
         run_vector_tool(
@@ -470,6 +480,26 @@ def test_attribute_join_unknown_how_raises() -> None:
                 "how": "outer",
             },
         )
+
+
+def test_attribute_join_blank_fields_string_brings_over_all() -> None:
+    # A fields string that is only separators (e.g. ",") is treated as blank,
+    # falling back to the default (every join field except the key) rather than
+    # erroring with "none of the requested join fields".
+    geojson, _ = run_vector_tool(
+        "attribute-join",
+        JOIN_COUNTIES,
+        JOIN_STATS,
+        parameters={
+            "target_field": "GEOID",
+            "join_field": "code",
+            "how": "left",
+            "fields": " , ",
+        },
+    )
+    autauga = next(f for f in geojson["features"] if f["properties"]["GEOID"] == "01001")
+    assert autauga["properties"]["pop"] == 100
+    assert autauga["properties"]["label"] == "Autauga"
 
 
 def test_attribute_join_missing_requested_fields_raises() -> None:

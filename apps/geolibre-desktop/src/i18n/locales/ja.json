@@ -188,6 +188,7 @@
       "difference": "差分",
       "union": "結合",
       "spatialJoin": "空間結合",
+      "attributeJoin": "属性結合",
       "selectByValue": "値で選択",
       "selectByLocation": "位置で選択",
       "h3Grid": "H3 グリッドを作成",

@@ -453,13 +453,15 @@ def _attribute_join(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     for jf in join_features:
         if not isinstance(jf, dict):
             continue
-        for key in (jf.get("properties") or {}).keys():
+        for key in jf.get("properties") or {}:
             if key not in join_key_set:
                 join_key_set.add(key)
                 join_keys_order.append(key)
 
     messages: list[str] = []
-    if requested_fields is not None:
+    # An empty list (e.g. fields = "," or ", ,") means the user effectively left
+    # the field blank, so it is falsy and falls through to the default below.
+    if requested_fields:
         selected_fields = [f for f in requested_fields if f in join_key_set]
         missing = [f for f in requested_fields if f not in join_key_set]
         if missing:
@@ -474,6 +476,13 @@ def _attribute_join(geojson, overlay, parameters) -> tuple[dict, list[str]]:
         # Default: every join field except the key (which would just duplicate
         # the target key column).
         selected_fields = [k for k in join_keys_order if k != join_field]
+        # A join layer that carries only the key column transfers no attributes;
+        # warn so the user isn't left thinking a silent no-op succeeded.
+        if join_features and not selected_fields:
+            messages.append(
+                "Note: no fields to bring over "
+                "(join layer only contains the key column)"
+            )
 
     # First-match lookup: when several join rows share a key, the first wins.
     lookup: dict[str, dict] = {}
@@ -492,6 +501,9 @@ def _attribute_join(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     results = []
     matched = 0
     for feature in input_features:
+        # The input layer must be strictly valid (a malformed feature is a hard
+        # error), whereas non-dict entries in the join table are skipped above —
+        # the same lenient-join convention as _spatial_join.
         if not isinstance(feature, dict):
             raise ValueError("Each feature must be a GeoJSON Feature object")
         props = feature.get("properties") or {}
@@ -512,9 +524,9 @@ def _attribute_join(geojson, overlay, parameters) -> tuple[dict, list[str]]:
                 results.append(out)
             continue
         matched += 1
-        picked = {
-            f: (join_props[f] if f in join_props else None) for f in selected_fields
-        }
+        # .get returns None for a key absent from this particular join row,
+        # matching the client's null fill for a schemaless join layer.
+        picked = {f: join_props.get(f) for f in selected_fields}
         # Target attributes win on name collisions with brought-over fields.
         picked.update(props)
         out = {

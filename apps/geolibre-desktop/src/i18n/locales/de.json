@@ -189,6 +189,7 @@
       "difference": "Differenz",
       "union": "Vereinigung",
       "spatialJoin": "Räumliche Verknüpfung",
+      "attributeJoin": "Attributverknüpfung",
       "selectByValue": "Nach Wert auswählen",
       "selectByLocation": "Nach Lage auswählen",
       "h3Grid": "H3-Gitter erstellen",
