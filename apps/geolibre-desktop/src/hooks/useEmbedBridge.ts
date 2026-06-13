@@ -126,6 +126,7 @@ export function useEmbedBridge(
           ...getPluginManager().getProjectState(),
           manifestUrls: state.projectPlugins?.manifestUrls ?? [],
         },
+        storymap: state.storymap,
         metadata: state.metadata,
       });
     };

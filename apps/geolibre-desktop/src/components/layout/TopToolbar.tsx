@@ -559,6 +559,7 @@ export function TopToolbar({
         ...getPluginManager().getProjectState(),
         manifestUrls: pluginManifestUrls,
       },
+      storymap: state.storymap,
       metadata: state.metadata,
     });
     return {
