@@ -27,18 +27,18 @@ export function isPlaceholderLayer(layer: GeoLibreLayer): boolean {
 
 export function placeholderMessage(layer: GeoLibreLayer): string {
   switch (layer.type) {
+    // PMTiles, COG, FlatGeobuf, and GeoParquet now render natively (each creates
+    // its own `nativeLayerIds`, which short-circuits isPlaceholderLayer above).
+    // Reaching this branch therefore means native layer creation did not happen
+    // for this layer, not that the format is unimplemented.
     case "pmtiles":
-      // TODO(v0.3): PMTiles — see docs/roadmap.md
-      return "PMTiles support planned for v0.3";
+      return "This PMTiles layer could not be displayed.";
     case "cog":
-      // TODO(v0.3): Cloud Optimized GeoTIFF
-      return "COG support planned for v0.3";
+      return "This COG layer could not be displayed.";
     case "flatgeobuf":
-      // TODO(v0.3): FlatGeobuf streaming
-      return "FlatGeobuf support planned for v0.3";
+      return "This FlatGeobuf layer could not be displayed.";
     case "geoparquet":
-      // TODO(v0.3): GeoParquet via DuckDB or parquet-wasm
-      return "GeoParquet support planned for v0.3";
+      return "This GeoParquet layer could not be displayed.";
     case "duckdb-query":
       // TODO(v0.4): DuckDB Spatial query results as layers
       return "DuckDB query layers planned for v0.4";

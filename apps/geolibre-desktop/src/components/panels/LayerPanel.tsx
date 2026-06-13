@@ -1202,7 +1202,6 @@ export function LayerPanel({
       </ScrollArea>
       <Separator />
       <p className="p-2 text-[10px] text-muted-foreground">
-        {/* TODO(v0.3): Add native PMTiles, COG, and FlatGeobuf layer types */}
         Advanced formats: see docs/roadmap.md
       </p>
       <Dialog

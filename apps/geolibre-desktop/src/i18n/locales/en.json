@@ -191,6 +191,9 @@
       "spatialJoin": "Spatial join",
       "selectByValue": "Select by value",
       "selectByLocation": "Select by location",
+      "reproject": "Reproject",
+      "explode": "Explode",
+      "aggregate": "Aggregate by attribute",
       "h3Grid": "Create H3 grid",
       "h3BinPoints": "Bin points to H3"
     },

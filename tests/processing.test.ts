@@ -485,6 +485,161 @@ describe("processing registry", () => {
     assert.equal(run(empty, "intersects").features.length, 0);
   });
 
+  it("explodes multipart geometries into single-part features", () => {
+    const tool = getVectorTool("explode");
+    assert.ok(tool);
+    const multi: GeoLibreLayer = {
+      ...layer,
+      id: "multi",
+      name: "Multi",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { name: "mp" },
+            geometry: {
+              type: "MultiPolygon",
+              coordinates: [
+                [
+                  [
+                    [0, 0],
+                    [0, 1],
+                    [1, 1],
+                    [1, 0],
+                    [0, 0],
+                  ],
+                ],
+                [
+                  [
+                    [2, 2],
+                    [2, 3],
+                    [3, 3],
+                    [3, 2],
+                    [2, 2],
+                  ],
+                ],
+              ],
+            },
+          },
+          {
+            type: "Feature",
+            properties: { name: "single" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [5, 5],
+                  [5, 6],
+                  [6, 6],
+                  [6, 5],
+                  [5, 5],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+    };
+    let out: FeatureCollection | null = null;
+    tool.run({
+      layers: [multi],
+      parameters: { layer: "multi" },
+      log: () => {},
+      addResultLayer: (_n, g) => {
+        out = g;
+      },
+    });
+    // The 2-part MultiPolygon splits into 2 Polygons; the single Polygon stays.
+    assert.equal(out!.features.length, 3);
+    assert.ok(out!.features.every((f) => f.geometry.type === "Polygon"));
+    // Each part keeps its parent's attributes.
+    const names = out!.features.map((f) => f.properties?.name).sort();
+    assert.deepEqual(names, ["mp", "mp", "single"]);
+  });
+
+  it("aggregates features by attribute with a summary statistic", () => {
+    const tool = getVectorTool("aggregate");
+    assert.ok(tool);
+    const cell = (region: string, pop: number, x: number) => ({
+      type: "Feature" as const,
+      properties: { region, pop },
+      geometry: {
+        type: "Polygon" as const,
+        coordinates: [
+          [
+            [x, 0],
+            [x, 1],
+            [x + 1, 1],
+            [x + 1, 0],
+            [x, 0],
+          ],
+        ],
+      },
+    });
+    const parcels: GeoLibreLayer = {
+      ...layer,
+      id: "parcels",
+      name: "Parcels",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          cell("north", 10, 0),
+          cell("north", 30, 1),
+          cell("south", 5, 5),
+        ],
+      },
+    };
+    const run = (parameters: Record<string, unknown>): FeatureCollection => {
+      let out: FeatureCollection = { type: "FeatureCollection", features: [] };
+      tool.run({
+        layers: [parcels],
+        parameters: { layer: "parcels", group_field: "region", ...parameters },
+        log: () => {},
+        addResultLayer: (_n, g) => {
+          out = g;
+        },
+      });
+      return out;
+    };
+    const byRegion = (fc: FeatureCollection) =>
+      new Map(fc.features.map((f) => [f.properties?.region, f.properties]));
+
+    // Count: 2 north parcels, 1 south.
+    const counts = byRegion(run({ statistic: "count" }));
+    assert.equal(counts.size, 2);
+    assert.equal(counts.get("north")?.count, 2);
+    assert.equal(counts.get("south")?.count, 1);
+
+    // Sum of pop per region, output column named "<field>_<stat>".
+    const sums = byRegion(run({ statistic: "sum", stat_field: "pop" }));
+    assert.equal(sums.get("north")?.pop_sum, 40);
+    assert.equal(sums.get("south")?.pop_sum, 5);
+
+    // Mean reduces the same numeric field.
+    const means = byRegion(run({ statistic: "mean", stat_field: "pop" }));
+    assert.equal(means.get("north")?.pop_mean, 20);
+  });
+
+  it("reproject defers to the Python engine on the client", () => {
+    const tool = getVectorTool("reproject");
+    assert.ok(tool);
+    const messages: string[] = [];
+    let produced = false;
+    tool.run({
+      layers: [layer],
+      parameters: { layer: "layer-a", source_crs: "EPSG:3857" },
+      log: (m) => messages.push(m),
+      addResultLayer: () => {
+        produced = true;
+      },
+    });
+    // The client engine cannot reproject; it points the user at Sidecar/Pyodide
+    // and produces no layer.
+    assert.equal(produced, false);
+    assert.ok(messages.some((m) => m.includes("Python engine")));
+  });
+
   it("calculates and fits layer bounds", () => {
     const messages: string[] = [];
     let fittedBounds: [number, number, number, number] | null = null;

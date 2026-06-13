@@ -50,6 +50,9 @@ export type VectorToolKind =
   | "spatial-join"
   | "select-by-value"
   | "select-by-location"
+  | "reproject"
+  | "explode"
+  | "aggregate"
   | "h3-grid"
   | "h3-bin-points";
 

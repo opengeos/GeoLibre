@@ -1703,6 +1703,15 @@ export function TopToolbar({
               <DropdownMenuItem onSelect={() => setVectorToolOpen("simplify")}>
                 {t("toolbar.vectorTool.simplify")}
               </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setVectorToolOpen("reproject")}>
+                {t("toolbar.vectorTool.reproject")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setVectorToolOpen("explode")}>
+                {t("toolbar.vectorTool.explode")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setVectorToolOpen("aggregate")}>
+                {t("toolbar.vectorTool.aggregate")}
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-xs text-muted-foreground">
                 {t("toolbar.item.subGroupOverlay")}

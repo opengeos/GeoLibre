@@ -189,7 +189,9 @@ def _clip(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     left = _load_gdf(geojson, "Input layer")
     right = _load_gdf(overlay, "Overlay layer")
     clipped = gpd.clip(left, right)
-    return _to_feature_collection(clipped), [f"Clip: produced {len(clipped)} feature(s)"]
+    return _to_feature_collection(clipped), [
+        f"Clip: produced {len(clipped)} feature(s)"
+    ]
 
 
 # Spatial-join predicates exposed by the UI (a safe subset of the predicates
@@ -407,6 +409,106 @@ def _union(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     return _to_feature_collection(result), ["Union: produced 1 feature"]
 
 
+def _reproject(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+    """Reinterpret a layer's coordinates as a source CRS and transform to WGS84.
+
+    GeoLibre stores and displays every vector layer as WGS84 GeoJSON, so the
+    only reprojection that yields a *displayable* result is mapping data that is
+    really in some other CRS back to longitude/latitude. The common case is data
+    whose coordinates are in a projected CRS (e.g. Web Mercator EPSG:3857) but
+    were loaded as if they were lon/lat, so the layer lands in the wrong place.
+    This reads the input coordinates as ``source_crs`` and reprojects them to
+    WGS84 (:func:`_to_feature_collection` always normalizes the output to WGS84).
+    """
+    gpd = _import_geopandas()
+    if not geojson or not geojson.get("features"):
+        raise ValueError("Input layer has no features")
+    source_crs = str(parameters.get("source_crs", "") or "").strip()
+    if not source_crs:
+        raise ValueError("A source CRS is required (e.g. EPSG:3857)")
+    # Build the frame WITHOUT the WGS84 assumption in _load_gdf: the stored
+    # coordinates are really in `source_crs`. An unknown CRS raises here.
+    try:
+        gdf = gpd.GeoDataFrame.from_features(geojson["features"], crs=source_crs)
+    except Exception as exc:  # noqa: BLE001 - surface any CRS/parse failure as 400
+        raise ValueError(f"Invalid source CRS '{source_crs}': {exc}") from exc
+    if gdf.empty:
+        raise ValueError("Input layer has no features")
+    return (
+        _to_feature_collection(gdf),
+        [f"Reprojected {len(gdf)} feature(s) from {source_crs} to WGS84"],
+    )
+
+
+def _explode(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+    """Split multipart geometries into single-part features (multi -> single)."""
+    gdf = _load_gdf(geojson, "Input layer")
+    # index_parts=False keeps a flat index so the output is a plain list of
+    # single-part features carrying each parent's attributes (one row per part).
+    exploded = gdf.explode(index_parts=False).reset_index(drop=True)
+    return (
+        _to_feature_collection(exploded),
+        [f"Exploded {len(gdf)} feature(s) into {len(exploded)} single-part feature(s)"],
+    )
+
+
+# Summary statistics supported by Aggregate by attribute; kept in sync with the
+# client engine. "count" needs no value field; the rest reduce a numeric field.
+_AGGREGATE_STATS = {"count", "sum", "mean", "min", "max", "median"}
+
+
+def _aggregate(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+    """Dissolve geometries by an attribute and attach a per-group summary stat.
+
+    Mirrors GeoPandas ``dissolve(by=...)`` for the geometry merge plus a
+    pandas ``groupby`` for the statistic. The output has one feature per group
+    with the group field and a single statistic column (``count`` or
+    ``<field>_<stat>``); kept in sync with the client engine.
+    """
+    import pandas as pd  # noqa: PLC0415
+
+    gdf = _load_gdf(geojson, "Input layer")
+    group_field = str(parameters.get("group_field", "") or "").strip()
+    if not group_field:
+        raise ValueError("A group field is required")
+    if group_field not in gdf.columns:
+        raise ValueError(f"Group field '{group_field}' not found in layer attributes.")
+    statistic = str(parameters.get("statistic", "count") or "count")
+    if statistic not in _AGGREGATE_STATS:
+        raise ValueError(
+            f"Unknown statistic '{statistic}'. Accepted: {sorted(_AGGREGATE_STATS)}"
+        )
+    stat_field = str(parameters.get("stat_field", "") or "").strip()
+    if statistic != "count":
+        if not stat_field:
+            raise ValueError(f"A statistic field is required for '{statistic}'")
+        if stat_field not in gdf.columns:
+            raise ValueError(
+                f"Statistic field '{stat_field}' not found in layer attributes."
+            )
+    # Merge each group's geometries into one (union), keeping only geometry so the
+    # output carries just the group key and the computed statistic.
+    result = gdf.dissolve(by=group_field)[["geometry"]].copy()
+    if statistic == "count":
+        out_col = "count"
+        values = gdf.groupby(group_field).size()
+    else:
+        out_col = f"{stat_field}_{statistic}"
+        # Coerce non-numeric/empty values to NaN so they are skipped, matching the
+        # client engine (and pandas' default skipna behaviour for these reducers).
+        numeric = pd.to_numeric(gdf[stat_field], errors="coerce")
+        values = numeric.groupby(gdf[group_field]).agg(statistic)
+    result[out_col] = values
+    result = result.reset_index()
+    return (
+        _to_feature_collection(result),
+        [
+            f"Aggregated {len(gdf)} feature(s) into {len(result)} group(s) "
+            f"by '{group_field}'"
+        ],
+    )
+
+
 # tool_id -> handler(geojson, overlay, parameters) -> (feature_collection, messages)
 _DISPATCH: dict[str, Callable[..., tuple[dict, list[str]]]] = {
     "buffer": _buffer,
@@ -422,6 +524,9 @@ _DISPATCH: dict[str, Callable[..., tuple[dict, list[str]]]] = {
     "spatial-join": _spatial_join,
     "select-by-value": _select_by_value,
     "select-by-location": _select_by_location,
+    "reproject": _reproject,
+    "explode": _explode,
+    "aggregate": _aggregate,
 }
 
 

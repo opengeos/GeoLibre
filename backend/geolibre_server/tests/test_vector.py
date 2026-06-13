@@ -65,6 +65,9 @@ def test_dispatch_covers_all_tools() -> None:
         "spatial-join",
         "select-by-value",
         "select-by-location",
+        "reproject",
+        "explode",
+        "aggregate",
     }
     assert set(_DISPATCH) == expected
 

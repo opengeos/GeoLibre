@@ -171,7 +171,9 @@ def test_spatial_join_inner_drops_unmatched_input() -> None:
 
 @requires_geopandas
 def test_spatial_join_empty_join_layer_left_keeps_input() -> None:
-    geojson, _ = run_vector_tool("spatial-join", SQUARE, EMPTY, parameters={"how": "left"})
+    geojson, _ = run_vector_tool(
+        "spatial-join", SQUARE, EMPTY, parameters={"how": "left"}
+    )
     assert len(geojson["features"]) == 1
 
 
@@ -252,7 +254,9 @@ def test_select_by_value_contains_is_case_insensitive() -> None:
 def test_select_by_value_is_null_matches_null_and_missing() -> None:
     # gamma has pop=None and delta omits the key entirely; both are "empty".
     geojson, _ = run_vector_tool(
-        "select-by-value", ATTR_LAYER, parameters={"field": "pop", "operator": "is-null"}
+        "select-by-value",
+        ATTR_LAYER,
+        parameters={"field": "pop", "operator": "is-null"},
     )
     names = sorted(f["properties"]["name"] for f in geojson["features"])
     assert names == ["delta", "gamma"]
@@ -323,7 +327,9 @@ def test_select_by_value_hexlike_string_compared_as_text() -> None:
         ],
     }
     miss, _ = run_vector_tool(
-        "select-by-value", layer, parameters={"field": "code", "operator": "eq", "value": "16"}
+        "select-by-value",
+        layer,
+        parameters={"field": "code", "operator": "eq", "value": "16"},
     )
     assert miss["features"] == []
     hit, _ = run_vector_tool(
@@ -454,6 +460,145 @@ def test_select_by_location_unknown_predicate_raises() -> None:
 def test_dissolve_unknown_field_raises_value_error() -> None:
     with pytest.raises(ValueError, match="not found"):
         run_vector_tool("dissolve", SQUARE, parameters={"field": "missing"})
+
+
+# --- Reproject ---
+
+
+@requires_geopandas
+def test_reproject_web_mercator_to_wgs84() -> None:
+    # A point at the eastern edge of Web Mercator (x ≈ 20037508.34) maps to
+    # lon ≈ 180, lat ≈ 0 once reinterpreted as EPSG:3857 and sent to WGS84.
+    mercator_point = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"name": "edge"},
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [20037508.342789244, 0.0],
+                },
+            }
+        ],
+    }
+    geojson, messages = run_vector_tool(
+        "reproject", mercator_point, parameters={"source_crs": "EPSG:3857"}
+    )
+    lon, lat = geojson["features"][0]["geometry"]["coordinates"]
+    assert abs(lon - 180.0) < 1e-6
+    assert abs(lat) < 1e-6
+    assert messages and "Reprojected" in messages[0]
+
+
+@requires_geopandas
+def test_reproject_missing_source_crs_raises() -> None:
+    with pytest.raises(ValueError, match="source CRS is required"):
+        run_vector_tool("reproject", SQUARE, parameters={})
+
+
+@requires_geopandas
+def test_reproject_invalid_source_crs_raises() -> None:
+    with pytest.raises(ValueError, match="Invalid source CRS"):
+        run_vector_tool("reproject", SQUARE, parameters={"source_crs": "EPSG:bogus"})
+
+
+# --- Explode ---
+
+
+@requires_geopandas
+def test_explode_splits_multipart_into_singlepart() -> None:
+    multipolygon = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"name": "mp"},
+                "geometry": {
+                    "type": "MultiPolygon",
+                    "coordinates": [
+                        [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]],
+                        [[[2, 2], [2, 3], [3, 3], [3, 2], [2, 2]]],
+                    ],
+                },
+            }
+        ],
+    }
+    geojson, messages = run_vector_tool("explode", multipolygon)
+    assert len(geojson["features"]) == 2
+    assert all(f["geometry"]["type"] == "Polygon" for f in geojson["features"])
+    # Each part keeps the parent's attributes.
+    assert all(f["properties"]["name"] == "mp" for f in geojson["features"])
+    assert messages and "single-part" in messages[0]
+
+
+# --- Aggregate by attribute ---
+
+
+def _parcels() -> dict:
+    def cell(region: str, pop: int, x: float) -> dict:
+        return {
+            "type": "Feature",
+            "properties": {"region": region, "pop": pop},
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [[[x, 0], [x, 1], [x + 1, 1], [x + 1, 0], [x, 0]]],
+            },
+        }
+
+    return {
+        "type": "FeatureCollection",
+        "features": [cell("north", 10, 0), cell("north", 30, 1), cell("south", 5, 5)],
+    }
+
+
+@requires_geopandas
+def test_aggregate_count_per_group() -> None:
+    geojson, messages = run_vector_tool(
+        "aggregate",
+        _parcels(),
+        parameters={"group_field": "region", "statistic": "count"},
+    )
+    by_region = {
+        f["properties"]["region"]: f["properties"] for f in geojson["features"]
+    }
+    assert by_region["north"]["count"] == 2
+    assert by_region["south"]["count"] == 1
+    assert messages and "Aggregated" in messages[0]
+
+
+@requires_geopandas
+def test_aggregate_sum_names_column_field_stat() -> None:
+    geojson, _ = run_vector_tool(
+        "aggregate",
+        _parcels(),
+        parameters={"group_field": "region", "statistic": "sum", "stat_field": "pop"},
+    )
+    by_region = {
+        f["properties"]["region"]: f["properties"] for f in geojson["features"]
+    }
+    assert by_region["north"]["pop_sum"] == 40
+    assert by_region["south"]["pop_sum"] == 5
+
+
+@requires_geopandas
+def test_aggregate_requires_stat_field_for_non_count() -> None:
+    with pytest.raises(ValueError, match="statistic field is required"):
+        run_vector_tool(
+            "aggregate",
+            _parcels(),
+            parameters={"group_field": "region", "statistic": "sum"},
+        )
+
+
+@requires_geopandas
+def test_aggregate_unknown_group_field_raises() -> None:
+    with pytest.raises(ValueError, match="Group field"):
+        run_vector_tool(
+            "aggregate",
+            _parcels(),
+            parameters={"group_field": "missing", "statistic": "count"},
+        )
 
 
 @requires_geopandas
