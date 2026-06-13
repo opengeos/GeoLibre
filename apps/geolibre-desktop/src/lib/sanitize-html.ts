@@ -29,11 +29,16 @@ if (!purify.__glRelHook) {
  * @returns A sanitized HTML string safe for `dangerouslySetInnerHTML`.
  */
 export function sanitizeStoryHtml(html: string): string {
+  // Story text is prose with links/images and light formatting, so allow only
+  // that set of tags rather than the full HTML profile. This excludes forms,
+  // tables, media, and other structural elements by construction.
   return DOMPurify.sanitize(html, {
-    ADD_ATTR: ["target", "rel"],
-    USE_PROFILES: { html: true },
-    // Story text is prose/links/images; forms add no value and `target` on a
-    // form is an exfiltration vector, so drop form controls entirely.
-    FORBID_TAGS: ["form", "input", "button", "select", "option", "textarea"],
+    ALLOWED_TAGS: [
+      "a", "abbr", "b", "blockquote", "br", "code", "del", "em",
+      "h1", "h2", "h3", "h4", "h5", "h6", "hr", "i", "img", "ins", "kbd",
+      "li", "mark", "ol", "p", "pre", "s", "small", "span", "strong",
+      "sub", "sup", "u", "ul",
+    ],
+    ALLOWED_ATTR: ["href", "title", "target", "rel", "src", "alt", "width", "height"],
   });
 }

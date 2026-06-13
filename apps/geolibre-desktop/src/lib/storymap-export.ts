@@ -279,7 +279,7 @@ function renderTemplate(
 ): string {
   const configJson = jsonForScript(config, 4);
   return `<!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
     <meta charset='utf-8' />

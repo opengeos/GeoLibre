@@ -146,28 +146,30 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
         insetMarkerRef.current?.setLngLat(chapter.location.center);
       }
 
-      // Fire exit effects for every chapter being left, not just the one
-      // directly before, so quick scrolls or nav jumps over several chapters
-      // don't strand layers at an intermediate opacity.
+      const applyEffects = (changes: typeof chapter.onChapterEnter) => {
+        for (const change of changes) {
+          controller.setStoryLayerOpacity(
+            change.layerId,
+            change.opacity,
+            change.duration,
+          );
+        }
+      };
+
+      // Replay the chapters between the old and new position as if scrolled
+      // through (exit the one we leave, then enter+exit each skipped chapter in
+      // order) so a fast scroll or nav jump reaches the same layer state as
+      // stepping one chapter at a time, without firing exits for chapters whose
+      // enter never ran.
       if (previous >= 0 && previous !== index) {
         const step = previous < index ? 1 : -1;
-        for (let i = previous; i !== index; i += step) {
-          for (const change of chapters[i]?.onChapterExit ?? []) {
-            controller.setStoryLayerOpacity(
-              change.layerId,
-              change.opacity,
-              change.duration,
-            );
-          }
+        applyEffects(chapters[previous]?.onChapterExit ?? []);
+        for (let i = previous + step; i !== index; i += step) {
+          applyEffects(chapters[i]?.onChapterEnter ?? []);
+          applyEffects(chapters[i]?.onChapterExit ?? []);
         }
       }
-      for (const change of chapter.onChapterEnter) {
-        controller.setStoryLayerOpacity(
-          change.layerId,
-          change.opacity,
-          change.duration,
-        );
-      }
+      applyEffects(chapter.onChapterEnter);
     };
 
     const observer = new IntersectionObserver(
@@ -201,6 +203,8 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
       insetMapRef.current?.remove();
       insetMapRef.current = null;
       activeIndexRef.current = -1;
+      // Reset the nav highlight so the next presentation starts at chapter 1.
+      setActiveIndex(0);
       // Undo any direct opacity changes made during playback.
       controller.restoreLayerStyles();
     };
