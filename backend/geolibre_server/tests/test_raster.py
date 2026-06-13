@@ -511,24 +511,20 @@ def test_zonal_statistics_reprojects_wgs84_zones(tmp_path: Path) -> None:
     Exercises the ``zone_crs != src.crs`` -> ``transform_geom`` branch, the most
     common real-world case, which same-CRS fixtures never hit.
     """
-    from pyproj import Transformer
+    # Use rasterio's own warp.transform (no extra pyproj dependency) to convert
+    # the left/right halves from the raster CRS to WGS84, so the zone file carries
+    # lon/lat coordinates with no explicit crs member.
+    from rasterio.warp import transform as warp_transform
 
     src = _write_classes(tmp_path / "classes.tif")  # EPSG:32633
-    # Reproject the same left/right halves from the raster CRS to WGS84 so the
-    # zone file carries lon/lat coordinates with no explicit crs member.
-    to_wgs84 = Transformer.from_crs("EPSG:32633", "EPSG:4326", always_xy=True)
 
     def wgs_square(minx, miny, maxx, maxy):
-        ring = [
-            (minx, miny),
-            (maxx, miny),
-            (maxx, maxy),
-            (minx, maxy),
-            (minx, miny),
-        ]
+        xs = [minx, maxx, maxx, minx, minx]
+        ys = [miny, miny, maxy, maxy, miny]
+        lons, lats = warp_transform("EPSG:32633", "EPSG:4326", xs, ys)
         return {
             "type": "Polygon",
-            "coordinates": [[list(to_wgs84.transform(x, y)) for x, y in ring]],
+            "coordinates": [[[lon, lat] for lon, lat in zip(lons, lats)]],
         }
 
     zones = tmp_path / "zones_wgs84.geojson"
@@ -875,7 +871,6 @@ def test_mosaic_rejects_mismatched_crs(tmp_path: Path) -> None:
 @requires_rasterio
 def test_mosaic_rejects_mismatched_band_count(tmp_path: Path) -> None:
     """A 1-band raster mixed with a 3-band raster fails with a clear message."""
-    import numpy as np
     import rasterio
     from rasterio.transform import from_origin
 
