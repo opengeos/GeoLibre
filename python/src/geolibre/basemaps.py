@@ -26,6 +26,7 @@ def is_url(value: str) -> bool:
     """
     Return ``True`` if *value* appears to be a URL (has a scheme and netloc).
     """
+    parsed = urlparse(value)
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
