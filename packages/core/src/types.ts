@@ -210,6 +210,9 @@ export interface MapViewState {
   bbox?: [number, number, number, number];
 }
 
+/** Map projection the renderer uses. Mirrors the GlobeControl toggle. */
+export type MapProjection = "globe" | "mercator";
+
 export interface MapPreferences {
   restrictBounds: boolean;
   bounds: [number, number, number, number];
@@ -217,6 +220,7 @@ export interface MapPreferences {
   maxZoom: number;
   maxPitch: number;
   renderWorldCopies: boolean;
+  projection: MapProjection;
 }
 
 export interface RuntimeEnvironmentVariable {
@@ -259,6 +263,7 @@ export const DEFAULT_PROJECT_PREFERENCES: ProjectPreferences = {
     maxZoom: 24,
     maxPitch: 85,
     renderWorldCopies: true,
+    projection: "globe",
   },
   environmentVariables: [],
 };

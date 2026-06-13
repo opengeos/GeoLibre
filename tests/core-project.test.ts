@@ -89,6 +89,8 @@ describe("project parsing", () => {
     assert.equal(project.preferences.map.minZoom, 0);
     assert.equal(project.preferences.map.maxZoom, 18);
     assert.equal(project.preferences.map.renderWorldCopies, false);
+    // Projects saved before projection was persisted default to globe.
+    assert.equal(project.preferences.map.projection, "globe");
     assert.deepEqual(project.preferences.environmentVariables, [
       { key: "VALID_KEY", value: "1", enabled: true },
     ]);
@@ -103,6 +105,19 @@ describe("project parsing", () => {
     assert.deepEqual(project.plugins?.settings, {
       "maplibre-gl-swipe": { position: 50 },
     });
+  });
+
+  it("round-trips the map projection preference", () => {
+    const base = createEmptyProject("Projection");
+    const mercator = {
+      ...base,
+      preferences: {
+        ...base.preferences,
+        map: { ...base.preferences.map, projection: "mercator" as const },
+      },
+    };
+    const reloaded = parseProject(serializeProject(mercator));
+    assert.equal(reloaded.preferences.map.projection, "mercator");
   });
 
   it("normalizes a legend config, dropping malformed overrides", () => {

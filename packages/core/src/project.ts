@@ -328,6 +328,10 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
         (map as Partial<ProjectPreferences["map"]>).renderWorldCopies,
         true,
       ),
+      projection:
+        (map as Partial<ProjectPreferences["map"]>).projection === "mercator"
+          ? "mercator"
+          : "globe",
     },
     environmentVariables: Array.isArray(candidate.environmentVariables)
       ? candidate.environmentVariables

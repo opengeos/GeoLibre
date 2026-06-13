@@ -7,6 +7,7 @@ import {
 import type {
   GeoLibreLayer,
   MapPreferences,
+  MapProjection,
   MapViewState,
   StoryChapterAnimation,
   StoryChapterLocation,
@@ -268,7 +269,7 @@ export class MapController {
     // redundant jumpTo that can interrupt the initial camera.
     const handleStyleReady = () => {
       this.styleReady = true;
-      this.enforceDefaultProjection();
+      this.enforceProjection();
       this.addTerrainSource();
       this.applyBasemapVisibility();
       this.applyBasemapOpacity();
@@ -276,7 +277,7 @@ export class MapController {
     };
     this.map.on("style.load", handleStyleReady);
     this.map.once("load", handleStyleReady);
-    this.map.once("idle", () => this.enforceDefaultProjection());
+    this.map.once("idle", () => this.enforceProjection());
     this.addNavigationControl();
     this.addFullscreenControl();
     this.addGeolocateControl();
@@ -559,6 +560,9 @@ export class MapController {
     this.map.setMinZoom(minZoom);
     this.map.setMaxPitch(maxPitch);
     this.map.setRenderWorldCopies(preferences.renderWorldCopies);
+    // Reflect a changed projection preference (e.g. loading a project saved in
+    // mercator) onto the live map.
+    this.enforceProjection();
     this.map.setMaxBounds(mapBoundsForPreferences(preferences));
     this.map.setTransformConstrain(
       createMapTransformConstraint(preferences, this.map, minZoom, maxZoom),
@@ -807,13 +811,26 @@ export class MapController {
     this.syncHighlight(EMPTY_HIGHLIGHT);
   }
 
-  private enforceDefaultProjection(): void {
+  /** Current map projection, normalized to the two values we persist. */
+  readProjection(): MapProjection {
+    return this.map?.getProjection()?.type === "mercator"
+      ? "mercator"
+      : "globe";
+  }
+
+  /**
+   * Apply the projection from the active map preferences. Defaults to globe so
+   * projects saved before projection was persisted keep their previous look.
+   * Retries on the next idle if the style is not ready to accept it yet.
+   */
+  private enforceProjection(): void {
     if (!this.map) return;
+    const desired = this.mapPreferences.projection ?? DEFAULT_PROJECTION.type;
     try {
-      if (this.map.getProjection()?.type === DEFAULT_PROJECTION.type) return;
-      this.map.setProjection(DEFAULT_PROJECTION);
+      if (this.map.getProjection()?.type === desired) return;
+      this.map.setProjection({ type: desired });
     } catch {
-      this.map.once("idle", () => this.enforceDefaultProjection());
+      this.map.once("idle", () => this.enforceProjection());
     }
   }
 

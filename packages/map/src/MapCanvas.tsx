@@ -628,6 +628,21 @@ export const MapCanvas = memo(function MapCanvas({
     const updateView = (event?: { originalEvent?: unknown }) =>
       setMapView(mc.readView(), Boolean(event?.originalEvent));
     map.on("moveend", updateView);
+
+    // Persist projection toggles (the GlobeControl) into project preferences so
+    // a project reopens with the projection it was saved in. getProjection()
+    // returns the configured type, so the internal globe→mercator switch at high
+    // zoom (which also fires this event) leaves the stored preference unchanged.
+    const updateProjection = () => {
+      const projection = mc.readProjection();
+      const state = useAppStore.getState();
+      if (state.preferences.map.projection === projection) return;
+      state.setPreferences({
+        ...state.preferences,
+        map: { ...state.preferences.map, projection },
+      });
+    };
+    map.on("projectiontransition", updateProjection);
     map.on("load", () => {
       mc.waitAndSyncLayers(useAppStore.getState().layers);
       mc.setBasemapVisible(useAppStore.getState().basemapVisible);
