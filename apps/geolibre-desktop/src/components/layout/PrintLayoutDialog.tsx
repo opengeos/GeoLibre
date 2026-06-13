@@ -207,8 +207,7 @@ export function PrintLayoutDialog({
       showFooter,
       footerText,
       legend,
-      legendConfig.title,
-      legendConfig.groupByLayer,
+      legendConfig,
       captured,
     ],
   );

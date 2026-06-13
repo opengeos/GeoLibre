@@ -387,9 +387,14 @@ function drawLegend(
   const rows: { color: string; text: string }[] = [];
   for (const entry of entries) {
     if (entry.swatches.length <= 1) {
+      // Prefer the swatch's own label so a multi-class entry collapsed to one
+      // visible swatch (others hidden) keeps its class label (e.g. "High")
+      // instead of falling back to the layer name. Genuine single-symbol
+      // entries carry no swatch label, so they still show entry.name.
+      const swatch = entry.swatches[0];
       rows.push({
-        color: entry.swatches[0]?.color ?? "#999999",
-        text: entry.name,
+        color: swatch?.color ?? "#999999",
+        text: swatch?.label ?? entry.name,
       });
     } else {
       if (opts.groupByLayer) rows.push({ color: "", text: entry.name });

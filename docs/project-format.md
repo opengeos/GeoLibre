@@ -55,7 +55,7 @@ survive layer additions and removals.
   "groupByLayer": true,
   "order": ["layer-b", "layer-a"],
   "overrides": {
-    "layer-a": { "label": "Roads", "hidden": false },
+    "layer-a": { "label": "Roads" },
     "layer-b::0": { "label": "Low" },
     "layer-b::1": { "hidden": true }
   }

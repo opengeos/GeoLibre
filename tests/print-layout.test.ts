@@ -89,6 +89,40 @@ describe("drawLayout legend rendering", () => {
     assert.equal(label.textBaseline, "alphabetic");
   });
 
+  it("renders the swatch label for an entry collapsed to one visible class", () => {
+    // applyLegendConfig yields a single-swatch entry (layer name + the one
+    // un-hidden class label) when the other classes are hidden; the label, not
+    // the layer name, must be drawn.
+    const { canvas, fills } = recordingCanvas();
+    drawLayout(
+      canvas,
+      baseOptions({
+        legend: [
+          { id: "pop", name: "Population", swatches: [{ color: "#00aa00", label: "High" }] },
+        ],
+      }),
+    );
+    assert.ok(
+      fills.some((f) => f.text === "High"),
+      "expected the surviving class label to be drawn",
+    );
+    assert.ok(
+      !fills.some((f) => f.text === "Population"),
+      "expected the layer name not to replace the class label",
+    );
+  });
+
+  it("renders the layer name for a genuine single-symbol entry", () => {
+    const { canvas, fills } = recordingCanvas();
+    drawLayout(
+      canvas,
+      baseOptions({
+        legend: [{ id: "a", name: "Roads", swatches: [{ color: "#ff0000" }] }],
+      }),
+    );
+    assert.ok(fills.some((f) => f.text === "Roads"));
+  });
+
   it("left-aligns legend rows when a legend title is present", () => {
     const { canvas, fills } = recordingCanvas();
     drawLayout(canvas, baseOptions({ legendTitle: "Key" }));
