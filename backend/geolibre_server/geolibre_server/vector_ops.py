@@ -729,6 +729,13 @@ def _voronoi(geojson, overlay, parameters) -> tuple[dict, list[str]]:
         )
     if kind == "delaunay":
         triangles = triangulate(multipoint)
+        # The bbox guard above catches axis-aligned collinearity; diagonally
+        # collinear points still yield no triangle with area, so report that.
+        if not triangles:
+            raise ValueError(
+                "Could not triangulate — the points are collinear "
+                "(no triangle has area)"
+            )
         result = gpd.GeoDataFrame(geometry=triangles, crs=WGS84)
         message = (
             f"Delaunay: produced {len(triangles)} triangle(s) "
@@ -750,6 +757,10 @@ def _voronoi(geojson, overlay, parameters) -> tuple[dict, list[str]]:
         for cell in cells
         if not cell.is_empty and cell.geom_type in ("Polygon", "MultiPolygon")
     ]
+    if not cells:
+        raise ValueError(
+            "Could not build a Voronoi diagram — the points are collinear"
+        )
     result = gpd.GeoDataFrame(geometry=cells, crs=WGS84)
     message = f"Voronoi: produced {len(cells)} cell(s) from {len(points)} point(s)"
     return _to_feature_collection(result), [message]

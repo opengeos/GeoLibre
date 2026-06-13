@@ -1053,6 +1053,44 @@ describe("processing registry", () => {
     });
     assert.equal(collinearProduced, false);
     assert.ok(collinearLogs.some((m) => m.includes("collinear")));
+
+    // The guard runs before the diagram-type branch, so Delaunay rejects the
+    // same axis-aligned input...
+    const runCollinear = (
+      type: string,
+      feats: typeof points.geojson.features,
+    ): string[] => {
+      const out: string[] = [];
+      let made = false;
+      tool.run({
+        layers: [
+          {
+            ...points,
+            id: "col",
+            geojson: { type: "FeatureCollection", features: feats },
+          },
+        ],
+        parameters: { layer: "col", type },
+        log: (m) => out.push(m),
+        addResultLayer: () => {
+          made = true;
+        },
+      });
+      assert.equal(made, false);
+      return out;
+    };
+    assert.ok(
+      runCollinear("delaunay", [pt(0, 0), pt(0, 5), pt(0, 10)]).some((m) =>
+        m.includes("collinear"),
+      ),
+    );
+    // ...and diagonally collinear points (non-zero-area bbox) are caught by the
+    // empty-result guard rather than silently producing nothing.
+    assert.ok(
+      runCollinear("delaunay", [pt(0, 0), pt(1, 1), pt(2, 2)]).some((m) =>
+        m.includes("collinear"),
+      ),
+    );
   });
 
   it("calculates and fits layer bounds", () => {

@@ -932,12 +932,32 @@ def test_voronoi_unknown_type_raises() -> None:
 
 @requires_geopandas
 def test_voronoi_collinear_points_raise() -> None:
-    # Collinear points (zero-area bounds) yield a degenerate diagram; reject them.
+    # Axis-aligned collinear points (zero-area bounds) are rejected before the
+    # diagram-type branch, for both Voronoi and Delaunay.
     with pytest.raises(ValueError, match="collinear or coincident"):
         run_vector_tool(
             "voronoi",
             _points((0, 0), (0, 5), (0, 10)),
             parameters={"type": "voronoi"},
+        )
+    with pytest.raises(ValueError, match="collinear or coincident"):
+        run_vector_tool(
+            "voronoi",
+            _points((0, 0), (0, 5), (0, 10)),
+            parameters={"type": "delaunay"},
+        )
+
+
+@requires_geopandas
+def test_voronoi_diagonal_collinear_points_raise() -> None:
+    # Diagonally collinear points have a non-zero-area bbox, so they slip past the
+    # bbox guard but produce no triangle/cell with area; the empty-result guard
+    # reports them rather than returning nothing.
+    with pytest.raises(ValueError, match="collinear"):
+        run_vector_tool(
+            "voronoi",
+            _points((0, 0), (1, 1), (2, 2)),
+            parameters={"type": "delaunay"},
         )
 
 

@@ -1567,7 +1567,7 @@ export const gridTool: ProcessingAlgorithm = {
     if (!Number.isFinite(cellHeight) || cellHeight <= 0) {
       // A blank field intentionally means "match the cell width"; only note it
       // when the user actually entered an invalid (non-positive/non-numeric) value.
-      if (rawHeight !== undefined && rawHeight !== null && rawHeight !== "") {
+      if (rawHeight != null && rawHeight !== "") {
         ctx.log(
           `Note: cell height '${rawHeight}' is not a positive number; using the cell width (${cellWidth}°)`,
         );
@@ -1707,6 +1707,15 @@ export const voronoiTool: ProcessingAlgorithm = {
     }
     if (kind === "delaunay") {
       const result = tin(pointsFc);
+      // The bbox guard above catches axis-aligned collinearity; diagonally
+      // collinear points (non-zero-area bbox) still yield no triangle with area,
+      // so report that rather than adding an empty layer.
+      if (result.features.length === 0) {
+        ctx.log(
+          "Error: could not triangulate — the points are collinear (no triangle has area)",
+        );
+        return;
+      }
       ctx.log(
         `Delaunay: produced ${result.features.length} triangle(s) from ${points.length} point(s)`,
       );
@@ -1726,6 +1735,12 @@ export const voronoiTool: ProcessingAlgorithm = {
     ];
     const result = voronoiDiagram(pointsFc, { bbox: clip });
     const cells = (result.features ?? []).filter((f) => Boolean(f?.geometry));
+    if (cells.length === 0) {
+      ctx.log(
+        "Error: could not build a Voronoi diagram — the points are collinear",
+      );
+      return;
+    }
     ctx.log(
       `Voronoi: produced ${cells.length} cell(s) from ${points.length} point(s)`,
     );
