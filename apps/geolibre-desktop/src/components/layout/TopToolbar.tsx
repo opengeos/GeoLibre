@@ -281,6 +281,14 @@ const CONVERSION_COMMANDS: Array<{
     kind: "vector-to-flatgeobuf",
     titleKey: "toolbar.conversion.vectorToFlatgeobuf",
   },
+  {
+    kind: "vector-to-shapefile",
+    titleKey: "toolbar.conversion.vectorToShapefile",
+  },
+  {
+    kind: "vector-to-geopackage",
+    titleKey: "toolbar.conversion.vectorToGeopackage",
+  },
   { kind: "csv-to-geoparquet", titleKey: "toolbar.conversion.csvToGeoparquet" },
   { kind: "vector-to-pmtiles", titleKey: "toolbar.conversion.vectorToPmtiles" },
   { kind: "raster-to-cog", titleKey: "toolbar.conversion.rasterToCog" },
@@ -1734,6 +1742,16 @@ export function TopToolbar({
                 onSelect={() => setConversionOpen("vector-to-flatgeobuf")}
               >
                 {t("toolbar.conversion.vectorToFlatgeobuf")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setConversionOpen("vector-to-shapefile")}
+              >
+                {t("toolbar.conversion.vectorToShapefile")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setConversionOpen("vector-to-geopackage")}
+              >
+                {t("toolbar.conversion.vectorToGeopackage")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => setConversionOpen("csv-to-geoparquet")}

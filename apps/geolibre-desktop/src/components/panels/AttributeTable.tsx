@@ -94,6 +94,7 @@ import {
   formatAttributeValue,
   geojsonVectorSourceId,
   sanitizeExportFileName,
+  shapefileFieldWarnings,
   type VectorExportFormat,
 } from "../../lib/vector-export";
 
@@ -274,6 +275,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [drafts, setDrafts] = useState<AttributeDrafts>({});
   const [exportError, setExportError] = useState<string | null>(null);
+  const [exportWarning, setExportWarning] = useState<string | null>(null);
   const deferTableResize = isTauri();
 
   const [loadingVectorGeojson, setLoadingVectorGeojson] = useState(false);
@@ -669,11 +671,18 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
 
     try {
       setExportError(null);
+      setExportWarning(null);
       const exportGeojson = geojsonWithDrafts();
       if (!exportGeojson) return;
 
       const baseName = sanitizeExportFileName(layer.name);
       await exportVectorLayer(exportGeojson, format, baseName);
+      // Surface Shapefile field-name limitations (10-char truncation and any
+      // resulting collisions) once the export completes.
+      if (format === "shapefile") {
+        const warnings = shapefileFieldWarnings(exportGeojson);
+        setExportWarning(warnings.length > 0 ? warnings.join(" ") : null);
+      }
     } catch (error) {
       console.error("Failed to export attribute table", error);
       setExportError(
@@ -1140,6 +1149,13 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           <span className="max-w-48 truncate text-xs text-destructive">
             {exportError}
           </span>
+        ) : exportWarning ? (
+          <span
+            className="max-w-48 truncate text-xs text-amber-600"
+            title={exportWarning}
+          >
+            {exportWarning}
+          </span>
         ) : null}
         <Button
           variant={isEditing ? "secondary" : "outline"}
@@ -1319,6 +1335,12 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => void exportLayer("geoparquet")}>
               GeoParquet
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void exportLayer("geopackage")}>
+              GeoPackage
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void exportLayer("shapefile")}>
+              Shapefile (zipped)
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => void exportLayer("csv")}>
               CSV (attributes only)

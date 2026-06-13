@@ -15,11 +15,15 @@ from geolibre_server.app.conversion import (
     csv_to_geoparquet,
     raster_to_cog,
     vector_to_geoparquet,
+    vector_to_geopackage,
     vector_to_pmtiles,
+    vector_to_shapefile,
     CsvToGeoParquetRequest,
     RasterToCogRequest,
+    VectorToGeoPackageRequest,
     VectorToGeoParquetRequest,
     VectorToPmtilesRequest,
+    VectorToShapefileRequest,
 )
 from geolibre_server.app.runtime import JobState
 
@@ -209,6 +213,28 @@ def test_vector_to_pmtiles_rejects_bad_zoom_range(tmp_path: Path) -> None:
     )
     with pytest.raises(HTTPException) as excinfo:
         vector_to_pmtiles(request)
+    assert excinfo.value.status_code == 400
+
+
+def test_vector_to_shapefile_rejects_missing_input(tmp_path: Path) -> None:
+    """A missing input file is rejected before a Shapefile job starts."""
+    request = VectorToShapefileRequest(
+        input_path=str(tmp_path / "missing.geojson"),
+        output_path=str(tmp_path / "out.zip"),
+    )
+    with pytest.raises(HTTPException) as excinfo:
+        vector_to_shapefile(request)
+    assert excinfo.value.status_code == 400
+
+
+def test_vector_to_geopackage_rejects_missing_input(tmp_path: Path) -> None:
+    """A missing input file is rejected before a GeoPackage job starts."""
+    request = VectorToGeoPackageRequest(
+        input_path=str(tmp_path / "missing.geojson"),
+        output_path=str(tmp_path / "out.gpkg"),
+    )
+    with pytest.raises(HTTPException) as excinfo:
+        vector_to_geopackage(request)
     assert excinfo.value.status_code == 400
 
 

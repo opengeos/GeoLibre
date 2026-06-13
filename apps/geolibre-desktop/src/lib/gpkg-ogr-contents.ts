@@ -115,7 +115,12 @@ export function ensureGpkgFeatureCountSync(
 
 let sqlJsPromise: Promise<SqlJsStatic> | null = null;
 
-async function loadSqlJs(): Promise<SqlJsStatic> {
+/**
+ * Load the sql.js (SQLite/WASM) factory once and memoize it. Shared by the
+ * GeoPackage reader-repair path here and the GeoPackage writer; the promise is
+ * cleared on failure so a later call retries.
+ */
+export async function loadSqlJs(): Promise<SqlJsStatic> {
   sqlJsPromise ??= (async () => {
     const [{ default: initSqlJs }, { default: wasmUrl }] = await Promise.all([
       import("sql.js"),

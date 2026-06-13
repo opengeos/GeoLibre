@@ -104,6 +104,8 @@ See the [Terrain Analysis tutorial](../tutorials/terrain-analysis.md).
 | --- | --- | --- |
 | **Vector to GeoParquet** | Browser (DuckDB-WASM) | Hilbert-sorted, compressed GeoParquet. |
 | **Vector to FlatGeobuf** | Sidecar | Hilbert-sorted, cloud-optimized, spatially indexed vector. |
+| **Vector to Shapefile** | Sidecar | Hilbert-sorted, zipped ESRI Shapefile (field names truncated to 10 characters). |
+| **Vector to GeoPackage** | Sidecar | Hilbert-sorted GeoPackage for sharing with QGIS/ArcGIS. |
 | **CSV to GeoParquet** | Browser (DuckDB-WASM) | Convert a CSV with coordinates to GeoParquet. |
 | **Vector to PMTiles** | Sidecar | Build a vector tile archive. |
 | **Raster to COG** | Sidecar | Write a Cloud-Optimized GeoTIFF. |

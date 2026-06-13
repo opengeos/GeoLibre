@@ -5,8 +5,10 @@ import {
   runCsvToGeoParquet,
   runRasterToCog,
   runVectorToFlatGeobuf,
+  runVectorToGeoPackage,
   runVectorToGeoParquet,
   runVectorToPmtiles,
+  runVectorToShapefile,
   type ConversionJob,
 } from "@geolibre/processing";
 import {
@@ -164,6 +166,26 @@ const TOOL_CONFIGS: Record<ConversionToolKind, ConversionToolConfig> = {
     outputLabel: "Output FlatGeobuf file",
     outputFilters: [{ name: "FlatGeobuf", extensions: ["fgb"] }],
     defaultOutputName: "output.fgb",
+  },
+  "vector-to-shapefile": {
+    title: "Vector to Shapefile",
+    description:
+      "Convert a vector dataset to a zipped ESRI Shapefile (.shp/.shx/.dbf/.prj). Field names are truncated to 10 characters.",
+    inputLabel: "Input vector file",
+    inputFilters: [{ name: "Vector", extensions: VECTOR_INPUT_EXTENSIONS }],
+    outputLabel: "Output zipped Shapefile",
+    outputFilters: [{ name: "Zip", extensions: ["zip"] }],
+    defaultOutputName: "output.zip",
+  },
+  "vector-to-geopackage": {
+    title: "Vector to GeoPackage",
+    description:
+      "Convert a vector dataset to a GeoPackage (.gpkg) for sharing with QGIS, ArcGIS, and other GIS tools.",
+    inputLabel: "Input vector file",
+    inputFilters: [{ name: "Vector", extensions: VECTOR_INPUT_EXTENSIONS }],
+    outputLabel: "Output GeoPackage file",
+    outputFilters: [{ name: "GeoPackage", extensions: ["gpkg"] }],
+    defaultOutputName: "output.gpkg",
   },
   "csv-to-geoparquet": {
     title: "CSV to GeoParquet",
@@ -537,6 +559,10 @@ export function ConversionDialog() {
         );
       } else if (kind === "vector-to-flatgeobuf") {
         setJob(await runVectorToFlatGeobuf({ input_path, output_path }));
+      } else if (kind === "vector-to-shapefile") {
+        setJob(await runVectorToShapefile({ input_path, output_path }));
+      } else if (kind === "vector-to-geopackage") {
+        setJob(await runVectorToGeoPackage({ input_path, output_path }));
       } else if (kind === "csv-to-geoparquet") {
         if (!rowGroupValid) {
           setError("Row group size must be a positive integer.");

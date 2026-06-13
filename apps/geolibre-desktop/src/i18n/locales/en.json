@@ -188,6 +188,8 @@
     "conversion": {
       "vectorToGeoparquet": "Vector to GeoParquet",
       "vectorToFlatgeobuf": "Vector to FlatGeobuf",
+      "vectorToShapefile": "Vector to Shapefile",
+      "vectorToGeopackage": "Vector to GeoPackage",
       "csvToGeoparquet": "CSV to GeoParquet",
       "vectorToPmtiles": "Vector to PMTiles",
       "rasterToCog": "Raster to COG"

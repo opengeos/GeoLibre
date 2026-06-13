@@ -72,6 +72,7 @@ import {
   geojsonVectorSourceId,
   resolveLayerGeojson,
   sanitizeExportFileName,
+  shapefileFieldWarnings,
   type VectorExportFormat,
 } from "../../lib/vector-export";
 
@@ -102,7 +103,7 @@ const CUSTOM_REFRESH_INTERVAL_VALUE = "custom";
 const REFRESH_STATUS_DURATION_MS = 4_000;
 
 type LayerRefreshStatus = {
-  type: "refreshing" | "success" | "error";
+  type: "refreshing" | "success" | "error" | "warning";
   message: string;
 };
 
@@ -430,9 +431,19 @@ export function LayerPanel({
         );
         // A null path means the user cancelled the save dialog, so no note.
         if (savedPath !== null) {
+          // Surface Shapefile field-name limitations so renamed/merged
+          // attributes do not come as a surprise to QGIS/ArcGIS users.
+          const warnings =
+            format === "shapefile" ? shapefileFieldWarnings(geojson) : [];
           setRefreshStatuses((current) => ({
             ...current,
-            [layer.id]: { type: "success", message: "Layer exported." },
+            [layer.id]:
+              warnings.length > 0
+                ? {
+                    type: "warning",
+                    message: `Layer exported. ${warnings.join(" ")}`,
+                  }
+                : { type: "success", message: "Layer exported." },
           }));
           scheduleStatusClear(layer.id);
         }
@@ -833,7 +844,9 @@ export function LayerPanel({
                         ? "text-destructive"
                         : refreshStatus.type === "success"
                           ? "text-emerald-600"
-                          : "text-muted-foreground"
+                          : refreshStatus.type === "warning"
+                            ? "text-amber-600"
+                            : "text-muted-foreground"
                     }`}
                   >
                     {refreshStatus.message}
@@ -1059,6 +1072,22 @@ export function LayerPanel({
                               }}
                             >
                               GeoParquet
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={(e: Event) => {
+                                e.preventDefault();
+                                void handleExportLayer(layer, "geopackage");
+                              }}
+                            >
+                              GeoPackage
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={(e: Event) => {
+                                e.preventDefault();
+                                void handleExportLayer(layer, "shapefile");
+                              }}
+                            >
+                              Shapefile (zipped)
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onSelect={(e: Event) => {

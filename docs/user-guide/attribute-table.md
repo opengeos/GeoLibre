@@ -28,4 +28,4 @@ Layers produced by the [SQL Workspace](sql-workspace.md) or added from a [DuckDB
 
 ## Exporting
 
-You can export the records you are viewing. The [SQL Workspace](sql-workspace.md) additionally exports query results as CSV or GeoParquet, and the [Conversion tools](processing.md#conversion) write cloud-native formats.
+You can export the records you are viewing as GeoJSON, GeoParquet, GeoPackage, a zipped Shapefile, or CSV (attributes only). The same formats are available from a layer's context menu in the [Layers panel](layers.md). Exporting to Shapefile surfaces a warning when field names exceed the format's 10-character limit. The [SQL Workspace](sql-workspace.md) additionally exports query results as CSV or GeoParquet, and the [Conversion tools](processing.md#conversion) write cloud-native formats.

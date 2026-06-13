@@ -62,6 +62,10 @@ function exportFormatLabel(format: BinaryVectorExportFormat): string {
   switch (format) {
     case "geoparquet":
       return "GeoParquet";
+    case "geopackage":
+      return "GeoPackage";
+    case "shapefile":
+      return "Shapefile (zipped)";
   }
 }
 
@@ -69,6 +73,10 @@ function exportFileExtension(format: BinaryVectorExportFormat): string {
   switch (format) {
     case "geoparquet":
       return "parquet";
+    case "geopackage":
+      return "gpkg";
+    case "shapefile":
+      return "zip";
   }
 }
 
@@ -76,7 +84,52 @@ function exportMimeType(format: BinaryVectorExportFormat): string {
   switch (format) {
     case "geoparquet":
       return "application/vnd.apache.parquet";
+    case "geopackage":
+      return "application/geopackage+sqlite3";
+    case "shapefile":
+      return "application/zip";
   }
+}
+
+/**
+ * Field-name limitations the Shapefile format will silently apply on export.
+ * Returns a human-readable warning for any attribute name longer than 10
+ * characters (which DBF truncates) and for truncations that collide into the
+ * same name. Empty when the layer's fields are all Shapefile-safe.
+ */
+export function shapefileFieldWarnings(geojson: FeatureCollection): string[] {
+  const names = new Set<string>();
+  for (const feature of geojson.features) {
+    for (const key of Object.keys(feature.properties ?? {})) {
+      names.add(key);
+    }
+  }
+
+  const fieldNames = Array.from(names);
+  const longNames = fieldNames.filter((name) => name.length > 10);
+  const warnings: string[] = [];
+  if (longNames.length > 0) {
+    warnings.push(
+      `Shapefile truncates field names to 10 characters: ${longNames.join(", ")}`,
+    );
+  }
+
+  const byTruncated = new Map<string, string[]>();
+  for (const name of fieldNames) {
+    const key = name.slice(0, 10).toLowerCase();
+    byTruncated.set(key, [...(byTruncated.get(key) ?? []), name]);
+  }
+  const collisions = Array.from(byTruncated.values()).filter(
+    (group) => group.length > 1,
+  );
+  if (collisions.length > 0) {
+    warnings.push(
+      `Truncating to 10 characters produces duplicate field names: ${collisions
+        .map((group) => group.join(", "))
+        .join("; ")}`,
+    );
+  }
+  return warnings;
 }
 
 async function exportTextLayer(

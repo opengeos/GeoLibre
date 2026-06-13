@@ -316,6 +316,16 @@ export interface VectorToFlatGeobufRequest {
   output_path: string;
 }
 
+export interface VectorToShapefileRequest {
+  input_path: string;
+  output_path: string;
+}
+
+export interface VectorToGeoPackageRequest {
+  input_path: string;
+  output_path: string;
+}
+
 export interface CsvToGeoParquetRequest {
   input_path: string;
   output_path: string;
@@ -377,6 +387,28 @@ export async function runVectorToFlatGeobuf(
 ): Promise<ConversionJob> {
   return startConversion(
     `${baseUrl}/conversion/vector-to-flatgeobuf`,
+    request,
+    baseUrl,
+  );
+}
+
+export async function runVectorToShapefile(
+  request: VectorToShapefileRequest,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<ConversionJob> {
+  return startConversion(
+    `${baseUrl}/conversion/vector-to-shapefile`,
+    request,
+    baseUrl,
+  );
+}
+
+export async function runVectorToGeoPackage(
+  request: VectorToGeoPackageRequest,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<ConversionJob> {
+  return startConversion(
+    `${baseUrl}/conversion/vector-to-geopackage`,
     request,
     baseUrl,
   );
@@ -454,6 +486,8 @@ export async function runRasterTool(
 type ConversionRequest =
   | VectorToGeoParquetRequest
   | VectorToFlatGeobufRequest
+  | VectorToShapefileRequest
+  | VectorToGeoPackageRequest
   | CsvToGeoParquetRequest
   | VectorToPmtilesRequest
   | RasterToCogRequest

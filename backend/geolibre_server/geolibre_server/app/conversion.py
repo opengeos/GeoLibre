@@ -89,6 +89,20 @@ class VectorToFlatGeobufRequest(BaseModel):
     output_path: str
 
 
+class VectorToShapefileRequest(BaseModel):
+    """Request body for a vector to zipped Shapefile conversion."""
+
+    input_path: str
+    output_path: str
+
+
+class VectorToGeoPackageRequest(BaseModel):
+    """Request body for a vector to GeoPackage conversion."""
+
+    input_path: str
+    output_path: str
+
+
 class CsvToGeoParquetRequest(BaseModel):
     """Request body for a CSV (with lon/lat columns) to GeoParquet conversion."""
 
@@ -124,7 +138,7 @@ class RasterToCogRequest(BaseModel):
 # columns when needed so ST_Hilbert and the writer both receive a GEOMETRY
 # column. `output_format` selects the Parquet or FlatGeobuf writer.
 _VECTOR_SCRIPT = """
-import json, sys
+import glob, json, os, shutil, sys, tempfile, zipfile
 
 import duckdb
 
@@ -195,34 +209,95 @@ else:
             f"SELECT * REPLACE (ST_GeomFromWKB({quoted_geometry}) AS {quoted_geometry}) "
             f"FROM {relation}"
         )
-    # Preserve the source CRS embedded in the GEOMETRY column rather than
-    # assuming one for arbitrary vector inputs.
-    output_srs = None
+    # GeoJSON is WGS84 by spec (RFC 7946) but carries no CRS on the GEOMETRY
+    # column, so a GDAL writer would emit no .prj/SRS; tag it explicitly. Other
+    # formats keep the CRS embedded in their geometry and need no override.
+    if input_path.lower().endswith((".geojson", ".json")):
+        output_srs = "EPSG:4326"
+    else:
+        output_srs = None
 
-if output_format == "flatgeobuf":
+# GDAL-backed writers share a single COPY path; the SRS clause tags the output
+# CRS (CSV lon/lat are WGS84; other sources keep the geometry's embedded CRS).
+GDAL_DRIVERS = {
+    "flatgeobuf": "FlatGeobuf",
+    "geopackage": "GPKG",
+    "shapefile": "ESRI Shapefile",
+}
+
+def shapefile_field_warnings(column_names):
+    # The Shapefile format caps field names at 10 characters and silently
+    # truncates longer ones, which can also collapse distinct fields into one
+    # name. Surface both so attribute renames/merges on write are not a surprise.
+    long_names = [name for name in column_names if len(name) > 10]
+    messages = []
+    if long_names:
+        messages.append(
+            "Shapefile truncates field names to 10 characters: "
+            + ", ".join(long_names)
+        )
+    truncated = {}
+    for name in column_names:
+        truncated.setdefault(name[:10].lower(), []).append(name)
+    collisions = [group for group in truncated.values() if len(group) > 1]
+    if collisions:
+        messages.append(
+            "Truncating to 10 characters produces duplicate field names: "
+            + "; ".join(", ".join(group) for group in collisions)
+        )
+    return messages
+
+if output_format in GDAL_DRIVERS:
     srs_clause = f", SRS {quote(output_srs)}" if output_srs else ""
-    to_clause = f"(FORMAT GDAL, DRIVER 'FlatGeobuf'{srs_clause})"
+    to_clause = f"(FORMAT GDAL, DRIVER '{GDAL_DRIVERS[output_format]}'{srs_clause})"
 else:
     to_clause = (
         f"(FORMAT PARQUET, COMPRESSION {quote(compression)}, "
         f"ROW_GROUP_SIZE {row_group_size})"
     )
 
+warnings = []
+tmp_dir = None
+if output_format == "shapefile":
+    # source_kind for shapefile output is always "auto", so `columns` (from the
+    # DESCRIBE above) is defined here.
+    warnings = shapefile_field_warnings(
+        [name for name, *_ in columns if name != geometry_column]
+    )
+    for message in warnings:
+        print(f"Warning: {message}")
+    # The Shapefile driver writes a .shp plus .shx/.dbf/.prj/.cpg sidecars, so
+    # write into a temp directory and zip them into the requested output path.
+    tmp_dir = tempfile.mkdtemp(prefix="geolibre-shapefile-")
+    stem = os.path.splitext(os.path.basename(output_path))[0] or "layer"
+    copy_target = os.path.join(tmp_dir, stem + ".shp")
+else:
+    copy_target = output_path
+
 print(f"Converting {input_path} -> {output_path} ({output_format})")
 
-# COPY returns the number of rows written, so the feature count comes for free
-# rather than costing a second full scan of the dataset.
-copy_result = con.execute(
-    f\"\"\"
-    COPY (
-      WITH src AS ({source}),
-      b AS (SELECT ST_Extent(ST_Extent_Agg({quoted_geometry})) AS box FROM src)
-      SELECT * FROM src
-      ORDER BY ST_Hilbert({quoted_geometry}, (SELECT box FROM b))
-    ) TO {quote(output_path)} {to_clause};
-    \"\"\"
-).fetchone()
-count = copy_result[0] if copy_result else None
+try:
+    # COPY returns the number of rows written, so the feature count comes for
+    # free rather than costing a second full scan of the dataset.
+    copy_result = con.execute(
+        f\"\"\"
+        COPY (
+          WITH src AS ({source}),
+          b AS (SELECT ST_Extent(ST_Extent_Agg({quoted_geometry})) AS box FROM src)
+          SELECT * FROM src
+          ORDER BY ST_Hilbert({quoted_geometry}, (SELECT box FROM b))
+        ) TO {quote(copy_target)} {to_clause};
+        \"\"\"
+    ).fetchone()
+    count = copy_result[0] if copy_result else None
+    if output_format == "shapefile":
+        with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as archive:
+            for sidecar in sorted(glob.glob(os.path.join(tmp_dir, stem + ".*"))):
+                archive.write(sidecar, os.path.basename(sidecar))
+finally:
+    if tmp_dir:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
 print(f"Wrote {count} Hilbert-sorted features to {output_path}")
 print(
     "{marker}"
@@ -231,6 +306,7 @@ print(
             "feature_count": count,
             "geometry_column": geometry_column,
             "output_path": output_path,
+            "warnings": warnings,
         }
     )
 )
@@ -745,6 +821,40 @@ def vector_to_flatgeobuf(request: VectorToFlatGeobufRequest):
             "source_kind": "auto",
         },
         "flatgeobuf",
+    )
+
+
+@router.post("/vector-to-shapefile")
+def vector_to_shapefile(request: VectorToShapefileRequest):
+    """Convert a vector dataset to a Hilbert-sorted, zipped ESRI Shapefile."""
+    input_path, output_path = _validate_paths(request.input_path, request.output_path)
+    return _start_job(
+        "vector-to-shapefile",
+        _VECTOR_SCRIPT,
+        {
+            "input_path": input_path,
+            "output_path": output_path,
+            "output_format": "shapefile",
+            "source_kind": "auto",
+        },
+        "shapefile",
+    )
+
+
+@router.post("/vector-to-geopackage")
+def vector_to_geopackage(request: VectorToGeoPackageRequest):
+    """Convert a vector dataset to a Hilbert-sorted GeoPackage."""
+    input_path, output_path = _validate_paths(request.input_path, request.output_path)
+    return _start_job(
+        "vector-to-geopackage",
+        _VECTOR_SCRIPT,
+        {
+            "input_path": input_path,
+            "output_path": output_path,
+            "output_format": "geopackage",
+            "source_kind": "auto",
+        },
+        "geopackage",
     )
 
 

@@ -32,6 +32,8 @@ import {
 export type ConversionToolKind =
   | "vector-to-geoparquet"
   | "vector-to-flatgeobuf"
+  | "vector-to-shapefile"
+  | "vector-to-geopackage"
   | "csv-to-geoparquet"
   | "vector-to-pmtiles"
   | "raster-to-cog";
