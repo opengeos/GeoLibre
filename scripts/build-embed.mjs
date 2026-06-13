@@ -8,9 +8,9 @@
 //     of the site root.
 //  2. `GEOLIBRE_EMBED=1` disables the service worker (a SW is meaningless inside
 //     a notebook iframe). PGlite is CDN-loaded here via `GEOLIBRE_PGLITE_CDN=1`,
-//     keeping its ~25 MB PostGIS bundle out of the wheel — the web build now
-//     CDN-loads it too by default; only the offline Tauri desktop shell bundles
-//     it.
+//     keeping its ~25 MB PostGIS bundle out of the wheel — the web and desktop
+//     builds CDN-load it too by default; override with `GEOLIBRE_PGLITE_CDN=0`
+//     on any target to force-bundle it for a fully offline build.
 //
 // Output: apps/geolibre-desktop/dist-embed/ -> copied to
 // python/src/geolibre/static/app/.
