@@ -12,6 +12,10 @@ import {
   DEFAULT_PROJECT_NAME,
 } from "./project";
 import {
+  DEFAULT_LAYER_GROUP_OPACITY,
+  normalizeGroupContiguity,
+} from "./layer-groups";
+import {
   DEFAULT_BASEMAP,
   DEFAULT_LAYER_STYLE,
   DEFAULT_LEGEND_CONFIG,
@@ -19,6 +23,7 @@ import {
   DEFAULT_STORY_MAP,
   type GeoLibreLayer,
   type GeoLibreProject,
+  type LayerGroup,
   type LayerStyle,
   type LegendConfig,
   type MapViewState,
@@ -99,6 +104,7 @@ export interface AppState {
   basemapVisible: boolean;
   basemapOpacity: number;
   layers: GeoLibreLayer[];
+  layerGroups: LayerGroup[];
   preferences: ProjectPreferences;
   projectPlugins: ProjectPluginState | null;
   legend: LegendConfig;
@@ -186,6 +192,19 @@ export interface AppState {
     sourcePath?: string,
     beforeLayerId?: string | null
   ) => string;
+
+  addLayerGroup: (name?: string, layerIds?: string[]) => string;
+  removeLayerGroup: (id: string, options?: { removeChildren?: boolean }) => void;
+  renameLayerGroup: (id: string, name: string) => void;
+  setLayerGroupVisibility: (id: string, visible: boolean) => void;
+  setLayerGroupOpacity: (id: string, opacity: number) => void;
+  toggleLayerGroupCollapsed: (id: string) => void;
+  moveLayerToGroup: (
+    layerId: string,
+    groupId: string | null,
+    beforeLayerId?: string | null
+  ) => void;
+  reorderLayerGroup: (id: string, direction: "up" | "down") => void;
 }
 
 const MAX_RECENT_PROJECTS = 10;
@@ -232,6 +251,7 @@ export const useAppStore = create<AppState>()(
       basemapVisible: true,
       basemapOpacity: 1,
       layers: [],
+      layerGroups: [],
       preferences: DEFAULT_PROJECT_PREFERENCES,
       projectPlugins: null,
       legend: { ...DEFAULT_LEGEND_CONFIG },
@@ -481,6 +501,152 @@ export const useAppStore = create<AppState>()(
         return id;
       },
 
+      addLayerGroup: (name, layerIds) => {
+        const id = uuidv4();
+        set((s) => {
+          const group: LayerGroup = {
+            id,
+            name: name?.trim() || `Group ${s.layerGroups.length + 1}`,
+            collapsed: false,
+            visible: true,
+            opacity: DEFAULT_LAYER_GROUP_OPACITY,
+          };
+          const ids = new Set(layerIds ?? []);
+          const layers =
+            ids.size > 0
+              ? normalizeGroupContiguity(
+                  s.layers.map((l) =>
+                    ids.has(l.id) ? { ...l, groupId: id } : l
+                  )
+                )
+              : s.layers;
+          return {
+            layers,
+            layerGroups: [...s.layerGroups, group],
+            isDirty: true,
+          };
+        });
+        return id;
+      },
+
+      removeLayerGroup: (id, options) =>
+        set((s) => {
+          const removeChildren = options?.removeChildren ?? false;
+          const removedIds = new Set(
+            s.layers.filter((l) => l.groupId === id).map((l) => l.id)
+          );
+          const layers = removeChildren
+            ? s.layers.filter((l) => l.groupId !== id)
+            : s.layers.map((l) =>
+                l.groupId === id ? { ...l, groupId: undefined } : l
+              );
+          const selectionRemoved =
+            removeChildren &&
+            s.selectedLayerId !== null &&
+            removedIds.has(s.selectedLayerId);
+          return {
+            layers,
+            layerGroups: s.layerGroups.filter((g) => g.id !== id),
+            selectedLayerId: selectionRemoved
+              ? layers[layers.length - 1]?.id ?? null
+              : s.selectedLayerId,
+            selectedFeatureId: selectionRemoved ? null : s.selectedFeatureId,
+            identifyLayerId:
+              s.identifyLayerId !== null && removedIds.has(s.identifyLayerId)
+                ? null
+                : s.identifyLayerId,
+            isDirty: true,
+          };
+        }),
+
+      renameLayerGroup: (id, name) =>
+        set((s) => ({
+          layerGroups: s.layerGroups.map((g) =>
+            g.id === id ? { ...g, name } : g
+          ),
+          isDirty: true,
+        })),
+
+      setLayerGroupVisibility: (id, visible) =>
+        set((s) => ({
+          layerGroups: s.layerGroups.map((g) =>
+            g.id === id ? { ...g, visible } : g
+          ),
+          isDirty: true,
+        })),
+
+      setLayerGroupOpacity: (id, opacity) =>
+        set((s) => ({
+          layerGroups: s.layerGroups.map((g) =>
+            g.id === id
+              ? { ...g, opacity: Math.min(Math.max(opacity, 0), 1) }
+              : g
+          ),
+          isDirty: true,
+        })),
+
+      toggleLayerGroupCollapsed: (id) =>
+        set((s) => ({
+          layerGroups: s.layerGroups.map((g) =>
+            g.id === id ? { ...g, collapsed: !g.collapsed } : g
+          ),
+          isDirty: true,
+        })),
+
+      moveLayerToGroup: (layerId, groupId, beforeLayerId = null) =>
+        set((s) => {
+          const current = s.layers.find((l) => l.id === layerId);
+          if (!current) return s;
+          if (groupId && !s.layerGroups.some((g) => g.id === groupId)) return s;
+          const updated = { ...current, groupId: groupId ?? undefined };
+          const without = s.layers.filter((l) => l.id !== layerId);
+          let index: number;
+          if (beforeLayerId) {
+            const at = without.findIndex((l) => l.id === beforeLayerId);
+            index = at < 0 ? without.length : at;
+          } else if (groupId) {
+            // Append to the end of the target group's block (top of the group
+            // in the panel); fall back to the array end for an empty group.
+            let last = -1;
+            without.forEach((l, i) => {
+              if (l.groupId === groupId) last = i;
+            });
+            index = last < 0 ? without.length : last + 1;
+          } else {
+            index = without.length;
+          }
+          const next = [...without];
+          next.splice(index, 0, updated);
+          const normalized = normalizeGroupContiguity(next);
+          const unchanged = normalized.every(
+            (l, i) =>
+              l.id === s.layers[i]?.id && l.groupId === s.layers[i]?.groupId
+          );
+          if (unchanged) return s;
+          return { layers: normalized, isDirty: true };
+        }),
+
+      reorderLayerGroup: (id, direction) =>
+        set((s) => {
+          // Build the top-level units in store (render) order: each ungrouped
+          // layer is its own unit, and a group's contiguous members form one
+          // unit. Reordering swaps the whole group block past its neighbor.
+          const units: { key: string; layers: GeoLibreLayer[] }[] = [];
+          for (const layer of s.layers) {
+            const key = layer.groupId ?? `layer:${layer.id}`;
+            const last = units[units.length - 1];
+            if (last && last.key === key) last.layers.push(layer);
+            else units.push({ key, layers: [layer] });
+          }
+          const unitIndex = units.findIndex((u) => u.key === id);
+          if (unitIndex < 0) return s; // empty group: nothing to move
+          const target = direction === "up" ? unitIndex + 1 : unitIndex - 1;
+          if (target < 0 || target >= units.length) return s;
+          const [unit] = units.splice(unitIndex, 1);
+          units.splice(target, 0, unit);
+          return { layers: units.flatMap((u) => u.layers), isDirty: true };
+        }),
+
       newProject: (options = {}) => {
         const project = createEmptyProject(options.name, options);
         const applied = applyProjectToStore(project);
@@ -529,24 +695,27 @@ export const useAppStore = create<AppState>()(
       // is excluded, so changing them never creates a history entry.
       partialize: (s) => ({
         layers: s.layers,
+        layerGroups: s.layerGroups,
         basemapStyleUrl: s.basemapStyleUrl,
         basemapVisible: s.basemapVisible,
         basemapOpacity: s.basemapOpacity,
         storymap: s.storymap,
       }),
       // Records a history entry only when the tracked slice really changed.
-      // Basemap fields compare with ===; `layers` is compared element-by-element
-      // (Object.is per element) via shallow. Every mutating action creates new
-      // layer objects, so real changes differ; two distinct empty arrays compare
-      // equal, so resetting layers (e.g. newProject) records nothing. `storymap`
-      // is compared by reference: every authoring action creates a new object,
-      // so real edits differ while an unchanged null stays equal.
+      // Basemap fields compare with ===; `layers` and `layerGroups` are compared
+      // element-by-element (Object.is per element) via shallow. Every mutating
+      // action creates new layer/group objects, so real changes differ; two
+      // distinct empty arrays compare equal, so resetting them (e.g. newProject)
+      // records nothing. `storymap` is compared by reference: every authoring
+      // action creates a new object, so real edits differ while an unchanged
+      // null stays equal.
       equality: (a, b) =>
         a.basemapStyleUrl === b.basemapStyleUrl &&
         a.basemapVisible === b.basemapVisible &&
         a.basemapOpacity === b.basemapOpacity &&
         a.storymap === b.storymap &&
-        shallow(a.layers, b.layers),
+        shallow(a.layers, b.layers) &&
+        shallow(a.layerGroups, b.layerGroups),
       limit: 100,
       // Group rapid bursts (slider drags) into one entry; window is 0 in tests.
       // Keep the debounced wrapper so clearHistory can reset an in-flight burst.

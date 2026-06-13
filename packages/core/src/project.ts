@@ -7,6 +7,7 @@ import {
   PROJECT_VERSION,
   type GeoLibreLayer,
   type GeoLibreProject,
+  type LayerGroup,
   type LayerStyle,
   type LegendConfig,
   type LegendItemOverride,
@@ -22,6 +23,7 @@ import {
   type StoryLayerOpacityChange,
   type StoryMap,
 } from "./types";
+import { DEFAULT_LAYER_GROUP_OPACITY } from "./layer-groups";
 
 /** Placeholder name a project carries before the user names it. */
 export const DEFAULT_PROJECT_NAME = "Untitled Project";
@@ -52,6 +54,7 @@ export function createEmptyProject(
     basemapVisible: true,
     basemapOpacity: 1,
     layers: [],
+    layerGroups: [],
     styles: {},
     preferences: DEFAULT_PROJECT_PREFERENCES,
     legend: { ...DEFAULT_LEGEND_CONFIG },
@@ -68,6 +71,15 @@ export function parseProject(json: string): GeoLibreProject {
   if (!data.version || !data.name || !data.mapView) {
     throw new Error("Invalid GeoLibre project: missing required fields");
   }
+  const layerGroups = normalizeLayerGroups(data.layerGroups);
+  const validGroupIds = new Set(layerGroups.map((g) => g.id));
+  const layers = (data.layers ?? [])
+    .map(normalizeLayer)
+    .map((layer) =>
+      layer.groupId && !validGroupIds.has(layer.groupId)
+        ? { ...layer, groupId: undefined }
+        : layer,
+    );
   return {
     version: data.version,
     name: data.name,
@@ -75,7 +87,8 @@ export function parseProject(json: string): GeoLibreProject {
     basemapStyleUrl: data.basemapStyleUrl ?? DEFAULT_BASEMAP,
     basemapVisible: data.basemapVisible ?? true,
     basemapOpacity: data.basemapOpacity ?? 1,
-    layers: (data.layers ?? []).map(normalizeLayer),
+    layers,
+    ...(layerGroups.length > 0 ? { layerGroups } : {}),
     styles: data.styles ?? {},
     preferences: normalizeProjectPreferences(data.preferences),
     plugins: normalizeProjectPlugins(data.plugins) ?? undefined,
@@ -83,6 +96,39 @@ export function parseProject(json: string): GeoLibreProject {
     storymap: normalizeStoryMap(data.storymap) ?? undefined,
     metadata: data.metadata ?? {},
   };
+}
+
+/**
+ * Coerce an untrusted (possibly hand-edited) `layerGroups` array into valid
+ * {@link LayerGroup} records, dropping entries without a usable id and
+ * de-duplicating by id. Always returns an array (empty when absent).
+ *
+ * @param value Raw `layerGroups` value from the project JSON.
+ * @returns Normalized, de-duplicated group definitions.
+ */
+function normalizeLayerGroups(value: unknown): LayerGroup[] {
+  if (!Array.isArray(value)) return [];
+  const groups: LayerGroup[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const candidate = entry as Partial<LayerGroup>;
+    const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const opacity =
+      typeof candidate.opacity === "number" && Number.isFinite(candidate.opacity)
+        ? Math.min(Math.max(candidate.opacity, 0), 1)
+        : DEFAULT_LAYER_GROUP_OPACITY;
+    groups.push({
+      id,
+      name: typeof candidate.name === "string" ? candidate.name : id,
+      collapsed: candidate.collapsed === true,
+      visible: candidate.visible !== false,
+      opacity,
+    });
+  }
+  return groups;
 }
 
 /**
@@ -525,6 +571,7 @@ export function projectFromStore(state: {
   basemapVisible: boolean;
   basemapOpacity: number;
   layers: GeoLibreLayer[];
+  layerGroups?: LayerGroup[];
   preferences: ProjectPreferences;
   plugins?: ProjectPluginState | null;
   legend?: LegendConfig | null;
@@ -538,6 +585,9 @@ export function projectFromStore(state: {
   const plugins = normalizeProjectPlugins(state.plugins);
   const legend = normalizeLegendConfig(state.legend);
   const storymap = normalizeStoryMap(state.storymap);
+  // Only persist groups that still have at least one member or are explicitly
+  // kept as empty folders; normalizeLayerGroups round-trips them back.
+  const layerGroups = state.layerGroups ?? [];
   return {
     version: PROJECT_VERSION,
     name: state.projectName,
@@ -546,6 +596,7 @@ export function projectFromStore(state: {
     basemapVisible: state.basemapVisible,
     basemapOpacity: state.basemapOpacity,
     layers: state.layers.map(prepareLayerForSave),
+    ...(layerGroups.length > 0 ? { layerGroups } : {}),
     styles,
     preferences: state.preferences,
     ...(plugins ? { plugins } : {}),
@@ -618,6 +669,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
   basemapVisible: boolean;
   basemapOpacity: number;
   layers: GeoLibreLayer[];
+  layerGroups: LayerGroup[];
   preferences: ProjectPreferences;
   projectPlugins: ProjectPluginState | null;
   legend: LegendConfig;
@@ -630,13 +682,20 @@ export function applyProjectToStore(project: GeoLibreProject): {
       ? { ...DEFAULT_LAYER_STYLE, ...project.styles[layer.id] }
       : { ...DEFAULT_LAYER_STYLE, ...layer.style },
   }));
+  const layerGroups = normalizeLayerGroups(project.layerGroups);
+  const validGroupIds = new Set(layerGroups.map((g) => g.id));
   return {
     projectName: project.name,
     mapView: project.mapView,
     basemapStyleUrl: project.basemapStyleUrl,
     basemapVisible: project.basemapVisible ?? true,
     basemapOpacity: project.basemapOpacity ?? 1,
-    layers,
+    layers: layers.map((layer) =>
+      layer.groupId && !validGroupIds.has(layer.groupId)
+        ? { ...layer, groupId: undefined }
+        : layer,
+    ),
+    layerGroups,
     preferences: normalizeProjectPreferences(project.preferences),
     projectPlugins: normalizeProjectPlugins(project.plugins),
     legend: normalizeLegendConfig(project.legend) ?? { ...DEFAULT_LEGEND_CONFIG },

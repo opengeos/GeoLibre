@@ -2,13 +2,18 @@ import {
   type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
   type RefObject,
+  Fragment,
   useCallback,
   useEffect,
   useRef,
   useState,
 } from "react";
-import { isDuckDBQueryLayer, useAppStore } from "@geolibre/core";
-import type { GeoLibreLayer } from "@geolibre/core";
+import {
+  buildLayerTree,
+  isDuckDBQueryLayer,
+  useAppStore,
+} from "@geolibre/core";
+import type { GeoLibreLayer, LayerGroup } from "@geolibre/core";
 import {
   canEditLayerGeometry,
   reloadVectorControlLayer,
@@ -39,10 +44,15 @@ import {
 } from "@geolibre/ui";
 import {
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   Download,
   Eye,
   EyeOff,
+  Folder,
+  FolderMinus,
+  FolderOpen,
+  FolderPlus,
   GripVertical,
   Info,
   Layers,
@@ -164,6 +174,17 @@ export function LayerPanel({
   onMaterializeDuckDBLayer,
 }: LayerPanelProps) {
   const layers = useAppStore((s) => s.layers);
+  const layerGroups = useAppStore((s) => s.layerGroups);
+  const addLayerGroup = useAppStore((s) => s.addLayerGroup);
+  const removeLayerGroup = useAppStore((s) => s.removeLayerGroup);
+  const renameLayerGroup = useAppStore((s) => s.renameLayerGroup);
+  const setLayerGroupVisibility = useAppStore((s) => s.setLayerGroupVisibility);
+  const setLayerGroupOpacity = useAppStore((s) => s.setLayerGroupOpacity);
+  const toggleLayerGroupCollapsed = useAppStore(
+    (s) => s.toggleLayerGroupCollapsed,
+  );
+  const moveLayerToGroup = useAppStore((s) => s.moveLayerToGroup);
+  const reorderLayerGroup = useAppStore((s) => s.reorderLayerGroup);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const selectLayer = useAppStore((s) => s.selectLayer);
   const identifyLayerId = useAppStore((s) => s.identifyLayerId);
@@ -199,6 +220,11 @@ export function LayerPanel({
   const [dropTargetLayerId, setDropTargetLayerId] = useState<string | null>(
     null,
   );
+  const [dropTargetGroupId, setDropTargetGroupId] = useState<string | null>(
+    null,
+  );
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [editingGroupName, setEditingGroupName] = useState("");
   // Ending a rename (commit or cancel) clears the editing state, which
   // unmounts the focused input. React then delivers that input's onBlur (the
   // browser's native blur on the removed element) to commitRename from the
@@ -211,6 +237,21 @@ export function LayerPanel({
   const refreshTimersRef = useRef(new Map<string, LayerRefreshTimer>());
   const refreshStatusTimersRef = useRef(new Map<string, number>());
   const visibleLayers = [...layers].reverse();
+  // Group lookup + the top-most member of each group in display order. Members
+  // are kept contiguous in `layers`, so the first occurrence walking the
+  // reversed list is where the group's header is drawn inline.
+  const groupById = new Map(layerGroups.map((g) => [g.id, g] as const));
+  const firstMemberIdByGroup = new Map<string, string>();
+  for (const layer of visibleLayers) {
+    if (layer.groupId && !firstMemberIdByGroup.has(layer.groupId)) {
+      firstMemberIdByGroup.set(layer.groupId, layer.id);
+    }
+  }
+  // Empty folders have no member to anchor them, so they render pinned at the
+  // top of the panel where they are easy to drop layers into.
+  const emptyGroups = layerGroups.filter(
+    (g) => !firstMemberIdByGroup.has(g.id),
+  );
   const refreshSettingsLayer = refreshSettingsLayerId
     ? (layers.find((layer) => layer.id === refreshSettingsLayerId) ?? null)
     : null;
@@ -242,6 +283,37 @@ export function LayerPanel({
   const resetDragState = () => {
     setDraggedLayerId(null);
     setDropTargetLayerId(null);
+    setDropTargetGroupId(null);
+  };
+
+  const beginGroupRename = (group: LayerGroup) => {
+    setEditingGroupId(group.id);
+    setEditingGroupName(group.name);
+  };
+
+  const commitGroupRename = () => {
+    if (!editingGroupId) return;
+    const trimmed = editingGroupName.trim();
+    const current = layerGroups.find((g) => g.id === editingGroupId);
+    if (trimmed && current && trimmed !== current.name) {
+      renameLayerGroup(editingGroupId, trimmed);
+    }
+    setEditingGroupId(null);
+    setEditingGroupName("");
+  };
+
+  const cancelGroupRename = () => {
+    setEditingGroupId(null);
+    setEditingGroupName("");
+  };
+
+  const handleCreateGroup = () => {
+    const id = addLayerGroup();
+    // Open the new (empty) folder's name for editing right away.
+    const group = useAppStore
+      .getState()
+      .layerGroups.find((g) => g.id === id);
+    if (group) beginGroupRename(group);
   };
 
   const beginRename = (layer: GeoLibreLayer) => {
@@ -620,8 +692,220 @@ export function LayerPanel({
     }
     event.preventDefault();
     event.stopPropagation();
-    moveLayer(draggedLayerId, layers.length - 1 - displayIndex);
+    const dragged = layers.find((l) => l.id === draggedLayerId);
+    const target = layers.find((l) => l.id === layerId);
+    const draggedGroupId = dragged?.groupId ?? null;
+    const targetGroupId = target?.groupId ?? null;
+    if (draggedGroupId === targetGroupId) {
+      // Same group (or both top-level): a plain reorder keeps contiguity.
+      moveLayer(draggedLayerId, layers.length - 1 - displayIndex);
+    } else {
+      // Crossing a group boundary: adopt the target's group and land next to it.
+      moveLayerToGroup(draggedLayerId, targetGroupId, layerId);
+    }
     resetDragState();
+  };
+
+  const handleGroupHeaderDragOver = (
+    event: ReactDragEvent<HTMLDivElement>,
+    groupId: string,
+  ) => {
+    if (!draggedLayerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "move";
+    setDropTargetGroupId(groupId);
+  };
+
+  const handleGroupHeaderDrop = (
+    event: ReactDragEvent<HTMLDivElement>,
+    groupId: string,
+  ) => {
+    if (!draggedLayerId) {
+      resetDragState();
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    moveLayerToGroup(draggedLayerId, groupId);
+    resetDragState();
+  };
+
+  const renderGroupHeader = (group: LayerGroup) => {
+    const isDropTarget = dropTargetGroupId === group.id;
+    return (
+      <div
+        data-group-header=""
+        data-testid="layer-group-header"
+        data-group-name={group.name}
+        className={`rounded-md border p-2 transition-colors ${
+          isDropTarget
+            ? "border-primary bg-primary/10"
+            : "border-border bg-muted/30 hover:border-muted-foreground/40"
+        }`}
+        onDragOver={(e) => handleGroupHeaderDragOver(e, group.id)}
+        onDrop={(e) => handleGroupHeaderDrop(e, group.id)}
+        onDragEnd={resetDragState}
+      >
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            className="rounded p-0.5 text-muted-foreground hover:bg-muted"
+            title={group.collapsed ? "Expand group" : "Collapse group"}
+            aria-label={group.collapsed ? "Expand group" : "Collapse group"}
+            aria-expanded={!group.collapsed}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleLayerGroupCollapsed(group.id);
+            }}
+          >
+            {group.collapsed ? (
+              <ChevronRight className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5" />
+            )}
+          </button>
+          <button
+            type="button"
+            className="rounded p-0.5 hover:bg-muted"
+            title={group.visible ? "Hide group" : "Show group"}
+            aria-label={group.visible ? "Hide group" : "Show group"}
+            onClick={(e) => {
+              e.stopPropagation();
+              setLayerGroupVisibility(group.id, !group.visible);
+            }}
+          >
+            {group.visible ? (
+              <Eye className="h-3.5 w-3.5" />
+            ) : (
+              <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+            )}
+          </button>
+          {group.collapsed ? (
+            <Folder className="h-3.5 w-3.5 text-muted-foreground" />
+          ) : (
+            <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
+          )}
+          {editingGroupId === group.id ? (
+            <input
+              autoFocus
+              type="text"
+              className="flex-1 min-w-0 rounded border border-input bg-background px-1 py-0.5 text-sm font-semibold outline-none focus:ring-1 focus:ring-ring"
+              value={editingGroupName}
+              aria-label={`Rename ${group.name}`}
+              onChange={(e) => setEditingGroupName(e.target.value)}
+              onClick={(e: ReactMouseEvent) => e.stopPropagation()}
+              onFocus={(e) => e.currentTarget.select()}
+              onBlur={commitGroupRename}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitGroupRename();
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  cancelGroupRename();
+                }
+              }}
+            />
+          ) : (
+            <span
+              className="flex-1 truncate text-sm font-semibold"
+              title="Double-click to rename"
+              onDoubleClick={(e: ReactMouseEvent) => {
+                e.stopPropagation();
+                beginGroupRename(group);
+              }}
+            >
+              {group.name}
+            </span>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                title="Group actions"
+                aria-label="Group actions"
+                onClick={(e: ReactMouseEvent) => e.stopPropagation()}
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              onClick={(e: ReactMouseEvent) => e.stopPropagation()}
+            >
+              <DropdownMenuItem
+                onSelect={(e: Event) => {
+                  e.preventDefault();
+                  beginGroupRename(group);
+                }}
+              >
+                <Pencil className="mr-2 h-3.5 w-3.5" />
+                Rename group
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e: Event) => {
+                  e.preventDefault();
+                  reorderLayerGroup(group.id, "up");
+                }}
+              >
+                <ChevronUp className="mr-2 h-3.5 w-3.5" />
+                Move group up
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e: Event) => {
+                  e.preventDefault();
+                  reorderLayerGroup(group.id, "down");
+                }}
+              >
+                <ChevronDown className="mr-2 h-3.5 w-3.5" />
+                Move group down
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={(e: Event) => {
+                  e.preventDefault();
+                  removeLayerGroup(group.id);
+                }}
+              >
+                <FolderMinus className="mr-2 h-3.5 w-3.5" />
+                Ungroup (keep layers)
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-destructive"
+                onSelect={(e: Event) => {
+                  e.preventDefault();
+                  removeLayerGroup(group.id, { removeChildren: true });
+                }}
+              >
+                <Trash2 className="mr-2 h-3.5 w-3.5" />
+                Delete group and layers
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        {!group.collapsed && (
+          <div className="mt-2 flex items-center gap-1">
+            <span className="text-[10px] text-muted-foreground">Opacity</span>
+            <Slider
+              aria-label={`${group.name} group opacity`}
+              className="flex-1"
+              min={0}
+              max={1}
+              step={0.05}
+              value={[group.opacity]}
+              onValueChange={([v]: number[]) =>
+                setLayerGroupOpacity(group.id, v ?? group.opacity)
+              }
+              onClick={(e: ReactMouseEvent) => e.stopPropagation()}
+            />
+          </div>
+        )}
+      </div>
+    );
   };
 
   if (isCollapsed) {
@@ -669,6 +953,16 @@ export function LayerPanel({
             variant="ghost"
             size="icon"
             className="h-7 w-7"
+            title="New group"
+            aria-label="New group"
+            onClick={handleCreateGroup}
+          >
+            <FolderPlus className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
             title={allLayersVisible ? "Hide all layers" : "Show all layers"}
             aria-label={
               allLayersVisible ? "Hide all layers" : "Show all layers"
@@ -700,7 +994,17 @@ export function LayerPanel({
               No data layers. Add data from the toolbar.
             </p>
           )}
+          {emptyGroups.map((group) => (
+            <Fragment key={group.id}>{renderGroupHeader(group)}</Fragment>
+          ))}
           {visibleLayers.map((layer, displayIndex) => {
+            const group = layer.groupId
+              ? groupById.get(layer.groupId)
+              : undefined;
+            const isFirstOfGroup = group
+              ? firstMemberIdByGroup.get(group.id) === layer.id
+              : false;
+            const groupCollapsed = group?.collapsed ?? false;
             const canIdentify =
               layer.type === "geojson" ||
               isDuckDBQueryLayer(layer) ||
@@ -736,8 +1040,10 @@ export function LayerPanel({
             const refreshStatus = refreshStatuses[layer.id];
             const isRefreshing = refreshStatus?.type === "refreshing";
             return (
+              <Fragment key={layer.id}>
+                {isFirstOfGroup && group && renderGroupHeader(group)}
+                {!groupCollapsed && (
               <div
-                key={layer.id}
                 data-layer-card=""
                 data-testid="layer-row"
                 data-layer-name={layer.name}
@@ -745,7 +1051,9 @@ export function LayerPanel({
                   selectedLayerId === layer.id
                     ? "border-primary bg-primary/5"
                     : "border-border bg-background hover:border-muted-foreground/40 hover:bg-muted/20"
-                } ${draggedLayerId === layer.id ? "opacity-50" : ""}`}
+                } ${draggedLayerId === layer.id ? "opacity-50" : ""} ${
+                  group ? "ml-4" : ""
+                }`}
                 onDragOver={(e) => handleLayerDragOver(e, layer.id)}
                 onDrop={(e) => handleLayerDrop(e, layer.id, displayIndex)}
                 onDragEnd={resetDragState}
@@ -1008,6 +1316,49 @@ export function LayerPanel({
                         Rename
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={(e: Event) => {
+                          e.preventDefault();
+                          addLayerGroup(undefined, [layer.id]);
+                        }}
+                      >
+                        <FolderPlus className="mr-2 h-3.5 w-3.5" />
+                        New group from layer
+                      </DropdownMenuItem>
+                      {layerGroups.length > 0 && (
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>
+                            <Folder className="h-3.5 w-3.5" />
+                            Move to group
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent>
+                            {layerGroups.map((g) => (
+                              <DropdownMenuItem
+                                key={g.id}
+                                disabled={layer.groupId === g.id}
+                                onSelect={(e: Event) => {
+                                  e.preventDefault();
+                                  moveLayerToGroup(layer.id, g.id);
+                                }}
+                              >
+                                {g.name}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                      )}
+                      {layer.groupId && (
+                        <DropdownMenuItem
+                          onSelect={(e: Event) => {
+                            e.preventDefault();
+                            moveLayerToGroup(layer.id, null);
+                          }}
+                        >
+                          <FolderMinus className="mr-2 h-3.5 w-3.5" />
+                          Remove from group
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuSeparator />
                       {canMaterializeDuckDB && (
                         <>
                           <DropdownMenuItem
@@ -1164,6 +1515,8 @@ export function LayerPanel({
                   </Button>
                 </div>
               </div>
+                )}
+              </Fragment>
             );
           })}
           <div
