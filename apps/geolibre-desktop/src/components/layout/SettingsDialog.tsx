@@ -18,6 +18,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -34,6 +36,7 @@ import {
   Eye,
   EyeOff,
   FolderCog,
+  Languages,
   MapPinned,
   LayoutPanelTop,
   PanelLeft,
@@ -442,6 +445,30 @@ export function SettingsDialog({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-56">
           <DropdownMenuLabel>{t("settings.title")}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Languages className="mr-2 h-3.5 w-3.5" />
+              {t("language.label")}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-44">
+              <DropdownMenuRadioGroup
+                value={language}
+                onValueChange={setLanguage}
+              >
+                {languageOptions.map((option) => (
+                  <DropdownMenuRadioItem
+                    key={option.code}
+                    value={option.code}
+                  >
+                    {option.nativeName === option.englishName
+                      ? option.nativeName
+                      : `${option.nativeName} (${option.englishName})`}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onSelect={() => {
