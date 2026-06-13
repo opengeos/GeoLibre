@@ -24,7 +24,7 @@ BASEMAPS: Final[Mapping[str, str]] = MappingProxyType(
 
 def is_url(value: str) -> bool:
     """
-    Return True if the value appears to be url
+    Return ``True`` if *value* appears to be a URL (has a scheme and netloc).
     """
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
