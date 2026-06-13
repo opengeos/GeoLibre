@@ -89,7 +89,7 @@ export function parseProject(json: string): GeoLibreProject {
  * @param storymap Raw value read from the project JSON.
  * @returns A normalized story map, or null when there is nothing to keep.
  */
-function normalizeStoryMap(storymap: unknown): StoryMap | null {
+export function normalizeStoryMap(storymap: unknown): StoryMap | null {
   if (!storymap || typeof storymap !== "object") return null;
 
   const candidate = storymap as Partial<StoryMap>;

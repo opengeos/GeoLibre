@@ -387,6 +387,12 @@
     "chapterNav": "Story chapters",
     "durationLabel": "Transition (ms)",
     "dragHint": "Drag to move (double-click to reset)",
-    "resizeHint": "Drag to resize"
+    "resizeHint": "Drag to resize",
+    "import": "Import",
+    "importJson": "Import JSON…",
+    "importCsv": "Import CSV…",
+    "exportData": "Export",
+    "exportJson": "Export JSON",
+    "exportCsv": "Export CSV"
   }
 }

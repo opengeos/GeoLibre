@@ -6,8 +6,12 @@ import {
   createEmptyProject,
   createSampleStoryMap,
   parseProject,
+  parseStoryMapCsv,
+  parseStoryMapJson,
   projectFromStore,
   serializeProject,
+  serializeStoryMapCsv,
+  serializeStoryMapJson,
   useAppStore,
   type GeoLibreLayer,
 } from "@geolibre/core";
@@ -435,5 +439,55 @@ describe("story maps", () => {
       useAppStore.getState().storymap?.chapters.map((c) => c.id),
       ["c", "b"],
     );
+  });
+});
+
+describe("story map import/export", () => {
+  it("round-trips a story map through JSON", () => {
+    const sample = createSampleStoryMap();
+    const restored = parseStoryMapJson(serializeStoryMapJson(sample));
+    assert.equal(restored.title, sample.title);
+    assert.equal(restored.chapters.length, 5);
+    assert.deepEqual(
+      restored.chapters.map((c) => c.id),
+      sample.chapters.map((c) => c.id),
+    );
+  });
+
+  it("accepts a project-shaped JSON object on import", () => {
+    const sample = createSampleStoryMap();
+    const restored = parseStoryMapJson(JSON.stringify({ storymap: sample }));
+    assert.equal(restored.chapters.length, 5);
+  });
+
+  it("round-trips chapters through CSV and preserves base settings", () => {
+    const sample = createSampleStoryMap();
+    const csv = serializeStoryMapCsv(sample);
+    // Import with different base settings; CSV carries only chapters.
+    const base = { ...sample, title: "Kept Title", chapters: [] };
+    const restored = parseStoryMapCsv(csv, base);
+    assert.equal(restored.title, "Kept Title");
+    assert.equal(restored.chapters.length, 5);
+    assert.deepEqual(
+      restored.chapters[0].location.center,
+      sample.chapters[0].location.center,
+    );
+  });
+
+  it("imports hand-authored CSV with reordered columns and missing ids", () => {
+    const csv = [
+      "title,lat,lng,description,zoom",
+      "Paris,48.8566,2.3522,The City of Light,11",
+      '"Tokyo",35.6895,139.6917,"Mixes, modern and old",10',
+    ].join("\n");
+    const restored = parseStoryMapCsv(csv, null);
+    assert.equal(restored.chapters.length, 2);
+    assert.equal(restored.chapters[0].title, "Paris");
+    assert.deepEqual(restored.chapters[0].location.center, [2.3522, 48.8566]);
+    // Quoted field with a comma is preserved.
+    assert.equal(restored.chapters[1].description, "Mixes, modern and old");
+    // Missing ids are generated.
+    assert.ok(restored.chapters[0].id);
+    assert.notEqual(restored.chapters[0].id, restored.chapters[1].id);
   });
 });

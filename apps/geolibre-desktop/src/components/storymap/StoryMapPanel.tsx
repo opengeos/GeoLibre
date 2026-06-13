@@ -1,9 +1,13 @@
-import { type RefObject, useCallback, useMemo, useState } from "react";
+import { type RefObject, useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import {
   DEFAULT_STORY_MAP,
   createSampleStoryMap,
+  parseStoryMapCsv,
+  parseStoryMapJson,
+  serializeStoryMapCsv,
+  serializeStoryMapJson,
   useAppStore,
   type StoryChapter,
   type StoryChapterAlignment,
@@ -20,6 +24,10 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   Input,
   Label,
   ScrollArea,
@@ -38,6 +46,7 @@ import {
   Plus,
   Sparkles,
   Trash2,
+  Upload,
 } from "lucide-react";
 import { saveTextFileWithFallback } from "../../lib/tauri-io";
 import { buildStoryMapHtml } from "../../lib/storymap-export";
@@ -78,6 +87,8 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const importFormatRef = useRef<"json" | "csv">("json");
 
   const story: StoryMap = storymap ?? DEFAULT_STORY_MAP;
   const chapters = story.chapters;
@@ -174,7 +185,74 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
         error instanceof Error ? error.message : String(error),
       );
     }
-  }, [basemapStyleUrl, chapters.length, layers, story]);
+  }, [basemapStyleUrl, chapters.length, layers, story, t]);
+
+  const handleExportData = useCallback(
+    async (format: "json" | "csv") => {
+      setExportError(null);
+      if (chapters.length === 0) return;
+      const slug =
+        (story.title || "story-map")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "") || "story-map";
+      try {
+        const content =
+          format === "json"
+            ? serializeStoryMapJson(story)
+            : serializeStoryMapCsv(story);
+        const mimeType = format === "json" ? "application/json" : "text/csv";
+        await saveTextFileWithFallback(content, {
+          defaultName: `${slug}.${format}`,
+          filters: [{ name: format.toUpperCase(), extensions: [format] }],
+          browserTypes: [
+            {
+              description: format.toUpperCase(),
+              accept: { [mimeType]: [`.${format}`] },
+            },
+          ],
+          mimeType,
+        });
+      } catch (error) {
+        setExportError(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [chapters.length, story],
+  );
+
+  const triggerImport = useCallback((format: "json" | "csv") => {
+    importFormatRef.current = format;
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleImportFile = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      setExportError(null);
+      const file = event.target.files?.[0];
+      // Reset so selecting the same file again re-triggers change.
+      event.target.value = "";
+      if (!file) return;
+      try {
+        const text = await file.text();
+        // Detect by extension, falling back to the menu choice.
+        const isCsv = file.name.toLowerCase().endsWith(".csv")
+          ? true
+          : file.name.toLowerCase().endsWith(".json")
+            ? false
+            : importFormatRef.current === "csv";
+        const imported = isCsv
+          ? parseStoryMapCsv(text, storymap)
+          : parseStoryMapJson(text);
+        setStorymap(imported);
+        setExpandedId(null);
+      } catch (error) {
+        setExportError(
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    },
+    [setStorymap, storymap],
+  );
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -187,19 +265,61 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
           <DialogDescription>{t("storymap.description")}</DialogDescription>
         </DialogHeader>
 
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,.csv,application/json,text/csv,text/plain"
+          className="hidden"
+          onChange={(e) => void handleImportFile(e)}
+        />
+
         <ScrollArea className="flex-1 overflow-y-auto px-5 py-4">
           <StorySettings story={story} onChange={updateSettings} t={t} />
 
           <Separator className="my-4" />
 
-          <div className="mb-2 flex items-center justify-between">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-semibold">
               {t("storymap.chapters", { count: chapters.length })}
             </h3>
-            <Button size="sm" variant="outline" onClick={handleAddChapter}>
-              <Plus className="mr-1 h-4 w-4" />
-              {t("storymap.addChapter")}
-            </Button>
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="outline">
+                    <Upload className="mr-1 h-4 w-4" />
+                    {t("storymap.import")}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => triggerImport("json")}>
+                    {t("storymap.importJson")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => triggerImport("csv")}>
+                    {t("storymap.importCsv")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="outline" disabled={chapters.length === 0}>
+                    <Download className="mr-1 h-4 w-4" />
+                    {t("storymap.exportData")}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => void handleExportData("json")}>
+                    {t("storymap.exportJson")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => void handleExportData("csv")}>
+                    {t("storymap.exportCsv")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button size="sm" variant="outline" onClick={handleAddChapter}>
+                <Plus className="mr-1 h-4 w-4" />
+                {t("storymap.addChapter")}
+              </Button>
+            </div>
           </div>
 
           {chapters.length === 0 ? (

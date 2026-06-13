@@ -43,6 +43,23 @@ Use **Set to current view** to re-capture the camera after panning, zooming, or
 tilting the map, and the map-pin button to fly to a chapter while editing.
 Reorder chapters with the arrows and remove them with the trash icon.
 
+## Import and export chapters
+
+To author content outside GeoLibre, use **Import** / **Export** next to **Add
+chapter**:
+
+- **Export JSON** writes the whole story (settings and chapters); **Import JSON**
+  reads it back (a full `.geolibre.json` project file also works).
+- **Export CSV** writes one row per chapter (spreadsheet-friendly). **Import CSV**
+  replaces the chapters while keeping your current story settings.
+
+The CSV columns are `id, title, description, image, alignment, hidden, lng, lat,
+zoom, pitch, bearing, mapAnimation, rotateAnimation, onChapterEnter,
+onChapterExit`. Columns are matched by name, so order is flexible and you only
+need the ones you use; `lng`/`lat` set the chapter center, and missing ids are
+generated on import. The `onChapterEnter`/`onChapterExit` columns hold JSON and
+can be left blank when authoring by hand.
+
 ### Layer effects
 
 Under **On enter** and **On exit**, add layer fades that run as a chapter
