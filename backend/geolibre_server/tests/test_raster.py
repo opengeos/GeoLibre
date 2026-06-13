@@ -23,6 +23,7 @@ EXPECTED_TOOL_IDS = {
     "clip-mask",
     "polygonize",
     "contour",
+    "interpolate",
 }
 
 try:
@@ -214,6 +215,122 @@ def test_polygonize_writes_geojson(tmp_path: Path) -> None:
     fc = json.loads(out.read_text())
     assert fc["type"] == "FeatureCollection"
     assert len(fc["features"]) >= 1
+
+
+def _write_points(path: Path) -> Path:
+    """Write a GeoJSON point layer sampling a planar trend z = x + 2y."""
+    import numpy as np
+
+    rng = np.random.default_rng(0)
+    features = []
+    for _ in range(40):
+        x = float(rng.uniform(0, 10))
+        y = float(rng.uniform(0, 10))
+        features.append(
+            {
+                "type": "Feature",
+                "properties": {"z": x + 2 * y},
+                "geometry": {"type": "Point", "coordinates": [x, y]},
+            }
+        )
+    fc = {"type": "FeatureCollection", "features": features}
+    path.write_text(json.dumps(fc))
+    return path
+
+
+@requires_rasterio
+def test_interpolate_idw_writes_raster(tmp_path: Path) -> None:
+    import rasterio
+
+    src = _write_points(tmp_path / "points.geojson")
+    out = tmp_path / "idw.tif"
+    _run_script(
+        _RASTER_TOOL_SCRIPTS["interpolate"],
+        {
+            "input_path": str(src),
+            "output_path": str(out),
+            "field": "z",
+            "method": "idw",
+            "resolution": 0.5,
+            "power": 2,
+        },
+    )
+    with rasterio.open(out) as ds:
+        assert ds.count == 1
+        assert ds.dtypes[0] == "float32"
+        assert ds.crs == rasterio.crs.CRS.from_epsg(4326)
+        data = ds.read(1, masked=True)
+        # The surface must stay within the sampled value range [0, 30].
+        assert 0.0 <= float(data.min())
+        assert float(data.max()) <= 30.0
+
+
+@requires_rasterio
+def test_interpolate_kriging_recovers_trend(tmp_path: Path) -> None:
+    import numpy as np
+    import rasterio
+
+    src = _write_points(tmp_path / "points.geojson")
+    out = tmp_path / "kriging.tif"
+    _run_script(
+        _RASTER_TOOL_SCRIPTS["interpolate"],
+        {
+            "input_path": str(src),
+            "output_path": str(out),
+            "field": "z",
+            "method": "kriging",
+            "resolution": 0.5,
+            "variogram_model": "spherical",
+        },
+    )
+    with rasterio.open(out) as ds:
+        assert ds.count == 1
+        data = ds.read(1).astype("float64")
+        # The centre of the grid should approximate z = x + 2y ~= 5 + 10 = 15.
+        centre = data[data.shape[0] // 2, data.shape[1] // 2]
+        assert abs(centre - 15.0) < 5.0
+
+
+@requires_rasterio
+def test_interpolate_requires_numeric_field(tmp_path: Path) -> None:
+    src = tmp_path / "points.geojson"
+    src.write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "properties": {"z": "n/a"},
+                        "geometry": {"type": "Point", "coordinates": [0, 0]},
+                    }
+                ],
+            }
+        )
+    )
+    out = tmp_path / "out.tif"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            _RASTER_TOOL_SCRIPTS["interpolate"],
+            json.dumps(
+                {
+                    "input_path": str(src),
+                    "output_path": str(out),
+                    "field": "z",
+                    "method": "idw",
+                    "resolution": 1.0,
+                }
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode != 0
+    assert "at least 3 point" in (completed.stdout + completed.stderr)
+    assert not out.exists()
 
 
 @requires_contourpy

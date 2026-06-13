@@ -73,7 +73,8 @@ export type RasterToolKind =
   | "clip-extent"
   | "clip-mask"
   | "polygonize"
-  | "contour";
+  | "contour"
+  | "interpolate";
 
 export interface AppState {
   projectName: string;

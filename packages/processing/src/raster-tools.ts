@@ -13,7 +13,8 @@ export type RasterToolId =
   | "clip-extent"
   | "clip-mask"
   | "polygonize"
-  | "contour";
+  | "contour"
+  | "interpolate";
 
 /** A native file-dialog filter (Tauri `open`/`save` shape). */
 export interface FileFilter {
@@ -32,12 +33,18 @@ export interface RasterTool {
   id: RasterToolId;
   name: string;
   description: string;
-  group: "Terrain" | "Reproject" | "Clip" | "Raster to Vector";
+  group: "Terrain" | "Reproject" | "Clip" | "Raster to Vector" | "Vector to Raster";
   /** Raster output writes a GeoTIFF; vector output writes a GeoJSON. */
   outputKind: "raster" | "vector";
   defaultOutputName: string;
   inputFilters: FileFilter[];
   outputFilters: FileFilter[];
+  /**
+   * Label for the primary input file picker. Defaults to "Input raster"; tools
+   * that take a vector input (e.g. interpolation reads a point GeoJSON) override
+   * it so the dialog reads correctly.
+   */
+  inputLabel?: string;
   /** Operation knobs (not the primary input/output paths). */
   parameters: AlgorithmParameter[];
 }
@@ -49,6 +56,9 @@ const GEOTIFF_OUTPUT: FileFilter[] = [
   { name: "GeoTIFF", extensions: ["tif", "tiff"] },
 ];
 const GEOJSON_OUTPUT: FileFilter[] = [
+  { name: "GeoJSON", extensions: ["geojson", "json"] },
+];
+const GEOJSON_INPUT: FileFilter[] = [
   { name: "GeoJSON", extensions: ["geojson", "json"] },
 ];
 
@@ -312,6 +322,74 @@ export const contourTool: RasterTool = {
   ],
 };
 
+export const interpolateTool: RasterTool = {
+  id: "interpolate",
+  name: "Interpolation (IDW / Kriging)",
+  description:
+    "Interpolate a point layer's numeric attribute into a continuous raster surface using inverse distance weighting or ordinary kriging.",
+  group: "Vector to Raster",
+  outputKind: "raster",
+  defaultOutputName: "interpolated.tif",
+  inputFilters: GEOJSON_INPUT,
+  outputFilters: GEOTIFF_OUTPUT,
+  inputLabel: "Input points (GeoJSON)",
+  parameters: [
+    {
+      id: "field",
+      label: "Value field",
+      type: "string",
+      required: true,
+      description:
+        "Name of the numeric point attribute to interpolate (e.g. elevation, temperature).",
+    },
+    {
+      id: "method",
+      label: "Method",
+      type: "select",
+      default: "idw",
+      options: [
+        { value: "idw", label: "Inverse distance weighting (IDW)" },
+        { value: "kriging", label: "Ordinary kriging" },
+      ],
+    },
+    {
+      id: "resolution",
+      label: "Output pixel size",
+      type: "number",
+      required: true,
+      min: 0.000001,
+      step: 0.0001,
+      description:
+        "Cell size in the layer's CRS units (degrees for WGS84). The grid covers the points' extent.",
+    },
+    {
+      id: "power",
+      label: "IDW power",
+      type: "number",
+      default: 2,
+      min: 0.1,
+      step: 0.1,
+      visibleWhen: { param: "method", in: ["idw"] },
+      description: "Higher values give nearby points more influence.",
+    },
+    {
+      id: "variogram_model",
+      label: "Variogram model",
+      type: "select",
+      default: "spherical",
+      options: [
+        { value: "spherical", label: "Spherical" },
+        { value: "exponential", label: "Exponential" },
+        { value: "gaussian", label: "Gaussian" },
+        { value: "linear", label: "Linear" },
+      ],
+      visibleWhen: { param: "method", in: ["kriging"] },
+      description:
+        "Theoretical model fitted to the empirical semivariogram. Kriging is capped at 1500 points.",
+    },
+  ],
+};
+
 /** Every raster tool, in display order (grouped by `group`). */
 export const RASTER_TOOLS: RasterTool[] = [
   hillshadeTool,
@@ -323,6 +401,7 @@ export const RASTER_TOOLS: RasterTool[] = [
   clipMaskTool,
   polygonizeTool,
   contourTool,
+  interpolateTool,
 ];
 
 export function getRasterTool(id: string): RasterTool | undefined {

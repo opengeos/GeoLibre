@@ -221,6 +221,7 @@ The **Processing → Raster** menu opens a single Raster tools dialog with commo
 - **Reproject.** **Reproject** to a target CRS and **Resample** to a new pixel size, with selectable resampling (nearest, bilinear, cubic).
 - **Clip.** **Clip by extent** (a bounding box in the raster's CRS) and **Clip by mask layer** (a GeoJSON mask, reprojected to the raster automatically).
 - **Raster to vector.** **Polygonize** (vector polygons grouped by pixel value) and **Contour** (contour lines from an elevation model), written as GeoJSON.
+- **Vector to raster.** **Interpolation (IDW / Kriging)** turns a point layer's numeric attribute into a continuous raster surface via inverse distance weighting or ordinary kriging.
 
 The tools share the conversion sidecar job runner. Install the optional `raster` extra (rasterio is also pulled in by the `conversion` extra):
 

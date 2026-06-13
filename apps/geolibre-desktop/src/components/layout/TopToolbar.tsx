@@ -311,6 +311,7 @@ const RASTER_TOOL_COMMANDS: Array<{ kind: RasterToolKind; titleKey: ParseKeys }>
     { kind: "clip-mask", titleKey: "toolbar.rasterTool.clipMask" },
     { kind: "polygonize", titleKey: "toolbar.rasterTool.polygonize" },
     { kind: "contour", titleKey: "toolbar.rasterTool.contour" },
+    { kind: "interpolate", titleKey: "toolbar.rasterTool.interpolate" },
   ];
 
 async function openExternalLink(url: string): Promise<void> {
@@ -1834,6 +1835,15 @@ export function TopToolbar({
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setRasterToolOpen("contour")}>
                 {t("toolbar.rasterTool.contour")}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs text-muted-foreground">
+                {t("toolbar.item.subGroupVectorToRaster")}
+              </DropdownMenuLabel>
+              <DropdownMenuItem
+                onSelect={() => setRasterToolOpen("interpolate")}
+              >
+                {t("toolbar.rasterTool.interpolate")}
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>

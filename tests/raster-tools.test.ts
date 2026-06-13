@@ -12,6 +12,7 @@ const EXPECTED_IDS = [
   "clip-mask",
   "polygonize",
   "contour",
+  "interpolate",
 ];
 
 describe("raster tools registry", () => {

@@ -180,6 +180,19 @@ export function RasterToolsDialog(): ReactElement {
     [],
   );
 
+  // Whether a parameter is shown, given another parameter's value (e.g. hide
+  // the IDW power field when the kriging method is selected).
+  const isParamVisible = useCallback(
+    (param: AlgorithmParameter): boolean => {
+      const vw = param.visibleWhen;
+      if (!vw) return true;
+      const current = params[vw.param] as string | undefined;
+      if ("in" in vw) return current != null && vw.in.includes(current);
+      return current == null || !vw.notIn.includes(current);
+    },
+    [params],
+  );
+
   const pickInput = useCallback(async () => {
     const path = await pickLocalPathWithFallback({ filters: tool.inputFilters });
     if (path) setInputPath(path);
@@ -228,9 +241,10 @@ export function RasterToolsDialog(): ReactElement {
       setError("Choose an output file.");
       return;
     }
-    // Validate required operation parameters before submitting the job.
+    // Validate required operation parameters before submitting the job. A
+    // hidden parameter (e.g. an IDW knob while kriging is selected) is skipped.
     for (const param of tool.parameters) {
-      if (!param.required) continue;
+      if (!param.required || !isParamVisible(param)) continue;
       const value = params[param.id];
       if (
         value === undefined ||
@@ -256,7 +270,7 @@ export function RasterToolsDialog(): ReactElement {
         err instanceof Error ? err.message : "Could not start raster tool.",
       );
     }
-  }, [tool, inputPath, outputPath, params]);
+  }, [tool, inputPath, outputPath, params, isParamVisible]);
 
   const running = Boolean(job && RUNNING_JOB_STATUSES.has(job.status));
 
@@ -340,7 +354,8 @@ export function RasterToolsDialog(): ReactElement {
             {/* Input file */}
             <div className="grid gap-1.5">
               <Label htmlFor="raster-input" className="text-xs">
-                Input raster<span className="text-destructive"> *</span>
+                {tool.inputLabel ?? "Input raster"}
+                <span className="text-destructive"> *</span>
               </Label>
               <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2">
                 <Input
@@ -386,7 +401,7 @@ export function RasterToolsDialog(): ReactElement {
             </div>
 
             {/* Operation parameters */}
-            {tool.parameters.map((param) => (
+            {tool.parameters.filter(isParamVisible).map((param) => (
               <RasterParameterField
                 key={param.id}
                 param={param}

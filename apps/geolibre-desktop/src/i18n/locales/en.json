@@ -209,7 +209,8 @@
       "clipExtent": "Clip by extent",
       "clipMask": "Clip by mask layer",
       "polygonize": "Polygonize",
-      "contour": "Contour"
+      "contour": "Contour",
+      "interpolate": "Interpolation (IDW / Kriging)"
     },
     "mapControl": {
       "navigation": "Navigation",
@@ -272,6 +273,7 @@
       "subGroupReproject": "Reproject",
       "subGroupClip": "Clip",
       "subGroupRasterToVector": "Raster to Vector",
+      "subGroupVectorToRaster": "Vector to Raster",
       "mapControls": "Map controls",
       "atmosphereEffects": "Atmosphere Effects",
       "directions": "Directions",

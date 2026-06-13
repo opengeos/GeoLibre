@@ -87,6 +87,12 @@ See the [Vector Analysis tutorial](../tutorials/vector-analysis.md).
 | **Polygonize** | Convert a raster band into vector polygons grouped by pixel value. |
 | **Contour** | Generate contour lines from an elevation model. |
 
+**Vector to Raster**
+
+| Tool | Description |
+| --- | --- |
+| **Interpolation (IDW / Kriging)** | Interpolate a point layer's numeric attribute into a continuous raster surface using inverse distance weighting or ordinary kriging. The output grid spans the points' extent at the chosen pixel size, in the layer's CRS. |
+
 See the [Terrain Analysis tutorial](../tutorials/terrain-analysis.md).
 
 ## Conversion
