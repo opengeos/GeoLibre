@@ -73,7 +73,9 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
       id: layer.id,
       geojson: layer.geojson,
       layerSpec,
-      layerOpacity: layer.opacity,
+      // Hidden layers export fully transparent so the export matches what
+      // GeoLibre renders (the opacity slider value alone ignores visibility).
+      layerOpacity: layer.visible ? layer.opacity : 0,
       // Layers a chapter fades in start hidden; exit-only and unreferenced
       // layers keep their natural opacity so they are visible until faded out.
       fadesIn: referencedOnEnter.has(layer.id),
@@ -165,12 +167,14 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
 /**
  * Serialize a value to JSON for embedding inside an inline `<script>` block.
  *
- * Escapes `</` so a string containing `</script>` (or any other closing tag)
- * cannot terminate the script element early, which would let crafted project
- * content inject markup into the exported page.
+ * Escapes `</` and `<!--` so a string containing `</script>` or an HTML comment
+ * opener cannot terminate the script element early or start a comment, which
+ * would let crafted project content inject markup into the exported page.
  */
 function jsonForScript(value: unknown, space?: number): string {
-  return JSON.stringify(value, null, space).replace(/<\//g, "<\\/");
+  return JSON.stringify(value, null, space)
+    .replace(/<\//g, "<\\/")
+    .replace(/<!--/g, "<\\!--");
 }
 
 function opacityProperty(type: string): string | null {
@@ -347,7 +351,7 @@ function renderTemplate(
         var layerTypes = {
             'fill': ['fill-opacity'],
             'line': ['line-opacity'],
-            'circle': ['circle-opacity', 'circle-stroke-opacity'],
+            'circle': ['circle-opacity'],
             'symbol': ['icon-opacity', 'text-opacity'],
             'raster': ['raster-opacity'],
             'fill-extrusion': ['fill-extrusion-opacity'],
@@ -493,7 +497,7 @@ function renderTemplate(
         map.on('load', function () {
 ${inlineLayerScript}
 
-            scroller.setup({ step: '.step', offset: 0.5, progress: true })
+            scroller.setup({ step: '.step', offset: 0.5 })
                 .onStepEnter(function (response) {
                     var idx = config.chapters.findIndex(function (c) { return c.id === response.element.id; });
                     var chapter = config.chapters[idx];

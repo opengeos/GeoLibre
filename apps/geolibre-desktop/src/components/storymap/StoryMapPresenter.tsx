@@ -31,8 +31,9 @@ const ALIGNMENT_CLASS: Record<StoryChapter["alignment"], string> = {
 const INSET_POSITION_CLASS: Record<string, string> = {
   "top-left": "top-3 left-3",
   "top-right": "top-3 right-3",
-  "bottom-left": "bottom-3 left-3",
-  "bottom-right": "bottom-3 right-3",
+  // Raised so the inset clears the map's scale control in the bottom corners.
+  "bottom-left": "bottom-10 left-3",
+  "bottom-right": "bottom-10 right-3",
 };
 
 /**
@@ -104,6 +105,8 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
       }
     | null
   >(null);
+  // Detaches the active gesture's window listeners; set while a drag is live.
+  const gestureCleanupRef = useRef<(() => void) | null>(null);
 
   const startGesture = useCallback(
     (
@@ -180,15 +183,22 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
         setCardLayouts((prev) => ({ ...prev, [g.id]: { ...g.base, dx, dy } }));
       };
       const onUp = () => {
+        gestureCleanupRef.current = null;
         gestureRef.current = null;
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
       };
+      // Remembered so an unmount mid-drag (e.g. Exit while dragging) can detach
+      // the window listeners instead of leaking them until the next pointerup.
+      gestureCleanupRef.current = onUp;
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
     },
     [cardLayouts, navOpen],
   );
+
+  // Detach any in-flight drag/resize listeners when the presenter unmounts.
+  useEffect(() => () => gestureCleanupRef.current?.(), []);
 
   const resetCard = useCallback((id: string) => {
     setCardLayouts((prev) => {
@@ -213,6 +223,8 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
     const container = scrollRef.current;
     const story = storymapRef.current;
     if (!controller || !map || !container || !story) return;
+    // Frozen snapshot for this presentation run (edits are blocked while
+    // presenting), shadowing the outer memoized `chapters` deliberately.
     const chapters = story.chapters;
 
     const steps = Array.from(

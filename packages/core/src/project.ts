@@ -198,9 +198,11 @@ function normalizeStoryChapter(chapter: unknown): StoryChapter | null {
         clampCoordinate(Number(center[0]), -180, 180),
         clampCoordinate(Number(center[1]), -90, 90),
       ],
-      zoom: normalizeNumber(location?.zoom, 2),
-      pitch: normalizeNumber(location?.pitch, 0),
-      bearing: normalizeNumber(location?.bearing, 0),
+      // Clamp to MapLibre's valid ranges so a stored value matches the camera
+      // that actually lands (bearing wraps to 0-360).
+      zoom: clamp(normalizeNumber(location?.zoom, 2), 0, 24),
+      pitch: clamp(normalizeNumber(location?.pitch, 0), 0, 85),
+      bearing: ((normalizeNumber(location?.bearing, 0) % 360) + 360) % 360,
     },
     mapAnimation: STORY_ANIMATIONS.has(
       candidate.mapAnimation as StoryChapterAnimation,
@@ -225,7 +227,7 @@ function normalizeOpacityChanges(value: unknown): StoryLayerOpacityChange[] {
       return {
         ...(id ? { id } : {}),
         layerId,
-        opacity: clampCoordinate(normalizeNumber(candidate.opacity, 1), 0, 1),
+        opacity: clamp(normalizeNumber(candidate.opacity, 1), 0, 1),
         ...(Number.isFinite(candidate.duration)
           ? { duration: Math.max(0, Number(candidate.duration)) }
           : {}),
@@ -309,8 +311,12 @@ function normalizeNumber(value: unknown, fallback: number): number {
   return Number.isFinite(value) ? Number(value) : fallback;
 }
 
-function clampCoordinate(value: number, min: number, max: number): number {
+function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function clampCoordinate(value: number, min: number, max: number): number {
+  return clamp(value, min, max);
 }
 
 function normalizeBoolean(value: unknown, fallback: boolean): boolean {

@@ -355,6 +355,29 @@ describe("story maps", () => {
     assert.equal(project.storymap.chapters[0].onChapterEnter[0].duration, 0);
   });
 
+  it("clamps chapter zoom/pitch and wraps bearing into range", () => {
+    const project = parseProject(
+      JSON.stringify({
+        version: "0.1.0",
+        name: "Story",
+        mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+        storymap: {
+          chapters: [
+            chapter({
+              id: "a",
+              location: { center: [10, 20], zoom: 999, pitch: 200, bearing: -43.2 },
+            }),
+          ],
+        },
+      }),
+    );
+    const loc = project.storymap?.chapters[0].location;
+    assert.equal(loc?.zoom, 24);
+    assert.equal(loc?.pitch, 85);
+    // -43.2 wraps to an equivalent positive bearing rather than clamping to 0.
+    assert.ok(Math.abs((loc?.bearing ?? 0) - 316.8) < 1e-9);
+  });
+
   it("omits a wholly-default empty story map but keeps settings-only stories", () => {
     const base = {
       version: "0.1.0",

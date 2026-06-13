@@ -774,13 +774,15 @@ function LayerEffectsEditor({
           <Input
             type="number"
             min={0}
+            max={60000}
             step={100}
             className="h-7 w-20 shrink-0"
             aria-label={t("storymap.durationLabel")}
             title={t("storymap.durationLabel")}
             value={change.duration ?? 0}
             onChange={(e) => {
-              const ms = Math.max(0, Number(e.target.value) || 0);
+              // Cap at 60s so a typo can't produce a multi-minute transition.
+              const ms = Math.min(60000, Math.max(0, Number(e.target.value) || 0));
               update(i, { duration: ms });
             }}
           />
