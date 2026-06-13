@@ -2,12 +2,17 @@ import DOMPurify from "dompurify";
 
 // Harden links that open in a new tab so the opened page cannot reach back
 // through `window.opener`. DOMPurify passes `target`/`rel` through but does not
-// add `rel`, so enforce it ourselves.
-DOMPurify.addHook("afterSanitizeAttributes", (node) => {
-  if (node.tagName === "A" && node.getAttribute("target") === "_blank") {
-    node.setAttribute("rel", "noopener noreferrer");
-  }
-});
+// add `rel`, so enforce it ourselves. The flag lives on the DOMPurify singleton
+// so a re-evaluated module (HMR, dynamic import) cannot register it twice.
+const purify = DOMPurify as typeof DOMPurify & { __glRelHook?: boolean };
+if (!purify.__glRelHook) {
+  purify.addHook("afterSanitizeAttributes", (node) => {
+    if (node.tagName === "A" && node.getAttribute("target") === "_blank") {
+      node.setAttribute("rel", "noopener noreferrer");
+    }
+  });
+  purify.__glRelHook = true;
+}
 
 /**
  * Sanitize a fragment of user-authored HTML for safe rendering.

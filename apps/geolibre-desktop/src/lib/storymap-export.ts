@@ -5,6 +5,7 @@ import {
   type StoryMap,
 } from "@geolibre/core";
 import { sanitizeStoryHtml } from "./sanitize-html";
+import { STORY_INSET_STYLE_URL } from "./storymap-constants";
 
 export interface StoryMapExportOptions {
   storymap: StoryMap;
@@ -21,9 +22,6 @@ interface InlineLayerExport {
   /** Opacity paint property to drive with story chapter transitions. */
   initialOpacity: number;
 }
-
-const INSET_STYLE_URL =
-  "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
 
 /**
  * Build a self-contained MapLibre storytelling HTML document for a story map.
@@ -99,7 +97,7 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
     markerColor: storymap.markerColor,
     inset: storymap.inset,
     insetPosition: storymap.insetPosition,
-    insetStyle: INSET_STYLE_URL,
+    insetStyle: STORY_INSET_STYLE_URL,
     insetZoom: 1,
     theme: storymap.theme,
     auto: false,
@@ -319,16 +317,16 @@ function renderTemplate(
         };
         var alignments = { 'left': 'lefty', 'center': 'centered', 'right': 'righty', 'full': 'fully' };
 
-        function getLayerPaintType(layer) { return layerTypes[map.getLayer(layer).type]; }
+        function getLayerPaintType(layer) { var sl = map.getLayer(layer); return sl ? layerTypes[sl.type] : null; }
         function setLayerOpacity(layer) {
+            if (!map.getLayer(layer.layer)) return;
             var paintProps = getLayerPaintType(layer.layer);
             if (!paintProps) return;
             paintProps.forEach(function (prop) {
-                var options = {};
                 if (layer.duration) {
                     map.setPaintProperty(layer.layer, prop + '-transition', { duration: layer.duration });
                 }
-                map.setPaintProperty(layer.layer, prop, layer.opacity, options);
+                map.setPaintProperty(layer.layer, prop, layer.opacity);
             });
         }
 
