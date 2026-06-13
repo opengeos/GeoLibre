@@ -295,12 +295,18 @@ export interface LegendConfig {
   overrides: Record<string, LegendItemOverride>;
 }
 
-export const DEFAULT_LEGEND_CONFIG: LegendConfig = {
+// Frozen so the shared singleton can be safely spread (`{ ...DEFAULT_LEGEND_CONFIG }`)
+// at call sites without risk of a future in-place mutation corrupting the nested
+// `order`/`overrides` references that the spread keeps sharing.
+export const DEFAULT_LEGEND_CONFIG: LegendConfig = Object.freeze({
   title: "Legend",
   groupByLayer: true,
-  order: [],
-  overrides: {},
-};
+  order: Object.freeze([] as string[]) as string[],
+  overrides: Object.freeze({} as Record<string, LegendItemOverride>) as Record<
+    string,
+    LegendItemOverride
+  >,
+});
 
 export interface GeoLibreProject {
   version: string;

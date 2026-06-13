@@ -114,6 +114,7 @@ describe("project parsing", () => {
             a: { label: "Renamed", hidden: true },
             b: { hidden: "yes", label: 3 },
             c: { hidden: false },
+            d: { label: "   " },
             "": { hidden: true },
           },
         },

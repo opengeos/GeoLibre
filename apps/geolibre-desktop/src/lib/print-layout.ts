@@ -421,14 +421,17 @@ function drawLegend(
   ctx.stroke();
 
   // Rows advance by rowH before each draw, so seed cy at the top padding; with a
-  // title, draw it first and leave a gap before the first row.
+  // title, draw it first and leave a gap before the first row. Set the text
+  // alignment unconditionally: drawLayout leaves textAlign/textBaseline at
+  // center/middle from the title/footer blocks, so an empty legend title must
+  // still reset them or the row labels render mis-anchored.
   let cy = y + pad;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
   if (hasTitle) {
     cy += titleSize;
     ctx.fillStyle = INK;
     ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "alphabetic";
     ctx.fillText(title, x + pad, cy);
     cy += unit;
   }

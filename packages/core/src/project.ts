@@ -96,7 +96,11 @@ function normalizeLegendConfig(legend: unknown): LegendConfig | undefined {
       if (!key.trim() || !value || typeof value !== "object") continue;
       const override = value as Partial<LegendItemOverride>;
       const normalized: LegendItemOverride = {};
-      if (typeof override.label === "string") normalized.label = override.label;
+      // Mirror setLegendItemLabel / renderedLabel: a blank or whitespace-only
+      // label is treated as "no override", so don't persist it.
+      if (typeof override.label === "string" && override.label.trim() !== "") {
+        normalized.label = override.label;
+      }
       // Only the truthy hidden flag is meaningful; `hidden: false` is the
       // default, so dropping it keeps round-tripped projects from accumulating
       // no-op overrides (matches what the UI mutations store).
