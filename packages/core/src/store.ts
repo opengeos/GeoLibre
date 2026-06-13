@@ -236,6 +236,17 @@ function normalizeRecentProjects(
   return normalized.slice(0, MAX_RECENT_PROJECTS);
 }
 
+/**
+ * Pick the first `Group N` name not already taken, so default names stay unique
+ * even after groups are deleted (a plain count would reuse a freed number).
+ */
+function nextDefaultGroupName(groups: LayerGroup[]): string {
+  const existing = new Set(groups.map((g) => g.name));
+  let n = groups.length + 1;
+  while (existing.has(`Group ${n}`)) n++;
+  return `Group ${n}`;
+}
+
 /** Cancels the active history coalesce window (assigned by zundo's handleSet). */
 let cancelHistoryCoalesce: () => void = () => {};
 
@@ -506,7 +517,7 @@ export const useAppStore = create<AppState>()(
         set((s) => {
           const group: LayerGroup = {
             id,
-            name: name?.trim() || `Group ${s.layerGroups.length + 1}`,
+            name: name?.trim() || nextDefaultGroupName(s.layerGroups),
             collapsed: false,
             visible: true,
             opacity: DEFAULT_LAYER_GROUP_OPACITY,

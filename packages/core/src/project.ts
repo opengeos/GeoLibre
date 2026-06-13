@@ -585,8 +585,9 @@ export function projectFromStore(state: {
   const plugins = normalizeProjectPlugins(state.plugins);
   const legend = normalizeLegendConfig(state.legend);
   const storymap = normalizeStoryMap(state.storymap);
-  // Only persist groups that still have at least one member or are explicitly
-  // kept as empty folders; normalizeLayerGroups round-trips them back.
+  // Persist every group (including empty folders, which the UI supports). The
+  // key is spread only when non-empty so legacy readers that don't recognise it
+  // are unaffected; normalizeLayerGroups round-trips them back on load.
   const layerGroups = state.layerGroups ?? [];
   return {
     version: PROJECT_VERSION,

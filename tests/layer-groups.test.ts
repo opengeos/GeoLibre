@@ -149,6 +149,21 @@ describe("layer group store actions", () => {
     assert.equal(groups[0].name, "Folder");
   });
 
+  it("picks a unique default name even after a group is deleted", () => {
+    const g1 = useAppStore.getState().addLayerGroup();
+    useAppStore.getState().addLayerGroup();
+    assert.equal(
+      useAppStore.getState().layerGroups.map((g) => g.name).join(","),
+      "Group 1,Group 2",
+    );
+    // Deleting "Group 1" then adding again must not reuse the freed number.
+    useAppStore.getState().removeLayerGroup(g1);
+    useAppStore.getState().addLayerGroup();
+    const names = useAppStore.getState().layerGroups.map((g) => g.name);
+    assert.equal(new Set(names).size, names.length); // all unique
+    assert.deepEqual([...names].sort(), ["Group 2", "Group 3"]);
+  });
+
   it("creates a group from existing layers and keeps members contiguous", () => {
     const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
     useAppStore.getState().addGeoJsonLayer("B", emptyFC);

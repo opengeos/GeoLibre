@@ -119,7 +119,8 @@ export function groupMemberIndices(
  * Reorder `layers` so that every group's members form a single contiguous block,
  * preserving the relative order of layers within each group and of the
  * top-level items. The block for a group is anchored at the position of its
- * current top-most (last) member, matching how {@link buildLayerTree} places it.
+ * current bottom-most (first) member — the first member encountered iterating
+ * from index 0, which renders at the bottom of the layer panel.
  *
  * Mutating store actions call this after assigning `groupId`s to restore the
  * contiguity invariant the rest of the system relies on.

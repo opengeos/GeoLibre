@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -95,21 +95,25 @@ test("groups a layer and persists the folder across save and reopen", async ({
   expect(saved.layers?.[0]?.groupId).toBe(groupId);
 
   const dir = await mkdtemp(join(tmpdir(), "geolibre-groups-"));
-  const savedPath = join(dir, "groups.geolibre.json");
-  await writeFile(savedPath, Buffer.concat(chunks));
+  try {
+    const savedPath = join(dir, "groups.geolibre.json");
+    await writeFile(savedPath, Buffer.concat(chunks));
 
-  // 4. Reload to a fresh store, reopen the project, and confirm the folder is
-  //    rebuilt with the layer still nested inside it.
-  await waitForMap(page);
-  const chooserPromise = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "Project" }).click();
-  await page.getByRole("menuitem", { name: "Open From" }).click();
-  await page.getByRole("menuitem", { name: "File..." }).click();
-  const chooser = await chooserPromise;
-  await chooser.setFiles(savedPath);
+    // 4. Reload to a fresh store, reopen the project, and confirm the folder is
+    //    rebuilt with the layer still nested inside it.
+    await waitForMap(page);
+    const chooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Project" }).click();
+    await page.getByRole("menuitem", { name: "Open From" }).click();
+    await page.getByRole("menuitem", { name: "File..." }).click();
+    const chooser = await chooserPromise;
+    await chooser.setFiles(savedPath);
 
-  await expect(page.getByTestId("layer-group-header").first()).toBeVisible();
-  await expect(
-    page.locator('[data-testid="layer-row"][data-layer-name="smoke"]'),
-  ).toBeVisible();
+    await expect(page.getByTestId("layer-group-header").first()).toBeVisible();
+    await expect(
+      page.locator('[data-testid="layer-row"][data-layer-name="smoke"]'),
+    ).toBeVisible();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
