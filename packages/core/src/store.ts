@@ -334,6 +334,7 @@ export const useAppStore = create<AppState>()(
           if (current < 0) return s;
           const chapters = [...s.storymap.chapters];
           const [chapter] = chapters.splice(current, 1);
+          if (!chapter) return s;
           const next = Math.min(Math.max(targetIndex, 0), chapters.length);
           chapters.splice(next, 0, chapter);
           if (chapters.every((item, i) => item.id === s.storymap?.chapters[i]?.id)) {

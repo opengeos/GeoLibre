@@ -188,15 +188,22 @@ function opacityProperty(type: string): string | null {
   }
 }
 
-/** Pick a dominant geometry kind for choosing a MapLibre layer type. */
+/** Pick the dominant (most common) geometry kind for the MapLibre layer type. */
 function geometryKind(
   geojson: FeatureCollection,
 ): "polygon" | "line" | "point" | null {
+  const counts = { polygon: 0, line: 0, point: 0 };
   for (const feature of geojson.features) {
     const kind = classifyGeometry(feature.geometry);
-    if (kind) return kind;
+    if (kind) counts[kind]++;
   }
-  return null;
+  let best: "polygon" | "line" | "point" | null = null;
+  for (const kind of ["polygon", "line", "point"] as const) {
+    if (counts[kind] > 0 && (best === null || counts[kind] > counts[best])) {
+      best = kind;
+    }
+  }
+  return best;
 }
 
 function classifyGeometry(
@@ -259,7 +266,9 @@ function buildLayerSpec(
       "circle-radius": styleValue(layer.style, "circleRadius"),
       "circle-stroke-color": styleValue(layer.style, "strokeColor"),
       "circle-stroke-width": styleValue(layer.style, "strokeWidth"),
-      "circle-opacity": 1,
+      // In-app circle-opacity is fillOpacity * layerOpacity; seed fillOpacity
+      // here so the later layerOpacity scaling matches.
+      "circle-opacity": styleValue(layer.style, "fillOpacity"),
     },
   };
 }

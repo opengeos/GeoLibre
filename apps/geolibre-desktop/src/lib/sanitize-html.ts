@@ -32,5 +32,8 @@ export function sanitizeStoryHtml(html: string): string {
   return DOMPurify.sanitize(html, {
     ADD_ATTR: ["target", "rel"],
     USE_PROFILES: { html: true },
+    // Story text is prose/links/images; forms add no value and `target` on a
+    // form is an exfiltration vector, so drop form controls entirely.
+    FORBID_TAGS: ["form", "input", "button", "select", "option", "textarea"],
   });
 }

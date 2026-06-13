@@ -351,16 +351,23 @@ describe("story maps", () => {
     assert.equal(project.storymap.chapters[0].onChapterEnter[0].duration, 0);
   });
 
-  it("omits an empty story map from a parsed project", () => {
-    const project = parseProject(
-      JSON.stringify({
-        version: "0.1.0",
-        name: "Story",
-        mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
-        storymap: { title: "Empty", chapters: [] },
-      }),
+  it("omits a wholly-default empty story map but keeps settings-only stories", () => {
+    const base = {
+      version: "0.1.0",
+      name: "Story",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+    };
+    // No chapters and all-default settings -> dropped.
+    const empty = parseProject(
+      JSON.stringify({ ...base, storymap: { chapters: [] } }),
     );
-    assert.equal(project.storymap, undefined);
+    assert.equal(empty.storymap, undefined);
+    // No chapters but an author-entered title -> kept (settings preserved).
+    const settingsOnly = parseProject(
+      JSON.stringify({ ...base, storymap: { title: "My Story", chapters: [] } }),
+    );
+    assert.equal(settingsOnly.storymap?.title, "My Story");
+    assert.equal(settingsOnly.storymap?.chapters.length, 0);
   });
 
   it("round-trips a story map through the store and back to a project", () => {
