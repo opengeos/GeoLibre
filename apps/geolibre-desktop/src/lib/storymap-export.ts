@@ -38,6 +38,13 @@ const INSET_STYLE_URL =
 export function buildStoryMapHtml(options: StoryMapExportOptions): string {
   const { storymap, basemapStyleUrl, layers } = options;
 
+  // The template reads chapters[0] for the initial camera, so an empty story
+  // cannot produce a working page. Callers gate this behind a chapter count,
+  // but fail loudly if that ever slips.
+  if (storymap.chapters.length === 0) {
+    throw new Error("Cannot export a story map with no chapters.");
+  }
+
   // Only inline layers that are actually referenced by a chapter transition or
   // that are visible GeoJSON layers, so the export stays focused on the story.
   // `referenced` (enter ∪ exit) drives which layers to inline; only layers a
@@ -71,6 +78,12 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
     });
   }
 
+  // Opacity effects can only target layers that actually exist in the export;
+  // others would make the exported page throw on `map.getLayer(...).type`.
+  const inlinedIds = new Set(inlineLayers.map((entry) => entry.id));
+  const keepChanges = (changes: StoryMap["chapters"][number]["onChapterEnter"]) =>
+    changes.filter((change) => inlinedIds.has(change.layerId));
+
   const config = {
     style: basemapStyleUrl,
     showMarkers: storymap.showMarkers,
@@ -101,8 +114,8 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
       mapAnimation: chapter.mapAnimation,
       rotateAnimation: chapter.rotateAnimation,
       callback: "",
-      onChapterEnter: chapter.onChapterEnter,
-      onChapterExit: chapter.onChapterExit,
+      onChapterEnter: keepChanges(chapter.onChapterEnter),
+      onChapterExit: keepChanges(chapter.onChapterExit),
     })),
   };
 
@@ -241,8 +254,8 @@ function renderTemplate(
     <meta charset='utf-8' />
     <title>${escapeHtml(String(config.title || "Story Map"))}</title>
     <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
-    <script src='https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js'></script>
-    <link href='https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css' rel='stylesheet' />
+    <script src='https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js'></script>
+    <link href='https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css' rel='stylesheet' />
     <script src="https://unpkg.com/scrollama@3.2.0"></script>
     <style>
         body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }

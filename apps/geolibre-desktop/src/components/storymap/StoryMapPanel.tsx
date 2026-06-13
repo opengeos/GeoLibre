@@ -112,14 +112,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
     setStorymap(sample);
     setExpandedId(null);
     const first = sample.chapters[0];
-    if (first) {
-      mapControllerRef.current?.getMap()?.flyTo({
-        center: first.location.center,
-        zoom: first.location.zoom,
-        pitch: first.location.pitch,
-        bearing: first.location.bearing,
-      });
-    }
+    if (first) mapControllerRef.current?.flyToView(first.location);
   }, [mapControllerRef, setStorymap]);
 
   const handleCaptureView = useCallback(
@@ -140,13 +133,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
 
   const handlePreview = useCallback(
     (chapter: StoryChapter) => {
-      const map = mapControllerRef.current?.getMap();
-      map?.flyTo({
-        center: chapter.location.center,
-        zoom: chapter.location.zoom,
-        pitch: chapter.location.pitch,
-        bearing: chapter.location.bearing,
-      });
+      mapControllerRef.current?.flyToView(chapter.location);
     },
     [mapControllerRef],
   );
@@ -173,9 +160,12 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
           .replace(/^-+|-+$/g, "") || "story-map";
       await saveTextFileWithFallback(html, {
         defaultName: `${slug}.html`,
-        filters: [{ name: "HTML", extensions: ["html"] }],
+        filters: [{ name: t("storymap.htmlFile"), extensions: ["html"] }],
         browserTypes: [
-          { description: "HTML", accept: { "text/html": [".html"] } },
+          {
+            description: t("storymap.htmlFile"),
+            accept: { "text/html": [".html"] },
+          },
         ],
         mimeType: "text/html",
       });
@@ -484,7 +474,7 @@ function ChapterCard({
           </Field>
           <Field label={t("storymap.field.image")}>
             <Input
-              placeholder="https://..."
+              placeholder={t("storymap.field.imagePlaceholder")}
               value={chapter.image ?? ""}
               onChange={(e) =>
                 onUpdate({ image: e.target.value || undefined })
@@ -601,7 +591,10 @@ function LayerEffectsEditor({
     return (id: string) => map.get(id) ?? id;
   }, [layers]);
 
-  if (layers.length === 0) return null;
+  // Nothing to add and nothing to clean up: hide the section entirely. When
+  // stale effects remain after the last layer is deleted, keep rendering them so
+  // the user can still remove the now-broken references.
+  if (layers.length === 0 && changes.length === 0) return null;
 
   const update = (i: number, patch: Partial<StoryLayerOpacityChange>) =>
     onChange(changes.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
@@ -614,6 +607,7 @@ function LayerEffectsEditor({
           size="sm"
           variant="ghost"
           className="h-6 px-2 text-xs"
+          disabled={layers.length === 0}
           onClick={() =>
             onChange([
               ...changes,
@@ -632,6 +626,11 @@ function LayerEffectsEditor({
             value={change.layerId}
             onChange={(e) => update(i, { layerId: e.target.value })}
           >
+            {/* Keep an orphaned layerId selectable so it can be inspected and
+                removed even after its layer was deleted. */}
+            {!layers.some((layer) => layer.id === change.layerId) ? (
+              <option value={change.layerId}>{layerName(change.layerId)}</option>
+            ) : null}
             {layers.map((layer) => (
               <option key={layer.id} value={layer.id}>
                 {layerName(layer.id)}
@@ -640,7 +639,7 @@ function LayerEffectsEditor({
           </Select>
           <Slider
             className="w-24"
-            aria-label="opacity"
+            aria-label={t("storymap.opacityLabel")}
             min={0}
             max={1}
             step={0.1}

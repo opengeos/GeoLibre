@@ -361,7 +361,8 @@
       "alignment": "Panel alignment",
       "animation": "Map animation",
       "hidden": "Hide panel",
-      "rotate": "Rotate camera"
+      "rotate": "Rotate camera",
+      "imagePlaceholder": "https://example.com/image.jpg"
     },
     "theme": {
       "dark": "Dark",
@@ -379,6 +380,8 @@
       "bottomLeft": "Bottom left",
       "bottomRight": "Bottom right"
     },
-    "loadSample": "Load sample story"
+    "loadSample": "Load sample story",
+    "htmlFile": "HTML",
+    "opacityLabel": "Opacity"
   }
 }

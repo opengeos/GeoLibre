@@ -103,17 +103,14 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
         step.classList.toggle("glsm-active", i === index),
       );
 
-      // Cancel any in-progress camera movement (e.g. a previous chapter's
-      // 30s rotateTo) so it cannot fight the new transition for control.
-      map.stop();
-
-      const animation = chapter.mapAnimation || "flyTo";
-      map[animation]({
-        center: chapter.location.center,
-        zoom: chapter.location.zoom,
-        pitch: chapter.location.pitch,
-        bearing: chapter.location.bearing,
-      });
+      // Drive the camera through the controller (which cancels any in-progress
+      // movement and handles the optional rotation) rather than mutating the
+      // MapLibre instance directly from UI code.
+      controller.applyStoryChapterCamera(
+        chapter.location,
+        chapter.mapAnimation || "flyTo",
+        chapter.rotateAnimation,
+      );
 
       markerRef.current?.setLngLat(chapter.location.center);
       if (insetMapRef.current) {
@@ -137,17 +134,6 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
           change.opacity,
           change.duration,
         );
-      }
-
-      if (chapter.rotateAnimation) {
-        map.once("moveend", () => {
-          if (activeIndexRef.current !== index) return;
-          const bearing = map.getBearing();
-          map.rotateTo(bearing + 180, {
-            duration: 30000,
-            easing: (time) => time,
-          });
-        });
       }
     };
 

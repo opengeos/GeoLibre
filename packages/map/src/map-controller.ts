@@ -4,7 +4,13 @@ import {
   DEFAULT_PROJECT_PREFERENCES,
   useAppStore,
 } from "@geolibre/core";
-import type { GeoLibreLayer, MapPreferences, MapViewState } from "@geolibre/core";
+import type {
+  GeoLibreLayer,
+  MapPreferences,
+  MapViewState,
+  StoryChapterAnimation,
+  StoryChapterLocation,
+} from "@geolibre/core";
 import bbox from "@turf/bbox";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import maplibregl from "maplibre-gl";
@@ -341,6 +347,61 @@ export class MapController {
       }
     }
     this.syncLayers(this.syncedLayers);
+  }
+
+  /** Token guarding deferred story rotations against later chapter changes. */
+  private storyCameraToken = 0;
+
+  /**
+   * Move the camera to a story chapter view during presentation playback.
+   *
+   * Cancels any in-progress movement first so a prior chapter's rotation cannot
+   * fight the new transition, then optionally starts a slow rotation once the
+   * move settles. Keeping this in the controller lets the presenter drive the
+   * camera without reaching into the raw MapLibre instance.
+   *
+   * @param location Target camera (center, zoom, pitch, bearing).
+   * @param animation MapLibre camera method to use.
+   * @param rotate When true, slowly rotate 180° after the move settles.
+   */
+  applyStoryChapterCamera(
+    location: StoryChapterLocation,
+    animation: StoryChapterAnimation = "flyTo",
+    rotate = false,
+  ): void {
+    if (!this.map) return;
+    const map = this.map;
+    map.stop();
+    const token = ++this.storyCameraToken;
+    map[animation]({
+      center: location.center,
+      zoom: location.zoom,
+      pitch: location.pitch,
+      bearing: location.bearing,
+    });
+    if (rotate) {
+      map.once("moveend", () => {
+        if (this.storyCameraToken !== token || !this.map) return;
+        this.map.rotateTo(this.map.getBearing() + 180, {
+          duration: 30000,
+          easing: (time) => time,
+        });
+      });
+    }
+  }
+
+  /**
+   * Fly the camera to a view, used for story authoring previews.
+   *
+   * @param location Target camera (center, zoom, pitch, bearing).
+   */
+  flyToView(location: StoryChapterLocation): void {
+    this.map?.flyTo({
+      center: location.center,
+      zoom: location.zoom,
+      pitch: location.pitch,
+      bearing: location.bearing,
+    });
   }
 
   private isStyleReady(): boolean {

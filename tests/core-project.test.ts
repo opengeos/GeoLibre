@@ -321,6 +321,36 @@ describe("story maps", () => {
     assert.equal(project.storymap.chapters[0].mapAnimation, "flyTo");
   });
 
+  it("dedupes chapter ids and clamps negative effect durations", () => {
+    const project = parseProject(
+      JSON.stringify({
+        version: "0.1.0",
+        name: "Story",
+        mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+        storymap: {
+          chapters: [
+            chapter({
+              id: "dup",
+              onChapterEnter: [
+                { layerId: "a", opacity: 1, duration: -500 },
+              ],
+            }),
+            chapter({ id: "dup", title: "Duplicate id" }),
+            chapter({ id: "unique" }),
+          ],
+        },
+      }),
+    );
+
+    assert.ok(project.storymap);
+    // The second "dup" chapter is dropped; the first one wins.
+    assert.deepEqual(
+      project.storymap.chapters.map((c) => c.id),
+      ["dup", "unique"],
+    );
+    assert.equal(project.storymap.chapters[0].onChapterEnter[0].duration, 0);
+  });
+
   it("omits an empty story map from a parsed project", () => {
     const project = parseProject(
       JSON.stringify({

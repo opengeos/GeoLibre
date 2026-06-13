@@ -93,10 +93,17 @@ function normalizeStoryMap(storymap: unknown): StoryMap | null {
   if (!storymap || typeof storymap !== "object") return null;
 
   const candidate = storymap as Partial<StoryMap>;
+  // Drop duplicate chapter ids so updates/removals stay unambiguous and keyed
+  // rendering stays stable.
+  const seenChapterIds = new Set<string>();
   const chapters = Array.isArray(candidate.chapters)
     ? candidate.chapters
         .map(normalizeStoryChapter)
-        .filter((chapter): chapter is StoryChapter => Boolean(chapter))
+        .filter((chapter): chapter is StoryChapter => {
+          if (!chapter || seenChapterIds.has(chapter.id)) return false;
+          seenChapterIds.add(chapter.id);
+          return true;
+        })
     : [];
 
   if (chapters.length === 0) return null;
@@ -197,7 +204,7 @@ function normalizeOpacityChanges(value: unknown): StoryLayerOpacityChange[] {
         layerId,
         opacity: clampCoordinate(normalizeNumber(candidate.opacity, 1), 0, 1),
         ...(Number.isFinite(candidate.duration)
-          ? { duration: Number(candidate.duration) }
+          ? { duration: Math.max(0, Number(candidate.duration)) }
           : {}),
       };
     })

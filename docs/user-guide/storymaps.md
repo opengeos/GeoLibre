@@ -4,7 +4,9 @@ Story maps turn a project into a scroll-driven narrative. As the reader scrolls,
 the map flies between chapters, and project layers can fade in and out. The
 feature is inspired by the
 [maplibre-gl-storymaps](https://github.com/opengeos/maplibre-gl-storymaps)
-template and works fully offline once your data is loaded.
+template. Authoring and the in-app presentation run locally, though basemap
+styles and any chapter images are still fetched from their URLs, and the
+standalone HTML export loads MapLibre and scrollama from a CDN.
 
 ## Open the builder
 
