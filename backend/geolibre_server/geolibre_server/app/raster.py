@@ -808,13 +808,19 @@ if not feats:
 zone_crs = CRS.from_epsg(4326)
 crs_member = gj.get("crs")
 if isinstance(crs_member, dict):
-    name = crs_member.get("properties", {}).get("name", "")
-    digits = re.search(r"(\\d+)$", str(name))
-    if digits:
-        try:
-            zone_crs = CRS.from_epsg(int(digits.group(1)))
-        except Exception:
-            pass
+    name = str(crs_member.get("properties", {}).get("name", ""))
+    # Prefer a full parse (handles OGC URNs, ``EPSG:NNNN``, WKT, PROJ strings)
+    # so a descriptive name like "Custom Albers zone 2" isn't mis-read as EPSG:2
+    # by the trailing-digit fallback.
+    try:
+        zone_crs = CRS.from_user_input(name)
+    except Exception:
+        digits = re.search(r"(\\d+)$", name)
+        if digits:
+            try:
+                zone_crs = CRS.from_epsg(int(digits.group(1)))
+            except Exception:
+                pass
 
 out_features = []
 with_data = 0
@@ -889,7 +895,7 @@ print("{marker}" + json.dumps({"output_path": output_path}))
 
 
 _RASTER_CALC_SCRIPT = """
-import json, sys
+import json, re, sys
 
 import numpy as np
 import rasterio
@@ -902,7 +908,9 @@ if not expression:
     raise SystemExit("Expression is required")
 # Dunder access (e.g. ``A.__class__.__bases__[0].__subclasses__()``) is the
 # standard way to break out of an ``eval`` with an emptied ``__builtins__``;
-# rejecting it keeps band math from reaching arbitrary objects.
+# rejecting it keeps band math from reaching arbitrary objects. This check is
+# load-bearing alongside the empty ``__builtins__`` and the np-free namespace
+# below: do not relax it (e.g. to allow a single ``_``) without replacing it.
 if "__" in expression:
     raise SystemExit("Expression may not contain '__'")
 b_path = str(params.get("b_path", "") or "").strip()
@@ -946,6 +954,14 @@ profile, base_shape, base_crs = load_bands(input_path, "A", namespace, None)
 for letter, path in (("B", b_path), ("C", c_path)):
     if path:
         load_bands(path, letter, namespace, (base_shape, base_crs))
+    # An expression that references B/C without a supplied path would otherwise
+    # fail deep in eval with an opaque "name 'B' is not defined". Catch the
+    # common case up front. The word-boundary match avoids false positives from
+    # function names that merely contain the letter (e.g. 'abs' has no bare 'B').
+    elif re.search(rf"(?<![A-Za-z0-9_]){letter}[0-9]*(?![A-Za-z0-9_])", expression):
+        raise SystemExit(
+            f"Expression references '{letter}' but no Raster {letter} path was provided."
+        )
 
 # Evaluate the expression in a restricted namespace: no builtins, only the band
 # arrays and a curated set of NumPy functions. The sidecar is local and confined
@@ -1103,10 +1119,18 @@ try:
     if base_crs is None:
         raise SystemExit("First raster has no CRS; mosaic requires georeferenced inputs.")
     base_nodata = sources[0].nodata
+    base_count = sources[0].count
     for s in sources[1:]:
         if s.crs != base_crs:
             raise SystemExit(
                 "All rasters must share the same CRS; reproject them first."
+            )
+        if s.count != base_count:
+            # merge would otherwise raise an opaque ValueError mid-run; give a
+            # clear message (e.g. a 3-band RGB tile mixed with a 1-band DEM).
+            raise SystemExit(
+                f"All rasters must have the same band count; one has {s.count} "
+                f"but the first has {base_count}."
             )
         if s.nodata != base_nodata:
             # merge masks each input by its own nodata, but the output header
@@ -1189,14 +1213,17 @@ offsets = [
 
 with np.errstate(all="ignore"):
     if stat == "median":
-        # Median has no streaming form, so it stacks the neighbour copies.
-        # Cap the stack (size*size float32 copies) so a large window over a
-        # large raster can't OOM the runtime.
-        MAX_MEDIAN_CELLS = 60_000_000
-        if height * width * size * size > MAX_MEDIAN_CELLS:
+        # Median has no streaming form, so it stacks the neighbour copies
+        # (size*size float32 layers). Cap the stack at ~480 MB so it can't OOM
+        # the runtime; the streaming statistics below have no such limit.
+        MAX_MEDIAN_CELLS = 120_000_000
+        max_pixels = MAX_MEDIAN_CELLS // (size * size)
+        if height * width > max_pixels:
+            side = int(max_pixels**0.5)
             raise SystemExit(
-                f"Focal median with a {size}x{size} window over {width}x{height} "
-                "exceeds the memory budget; use a smaller window or raster, or pick "
+                f"Focal median with a {size}x{size} window is limited to "
+                f"{max_pixels:,} pixels (~{side}x{side}); this raster is "
+                f"{width}x{height}. Use a smaller window, crop the raster, or pick "
                 "a streaming statistic (mean/min/max/sum/std/range)."
             )
         stack = np.stack([neighbor(dy, dx) for dy, dx in offsets], axis=0)

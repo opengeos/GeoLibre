@@ -644,6 +644,52 @@ def test_raster_calculator_blocks_numpy_io(tmp_path: Path) -> None:
 
 
 @requires_rasterio
+def test_raster_calculator_reports_missing_referenced_raster(tmp_path: Path) -> None:
+    """Referencing B without supplying a B path gives a clear message, not NameError."""
+    src = _write_dem(tmp_path / "dem.tif")
+    out = tmp_path / "calc.tif"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            _RASTER_TOOL_SCRIPTS["raster-calc"],
+            json.dumps(
+                {
+                    "input_path": str(src),
+                    "output_path": str(out),
+                    "expression": "A + B",
+                }
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode != 0
+    assert "no Raster B path was provided" in (completed.stdout + completed.stderr)
+    assert not out.exists()
+
+
+@requires_rasterio
+def test_raster_calculator_allows_funcs_named_like_bands(tmp_path: Path) -> None:
+    """A function whose name contains 'b' (abs) must not trip the missing-B guard."""
+    import rasterio
+
+    src = _write_dem(tmp_path / "dem.tif")
+    out = tmp_path / "calc.tif"
+    _run_script(
+        _RASTER_TOOL_SCRIPTS["raster-calc"],
+        {
+            "input_path": str(src),
+            "output_path": str(out),
+            "expression": "abs(A - 10)",
+        },
+    )
+    with rasterio.open(out) as ds:
+        assert ds.count == 1
+
+
+@requires_rasterio
 def test_raster_calculator_evaluates_expression(tmp_path: Path) -> None:
     import rasterio
 
@@ -824,6 +870,49 @@ def test_mosaic_rejects_mismatched_crs(tmp_path: Path) -> None:
     )
     assert completed.returncode != 0
     assert "same CRS" in (completed.stdout + completed.stderr)
+
+
+@requires_rasterio
+def test_mosaic_rejects_mismatched_band_count(tmp_path: Path) -> None:
+    """A 1-band raster mixed with a 3-band raster fails with a clear message."""
+    import numpy as np
+    import rasterio
+    from rasterio.transform import from_origin
+
+    a = _write_dem(tmp_path / "a.tif")  # 1 band, EPSG:32633
+    with rasterio.open(a) as ds:
+        arr = ds.read(1)
+        transform = ds.transform
+    b = tmp_path / "b.tif"
+    with rasterio.open(
+        b,
+        "w",
+        driver="GTiff",
+        height=arr.shape[0],
+        width=arr.shape[1],
+        count=3,
+        dtype="float32",
+        crs="EPSG:32633",
+        transform=from_origin(transform.c, transform.f, 30, 30),
+    ) as dst:
+        for band in range(1, 4):
+            dst.write(arr, band)
+    out = tmp_path / "mosaic.tif"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            _RASTER_TOOL_SCRIPTS["mosaic"],
+            json.dumps(
+                {"input_path": str(a), "output_path": str(out), "raster_2": str(b)}
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode != 0
+    assert "same band count" in (completed.stdout + completed.stderr)
 
 
 @requires_rasterio

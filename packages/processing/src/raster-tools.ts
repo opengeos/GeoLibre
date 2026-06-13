@@ -284,7 +284,7 @@ export const polygonizeTool: RasterTool = {
   inputFilters: GEOTIFF_INPUT,
   outputFilters: GEOJSON_OUTPUT,
   parameters: [
-    { id: "band", label: "Band", type: "number", default: 1, min: 1, step: 1 },
+    { id: "band", label: "Band", type: "number", default: 1, min: 1, max: 99, step: 1 },
     {
       id: "connectivity",
       label: "Connectivity",
@@ -314,7 +314,7 @@ export const contourTool: RasterTool = {
   inputFilters: GEOTIFF_INPUT,
   outputFilters: GEOJSON_OUTPUT,
   parameters: [
-    { id: "band", label: "Band", type: "number", default: 1, min: 1, step: 1 },
+    { id: "band", label: "Band", type: "number", default: 1, min: 1, max: 99, step: 1 },
     {
       id: "interval",
       label: "Interval",
@@ -422,7 +422,7 @@ export const zonalStatisticsTool: RasterTool = {
       description:
         "A GeoJSON polygon layer defining the zones. It is reprojected to the raster's CRS automatically (a GeoJSON with no CRS is assumed to be WGS84).",
     },
-    { id: "band", label: "Band", type: "number", default: 1, min: 1, step: 1 },
+    { id: "band", label: "Band", type: "number", default: 1, min: 1, max: 99, step: 1 },
     {
       id: "prefix",
       label: "Field prefix",
@@ -481,7 +481,7 @@ export const reclassifyTool: RasterTool = {
   inputFilters: GEOTIFF_INPUT,
   outputFilters: GEOTIFF_OUTPUT,
   parameters: [
-    { id: "band", label: "Band", type: "number", default: 1, min: 1, step: 1 },
+    { id: "band", label: "Band", type: "number", default: 1, min: 1, max: 99, step: 1 },
     {
       id: "table",
       label: "Rules",
@@ -567,7 +567,7 @@ export const focalStatisticsTool: RasterTool = {
   inputFilters: GEOTIFF_INPUT,
   outputFilters: GEOTIFF_OUTPUT,
   parameters: [
-    { id: "band", label: "Band", type: "number", default: 1, min: 1, step: 1 },
+    { id: "band", label: "Band", type: "number", default: 1, min: 1, max: 99, step: 1 },
     {
       id: "statistic",
       label: "Statistic",
