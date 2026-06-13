@@ -5,6 +5,7 @@ import { AVAILABLE_LANGUAGES } from "../i18n";
 import {
   DEFAULT_LANGUAGE,
   languageOptions,
+  resolveLanguage,
   type LanguageOption,
 } from "../i18n/languages";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
@@ -33,20 +34,22 @@ export function useLanguage(): UseLanguageResult {
 
   const setLanguage = useCallback(
     (code: string) => {
-      void i18n.changeLanguage(code);
-      const current = useDesktopSettingsStore.getState().desktopSettings;
-      setDesktopSettings({ ...current, language: code });
+      // Persist only after the language has actually switched, so a future
+      // lazy-loaded or remote catalog that fails to load does not leave a
+      // broken language persisted for the next boot. With today's eagerly
+      // bundled catalogs this resolves synchronously.
+      void i18n.changeLanguage(code).then(() => {
+        const current = useDesktopSettingsStore.getState().desktopSettings;
+        setDesktopSettings({ ...current, language: code });
+      });
     },
     [i18n, setDesktopSettings],
   );
 
-  // i18n.language can be a full tag (e.g. `en-US`); collapse to a code we ship.
-  const base = i18n.language?.split("-")[0];
-  const language = AVAILABLE_LANGUAGES.includes(i18n.language)
-    ? i18n.language
-    : base && AVAILABLE_LANGUAGES.includes(base)
-      ? base
-      : DEFAULT_LANGUAGE;
+  // i18n.language can be a full tag (e.g. `en-US`); reuse the shared resolver to
+  // collapse it to a code we ship.
+  const language =
+    resolveLanguage(i18n.language, AVAILABLE_LANGUAGES) ?? DEFAULT_LANGUAGE;
 
   return { language, options: OPTIONS, setLanguage };
 }

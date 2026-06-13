@@ -778,7 +778,16 @@ export function TopToolbar({
     try {
       const data = await appApi.fetchArrayBuffer?.(url);
       if (controller.signal.aborted) return;
-      if (!data) throw new Error(t("toolbar.error.couldNotDownloadOsmPbf"));
+      // Surface the user-facing message directly rather than throwing a
+      // translated Error — Error.message also feeds error boundaries and logs,
+      // which should stay locale-independent. The catch below still covers a
+      // genuine fetch failure.
+      if (!data) {
+        setOsmPbfLoading(false);
+        if (osmPbfAbortRef.current === controller) osmPbfAbortRef.current = null;
+        setActionError(t("toolbar.error.couldNotDownloadOsmPbf"));
+        return;
+      }
       const fileName =
         url.split("/").pop()?.split("?")[0].split("#")[0] || "osm";
       // Keep the loading indicator up through the parse for small files
@@ -2328,7 +2337,10 @@ export function TopToolbar({
               onChange={(event) => setProjectName(event.target.value)}
               onBlur={(event) => {
                 const nextName = event.target.value.trim();
-                if (!nextName) setProjectName(t("toolbar.item.untitledProject"));
+                // Persist the canonical, locale-independent default name; a
+                // translated string would otherwise be written into the saved
+                // project file and vary by UI language.
+                if (!nextName) setProjectName(DEFAULT_PROJECT_NAME);
               }}
             />
             {projectPath ? (

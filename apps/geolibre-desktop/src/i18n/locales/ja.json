@@ -303,8 +303,7 @@
       "loadFromUrl": "URL から読み込む",
       "loadingOsmPbf": "OSM PBF を読み込んでいます…",
       "loadingOsmPbfDesc": "ファイルを解析して GeoJSON にフィーチャーを変換しています。バックグラウンドで実行されており、大きなデータの場合は少し時間がかかることがあります。",
-      "projectName": "プロジェクト名",
-      "untitledProject": "無題のプロジェクト"
+      "projectName": "プロジェクト名"
     },
     "error": {
       "couldNotOpenProject": "プロジェクトを開けませんでした。",

@@ -762,11 +762,9 @@ export function SettingsDialog({
                       {t("language.label")}
                     </h4>
                     <div className="space-y-1.5">
-                      <Label htmlFor="settings-language">
-                        {t("language.label")}
-                      </Label>
                       <Select
                         id="settings-language"
+                        aria-label={t("language.label")}
                         value={language}
                         onChange={(event) => setLanguage(event.target.value)}
                       >

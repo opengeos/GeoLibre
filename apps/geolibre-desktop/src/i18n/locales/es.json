@@ -304,8 +304,7 @@
       "loadFromUrl": "Cargar desde URL",
       "loadingOsmPbf": "Cargando OSM PBF…",
       "loadingOsmPbfDesc": "Analizando el archivo y convirtiendo las entidades a GeoJSON. Esto se ejecuta en segundo plano y puede tardar un momento con extracciones grandes.",
-      "projectName": "Nombre del proyecto",
-      "untitledProject": "Proyecto sin título"
+      "projectName": "Nombre del proyecto"
     },
     "error": {
       "couldNotOpenProject": "No se pudo abrir el proyecto.",

@@ -304,8 +304,7 @@
       "loadFromUrl": "Load from URL",
       "loadingOsmPbf": "Loading OSM PBF…",
       "loadingOsmPbfDesc": "Parsing the file and converting features to GeoJSON. This runs in the background and may take a moment for large extracts.",
-      "projectName": "Project name",
-      "untitledProject": "Untitled Project"
+      "projectName": "Project name"
     },
     "error": {
       "couldNotOpenProject": "Could not open project.",

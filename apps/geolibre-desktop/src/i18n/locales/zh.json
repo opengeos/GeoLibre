@@ -303,8 +303,7 @@
       "loadFromUrl": "从 URL 加载",
       "loadingOsmPbf": "正在加载 OSM PBF…",
       "loadingOsmPbfDesc": "正在解析文件并将要素转换为 GeoJSON。此过程在后台运行，对于大型提取数据可能需要一些时间。",
-      "projectName": "项目名称",
-      "untitledProject": "未命名项目"
+      "projectName": "项目名称"
     },
     "error": {
       "couldNotOpenProject": "无法打开项目。",

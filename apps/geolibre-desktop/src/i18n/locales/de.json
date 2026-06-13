@@ -304,8 +304,7 @@
       "loadFromUrl": "Aus URL laden",
       "loadingOsmPbf": "OSM PBF wird geladen…",
       "loadingOsmPbfDesc": "Die Datei wird geparst und Objekte werden in GeoJSON konvertiert. Dies läuft im Hintergrund und kann bei großen Extrakten einen Moment dauern.",
-      "projectName": "Projektname",
-      "untitledProject": "Unbenanntes Projekt"
+      "projectName": "Projektname"
     },
     "error": {
       "couldNotOpenProject": "Das Projekt konnte nicht geöffnet werden.",

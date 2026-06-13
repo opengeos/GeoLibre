@@ -69,8 +69,14 @@ export function resolveLanguage(
   if (!raw) return null;
   const normalized = raw.trim().toLowerCase();
   if (!normalized) return null;
-  if (available.includes(normalized)) return normalized;
+  // Match case-insensitively but return the catalog's actual code, so a shipped
+  // regional catalog like `pt-BR.json` still resolves from a `pt-br` input.
+  const byLower = new Map(
+    available.map((code) => [code.trim().toLowerCase(), code] as const),
+  );
+  const exact = byLower.get(normalized);
+  if (exact) return exact;
   const base = normalized.split(/[-_]/)[0];
-  if (base && available.includes(base)) return base;
-  return null;
+  if (!base) return null;
+  return byLower.get(base) ?? null;
 }

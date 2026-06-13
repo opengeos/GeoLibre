@@ -2,8 +2,7 @@ import { isAllowedPluginManifestUrl } from "@geolibre/core";
 import { useEffect } from "react";
 import { create } from "zustand";
 import { normalizeStringList } from "../lib/string-lists";
-
-const DESKTOP_SETTINGS_STORAGE_KEY = "geolibre.desktopSettings";
+import { DESKTOP_SETTINGS_STORAGE_KEY } from "../lib/storage-keys";
 
 export interface DesktopSettings {
   additionalPluginDirectories: string[];

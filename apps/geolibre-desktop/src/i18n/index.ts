@@ -1,6 +1,7 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 
+import { DESKTOP_SETTINGS_STORAGE_KEY } from "../lib/storage-keys";
 import { DEFAULT_LANGUAGE, resolveLanguage } from "./languages";
 
 /**
@@ -22,7 +23,6 @@ for (const [path, mod] of Object.entries(catalogModules)) {
 /** Catalog codes we actually ship, e.g. `["en", "zh"]`. */
 export const AVAILABLE_LANGUAGES: string[] = Object.keys(resources).sort();
 
-const SETTINGS_STORAGE_KEY = "geolibre.desktopSettings";
 const QUERY_PARAM_KEYS = ["locale", "lang"];
 
 /**
@@ -33,7 +33,7 @@ const QUERY_PARAM_KEYS = ["locale", "lang"];
 function persistedLanguage(): string | null {
   if (typeof window === "undefined") return null;
   try {
-    const stored = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+    const stored = window.localStorage.getItem(DESKTOP_SETTINGS_STORAGE_KEY);
     if (!stored) return null;
     const parsed = JSON.parse(stored) as { language?: unknown };
     return typeof parsed.language === "string" ? parsed.language : null;
@@ -77,7 +77,7 @@ export function getInitialLanguage(): string {
   return DEFAULT_LANGUAGE;
 }
 
-void i18n.use(initReactI18next).init({
+i18n.use(initReactI18next).init({
   resources,
   lng: getInitialLanguage(),
   fallbackLng: DEFAULT_LANGUAGE,
@@ -91,6 +91,10 @@ void i18n.use(initReactI18next).init({
   // — skip Suspense and render immediately rather than requiring a boundary.
   react: { useSuspense: false },
   returnNull: false,
+  // Eager catalogs make init resolve synchronously today, but surface any error
+  // (e.g. if loading ever becomes async) instead of silently swallowing it.
+}).catch((error: unknown) => {
+  console.error("[GeoLibre] i18n initialization failed", error);
 });
 
 export default i18n;
