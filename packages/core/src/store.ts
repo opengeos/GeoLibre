@@ -74,7 +74,12 @@ export type RasterToolKind =
   | "clip-mask"
   | "polygonize"
   | "contour"
-  | "interpolate";
+  | "interpolate"
+  | "zonal"
+  | "raster-calc"
+  | "reclassify"
+  | "mosaic"
+  | "focal";
 
 export interface AppState {
   projectName: string;

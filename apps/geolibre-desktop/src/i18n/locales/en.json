@@ -211,7 +211,14 @@
       "polygonize": "Polygonize",
       "contour": "Contour",
       "interpolate": "Interpolation (IDW / Kriging)",
+      "zonal": "Zonal statistics",
+      "rasterCalc": "Raster calculator",
+      "reclassify": "Reclassify",
+      "mosaic": "Mosaic / merge",
+      "focal": "Focal statistics",
       "inputRaster": "Input raster",
+      "inputRasterA": "Input raster A",
+      "inputRaster1": "First raster",
       "inputPoints": "Input points (GeoJSON)"
     },
     "mapControl": {
@@ -276,6 +283,7 @@
       "subGroupClip": "Clip",
       "subGroupRasterToVector": "Raster to Vector",
       "subGroupVectorToRaster": "Vector to Raster",
+      "subGroupAnalysis": "Analysis",
       "mapControls": "Map controls",
       "atmosphereEffects": "Atmosphere Effects",
       "directions": "Directions",

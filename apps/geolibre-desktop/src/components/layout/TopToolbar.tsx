@@ -312,6 +312,11 @@ const RASTER_TOOL_COMMANDS: Array<{ kind: RasterToolKind; titleKey: ParseKeys }>
     { kind: "polygonize", titleKey: "toolbar.rasterTool.polygonize" },
     { kind: "contour", titleKey: "toolbar.rasterTool.contour" },
     { kind: "interpolate", titleKey: "toolbar.rasterTool.interpolate" },
+    { kind: "zonal", titleKey: "toolbar.rasterTool.zonal" },
+    { kind: "raster-calc", titleKey: "toolbar.rasterTool.rasterCalc" },
+    { kind: "reclassify", titleKey: "toolbar.rasterTool.reclassify" },
+    { kind: "mosaic", titleKey: "toolbar.rasterTool.mosaic" },
+    { kind: "focal", titleKey: "toolbar.rasterTool.focal" },
   ];
 
 async function openExternalLink(url: string): Promise<void> {
@@ -1844,6 +1849,29 @@ export function TopToolbar({
                 onSelect={() => setRasterToolOpen("interpolate")}
               >
                 {t("toolbar.rasterTool.interpolate")}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs text-muted-foreground">
+                {t("toolbar.item.subGroupAnalysis")}
+              </DropdownMenuLabel>
+              <DropdownMenuItem onSelect={() => setRasterToolOpen("zonal")}>
+                {t("toolbar.rasterTool.zonal")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setRasterToolOpen("raster-calc")}
+              >
+                {t("toolbar.rasterTool.rasterCalc")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setRasterToolOpen("reclassify")}
+              >
+                {t("toolbar.rasterTool.reclassify")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setRasterToolOpen("mosaic")}>
+                {t("toolbar.rasterTool.mosaic")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setRasterToolOpen("focal")}>
+                {t("toolbar.rasterTool.focal")}
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>

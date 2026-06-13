@@ -772,6 +772,425 @@ print("{marker}" + json.dumps({"output_path": output_path}))
 """.replace("{marker}", _RESULT_MARKER)
 
 
+_ZONAL_STATS_SCRIPT = """
+import json, re, sys
+
+import numpy as np
+import rasterio
+from rasterio.crs import CRS
+from rasterio.errors import RasterioError
+from rasterio.mask import mask as rio_mask
+from rasterio.warp import transform_geom
+
+params = json.loads(sys.argv[1])
+input_path = params["input_path"]
+output_path = params["output_path"]
+zones_path = params["zones_path"]
+band = int(params.get("band", 1))
+# Optional prefix so stats don't clobber existing zone attributes named e.g.
+# 'mean'. Empty by default to match QGIS's bare 'min'/'max'/... fields.
+prefix = str(params.get("prefix", "") or "")
+
+with open(zones_path) as f:
+    gj = json.load(f)
+gtype = gj.get("type")
+if gtype == "FeatureCollection":
+    feats = gj.get("features", [])
+elif gtype == "Feature":
+    feats = [gj]
+else:
+    feats = [{"type": "Feature", "properties": {}, "geometry": gj}]
+if not feats:
+    raise SystemExit("Zones layer has no features")
+
+# Resolve the zones CRS: an explicit GeoJSON ``crs`` member if present, else the
+# GeoJSON default of WGS84 (EPSG:4326).
+zone_crs = CRS.from_epsg(4326)
+crs_member = gj.get("crs")
+if isinstance(crs_member, dict):
+    name = crs_member.get("properties", {}).get("name", "")
+    digits = re.search(r"(\\d+)$", str(name))
+    if digits:
+        try:
+            zone_crs = CRS.from_epsg(int(digits.group(1)))
+        except Exception:
+            pass
+
+out_features = []
+with_data = 0
+with rasterio.open(input_path) as src:
+    if src.crs is None:
+        raise SystemExit(
+            "Input raster has no CRS; zonal statistics requires a georeferenced raster."
+        )
+    if band < 1 or band > src.count:
+        raise SystemExit(f"Band {band} out of range (raster has {src.count} band(s))")
+    for feat in feats:
+        geom = (feat or {}).get("geometry")
+        props = dict((feat or {}).get("properties") or {})
+        vals = np.array([], dtype="float64")
+        if geom:
+            shape = geom
+            # rio_mask needs shapes in the raster's CRS; reproject when the zone
+            # CRS differs so a WGS84 zone layer over a projected raster works.
+            if zone_crs != src.crs:
+                shape = transform_geom(zone_crs, src.crs, geom)
+            try:
+                # filled=False returns a masked array combining the dataset
+                # nodata mask with the outside-geometry mask, so a missing
+                # nodata value can't be mistaken for real data.
+                out_img, _ = rio_mask(
+                    src, [shape], crop=True, filled=False, indexes=band
+                )
+                arr = np.ma.filled(out_img.astype("float64"), np.nan)
+                valid = (~np.ma.getmaskarray(out_img)) & np.isfinite(arr)
+                vals = arr[valid]
+            except (ValueError, RasterioError):
+                # Geometry falls entirely outside the raster; report empty stats.
+                vals = np.array([], dtype="float64")
+        n = int(vals.size)
+        if n:
+            with_data += 1
+            props[prefix + "count"] = n
+            props[prefix + "min"] = float(vals.min())
+            props[prefix + "max"] = float(vals.max())
+            props[prefix + "mean"] = float(vals.mean())
+            props[prefix + "sum"] = float(vals.sum())
+            props[prefix + "std"] = float(vals.std())
+            props[prefix + "median"] = float(np.median(vals))
+        else:
+            props[prefix + "count"] = 0
+            for key in ("min", "max", "mean", "sum", "std", "median"):
+                props[prefix + key] = None
+        out_features.append(
+            {"type": "Feature", "properties": props, "geometry": geom}
+        )
+
+fc = {"type": "FeatureCollection", "features": out_features}
+if zone_crs.to_epsg() and zone_crs.to_epsg() != 4326:
+    fc["crs"] = {
+        "type": "name",
+        "properties": {"name": f"urn:ogc:def:crs:EPSG::{zone_crs.to_epsg()}"},
+    }
+with open(output_path, "w") as f:
+    json.dump(fc, f)
+print(
+    f"Computed zonal statistics for {len(out_features)} zone(s) "
+    f"({with_data} with data) -> {output_path}"
+)
+print("{marker}" + json.dumps({"output_path": output_path}))
+""".replace("{marker}", _RESULT_MARKER)
+
+
+_RASTER_CALC_SCRIPT = """
+import json, sys
+
+import numpy as np
+import rasterio
+
+params = json.loads(sys.argv[1])
+input_path = params["input_path"]
+output_path = params["output_path"]
+expression = str(params.get("expression", "") or "").strip()
+if not expression:
+    raise SystemExit("Expression is required")
+# Dunder access (e.g. ``A.__class__.__bases__[0].__subclasses__()``) is the
+# standard way to break out of an ``eval`` with an emptied ``__builtins__``;
+# rejecting it keeps band math from reaching arbitrary objects.
+if "__" in expression:
+    raise SystemExit("Expression may not contain '__'")
+b_path = str(params.get("b_path", "") or "").strip()
+c_path = str(params.get("c_path", "") or "").strip()
+nodata = -9999.0
+
+
+def load_bands(path, letter, namespace, base_shape):
+    with rasterio.open(path) as ds:
+        if base_shape is not None and (ds.height, ds.width) != base_shape:
+            raise SystemExit(
+                f"Raster {letter} ({ds.width}x{ds.height}) must match the dimensions "
+                f"of raster A ({base_shape[1]}x{base_shape[0]})."
+            )
+        bands = [
+            np.ma.filled(ds.read(i, masked=True).astype("float64"), np.nan)
+            for i in range(1, ds.count + 1)
+        ]
+        profile = ds.profile.copy()
+        shape = (ds.height, ds.width)
+    # ``A``/``B``/``C`` reference band 1; ``A1``, ``A2``, ... address each band.
+    namespace[letter] = bands[0]
+    for i, arr in enumerate(bands, start=1):
+        namespace[f"{letter}{i}"] = arr
+    return profile, shape
+
+
+namespace = {}
+profile, base_shape = load_bands(input_path, "A", namespace, None)
+for letter, path in (("B", b_path), ("C", c_path)):
+    if path:
+        load_bands(path, letter, namespace, base_shape)
+
+# Evaluate the expression in a restricted namespace: no builtins, only the band
+# arrays and a curated set of NumPy functions. The sidecar is local and confined
+# to the conversion roots, but stripping ``__builtins__`` still blocks arbitrary
+# attribute/import access from a hand-typed expression.
+safe_funcs = {
+    "np": np,
+    "where": np.where,
+    "log": np.log,
+    "log10": np.log10,
+    "exp": np.exp,
+    "sqrt": np.sqrt,
+    "abs": np.abs,
+    "sin": np.sin,
+    "cos": np.cos,
+    "tan": np.tan,
+    "arctan": np.arctan,
+    "minimum": np.minimum,
+    "maximum": np.maximum,
+    "clip": np.clip,
+    "floor": np.floor,
+    "ceil": np.ceil,
+    "round": np.round,
+    "pi": np.pi,
+    "e": np.e,
+}
+namespace.update(safe_funcs)
+try:
+    with np.errstate(all="ignore"):
+        result = eval(expression, {"__builtins__": {}}, namespace)
+except SystemExit:
+    raise
+except Exception as exc:
+    raise SystemExit(f"Failed to evaluate expression: {exc}")
+
+result = np.asarray(result, dtype="float64")
+if result.shape != base_shape:
+    # A scalar or single-band broadcast result is fine; anything else is a
+    # dimension mismatch the user must fix.
+    try:
+        result = np.broadcast_to(result, base_shape).astype("float64")
+    except ValueError:
+        raise SystemExit(
+            f"Expression produced a {result.shape} array; expected {base_shape}."
+        )
+
+out = np.where(np.isfinite(result), result, nodata).astype("float32")
+profile.update(count=1, dtype="float32", nodata=nodata, compress="deflate")
+# Drop multiband photometric hints carried over from a multiband input A.
+profile.pop("photometric", None)
+with rasterio.open(output_path, "w", **profile) as dst:
+    dst.write(out, 1)
+print(f"Evaluated '{expression}' -> {output_path}")
+print("{marker}" + json.dumps({"output_path": output_path}))
+""".replace("{marker}", _RESULT_MARKER)
+
+
+_RECLASSIFY_SCRIPT = """
+import json, re, sys
+
+import numpy as np
+import rasterio
+
+params = json.loads(sys.argv[1])
+input_path = params["input_path"]
+output_path = params["output_path"]
+band = int(params.get("band", 1))
+table = str(params.get("table", "") or "").strip()
+if not table:
+    raise SystemExit("Reclassification table is required")
+# What to do with values matching no rule: emit nodata (default) or keep the
+# original value untouched.
+unmatched = str(params.get("unmatched", "nodata")).lower()
+nodata = -9999.0
+
+rules = []
+for token in re.split(r"[,;\\n]+", table):
+    token = token.strip()
+    if not token:
+        continue
+    parts = token.split(":")
+    if len(parts) != 3:
+        raise SystemExit(
+            f"Bad rule '{token}'. Use 'min:max:newvalue' (e.g. '0:10:1')."
+        )
+    lo_raw, hi_raw, nv_raw = (p.strip() for p in parts)
+    lo = -np.inf if lo_raw.lower() in ("", "min", "-inf") else float(lo_raw)
+    hi = np.inf if hi_raw.lower() in ("", "max", "inf") else float(hi_raw)
+    try:
+        nv = float(nv_raw)
+    except ValueError:
+        raise SystemExit(f"Bad new value in rule '{token}'")
+    rules.append((lo, hi, nv))
+if not rules:
+    raise SystemExit("No reclassification rules parsed")
+
+with rasterio.open(input_path) as src:
+    if band < 1 or band > src.count:
+        raise SystemExit(f"Band {band} out of range (raster has {src.count} band(s))")
+    arr = src.read(band, masked=True).astype("float64")
+    profile = src.profile.copy()
+
+data = np.ma.filled(arr, np.nan)
+out = np.full(data.shape, np.nan, dtype="float64")
+# Earlier rules win on overlap: apply in reverse so the first rule's assignment
+# is written last and survives.
+for lo, hi, nv in reversed(rules):
+    # Half-open [lo, hi): a value equal to a class's upper bound belongs to the
+    # next class, avoiding double assignment at shared edges.
+    out[(data >= lo) & (data < hi)] = nv
+if unmatched == "original":
+    keep = np.isnan(out) & np.isfinite(data)
+    out[keep] = data[keep]
+
+result = np.where(np.isfinite(out), out, nodata).astype("float32")
+profile.update(count=1, dtype="float32", nodata=nodata, compress="deflate")
+profile.pop("photometric", None)
+with rasterio.open(output_path, "w", **profile) as dst:
+    dst.write(result, 1)
+print(f"Reclassified band {band} with {len(rules)} rule(s) -> {output_path}")
+print("{marker}" + json.dumps({"output_path": output_path}))
+""".replace("{marker}", _RESULT_MARKER)
+
+
+_MOSAIC_SCRIPT = """
+import json, sys
+
+import rasterio
+from rasterio.merge import merge
+
+params = json.loads(sys.argv[1])
+input_path = params["input_path"]
+output_path = params["output_path"]
+method = str(params.get("method", "first")).lower()
+allowed = {"first", "last", "min", "max"}
+if method not in allowed:
+    raise SystemExit(f"Unsupported merge method: {method} (use {sorted(allowed)})")
+
+paths = [input_path]
+for key in ("raster_2", "raster_3", "raster_4", "raster_5"):
+    extra = str(params.get(key, "") or "").strip()
+    if extra:
+        paths.append(extra)
+if len(paths) < 2:
+    raise SystemExit("Mosaic needs at least two rasters")
+
+sources = [rasterio.open(p) for p in paths]
+try:
+    base_crs = sources[0].crs
+    for s in sources[1:]:
+        if s.crs != base_crs:
+            raise SystemExit(
+                "All rasters must share the same CRS; reproject them first."
+            )
+    mosaic, out_transform = merge(sources, method=method)
+    profile = sources[0].profile.copy()
+finally:
+    for s in sources:
+        s.close()
+
+profile.update(
+    height=mosaic.shape[1],
+    width=mosaic.shape[2],
+    transform=out_transform,
+    compress="deflate",
+)
+with rasterio.open(output_path, "w", **profile) as dst:
+    dst.write(mosaic)
+print(f"Merged {len(paths)} rasters (method={method}) -> {output_path}")
+print("{marker}" + json.dumps({"output_path": output_path}))
+""".replace("{marker}", _RESULT_MARKER)
+
+
+_FOCAL_SCRIPT = """
+import json, sys
+
+import numpy as np
+import rasterio
+
+params = json.loads(sys.argv[1])
+input_path = params["input_path"]
+output_path = params["output_path"]
+band = int(params.get("band", 1))
+size = int(params.get("size", 3))
+if size < 3 or size % 2 == 0:
+    raise SystemExit("Window size must be an odd integer >= 3")
+if size > 25:
+    raise SystemExit("Window size is capped at 25")
+stat = str(params.get("statistic", "mean")).lower()
+reducers = {
+    "mean": np.nanmean,
+    "median": np.nanmedian,
+    "min": np.nanmin,
+    "max": np.nanmax,
+    "sum": np.nansum,
+    "std": np.nanstd,
+}
+if stat not in reducers and stat != "range":
+    raise SystemExit(f"Unsupported statistic: {stat}")
+nodata = -9999.0
+
+with rasterio.open(input_path) as src:
+    if band < 1 or band > src.count:
+        raise SystemExit(f"Band {band} out of range (raster has {src.count} band(s))")
+    data = np.ma.filled(src.read(band, masked=True).astype("float32"), np.nan)
+    profile = src.profile.copy()
+
+height, width = data.shape
+# A float32 stack of size*size neighbour copies bounds memory; cap the product
+# so a large window over a large raster can't OOM the runtime.
+MAX_WINDOW_CELLS = 40_000_000
+if height * width * size * size > MAX_WINDOW_CELLS:
+    raise SystemExit(
+        f"A {size}x{size} window over {width}x{height} exceeds the work budget; "
+        "use a smaller window or raster."
+    )
+radius = size // 2
+
+
+def neighbor(dy, dx):
+    # ``out[i, j] = data[i + dy, j + dx]`` with out-of-bounds neighbours set to
+    # NaN (so edge windows aggregate only the cells that exist).
+    out = np.roll(np.roll(data, -dy, axis=0), -dx, axis=1)
+    if dy > 0:
+        out[-dy:, :] = np.nan
+    elif dy < 0:
+        out[:-dy, :] = np.nan
+    if dx > 0:
+        out[:, -dx:] = np.nan
+    elif dx < 0:
+        out[:, :-dx] = np.nan
+    return out
+
+
+stack = np.stack(
+    [
+        neighbor(dy, dx)
+        for dy in range(-radius, radius + 1)
+        for dx in range(-radius, radius + 1)
+    ],
+    axis=0,
+)
+with np.errstate(all="ignore"):
+    if stat == "range":
+        res = np.nanmax(stack, axis=0) - np.nanmin(stack, axis=0)
+    else:
+        res = reducers[stat](stack, axis=0)
+# Windows with no valid cells return NaN/0 depending on the reducer; force them
+# to nodata uniformly.
+valid_count = np.sum(np.isfinite(stack), axis=0)
+res = np.where(valid_count > 0, res, np.nan)
+
+out = np.where(np.isfinite(res), res, nodata).astype("float32")
+profile.update(count=1, dtype="float32", nodata=nodata, compress="deflate")
+profile.pop("photometric", None)
+with rasterio.open(output_path, "w", **profile) as dst:
+    dst.write(out, 1)
+print(f"Focal {stat} ({size}x{size}) -> {output_path}")
+print("{marker}" + json.dumps({"output_path": output_path}))
+""".replace("{marker}", _RESULT_MARKER)
+
+
 _RASTER_TOOL_SCRIPTS: dict[str, str] = {
     "hillshade": _HILLSHADE_SCRIPT,
     "slope": _SLOPE_SCRIPT,
@@ -783,12 +1202,40 @@ _RASTER_TOOL_SCRIPTS: dict[str, str] = {
     "polygonize": _POLYGONIZE_SCRIPT,
     "contour": _CONTOUR_SCRIPT,
     "interpolate": _INTERPOLATE_SCRIPT,
+    "zonal": _ZONAL_STATS_SCRIPT,
+    "raster-calc": _RASTER_CALC_SCRIPT,
+    "reclassify": _RECLASSIFY_SCRIPT,
+    "mosaic": _MOSAIC_SCRIPT,
+    "focal": _FOCAL_SCRIPT,
 }
 
 # Output kind per tool, used only as the key under ``JobState.outputs``.
 _OUTPUT_NAMES: dict[str, str] = {
     "polygonize": "vector",
     "contour": "vector",
+    "zonal": "vector",
+}
+
+_GEOJSON_EXTS = {".geojson", ".json"}
+_GEOTIFF_EXTS = {".tif", ".tiff"}
+
+# Secondary file-path parameters per tool, validated (path + allowlist +
+# extension) before the job starts. Each entry is
+# ``(param_name, label, allowed_extensions, required)``; an empty optional value
+# is passed through to the script as ``""``.
+_EXTRA_INPUTS: dict[str, list[tuple[str, str, set[str], bool]]] = {
+    "clip-mask": [("mask_path", "Mask layer", _GEOJSON_EXTS, True)],
+    "zonal": [("zones_path", "Zones layer", _GEOJSON_EXTS, True)],
+    "raster-calc": [
+        ("b_path", "Raster B", _GEOTIFF_EXTS, False),
+        ("c_path", "Raster C", _GEOTIFF_EXTS, False),
+    ],
+    "mosaic": [
+        ("raster_2", "Second raster", _GEOTIFF_EXTS, True),
+        ("raster_3", "Third raster", _GEOTIFF_EXTS, False),
+        ("raster_4", "Fourth raster", _GEOTIFF_EXTS, False),
+        ("raster_5", "Fifth raster", _GEOTIFF_EXTS, False),
+    ],
 }
 
 
@@ -891,12 +1338,17 @@ def raster_run(request: RasterToolRequest):
         "output_path": output_path,
     }
 
-    if request.tool_id == "clip-mask":
-        params["mask_path"] = _validate_extra_input(
-            str(request.parameters.get("mask_path", "")),
-            "Mask layer",
-            allowed_extensions={".geojson", ".json"},
-        )
+    # Validate any secondary file-path parameters (clip mask, zonal zones,
+    # raster-calc operands, mosaic inputs) against the path allowlist and the
+    # expected extension. An empty optional value is passed through as "".
+    for name, label, exts, required in _EXTRA_INPUTS.get(request.tool_id, []):
+        raw = str(request.parameters.get(name, "") or "").strip()
+        if not raw:
+            if required:
+                raise HTTPException(status_code=400, detail=f"{label} is required")
+            params[name] = ""
+            continue
+        params[name] = _validate_extra_input(raw, label, allowed_extensions=exts)
 
     # Interpolation reads a point GeoJSON (every other raster tool takes a
     # GeoTIFF). Reject a non-JSON primary input here with a clear 400 instead of
