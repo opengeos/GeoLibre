@@ -292,7 +292,9 @@ def test_interpolate_kriging_recovers_trend(tmp_path: Path) -> None:
 
 
 @requires_rasterio
-def test_interpolate_requires_numeric_field(tmp_path: Path) -> None:
+def test_interpolate_skips_non_numeric_values(tmp_path: Path) -> None:
+    """Features whose field value is non-numeric are skipped; if too few remain
+    the run fails with the minimum-count error rather than crashing."""
     src = tmp_path / "points.geojson"
     src.write_text(
         json.dumps(
@@ -302,8 +304,9 @@ def test_interpolate_requires_numeric_field(tmp_path: Path) -> None:
                     {
                         "type": "Feature",
                         "properties": {"z": "n/a"},
-                        "geometry": {"type": "Point", "coordinates": [0, 0]},
+                        "geometry": {"type": "Point", "coordinates": [float(i), 0]},
                     }
+                    for i in range(4)
                 ],
             }
         )

@@ -694,6 +694,11 @@ def interpolate_kriging(grid_pts):
         [gamma[which == b].mean() if np.any(which == b) else np.nan for b in range(nbins)]
     )
     valid = ~np.isnan(emp)
+    # The clip above maps every pair into [0, nbins-1], so with >= 3 points at
+    # least one bin is populated; the guard makes that contract explicit rather
+    # than letting an all-empty histogram degenerate the fit silently.
+    if not valid.any():
+        raise SystemExit("Could not build an empirical semivariogram from the points.")
     rng, sill, nugget = _fit_variogram(centers[valid], emp[valid], variogram_model, hmax)
     print(
         f"Variogram ({variogram_model}): range={rng:.4g}, sill={sill:.4g}, "
@@ -705,8 +710,9 @@ def interpolate_kriging(grid_pts):
         return np.where(hh <= 0, 0.0, g)
 
     # Ordinary-kriging LHS: semivariances among samples with a unit-bias row/col
-    # and a zero corner (the Lagrange multiplier). The diagonal stays 0 so the
-    # surface honours the samples exactly.
+    # and a zero corner (the Lagrange multiplier). `model` returns 0 for h <= 0,
+    # so the self-pair diagonal is 0 (nugget excluded there) and the surface
+    # honours the samples exactly — pykrige's default `exact_values` behaviour.
     big = np.ones((n + 1, n + 1), dtype="float64")
     big[:n, :n] = model(dist)
     big[n, n] = 0.0

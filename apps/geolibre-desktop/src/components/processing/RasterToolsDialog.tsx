@@ -189,11 +189,17 @@ export function RasterToolsDialog(): ReactElement {
     (param: AlgorithmParameter): boolean => {
       const vw = param.visibleWhen;
       if (!vw) return true;
-      const current = params[vw.param] as string | undefined;
+      // Fall back to the controlling param's declared default, so dependent
+      // fields resolve correctly on the first render — before the effect that
+      // seeds `params` from toolDefaults has run (avoids a one-frame flicker).
+      const controller = tool.parameters.find((p) => p.id === vw.param);
+      const current = (params[vw.param] ?? controller?.default) as
+        | string
+        | undefined;
       if ("in" in vw) return current != null && vw.in.includes(current);
       return current == null || !vw.notIn.includes(current);
     },
-    [params],
+    [params, tool],
   );
 
   const pickInput = useCallback(async () => {
