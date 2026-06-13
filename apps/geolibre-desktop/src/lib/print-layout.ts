@@ -273,7 +273,13 @@ function drawNorthArrow(
   ctx.font = `700 ${unit * 1.8}px system-ui, sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("N", 0, -radius - unit * 1.4);
+  // Keep the label upright (only the arrow rotates with bearing): move to the
+  // tip in the rotated frame, then undo the rotation before drawing the glyph.
+  ctx.save();
+  ctx.translate(0, -radius - unit * 1.4);
+  ctx.rotate((bearingDeg * Math.PI) / 180);
+  ctx.fillText("N", 0, 0);
+  ctx.restore();
   ctx.restore();
 }
 

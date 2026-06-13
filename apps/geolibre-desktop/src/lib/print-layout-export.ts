@@ -55,8 +55,12 @@ export function captureMapImage(map: MapLike): CapturedMap {
   canvases.forEach((c) => {
     try {
       ctx.drawImage(c, 0, 0, out.width, out.height);
-    } catch {
-      // A tainted or zero-size canvas is skipped rather than aborting.
+    } catch (err) {
+      // The base map canvas is unrecoverable (most likely cross-origin tile
+      // CORS tainting it): propagate so the dialog reports an error instead of
+      // exporting a blank page. A tainted/zero-size overlay (deck.gl) is only
+      // cosmetic, so skip it.
+      if (c === base) throw err;
     }
   });
 

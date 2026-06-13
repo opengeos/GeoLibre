@@ -39,7 +39,12 @@ interface PrintLayoutDialogProps {
 const PREVIEW_LONG_EDGE = 560;
 
 function sanitizeFilename(name: string): string {
-  const cleaned = name.trim().replace(/[^A-Za-z0-9 _-]+/g, "").replace(/\s+/g, "-");
+  // Keep letters and digits from any script (\p{L}\p{N}) so non-Latin project
+  // names are not stripped to the fallback.
+  const cleaned = name
+    .trim()
+    .replace(/[^\p{L}\p{N} _-]+/gu, "")
+    .replace(/\s+/g, "-");
   return cleaned || "map-layout";
 }
 
