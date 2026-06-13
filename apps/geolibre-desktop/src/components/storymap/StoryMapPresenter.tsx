@@ -100,35 +100,68 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
       event.stopPropagation();
       const existing = cardLayouts[id];
       const rect = cardEl?.getBoundingClientRect();
+      // Bounds of the visible map area and the card's flow (un-offset) position,
+      // captured once so a drag can be clamped to keep the title bar reachable.
+      const viewport = scrollRef.current?.getBoundingClientRect() ?? null;
+      const baseDx = existing?.dx ?? 0;
+      const baseDy = existing?.dy ?? 0;
+      const flowLeft = rect ? rect.left - baseDx : 0;
+      const flowTop = rect ? rect.top - baseDy : 0;
       gestureRef.current = {
         id,
         mode,
         startX: event.clientX,
         startY: event.clientY,
         base: {
-          dx: existing?.dx ?? 0,
-          dy: existing?.dy ?? 0,
+          dx: baseDx,
+          dy: baseDy,
           w: existing?.w ?? (mode === "resize" ? (rect?.width ?? null) : null),
           h: existing?.h ?? (mode === "resize" ? (rect?.height ?? null) : null),
         },
       };
+
+      // Keep at least this much of the card on screen, and clear the top
+      // control row so the drag bar never hides behind Exit/the map controls.
+      const TOP_INSET = 52;
+      const EDGE_KEEP = 80;
+      // Left boundary clears the nav pane (matches the `.glsm-with-nav` reserve)
+      // so a dragged card can't slip behind it.
+      const leftBoundary = (viewport?.left ?? 0) + (navOpen ? 14 * 16 : 0);
 
       const onMove = (e: PointerEvent) => {
         const g = gestureRef.current;
         if (!g) return;
         const ddx = e.clientX - g.startX;
         const ddy = e.clientY - g.startY;
-        setCardLayouts((prev) => ({
-          ...prev,
-          [g.id]:
-            g.mode === "drag"
-              ? { ...g.base, dx: g.base.dx + ddx, dy: g.base.dy + ddy }
-              : {
-                  ...g.base,
-                  w: Math.max(200, (g.base.w ?? 280) + ddx),
-                  h: Math.max(120, (g.base.h ?? 200) + ddy),
-                },
-        }));
+        if (g.mode === "resize") {
+          setCardLayouts((prev) => ({
+            ...prev,
+            [g.id]: {
+              ...g.base,
+              w: Math.max(200, (g.base.w ?? 280) + ddx),
+              h: Math.max(120, (g.base.h ?? 200) + ddy),
+            },
+          }));
+          return;
+        }
+        let dx = g.base.dx + ddx;
+        let dy = g.base.dy + ddy;
+        if (viewport) {
+          // Clamp the title bar within [top control row, bottom] and keep part
+          // of the card horizontally on screen.
+          const minTop = viewport.top + TOP_INSET;
+          const maxTop = viewport.bottom - TOP_INSET;
+          dy = Math.min(
+            maxTop - flowTop,
+            Math.max(minTop - flowTop, dy),
+          );
+          const maxLeft = viewport.right - EDGE_KEEP;
+          dx = Math.min(
+            maxLeft - flowLeft,
+            Math.max(leftBoundary - flowLeft, dx),
+          );
+        }
+        setCardLayouts((prev) => ({ ...prev, [g.id]: { ...g.base, dx, dy } }));
       };
       const onUp = () => {
         gestureRef.current = null;
@@ -138,7 +171,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
     },
-    [cardLayouts],
+    [cardLayouts, navOpen],
   );
 
   const resetCard = useCallback((id: string) => {
@@ -505,7 +538,8 @@ function StoryMapStyles() {
       .glsm-with-nav { padding-left: 14rem; }
       @media (max-width: 900px) { .glsm-with-nav { padding-left: 0; } }
       .glsm-scroll a, .glsm-scroll a:hover, .glsm-scroll a:visited { color: #0071bc; }
-      .glsm-header { margin: auto; width: 100%; position: relative; z-index: 5; }
+      /* Decorative text only; never intercept pointers meant for cards/map. */
+      .glsm-header { margin: auto; width: 100%; position: relative; z-index: 5; pointer-events: none; }
       .glsm-header h1, .glsm-header h2, .glsm-header p { margin: 0; padding: 1.5vh 2%; text-align: center; }
       .glsm-footer { width: 100%; min-height: 5vh; padding: 2vh 0; text-align: center; line-height: 22px; font-size: 13px; position: relative; z-index: 5; }
       .glsm-footer p { margin: 0; padding: 0 5%; }
@@ -520,7 +554,8 @@ function StoryMapStyles() {
       .glsm-step { padding-bottom: 45vh; opacity: 0.25; transition: opacity 0.3s; }
       .glsm-step.glsm-active { opacity: 0.95; }
       /* Each chapter renders as a movable, resizable card. */
-      .glsm-card { position: relative; display: flex; flex-direction: column; max-height: 60vh; line-height: 22px; font-size: 14px; border-radius: 6px; box-shadow: 0 6px 20px rgba(0,0,0,0.25); overflow: hidden; }
+      /* z-index keeps a dragged card above the (z-index:5) header it overlaps. */
+      .glsm-card { position: relative; z-index: 6; display: flex; flex-direction: column; max-height: 60vh; line-height: 22px; font-size: 14px; border-radius: 6px; box-shadow: 0 6px 20px rgba(0,0,0,0.25); overflow: hidden; }
       .glsm-card-bar { display: flex; align-items: center; gap: 6px; padding: 7px 10px; cursor: move; touch-action: none; user-select: none; font-weight: 600; font-size: 13px; border-bottom: 1px solid rgba(127,127,127,0.25); }
       .glsm-grip { width: 14px; height: 14px; flex-shrink: 0; opacity: 0.55; }
       .glsm-card-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
