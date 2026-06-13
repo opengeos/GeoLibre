@@ -398,6 +398,7 @@ ${inlineLayerScript}
                 .onStepEnter(function (response) {
                     var idx = config.chapters.findIndex(function (c) { return c.id === response.element.id; });
                     var chapter = config.chapters[idx];
+                    if (!chapter) return;
                     response.element.classList.add('active');
                     map[chapter.mapAnimation || 'flyTo'](chapter.location);
                     if (config.showMarkers && marker) marker.setLngLat(chapter.location.center);
@@ -412,6 +413,7 @@ ${inlineLayerScript}
                 })
                 .onStepExit(function (response) {
                     var chapter = config.chapters.find(function (c) { return c.id === response.element.id; });
+                    if (!chapter) return;
                     response.element.classList.remove('active');
                     if (chapter.onChapterExit.length > 0) chapter.onChapterExit.forEach(setLayerOpacity);
                 });

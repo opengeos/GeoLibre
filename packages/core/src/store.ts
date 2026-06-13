@@ -507,16 +507,20 @@ export const useAppStore = create<AppState>()(
         basemapStyleUrl: s.basemapStyleUrl,
         basemapVisible: s.basemapVisible,
         basemapOpacity: s.basemapOpacity,
+        storymap: s.storymap,
       }),
       // Records a history entry only when the tracked slice really changed.
       // Basemap fields compare with ===; `layers` is compared element-by-element
       // (Object.is per element) via shallow. Every mutating action creates new
       // layer objects, so real changes differ; two distinct empty arrays compare
-      // equal, so resetting layers (e.g. newProject) records nothing.
+      // equal, so resetting layers (e.g. newProject) records nothing. `storymap`
+      // is compared by reference: every authoring action creates a new object,
+      // so real edits differ while an unchanged null stays equal.
       equality: (a, b) =>
         a.basemapStyleUrl === b.basemapStyleUrl &&
         a.basemapVisible === b.basemapVisible &&
         a.basemapOpacity === b.basemapOpacity &&
+        a.storymap === b.storymap &&
         shallow(a.layers, b.layers),
       limit: 100,
       // Group rapid bursts (slider drags) into one entry; window is 0 in tests.

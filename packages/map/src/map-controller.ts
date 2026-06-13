@@ -331,6 +331,10 @@ export class MapController {
    * changes made during story-map playback by {@link setStoryLayerOpacity}.
    */
   restoreLayerStyles(): void {
+    // Invalidate any pending story rotation and halt an in-flight camera move so
+    // a deferred rotateTo cannot fire after the presenter has exited.
+    this.storyCameraToken++;
+    this.map?.stop();
     // Clear any opacity transitions left over from playback first, otherwise the
     // restored values animate back in (potentially over a multi-second fade).
     if (this.map) {

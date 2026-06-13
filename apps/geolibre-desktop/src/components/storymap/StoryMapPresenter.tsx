@@ -208,14 +208,14 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
   const themeClass = theme === "light" ? "glsm-light" : "glsm-dark";
 
   return createPortal(
-    // The root is click-through (pointer-events-none) so the map and its
-    // controls stay usable during playback; only the chapter panels, footer,
-    // and the Exit button opt back into pointer events.
-    <div className="pointer-events-none absolute inset-0 z-[70] overflow-hidden">
+    // The scroll surface captures the wheel so scrolling navigates chapters.
+    // The map controls are lifted above it (see StoryMapStyles) so they stay
+    // clickable even though the story drives the camera.
+    <div className="absolute inset-0 z-[70] overflow-hidden">
       <Button
         variant="secondary"
         size="sm"
-        className="pointer-events-auto absolute left-3 top-3 z-[72] shadow-md"
+        className="absolute left-3 top-3 z-[72] shadow-md"
         onClick={() => setPresenting(false)}
       >
         <X className="mr-1 h-4 w-4" />
@@ -296,14 +296,19 @@ function StoryMapStyles() {
     <style>{`
       /* Widths are percentages of the overlay (which is sized to the map
          canvas, not the viewport) so panels and images never spill past the
-         map. The scroll surface is click-through; only the panels/footer
-         capture events, leaving the map and its controls interactive. */
-      .glsm-scroll { pointer-events: none; scrollbar-width: none; }
+         map. The scroll surface captures the wheel so scrolling advances
+         chapters; the scrollbar is hidden so it cannot cover the map controls,
+         which are lifted above the overlay to stay clickable. */
+      /* Lift the whole control layer (a positioned z-index:2 stacking context)
+         above the overlay; it is pointer-events:none, so only its buttons take
+         clicks while scroll/clicks elsewhere still reach the overlay. */
+      .maplibregl-control-container { z-index: 73; }
+      .glsm-scroll { scrollbar-width: none; }
       .glsm-scroll::-webkit-scrollbar { width: 0; height: 0; }
       .glsm-scroll a, .glsm-scroll a:hover, .glsm-scroll a:visited { color: #0071bc; }
       .glsm-header { margin: auto; width: 100%; position: relative; z-index: 5; }
       .glsm-header h1, .glsm-header h2, .glsm-header p { margin: 0; padding: 1.5vh 2%; text-align: center; }
-      .glsm-footer { pointer-events: auto; width: 100%; min-height: 5vh; padding: 2vh 0; text-align: center; line-height: 22px; font-size: 13px; position: relative; z-index: 5; }
+      .glsm-footer { width: 100%; min-height: 5vh; padding: 2vh 0; text-align: center; line-height: 22px; font-size: 13px; position: relative; z-index: 5; }
       .glsm-footer p { margin: 0; padding: 0 5%; }
       .glsm-features { padding-top: 10vh; padding-bottom: 45vh; }
       .glsm-hidden { visibility: hidden; }
@@ -315,7 +320,7 @@ function StoryMapStyles() {
       .glsm-dark { color: #fafafa; background-color: #444; }
       .glsm-step { padding-bottom: 45vh; opacity: 0.25; transition: opacity 0.3s; }
       .glsm-step.glsm-active { opacity: 0.95; }
-      .glsm-step > div { pointer-events: auto; padding: 20px 28px; line-height: 22px; font-size: 14px; border-radius: 4px; }
+      .glsm-step > div { padding: 20px 28px; line-height: 22px; font-size: 14px; border-radius: 4px; }
       .glsm-step h3 { margin-top: 0; }
       .glsm-step img { width: 100%; max-height: 38vh; object-fit: cover; border-radius: 2px; }
       .glsm-inset-marker { width: 12px; height: 12px; background-color: #ff6b6b; border: 2px solid white; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.3); }
