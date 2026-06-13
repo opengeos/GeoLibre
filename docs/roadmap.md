@@ -126,7 +126,7 @@
 - [x] Cross-platform installers
 - [x] Documentation and tutorials
 
-## v1.1: Vector styling, attribute table management, and atmosphere effects (current)
+## v1.1: Vector styling, attribute table management, and atmosphere effects
 
 - [x] In-browser GeoPandas engine for the Vector tools via Pyodide (no server, same results as the optional sidecar)
 - [x] Host deck.gl exposed to external plugins via `app.getDeckGL()`, so plugins render on the shared instance instead of bundling their own copy
@@ -139,6 +139,32 @@
 - [x] conda-forge install instructions and a video tutorial in the documentation
 - [x] MIT license
 - [x] CSP allowance for `cdn.jsdelivr.net` so DuckDB-WASM loads its bundles in the browser build
+
+## v1.2: New data sources, attribute analytics, routing, and platform polish (current)
+
+- [x] OpenStreetMap PBF file loading parsed in-browser with osmix
+- [x] Cloud-Optimized NetCDF/HDF layers loaded via kerchunk references
+- [x] Authenticated 3D Tiles tilesets via custom request headers
+- [x] Georeferenced video overlay layers
+- [x] Deck.gl Layer builder for composing deck.gl overlays from uploaded files and remote URLs
+- [x] In-browser PostGIS SQL engine via PGlite, alongside the DuckDB Spatial SQL Workspace
+- [x] Attribute table add-field and field-calculator tools
+- [x] Attribute table Charts panel (histogram, scatter, bar, line, box)
+- [x] Spatial join added to the Vector tools
+- [x] Select by value and Select by location tools
+- [x] H3 tools to create hexagonal grids and bin points into H3 cells
+- [x] Point heatmap renderer and clustering, including for Add Vector Layer point layers
+- [x] Directions plugin for interactive routing via `maplibre-gl-directions`, with a one-time privacy notice before enabling it
+- [x] Undo/redo for layer and style operations
+- [x] Command palette (`Ctrl`/`Cmd` + `K`) and global keyboard shortcuts with a `?` cheat sheet
+- [x] Print layout composer with PNG and PDF export
+- [x] Installable, offline-capable Progressive Web App (PWA) build
+- [x] Internationalization framework (react-i18next) with extracted string catalogs and a `?locale`/`?lang` embed language parameter
+- [x] Accessibility pass with axe checks across key screens
+- [x] App, section, and plugin React error boundaries
+- [x] Playwright end-to-end smoke tests and a CI job
+- [x] Expanded Python `Map` API covering more Add Data layer types
+- [x] CDN-loaded PGlite/PostGIS to shrink the Jupyter wheel and the desktop binary
 
 ## Plugin marketplace and registry (design)
 

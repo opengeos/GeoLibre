@@ -20,26 +20,29 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 
 **Video tutorial:** [GeoLibre 1.0: A Free, Open-Source Cloud-Native GIS That Runs Anywhere (Browser, Desktop & Jupyter)](https://youtu.be/87Cm0QagtxI)
 
-## Features (v1.1)
+## Features (v1.2)
 
 - Runs across desktop (Tauri), web (browser), and mobile or small screens, with a responsive layout that adapts menus, dialogs, and panels, plus per-panel visibility through Layout settings
 - MapLibre map workspace with OpenFreeMap basemaps, blank background support, and toggleable navigation, fullscreen, geolocation, globe, terrain, scale, attribution, and logo controls
-- Load local vector layers supported by DuckDB-WASM Spatial, including common formats such as GeoJSON, GeoParquet, GeoPackage, Shapefile, FlatGeobuf, KML/KMZ, GML, delimited text, and GPX
+- Load local vector layers supported by DuckDB-WASM Spatial, including common formats such as GeoJSON, GeoParquet, GeoPackage, Shapefile, FlatGeobuf, KML/KMZ, GML, delimited text, GPX, and OpenStreetMap PBF extracts (parsed in-browser with osmix)
 - Reproject vector layers to EPSG:4326 on load and split dragged GPX files into named waypoint, track, and route layers
-- Add Data menu for XYZ tiles, WMS, WFS, GeoJSON URLs, vector tiles, COG and GeoTIFF rasters, MBTiles, ArcGIS FeatureServer and VectorTileServer layers, PMTiles, Zarr, LiDAR, 3D Tiles, Gaussian splats, and georeferenced video overlays
+- Add Data menu for XYZ tiles, WMS, WFS, GeoJSON URLs, vector tiles, COG and GeoTIFF rasters, Cloud-Optimized NetCDF/HDF (via kerchunk references), MBTiles, ArcGIS FeatureServer and VectorTileServer layers, PMTiles, Zarr, LiDAR, 3D Tiles (including authenticated tilesets via custom request headers), Gaussian splats, and georeferenced video overlays
+- Deck.gl Layer builder for composing deck.gl overlays from uploaded files or remote URLs
 - Cloud data integrations through the Planetary Computer and Earth Engine panels, the Overture Maps plugin, and federal Web Services plugins
 - Manual and automatic refresh for WFS, GeoJSON URL, and Add Vector Layer URL layers
 - Layer panel for visibility, opacity, reordering, rename, zoom-to-layer, identify, labels, open attribute table, export, and remove actions
 - Live style panel with single, categorized, graduated, and expression symbology (fill, stroke, opacity, circle radius), plus point heatmap and clustering renderers — all including for Add Vector Layer point layers
-- Attribute table with filtering, sorting, resize controls, feature highlighting, optional zoom to selected features, column management (rename, delete, hide/show, reorder), and export to GeoJSON/GeoParquet/CSV
-- SQL Workspace for running DuckDB Spatial SQL against loaded layers, local files, and remote URLs, with sample queries, query history, and adding results to the map or exporting them
+- Attribute table with filtering, sorting, resize controls, feature highlighting, optional zoom to selected features, add-field and field-calculator tools, a Charts panel (histogram, scatter, bar, line, box), column management (rename, delete, hide/show, reorder), and export to GeoJSON/GeoParquet/CSV
+- SQL Workspace for running DuckDB Spatial SQL against loaded layers, local files, and remote URLs, with sample queries, query history, and adding results to the map or exporting them, plus an in-browser PostGIS SQL engine via PGlite
 - Multiple DuckDB SQL query-result layers with identify, selection, and attribute table support
-- Controls menu with Measure, Bookmark, Minimap, and View State tools, plus a Print menu and a Search panel
+- Controls menu with Measure, Bookmark, Minimap, and View State tools, a Search panel, and a Print menu with a print layout composer that exports the map to PNG or PDF
 - Command palette (`Ctrl`/`Cmd` + `K`) that searches and runs menu and toolbar actions across Add Data, Processing, Controls, Plugins, and Help, global keyboard shortcuts for New/Open/Save/Save As, and a `?` shortcuts cheat sheet
 - Conversion menu for Vector to GeoParquet/FlatGeobuf/PMTiles, CSV to GeoParquet, and Raster to COG; GeoParquet and CSV conversions run in the browser with DuckDB-WASM, while FlatGeobuf, PMTiles, and COG require the optional Python sidecar
 - Whitebox toolbox with batch tools run against a selected input directory
 - Vector menu with common geometry tools (buffer, centroids, convex hull, dissolve, bounding box, simplify, clip, intersection, difference, union, spatial join, select by value, select by location) that run in the browser with Turf.js, an optional GeoPandas sidecar engine for every tool, and an in-browser GeoPandas engine via Pyodide (no server, same results as the sidecar)
 - Raster menu with common raster tools (hillshade, slope, aspect, reproject, resample, clip by extent, clip by mask layer, polygonize, contour) backed by a rasterio Python sidecar, with a file path in and a file path out
+- H3 tools to create hexagonal grids over an extent and bin point layers into H3 cells
+- Undo/redo for layer and style operations
 - Drag and drop vector and GeoTIFF/COG raster files onto the map to add them as layers
 - Project menu to create, open, save, and Save As `.geolibre.json` projects
 - Desktop diagnostics panel, update check, and MSIX packaging support
@@ -50,7 +53,11 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 - External plugin zip loading from the app data plugins directory and local development plugin directories
 - Bundled drop-in plugins under `public/plugins/<id>/` that bake into both the web and desktop builds and load automatically with no manifest URL
 - Browser deployment with Docker, embed-friendly URL parameters, and a `maponly` chrome-free mode
-- Python package (`geolibre`) that embeds the full app in Jupyter notebooks as an [anywidget](https://anywidget.dev), with a leafmap-style API and two-way project sync
+- Installable, offline-capable Progressive Web App (PWA) build
+- Internationalization framework with react-i18next and per-build translation catalogs, plus a `?locale`/`?lang` query parameter to set the embed language
+- Accessibility pass with axe-checked screens, keyboard navigation, and screen-reader labels
+- App-wide, section, and plugin React error boundaries that contain failures and keep the rest of the workspace usable
+- Python package (`geolibre`) that embeds the full app in Jupyter notebooks as an [anywidget](https://anywidget.dev), with an expanded leafmap-style API covering more Add Data layer types and two-way project sync
 - Optional Python FastAPI sidecar for heavier processing workflows
 
 ## Prerequisites

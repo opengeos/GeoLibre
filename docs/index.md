@@ -39,7 +39,7 @@ Pan, zoom, rotate, and tilt a MapLibre map with OpenFreeMap basemaps or a blank 
 <div class="feature-card" markdown>
 ### Local and remote data
 
-Load local and remote vector and raster data, inspect and manage attributes in the table (rename, hide, reorder, and delete fields, plus export), style layers with single, categorized, graduated, and expression symbology (plus point heatmap and clustering renderers), reorder, rename, and refresh layers, and save, reopen, or share `.geolibre.json` projects.
+Load local and remote vector and raster data, inspect and manage attributes in the table (add fields, a field calculator, a Charts panel, plus rename, hide, reorder, delete, and export), style layers with single, categorized, graduated, and expression symbology (plus point heatmap and clustering renderers), reorder, rename, and refresh layers with undo/redo, and save, reopen, or share `.geolibre.json` projects.
 </div>
 
 <div class="feature-card" markdown>
@@ -51,7 +51,7 @@ Activate built-in plugins for layer control, basemaps, MapLibre components, swip
 <div class="feature-card" markdown>
 ### Advanced layer formats
 
-Add Data covers XYZ, WMS, WFS, WMTS, ArcGIS, and STAC services; GeoParquet, FlatGeobuf, PMTiles, and Zarr cloud formats; COG and GeoTIFF rasters and MBTiles; LiDAR, Gaussian splats, and 3D Tiles; and DuckDB and PostgreSQL databases.
+Add Data covers XYZ, WMS, WFS, WMTS, ArcGIS, and STAC services; GeoParquet, FlatGeobuf, PMTiles, Zarr, and OpenStreetMap PBF; COG and GeoTIFF rasters, Cloud-Optimized NetCDF/HDF, and MBTiles; LiDAR, Gaussian splats, 3D Tiles (including authenticated tilesets), georeferenced video overlays, and deck.gl layers; and DuckDB and PostgreSQL databases.
 </div>
 
 <div class="feature-card" markdown>
@@ -63,13 +63,13 @@ Convert data to cloud-native GeoParquet, FlatGeobuf, PMTiles, and COG from the C
 <div class="feature-card" markdown>
 ### SQL Workspace
 
-Run DuckDB Spatial SQL in the browser against loaded layers, local files, and remote URLs. Auto-wraps bare URLs into the matching reader and streams remote files over HTTP range requests. Includes sample queries, query history, and adding a result (with an optional layer name) to the map or exporting it as CSV or GeoParquet.
+Run DuckDB Spatial SQL in the browser against loaded layers, local files, and remote URLs, or query with the in-browser PostGIS engine powered by PGlite. Auto-wraps bare URLs into the matching reader and streams remote files over HTTP range requests. Includes sample queries, query history, and adding a result (with an optional layer name) to the map or exporting it as CSV or GeoParquet.
 </div>
 
 <div class="feature-card" markdown>
 ### Vector tools
 
-Common geometry tools under Processing → Vector: buffer, centroids, convex hull, dissolve, bounding box, simplify, clip, intersection, difference, union, spatial join, select by value, and select by location. They run in the browser with Turf.js, with an optional GeoPandas sidecar engine for every tool.
+Common geometry tools under Processing → Vector: buffer, centroids, convex hull, dissolve, bounding box, simplify, clip, intersection, difference, union, spatial join, select by value, select by location, and H3 hexagonal grids and binning. They run in the browser with Turf.js, with an optional GeoPandas sidecar engine for every tool.
 </div>
 
 <div class="feature-card" markdown>
@@ -81,7 +81,7 @@ Common raster tools under Processing → Raster: hillshade, slope, aspect, repro
 <div class="feature-card" markdown>
 ### Python and Jupyter
 
-Embed the full GeoLibre app in a Jupyter notebook with the [`geolibre`](python.md) Python package. A leafmap-style API (`add_geojson`, `add_tile_layer`, `add_cog`) drives the map, and the project syncs both ways so UI edits are readable back from Python.
+Embed the full GeoLibre app in a Jupyter notebook with the [`geolibre`](python.md) Python package. An expanded leafmap-style API (`add_geojson`, `add_tile_layer`, `add_cog`, and many more Add Data layer types) drives the map, and the project syncs both ways so UI edits are readable back from Python.
 </div>
 
 </div>
