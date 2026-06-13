@@ -191,7 +191,9 @@ function normalizeOpacityChanges(value: unknown): StoryLayerOpacityChange[] {
       const candidate = entry as Partial<StoryLayerOpacityChange>;
       const layerId = normalizeString(candidate.layerId);
       if (!layerId) return null;
+      const id = normalizeString(candidate.id);
       return {
+        ...(id ? { id } : {}),
         layerId,
         opacity: clampCoordinate(normalizeNumber(candidate.opacity, 1), 0, 1),
         ...(Number.isFinite(candidate.duration)

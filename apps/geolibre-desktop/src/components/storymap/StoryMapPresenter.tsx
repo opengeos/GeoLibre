@@ -1,10 +1,12 @@
 import { type RefObject, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import maplibregl from "maplibre-gl";
 import { useAppStore, type StoryChapter } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import { Button } from "@geolibre/ui";
 import { X } from "lucide-react";
+import { sanitizeStoryHtml } from "../../lib/sanitize-html";
 
 interface StoryMapPresenterProps {
   mapControllerRef: RefObject<MapController | null>;
@@ -100,6 +102,10 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
       steps.forEach((step, i) =>
         step.classList.toggle("glsm-active", i === index),
       );
+
+      // Cancel any in-progress camera movement (e.g. a previous chapter's
+      // 30s rotateTo) so it cannot fight the new transition for control.
+      map.stop();
 
       const animation = chapter.mapAnimation || "flyTo";
       map[animation]({
@@ -198,11 +204,18 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
 
   if (!presenting || chapters.length === 0) return null;
 
+  // Render into the MapLibre container so the presentation is clipped to the
+  // map canvas instead of overlaying the toolbar and side panels. The container
+  // carries `.maplibregl-map { position: relative }`, so `absolute inset-0`
+  // lines the overlay up exactly with the map.
+  const container = mapControllerRef.current?.getMap()?.getContainer() ?? null;
+  if (!container) return null;
+
   const theme = storymap?.theme ?? "dark";
   const themeClass = theme === "light" ? "glsm-light" : "glsm-dark";
 
-  return (
-    <div className="fixed inset-0 z-[70]">
+  return createPortal(
+    <div className="absolute inset-0 z-[70] overflow-hidden">
       <Button
         variant="secondary"
         size="sm"
@@ -214,20 +227,24 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
       </Button>
 
       {storymap?.inset ? (
+        // The inner div is the MapLibre container; MapLibre stamps it with
+        // `.maplibregl-map { position: relative }`, so keep the corner
+        // positioning on the outer wrapper where it cannot be overridden.
         <div
-          ref={insetRef}
           className={`pointer-events-none absolute z-[71] h-44 w-44 overflow-hidden rounded-md border-2 border-white/80 shadow-lg ${
             INSET_POSITION_CLASS[storymap.insetPosition] ??
             INSET_POSITION_CLASS["bottom-right"]
           }`}
-        />
+        >
+          <div ref={insetRef} className="h-full w-full" />
+        </div>
       ) : null}
 
       <StoryMapStyles />
 
       <div
         ref={scrollRef}
-        className="glsm-scroll h-full w-full overflow-y-auto"
+        className="glsm-scroll absolute inset-0 overflow-y-auto"
       >
         {storymap &&
         (storymap.title || storymap.subtitle || storymap.byline) ? (
@@ -254,8 +271,11 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
                 ) : null}
                 {chapter.description ? (
                   <p
-                    // Descriptions support inline HTML, matching the template.
-                    dangerouslySetInnerHTML={{ __html: chapter.description }}
+                    // Descriptions support inline HTML, matching the template;
+                    // sanitized because chapters can come from a shared project.
+                    dangerouslySetInnerHTML={{
+                      __html: sanitizeStoryHtml(chapter.description),
+                    }}
                   />
                 ) : null}
               </div>
@@ -265,11 +285,12 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
 
         {storymap?.footer ? (
           <div className={`glsm-footer ${themeClass}`}>
-            <p dangerouslySetInnerHTML={{ __html: storymap.footer }} />
+            <p dangerouslySetInnerHTML={{ __html: sanitizeStoryHtml(storymap.footer) }} />
           </div>
         ) : null}
       </div>
-    </div>
+    </div>,
+    container,
   );
 }
 

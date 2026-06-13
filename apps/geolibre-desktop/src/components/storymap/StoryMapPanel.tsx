@@ -617,7 +617,7 @@ function LayerEffectsEditor({
           onClick={() =>
             onChange([
               ...changes,
-              { layerId: layers[0].id, opacity: 1, duration: 1000 },
+              { id: createId(), layerId: layers[0].id, opacity: 1, duration: 1000 },
             ])
           }
         >
@@ -626,7 +626,7 @@ function LayerEffectsEditor({
         </Button>
       </div>
       {changes.map((change, i) => (
-        <div key={i} className="flex items-center gap-2">
+        <div key={change.id ?? `${change.layerId}-${i}`} className="flex items-center gap-2">
           <Select
             className="flex-1"
             value={change.layerId}

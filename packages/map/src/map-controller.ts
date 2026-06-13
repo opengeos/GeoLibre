@@ -325,6 +325,21 @@ export class MapController {
    * changes made during story-map playback by {@link setStoryLayerOpacity}.
    */
   restoreLayerStyles(): void {
+    // Clear any opacity transitions left over from playback first, otherwise the
+    // restored values animate back in (potentially over a multi-second fade).
+    if (this.map) {
+      for (const layer of this.syncedLayers) {
+        for (const nativeId of this.getNativeLayerIdsByLayerId(layer.id)) {
+          const styleLayer = this.map.getLayer(nativeId);
+          if (!styleLayer) continue;
+          for (const prop of OPACITY_PAINT_PROPERTIES[styleLayer.type] ?? []) {
+            this.map.setPaintProperty(nativeId, `${prop}-transition`, {
+              duration: 0,
+            });
+          }
+        }
+      }
+    }
     this.syncLayers(this.syncedLayers);
   }
 

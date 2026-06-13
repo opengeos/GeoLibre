@@ -40,9 +40,16 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
 
   // Only inline layers that are actually referenced by a chapter transition or
   // that are visible GeoJSON layers, so the export stays focused on the story.
+  // `referenced` (enter ∪ exit) drives which layers to inline; only layers a
+  // chapter fades *in* should start hidden, so those are tracked separately.
   const referenced = new Set<string>();
+  const referencedOnEnter = new Set<string>();
   for (const chapter of storymap.chapters) {
-    for (const change of [...chapter.onChapterEnter, ...chapter.onChapterExit]) {
+    for (const change of chapter.onChapterEnter) {
+      referenced.add(change.layerId);
+      referencedOnEnter.add(change.layerId);
+    }
+    for (const change of chapter.onChapterExit) {
       referenced.add(change.layerId);
     }
   }
@@ -58,8 +65,9 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
       id: layer.id,
       geojson: layer.geojson,
       layerSpec,
-      // Referenced layers start hidden so the first chapter can fade them in.
-      initialOpacity: isReferenced ? 0 : layer.opacity,
+      // Layers a chapter fades in start hidden; exit-only layers keep their
+      // natural opacity so they are visible until faded out.
+      initialOpacity: referencedOnEnter.has(layer.id) ? 0 : layer.opacity,
     });
   }
 
@@ -111,12 +119,23 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
         source: sourceId,
         paint,
       };
-      return `    map.addSource(${JSON.stringify(sourceId)}, { type: 'geojson', data: ${JSON.stringify(entry.geojson)} });
-    map.addLayer(${JSON.stringify(spec)});`;
+      return `    map.addSource(${jsonForScript(sourceId)}, { type: 'geojson', data: ${jsonForScript(entry.geojson)} });
+    map.addLayer(${jsonForScript(spec)});`;
     })
     .join("\n");
 
   return renderTemplate(config, inlineLayerScript);
+}
+
+/**
+ * Serialize a value to JSON for embedding inside an inline `<script>` block.
+ *
+ * Escapes `</` so a string containing `</script>` (or any other closing tag)
+ * cannot terminate the script element early, which would let crafted project
+ * content inject markup into the exported page.
+ */
+function jsonForScript(value: unknown, space?: number): string {
+  return JSON.stringify(value, null, space).replace(/<\//g, "<\\/");
 }
 
 function opacityProperty(type: string): string | null {
@@ -214,7 +233,7 @@ function renderTemplate(
   config: Record<string, unknown>,
   inlineLayerScript: string,
 ): string {
-  const configJson = JSON.stringify(config, null, 4);
+  const configJson = jsonForScript(config, 4);
   return `<!DOCTYPE html>
 <html>
 
@@ -224,7 +243,7 @@ function renderTemplate(
     <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
     <script src='https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js'></script>
     <link href='https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css' rel='stylesheet' />
-    <script src="https://unpkg.com/scrollama"></script>
+    <script src="https://unpkg.com/scrollama@3.2.0"></script>
     <style>
         body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
         a, a:hover, a:visited { color: #0071bc; }

@@ -279,6 +279,8 @@ export type StoryChapterAnimation = "flyTo" | "easeTo" | "jumpTo";
 
 /** A layer opacity change triggered when a chapter is entered or exited. */
 export interface StoryLayerOpacityChange {
+  /** Stable identity for React list keys; optional for older project files. */
+  id?: string;
   /** GeoLibre store layer id whose opacity should change. */
   layerId: string;
   opacity: number;
