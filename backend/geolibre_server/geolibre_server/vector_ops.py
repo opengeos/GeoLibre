@@ -525,6 +525,167 @@ def _aggregate(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     return _to_feature_collection(result), [message]
 
 
+# Largest iteration count Smooth accepts; kept in sync with the client engine.
+_SMOOTH_MAX_ITERATIONS = 10
+
+
+def _chaikin(points: list[list[float]], closed: bool) -> list[list[float]]:
+    """One pass of Chaikin's corner-cutting over a list of ``[x, y]`` positions.
+
+    Each segment A->B contributes two new points at 1/4 and 3/4 along it. For a
+    closed ring the segments wrap (every vertex is cut); for an open line the
+    endpoints are preserved. The arithmetic and ordering mirror the client's
+    ``chaikinOnce`` exactly so both engines return bit-identical coordinates.
+    """
+    n = len(points)
+    if n < (3 if closed else 2):
+        return points
+    out: list[list[float]] = []
+    if closed:
+        for i in range(n):
+            a = points[i]
+            b = points[(i + 1) % n]
+            out.append([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25])
+            out.append([a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75])
+    else:
+        out.append([points[0][0], points[0][1]])
+        for i in range(n - 1):
+            a = points[i]
+            b = points[i + 1]
+            out.append([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25])
+            out.append([a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75])
+        out.append([points[n - 1][0], points[n - 1][1]])
+    return out
+
+
+def _smooth_line(coords: list[list[float]], iterations: int) -> list[list[float]]:
+    pts = [[p[0], p[1]] for p in coords]
+    for _ in range(iterations):
+        pts = _chaikin(pts, False)
+    return pts
+
+
+def _smooth_ring(ring: list[list[float]], iterations: int) -> list[list[float]]:
+    closed = (
+        len(ring) > 1
+        and ring[0][0] == ring[-1][0]
+        and ring[0][1] == ring[-1][1]
+    )
+    pts = [[p[0], p[1]] for p in (ring[:-1] if closed else ring)]
+    for _ in range(iterations):
+        pts = _chaikin(pts, True)
+    pts.append([pts[0][0], pts[0][1]])
+    return pts
+
+
+def _smooth_geometry(geometry: dict, iterations: int) -> dict:
+    """Smooth one GeoJSON geometry; non-line/polygon geometries pass through."""
+    gtype = geometry.get("type")
+    coords = geometry.get("coordinates")
+    if gtype == "LineString":
+        return {"type": gtype, "coordinates": _smooth_line(coords, iterations)}
+    if gtype == "MultiLineString":
+        return {
+            "type": gtype,
+            "coordinates": [_smooth_line(line, iterations) for line in coords],
+        }
+    if gtype == "Polygon":
+        return {
+            "type": gtype,
+            "coordinates": [_smooth_ring(ring, iterations) for ring in coords],
+        }
+    if gtype == "MultiPolygon":
+        return {
+            "type": gtype,
+            "coordinates": [
+                [_smooth_ring(ring, iterations) for ring in poly] for poly in coords
+            ],
+        }
+    return geometry
+
+
+def _smooth(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+    """Round the corners of line/polygon features with Chaikin's algorithm.
+
+    Works directly on the GeoJSON coordinates (no GeoPandas) so it produces
+    bit-identical output to the client engine, distinct from Simplify's vertex
+    reduction. Points pass through unchanged.
+    """
+    if not geojson or not geojson.get("features"):
+        raise ValueError("Input layer has no features")
+    iterations = int(parameters.get("iterations", 3) or 3)
+    if iterations < 1 or iterations > _SMOOTH_MAX_ITERATIONS:
+        raise ValueError(f"Iterations must be between 1 and {_SMOOTH_MAX_ITERATIONS}")
+    out_features = []
+    smoothed = 0
+    for feature in geojson["features"]:
+        geometry = feature.get("geometry")
+        if not geometry:
+            out_features.append(feature)
+            continue
+        if geometry.get("type") in (
+            "LineString",
+            "MultiLineString",
+            "Polygon",
+            "MultiPolygon",
+        ):
+            smoothed += 1
+        out_features.append(
+            {
+                "type": "Feature",
+                "properties": feature.get("properties") or {},
+                "geometry": _smooth_geometry(geometry, iterations),
+            }
+        )
+    fc = {"type": "FeatureCollection", "features": out_features}
+    return fc, [f"Smoothed {smoothed} feature(s) with {iterations} iteration(s)"]
+
+
+def _voronoi(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+    """Build a Voronoi diagram or Delaunay triangulation from a point layer."""
+    gpd = _import_geopandas()
+    from shapely.geometry import MultiPoint, box  # noqa: PLC0415
+    from shapely.ops import triangulate, voronoi_diagram  # noqa: PLC0415
+
+    kind = str(parameters.get("type", "voronoi") or "voronoi")
+    if kind not in ("voronoi", "delaunay"):
+        raise ValueError(f"Unknown diagram type '{kind}'. Accepted: delaunay, voronoi")
+    gdf = _load_gdf(geojson, "Input layer")
+    # Collect every point, exploding MultiPoint into its members (mirrors the
+    # client's collectPoints), so a MultiPoint layer is handled the same way.
+    points = []
+    for geom in gdf.geometry:
+        if geom is None:
+            continue
+        if geom.geom_type == "Point":
+            points.append(geom)
+        elif geom.geom_type == "MultiPoint":
+            points.extend(list(geom.geoms))
+    if len(points) < 3:
+        raise ValueError("Voronoi / Delaunay needs at least 3 points")
+    multipoint = MultiPoint(points)
+    if kind == "delaunay":
+        triangles = triangulate(multipoint)
+        result = gpd.GeoDataFrame(geometry=triangles, crs=WGS84)
+        message = (
+            f"Delaunay: produced {len(triangles)} triangle(s) "
+            f"from {len(points)} point(s)"
+        )
+        return _to_feature_collection(result), [message]
+    # Clip the (otherwise unbounded outer) cells to the points' bbox expanded by a
+    # 10% margin, matching the client, so they get a finite extent.
+    minx, miny, maxx, maxy = multipoint.bounds
+    dx = (maxx - minx) or 1
+    dy = (maxy - miny) or 1
+    envelope = box(minx - dx * 0.1, miny - dy * 0.1, maxx + dx * 0.1, maxy + dy * 0.1)
+    diagram = voronoi_diagram(multipoint, envelope=envelope)
+    cells = [cell.intersection(envelope) for cell in diagram.geoms]
+    cells = [cell for cell in cells if not cell.is_empty]
+    result = gpd.GeoDataFrame(geometry=cells, crs=WGS84)
+    message = f"Voronoi: produced {len(cells)} cell(s) from {len(points)} point(s)"
+    return _to_feature_collection(result), [message]
+
+
 # tool_id -> handler(geojson, overlay, parameters) -> (feature_collection, messages)
 _DISPATCH: dict[str, Callable[..., tuple[dict, list[str]]]] = {
     "buffer": _buffer,
@@ -543,6 +704,8 @@ _DISPATCH: dict[str, Callable[..., tuple[dict, list[str]]]] = {
     "reproject": _reproject,
     "explode": _explode,
     "aggregate": _aggregate,
+    "smooth": _smooth,
+    "voronoi": _voronoi,
 }
 
 

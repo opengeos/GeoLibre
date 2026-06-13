@@ -743,6 +743,195 @@ describe("processing registry", () => {
     assert.ok(messages.some((m) => m.includes("Python engine")));
   });
 
+  it("smooths polygon corners with Chaikin's algorithm", () => {
+    const tool = getVectorTool("smooth");
+    assert.ok(tool);
+    const square: GeoLibreLayer = {
+      ...layer,
+      id: "square",
+      name: "Square",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { name: "s" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [0, 0],
+                  [0, 10],
+                  [10, 10],
+                  [10, 0],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+    };
+    let out: FeatureCollection | null = null;
+    tool.run({
+      layers: [square],
+      parameters: { layer: "square", iterations: 1 },
+      log: () => {},
+      addResultLayer: (_n, g) => {
+        out = g;
+      },
+    });
+    assert.ok(out);
+    const ring = (out!.features[0].geometry as { coordinates: number[][][] })
+      .coordinates[0];
+    // One Chaikin pass on a 4-vertex closed ring yields 8 cut points + the
+    // closing vertex, and stays a closed ring (more vertices than the input).
+    assert.equal(ring.length, 9);
+    assert.deepEqual(ring[0], ring[ring.length - 1]);
+    assert.ok(out!.features[0].geometry.type === "Polygon");
+    // Properties are preserved.
+    assert.equal(out!.features[0].properties?.name, "s");
+
+    // Out-of-range iterations error rather than running.
+    let produced = false;
+    const logs: string[] = [];
+    tool.run({
+      layers: [square],
+      parameters: { layer: "square", iterations: 99 },
+      log: (m) => logs.push(m),
+      addResultLayer: () => {
+        produced = true;
+      },
+    });
+    assert.equal(produced, false);
+    assert.ok(logs.some((m) => m.includes("between 1 and 10")));
+  });
+
+  it("generates a regular grid from a bounding box", () => {
+    const tool = getVectorTool("grid");
+    assert.ok(tool);
+    const run = (parameters: Record<string, unknown>): FeatureCollection => {
+      let out: FeatureCollection = { type: "FeatureCollection", features: [] };
+      tool.run({
+        layers: [],
+        parameters: { source: "bbox", ...parameters },
+        log: () => {},
+        addResultLayer: (_n, g) => {
+          out = g;
+        },
+      });
+      return out;
+    };
+    // A 10x10 box with 5-degree cells is a 2x2 grid of rectangles.
+    const grid = run({
+      west: 0,
+      south: 0,
+      east: 10,
+      north: 10,
+      cell_width: 5,
+    });
+    assert.equal(grid.features.length, 4);
+    assert.ok(grid.features.every((f) => f.geometry.type === "Polygon"));
+
+    // Point cells emit one centroid per cell.
+    const points = run({
+      west: 0,
+      south: 0,
+      east: 10,
+      north: 10,
+      cell_width: 5,
+      cell_type: "point",
+    });
+    assert.equal(points.features.length, 4);
+    assert.ok(points.features.every((f) => f.geometry.type === "Point"));
+
+    // A degenerate box (west >= east) errors rather than producing cells.
+    let produced = false;
+    const logs: string[] = [];
+    tool.run({
+      layers: [],
+      parameters: {
+        source: "bbox",
+        west: 10,
+        south: 0,
+        east: 0,
+        north: 10,
+        cell_width: 5,
+      },
+      log: (m) => logs.push(m),
+      addResultLayer: () => {
+        produced = true;
+      },
+    });
+    assert.equal(produced, false);
+    assert.ok(logs.some((m) => m.includes("west < east")));
+  });
+
+  it("builds Voronoi cells and Delaunay triangles from points", () => {
+    const tool = getVectorTool("voronoi");
+    assert.ok(tool);
+    const pt = (x: number, y: number) => ({
+      type: "Feature" as const,
+      properties: {},
+      geometry: { type: "Point" as const, coordinates: [x, y] },
+    });
+    const points: GeoLibreLayer = {
+      ...layer,
+      id: "pts",
+      name: "Points",
+      geojson: {
+        type: "FeatureCollection",
+        features: [pt(0, 0), pt(10, 0), pt(0, 10), pt(10, 10), pt(5, 5)],
+      },
+    };
+    const run = (type: string): FeatureCollection => {
+      let out: FeatureCollection = { type: "FeatureCollection", features: [] };
+      tool.run({
+        layers: [points],
+        parameters: { layer: "pts", type },
+        log: () => {},
+        addResultLayer: (_n, g) => {
+          out = g;
+        },
+      });
+      return out;
+    };
+    const cells = run("voronoi");
+    assert.ok(cells.features.length > 0);
+    assert.ok(
+      cells.features.every(
+        (f) =>
+          f.geometry.type === "Polygon" || f.geometry.type === "MultiPolygon",
+      ),
+    );
+    const triangles = run("delaunay");
+    assert.ok(triangles.features.length > 0);
+    assert.ok(triangles.features.every((f) => f.geometry.type === "Polygon"));
+
+    // Fewer than 3 points errors on both engines.
+    let produced = false;
+    const logs: string[] = [];
+    tool.run({
+      layers: [
+        {
+          ...points,
+          id: "two",
+          geojson: {
+            type: "FeatureCollection",
+            features: [pt(0, 0), pt(1, 1)],
+          },
+        },
+      ],
+      parameters: { layer: "two", type: "voronoi" },
+      log: (m) => logs.push(m),
+      addResultLayer: () => {
+        produced = true;
+      },
+    });
+    assert.equal(produced, false);
+    assert.ok(logs.some((m) => m.includes("at least 3 points")));
+  });
+
   it("calculates and fits layer bounds", () => {
     const messages: string[] = [];
     let fittedBounds: [number, number, number, number] | null = null;

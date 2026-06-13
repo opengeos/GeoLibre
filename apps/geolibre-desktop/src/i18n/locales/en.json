@@ -194,6 +194,9 @@
       "reproject": "Reproject",
       "explode": "Explode",
       "aggregate": "Aggregate by attribute",
+      "smooth": "Smooth",
+      "grid": "Regular grid",
+      "voronoi": "Voronoi / Delaunay",
       "h3Grid": "Create H3 grid",
       "h3BinPoints": "Bin points to H3"
     },

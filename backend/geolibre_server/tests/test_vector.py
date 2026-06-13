@@ -68,6 +68,8 @@ def test_dispatch_covers_all_tools() -> None:
         "reproject",
         "explode",
         "aggregate",
+        "smooth",
+        "voronoi",
     }
     assert set(_DISPATCH) == expected
 

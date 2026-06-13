@@ -11,6 +11,8 @@
   "dependencies": {
     "@geolibre/core": "*",
     "@turf/bbox": "^7.3.5",
+    "@turf/tin": "^7.3.5",
+    "@turf/voronoi": "^7.3.5",
     "@turf/boolean-contains": "^7.3.5",
     "@turf/boolean-intersects": "^7.3.5",
     "@turf/boolean-within": "^7.3.5",

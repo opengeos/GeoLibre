@@ -53,6 +53,9 @@ export type VectorToolKind =
   | "reproject"
   | "explode"
   | "aggregate"
+  | "smooth"
+  | "grid"
+  | "voronoi"
   | "h3-grid"
   | "h3-bin-points";
 

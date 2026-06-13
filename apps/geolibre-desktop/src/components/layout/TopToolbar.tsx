@@ -293,6 +293,9 @@ const VECTOR_TOOL_COMMANDS: Array<{ kind: VectorToolKind; titleKey: ParseKeys }>
     { kind: "reproject", titleKey: "toolbar.vectorTool.reproject" },
     { kind: "explode", titleKey: "toolbar.vectorTool.explode" },
     { kind: "aggregate", titleKey: "toolbar.vectorTool.aggregate" },
+    { kind: "smooth", titleKey: "toolbar.vectorTool.smooth" },
+    { kind: "grid", titleKey: "toolbar.vectorTool.grid" },
+    { kind: "voronoi", titleKey: "toolbar.vectorTool.voronoi" },
     { kind: "h3-grid", titleKey: "toolbar.vectorTool.h3Grid" },
     { kind: "h3-bin-points", titleKey: "toolbar.vectorTool.h3BinPoints" },
   ];
@@ -1714,6 +1717,15 @@ export function TopToolbar({
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setVectorToolOpen("aggregate")}>
                 {t("toolbar.vectorTool.aggregate")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setVectorToolOpen("smooth")}>
+                {t("toolbar.vectorTool.smooth")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setVectorToolOpen("grid")}>
+                {t("toolbar.vectorTool.grid")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setVectorToolOpen("voronoi")}>
+                {t("toolbar.vectorTool.voronoi")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-xs text-muted-foreground">

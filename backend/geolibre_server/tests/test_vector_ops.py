@@ -681,6 +681,131 @@ def test_aggregate_geometry_group_field_raises_clean_error() -> None:
         )
 
 
+# --- Smooth ---
+
+
+def test_smooth_polygon_chaikin_exact_coordinates() -> None:
+    # Smooth is pure coordinate math (no GeoPandas), so it runs unconditionally
+    # and must match the client engine bit-for-bit on a known case.
+    square = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"name": "s"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [
+                        [[0, 0], [0, 10], [10, 10], [10, 0], [0, 0]],
+                    ],
+                },
+            }
+        ],
+    }
+    geojson, messages = run_vector_tool("smooth", square, parameters={"iterations": 1})
+    ring = geojson["features"][0]["geometry"]["coordinates"][0]
+    # One Chaikin pass on the 4-vertex ring -> 8 cut points + the closing vertex.
+    assert len(ring) == 9
+    assert ring[0] == ring[-1]
+    # The first cut point is 1/4 along the first segment ([0,0] -> [0,10]).
+    assert ring[0] == [0, 2.5]
+    assert geojson["features"][0]["geometry"]["type"] == "Polygon"
+    assert geojson["features"][0]["properties"]["name"] == "s"
+    assert messages and "Smoothed 1 feature" in messages[0]
+
+
+def test_smooth_passes_points_through_unchanged() -> None:
+    pts = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {},
+                "geometry": {"type": "Point", "coordinates": [1, 2]},
+            }
+        ],
+    }
+    geojson, messages = run_vector_tool("smooth", pts, parameters={"iterations": 3})
+    assert geojson["features"][0]["geometry"] == {"type": "Point", "coordinates": [1, 2]}
+    # No line/polygon features were smoothed.
+    assert messages and "Smoothed 0 feature" in messages[0]
+
+
+def test_smooth_rejects_out_of_range_iterations() -> None:
+    line = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {},
+                "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+            }
+        ],
+    }
+    with pytest.raises(ValueError, match="between 1 and 10"):
+        run_vector_tool("smooth", line, parameters={"iterations": 99})
+
+
+# --- Voronoi / Delaunay ---
+
+
+def _points(*coords: tuple[float, float]) -> dict:
+    return {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {},
+                "geometry": {"type": "Point", "coordinates": [x, y]},
+            }
+            for x, y in coords
+        ],
+    }
+
+
+@requires_geopandas
+def test_voronoi_produces_polygon_cells() -> None:
+    geojson, messages = run_vector_tool(
+        "voronoi",
+        _points((0, 0), (10, 0), (0, 10), (10, 10), (5, 5)),
+        parameters={"type": "voronoi"},
+    )
+    assert len(geojson["features"]) > 0
+    assert all(
+        f["geometry"]["type"] in ("Polygon", "MultiPolygon")
+        for f in geojson["features"]
+    )
+    assert messages and "Voronoi" in messages[0]
+
+
+@requires_geopandas
+def test_delaunay_produces_triangles() -> None:
+    geojson, messages = run_vector_tool(
+        "voronoi",
+        _points((0, 0), (10, 0), (0, 10), (10, 10), (5, 5)),
+        parameters={"type": "delaunay"},
+    )
+    assert len(geojson["features"]) > 0
+    assert all(f["geometry"]["type"] == "Polygon" for f in geojson["features"])
+    assert messages and "Delaunay" in messages[0]
+
+
+@requires_geopandas
+def test_voronoi_requires_three_points() -> None:
+    with pytest.raises(ValueError, match="at least 3 points"):
+        run_vector_tool("voronoi", _points((0, 0), (1, 1)), parameters={})
+
+
+@requires_geopandas
+def test_voronoi_unknown_type_raises() -> None:
+    with pytest.raises(ValueError, match="Unknown diagram type"):
+        run_vector_tool(
+            "voronoi",
+            _points((0, 0), (10, 0), (0, 10)),
+            parameters={"type": "bogus"},
+        )
+
+
 @requires_geopandas
 def test_json_wrapper_round_trips() -> None:
     payload = json.dumps(
