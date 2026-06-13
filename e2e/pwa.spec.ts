@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 /**
  * Validates the web build's PWA/offline support (issue #274):
@@ -61,12 +61,26 @@ test("registers a service worker and serves the shell offline after first visit"
     timeout: 30_000,
   });
 
+  // The service worker writes its CacheFirst runtime caches asynchronously,
+  // *after* the page's fetch for a chunk resolves — so the map canvas can be
+  // visible (the ~13 MB MapLibre chunk ran in-page) while the SW is still
+  // persisting that chunk. Going offline in that window leaves the chunk
+  // uncached, so the offline reload can't boot the map. Wait for all first-load
+  // requests to finish, then for the Cache Storage entry count to stop growing,
+  // so every runtime-cached chunk is durably stored before we drop the network.
+  await page.waitForLoadState("networkidle");
+  await waitForCacheStorageToSettle(page);
+
   // Drop the network and reload: the precached shell plus the runtime-cached
   // MapLibre chunk must still bring the app up with no connectivity.
   await context.setOffline(true);
   try {
     await page.reload();
-    await expect(page.getByTestId("map-canvas")).toBeVisible();
+    // The offline cold boot re-parses/executes every chunk from cache, so give
+    // the canvas the same 30s budget the warm boot above gets.
+    await expect(page.getByTestId("map-canvas")).toBeVisible({
+      timeout: 30_000,
+    });
     await expect(page.locator(".maplibregl-canvas")).toBeVisible({
       timeout: 30_000,
     });
@@ -74,3 +88,29 @@ test("registers a service worker and serves the shell offline after first visit"
     await context.setOffline(false);
   }
 });
+
+/**
+ * Wait until the service worker's Cache Storage stops growing, i.e. it has
+ * finished persisting the runtime-cached chunks the first load pulled in.
+ * CacheFirst writes happen asynchronously after the page's fetch resolves, so
+ * "canvas visible" alone does not guarantee the chunk is cached; polling the
+ * total entry count until two consecutive reads match (and it is non-zero)
+ * gives a deterministic "caches settled" signal before we go offline.
+ */
+async function waitForCacheStorageToSettle(page: Page): Promise<void> {
+  await page.waitForFunction(
+    async () => {
+      const w = window as unknown as { __prevCacheEntryCount?: number };
+      const names = await caches.keys();
+      let count = 0;
+      for (const name of names) {
+        count += (await (await caches.open(name)).keys()).length;
+      }
+      const previous = w.__prevCacheEntryCount ?? -1;
+      w.__prevCacheEntryCount = count;
+      return count > 0 && count === previous;
+    },
+    undefined,
+    { timeout: 30_000, polling: 1000 },
+  );
+}
