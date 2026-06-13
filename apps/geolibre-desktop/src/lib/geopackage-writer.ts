@@ -286,7 +286,8 @@ export function writeGeoPackageSync(
       insert.free();
     }
 
-    const finiteBox = Number.isFinite(box.minX);
+    const finiteBox =
+      Number.isFinite(box.minX) && Number.isFinite(box.minY);
     const contents = db.prepare(
       `INSERT INTO gpkg_contents
         (table_name, data_type, identifier, description, min_x, min_y, max_x, max_y, srs_id)

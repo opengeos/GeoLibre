@@ -60,4 +60,52 @@ describe("shapefileFieldWarnings", () => {
     assert.equal(warnings.length, 1);
     assert.match(warnings[0], /another_long_field/);
   });
+
+  it("detects collisions caused by non-alphanumeric normalization", () => {
+    // "my-field-x" and "my_field_x" both normalize to "my_field_x".
+    const warnings = shapefileFieldWarnings(
+      fc([{ "my-field-x": 1, my_field_x: 2 }]),
+    );
+    assert.ok(warnings.some((w) => /duplicate field names/.test(w)));
+  });
+
+  it("warns when geometry families are mixed (extra families dropped)", () => {
+    const warnings = shapefileFieldWarnings({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [0, 0] },
+          properties: {},
+        },
+        {
+          type: "Feature",
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [0, 0],
+              [1, 1],
+            ],
+          },
+          properties: {},
+        },
+      ],
+    });
+    assert.ok(warnings.some((w) => /without geometry/.test(w)));
+  });
+
+  it("does not warn about null geometries in a single-family layer", () => {
+    const warnings = shapefileFieldWarnings({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [0, 0] },
+          properties: {},
+        },
+        { type: "Feature", geometry: null, properties: {} },
+      ],
+    });
+    assert.deepEqual(warnings, []);
+  });
 });

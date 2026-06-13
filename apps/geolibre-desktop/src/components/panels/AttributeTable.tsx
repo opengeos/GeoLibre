@@ -676,10 +676,11 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       if (!exportGeojson) return;
 
       const baseName = sanitizeExportFileName(layer.name);
-      await exportVectorLayer(exportGeojson, format, baseName);
+      const savedPath = await exportVectorLayer(exportGeojson, format, baseName);
       // Surface Shapefile field-name limitations (10-char truncation and any
-      // resulting collisions) once the export completes.
-      if (format === "shapefile") {
+      // resulting collisions) only when a file was actually written; a null
+      // path means the user cancelled the save dialog.
+      if (savedPath !== null && format === "shapefile") {
         const warnings = shapefileFieldWarnings(exportGeojson);
         setExportWarning(warnings.length > 0 ? warnings.join(" ") : null);
       }

@@ -267,6 +267,20 @@ interface DbfField {
 
 const TEXT_ENCODER = new TextEncoder();
 
+/** Encode `text` to UTF-8, truncated to at most `maxBytes` without splitting a
+ * multi-byte code point (so non-ASCII attribute values stay valid). */
+function encodeUtf8Truncated(text: string, maxBytes: number): Uint8Array {
+  const full = TEXT_ENCODER.encode(text);
+  if (full.length <= maxBytes) return full;
+  let length = 0;
+  for (const char of text) {
+    const size = TEXT_ENCODER.encode(char).length;
+    if (length + size > maxBytes) break;
+    length += size;
+  }
+  return full.subarray(0, length);
+}
+
 function dbfFieldName(key: string, taken: Set<string>): string {
   // DBF field names are at most 10 characters; truncate and de-duplicate.
   let base = key.replace(/[^0-9A-Za-z_]/g, "_").slice(0, 10) || "field";
@@ -282,8 +296,12 @@ function dbfFieldName(key: string, taken: Set<string>): string {
       return candidate;
     }
   }
-  taken.add(base.toUpperCase());
-  return base;
+  // Falling through means >999 fields share one 10-char prefix; returning a
+  // name already in `taken` would write a duplicate DBF column. Fail loudly
+  // instead of silently corrupting the file.
+  throw new Error(
+    `Cannot generate a unique DBF field name for "${key}" (>999 collisions).`,
+  );
 }
 
 function decimalPlaces(value: number): number {
@@ -363,12 +381,11 @@ function encodeDbfValue(value: unknown, field: DbfField): Uint8Array {
     return cell;
   }
 
-  // Text: left-justified, truncated to the field byte length.
+  // Text: left-justified, truncated to the field byte length on a code-point
+  // boundary so multi-byte characters are never cut mid-sequence.
   const text =
     typeof value === "object" ? JSON.stringify(value) : String(value);
-  let bytes = TEXT_ENCODER.encode(text);
-  if (bytes.length > field.length) bytes = bytes.subarray(0, field.length);
-  cell.set(bytes, 0);
+  cell.set(encodeUtf8Truncated(text, field.length), 0);
   return cell;
 }
 
@@ -376,6 +393,11 @@ function buildDbf(features: Feature[], fields: DbfField[]): Uint8Array {
   const recordLength =
     1 + fields.reduce((total, field) => total + field.length, 0);
   const headerLength = 32 + fields.length * 32 + 1;
+  // Both are serialized as uint16; too many or too-wide attributes would
+  // overflow and silently corrupt the .dbf, so fail fast instead.
+  if (recordLength > 0xffff || headerLength > 0xffff) {
+    throw new Error("Too many or too-wide attributes for the DBF format limits.");
+  }
   const total = headerLength + features.length * recordLength + 1; // +1 EOF
   const buffer = new Uint8Array(total);
   const view = new DataView(buffer.buffer);
