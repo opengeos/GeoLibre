@@ -335,6 +335,10 @@ export class MapController {
     // Invalidate any pending story rotation and halt an in-flight camera move so
     // a deferred rotateTo cannot fire after the presenter has exited.
     this.storyCameraToken++;
+    if (this.pendingRotateHandler) {
+      this.map?.off("moveend", this.pendingRotateHandler);
+      this.pendingRotateHandler = null;
+    }
     this.map?.stop();
     // Clear any opacity transitions left over from playback first, otherwise the
     // restored values animate back in (potentially over a multi-second fade).
@@ -356,6 +360,15 @@ export class MapController {
 
   /** Token guarding deferred story rotations against later chapter changes. */
   private storyCameraToken = 0;
+  /**
+   * The rotate-on-settle `moveend` listener currently awaiting its move, kept so
+   * it can be detached deterministically (on the next chapter or on presenter
+   * exit) instead of relying solely on self-removal, which never fires for an
+   * instant move whose `moveend` precedes attachment.
+   */
+  private pendingRotateHandler:
+    | ((event: { storyCameraToken?: number }) => void)
+    | null = null;
 
   /**
    * Move the camera to a story chapter view during presentation playback.
@@ -381,6 +394,13 @@ export class MapController {
     // supersede an in-progress camera animation, and calling stop() immediately
     // before a new movement during rapid chapter changes can drop it entirely.
     const token = ++this.storyCameraToken;
+    // Detach any rotate-on-settle listener still waiting on a superseded move so
+    // handlers can never accumulate across rapid chapter changes or a presenter
+    // exit. The matching listener for the new move is registered below.
+    if (this.pendingRotateHandler) {
+      map.off("moveend", this.pendingRotateHandler);
+      this.pendingRotateHandler = null;
+    }
     // Tag the movement so the rotate-on-settle handler can recognize *this*
     // move's `moveend`. When flyTo/easeTo supersedes a prior chapter's in-flight
     // rotation, MapLibre fires a deferred `moveend` for that halted rotation; an
@@ -405,12 +425,16 @@ export class MapController {
         // it can react to the subsequent flyTo's matching moveend.
         if (event.storyCameraToken !== token) return;
         map.off("moveend", onMoveEnd);
+        if (this.pendingRotateHandler === onMoveEnd) {
+          this.pendingRotateHandler = null;
+        }
         if (this.storyCameraToken !== token || !this.map) return;
         this.map.rotateTo(this.map.getBearing() + 180, {
           duration: 30000,
           easing: (time) => time,
         });
       };
+      this.pendingRotateHandler = onMoveEnd;
       map.on("moveend", onMoveEnd);
     }
   }

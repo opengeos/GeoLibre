@@ -635,11 +635,17 @@ export const MapCanvas = memo(function MapCanvas({
     // zoom (which also fires this event) leaves the stored preference unchanged.
     const updateProjection = () => {
       const projection = mc.readProjection();
-      const state = useAppStore.getState();
-      if (state.preferences.map.projection === projection) return;
-      state.setPreferences({
-        ...state.preferences,
-        map: { ...state.preferences.map, projection },
+      // Functional update so a concurrent preference change (zoom-limit edit,
+      // loadProject) between read and write is not clobbered by a stale snapshot.
+      useAppStore.setState((s) => {
+        if (s.preferences.map.projection === projection) return s;
+        return {
+          preferences: {
+            ...s.preferences,
+            map: { ...s.preferences.map, projection },
+          },
+          isDirty: true,
+        };
       });
     };
     map.on("projectiontransition", updateProjection);

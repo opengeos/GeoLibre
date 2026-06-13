@@ -3,6 +3,7 @@ import { beforeEach, describe, it } from "node:test";
 import {
   DEFAULT_BASEMAP,
   DEFAULT_LAYER_STYLE,
+  DEFAULT_STORY_MAP,
   createEmptyProject,
   createSampleStoryMap,
   parseProject,
@@ -501,6 +502,22 @@ describe("story maps", () => {
     useAppStore.getState().setStorymapPresenting(true);
     const empty = parseProject(serializeProject(createEmptyProject("Plain")));
     useAppStore.getState().loadProject(empty);
+    assert.equal(useAppStore.getState().ui.storymapPresenting, false);
+  });
+
+  it("does not present a story that has no chapters", () => {
+    useAppStore.getState().setStorymapPresenting(true);
+    // A settings-only story survives normalization as a non-null storymap with
+    // an empty chapters array, distinct from "no storymap at all".
+    const withEmptyStory = parseProject(
+      serializeProject({
+        ...createEmptyProject("Settings-only story"),
+        storymap: { ...DEFAULT_STORY_MAP, title: "No chapters" },
+      }),
+    );
+    assert.ok(withEmptyStory.storymap);
+    assert.equal(withEmptyStory.storymap?.chapters.length, 0);
+    useAppStore.getState().loadProject(withEmptyStory);
     assert.equal(useAppStore.getState().ui.storymapPresenting, false);
   });
 
