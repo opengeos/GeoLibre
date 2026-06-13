@@ -413,6 +413,7 @@ function renderTemplate(
         }
 
         var scroller = scrollama();
+        var cameraToken = 0;
 
         map.on('load', function () {
 ${inlineLayerScript}
@@ -423,12 +424,17 @@ ${inlineLayerScript}
                     var chapter = config.chapters[idx];
                     if (!chapter) return;
                     response.element.classList.add('active');
+                    // Cancel any in-progress move (e.g. a prior chapter's rotation)
+                    // and bump the token so its pending moveend handler is ignored.
+                    map.stop();
+                    var token = ++cameraToken;
                     map[chapter.mapAnimation || 'flyTo'](chapter.location);
                     if (config.showMarkers && marker) marker.setLngLat(chapter.location.center);
                     if (insetMap && insetMarker) { insetMap.setCenter(chapter.location.center); insetMarker.setLngLat(chapter.location.center); }
                     if (chapter.onChapterEnter.length > 0) chapter.onChapterEnter.forEach(setLayerOpacity);
                     if (chapter.rotateAnimation) {
                         map.once('moveend', function () {
+                            if (token !== cameraToken) return;
                             var bearing = map.getBearing();
                             map.rotateTo(bearing + 180, { duration: 30000, easing: function (t) { return t; } });
                         });

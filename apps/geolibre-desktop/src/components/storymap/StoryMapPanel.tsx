@@ -668,6 +668,7 @@ function LayerEffectsEditor({
             variant="ghost"
             size="icon"
             className="h-7 w-7 text-destructive"
+            title={t("common.remove")}
             onClick={() => onChange(changes.filter((_, idx) => idx !== i))}
           >
             <Trash2 className="h-4 w-4" />
