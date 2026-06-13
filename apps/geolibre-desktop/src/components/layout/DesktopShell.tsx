@@ -54,6 +54,7 @@ import {
   useExternalPluginsReady,
 } from "../../hooks/usePlugins";
 import { registerMbtilesProtocol } from "../../lib/mbtiles";
+import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
 import { registerXyzTileProtocol } from "../../lib/xyz-url";
 import { useEmbedBridge } from "../../hooks/useEmbedBridge";
 import {
@@ -403,7 +404,17 @@ export function DesktopShell({
     // Rebind the directions tool to the (possibly new) map instance after a
     // map re-init, since restoreProjectState skips an already-active plugin.
     restoreDirections(appAPI, pluginManager.isActive(DIRECTIONS_PLUGIN_ID));
-    // Same rebind contract for the reverse-geocode click handler.
+    // Reverse geocode sends clicked coordinates to a public geocoder. If a
+    // restored project marks it active but this device never acknowledged the
+    // privacy notice, deactivate it so no coordinates are sent without consent;
+    // the user must re-enable it (which shows the notice). This makes the
+    // consent gate cover every activation path, not just the toolbar toggle.
+    if (
+      pluginManager.isActive(REVERSE_GEOCODE_PLUGIN_ID) &&
+      !hasReverseGeocodeConsent()
+    ) {
+      pluginManager.deactivate(REVERSE_GEOCODE_PLUGIN_ID, appAPI);
+    }
     restoreReverseGeocode(
       appAPI,
       pluginManager.isActive(REVERSE_GEOCODE_PLUGIN_ID),

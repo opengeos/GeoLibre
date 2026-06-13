@@ -173,6 +173,10 @@ import {
   osmPbfBaseName,
   OSM_PBF_SIZE_WARN_BYTES,
 } from "../../lib/osm-pbf-loader";
+import {
+  hasReverseGeocodeConsent,
+  recordReverseGeocodeConsent,
+} from "../../lib/reverse-geocode-consent";
 import { mergeStringLists } from "../../lib/string-lists";
 import { normalizeProjectUrl } from "../../lib/urls";
 import { resolveProjectXyzLayers } from "../../lib/xyz-url";
@@ -680,28 +684,18 @@ export function TopToolbar({
   };
   // Reverse geocode sends the clicked coordinates to a public geocoder, so it
   // shows the same one-time consent notice as Directions before first enabling.
+  // The consent flag is shared with the project-restore path (DesktopShell), so
+  // every activation path is gated on it.
   const handleToggleReverseGeocode = () => {
     if (isActive(REVERSE_GEOCODE_PLUGIN_ID)) {
       toggle(REVERSE_GEOCODE_PLUGIN_ID, appApi);
       return;
     }
-    let acknowledged = false;
-    try {
-      acknowledged =
-        localStorage.getItem("geolibre:reverse-geocode-nominatim-notice") ===
-        "1";
-    } catch {
-      // localStorage unavailable (private mode): fall back to showing the notice.
-    }
-    if (acknowledged) toggle(REVERSE_GEOCODE_PLUGIN_ID, appApi);
+    if (hasReverseGeocodeConsent()) toggle(REVERSE_GEOCODE_PLUGIN_ID, appApi);
     else setReverseGeocodeNoticeOpen(true);
   };
   const confirmEnableReverseGeocode = () => {
-    try {
-      localStorage.setItem("geolibre:reverse-geocode-nominatim-notice", "1");
-    } catch {
-      // Ignore: the notice will simply show again next time.
-    }
+    recordReverseGeocodeConsent();
     setReverseGeocodeNoticeOpen(false);
     toggle(REVERSE_GEOCODE_PLUGIN_ID, appApi);
   };
