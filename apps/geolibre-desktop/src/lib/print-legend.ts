@@ -48,7 +48,12 @@ export function buildLegend(layers: GeoLibreLayer[]): LegendEntry[] {
     if (!layer.visible) continue;
     if (NON_LEGEND_TYPES.has(layer.type)) continue;
 
-    if (VECTOR_TYPES.has(layer.type)) {
+    // MBTiles can carry vector or raster tiles and is rendered as vector unless
+    // its metadata says raster, so treat vector MBTiles like the other vectors.
+    const isVector =
+      VECTOR_TYPES.has(layer.type) ||
+      (layer.type === "mbtiles" && layer.metadata.tileType === "vector");
+    if (isVector) {
       const mode = styleValue(layer.style, "vectorStyleMode");
       const stops = styleValue(layer.style, "vectorStyleStops");
       if (
@@ -90,7 +95,8 @@ function rampSwatches(
 }
 
 function sampleEvenly<T>(items: T[], count: number): T[] {
-  if (items.length <= count) return items;
+  // count <= 1 would divide by zero below; return the available slice instead.
+  if (items.length <= count || count <= 1) return items.slice(0, count);
   const out: T[] = [];
   for (let i = 0; i < count; i++) {
     out.push(items[Math.round((i * (items.length - 1)) / (count - 1))]);

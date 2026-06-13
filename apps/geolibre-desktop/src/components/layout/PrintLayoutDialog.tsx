@@ -70,6 +70,7 @@ export function PrintLayoutDialog({
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const previewRef = useRef<HTMLCanvasElement | null>(null);
+  const wasOpenRef = useRef(false);
 
   const legend = useMemo(() => buildLegend(layers), [layers]);
 
@@ -89,16 +90,19 @@ export function PrintLayoutDialog({
     }
   }, [mapControllerRef]);
 
-  // Capture the map and seed defaults each time the dialog opens.
+  // Capture the map and seed defaults only on the closed -> open transition, so
+  // a background project-name change while the dialog is open does not replace
+  // the snapshot the user is composing.
   useEffect(() => {
-    if (!open) return;
-    setTitle((prev) => prev || (projectName ?? "").trim());
-    setFooterText(
-      (prev) =>
-        prev ||
-        `Created with GeoLibre · ${new Date().toLocaleDateString()}`,
-    );
-    recapture();
+    if (open && !wasOpenRef.current) {
+      setTitle((prev) => prev || (projectName ?? "").trim());
+      setFooterText(
+        (prev) =>
+          prev || `Created with GeoLibre · ${new Date().toLocaleDateString()}`,
+      );
+      recapture();
+    }
+    wasOpenRef.current = open;
   }, [open, projectName, recapture]);
 
   const options = useMemo<LayoutOptions>(
@@ -141,14 +145,17 @@ export function PrintLayoutDialog({
     if (!open) return;
     const canvas = previewRef.current;
     if (!canvas) return;
-    const { widthMm, heightMm } = pageDimensionsMm(paperSize, orientation);
+    const { widthMm, heightMm } = pageDimensionsMm(
+      options.paperSize,
+      options.orientation,
+    );
     const aspect = widthMm / heightMm;
     const pw = aspect >= 1 ? PREVIEW_LONG_EDGE : Math.round(PREVIEW_LONG_EDGE * aspect);
     const ph = aspect >= 1 ? Math.round(PREVIEW_LONG_EDGE / aspect) : PREVIEW_LONG_EDGE;
     canvas.width = pw;
     canvas.height = ph;
     drawLayout(canvas, options);
-  }, [open, options, paperSize, orientation]);
+  }, [open, options]);
 
   const handleExport = async (kind: "png" | "pdf") => {
     if (!captured) {

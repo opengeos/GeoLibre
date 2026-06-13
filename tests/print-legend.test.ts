@@ -109,4 +109,28 @@ describe("buildLegend", () => {
     assert.equal(legend[0].swatches.length, 1);
     assert.equal(legend[1].swatches.length, 1);
   });
+
+  it("treats vector MBTiles as a vector layer using its fill color", () => {
+    const legend = buildLegend([
+      makeLayer({
+        name: "Vector tiles",
+        type: "mbtiles",
+        metadata: { tileType: "vector" },
+        style: { vectorStyleMode: "single", fillColor: "#00aa55" } as LayerStyle,
+      }),
+    ]);
+    assert.equal(legend[0].swatches[0].color, "#00aa55");
+  });
+
+  it("gives raster MBTiles the neutral swatch", () => {
+    const legend = buildLegend([
+      makeLayer({
+        name: "Raster tiles",
+        type: "mbtiles",
+        metadata: { tileType: "raster" },
+        style: { fillColor: "#00aa55" } as LayerStyle,
+      }),
+    ]);
+    assert.notEqual(legend[0].swatches[0].color, "#00aa55");
+  });
 });

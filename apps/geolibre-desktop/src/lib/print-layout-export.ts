@@ -165,16 +165,9 @@ export async function exportLayoutPdf(
     unit: "mm",
     format: [widthMm, heightMm],
   });
-  pdf.addImage(
-    canvas.toDataURL("image/png"),
-    "PNG",
-    0,
-    0,
-    widthMm,
-    heightMm,
-    undefined,
-    "FAST",
-  );
+  // Pass the canvas directly so jsPDF reads its pixels without an intermediate
+  // base64 data URL (synchronous and ~33% larger in memory).
+  pdf.addImage(canvas, "PNG", 0, 0, widthMm, heightMm, undefined, "FAST");
   const bytes = new Uint8Array(pdf.output("arraybuffer"));
   return saveBinaryFileWithFallback(bytes, {
     defaultName: filename,

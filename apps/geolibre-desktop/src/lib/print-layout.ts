@@ -156,6 +156,9 @@ export function drawLayout(
   }
 
   // --- Map body ----------------------------------------------------------
+  // Clamp the top so a tall title block plus footer on a very small page can
+  // never push the map area below the footer (which would overflow the page).
+  bodyTop = Math.min(bodyTop, bodyBottom - unit * 10);
   const bodyX = margin;
   const bodyY = bodyTop;
   const bodyW = W - margin * 2;
@@ -269,6 +272,9 @@ function drawNorthArrow(
 
 /** Round a distance down to a "nice" 1/2/5 × 10ⁿ value. */
 function niceDistance(meters: number): number {
+  // Guard against a zero/negative body width: Math.log10(0) is -Infinity, which
+  // would propagate as NaN through the scale-bar geometry.
+  if (meters <= 0) return 1;
   const pow = Math.pow(10, Math.floor(Math.log10(meters)));
   const frac = meters / pow;
   let nice: number;

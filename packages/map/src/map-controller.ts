@@ -249,9 +249,11 @@ export class MapController {
       renderWorldCopies: mapPreferences.renderWorldCopies,
       attributionControl: false,
       maplibreLogo: false,
-      // Retain the WebGL drawing buffer so the canvas can be read back for the
-      // Print Layout composer and other image exports. Without this,
-      // `canvas.toDataURL()` / `drawImage` can return a blank frame.
+      // preserveDrawingBuffer must stay true: the Print Layout composer and any
+      // future export feature reads the canvas via drawImage / toDataURL outside
+      // of a render callback. Removing this causes blank captures on browsers
+      // that discard the drawing buffer after compositing (most mobile GPUs).
+      // Trade-off: adds one extra framebuffer copy per frame on tiled renderers.
       canvasContextAttributes: { preserveDrawingBuffer: true },
     });
     // The constructor options above already apply the static constraints.
