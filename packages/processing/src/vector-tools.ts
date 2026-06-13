@@ -124,12 +124,14 @@ const AGGREGATE_STATS = new Set([
 
 /**
  * Coerce a property value to a finite number the way pandas' ``to_numeric`` does
- * for the aggregate engine: real numbers pass through, numeric strings parse
- * (decimal/scientific only — see {@link parseFiniteNumber}), everything else
- * (null, NaN, booleans, text, objects) becomes null and is skipped by the
- * reducers, matching pandas' default skipna behaviour.
+ * for the aggregate engine: real numbers pass through, booleans map to 1/0 (as
+ * pandas' `to_numeric` does), numeric strings parse (decimal/scientific only —
+ * see {@link parseFiniteNumber}), and everything else (null, NaN, text, objects)
+ * becomes null and is skipped by the reducers, matching pandas' default skipna
+ * behaviour.
  */
 function toNumeric(value: unknown): number | null {
+  if (typeof value === "boolean") return value ? 1 : 0;
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
   if (typeof value === "string") {
     const n = parseFiniteNumber(value);

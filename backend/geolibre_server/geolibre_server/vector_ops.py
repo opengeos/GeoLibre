@@ -493,9 +493,11 @@ def _aggregate(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     # Restrict to polygons to match the client engine (and the tool's polygon-only
     # layer picker), so a mixed-geometry layer can't make the two engines count
     # different features per group.
+    total = len(gdf)
     gdf = gdf[gdf.geometry.geom_type.isin(["Polygon", "MultiPolygon"])]
     if gdf.empty:
         raise ValueError("Aggregate by attribute requires polygon features")
+    skipped = total - len(gdf)
     # Merge each group's geometries into one (union), keeping only geometry so the
     # output carries just the group key and the computed statistic.
     result = gdf.dissolve(by=group_field)[["geometry"]].copy()
@@ -505,20 +507,22 @@ def _aggregate(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     else:
         out_col = f"{stat_field}_{statistic}"
         # Coerce non-numeric/empty values to NaN so they are skipped, matching the
-        # client engine (and pandas' default skipna behaviour for these reducers).
+        # client engine. Call the GroupBy reducer by name (e.g. .median()) rather
+        # than .agg("median"), whose NaN-skipping can vary by pandas version.
         numeric = pd.to_numeric(gdf[stat_field], errors="coerce")
-        values = numeric.groupby(gdf[group_field]).agg(statistic)
+        values = getattr(numeric.groupby(gdf[group_field]), statistic)()
     # Align the statistic to the dissolved geometry explicitly by index label so the
     # assignment stays correct even if either call's group ordering changes.
     result[out_col] = values.reindex(result.index)
     result = result.reset_index()
-    return (
-        _to_feature_collection(result),
-        [
-            f"Aggregated {len(gdf)} feature(s) into {len(result)} group(s) "
-            f"by '{group_field}'"
-        ],
+    message = (
+        f"Aggregated {len(gdf)} feature(s) into {len(result)} group(s) "
+        f"by '{group_field}'"
     )
+    # Mirror the client's "(N skipped, not polygons)" note for mixed-geometry input.
+    if skipped:
+        message += f" ({skipped} skipped, not polygons)"
+    return _to_feature_collection(result), [message]
 
 
 # tool_id -> handler(geojson, overlay, parameters) -> (feature_collection, messages)

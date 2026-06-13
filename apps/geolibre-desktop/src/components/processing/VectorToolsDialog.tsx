@@ -102,11 +102,13 @@ export function VectorToolsDialog({
     }
     setParams(defaults);
     setLog([]);
-    // Pick the engine that can actually run this tool: client-only tools force
-    // "client"; sidecar-only tools (e.g. Reproject, whose client run just defers)
-    // default to "sidecar" so Run produces a result without touching the selector.
-    if (!tool.supportsSidecar) setEngine("client");
-    else if (tool.requiresSidecar) setEngine("sidecar");
+    // Pick the engine that can actually run this tool: sidecar-only tools (e.g.
+    // Reproject, whose client run just defers) default to "sidecar" so Run
+    // produces a result without touching the selector; client-only tools force
+    // "client". requiresSidecar is checked first so it wins even if a tool ever
+    // sets it without supportsSidecar (the JSDoc says it implies supportsSidecar).
+    if (tool.requiresSidecar) setEngine("sidecar");
+    else if (!tool.supportsSidecar) setEngine("client");
   }, [tool]);
 
   // Prefill the H3 grid's manual bounding-box fields from the current map

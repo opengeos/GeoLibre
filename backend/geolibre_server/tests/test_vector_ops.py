@@ -636,6 +636,40 @@ def test_aggregate_counts_polygons_only_for_mixed_geometry() -> None:
 
 
 @requires_geopandas
+def test_aggregate_all_null_group_values_returns_empty_result() -> None:
+    # Polygons exist but every group value is null: pandas groupby(dropna=True)
+    # yields no groups, so the result is empty (not an error), matching the client.
+    all_null = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"region": None, "pop": 1},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]],
+                },
+            },
+            {
+                "type": "Feature",
+                "properties": {"region": None, "pop": 2},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[2, 0], [2, 1], [3, 1], [3, 0], [2, 0]]],
+                },
+            },
+        ],
+    }
+    geojson, messages = run_vector_tool(
+        "aggregate",
+        all_null,
+        parameters={"group_field": "region", "statistic": "count"},
+    )
+    assert geojson["features"] == []
+    assert messages and "0 group(s)" in messages[0]
+
+
+@requires_geopandas
 def test_aggregate_geometry_group_field_raises_clean_error() -> None:
     # "geometry" is in gdf.columns but grouping by it would raise an unhashable
     # TypeError (a 500); it must be rejected as a clean "not found" (400) instead.

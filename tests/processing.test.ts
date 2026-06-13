@@ -626,6 +626,35 @@ describe("processing registry", () => {
     const maxes = byRegion(run({ statistic: "max", stat_field: "pop" }));
     assert.equal(maxes.get("north")?.pop_max, 30);
 
+    // Boolean stat values coerce to 1/0 like pandas to_numeric (sum of two
+    // north parcels, one true + one false → 1), not dropped as non-numeric.
+    const boolLayer: GeoLibreLayer = {
+      ...parcels,
+      id: "boolLayer",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          { ...cell("north", 1, 0), properties: { region: "north", flag: true } },
+          { ...cell("north", 1, 1), properties: { region: "north", flag: false } },
+        ],
+      },
+    };
+    let boolOut: FeatureCollection = { type: "FeatureCollection", features: [] };
+    tool.run({
+      layers: [boolLayer],
+      parameters: {
+        layer: "boolLayer",
+        group_field: "region",
+        statistic: "sum",
+        stat_field: "flag",
+      },
+      log: () => {},
+      addResultLayer: (_n, g) => {
+        boolOut = g;
+      },
+    });
+    assert.equal(boolOut.features[0]?.properties?.flag_sum, 1);
+
     // A feature whose group value is null is skipped (no "null" bucket), matching
     // pandas groupby(dropna=True) on the sidecar.
     const withNull: GeoLibreLayer = {
