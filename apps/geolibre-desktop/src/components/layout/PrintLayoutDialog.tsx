@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { DEFAULT_LEGEND_CONFIG, useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import {
@@ -95,6 +96,7 @@ export function PrintLayoutDialog({
   onOpenChange,
   mapControllerRef,
 }: PrintLayoutDialogProps) {
+  const { t } = useTranslation();
   const layers = useAppStore((s) => s.layers);
   const projectName = useAppStore((s) => s.projectName);
   const legendConfig = useAppStore((s) => s.legend);
@@ -364,7 +366,9 @@ export function PrintLayoutDialog({
                 <Separator />
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium">Legend</p>
+                    <p className="text-sm font-medium">
+                      {t("printLayout.legend.section")}
+                    </p>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -373,15 +377,17 @@ export function PrintLayoutDialog({
                       }
                     >
                       <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-                      Reset
+                      {t("common.reset")}
                     </Button>
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="legend-title">Legend title</Label>
+                    <Label htmlFor="legend-title">
+                      {t("printLayout.legend.titleLabel")}
+                    </Label>
                     <Input
                       id="legend-title"
                       value={legendConfig.title}
-                      placeholder="Legend"
+                      placeholder={t("printLayout.legend.defaultTitle")}
                       onChange={(e) =>
                         setLegendConfig({
                           ...legendConfig,
@@ -392,7 +398,7 @@ export function PrintLayoutDialog({
                   </div>
                   <ToggleField
                     id="legend-group"
-                    label="Group classes by layer"
+                    label={t("printLayout.legend.groupByLayer")}
                     checked={legendConfig.groupByLayer}
                     onChange={(next) =>
                       setLegendConfig({ ...legendConfig, groupByLayer: next })
@@ -401,7 +407,7 @@ export function PrintLayoutDialog({
 
                   {editorRows.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
-                      No visible layers to include in the legend.
+                      {t("printLayout.legend.empty")}
                     </p>
                   ) : (
                     <div className="max-h-56 space-y-1 overflow-auto rounded-md border p-2">
@@ -418,7 +424,7 @@ export function PrintLayoutDialog({
                               <div className="flex flex-col">
                                 <button
                                   type="button"
-                                  aria-label="Move entry up"
+                                  aria-label={t("printLayout.legend.moveUp")}
                                   className="text-muted-foreground hover:text-foreground disabled:opacity-30"
                                   disabled={entryIndex <= 0}
                                   onClick={() => moveEntry(row.layerId, "up")}
@@ -427,7 +433,7 @@ export function PrintLayoutDialog({
                                 </button>
                                 <button
                                   type="button"
-                                  aria-label="Move entry down"
+                                  aria-label={t("printLayout.legend.moveDown")}
                                   className="text-muted-foreground hover:text-foreground disabled:opacity-30"
                                   disabled={
                                     entryIndex >= entryIdsInOrder.length - 1
@@ -451,7 +457,10 @@ export function PrintLayoutDialog({
                             <Input
                               className="h-7 flex-1 text-sm"
                               value={row.label}
-                              placeholder={row.defaultLabel || "Label"}
+                              placeholder={
+                                row.defaultLabel ||
+                                t("printLayout.legend.labelPlaceholder")
+                              }
                               onChange={(e) =>
                                 setLegendConfig(
                                   setLegendItemLabel(
@@ -465,7 +474,11 @@ export function PrintLayoutDialog({
                             />
                             <button
                               type="button"
-                              aria-label={row.hidden ? "Show entry" : "Hide entry"}
+                              aria-label={
+                                row.hidden
+                                  ? t("printLayout.legend.showEntry")
+                                  : t("printLayout.legend.hideEntry")
+                              }
                               className="shrink-0 text-muted-foreground hover:text-foreground"
                               onClick={() =>
                                 setLegendConfig(

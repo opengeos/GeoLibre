@@ -113,6 +113,7 @@ describe("project parsing", () => {
           overrides: {
             a: { label: "Renamed", hidden: true },
             b: { hidden: "yes", label: 3 },
+            c: { hidden: false },
             "": { hidden: true },
           },
         },

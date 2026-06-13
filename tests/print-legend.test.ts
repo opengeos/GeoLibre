@@ -239,6 +239,22 @@ describe("applyLegendConfig", () => {
     assert.equal(allHidden.length, 0);
   });
 
+  it("trims surrounding whitespace from a rendered label", () => {
+    const result = applyLegendConfig(
+      base,
+      config({ overrides: { top: { label: "  Spaced  " } } }),
+    );
+    assert.equal(result[0].name, "Spaced");
+  });
+
+  it("treats a whitespace-only label as no override", () => {
+    const result = applyLegendConfig(
+      base,
+      config({ overrides: { top: { label: "   " } } }),
+    );
+    assert.equal(result[0].name, "Top");
+  });
+
   it("renames a class label", () => {
     const categorized = buildLegend([
       makeLayer({
@@ -295,6 +311,22 @@ describe("legendEditorRows", () => {
     assert.equal(rows[0].label, "Renamed");
     assert.equal(rows[0].defaultLabel, "A");
     assert.equal(rows[0].hidden, true);
+  });
+
+  it("keeps a raw override (with spaces) in the editor but falls back when blank", () => {
+    const base = buildLegend([makeLayer({ id: "a", name: "A" })]);
+    // A non-blank override is shown verbatim so the input can hold spaces.
+    const spaced = legendEditorRows(
+      base,
+      config({ overrides: { a: { label: "My label " } } }),
+    );
+    assert.equal(spaced[0].label, "My label ");
+    // A whitespace-only override is treated as no override (shows the default).
+    const blank = legendEditorRows(
+      base,
+      config({ overrides: { a: { label: "   " } } }),
+    );
+    assert.equal(blank[0].label, "A");
   });
 });
 

@@ -12,6 +12,20 @@
     "label": "Language",
     "description": "Choose the language used for the interface."
   },
+  "printLayout": {
+    "legend": {
+      "section": "Legend",
+      "titleLabel": "Legend title",
+      "defaultTitle": "Legend",
+      "groupByLayer": "Group classes by layer",
+      "empty": "No visible layers to include in the legend.",
+      "labelPlaceholder": "Label",
+      "moveUp": "Move entry up",
+      "moveDown": "Move entry down",
+      "showEntry": "Show entry",
+      "hideEntry": "Hide entry"
+    }
+  },
   "settings": {
     "title": "Settings",
     "description": "Configure project preferences and runtime settings.",

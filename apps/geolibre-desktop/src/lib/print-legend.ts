@@ -97,6 +97,26 @@ function swatchKey(layerId: string, index: number): string {
 }
 
 /**
+ * The label to render for an item: the override trimmed of surrounding
+ * whitespace when it has visible content, otherwise the fallback. Trimming here
+ * (rather than when storing) keeps the editor input free to accept spaces while
+ * the canvas export never shows stray leading/trailing whitespace.
+ */
+function renderedLabel(label: string | undefined, fallback: string): string {
+  const trimmed = label?.trim();
+  return trimmed ? trimmed : fallback;
+}
+
+/**
+ * Whether an override carries a non-blank label. Mirrors {@link renderedLabel}'s
+ * blank test so the editor and the rendered legend agree on when an override is
+ * in effect.
+ */
+function hasLabelOverride(label: string | undefined): boolean {
+  return label !== undefined && label.trim() !== "";
+}
+
+/**
  * Reorder base legend entries to follow {@link LegendConfig.order} (top-first).
  * Layers absent from `order` keep their default position after the listed ones.
  */
@@ -139,10 +159,7 @@ export function applyLegendConfig(
   for (const entry of ordered) {
     const entryOverride = config.overrides[entry.id];
     if (entryOverride?.hidden) continue;
-    const name =
-      entryOverride?.label !== undefined && entryOverride.label.trim() !== ""
-        ? entryOverride.label
-        : entry.name;
+    const name = renderedLabel(entryOverride?.label, entry.name);
 
     if (entry.swatches.length <= 1) {
       result.push({ id: entry.id, name, swatches: entry.swatches });
@@ -155,10 +172,9 @@ export function applyLegendConfig(
       if (override?.hidden) return;
       swatches.push({
         color: swatch.color,
-        label:
-          override?.label !== undefined && override.label.trim() !== ""
-            ? override.label
-            : swatch.label,
+        label: hasLabelOverride(override?.label)
+          ? renderedLabel(override?.label, swatch.label ?? "")
+          : swatch.label,
       });
     });
     // Every class hidden: drop the whole entry rather than render an empty box.
@@ -282,10 +298,12 @@ export function legendEditorRows(
       kind: "entry",
       color: single ? entry.swatches[0]?.color : undefined,
       defaultLabel: entry.name,
-      label:
-        entryOverride?.label !== undefined && entryOverride.label !== ""
-          ? entryOverride.label
-          : entry.name,
+      // Show the raw override (so the input can hold spaces mid-edit) but fall
+      // back to the default when it is blank, matching what applyLegendConfig
+      // renders.
+      label: hasLabelOverride(entryOverride?.label)
+        ? (entryOverride?.label as string)
+        : entry.name,
       hidden: Boolean(entryOverride?.hidden),
       reorderable: true,
     });
@@ -300,10 +318,9 @@ export function legendEditorRows(
         kind: "class",
         color: swatch.color,
         defaultLabel,
-        label:
-          override?.label !== undefined && override.label !== ""
-            ? override.label
-            : defaultLabel,
+        label: hasLabelOverride(override?.label)
+          ? (override?.label as string)
+          : defaultLabel,
         hidden: Boolean(override?.hidden),
         reorderable: false,
       });
