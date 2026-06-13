@@ -162,7 +162,7 @@ export function PrintLayoutDialog({
       if (kind === "png") {
         await exportLayoutPng(options, `${base}.png`);
       } else {
-        exportLayoutPdf(options, `${base}.pdf`);
+        await exportLayoutPdf(options, `${base}.pdf`);
       }
     } catch {
       setError(`Failed to export ${kind.toUpperCase()}.`);

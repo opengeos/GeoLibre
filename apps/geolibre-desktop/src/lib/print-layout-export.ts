@@ -11,6 +11,7 @@ import {
   pageDimensionsMm,
   type LayoutOptions,
 } from "./print-layout";
+import { saveBinaryFileWithFallback } from "./tauri-io";
 
 export { buildLegend } from "./print-legend";
 
@@ -105,37 +106,52 @@ function renderToCanvas(opts: LayoutOptions, dpi: number): HTMLCanvasElement {
   return canvas;
 }
 
-function triggerDownload(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-/** Export the layout as a PNG file at the given DPI (default 150). */
-export async function exportLayoutPng(
-  opts: LayoutOptions,
-  filename: string,
-  dpi = 150,
-): Promise<void> {
-  const canvas = renderToCanvas(opts, dpi);
+async function canvasToPngBytes(canvas: HTMLCanvasElement): Promise<Uint8Array> {
   const blob = await new Promise<Blob | null>((resolve) =>
     canvas.toBlob((b) => resolve(b), "image/png"),
   );
   if (!blob) throw new Error("Failed to render PNG");
-  triggerDownload(blob, filename);
+  return new Uint8Array(await blob.arrayBuffer());
 }
 
-/** Export the layout as a PDF file at the given DPI (default 150). */
-export function exportLayoutPdf(
+/**
+ * Export the layout as a PNG file at the given DPI (default 150).
+ *
+ * Routes through {@link saveBinaryFileWithFallback} so it works in the Tauri
+ * desktop app (native save dialog + filesystem write) as well as the browser
+ * build, where anchor-style downloads are unavailable in the webview.
+ *
+ * @returns The saved file name, or null if the user cancelled the save dialog.
+ */
+export async function exportLayoutPng(
   opts: LayoutOptions,
   filename: string,
   dpi = 150,
-): void {
+): Promise<string | null> {
+  const canvas = renderToCanvas(opts, dpi);
+  const bytes = await canvasToPngBytes(canvas);
+  return saveBinaryFileWithFallback(bytes, {
+    defaultName: filename,
+    filters: [{ name: "PNG Image", extensions: ["png"] }],
+    browserTypes: [{ description: "PNG Image", accept: { "image/png": [".png"] } }],
+    mimeType: "image/png",
+  });
+}
+
+/**
+ * Export the layout as a PDF file at the given DPI (default 150).
+ *
+ * Generates the PDF bytes with jsPDF and saves them through
+ * {@link saveBinaryFileWithFallback}; `jsPDF.save()` does not work inside the
+ * Tauri webview because it relies on an anchor download.
+ *
+ * @returns The saved file name, or null if the user cancelled the save dialog.
+ */
+export async function exportLayoutPdf(
+  opts: LayoutOptions,
+  filename: string,
+  dpi = 150,
+): Promise<string | null> {
   const { widthMm, heightMm } = pageDimensionsMm(
     opts.paperSize,
     opts.orientation,
@@ -154,5 +170,13 @@ export function exportLayoutPdf(
     undefined,
     "FAST",
   );
-  pdf.save(filename);
+  const bytes = new Uint8Array(pdf.output("arraybuffer"));
+  return saveBinaryFileWithFallback(bytes, {
+    defaultName: filename,
+    filters: [{ name: "PDF Document", extensions: ["pdf"] }],
+    browserTypes: [
+      { description: "PDF Document", accept: { "application/pdf": [".pdf"] } },
+    ],
+    mimeType: "application/pdf",
+  });
 }
