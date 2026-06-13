@@ -742,3 +742,65 @@ def test_focal_rejects_even_window(tmp_path: Path) -> None:
     assert completed.returncode != 0
     assert "odd integer" in (completed.stdout + completed.stderr)
     assert not out.exists()
+
+
+@requires_rasterio
+def test_focal_median_matches_numpy(tmp_path: Path) -> None:
+    """The median (stack) path agrees with a direct NumPy windowed median."""
+    import numpy as np
+    import rasterio
+
+    src = _write_dem(tmp_path / "dem.tif")  # 16x16 ramp z = x + y
+    out = tmp_path / "focal.tif"
+    _run_script(
+        _RASTER_TOOL_SCRIPTS["focal"],
+        {
+            "input_path": str(src),
+            "output_path": str(out),
+            "statistic": "median",
+            "size": 3,
+        },
+    )
+    with rasterio.open(src) as ds:
+        data = ds.read(1).astype("float64")
+    with rasterio.open(out) as ds:
+        got = ds.read(1).astype("float64")
+    # Reference 3x3 median over an interior cell (no edge truncation there).
+    i = j = 8
+    expected = float(np.median(data[i - 1 : i + 2, j - 1 : j + 2]))
+    assert got[i, j] == pytest.approx(expected, rel=1e-5)
+
+
+@requires_rasterio
+def test_focal_std_zero_on_flat_input(tmp_path: Path) -> None:
+    """The streaming std accumulator is ~0 where every neighbour is equal."""
+    import numpy as np
+    import rasterio
+    from rasterio.transform import from_origin
+
+    flat = tmp_path / "flat.tif"
+    with rasterio.open(
+        flat,
+        "w",
+        driver="GTiff",
+        height=12,
+        width=12,
+        count=1,
+        dtype="float32",
+        crs="EPSG:32633",
+        transform=from_origin(500000, 4100000, 30, 30),
+    ) as dst:
+        dst.write(np.full((12, 12), 7.0, dtype="float32"), 1)
+    out = tmp_path / "focal.tif"
+    _run_script(
+        _RASTER_TOOL_SCRIPTS["focal"],
+        {
+            "input_path": str(flat),
+            "output_path": str(out),
+            "statistic": "std",
+            "size": 3,
+        },
+    )
+    with rasterio.open(out) as ds:
+        got = ds.read(1)
+    assert np.allclose(got, 0.0, atol=1e-4)

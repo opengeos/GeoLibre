@@ -1118,15 +1118,8 @@ if size < 3 or size % 2 == 0:
 if size > 25:
     raise SystemExit("Window size is capped at 25")
 stat = str(params.get("statistic", "mean")).lower()
-reducers = {
-    "mean": np.nanmean,
-    "median": np.nanmedian,
-    "min": np.nanmin,
-    "max": np.nanmax,
-    "sum": np.nansum,
-    "std": np.nanstd,
-}
-if stat not in reducers and stat != "range":
+allowed = {"mean", "median", "min", "max", "sum", "std", "range"}
+if stat not in allowed:
     raise SystemExit(f"Unsupported statistic: {stat}")
 nodata = -9999.0
 
@@ -1137,14 +1130,6 @@ with rasterio.open(input_path) as src:
     profile = src.profile.copy()
 
 height, width = data.shape
-# A float32 stack of size*size neighbour copies bounds memory; cap the product
-# so a large window over a large raster can't OOM the runtime.
-MAX_WINDOW_CELLS = 40_000_000
-if height * width * size * size > MAX_WINDOW_CELLS:
-    raise SystemExit(
-        f"A {size}x{size} window over {width}x{height} exceeds the work budget; "
-        "use a smaller window or raster."
-    )
 radius = size // 2
 
 
@@ -1163,24 +1148,62 @@ def neighbor(dy, dx):
     return out
 
 
-stack = np.stack(
-    [
-        neighbor(dy, dx)
-        for dy in range(-radius, radius + 1)
-        for dx in range(-radius, radius + 1)
-    ],
-    axis=0,
-)
-with np.errstate(all="ignore"):
-    if stat == "range":
-        res = np.nanmax(stack, axis=0) - np.nanmin(stack, axis=0)
-    else:
-        res = reducers[stat](stack, axis=0)
-# Windows with no valid cells return NaN/0 depending on the reducer; force them
-# to nodata uniformly.
-valid_count = np.sum(np.isfinite(stack), axis=0)
-res = np.where(valid_count > 0, res, np.nan)
+offsets = [
+    (dy, dx)
+    for dy in range(-radius, radius + 1)
+    for dx in range(-radius, radius + 1)
+]
 
+with np.errstate(all="ignore"):
+    if stat == "median":
+        # Median has no streaming form, so it stacks the neighbour copies.
+        # Cap the stack (size*size float32 copies) so a large window over a
+        # large raster can't OOM the runtime.
+        MAX_MEDIAN_CELLS = 60_000_000
+        if height * width * size * size > MAX_MEDIAN_CELLS:
+            raise SystemExit(
+                f"Focal median with a {size}x{size} window over {width}x{height} "
+                "exceeds the memory budget; use a smaller window or raster, or pick "
+                "a streaming statistic (mean/min/max/sum/std/range)."
+            )
+        stack = np.stack([neighbor(dy, dx) for dy, dx in offsets], axis=0)
+        res = np.nanmedian(stack, axis=0)
+        has_data = np.sum(np.isfinite(stack), axis=0) > 0
+    else:
+        # Streaming accumulators keep memory at O(cells) regardless of window
+        # size, so this scales to full-resolution rasters with large windows.
+        count = np.zeros((height, width), dtype="int32")
+        total = np.zeros((height, width), dtype="float64")
+        sumsq = np.zeros((height, width), dtype="float64")
+        vmin = np.full((height, width), np.inf, dtype="float64")
+        vmax = np.full((height, width), -np.inf, dtype="float64")
+        for dy, dx in offsets:
+            nb = neighbor(dy, dx)
+            valid = np.isfinite(nb)
+            count += valid
+            contrib = np.where(valid, nb, 0.0)
+            total += contrib
+            sumsq += contrib * contrib
+            vmin = np.fmin(vmin, nb)
+            vmax = np.fmax(vmax, nb)
+        has_data = count > 0
+        safe_count = np.where(count == 0, 1, count)
+        if stat == "mean":
+            res = total / safe_count
+        elif stat == "sum":
+            res = total
+        elif stat == "min":
+            res = vmin
+        elif stat == "max":
+            res = vmax
+        elif stat == "range":
+            res = vmax - vmin
+        else:  # std (population)
+            mean_ = total / safe_count
+            res = np.sqrt(np.maximum(sumsq / safe_count - mean_ * mean_, 0.0))
+
+# Windows with no valid cells get nodata uniformly (rather than 0 or inf).
+res = np.where(has_data, res, np.nan)
 out = np.where(np.isfinite(res), res, nodata).astype("float32")
 profile.update(count=1, dtype="float32", nodata=nodata, compress="deflate")
 profile.pop("photometric", None)
