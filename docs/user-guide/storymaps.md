@@ -60,6 +60,10 @@ click any entry to jump straight to it. Toggle the pane with the list button nex
 to **Exit**. The map controls (navigation, fullscreen, globe, layer control)
 stay usable during the presentation.
 
+Each chapter card is **movable and resizable**: drag its title bar to reposition
+it (double-click the bar to reset), or drag the bottom-right corner to resize, so
+you can move a card aside and explore the map beneath it.
+
 ## Export to HTML
 
 Click **Export HTML** to save a self-contained `.html` page that reproduces the

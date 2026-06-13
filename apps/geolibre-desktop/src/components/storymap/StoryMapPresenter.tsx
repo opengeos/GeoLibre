@@ -1,4 +1,5 @@
 import {
+  type PointerEvent as ReactPointerEvent,
   type RefObject,
   useCallback,
   useEffect,
@@ -12,7 +13,7 @@ import maplibregl from "maplibre-gl";
 import { useAppStore, type StoryChapter } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import { Button, cn } from "@geolibre/ui";
-import { List, X } from "lucide-react";
+import { GripVertical, List, X } from "lucide-react";
 import { sanitizeStoryHtml } from "../../lib/sanitize-html";
 import { STORY_INSET_STYLE_URL } from "../../lib/storymap-constants";
 
@@ -70,6 +71,83 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
       `[data-chapter-index="${index}"]`,
     );
     step?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, []);
+
+  // Per-chapter drag offset / explicit size so the reader can move and resize a
+  // chapter card out of the way to explore the map beneath it.
+  const [cardLayouts, setCardLayouts] = useState<
+    Record<string, { dx: number; dy: number; w: number | null; h: number | null }>
+  >({});
+  const gestureRef = useRef<
+    | {
+        id: string;
+        mode: "drag" | "resize";
+        startX: number;
+        startY: number;
+        base: { dx: number; dy: number; w: number | null; h: number | null };
+      }
+    | null
+  >(null);
+
+  const startGesture = useCallback(
+    (
+      event: ReactPointerEvent,
+      id: string,
+      mode: "drag" | "resize",
+      cardEl: HTMLElement | null,
+    ) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const existing = cardLayouts[id];
+      const rect = cardEl?.getBoundingClientRect();
+      gestureRef.current = {
+        id,
+        mode,
+        startX: event.clientX,
+        startY: event.clientY,
+        base: {
+          dx: existing?.dx ?? 0,
+          dy: existing?.dy ?? 0,
+          w: existing?.w ?? (mode === "resize" ? (rect?.width ?? null) : null),
+          h: existing?.h ?? (mode === "resize" ? (rect?.height ?? null) : null),
+        },
+      };
+
+      const onMove = (e: PointerEvent) => {
+        const g = gestureRef.current;
+        if (!g) return;
+        const ddx = e.clientX - g.startX;
+        const ddy = e.clientY - g.startY;
+        setCardLayouts((prev) => ({
+          ...prev,
+          [g.id]:
+            g.mode === "drag"
+              ? { ...g.base, dx: g.base.dx + ddx, dy: g.base.dy + ddy }
+              : {
+                  ...g.base,
+                  w: Math.max(200, (g.base.w ?? 280) + ddx),
+                  h: Math.max(120, (g.base.h ?? 200) + ddy),
+                },
+        }));
+      };
+      const onUp = () => {
+        gestureRef.current = null;
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    },
+    [cardLayouts],
+  );
+
+  const resetCard = useCallback((id: string) => {
+    setCardLayouts((prev) => {
+      if (!prev[id]) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   }, []);
 
   // The playback effect reads the story through a ref so it only sets up on
@@ -203,8 +281,10 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
       insetMapRef.current?.remove();
       insetMapRef.current = null;
       activeIndexRef.current = -1;
-      // Reset the nav highlight so the next presentation starts at chapter 1.
+      // Reset nav highlight and any card drag/resize so the next presentation
+      // starts clean.
       setActiveIndex(0);
+      setCardLayouts({});
       // Undo any direct opacity changes made during playback.
       controller.restoreLayerStyles();
     };
@@ -332,31 +412,67 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
         ) : null}
 
         <div className="glsm-features">
-          {chapters.map((chapter, index) => (
-            <div
-              key={chapter.id}
-              data-chapter-index={index}
-              className={`glsm-step ${ALIGNMENT_CLASS[chapter.alignment]} ${
-                chapter.hidden ? "glsm-hidden" : ""
-              }`}
-            >
-              <div className={themeClass}>
-                {chapter.title ? <h3>{chapter.title}</h3> : null}
-                {chapter.image ? (
-                  <img src={chapter.image} alt={chapter.title} />
-                ) : null}
-                {chapter.description ? (
-                  <p
-                    // Descriptions support inline HTML, matching the template;
-                    // sanitized because chapters can come from a shared project.
-                    dangerouslySetInnerHTML={{
-                      __html: sanitizeStoryHtml(chapter.description),
-                    }}
+          {chapters.map((chapter, index) => {
+            const layout = cardLayouts[chapter.id];
+            const cardStyle = {
+              transform: layout
+                ? `translate(${layout.dx}px, ${layout.dy}px)`
+                : undefined,
+              width: layout?.w ? `${layout.w}px` : undefined,
+              height: layout?.h ? `${layout.h}px` : undefined,
+            };
+            return (
+              <div
+                key={chapter.id}
+                data-chapter-index={index}
+                className={`glsm-step ${ALIGNMENT_CLASS[chapter.alignment]} ${
+                  chapter.hidden ? "glsm-hidden" : ""
+                }`}
+              >
+                <div className={`glsm-card ${themeClass}`} style={cardStyle}>
+                  <div
+                    className="glsm-card-bar"
+                    onPointerDown={(e) =>
+                      startGesture(e, chapter.id, "drag", e.currentTarget.parentElement)
+                    }
+                    onDoubleClick={() => resetCard(chapter.id)}
+                    title={t("storymap.dragHint")}
+                  >
+                    <GripVertical className="glsm-grip" />
+                    <span className="glsm-card-title">
+                      {chapter.title || t("storymap.untitledChapter")}
+                    </span>
+                  </div>
+                  <div className="glsm-card-body">
+                    {chapter.image ? (
+                      <img src={chapter.image} alt={chapter.title} />
+                    ) : null}
+                    {chapter.description ? (
+                      <div
+                        // Descriptions support inline HTML, matching the template;
+                        // sanitized because chapters can come from a shared project.
+                        dangerouslySetInnerHTML={{
+                          __html: sanitizeStoryHtml(chapter.description),
+                        }}
+                      />
+                    ) : null}
+                  </div>
+                  <span
+                    className="glsm-resize"
+                    title={t("storymap.resizeHint")}
+                    onPointerDown={(e) =>
+                      startGesture(
+                        e,
+                        chapter.id,
+                        "resize",
+                        e.currentTarget.parentElement,
+                      )
+                    }
                   />
-                ) : null}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {storymap?.footer ? (
@@ -403,9 +519,15 @@ function StoryMapStyles() {
       .glsm-dark { color: #fafafa; background-color: #444; }
       .glsm-step { padding-bottom: 45vh; opacity: 0.25; transition: opacity 0.3s; }
       .glsm-step.glsm-active { opacity: 0.95; }
-      .glsm-step > div { padding: 20px 28px; line-height: 22px; font-size: 14px; border-radius: 4px; }
-      .glsm-step h3 { margin-top: 0; }
-      .glsm-step img { width: 100%; max-height: 38vh; object-fit: cover; border-radius: 2px; }
+      /* Each chapter renders as a movable, resizable card. */
+      .glsm-card { position: relative; display: flex; flex-direction: column; max-height: 60vh; line-height: 22px; font-size: 14px; border-radius: 6px; box-shadow: 0 6px 20px rgba(0,0,0,0.25); overflow: hidden; }
+      .glsm-card-bar { display: flex; align-items: center; gap: 6px; padding: 7px 10px; cursor: move; touch-action: none; user-select: none; font-weight: 600; font-size: 13px; border-bottom: 1px solid rgba(127,127,127,0.25); }
+      .glsm-grip { width: 14px; height: 14px; flex-shrink: 0; opacity: 0.55; }
+      .glsm-card-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .glsm-card-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 14px 18px; }
+      .glsm-card-body img { width: 100%; max-height: 38vh; object-fit: cover; border-radius: 2px; }
+      .glsm-resize { position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; touch-action: none; }
+      .glsm-resize::after { content: ''; position: absolute; right: 4px; bottom: 4px; width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; opacity: 0.5; }
       .glsm-inset-marker { width: 12px; height: 12px; background-color: #ff6b6b; border: 2px solid white; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.3); }
       @media (max-width: 750px) {
         .glsm-centered, .glsm-lefty, .glsm-righty, .glsm-fully { width: 90vw; margin: 0 auto; }
