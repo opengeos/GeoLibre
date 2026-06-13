@@ -103,7 +103,6 @@ manager.activate("my-plugin", appApi);
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `osm-basemap`                 | OpenFreeMap Liberty style                                                                                           |
 | `carto-light`                 | CARTO Positron GL style                                                                                             |
-| `sample-geojson`              | Loads `sample-data/sample.geojson`                                                                                  |
 | `maplibre-gl-basemap-control` | Adds a MapLibre basemap picker                                                                                      |
 | `maplibre-gl-components`      | Adds the MapLibre Components control grid and panels for FlatGeobuf, COG, PMTiles, Zarr, LiDAR, and Gaussian splats |
 | `maplibre-gl-geo-editor`      | Adds GeoEditor drawing controls                                                                                     |

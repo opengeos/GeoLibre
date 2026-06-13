@@ -107,10 +107,6 @@ Manual refresh uses the same saved source URL without requiring this metadata.
 | `duckdb-query`   | Supported for SQL query-result layers                                              |
 | `3d-tiles`       | Supported through the `maplibre-gl-3d-tiles` plugin                               |
 
-## Example
-
-See [`sample-data/example.geolibre.json`](https://github.com/opengeos/GeoLibre/blob/main/sample-data/example.geolibre.json).
-
 ## API
 
 ```typescript

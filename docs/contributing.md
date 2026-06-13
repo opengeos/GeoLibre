@@ -70,7 +70,6 @@ packages/plugins        # Plugin API and built-in plugins
 packages/processing     # Client-side algorithm registry
 workers/viewer          # Cloudflare viewer worker (geolibre-viewer-worker)
 backend/geolibre_server # Optional FastAPI conversion sidecar (Python)
-sample-data/            # Sample GeoJSON and an example project
 docs/                   # This documentation site (MkDocs)
 ```
 

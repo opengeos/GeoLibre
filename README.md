@@ -410,7 +410,6 @@ packages/plugins        # Plugin API
 packages/processing     # Algorithm registry
 backend/geolibre_server # FastAPI sidecar
 python/                 # geolibre Python package (Jupyter anywidget)
-sample-data/            # Sample GeoJSON & project
 docs/                   # Architecture & API docs
 ```
 

@@ -165,8 +165,4 @@ export { maplibreOvertureMapsPlugin } from "./plugins/maplibre-overture-maps";
 export { maplibreStreetViewPlugin } from "./plugins/maplibre-streetview";
 export { maplibreSwipePlugin } from "./plugins/maplibre-swipe";
 export { maplibreTimeSliderPlugin } from "./plugins/maplibre-time-slider";
-export {
-  sampleGeoJsonPlugin,
-  setSampleGeoJson,
-} from "./plugins/sample-geojson";
 export { WEB_SERVICE_PLUGIN_IDS } from "./plugins/web-service-sync";

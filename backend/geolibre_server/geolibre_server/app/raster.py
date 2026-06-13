@@ -511,16 +511,19 @@ resolution = float(params.get("resolution", 0) or 0)
 if resolution <= 0:
     raise SystemExit("Output pixel size (resolution) must be > 0")
 # Default to 2 only when absent/None; an explicit 0 must error rather than be
-# silently coerced to the default (0 ** 0 has no useful IDW meaning).
+# silently coerced to the default (0 ** 0 has no useful IDW meaning). The check
+# is gated on the method so a kriging request isn't rejected for an unused knob.
 _power = params.get("power", 2)
 power = float(2 if _power is None else _power)
-if power <= 0:
+if method == "idw" and power <= 0:
     raise SystemExit("IDW power must be > 0")
 variogram_model = str(params.get("variogram_model", "spherical")).lower()
 nodata = -9999.0
 
 # Guards: keep the output grid and (for kriging) the dense linear system within
-# memory/time budgets. IDW is cheap, so it tolerates a much larger grid.
+# memory/time budgets. IDW is cheap, so it tolerates a much larger grid, but a
+# point cap still bounds its O(points x cells) work for pathological inputs.
+MAX_IDW_POINTS = 200_000
 MAX_CELLS_IDW = 6_000_000
 MAX_CELLS_KRIGE = 1_000_000
 MAX_KRIGE_POINTS = 1500
@@ -564,6 +567,11 @@ if len(zs) < 3:
     raise SystemExit(
         "Interpolation needs at least 3 point features with a numeric "
         f"'{field}' value (found {len(zs)})."
+    )
+if method == "idw" and len(zs) > MAX_IDW_POINTS:
+    raise SystemExit(
+        f"IDW is capped at {MAX_IDW_POINTS} points (got {len(zs)}). "
+        "Thin the layer or aggregate it first."
     )
 if skipped:
     print(f"Skipped {skipped} feature(s) without a Point geometry or numeric '{field}'.")
@@ -888,6 +896,18 @@ def raster_run(request: RasterToolRequest):
             str(request.parameters.get("mask_path", "")),
             "Mask layer",
             allowed_extensions={".geojson", ".json"},
+        )
+
+    # Interpolation reads a point GeoJSON (every other raster tool takes a
+    # GeoTIFF). Reject a non-JSON primary input here with a clear 400 instead of
+    # letting json.load fail with an opaque JSONDecodeError inside the job.
+    if request.tool_id == "interpolate" and Path(input_path).suffix.lower() not in {
+        ".geojson",
+        ".json",
+    }:
+        raise HTTPException(
+            status_code=400,
+            detail="Interpolation input must be a GeoJSON (.geojson/.json) file",
         )
 
     output_name = _OUTPUT_NAMES.get(request.tool_id, "raster")
