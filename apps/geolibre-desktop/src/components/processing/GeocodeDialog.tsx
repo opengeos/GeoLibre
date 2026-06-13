@@ -111,8 +111,13 @@ export function GeocodeDialog({
 
   const config = getGeocoderConfig();
   const cap = rowCap(config.forwardEndpoint);
-  const rowCount = csv?.rows.length ?? 0;
-  const willCap = Number.isFinite(cap) && rowCount > cap;
+  // Count only rows that will actually be geocoded (non-empty address), so the
+  // cap warning matches the requests sent rather than the raw CSV row count.
+  const geocodableCount =
+    csv && addressColumn
+      ? csvRowsToGeocodeRequests(csv.rows, [addressColumn]).length
+      : 0;
+  const willCap = Number.isFinite(cap) && geocodableCount > cap;
 
   const appendLog = useCallback((line: string) => {
     setLog((prev) => [...prev, line]);
@@ -187,16 +192,27 @@ export function GeocodeDialog({
             address: request.address,
           }),
         );
-        const results = await geocodeForward(request.address, {
-          signal,
-          config,
-          limit: 1,
-        });
-        const feature = results[0]
-          ? nominatimResultToFeature(results[0], request.row)
-          : null;
-        if (feature) features.push(feature);
-        else failed.push(request.index + 1);
+        try {
+          const results = await geocodeForward(request.address, {
+            signal,
+            config,
+            limit: 1,
+          });
+          const feature = results[0]
+            ? nominatimResultToFeature(results[0], request.row)
+            : null;
+          if (feature) features.push(feature);
+          else failed.push(request.index + 1);
+        } catch (requestError) {
+          // A cancel propagates to stop the whole batch; any other per-request
+          // failure (e.g. an HTTP 429) is logged and the row is recorded as a
+          // miss so the remaining rows still run.
+          if (isAbortError(requestError)) throw requestError;
+          appendLog(
+            t("geocode.error", { message: (requestError as Error).message }),
+          );
+          failed.push(request.index + 1);
+        }
       }
     } catch (error) {
       if (isAbortError(error)) cancelled = true;

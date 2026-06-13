@@ -78,6 +78,7 @@ import {
   DECK_VIZ_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
   REVERSE_GEOCODE_PLUGIN_ID,
+  setReverseGeocodeLabels,
   EFFECTS_PLUGIN_ID,
   WEB_SERVICE_PLUGIN_IDS,
   type GeoLibreMapControlPosition,
@@ -140,7 +141,13 @@ import {
 } from "lucide-react";
 import { useStore } from "zustand";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { type FormEvent, useRef, useState, useSyncExternalStore } from "react";
+import {
+  type FormEvent,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { ParseKeys } from "i18next";
 import { useTranslation } from "react-i18next";
 import {
@@ -368,6 +375,17 @@ export function TopToolbar({
   onToggleThemeMode,
 }: TopToolbarProps) {
   const { t } = useTranslation();
+  // The reverse-geocode plugin lives in the framework-agnostic plugins package
+  // and cannot call t() itself, so push the translated popup strings into it
+  // here and refresh them whenever the active language changes.
+  useEffect(() => {
+    setReverseGeocodeLabels({
+      lookingUp: t("geocode.reverseLookingUp"),
+      noAddress: t("geocode.reverseNoAddress"),
+      copyAddress: t("geocode.reverseCopyAddress"),
+      failed: t("geocode.reverseFailed"),
+    });
+  }, [t]);
   const loadProject = useAppStore((s) => s.loadProject);
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
   const setConversionOpen = useAppStore((s) => s.setConversionOpen);

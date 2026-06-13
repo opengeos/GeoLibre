@@ -316,7 +316,7 @@
       "directionsNoticeDesc": "Turning on Directions sends the waypoints you place to the public OSRM demo server (router.project-osrm.org) to calculate routes — your coordinates leave your device for those requests. The demo server is rate-limited and supports driving only.",
       "reverseGeocode": "Reverse Geocode",
       "reverseGeocodeTooltip": "Click the map to look up an address. The clicked coordinates are sent to the public Nominatim service (nominatim.openstreetmap.org).",
-      "reverseGeocodeNoticeTitle": "Reverse geocode uses a public service",
+      "reverseGeocodeNoticeTitle": "Reverse Geocode uses a public service",
       "reverseGeocodeNoticeDesc": "Turning on Reverse Geocode sends the coordinates of each point you click to the public Nominatim service (nominatim.openstreetmap.org) to resolve an address — your coordinates leave your device for those requests. The public service is rate-limited.",
       "continue": "Continue",
       "largeOsmPbfTitle": "Large OSM PBF file",
@@ -365,7 +365,11 @@
     "failedRows": "Rows with no match: {{rows}}",
     "noMatches": "No rows could be geocoded.",
     "cancelled": "Cancelled. Added {{matched}} matched row(s).",
-    "error": "Error: {{message}}"
+    "error": "Error: {{message}}",
+    "reverseLookingUp": "Looking up address...",
+    "reverseNoAddress": "No address found.",
+    "reverseCopyAddress": "Copy address",
+    "reverseFailed": "Reverse geocoding failed."
   },
   "storymap": {
     "title": "Story Map",
