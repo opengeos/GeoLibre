@@ -1165,9 +1165,10 @@ export const aggregateTool: ProcessingAlgorithm = {
       ctx.log(`Error: a statistic field is required for '${statistic}'`);
       return;
     }
-    // The client engine merges polygons per group (like Dissolve); the sidecar
-    // handles all geometry types. Group the original features (so count and the
-    // numeric stats match the sidecar), then union each group's polygons.
+    // Both engines restrict Aggregate to polygons (the layer picker filters to
+    // polygon layers, and the sidecar drops non-polygons too), so count and the
+    // numeric stats stay in sync. Group the polygon features, then union each
+    // group's polygons for the output geometry.
     const groups = new Map<
       string,
       { value: unknown; features: Feature[]; nums: number[]; count: number }
@@ -1195,8 +1196,19 @@ export const aggregateTool: ProcessingAlgorithm = {
         if (num !== null) group.nums.push(num);
       }
     }
-    if (!groups.size) {
+    const polygonCount = fc.features.length - skipped;
+    if (polygonCount === 0) {
       ctx.log("Error: Aggregate by attribute requires polygon features");
+      return;
+    }
+    if (!groups.size) {
+      // Polygons exist but every one had a null/undefined group value; the
+      // sidecar (pandas groupby dropna=True) yields an empty grouped result
+      // here, so match it instead of erroring on "no polygons".
+      ctx.log(
+        `Aggregated ${polygonCount} feature(s) into 0 group(s) by '${groupField}'`,
+      );
+      ctx.addResultLayer?.("Aggregate by attribute", featureCollection([]));
       return;
     }
     const outColumn =

@@ -490,6 +490,12 @@ def _aggregate(geojson, overlay, parameters) -> tuple[dict, list[str]]:
             raise ValueError(
                 f"Statistic field '{stat_field}' not found in layer attributes."
             )
+    # Restrict to polygons to match the client engine (and the tool's polygon-only
+    # layer picker), so a mixed-geometry layer can't make the two engines count
+    # different features per group.
+    gdf = gdf[gdf.geometry.geom_type.isin(["Polygon", "MultiPolygon"])]
+    if gdf.empty:
+        raise ValueError("Aggregate by attribute requires polygon features")
     # Merge each group's geometries into one (union), keeping only geometry so the
     # output carries just the group key and the computed statistic.
     result = gdf.dissolve(by=group_field)[["geometry"]].copy()

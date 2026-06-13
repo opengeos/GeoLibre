@@ -439,7 +439,7 @@ export function VectorToolsDialog({
               ))}
             </div>
 
-            {tool.supportsSidecar ? (
+            {tool.supportsSidecar || tool.requiresSidecar ? (
               <div className="flex flex-col gap-1">
                 <Label className="flex items-center gap-1.5 text-xs">
                   <Server className="h-3.5 w-3.5" /> Engine
@@ -460,7 +460,10 @@ export function VectorToolsDialog({
                 {engine === "sidecar" && sidecarAvailable === false ? (
                   <p className="text-xs text-destructive">
                     The GeoPandas sidecar is not available. Start the sidecar
-                    with the vector extra, or switch to the client engine.
+                    with the vector extra, or switch to
+                    {tool.requiresSidecar
+                      ? " Python (Pyodide)."
+                      : " the client engine."}
                   </p>
                 ) : null}
                 {engine === "pyodide" ? (

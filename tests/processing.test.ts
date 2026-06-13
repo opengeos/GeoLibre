@@ -665,6 +665,34 @@ describe("processing registry", () => {
     });
     assert.equal(missingProduced, false);
     assert.ok(missingLogs.some((m) => m.includes("not found")));
+
+    // The field exists but every value is null: not an error (polygons exist),
+    // an empty grouped result matching the sidecar's pandas dropna behaviour.
+    const allNull: GeoLibreLayer = {
+      ...parcels,
+      id: "allNull",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          { ...cell("x", 1, 0), properties: { region: null, pop: 1 } },
+          { ...cell("y", 2, 5), properties: { region: null, pop: 2 } },
+        ],
+      },
+    };
+    let allNullOut: FeatureCollection | null = null;
+    const allNullLogs: string[] = [];
+    tool.run({
+      layers: [allNull],
+      parameters: { layer: "allNull", group_field: "region", statistic: "count" },
+      log: (m) => allNullLogs.push(m),
+      addResultLayer: (_n, g) => {
+        allNullOut = g;
+      },
+    });
+    assert.ok(allNullOut);
+    assert.equal(allNullOut!.features.length, 0);
+    assert.ok(allNullLogs.some((m) => m.includes("0 group(s)")));
+    assert.ok(!allNullLogs.some((m) => m.includes("requires polygon")));
   });
 
   it("reproject defers to the Python engine on the client", () => {

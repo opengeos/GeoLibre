@@ -602,6 +602,40 @@ def test_aggregate_unknown_group_field_raises() -> None:
 
 
 @requires_geopandas
+def test_aggregate_counts_polygons_only_for_mixed_geometry() -> None:
+    # A mixed layer (2 polygons + 1 point, all group "a") must count only the
+    # polygons, matching the client engine's polygon-only restriction.
+    poly = {
+        "type": "Feature",
+        "properties": {"region": "a", "pop": 10},
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]],
+        },
+    }
+    poly2 = {
+        "type": "Feature",
+        "properties": {"region": "a", "pop": 20},
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [[[1, 0], [1, 1], [2, 1], [2, 0], [1, 0]]],
+        },
+    }
+    point = {
+        "type": "Feature",
+        "properties": {"region": "a", "pop": 99},
+        "geometry": {"type": "Point", "coordinates": [0.5, 0.5]},
+    }
+    mixed = {"type": "FeatureCollection", "features": [poly, poly2, point]}
+    geojson, _ = run_vector_tool(
+        "aggregate", mixed, parameters={"group_field": "region", "statistic": "count"}
+    )
+    assert len(geojson["features"]) == 1
+    # Only the 2 polygons count; the point is excluded.
+    assert geojson["features"][0]["properties"]["count"] == 2
+
+
+@requires_geopandas
 def test_aggregate_geometry_group_field_raises_clean_error() -> None:
     # "geometry" is in gdf.columns but grouping by it would raise an unhashable
     # TypeError (a 500); it must be rejected as a clean "not found" (400) instead.
