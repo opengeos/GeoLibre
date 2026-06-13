@@ -181,7 +181,11 @@ export function createEqualIntervalBreaks(
  * @returns The quantile break values.
  */
 export function createQuantileBreaks(values: number[], count: number): number[] {
+  if (count <= 0) return [];
   const sorted = [...values].sort((a, b) => a - b);
+  // An empty sample would read `undefined` through the index math below and
+  // yield NaN breaks; callers that have no values get an empty result instead.
+  if (sorted.length === 0) return [];
   return Array.from({ length: count }, (_, index) => {
     const position =
       count === 1 ? 0 : (index / (count - 1)) * (sorted.length - 1);

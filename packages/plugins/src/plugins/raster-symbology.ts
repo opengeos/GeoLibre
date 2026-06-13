@@ -123,9 +123,16 @@ export function computeRasterBreaks(
     if (edges.length === edgeCount) return [...edges].sort((a, b) => a - b);
     // Fall back to an even spread across whatever range we can infer so the
     // editor always starts from a sensible, correctly sized set of edges.
-    const min = stats?.min ?? edges[0] ?? 0;
-    const max = stats?.max ?? edges.at(-1) ?? 1;
-    return createEqualIntervalBreaks(min, max, edgeCount);
+    // Order the inferred bounds so unsorted manual input cannot produce
+    // descending edges (which would violate the ascending-edge contract).
+    const sortedEdges = [...edges].sort((a, b) => a - b);
+    const inferredMin = stats?.min ?? sortedEdges[0] ?? 0;
+    const inferredMax = stats?.max ?? sortedEdges.at(-1) ?? 1;
+    return createEqualIntervalBreaks(
+      Math.min(inferredMin, inferredMax),
+      Math.max(inferredMin, inferredMax),
+      edgeCount,
+    );
   }
 
   const min = stats?.min ?? 0;
@@ -171,6 +178,7 @@ export function buildSteppedColormapRgba(
 
   for (let column = 0; column < width; column += 1) {
     const t = column / (width - 1);
+    // Defaults to the last class (covers t === 1 and the degenerate range).
     let classIndex = classCount - 1;
     if (normalizedEdges) {
       for (let edge = 1; edge < normalizedEdges.length; edge += 1) {
@@ -179,8 +187,6 @@ export function buildSteppedColormapRgba(
           break;
         }
       }
-    } else {
-      classIndex = classCount - 1;
     }
     const color = parseHexColor(
       orderedColors[classIndex] ?? orderedColors.at(-1) ?? "#000000",

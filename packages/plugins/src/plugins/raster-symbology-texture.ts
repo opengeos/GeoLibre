@@ -12,7 +12,11 @@ import {
   buildSteppedColormapRgba,
   savedRasterSymbology,
 } from "./raster-symbology";
-import { RASTER_SOURCE_KIND, isRasterControlStoreLayer } from "./raster-layer-sync";
+import {
+  RASTER_SOURCE_KIND,
+  isRasterControlStoreLayer,
+  isRasterStoreSyncSuspended,
+} from "./raster-layer-sync";
 
 // These types mirror undocumented private members of the maplibre-gl-raster
 // LayerManager (verified against v0.2.0) and the deck.gl-raster Colormap
@@ -223,6 +227,10 @@ function reconcile(control: unknown): void {
 function subscribeToStore(): void {
   storeUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     if (state.layers === previous.layers) return;
+    // Skip the control->store echo: when the control rewrites a store layer
+    // from its own state (e.g. after setRasterState), symbology is unchanged,
+    // so reconciling again is wasted work.
+    if (isRasterStoreSyncSuspended()) return;
     // Cheap guard: only reconcile when a control-managed raster is present.
     if (
       !state.layers.some(isRasterControlStoreLayer) &&

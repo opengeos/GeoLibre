@@ -86,6 +86,11 @@ describe("computeRasterBreaks", () => {
     );
     assert.deepEqual(breaks, [0, 5, 10]);
   });
+
+  it("keeps fallback edges ascending when stats are absent and manual edges are unsorted", () => {
+    const breaks = computeRasterBreaks("manual", null, 2, [10, -5]);
+    assert.deepEqual(breaks, [-5, 2.5, 10]);
+  });
 });
 
 describe("buildSteppedColormapRgba", () => {

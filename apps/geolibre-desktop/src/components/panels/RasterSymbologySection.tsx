@@ -15,7 +15,7 @@ import {
   savedRasterSymbology,
 } from "@geolibre/plugins";
 import { Input, Label, Select, Separator } from "@geolibre/ui";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type RasterStateRecord = {
   mode: "single" | "rgb";
@@ -117,11 +117,15 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
   const band = state.bands[0] ?? 1;
 
   const [stats, setStats] = useState<RasterBandStats | null>(null);
+  const lastStatsRef = useRef<RasterBandStats | null>(null);
 
   // Fetch band statistics lazily once the user is classifying (equal-interval
   // and quantile both need a data range / histogram). Aborts implicitly via
-  // the cache + the manager's per-layer AbortController.
+  // the cache + the manager's per-layer AbortController. Stats are cleared
+  // first so a band/method switch shows "Computing data range…" rather than
+  // the previous band's values.
   useEffect(() => {
+    setStats(null);
     let cancelled = false;
     if (!symbology?.classified || symbology.method === "manual") return;
     void getRasterBandStats(layer.id, band).then((result) => {
@@ -131,6 +135,20 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
       cancelled = true;
     };
   }, [layer.id, band, symbology?.classified, symbology?.method]);
+
+  // Classification can be enabled before stats arrive, in which case the
+  // breaks fall back to the [0, …, 1] default range. Once real stats land,
+  // replace that fallback with data-range breaks so the user sees them
+  // without any extra interaction.
+  useEffect(() => {
+    if (!stats || stats === lastStatsRef.current) return;
+    lastStatsRef.current = stats;
+    if (!symbology?.classified || symbology.method === "manual") return;
+    const isDefaultRange =
+      symbology.breaks[0] === 0 && symbology.breaks.at(-1) === 1;
+    if (isDefaultRange) recomputeSymbology({ ...symbology });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stats]);
 
   const bandOptions = useMemo(() => {
     if (!bandCount) return [];
@@ -161,6 +179,9 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
     next: Pick<RasterSymbology, "ramp" | "reversed" | "method" | "classCount">,
     overrides: { range?: [number, number]; manualBreaks?: number[] } = {},
   ): void {
+    // Reusing the prior histogram here is safe: a range override only happens
+    // for equal-interval (the Min/Max inputs are disabled for quantile), and
+    // equal-interval breaks use only min/max — never the histogram.
     const effectiveStats: RasterBandStats | null = overrides.range
       ? { min: overrides.range[0], max: overrides.range[1], histogram: stats?.histogram ?? [] }
       : stats;
@@ -543,6 +564,9 @@ function RescaleControls({
   onChange: (rescale: [number, number][] | null) => void;
 }) {
   const range = rescale?.[0];
+  // The rescale data model is all-or-nothing ([min, max] or null = auto), so
+  // clearing either bound drops back to auto-stretch on both — a single bound
+  // can't be pinned independently.
   return (
     <div className="grid grid-cols-2 gap-3">
       <NumberField
@@ -630,12 +654,20 @@ function NumberField({
   placeholder?: string;
   onCommit: (value: number, empty: boolean) => void;
 }) {
-  // Local draft so the user can clear / retype without the value snapping back
-  // mid-edit; committed on change when it parses to a finite number.
+  // Local draft so the user can clear / retype freely; committed on blur (one
+  // store write / setRasterState per edit, instead of one per keystroke).
   const [draft, setDraft] = useState<string>(value === "" ? "" : String(value));
   useEffect(() => {
     setDraft(value === "" ? "" : String(value));
   }, [value]);
+  const commitDraft = () => {
+    if (draft.trim() === "") {
+      onCommit(0, true);
+      return;
+    }
+    const parsed = Number(draft);
+    if (Number.isFinite(parsed)) onCommit(parsed, false);
+  };
   return (
     <div className="space-y-2">
       <Label className="text-xs">{label}</Label>
@@ -647,15 +679,10 @@ function NumberField({
         disabled={disabled}
         placeholder={placeholder}
         value={draft}
-        onChange={(event) => {
-          const next = event.target.value;
-          setDraft(next);
-          if (next.trim() === "") {
-            onCommit(0, true);
-            return;
-          }
-          const parsed = Number(next);
-          if (Number.isFinite(parsed)) onCommit(parsed, false);
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commitDraft}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.currentTarget.blur();
         }}
       />
     </div>
