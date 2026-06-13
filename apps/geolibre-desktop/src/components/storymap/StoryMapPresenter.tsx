@@ -50,10 +50,15 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const activeIndexRef = useRef<number>(-1);
 
-  // Memoized so the effect below does not re-run on every render from a fresh
-  // `?? []` array reference; it only changes when the story does.
+  // Memoized so the render path and `hasChapters` get a stable reference.
   const chapters = useMemo(() => storymap?.chapters ?? [], [storymap]);
   const hasChapters = presenting && chapters.length > 0;
+
+  // The playback effect reads the story through a ref so it only sets up on
+  // present/exit (hasChapters) and not on every edit. Edits cannot happen mid-
+  // presentation anyway (the builder is closed first), so the story is frozen.
+  const storymapRef = useRef(storymap);
+  storymapRef.current = storymap;
 
   // Set up scroll observation and the live map side-effects while presenting.
   useEffect(() => {
@@ -61,23 +66,25 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
     const controller = mapControllerRef.current;
     const map = controller?.getMap();
     const container = scrollRef.current;
-    if (!controller || !map || !container || !storymap) return;
+    const story = storymapRef.current;
+    if (!controller || !map || !container || !story) return;
+    const chapters = story.chapters;
 
     const steps = Array.from(
       container.querySelectorAll<HTMLElement>("[data-chapter-index]"),
     );
 
     // Main-map marker, created once and moved per chapter.
-    if (storymap.showMarkers) {
+    if (story.showMarkers) {
       markerRef.current = new maplibregl.Marker({
-        color: storymap.markerColor,
+        color: story.markerColor,
       })
         .setLngLat(chapters[0].location.center)
         .addTo(map);
     }
 
     // Optional inset minimap.
-    if (storymap.inset && insetRef.current) {
+    if (story.inset && insetRef.current) {
       const insetMap = new maplibregl.Map({
         container: insetRef.current,
         style: INSET_STYLE_URL,
@@ -173,7 +180,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
       // Undo any direct opacity changes made during playback.
       controller.restoreLayerStyles();
     };
-  }, [hasChapters, chapters, storymap, mapControllerRef]);
+  }, [hasChapters, mapControllerRef]);
 
   // Allow Escape to exit the presentation.
   useEffect(() => {

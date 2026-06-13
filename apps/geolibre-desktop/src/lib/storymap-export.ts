@@ -340,7 +340,7 @@ function renderTemplate(
         if (config.title) { var t = document.createElement('h1'); t.innerText = config.title; header.appendChild(t); }
         if (config.subtitle) { var s = document.createElement('h2'); s.innerText = config.subtitle; header.appendChild(s); }
         if (config.byline) { var b = document.createElement('p'); b.innerText = config.byline; header.appendChild(b); }
-        if (header.innerText.length > 0) { header.classList.add(config.theme); header.setAttribute('id', 'header'); story.appendChild(header); }
+        if (header.children.length > 0) { header.classList.add(config.theme); header.setAttribute('id', 'header'); story.appendChild(header); }
 
         config.chapters.forEach(function (record, idx) {
             var container = document.createElement('div');
@@ -361,7 +361,7 @@ function renderTemplate(
 
         var footer = document.createElement('div');
         if (config.footer) { var f = document.createElement('p'); f.innerHTML = config.footer; footer.appendChild(f); }
-        if (footer.innerText.length > 0) { footer.classList.add(config.theme); footer.setAttribute('id', 'footer'); story.appendChild(footer); }
+        if (footer.children.length > 0) { footer.classList.add(config.theme); footer.setAttribute('id', 'footer'); story.appendChild(footer); }
 
         var map = new maplibregl.Map({
             container: 'map',

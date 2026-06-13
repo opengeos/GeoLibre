@@ -15,8 +15,10 @@ DOMPurify.addHook("afterSanitizeAttributes", (node) => {
  * Story map titles, descriptions, and footers support inline formatting
  * (`<br>`, `<em>`, `<a>`, etc.) like the storytelling template, but a project
  * can be shared or loaded from a URL, so the markup is untrusted. DOMPurify
- * strips scripts and event-handler attributes while keeping formatting, and we
- * force external links to open in a new tab without leaking the opener.
+ * strips scripts and event-handler attributes while keeping formatting;
+ * `ADD_ATTR` keeps author-provided `target`/`rel`, and the module-level hook
+ * above adds `rel="noopener noreferrer"` to any `target="_blank"` link so the
+ * opener cannot be leaked.
  *
  * @param html Raw HTML string to clean.
  * @returns A sanitized HTML string safe for `dangerouslySetInnerHTML`.
