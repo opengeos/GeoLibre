@@ -673,6 +673,11 @@ def _smooth(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     smoothed = 0
     _smoothable = ("LineString", "MultiLineString", "Polygon", "MultiPolygon")
     for feature in geojson["features"]:
+        # The server accepts arbitrary JSON, so a `null`/non-object feature would
+        # raise AttributeError (500); reject it as bad input (ValueError -> 400),
+        # matching the module contract.
+        if not isinstance(feature, dict):
+            raise ValueError("Each feature must be a GeoJSON Feature object")
         geometry = feature.get("geometry")
         if not geometry:
             out_features.append(feature)

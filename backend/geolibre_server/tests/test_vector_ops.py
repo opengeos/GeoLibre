@@ -849,6 +849,24 @@ def test_smooth_degenerate_ring_collapses_to_empty() -> None:
     assert geojson["features"][0]["geometry"]["coordinates"] == [[]]
 
 
+def test_smooth_null_feature_raises_value_error() -> None:
+    # A null/non-object feature is bad input: it must raise ValueError (-> 400),
+    # not AttributeError (-> 500).
+    bad = {
+        "type": "FeatureCollection",
+        "features": [
+            None,
+            {
+                "type": "Feature",
+                "properties": {},
+                "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+            },
+        ],
+    }
+    with pytest.raises(ValueError, match="GeoJSON Feature object"):
+        run_vector_tool("smooth", bad, parameters={"iterations": 1})
+
+
 def test_smooth_preserves_feature_id() -> None:
     line = {
         "type": "FeatureCollection",

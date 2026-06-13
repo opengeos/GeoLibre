@@ -1525,9 +1525,9 @@ export const gridTool: ProcessingAlgorithm = {
         ctx.log("Error: map viewport is unavailable");
         return;
       }
-      if (view[0] >= view[2]) {
+      if (view[0] >= view[2] || view[1] >= view[3]) {
         ctx.log(
-          "Error: the map view crosses the antimeridian; pan so it doesn't wrap +/-180, or use a manual bounding box",
+          "Error: the map view is empty or crosses the antimeridian; pan so it doesn't wrap +/-180, or use a manual bounding box",
         );
         return;
       }
@@ -1742,7 +1742,13 @@ export const voronoiTool: ProcessingAlgorithm = {
       maxY + dy * 0.1,
     ];
     const result = voronoiDiagram(pointsFc, { bbox: clip });
-    const cells = (result.features ?? []).filter((f) => Boolean(f?.geometry));
+    // Keep only polygonal cells, matching the backend: clipping a cell whose
+    // edge coincides with the bbox can in principle yield a degenerate
+    // non-polygon geometry.
+    const cells = (result.features ?? []).filter(
+      (f) =>
+        f?.geometry?.type === "Polygon" || f?.geometry?.type === "MultiPolygon",
+    );
     if (cells.length === 0) {
       ctx.log(
         "Error: could not build a Voronoi diagram — the points are collinear",
