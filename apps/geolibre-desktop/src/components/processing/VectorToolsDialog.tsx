@@ -450,7 +450,11 @@ export function VectorToolsDialog({
                   value={engine}
                   onChange={(e) => setEngine(e.target.value as Engine)}
                 >
-                  <option value="client">Client (Turf.js)</option>
+                  {/* requiresSidecar tools (e.g. Reproject) have no working client
+                      path, so don't let the user pick a dead-end engine. */}
+                  <option value="client" disabled={tool.requiresSidecar}>
+                    Client (Turf.js)
+                  </option>
                   <option value="sidecar">Sidecar (GeoPandas)</option>
                   <option value="pyodide">Python (Pyodide)</option>
                 </Select>

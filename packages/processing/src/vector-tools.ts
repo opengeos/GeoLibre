@@ -1216,15 +1216,11 @@ export const aggregateTool: ProcessingAlgorithm = {
     const outColumn =
       statistic === "count" ? "count" : `${statField}_${statistic}`;
     const results: Feature[] = [];
-    let droppedGroups = 0;
     for (const group of groups.values()) {
+      // Each group holds only polygon features, so mergePolygons always returns a
+      // geometry; the null check just satisfies its `| null` return type.
       const merged = mergePolygons(featureCollection(group.features));
-      // mergePolygons returns null for a degenerate/self-intersecting group; count
-      // it so the user understands why the output has fewer groups than expected.
-      if (!merged?.geometry) {
-        droppedGroups += 1;
-        continue;
-      }
+      if (!merged) continue;
       const statValue =
         statistic === "count"
           ? group.count
@@ -1236,11 +1232,8 @@ export const aggregateTool: ProcessingAlgorithm = {
       });
     }
     ctx.log(
-      `Aggregated ${fc.features.length - skipped} feature(s) into ${results.length} group(s) by '${groupField}'` +
-        (skipped > 0 ? ` (${skipped} skipped, not polygons)` : "") +
-        (droppedGroups > 0
-          ? ` (${droppedGroups} group(s) dropped: could not merge geometry)`
-          : ""),
+      `Aggregated ${polygonCount} feature(s) into ${results.length} group(s) by '${groupField}'` +
+        (skipped > 0 ? ` (${skipped} skipped, not polygons)` : ""),
     );
     ctx.addResultLayer?.("Aggregate by attribute", featureCollection(results));
   },
