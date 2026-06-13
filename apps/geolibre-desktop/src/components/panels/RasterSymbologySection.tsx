@@ -306,7 +306,7 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
         </Select>
         <div
           aria-hidden="true"
-          className="h-2 rounded-sm border"
+          className="h-4 rounded-sm border"
           style={{
             background: `linear-gradient(90deg, ${previewColors.join(", ")})`,
           }}
