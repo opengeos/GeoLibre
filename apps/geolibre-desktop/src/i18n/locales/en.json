@@ -378,6 +378,7 @@
       "topRight": "Top right",
       "bottomLeft": "Bottom left",
       "bottomRight": "Bottom right"
-    }
+    },
+    "loadSample": "Load sample story"
   }
 }

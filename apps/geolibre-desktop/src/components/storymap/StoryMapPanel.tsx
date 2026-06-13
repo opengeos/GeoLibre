@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import {
   DEFAULT_STORY_MAP,
+  createSampleStoryMap,
   useAppStore,
   type StoryChapter,
   type StoryChapterAlignment,
@@ -35,6 +36,7 @@ import {
   MapPin,
   Play,
   Plus,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import { saveTextFileWithFallback } from "../../lib/tauri-io";
@@ -67,6 +69,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
   const layers = useAppStore((s) => s.layers);
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
 
+  const setStorymap = useAppStore((s) => s.setStorymap);
   const updateSettings = useAppStore((s) => s.updateStorymapSettings);
   const addChapter = useAppStore((s) => s.addStoryChapter);
   const updateChapter = useAppStore((s) => s.updateStoryChapter);
@@ -103,6 +106,21 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
     addChapter(chapter);
     setExpandedId(chapter.id);
   }, [addChapter, chapters.length, mapControllerRef, t]);
+
+  const handleLoadSample = useCallback(() => {
+    const sample = createSampleStoryMap();
+    setStorymap(sample);
+    setExpandedId(null);
+    const first = sample.chapters[0];
+    if (first) {
+      mapControllerRef.current?.getMap()?.flyTo({
+        center: first.location.center,
+        zoom: first.location.zoom,
+        pitch: first.location.pitch,
+        bearing: first.location.bearing,
+      });
+    }
+  }, [mapControllerRef, setStorymap]);
 
   const handleCaptureView = useCallback(
     (id: string) => {
@@ -195,9 +213,13 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
           </div>
 
           {chapters.length === 0 ? (
-            <p className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-              {t("storymap.empty")}
-            </p>
+            <div className="flex flex-col items-center gap-3 rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+              <p>{t("storymap.empty")}</p>
+              <Button size="sm" variant="secondary" onClick={handleLoadSample}>
+                <Sparkles className="mr-1 h-4 w-4" />
+                {t("storymap.loadSample")}
+              </Button>
+            </div>
           ) : (
             <div className="space-y-2">
               {chapters.map((chapter, index) => (

@@ -1,6 +1,7 @@
 export * from "./types";
 export * from "./vector-color";
 export * from "./project";
+export { createSampleStoryMap } from "./storymap-sample";
 export {
   clearHistory,
   projectPathLabel,

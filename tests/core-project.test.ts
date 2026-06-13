@@ -4,6 +4,7 @@ import {
   DEFAULT_BASEMAP,
   DEFAULT_LAYER_STYLE,
   createEmptyProject,
+  createSampleStoryMap,
   parseProject,
   projectFromStore,
   serializeProject,
@@ -363,6 +364,21 @@ describe("story maps", () => {
       useAppStore.getState().storymap?.chapters.map((c) => c.id),
       ["chapter-1", "chapter-2"],
     );
+  });
+
+  it("provides a sample story that survives normalization", () => {
+    const sample = createSampleStoryMap();
+    assert.equal(sample.chapters.length, 5);
+
+    // Loading it as a project must keep every chapter (valid ids + centers).
+    const reloaded = parseProject(
+      serializeProject({
+        ...createEmptyProject("Sample"),
+        storymap: sample,
+      }),
+    );
+    assert.equal(reloaded.storymap?.chapters.length, 5);
+    assert.equal(reloaded.storymap?.chapters[0].id, "sample-san-francisco");
   });
 
   it("moves and removes chapters", () => {

@@ -12,6 +12,11 @@ Choose **Project → Story Map** to open the builder. The builder edits a story
 that is saved inside the `.geolibre.json` project file, so it travels with your
 project.
 
+!!! tip "Try it instantly"
+    When the story is empty, click **Load sample story** to populate a five-city
+    world tour. Hit **Present** and scroll to see it in action, then edit or
+    replace the chapters with your own.
+
 ## Story settings
 
 - **Title / Subtitle / Byline / Footer** appear in the presentation header and
