@@ -55,6 +55,11 @@ progresses.
 Click **Present** to start the scroll-driven presentation over the live map.
 Scroll to move between chapters; press **Esc** or **Exit** to return to editing.
 
+A **navigation pane** on the left lists every chapter for a quick overview;
+click any entry to jump straight to it. Toggle the pane with the list button next
+to **Exit**. The map controls (navigation, fullscreen, globe, layer control)
+stay usable during the presentation.
+
 ## Export to HTML
 
 Click **Export HTML** to save a self-contained `.html` page that reproduces the

@@ -382,6 +382,8 @@
     },
     "loadSample": "Load sample story",
     "htmlFile": "HTML",
-    "opacityLabel": "Opacity"
+    "opacityLabel": "Opacity",
+    "toggleNav": "Toggle chapter list",
+    "chapterNav": "Story chapters"
   }
 }

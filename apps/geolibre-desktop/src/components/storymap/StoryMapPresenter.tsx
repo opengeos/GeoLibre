@@ -1,11 +1,18 @@
-import { type RefObject, useEffect, useMemo, useRef } from "react";
+import {
+  type RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import maplibregl from "maplibre-gl";
 import { useAppStore, type StoryChapter } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
-import { Button } from "@geolibre/ui";
-import { X } from "lucide-react";
+import { Button, cn } from "@geolibre/ui";
+import { List, X } from "lucide-react";
 import { sanitizeStoryHtml } from "../../lib/sanitize-html";
 import { STORY_INSET_STYLE_URL } from "../../lib/storymap-constants";
 
@@ -47,10 +54,23 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
   const insetMarkerRef = useRef<maplibregl.Marker | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const activeIndexRef = useRef<number>(-1);
+  // Mirror of activeIndexRef as state so the navigation pane can highlight the
+  // current chapter.
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [navOpen, setNavOpen] = useState(true);
 
   // Memoized so the render path and `hasChapters` get a stable reference.
   const chapters = useMemo(() => storymap?.chapters ?? [], [storymap]);
   const hasChapters = presenting && chapters.length > 0;
+
+  // Scroll a chapter into view; the IntersectionObserver then activates it and
+  // flies the camera, so clicking the nav reuses the same scroll-driven path.
+  const goToChapter = useCallback((index: number) => {
+    const step = scrollRef.current?.querySelector<HTMLElement>(
+      `[data-chapter-index="${index}"]`,
+    );
+    step?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, []);
 
   // The playback effect reads the story through a ref so it only sets up on
   // present/exit (hasChapters) and not on every edit. Edits cannot happen mid-
@@ -105,6 +125,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
       activeIndexRef.current = index;
       const chapter = chapters[index];
       if (!chapter) return;
+      setActiveIndex(index);
 
       steps.forEach((step, i) =>
         step.classList.toggle("glsm-active", i === index),
@@ -212,15 +233,62 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
     // The map controls are lifted above it (see StoryMapStyles) so they stay
     // clickable even though the story drives the camera.
     <div className="absolute inset-0 z-[70] overflow-hidden">
-      <Button
-        variant="secondary"
-        size="sm"
-        className="absolute left-3 top-3 z-[72] shadow-md"
-        onClick={() => setPresenting(false)}
-      >
-        <X className="mr-1 h-4 w-4" />
-        {t("storymap.exitPresentation")}
-      </Button>
+      <div className="absolute left-3 top-3 z-[72] flex items-center gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          className="shadow-md"
+          onClick={() => setPresenting(false)}
+        >
+          <X className="mr-1 h-4 w-4" />
+          {t("storymap.exitPresentation")}
+        </Button>
+        <Button
+          variant="secondary"
+          size="icon"
+          className="h-8 w-8 shadow-md"
+          title={t("storymap.toggleNav")}
+          aria-pressed={navOpen}
+          onClick={() => setNavOpen((open) => !open)}
+        >
+          <List className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {navOpen ? (
+        <nav
+          aria-label={t("storymap.chapterNav")}
+          className="absolute left-3 top-14 z-[72] max-h-[calc(100%-4.5rem)] w-52 overflow-y-auto rounded-md border bg-background/85 p-1.5 shadow-lg backdrop-blur"
+        >
+          {chapters.map((chapter, index) => (
+            <button
+              key={chapter.id}
+              type="button"
+              onClick={() => goToChapter(index)}
+              className={cn(
+                "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors",
+                index === activeIndex
+                  ? "bg-primary/15 font-medium text-foreground"
+                  : "text-muted-foreground hover:bg-muted",
+              )}
+            >
+              <span
+                className={cn(
+                  "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px]",
+                  index === activeIndex
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground",
+                )}
+              >
+                {index + 1}
+              </span>
+              <span className="truncate">
+                {chapter.title || t("storymap.untitledChapter")}
+              </span>
+            </button>
+          ))}
+        </nav>
+      ) : null}
 
       {storymap?.inset ? (
         // The inner div is the MapLibre container; MapLibre stamps it with
@@ -240,7 +308,10 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
 
       <div
         ref={scrollRef}
-        className="glsm-scroll absolute inset-0 overflow-y-auto"
+        className={cn(
+          "glsm-scroll absolute inset-0 overflow-y-auto",
+          navOpen && "glsm-with-nav",
+        )}
       >
         {storymap &&
         (storymap.title || storymap.subtitle || storymap.byline) ? (
@@ -305,6 +376,9 @@ function StoryMapStyles() {
       .maplibregl-control-container { z-index: 73; }
       .glsm-scroll { scrollbar-width: none; }
       .glsm-scroll::-webkit-scrollbar { width: 0; height: 0; }
+      /* Reserve room for the navigation pane so panels never slide under it. */
+      .glsm-with-nav { padding-left: 14rem; }
+      @media (max-width: 900px) { .glsm-with-nav { padding-left: 0; } }
       .glsm-scroll a, .glsm-scroll a:hover, .glsm-scroll a:visited { color: #0071bc; }
       .glsm-header { margin: auto; width: 100%; position: relative; z-index: 5; }
       .glsm-header h1, .glsm-header h2, .glsm-header p { margin: 0; padding: 1.5vh 2%; text-align: center; }
