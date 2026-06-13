@@ -39,6 +39,8 @@ import {
   useState,
   type ReactElement,
 } from "react";
+import { useTranslation } from "react-i18next";
+import type { ParseKeys } from "i18next";
 import {
   isTauri,
   pickLocalPathWithFallback,
@@ -72,6 +74,7 @@ function toolDefaults(tool: RasterTool): Record<string, unknown> {
 }
 
 export function RasterToolsDialog(): ReactElement {
+  const { t } = useTranslation();
   const openTool = useAppStore((s) => s.ui.rasterToolOpen);
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
 
@@ -354,7 +357,7 @@ export function RasterToolsDialog(): ReactElement {
             {/* Input file */}
             <div className="grid gap-1.5">
               <Label htmlFor="raster-input" className="text-xs">
-                {tool.inputLabel ?? "Input raster"}
+                {t((tool.inputLabel ?? "toolbar.rasterTool.inputRaster") as ParseKeys)}
                 <span className="text-destructive"> *</span>
               </Label>
               <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2">

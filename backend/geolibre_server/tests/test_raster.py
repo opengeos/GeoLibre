@@ -261,7 +261,7 @@ def test_interpolate_idw_writes_raster(tmp_path: Path) -> None:
         assert ds.crs == rasterio.crs.CRS.from_epsg(4326)
         data = ds.read(1, masked=True)
         # The surface must stay within the sampled value range [0, 30].
-        assert 0.0 <= float(data.min())
+        assert float(data.min()) >= 0.0
         assert float(data.max()) <= 30.0
 
 
@@ -330,6 +330,83 @@ def test_interpolate_requires_numeric_field(tmp_path: Path) -> None:
     )
     assert completed.returncode != 0
     assert "at least 3 point" in (completed.stdout + completed.stderr)
+    assert not out.exists()
+
+
+@requires_rasterio
+def test_interpolate_honors_geojson_crs(tmp_path: Path) -> None:
+    """An explicit GeoJSON CRS member is parsed onto the output raster.
+
+    Guards the doubly-escaped ``r"(\\\\d+)$"`` regex in the embedded script,
+    which resolves to ``r"(\\d+)$"`` in the emitted script text.
+    """
+    import rasterio
+
+    src = tmp_path / "points.geojson"
+    src.write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "crs": {
+                    "type": "name",
+                    "properties": {"name": "urn:ogc:def:crs:EPSG::32611"},
+                },
+                "features": [
+                    {
+                        "type": "Feature",
+                        "properties": {"z": float(i)},
+                        "geometry": {
+                            "type": "Point",
+                            "coordinates": [500000 + 1000 * i, 4000000 + 1000 * i],
+                        },
+                    }
+                    for i in range(6)
+                ],
+            }
+        )
+    )
+    out = tmp_path / "out.tif"
+    _run_script(
+        _RASTER_TOOL_SCRIPTS["interpolate"],
+        {
+            "input_path": str(src),
+            "output_path": str(out),
+            "field": "z",
+            "method": "idw",
+            "resolution": 1000,
+        },
+    )
+    with rasterio.open(out) as ds:
+        assert ds.crs == rasterio.crs.CRS.from_epsg(32611)
+
+
+@requires_rasterio
+def test_interpolate_rejects_zero_power(tmp_path: Path) -> None:
+    """An explicit ``power=0`` errors instead of being coerced to the default."""
+    src = _write_points(tmp_path / "points.geojson")
+    out = tmp_path / "out.tif"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            _RASTER_TOOL_SCRIPTS["interpolate"],
+            json.dumps(
+                {
+                    "input_path": str(src),
+                    "output_path": str(out),
+                    "field": "z",
+                    "method": "idw",
+                    "resolution": 0.5,
+                    "power": 0,
+                }
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode != 0
+    assert "power must be > 0" in (completed.stdout + completed.stderr)
     assert not out.exists()
 
 

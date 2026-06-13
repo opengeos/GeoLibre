@@ -40,9 +40,10 @@ export interface RasterTool {
   inputFilters: FileFilter[];
   outputFilters: FileFilter[];
   /**
-   * Label for the primary input file picker. Defaults to "Input raster"; tools
-   * that take a vector input (e.g. interpolation reads a point GeoJSON) override
-   * it so the dialog reads correctly.
+   * i18n key for the primary input file picker label. Defaults to
+   * `toolbar.rasterTool.inputRaster`; tools that take a vector input (e.g.
+   * interpolation reads a point GeoJSON) override it so the dialog reads
+   * correctly.
    */
   inputLabel?: string;
   /** Operation knobs (not the primary input/output paths). */
@@ -332,7 +333,7 @@ export const interpolateTool: RasterTool = {
   defaultOutputName: "interpolated.tif",
   inputFilters: GEOJSON_INPUT,
   outputFilters: GEOTIFF_OUTPUT,
-  inputLabel: "Input points (GeoJSON)",
+  inputLabel: "toolbar.rasterTool.inputPoints",
   parameters: [
     {
       id: "field",

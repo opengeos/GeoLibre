@@ -510,7 +510,12 @@ method = str(params.get("method", "idw")).lower()
 resolution = float(params.get("resolution", 0) or 0)
 if resolution <= 0:
     raise SystemExit("Output pixel size (resolution) must be > 0")
-power = float(params.get("power", 2) or 2)
+# Default to 2 only when absent/None; an explicit 0 must error rather than be
+# silently coerced to the default (0 ** 0 has no useful IDW meaning).
+_power = params.get("power", 2)
+power = float(2 if _power is None else _power)
+if power <= 0:
+    raise SystemExit("IDW power must be > 0")
 variogram_model = str(params.get("variogram_model", "spherical")).lower()
 nodata = -9999.0
 
@@ -611,7 +616,12 @@ grid = np.column_stack([mesh_x.ravel(), mesh_y.ravel()])  # (M, 2)
 def interpolate_idw(grid_pts):
     out = np.empty(grid_pts.shape[0], dtype="float64")
     half_power = power / 2.0
-    chunk = 100_000
+    # Each chunk broadcasts several (chunk, n) float64 matrices. Size the chunk
+    # so their combined peak stays near ~256 MB regardless of the sample count,
+    # so a large point layer cannot OOM (unlike a fixed chunk). Capped at
+    # 100_000 cells so small point sets still run in one or few passes.
+    n = px.shape[0]
+    chunk = max(1, min(100_000, 256_000_000 // (5 * 8 * n)))
     for i in range(0, grid_pts.shape[0], chunk):
         gp = grid_pts[i : i + chunk]
         dx = gp[:, 0:1] - px[None, :]

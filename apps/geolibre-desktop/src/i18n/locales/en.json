@@ -210,7 +210,9 @@
       "clipMask": "Clip by mask layer",
       "polygonize": "Polygonize",
       "contour": "Contour",
-      "interpolate": "Interpolation (IDW / Kriging)"
+      "interpolate": "Interpolation (IDW / Kriging)",
+      "inputRaster": "Input raster",
+      "inputPoints": "Input points (GeoJSON)"
     },
     "mapControl": {
       "navigation": "Navigation",
