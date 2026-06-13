@@ -146,14 +146,19 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
         insetMarkerRef.current?.setLngLat(chapter.location.center);
       }
 
-      // Exit effects of the chapter we are leaving, then enter effects.
-      if (previous >= 0 && chapters[previous]) {
-        for (const change of chapters[previous].onChapterExit) {
-          controller.setStoryLayerOpacity(
-            change.layerId,
-            change.opacity,
-            change.duration,
-          );
+      // Fire exit effects for every chapter being left, not just the one
+      // directly before, so quick scrolls or nav jumps over several chapters
+      // don't strand layers at an intermediate opacity.
+      if (previous >= 0 && previous !== index) {
+        const step = previous < index ? 1 : -1;
+        for (let i = previous; i !== index; i += step) {
+          for (const change of chapters[i]?.onChapterExit ?? []) {
+            controller.setStoryLayerOpacity(
+              change.layerId,
+              change.opacity,
+              change.duration,
+            );
+          }
         }
       }
       for (const change of chapter.onChapterEnter) {

@@ -384,6 +384,7 @@
     "htmlFile": "HTML",
     "opacityLabel": "Opacity",
     "toggleNav": "Toggle chapter list",
-    "chapterNav": "Story chapters"
+    "chapterNav": "Story chapters",
+    "durationLabel": "Transition (ms)"
   }
 }

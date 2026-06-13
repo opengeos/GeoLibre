@@ -19,8 +19,10 @@ interface InlineLayerExport {
   id: string;
   geojson: FeatureCollection;
   layerSpec: Record<string, unknown>;
-  /** Opacity paint property to drive with story chapter transitions. */
-  initialOpacity: number;
+  /** GeoLibre layer-level opacity, combined with the style's per-geometry one. */
+  layerOpacity: number;
+  /** Whether a chapter fades this layer in (so it starts hidden). */
+  fadesIn: boolean;
 }
 
 /**
@@ -71,9 +73,10 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
       id: layer.id,
       geojson: layer.geojson,
       layerSpec,
-      // Layers a chapter fades in start hidden; exit-only layers keep their
-      // natural opacity so they are visible until faded out.
-      initialOpacity: referencedOnEnter.has(layer.id) ? 0 : layer.opacity,
+      layerOpacity: layer.opacity,
+      // Layers a chapter fades in start hidden; exit-only and unreferenced
+      // layers keep their natural opacity so they are visible until faded out.
+      fadesIn: referencedOnEnter.has(layer.id),
     });
   }
 
@@ -132,9 +135,19 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
     .map((entry) => {
       const sourceId = `${entry.id}-source`;
       const paint = { ...(entry.layerSpec.paint as Record<string, unknown>) };
-      // Override the opacity paint property with the story's initial value.
+      // Seed the opacity paint property: 0 when a chapter fades the layer in,
+      // otherwise the style's per-geometry opacity scaled by the layer opacity
+      // so the export matches what GeoLibre renders.
       const opacityProp = opacityProperty(entry.layerSpec.type as string);
-      if (opacityProp) paint[opacityProp] = entry.initialOpacity;
+      if (opacityProp) {
+        const styleOpacity =
+          typeof paint[opacityProp] === "number"
+            ? (paint[opacityProp] as number)
+            : 1;
+        paint[opacityProp] = entry.fadesIn
+          ? 0
+          : styleOpacity * entry.layerOpacity;
+      }
       const spec = {
         ...entry.layerSpec,
         id: entry.id,
@@ -263,9 +276,10 @@ function renderTemplate(
     <meta charset='utf-8' />
     <title>${escapeHtml(String(config.title || "Story Map"))}</title>
     <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
-    <script src='https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js'></script>
-    <link href='https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css' rel='stylesheet' />
-    <script src="https://unpkg.com/scrollama@3.2.0"></script>
+    <!-- SRI hashes are pinned to the versions above; update both together. -->
+    <script src='https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js' integrity='sha384-5+cfbwT0iiub6VsQAdn6yz16nr6sDiQoHx6tm4O8OVYXHYOxcffFmCJBL0dgdvGp' crossorigin='anonymous'></script>
+    <link href='https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css' rel='stylesheet' integrity='sha384-uTttxo/aOKbdE5RlD/SPzSDoDmNvGlUYPjONi2MN/b7c9HPSvW07OIuyP7uL6jxK' crossorigin='anonymous' />
+    <script src="https://unpkg.com/scrollama@3.2.0/build/scrollama.js" integrity="sha384-cQr5Cx9W8UDNyE09swPH4QMork1pq5sHUzY32DbxJ/WpWFSpr2MG8FGs/3pMjp2S" crossorigin="anonymous"></script>
     <style>
         body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
         a, a:hover, a:visited { color: #0071bc; }

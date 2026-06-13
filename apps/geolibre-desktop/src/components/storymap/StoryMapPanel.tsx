@@ -651,6 +651,19 @@ function LayerEffectsEditor({
           <span className="w-8 shrink-0 text-right font-mono text-xs">
             {change.opacity.toFixed(1)}
           </span>
+          <Input
+            type="number"
+            min={0}
+            step={100}
+            className="h-7 w-20 shrink-0"
+            aria-label={t("storymap.durationLabel")}
+            title={t("storymap.durationLabel")}
+            value={change.duration ?? 0}
+            onChange={(e) => {
+              const ms = Math.max(0, Number(e.target.value) || 0);
+              update(i, { duration: ms || undefined });
+            }}
+          />
           <Button
             variant="ghost"
             size="icon"
