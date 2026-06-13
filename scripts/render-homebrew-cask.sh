@@ -48,9 +48,17 @@ cask "geolibre" do
   desc "Lightweight, cloud-native GIS platform"
   homepage "https://geolibre.app/"
 
-  # The DMGs are ad-hoc signed but not notarized, so install with
-  # \`--no-quarantine\` to avoid the Gatekeeper "damaged" prompt.
   app "GeoLibre Desktop.app"
+
+  # The DMGs are ad-hoc signed but not notarized by Apple, so macOS Gatekeeper
+  # blocks them with a "damaged" prompt. Homebrew removed the --no-quarantine
+  # flag in 5.1, so the user must strip the quarantine attribute by hand.
+  caveats <<~EOS
+    GeoLibre Desktop is not notarized by Apple. Before first launch, remove the
+    quarantine attribute (repeat this after every upgrade):
+
+      xattr -dr com.apple.quarantine "/Applications/GeoLibre Desktop.app"
+  EOS
 
   zap trash: [
     "~/Library/Application Support/org.geolibre.desktop",

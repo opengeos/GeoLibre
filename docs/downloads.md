@@ -25,19 +25,34 @@ from a self-hosted tap:
 
 ```bash
 brew tap opengeos/geolibre
-brew install --cask --no-quarantine geolibre
+brew trust --cask opengeos/geolibre/geolibre
+brew install --cask geolibre
+xattr -dr com.apple.quarantine "/Applications/GeoLibre Desktop.app"
 ```
 
-The `--no-quarantine` flag is required because the DMGs are ad-hoc signed but
-not notarized by Apple; it lets Homebrew skip the Gatekeeper quarantine that
-would otherwise show a "damaged" prompt (see below). Upgrade later with:
+The `brew trust` step is a one-time approval. Homebrew refuses to load casks
+from non-official taps until you trust them; this is enforced when
+`HOMEBREW_REQUIRE_TAP_TRUST=1` is set and becomes the default in a future
+Homebrew release. `brew trust opengeos/geolibre` trusts the whole tap instead of
+just this cask. The command exists in Homebrew 5.1 and later; on older versions
+skip it.
+
+The `xattr` step is required because the DMGs are ad-hoc signed but not
+notarized by Apple, so macOS Gatekeeper would otherwise block the app with a
+"damaged" prompt (see below). It removes the quarantine attribute Homebrew
+attaches on download. Upgrade later with:
 
 ```bash
-brew upgrade --cask --no-quarantine geolibre
+brew upgrade --cask geolibre
+xattr -dr com.apple.quarantine "/Applications/GeoLibre Desktop.app"
 ```
 
-The tap is not the official `homebrew/cask` repository, which requires a
-notarized, Apple-signed app.
+Re-run the `xattr` command after each upgrade, since it applies to the newly
+installed app bundle.
+
+Homebrew removed the `--no-quarantine` flag in version 5.1, so the manual
+`xattr` step replaces it. The tap is also not the official `homebrew/cask`
+repository, which requires a notarized, Apple-signed app.
 
 ### Manual installation
 
