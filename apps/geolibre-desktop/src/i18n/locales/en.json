@@ -368,6 +368,12 @@
       "couldNotOpenOsmPbf": "Could not open the OSM PBF file.",
       "invalidOsmPbfUrl": "Enter a valid http(s) URL to an .osm.pbf file.",
       "couldNotDownloadOsmPbf": "Could not download the OSM PBF file."
+    },
+    "sqlWorkspace": {
+      "description": {
+        "postgis": "Run PostGIS SQL against loaded layers. The PostGIS extension is loaded, so ST_* functions are available. The first run loads a ~19 MB database engine.",
+        "duckdb": "Run DuckDB SQL against loaded layers, files, and URLs. The spatial extension is loaded, so ST_* functions are available. Cloud URLs (s3://, gs://, az://) are supported for public data."
+      }
     }
   },
   "geocode": {
@@ -475,5 +481,25 @@
       "selectField": "Select a field...",
       "selectLayerFirst": "Select a layer first"
     }
+  },
+  "layers": {
+    "newGroup": "New group",
+    "collapseGroup": "Collapse group",
+    "expandGroup": "Expand group",
+    "hideGroup": "Hide group",
+    "showGroup": "Show group",
+    "renameGroup": "Rename group",
+    "moveGroupUp": "Move group up",
+    "moveGroupDown": "Move group down",
+    "ungroupKeepLayers": "Ungroup (keep layers)",
+    "deleteGroupAndLayers": "Delete group and layers",
+    "groupActions": "Group actions",
+    "groupOpacity": "Opacity",
+    "groupOpacityAria": "{{name}} group opacity",
+    "doubleClickToRename": "Double-click to rename",
+    "renameNamed": "Rename {{name}}",
+    "newGroupFromLayer": "New group from layer",
+    "moveToGroup": "Move to group",
+    "removeFromGroup": "Remove from group"
   }
 }

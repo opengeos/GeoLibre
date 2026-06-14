@@ -1,10 +1,11 @@
 import {
+  applyGroupEffects,
   isDuckDBQueryLayer,
   useAppStore,
   type GeoLibreLayer,
 } from "@geolibre/core";
 import maplibregl from "maplibre-gl";
-import { memo, useEffect, useRef } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import {
   circleLayerId,
   fillExtrusionLayerId,
@@ -591,6 +592,7 @@ export const MapCanvas = memo(function MapCanvas({
   const mapPreferences = useAppStore((s) => s.preferences.map);
   const mapView = useAppStore((s) => s.mapView);
   const layers = useAppStore((s) => s.layers);
+  const layerGroups = useAppStore((s) => s.layerGroups);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const selectedFeatureId = useAppStore((s) => s.selectedFeatureId);
   const identifyLayerId = useAppStore((s) => s.identifyLayerId);
@@ -658,10 +660,10 @@ export const MapCanvas = memo(function MapCanvas({
     };
     map.on("projectiontransition", updateProjection);
     map.on("load", () => {
-      mc.waitAndSyncLayers(useAppStore.getState().layers);
-      mc.setBasemapVisible(useAppStore.getState().basemapVisible);
-      mc.setBasemapOpacity(useAppStore.getState().basemapOpacity);
       const state = useAppStore.getState();
+      mc.waitAndSyncLayers(applyGroupEffects(state.layers, state.layerGroups));
+      mc.setBasemapVisible(state.basemapVisible);
+      mc.setBasemapOpacity(state.basemapOpacity);
       mc.highlightFeature(
         state.layers.find((layer) => layer.id === state.selectedLayerId),
         state.selectedFeatureId,
@@ -730,14 +732,12 @@ export const MapCanvas = memo(function MapCanvas({
     if (!map || prevBasemap.current === basemapStyleUrl) return;
     prevBasemap.current = basemapStyleUrl;
     map.once("style.load", () => {
-      controller.current?.waitAndSyncLayers(useAppStore.getState().layers);
-      controller.current?.setBasemapVisible(
-        useAppStore.getState().basemapVisible,
-      );
-      controller.current?.setBasemapOpacity(
-        useAppStore.getState().basemapOpacity,
-      );
       const state = useAppStore.getState();
+      controller.current?.waitAndSyncLayers(
+        applyGroupEffects(state.layers, state.layerGroups),
+      );
+      controller.current?.setBasemapVisible(state.basemapVisible);
+      controller.current?.setBasemapOpacity(state.basemapOpacity);
       controller.current?.highlightFeature(
         state.layers.find((layer) => layer.id === state.selectedLayerId),
         state.selectedFeatureId,
@@ -759,9 +759,18 @@ export const MapCanvas = memo(function MapCanvas({
     controller.current?.applyMapPreferences(mapPreferences);
   }, [mapPreferences]);
 
+  // Fold group visibility/opacity into each child layer before syncing so the
+  // map sync keeps treating every layer independently. This also re-runs when
+  // only a group's visibility/opacity changes (the raw `layers` array is then
+  // unchanged), because `renderLayers` depends on `layerGroups`.
+  const renderLayers = useMemo(
+    () => applyGroupEffects(layers, layerGroups),
+    [layers, layerGroups],
+  );
+
   useEffect(() => {
-    controller.current?.waitAndSyncLayers(layers);
-  }, [layers]);
+    controller.current?.waitAndSyncLayers(renderLayers);
+  }, [renderLayers]);
 
   useEffect(() => {
     const layer = layers.find((item) => item.id === selectedLayerId);
