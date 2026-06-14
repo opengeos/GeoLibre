@@ -36,7 +36,7 @@ export function RemoteCursorsOverlay({
     const map = mapControllerRef.current?.getMap() ?? null;
     if (!map || !isActive) {
       // Clean up any lingering markers/layer when the session ends.
-      clearAll(map, markersRef.current);
+      safely(() => clearAll(map, markersRef.current));
       return;
     }
 
@@ -44,17 +44,7 @@ export function RemoteCursorsOverlay({
     // map style mutates concurrently (layer add/remove, basemap reload) and a
     // transient failure must not trip the Map error boundary. The next presence
     // update or styledata event retries.
-    const render = () => {
-      try {
-        renderPresence(map, presence, markersRef.current);
-      } catch (error) {
-        // Expected when the style mutates mid-render; the next presence/styledata
-        // event retries. Surface it in dev so a persistent bug isn't hidden.
-        if (import.meta.env.DEV) {
-          console.warn("[GeoLibre] presence render failed", error);
-        }
-      }
-    };
+    const render = () => safely(() => renderPresence(map, presence, markersRef.current));
     render();
     // Re-apply after a style reload (basemap change) wipes the source/layer.
     map.on("styledata", render);
@@ -65,11 +55,27 @@ export function RemoteCursorsOverlay({
 
   // Remove everything on unmount.
   useEffect(
-    () => () => clearAll(mapControllerRef.current?.getMap() ?? null, markersRef.current),
+    () => () =>
+      safely(() =>
+        clearAll(mapControllerRef.current?.getMap() ?? null, markersRef.current),
+      ),
     [mapControllerRef],
   );
 
   return null;
+}
+
+// Runs a map mutation that may throw while the style is mid-change, swallowing
+// the error so presence rendering can never trip the Map error boundary. Logs
+// in dev so a persistent bug isn't hidden.
+function safely(fn: () => void): void {
+  try {
+    fn();
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn("[GeoLibre] collab presence overlay error", error);
+    }
+  }
 }
 
 function renderPresence(

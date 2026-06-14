@@ -42,6 +42,8 @@ export interface CollaborationApi {
   leave: () => void;
   /** Host-only: switch the session between view-only and co-edit. */
   setMode: (mode: CollaborationMode) => void;
+  /** Toggle whether this participant's camera follows the host's viewport. */
+  setFollowHost: (enabled: boolean) => void;
 }
 
 /**
@@ -204,11 +206,10 @@ export function useCollaboration(
         break;
       case "presence": {
         if (message.clientId === selfIdRef.current) break;
-        const participant = useAppStore
-          .getState()
-          .collaboration.participants.find(
-            (p) => p.clientId === message.clientId,
-          );
+        const collab = useAppStore.getState().collaboration;
+        const participant = collab.participants.find(
+          (p) => p.clientId === message.clientId,
+        );
         const presence: CollaborationPresence = {
           displayName: participant?.displayName ?? i18n.t("collaborate.guest"),
           color: participant?.color ?? "#888888",
@@ -216,6 +217,14 @@ export function useCollaboration(
           view: message.view,
         };
         store.updateCollaborationPresence(message.clientId, presence);
+        // Follow mode: mirror the host's camera onto the local map.
+        if (
+          collab.followHost &&
+          participant?.role === "host" &&
+          message.view
+        ) {
+          mapControllerRef.current?.applyView(message.view);
+        }
         break;
       }
       case "participants": {
@@ -414,20 +423,42 @@ export function useCollaboration(
     connRef.current?.send({ type: "set-mode", mode });
   }, []);
 
-  return { enabled, start, join, leave, setMode };
+  const setFollowHost = useCallback((enabled: boolean) => {
+    const store = useAppStore.getState();
+    store.setCollaboration({ followHost: enabled });
+    if (!enabled) return;
+    // Jump to the host's last-known viewport immediately so following takes
+    // effect now rather than only on the host's next move.
+    const host = store.collaboration.participants.find(
+      (p) => p.role === "host",
+    );
+    const view = host
+      ? store.collaboration.presence[host.clientId]?.view
+      : null;
+    if (view) mapControllerRef.current?.applyView(view);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return { enabled, start, join, leave, setMode, setFollowHost };
 }
 
 // Reference-compares the store fields that feed a project snapshot. Every
 // mutating store action produces new refs for the slice it touches, so this is
 // a cheap, correct "did the broadcastable project change?" check that ignores
 // selection, UI, and collaboration-slice churn.
+//
+// `mapView` is deliberately NOT compared: each participant keeps their own
+// camera (applyRemoteSnapshot overrides the incoming view), so broadcasting a
+// full-project snapshot on every pan/zoom only churns receivers' layer
+// reconciliation for no visible effect — and that churn was intermittently
+// crashing the map under rapid panning. Camera is shared through presence
+// (viewport rectangles + opt-in follow-host) instead.
 function projectChanged(
   a: ReturnType<typeof useAppStore.getState>,
   b: ReturnType<typeof useAppStore.getState>,
 ): boolean {
   return (
     a.projectName !== b.projectName ||
-    a.mapView !== b.mapView ||
     a.basemapStyleUrl !== b.basemapStyleUrl ||
     a.basemapVisible !== b.basemapVisible ||
     a.basemapOpacity !== b.basemapOpacity ||

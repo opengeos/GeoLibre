@@ -277,6 +277,8 @@ export interface CollaborationState {
   participants: CollaborationParticipant[];
   /** Remote presence keyed by participant clientId (never includes self). */
   presence: Record<string, CollaborationPresence>;
+  /** When true, this participant's camera follows the host's viewport. */
+  followHost: boolean;
   /** Last human-readable error, surfaced in the Collaborate dialog. */
   error: string | null;
 }

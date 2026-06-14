@@ -169,6 +169,7 @@ export function CollaborateDialog({
             onCopy={handleCopy}
             onLeave={handleLeave}
             onSetMode={api.setMode}
+            onSetFollowHost={api.setFollowHost}
           />
         ) : (
           <div className="space-y-4">
@@ -287,12 +288,14 @@ function ActiveSession({
   onCopy,
   onLeave,
   onSetMode,
+  onSetFollowHost,
 }: {
   shareLink: string;
   copied: "code" | "link" | null;
   onCopy: (kind: "code" | "link", value: string) => void;
   onLeave: () => void;
   onSetMode: (mode: CollaborationMode) => void;
+  onSetFollowHost: (enabled: boolean) => void;
 }) {
   const { t } = useTranslation();
   const collaboration = useAppStore((s) => s.collaboration);
@@ -317,6 +320,20 @@ function ActiveSession({
           </>
         )}
       </div>
+
+      {/* Cameras are independent by default; a non-host can opt to follow the
+          host's viewport (presenter mode). */}
+      {!isHost && (
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={collaboration.followHost}
+            onChange={(e) => onSetFollowHost(e.target.checked)}
+            className="h-4 w-4 accent-foreground"
+          />
+          {t("collaborate.followHost")}
+        </label>
+      )}
 
       <div className="space-y-1.5">
         <Label>{t("collaborate.sessionCode")}</Label>

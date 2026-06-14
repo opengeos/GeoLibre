@@ -249,6 +249,7 @@ export const DEFAULT_COLLABORATION_STATE: CollaborationState = Object.freeze({
     string,
     CollaborationPresence
   >,
+  followHost: false,
   error: null,
 });
 
