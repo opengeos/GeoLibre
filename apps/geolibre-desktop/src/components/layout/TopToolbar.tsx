@@ -337,8 +337,8 @@ export function TopToolbar({
     },
     {
       id: "project.print-layout",
-      title: "Print Layout…",
-      group: "Project",
+      title: t("toolbar.item.printLayoutEllipsis"),
+      group: t("toolbar.commandGroup.project"),
       icon: LayoutTemplate,
       run: () => setPrintLayoutOpen(true),
     },

@@ -100,6 +100,12 @@ export function useConsentGatedActions({
     if (pendingNetworkTool) setNetworkToolOpen(pendingNetworkTool);
     setPendingNetworkTool(null);
   };
+  // Cancel/dismiss the routing notice, clearing the paired pending-tool state so
+  // callers don't need to know that state exists.
+  const dismissRoutingNotice = () => {
+    setRoutingNoticeOpen(false);
+    setPendingNetworkTool(null);
+  };
 
   return {
     directionsNoticeOpen,
@@ -107,8 +113,7 @@ export function useConsentGatedActions({
     reverseGeocodeNoticeOpen,
     setReverseGeocodeNoticeOpen,
     routingNoticeOpen,
-    setRoutingNoticeOpen,
-    setPendingNetworkTool,
+    dismissRoutingNotice,
     handleToggleDirections,
     confirmEnableDirections,
     handleToggleReverseGeocode,

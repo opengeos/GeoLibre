@@ -200,7 +200,7 @@ export function ProjectMenu({
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={onPrintLayout}>
           <LayoutTemplate className="mr-2 h-3.5 w-3.5" />
-          Print Layout...
+          {t("toolbar.item.printLayoutEllipsis")}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => setStorymapPanelOpen(true)}>

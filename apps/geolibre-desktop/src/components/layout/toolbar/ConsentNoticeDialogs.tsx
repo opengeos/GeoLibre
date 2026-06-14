@@ -75,8 +75,9 @@ export function ConsentNoticeDialogs({ consent }: ConsentNoticeDialogsProps) {
       <Dialog
         open={consent.routingNoticeOpen}
         onOpenChange={(open: boolean) => {
-          consent.setRoutingNoticeOpen(open);
-          if (!open) consent.setPendingNetworkTool(null);
+          // This dialog is opened programmatically (it has no trigger), so
+          // onOpenChange only ever fires to close it (Escape/overlay).
+          if (!open) consent.dismissRoutingNotice();
         }}
       >
         <DialogContent className="max-w-lg">
@@ -87,13 +88,7 @@ export function ConsentNoticeDialogs({ consent }: ConsentNoticeDialogsProps) {
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                consent.setRoutingNoticeOpen(false);
-                consent.setPendingNetworkTool(null);
-              }}
-            >
+            <Button variant="outline" onClick={consent.dismissRoutingNotice}>
               {t("common.cancel")}
             </Button>
             <Button onClick={consent.confirmOpenNetworkTool}>
