@@ -7,6 +7,8 @@ registered as ``_geolibre_js``. Method names mirror the ``geolibre.Map`` noteboo
 API so the two surfaces feel identical.
 """
 
+import base64
+
 import _geolibre_js as _js
 import js
 from pyodide.ffi import to_js
@@ -215,8 +217,15 @@ class _GeoLibre:
 
     # -- export / packages ---------------------------------------------
     def to_image(self):
-        """Capture the current map view as a PNG data URL string."""
-        return str(_js.toImage())
+        """Capture the current map view as PNG bytes.
+
+        Matches the notebook ``Map.to_image()`` return type. Writing to a host
+        file path is not available in the in-browser runtime, so this always
+        returns the bytes; persist them yourself if needed.
+        """
+        data_url = str(_js.toImage())
+        _, _, encoded = data_url.partition(",")
+        return base64.b64decode(encoded)
 
     async def load_package(self, name):
         """Load a Pyodide package on demand, e.g. ``await geolibre.load_package("numpy")``."""

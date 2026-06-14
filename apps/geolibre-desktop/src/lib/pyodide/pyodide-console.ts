@@ -146,10 +146,17 @@ export async function runConsoleCode(
     // Echo the last expression like a REPL (Python None comes back as undefined).
     if (result !== undefined && result !== null) {
       const proxy = result as { toString?: () => string; destroy?: () => void };
-      append(
-        typeof proxy.toString === "function" ? proxy.toString() : String(result),
-      );
-      if (typeof proxy.destroy === "function") proxy.destroy();
+      // Destroy the proxy even if toString() throws, or it leaks the underlying
+      // Python object and its JS reference.
+      try {
+        append(
+          typeof proxy.toString === "function"
+            ? proxy.toString()
+            : String(result),
+        );
+      } finally {
+        if (typeof proxy.destroy === "function") proxy.destroy();
+      }
     }
     return { output, error: null };
   } catch (error) {

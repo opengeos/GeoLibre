@@ -241,7 +241,11 @@ async function render({ model, el }) {
   const onCustom = (msg) => {
     if (!msg || typeof msg !== "object") return;
     if (msg.type !== "geolibre:command") return;
-    pendingCommands.push(msg);
+    // Defensive cap: the blocking request() issues one command at a time, so the
+    // pre-ready queue stays tiny in practice. Bound it anyway so a caller that
+    // bypasses the blocking wait can't grow it without limit (a dropped command
+    // simply times out on the Python side).
+    if (pendingCommands.length < 500) pendingCommands.push(msg);
     flushCommands();
   };
   model.on("msg:custom", onCustom);

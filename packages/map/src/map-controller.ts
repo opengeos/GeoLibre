@@ -1699,6 +1699,10 @@ function featureIdForLayer(
   if (!layer.geojson) return null;
   const properties = feature.properties ?? {};
   const propertyKeys = Object.keys(properties);
+  // With no properties, `every` is vacuously true and would match the first
+  // source feature for every hit (common for geometry-only GeoJSON). Bail out
+  // with no stable id instead, consistent with the feature.id guard above.
+  if (propertyKeys.length === 0) return null;
   const index = layer.geojson.features.findIndex((candidate) => {
     const candidateProperties = candidate.properties ?? {};
     return propertyKeys.every(
