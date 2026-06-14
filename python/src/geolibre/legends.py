@@ -7,9 +7,19 @@ render a recognizable legend (e.g. NLCD, ESA WorldCover) from a single name.
 
 from __future__ import annotations
 
+from typing import TypedDict
+
+
+class _LegendPreset(TypedDict):
+    """A built-in legend preset: a title and ordered (label, color) pairs."""
+
+    title: str
+    items: list[tuple[str, str]]
+
+
 # Each value is an ordered list of (label, hex color) pairs. Colors follow the
 # official product color tables (NLCD legend, ESA WorldCover class palette).
-BUILTIN_LEGENDS: dict[str, dict[str, object]] = {
+BUILTIN_LEGENDS: dict[str, _LegendPreset] = {
     "nlcd": {
         "title": "NLCD Land Cover",
         "items": [
@@ -67,7 +77,7 @@ def builtin_legend_names() -> list[str]:
     return sorted(BUILTIN_LEGENDS)
 
 
-def get_builtin_legend(name: str) -> dict[str, object]:
+def get_builtin_legend(name: str) -> _LegendPreset:
     """Return a built-in legend preset by name.
 
     Args:

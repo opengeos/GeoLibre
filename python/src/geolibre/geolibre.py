@@ -34,9 +34,8 @@ _VALID_THEMES = frozenset({"light", "dark"})
 
 # Accepted values for the split-map / legend / colorbar helpers, validated up
 # front so a typo surfaces in Python instead of silently falling back in the app.
-_VALID_CONTROL_POSITIONS = frozenset(
-    {"top-left", "top-right", "bottom-left", "bottom-right"}
-)
+# Reuse the canonical corner set from project.py so the two cannot drift.
+_VALID_CONTROL_POSITIONS = _project.CONTROL_POSITIONS
 _VALID_ORIENTATIONS = frozenset({"vertical", "horizontal"})
 _VALID_LEGEND_SHAPES = frozenset({"square", "circle", "line"})
 
@@ -1777,12 +1776,20 @@ class Map(anywidget.AnyWidget):
             A list of layer-id strings.
 
         Raises:
-            ValueError: If an entry is neither a string nor a :class:`Layer`.
+            ValueError: If ``value`` (or an entry within it) is neither a string
+                nor a :class:`Layer`.
         """
         if value is None:
             return []
         if isinstance(value, (str, Layer)):
             value = [value]
+        elif not isinstance(value, (list, tuple)):
+            # A bare non-iterable (e.g. split_map(123)) would raise an opaque
+            # TypeError from the loop below; surface the documented ValueError.
+            raise ValueError(
+                "Layer reference must be a layer id string, a Layer, or a list "
+                f"of those; got {value!r}"
+            )
         ids: list[str] = []
         for entry in value:
             if isinstance(entry, Layer):
@@ -1937,12 +1944,25 @@ class Map(anywidget.AnyWidget):
                 f"got {shape!r}"
             )
 
+        # The three ways to supply entries are mutually exclusive; reject a
+        # combination rather than silently letting one win by check order.
+        sources = (
+            builtin is not None,
+            legend_dict is not None,
+            labels is not None or colors is not None,
+        )
+        if sum(sources) > 1:
+            raise ValueError(
+                "Provide legend entries via exactly one of: builtin=, "
+                "legend_dict=, or labels= and colors=."
+            )
+
         pairs: list[tuple[str, str]]
         if builtin is not None:
             preset = get_builtin_legend(builtin)
-            pairs = list(preset["items"])  # type: ignore[arg-type]
+            pairs = list(preset["items"])
             if title is None:
-                title = str(preset["title"])
+                title = preset["title"]
         elif legend_dict is not None:
             pairs = [(str(label), str(color)) for label, color in legend_dict.items()]
         elif labels is not None or colors is not None:
@@ -2004,8 +2024,9 @@ class Map(anywidget.AnyWidget):
                 ``"top-right"``, ``"bottom-left"``, ``"bottom-right"``.
 
         Raises:
-            ValueError: If ``orientation`` or ``position`` is invalid, or
-                ``colors`` is given but empty.
+            ValueError: If ``orientation`` or ``position`` is invalid,
+                ``vmin`` is not less than ``vmax``, or ``colors`` is given but
+                empty.
         """
         if orientation not in _VALID_ORIENTATIONS:
             raise ValueError(
@@ -2017,6 +2038,11 @@ class Map(anywidget.AnyWidget):
                 f"position must be one of {sorted(_VALID_CONTROL_POSITIONS)}, "
                 f"got {position!r}"
             )
+        vmin_f, vmax_f = float(vmin), float(vmax)
+        # The app's normalizer only fixes vmin == vmax; an inverted range would
+        # otherwise render a reversed gradient, so reject it here.
+        if vmin_f >= vmax_f:
+            raise ValueError(f"vmin ({vmin_f}) must be less than vmax ({vmax_f})")
         if colors is not None:
             if not colors:
                 raise ValueError("colors must be a non-empty list when provided")
@@ -2029,8 +2055,8 @@ class Map(anywidget.AnyWidget):
             mode=mode,
             colormap=colormap,
             custom_colors=custom_colors,
-            vmin=float(vmin),
-            vmax=float(vmax),
+            vmin=vmin_f,
+            vmax=vmax_f,
             label=label,
             units=units,
             orientation=orientation,

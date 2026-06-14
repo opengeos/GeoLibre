@@ -401,6 +401,12 @@ def test_split_map_rejects_bad_layer_reference(m):
         m.split_map([123])
 
 
+def test_split_map_rejects_bare_non_iterable(m):
+    # A bare non-iterable must raise the documented ValueError, not TypeError.
+    with pytest.raises(ValueError, match="layer id"):
+        m.split_map(123)
+
+
 def test_existing_plugins_block_is_not_reseeded(m):
     # A project that already carries a plugins block reflects deliberate choices,
     # so adding a control must not inject the default-active ids into it.
@@ -471,6 +477,12 @@ def test_add_legend_mismatched_labels_colors(m):
         m.add_legend(labels=["a", "b"], colors=["#111"])
 
 
+def test_add_legend_rejects_combined_sources(m):
+    # The three entry sources are mutually exclusive.
+    with pytest.raises(ValueError, match="exactly one of"):
+        m.add_legend(builtin="nlcd", legend_dict={"a": "#111"})
+
+
 def test_add_legend_appends_multiple(m):
     m.add_legend(legend_dict={"a": "#111"})
     m.add_legend(legend_dict={"b": "#222"}, position="top-right")
@@ -506,6 +518,11 @@ def test_add_colorbar_empty_custom_colors_raises(m):
 def test_add_colorbar_bad_position_raises(m):
     with pytest.raises(ValueError, match="position"):
         m.add_colorbar(position="middle")
+
+
+def test_add_colorbar_rejects_inverted_range(m):
+    with pytest.raises(ValueError, match="must be less than"):
+        m.add_colorbar(vmin=100, vmax=0)
 
 
 def test_add_colormap_is_colorbar_alias(m):
