@@ -1699,11 +1699,20 @@ function featureIdForLayer(
   if (!layer.geojson) return null;
   const properties = feature.properties ?? {};
   const propertyKeys = Object.keys(properties);
+  // With no properties there is nothing to match on, so any "match" would be a
+  // fake id (the array index) that breaks if features are reordered — bail out.
+  if (propertyKeys.length === 0) return null;
   // Match by full property-set equality (same keys and values), and only accept
-  // an UNAMBIGUOUS hit. Without this, a feature with no/non-unique properties
-  // (common for geometry-only GeoJSON) would vacuously match — and silently pick
-  // the first — source feature. Returning null when the match is ambiguous is
-  // consistent with the feature.id guard above (no stable id).
+  // an UNAMBIGUOUS hit; a non-unique match returns null (no stable id), like the
+  // feature.id guard above. MapLibre re-parses object/array property values into
+  // fresh references each query, so compare those by JSON rather than identity.
+  const valuesEqual = (a: unknown, b: unknown): boolean => {
+    if (a === b) return true;
+    if (a && b && typeof a === "object" && typeof b === "object") {
+      return JSON.stringify(a) === JSON.stringify(b);
+    }
+    return false;
+  };
   const matches = layer.geojson.features
     .map((candidate, index) => ({ candidate, index }))
     .filter(({ candidate }) => {
@@ -1711,8 +1720,8 @@ function featureIdForLayer(
       if (Object.keys(candidateProperties).length !== propertyKeys.length) {
         return false;
       }
-      return propertyKeys.every(
-        (key) => candidateProperties[key] === properties[key],
+      return propertyKeys.every((key) =>
+        valuesEqual(candidateProperties[key], properties[key]),
       );
     });
   if (matches.length !== 1) return null;

@@ -142,7 +142,23 @@ export function initConsoleRuntime(deps: ScriptingDeps): Promise<PyodideAPI> {
  * @param source - The Python source to execute.
  * @returns Captured output and an error message (with traceback) on failure.
  */
-export async function runConsoleCode(
+// Runs are serialized through this queue: stdout/stderr capture is
+// instance-global, so an overlapping call (e.g. a rapid double-trigger before the
+// UI disables Run, or a console + editor run racing) would clobber the active
+// `append` closure. Chaining each run after the previous keeps captures isolated.
+let runQueue: Promise<unknown> = Promise.resolve();
+
+export function runConsoleCode(
+  deps: ScriptingDeps,
+  source: string,
+): Promise<ConsoleRunResult> {
+  const result = runQueue.then(() => runConsoleCodeImpl(deps, source));
+  // Keep the chain alive even if a run rejects (it shouldn't — impl catches).
+  runQueue = result.catch(() => undefined);
+  return result;
+}
+
+async function runConsoleCodeImpl(
   deps: ScriptingDeps,
   source: string,
 ): Promise<ConsoleRunResult> {
@@ -151,6 +167,9 @@ export async function runConsoleCode(
   const append = (text: string) => {
     output += text.endsWith("\n") ? text : `${text}\n`;
   };
+  // stdout and stderr are intentionally merged into one chronological `output`
+  // stream (like a terminal); `error` is reserved for an actual raised exception.
+  // So a non-raising `sys.stderr` write (e.g. warnings.warn) appears in `output`.
   pyodide.setStdout({ batched: append });
   pyodide.setStderr({ batched: append });
   try {

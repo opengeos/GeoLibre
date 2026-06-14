@@ -294,6 +294,9 @@ export function PythonConsolePanel({
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
       if (frame !== null) window.cancelAnimationFrame(frame);
+      // Pair the START dispatched on mousedown, so MapCanvas clears
+      // panelResizeActive even when unmounted mid-drag.
+      window.dispatchEvent(new Event(PANEL_RESIZE_END_EVENT));
       document.body.style.cursor = prevCursor;
       document.body.style.userSelect = prevSelect;
     };

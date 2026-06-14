@@ -327,18 +327,25 @@ class Map(anywidget.AnyWidget):
                 "package. Install it with `pip install jupyter_ui_poll`."
             ) from exc
         deadline = time.monotonic() + timeout
+
+        def _check_deadline() -> None:
+            if time.monotonic() > deadline:
+                raise TimeoutError(
+                    f"GeoLibre command {method!r} timed out after {timeout}s. "
+                    "The map must be displayed and loaded before it can "
+                    "answer; show the map, then retry or pass a larger "
+                    "timeout=."
+                )
+
         with ui_events() as poll:
             while not slot["done"]:
+                # Check before and after pumping: a slow poll() with a large event
+                # backlog could otherwise overrun a very small timeout.
+                _check_deadline()
                 poll(10)
                 if slot["done"]:
                     break
-                if time.monotonic() > deadline:
-                    raise TimeoutError(
-                        f"GeoLibre command {method!r} timed out after {timeout}s. "
-                        "The map must be displayed and loaded before it can "
-                        "answer; show the map, then retry or pass a larger "
-                        "timeout=."
-                    )
+                _check_deadline()
                 time.sleep(0.01)
 
     def request(
@@ -1147,6 +1154,15 @@ class Map(anywidget.AnyWidget):
         """
         url = resolve_basemap(basemap)
         self._update_project(lambda p: p.update({"basemapStyleUrl": url}))
+
+    # Name parity with the in-app console's geolibre.set_basemap(url).
+    def set_basemap(self, basemap: str) -> None:
+        """Set the background basemap style (alias of :meth:`add_basemap`).
+
+        Args:
+            basemap: A basemap name or MapLibre style URL.
+        """
+        self.add_basemap(basemap)
 
     def set_center(self, lng: float, lat: float, zoom: float | None = None) -> None:
         """Center the map, optionally setting the zoom.

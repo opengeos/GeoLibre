@@ -105,9 +105,13 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       return null;
     },
     setOpacity: (params) => {
+      const raw = Number(params.opacity);
+      if (!Number.isFinite(raw)) {
+        throw new Error("setOpacity: opacity must be a finite number");
+      }
       useAppStore
         .getState()
-        .setLayerOpacity(params.layerId as string, Number(params.opacity));
+        .setLayerOpacity(params.layerId as string, Math.min(1, Math.max(0, raw)));
       return null;
     },
     setStyle: (params) => {

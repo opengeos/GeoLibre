@@ -89,9 +89,12 @@ export function usePyCompletion({
     setCompletion((c) => (c.open ? { ...c, open: false } : c));
 
   const applyCompletion = (candidate: string, prefix: string, cursor: number) => {
-    const start = cursor - prefix.length;
+    // Clamp against the current `code` in case it changed since the candidates
+    // were computed, so the splice offsets can't land out of range.
+    const safeCursor = Math.min(Math.max(0, cursor), code.length);
+    const start = Math.max(0, safeCursor - prefix.length);
     pendingCaretRef.current = start + candidate.length;
-    setCode(code.slice(0, start) + candidate + code.slice(cursor));
+    setCode(code.slice(0, start) + candidate + code.slice(safeCursor));
     close();
   };
 
