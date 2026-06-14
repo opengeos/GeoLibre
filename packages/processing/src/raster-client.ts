@@ -152,7 +152,11 @@ export function writeRasterBands(raster: RasterData): ArrayBuffer {
 
   // The geotiff writer's metadata type is broad; the runtime accepts the fields
   // set above (it derives SampleFormat/BitsPerSample from the Float32Array).
-  return writeArrayBuffer(values, metadata as never);
+  const bytes: ArrayBuffer = writeArrayBuffer(
+    values,
+    metadata as Parameters<typeof writeArrayBuffer>[1],
+  );
+  return bytes;
 }
 
 // --- Compute helpers -------------------------------------------------------
@@ -457,11 +461,12 @@ export function rasterCalc(input: RasterData, params: RasterCalcParams): RasterD
     );
   }
   // After identifiers/numbers/band refs are removed, only arithmetic,
-  // comparison, and logical operators, parentheses and commas may remain.
-  // This blocks bracket/property access and "JSFuck"-style payloads
-  // (`[`, `]`, `!`, backticks) that use no letters and would otherwise slip
-  // through the identifier check and reach `new Function`.
-  if (/[^\s+\-*/%(),<>=&|]/.test(residual)) {
+  // comparison, and logical operators, parentheses and commas may remain. This
+  // also catches non-ASCII identifiers (e.g. Greek/CJK letters) that the ASCII
+  // check above misses, and blocks bracket/property access — so "JSFuck"-style
+  // payloads (which need `[` and `]`) can't reach `new Function`. `!` is allowed
+  // for `!=`/`!` since brackets stay blocked.
+  if (/[^\s+\-*/%(),<>=&|!]/.test(residual)) {
     throw new Error(
       "Expression contains unsupported characters. Only A, A1, A2 …, the math helpers, " +
         "numbers, and arithmetic/comparison operators are allowed.",
@@ -535,6 +540,14 @@ export function focalStatistics(input: RasterData, params: FocalParams): RasterD
   const stat = params.statistic ?? "mean";
   let size = Math.max(3, Math.min(25, Math.round(params.size ?? 3)));
   if (size % 2 === 0) size += 1; // window must be odd
+  // Focal is O(pixels × window²); a large window on a large raster can freeze
+  // the tab for tens of seconds. Cap the total work and steer to the sidecar.
+  if (width * height * size * size > 500_000_000) {
+    throw new Error(
+      `A ${size}×${size} window on a ${width}×${height} raster is too large for the ` +
+        "in-browser engine. Use a smaller window or the sidecar (rasterio/GDAL) engine.",
+    );
+  }
   const radius = (size - 1) / 2;
   const outNoData = nodata ?? TERRAIN_NODATA;
 

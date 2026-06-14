@@ -167,6 +167,9 @@ export function RasterToolsDialog({
   }, [desktop]);
 
   // Reset per-tool state whenever the dialog opens or the selected tool changes.
+  // Also reset the engine here (not only on tool change) so reopening the dialog
+  // on the same tool restores the default: client only on a client-capable tool
+  // without a sidecar, otherwise sidecar.
   useEffect(() => {
     if (!open) return;
     setInputPath("");
@@ -177,15 +180,8 @@ export function RasterToolsDialog({
     setClientInput(null);
     setClientLog([]);
     setClientResult(null);
-  }, [open, tool]);
-
-  // Keep the engine valid for the selected tool: tools without a client
-  // implementation force "sidecar"; on the web build (no sidecar), client-
-  // capable tools default to "client" so the toolbox stays usable.
-  useEffect(() => {
-    if (!tool.supportsClient) setEngine("sidecar");
-    else if (!desktop) setEngine("client");
-  }, [tool, desktop]);
+    setEngine(tool.supportsClient && !desktop ? "client" : "sidecar");
+  }, [open, tool, desktop]);
 
   // Probe the runtime only when the dialog opens, not on every tool switch
   // (each probe spawns a sidecar subprocess import check).
@@ -221,11 +217,14 @@ export function RasterToolsDialog({
     };
   }, [job]);
 
-  // Keep the newest log lines in view as messages stream in.
+  // Keep the newest log lines in view as messages stream in. One effect per log
+  // pane so a sidecar update never scrolls the client pane (and vice versa).
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ block: "end" });
+  }, [job?.messages.length]);
+  useEffect(() => {
     clientLogEndRef.current?.scrollIntoView({ block: "end" });
-  }, [job?.messages.length, clientLog.length]);
+  }, [clientLog.length]);
 
   const setParam = useCallback(
     (id: string, value: unknown) =>
@@ -361,7 +360,7 @@ export function RasterToolsDialog({
     setError(null);
     setClientResult(null);
     if (!clientInput) {
-      setError("Choose an input raster.");
+      setError(t("toolbar.rasterTool.chooseInputRaster"));
       return;
     }
     const invalid = validateParams();
@@ -370,20 +369,41 @@ export function RasterToolsDialog({
       return;
     }
     setClientRunning(true);
-    setClientLog([`Running "${tool.name}" in your browser...`]);
+    setClientLog([t("toolbar.rasterTool.runningInBrowser", { tool: tool.name })]);
     try {
       const raster = await readRasterData(clientInput.bytes);
+      setClientLog((prev) => [
+        ...prev,
+        t("toolbar.rasterTool.loadedRaster", {
+          width: raster.width,
+          height: raster.height,
+          bands: raster.bands.length,
+        }),
+      ]);
       // Compute is a synchronous pixel loop (millions of iterations for a large
       // DEM). Yield once so React paints the "running" spinner before the main
       // thread blocks; a Web Worker would be the full fix for very large rasters.
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      const { raster: result, bytes, messages } = runRasterToolClient(
+      const pixelCount = raster.width * raster.height;
+      if (pixelCount > 2_000_000) {
+        setClientLog((prev) => [
+          ...prev,
+          t("toolbar.rasterTool.largeRasterWarning", {
+            mp: (pixelCount / 1_000_000).toFixed(1),
+          }),
+        ]);
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      }
+      const { raster: result, bytes } = runRasterToolClient(
         tool.id,
         raster,
         params,
       );
+      setClientLog((prev) => [
+        ...prev,
+        t("toolbar.rasterTool.computedInBrowser", { tool: tool.name }),
+      ]);
       const outName = tool.defaultOutputName;
-      setClientLog((prev) => [...prev, ...messages]);
       // Persist the result before the map add so the Download button survives a
       // render failure (the compute already succeeded — don't discard it).
       setClientResult({ name: outName, bytes });
@@ -397,27 +417,30 @@ export function RasterToolsDialog({
           // it explicitly for correct transparency of masked/edge cells.
           ...(result.nodata != null ? { nodata: result.nodata } : {}),
         });
-        setClientLog((prev) => [...prev, `Added "${outName}" to the map.`]);
+        setClientLog((prev) => [
+          ...prev,
+          t("toolbar.rasterTool.addedToMap", { name: outName }),
+        ]);
       } catch (mapError) {
         const mapMessage =
           mapError instanceof Error
             ? mapError.message
-            : "Could not add the result to the map.";
+            : t("toolbar.rasterTool.mapAddError");
         setError(mapMessage);
         setClientLog((prev) => [
           ...prev,
-          `Map add failed (the result is still available to download): ${mapMessage}`,
+          t("toolbar.rasterTool.mapAddFailed", { message: mapMessage }),
         ]);
       }
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : "Could not run raster tool.";
+        err instanceof Error ? err.message : t("toolbar.rasterTool.runError");
       setError(message);
-      setClientLog((prev) => [...prev, `Error: ${message}`]);
+      setClientLog((prev) => [...prev, message]);
     } finally {
       setClientRunning(false);
     }
-  }, [tool, params, clientInput, validateParams, mapControllerRef]);
+  }, [tool, params, clientInput, validateParams, mapControllerRef, t]);
 
   const handleRun = useCallback(
     () => (engine === "client" ? runClient() : runSidecar()),
@@ -437,10 +460,12 @@ export function RasterToolsDialog({
       });
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Could not save the result.",
+        err instanceof Error
+          ? err.message
+          : t("toolbar.rasterTool.saveError"),
       );
     }
-  }, [clientResult, tool]);
+  }, [clientResult, tool, t]);
 
   const running =
     Boolean(job && RUNNING_JOB_STATUSES.has(job.status)) || clientRunning;
@@ -502,21 +527,23 @@ export function RasterToolsDialog({
             {tool.supportsClient && (
               <div className="flex flex-col gap-1">
                 <Label className="flex items-center gap-1.5 text-xs">
-                  <Server className="h-3.5 w-3.5" /> Engine
+                  <Server className="h-3.5 w-3.5" />{" "}
+                  {t("toolbar.rasterTool.engine")}
                 </Label>
                 <Select
                   value={engine}
                   onChange={(e) => setEngine(e.target.value as RasterEngine)}
                 >
-                  <option value="client">Client (browser)</option>
+                  <option value="client">
+                    {t("toolbar.rasterTool.engineClient")}
+                  </option>
                   <option value="sidecar" disabled={!desktop}>
-                    Sidecar (rasterio/GDAL)
+                    {t("toolbar.rasterTool.engineSidecar")}
                   </option>
                 </Select>
                 {engine === "client" && (
                   <p className="text-xs text-muted-foreground">
-                    Computes in your browser and adds the result to the map. For
-                    large rasters or geographic-CRS terrain, prefer the sidecar.
+                    {t("toolbar.rasterTool.clientHint")}
                   </p>
                 )}
               </div>
@@ -546,8 +573,7 @@ export function RasterToolsDialog({
                 )}
                 {tool.supportsClient && (
                   <p className="text-xs text-muted-foreground">
-                    Or switch the engine to Client to run this tool in your
-                    browser.
+                    {t("toolbar.rasterTool.switchToClientHint")}
                   </p>
                 )}
               </div>
@@ -564,7 +590,7 @@ export function RasterToolsDialog({
                   <Input
                     id="raster-input"
                     value={clientInput?.name ?? ""}
-                    placeholder="Choose a GeoTIFF"
+                    placeholder={t("toolbar.rasterTool.chooseGeoTiff")}
                     readOnly
                   />
                   <Button
@@ -718,7 +744,7 @@ export function RasterToolsDialog({
                     className="gap-2"
                   >
                     <Download className="h-4 w-4" />
-                    Download GeoTIFF
+                    {t("toolbar.rasterTool.downloadGeoTiff")}
                   </Button>
                 )}
               </div>

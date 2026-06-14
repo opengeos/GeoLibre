@@ -103,6 +103,16 @@ describe("raster-client compute", () => {
     assert.equal(aspect(flat).bands[0][4], TERRAIN_NODATA);
   });
 
+  it("computes correct aspect for north-south slopes", () => {
+    // Top row (north) highest -> steepest descent points south -> aspect 180.
+    const northHigh = makeRaster([[9, 9, 9, 5, 5, 5, 1, 1, 1]], 3, 3);
+    assert.equal(aspect(northHigh).bands[0][4], 180);
+    // Bottom row (south) highest -> descent points north -> aspect 0/360.
+    const southHigh = makeRaster([[1, 1, 1, 5, 5, 5, 9, 9, 9]], 3, 3);
+    const a = aspect(southHigh).bands[0][4];
+    assert.ok(a === 0 || a === 360);
+  });
+
   it("clips to a sub-window in CRS coordinates", () => {
     // 4x4 raster, values = row*4 + col, origin (0,4), 1-unit pixels.
     const values = Array.from({ length: 16 }, (_, i) => i);
@@ -188,6 +198,21 @@ describe("raster-client GeoTIFF round-trip", () => {
     assert.equal(back.resY, 5);
     assert.equal(back.nodata, -1);
     assert.deepEqual(Array.from(back.bands[0]), [1, 2, 3, 4, 5, 6]);
+  });
+
+  it("writes and reads back a multi-band raster with correct interleaving", async () => {
+    const raster = makeRaster(
+      [
+        [1, 2, 3, 4],
+        [10, 20, 30, 40],
+      ],
+      2,
+      2,
+    );
+    const back = await readRasterData(writeRasterBands(raster));
+    assert.equal(back.bands.length, 2);
+    assert.deepEqual(Array.from(back.bands[0]), [1, 2, 3, 4]);
+    assert.deepEqual(Array.from(back.bands[1]), [10, 20, 30, 40]);
   });
 
   it("runs a tool end-to-end via the dispatcher and yields renderable bytes", async () => {
