@@ -199,9 +199,55 @@ environment. Until that env var is set, the feature stays dark.
 
 ## Testing
 
+Automated:
+
 - `npm run test:worker` typechecks `workers/collab`.
 - `npm run test:frontend` runs `tests/collab-protocol.test.ts` (protocol
   round-trip, `resolveCollabBaseUrl` validation, echo-suppression logic).
-- Local end-to-end: `wrangler dev` in `workers/collab`, run the app with
-  `VITE_GEOLIBRE_COLLAB_URL=ws://127.0.0.1:8787`, open two browser windows, start
-  a co-edit session in one and join from the other.
+
+### Testing the full feature locally
+
+Collaboration is dark until `VITE_GEOLIBRE_COLLAB_URL` points at a running
+relay, so local testing has two parts: run the relay, then run the app against
+it.
+
+1. **Start the relay** (the Durable Object) in one terminal:
+
+   ```bash
+   cd workers/collab && npx wrangler dev --port 8787 --local
+   # → Ready on http://localhost:8787
+   ```
+
+2. **Start the app pointing at that relay** in another terminal:
+
+   ```bash
+   VITE_GEOLIBRE_COLLAB_URL=ws://127.0.0.1:8787 npm run dev
+   # → http://localhost:5173
+   ```
+
+   Or put `VITE_GEOLIBRE_COLLAB_URL=ws://127.0.0.1:8787` in
+   `apps/geolibre-desktop/.env.local` so you don't repeat it. With the variable
+   unset the Collaborate menu item stays hidden — that is the feature flag
+   working. (For the desktop shell use `npm run tauri:dev` with the same
+   variable; the Tauri CSP already allows `ws://127.0.0.1:*` / `ws://localhost:*`.)
+
+3. **Open two independent windows** at `http://localhost:5173` — a normal window
+   plus an incognito window works well so they don't share state.
+
+4. **Drive a session:**
+   - Window A: **Project → Collaborate…**, enter a name, pick a color, **Start
+     session** (choose *Anyone can edit*). Copy the session code or the share
+     link.
+   - Window B: open the share link directly (the Collaborate dialog auto-opens
+     with the code prefilled — just enter a name and **Join**), or open
+     **Project → Collaborate…** and paste the code.
+   - Verify: B immediately sees A's existing layers; adding/removing a layer,
+     changing a style, or panning in A reflects in B within ~300 ms; each window
+     shows the other's live **cursor** and a dashed **viewport rectangle**;
+     toggling A (the host) to *view-only* blocks B's edits.
+
+**Relay-only smoke test (no UI):** with `wrangler dev` running, `POST` to
+`http://127.0.0.1:8787/sessions` to mint a code, then open a WebSocket to
+`ws://127.0.0.1:8787/sessions/<code>/ws` and exchange `join` / `snapshot` /
+`presence` frames — the quickest way to confirm the relay independent of the
+front end.
