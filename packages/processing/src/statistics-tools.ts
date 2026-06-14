@@ -225,10 +225,14 @@ function readWeightsParams(ctx: ProcessingContext): {
 } {
   const type = (ctx.parameters.weightsType as string) || "knn";
   const k = Math.max(1, Math.round(Number(ctx.parameters.k) || 8));
-  const threshold = Math.max(0, Number(ctx.parameters.threshold) || 0);
-  const permutations = Math.max(
-    99,
-    Math.round(Number(ctx.parameters.permutations) || 999),
+  // Fall back to the declared tool default (10 km), and clamp permutations to
+  // the declared [99, 9999] bounds — scripting callers can bypass the UI's
+  // input constraints, so guard against a 0 km band (no neighbors) or a
+  // runaway permutation count here.
+  const threshold = Math.max(0, Number(ctx.parameters.threshold) || 10);
+  const permutations = Math.min(
+    9999,
+    Math.max(99, Math.round(Number(ctx.parameters.permutations) || 999)),
   );
   return { type, k, threshold, permutations };
 }
@@ -712,7 +716,9 @@ export const kernelDensityTool: ProcessingAlgorithm = {
       if (weightField) {
         const raw = feature.properties?.[weightField];
         const value = typeof raw === "number" ? raw : Number(raw);
-        if (!Number.isFinite(value)) return;
+        // Skip non-finite and negative weights: a negative kernel contribution
+        // would cancel density and could silently zero out a cell.
+        if (!Number.isFinite(value) || value < 0) return;
         weight = value;
       }
       points.push({ lon: position[0], lat: position[1], weight });
@@ -778,12 +784,9 @@ export const kernelDensityTool: ProcessingAlgorithm = {
                 [cellWest, cellSouth],
               ],
             ],
-            { density: 0 },
+            { density },
           ),
         );
-        // Store the raw density on the just-pushed cell.
-        (cells[cells.length - 1].properties as Record<string, number>).density =
-          density;
       }
     }
 
