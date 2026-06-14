@@ -115,13 +115,18 @@ export function useCollaboration(
     const localView =
       mapControllerRef.current?.readView() ?? useAppStore.getState().mapView;
     const merged: GeoLibreProject = { ...project, mapView: localView };
-    // Set the dedupe key to the post-merge string BEFORE applying: loadProject
-    // triggers the store subscription, which re-serializes to this same string
-    // and is suppressed, so the remote apply is never re-broadcast.
-    lastContentRef.current = serializeProject(merged);
     useAppStore
       .getState()
       .loadProject(merged, null, { rememberRecent: false, presenting: false });
+    // Cache the POST-normalization serialization (mirrors useEmbedBridge): the
+    // store update loadProject just triggered re-serializes to this exact
+    // string and is suppressed, so a remote apply never echoes back as a new
+    // snapshot. Serializing `merged` (the pre-normalization input) instead
+    // would mismatch applyProjectToStore's normalized output (deduped styles,
+    // defaults, reordering) and create a broadcast feedback loop.
+    lastContentRef.current = serializeProject(
+      buildProjectSnapshot(mapControllerRef),
+    );
   };
 
   const handleMessage = (message: ServerMessage): void => {

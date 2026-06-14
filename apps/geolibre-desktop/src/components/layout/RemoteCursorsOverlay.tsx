@@ -40,9 +40,19 @@ export function RemoteCursorsOverlay({
       return;
     }
 
-    const render = () => renderPresence(map, presence, markersRef.current);
-    // The viewport layer needs a ready style; (re)apply on style reloads too.
-    if (map.isStyleLoaded()) render();
+    // Never let presence rendering throw out of a React effect/map event — the
+    // map style mutates concurrently (layer add/remove, basemap reload) and a
+    // transient failure must not trip the Map error boundary. The next presence
+    // update or styledata event retries.
+    const render = () => {
+      try {
+        renderPresence(map, presence, markersRef.current);
+      } catch {
+        // Style was mid-mutation; ignore and let the next render retry.
+      }
+    };
+    render();
+    // Re-apply after a style reload (basemap change) wipes the source/layer.
     map.on("styledata", render);
     return () => {
       map.off("styledata", render);
@@ -94,9 +104,15 @@ function renderPresence(
     marker.setLngLat([p.cursor.lng, p.cursor.lat]);
   }
 
-  ensureViewportLayer(map);
-  const source = map.getSource(VIEWPORT_SOURCE_ID) as GeoJSONSource | undefined;
-  source?.setData(viewportCollection(presence));
+  // Adding/updating the viewport source+layer mutates the style, so only touch
+  // it once the style is loaded; markers above are DOM and always safe.
+  if (map.isStyleLoaded()) {
+    ensureViewportLayer(map);
+    const source = map.getSource(VIEWPORT_SOURCE_ID) as
+      | GeoJSONSource
+      | undefined;
+    source?.setData(viewportCollection(presence));
+  }
 }
 
 function viewportCollection(

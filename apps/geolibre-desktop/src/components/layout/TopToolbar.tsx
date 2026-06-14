@@ -456,6 +456,15 @@ export function TopToolbar({
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [collaborateDialogOpen, setCollaborateDialogOpen] = useState(false);
   const collaboration = useCollaboration(mapControllerRef);
+  // When opened via a `?collab=<code>` share link, auto-open the Collaborate
+  // dialog (which prefills the code) so the recipient only picks a name and
+  // joins, instead of having to find the Project menu first.
+  useEffect(() => {
+    if (!collaboration.enabled) return;
+    if (new URLSearchParams(window.location.search).get("collab")) {
+      setCollaborateDialogOpen(true);
+    }
+  }, [collaboration.enabled]);
   const [projectUrl, setProjectUrl] = useState("");
   const [projectUrlError, setProjectUrlError] = useState<string | null>(null);
   const [projectUrlLoading, setProjectUrlLoading] = useState(false);
