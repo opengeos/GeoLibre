@@ -43,6 +43,8 @@ export class AssistantSession {
   /** Explicit provider/model chosen in the UI; null means auto-resolve. */
   private selection: { provider: AssistantProviderId; model?: string } | null =
     null;
+  /** Last layer context sent, so it is only re-sent when it actually changes. */
+  private lastContext: string | null = null;
 
   constructor(private readonly deps: AssistantToolDeps) {}
 
@@ -66,6 +68,7 @@ export class AssistantSession {
   reset(): void {
     this.agent?.cancel();
     this.agent = null;
+    this.lastContext = null;
   }
 
   /** Cancel the in-flight model/tool run, if any. */
@@ -79,8 +82,11 @@ export class AssistantSession {
       ? configForProvider(this.selection.provider, this.selection.model)
       : resolveProviderConfig();
     if (!config) {
+      const pinned = this.selection?.provider;
       throw new Error(
-        "No LLM API key is configured. Add one (e.g. GEMINI_API_KEY) in Settings → Environment.",
+        pinned
+          ? `No API key for the selected provider "${pinned}". Add its key in Settings → Environment, or pick another provider.`
+          : "No LLM API key is configured. Add one (e.g. GEMINI_API_KEY) in Settings → Environment.",
       );
     }
     const model = await createModel(config);
@@ -102,19 +108,24 @@ export class AssistantSession {
    */
   async *stream(prompt: string): AsyncGenerator<AssistantStreamEvent> {
     const agent = await this.ensureAgent();
+    // Only prepend the layer context when it changed since the last message, so
+    // long conversations don't re-send the full layer list on every turn.
     const context = describeLayers(useAppStore.getState().layers);
-    const message = `Current layers:\n${context}\n\nUser request: ${prompt}`;
+    const message =
+      context === this.lastContext
+        ? prompt
+        : `Current layers:\n${context}\n\nUser request: ${prompt}`;
+    this.lastContext = context;
 
     for await (const event of agent.stream(message)) {
-      // Text deltas as the model writes its reply.
+      // Text deltas as the model writes its reply. `event.event` is the SDK's
+      // normalized ModelStreamEvent (provider-agnostic), so we narrow on its
+      // public discriminants rather than casting to an ad-hoc shape.
       if (event.type === "modelStreamUpdateEvent") {
-        const inner = event.event as {
-          type?: string;
-          delta?: { type?: string; text?: string };
-        };
+        const inner = event.event;
         if (
-          inner?.type === "modelContentBlockDeltaEvent" &&
-          inner.delta?.type === "textDelta" &&
+          inner.type === "modelContentBlockDeltaEvent" &&
+          inner.delta.type === "textDelta" &&
           inner.delta.text
         ) {
           yield { type: "text", text: inner.delta.text };

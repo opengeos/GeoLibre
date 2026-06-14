@@ -68,6 +68,8 @@ function saveStored(key: string, value: string): void {
 
 /** One rendered line in the conversation transcript. */
 interface Turn {
+  /** Stable, monotonic id — used as the React key and to target updates. */
+  id: number;
   role: "user" | "assistant" | "tool" | "error";
   text: string;
   /** Tool name for `role === "tool"`. */
@@ -114,6 +116,10 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   // Guards a synchronous double-submit before `running` re-renders.
   const runningRef = useRef(false);
+  // Set true by Stop/Clear so the stream's rejection isn't shown as an error.
+  const cancelledRef = useRef(false);
+  // Monotonic id source for transcript turns (stable React keys + update target).
+  const turnIdRef = useRef(0);
   // Tears down an in-flight drag's window listeners if the panel unmounts
   // mid-drag (e.g. the user closes it while dragging).
   const resizeCleanupRef = useRef<(() => void) | null>(null);
@@ -196,52 +202,65 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     const prompt = input.trim();
     if (!prompt || runningRef.current || !hasKey) return;
     runningRef.current = true;
+    cancelledRef.current = false;
     setRunning(true);
     setInput("");
-    setTurns((prev) => [...prev, { role: "user", text: prompt }]);
-    // Reserve a streaming assistant turn whose text we append into.
-    let assistantIndex = -1;
-    setTurns((prev) => {
-      assistantIndex = prev.length;
-      return [...prev, { role: "assistant", text: "" }];
-    });
+    // Turns are tracked by stable id (not array index), so updaters stay pure —
+    // safe under React Strict Mode / concurrent re-invocation — and a stale
+    // generator from a stopped/cleared run can no longer corrupt a new one.
+    const userId = (turnIdRef.current += 1);
+    const assistantId = (turnIdRef.current += 1);
+    setTurns((prev) => [
+      ...prev,
+      { id: userId, role: "user", text: prompt },
+      { id: assistantId, role: "assistant", text: "" },
+    ]);
 
     try {
       for await (const event of session.stream(prompt)) {
         if (event.type === "text") {
-          setTurns((prev) => {
-            const next = [...prev];
-            const turn = next[assistantIndex];
-            if (turn) next[assistantIndex] = { ...turn, text: turn.text + event.text };
-            return next;
-          });
+          setTurns((prev) =>
+            prev.map((turn) =>
+              turn.id === assistantId
+                ? { ...turn, text: turn.text + event.text }
+                : turn,
+            ),
+          );
         } else {
-          // Insert a tool line before the streaming assistant turn.
           const detail = event.error
             ? `${describeTool(event.name, event.input)} — ${event.error}`.trim()
             : describeTool(event.name, event.input);
+          const toolId = (turnIdRef.current += 1);
           setTurns((prev) => {
+            const index = prev.findIndex((turn) => turn.id === assistantId);
+            // The streaming turn was cleared (Clear/Stop) — drop the late event
+            // instead of ghosting it back into an empty transcript.
+            if (index < 0) return prev;
             const next = [...prev];
-            next.splice(assistantIndex, 0, {
+            next.splice(index, 0, {
+              id: toolId,
               role: "tool",
               tool: event.name,
               text: detail,
               failed: Boolean(event.error),
             });
-            assistantIndex += 1;
             return next;
           });
         }
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setTurns((prev) => [...prev, { role: "error", text: message }]);
+      // A user-initiated stop rejects the stream; that isn't an error to show.
+      if (!cancelledRef.current) {
+        const message = error instanceof Error ? error.message : String(error);
+        const errorId = (turnIdRef.current += 1);
+        setTurns((prev) => [...prev, { id: errorId, role: "error", text: message }]);
+      }
     } finally {
-      // Drop an empty assistant turn (e.g. a run that only made tool calls).
+      // Drop the assistant turn if it never produced text (e.g. tool-only run).
       setTurns((prev) =>
         prev.filter(
-          (turn, index) =>
-            !(index === assistantIndex && turn.role === "assistant" && !turn.text),
+          (turn) =>
+            !(turn.id === assistantId && turn.role === "assistant" && !turn.text),
         ),
       );
       runningRef.current = false;
@@ -250,9 +269,18 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   };
 
   const stop = () => {
+    cancelledRef.current = true;
     session.cancel();
     runningRef.current = false;
     setRunning(false);
+  };
+
+  // Clear the transcript and the agent's conversation history (so the next
+  // message starts fresh), stopping any in-flight run first.
+  const clearConversation = () => {
+    stop();
+    setTurns([]);
+    session.reset();
   };
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
@@ -385,7 +413,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
             size="icon"
             className="h-8 w-8"
             title={t("assistant.clear")}
-            onClick={() => setTurns([])}
+            onClick={clearConversation}
           >
             <Eraser className="h-4 w-4" />
           </Button>
@@ -408,11 +436,11 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
         {turns.length === 0 ? (
           <p className="text-muted-foreground">{t("assistant.intro")}</p>
         ) : (
-          turns.map((turn, index) => {
+          turns.map((turn) => {
             if (turn.role === "tool") {
               return (
                 <div
-                  key={index}
+                  key={turn.id}
                   className={cn(
                     "flex items-start gap-1.5 font-mono text-xs",
                     turn.failed ? "text-destructive" : "text-muted-foreground",
@@ -429,7 +457,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
             if (turn.role === "error") {
               return (
                 <p
-                  key={index}
+                  key={turn.id}
                   className="flex items-start gap-1.5 text-xs text-destructive"
                 >
                   <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -439,7 +467,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
             }
             return (
               <div
-                key={index}
+                key={turn.id}
                 className={cn(
                   "whitespace-pre-wrap",
                   turn.role === "user"

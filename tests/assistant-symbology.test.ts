@@ -39,13 +39,26 @@ describe("buildSymbologyStyle", () => {
   });
 
   it("clamps the graduated class count into a sane range", () => {
-    const layer = layerWith("pop", [1, 2, 3, 4]);
+    const layer = layerWith(
+      "pop",
+      Array.from({ length: 30 }, (_, index) => index + 1),
+    );
     const style = buildSymbologyStyle(layer, {
       mode: "graduated",
       property: "pop",
       classCount: 99,
     });
     assert.equal(style.vectorStyleStops?.length, 12);
+  });
+
+  it("never asks for more classes than the data has values", () => {
+    const layer = layerWith("pop", [10, 20, 30]);
+    const style = buildSymbologyStyle(layer, {
+      mode: "graduated",
+      property: "pop",
+      classCount: 8,
+    });
+    assert.equal(style.vectorStyleStops?.length, 3);
   });
 
   it("builds a categorized style with one stop per distinct value", () => {

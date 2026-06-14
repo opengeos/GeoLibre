@@ -11,7 +11,7 @@ import type { FeatureCollection } from "geojson";
 import { z } from "zod";
 import { inferPropertyColumns } from "../pglite-sql";
 import { consoleDeps, runConsoleCode } from "../pyodide/pyodide-console";
-import { previewLayerTables, runSqlQuery } from "../sql-workspace";
+import { cleanStatement, previewLayerTables, runSqlQuery } from "../sql-workspace";
 import { createXyzTileUrlTemplate } from "../xyz-url";
 import {
   findNamedTileBasemap,
@@ -34,6 +34,44 @@ interface LayerSummary {
   geometryType: string | null;
   featureCount: number;
   fields: { name: string; type: string }[];
+}
+
+/** True when a SQL statement is a read-only SELECT/WITH query. */
+function isReadOnlySql(sql: string): boolean {
+  const head = cleanStatement(sql).trimStart().toUpperCase();
+  return head.startsWith("SELECT") || head.startsWith("WITH");
+}
+
+/**
+ * Validate a model-supplied URL before fetching: only http(s), and never a
+ * loopback/private/link-local address (guards against AI-directed SSRF to the
+ * local sidecar or internal services via prompt injection).
+ */
+function assertPublicHttpUrl(raw: string): void {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`Invalid URL: ${raw}`);
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new Error(`Only http(s) URLs are allowed (got ${url.protocol}).`);
+  }
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  const isPrivate =
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host === "0.0.0.0" ||
+    host === "::1" ||
+    /^127\./.test(host) ||
+    /^10\./.test(host) ||
+    /^192\.168\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+    /^169\.254\./.test(host) ||
+    /^(fc|fd)[0-9a-f]{2}:/.test(host);
+  if (isPrivate) {
+    throw new Error(`Refusing to fetch a private/loopback address: ${host}`);
+  }
 }
 
 /** Detect a layer's geometry family from its first feature. */
@@ -66,13 +104,13 @@ function summarizeLayer(layer: GeoLibreLayer): LayerSummary {
  */
 export function describeLayers(layers: GeoLibreLayer[]): string {
   if (layers.length === 0) return "No layers are currently loaded.";
-  const tables = new Map(
-    previewLayerTables(layers).map((table) => [table.layerName, table.tableName]),
-  );
+  // previewLayerTables returns one entry per layer in order, so align by index —
+  // keying by name would collapse layers that share a name onto one table.
+  const tables = previewLayerTables(layers);
   return layers
-    .map((layer) => {
+    .map((layer, index) => {
       const summary = summarizeLayer(layer);
-      const table = tables.get(layer.name);
+      const table = tables[index]?.tableName;
       const fields = summary.fields
         .map((field) => `${field.name}:${field.type}`)
         .join(", ");
@@ -94,17 +132,24 @@ function resolveLayer(reference: string): GeoLibreLayer | null {
   const byId = layers.find((layer) => layer.id === reference);
   if (byId) return byId;
   const target = reference.trim().toLowerCase();
+  const exact = layers.find((layer) => layer.name.toLowerCase() === target);
+  if (exact) return exact;
+  // Only fall back to a substring match for references long enough to be
+  // meaningful, so a 1–2 char string can't match an arbitrary layer.
+  if (target.length < 3) return null;
   return (
-    layers.find((layer) => layer.name.toLowerCase() === target) ??
-    layers.find((layer) => layer.name.toLowerCase().includes(target)) ??
-    null
+    layers.find((layer) => layer.name.toLowerCase().includes(target)) ?? null
   );
 }
 
 /** Resolve a basemap name/id/url to a style URL via the known presets. */
 function resolveBasemap(reference: string): string | null {
   const target = reference.trim().toLowerCase();
-  if (target.startsWith("http")) return reference.trim();
+  if (target.startsWith("http")) {
+    // Only accept https style URLs; an http style could mix-content fail and is
+    // a needless freeform-URL surface.
+    return target.startsWith("https://") ? reference.trim() : null;
+  }
   const preset = OPENFREEMAP_BASEMAPS.find(
     (basemap) =>
       basemap.id.toLowerCase() === target ||
@@ -169,6 +214,9 @@ export function createAssistantTools(
         .describe("Name for the added layer (when add_as_layer is true)."),
     }),
     callback: async (input) => {
+      if (!isReadOnlySql(input.sql)) {
+        throw new Error("Only read-only SELECT/WITH queries are allowed.");
+      }
       const result = await runSqlQuery(input.sql, store().layers);
       let addedLayerId: string | null = null;
       if (input.add_as_layer && result.geojson) {
@@ -196,17 +244,35 @@ export function createAssistantTools(
       name: z.string().optional().describe("Optional layer name."),
     }),
     callback: async (input) => {
-      const response = await fetch(input.url);
-      if (!response.ok) {
-        throw new Error(`Fetch failed: ${response.status} ${response.statusText}`);
+      assertPublicHttpUrl(input.url);
+      const MAX_BYTES = 100 * 1024 * 1024; // 100 MB guard against OOM.
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30_000);
+      try {
+        const response = await fetch(input.url, { signal: controller.signal });
+        if (!response.ok) {
+          throw new Error(
+            `Fetch failed: ${response.status} ${response.statusText}`,
+          );
+        }
+        const length = response.headers.get("content-length");
+        if (length && Number(length) > MAX_BYTES) {
+          throw new Error(`Response too large (${length} bytes).`);
+        }
+        const geojson = asFeatureCollection(await response.json());
+        const name =
+          input.name?.trim() ||
+          input.url.split("/").pop()?.split("?")[0] ||
+          "Remote layer";
+        const id = store().addGeoJsonLayer(name, geojson, input.url);
+        return json({
+          addedLayerId: id,
+          name,
+          featureCount: geojson.features.length,
+        });
+      } finally {
+        clearTimeout(timeout);
       }
-      const geojson = asFeatureCollection(await response.json());
-      const name =
-        input.name?.trim() ||
-        input.url.split("/").pop()?.split("?")[0] ||
-        "Remote layer";
-      const id = store().addGeoJsonLayer(name, geojson, input.url);
-      return json({ addedLayerId: id, name, featureCount: geojson.features.length });
     },
   });
 
@@ -353,14 +419,18 @@ export function createAssistantTools(
     name: "zoom_to",
     description:
       "Move the camera to fit a layer (by name or id) or an explicit bounding box [west, south, east, north].",
-    inputSchema: z.object({
-      layer: z.string().optional().describe("Layer name or id to fit."),
-      bbox: z
-        .array(z.number())
-        .length(4)
-        .optional()
-        .describe("Bounding box [west, south, east, north] in WGS84."),
-    }),
+    inputSchema: z
+      .object({
+        layer: z.string().optional().describe("Layer name or id to fit."),
+        bbox: z
+          .array(z.number())
+          .length(4)
+          .optional()
+          .describe("Bounding box [west, south, east, north] in WGS84."),
+      })
+      .refine((value) => value.layer !== undefined || value.bbox !== undefined, {
+        message: "Provide either a layer or a bbox.",
+      }),
     callback: (input) => {
       const controller = deps.getMapController();
       if (!controller) throw new Error("The map is not ready yet.");

@@ -114,7 +114,12 @@ export function buildSymbologyStyle(
         `Property "${request.property}" is not numeric; use categorized mode instead.`,
       );
     }
-    const classCount = Math.max(2, Math.min(request.classCount ?? 5, 12));
+    // Cap classes by the number of values too, so we never ask for more breaks
+    // than the data supports (which would yield duplicate/empty color stops).
+    const classCount = Math.max(
+      2,
+      Math.min(request.classCount ?? 5, 12, numbers.length),
+    );
     const scheme = request.scheme ?? "equal-interval";
     return {
       vectorStyleMode: "graduated",
