@@ -3,7 +3,12 @@ import { v4 as uuidv4 } from "uuid";
 import { create } from "zustand";
 import { shallow } from "zustand/shallow";
 import { temporal } from "zundo";
-import { getHistoryCoalesceMs, leadingDebounce } from "./history";
+import {
+  getHistoryCoalesceMs,
+  getMaxHistoryFeatureCount,
+  leadingDebounce,
+  trimHistoryBySize,
+} from "./history";
 import {
   applyProjectToStore,
   type CreateProjectOptions,
@@ -326,6 +331,22 @@ function layerGroupsEqualForHistory(
 
 /** Cancels the active history coalesce window (assigned by zundo's handleSet). */
 let cancelHistoryCoalesce: () => void = () => {};
+
+/**
+ * Drop the oldest undo snapshots once their combined feature payload exceeds the
+ * configured budget, bounding the memory held by history when a large vector
+ * layer is edited repeatedly (issue #341). Runs after every recorded change.
+ * Operates on the temporal store directly; this never touches the main store, so
+ * it does not itself record a history entry.
+ */
+function pruneHistoryBySize(): void {
+  const temporal = useAppStore.temporal;
+  const { pastStates } = temporal.getState();
+  const trimmed = trimHistoryBySize(pastStates, getMaxHistoryFeatureCount());
+  if (trimmed.length !== pastStates.length) {
+    temporal.setState({ pastStates: trimmed });
+  }
+}
 
 export const useAppStore = create<AppState>()(
   temporal(
@@ -855,7 +876,13 @@ export const useAppStore = create<AppState>()(
       handleSet: (baseHandleSet) => {
         const debounced = leadingDebounce(baseHandleSet, getHistoryCoalesceMs);
         cancelHistoryCoalesce = debounced.cancel;
-        return debounced;
+        // After the (leading-edge) save pushes a snapshot, trim history back
+        // under the feature-payload budget so editing large layers can't pin
+        // unbounded copies of their feature sets in memory (issue #341).
+        return (...args: Parameters<typeof debounced>) => {
+          debounced(...args);
+          pruneHistoryBySize();
+        };
       },
     }
   )

@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import {
   getHistoryCoalesceMs,
+  getMaxHistoryFeatureCount,
   leadingDebounce,
   setHistoryCoalesceMs,
+  setMaxHistoryFeatureCount,
+  trimHistoryBySize,
 } from "../packages/core/src/history";
 import { clearHistory, redo, undo, useAppStore } from "../packages/core/src/store";
 import { createEmptyProject } from "../packages/core/src/project";
@@ -66,7 +69,58 @@ describe("history coalesce config", () => {
   });
 });
 
+/** A snapshot with one layer whose geojson holds `n` placeholder features. */
+function snapshot(features: number, geojson?: { features: unknown[] }) {
+  const gj = geojson ?? { features: Array.from({ length: features }) };
+  return { layers: [{ geojson: gj }] };
+}
+
+describe("trimHistoryBySize", () => {
+  it("returns the input unchanged when under the budget", () => {
+    const past = [snapshot(10), snapshot(10), snapshot(10)];
+    assert.equal(trimHistoryBySize(past, 1000), past);
+  });
+
+  it("does not trim a zero- or one-entry history", () => {
+    assert.deepEqual(trimHistoryBySize([], 0), []);
+    const one = [snapshot(10_000)];
+    assert.equal(trimHistoryBySize(one, 1), one);
+  });
+
+  it("drops the oldest snapshots once the budget is exceeded", () => {
+    // Each snapshot carries 100 distinct features; budget 250 keeps the newest 2.
+    const past = [snapshot(100), snapshot(100), snapshot(100), snapshot(100)];
+    const trimmed = trimHistoryBySize(past, 250);
+    assert.deepEqual(trimmed, [past[2], past[3]]);
+  });
+
+  it("always keeps the newest snapshot even if it alone exceeds the budget", () => {
+    const past = [snapshot(100), snapshot(5000)];
+    const trimmed = trimHistoryBySize(past, 250);
+    assert.deepEqual(trimmed, [past[1]]);
+  });
+
+  it("counts feature sets shared by reference only once", () => {
+    // An unchanged layer keeps the same geojson reference across snapshots, so a
+    // long history of shared payloads stays cheap and is never trimmed.
+    const shared = { features: Array.from({ length: 1000 }) };
+    const past = Array.from({ length: 50 }, () => snapshot(0, shared));
+    assert.equal(trimHistoryBySize(past, 1500), past);
+  });
+});
+
 const emptyFC = { type: "FeatureCollection" as const, features: [] };
+
+function bigFC(n: number) {
+  return {
+    type: "FeatureCollection" as const,
+    features: Array.from({ length: n }, (_, i) => ({
+      type: "Feature" as const,
+      geometry: { type: "Point" as const, coordinates: [i, i] },
+      properties: { i },
+    })),
+  };
+}
 
 function pastLen(): number {
   return useAppStore.temporal.getState().pastStates.length;
@@ -101,6 +155,59 @@ describe("store history tracking", () => {
     useAppStore.getState().setPointerCoords([1, 2]);
     useAppStore.getState().setAttributeFilter("abc");
     assert.equal(pastLen(), before);
+  });
+});
+
+describe("history size budget (issue #341)", () => {
+  beforeEach(() => {
+    setHistoryCoalesceMs(0);
+    useAppStore.getState().newProject({ name: "reset" });
+    useAppStore.temporal.getState().clear();
+  });
+
+  it("caps retained snapshots by feature payload for a large layer", () => {
+    const original = getMaxHistoryFeatureCount();
+    setMaxHistoryFeatureCount(250); // budget fits ~2 snapshots of a 100-feature layer
+    try {
+      const id = useAppStore.getState().addGeoJsonLayer("big", bigFC(100));
+      // Each edit replaces the layer's geojson with a fresh 100-feature set, so
+      // every edit would otherwise retain another full copy in history.
+      for (let i = 0; i < 10; i++) {
+        useAppStore.getState().updateLayer(id, { geojson: bigFC(100) });
+      }
+      // Without the budget this would be 11 snapshots (add + 10 edits); the
+      // budget keeps only the newest few whose payload fits ~250 features.
+      assert.ok(pastLen() >= 1 && pastLen() <= 3, `got ${pastLen()} snapshots`);
+      // The most recent edit is still undoable.
+      undo();
+      assert.equal(
+        useAppStore.getState().layers[0].geojson?.features.length,
+        100,
+      );
+    } finally {
+      setMaxHistoryFeatureCount(original);
+    }
+  });
+
+  it("keeps full history depth for small layers under the budget", () => {
+    const original = getMaxHistoryFeatureCount();
+    setMaxHistoryFeatureCount(500_000);
+    try {
+      const id = useAppStore.getState().addGeoJsonLayer("small", bigFC(1));
+      for (let i = 0; i < 10; i++) {
+        useAppStore.getState().updateLayer(id, { geojson: bigFC(1) });
+      }
+      assert.equal(pastLen(), 11); // add + 10 edits, nothing trimmed
+    } finally {
+      setMaxHistoryFeatureCount(original);
+    }
+  });
+
+  it("round-trips the feature-count budget", () => {
+    const original = getMaxHistoryFeatureCount();
+    setMaxHistoryFeatureCount(1234);
+    assert.equal(getMaxHistoryFeatureCount(), 1234);
+    setMaxHistoryFeatureCount(original);
   });
 });
 

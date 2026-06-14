@@ -27,6 +27,9 @@ export {
 export {
   getHistoryCoalesceMs,
   setHistoryCoalesceMs,
+  getMaxHistoryFeatureCount,
+  setMaxHistoryFeatureCount,
+  trimHistoryBySize,
 } from "./history";
 export {
   DEFAULT_FORWARD_GEOCODE_ENDPOINT,
