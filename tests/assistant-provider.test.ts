@@ -18,7 +18,7 @@ describe("resolveProviderConfig", () => {
     assert.deepEqual(config, {
       provider: "google",
       apiKey: "g-key",
-      modelId: "gemini-2.5-flash",
+      modelId: "gemini-3.5-flash",
     });
   });
 

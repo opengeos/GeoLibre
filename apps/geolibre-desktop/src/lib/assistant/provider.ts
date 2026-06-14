@@ -27,14 +27,20 @@ const PROVIDER_KEY_NAMES: Record<AssistantProviderId, readonly string[]> = {
 };
 
 /**
- * Selectable models per provider, most capable/common first. The first entry is
- * also the provider default. Users can still pin any other id via
- * `GEOLIBRE_ASSISTANT_MODEL`.
+ * Selectable models per provider, recommended/newest first. The first entry is
+ * the provider default (a capable, broadly-available model). Users can still pin
+ * any other id via `GEOLIBRE_ASSISTANT_MODEL` or the model picker. Verified
+ * against the providers' model docs as of 2026-06.
  */
 export const PROVIDER_MODELS: Record<AssistantProviderId, readonly string[]> = {
-  google: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
-  anthropic: ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"],
-  openai: ["gpt-4o", "gpt-4o-mini", "gpt-4.1"],
+  google: ["gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-2.5-flash"],
+  anthropic: [
+    "claude-opus-4-8",
+    "claude-fable-5",
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5",
+  ],
+  openai: ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano"],
 };
 
 /** Default model per provider; override with `GEOLIBRE_ASSISTANT_MODEL`. */
