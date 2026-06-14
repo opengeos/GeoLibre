@@ -589,6 +589,7 @@ export default defineConfig({
       "@strands-agents/sdk/models/google",
       "@strands-agents/sdk/models/anthropic",
       "@strands-agents/sdk/models/openai",
+      "@strands-agents/sdk/models/bedrock",
       "@anthropic-ai/sdk",
       "@google/genai",
       "openai",

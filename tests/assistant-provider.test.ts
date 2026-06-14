@@ -71,6 +71,53 @@ describe("resolveProviderConfig", () => {
   it("ignores blank key values", () => {
     assert.equal(resolveProviderConfig({ GEMINI_API_KEY: "   " }), null);
   });
+
+  it("selects Ollama from OLLAMA_BASE_URL, normalizing to a /v1 base", () => {
+    const config = resolveProviderConfig({ OLLAMA_BASE_URL: "localhost:11434" });
+    assert.deepEqual(config, {
+      provider: "ollama",
+      apiKey: "ollama",
+      baseURL: "http://localhost:11434/v1",
+      modelId: "llama3.2",
+    });
+  });
+
+  it("selects Bedrock from AWS credentials with a default region", () => {
+    const config = resolveProviderConfig({
+      AWS_ACCESS_KEY_ID: "AKIA",
+      AWS_SECRET_ACCESS_KEY: "secret",
+    });
+    assert.deepEqual(config, {
+      provider: "bedrock",
+      modelId: "global.anthropic.claude-sonnet-4-6",
+      region: "us-east-1",
+      credentials: {
+        accessKeyId: "AKIA",
+        secretAccessKey: "secret",
+        sessionToken: undefined,
+      },
+    });
+  });
+
+  it("requires both a base URL and a model for the custom provider", () => {
+    assert.equal(
+      configForProvider("custom", undefined, {
+        OPENAI_COMPATIBLE_BASE_URL: "https://api.example.com/v1",
+      }),
+      null,
+    );
+    const config = configForProvider("custom", undefined, {
+      OPENAI_COMPATIBLE_BASE_URL: "https://api.example.com/v1/",
+      OPENAI_COMPATIBLE_MODEL: "my-model",
+      OPENAI_COMPATIBLE_API_KEY: "k",
+    });
+    assert.deepEqual(config, {
+      provider: "custom",
+      apiKey: "k",
+      baseURL: "https://api.example.com/v1",
+      modelId: "my-model",
+    });
+  });
 });
 
 describe("availableProviders", () => {

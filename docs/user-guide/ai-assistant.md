@@ -18,19 +18,30 @@ data leaves your machine until you add a key and send a prompt.
 ## Setup: add an API key
 
 The assistant is **provider-pluggable** — it uses the
-[Strands Agents](https://strandsagents.com) SDK and supports **Google Gemini**
-(default), **Anthropic**, and **OpenAI**. Add a key for one (or more) of them in
-**Settings → Environment** as an environment variable:
+[Strands Agents](https://strandsagents.com) SDK. Configure one (or more)
+providers in **Settings → Environment** as environment variables:
 
-| Provider | Environment variable (any of) | Default model |
+| Provider | Environment variable(s) | Default model |
 | --- | --- | --- |
-| Google Gemini | `GEMINI_API_KEY`, `GOOGLE_API_KEY` | `gemini-3.5-flash` |
+| Google Gemini | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | `gemini-3.5-flash` |
 | Anthropic | `ANTHROPIC_API_KEY` | `claude-opus-4-8` |
 | OpenAI | `OPENAI_API_KEY` | `gpt-5.5` |
+| **Ollama** (local) | `OLLAMA_BASE_URL` (e.g. `http://localhost:11434`) | `llama3.2` |
+| **Amazon Bedrock** | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` (+ `AWS_REGION`, optional `AWS_SESSION_TOKEN`) | `global.anthropic.claude-sonnet-4-6` |
+| **Custom** (OpenAI-compatible) | `OPENAI_COMPATIBLE_BASE_URL` (+ optional `OPENAI_COMPATIBLE_API_KEY`) and `OPENAI_COMPATIBLE_MODEL` | — |
 
-The key is used **directly from your browser** to call the provider; it is never
-sent to GeoLibre's servers. Saving the setting enables the panel immediately — no
-reload needed.
+- **Ollama** runs models on your own machine — no API key and nothing leaves your
+  computer. Point `OLLAMA_BASE_URL` at your Ollama host (the `/v1` suffix is added
+  automatically); set `OLLAMA_MODEL` to pick which pulled model to use.
+- **Bedrock** calls AWS from the browser using your credentials (and the model
+  id is an inference-profile id such as `global.anthropic.claude-sonnet-4-6`; set
+  `BEDROCK_MODEL` to choose another).
+- **Custom** covers any OpenAI-compatible endpoint — LiteLLM, vLLM, OpenRouter,
+  Groq, Together, a local server, etc. — via its chat-completions API.
+
+Hosted keys (and AWS credentials) are used **directly from your browser** to call
+the provider; they are never sent to GeoLibre's servers. Saving the setting
+enables the panel immediately — no reload needed.
 
 Optional variables:
 

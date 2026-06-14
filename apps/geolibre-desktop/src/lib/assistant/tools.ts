@@ -6,6 +6,7 @@ import {
 } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import type { InvokableTool, JSONValue } from "@strands-agents/sdk";
+import maplibregl from "maplibre-gl";
 import { tool } from "@strands-agents/sdk";
 import type { FeatureCollection } from "geojson";
 import { z } from "zod";
@@ -551,18 +552,23 @@ export function createAssistantTools(
   const runMaplibreJs = tool({
     name: "run_maplibre_js",
     description:
-      "Fallback for tasks with no dedicated tool (e.g. globe projection, terrain, sky, custom paint/layout properties). Runs a small JavaScript snippet against the live map. The snippet is a function body with `map` (the MapLibre GL JS map) in scope and may `return` a JSON-serializable value. Example — switch to globe: `map.setProjection({ type: 'globe' })`. Prefer dedicated tools when one exists; changes made here bypass the store and are NOT undoable.",
+      "Fallback for tasks with no dedicated tool (e.g. globe projection, terrain, sky, custom paint/layout properties, controls, markers). Runs a small JavaScript snippet against the live map. The snippet is a function body with `map` (the MapLibre GL JS map) and `maplibregl` (the MapLibre GL JS module, e.g. `maplibregl.TerrainControl`, `maplibregl.Marker`) in scope, and may `return` a JSON-serializable value. Example — switch to globe: `map.setProjection({ type: 'globe' })`. Prefer dedicated tools when one exists; changes made here bypass the store and are NOT undoable.",
     inputSchema: z.object({
       code: z
         .string()
-        .describe("JavaScript function body; `map` (MapLibre map) is in scope."),
+        .describe(
+          "JavaScript function body; `map` and `maplibregl` are in scope.",
+        ),
     }),
     callback: (input) => {
       const map = deps.getMapController()?.getMap();
       if (!map) throw new Error("The map is not ready yet.");
       // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
-      const run = new Function("map", input.code) as (map: unknown) => unknown;
-      const result = run(map);
+      const run = new Function("map", "maplibregl", input.code) as (
+        map: unknown,
+        maplibregl: unknown,
+      ) => unknown;
+      const result = run(map, maplibregl);
       // Coerce to a JSON-safe value so non-serializable returns (e.g. the map
       // object itself) don't blow up the tool result.
       let safe: JSONValue = null;

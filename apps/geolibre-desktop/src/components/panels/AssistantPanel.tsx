@@ -22,7 +22,9 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { AssistantSession } from "../../lib/assistant/agent";
+import { renderAssistantMarkdown } from "../../lib/assistant/markdown";
 import {
+  ASSISTANT_PROVIDER_IDS,
   availableProviders,
   defaultModelFor,
   hasProviderKey,
@@ -40,11 +42,6 @@ const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
 const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
 const PROVIDER_STORAGE_KEY = "geolibre.assistant.provider";
 const MODEL_STORAGE_KEY = "geolibre.assistant.model";
-const PROVIDER_IDS: readonly AssistantProviderId[] = [
-  "google",
-  "anthropic",
-  "openai",
-];
 
 /** Read a persisted string setting, ignoring storage failures. */
 function loadStored(key: string): string | null {
@@ -139,7 +136,8 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   );
   const [provider, setProvider] = useState<AssistantProviderId | null>(() => {
     const stored = loadStored(PROVIDER_STORAGE_KEY);
-    return stored && PROVIDER_IDS.includes(stored as AssistantProviderId)
+    return stored &&
+      ASSISTANT_PROVIDER_IDS.includes(stored as AssistantProviderId)
       ? (stored as AssistantProviderId)
       : null;
   });
@@ -406,19 +404,21 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
                   ))}
                 </Select>
               ) : null}
-              <Select
-                aria-label={t("assistant.model")}
-                className="h-8 w-auto text-xs"
-                value={model || defaultModelFor(provider)}
-                disabled={running}
-                onChange={(event) => onModelChange(event.target.value)}
-              >
-                {PROVIDER_MODELS[provider].map((id) => (
-                  <option key={id} value={id}>
-                    {id}
-                  </option>
-                ))}
-              </Select>
+              {PROVIDER_MODELS[provider].length > 0 ? (
+                <Select
+                  aria-label={t("assistant.model")}
+                  className="h-8 w-auto text-xs"
+                  value={model || defaultModelFor(provider)}
+                  disabled={running}
+                  onChange={(event) => onModelChange(event.target.value)}
+                >
+                  {PROVIDER_MODELS[provider].map((id) => (
+                    <option key={id} value={id}>
+                      {id}
+                    </option>
+                  ))}
+                </Select>
+              ) : null}
             </>
           ) : null}
           <Button
@@ -478,18 +478,34 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
                 </p>
               );
             }
+            if (turn.role === "user") {
+              return (
+                <div
+                  key={turn.id}
+                  className="whitespace-pre-wrap font-medium text-foreground"
+                >
+                  {`❯ ${turn.text}`}
+                </div>
+              );
+            }
+            // Assistant replies are markdown — render (and sanitize) them.
             return (
               <div
                 key={turn.id}
                 className={cn(
-                  "whitespace-pre-wrap",
-                  turn.role === "user"
-                    ? "font-medium text-foreground"
-                    : "text-foreground",
+                  "text-foreground",
+                  "[&_p]:my-1 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0",
+                  "[&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-5",
+                  "[&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-5",
+                  "[&_a]:text-primary [&_a]:underline",
+                  "[&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-xs",
+                  "[&_pre]:my-1 [&_pre]:overflow-auto [&_pre]:rounded [&_pre]:bg-muted [&_pre]:p-2",
+                  "[&_pre_code]:bg-transparent [&_pre_code]:p-0",
                 )}
-              >
-                {turn.role === "user" ? `❯ ${turn.text}` : turn.text}
-              </div>
+                dangerouslySetInnerHTML={{
+                  __html: renderAssistantMarkdown(turn.text),
+                }}
+              />
             );
           })
         )}
