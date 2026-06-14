@@ -10,6 +10,7 @@ import { tool } from "@strands-agents/sdk";
 import type { FeatureCollection } from "geojson";
 import { z } from "zod";
 import { inferPropertyColumns } from "../pglite-sql";
+import { consoleDeps, runConsoleCode } from "../pyodide/pyodide-console";
 import { previewLayerTables, runSqlQuery } from "../sql-workspace";
 import { createXyzTileUrlTemplate } from "../xyz-url";
 import {
@@ -140,6 +141,9 @@ export function createAssistantTools(
   // Tool results are serialized to the model; the data we return is JSON-safe by
   // construction, so this asserts the shape against Strands' strict JSONValue.
   const json = (value: unknown): JSONValue => value as JSONValue;
+  // Shared Pyodide scripting context for run_python (exposes the `geolibre`
+  // facade that drives the live map).
+  const pyDeps = consoleDeps(deps.getMapController);
 
   const listLayers = tool({
     name: "list_layers",
@@ -374,6 +378,19 @@ export function createAssistantTools(
     },
   });
 
+  const runPython = tool({
+    name: "run_python",
+    description:
+      "Run a Python snippet in the in-app Pyodide runtime for data/compute tasks (numpy, pandas, etc.). A `geolibre` object is in scope to drive the live map, e.g. `geolibre.get_center()` or `geolibre.add_geojson(name, data)`; `await geolibre.load_package('geopandas')` installs packages. Returns captured stdout and the repr of the last expression. The first call boots the Python runtime and can take several seconds. Prefer run_sql for querying layer attributes.",
+    inputSchema: z.object({
+      code: z.string().describe("Python source to execute."),
+    }),
+    callback: async (input) => {
+      const result = await runConsoleCode(pyDeps, input.code);
+      return json({ output: result.output, error: result.error });
+    },
+  });
+
   const runMaplibreJs = tool({
     name: "run_maplibre_js",
     description:
@@ -446,5 +463,6 @@ export function createAssistantTools(
     zoomTo,
     applySymbology,
     runMaplibreJs,
+    runPython,
   ] as InvokableTool<unknown, unknown>[];
 }

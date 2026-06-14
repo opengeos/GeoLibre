@@ -1846,6 +1846,10 @@ export function TopToolbar({
         <DropdownMenuContent align="start">
           <DropdownMenuLabel>{t("toolbar.menu.processing")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => setAssistantOpen(true)}>
+            {t("toolbar.command.assistant")}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setProcessingOpen(true)}>
             {t("toolbar.item.whitebox")}
           </DropdownMenuItem>
@@ -1854,9 +1858,6 @@ export function TopToolbar({
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setPythonConsoleOpen(true)}>
             {t("toolbar.command.pythonConsole")}
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setAssistantOpen(true)}>
-            {t("toolbar.command.assistant")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setGeocodeOpen(true)}>
             {t("toolbar.item.geocode")}
