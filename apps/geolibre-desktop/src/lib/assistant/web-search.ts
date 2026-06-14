@@ -116,8 +116,10 @@ export async function webSearch(
   if (tavilyKey) {
     try {
       return await tavilySearch(query, tavilyKey, signal);
-    } catch {
-      // Fall back to the keyless backend if Tavily fails (bad key, CORS, …).
+    } catch (error) {
+      // Fall back to the keyless backend if Tavily fails (bad key, CORS, …),
+      // but surface why so a misconfigured key isn't silently ignored.
+      console.warn("Tavily search failed; falling back to DuckDuckGo.", error);
     }
   }
   return duckDuckGoSearch(query, signal);

@@ -11,7 +11,12 @@ import type { FeatureCollection } from "geojson";
 import { z } from "zod";
 import { inferPropertyColumns } from "../pglite-sql";
 import { consoleDeps, runConsoleCode } from "../pyodide/pyodide-console";
-import { cleanStatement, previewLayerTables, runSqlQuery } from "../sql-workspace";
+import {
+  cleanStatement,
+  maskSqlLiterals,
+  previewLayerTables,
+  runSqlQuery,
+} from "../sql-workspace";
 import { createXyzTileUrlTemplate } from "../xyz-url";
 import {
   findNamedTileBasemap,
@@ -36,10 +41,20 @@ interface LayerSummary {
   fields: { name: string; type: string }[];
 }
 
-/** True when a SQL statement is a read-only SELECT/WITH query. */
+/** Statement keywords that write data or have side effects. */
+const SQL_WRITE_KEYWORDS =
+  /\b(INSERT|UPDATE|DELETE|MERGE|CREATE|DROP|ALTER|TRUNCATE|REPLACE|ATTACH|DETACH|COPY|EXPORT|IMPORT|INSTALL|LOAD|PRAGMA|VACUUM|CHECKPOINT)\b/;
+
+/**
+ * True when a SQL statement is a read-only SELECT/WITH query. Guards both the
+ * leading keyword and the body (with string/comment literals masked) so a
+ * data-modifying CTE — `WITH x AS (DELETE …) …` — is also rejected.
+ */
 function isReadOnlySql(sql: string): boolean {
-  const head = cleanStatement(sql).trimStart().toUpperCase();
-  return head.startsWith("SELECT") || head.startsWith("WITH");
+  const cleaned = cleanStatement(sql);
+  const head = cleaned.trimStart().toUpperCase();
+  if (!head.startsWith("SELECT") && !head.startsWith("WITH")) return false;
+  return !SQL_WRITE_KEYWORDS.test(maskSqlLiterals(cleaned).toUpperCase());
 }
 
 /**
@@ -58,17 +73,22 @@ function assertPublicHttpUrl(raw: string): void {
     throw new Error(`Only http(s) URLs are allowed (got ${url.protocol}).`);
   }
   const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  // Unwrap IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1) before the IPv4 checks.
+  const v4 = host.startsWith("::ffff:") ? host.slice(7) : host;
   const isPrivate =
     host === "localhost" ||
     host.endsWith(".localhost") ||
-    host === "0.0.0.0" ||
+    host === "::" ||
     host === "::1" ||
-    /^127\./.test(host) ||
-    /^10\./.test(host) ||
-    /^192\.168\./.test(host) ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
-    /^169\.254\./.test(host) ||
-    /^(fc|fd)[0-9a-f]{2}:/.test(host);
+    /^0\./.test(v4) || // 0.0.0.0/8 (incl. 0.0.0.0)
+    /^127\./.test(v4) ||
+    /^10\./.test(v4) ||
+    /^192\.168\./.test(v4) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(v4) ||
+    /^169\.254\./.test(v4) || // link-local
+    /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(v4) || // 100.64/10 CGNAT
+    /^(fc|fd)[0-9a-f]{2}:/.test(host) || // unique-local IPv6
+    /^fe80:/.test(host); // link-local IPv6
   if (isPrivate) {
     throw new Error(`Refusing to fetch a private/loopback address: ${host}`);
   }
@@ -255,11 +275,17 @@ export function createAssistantTools(
             `Fetch failed: ${response.status} ${response.statusText}`,
           );
         }
+        // Check the advertised length first (cheap), then the actual body —
+        // Content-Length is optional, so a server can omit it to bypass it.
         const length = response.headers.get("content-length");
         if (length && Number(length) > MAX_BYTES) {
           throw new Error(`Response too large (${length} bytes).`);
         }
-        const geojson = asFeatureCollection(await response.json());
+        const body = await response.text();
+        if (body.length > MAX_BYTES) {
+          throw new Error(`Response too large (${body.length} bytes).`);
+        }
+        const geojson = asFeatureCollection(JSON.parse(body));
         const name =
           input.name?.trim() ||
           input.url.split("/").pop()?.split("?")[0] ||
