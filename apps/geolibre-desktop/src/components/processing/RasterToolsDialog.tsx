@@ -384,17 +384,31 @@ export function RasterToolsDialog({
       );
       const outName = tool.defaultOutputName;
       setClientLog((prev) => [...prev, ...messages]);
-      const app = createAppAPI(mapControllerRef);
-      await addCogRasterLayer(app, {
-        url: outName,
-        data: bytes,
-        name: outName.replace(/\.tiff?$/i, ""),
-        // The renderer reads NoData from options (not the file's tag), so pass
-        // it explicitly for correct transparency of masked/edge cells.
-        ...(result.nodata != null ? { nodata: result.nodata } : {}),
-      });
+      // Persist the result before the map add so the Download button survives a
+      // render failure (the compute already succeeded — don't discard it).
       setClientResult({ name: outName, bytes });
-      setClientLog((prev) => [...prev, `Added "${outName}" to the map.`]);
+      const app = createAppAPI(mapControllerRef);
+      try {
+        await addCogRasterLayer(app, {
+          url: outName,
+          data: bytes,
+          name: outName.replace(/\.tiff?$/i, ""),
+          // The renderer reads NoData from options (not the file's tag), so pass
+          // it explicitly for correct transparency of masked/edge cells.
+          ...(result.nodata != null ? { nodata: result.nodata } : {}),
+        });
+        setClientLog((prev) => [...prev, `Added "${outName}" to the map.`]);
+      } catch (mapError) {
+        const mapMessage =
+          mapError instanceof Error
+            ? mapError.message
+            : "Could not add the result to the map.";
+        setError(mapMessage);
+        setClientLog((prev) => [
+          ...prev,
+          `Map add failed (the result is still available to download): ${mapMessage}`,
+        ]);
+      }
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Could not run raster tool.";

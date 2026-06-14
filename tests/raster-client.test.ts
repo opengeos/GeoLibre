@@ -141,6 +141,11 @@ describe("raster-client compute", () => {
       () => rasterCalc(raster, { expression: "globalThis" }),
       /unsupported identifiers/,
     );
+    // Letter-free "JSFuck"-style payloads must be blocked by the char allowlist.
+    assert.throws(
+      () => rasterCalc(raster, { expression: "[]+[]" }),
+      /unsupported characters/,
+    );
   });
 
   it("allows numeric literals including scientific notation", () => {
@@ -195,5 +200,9 @@ describe("raster-client GeoTIFF round-trip", () => {
     const back = await readRasterData(bytes);
     assert.equal(back.width, 3);
     assert.equal(back.height, 3);
+    // Verify semantic content, not just shape: the encoded slope carries the
+    // terrain NoData and the interior pixel has a real (>0) slope.
+    assert.equal(back.nodata, TERRAIN_NODATA);
+    assert.ok(back.bands[0][4] > 0);
   });
 });

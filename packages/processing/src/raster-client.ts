@@ -70,12 +70,27 @@ const PRESERVED_GEO_KEYS = [
   "GTCitationGeoKey",
 ] as const;
 
+/**
+ * Upper bound on the Float32 pixel buffers the client engine will allocate
+ * (512 MB). Larger rasters should use the sidecar, which streams from disk.
+ */
+const MAX_CLIENT_RASTER_BYTES = 512 * 1024 * 1024;
+
 /** Decode GeoTIFF bytes into a {@link RasterData}. */
 export async function readRasterData(bytes: ArrayBuffer): Promise<RasterData> {
   const tiff = await fromArrayBuffer(bytes);
   const image = await tiff.getImage();
   const width = image.getWidth();
   const height = image.getHeight();
+  // Guard against decoding a raster too large to hold in browser memory before
+  // we materialize the band arrays (which would freeze or OOM the tab).
+  const estimatedBytes =
+    width * height * image.getSamplesPerPixel() * Float32Array.BYTES_PER_ELEMENT;
+  if (!Number.isFinite(estimatedBytes) || estimatedBytes > MAX_CLIENT_RASTER_BYTES) {
+    throw new Error(
+      "This raster is too large for the in-browser engine. Use the sidecar (rasterio/GDAL) engine instead.",
+    );
+  }
   const [originX, originY] = image.getOrigin();
   const [resolutionX, resolutionY] = image.getResolution();
 
@@ -442,6 +457,17 @@ export function rasterCalc(input: RasterData, params: RasterCalcParams): RasterD
         "(where, clip, log, exp, sqrt, abs, minimum, maximum, sin, cos, tan) are allowed.",
     );
   }
+  // After identifiers/numbers/band refs are removed, only arithmetic,
+  // comparison, and logical operators, parentheses and commas may remain.
+  // This blocks bracket/property access and "JSFuck"-style payloads
+  // (`[`, `]`, `!`, backticks) that use no letters and would otherwise slip
+  // through the identifier check and reach `new Function`.
+  if (/[^\s+\-*/%(),<>=&|]/.test(residual)) {
+    throw new Error(
+      "Expression contains unsupported characters. Only A, A1, A2 …, the math helpers, " +
+        "numbers, and arithmetic/comparison operators are allowed.",
+    );
+  }
 
   const bandCount = input.bands.length;
   const argNames = ["A", ...input.bands.map((_, i) => `A${i + 1}`)];
@@ -608,6 +634,12 @@ export function runRasterToolClient(
   ];
   const num = (key: string, fallback?: number): number => {
     const v = parameters[key];
+    // Number("") is 0, so treat empty/missing explicitly rather than silently
+    // running a tool with an unintended zero extent/parameter.
+    if (v === "" || v == null) {
+      if (fallback !== undefined) return fallback;
+      throw new Error(`"${key}" is required.`);
+    }
     const n = typeof v === "number" ? v : Number(v);
     if (Number.isFinite(n)) return n;
     if (fallback !== undefined) return fallback;
