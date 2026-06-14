@@ -33,6 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from "@geolibre/ui";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Feature, FeatureCollection } from "geojson";
 import {
   ArrowDown,
@@ -113,6 +114,10 @@ const MIN_FEATURE_ID_COLUMN_WIDTH = 48;
 const MAX_FEATURE_ID_COLUMN_WIDTH = 180;
 const MIN_ATTRIBUTE_COLUMN_WIDTH = 72;
 const MAX_ATTRIBUTE_COLUMN_WIDTH = 520;
+// Estimated row height used to size the virtualizer before real rows are
+// measured. View-mode rows are ~37px; edit-mode rows (with an Input) are taller
+// and are corrected by measureElement once rendered.
+const ESTIMATED_ROW_HEIGHT = 37;
 const DEFAULT_TABLE_HEIGHT = 192;
 const MIN_TABLE_HEIGHT = 96;
 const MAX_TABLE_HEIGHT = 520;
@@ -248,6 +253,8 @@ interface AttributeTableProps {
 export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const tableSectionRef = useRef<HTMLElement>(null);
   const tableResizeGuideRef = useRef<HTMLDivElement>(null);
+  // The Radix ScrollArea viewport, used as the virtualizer's scroll container.
+  const scrollViewportRef = useRef<HTMLDivElement>(null);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const layers = useAppStore((s) => s.layers);
   const attributeFilter = useAppStore((s) => s.attributeFilter);
@@ -416,6 +423,21 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     setCalcSelectedOnly(false);
   }, [selectedLayerId, hasLayer, isGeometryEditing]);
 
+  // Bring the selected feature's row into view. With virtualization the row may
+  // be unmounted (e.g. when a feature is picked on the map), so a plain CSS
+  // highlight would be invisible; scroll the virtualizer to it instead. "auto"
+  // alignment leaves an already-visible row untouched.
+  useEffect(() => {
+    if (!selectedFeatureId) return;
+    const index = sorted.findIndex(
+      (row) => row.featureId === selectedFeatureId,
+    );
+    if (index >= 0) rowVirtualizer.scrollToIndex(index, { align: "auto" });
+    // `sorted`/`rowVirtualizer` are rebuilt every render; depend only on the
+    // selection (and the layer, so a layer switch re-runs against fresh rows).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFeatureId, selectedLayerId]);
+
   // If the selected feature is cleared while the calculator is open, drop the
   // "selected only" flag too: leaving it checked-but-disabled would mislead the
   // user, and the submit guard would silently widen the scope to all features.
@@ -441,6 +463,29 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     const result = compareAttributeValues(aValue, bValue);
     return sort.direction === "asc" ? result : -result;
   });
+
+  // Row virtualization: only the rows in (and just around) the viewport are
+  // mounted, so opening the table on a layer with tens of thousands of features
+  // no longer builds that many DOM nodes at once. Sorting/filtering above still
+  // operate over the full data model; the virtualizer only governs rendering.
+  const rowVirtualizer = useVirtualizer({
+    count: sorted.length,
+    getScrollElement: () => scrollViewportRef.current,
+    estimateSize: () => ESTIMATED_ROW_HEIGHT,
+    // Key by feature id so measured heights stay attached to the right row when
+    // the sort/filter reorders the list.
+    getItemKey: (index) => sorted[index]?.featureId ?? index,
+    overscan: 12,
+  });
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const virtualTotalSize = rowVirtualizer.getTotalSize();
+  // Spacer rows above/below the rendered window reserve the scroll height of the
+  // off-screen rows while keeping the native <table> column layout intact.
+  const paddingTop = virtualRows.length > 0 ? virtualRows[0].start : 0;
+  const paddingBottom =
+    virtualRows.length > 0
+      ? virtualTotalSize - virtualRows[virtualRows.length - 1].end
+      : 0;
 
   const propKeys = new Set<string>();
   for (const row of attributeRows) {
@@ -1396,6 +1441,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       */}
       <ScrollArea
         type="always"
+        viewportRef={scrollViewportRef}
         className="flex-1 [&_[data-orientation=vertical]]:!top-11 [&_[data-orientation=vertical]]:!h-[calc(100%-3.625rem)]"
       >
         {!hasAttributeSource ? (
@@ -1428,11 +1474,19 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sorted.map(({ featureId, properties }) => {
+              {paddingTop > 0 ? (
+                <tr aria-hidden="true">
+                  <td colSpan={tableColumns.length} style={{ height: paddingTop }} />
+                </tr>
+              ) : null}
+              {virtualRows.map((virtualRow) => {
+                const { featureId, properties } = sorted[virtualRow.index];
                 const selected = selectedFeatureId === featureId;
                 return (
                   <TableRow
                     key={featureId}
+                    data-index={virtualRow.index}
+                    ref={rowVirtualizer.measureElement}
                     data-state={selected ? "selected" : undefined}
                     className="cursor-pointer"
                     onClick={() => {
@@ -1486,6 +1540,14 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                   </TableRow>
                 );
               })}
+              {paddingBottom > 0 ? (
+                <tr aria-hidden="true">
+                  <td
+                    colSpan={tableColumns.length}
+                    style={{ height: paddingBottom }}
+                  />
+                </tr>
+              ) : null}
             </TableBody>
           </table>
         )}
