@@ -47,6 +47,13 @@ const CAPTURE_NETWORK_INFO_STORAGE_KEY =
 // they read as fatal errors (see GitHub issue #332). Scoped to the desktop
 // runtime and a short post-launch window so genuine later fetch failures are
 // untouched.
+//
+// Tradeoff: the match is on the generic message text, not the failing origin.
+// MapLibre's rejection is a plain `Failed to fetch` with no `ipc.localhost` in
+// the message, so narrowing to that origin would miss the very rejection this
+// targets. The cost is that a genuine plugin/network fetch that rejects within
+// the startup window is also downgraded from error to warning — acceptable
+// because the window is short and the event is still recorded in diagnostics.
 const STARTUP_FETCH_GRACE_MS = 15_000;
 const FETCH_FAILURE_MESSAGES = ["Failed to fetch", "Load failed"];
 // Logged verbatim by Tauri's runtime-injected ipc-protocol.js (tauri 2.x) the
@@ -287,12 +294,16 @@ export function installDiagnosticsCapture(): () => void {
   const originalConsoleError = console.error;
   const originalConsoleWarn = console.warn;
 
+  // Suppression only applies to the desktop runtime during the post-launch
+  // window; a Tauri IPC fallback that happens later (e.g. after an OS
+  // suspend/resume) stays console-visible rather than being silently swallowed.
+  const inStartupWindow = (): boolean =>
+    isTauri() && Date.now() - installedAt <= STARTUP_FETCH_GRACE_MS;
+
   // Within the startup window, a desktop "Failed to fetch" rejection/warning is
   // the Tauri custom-protocol fallback warming up rather than a real failure.
   const isBenignStartupFetch = (reason: unknown): boolean =>
-    isTauri() &&
-    Date.now() - installedAt <= STARTUP_FETCH_GRACE_MS &&
-    looksLikeFetchFailure(reason);
+    inStartupWindow() && looksLikeFetchFailure(reason);
 
   const patchedFetch: typeof fetch = async (input, init) => {
     const startedAt = performance.now();
@@ -342,7 +353,7 @@ export function installDiagnosticsCapture(): () => void {
 
   console.warn = (...args: unknown[]) => {
     const isTauriIpcFallback =
-      isTauri() &&
+      inStartupWindow() &&
       typeof args[0] === "string" &&
       args[0].includes(TAURI_IPC_FALLBACK_WARNING);
     try {

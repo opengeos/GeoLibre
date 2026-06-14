@@ -122,6 +122,14 @@ describe("diagnostics startup transient suppression", () => {
   let installCapture: DiagnosticsModule["installDiagnosticsCapture"];
   let realWarn: typeof console.warn;
   let realError: typeof console.error;
+  const realDateNow = Date.now;
+  // Tracked so afterEach can tear down the interceptors even if an assertion
+  // throws mid-test, keeping the module-level capture ref-count clean.
+  let activeCleanup: (() => void) | null = null;
+
+  function install(): void {
+    activeCleanup = installCapture();
+  }
 
   before(async () => {
     ({ installDiagnosticsCapture: installCapture } = await import(
@@ -145,8 +153,11 @@ describe("diagnostics startup transient suppression", () => {
   });
 
   afterEach(() => {
+    activeCleanup?.();
+    activeCleanup = null;
     console.warn = realWarn;
     console.error = realError;
+    Date.now = realDateNow;
   });
 
   function rejectionEvent(reason: unknown) {
@@ -164,7 +175,7 @@ describe("diagnostics startup transient suppression", () => {
 
   it("swallows a benign startup fetch rejection under Tauri", () => {
     win.__TAURI_INTERNALS__ = {};
-    const cleanup = installCapture();
+    install();
     const { event, wasPrevented } = rejectionEvent(
       new TypeError("Failed to fetch"),
     );
@@ -173,11 +184,10 @@ describe("diagnostics startup transient suppression", () => {
     const [record] = getDiagnosticsSnapshot().records;
     assert.equal(record.level, "warning");
     assert.equal(record.category, "network");
-    cleanup();
   });
 
   it("leaves a fetch rejection alone outside the Tauri runtime", () => {
-    const cleanup = installCapture();
+    install();
     const { event, wasPrevented } = rejectionEvent(
       new TypeError("Failed to fetch"),
     );
@@ -186,17 +196,29 @@ describe("diagnostics startup transient suppression", () => {
     const [record] = getDiagnosticsSnapshot().records;
     assert.equal(record.level, "error");
     assert.equal(record.category, "runtime");
-    cleanup();
+  });
+
+  it("does not swallow a fetch rejection after the startup window", () => {
+    win.__TAURI_INTERNALS__ = {};
+    install();
+    // installedAt is captured at install; jump past the grace window so the
+    // rejection no longer counts as a startup transient.
+    Date.now = () => realDateNow() + 60_000;
+    const { event, wasPrevented } = rejectionEvent(
+      new TypeError("Failed to fetch"),
+    );
+    listeners.get("unhandledrejection")?.(event);
+    assert.equal(wasPrevented(), false);
+    assert.equal(getDiagnosticsSnapshot().records[0]?.level, "error");
   });
 
   it("does not swallow a non-fetch rejection under Tauri", () => {
     win.__TAURI_INTERNALS__ = {};
-    const cleanup = installCapture();
+    install();
     const { event, wasPrevented } = rejectionEvent(new Error("boom"));
     listeners.get("unhandledrejection")?.(event);
     assert.equal(wasPrevented(), false);
     assert.equal(getDiagnosticsSnapshot().records[0]?.level, "error");
-    cleanup();
   });
 
   it("records but does not echo Tauri's IPC fallback warning", () => {
@@ -205,14 +227,27 @@ describe("diagnostics startup transient suppression", () => {
     console.warn = (...args: unknown[]) => {
       echoed = args;
     };
-    const cleanup = installCapture();
+    install();
     console.warn(
       "IPC custom protocol failed, Tauri will now use the postMessage interface instead",
       new TypeError("Failed to fetch"),
     );
     assert.equal(echoed, null);
     assert.equal(getDiagnosticsSnapshot().records[0]?.level, "warning");
-    cleanup();
+  });
+
+  it("echoes the IPC fallback warning after the startup window", () => {
+    win.__TAURI_INTERNALS__ = {};
+    let echoed: unknown[] | null = null;
+    console.warn = (...args: unknown[]) => {
+      echoed = args;
+    };
+    install();
+    Date.now = () => realDateNow() + 60_000;
+    const message =
+      "IPC custom protocol failed, Tauri will now use the postMessage interface instead";
+    console.warn(message);
+    assert.deepEqual(echoed, [message]);
   });
 
   it("still echoes ordinary warnings under Tauri", () => {
@@ -221,9 +256,8 @@ describe("diagnostics startup transient suppression", () => {
     console.warn = (...args: unknown[]) => {
       echoed = args;
     };
-    const cleanup = installCapture();
+    install();
     console.warn("a normal warning");
     assert.deepEqual(echoed, ["a normal warning"]);
-    cleanup();
   });
 });
