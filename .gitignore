@@ -36,3 +36,6 @@ private/
 # not committed to the repo, to save space.
 docs/assets/screenshots/
 python/examples/my-map.geolibre.json
+
+# Cloudflare Workers local dev state (wrangler dev / miniflare)
+.wrangler/

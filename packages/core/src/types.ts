@@ -236,6 +236,53 @@ export interface MapViewState {
   bbox?: [number, number, number, number];
 }
 
+/**
+ * Live multi-user collaboration (issue #307). These types describe the
+ * *ephemeral* session state the store holds while a live session is active. It
+ * is intentionally never written to the `.geolibre.json` project file (the
+ * `project.ts` serializers never read it) and never tracked in undo history (the
+ * store's `partialize` never lists it), so it resets cleanly on reload.
+ */
+export type CollaborationRole = "host" | "guest";
+
+/** Whether guests may edit (`co-edit`) or only watch (`view-only`). */
+export type CollaborationMode = "view-only" | "co-edit";
+
+export interface CollaborationParticipant {
+  clientId: string;
+  displayName: string;
+  color: string;
+  role: CollaborationRole;
+}
+
+/** A remote participant's live cursor + viewport, used to render presence. */
+export interface CollaborationPresence {
+  displayName: string;
+  color: string;
+  cursor?: { lng: number; lat: number } | null;
+  view?: MapViewState | null;
+}
+
+export interface CollaborationState {
+  /** True once connected and joined to a session. */
+  isActive: boolean;
+  /** True while connecting/reconnecting (UI shows a spinner). */
+  connecting: boolean;
+  sessionId: string | null;
+  clientId: string | null;
+  role: CollaborationRole | null;
+  mode: CollaborationMode;
+  selfName: string;
+  selfColor: string;
+  participants: CollaborationParticipant[];
+  /** Remote presence keyed by participant clientId (never includes self). */
+  presence: Record<string, CollaborationPresence>;
+  /** When true, this participant's camera follows the host's viewport. */
+  followHost: boolean;
+  /** Last human-readable error, surfaced in the Collaborate dialog. */
+  error: string | null;
+}
+
 /** Map projection the renderer uses. Mirrors the GlobeControl toggle. */
 export type MapProjection = "globe" | "mercator";
 

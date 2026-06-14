@@ -1,13 +1,12 @@
 import {
   parseProject,
-  projectFromStore,
   serializeProject,
   useAppStore,
   type GeoLibreProject,
 } from "@geolibre/core";
 import { type RefObject, useEffect } from "react";
 import type { MapController } from "@geolibre/map";
-import { getPluginManager } from "./usePlugins";
+import { buildProjectSnapshot } from "../lib/build-project-snapshot";
 import { getEmbedHost, isEmbedded } from "./embedHost";
 
 // How long to wait after the last store change before posting a fresh project
@@ -71,29 +70,8 @@ export function useEmbedBridge(
     let lastLoadedSeq = 0;
     let lastPostedContent: string | null = null;
 
-    const buildProject = (): GeoLibreProject => {
-      const state = useAppStore.getState();
-      return projectFromStore({
-        projectName: state.projectName,
-        // Mirror the Save/Share path: read the live camera from the controller
-        // so pan/zoom round-trips, falling back to the store before the map is
-        // ready.
-        mapView: mapControllerRef.current?.readView() ?? state.mapView,
-        basemapStyleUrl: state.basemapStyleUrl,
-        basemapVisible: state.basemapVisible,
-        basemapOpacity: state.basemapOpacity,
-        layers: state.layers,
-        layerGroups: state.layerGroups,
-        preferences: state.preferences,
-        plugins: {
-          ...getPluginManager().getProjectState(),
-          manifestUrls: state.projectPlugins?.manifestUrls ?? [],
-        },
-        legend: state.legend,
-        storymap: state.storymap,
-        metadata: state.metadata,
-      });
-    };
+    const buildProject = (): GeoLibreProject =>
+      buildProjectSnapshot(mapControllerRef);
 
     const postState = () => {
       if (disposed) return;
@@ -198,5 +176,6 @@ export function useEmbedBridge(
     };
     // Mount-only: mapControllerRef is a stable ref, so the bridge is set up
     // once and reads the live controller through the ref inside buildProject.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 }

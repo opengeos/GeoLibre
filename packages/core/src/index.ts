@@ -13,6 +13,7 @@ export {
 } from "./storymap-io";
 export {
   clearHistory,
+  DEFAULT_COLLABORATION_STATE,
   projectPathLabel,
   redo,
   undo,

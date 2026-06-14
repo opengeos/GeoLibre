@@ -111,6 +111,7 @@ import {
   Database,
   FilePen,
   Share2,
+  Users,
   FilePlus2,
   FileText,
   Folder,
@@ -194,6 +195,8 @@ import { AboutDialog } from "./AboutDialog";
 import { NewProjectDialog } from "./NewProjectDialog";
 import { ManagePluginsDialog } from "./ManagePluginsDialog";
 import { ShareProjectDialog } from "./ShareProjectDialog";
+import { CollaborateDialog } from "./CollaborateDialog";
+import { useCollaboration } from "../../hooks/useCollaboration";
 import { SettingsDialog } from "./SettingsDialog";
 import { PrintLayoutDialog } from "./PrintLayoutDialog";
 
@@ -451,6 +454,17 @@ export function TopToolbar({
   const [projectUrlDialogOpen, setProjectUrlDialogOpen] = useState(false);
   const [managePluginsOpen, setManagePluginsOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [collaborateDialogOpen, setCollaborateDialogOpen] = useState(false);
+  const collaboration = useCollaboration(mapControllerRef);
+  // When opened via a `?collab=<code>` share link, auto-open the Collaborate
+  // dialog (which prefills the code) so the recipient only picks a name and
+  // joins, instead of having to find the Project menu first.
+  useEffect(() => {
+    if (!collaboration.enabled) return;
+    if (new URLSearchParams(window.location.search).get("collab")) {
+      setCollaborateDialogOpen(true);
+    }
+  }, [collaboration.enabled]);
   const [projectUrl, setProjectUrl] = useState("");
   const [projectUrlError, setProjectUrlError] = useState<string | null>(null);
   const [projectUrlLoading, setProjectUrlLoading] = useState(false);
@@ -1111,6 +1125,18 @@ export function TopToolbar({
       icon: Share2,
       run: () => setShareDialogOpen(true),
     },
+    // Only surfaced when live collaboration is configured (env flag).
+    ...(collaboration.enabled
+      ? [
+          {
+            id: "project.collaborate",
+            title: t("toolbar.command.projectCollaborate"),
+            group: t("toolbar.commandGroup.project"),
+            icon: Users,
+            run: () => setCollaborateDialogOpen(true),
+          },
+        ]
+      : []),
     {
       id: "project.print",
       title: t("toolbar.command.projectPrint"),
@@ -1580,6 +1606,12 @@ export function TopToolbar({
             <Share2 className="mr-2 h-3.5 w-3.5" />
             {t("toolbar.item.shareEllipsis")}
           </DropdownMenuItem>
+          {collaboration.enabled && (
+            <DropdownMenuItem onSelect={() => setCollaborateDialogOpen(true)}>
+              <Users className="mr-2 h-3.5 w-3.5" />
+              {t("toolbar.item.collaborateEllipsis")}
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={handleTogglePrintPanel}>
             <Printer className="mr-2 h-3.5 w-3.5" />
@@ -2270,6 +2302,13 @@ export function TopToolbar({
           return { content, filename: `${safeName}.geolibre.json` };
         }}
       />
+      {collaboration.enabled && (
+        <CollaborateDialog
+          open={collaborateDialogOpen}
+          onOpenChange={setCollaborateDialogOpen}
+          api={collaboration}
+        />
+      )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button

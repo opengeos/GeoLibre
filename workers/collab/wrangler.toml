@@ -1,0 +1,24 @@
+name = "geolibre-collab"
+main = "src/index.ts"
+compatibility_date = "2025-03-01"
+
+# Binds the custom domain on deploy. Because geolibre.app is managed in this
+# Cloudflare account, the DNS record and TLS certificate are provisioned
+# automatically on the first deploy.
+[[routes]]
+pattern = "collab.geolibre.app"
+custom_domain = true
+
+# Each live session is one Durable Object instance (addressed by its session
+# code via idFromName), so all participants' sockets land on the same actor and
+# can be fanned out to.
+[[durable_objects.bindings]]
+name = "COLLAB_SESSION"
+class_name = "CollabSession"
+
+# SQLite-backed Durable Object: cheaper, and required for the WebSocket
+# Hibernation API used to keep idle sessions' sockets open without holding the
+# actor in memory.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["CollabSession"]

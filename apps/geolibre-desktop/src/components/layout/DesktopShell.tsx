@@ -57,6 +57,7 @@ import { registerMbtilesProtocol } from "../../lib/mbtiles";
 import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
 import { registerXyzTileProtocol } from "../../lib/xyz-url";
 import { useEmbedBridge } from "../../hooks/useEmbedBridge";
+import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
 import { useCommandBridge } from "../../hooks/useCommandBridge";
 import {
   appendDiagnostic,
@@ -978,6 +979,7 @@ export function DesktopShell({
               onMapDiagnosticEvent={handleMapDiagnosticEvent}
               onControllerReady={handleMapControllerReady}
             />
+            <RemoteCursorsOverlay mapControllerRef={mapControllerRef} />
           </SectionErrorBoundary>
         </main>
         {layoutOptions.stylePanelVisible ? (
