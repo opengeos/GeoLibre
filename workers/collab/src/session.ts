@@ -20,6 +20,10 @@ const MAX_SNAPSHOT_BYTES = 1_000_000;
 // abandoned codes don't accumulate. A rejoin before the alarm fires cancels it.
 const EMPTY_SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 
+// Stateless and reused across frames (snapshots can arrive several times a
+// second), so we don't allocate a new encoder per message.
+const ENCODER = new TextEncoder();
+
 interface SocketAttachment {
   clientId: string;
   displayName: string;
@@ -144,7 +148,7 @@ export class CollabSession extends DurableObject<Env> {
           ws,
           attachment,
           message,
-          new TextEncoder().encode(raw).length,
+          ENCODER.encode(raw).length,
         );
         break;
       case "presence":
@@ -208,7 +212,11 @@ export class CollabSession extends DurableObject<Env> {
       // participant can't claim another's clientId to hijack their presence or
       // collide React keys. The welcome echoes it back for the client to adopt.
       clientId: crypto.randomUUID(),
-      displayName: (message.displayName ?? "").slice(0, 60) || "Guest",
+      // Guard against a non-string displayName (JSON.parse won't enforce the
+      // type) so a crafted frame can't crash the handler on `.slice`.
+      displayName:
+        (typeof message.displayName === "string" ? message.displayName : "")
+          .slice(0, 60) || "Guest",
       // Only accept a hex color; fall back to neutral grey so a hostile value
       // never reaches peers (defense-in-depth with the client's DOM rendering).
       color: /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(message.color)
@@ -228,7 +236,9 @@ export class CollabSession extends DurableObject<Env> {
       rev: rev ?? 0,
     });
 
-    this.broadcastParticipants();
+    // The joiner already has the up-to-date list from `welcome` above; only the
+    // other participants need the update.
+    this.broadcastParticipants(ws);
   }
 
   private async handleSnapshot(
@@ -260,8 +270,10 @@ export class CollabSession extends DurableObject<Env> {
     // The project was already parsed in webSocketMessage; store and forward it
     // directly. The relay never inspects the project's internals.
     const project = message.project ?? null;
-    const rev =
-      ((await this.ctx.storage.get<number>("rev")) ?? message.rev) + 1;
+    // `rev` is written during /init before any socket can join, so the stored
+    // value is always present; the `?? 0` is a defensive floor, never the
+    // client's counter (a server-owned monotonic value must not trust input).
+    const rev = ((await this.ctx.storage.get<number>("rev")) ?? 0) + 1;
     await this.ctx.storage.put({
       snapshot: JSON.stringify(project),
       rev,
@@ -330,8 +342,11 @@ export class CollabSession extends DurableObject<Env> {
     return result;
   }
 
-  private broadcastParticipants(): void {
-    this.broadcast({ type: "participants", participants: this.participants() });
+  private broadcastParticipants(except?: WebSocket): void {
+    this.broadcast(
+      { type: "participants", participants: this.participants() },
+      except,
+    );
   }
 
   private send(ws: WebSocket, message: ServerMessage): void {
