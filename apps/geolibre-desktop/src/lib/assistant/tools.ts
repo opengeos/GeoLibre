@@ -391,12 +391,12 @@ export function createAssistantTools(
 
   const addTileLayer = tool({
     name: "add_tile_layer",
-    description: `Add an XYZ raster tile basemap/layer to the map. Use a known name (${NAMED_TILE_BASEMAPS.map((basemap) => basemap.id).join(", ")}) or a custom XYZ url template containing {z}/{x}/{y}. You know the common imagery URLs (e.g. Google Satellite is https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}), so add them directly instead of asking the user. The layer is placed underneath existing layers so it acts as a basemap.`,
+    description: `Add an XYZ raster tile basemap/layer to the map. Use a known name (${NAMED_TILE_BASEMAPS.map((basemap) => basemap.id).join(", ")}) or a custom XYZ url template containing {z}/{x}/{y}. The layer is placed underneath existing layers so it acts as a basemap.`,
     inputSchema: z.object({
       basemap: z
         .string()
         .optional()
-        .describe("Known basemap name, e.g. 'google satellite', 'esri imagery', 'opentopomap'."),
+        .describe("Known basemap name, e.g. 'esri imagery', 'opentopomap', 'osm'."),
       url: z
         .string()
         .optional()

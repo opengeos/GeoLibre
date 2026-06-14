@@ -7,18 +7,28 @@ import {
 
 describe("findNamedTileBasemap", () => {
   it("matches by exact id", () => {
-    const basemap = findNamedTileBasemap("google-satellite");
-    assert.equal(basemap?.id, "google-satellite");
+    const basemap = findNamedTileBasemap("esri-imagery");
+    assert.equal(basemap?.id, "esri-imagery");
     assert.match(basemap?.url ?? "", /\{z\}/);
     assert.match(basemap?.url ?? "", /\{x\}/);
     assert.match(basemap?.url ?? "", /\{y\}/);
   });
 
   it("matches by label, case-insensitively and fuzzily", () => {
-    assert.equal(findNamedTileBasemap("Google Satellite")?.id, "google-satellite");
-    assert.equal(findNamedTileBasemap("google satellite")?.id, "google-satellite");
+    assert.equal(findNamedTileBasemap("Esri World Imagery")?.id, "esri-imagery");
     assert.equal(findNamedTileBasemap("esri imagery")?.id, "esri-imagery");
+    assert.equal(findNamedTileBasemap("opentopomap")?.id, "opentopomap");
     assert.equal(findNamedTileBasemap("openstreetmap")?.id, "osm");
+  });
+
+  it("does not include undocumented Google tile endpoints", () => {
+    assert.equal(findNamedTileBasemap("google-satellite"), null);
+    for (const basemap of NAMED_TILE_BASEMAPS) {
+      assert.ok(
+        !/google/i.test(basemap.url),
+        `${basemap.id} should not use a Google endpoint`,
+      );
+    }
   });
 
   it("returns null for unknown or empty references", () => {

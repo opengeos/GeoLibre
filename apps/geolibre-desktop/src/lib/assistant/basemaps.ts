@@ -9,36 +9,13 @@ export interface NamedTileBasemap {
 }
 
 /**
- * Curated registry of common imagery/tile basemaps so the assistant can add,
- * e.g., "Google Satellite" without needing to look up a URL. These are raster
- * XYZ layers (added on the map), distinct from the MapLibre vector styles that
- * `set_basemap` switches between.
+ * Curated registry of common imagery/tile basemaps with documented usage terms
+ * so the assistant can add, e.g., "Esri World Imagery" without looking up a URL.
+ * These are raster XYZ layers (added on the map), distinct from the MapLibre
+ * vector styles that `set_basemap` switches between. (Undocumented endpoints
+ * such as Google's `mt*.google.com` tiles are intentionally excluded.)
  */
 export const NAMED_TILE_BASEMAPS: readonly NamedTileBasemap[] = [
-  {
-    id: "google-satellite",
-    label: "Google Satellite",
-    url: "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
-    attribution: "© Google",
-  },
-  {
-    id: "google-hybrid",
-    label: "Google Hybrid",
-    url: "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
-    attribution: "© Google",
-  },
-  {
-    id: "google-roads",
-    label: "Google Roads",
-    url: "https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
-    attribution: "© Google",
-  },
-  {
-    id: "google-terrain",
-    label: "Google Terrain",
-    url: "https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}",
-    attribution: "© Google",
-  },
   {
     id: "esri-imagery",
     label: "Esri World Imagery",
@@ -80,9 +57,9 @@ function tokens(value: string): string[] {
 }
 
 /**
- * Resolve a basemap by id or (fuzzy) label, e.g. "google satellite",
- * "esri imagery", or "satellite". Tries exact id, exact label, substring, then
- * a token-subset match (every word of the query appears in the id+label).
+ * Resolve a basemap by id or (fuzzy) label, e.g. "esri imagery", "opentopomap",
+ * or "imagery". Tries exact id, exact label, substring, then a token-subset
+ * match (every word of the query appears in the id+label).
  */
 export function findNamedTileBasemap(reference: string): NamedTileBasemap | null {
   const target = reference.trim().toLowerCase();
