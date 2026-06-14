@@ -149,6 +149,25 @@ unset, the hook is inert and all collaboration UI is hidden, so production build
 ship the feature dark. The Tauri CSP `connect-src` must list the wss host (the
 existing `https:` directive does **not** authorize `wss:`).
 
+## Deploying the relay (`collab.geolibre.app`)
+
+The relay deploys to Cloudflare Workers the same way as `workers/viewer`:
+
+- **CI:** `.github/workflows/deploy-collab.yml` deploys on any push to `main`
+  that touches `workers/collab/**` (or via manual `workflow_dispatch`). It reuses
+  the existing `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` repo secrets — the
+  token needs **Workers Scripts: Edit** and **Durable Objects** permissions.
+- **Manual:** `cd workers/collab && npx wrangler deploy`.
+
+`wrangler.toml` already declares the `collab.geolibre.app` custom-domain route and
+the SQLite Durable Object migration, so the first deploy provisions DNS, TLS, and
+the DO class automatically — no manual Cloudflare dashboard steps. SQLite-backed
+Durable Objects are available on the free Workers plan.
+
+Once the relay is live, point the app at it by setting
+`VITE_GEOLIBRE_COLLAB_URL=wss://collab.geolibre.app` in the web/Pages build
+environment. Until that env var is set, the feature stays dark.
+
 ## Limitations / v2
 
 - **Last-write-wins**: simultaneous co-edits race; the last debounced snapshot
