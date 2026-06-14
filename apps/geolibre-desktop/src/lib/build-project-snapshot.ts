@@ -39,6 +39,7 @@ export function buildProjectSnapshot(
     },
     legend: state.legend,
     storymap: state.storymap,
+    models: state.models,
     metadata: state.metadata,
   });
 }

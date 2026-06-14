@@ -170,6 +170,55 @@ describe("project parsing", () => {
     assert.deepEqual(reparsed.legend, legend);
   });
 
+  it("round-trips saved processing models through projectFromStore", () => {
+    const models = [
+      {
+        id: "model-1",
+        name: "Buffer then centroids",
+        steps: [
+          {
+            id: "step-1",
+            toolId: "buffer",
+            parameters: { layer: "roads", distance: 2, units: "kilometers" },
+          },
+          { id: "step-2", toolId: "centroids", parameters: {} },
+        ],
+      },
+    ];
+    const project = projectFromStore({
+      projectName: "Models",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [],
+      preferences: createEmptyProject().preferences,
+      models,
+      metadata: {},
+    });
+    assert.deepEqual(project.models, models);
+    const reparsed = parseProject(serializeProject(project));
+    assert.deepEqual(reparsed.models, models);
+  });
+
+  it("drops invalid models and omits the key when none remain", () => {
+    const project = projectFromStore({
+      projectName: "Models",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [],
+      preferences: createEmptyProject().preferences,
+      // Missing id / no usable steps: normalized away entirely.
+      models: [
+        { id: "", name: "no id", steps: [] },
+      ] as never,
+      metadata: {},
+    });
+    assert.equal("models" in project, false);
+  });
+
   it("saves original XYZ tile templates instead of resolved URLs", () => {
     const project = projectFromStore({
       projectName: "Tiles",

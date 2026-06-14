@@ -6,6 +6,13 @@ export {
   countFeaturesAlgorithm,
 } from "./registry";
 export { VECTOR_TOOLS, getVectorTool } from "./vector-tools";
+export {
+  runAlgorithmCapture,
+  runModel,
+  type RunnerHost,
+  type ModelStepResult,
+  type RunModelOptions,
+} from "./runner";
 export { NETWORK_TOOLS, getNetworkTool } from "./network-tools";
 export {
   STATISTICS_TOOLS,

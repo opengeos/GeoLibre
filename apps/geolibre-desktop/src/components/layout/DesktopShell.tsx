@@ -137,6 +137,20 @@ const VectorToolsDialog = lazy(() =>
     }),
 );
 
+const ModelBuilderDialog = lazy(() =>
+  import("../processing/ModelBuilderDialog")
+    .then((module) => ({
+      default: module.ModelBuilderDialog,
+    }))
+    .catch((error) => {
+      // Same chunk-load fallback rationale as ProcessingDialog above.
+      console.error("Failed to load ModelBuilderDialog", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/ModelBuilderDialog").ModelBuilderDialog;
+      return { default: Fallback };
+    }),
+);
+
 const NetworkToolsDialog = lazy(() =>
   import("../processing/NetworkToolsDialog")
     .then((module) => ({
@@ -1099,6 +1113,9 @@ export function DesktopShell({
       </Suspense>
       <Suspense fallback={null}>
         <NetworkToolsDialog mapControllerRef={mapControllerRef} />
+      </Suspense>
+      <Suspense fallback={null}>
+        <ModelBuilderDialog mapControllerRef={mapControllerRef} />
       </Suspense>
       <Suspense fallback={null}>
         <StatisticsToolsDialog mapControllerRef={mapControllerRef} />

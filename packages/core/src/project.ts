@@ -12,6 +12,8 @@ import {
   type LegendConfig,
   type LegendItemOverride,
   type MapViewState,
+  type ProcessingModel,
+  type ProcessingModelStep,
   type ProjectPluginControlPosition,
   type ProjectPluginState,
   type ProjectPreferences,
@@ -97,6 +99,7 @@ export function parseProject(json: string): GeoLibreProject {
     plugins: normalizeProjectPlugins(data.plugins) ?? undefined,
     legend: normalizeLegendConfig(data.legend),
     storymap: normalizeStoryMap(data.storymap) ?? undefined,
+    models: normalizeModels(data.models) ?? undefined,
     metadata: data.metadata ?? {},
   };
 }
@@ -340,6 +343,53 @@ function normalizeOpacityChanges(value: unknown): StoryLayerOpacityChange[] {
 
 function normalizeString(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+/**
+ * Coerce an untrusted (possibly hand-edited) `models` array into valid
+ * {@link ProcessingModel} records. Drops models and steps without a usable id or
+ * tool id, de-duplicates models by id, and keeps step `parameters` as a plain
+ * object (the runner validates parameter values per tool at run time). Returns
+ * `null` when there is nothing worth persisting, so a model-less project stays
+ * free of the key.
+ *
+ * @param value Raw `models` value from the project JSON.
+ * @returns Normalized models, or `null` when none survive.
+ */
+export function normalizeModels(value: unknown): ProcessingModel[] | null {
+  if (!Array.isArray(value)) return null;
+  const models: ProcessingModel[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const candidate = entry as Partial<ProcessingModel>;
+    const id = normalizeString(candidate.id).trim();
+    if (!id || seen.has(id)) continue;
+    const steps: ProcessingModelStep[] = [];
+    const rawSteps = Array.isArray(candidate.steps) ? candidate.steps : [];
+    const seenStepIds = new Set<string>();
+    for (const rawStep of rawSteps) {
+      if (!rawStep || typeof rawStep !== "object") continue;
+      const step = rawStep as Partial<ProcessingModelStep>;
+      const stepId = normalizeString(step.id).trim();
+      const toolId = normalizeString(step.toolId).trim();
+      if (!stepId || !toolId || seenStepIds.has(stepId)) continue;
+      seenStepIds.add(stepId);
+      const inputParam = normalizeString(step.inputParam).trim();
+      steps.push({
+        id: stepId,
+        toolId,
+        parameters:
+          step.parameters && typeof step.parameters === "object"
+            ? (step.parameters as Record<string, unknown>)
+            : {},
+        ...(inputParam ? { inputParam } : {}),
+      });
+    }
+    seen.add(id);
+    models.push({ id, name: normalizeString(candidate.name), steps });
+  }
+  return models.length > 0 ? models : null;
 }
 
 function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
@@ -623,6 +673,7 @@ export function projectFromStore(state: {
   plugins?: ProjectPluginState | null;
   legend?: LegendConfig | null;
   storymap?: StoryMap | null;
+  models?: ProcessingModel[] | null;
   metadata: Record<string, unknown>;
 }): GeoLibreProject {
   const styles: Record<string, LayerStyle> = {};
@@ -632,6 +683,7 @@ export function projectFromStore(state: {
   const plugins = normalizeProjectPlugins(state.plugins);
   const legend = normalizeLegendConfig(state.legend);
   const storymap = normalizeStoryMap(state.storymap);
+  const models = normalizeModels(state.models);
   // Persist every group (including empty folders, which the UI supports). The
   // key is spread only when non-empty so legacy readers that don't recognise it
   // are unaffected; normalizeLayerGroups round-trips them back on load.
@@ -650,6 +702,7 @@ export function projectFromStore(state: {
     ...(plugins ? { plugins } : {}),
     ...(legend ? { legend } : {}),
     ...(storymap ? { storymap } : {}),
+    ...(models ? { models } : {}),
     metadata: state.metadata,
   };
 }
@@ -722,6 +775,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
   projectPlugins: ProjectPluginState | null;
   legend: LegendConfig;
   storymap: StoryMap | null;
+  models: ProcessingModel[];
   metadata: Record<string, unknown>;
 } {
   const layers = project.layers.map((layer) => ({
@@ -759,6 +813,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
     projectPlugins: normalizeProjectPlugins(project.plugins),
     legend: normalizeLegendConfig(project.legend) ?? { ...DEFAULT_LEGEND_CONFIG },
     storymap: normalizeStoryMap(project.storymap),
+    models: normalizeModels(project.models) ?? [],
     metadata: project.metadata,
   };
 }

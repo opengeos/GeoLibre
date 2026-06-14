@@ -138,6 +138,7 @@ import {
   Sparkles,
   Sun,
   Undo2,
+  Workflow,
   Wrench,
   X,
 } from "lucide-react";
@@ -413,6 +414,7 @@ export function TopToolbar({
   const setNetworkToolOpen = useAppStore((s) => s.setNetworkToolOpen);
   const setStatisticsToolOpen = useAppStore((s) => s.setStatisticsToolOpen);
   const setGeocodeOpen = useAppStore((s) => s.setGeocodeOpen);
+  const setModelBuilderOpen = useAppStore((s) => s.setModelBuilderOpen);
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
   const setSegmentationOpen = useAppStore((s) => s.setSegmentationOpen);
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
@@ -643,6 +645,7 @@ export function TopToolbar({
       },
       legend: state.legend,
       storymap: state.storymap,
+      models: state.models,
       metadata: state.metadata,
     });
     return {
@@ -1317,6 +1320,14 @@ export function TopToolbar({
       run: () => setGeocodeOpen(true),
     },
     {
+      id: "proc.modelBuilder",
+      title: t("toolbar.command.modelBuilder"),
+      group: t("toolbar.commandGroup.processing"),
+      keywords: "batch model pipeline chain modeler workflow graphical",
+      icon: Workflow,
+      run: () => setModelBuilderOpen(true),
+    },
+    {
       id: "proc.segmentation",
       title: t("toolbar.command.segmentation"),
       group: t("toolbar.commandGroup.processing"),
@@ -1870,6 +1881,9 @@ export function TopToolbar({
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setGeocodeOpen(true)}>
             {t("toolbar.item.geocode")}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setModelBuilderOpen(true)}>
+            {t("toolbar.item.modelBuilder")}
           </DropdownMenuItem>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>

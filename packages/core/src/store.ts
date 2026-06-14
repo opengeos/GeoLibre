@@ -35,6 +35,7 @@ import {
   type LayerStyle,
   type LegendConfig,
   type MapViewState,
+  type ProcessingModel,
   type ProjectPluginState,
   type ProjectPreferences,
   type RecentProjectEntry,
@@ -128,6 +129,8 @@ export interface AppState {
   projectPlugins: ProjectPluginState | null;
   legend: LegendConfig;
   storymap: StoryMap | null;
+  /** Saved processing pipelines (batch/model chaining; issue #344). */
+  models: ProcessingModel[];
   selectedLayerId: string | null;
   selectedFeatureId: string | null;
   identifyLayerId: string | null;
@@ -154,6 +157,7 @@ export interface AppState {
     attributeTableOpen: boolean;
     storymapPanelOpen: boolean;
     storymapPresenting: boolean;
+    modelBuilderOpen: boolean;
     zoomToSelectedFeature: boolean;
   };
 
@@ -192,7 +196,13 @@ export interface AppState {
   setAttributeTableOpen: (open: boolean) => void;
   setStorymapPanelOpen: (open: boolean) => void;
   setStorymapPresenting: (presenting: boolean) => void;
+  setModelBuilderOpen: (open: boolean) => void;
   setZoomToSelectedFeature: (enabled: boolean) => void;
+
+  /** Insert a new model or replace an existing one matching by `id`. */
+  saveModel: (model: ProcessingModel) => void;
+  /** Remove a saved model by id. */
+  deleteModel: (id: string) => void;
 
   setStorymap: (storymap: StoryMap | null) => void;
   updateStorymapSettings: (
@@ -375,6 +385,7 @@ export const useAppStore = create<AppState>()(
       projectPlugins: null,
       legend: { ...DEFAULT_LEGEND_CONFIG },
       storymap: null,
+      models: [],
       selectedLayerId: null,
       selectedFeatureId: null,
       identifyLayerId: null,
@@ -398,6 +409,7 @@ export const useAppStore = create<AppState>()(
         attributeTableOpen: false,
         storymapPanelOpen: false,
         storymapPresenting: false,
+        modelBuilderOpen: false,
         zoomToSelectedFeature: false,
       },
 
@@ -471,8 +483,24 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ ui: { ...s.ui, storymapPanelOpen: open } })),
       setStorymapPresenting: (presenting) =>
         set((s) => ({ ui: { ...s.ui, storymapPresenting: presenting } })),
+      setModelBuilderOpen: (open) =>
+        set((s) => ({ ui: { ...s.ui, modelBuilderOpen: open } })),
       setZoomToSelectedFeature: (enabled) =>
         set((s) => ({ ui: { ...s.ui, zoomToSelectedFeature: enabled } })),
+
+      saveModel: (model) =>
+        set((s) => {
+          const exists = s.models.some((m) => m.id === model.id);
+          const models = exists
+            ? s.models.map((m) => (m.id === model.id ? model : m))
+            : [...s.models, model];
+          return { models, isDirty: true };
+        }),
+      deleteModel: (id) =>
+        set((s) => ({
+          models: s.models.filter((m) => m.id !== id),
+          isDirty: true,
+        })),
 
       setStorymap: (storymap) => set({ storymap, isDirty: true }),
       updateStorymapSettings: (patch) =>

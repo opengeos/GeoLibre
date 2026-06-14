@@ -510,6 +510,38 @@ export const DEFAULT_STORY_MAP: StoryMap = {
   chapters: [],
 };
 
+/**
+ * One step in a {@link ProcessingModel}: a processing tool invoked with a fixed
+ * set of parameters. The runner chains steps by feeding each step's output layer
+ * into the next step's input layer parameter (`inputParam`, default `"layer"`),
+ * so a step's stored `parameters` for that input is ignored for every step after
+ * the first.
+ */
+export interface ProcessingModelStep {
+  /** Stable id, unique within the model (used as the React key and run label). */
+  id: string;
+  /** The processing tool's registry id (e.g. `"buffer"`). */
+  toolId: string;
+  /** Parameter values keyed by the tool's parameter ids. */
+  parameters: Record<string, unknown>;
+  /**
+   * Which `type: "layer"` parameter receives the previous step's output. Defaults
+   * to `"layer"`; set it for tools whose primary input is named differently.
+   */
+  inputParam?: string;
+}
+
+/**
+ * A reusable, sequential processing pipeline ("model" in QGIS Graphical Modeler
+ * / ArcGIS ModelBuilder terms). Steps run in order; each step's result feeds the
+ * next. Saved in the project file so it can be reloaded and re-run.
+ */
+export interface ProcessingModel {
+  id: string;
+  name: string;
+  steps: ProcessingModelStep[];
+}
+
 export interface GeoLibreProject {
   version: string;
   name: string;
@@ -526,6 +558,8 @@ export interface GeoLibreProject {
   /** User customizations for the Print Layout legend. */
   legend?: LegendConfig;
   storymap?: StoryMap;
+  /** Saved processing pipelines (batch/model chaining; issue #344). */
+  models?: ProcessingModel[];
   metadata: Record<string, unknown>;
 }
 
