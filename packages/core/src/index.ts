@@ -50,6 +50,7 @@ export {
   shouldThrottle,
   rowCap,
   geocoderMinIntervalMs,
+  geocoderNeedsApiKey,
   nextDelayMs,
   buildForwardGeocodeUrl,
   buildReverseGeocodeUrl,

@@ -3,6 +3,7 @@ import {
   geocodeForward,
   geocodeMatchToFeature,
   geocoderMinIntervalMs,
+  geocoderNeedsApiKey,
   GEOCODING_PROVIDERS,
   getGeocodingProvider,
   nextDelayMs,
@@ -130,7 +131,7 @@ export function GeocodeDialog({
     [geocodingPrefs, providerId],
   );
   const provider = getGeocodingProvider(providerId);
-  const missingApiKey = provider.requiresApiKey && !config.apiKey;
+  const missingApiKey = geocoderNeedsApiKey(config) && !config.apiKey;
   const cap = rowCap(config.forwardEndpoint);
   // Count only rows that will actually be geocoded (non-empty address), so the
   // cap warning matches the requests sent rather than the raw CSV row count.
@@ -186,10 +187,7 @@ export function GeocodeDialog({
     const requests = csvRowsToGeocodeRequests(csv.rows, [addressColumn]);
     const skippedEmpty = csv.rows.length - requests.length;
     const toProcess = Number.isFinite(cap) ? requests.slice(0, cap) : requests;
-    const interval = geocoderMinIntervalMs(
-      config.providerId,
-      config.forwardEndpoint,
-    );
+    const interval = geocoderMinIntervalMs(config.forwardEndpoint);
 
     appendLog(
       t("geocode.usingProvider", {

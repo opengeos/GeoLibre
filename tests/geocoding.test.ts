@@ -6,6 +6,7 @@ import {
   csvRowsToGeocodeRequests,
   geocodeMatchToFeature,
   geocoderMinIntervalMs,
+  geocoderNeedsApiKey,
   GEOCODING_PROVIDERS,
   getGeocodingProvider,
   nextDelayMs,
@@ -197,20 +198,57 @@ describe("shouldThrottle / rowCap", () => {
 });
 
 describe("geocoderMinIntervalMs", () => {
-  it("paces only the public Nominatim host", () => {
+  it("paces by hostname: only the public Nominatim host", () => {
     assert.equal(
-      geocoderMinIntervalMs("nominatim", PUBLIC_FORWARD),
+      geocoderMinIntervalMs(PUBLIC_FORWARD),
       NOMINATIM_MIN_INTERVAL_MS,
     );
-    assert.equal(geocoderMinIntervalMs("nominatim", SELF_HOSTED), 0);
+    assert.equal(geocoderMinIntervalMs(SELF_HOSTED), 0);
+    assert.equal(geocoderMinIntervalMs("https://api.mapbox.com/x"), 0);
   });
 
-  it("does not pace keyed providers", () => {
+  it("paces any provider pointed at the public Nominatim host (matches rowCap)", () => {
+    // A non-Nominatim provider aimed at the public host must still be paced.
     assert.equal(
-      geocoderMinIntervalMs("mapbox", "https://api.mapbox.com/x"),
-      0,
+      geocoderMinIntervalMs(PUBLIC_FORWARD),
+      NOMINATIM_MIN_INTERVAL_MS,
     );
-    assert.equal(geocoderMinIntervalMs("google", "https://maps.googleapis.com"), 0);
+    assert.equal(rowCap(PUBLIC_FORWARD), PUBLIC_GEOCODE_ROW_CAP);
+  });
+});
+
+describe("geocoderNeedsApiKey", () => {
+  it("requires a key for the keyed providers", () => {
+    for (const providerId of ["arcgis", "mapbox", "google"] as const) {
+      assert.equal(
+        geocoderNeedsApiKey(resolveGeocoderConfig({ providerId, apiKeys: {} })),
+        true,
+      );
+    }
+  });
+
+  it("requires a key for hosted Pelias but not a self-hosted endpoint", () => {
+    assert.equal(
+      geocoderNeedsApiKey(resolveGeocoderConfig({ providerId: "pelias", apiKeys: {} })),
+      true,
+    );
+    assert.equal(
+      geocoderNeedsApiKey(
+        resolveGeocoderConfig({
+          providerId: "pelias",
+          apiKeys: {},
+          forwardEndpoint: "https://pelias.internal.example.org/v1/search",
+        }),
+      ),
+      false,
+    );
+  });
+
+  it("never requires a key for Nominatim", () => {
+    assert.equal(
+      geocoderNeedsApiKey(resolveGeocoderConfig({ providerId: "nominatim", apiKeys: {} })),
+      false,
+    );
   });
 });
 

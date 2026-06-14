@@ -727,17 +727,36 @@ export function rowCap(endpoint: string): number {
 }
 
 /**
- * Minimum spacing (ms) between requests for a given provider/endpoint. Only the
- * public Nominatim host carries the 1 req/sec policy; keyed providers and
- * self-hosted endpoints are not paced by us.
+ * Minimum spacing (ms) between requests for `endpoint`. Gated on the hostname
+ * (like {@link rowCap}), not the selected provider, so pointing any provider at
+ * the public Nominatim host still honors its 1 req/sec policy; keyed providers
+ * and self-hosted endpoints are not paced by us.
  */
-export function geocoderMinIntervalMs(
-  providerId: GeocodingProviderId,
-  endpoint: string,
-): number {
-  return providerId === "nominatim" && shouldThrottle(endpoint)
-    ? NOMINATIM_MIN_INTERVAL_MS
-    : 0;
+export function geocoderMinIntervalMs(endpoint: string): number {
+  return shouldThrottle(endpoint) ? NOMINATIM_MIN_INTERVAL_MS : 0;
+}
+
+/** Hosted Pelias service that rejects keyless requests. */
+const GEOCODE_EARTH_HOST_SUFFIX = "geocode.earth";
+
+/**
+ * Whether `config` cannot geocode without an API key. True for the keyed
+ * providers (ArcGIS, Mapbox, Google) and for Pelias only when it targets the
+ * hosted geocode.earth endpoint (a self-hosted Pelias needs no key). Drives the
+ * batch dialog's "missing key" warning and disabled run.
+ */
+export function geocoderNeedsApiKey(config: GeocoderConfig): boolean {
+  const provider = getGeocodingProvider(config.providerId);
+  if (provider.requiresApiKey) return true;
+  if (provider.id === "pelias") {
+    try {
+      const host = new URL(config.forwardEndpoint).hostname;
+      return host === GEOCODE_EARTH_HOST_SUFFIX || host.endsWith(`.${GEOCODE_EARTH_HOST_SUFFIX}`);
+    } catch {
+      return false;
+    }
+  }
+  return false;
 }
 
 /**

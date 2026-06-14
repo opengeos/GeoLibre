@@ -922,7 +922,7 @@ export function SettingsDialog({
                     const provider = getGeocodingProvider(
                       draftPreferences.geocoding.providerId,
                     );
-                    const apiKeyId = "geocoding-api-key";
+                    const apiKeyId = `geocoding-api-key-${provider.id}`;
                     const apiKeyRevealed = revealedValueIds.has(apiKeyId);
                     return (
                       <div className="space-y-4">
