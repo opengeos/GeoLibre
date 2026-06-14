@@ -51,10 +51,11 @@ def get_color_ramp(name: str) -> list[str]:
         name: A ramp name (e.g. ``"viridis"``).
 
     Returns:
-        The ramp's anchor hex colors, or the default ramp's when ``name`` is
-        unknown.
+        A fresh list of the ramp's anchor hex colors, or the default ramp's when
+        ``name`` is unknown. A copy is returned so callers cannot mutate the
+        shared :data:`VECTOR_COLOR_RAMPS` entries.
     """
-    return VECTOR_COLOR_RAMPS.get(name, VECTOR_COLOR_RAMPS[_DEFAULT_RAMP])
+    return list(VECTOR_COLOR_RAMPS.get(name, VECTOR_COLOR_RAMPS[_DEFAULT_RAMP]))
 
 
 def _parse_hex(value: str) -> tuple[int, int, int]:

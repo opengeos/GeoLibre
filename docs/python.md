@@ -60,11 +60,13 @@ m.add_basemap("dark")
 m.set_center(-120, 47, zoom=8)
 ```
 
-`add_raster` / `add_cog` also accept a **local** GeoTIFF path on the kernel host
-(local Jupyter / VS Code): the file is served by the bundled localhost server so
-the app can read it. That URL is session-scoped, so a project saved with a local
-raster will not restore it when reopened later — pass a hosted URL for durable
-projects.
+`add_raster` / `add_cog` also accept a **local** GeoTIFF path on the kernel host:
+the file is served by the bundled localhost server so the app can read it. This
+only works where the **browser can reach the kernel's localhost** (local Jupyter,
+VS Code); on remote/browser-separated setups (Colab, JupyterHub, remote servers)
+the localhost route is unreachable, so pass a hosted URL there. The served URL is
+also session-scoped, so a project saved with a local raster will not restore it
+when reopened later — pass a hosted URL for durable projects.
 
 Add markers and data-driven symbology without precomputing styles:
 
@@ -191,8 +193,8 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `add_wms(endpoint, layers, name=, styles=, image_format=, transparent=, tile_size=, **style)` | Add a WMS layer (GetMap, tiled raster). |
 | `add_wmts(url, name=, tile_size=, **style)` | Add a WMTS layer from a tile URL template. |
 | `add_wfs(endpoint, type_name, name=, version=, output_format=, srs_name=, max_features=, **style)` | Add a WFS layer (GetFeature GeoJSON, fetched and inlined). |
-| `add_cog(url, name=, bands=, colormap=, rescale=)` | Add a Cloud Optimized GeoTIFF (URL or a kernel-side local GeoTIFF path). |
-| `add_raster(url, name=, bands=, colormap=, rescale=)` | Add a raster (COG/GeoTIFF), URL or local path; alias of `add_cog`. |
+| `add_cog(url, name=, bands=, colormap=, rescale=, **style)` | Add a Cloud Optimized GeoTIFF (URL or a kernel-side local GeoTIFF path). |
+| `add_raster(url, name=, bands=, colormap=, rescale=, **style)` | Add a raster (COG/GeoTIFF), URL or local path; alias of `add_cog`. |
 | `add_3d_tiles(url, name=, altitude_offset=, request_headers=, **style)` | Add a 3D Tiles `tileset.json`. |
 | `add_video(urls, coordinates, name=, **style)` | Add a georeferenced video (four `[lng, lat]` corners). |
 | `add_basemap(basemap)` | Set the background basemap. |

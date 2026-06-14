@@ -20,7 +20,9 @@ def served(tmp_path, monkeypatch):
     """Boot the static server against a stub bundle and yield helpers.
 
     Resets the module-level server singleton so the test owns a fresh server,
-    then registers a known-content file and returns its URL plus the payload.
+    then registers a known-content file and yields its URL plus the payload.
+    The server is shut down on teardown so its background thread/socket does not
+    leak across the suite.
     """
     # Force a fresh singleton: other tests/imports may have started one already.
     monkeypatch.setattr(_server, "_server", None)
@@ -37,7 +39,15 @@ def served(tmp_path, monkeypatch):
     raster = tmp_path / "dem.tif"
     raster.write_bytes(payload)
     url = _server.register_local_file(raster)
-    return url, payload
+    try:
+        yield url, payload
+    finally:
+        # serve_app set the module-level singleton to this test's server; stop it
+        # before monkeypatch restores the originals.
+        server = _server._server
+        if server is not None:
+            server.shutdown()
+            server.server_close()
 
 
 def _get(url, headers=None):

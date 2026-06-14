@@ -248,6 +248,21 @@ def test_add_markers_rejects_dict_missing_coords(m):
         m.add_markers([{"pop": 5}])
 
 
+def test_add_markers_rejects_non_point_geojson(m):
+    polygon_fc = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {},
+                "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 0]]]},
+            }
+        ],
+    }
+    with pytest.raises(ValueError, match="Point/MultiPoint"):
+        m.add_markers(polygon_fc)
+
+
 def test_add_markers_from_geojson(m):
     fc = {
         "type": "FeatureCollection",
@@ -299,6 +314,18 @@ def test_add_choropleth_builds_graduated_style(m):
 def test_add_choropleth_missing_column_raises(m):
     with pytest.raises(ValueError, match="not found"):
         m.add_choropleth(_choropleth_fc(), "missing")
+
+
+def test_add_choropleth_non_numeric_column_raises(m):
+    fc = {
+        "type": "FeatureCollection",
+        "features": [
+            {"type": "Feature", "properties": {"name": label}, "geometry": None}
+            for label in ("alpha", "beta", "gamma")
+        ],
+    }
+    with pytest.raises(ValueError, match="numeric value"):
+        m.add_choropleth(fc, "name")
 
 
 def test_add_choropleth_style_override_wins(m):

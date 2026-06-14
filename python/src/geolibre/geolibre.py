@@ -712,12 +712,24 @@ class Map(anywidget.AnyWidget):
 
         Raises:
             ValueError: If a sequence entry is not a coordinate pair or a mapping
-                with longitude/latitude keys.
+                with longitude/latitude keys, or if a GeoJSON/geo-interface input
+                carries a non-point geometry (the marker APIs are point-only).
         """
         # Defer dict / GeoJSON-string / __geo_interface__ inputs to the shared
         # loader so a GeoDataFrame of points or a FeatureCollection works as-is.
         if hasattr(points, "__geo_interface__") or isinstance(points, (dict, str)):
-            return _project.load_featurecollection(points)
+            fc = _project.load_featurecollection(points)
+            # The marker APIs are point-only; reject other geometries rather than
+            # silently rendering polygons/lines through a "markers" layer.
+            for feature in fc.get("features", []):
+                geometry = feature.get("geometry") if isinstance(feature, dict) else None
+                geometry_type = geometry.get("type") if isinstance(geometry, dict) else None
+                if geometry_type not in ("Point", "MultiPoint"):
+                    raise ValueError(
+                        "add_markers requires Point/MultiPoint geometries; got "
+                        f"{geometry_type!r}. Use add_geojson for other geometries."
+                    )
+            return fc
 
         features: list[dict[str, Any]] = []
         for entry in points:
@@ -907,6 +919,21 @@ class Map(anywidget.AnyWidget):
         if all(value is None for value in values):
             raise ValueError(
                 f"Column {column!r} not found in any feature's properties"
+            )
+
+        def _is_numeric(value: Any) -> bool:
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                return False
+            return number == number and number not in (float("inf"), float("-inf"))
+
+        # graduated_stops would otherwise fall back to index-based stops for a
+        # non-numeric column, succeeding with misleading symbology; reject it.
+        if not any(_is_numeric(value) for value in values):
+            raise ValueError(
+                f"Column {column!r} must contain at least one numeric value for "
+                "a graduated choropleth"
             )
         stops = graduated_stops(
             values,
