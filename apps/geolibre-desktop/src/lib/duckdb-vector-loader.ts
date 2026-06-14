@@ -15,7 +15,7 @@ import {
 import { ensureGpkgFeatureCount } from "./gpkg-ogr-contents";
 import { getSpatialExtensionPath } from "./spatial-extension-config";
 
-// Re-exported for existing importers (sql-workspace, geopackage-writer, etc.)
+// Re-exported for existing importers (sql-workspace, duckdb-processing, etc.)
 // that reach for these helpers via this module.
 export {
   isGeometryColumnType,

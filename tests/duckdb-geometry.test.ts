@@ -69,6 +69,25 @@ describe("detectGeometryColumn", () => {
     }
   });
 
+  it("matches VARBINARY/BINARY WKB columns", () => {
+    assert.deepEqual(
+      detectGeometryColumn([describeRow("geom", "VARBINARY")]),
+      { column: "geom", isWkb: true },
+    );
+    assert.deepEqual(detectGeometryColumn([describeRow("wkb", "BINARY")]), {
+      column: "wkb",
+      isWkb: true,
+    });
+  });
+
+  it("ignores a WKB-named column that is not a binary type", () => {
+    const detected = detectGeometryColumn([
+      describeRow("id", "BIGINT"),
+      describeRow("geometry", "VARCHAR"),
+    ]);
+    assert.equal(detected, null);
+  });
+
   it("returns null when no geometry column is present", () => {
     const detected = detectGeometryColumn([
       describeRow("id", "BIGINT"),

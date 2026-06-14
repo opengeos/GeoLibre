@@ -59,9 +59,15 @@ export function detectGeometryColumn(
   if (typeof native === "string") {
     return { column: native, isWkb: false };
   }
+  // Require the WKB candidate to be a binary/blob type. Matching on name alone
+  // would route a same-named non-binary column (e.g. a VARCHAR "geometry")
+  // through ST_GeomFromWKB and surface an opaque DuckDB error instead of the
+  // clear "no geometry column" message callers expect.
   const wkb = description.find(
     (row) =>
       typeof row.column_name === "string" &&
+      typeof row.column_type === "string" &&
+      /^(BLOB|BINARY|VARBINARY)/i.test(row.column_type) &&
       WKB_GEOMETRY_COLUMN_NAMES.has(row.column_name.toLowerCase()),
   )?.column_name;
   if (typeof wkb === "string") {
@@ -82,18 +88,25 @@ export function geometryExpr(detected: DetectedGeometry): string {
 /**
  * Wrap a geometry SQL expression in ST_AsGeoJSON, transforming to WGS84 when a
  * source CRS is known.
+ *
+ * @param geometryExpression A fully-formed SQL expression for the geometry
+ *   value, e.g. `"geom"` or `ST_GeomFromWKB("geometry_wkb")` (use
+ *   {@link geometryExpr}). The caller owns identifier quoting; a bare column
+ *   name passed here produces broken SQL.
+ * @param sourceCrs The source CRS as `AUTHORITY:CODE`, or null to skip the
+ *   reprojection to WGS84.
  */
 export function geometryGeoJsonSql(
-  geometrySql: string,
+  geometryExpression: string,
   sourceCrs: string | null,
 ): string {
   if (!sourceCrs) {
-    return `ST_AsGeoJSON(${geometrySql})`;
+    return `ST_AsGeoJSON(${geometryExpression})`;
   }
   // Transform even for EPSG:4326 sources: always_xy=true normalises axis order
   // to lon/lat, which a no-op EPSG:4326 -> EPSG:4326 transform guarantees for
   // formats that may store data as lat/lon.
-  return `ST_AsGeoJSON(ST_Transform(${geometrySql}, ${quoteSqlString(
+  return `ST_AsGeoJSON(ST_Transform(${geometryExpression}, ${quoteSqlString(
     sourceCrs,
   )}, ${quoteSqlString(TARGET_CRS)}, true))`;
 }
