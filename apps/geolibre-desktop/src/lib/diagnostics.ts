@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { isTauri } from "./is-tauri";
 
 export type DiagnosticCategory = "console" | "map" | "network" | "runtime";
 export type DiagnosticLevel = "error" | "info" | "warning";
@@ -35,6 +36,33 @@ const MAX_DIAGNOSTIC_RECORDS = 500;
 const MAX_FIELD_LENGTH = 3000;
 const CAPTURE_NETWORK_INFO_STORAGE_KEY =
   "geolibre.diagnostics.captureNetworkInfo";
+
+// On some WebView2 (Windows) and WKWebView (macOS) builds the first requests to
+// Tauri's custom IPC/asset protocols can momentarily fail while those schemes
+// are still being registered, surfacing as a `TypeError: Failed to fetch` (or
+// `Load failed` on WebKit). Tauri's IPC layer logs the warning below once and
+// transparently retries every call over its postMessage interface, and MapLibre
+// recovers and renders the map, so these are benign startup transients. They are
+// still recorded as diagnostics, but kept out of the developer console where
+// they read as fatal errors (see GitHub issue #332). Scoped to the desktop
+// runtime and a short post-launch window so genuine later fetch failures are
+// untouched.
+const STARTUP_FETCH_GRACE_MS = 15_000;
+const FETCH_FAILURE_MESSAGES = ["Failed to fetch", "Load failed"];
+// Logged verbatim by Tauri's runtime-injected ipc-protocol.js (tauri 2.x) the
+// first time the custom-protocol IPC falls back to postMessage.
+const TAURI_IPC_FALLBACK_WARNING =
+  "IPC custom protocol failed, Tauri will now use the postMessage interface instead";
+
+function looksLikeFetchFailure(reason: unknown): boolean {
+  const message =
+    reason instanceof Error
+      ? reason.message
+      : typeof reason === "string"
+        ? reason
+        : "";
+  return FETCH_FAILURE_MESSAGES.some((needle) => message.includes(needle));
+}
 
 // Note: called once at module import, so the initial value is frozen for the
 // lifetime of the module. Tests that need a different starting state must
@@ -254,9 +282,17 @@ export function installDiagnosticsCapture(): () => void {
     };
   }
 
+  const installedAt = Date.now();
   const originalFetch = window.fetch.bind(window);
   const originalConsoleError = console.error;
   const originalConsoleWarn = console.warn;
+
+  // Within the startup window, a desktop "Failed to fetch" rejection/warning is
+  // the Tauri custom-protocol fallback warming up rather than a real failure.
+  const isBenignStartupFetch = (reason: unknown): boolean =>
+    isTauri() &&
+    Date.now() - installedAt <= STARTUP_FETCH_GRACE_MS &&
+    looksLikeFetchFailure(reason);
 
   const patchedFetch: typeof fetch = async (input, init) => {
     const startedAt = performance.now();
@@ -305,6 +341,10 @@ export function installDiagnosticsCapture(): () => void {
   };
 
   console.warn = (...args: unknown[]) => {
+    const isTauriIpcFallback =
+      isTauri() &&
+      typeof args[0] === "string" &&
+      args[0].includes(TAURI_IPC_FALLBACK_WARNING);
     try {
       appendDiagnostic({
         category: "console",
@@ -312,7 +352,10 @@ export function installDiagnosticsCapture(): () => void {
         message: formatConsoleArgs(args) || "console.warn",
       });
     } finally {
-      originalConsoleWarn(...args);
+      // Record Tauri's one-time IPC-fallback notice but don't echo it to the
+      // console: the fallback is automatic and harmless, and the warning only
+      // alarms users inspecting the console at startup (issue #332).
+      if (!isTauriIpcFallback) originalConsoleWarn(...args);
     }
   };
 
@@ -329,12 +372,19 @@ export function installDiagnosticsCapture(): () => void {
   };
 
   const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+    const benign = isBenignStartupFetch(event.reason);
     appendDiagnostic({
-      category: "runtime",
-      level: "error",
-      message: "Unhandled promise rejection",
+      category: benign ? "network" : "runtime",
+      level: benign ? "warning" : "error",
+      message: benign
+        ? "Benign startup fetch rejection (Tauri custom-protocol warm-up)"
+        : "Unhandled promise rejection",
       detail: formatUnknown(event.reason),
     });
+    // MapLibre and Tauri both recover from the custom-protocol warm-up failure,
+    // so swallow the rejection to keep an "Uncaught (in promise) TypeError:
+    // Failed to fetch" out of the console (issue #332). It stays in diagnostics.
+    if (benign) event.preventDefault();
   };
 
   window.fetch = patchedFetch;

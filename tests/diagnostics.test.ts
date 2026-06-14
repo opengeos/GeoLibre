@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { before, beforeEach, describe, it } from "node:test";
+import { afterEach, before, beforeEach, describe, it } from "node:test";
 
 // diagnostics.ts reads localStorage at import time, so the window stub must
 // be installed before the module is loaded; hence the dynamic import below.
@@ -112,5 +112,118 @@ describe("diagnostics network info capture", () => {
     assert.equal(getDiagnosticsSnapshot().captureNetworkInfo, false);
     setCaptureNetworkInfo(true);
     assert.equal(getDiagnosticsSnapshot().captureNetworkInfo, true);
+  });
+});
+
+describe("diagnostics startup transient suppression", () => {
+  type Listener = (event: unknown) => void;
+  const listeners = new Map<string, Listener>();
+  const win = (globalThis as { window?: Record<string, unknown> }).window!;
+  let installCapture: DiagnosticsModule["installDiagnosticsCapture"];
+  let realWarn: typeof console.warn;
+  let realError: typeof console.error;
+
+  before(async () => {
+    ({ installDiagnosticsCapture: installCapture } = await import(
+      "../apps/geolibre-desktop/src/lib/diagnostics"
+    ));
+  });
+
+  beforeEach(() => {
+    listeners.clear();
+    clearDiagnostics();
+    realWarn = console.warn;
+    realError = console.error;
+    win.fetch = (() => Promise.resolve()) as unknown as typeof fetch;
+    win.addEventListener = (type: string, listener: Listener) => {
+      listeners.set(type, listener);
+    };
+    win.removeEventListener = (type: string) => {
+      listeners.delete(type);
+    };
+    delete win.__TAURI_INTERNALS__;
+  });
+
+  afterEach(() => {
+    console.warn = realWarn;
+    console.error = realError;
+  });
+
+  function rejectionEvent(reason: unknown) {
+    let prevented = false;
+    return {
+      event: {
+        reason,
+        preventDefault: () => {
+          prevented = true;
+        },
+      },
+      wasPrevented: () => prevented,
+    };
+  }
+
+  it("swallows a benign startup fetch rejection under Tauri", () => {
+    win.__TAURI_INTERNALS__ = {};
+    const cleanup = installCapture();
+    const { event, wasPrevented } = rejectionEvent(
+      new TypeError("Failed to fetch"),
+    );
+    listeners.get("unhandledrejection")?.(event);
+    assert.equal(wasPrevented(), true);
+    const [record] = getDiagnosticsSnapshot().records;
+    assert.equal(record.level, "warning");
+    assert.equal(record.category, "network");
+    cleanup();
+  });
+
+  it("leaves a fetch rejection alone outside the Tauri runtime", () => {
+    const cleanup = installCapture();
+    const { event, wasPrevented } = rejectionEvent(
+      new TypeError("Failed to fetch"),
+    );
+    listeners.get("unhandledrejection")?.(event);
+    assert.equal(wasPrevented(), false);
+    const [record] = getDiagnosticsSnapshot().records;
+    assert.equal(record.level, "error");
+    assert.equal(record.category, "runtime");
+    cleanup();
+  });
+
+  it("does not swallow a non-fetch rejection under Tauri", () => {
+    win.__TAURI_INTERNALS__ = {};
+    const cleanup = installCapture();
+    const { event, wasPrevented } = rejectionEvent(new Error("boom"));
+    listeners.get("unhandledrejection")?.(event);
+    assert.equal(wasPrevented(), false);
+    assert.equal(getDiagnosticsSnapshot().records[0]?.level, "error");
+    cleanup();
+  });
+
+  it("records but does not echo Tauri's IPC fallback warning", () => {
+    win.__TAURI_INTERNALS__ = {};
+    let echoed: unknown[] | null = null;
+    console.warn = (...args: unknown[]) => {
+      echoed = args;
+    };
+    const cleanup = installCapture();
+    console.warn(
+      "IPC custom protocol failed, Tauri will now use the postMessage interface instead",
+      new TypeError("Failed to fetch"),
+    );
+    assert.equal(echoed, null);
+    assert.equal(getDiagnosticsSnapshot().records[0]?.level, "warning");
+    cleanup();
+  });
+
+  it("still echoes ordinary warnings under Tauri", () => {
+    win.__TAURI_INTERNALS__ = {};
+    let echoed: unknown[] | null = null;
+    console.warn = (...args: unknown[]) => {
+      echoed = args;
+    };
+    const cleanup = installCapture();
+    console.warn("a normal warning");
+    assert.deepEqual(echoed, ["a normal warning"]);
+    cleanup();
   });
 });
