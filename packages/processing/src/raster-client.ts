@@ -113,9 +113,8 @@ export async function readRasterData(bytes: ArrayBuffer): Promise<RasterData> {
 }
 
 /**
- * Encode a {@link RasterData} as a single-band Float32 GeoTIFF `ArrayBuffer`.
- * Only the first band is written (every client tool produces one band; the clip
- * tool, which can carry multiple, is handled by {@link writeRasterBands}).
+ * Encode a {@link RasterData} as a Float32 GeoTIFF `ArrayBuffer`. Convenience
+ * alias for {@link writeRasterBands}; both write every band of the raster.
  */
 export function writeRasterData(raster: RasterData): ArrayBuffer {
   return writeRasterBands(raster);
@@ -405,7 +404,7 @@ export function parseReclassTable(table: string): ReclassRule[] {
 /** Remap value ranges to new class values using a half-open [min, max) table. */
 export function reclassify(input: RasterData, params: ReclassifyParams): RasterData {
   const band = input.bands[(params.band ?? 1) - 1];
-  if (!band) throw new Error(`Band ${params.band} is out of range.`);
+  if (!band) throw new Error(`Band ${params.band ?? 1} is out of range.`);
   const rules = parseReclassTable(params.table);
   const keepOriginal = params.unmatched === "original";
   const outNoData = input.nodata ?? TERRAIN_NODATA;
@@ -531,7 +530,7 @@ export interface FocalParams {
 /** Apply a moving-window (neighbourhood) statistic to a raster band. */
 export function focalStatistics(input: RasterData, params: FocalParams): RasterData {
   const band = input.bands[(params.band ?? 1) - 1];
-  if (!band) throw new Error(`Band ${params.band} is out of range.`);
+  if (!band) throw new Error(`Band ${params.band ?? 1} is out of range.`);
   const { width, height, nodata } = input;
   const stat = params.statistic ?? "mean";
   let size = Math.max(3, Math.min(25, Math.round(params.size ?? 3)));
