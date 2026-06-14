@@ -11,7 +11,9 @@ import { PMTiles, Protocol } from "pmtiles";
 import {
   ensureGeoJsonVtProtocol,
   geojsonVtTileUrl,
+  hasGeoJsonVtSource,
   registerGeoJsonVtSource,
+  TILE_MAX_ZOOM,
   TILE_SOURCE_LAYER,
   unregisterGeoJsonVtSource,
 } from "./geojson-vt-protocol";
@@ -994,7 +996,10 @@ function syncGeoJsonLayer(
   // it), leaving behind a vector-tile source from the tiled path. Tear it down
   // and free its tile index so we can recreate a plain geojson source.
   const existingSource = map.getSource(src) as maplibregl.Source | undefined;
-  const switchingFromTiled = existingSource?.type === "vector";
+  // Only tear down a vector source we own (the geojson-vt tiled path), never an
+  // unrelated vector source that happens to share the id.
+  const switchingFromTiled =
+    existingSource?.type === "vector" && hasGeoJsonVtSource(layer.id);
   if (switchingFromTiled) {
     removeGeoJsonRenderLayers(map, layer.id);
     map.removeSource(src);
@@ -1082,7 +1087,7 @@ function syncGeoJsonVtLayer(
       type: "vector",
       tiles: [geojsonVtTileUrl(layer.id)],
       minzoom: 0,
-      maxzoom: 16,
+      maxzoom: TILE_MAX_ZOOM,
     });
   }
 

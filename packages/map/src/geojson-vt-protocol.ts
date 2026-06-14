@@ -29,8 +29,11 @@ export const TILE_SOURCE_LAYER = "data";
 /** Tile extent shared by the index builders and the MVT encoder. */
 const TILE_EXTENT = 4096;
 
-/** Highest zoom the tile index is built for; MapLibre over-zooms beyond it. */
-const TILE_MAX_ZOOM = 16;
+/**
+ * Highest zoom the tile index is built for; MapLibre over-zooms beyond it.
+ * Exported so the vector source's `maxzoom` in `layer-sync.ts` cannot drift.
+ */
+export const TILE_MAX_ZOOM = 16;
 
 interface TileIndex {
   getTile(z: number, x: number, y: number): GeoJSONVTTile | null;
@@ -115,9 +118,14 @@ export function unregisterGeoJsonVtSource(layerId: string): void {
   registry.delete(layerId);
 }
 
+/** Whether a tile index is currently registered for this layer. */
+export function hasGeoJsonVtSource(layerId: string): boolean {
+  return registry.has(layerId);
+}
+
 /** The `tiles` template for a layer's vector source. */
 export function geojsonVtTileUrl(layerId: string): string {
-  return `${GEOJSONVT_PROTOCOL}://${layerId}/{z}/{x}/{y}`;
+  return `${GEOJSONVT_PROTOCOL}://${encodeURIComponent(layerId)}/{z}/{x}/{y}`;
 }
 
 /**
@@ -138,22 +146,30 @@ async function geojsonVtProtocolHandler(
 ): Promise<{ data: ArrayBuffer }> {
   const tile = lookupTile(params.url);
   if (!tile) return { data: new ArrayBuffer(0) };
-  // vt-pbf bundles an older geojson-vt whose tile type differs nominally from
-  // ours; the shapes are runtime-compatible, so cast at the encode boundary.
-  const pbf = fromGeojsonVt(
-    { [TILE_SOURCE_LAYER]: tile } as unknown as Parameters<
-      typeof fromGeojsonVt
-    >[0],
-    { version: 2, extent: TILE_EXTENT },
-  );
-  // Hand MapLibre an exactly-sized ArrayBuffer; `pbf` may be a view into a
-  // larger backing buffer.
-  return {
-    data: pbf.buffer.slice(
-      pbf.byteOffset,
-      pbf.byteOffset + pbf.byteLength,
-    ) as ArrayBuffer,
-  };
+  try {
+    // vt-pbf bundles an older geojson-vt whose tile type differs nominally from
+    // ours; the shapes are runtime-compatible, so cast at the encode boundary.
+    // The try-catch guards against that compatibility ever breaking (a future
+    // vt-pbf release) — return an empty tile rather than leaving MapLibre with
+    // an unhandled rejection that silently blanks the whole layer.
+    const pbf = fromGeojsonVt(
+      { [TILE_SOURCE_LAYER]: tile } as unknown as Parameters<
+        typeof fromGeojsonVt
+      >[0],
+      { version: 2, extent: TILE_EXTENT },
+    );
+    // Hand MapLibre an exactly-sized ArrayBuffer; `pbf` may be a view into a
+    // larger backing buffer.
+    return {
+      data: pbf.buffer.slice(
+        pbf.byteOffset,
+        pbf.byteOffset + pbf.byteLength,
+      ) as ArrayBuffer,
+    };
+  } catch (err) {
+    console.warn("[GeoLibre] geojson-vt tile encode failed", err);
+    return { data: new ArrayBuffer(0) };
+  }
 }
 
 // Parse `geolibre-gjvt://<layerId>/<z>/<x>/<y>` and return the encoded tile, or
@@ -162,7 +178,12 @@ function lookupTile(url: string): GeoJSONVTTile | null {
   const path = url.slice(`${GEOJSONVT_PROTOCOL}://`.length);
   const slash = path.indexOf("/");
   if (slash < 0) return null;
-  const layerId = path.slice(0, slash);
+  let layerId: string;
+  try {
+    layerId = decodeURIComponent(path.slice(0, slash));
+  } catch {
+    return null;
+  }
   const [z, x, y] = path
     .slice(slash + 1)
     .split("/")
