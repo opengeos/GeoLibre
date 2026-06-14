@@ -43,12 +43,33 @@ installDiagnosticsCapture();
 installStaleChunkReload();
 // Register the offline/PWA service worker (web build only). `registerSW` is a
 // no-op stub in the Tauri desktop and embedded Jupyter builds, where the plugin
-// is disabled (see vite.config.ts pwaPlugin). autoUpdate reloads the page when a
-// new deploy is detected; precached chunks are served from cache so they never
-// 404, and installStaleChunkReload above stays as the fallback for any chunk not
-// covered by the precache.
+// is disabled (see vite.config.ts pwaPlugin).
+//
+// `autoUpdate` would, by default, force a full `window.location.reload()` the
+// moment a new service worker activates (workbox's `activated` event, when
+// `isUpdate || isExternal`). On the GitHub Pages demo — built with a relative
+// base and served from the `/demo/` subpath — that reload fires spuriously a few
+// seconds after load: a returning visitor fetches a freshly-built `sw.js`, and
+// workbox's external-worker heuristics (URL/scope resolution under the relative
+// base, the time-based fallback, a second `updatefound`) flag the activation as
+// an update, reloading the page and discarding in-progress map state. Right
+// after a deploy, when edge nodes briefly serve inconsistent assets, this can
+// repeat, so the page looks like it "refreshes itself."
+//
+// `onNeedReload` takes over that reload flow: the new worker still activates and
+// claims the page (skipWaiting + clientsClaim), so its fresh precache serves
+// every subsequent request, but we do NOT force a reload. The page refreshes
+// only when it genuinely must — a stale lazy chunk that 404s — which
+// installStaleChunkReload above already handles (cooldown-guarded). That keeps
+// the user's session/map state intact and removes the self-refresh loop.
 registerSW({
   immediate: true,
+  onNeedReload() {
+    // Intentionally a no-op: the updated SW is already in control, so let the
+    // refreshed shell load on the user's next navigation rather than yanking the
+    // page out from under them. See installStaleChunkReload for the on-demand
+    // recovery path when a now-deleted lazy chunk is actually requested.
+  },
   onRegisterError(error) {
     // Registration can fail in production (non-secure origin, scope conflict).
     // The app still works without the SW, so surface it rather than fail.
