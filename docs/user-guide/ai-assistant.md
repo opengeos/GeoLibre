@@ -88,6 +88,70 @@ operations, so its actions stay within GeoLibre's validated surface.
 | **Web search** | Looks up current information online (best with `TAVILY_API_KEY`). |
 | **Code fallback** | For tasks with no dedicated tool, runs a small **JavaScript** snippet against the live map (e.g. globe projection) or a **Python** snippet in the [Pyodide runtime](python-console.md). |
 
+## Sample prompts
+
+Prompts are free-form — these are starting points, not fixed commands. Refer to
+layers by name; the assistant looks up the rest. You can also chain steps in one
+message ("buffer the roads by 100 m **and then** clip to the county boundary")
+or keep refining across turns ("now color it by area").
+
+**Explore & query**
+
+```text
+what layers are loaded, and what fields does the parcels layer have?
+how many parcels are larger than 1 hectare?
+list the 10 most populous counties with their population
+show parcels within 500 m of a river and add them as a layer
+count points in each polygon of the districts layer
+```
+
+**Geoprocessing & analysis**
+
+```text
+buffer the roads by 100 meters
+buffer the roads by 100 m, then clip the buffer to the county boundary
+dissolve the parcels by zoning type
+find where the floodplain overlaps the buildings (intersection)
+create an H3 hex grid at resolution 8 over the points and count points per cell
+compute centroids of the counties and add them as a layer
+```
+
+**Symbology**
+
+```text
+color the counties by population with a graduated red ramp
+style the parcels categorized by land-use type
+shade the tracts by median income using a viridis ramp with 7 classes
+```
+
+**Add data & imagery**
+
+```text
+load the latest Sentinel-2 scene over this view
+add the most recent cloud-free Landsat image for this area
+search the Planetary Computer for NAIP imagery here
+add an Esri World Imagery basemap
+add this GeoJSON: https://example.com/data.geojson
+```
+
+**Map control & styling**
+
+```text
+zoom to the parcels layer
+fly to San Francisco
+switch to a dark basemap
+hide the buildings layer and set the parcels opacity to 0.5
+remove the temporary buffer layer
+```
+
+**Advanced (code fallback)**
+
+```text
+switch the map to a 3D globe projection
+enable terrain with hillshade exaggeration of 1.5
+load a CSV from a URL with pandas and summarize its columns
+```
+
 ## Safety and privacy
 
 - **Acts through the store.** Layer, style, basemap, and add/remove actions go
