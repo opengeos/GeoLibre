@@ -157,6 +157,13 @@ unset, the hook is inert and all collaboration UI is hidden, so production build
 ship the feature dark. The Tauri CSP `connect-src` must list the wss host (the
 existing `https:` directive does **not** authorize `wss:`).
 
+> **Self-hosting note:** the desktop CSP pins `wss://collab.geolibre.app` (plus
+> `ws://localhost`/`127.0.0.1` for dev). Pointing the desktop build at a
+> different relay means updating `connect-src` in
+> `apps/geolibre-desktop/src-tauri/tauri.conf.json` and rebuilding — the CSP and
+> the `VITE_GEOLIBRE_COLLAB_URL` flag are independent knobs. The web build
+> inherits the page's CSP instead, so it only needs the env var.
+
 ## Deploying the relay (`collab.geolibre.app`)
 
 The relay deploys to Cloudflare Workers the same way as `workers/viewer`:
