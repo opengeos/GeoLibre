@@ -120,6 +120,9 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   const cancelledRef = useRef(false);
   // Monotonic id source for transcript turns (stable React keys + update target).
   const turnIdRef = useRef(0);
+  // Identifies the current send so a stopped run's cleanup can't reset the
+  // running state of a newer send started right after Stop.
+  const sendGenerationRef = useRef(0);
   // Tears down an in-flight drag's window listeners if the panel unmounts
   // mid-drag (e.g. the user closes it while dragging).
   const resizeCleanupRef = useRef<(() => void) | null>(null);
@@ -203,6 +206,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     if (!prompt || runningRef.current || !hasKey) return;
     runningRef.current = true;
     cancelledRef.current = false;
+    const myGeneration = (sendGenerationRef.current += 1);
     setRunning(true);
     setInput("");
     // Turns are tracked by stable id (not array index), so updaters stay pure —
@@ -263,8 +267,12 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
             !(turn.id === assistantId && turn.role === "assistant" && !turn.text),
         ),
       );
-      runningRef.current = false;
-      setRunning(false);
+      // Only clear the running state if no newer send has superseded this one
+      // (e.g. the user stopped and immediately sent again).
+      if (sendGenerationRef.current === myGeneration) {
+        runningRef.current = false;
+        setRunning(false);
+      }
     }
   };
 
