@@ -1,4 +1,5 @@
 import {
+  DEFAULT_LAYER_STYLE,
   OPENFREEMAP_BASEMAPS,
   useAppStore,
   type GeoLibreLayer,
@@ -10,7 +11,13 @@ import type { FeatureCollection } from "geojson";
 import { z } from "zod";
 import { inferPropertyColumns } from "../pglite-sql";
 import { previewLayerTables, runSqlQuery } from "../sql-workspace";
+import { createXyzTileUrlTemplate } from "../xyz-url";
+import {
+  findNamedTileBasemap,
+  NAMED_TILE_BASEMAPS,
+} from "./basemaps";
 import { buildSymbologyStyle } from "./symbology";
+import { webSearch } from "./web-search";
 
 /** Dependencies the assistant tools need beyond the global store. */
 export interface AssistantToolDeps {
@@ -243,6 +250,87 @@ export function createAssistantTools(
     },
   });
 
+  const addTileLayer = tool({
+    name: "add_tile_layer",
+    description: `Add an XYZ raster tile basemap/layer to the map. Use a known name (${NAMED_TILE_BASEMAPS.map((basemap) => basemap.id).join(", ")}) or a custom XYZ url template containing {z}/{x}/{y}. You know the common imagery URLs (e.g. Google Satellite is https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}), so add them directly instead of asking the user. The layer is placed underneath existing layers so it acts as a basemap.`,
+    inputSchema: z.object({
+      basemap: z
+        .string()
+        .optional()
+        .describe("Known basemap name, e.g. 'google satellite', 'esri imagery', 'opentopomap'."),
+      url: z
+        .string()
+        .optional()
+        .describe("Custom XYZ tile URL template with {z}, {x}, {y} placeholders."),
+      name: z.string().optional(),
+      attribution: z.string().optional(),
+    }),
+    callback: (input) => {
+      let url = input.url?.trim();
+      let name = input.name?.trim();
+      let attribution = input.attribution?.trim();
+      if (input.basemap?.trim()) {
+        const found = findNamedTileBasemap(input.basemap);
+        if (found) {
+          url = url || found.url;
+          name = name || found.label;
+          attribution = attribution || found.attribution;
+        } else if (!url) {
+          throw new Error(
+            `Unknown basemap "${input.basemap}". Known: ${NAMED_TILE_BASEMAPS.map((basemap) => basemap.id).join(", ")} — or pass a url.`,
+          );
+        }
+      }
+      if (!url) {
+        throw new Error(
+          "Provide a known basemap name or an XYZ url template with {z}/{x}/{y}.",
+        );
+      }
+      const tileUrl = createXyzTileUrlTemplate(url);
+      const layer: GeoLibreLayer = {
+        id: crypto.randomUUID(),
+        name: name || "Tile layer",
+        type: "xyz",
+        source: {
+          type: "raster",
+          tiles: [tileUrl.renderUrl],
+          tileSize: 256,
+          url: tileUrl.originalUrl,
+          ...(attribution ? { attribution } : {}),
+        },
+        visible: true,
+        opacity: 1,
+        style: { ...DEFAULT_LAYER_STYLE },
+        metadata: { sourceKind: "xyz-url" },
+      };
+      // Insert at the bottom of the stack (index 0) so imagery sits under data.
+      const bottomBeforeId = store().layers[0]?.id ?? null;
+      store().addLayer(layer, bottomBeforeId);
+      return json({
+        addedLayerId: layer.id,
+        name: layer.name,
+        url: tileUrl.originalUrl,
+      });
+    },
+  });
+
+  const webSearchTool = tool({
+    name: "web_search",
+    description:
+      "Search the web for current information (news, recent data, documentation, tile/style URLs). Returns top results with title, url, and snippet, plus a short answer when available.",
+    inputSchema: z.object({
+      query: z.string().describe("The search query."),
+    }),
+    callback: async (input) => {
+      const response = await webSearch(input.query);
+      return json({
+        provider: response.provider,
+        answer: response.answer ?? null,
+        results: response.results.slice(0, 8),
+      });
+    },
+  });
+
   const setBasemap = tool({
     name: "set_basemap",
     description: `Switch the basemap. Accepts a known name (${OPENFREEMAP_BASEMAPS.map((basemap) => basemap.id).join(", ")}) or a full style URL.`,
@@ -322,6 +410,8 @@ export function createAssistantTools(
     listLayers,
     runSql,
     addLayerFromUrl,
+    addTileLayer,
+    webSearchTool,
     removeLayer,
     setLayerVisibility,
     setLayerOpacity,
