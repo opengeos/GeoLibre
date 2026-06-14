@@ -9,6 +9,7 @@ import json
 import math
 import os
 import pathlib
+import re
 import time
 import uuid
 import warnings
@@ -91,6 +92,12 @@ def _read_local_vector(path: Any, data_format: str | None = None) -> dict[str, A
 def _html_escape(value: str) -> str:
     """Escape a string for safe interpolation into HTML attributes/text."""
     return _html.escape(str(value), quote=True)
+
+
+# A CSS length/percentage value (e.g. "100%", "800px", "calc(100% - 2rem)"). The
+# allowed set deliberately excludes the structural CSS characters ("{};:") so a
+# to_html() width/height cannot close the <style> rule and inject CSS.
+_CSS_DIMENSION_RE = re.compile(r"^[\w%.+\-\s()]+$")
 
 
 # Standalone export shell: an iframe hosting the GeoLibre app plus a script that
@@ -651,6 +658,11 @@ class Map(anywidget.AnyWidget):
         Returns:
             A list of :class:`Feature` objects, or a ``GeoDataFrame`` when
             ``as_gdf`` is true.
+
+        Note:
+            Only features in vector (GeoJSON) layers can be read back. A feature
+            selected in a tile or service layer carries no inline geometry, so
+            the result is an empty list; use :meth:`identify` for those layers.
         """
         features = self.request("getSelectedFeatures", timeout=timeout)
         feats = [Feature(f) for f in features or []]
@@ -795,12 +807,23 @@ class Map(anywidget.AnyWidget):
             URLs or tile sources for a fully self-contained export.
         """
         base_url = app_url or self._DEFAULT_HTML_APP_URL
-        # Force the embed bridge on (isEmbedded() honours ?embed=1), appending
-        # with the right separator so an app_url that already carries a query
-        # string still parses.
-        separator = "&" if "?" in base_url else "?"
-        iframe_src = f"{base_url}{separator}embed=1"
+        # Force the embed bridge on (isEmbedded() honours ?embed=1). Insert the
+        # parameter into the query string *before* any URL fragment: a "#..."
+        # fragment would otherwise swallow a trailing "?embed=1" (browsers read
+        # it as part of the fragment), so the app never sees the flag. partition
+        # keeps the fragment and its "#" intact when present and yields "" when
+        # absent.
+        base, hash_sep, fragment = base_url.partition("#")
+        separator = "&" if "?" in base else "?"
+        iframe_src = f"{base}{separator}embed=1{hash_sep}{fragment}"
+        # width/height land inside a <style> rule; _html_escape does not neutralise
+        # CSS metacharacters like "}" or ";", so validate them as plain CSS
+        # dimensions to keep a stray value from closing the rule and injecting CSS.
         frame_height = height or self.height
+        if not _CSS_DIMENSION_RE.match(width):
+            raise ValueError(f"to_html: invalid CSS width value {width!r}")
+        if not _CSS_DIMENSION_RE.match(frame_height):
+            raise ValueError(f"to_html: invalid CSS height value {frame_height!r}")
         # Inline the project inside a JSON <script> block and escape "<" so a
         # property value can never break out of the script element; "<" is
         # valid JSON that JSON.parse restores to "<".

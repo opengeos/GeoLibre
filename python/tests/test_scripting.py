@@ -227,6 +227,24 @@ def test_get_selected_features_wraps_in_feature(m, monkeypatch):
     assert feats[0].properties == {"sel": 1}
 
 
+def test_get_selected_features_as_gdf(m, monkeypatch):
+    geopandas = pytest.importorskip("geopandas")
+    monkeypatch.setattr(
+        m,
+        "request",
+        lambda *_a, **_k: [
+            {
+                "type": "Feature",
+                "properties": {"sel": 1},
+                "geometry": {"type": "Point", "coordinates": [0, 0]},
+            }
+        ],
+    )
+    gdf = m.get_selected_features(as_gdf=True)
+    assert isinstance(gdf, geopandas.GeoDataFrame)
+    assert len(gdf) == 1
+
+
 def test_get_drawn_features_wraps_in_feature(m, monkeypatch):
     captured = {}
     monkeypatch.setattr(
@@ -296,6 +314,18 @@ def test_to_html_app_url_query_separator(m):
     # embed flag is appended with "&", not a second "?".
     html = m.to_html(app_url="https://example.com/app?foo=bar")
     assert "https://example.com/app?foo=bar&amp;embed=1" in html
+
+
+def test_to_html_inserts_embed_before_fragment(m):
+    # embed=1 must land in the query string, before any "#fragment", or the
+    # browser folds it into the fragment and the iframe never sees the flag.
+    html = m.to_html(app_url="https://example.com/app#section")
+    assert "https://example.com/app?embed=1#section" in html
+
+
+def test_to_html_rejects_css_injection_dimensions(m):
+    with pytest.raises(ValueError, match="invalid CSS width"):
+        m.to_html(width="100%; } body { background: red; }")
 
 
 def test_to_image_decodes_base64(m, monkeypatch):
