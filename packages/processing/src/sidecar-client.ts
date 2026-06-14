@@ -614,7 +614,7 @@ export interface SedonaSqlResult {
   /** Name of the detected geometry column, or null when there is none. */
   geometry_column: string | null;
   /** Result as a GeoJSON FeatureCollection when a geometry column is present. */
-  geojson: unknown | null;
+  geojson: FeatureCollection | null;
 }
 
 /** Return spatial-SQL (SedonaDB) runtime availability. */

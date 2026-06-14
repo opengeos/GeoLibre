@@ -340,7 +340,7 @@ async function runSidecarQuery(
     rows: result.rows,
     rowCount: result.rows.length,
     geometryColumn: result.geometry_column ?? null,
-    geojson: (result.geojson as FeatureCollection | null) ?? null,
+    geojson: result.geojson ?? null,
   };
 }
 
