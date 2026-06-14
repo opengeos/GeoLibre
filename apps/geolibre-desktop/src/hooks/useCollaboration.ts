@@ -90,7 +90,10 @@ export function useCollaboration(
 
   const canEdit = (): boolean => {
     const c = useAppStore.getState().collaboration;
-    return c.role === "host" || c.mode === "co-edit";
+    // Require an active (joined) session so a debounced snapshot can't fire in
+    // the window between connect() and the `welcome` (where mode still holds its
+    // default of "co-edit").
+    return c.isActive && (c.role === "host" || c.mode === "co-edit");
   };
 
   const sendSnapshot = (): void => {
@@ -259,6 +262,9 @@ export function useCollaboration(
     color: string,
     hostToken: string | undefined,
   ): void => {
+    // Unreachable when disabled (the UI is hidden), but guard so `baseUrl` is
+    // a string below without a non-null assertion.
+    if (!baseUrl) return;
     disconnect();
     joinedRef.current = false;
     selfIdRef.current = crypto.randomUUID();
@@ -271,7 +277,7 @@ export function useCollaboration(
       selfColor: color,
       error: null,
     });
-    const conn = new CollabConnection(sessionWsUrl(baseUrl!, sessionId), {
+    const conn = new CollabConnection(sessionWsUrl(baseUrl, sessionId), {
       onOpen: () => attach(displayName, color, hostToken),
       onMessage: handleMessage,
       onClose: (reconnecting) => {

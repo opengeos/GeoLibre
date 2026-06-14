@@ -168,9 +168,16 @@ export class CollabSession extends DurableObject<Env> {
     } catch {
       // Already closing; ignore.
     }
-    this.broadcastParticipants();
-    // If that was the last socket, schedule storage cleanup.
-    if (this.ctx.getWebSockets().length === 0) {
+    // The closing socket can still be present in getWebSockets() during this
+    // handler, so exclude it explicitly from both the participant list and the
+    // empty-session check (otherwise the leaver lingers and the cleanup alarm
+    // is never scheduled when the last participant leaves).
+    this.broadcast(
+      { type: "participants", participants: this.participants(ws) },
+      ws,
+    );
+    const remaining = this.ctx.getWebSockets().filter((s) => s !== ws);
+    if (remaining.length === 0) {
       await this.ctx.storage.setAlarm(Date.now() + EMPTY_SESSION_TTL_MS);
     }
   }
@@ -326,9 +333,10 @@ export class CollabSession extends DurableObject<Env> {
 
   // -- helpers ----------------------------------------------------------------
 
-  private participants(): CollabParticipant[] {
+  private participants(except?: WebSocket): CollabParticipant[] {
     const result: CollabParticipant[] = [];
     for (const socket of this.ctx.getWebSockets()) {
+      if (socket === except) continue;
       const a = socket.deserializeAttachment() as SocketAttachment | null;
       if (a) {
         result.push({
