@@ -38,7 +38,7 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 - Multiple DuckDB SQL query-result layers with identify, selection, and attribute table support
 - Controls menu with Measure, Bookmark, Minimap, and View State tools, a Search panel, and a Print menu with a print layout composer (including a user-editable legend) that exports the map to PNG or PDF
 - Story map builder with a scroll-driven editor, presenter view, and standalone HTML export
-- Real-time multi-user collaboration (MVP) so several people can edit the same project together
+- Real-time multi-user collaboration (MVP; requires the `VITE_GEOLIBRE_COLLAB_URL` build variable — see [docs/collaboration.md](docs/collaboration.md)) so several people can edit the same project together
 - Natural-language GIS assistant that turns plain-English requests into auditable, undoable GeoLibre operations (Spatial SQL, symbology, add/remove data, and map control), provider-pluggable with your own API key
 - In-app Python Console plus a Python automation API for scripting the app
 - Command palette (`Ctrl`/`Cmd` + `K`) that searches and runs menu and toolbar actions across Add Data, Processing, Controls, Plugins, and Help, global keyboard shortcuts for New/Open/Save/Save As, and a `?` shortcuts cheat sheet

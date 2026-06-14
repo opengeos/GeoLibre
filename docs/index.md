@@ -93,13 +93,13 @@ Chat with your data: a natural-language [assistant](user-guide/ai-assistant.md) 
 <div class="feature-card" markdown>
 ### Collaboration and story maps
 
-Edit the same project with others in real time (MVP; requires `VITE_GEOLIBRE_COLLAB_URL`), build scroll-driven story maps with a presenter view and standalone HTML export, and compose print layouts with a user-editable legend that export to PNG or PDF.
+Edit the same project with others in real time ([collaboration](collaboration.md) MVP; requires `VITE_GEOLIBRE_COLLAB_URL`), and build scroll-driven [story maps](user-guide/storymaps.md) with a presenter view and standalone HTML export.
 </div>
 
 <div class="feature-card" markdown>
 ### Network analysis and geocoding
 
-Compute isochrones, service areas, and origin–destination cost matrices for network analysis, and run forward, batch, and reverse geocoding through a multi-provider abstraction.
+Compute isochrones, service areas, and origin–destination cost matrices for network analysis, and run forward, batch, and reverse [geocoding](user-guide/data-integrations.md#geocoding) through a multi-provider abstraction.
 </div>
 
 </div>
