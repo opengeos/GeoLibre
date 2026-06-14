@@ -59,7 +59,7 @@ Client → server:
 
 | type | payload | notes |
 | --- | --- | --- |
-| `join` | `displayName, color, clientId, hostToken?` | first frame after connect |
+| `join` | `displayName, color, hostToken?` | first frame after connect; the relay assigns the `clientId` (returned in `welcome`) |
 | `snapshot` | `project, rev` | a debounced project push; co-editors only |
 | `presence` | `cursor?, view?` | throttled cursor / viewport |
 | `set-mode` | `mode` | host only |
@@ -113,12 +113,12 @@ storage alarm.
 ## Frontend
 
 - `lib/collab-protocol.ts` — shared message types.
-- `lib/collab-client.ts` — WebSocket transport, `resolveCollabUrl()` (wss/loopback
+- `lib/collab-client.ts` — WebSocket transport, `resolveCollabBaseUrl()` (wss/loopback
   validation, returns `null` when unset), exponential-backoff reconnect.
 - `hooks/useCollaboration.ts` — orchestration: subscribes to the store
   (debounced, deduped snapshot push for co-editors), reads `map` `mousemove`
   (throttled) and `moveend` for presence, routes inbound frames, and exposes
-  start/join/leave/set-mode actions. Inert no-op when `resolveCollabUrl()` is
+  start/join/leave/set-mode actions. Inert no-op when `resolveCollabBaseUrl()` is
   `null`.
 - `lib/build-project-snapshot.ts` — the shared `buildProjectSnapshot()` lifted
   from `useEmbedBridge` so the bridge and the adapter share one definition.
@@ -140,6 +140,14 @@ display name and a color. The host chooses the session **mode**:
 
 The host token (returned only to the creator) gates `set-mode`, so a guest can't
 escalate the session to co-edit. Codes are unguessable and sessions auto-expire.
+The relay assigns each participant's `clientId` server-side (the client-supplied
+value is ignored) so one participant can't claim another's identity, and it
+validates the `color` to a hex value before storing/broadcasting it.
+
+> **Operator note:** `POST /sessions` is unauthenticated and currently responds
+> with `Access-Control-Allow-Origin: *`, so any page can create sessions. This is
+> acceptable for the experimental MVP but should be restricted to the app's own
+> origin(s) before a wider rollout to avoid capacity abuse.
 
 ## Feature flag
 
@@ -156,7 +164,9 @@ The relay deploys to Cloudflare Workers the same way as `workers/viewer`:
 - **CI:** `.github/workflows/deploy-collab.yml` deploys on any push to `main`
   that touches `workers/collab/**` (or via manual `workflow_dispatch`). It reuses
   the existing `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` repo secrets — the
-  token needs **Workers Scripts: Edit** and **Durable Objects** permissions.
+  token needs the **Workers Scripts Write** permission (Cloudflare's "Edit
+  Cloudflare Workers" template includes it). Deploying the Durable Object is part
+  of the same script upload, so no separate Durable Objects permission is needed.
 - **Manual:** `cd workers/collab && npx wrangler deploy`.
 
 `wrangler.toml` already declares the `collab.geolibre.app` custom-domain route and
@@ -184,7 +194,7 @@ environment. Until that env var is set, the feature stays dark.
 
 - `npm run test:worker` typechecks `workers/collab`.
 - `npm run test:frontend` runs `tests/collab-protocol.test.ts` (protocol
-  round-trip, `resolveCollabUrl` validation, echo-suppression logic).
+  round-trip, `resolveCollabBaseUrl` validation, echo-suppression logic).
 - Local end-to-end: `wrangler dev` in `workers/collab`, run the app with
   `VITE_GEOLIBRE_COLLAB_URL=ws://127.0.0.1:8787`, open two browser windows, start
   a co-edit session in one and join from the other.

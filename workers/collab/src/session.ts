@@ -138,7 +138,14 @@ export class CollabSession extends DurableObject<Env> {
 
     switch (message.type) {
       case "snapshot":
-        await this.handleSnapshot(ws, attachment, raw, message.rev);
+        // Pass the accurate UTF-8 byte length (raw.length counts UTF-16 code
+        // units, which undercounts multi-byte characters).
+        await this.handleSnapshot(
+          ws,
+          attachment,
+          message,
+          new TextEncoder().encode(raw).length,
+        );
         break;
       case "presence":
         this.handlePresence(attachment, message);
@@ -195,9 +202,16 @@ export class CollabSession extends DurableObject<Env> {
         : "guest";
 
     const attachment: SocketAttachment = {
-      clientId: message.clientId,
-      displayName: message.displayName.slice(0, 60) || "Guest",
-      color: message.color,
+      // Assign the id server-side instead of trusting the client's, so a
+      // participant can't claim another's clientId to hijack their presence or
+      // collide React keys. The welcome echoes it back for the client to adopt.
+      clientId: crypto.randomUUID(),
+      displayName: (message.displayName ?? "").slice(0, 60) || "Guest",
+      // Only accept a hex color; fall back to neutral grey so a hostile value
+      // never reaches peers (defense-in-depth with the client's DOM rendering).
+      color: /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(message.color)
+        ? message.color
+        : "#888888",
       role,
     };
     ws.serializeAttachment(attachment);
@@ -218,8 +232,8 @@ export class CollabSession extends DurableObject<Env> {
   private async handleSnapshot(
     ws: WebSocket,
     attachment: SocketAttachment,
-    raw: string,
-    clientRev: number,
+    message: Extract<ClientMessage, { type: "snapshot" }>,
+    byteLength: number,
   ): Promise<void> {
     const mode =
       (await this.ctx.storage.get<CollaborationMode>("mode")) ?? "co-edit";
@@ -231,7 +245,7 @@ export class CollabSession extends DurableObject<Env> {
       });
       return;
     }
-    if (raw.length > MAX_SNAPSHOT_BYTES) {
+    if (byteLength > MAX_SNAPSHOT_BYTES) {
       this.send(ws, {
         type: "error",
         code: "too-large",
@@ -241,19 +255,20 @@ export class CollabSession extends DurableObject<Env> {
       return;
     }
 
-    // Re-parse to forward only the project payload and to store it; the relay
-    // never inspects the project's internals.
-    const parsed = JSON.parse(raw) as { project?: unknown };
-    const rev = ((await this.ctx.storage.get<number>("rev")) ?? clientRev) + 1;
+    // The project was already parsed in webSocketMessage; store and forward it
+    // directly. The relay never inspects the project's internals.
+    const project = message.project ?? null;
+    const rev =
+      ((await this.ctx.storage.get<number>("rev")) ?? message.rev) + 1;
     await this.ctx.storage.put({
-      snapshot: JSON.stringify(parsed.project ?? null),
+      snapshot: JSON.stringify(project),
       rev,
     });
 
     this.broadcast(
       {
         type: "snapshot",
-        project: parsed.project ?? null,
+        project,
         origin: attachment.clientId,
         rev,
       },
@@ -273,7 +288,7 @@ export class CollabSession extends DurableObject<Env> {
       type: "presence",
       clientId: attachment.clientId,
       cursor: message.cursor,
-      view: message.view as never,
+      view: message.view,
     });
   }
 

@@ -61,16 +61,31 @@ export default {
         mode?: string;
       };
       const mode = body.mode === "view-only" ? "view-only" : "co-edit";
-      const sessionId = randomCode();
-      const hostToken = randomToken();
-      const stub = env.COLLAB_SESSION.get(
-        env.COLLAB_SESSION.idFromName(sessionId),
+      // Retry on the (rare) collision with an existing active session: /init
+      // is a no-op when the code is already taken, so without this the caller
+      // would receive a hostToken that doesn't match the stored one and be
+      // silently downgraded to a guest in someone else's session.
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const sessionId = randomCode();
+        const hostToken = randomToken();
+        const stub = env.COLLAB_SESSION.get(
+          env.COLLAB_SESSION.idFromName(sessionId),
+        );
+        const initRes = await stub.fetch("https://collab/init", {
+          method: "POST",
+          body: JSON.stringify({ mode, hostToken }),
+        });
+        const initBody = (await initRes.json().catch(() => ({}))) as {
+          alreadyInitialized?: boolean;
+        };
+        if (!initBody.alreadyInitialized) {
+          return json({ sessionId, hostToken, mode });
+        }
+      }
+      return json(
+        { error: "Could not allocate a session code. Please try again." },
+        503,
       );
-      await stub.fetch("https://collab/init", {
-        method: "POST",
-        body: JSON.stringify({ mode, hostToken }),
-      });
-      return json({ sessionId, hostToken, mode });
     }
 
     // Join a session over WebSocket: /sessions/:id/ws

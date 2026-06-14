@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { RefObject } from "react";
 import type { MapController } from "@geolibre/map";
 import type { Map as MapLibreMap } from "maplibre-gl";
+import i18n from "../i18n";
 import { buildProjectSnapshot } from "../lib/build-project-snapshot";
 import {
   CollabConnection,
@@ -71,8 +72,16 @@ export function useCollaboration(
   const revRef = useRef(0);
   const selfIdRef = useRef<string | null>(null);
 
-  // Tear everything down on unmount.
-  useEffect(() => () => disconnect(), []);
+  // Tear everything down on unmount: close the socket AND clear the slice so a
+  // stale "active" session can't linger in the store if the host unmounts.
+  useEffect(
+    () => () => {
+      disconnect();
+      useAppStore.getState().resetCollaboration();
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
 
   const canEdit = (): boolean => {
     const c = useAppStore.getState().collaboration;
@@ -137,7 +146,7 @@ export function useCollaboration(
             (p) => p.clientId === message.clientId,
           );
         const presence: CollaborationPresence = {
-          displayName: participant?.displayName ?? "Guest",
+          displayName: participant?.displayName ?? i18n.t("collaborate.guest"),
           color: participant?.color ?? "#888888",
           cursor: message.cursor,
           view: message.view,

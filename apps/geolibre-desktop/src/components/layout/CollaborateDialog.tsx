@@ -89,7 +89,9 @@ export function CollaborateDialog({
         setCopied(kind);
         copyTimer.current = window.setTimeout(() => setCopied(null), 2000);
       })
-      .catch(() => {});
+      .catch(() => {
+        setError(t("collaborate.copyFailed"));
+      });
   };
 
   const handleStart = async () => {
@@ -102,7 +104,10 @@ export function CollaborateDialog({
     try {
       await api.start(name.trim(), color, mode);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      // Show a localized message; keep the raw error in the console for
+      // diagnostics (collab-client throws human-readable English strings).
+      console.error("[GeoLibre] Collaboration error", err);
+      setError(t("collaborate.connectFailed"));
     } finally {
       setBusy(false);
     }
@@ -122,7 +127,10 @@ export function CollaborateDialog({
     try {
       await api.join(code.trim(), name.trim(), color);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      // Show a localized message; keep the raw error in the console for
+      // diagnostics (collab-client throws human-readable English strings).
+      console.error("[GeoLibre] Collaboration error", err);
+      setError(t("collaborate.connectFailed"));
     } finally {
       setBusy(false);
     }

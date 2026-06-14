@@ -41,7 +41,10 @@ export function resolveCollabBaseUrl(
     if (
       url.protocol === "wss:" ||
       (url.protocol === "ws:" &&
-        (url.hostname === "localhost" || url.hostname === "127.0.0.1"))
+        (url.hostname === "localhost" ||
+          url.hostname === "127.0.0.1" ||
+          // WHATWG URL keeps the brackets on an IPv6 host.
+          url.hostname === "[::1]"))
     ) {
       return trimmed;
     }
@@ -101,10 +104,20 @@ export async function createSession(
   if (!payload?.sessionId || !payload.hostToken) {
     throw new Error("The collaboration server returned an unexpected response.");
   }
+  // Default an unrecognized mode to co-edit but warn, so a protocol/version
+  // mismatch surfaces in the console rather than silently degrading.
+  let resolvedMode: CollaborationMode = "co-edit";
+  if (payload.mode === "view-only" || payload.mode === "co-edit") {
+    resolvedMode = payload.mode;
+  } else if (payload.mode !== undefined) {
+    console.warn(
+      `[GeoLibre] Unexpected collaboration mode "${payload.mode}"; defaulting to "co-edit".`,
+    );
+  }
   return {
     sessionId: payload.sessionId,
     hostToken: payload.hostToken,
-    mode: payload.mode === "view-only" ? "view-only" : "co-edit",
+    mode: resolvedMode,
   };
 }
 
@@ -131,6 +144,11 @@ export class CollabConnection {
     private readonly handlers: CollabConnectionHandlers,
     // Injected in tests; defaults to the global WebSocket.
     private readonly WebSocketImpl: typeof WebSocket = WebSocket,
+    // Per-client entropy source for reconnect jitter; injectable for
+    // deterministic tests. Real `Math.random()` is what actually spreads
+    // simultaneous reconnects apart (a function of `attempt` alone would give
+    // every client the identical delay).
+    private readonly random: () => number = Math.random,
   ) {}
 
   connect(): void {
@@ -167,6 +185,11 @@ export class CollabConnection {
     ws.addEventListener("error", () => {});
   }
 
+  // Reconnects indefinitely with jittered exponential backoff (capped at
+  // RECONNECT_MAX_MS) until close() is called. The application layer is
+  // responsible for calling close() on a permanent failure (e.g. an `error`
+  // frame with code "not-found"/"forbidden") so we don't retry a dead session
+  // forever.
   private scheduleReconnect(): void {
     const delay = Math.min(
       RECONNECT_MAX_MS,
@@ -175,7 +198,7 @@ export class CollabConnection {
     this.attempt += 1;
     // Jitter avoids a thundering herd when a relay restarts and every client
     // reconnects at once.
-    const jittered = delay / 2 + (delay / 2) * pseudoJitter(this.attempt);
+    const jittered = delay / 2 + (delay / 2) * this.random();
     this.reconnectTimer = setTimeout(() => this.open(), jittered);
   }
 
@@ -196,11 +219,4 @@ export class CollabConnection {
     this.ws?.close();
     this.ws = null;
   }
-}
-
-// Deterministic-per-attempt jitter in [0, 1) without Math.random, so reconnect
-// timing stays testable while still spreading clients apart.
-function pseudoJitter(attempt: number): number {
-  const x = Math.sin(attempt * 12.9898) * 43758.5453;
-  return x - Math.floor(x);
 }

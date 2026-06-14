@@ -21,6 +21,7 @@ import {
   DEFAULT_LEGEND_CONFIG,
   DEFAULT_PROJECT_PREFERENCES,
   DEFAULT_STORY_MAP,
+  type CollaborationParticipant,
   type CollaborationPresence,
   type CollaborationState,
   type GeoLibreLayer,
@@ -228,8 +229,13 @@ export interface AppState {
 
 const MAX_RECENT_PROJECTS = 10;
 
-/** A fresh, inactive collaboration slice (no live session). */
-export const DEFAULT_COLLABORATION_STATE: CollaborationState = {
+/**
+ * A fresh, inactive collaboration slice (no live session). Frozen (like
+ * DEFAULT_LEGEND_CONFIG) to guard against accidental in-place mutation; store
+ * actions always produce new objects via spread, so the frozen default is only
+ * ever read.
+ */
+export const DEFAULT_COLLABORATION_STATE: CollaborationState = Object.freeze({
   isActive: false,
   connecting: false,
   sessionId: null,
@@ -238,10 +244,13 @@ export const DEFAULT_COLLABORATION_STATE: CollaborationState = {
   mode: "co-edit",
   selfName: "",
   selfColor: "",
-  participants: [],
-  presence: {},
+  participants: Object.freeze([] as CollaborationParticipant[]) as CollaborationParticipant[],
+  presence: Object.freeze({} as Record<string, CollaborationPresence>) as Record<
+    string,
+    CollaborationPresence
+  >,
   error: null,
-};
+});
 
 /** Derive a human-friendly display name from a file path or URL. */
 export function projectPathLabel(path: string): string {
