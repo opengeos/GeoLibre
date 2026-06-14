@@ -1665,14 +1665,6 @@ export function TopToolbar({
           <DropdownMenuItem onSelect={() => setAddDataKind("deckgl-viz")}>
             {t("toolbar.layerType.deckglViz")}
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onSelect={() => {
-              setAddDataDeckVizKind("scenegraph");
-              setAddDataKind("deckgl-viz");
-            }}
-          >
-            {t("toolbar.layerType.gltfModel")}
-          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-xs text-muted-foreground">
             {t("toolbar.item.sectionCloudFormats")}
@@ -1704,6 +1696,14 @@ export function TopToolbar({
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleAddThreeDTilesLayer}>
             {t("toolbar.item.threeDTilesLayer")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => {
+              setAddDataDeckVizKind("scenegraph");
+              setAddDataKind("deckgl-viz");
+            }}
+          >
+            {t("toolbar.layerType.gltfModel")}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-xs text-muted-foreground">
