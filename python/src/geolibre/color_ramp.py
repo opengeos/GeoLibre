@@ -170,7 +170,9 @@ def graduated_stops(
             "classification_scheme must be one of "
             f"{sorted(_GRADUATED_SCHEMES)}, got {classification_scheme!r}"
         )
-    count = max(2, int(class_count))
+    # Mirror clampClassCount in StylePanel.tsx: graduated needs >= 2 classes and
+    # caps at 12, so a huge class_count can't bloat the project with stops.
+    count = min(12, max(2, int(class_count)))
     numeric: list[float] = []
     for value in values:
         try:
@@ -178,7 +180,7 @@ def graduated_stops(
         except (TypeError, ValueError):
             continue
         # Match Number.isFinite: drop NaN/inf the way the TS filter does.
-        if number == number and number not in (float("inf"), float("-inf")):
+        if math.isfinite(number):
             numeric.append(number)
     colors = interpolate_ramp_colors(color_ramp, count)
     if not numeric:
@@ -188,18 +190,14 @@ def graduated_stops(
     if minimum == maximum:
         return [{"value": minimum, "color": colors[-1]}]
 
+    # Both schemes return exactly `count` breaks, so the colors line up 1:1
+    # (unlike the TS natural-breaks path, which can yield fewer).
     breaks = (
         quantile_breaks(numeric, count)
         if classification_scheme == "quantile"
         else equal_interval_breaks(minimum, maximum, count)
     )
-    stop_colors = colors if len(breaks) == count else interpolate_ramp_colors(
-        color_ramp, len(breaks)
-    )
     return [
-        {
-            "value": float(f"{value:.8g}"),
-            "color": stop_colors[index] if index < len(stop_colors) else stop_colors[-1],
-        }
+        {"value": float(f"{value:.8g}"), "color": colors[index]}
         for index, value in enumerate(breaks)
     ]

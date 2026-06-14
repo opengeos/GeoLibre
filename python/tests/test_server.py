@@ -103,6 +103,26 @@ def test_unknown_token_404s(served):
     assert excinfo.value.code == 404
 
 
+def test_register_same_file_reuses_token(served):
+    url, _payload = served
+    # Re-registering the same file returns the identical URL (no registry growth).
+    path = url.split("/_geolibre_local/", 1)[1].split("/", 1)[0]
+    again = _server.register_local_file(
+        next(p for tok, p in _server._local_files.items() if tok == path)
+    )
+    assert again == url
+    assert len(_server._local_files) == 1
+
+
+def test_options_preflight_allows_range(served):
+    url, _payload = served
+    request = urllib.request.Request(url, method="OPTIONS")
+    with urllib.request.urlopen(request, timeout=5) as response:  # noqa: S310 - loopback
+        assert response.status == 200
+        assert response.headers["Access-Control-Allow-Origin"] == "*"
+        assert "Range" in response.headers["Access-Control-Allow-Headers"]
+
+
 def test_register_missing_file_raises(served):
     with pytest.raises(ValueError, match="not found"):
         _server.register_local_file(Path("/no/such/raster.tif"))

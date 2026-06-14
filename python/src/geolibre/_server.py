@@ -162,6 +162,18 @@ class _QuietHandler(SimpleHTTPRequestHandler):
             return
         super().do_HEAD()
 
+    def do_OPTIONS(self) -> None:  # noqa: N802 - http.server naming
+        # Modern browsers treat a simple ``Range: bytes=…`` as a CORS-safelisted
+        # request header (no preflight), but answer OPTIONS anyway so older
+        # browsers / proxies that do preflight the ranged COG fetch don't get the
+        # stdlib's 501 and silently fail to render the local raster.
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "Range")
+        self.send_header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
 
 class _QuietServer(ThreadingHTTPServer):
     """A server that swallows the broken-pipe noise of early-closed requests.
@@ -271,8 +283,15 @@ def register_local_file(path: str | os.PathLike[str]) -> str:
             raise RuntimeError(
                 "The GeoLibre static server is not running; create a Map first."
             )
-        token = secrets.token_urlsafe(16)
-        _local_files[token] = file_path
+        # Reuse an existing token for the same file so repeated add_raster calls
+        # in a long-running notebook don't grow the registry without bound.
+        token = next(
+            (tok for tok, registered in _local_files.items() if registered == file_path),
+            None,
+        )
+        if token is None:
+            token = secrets.token_urlsafe(16)
+            _local_files[token] = file_path
         base = _base_url
     return f"{base}{_LOCAL_FILE_PREFIX.lstrip('/')}{token}/{quote(file_path.name)}"
 

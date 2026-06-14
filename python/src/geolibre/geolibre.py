@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import copy
 import json
+import math
 import os
 import pathlib
 import time
@@ -923,10 +924,9 @@ class Map(anywidget.AnyWidget):
 
         def _is_numeric(value: Any) -> bool:
             try:
-                number = float(value)
+                return math.isfinite(float(value))
             except (TypeError, ValueError):
                 return False
-            return number == number and number not in (float("inf"), float("-inf"))
 
         # graduated_stops would otherwise fall back to index-based stops for a
         # non-numeric column, succeeding with misleading symbology; reject it.
@@ -944,7 +944,7 @@ class Map(anywidget.AnyWidget):
         choropleth_style: dict[str, Any] = {
             "vectorStyleMode": "graduated",
             "vectorStyleProperty": column,
-            "vectorStyleClassCount": max(2, int(class_count)),
+            "vectorStyleClassCount": min(12, max(2, int(class_count))),
             "vectorStyleColorRamp": colormap,
             "vectorStyleClassificationScheme": scheme,
             "vectorStyleStops": stops,

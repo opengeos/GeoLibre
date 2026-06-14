@@ -77,6 +77,19 @@ def test_graduated_stops_class_count_clamped():
     assert len(stops) == 2
 
 
+def test_graduated_stops_class_count_capped_at_12():
+    # Mirrors clampClassCount in StylePanel.tsx (max 12).
+    stops = graduated_stops(list(range(100)), class_count=1000)
+    assert len(stops) == 12
+
+
+def test_get_color_ramp_returns_copy():
+    ramp = get_color_ramp("viridis")
+    ramp.append("#000000")
+    # Mutating the returned list must not corrupt the shared definition.
+    assert "#000000" not in get_color_ramp("viridis")
+
+
 def test_graduated_stops_rejects_unknown_scheme():
     with pytest.raises(ValueError, match="classification_scheme"):
         graduated_stops([1, 2, 3], classification_scheme="natural-breaks")
