@@ -180,3 +180,164 @@ def test_add_vector_geo_interface_warns_on_ignored_kwargs(m):
 
     with pytest.warns(UserWarning, match="__geo_interface__ objects"):
         m.add_vector(Fake(), render_mode="tiles")
+
+
+# -- local raster ---------------------------------------------------------
+
+
+def test_add_raster_local_path_served(monkeypatch, m):
+    monkeypatch.setattr(
+        gmod, "register_local_file", lambda path: f"http://127.0.0.1:0/served/{path}"
+    )
+    m.add_raster("/data/dem.tif", colormap="terrain")
+    layer = _last_layer(m)
+    assert layer["type"] == "cog"
+    assert layer["source"]["url"] == "http://127.0.0.1:0/served//data/dem.tif"
+    assert layer["metadata"]["rasterState"]["colormap"] == "terrain"
+
+
+def test_add_raster_url_not_served(monkeypatch, m):
+    called = {"n": 0}
+
+    def boom(_path):
+        called["n"] += 1
+        raise AssertionError("URL rasters must not be routed to the file server")
+
+    monkeypatch.setattr(gmod, "register_local_file", boom)
+    m.add_raster("https://e/dem.tif")
+    assert called["n"] == 0
+    assert _last_layer(m)["source"]["url"] == "https://e/dem.tif"
+
+
+# -- markers --------------------------------------------------------------
+
+
+def test_add_marker_single_point(m):
+    m.add_marker(-100, 40, properties={"name": "Center"}, fillColor="#ff0000")
+    layer = _last_layer(m)
+    assert layer["type"] == "geojson"
+    feature = layer["geojson"]["features"][0]
+    assert feature["geometry"]["coordinates"] == [-100.0, 40.0]
+    assert feature["properties"]["name"] == "Center"
+    assert layer["style"]["fillColor"] == "#ff0000"
+
+
+def test_add_markers_from_pairs(m):
+    m.add_markers([(-100, 40), (-90, 35)])
+    features = _last_layer(m)["geojson"]["features"]
+    assert [f["geometry"]["coordinates"] for f in features] == [
+        [-100.0, 40.0],
+        [-90.0, 35.0],
+    ]
+
+
+def test_add_markers_from_dicts_keeps_properties(m):
+    m.add_markers([{"lon": -100, "lat": 40, "pop": 5}, {"x": -90, "y": 35}])
+    features = _last_layer(m)["geojson"]["features"]
+    assert features[0]["properties"] == {"pop": 5}
+    assert features[1]["geometry"]["coordinates"] == [-90.0, 35.0]
+
+
+def test_add_markers_rejects_bad_pair(m):
+    with pytest.raises(ValueError, match="lng, lat"):
+        m.add_markers([(-100, 40, 1)])
+
+
+def test_add_markers_rejects_dict_missing_coords(m):
+    with pytest.raises(ValueError, match="longitude"):
+        m.add_markers([{"pop": 5}])
+
+
+def test_add_markers_rejects_non_point_geojson(m):
+    polygon_fc = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {},
+                "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 0]]]},
+            }
+        ],
+    }
+    with pytest.raises(ValueError, match="Point/MultiPoint"):
+        m.add_markers(polygon_fc)
+
+
+def test_add_markers_from_geojson(m):
+    fc = {
+        "type": "FeatureCollection",
+        "features": [
+            {"type": "Feature", "properties": {}, "geometry": {"type": "Point", "coordinates": [1, 2]}}
+        ],
+    }
+    m.add_markers(fc)
+    assert _last_layer(m)["geojson"]["features"][0]["geometry"]["coordinates"] == [1, 2]
+
+
+def test_add_circle_markers_sets_radius(m):
+    m.add_circle_markers([(0, 0)], radius=12)
+    assert _last_layer(m)["style"]["circleRadius"] == 12.0
+
+
+def test_add_marker_cluster_enables_clustering(m):
+    m.add_marker_cluster([(0, 0), (1, 1)], cluster_radius=80, cluster_max_zoom=10)
+    style = _last_layer(m)["style"]
+    assert style["pointRenderer"] == "cluster"
+    assert style["clusterRadius"] == 80
+    assert style["clusterMaxZoom"] == 10
+
+
+# -- choropleth -----------------------------------------------------------
+
+
+def _choropleth_fc():
+    return {
+        "type": "FeatureCollection",
+        "features": [
+            {"type": "Feature", "properties": {"pop": v}, "geometry": None}
+            for v in (0, 10, 20, 30, 40)
+        ],
+    }
+
+
+def test_add_choropleth_builds_graduated_style(m):
+    m.add_choropleth(_choropleth_fc(), "pop", class_count=5, colormap="blues")
+    style = _last_layer(m)["style"]
+    assert style["vectorStyleMode"] == "graduated"
+    assert style["vectorStyleProperty"] == "pop"
+    assert style["vectorStyleColorRamp"] == "blues"
+    assert len(style["vectorStyleStops"]) == 5
+    assert style["vectorStyleStops"][0]["value"] == 0.0
+    assert style["vectorStyleStops"][-1]["value"] == 40.0
+
+
+def test_add_choropleth_missing_column_raises(m):
+    with pytest.raises(ValueError, match="not found"):
+        m.add_choropleth(_choropleth_fc(), "missing")
+
+
+def test_add_choropleth_non_numeric_column_raises(m):
+    fc = {
+        "type": "FeatureCollection",
+        "features": [
+            {"type": "Feature", "properties": {"name": label}, "geometry": None}
+            for label in ("alpha", "beta", "gamma")
+        ],
+    }
+    with pytest.raises(ValueError, match="numeric value"):
+        m.add_choropleth(fc, "name")
+
+
+def test_add_choropleth_style_override_wins(m):
+    m.add_choropleth(_choropleth_fc(), "pop", strokeColor="#000000")
+    assert _last_layer(m)["style"]["strokeColor"] == "#000000"
+
+
+def test_add_data_without_column_is_plain_geojson(m):
+    m.add_data(_choropleth_fc())
+    assert _last_layer(m)["style"]["vectorStyleMode"] == "single"
+
+
+def test_add_data_with_column_is_choropleth(m):
+    m.add_data(_choropleth_fc(), column="pop")
+    assert _last_layer(m)["style"]["vectorStyleMode"] == "graduated"
