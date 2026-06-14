@@ -128,7 +128,11 @@
       "hideValueAria": "Hide value for {{name}}",
       "removeAria": "Remove {{name}}",
       "errorNamePattern": "Environment variable names must start with a letter or underscore and contain only letters, numbers, and underscores.",
-      "errorDuplicate": "Environment variable \"{{name}}\" is duplicated."
+      "errorDuplicate": "Environment variable \"{{name}}\" is duplicated.",
+      "stripPromptTitle": "Strip environment variables?",
+      "stripPromptDesc": "This project has {{count}} environment variable(s) (which may include API keys). They are stored in plain text in the project file and could be exposed if you share it. Remove them from the saved file? Your Settings keep them on this device either way.",
+      "stripButton": "Strip from file",
+      "keepButton": "Keep in file"
     },
     "project": {
       "title": "Project",

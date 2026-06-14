@@ -488,6 +488,12 @@ export function TopToolbar({
     sourcePath: string;
     sizeMb: number;
   } | null>(null);
+  // Pending "strip env vars before saving?" prompt. Holds the count to display
+  // and the resolver that the dialog buttons call to continue the save.
+  const [envStripPrompt, setEnvStripPrompt] = useState<{
+    count: number;
+    resolve: (choice: "strip" | "keep" | "cancel") => void;
+  } | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [printLayoutOpen, setPrintLayoutOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -647,11 +653,41 @@ export function TopToolbar({
     };
   };
 
+  // Ask whether to strip environment variables before writing the file. The
+  // promise resolves when the user picks an option in the dialog.
+  const askStripEnvVars = (count: number) =>
+    new Promise<"strip" | "keep" | "cancel">((resolve) => {
+      setEnvStripPrompt({ count, resolve });
+    });
+
+  const resolveEnvStripPrompt = (choice: "strip" | "keep" | "cancel") => {
+    setEnvStripPrompt((current) => {
+      current?.resolve(choice);
+      return null;
+    });
+  };
+
   const saveProject = async (options?: {
     saveAs?: boolean;
   }): Promise<boolean> => {
     const { project, defaultProjectName, content, projectPath } =
       buildCurrentProject();
+    // Env vars (possibly API keys) are serialized in plain text. If any are set,
+    // offer to strip them from the saved file before writing.
+    let contentToSave = content;
+    const envVarCount = (project.preferences.environmentVariables ?? []).filter(
+      (variable) => variable.key.trim(),
+    ).length;
+    if (envVarCount > 0) {
+      const choice = await askStripEnvVars(envVarCount);
+      if (choice === "cancel") return false;
+      if (choice === "strip") {
+        contentToSave = serializeProject({
+          ...project,
+          preferences: { ...project.preferences, environmentVariables: [] },
+        });
+      }
+    }
     // Projects opened from a URL have no writable path, so both Save and
     // Save As fall back to the save dialog for them.
     const existingLocalPath =
@@ -660,9 +696,9 @@ export function TopToolbar({
     try {
       path =
         !options?.saveAs && existingLocalPath
-          ? await saveProjectFileToPath(content, existingLocalPath)
+          ? await saveProjectFileToPath(contentToSave, existingLocalPath)
           : await saveProjectFile(
-              content,
+              contentToSave,
               existingLocalPath ?? `${defaultProjectName}.geolibre.json`,
             );
     } catch (error) {
@@ -2459,6 +2495,40 @@ export function TopToolbar({
           <div className="flex justify-end">
             <Button onClick={() => setActionError(null)}>
               {t("toolbar.item.dismiss")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={envStripPrompt !== null}
+        onOpenChange={(open: boolean) => {
+          if (!open) resolveEnvStripPrompt("cancel");
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("settings.env.stripPromptTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("settings.env.stripPromptDesc", {
+                count: envStripPrompt?.count ?? 0,
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => resolveEnvStripPrompt("cancel")}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => resolveEnvStripPrompt("keep")}
+            >
+              {t("settings.env.keepButton")}
+            </Button>
+            <Button onClick={() => resolveEnvStripPrompt("strip")}>
+              {t("settings.env.stripButton")}
             </Button>
           </div>
         </DialogContent>
