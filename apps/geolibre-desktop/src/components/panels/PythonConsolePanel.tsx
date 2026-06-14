@@ -1,7 +1,15 @@
 import { useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import { Button, Textarea } from "@geolibre/ui";
-import { Eraser, Loader2, Play, Terminal, X } from "lucide-react";
+import {
+  Eraser,
+  Loader2,
+  PanelLeft,
+  PanelLeftClose,
+  Play,
+  Terminal,
+  X,
+} from "lucide-react";
 import {
   type ChangeEvent as ReactChangeEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -14,20 +22,24 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  completeConsoleCode,
   consoleDeps,
   initConsoleRuntime,
   onConsoleProgress,
   runConsoleCode,
 } from "../../lib/pyodide/pyodide-console";
+import { usePyCompletion } from "../../lib/pyodide/usePyCompletion";
+import { PythonEditorPane } from "./PythonEditorPane";
 
 const DEFAULT_CONSOLE_HEIGHT = 240;
 const MIN_CONSOLE_HEIGHT = 120;
 const MAX_CONSOLE_HEIGHT = 560;
+const DEFAULT_EDITOR_WIDTH = 360;
+const MIN_EDITOR_WIDTH = 220;
+const MAX_EDITOR_WIDTH = 900;
 const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
 const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
 
-type EntryKind = "input" | "output" | "error";
+type EntryKind = "input" | "output" | "error" | "marker";
 interface Entry {
   kind: EntryKind;
   text: string;
@@ -40,7 +52,8 @@ interface PythonConsolePanelProps {
 /**
  * The in-app Python Console: a bottom-docked, resizable panel that runs Python
  * via main-thread Pyodide and exposes a `geolibre` object that drives the live
- * app (mirrors the docked AttributeTable pattern). Rendered only while open.
+ * app. A "Show Editor" toggle splits in a script editor (left) that shares the
+ * same interpreter, à la QGIS. Rendered only while open.
  *
  * @param mapControllerRef - Ref to the live map controller, read lazily by the
  *   Pyodide `geolibre` facade so Python can drive the current map.
@@ -53,37 +66,40 @@ export function PythonConsolePanel({
 
   const sectionRef = useRef<HTMLElement>(null);
   const outputRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const consoleInputRef = useRef<HTMLTextAreaElement>(null);
   // Tears down an in-flight drag's window listeners; set while dragging so an
   // unmount mid-drag (e.g. closing the panel) doesn't leak them.
   const resizeCleanupRef = useRef<(() => void) | null>(null);
-  // Caret offset to apply after the next controlled `code` update (so a
-  // history recall or accepted completion lands the cursor sensibly).
-  const pendingCaretRef = useRef<number | null>(null);
+  // Caret to apply after a programmatic console-input change (history recall).
+  const historyCaretRef = useRef<number | null>(null);
   // Submitted commands (newest last) for up/down recall, plus the cursor into
   // them and the draft saved when history navigation begins.
   const commandHistoryRef = useRef<string[]>([]);
   const historyIndexRef = useRef<number | null>(null);
   const historyDraftRef = useRef("");
   const [height, setHeight] = useState(DEFAULT_CONSOLE_HEIGHT);
+  const [editorVisible, setEditorVisible] = useState(false);
+  const [editorWidth, setEditorWidth] = useState(DEFAULT_EDITOR_WIDTH);
   const [code, setCode] = useState("");
   const [history, setHistory] = useState<Entry[]>([]);
   const [running, setRunning] = useState(false);
   const [ready, setReady] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [completion, setCompletion] = useState<{
-    open: boolean;
-    prefix: string;
-    candidates: string[];
-    index: number;
-    cursor: number;
-  }>({ open: false, prefix: "", candidates: [], index: 0, cursor: 0 });
 
   const deps = useMemo(
     () => consoleDeps(() => mapControllerRef.current),
     [mapControllerRef],
   );
+
+  const completion = usePyCompletion({
+    textareaRef: consoleInputRef,
+    code,
+    setCode,
+    deps,
+    ready,
+    label: t("pythonConsole.completions"),
+  });
 
   // Lazily boot the runtime the first time the panel opens, surfacing the
   // download/setup phases. The runtime is a module singleton, so a later reopen
@@ -118,19 +134,19 @@ export function PythonConsolePanel({
     if (el) el.scrollTop = el.scrollHeight;
   }, [history]);
 
-  const closeCompletion = () =>
-    setCompletion((c) => (c.open ? { ...c, open: false } : c));
+  // Apply a queued caret position after a history recall changes `code`.
+  useEffect(() => {
+    if (historyCaretRef.current === null) return;
+    const pos = historyCaretRef.current;
+    historyCaretRef.current = null;
+    const ta = consoleInputRef.current;
+    if (ta) ta.setSelectionRange(pos, pos);
+  }, [code]);
 
-  const run = async () => {
-    const source = code.trim();
-    if (!source || running) return;
-    // Record for up/down recall (skip a consecutive duplicate), reset the cursor.
-    const cmds = commandHistoryRef.current;
-    if (cmds[cmds.length - 1] !== source) cmds.push(source);
-    historyIndexRef.current = null;
-    closeCompletion();
-    setHistory((h) => [...h, { kind: "input", text: source }]);
-    setCode("");
+  // Shared runner: execute Python in the one runtime and append output/errors to
+  // the console scrollback. Used by both the console input and the editor, so
+  // their variables are shared (same interpreter).
+  const runSource = async (source: string) => {
     setRunning(true);
     try {
       const { output, error } = await runConsoleCode(deps, source);
@@ -152,52 +168,30 @@ export function PythonConsolePanel({
     }
   };
 
-  // Apply a queued caret position after a programmatic `code` change.
-  useEffect(() => {
-    if (pendingCaretRef.current === null) return;
-    const pos = pendingCaretRef.current;
-    pendingCaretRef.current = null;
-    const ta = textareaRef.current;
-    if (ta) ta.setSelectionRange(pos, pos);
-  }, [code]);
-
-  const applyCompletion = (candidate: string, prefix: string, cursor: number) => {
-    const start = cursor - prefix.length;
-    pendingCaretRef.current = start + candidate.length;
-    setCode(code.slice(0, start) + candidate + code.slice(cursor));
-    closeCompletion();
+  // Run the editor's script, prefixed by a marker line in the scrollback.
+  const runScript = async (source: string, label: string) => {
+    if (!source.trim() || running) return;
+    setHistory((h) => [...h, { kind: "marker", text: `# ▶ ${label}` }]);
+    await runSource(source);
   };
 
-  const triggerCompletion = async () => {
-    const ta = textareaRef.current;
-    if (!ta || !ready) return;
-    const cursor = ta.selectionStart ?? code.length;
-    let result;
-    try {
-      result = await completeConsoleCode(deps, code, cursor);
-    } catch {
-      return;
-    }
-    if (result.candidates.length === 0) {
-      closeCompletion();
-    } else if (result.candidates.length === 1) {
-      applyCompletion(result.candidates[0], result.prefix, cursor);
-    } else {
-      setCompletion({
-        open: true,
-        prefix: result.prefix,
-        candidates: result.candidates,
-        index: 0,
-        cursor,
-      });
-    }
+  const run = async () => {
+    const source = code.trim();
+    if (!source || running) return;
+    const cmds = commandHistoryRef.current;
+    if (cmds[cmds.length - 1] !== source) cmds.push(source);
+    historyIndexRef.current = null;
+    completion.close();
+    setHistory((h) => [...h, { kind: "input", text: source }]);
+    setCode("");
+    await runSource(source);
   };
 
   // Recall a previous command. dir -1 = older, +1 = newer. Only navigates when
-  // the caret is on the first line (older) or last line (newer), so multi-line
-  // editing's arrow keys still move between lines. Returns true when handled.
+  // the caret is on the first line (older) or last line (newer). Returns true
+  // when handled.
   const navigateHistory = (dir: -1 | 1): boolean => {
-    const ta = textareaRef.current;
+    const ta = consoleInputRef.current;
     const cmds = commandHistoryRef.current;
     if (!ta || cmds.length === 0) return false;
     const pos = ta.selectionStart ?? 0;
@@ -224,46 +218,13 @@ export function PythonConsolePanel({
       historyIndexRef.current === null
         ? historyDraftRef.current
         : cmds[historyIndexRef.current];
-    pendingCaretRef.current = text.length;
+    historyCaretRef.current = text.length;
     setCode(text);
     return true;
   };
 
-  const onKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-    // When the completion list is open, arrows/Enter/Tab/Esc drive it.
-    if (completion.open) {
-      const n = completion.candidates.length;
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        setCompletion((c) => ({ ...c, index: (c.index + 1) % n }));
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        setCompletion((c) => ({ ...c, index: (c.index - 1 + n) % n }));
-        return;
-      }
-      if (event.key === "Enter" || event.key === "Tab") {
-        event.preventDefault();
-        applyCompletion(
-          completion.candidates[completion.index],
-          completion.prefix,
-          completion.cursor,
-        );
-        return;
-      }
-      if (event.key === "Escape") {
-        event.preventDefault();
-        closeCompletion();
-        return;
-      }
-    }
-    // Tab or Ctrl+Space requests completions.
-    if (event.key === "Tab" || (event.key === " " && event.ctrlKey)) {
-      event.preventDefault();
-      void triggerCompletion();
-      return;
-    }
+  const onConsoleKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (completion.tryKey(event)) return;
     // Ctrl/Cmd+Enter runs; plain Enter inserts a newline (multi-line editing).
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
@@ -279,11 +240,12 @@ export function PythonConsolePanel({
     }
   };
 
-  const onChange = (event: ReactChangeEvent<HTMLTextAreaElement>) => {
+  const onConsoleChange = (
+    event: ReactChangeEvent<HTMLTextAreaElement>,
+  ) => {
     setCode(event.target.value);
-    // The user is typing their own line again — leave history recall.
     historyIndexRef.current = null;
-    closeCompletion();
+    completion.close();
   };
 
   const startResize = (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -328,11 +290,46 @@ export function PythonConsolePanel({
 
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
-    // Expose teardown so an unmount during the drag can remove the listeners.
     resizeCleanupRef.current = () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
       if (frame !== null) window.cancelAnimationFrame(frame);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+    };
+  };
+
+  // Horizontal splitter between the editor (left) and the console (right).
+  const startEditorResize = (event: ReactMouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startWidth = editorWidth;
+    let nextWidth = startWidth;
+    const prevCursor = document.body.style.cursor;
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const onMove = (moveEvent: MouseEvent) => {
+      nextWidth = Math.min(
+        MAX_EDITOR_WIDTH,
+        Math.max(MIN_EDITOR_WIDTH, startWidth + moveEvent.clientX - startX),
+      );
+      setEditorWidth(nextWidth);
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      resizeCleanupRef.current = null;
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    resizeCleanupRef.current = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
       document.body.style.cursor = prevCursor;
       document.body.style.userSelect = prevSelect;
     };
@@ -368,6 +365,24 @@ export function PythonConsolePanel({
         ) : null}
         <div className="ml-auto flex items-center gap-1">
           <Button
+            variant={editorVisible ? "secondary" : "ghost"}
+            size="icon"
+            className="h-8 w-8"
+            title={
+              editorVisible
+                ? t("pythonConsole.hideEditor")
+                : t("pythonConsole.showEditor")
+            }
+            aria-pressed={editorVisible}
+            onClick={() => setEditorVisible((v) => !v)}
+          >
+            {editorVisible ? (
+              <PanelLeftClose className="h-4 w-4" />
+            ) : (
+              <PanelLeft className="h-4 w-4" />
+            )}
+          </Button>
+          <Button
             variant="ghost"
             size="icon"
             className="h-8 w-8"
@@ -388,82 +403,85 @@ export function PythonConsolePanel({
         </div>
       </div>
 
-      <div
-        ref={outputRef}
-        className="flex-1 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-xs leading-relaxed"
-      >
-        {history.length === 0 ? (
-          <p className="text-muted-foreground">{t("pythonConsole.intro")}</p>
-        ) : (
-          history.map((entry, index) => (
+      <div className="flex min-h-0 flex-1">
+        {editorVisible ? (
+          <>
             <div
-              key={index}
-              className={
-                entry.kind === "input"
-                  ? "text-primary"
-                  : entry.kind === "error"
-                    ? "text-destructive"
-                    : "text-foreground"
-              }
+              className="flex min-w-0 flex-col border-r"
+              style={{ width: editorWidth }}
             >
-              {entry.kind === "input" ? `>>> ${entry.text}` : entry.text}
+              <PythonEditorPane
+                deps={deps}
+                ready={ready}
+                running={running}
+                runScript={runScript}
+                completionLabel={t("pythonConsole.completions")}
+              />
             </div>
-          ))
-        )}
-      </div>
-
-      <div className="relative flex items-end gap-2 border-t px-3 py-2">
-        {completion.open ? (
-          <div
-            role="listbox"
-            aria-label={t("pythonConsole.completions")}
-            className="absolute bottom-full left-3 z-30 mb-1 max-h-48 w-72 overflow-auto rounded-md border bg-popover py-1 text-popover-foreground shadow-md"
-          >
-            {completion.candidates.map((candidate, i) => (
-              <button
-                type="button"
-                key={candidate}
-                role="option"
-                aria-selected={i === completion.index}
-                className={`block w-full px-3 py-1 text-left font-mono text-xs ${
-                  i === completion.index
-                    ? "bg-accent text-accent-foreground"
-                    : "hover:bg-accent/50"
-                }`}
-                // Keep focus in the textarea so the caret update applies.
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  applyCompletion(candidate, completion.prefix, completion.cursor);
-                }}
-              >
-                {candidate}
-              </button>
-            ))}
-          </div>
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={t("pythonConsole.resizeEditor")}
+              className="w-1 shrink-0 cursor-col-resize select-none bg-border hover:bg-primary"
+              onMouseDown={startEditorResize}
+            />
+          </>
         ) : null}
-        <Textarea
-          ref={textareaRef}
-          value={code}
-          onChange={onChange}
-          onKeyDown={onKeyDown}
-          placeholder={t("pythonConsole.placeholder")}
-          spellCheck={false}
-          rows={2}
-          className="min-h-[2.5rem] flex-1 resize-none font-mono text-xs"
-        />
-        <Button
-          size="sm"
-          onClick={() => void run()}
-          disabled={running || !ready || !code.trim()}
-          title={t("pythonConsole.runHint")}
-        >
-          {running ? (
-            <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-          ) : (
-            <Play className="mr-1 h-4 w-4" />
-          )}
-          {t("pythonConsole.run")}
-        </Button>
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div
+            ref={outputRef}
+            className="flex-1 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-xs leading-relaxed"
+          >
+            {history.length === 0 ? (
+              <p className="text-muted-foreground">{t("pythonConsole.intro")}</p>
+            ) : (
+              history.map((entry, index) => (
+                <div
+                  key={index}
+                  className={
+                    entry.kind === "input"
+                      ? "text-primary"
+                      : entry.kind === "error"
+                        ? "text-destructive"
+                        : entry.kind === "marker"
+                          ? "text-muted-foreground"
+                          : "text-foreground"
+                  }
+                >
+                  {entry.kind === "input" ? `>>> ${entry.text}` : entry.text}
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="relative flex items-end gap-2 border-t px-3 py-2">
+            {completion.dropdown}
+            <Textarea
+              ref={consoleInputRef}
+              value={code}
+              onChange={onConsoleChange}
+              onKeyDown={onConsoleKeyDown}
+              placeholder={t("pythonConsole.placeholder")}
+              spellCheck={false}
+              rows={2}
+              className="min-h-[2.5rem] flex-1 resize-none font-mono text-xs"
+            />
+            <Button
+              size="sm"
+              onClick={() => void run()}
+              disabled={running || !ready || !code.trim()}
+              title={t("pythonConsole.runHint")}
+            >
+              {running ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <Play className="mr-1 h-4 w-4" />
+              )}
+              {t("pythonConsole.run")}
+            </Button>
+          </div>
+        </div>
       </div>
     </section>
   );

@@ -41,6 +41,23 @@ geolibre.get_bounds()        # [west, south, east, north]
 geolibre.fly_to(-122.4, 37.8, zoom=10)
 ```
 
+## Script editor
+
+For multi-line scripts you want to keep, click **Show editor** (the panel icon in
+the header) to open a script editor beside the console — like QGIS's Python
+editor. Drag the divider to resize it, and click the icon again to hide it.
+
+The editor **shares the console's interpreter**, so a variable or function you
+define in a script is immediately usable in the console, and vice-versa.
+
+- **New / Open / Save / Save As** work with `.py` files. On the desktop app, Save
+  writes back to the open file; in the browser it downloads (or uses the
+  File System Access API). An unsaved file shows a `•` next to its name.
+- **Run** (or **Ctrl/Cmd+Enter**) executes the whole script — or just the
+  **selected** lines if you have a selection. Output and errors appear in the
+  console on the right.
+- **Tab** indents, **Ctrl+Space** autocompletes, and **Ctrl/Cmd+S** saves.
+
 ## Driving the map
 
 ```python

@@ -891,6 +891,19 @@ export async function saveProjectFileToPath(
   return path;
 }
 
+/**
+ * Write text directly to a known local path without prompting. Desktop-only —
+ * the browser has no writable filesystem path — so callers must gate on
+ * {@link isTauri} and a real (non-URL) path; the Python Editor's in-place Save
+ * uses this and falls back to a save dialog otherwise.
+ */
+export async function writeTextFileToPath(
+  path: string,
+  content: string,
+): Promise<void> {
+  await writeTextFile(path, content);
+}
+
 export async function saveTextFileWithFallback(
   content: string,
   options: SaveTextFileOptions,

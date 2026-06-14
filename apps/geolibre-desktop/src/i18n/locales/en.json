@@ -396,7 +396,18 @@
     "completions": "Completions",
     "placeholder": "Python here · Ctrl/Cmd+Enter to run · Tab to autocomplete · ↑/↓ for history",
     "intro": "Python console ready. Use the `geolibre` object to script the map, e.g. geolibre.get_center(). Tab autocompletes, ↑/↓ recall previous commands, and `await geolibre.load_package(\"numpy\")` adds packages.",
-    "loadFailed": "Failed to load the Python runtime."
+    "loadFailed": "Failed to load the Python runtime.",
+    "showEditor": "Show editor",
+    "hideEditor": "Hide editor",
+    "resizeEditor": "Resize editor",
+    "fileNew": "New script",
+    "fileOpen": "Open script…",
+    "fileSave": "Save script (Ctrl/Cmd+S)",
+    "fileSaveAs": "Save script as…",
+    "runScript": "Run script or selection (Ctrl/Cmd+Enter)",
+    "untitled": "untitled.py",
+    "discardChanges": "Discard unsaved changes to the current script?",
+    "editorPlaceholder": "Write a multi-line Python script here. Ctrl/Cmd+Enter runs it (or the selection) in the console; Tab indents; Ctrl+Space autocompletes."
   },
   "storymap": {
     "title": "Story Map",
