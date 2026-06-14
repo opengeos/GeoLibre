@@ -389,6 +389,38 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
             Boolean(variable),
           )
       : [],
+    geocoding: normalizeGeocodingPreferences(candidate.geocoding),
+  };
+}
+
+function normalizeGeocodingPreferences(
+  geocoding: unknown,
+): ProjectPreferences["geocoding"] {
+  if (!geocoding || typeof geocoding !== "object") {
+    return { ...DEFAULT_PROJECT_PREFERENCES.geocoding, apiKeys: {} };
+  }
+  const candidate = geocoding as Partial<ProjectPreferences["geocoding"]>;
+  const apiKeys: Record<string, string> = {};
+  if (candidate.apiKeys && typeof candidate.apiKeys === "object") {
+    for (const [key, value] of Object.entries(candidate.apiKeys)) {
+      if (typeof value === "string") apiKeys[key] = value;
+    }
+  }
+  return {
+    providerId:
+      typeof candidate.providerId === "string" && candidate.providerId.trim()
+        ? candidate.providerId
+        : DEFAULT_PROJECT_PREFERENCES.geocoding.providerId,
+    apiKeys,
+    forwardEndpoint:
+      typeof candidate.forwardEndpoint === "string"
+        ? candidate.forwardEndpoint
+        : undefined,
+    reverseEndpoint:
+      typeof candidate.reverseEndpoint === "string"
+        ? candidate.reverseEndpoint
+        : undefined,
+    email: typeof candidate.email === "string" ? candidate.email : undefined,
   };
 }
 

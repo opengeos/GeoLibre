@@ -69,12 +69,14 @@
     "section": {
       "map": "Map",
       "layout": "Layout",
+      "geocoding": "Geocoding",
       "environment": "Environment",
       "project": "Project"
     },
     "menu": {
       "mapPreferences": "Map Preferences",
       "layoutSettings": "Layout Settings",
+      "geocoding": "Geocoding",
       "environmentVariables": "Environment Variables",
       "projectSettings": "Project Settings",
       "managePlugins": "Manage Plugins",
@@ -133,6 +135,22 @@
       "stripPromptDesc": "This project has {{count}} environment variable(s) (which may include API keys). They are stored in plain text in the project file and could be exposed if you share it. Remove them from the saved file? Your Settings keep them on this device either way.",
       "stripButton": "Strip from file",
       "keepButton": "Keep in file"
+    },
+    "geocoding": {
+      "title": "Geocoding",
+      "description": "Choose the geocoding backend used by Geocode Addresses and Reverse Geocode. Nominatim is the default and needs no key.",
+      "provider": "Provider",
+      "requiresKey": "This provider needs an API key or access token.",
+      "noKey": "This provider works without an API key.",
+      "apiKey": "API key",
+      "apiKeyPlaceholder": "Paste the provider API key or token",
+      "toggleApiKey": "Toggle API key visibility",
+      "forwardEndpoint": "Forward endpoint (optional)",
+      "reverseEndpoint": "Reverse endpoint (optional)",
+      "email": "Contact email (optional)",
+      "emailPlaceholder": "you@example.org",
+      "emailHint": "Sent to identify the client to Nominatim, per its usage policy.",
+      "secretsWarning": "Keys are stored in plain text in the project file and may be exposed when the project is shared."
     },
     "project": {
       "title": "Project",
@@ -445,11 +463,15 @@
     "chooseFile": "Choose CSV file",
     "noFile": "Choose a CSV file to begin.",
     "fileLoaded": "{{name}} ({{count}} rows)",
+    "provider": "Geocoding provider",
+    "providerHint": "Configure provider API keys and endpoints in Settings.",
+    "apiKeyRequired": "{{provider}} needs an API key. Add one in Settings to get results.",
     "addressColumn": "Address column",
     "run": "Geocode",
     "cancel": "Cancel",
     "outputPlaceholder": "Progress will appear here.",
     "usingEndpoint": "Using {{endpoint}}",
+    "usingProvider": "Using {{provider}} ({{endpoint}})",
     "rowCapWarning": "Only the first {{cap}} rows will be geocoded to respect the public Nominatim usage policy. Configure a self-hosted endpoint for larger batches.",
     "skippedEmpty": "Skipped {{count}} row(s) with an empty address.",
     "progress": "Geocoding row {{current}} of {{total}}: {{address}}",

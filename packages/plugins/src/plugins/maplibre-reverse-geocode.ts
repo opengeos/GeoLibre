@@ -1,7 +1,4 @@
-import {
-  geocodeReverse,
-  nominatimReverseResultToDisplay,
-} from "@geolibre/core";
+import { geocodeReverse } from "@geolibre/core";
 import type {
   Map as MapLibreMap,
   MapMouseEvent,
@@ -127,9 +124,8 @@ async function showReverseGeocodePopup(
     .addTo(map);
 
   try {
-    const result = await geocodeReverse(lng, lat, { signal });
+    const resolved = await geocodeReverse(lng, lat, { signal });
     if (requestToken !== lookupToken || !popup) return;
-    const resolved = nominatimReverseResultToDisplay(result);
     const label = resolved?.displayName ?? labels.noAddress;
     popup.setDOMContent(
       buildPopupContent(

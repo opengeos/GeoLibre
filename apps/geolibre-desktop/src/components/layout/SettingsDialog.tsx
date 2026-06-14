@@ -1,5 +1,8 @@
 import {
   DEFAULT_PROJECT_PREFERENCES,
+  GEOCODING_PROVIDERS,
+  getGeocodingProvider,
+  normalizeGeocodingProviderId,
   PROJECT_VERSION,
   useAppStore,
   type MapPreferences,
@@ -27,6 +30,7 @@ import {
   DropdownMenuTrigger,
   Input,
   Label,
+  Select,
 } from "@geolibre/ui";
 import type { MapController } from "@geolibre/map";
 import {
@@ -36,6 +40,7 @@ import {
   EyeOff,
   FolderCog,
   Languages,
+  Locate,
   MapPinned,
   LayoutPanelTop,
   PanelLeft,
@@ -59,7 +64,12 @@ import {
 } from "../../hooks/useDesktopSettings";
 import { useLanguage } from "../../hooks/useLanguage";
 
-type SettingsSection = "map" | "layout" | "environment" | "project";
+type SettingsSection =
+  | "map"
+  | "layout"
+  | "geocoding"
+  | "environment"
+  | "project";
 
 interface SettingsDialogProps {
   buttonClassName?: string;
@@ -77,6 +87,7 @@ const SECTION_ITEMS: Array<{
 }> = [
   { id: "map", labelKey: "settings.section.map", icon: MapPinned },
   { id: "layout", labelKey: "settings.section.layout", icon: LayoutPanelTop },
+  { id: "geocoding", labelKey: "settings.section.geocoding", icon: Locate },
   {
     id: "environment",
     labelKey: "settings.section.environment",
@@ -97,6 +108,7 @@ interface DraftEnvironmentVariable extends RuntimeEnvironmentVariable {
 interface DraftPreferences {
   map: MapPreferences;
   environmentVariables: DraftEnvironmentVariable[];
+  geocoding: ProjectPreferences["geocoding"];
 }
 
 interface DraftDesktopSettings {
@@ -117,6 +129,10 @@ function clonePreferences(preferences: ProjectPreferences): DraftPreferences {
       ...variable,
       id: createDraftId(),
     })),
+    geocoding: {
+      ...preferences.geocoding,
+      apiKeys: { ...preferences.geocoding.apiKeys },
+    },
   };
 }
 
@@ -170,6 +186,25 @@ function normalizePreferences(
         enabled: variable.enabled,
       }))
       .filter((variable) => variable.key.length > 0),
+    geocoding: normalizeGeocodingPreferences(preferences.geocoding),
+  };
+}
+
+function normalizeGeocodingPreferences(
+  geocoding: ProjectPreferences["geocoding"],
+): ProjectPreferences["geocoding"] {
+  const providerId = normalizeGeocodingProviderId(geocoding.providerId);
+  // Keep only non-empty keys so the saved project does not carry blank entries.
+  const apiKeys: Record<string, string> = {};
+  for (const [id, key] of Object.entries(geocoding.apiKeys)) {
+    if (key.trim()) apiKeys[id] = key.trim();
+  }
+  return {
+    providerId,
+    apiKeys,
+    forwardEndpoint: geocoding.forwardEndpoint?.trim() || undefined,
+    reverseEndpoint: geocoding.reverseEndpoint?.trim() || undefined,
+    email: geocoding.email?.trim() || undefined,
   };
 }
 
@@ -347,6 +382,27 @@ export function SettingsDialog({
 
   const resetMapPreferences = () => {
     updateMapPreferences(DEFAULT_PROJECT_PREFERENCES.map);
+  };
+
+  const updateGeocoding = (
+    patch: Partial<ProjectPreferences["geocoding"]>,
+  ) => {
+    setDraftPreferences((current) => ({
+      ...current,
+      geocoding: { ...current.geocoding, ...patch },
+    }));
+    setError(null);
+  };
+
+  const updateGeocodingApiKey = (providerId: string, value: string) => {
+    setDraftPreferences((current) => ({
+      ...current,
+      geocoding: {
+        ...current.geocoding,
+        apiKeys: { ...current.geocoding.apiKeys, [providerId]: value },
+      },
+    }));
+    setError(null);
   };
 
   const updateDraftLayoutSettings = (patch: Partial<DesktopLayoutSettings>) => {
@@ -553,6 +609,15 @@ export function SettingsDialog({
               </DropdownMenuLabel>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
+          <DropdownMenuItem
+            onSelect={() => {
+              setSection("geocoding");
+              setOpen(true);
+            }}
+          >
+            <Locate className="mr-2 h-3.5 w-3.5" />
+            {t("settings.menu.geocoding")}
+          </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={() => {
               setSection("environment");
@@ -841,6 +906,161 @@ export function SettingsDialog({
                   <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
                     {t("settings.layout.urlParamsNote")}
                   </div>
+                </div>
+              ) : null}
+              {section === "geocoding" ? (
+                <div className="space-y-5">
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-semibold">
+                      {t("settings.geocoding.title")}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.geocoding.description")}
+                    </p>
+                  </div>
+                  {(() => {
+                    const provider = getGeocodingProvider(
+                      draftPreferences.geocoding.providerId,
+                    );
+                    const apiKeyId = "geocoding-api-key";
+                    const apiKeyRevealed = revealedValueIds.has(apiKeyId);
+                    return (
+                      <div className="space-y-4">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">
+                            {t("settings.geocoding.provider")}
+                          </Label>
+                          <Select
+                            value={provider.id}
+                            onChange={(event) =>
+                              updateGeocoding({
+                                providerId: event.target.value,
+                              })
+                            }
+                          >
+                            {GEOCODING_PROVIDERS.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.label}
+                              </option>
+                            ))}
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            {provider.requiresApiKey
+                              ? t("settings.geocoding.requiresKey")
+                              : t("settings.geocoding.noKey")}
+                          </p>
+                        </div>
+
+                        {provider.requiresApiKey ? (
+                          <div className="space-y-1.5">
+                            <Label className="text-xs" htmlFor="geocoding-key">
+                              {t("settings.geocoding.apiKey")}
+                            </Label>
+                            <div className="flex items-center gap-2">
+                              <Input
+                                id="geocoding-key"
+                                type={apiKeyRevealed ? "text" : "password"}
+                                autoComplete="off"
+                                spellCheck={false}
+                                value={
+                                  draftPreferences.geocoding.apiKeys[
+                                    provider.id
+                                  ] ?? ""
+                                }
+                                onChange={(event) =>
+                                  updateGeocodingApiKey(
+                                    provider.id,
+                                    event.target.value,
+                                  )
+                                }
+                                placeholder={t(
+                                  "settings.geocoding.apiKeyPlaceholder",
+                                )}
+                              />
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => toggleValueVisibility(apiKeyId)}
+                                aria-label={t("settings.geocoding.toggleApiKey")}
+                              >
+                                {apiKeyRevealed ? (
+                                  <EyeOff className="h-3.5 w-3.5" />
+                                ) : (
+                                  <Eye className="h-3.5 w-3.5" />
+                                )}
+                              </Button>
+                            </div>
+                            <p className="text-xs text-amber-600 dark:text-amber-500">
+                              {t("settings.geocoding.secretsWarning")}
+                            </p>
+                          </div>
+                        ) : null}
+
+                        <div className="space-y-1.5">
+                          <Label
+                            className="text-xs"
+                            htmlFor="geocoding-forward"
+                          >
+                            {t("settings.geocoding.forwardEndpoint")}
+                          </Label>
+                          <Input
+                            id="geocoding-forward"
+                            value={
+                              draftPreferences.geocoding.forwardEndpoint ?? ""
+                            }
+                            onChange={(event) =>
+                              updateGeocoding({
+                                forwardEndpoint: event.target.value,
+                              })
+                            }
+                            placeholder={provider.defaultForwardEndpoint}
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <Label
+                            className="text-xs"
+                            htmlFor="geocoding-reverse"
+                          >
+                            {t("settings.geocoding.reverseEndpoint")}
+                          </Label>
+                          <Input
+                            id="geocoding-reverse"
+                            value={
+                              draftPreferences.geocoding.reverseEndpoint ?? ""
+                            }
+                            onChange={(event) =>
+                              updateGeocoding({
+                                reverseEndpoint: event.target.value,
+                              })
+                            }
+                            placeholder={provider.defaultReverseEndpoint}
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <Label className="text-xs" htmlFor="geocoding-email">
+                            {t("settings.geocoding.email")}
+                          </Label>
+                          <Input
+                            id="geocoding-email"
+                            type="email"
+                            value={draftPreferences.geocoding.email ?? ""}
+                            onChange={(event) =>
+                              updateGeocoding({ email: event.target.value })
+                            }
+                            placeholder={t(
+                              "settings.geocoding.emailPlaceholder",
+                            )}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            {t("settings.geocoding.emailHint")}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               ) : null}
               {section === "environment" ? (

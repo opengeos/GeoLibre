@@ -4,13 +4,20 @@ import {
   buildForwardGeocodeUrl,
   buildReverseGeocodeUrl,
   csvRowsToGeocodeRequests,
+  geocodeMatchToFeature,
+  geocoderMinIntervalMs,
+  GEOCODING_PROVIDERS,
+  getGeocodingProvider,
   nextDelayMs,
   nominatimResultToFeature,
   nominatimReverseResultToDisplay,
+  normalizeGeocodingProviderId,
   NOMINATIM_MIN_INTERVAL_MS,
   PUBLIC_GEOCODE_ROW_CAP,
+  resolveGeocoderConfig,
   rowCap,
   shouldThrottle,
+  type GeocoderConfig,
   type NominatimForwardResult,
 } from "@geolibre/core";
 
@@ -186,5 +193,238 @@ describe("shouldThrottle / rowCap", () => {
 
   it("throttles defensively when the endpoint does not parse", () => {
     assert.equal(shouldThrottle("not a url"), true);
+  });
+});
+
+describe("geocoderMinIntervalMs", () => {
+  it("paces only the public Nominatim host", () => {
+    assert.equal(
+      geocoderMinIntervalMs("nominatim", PUBLIC_FORWARD),
+      NOMINATIM_MIN_INTERVAL_MS,
+    );
+    assert.equal(geocoderMinIntervalMs("nominatim", SELF_HOSTED), 0);
+  });
+
+  it("does not pace keyed providers", () => {
+    assert.equal(
+      geocoderMinIntervalMs("mapbox", "https://api.mapbox.com/x"),
+      0,
+    );
+    assert.equal(geocoderMinIntervalMs("google", "https://maps.googleapis.com"), 0);
+  });
+});
+
+describe("provider registry", () => {
+  it("exposes Nominatim first as the default", () => {
+    assert.equal(GEOCODING_PROVIDERS[0].id, "nominatim");
+  });
+
+  it("includes the proposed alternatives", () => {
+    const ids = GEOCODING_PROVIDERS.map((p) => p.id).sort();
+    assert.deepEqual(ids, ["arcgis", "google", "mapbox", "nominatim", "pelias"]);
+  });
+
+  it("normalizes unknown provider ids to Nominatim", () => {
+    assert.equal(normalizeGeocodingProviderId("bogus"), "nominatim");
+    assert.equal(normalizeGeocodingProviderId(undefined), "nominatim");
+    assert.equal(normalizeGeocodingProviderId("mapbox"), "mapbox");
+  });
+
+  it("getGeocodingProvider falls back to Nominatim for unknown ids", () => {
+    assert.equal(getGeocodingProvider("bogus").id, "nominatim");
+  });
+});
+
+describe("resolveGeocoderConfig", () => {
+  it("uses the provider's default endpoints and its API key", () => {
+    const config = resolveGeocoderConfig({
+      providerId: "mapbox",
+      apiKeys: { mapbox: "pk.test", google: "g" },
+    });
+    assert.equal(config.providerId, "mapbox");
+    assert.equal(config.apiKey, "pk.test");
+    assert.equal(
+      config.forwardEndpoint,
+      "https://api.mapbox.com/geocoding/v5/mapbox.places",
+    );
+  });
+
+  it("lets a custom endpoint override the default", () => {
+    const config = resolveGeocoderConfig({
+      providerId: "nominatim",
+      apiKeys: {},
+      forwardEndpoint: "https://geocoder.example.org/search",
+    });
+    assert.equal(config.forwardEndpoint, "https://geocoder.example.org/search");
+  });
+
+  it("defaults to Nominatim with no API key", () => {
+    const config = resolveGeocoderConfig({ apiKeys: {} });
+    assert.equal(config.providerId, "nominatim");
+    assert.equal(config.apiKey, undefined);
+  });
+});
+
+function configFor(providerId: GeocoderConfig["providerId"], apiKey?: string): GeocoderConfig {
+  const provider = getGeocodingProvider(providerId);
+  return {
+    providerId,
+    forwardEndpoint: provider.defaultForwardEndpoint,
+    reverseEndpoint: provider.defaultReverseEndpoint,
+    apiKey,
+  };
+}
+
+describe("ArcGIS provider", () => {
+  const provider = getGeocodingProvider("arcgis");
+  const config = configFor("arcgis", "tok");
+
+  it("builds a SingleLine forward URL with a token", () => {
+    const url = new URL(provider.buildForwardUrl(config, "Paris", { limit: 2 }));
+    assert.equal(url.searchParams.get("SingleLine"), "Paris");
+    assert.equal(url.searchParams.get("f"), "json");
+    assert.equal(url.searchParams.get("maxLocations"), "2");
+    assert.equal(url.searchParams.get("token"), "tok");
+  });
+
+  it("parses candidates into matches", () => {
+    const matches = provider.parseForward({
+      candidates: [
+        { address: "Paris, France", location: { x: 2.35, y: 48.85 }, score: 99 },
+        { address: "bad", location: { x: "nan", y: 1 } },
+      ],
+    });
+    assert.equal(matches.length, 1);
+    assert.deepEqual(
+      [matches[0].lon, matches[0].lat, matches[0].displayName, matches[0].score],
+      [2.35, 48.85, "Paris, France", 99],
+    );
+  });
+
+  it("parses a reverse address from LongLabel", () => {
+    assert.deepEqual(
+      provider.parseReverse({ address: { LongLabel: "1 Infinite Loop" } }),
+      { displayName: "1 Infinite Loop", parts: { LongLabel: "1 Infinite Loop" } },
+    );
+    assert.equal(provider.parseReverse({}), null);
+  });
+});
+
+describe("Mapbox provider", () => {
+  const provider = getGeocodingProvider("mapbox");
+  const config = configFor("mapbox", "pk.tok");
+
+  it("builds a path-style forward URL with the access token", () => {
+    const url = new URL(
+      provider.buildForwardUrl(config, "San Francisco, CA", { limit: 1 }),
+    );
+    assert.ok(url.pathname.endsWith("/San%20Francisco%2C%20CA.json"));
+    assert.equal(url.searchParams.get("access_token"), "pk.tok");
+    assert.equal(url.searchParams.get("limit"), "1");
+  });
+
+  it("parses features using center coordinates and relevance", () => {
+    const matches = provider.parseForward({
+      features: [
+        { place_name: "San Francisco", center: [-122.42, 37.77], relevance: 0.9 },
+      ],
+    });
+    assert.deepEqual(
+      [matches[0].lon, matches[0].lat, matches[0].displayName, matches[0].score],
+      [-122.42, 37.77, "San Francisco", 0.9],
+    );
+  });
+
+  it("builds a lon,lat reverse URL", () => {
+    const url = new URL(provider.buildReverseUrl(config, -122.42, 37.77, {}));
+    assert.ok(url.pathname.endsWith("/-122.42,37.77.json"));
+    assert.equal(url.searchParams.get("access_token"), "pk.tok");
+  });
+});
+
+describe("Google provider", () => {
+  const provider = getGeocodingProvider("google");
+  const config = configFor("google", "key");
+
+  it("builds a forward URL with address and key", () => {
+    const url = new URL(provider.buildForwardUrl(config, "Berlin", {}));
+    assert.equal(url.searchParams.get("address"), "Berlin");
+    assert.equal(url.searchParams.get("key"), "key");
+  });
+
+  it("builds a reverse URL with latlng ordered lat,lng", () => {
+    const url = new URL(provider.buildReverseUrl(config, 13.4, 52.52, {}));
+    assert.equal(url.searchParams.get("latlng"), "52.52,13.4");
+  });
+
+  it("parses results from geometry.location and formatted_address", () => {
+    const matches = provider.parseForward({
+      results: [
+        {
+          formatted_address: "Berlin, Germany",
+          geometry: { location: { lat: 52.52, lng: 13.4 } },
+        },
+      ],
+    });
+    assert.deepEqual(
+      [matches[0].lon, matches[0].lat, matches[0].displayName, matches[0].score],
+      [13.4, 52.52, "Berlin, Germany", null],
+    );
+    assert.deepEqual(
+      provider.parseReverse({
+        results: [{ formatted_address: "Berlin, Germany" }],
+      }),
+      { displayName: "Berlin, Germany", parts: {} },
+    );
+  });
+});
+
+describe("Pelias provider", () => {
+  const provider = getGeocodingProvider("pelias");
+  const config = configFor("pelias", "pel-key");
+
+  it("builds a text forward URL with size and api_key", () => {
+    const url = new URL(
+      provider.buildForwardUrl(config, "Oslo", { limit: 3 }),
+    );
+    assert.equal(url.searchParams.get("text"), "Oslo");
+    assert.equal(url.searchParams.get("size"), "3");
+    assert.equal(url.searchParams.get("api_key"), "pel-key");
+  });
+
+  it("parses a GeoJSON FeatureCollection into matches", () => {
+    const matches = provider.parseForward({
+      features: [
+        {
+          geometry: { type: "Point", coordinates: [10.74, 59.91] },
+          properties: { label: "Oslo, Norway", confidence: 0.95 },
+        },
+      ],
+    });
+    assert.deepEqual(
+      [matches[0].lon, matches[0].lat, matches[0].displayName, matches[0].score],
+      [10.74, 59.91, "Oslo, Norway", 0.95],
+    );
+  });
+});
+
+describe("geocodeMatchToFeature", () => {
+  it("builds a [lon, lat] point carrying the original row", () => {
+    const feature = geocodeMatchToFeature(
+      { lat: 48.85, lon: 2.35, displayName: "Paris", score: 0.9 },
+      { id: "1" },
+    );
+    assert.ok(feature);
+    assert.deepEqual(feature.geometry.coordinates, [2.35, 48.85]);
+    assert.equal(feature.properties?.id, "1");
+    assert.equal(feature.properties?.geocode_display_name, "Paris");
+    assert.equal(feature.properties?.geocode_importance, 0.9);
+  });
+
+  it("returns null for non-finite coordinates", () => {
+    assert.equal(
+      geocodeMatchToFeature({ lat: NaN, lon: 0, displayName: "", score: null }),
+      null,
+    );
   });
 });

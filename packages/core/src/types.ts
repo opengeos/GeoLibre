@@ -335,9 +335,28 @@ declare global {
   }
 }
 
+/**
+ * Geocoding backend selection persisted in the project. The provider id keys
+ * into the geocoding registry in `@geolibre/core`; API keys are stored per
+ * provider so switching backends does not discard the others' keys. Empty
+ * endpoint overrides fall back to the provider's default endpoints.
+ */
+export interface GeocodingPreferences {
+  providerId: string;
+  /** Per-provider API key / access token, keyed by provider id. */
+  apiKeys: Record<string, string>;
+  /** Optional custom forward endpoint (else the provider default). */
+  forwardEndpoint?: string;
+  /** Optional custom reverse endpoint (else the provider default). */
+  reverseEndpoint?: string;
+  /** Contact email sent to identify the client (used by Nominatim). */
+  email?: string;
+}
+
 export interface ProjectPreferences {
   map: MapPreferences;
   environmentVariables: RuntimeEnvironmentVariable[];
+  geocoding: GeocodingPreferences;
 }
 
 export type ProjectPluginControlPosition =
@@ -364,6 +383,10 @@ export const DEFAULT_PROJECT_PREFERENCES: ProjectPreferences = {
     projection: "globe",
   },
   environmentVariables: [],
+  geocoding: {
+    providerId: "nominatim",
+    apiKeys: {},
+  },
 };
 
 /**

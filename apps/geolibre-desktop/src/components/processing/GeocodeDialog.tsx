@@ -1,12 +1,13 @@
 import {
   csvRowsToGeocodeRequests,
   geocodeForward,
-  getGeocoderConfig,
+  geocodeMatchToFeature,
+  geocoderMinIntervalMs,
+  GEOCODING_PROVIDERS,
+  getGeocodingProvider,
   nextDelayMs,
-  nominatimResultToFeature,
-  NOMINATIM_MIN_INTERVAL_MS,
+  resolveGeocoderConfig,
   rowCap,
-  shouldThrottle,
   useAppStore,
 } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
@@ -26,6 +27,7 @@ import { Loader2, MapPin, Upload, X } from "lucide-react";
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactElement,
@@ -100,16 +102,31 @@ export function GeocodeDialog({
   const open = useAppStore((s) => s.ui.geocodeOpen);
   const setGeocodeOpen = useAppStore((s) => s.setGeocodeOpen);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
+  const geocodingPrefs = useAppStore((s) => s.preferences.geocoding);
 
   const [csv, setCsv] = useState<ParsedCsv | null>(null);
   const [addressColumn, setAddressColumn] = useState<string>("");
+  const [providerId, setProviderId] = useState<string>(
+    geocodingPrefs.providerId,
+  );
   const [log, setLog] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
   const [picking, setPicking] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
 
-  const config = getGeocoderConfig();
+  // Default the run to the configured provider, but follow a settings change
+  // while the dialog is open and idle.
+  useEffect(() => {
+    if (!running) setProviderId(geocodingPrefs.providerId);
+  }, [geocodingPrefs.providerId, running]);
+
+  const config = useMemo(
+    () => resolveGeocoderConfig({ ...geocodingPrefs, providerId }),
+    [geocodingPrefs, providerId],
+  );
+  const provider = getGeocodingProvider(providerId);
+  const missingApiKey = provider.requiresApiKey && !config.apiKey;
   const cap = rowCap(config.forwardEndpoint);
   // Count only rows that will actually be geocoded (non-empty address), so the
   // cap warning matches the requests sent rather than the raw CSV row count.
@@ -165,10 +182,17 @@ export function GeocodeDialog({
     const requests = csvRowsToGeocodeRequests(csv.rows, [addressColumn]);
     const skippedEmpty = csv.rows.length - requests.length;
     const toProcess = Number.isFinite(cap) ? requests.slice(0, cap) : requests;
-    const throttle = shouldThrottle(config.forwardEndpoint);
-    const interval = throttle ? NOMINATIM_MIN_INTERVAL_MS : 0;
+    const interval = geocoderMinIntervalMs(
+      config.providerId,
+      config.forwardEndpoint,
+    );
 
-    appendLog(t("geocode.usingEndpoint", { endpoint: config.forwardEndpoint }));
+    appendLog(
+      t("geocode.usingProvider", {
+        provider: provider.label,
+        endpoint: config.forwardEndpoint,
+      }),
+    );
     if (skippedEmpty > 0) {
       appendLog(t("geocode.skippedEmpty", { count: skippedEmpty }));
     }
@@ -199,7 +223,7 @@ export function GeocodeDialog({
             limit: 1,
           });
           const feature = results[0]
-            ? nominatimResultToFeature(results[0], request.row)
+            ? geocodeMatchToFeature(results[0], request.row)
             : null;
           if (feature) features.push(feature);
           else failed.push(request.index + 1);
@@ -256,6 +280,7 @@ export function GeocodeDialog({
     cap,
     willCap,
     config,
+    provider,
     appendLog,
     addGeoJsonLayer,
     mapControllerRef,
@@ -305,6 +330,30 @@ export function GeocodeDialog({
               </span>
             )}
           </div>
+
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs">{t("geocode.provider")}</Label>
+            <Select
+              value={providerId}
+              onChange={(e) => setProviderId(e.target.value)}
+              disabled={running}
+            >
+              {GEOCODING_PROVIDERS.filter((p) => p.forward).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {t("geocode.providerHint")}
+            </p>
+          </div>
+
+          {missingApiKey ? (
+            <p className="text-xs text-amber-600 dark:text-amber-500">
+              {t("geocode.apiKeyRequired", { provider: provider.label })}
+            </p>
+          ) : null}
 
           {csv ? (
             <div className="flex flex-col gap-1">
