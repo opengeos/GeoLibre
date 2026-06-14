@@ -267,6 +267,13 @@
       "isochrone": "Isochrone / service area",
       "odMatrix": "OD cost matrix"
     },
+    "statisticsTool": {
+      "globalMoransI": "Global Moran's I",
+      "localMoransI": "Local Moran's I (LISA)",
+      "getisOrd": "Getis-Ord Gi* hotspots",
+      "averageNearestNeighbor": "Average nearest neighbor",
+      "kernelDensity": "Kernel density (heatmap)"
+    },
     "rasterTool": {
       "hillshade": "Hillshade",
       "slope": "Slope",
@@ -342,6 +349,7 @@
       "conversion": "Conversion",
       "vector": "Vector",
       "network": "Network",
+      "statistics": "Spatial Statistics",
       "raster": "Raster",
       "subGroupGeometry": "Geometry",
       "subGroupOverlay": "Overlay",
@@ -577,6 +585,13 @@
     "run": "Run",
     "outputPlaceholder": "Output will appear here.",
     "endpointNotice": "Point coordinates are sent to the routing server ({{endpoint}}). The default is a shared public Valhalla server (FOSSGIS) with usage limits — point it at your own server (Settings → Environment, VITE_ROUTING_ENDPOINT) for heavy use."
+  },
+  "statistics": {
+    "title": "Spatial statistics",
+    "description": "Spatial autocorrelation, hotspot analysis, and density measures. Every tool runs client-side on your GeoJSON layers.",
+    "heading": "Spatial Statistics",
+    "run": "Run",
+    "outputPlaceholder": "Output will appear here."
   },
   "processing": {
     "parameterField": {

@@ -3,6 +3,7 @@ import {
   ALGORITHMS,
   VECTOR_TOOLS,
   H3_TOOLS,
+  STATISTICS_TOOLS,
   type ProcessingAlgorithm,
   type ProcessingContext,
 } from "@geolibre/processing";
@@ -30,7 +31,7 @@ export interface ScriptingDeps {
 
 /** Combined client-side algorithm registry, matching the in-app dialogs. */
 function allAlgorithms(): ProcessingAlgorithm[] {
-  return [...ALGORITHMS, ...VECTOR_TOOLS, ...H3_TOOLS];
+  return [...ALGORITHMS, ...VECTOR_TOOLS, ...H3_TOOLS, ...STATISTICS_TOOLS];
 }
 
 /** Validate a required string `layerId` param, with a clear error if missing. */

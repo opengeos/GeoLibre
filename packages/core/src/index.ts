@@ -22,6 +22,7 @@ export {
   type ConversionToolKind,
   type NetworkToolKind,
   type RasterToolKind,
+  type StatisticsToolKind,
   type VectorToolKind,
 } from "./store";
 export {

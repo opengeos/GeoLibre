@@ -8,6 +8,15 @@ export {
 export { VECTOR_TOOLS, getVectorTool } from "./vector-tools";
 export { NETWORK_TOOLS, getNetworkTool } from "./network-tools";
 export {
+  STATISTICS_TOOLS,
+  getStatisticsTool,
+  globalMoransITool,
+  localMoransITool,
+  getisOrdTool,
+  averageNearestNeighborTool,
+  kernelDensityTool,
+} from "./statistics-tools";
+export {
   H3_TOOLS,
   getH3Tool,
   createH3GridTool,

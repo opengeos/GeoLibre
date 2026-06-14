@@ -151,6 +151,20 @@ const NetworkToolsDialog = lazy(() =>
     }),
 );
 
+const StatisticsToolsDialog = lazy(() =>
+  import("../processing/StatisticsToolsDialog")
+    .then((module) => ({
+      default: module.StatisticsToolsDialog,
+    }))
+    .catch((error) => {
+      // Same chunk-load fallback rationale as ProcessingDialog above.
+      console.error("Failed to load StatisticsToolsDialog", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/StatisticsToolsDialog").StatisticsToolsDialog;
+      return { default: Fallback };
+    }),
+);
+
 const GeocodeDialog = lazy(() =>
   import("../processing/GeocodeDialog")
     .then((module) => ({
@@ -1085,6 +1099,9 @@ export function DesktopShell({
       </Suspense>
       <Suspense fallback={null}>
         <NetworkToolsDialog mapControllerRef={mapControllerRef} />
+      </Suspense>
+      <Suspense fallback={null}>
+        <StatisticsToolsDialog mapControllerRef={mapControllerRef} />
       </Suspense>
       <Suspense fallback={null}>
         <GeocodeDialog mapControllerRef={mapControllerRef} />

@@ -1,0 +1,315 @@
+import { useAppStore } from "@geolibre/core";
+import { detectGeometryProfile, type MapController } from "@geolibre/map";
+import {
+  STATISTICS_TOOLS,
+  getStatisticsTool,
+  type AlgorithmParameter,
+  type GeometryFamily,
+  type ProcessingContext,
+} from "@geolibre/processing";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  ScrollArea,
+  cn,
+} from "@geolibre/ui";
+import type { FeatureCollection } from "geojson";
+import { Loader2, Play } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+} from "react";
+import { useTranslation } from "react-i18next";
+import { ParameterField } from "./ParameterField";
+
+interface StatisticsToolsDialogProps {
+  mapControllerRef: React.RefObject<MapController | null>;
+}
+
+/**
+ * Processing → Spatial Statistics dialog: Moran's I (global + local/LISA),
+ * Getis-Ord Gi* hotspots, kernel density, and average nearest neighbor. Every
+ * tool runs client-side in TypeScript (no sidecar/engine selector), so this is
+ * a sibling of NetworkToolsDialog. Cluster/hotspot tools add a result layer;
+ * the global summary tools (Moran's I, ANN) report to the output log.
+ *
+ * @param props.mapControllerRef - Map controller, used to zoom to result layers.
+ */
+export function StatisticsToolsDialog({
+  mapControllerRef,
+}: StatisticsToolsDialogProps): ReactElement {
+  const { t } = useTranslation();
+  const openTool = useAppStore((s) => s.ui.statisticsToolOpen);
+  const setStatisticsToolOpen = useAppStore((s) => s.setStatisticsToolOpen);
+  const layers = useAppStore((s) => s.layers);
+  const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
+
+  const open = openTool !== null;
+  const [selectedId, setSelectedId] = useState<string>(
+    openTool ?? STATISTICS_TOOLS[0].id,
+  );
+  const [params, setParams] = useState<Record<string, unknown>>({});
+  const [log, setLog] = useState<string[]>([]);
+  const [running, setRunning] = useState(false);
+  const logEndRef = useRef<HTMLDivElement>(null);
+
+  const tool = useMemo(
+    () => getStatisticsTool(selectedId) ?? STATISTICS_TOOLS[0],
+    [selectedId],
+  );
+
+  // When the menu opens the dialog with a specific tool, preselect it.
+  useEffect(() => {
+    if (openTool) setSelectedId(openTool);
+  }, [openTool]);
+
+  // Reset parameters to the selected tool's defaults whenever it changes.
+  useEffect(() => {
+    const defaults: Record<string, unknown> = {};
+    for (const param of tool.parameters) {
+      if (param.default !== undefined) defaults[param.id] = param.default;
+    }
+    setParams(defaults);
+    setLog([]);
+  }, [tool]);
+
+  // Keep the newest log lines in view as they stream in.
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ block: "end" });
+  }, [log]);
+
+  const appendLog = useCallback(
+    (message: string) => setLog((prev) => [...prev, message]),
+    [],
+  );
+
+  const layerOptions = useCallback(
+    (filter?: GeometryFamily[]) =>
+      layers.filter((layer) => {
+        if (layer.type !== "geojson" || !layer.geojson) return false;
+        if (!filter?.length) return true;
+        const profile = detectGeometryProfile(layer.geojson);
+        return filter.some(
+          (family) =>
+            (family === "point" && profile.hasPoint) ||
+            (family === "line" && profile.hasLine) ||
+            (family === "polygon" && profile.hasPolygon),
+        );
+      }),
+    [layers],
+  );
+
+  // Attribute-field names per layer, sampled from the first features (GeoJSON is
+  // schemaless). Memoized on the layer set and the dialog being open.
+  const fieldsByLayer = useMemo(() => {
+    const FIELD_SCAN_SAMPLE = 1000;
+    const map = new Map<string, string[]>();
+    if (!open) return map;
+    for (const layer of layers) {
+      if (layer.type !== "geojson" || !layer.geojson) continue;
+      const keys = new Set<string>();
+      for (const feature of layer.geojson.features.slice(0, FIELD_SCAN_SAMPLE)) {
+        for (const key of Object.keys(feature.properties ?? {})) keys.add(key);
+      }
+      map.set(layer.id, [...keys]);
+    }
+    return map;
+  }, [layers, open]);
+
+  const fieldOptions = useCallback(
+    (param: AlgorithmParameter): string[] => {
+      const sourceId = params[param.fieldSource ?? "layer"] as
+        | string
+        | undefined;
+      return (sourceId && fieldsByLayer.get(sourceId)) || [];
+    },
+    [fieldsByLayer, params],
+  );
+
+  const addResultLayer = useCallback(
+    (name: string, fc: FeatureCollection) => {
+      if (!fc.features.length) {
+        appendLog(`No features produced for "${name}"`);
+        return;
+      }
+      const layerId = addGeoJsonLayer(name, fc);
+      const layer = useAppStore
+        .getState()
+        .layers.find((item) => item.id === layerId);
+      if (layer) mapControllerRef.current?.fitLayer(layer);
+    },
+    [addGeoJsonLayer, appendLog, mapControllerRef],
+  );
+
+  // When a layer parameter changes, clear any field parameter that draws its
+  // options from it, so the field dropdown never keeps a stale value.
+  const handleParamChange = useCallback(
+    (id: string, value: unknown) => {
+      setParams((prev) => {
+        const next = { ...prev, [id]: value };
+        for (const param of tool.parameters) {
+          if (param.type === "field" && (param.fieldSource ?? "layer") === id) {
+            next[param.id] = undefined;
+          }
+        }
+        return next;
+      });
+    },
+    [tool],
+  );
+
+  const isParamVisible = useCallback(
+    (param: AlgorithmParameter): boolean => {
+      const vw = param.visibleWhen;
+      if (!vw) return true;
+      const current = params[vw.param] as string | undefined;
+      if ("in" in vw) return current != null && vw.in.includes(current);
+      return current == null || !vw.notIn.includes(current);
+    },
+    [params],
+  );
+
+  const handleRun = useCallback(async () => {
+    setLog([]);
+    for (const param of tool.parameters) {
+      if (!param.required || !isParamVisible(param)) continue;
+      const value = params[param.id];
+      if (
+        value === undefined ||
+        value === "" ||
+        value === null ||
+        (param.type === "number" &&
+          typeof value === "number" &&
+          Number.isNaN(value))
+      ) {
+        appendLog(`Error: "${param.label}" is required`);
+        return;
+      }
+    }
+
+    setRunning(true);
+    try {
+      const ctx: ProcessingContext = {
+        layers,
+        parameters: params,
+        log: appendLog,
+        fitBounds: (bounds) => mapControllerRef.current?.fitBounds(bounds),
+        addResultLayer,
+        viewportBounds: () => {
+          const map = mapControllerRef.current?.getMap();
+          if (!map) return null;
+          const b = map.getBounds();
+          return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+        },
+      };
+      await tool.run(ctx);
+    } catch (error) {
+      appendLog(`Error: ${(error as Error).message}`);
+    } finally {
+      setRunning(false);
+    }
+  }, [
+    tool,
+    params,
+    layers,
+    appendLog,
+    addResultLayer,
+    mapControllerRef,
+    isParamVisible,
+  ]);
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next: boolean) => {
+        if (!next) setStatisticsToolOpen(null);
+      }}
+    >
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>{t("statistics.title")}</DialogTitle>
+          <DialogDescription>{t("statistics.description")}</DialogDescription>
+        </DialogHeader>
+
+        <div className="flex gap-4">
+          {/* Tool list */}
+          <ScrollArea className="h-[24rem] w-52 shrink-0 rounded-md border">
+            <div className="p-1">
+              <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                {t("statistics.heading")}
+              </div>
+              {STATISTICS_TOOLS.map((entry) => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  onClick={() => setSelectedId(entry.id)}
+                  className={cn(
+                    "w-full rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent",
+                    entry.id === selectedId &&
+                      "bg-accent font-medium text-accent-foreground",
+                  )}
+                >
+                  {entry.name}
+                </button>
+              ))}
+            </div>
+          </ScrollArea>
+
+          {/* Parameter form + run + log */}
+          <div className="flex min-w-0 flex-1 flex-col gap-3">
+            <p className="text-sm text-muted-foreground">{tool.description}</p>
+
+            <div className="flex flex-col gap-3">
+              {tool.parameters.filter(isParamVisible).map((param) => (
+                <ParameterField
+                  key={param.id}
+                  param={param}
+                  value={params[param.id]}
+                  layerOptions={layerOptions(param.geometryFilter)}
+                  fieldOptions={
+                    param.type === "field" ? fieldOptions(param) : undefined
+                  }
+                  onChange={(value) => handleParamChange(param.id, value)}
+                />
+              ))}
+            </div>
+
+            <div>
+              <Button onClick={handleRun} disabled={running} className="gap-2">
+                {running ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
+                {t("statistics.run")}
+              </Button>
+            </div>
+
+            <ScrollArea className="h-32 rounded-md border bg-muted/30 p-2 font-mono text-xs">
+              {log.length === 0 ? (
+                <span className="text-muted-foreground">
+                  {t("statistics.outputPlaceholder")}
+                </span>
+              ) : (
+                log.map((line, index) => (
+                  <div key={index} className="whitespace-pre-wrap">
+                    {line}
+                  </div>
+                ))
+              )}
+              <div ref={logEndRef} />
+            </ScrollArea>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

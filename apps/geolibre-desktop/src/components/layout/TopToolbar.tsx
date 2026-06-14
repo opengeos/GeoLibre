@@ -411,6 +411,7 @@ export function TopToolbar({
   const setConversionOpen = useAppStore((s) => s.setConversionOpen);
   const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
   const setNetworkToolOpen = useAppStore((s) => s.setNetworkToolOpen);
+  const setStatisticsToolOpen = useAppStore((s) => s.setStatisticsToolOpen);
   const setGeocodeOpen = useAppStore((s) => s.setGeocodeOpen);
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
   const setSegmentationOpen = useAppStore((s) => s.setSegmentationOpen);
@@ -2036,6 +2037,40 @@ export function TopToolbar({
                 onSelect={() => openNetworkTool("od-matrix")}
               >
                 {t("toolbar.networkTool.odMatrix")}
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              {t("toolbar.item.statistics")}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuItem
+                onSelect={() => setStatisticsToolOpen("global-morans-i")}
+              >
+                {t("toolbar.statisticsTool.globalMoransI")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setStatisticsToolOpen("local-morans-i")}
+              >
+                {t("toolbar.statisticsTool.localMoransI")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setStatisticsToolOpen("getis-ord-gi")}
+              >
+                {t("toolbar.statisticsTool.getisOrd")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() =>
+                  setStatisticsToolOpen("average-nearest-neighbor")
+                }
+              >
+                {t("toolbar.statisticsTool.averageNearestNeighbor")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setStatisticsToolOpen("kernel-density")}
+              >
+                {t("toolbar.statisticsTool.kernelDensity")}
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>

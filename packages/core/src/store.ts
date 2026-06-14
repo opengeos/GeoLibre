@@ -78,6 +78,14 @@ export type VectorToolKind =
 /** Identifiers of the network-analysis tools (`NETWORK_TOOLS` ids). */
 export type NetworkToolKind = "isochrone" | "od-matrix";
 
+/** Identifiers of the spatial-statistics tools (`STATISTICS_TOOLS` ids). */
+export type StatisticsToolKind =
+  | "global-morans-i"
+  | "local-morans-i"
+  | "getis-ord-gi"
+  | "average-nearest-neighbor"
+  | "kernel-density";
+
 /**
  * Identifiers of the raster processing tools. Kept in sync by hand with the
  * `id` fields of `RASTER_TOOLS` in `@geolibre/processing` (`raster-tools.ts`);
@@ -131,6 +139,7 @@ export interface AppState {
     conversionOpen: ConversionToolKind | null;
     vectorToolOpen: VectorToolKind | null;
     networkToolOpen: NetworkToolKind | null;
+    statisticsToolOpen: StatisticsToolKind | null;
     rasterToolOpen: RasterToolKind | null;
     segmentationOpen: boolean;
     geocodeOpen: boolean;
@@ -168,6 +177,7 @@ export interface AppState {
   setConversionOpen: (kind: ConversionToolKind | null) => void;
   setVectorToolOpen: (kind: VectorToolKind | null) => void;
   setNetworkToolOpen: (kind: NetworkToolKind | null) => void;
+  setStatisticsToolOpen: (kind: StatisticsToolKind | null) => void;
   setRasterToolOpen: (kind: RasterToolKind | null) => void;
   setSegmentationOpen: (open: boolean) => void;
   setGeocodeOpen: (open: boolean) => void;
@@ -357,6 +367,7 @@ export const useAppStore = create<AppState>()(
         conversionOpen: null,
         vectorToolOpen: null,
         networkToolOpen: null,
+        statisticsToolOpen: null,
         rasterToolOpen: null,
         segmentationOpen: false,
         geocodeOpen: false,
@@ -419,6 +430,8 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ ui: { ...s.ui, vectorToolOpen: kind } })),
       setNetworkToolOpen: (kind) =>
         set((s) => ({ ui: { ...s.ui, networkToolOpen: kind } })),
+      setStatisticsToolOpen: (kind) =>
+        set((s) => ({ ui: { ...s.ui, statisticsToolOpen: kind } })),
       setRasterToolOpen: (kind) =>
         set((s) => ({ ui: { ...s.ui, rasterToolOpen: kind } })),
       setSegmentationOpen: (open) =>
