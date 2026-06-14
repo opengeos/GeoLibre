@@ -12,6 +12,10 @@ import {
   quoteIdentifier,
   quoteSqlString,
 } from "./duckdb-geometry";
+import {
+  confirmLargeDataset,
+  type DuckDbVectorLoadOptions,
+} from "./duckdb-vector-guard";
 import { ensureGpkgFeatureCount } from "./gpkg-ogr-contents";
 import { getSpatialExtensionPath } from "./spatial-extension-config";
 
@@ -23,9 +27,20 @@ export {
   quoteSqlString,
 } from "./duckdb-geometry";
 
+// Re-exported so callers can keep importing the guard surface from the loader.
+export {
+  confirmLargeDataset,
+  DUCKDB_VECTOR_FEATURE_WARN_COUNT,
+  VectorLoadCancelledError,
+  type DuckDbVectorLoadOptions,
+  type LargeVectorDataset,
+} from "./duckdb-vector-guard";
+
 const GEOMETRY_JSON_COLUMN = "__geolibre_geometry_geojson";
 const EXPORT_GEOJSON_EXTENSION = "geojson";
 const EXPORT_GEOPARQUET_EXTENSION = "parquet";
+
+const FEATURE_COUNT_COLUMN = "__geolibre_feature_count";
 
 const MANUAL_BUNDLES: duckdb.DuckDBBundles = {
   mvp: {
@@ -288,8 +303,28 @@ function normalizePropertyValue(value: unknown): unknown {
   return value;
 }
 
+/**
+ * Count the rows a source SQL statement would return. DuckDB answers this from
+ * Parquet metadata without a scan and, for `ST_Read` formats, far more cheaply
+ * than the full `SELECT *, ST_AsGeoJSON(...)` materialization, so it is a sound
+ * up-front guard against runaway feature counts.
+ */
+async function countFeatures(
+  connection: duckdb.AsyncDuckDBConnection,
+  sql: string,
+): Promise<number> {
+  const row = rowsFromResult(
+    await connection.query(
+      `SELECT count(*) AS ${quoteIdentifier(FEATURE_COUNT_COLUMN)} FROM (${sql}) AS data`,
+    ),
+  )[0];
+  const raw = row?.[FEATURE_COUNT_COLUMN];
+  return typeof raw === "bigint" ? Number(raw) : Number(raw ?? 0);
+}
+
 export async function loadDuckDbVectorFile(
   file: DuckDbVectorFile,
+  options: DuckDbVectorLoadOptions = {},
 ): Promise<FeatureCollection> {
   const db = await getDatabase();
   const connection = await db.connect();
@@ -306,6 +341,14 @@ export async function loadDuckDbVectorFile(
 
     if (!detected) {
       throw new Error("DuckDB did not find a geometry column in this file.");
+    }
+
+    // Guard against very large files before the expensive GeoJSON
+    // materialization. Only counted when a callback is attached, so the
+    // common (non-interactive) path stays single-pass.
+    if (options.onLargeDataset) {
+      const featureCount = await countFeatures(connection, sql);
+      await confirmLargeDataset({ name: file.name, featureCount }, options.onLargeDataset);
     }
 
     const sourceCrs = await readSourceCrs(connection, file);
