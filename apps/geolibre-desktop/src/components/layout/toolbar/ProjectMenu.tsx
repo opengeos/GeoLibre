@@ -1,0 +1,213 @@
+import { projectPathLabel, useAppStore } from "@geolibre/core";
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@geolibre/ui";
+import {
+  BookOpen,
+  FilePen,
+  FilePlus2,
+  FileText,
+  Folder,
+  FolderOpen,
+  History,
+  LayoutTemplate,
+  Link2,
+  Printer,
+  Save,
+  Share2,
+  Users,
+  X,
+} from "lucide-react";
+import { useTranslation } from "react-i18next";
+import type { ToolbarPanel } from "../../../hooks/useToolbarPanels";
+import { formatRecentProjectTime, type ToolbarChrome } from "./constants";
+
+interface ProjectMenuProps {
+  chrome: ToolbarChrome;
+  collaborationEnabled: boolean;
+  printPanel: ToolbarPanel;
+  onNewProject: () => void;
+  onOpenFromFile: () => void;
+  onOpenFromUrl: () => void;
+  onOpenRecent: (path: string) => void;
+  onSave: () => void;
+  onSaveAs: () => void;
+  onShare: () => void;
+  onCollaborate: () => void;
+  onPrintLayout: () => void;
+}
+
+/** The Project menu: new/open/save/share, recent projects, print, and storymap. */
+export function ProjectMenu({
+  chrome,
+  collaborationEnabled,
+  printPanel,
+  onNewProject,
+  onOpenFromFile,
+  onOpenFromUrl,
+  onOpenRecent,
+  onSave,
+  onSaveAs,
+  onShare,
+  onCollaborate,
+  onPrintLayout,
+}: ProjectMenuProps) {
+  const { t } = useTranslation();
+  const projectPath = useAppStore((s) => s.projectPath);
+  const recentProjects = useAppStore((s) => s.recentProjects);
+  const forgetRecentProject = useAppStore((s) => s.forgetRecentProject);
+  const clearRecentProjects = useAppStore((s) => s.clearRecentProjects);
+  const setStorymapPanelOpen = useAppStore((s) => s.setStorymapPanelOpen);
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          className={chrome.buttonClass}
+          variant="ghost"
+          size={chrome.buttonSize}
+          aria-label={t("toolbar.menu.project")}
+        >
+          <Folder className={chrome.iconClassName} />
+          {chrome.renderLabel(t("toolbar.menu.project"))}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-64">
+        <DropdownMenuLabel>{t("toolbar.menu.project")}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={onNewProject}>
+          <FilePlus2 className="mr-2 h-3.5 w-3.5" />
+          {t("toolbar.item.newEllipsis")}
+        </DropdownMenuItem>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <FolderOpen className="mr-2 h-3.5 w-3.5" />
+            {t("toolbar.item.openFrom")}
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuItem onSelect={onOpenFromFile}>
+              <FileText className="mr-2 h-3.5 w-3.5" />
+              {t("toolbar.item.fileEllipsis")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={onOpenFromUrl}>
+              <Link2 className="mr-2 h-3.5 w-3.5" />
+              {t("toolbar.item.urlEllipsis")}
+            </DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger disabled={recentProjects.length === 0}>
+            <History className="mr-2 h-3.5 w-3.5" />
+            {t("toolbar.item.openRecent")}
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="w-80">
+            {recentProjects.length === 0 ? (
+              <DropdownMenuItem disabled>
+                {t("toolbar.item.noRecentProjects")}
+              </DropdownMenuItem>
+            ) : (
+              recentProjects.map((project) => {
+                const openedAt = formatRecentProjectTime(project.openedAt);
+                const label = project.name || projectPathLabel(project.path);
+                return (
+                  <DropdownMenuItem
+                    key={project.path}
+                    className="flex items-start justify-between gap-2"
+                    onSelect={() => onOpenRecent(project.path)}
+                    title={project.path}
+                  >
+                    <span className="flex min-w-0 flex-col items-start gap-0.5">
+                      <span
+                        className="max-w-full truncate font-medium"
+                        title={label}
+                      >
+                        {label}
+                      </span>
+                      <span className="flex max-w-full items-start gap-1 text-xs text-muted-foreground">
+                        <History className="h-3 w-3 shrink-0" />
+                        <span
+                          className="break-all text-left leading-snug"
+                          title={project.path}
+                        >
+                          {openedAt
+                            ? `${openedAt} - ${project.path}`
+                            : project.path}
+                        </span>
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={t("toolbar.item.removeFromRecent", {
+                        name: label,
+                      })}
+                      className="mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+                      onClick={(event) => {
+                        // Keep the menu open and prevent the row's onSelect
+                        // (which would reopen the project) from firing.
+                        event.stopPropagation();
+                        event.preventDefault();
+                        forgetRecentProject(project.path);
+                      }}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </DropdownMenuItem>
+                );
+              })
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              disabled={recentProjects.length === 0}
+              onSelect={clearRecentProjects}
+            >
+              {t("toolbar.item.clearRecentProjects")}
+            </DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={onSave}>
+          <Save className="mr-2 h-3.5 w-3.5" />
+          {t("common.save")}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={onSaveAs}>
+          <FilePen className="mr-2 h-3.5 w-3.5" />
+          {t("toolbar.item.saveAsEllipsis")}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={onShare}>
+          <Share2 className="mr-2 h-3.5 w-3.5" />
+          {t("toolbar.item.shareEllipsis")}
+        </DropdownMenuItem>
+        {collaborationEnabled && (
+          <DropdownMenuItem onSelect={onCollaborate}>
+            <Users className="mr-2 h-3.5 w-3.5" />
+            {t("toolbar.item.collaborateEllipsis")}
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={printPanel.toggle}>
+          <Printer className="mr-2 h-3.5 w-3.5" />
+          {t("toolbar.item.printEllipsis")}
+          {printPanel.visible ? " ✓" : ""}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={onPrintLayout}>
+          <LayoutTemplate className="mr-2 h-3.5 w-3.5" />
+          Print Layout...
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => setStorymapPanelOpen(true)}>
+          <BookOpen className="mr-2 h-3.5 w-3.5" />
+          {t("toolbar.item.storymapEllipsis")}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
