@@ -275,6 +275,11 @@ describe("scenegraph (glTF 3D model) layer", () => {
     assert.match(def.example.scenegraph.modelUrl, /\.glb$/);
     assert.equal(def.example.fieldMapping.lng, "longitude");
     assert.equal(def.example.fieldMapping.lat, "latitude");
+    // A default single-location coordinate pre-fills the dialog's lng/lat.
+    assert.ok(def.example.scenegraphLocation);
+    const [lng, lat] = def.example.scenegraphLocation;
+    assert.ok(lng >= -180 && lng <= 180);
+    assert.ok(lat >= -90 && lat <= 90);
   });
 
   it("round-trips the model URL and transform through the store layer", () => {

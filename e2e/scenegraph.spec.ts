@@ -27,15 +27,14 @@ test("adds a glTF 3D model layer placed at a single coordinate", async ({
   await page.getByRole("button", { name: "Add Data" }).click();
   await page.getByRole("menuitem", { name: "3D Model (glTF)" }).click();
 
-  // The dialog opens pre-selected on the scenegraph layer type, with the model
-  // URL pre-filled from the bundled example.
+  // The dialog opens pre-selected on the scenegraph layer type, pre-filled from
+  // the bundled example: model URL plus a default single-location coordinate so
+  // the user can place a model with one click.
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
   await expect(dialog.getByLabel("glTF / GLB model URL")).not.toHaveValue("");
-
-  // Single-location placement is the default; type a coordinate.
-  await dialog.getByLabel("Longitude").fill("-122.45");
-  await dialog.getByLabel("Latitude").fill("37.78");
+  await expect(dialog.getByLabel("Longitude")).not.toHaveValue("");
+  await expect(dialog.getByLabel("Latitude")).not.toHaveValue("");
 
   await dialog.getByRole("button", { name: "Add layer" }).click();
 
@@ -58,8 +57,10 @@ test("blocks single-location placement without a valid coordinate", async ({
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
 
-  // No coordinate entered: submitting surfaces a validation error and keeps the
-  // dialog open (a blank field must not be treated as the coordinate 0).
+  // Clearing the pre-filled longitude and submitting surfaces a validation
+  // error and keeps the dialog open (a blank field must not be read as the
+  // coordinate 0).
+  await dialog.getByLabel("Longitude").fill("");
   await dialog.getByRole("button", { name: "Add layer" }).click();
   await expect(
     dialog.getByText("Enter a valid longitude and latitude."),

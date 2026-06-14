@@ -134,6 +134,12 @@ export interface DeckVizExample {
   style?: Partial<DeckVizStyle>;
   /** Default model + transform for the `scenegraph` layer kind. */
   scenegraph?: DeckVizScenegraphConfig;
+  /**
+   * Default `[lng, lat]` to pre-fill the 3D-model dialog's single-location
+   * inputs. Dialog convenience only; placement at render time comes from the
+   * row data, so this is not part of the persisted config.
+   */
+  scenegraphLocation?: [number, number];
 }
 
 export interface DeckVizLayerDef {
@@ -898,6 +904,9 @@ const DEFINITIONS: DeckVizLayerDef[] = [
         bearing: 0,
         altitude: 0,
       },
+      // San Francisco International Airport — a fitting spot for the airplane
+      // model in single-location mode.
+      scenegraphLocation: [-122.379, 37.6213],
     },
   },
 ];

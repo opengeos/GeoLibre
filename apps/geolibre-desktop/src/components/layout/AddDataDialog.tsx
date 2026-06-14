@@ -670,7 +670,8 @@ export function AddDataDialog({
     setIsLoadingDeckViz(false);
     // Pre-fill the scenegraph model + transform from the bundled example when
     // the dialog opens directly on the 3D-model kind.
-    const startSg = getDeckVizLayerDef(startKind)?.example.scenegraph;
+    const startExample = getDeckVizLayerDef(startKind)?.example;
+    const startSg = startExample?.scenegraph;
     setDeckVizModelUrl(startSg?.modelUrl ?? "");
     setDeckVizModelMode("single");
     setDeckVizModelScale(
@@ -678,8 +679,9 @@ export function AddDataDialog({
     );
     setDeckVizModelBearing(String(startSg?.bearing ?? 0));
     setDeckVizModelAltitude(String(startSg?.altitude ?? 0));
-    setDeckVizModelLng("");
-    setDeckVizModelLat("");
+    const [startLng, startLat] = startExample?.scenegraphLocation ?? ["", ""];
+    setDeckVizModelLng(String(startLng));
+    setDeckVizModelLat(String(startLat));
   }, [kind, initialDeckVizKind]);
 
   const description = useMemo(() => {
@@ -898,8 +900,9 @@ export function AddDataDialog({
       // cleared above, so leaving mode on "data" would strand the submit
       // button disabled with no point file loaded.
       setDeckVizModelMode("single");
-      setDeckVizModelLng("");
-      setDeckVizModelLat("");
+      const [lng, lat] = nextDef?.example.scenegraphLocation ?? ["", ""];
+      setDeckVizModelLng(String(lng));
+      setDeckVizModelLat(String(lat));
     }
   };
 
