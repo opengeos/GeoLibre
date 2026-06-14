@@ -150,19 +150,30 @@ describe("layer group store actions", () => {
     assert.equal(groups[0].name, "Folder");
   });
 
-  it("picks a unique default name even after a group is deleted", () => {
+  it("picks the lowest unique default name, even with custom-named groups", () => {
     const g1 = useAppStore.getState().addLayerGroup();
     useAppStore.getState().addLayerGroup();
     assert.equal(
       useAppStore.getState().layerGroups.map((g) => g.name).join(","),
       "Group 1,Group 2",
     );
-    // Deleting "Group 1" then adding again must not reuse the freed number.
+    // Deleting "Group 1" frees that number; the next default fills the gap.
     useAppStore.getState().removeLayerGroup(g1);
     useAppStore.getState().addLayerGroup();
     const names = useAppStore.getState().layerGroups.map((g) => g.name);
     assert.equal(new Set(names).size, names.length); // all unique
-    assert.deepEqual([...names].sort(), ["Group 2", "Group 3"]);
+    assert.deepEqual([...names].sort(), ["Group 1", "Group 2"]);
+
+    // A custom name must not push the default past free low numbers.
+    useAppStore.getState().newProject({ name: "Custom" });
+    const cg = useAppStore.getState().addLayerGroup("Basemaps");
+    assert.ok(cg);
+    assert.equal(
+      useAppStore.getState().addLayerGroup() &&
+        useAppStore.getState().layerGroups.find((g) => g.name === "Group 1") !==
+          undefined,
+      true,
+    );
   });
 
   it("creates a group from existing layers and keeps members contiguous", () => {
@@ -237,6 +248,37 @@ describe("layer group store actions", () => {
     redo();
     assert.equal(useAppStore.getState().layerGroups.length, 1);
     assert.equal(useAppStore.getState().layerGroups[0].id, gid);
+  });
+
+  it("collapse is a UI preference: not dirtying, not in undo history", () => {
+    const gid = useAppStore.getState().addLayerGroup("G");
+    useAppStore.getState().markSaved();
+    useAppStore.temporal.getState().clear();
+    const pastBefore = useAppStore.temporal.getState().pastStates.length;
+
+    useAppStore.getState().toggleLayerGroupCollapsed(gid);
+    assert.equal(useAppStore.getState().layerGroups[0].collapsed, true);
+    // Toggling collapse must not dirty the project nor record an undo entry.
+    assert.equal(useAppStore.getState().isDirty, false);
+    assert.equal(
+      useAppStore.temporal.getState().pastStates.length,
+      pastBefore,
+    );
+    // But it is still persisted (so folders reopen collapsed).
+    assert.equal(
+      projectFromStore({
+        projectName: "P",
+        mapView: { center: [0, 0], zoom: 1, bearing: 0, pitch: 0 },
+        basemapStyleUrl: "",
+        basemapVisible: true,
+        basemapOpacity: 1,
+        layers: useAppStore.getState().layers,
+        layerGroups: useAppStore.getState().layerGroups,
+        preferences: createEmptyProject().preferences,
+        metadata: {},
+      }).layerGroups?.[0].collapsed,
+      true,
+    );
   });
 });
 

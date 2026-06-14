@@ -686,6 +686,11 @@ export function applyProjectToStore(project: GeoLibreProject): {
       ? { ...DEFAULT_LAYER_STYLE, ...project.styles[layer.id] }
       : { ...DEFAULT_LAYER_STYLE, ...layer.style },
   }));
+  // Re-normalize here (even though `parseProject` already did) because
+  // `applyProjectToStore` is a public entry point also reached directly by
+  // programmatic/newProject loads that never passed through `parseProject`, so
+  // this stays a hardening boundary for untrusted group data. The call is
+  // idempotent on already-normalized input.
   const layerGroups = normalizeLayerGroups(project.layerGroups);
   const validGroupIds = new Set(layerGroups.map((g) => g.id));
   // Drop dangling groupIds, then restore the contiguity invariant the layer

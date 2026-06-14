@@ -769,7 +769,6 @@ export function LayerPanel({
         }`}
         onDragOver={(e) => handleGroupHeaderDragOver(e, group.id)}
         onDrop={(e) => handleGroupHeaderDrop(e, group.id)}
-        onDragEnd={resetDragState}
       >
         <div className="flex items-center gap-1">
           <button

@@ -237,14 +237,43 @@ function normalizeRecentProjects(
 }
 
 /**
- * Pick the first `Group N` name not already taken, so default names stay unique
- * even after groups are deleted (a plain count would reuse a freed number).
+ * Pick the lowest `Group N` name not already taken, so default names stay
+ * unique while still preferring small numbers — starting the search at 1 (not
+ * `length + 1`) avoids skipping free low numbers when some groups carry custom
+ * names. Group counts are small, so the linear scan is negligible.
  */
 function nextDefaultGroupName(groups: LayerGroup[]): string {
   const existing = new Set(groups.map((g) => g.name));
-  let n = groups.length + 1;
+  let n = 1;
   while (existing.has(`Group ${n}`)) n++;
   return `Group ${n}`;
+}
+
+/**
+ * Compare two `layerGroups` arrays for undo-history purposes, ignoring the
+ * `collapsed` flag so expand/collapse (a UI-panel preference) never records a
+ * history entry. Every other field — order, name, visibility, opacity — is
+ * still compared, so real edits are tracked.
+ */
+function layerGroupsEqualForHistory(
+  a: LayerGroup[],
+  b: LayerGroup[]
+): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (x === y) continue;
+    if (
+      x.id !== y.id ||
+      x.name !== y.name ||
+      x.visible !== y.visible ||
+      x.opacity !== y.opacity
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /** Cancels the active history coalesce window (assigned by zundo's handleSet). */
@@ -596,12 +625,15 @@ export const useAppStore = create<AppState>()(
           isDirty: true,
         })),
 
+      // Collapsing/expanding a folder is a UI-panel preference, not a data
+      // edit: it is still persisted in the project (folders reopen collapsed),
+      // but it does not mark the project dirty and is excluded from undo (see
+      // the equality comparator below) so Ctrl-Z never toggles a folder.
       toggleLayerGroupCollapsed: (id) =>
         set((s) => ({
           layerGroups: s.layerGroups.map((g) =>
             g.id === id ? { ...g, collapsed: !g.collapsed } : g
           ),
-          isDirty: true,
         })),
 
       moveLayerToGroup: (layerId, groupId, beforeLayerId = null) =>
@@ -713,20 +745,21 @@ export const useAppStore = create<AppState>()(
         storymap: s.storymap,
       }),
       // Records a history entry only when the tracked slice really changed.
-      // Basemap fields compare with ===; `layers` and `layerGroups` are compared
-      // element-by-element (Object.is per element) via shallow. Every mutating
-      // action creates new layer/group objects, so real changes differ; two
-      // distinct empty arrays compare equal, so resetting them (e.g. newProject)
-      // records nothing. `storymap` is compared by reference: every authoring
-      // action creates a new object, so real edits differ while an unchanged
-      // null stays equal.
+      // Basemap fields compare with ===; `layers` is compared element-by-element
+      // (Object.is per element) via shallow. Every mutating action creates new
+      // layer/group objects, so real changes differ; two distinct empty arrays
+      // compare equal, so resetting them (e.g. newProject) records nothing.
+      // `storymap` is compared by reference: every authoring action creates a
+      // new object, so real edits differ while an unchanged null stays equal.
+      // `layerGroups` is compared ignoring `collapsed`, which is a UI preference
+      // excluded from undo (see toggleLayerGroupCollapsed).
       equality: (a, b) =>
         a.basemapStyleUrl === b.basemapStyleUrl &&
         a.basemapVisible === b.basemapVisible &&
         a.basemapOpacity === b.basemapOpacity &&
         a.storymap === b.storymap &&
         shallow(a.layers, b.layers) &&
-        shallow(a.layerGroups, b.layerGroups),
+        layerGroupsEqualForHistory(a.layerGroups, b.layerGroups),
       limit: 100,
       // Group rapid bursts (slider drags) into one entry; window is 0 in tests.
       // Keep the debounced wrapper so clearHistory can reset an in-flight burst.
