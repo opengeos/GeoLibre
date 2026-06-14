@@ -78,6 +78,13 @@ export function useCollaboration(
   // unreachable, which we treat as a fatal connect failure rather than retrying
   // a dead session forever.
   const joinedRef = useRef(false);
+  // Settles when the current connect attempt joins (welcome) or fatally fails,
+  // so start()/join() resolve only on real success and the dialog keeps its
+  // busy spinner until then.
+  const pendingConnectRef = useRef<{
+    resolve: () => void;
+    reject: (error: Error) => void;
+  } | null>(null);
 
   // Tear everything down on unmount: close the socket AND clear the slice so a
   // stale "active" session can't linger in the store if the host unmounts.
@@ -165,7 +172,26 @@ export function useCollaboration(
           participants: message.participants,
           error: null,
         });
+        // Bootstrap existing participants' cursors/viewports so they're visible
+        // immediately, not only after their next move.
+        for (const [clientId, entry] of Object.entries(message.presence)) {
+          if (clientId === message.clientId) continue;
+          const participant = message.participants.find(
+            (p) => p.clientId === clientId,
+          );
+          store.updateCollaborationPresence(clientId, {
+            displayName: participant?.displayName ?? i18n.t("collaborate.guest"),
+            color: participant?.color ?? "#888888",
+            cursor: entry.cursor,
+            view: entry.view,
+          });
+        }
         if (message.snapshot) applyRemoteSnapshot(message.snapshot, true);
+        // Resolve the connect() promise so start()/join() (and the dialog's busy
+        // state) settle only once the join actually succeeds.
+        const pending = pendingConnectRef.current;
+        pendingConnectRef.current = null;
+        pending?.resolve();
         break;
       }
       case "snapshot":
@@ -282,15 +308,18 @@ export function useCollaboration(
     };
   };
 
+  // Resolves once the connection joins (welcome) and rejects on a fatal
+  // connect failure, so callers can keep a busy state until the join really
+  // succeeds.
   const connect = (
     sessionId: string,
     displayName: string,
     color: string,
     hostToken: string | undefined,
-  ): void => {
+  ): Promise<void> => {
     // Unreachable when disabled (the UI is hidden), but guard so `baseUrl` is
     // a string below without a non-null assertion.
-    if (!baseUrl) return;
+    if (!baseUrl) return Promise.reject(new Error("not configured"));
     disconnect();
     joinedRef.current = false;
     selfIdRef.current = crypto.randomUUID();
@@ -303,32 +332,38 @@ export function useCollaboration(
       selfColor: color,
       error: null,
     });
-    const conn = new CollabConnection(sessionWsUrl(baseUrl, sessionId), {
-      onOpen: () => attach(displayName, color, hostToken),
-      onMessage: handleMessage,
-      onClose: (reconnecting) => {
-        // A reconnect re-runs onOpen -> attach -> join, so drop the stale
-        // store subscription/handlers first.
-        teardownRef.current?.();
-        teardownRef.current = null;
-        // A disconnect before the first successful join (bad session code,
-        // unreachable relay) is fatal: stop retrying and surface the error to
-        // the dialog instead of spinning forever. close() here suppresses the
-        // pending reconnect (see CollabConnection).
-        if (reconnecting && !joinedRef.current) {
-          disconnect();
-          useAppStore.getState().setCollaboration({
-            connecting: false,
-            isActive: false,
-            error: i18n.t("collaborate.connectFailed"),
-          });
-          return;
-        }
-        useAppStore.getState().setCollaboration({ connecting: reconnecting });
-      },
+    return new Promise<void>((resolve, reject) => {
+      pendingConnectRef.current = { resolve, reject };
+      const conn = new CollabConnection(sessionWsUrl(baseUrl, sessionId), {
+        onOpen: () => attach(displayName, color, hostToken),
+        onMessage: handleMessage,
+        onClose: (reconnecting) => {
+          // A reconnect re-runs onOpen -> attach -> join, so drop the stale
+          // store subscription/handlers first.
+          teardownRef.current?.();
+          teardownRef.current = null;
+          // A disconnect before the first successful join (bad session code,
+          // unreachable relay) is fatal: stop retrying and surface the error to
+          // the dialog instead of spinning forever. close() here suppresses the
+          // pending reconnect (see CollabConnection).
+          if (reconnecting && !joinedRef.current) {
+            const pending = pendingConnectRef.current;
+            pendingConnectRef.current = null;
+            disconnect();
+            useAppStore.getState().setCollaboration({
+              connecting: false,
+              isActive: false,
+              error: i18n.t("collaborate.connectFailed"),
+            });
+            pending?.reject(new Error("connect failed"));
+            return;
+          }
+          useAppStore.getState().setCollaboration({ connecting: reconnecting });
+        },
+      });
+      connRef.current = conn;
+      conn.connect();
     });
-    connRef.current = conn;
-    conn.connect();
   };
 
   const disconnect = (): void => {
@@ -337,6 +372,9 @@ export function useCollaboration(
     connRef.current?.close();
     connRef.current = null;
     selfIdRef.current = null;
+    // Drop any in-flight connect promise without settling it; a fresh connect()
+    // installs a new one, and the only fatal path settles it explicitly above.
+    pendingConnectRef.current = null;
   };
 
   // `connect`/`disconnect` close only over stable refs and `baseUrl`, so keying
@@ -345,7 +383,7 @@ export function useCollaboration(
   const start = useCallback(
     async (displayName: string, color: string, mode: CollaborationMode) => {
       const session = await createSession(mode, baseUrl);
-      connect(session.sessionId, displayName, color, session.hostToken);
+      await connect(session.sessionId, displayName, color, session.hostToken);
       return session.sessionId;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -354,7 +392,7 @@ export function useCollaboration(
 
   const join = useCallback(
     async (sessionId: string, displayName: string, color: string) => {
-      connect(sessionId.trim().toUpperCase(), displayName, color, undefined);
+      await connect(sessionId.trim().toUpperCase(), displayName, color, undefined);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [baseUrl],

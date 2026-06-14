@@ -1,11 +1,65 @@
 import { DurableObject } from "cloudflare:workers";
 import type {
+  CollabCursor,
   CollabParticipant,
+  CollabView,
   ClientMessage,
   CollaborationMode,
   CollaborationRole,
+  PresenceEntry,
   ServerMessage,
 } from "./protocol";
+
+function finite(n: unknown): n is number {
+  return typeof n === "number" && Number.isFinite(n);
+}
+
+/** Accept a cursor only when both coordinates are finite numbers, so a crafted
+ *  frame can't push NaN/strings into peers' `marker.setLngLat`. */
+function sanitizeCursor(c: unknown): CollabCursor | null {
+  if (c && typeof c === "object") {
+    const { lng, lat } = c as Record<string, unknown>;
+    if (finite(lng) && finite(lat)) return { lng, lat };
+  }
+  return null;
+}
+
+/** Accept a view only with a finite center; coerce the rest and keep bbox only
+ *  when it is a finite 4-tuple. Drops any hostile extra fields. */
+function sanitizeView(v: unknown): CollabView | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const center = o.center;
+  if (!Array.isArray(center) || !finite(center[0]) || !finite(center[1])) {
+    return null;
+  }
+  const view: CollabView = {
+    center: [center[0], center[1]],
+    zoom: finite(o.zoom) ? o.zoom : 0,
+    bearing: finite(o.bearing) ? o.bearing : 0,
+    pitch: finite(o.pitch) ? o.pitch : 0,
+  };
+  const bbox = o.bbox;
+  if (
+    Array.isArray(bbox) &&
+    bbox.length === 4 &&
+    bbox.every((n) => finite(n))
+  ) {
+    view.bbox = [bbox[0], bbox[1], bbox[2], bbox[3]];
+  }
+  return view;
+}
+
+/** Parse the stored snapshot defensively: a corrupt value yields null rather
+ *  than throwing (which would lock joiners out of the session). */
+function parseStoredSnapshot(snapshot: string | undefined): unknown {
+  if (!snapshot) return null;
+  try {
+    return JSON.parse(snapshot);
+  } catch {
+    return null;
+  }
+}
 
 export interface Env {
   COLLAB_SESSION: DurableObjectNamespace<CollabSession>;
@@ -31,10 +85,7 @@ interface SocketAttachment {
   role: CollaborationRole;
 }
 
-interface PresenceState {
-  cursor?: { lng: number; lat: number } | null;
-  view?: unknown;
-}
+type PresenceState = PresenceEntry;
 
 /**
  * One live collaboration session. All participants of a given session code land
@@ -58,7 +109,10 @@ export class CollabSession extends DurableObject<Env> {
     // existing session by guessing its code.
     if (url.pathname === "/init" && request.method === "POST") {
       const existing = await this.ctx.storage.get<string>("hostToken");
-      if (existing) {
+      // Express the real intent — "already initialized" — as "a value is
+      // present", not "the value is truthy", so a stored empty token wouldn't
+      // be treated as uninitialized and let a later /init overwrite it.
+      if (existing !== undefined) {
         return Response.json({ ok: true, alreadyInitialized: true });
       }
       const body = (await request.json()) as {
@@ -202,6 +256,11 @@ export class CollabSession extends DurableObject<Env> {
     ws: WebSocket,
     message: Extract<ClientMessage, { type: "join" }>,
   ): Promise<void> {
+    // Ignore a duplicate join on an already-joined socket: re-running it would
+    // mint a new clientId and orphan the socket's previous presence entry (the
+    // close handler only deletes the current clientId).
+    if (ws.deserializeAttachment()) return;
+
     const [storedToken, mode, rev, snapshot] = await Promise.all([
       this.ctx.storage.get<string>("hostToken"),
       this.ctx.storage.get<CollaborationMode>("mode"),
@@ -239,7 +298,12 @@ export class CollabSession extends DurableObject<Env> {
       role,
       mode: mode ?? "co-edit",
       participants: this.participants(),
-      snapshot: snapshot ? (JSON.parse(snapshot) as unknown) : null,
+      // A corrupt stored snapshot (partial write/storage error) must not throw
+      // here — that would close the socket 1011 and every reconnect would hit
+      // the same poison value, locking the whole session out. Fall back to null.
+      snapshot: parseStoredSnapshot(snapshot),
+      // Bootstrap the joiner with existing participants' live cursors/viewports.
+      presence: Object.fromEntries(this.presence),
       rev: rev ?? 0,
     });
 
@@ -274,8 +338,9 @@ export class CollabSession extends DurableObject<Env> {
       return;
     }
 
-    // The project was already parsed in webSocketMessage; store and forward it
-    // directly. The relay never inspects the project's internals.
+    // The project was parsed in webSocketMessage; re-serialize it only to
+    // persist a string for storage and forward the object verbatim. The relay
+    // never reads any field inside the project.
     const project = message.project ?? null;
     // `rev` is written during /init before any socket can join, so the stored
     // value is always present; the `?? 0` is a defensive floor, never the
@@ -301,15 +366,17 @@ export class CollabSession extends DurableObject<Env> {
     attachment: SocketAttachment,
     message: Extract<ClientMessage, { type: "presence" }>,
   ): void {
-    this.presence.set(attachment.clientId, {
-      cursor: message.cursor,
-      view: message.view,
-    });
+    // Validate before storing/forwarding: cursor/view come straight off the
+    // wire and land in peers' map APIs, so reject non-finite coordinates and
+    // strip any hostile extra fields.
+    const cursor = sanitizeCursor(message.cursor);
+    const view = sanitizeView(message.view);
+    this.presence.set(attachment.clientId, { cursor, view });
     this.broadcastExcept(attachment.clientId, {
       type: "presence",
       clientId: attachment.clientId,
-      cursor: message.cursor,
-      view: message.view,
+      cursor,
+      view,
     });
   }
 

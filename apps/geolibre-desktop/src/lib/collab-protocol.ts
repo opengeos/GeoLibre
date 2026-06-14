@@ -63,7 +63,15 @@ export interface WelcomeMessage {
   mode: CollaborationMode;
   participants: CollaborationParticipant[];
   snapshot: GeoLibreProject | null;
+  /** Current presence of existing participants (keyed by clientId) so a late
+   *  joiner sees their cursors/viewports without waiting for the next move. */
+  presence: Record<string, PresenceEntry>;
   rev: number;
+}
+
+export interface PresenceEntry {
+  cursor?: CollabCursor | null;
+  view?: MapViewState | null;
 }
 
 export interface ServerSnapshotMessage {

@@ -72,7 +72,15 @@ export interface WelcomeMessage {
   mode: CollaborationMode;
   participants: CollabParticipant[];
   snapshot: unknown | null;
+  /** Current presence of existing participants (keyed by clientId) so a late
+   *  joiner sees their cursors/viewports without waiting for the next move. */
+  presence: Record<string, PresenceEntry>;
   rev: number;
+}
+
+export interface PresenceEntry {
+  cursor: CollabCursor | null;
+  view: CollabView | null;
 }
 
 export interface ServerSnapshotMessage {

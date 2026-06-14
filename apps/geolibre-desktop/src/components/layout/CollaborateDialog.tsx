@@ -11,21 +11,24 @@ import {
   Select,
 } from "@geolibre/ui";
 import { Check, Copy, Loader2, LogOut, Users } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { CollaborationApi } from "../../hooks/useCollaboration";
 
-// A small fixed palette so participant colors stay distinct and legible.
+// A small fixed palette so participant colors stay distinct and legible. Each
+// entry pairs a hex value with a human-readable name for the swatch aria-label.
 const COLOR_PALETTE = [
-  "#2563eb",
-  "#dc2626",
-  "#16a34a",
-  "#d97706",
-  "#9333ea",
-  "#0891b2",
-  "#db2777",
-  "#65a30d",
+  { hex: "#2563eb", name: "blue" },
+  { hex: "#dc2626", name: "red" },
+  { hex: "#16a34a", name: "green" },
+  { hex: "#d97706", name: "amber" },
+  { hex: "#9333ea", name: "purple" },
+  { hex: "#0891b2", name: "cyan" },
+  { hex: "#db2777", name: "pink" },
+  { hex: "#65a30d", name: "lime" },
 ];
+const DEFAULT_COLOR = COLOR_PALETTE[0]?.hex ?? "#2563eb";
 
 interface CollaborateDialogProps {
   open: boolean;
@@ -48,7 +51,7 @@ export function CollaborateDialog({
   const isActive = collaboration.isActive;
 
   const [name, setName] = useState("");
-  const [color, setColor] = useState(COLOR_PALETTE[0]);
+  const [color, setColor] = useState<string>(DEFAULT_COLOR);
   const [mode, setMode] = useState<CollaborationMode>("co-edit");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -63,8 +66,15 @@ export function CollaborateDialog({
     setBusy(false);
     setName((prev) => prev || collaboration.selfName);
     setColor((prev) => collaboration.selfColor || prev);
-    const fromUrl = new URLSearchParams(window.location.search).get("collab");
-    if (fromUrl) setCode(fromUrl);
+    const url = new URL(window.location.href);
+    const fromUrl = url.searchParams.get("collab");
+    if (fromUrl) {
+      setCode(fromUrl);
+      // Strip the code from the address bar (and thus history/referrer) once
+      // read, so the session code doesn't linger after joining.
+      url.searchParams.delete("collab");
+      window.history.replaceState({}, "", url.toString());
+    }
   }, [open, collaboration.selfName, collaboration.selfColor]);
 
   useEffect(
@@ -180,16 +190,20 @@ export function CollaborateDialog({
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {COLOR_PALETTE.map((c) => (
                     <button
-                      key={c}
+                      key={c.hex}
                       type="button"
-                      aria-label={c}
-                      aria-pressed={color === c}
-                      onClick={() => setColor(c)}
-                      className="h-6 w-6 rounded-full border-2 transition"
-                      style={{
-                        backgroundColor: c,
-                        borderColor: color === c ? "#000" : "transparent",
-                      }}
+                      aria-label={c.name}
+                      aria-pressed={color === c.hex}
+                      onClick={() => setColor(c.hex)}
+                      // Selection is an outer ring (offset from the swatch), so
+                      // the colored circle stays the same size — a border would
+                      // inset the fill and make the selected one look smaller.
+                      className={`h-6 w-6 rounded-full transition ${
+                        color === c.hex
+                          ? "ring-2 ring-offset-2 ring-offset-background ring-foreground"
+                          : ""
+                      }`}
+                      style={{ backgroundColor: c.hex }}
                     />
                   ))}
                 </div>
@@ -343,6 +357,20 @@ function ActiveSession({
               <Copy className="h-3.5 w-3.5" />
             )}
           </Button>
+        </div>
+        {/* Scan to join from a phone/tablet without typing the code. */}
+        <div className="flex flex-col items-center gap-1.5 pt-1">
+          <div className="rounded-md bg-white p-2">
+            <QRCodeSVG
+              value={shareLink}
+              size={132}
+              marginSize={0}
+              title={t("collaborate.scanToJoin")}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {t("collaborate.scanToJoin")}
+          </p>
         </div>
       </div>
 
