@@ -361,7 +361,22 @@
       "osmPbfLoadFailedWithHint": "{{message}} If this is a Mapbox Vector Tile (.pbf), it cannot be loaded as an OSM extract.",
       "couldNotOpenOsmPbf": "Could not open the OSM PBF file.",
       "invalidOsmPbfUrl": "Enter a valid http(s) URL to an .osm.pbf file.",
-      "couldNotDownloadOsmPbf": "Could not download the OSM PBF file."
+      "couldNotDownloadOsmPbf": "Could not download the OSM PBF file.",
+      "scenegraphModelUrlRequired": "Enter a glTF/GLB model URL.",
+      "scenegraphInvalidLngLat": "Enter a valid longitude and latitude.",
+      "scenegraphOutOfRange": "Longitude must be between -180 and 180, and latitude between -90 and 90.",
+      "scenegraphNoPointFeatures": "The GeoJSON has no point features to place models at."
+    },
+    "scenegraph": {
+      "modelUrl": "glTF / GLB model URL",
+      "placement": "Placement",
+      "placementSingle": "Single location",
+      "placementData": "From point data",
+      "longitude": "Longitude",
+      "latitude": "Latitude",
+      "scale": "Scale",
+      "bearing": "Bearing°",
+      "altitude": "Altitude m"
     }
   },
   "geocode": {

@@ -858,10 +858,10 @@ const DEFINITIONS: DeckVizLayerDef[] = [
         scenegraph: sg.modelUrl,
         _lighting: "pbr",
         sizeScale: sg.sizeScale,
-        // Keep the model visible at every zoom even when the metric size is
-        // tiny on screen.
+        // Floor the on-screen size so distant models stay visible; leave the
+        // ceiling unset so zooming in scales the model up naturally instead of
+        // clamping a single large asset (building, turbine) to a small dot.
         sizeMinPixels: 1,
-        sizeMaxPixels: 100,
         getPosition: (record: AnyRecord) => {
           const [lng, lat] = position(record);
           const altitude =
@@ -891,7 +891,9 @@ const DEFINITIONS: DeckVizLayerDef[] = [
       url: `${DATA_BASE}/text-layer/cities-1000.csv`,
       fieldMapping: { lng: "longitude", lat: "latitude" },
       scenegraph: {
-        modelUrl: `https://raw.githubusercontent.com/visgl/deck.gl-data/master/examples/scenegraph-layer/airplane.glb`,
+        // Pinned to a commit SHA (not `master`) so the bundled example does
+        // not silently break if the asset is moved/renamed upstream.
+        modelUrl: `https://raw.githubusercontent.com/visgl/deck.gl-data/1d1f1f2a8de2d2ff5a3f55cb4763171253cc2738/examples/scenegraph-layer/airplane.glb`,
         sizeScale: 3000,
         bearing: 0,
         altitude: 0,

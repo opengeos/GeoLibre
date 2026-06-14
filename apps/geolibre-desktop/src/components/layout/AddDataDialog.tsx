@@ -47,6 +47,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
 import { createAppAPI } from "../../hooks/usePlugins";
 import {
@@ -385,12 +386,54 @@ function inferDelimitedTextField(
   return fields[0] ?? currentField;
 }
 
+/** Recursively finds the first `[lng, lat]` pair in a GeoJSON coordinate array. */
+function firstCoordinate(coords: unknown): [number, number] | null {
+  if (!Array.isArray(coords)) return null;
+  if (typeof coords[0] === "number" && typeof coords[1] === "number") {
+    return [coords[0], coords[1]];
+  }
+  for (const child of coords) {
+    const found = firstCoordinate(child);
+    if (found) return found;
+  }
+  return null;
+}
+
+/**
+ * Flattens a GeoJSON FeatureCollection into `{ lng, lat, ...properties }` rows
+ * so the 3D-model (scenegraph) layer can place a model at each feature. The
+ * lon/lat come from each feature's geometry (its first coordinate), while the
+ * properties remain available for the optional altitude/bearing/scale columns.
+ *
+ * @param geojson - The parsed FeatureCollection.
+ * @returns One row per feature that has a usable coordinate.
+ */
+function geoJsonToPointRows(
+  geojson: FeatureCollection | undefined,
+): Record<string, unknown>[] {
+  if (!geojson) return [];
+  const rows: Record<string, unknown>[] = [];
+  for (const feature of geojson.features) {
+    const coord = firstCoordinate(
+      (feature.geometry as { coordinates?: unknown } | null)?.coordinates,
+    );
+    if (!coord) continue;
+    rows.push({
+      ...(feature.properties ?? {}),
+      lng: coord[0],
+      lat: coord[1],
+    });
+  }
+  return rows;
+}
+
 export function AddDataDialog({
   kind,
   mapControllerRef,
   onOpenChange,
   initialDeckVizKind,
 }: AddDataDialogProps) {
+  const { t } = useTranslation();
   const open = kind !== null;
   const addLayer = useAppStore((s) => s.addLayer);
   const existingLayers = useAppStore((s) => s.layers);
@@ -851,6 +894,12 @@ export function AddDataDialog({
       setDeckVizModelScale(String(exampleSg.sizeScale));
       setDeckVizModelBearing(String(exampleSg.bearing));
       setDeckVizModelAltitude(String(exampleSg.altitude));
+      // Reset placement back to single-location: the data-mode parse was
+      // cleared above, so leaving mode on "data" would strand the submit
+      // button disabled with no point file loaded.
+      setDeckVizModelMode("single");
+      setDeckVizModelLng("");
+      setDeckVizModelLat("");
     }
   };
 
@@ -858,6 +907,9 @@ export function AddDataDialog({
   // defaults for any field the user left blank/invalid.
   const buildScenegraphConfig = (): DeckVizScenegraphConfig => {
     const numOr = (value: string, fallback: number): number => {
+      // Number("") is 0 (and finite), so treat a blank field as unset and use
+      // the fallback rather than silently zeroing scale/bearing/altitude.
+      if (value.trim() === "") return fallback;
       const parsed = Number(value);
       return Number.isFinite(parsed) ? parsed : fallback;
     };
@@ -920,9 +972,28 @@ export function AddDataDialog({
   }) => {
     const def = getDeckVizLayerDef(deckVizKind);
     if (!def) throw new Error("Unknown layer type.");
-    const { parsed, mapping, style, sourcePath, scenegraph } = params;
-    if (def.kind === "scenegraph" && !scenegraph?.modelUrl) {
-      throw new Error("Enter a glTF/GLB model URL.");
+    // The model URL is already enforced by the submit handler and the disabled
+    // state of the Add button, and the example path always supplies one, so no
+    // redundant guard is needed here.
+    const { style, sourcePath, scenegraph } = params;
+    let { parsed, mapping } = params;
+
+    // The 3D-model layer renders from row data; a dropped GeoJSON point
+    // collection is converted to rows so GeoJSON point files work alongside
+    // CSV/JSON (the shared file picker offers .geojson).
+    if (def.kind === "scenegraph" && parsed.format === "geojson") {
+      const rows = geoJsonToPointRows(parsed.geojson);
+      if (rows.length === 0) {
+        throw new Error(t("toolbar.error.scenegraphNoPointFeatures"));
+      }
+      parsed = {
+        format: "csv-rows",
+        columns: Object.keys(rows[0]).map((key) => ({ value: key, label: key })),
+        rows,
+        rowCount: rows.length,
+      };
+      // lon/lat come from geometry; keep any property-mapped roles intact.
+      mapping = { ...mapping, lng: "lng", lat: "lat" };
     }
 
     if (def.format === "geojson" && parsed.format !== "geojson") {
@@ -1284,7 +1355,7 @@ export function AddDataDialog({
         const isScenegraph = deckVizKind === "scenegraph";
         const scenegraph = isScenegraph ? buildScenegraphConfig() : undefined;
         if (isScenegraph && !scenegraph?.modelUrl) {
-          throw new Error("Enter a glTF/GLB model URL.");
+          throw new Error(t("toolbar.error.scenegraphModelUrlRequired"));
         }
         // Single-location mode synthesizes a one-row dataset from the typed
         // coordinate instead of loading a point file.
@@ -1296,7 +1367,10 @@ export function AddDataDialog({
           const lng = parseCoord(deckVizModelLng);
           const lat = parseCoord(deckVizModelLat);
           if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
-            throw new Error("Enter a valid longitude and latitude.");
+            throw new Error(t("toolbar.error.scenegraphInvalidLngLat"));
+          }
+          if (lng < -180 || lng > 180 || lat < -90 || lat > 90) {
+            throw new Error(t("toolbar.error.scenegraphOutOfRange"));
           }
           finalizeDeckVizLayer({
             parsed: {
@@ -1879,7 +1953,7 @@ export function AddDataDialog({
                 <div className="space-y-3 rounded-md border border-border p-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="deckviz-model-url">
-                      glTF / GLB model URL
+                      {t("toolbar.scenegraph.modelUrl")}
                     </Label>
                     <Input
                       id="deckviz-model-url"
@@ -1892,7 +1966,9 @@ export function AddDataDialog({
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="deckviz-model-mode">Placement</Label>
+                    <Label htmlFor="deckviz-model-mode">
+                      {t("toolbar.scenegraph.placement")}
+                    </Label>
                     <Select
                       id="deckviz-model-mode"
                       value={deckVizModelMode}
@@ -1904,15 +1980,21 @@ export function AddDataDialog({
                         setDeckVizStatus(null);
                       }}
                     >
-                      <option value="single">Single location</option>
-                      <option value="data">From point data</option>
+                      <option value="single">
+                        {t("toolbar.scenegraph.placementSingle")}
+                      </option>
+                      <option value="data">
+                        {t("toolbar.scenegraph.placementData")}
+                      </option>
                     </Select>
                   </div>
 
                   {deckVizModelMode === "single" ? (
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="space-y-1.5">
-                        <Label htmlFor="deckviz-model-lng">Longitude</Label>
+                        <Label htmlFor="deckviz-model-lng">
+                          {t("toolbar.scenegraph.longitude")}
+                        </Label>
                         <Input
                           id="deckviz-model-lng"
                           inputMode="decimal"
@@ -1924,7 +2006,9 @@ export function AddDataDialog({
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <Label htmlFor="deckviz-model-lat">Latitude</Label>
+                        <Label htmlFor="deckviz-model-lat">
+                          {t("toolbar.scenegraph.latitude")}
+                        </Label>
                         <Input
                           id="deckviz-model-lat"
                           inputMode="decimal"
@@ -1940,7 +2024,9 @@ export function AddDataDialog({
 
                   <div className="grid gap-3 sm:grid-cols-3">
                     <div className="space-y-1.5">
-                      <Label htmlFor="deckviz-model-scale">Scale</Label>
+                      <Label htmlFor="deckviz-model-scale">
+                        {t("toolbar.scenegraph.scale")}
+                      </Label>
                       <Input
                         id="deckviz-model-scale"
                         inputMode="numeric"
@@ -1951,7 +2037,9 @@ export function AddDataDialog({
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="deckviz-model-bearing">Bearing°</Label>
+                      <Label htmlFor="deckviz-model-bearing">
+                        {t("toolbar.scenegraph.bearing")}
+                      </Label>
                       <Input
                         id="deckviz-model-bearing"
                         inputMode="numeric"
@@ -1962,7 +2050,9 @@ export function AddDataDialog({
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="deckviz-model-altitude">Altitude m</Label>
+                      <Label htmlFor="deckviz-model-altitude">
+                        {t("toolbar.scenegraph.altitude")}
+                      </Label>
                       <Input
                         id="deckviz-model-altitude"
                         inputMode="numeric"
