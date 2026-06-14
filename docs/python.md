@@ -94,7 +94,63 @@ Map(
 )
 ```
 
+## Interactive scripting
+
+Beyond adding data, the widget can **query the live app and react to it** — the
+same surface as the in-app [Python Console](user-guide/python-console.md). These
+calls round-trip to the running map, so the map must be displayed first (show
+`m` in a cell), then run the queries in a later cell.
+
+```python
+m.get_center()                 # live [lng, lat], reflecting UI pans/zooms
+m.get_bounds()                 # [west, south, east, north]
+m.fly_to(-122.4, 37.8, zoom=10)
+m.identify(-122.4, 37.8)       # features at a point, like clicking the map
+
+# Layer objects: read and mutate layers, read their features
+for layer in m.layers:
+    layer.opacity = 0.6
+features = m.layers[0].get_features()   # list of GeoJSON Feature objects
+
+# Run a processing algorithm; result layers are added to the map
+m.list_algorithms()
+m.run_algorithm("buffer", {"layer": layer_id, "distance": 1000})
+
+png = m.to_image()             # PNG bytes (or m.to_image("map.png"))
+```
+
+React to user interaction with event callbacks:
+
+```python
+m.on_click(lambda e: print("clicked", e["lngLat"]))
+m.on_selection_change(lambda e: print("selected", e))
+m.on_layer_change(lambda e: print("layers", e["layerIds"]))
+```
+
+!!! note "Blocking queries"
+    Interactive queries block the kernel until the app replies (via
+    `jupyter_ui_poll`, installed automatically). Pass `timeout=` for slow calls,
+    e.g. `m.run_algorithm(..., timeout=300)`.
+
 ## API reference
+
+### Interactive queries, events & processing
+
+| Method | Description |
+| --- | --- |
+| `get_view()` / `get_center()` / `get_bounds()` | Read the live camera / center / viewport bounds. |
+| `fly_to(lng, lat, zoom=, bearing=, pitch=, duration=)` | Animate the camera. |
+| `fit_bounds([w, s, e, n])` | Fit the camera to a bounding box. |
+| `identify(lng, lat, layer_id=None)` | Query rendered features at a point. |
+| `get_features(layer_id)` | A layer's features as `Feature` objects. |
+| `layers` / `get_layer(id)` | `Layer` handles (read state; set `name`/`visible`/`opacity`, `set_style`, `get_features`, `zoom_to`, `remove`). |
+| `list_algorithms()` | Available processing algorithms (`id`, `parameters`, …). |
+| `run_algorithm(id, parameters=None, timeout=)` | Run an algorithm; returns `{logs, resultLayerIds}`. |
+| `to_image(path=None, timeout=)` | Capture the map as PNG bytes, or write to `path`. |
+| `on(event, cb)` / `on_click` / `on_selection_change` / `on_layer_change` | Register event callbacks; returns an unsubscribe function. |
+| `request(method, params=None, timeout=)` | Low-level command primitive behind the methods above. |
+
+### Data, view & projects
 
 | Method | Description |
 | --- | --- |

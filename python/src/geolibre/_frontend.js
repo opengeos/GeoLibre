@@ -193,6 +193,15 @@ async function render({ model, el }) {
     });
   };
 
+  // Commands (geolibre:command) issued from Python before the iframe app has
+  // signalled readiness are held here and flushed once geolibre:ready arrives,
+  // mirroring how the first project push waits for ready.
+  const pendingCommands = [];
+  const flushCommands = () => {
+    if (!ready) return;
+    while (pendingCommands.length) post(pendingCommands.shift());
+  };
+
   const onMessage = (event) => {
     if (event.source !== iframe.contentWindow) return;
     // Defense in depth alongside the source check: reject messages that did not
@@ -203,6 +212,7 @@ async function render({ model, el }) {
     if (data.type === "geolibre:ready") {
       ready = true;
       pushProject();
+      flushCommands();
     } else if (data.type === "geolibre:state") {
       // Record the project object that came from the app, then write it back to
       // Python. onProjectChange skips pushing whatever value is still identical
@@ -213,10 +223,40 @@ async function render({ model, el }) {
     } else if (data.type === "geolibre:error") {
       model.set("error", String(data.message || ""));
       model.save_changes();
+    } else if (
+      data.type === "geolibre:result" ||
+      data.type === "geolibre:event"
+    ) {
+      // Pure passthrough of the scripting RPC reply / event back to Python over
+      // the anywidget custom-message channel; the requestId stays opaque here.
+      model.send(data);
     }
   };
 
   window.addEventListener("message", onMessage);
+
+  // Relay scripting commands from Python (widget.send) into the iframe app.
+  // Queue until the app is ready so a command issued right after construction
+  // is not dropped.
+  const onCustom = (msg) => {
+    if (!msg || typeof msg !== "object") return;
+    if (msg.type !== "geolibre:command") return;
+    // Once ready, post straight through; only buffer before the app signals
+    // ready (the queue is flushed on geolibre:ready). Defensive cap so a caller
+    // that bypasses the blocking request() can't grow the queue without limit.
+    if (ready) {
+      post(msg);
+    } else if (pendingCommands.length < 500) {
+      pendingCommands.push(msg);
+    } else {
+      // Warn so a full queue is diagnosable; otherwise the dropped command only
+      // surfaces as a confusing TimeoutError on the Python side.
+      console.warn(
+        `[GeoLibre] command queue full (500); dropping "${msg.method}"`,
+      );
+    }
+  };
+  model.on("msg:custom", onCustom);
 
   const onProjectChange = () => {
     // Loop guard. The PRIMARY protection is on the Python side: traitlets.Dict
@@ -245,6 +285,7 @@ async function render({ model, el }) {
 
   return () => {
     window.removeEventListener("message", onMessage);
+    model.off("msg:custom", onCustom);
     model.off("change:project", onProjectChange);
     model.off("change:height", onHeight);
   };

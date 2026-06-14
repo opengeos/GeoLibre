@@ -2,10 +2,10 @@
 
 from typing import Any
 
-from .geolibre import Map
+from .geolibre import Feature, Layer, Map
 
 __version__ = "1.2.0"
-__all__ = ["Map", "__version__"]
+__all__ = ["Feature", "Layer", "Map", "__version__"]
 
 
 def _jupyter_server_extension_points() -> list[dict[str, str]]:

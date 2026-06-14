@@ -58,6 +58,7 @@ import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
 import { registerXyzTileProtocol } from "../../lib/xyz-url";
 import { useEmbedBridge } from "../../hooks/useEmbedBridge";
 import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
+import { useCommandBridge } from "../../hooks/useCommandBridge";
 import {
   appendDiagnostic,
   useDiagnosticsSnapshot,
@@ -175,6 +176,20 @@ const SqlWorkspaceDialog = lazy(() =>
     }),
 );
 
+const PythonConsolePanel = lazy(() =>
+  import("../panels/PythonConsolePanel")
+    .then((module) => ({
+      default: module.PythonConsolePanel,
+    }))
+    .catch((error) => {
+      // Same chunk-load fallback rationale as the dialogs above.
+      console.error("Failed to load PythonConsolePanel", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../panels/PythonConsolePanel").PythonConsolePanel;
+      return { default: Fallback };
+    }),
+);
+
 interface DesktopShellProps {
   layoutOptions: LayoutOptions;
   projectUrlLoadState?: ProjectUrlLoadState;
@@ -226,6 +241,7 @@ export function DesktopShell({
   const togglingGeometryEditRef = useRef(false);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
+  const pythonConsoleOpen = useAppStore((s) => s.ui.pythonConsoleOpen);
   const geometryEditLayerId = useSyncExternalStore(
     subscribeGeometryEdit,
     getGeometryEditTargetLayerId,
@@ -240,6 +256,9 @@ export function DesktopShell({
   // Sync the project with an embedding host (the GeoLibre Jupyter widget) over
   // postMessage. Inert when the app is not embedded.
   useEmbedBridge(mapControllerRef);
+  // Request/reply + event channel backing the Python scripting API (live
+  // queries, processing, map events). Also inert when not embedded.
+  useCommandBridge(mapControllerRef);
   const [layerPanelWidth, setLayerPanelWidth] = useState(
     DEFAULT_SIDE_PANEL_WIDTH,
   );
@@ -975,6 +994,13 @@ export function DesktopShell({
       {layoutOptions.attributePanelVisible ? (
         <SectionErrorBoundary label="Attribute table">
           <AttributeTable mapControllerRef={mapControllerRef} />
+        </SectionErrorBoundary>
+      ) : null}
+      {pythonConsoleOpen ? (
+        <SectionErrorBoundary label="Python console">
+          <Suspense fallback={null}>
+            <PythonConsolePanel mapControllerRef={mapControllerRef} />
+          </Suspense>
         </SectionErrorBoundary>
       ) : null}
       {layoutOptions.statusBarVisible ? (

@@ -811,6 +811,84 @@ export class MapController {
     );
   }
 
+  /**
+   * Imperatively animate the camera, for the programmatic scripting API.
+   *
+   * Unlike {@link applyView} (which the store sync uses) this passes straight to
+   * MapLibre's `flyTo`, so a script can request an animated move with an explicit
+   * duration. Only the provided fields are changed; omitted camera properties
+   * keep their current value.
+   *
+   * @param camera Target camera. `center` is `[lng, lat]`.
+   */
+  flyTo(camera: {
+    center?: [number, number];
+    zoom?: number;
+    bearing?: number;
+    pitch?: number;
+    duration?: number;
+  }): void {
+    if (!this.map) return;
+    this.map.flyTo({
+      ...(camera.center ? { center: camera.center } : {}),
+      ...(typeof camera.zoom === "number" ? { zoom: camera.zoom } : {}),
+      ...(typeof camera.bearing === "number" ? { bearing: camera.bearing } : {}),
+      ...(typeof camera.pitch === "number" ? { pitch: camera.pitch } : {}),
+      duration: typeof camera.duration === "number" ? camera.duration : 800,
+    });
+  }
+
+  /**
+   * Query rendered features at a geographic point, for the scripting API's
+   * "identify" command. Mirrors the in-app Identify tool: it queries the same
+   * candidate style layers MapLibre renders for each layer
+   * ({@link getCandidateStyleLayers}) and falls back to property matching when a
+   * feature carries no stable id, so a Python caller gets the same hit a click
+   * would.
+   *
+   * @param lngLat Geographic point as `[lng, lat]`.
+   * @param layerId Optional store layer id to restrict the query to; omit to
+   *   query every layer at the point.
+   * @returns One entry per matched feature, topmost first.
+   */
+  identifyFeatures(
+    lngLat: [number, number],
+    layerId?: string,
+  ): Array<{
+    layerId: string;
+    featureId: string | null;
+    properties: Record<string, unknown>;
+    geometry: Geometry | null;
+  }> {
+    if (!this.map) return [];
+    const point = this.map.project(lngLat);
+    const targets = layerId
+      ? this.syncedLayers.filter((layer) => layer.id === layerId)
+      : this.syncedLayers;
+    const results: Array<{
+      layerId: string;
+      featureId: string | null;
+      properties: Record<string, unknown>;
+      geometry: Geometry | null;
+    }> = [];
+    for (const layer of targets) {
+      const styleIds = this.getNativeLayerIds(layer);
+      if (styleIds.length === 0) continue;
+      const features = this.map.queryRenderedFeatures(point, {
+        layers: styleIds,
+      });
+      for (const feature of features) {
+        results.push({
+          layerId: layer.id,
+          featureId: featureIdForLayer(layer, feature),
+          properties: (feature.properties ?? {}) as Record<string, unknown>,
+          geometry: feature.geometry ?? null,
+        });
+      }
+    }
+    return results;
+  }
+
   highlightFeature(
     layer: GeoLibreLayer | undefined,
     featureId: string | null,
@@ -1667,6 +1745,50 @@ function constrainMapView(
       clampNumber(preferences.maxPitch, 0, DEFAULT_MAX_PITCH),
     ),
   };
+}
+
+/**
+ * Resolve a stable feature id for an identify hit. Prefers the feature's own id;
+ * for a GeoJSON layer without one, matches the rendered feature back to a source
+ * feature by property equality and returns its id (or array index). Mirrors the
+ * in-app Identify behaviour so the scripting API reports consistent ids.
+ */
+function featureIdForLayer(
+  layer: GeoLibreLayer,
+  feature: maplibregl.MapGeoJSONFeature,
+): string | null {
+  if (feature.id != null) return String(feature.id);
+  if (!layer.geojson) return null;
+  const properties = feature.properties ?? {};
+  const propertyKeys = Object.keys(properties);
+  // With no properties there is nothing to match on, so any "match" would be a
+  // fake id (the array index) that breaks if features are reordered — bail out.
+  if (propertyKeys.length === 0) return null;
+  // Match by full property-set equality (same keys and values), and only accept
+  // an UNAMBIGUOUS hit; a non-unique match returns null (no stable id), like the
+  // feature.id guard above. MapLibre re-parses object/array property values into
+  // fresh references each query, so compare those by JSON rather than identity.
+  const valuesEqual = (a: unknown, b: unknown): boolean => {
+    if (a === b) return true;
+    if (a && b && typeof a === "object" && typeof b === "object") {
+      return JSON.stringify(a) === JSON.stringify(b);
+    }
+    return false;
+  };
+  const matches = layer.geojson.features
+    .map((candidate, index) => ({ candidate, index }))
+    .filter(({ candidate }) => {
+      const candidateProperties = candidate.properties ?? {};
+      if (Object.keys(candidateProperties).length !== propertyKeys.length) {
+        return false;
+      }
+      return propertyKeys.every((key) =>
+        valuesEqual(candidateProperties[key], properties[key]),
+      );
+    });
+  if (matches.length !== 1) return null;
+  const { candidate, index } = matches[0];
+  return String(candidate.id ?? index);
 }
 
 function effectiveMinZoomForPreferences(

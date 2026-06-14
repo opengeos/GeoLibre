@@ -450,12 +450,14 @@ function pwaPlugin(): Plugin[] {
 
   return VitePWA({
     disable: PWA_DISABLED,
-    // autoUpdate installs a new SW and reloads on the next deploy. That reload
-    // re-evaluates the import graph against the fresh build, which is the same
-    // recovery installStaleChunkReload performs for orphaned lazy chunks (see
-    // src/lib/stale-chunk-reload.ts) — the two are complementary, not at odds:
-    // precached chunks are served from the cache so they never 404, and the
-    // stale-chunk reload remains the fallback for any non-precached chunk.
+    // autoUpdate installs the new SW and lets it take control on the next
+    // deploy (skipWaiting + clientsClaim below), so its fresh precache serves
+    // subsequent requests. We deliberately suppress workbox's default
+    // force-reload-on-activate via `onNeedReload` in main.tsx — that reload
+    // fired spuriously on the relative-base `/demo/` subpath and discarded map
+    // state. Page refreshes are left to installStaleChunkReload
+    // (src/lib/stale-chunk-reload.ts), which reloads on-demand only when a now
+    // orphaned lazy chunk actually 404s; precached chunks never 404.
     registerType: "autoUpdate",
     // We register the SW by hand in main.tsx so registration lives next to the
     // stale-chunk reload it coordinates with; no auto-injected snippet.
