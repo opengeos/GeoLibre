@@ -176,6 +176,7 @@ export { maplibreFemaWmsPlugin } from "./plugins/maplibre-fema-wms";
 export {
   maplibreGeoEditorPlugin,
   canEditLayerGeometry,
+  SKETCHES_SOURCE_KIND,
   startLayerGeometryEdit,
   endLayerGeometryEdit,
   getGeometryEditTargetLayerId,

@@ -137,7 +137,14 @@ features = m.layers[0].get_features()   # list of GeoJSON Feature objects
 m.list_algorithms()
 m.run_algorithm("buffer", {"layer": layer_id, "distance": 1000})
 
+# Read back what the user selected or drew on the map
+m.get_selected_features()      # the clicked feature(s) as Feature objects
+m.get_drawn_features()         # features sketched with the Geo Editor
+m.user_rois                    # the drawn ROIs as a GeoJSON FeatureCollection
+m.get_drawn_features(as_gdf=True)   # the same, as a GeoDataFrame (needs GeoPandas)
+
 png = m.to_image()             # PNG bytes (or m.to_image("map.png"))
+m.to_html("map.html")          # standalone HTML embedding the live project
 ```
 
 React to user interaction with event callbacks:
@@ -164,10 +171,13 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `fit_bounds([w, s, e, n])` | Fit the camera to a bounding box. |
 | `identify(lng, lat, layer_id=None)` | Query rendered features at a point. |
 | `get_features(layer_id)` | A layer's features as `Feature` objects. |
+| `get_selected_features(as_gdf=False)` | The feature(s) selected in the app, as `Feature` objects (or a GeoDataFrame). |
+| `get_drawn_features(as_gdf=False)` / `user_rois` | Features drawn with the Geo Editor; `user_rois` returns them as a FeatureCollection. |
 | `layers` / `get_layer(id)` | `Layer` handles (read state; set `name`/`visible`/`opacity`, `set_style`, `get_features`, `zoom_to`, `remove`). |
 | `list_algorithms()` | Available processing algorithms (`id`, `parameters`, …). |
 | `run_algorithm(id, parameters=None, timeout=)` | Run an algorithm; returns `{logs, resultLayerIds}`. |
 | `to_image(path=None, timeout=)` | Capture the map as PNG bytes, or write to `path`. |
+| `to_html(path=None, title=, width=, height=, app_url=)` | Export a standalone HTML page that embeds the current project; returns the HTML or writes to `path`. |
 | `on(event, cb)` / `on_click` / `on_selection_change` / `on_layer_change` | Register event callbacks; returns an unsubscribe function. |
 | `request(method, params=None, timeout=)` | Low-level command primitive behind the methods above. |
 

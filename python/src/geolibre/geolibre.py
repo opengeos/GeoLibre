@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import copy
+import html as _html
 import json
 import math
 import os
@@ -85,6 +86,60 @@ def _read_local_vector(path: Any, data_format: str | None = None) -> dict[str, A
             f"Vector file exceeds the 50 MB GeoJSON size limit after conversion: {path}"
         )
     return json.loads(geojson)
+
+
+def _html_escape(value: str) -> str:
+    """Escape a string for safe interpolation into HTML attributes/text."""
+    return _html.escape(str(value), quote=True)
+
+
+# Standalone export shell: an iframe hosting the GeoLibre app plus a script that
+# replays the inlined project into it once the app announces it is ready, using
+# the same postMessage protocol useEmbedBridge/useCommandBridge speak. The
+# project is carried in a JSON <script> block rather than a JS string literal so
+# it needs no JS-string escaping. {0}-style fields are filled by str.format, so
+# literal CSS/JS braces are doubled.
+_HTML_EXPORT_TEMPLATE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>{title}</title>
+<style>
+  html, body {{ margin: 0; padding: 0; height: 100%; }}
+  #geolibre-frame {{ border: 0; display: block; width: {width}; height: {height}; }}
+</style>
+</head>
+<body>
+<iframe id="geolibre-frame" src="{iframe_src}" allow="fullscreen" allowfullscreen></iframe>
+<script type="application/json" id="geolibre-project">{project_json}</script>
+<script>
+(function () {{
+  var frame = document.getElementById("geolibre-frame");
+  var project = JSON.parse(
+    document.getElementById("geolibre-project").textContent
+  );
+  var loaded = false;
+  function load() {{
+    if (loaded || !frame.contentWindow) return;
+    loaded = true;
+    frame.contentWindow.postMessage(
+      {{ type: "geolibre:load-project", project: project, seq: 1 }},
+      "*"
+    );
+  }}
+  // The app posts "geolibre:ready" once mounted; reply with the project. Guard
+  // on the frame as the source so an unrelated message cannot trigger the load.
+  window.addEventListener("message", function (event) {{
+    if (event.source !== frame.contentWindow) return;
+    var data = event.data;
+    if (data && data.type === "geolibre:ready") load();
+  }});
+}})();
+</script>
+</body>
+</html>
+"""
 
 
 class Map(anywidget.AnyWidget):
@@ -553,6 +608,88 @@ class Map(anywidget.AnyWidget):
         )
         return [Feature(f) for f in features or []]
 
+    @staticmethod
+    def _features_to_gdf(features: list[Feature]) -> Any:
+        """Build an EPSG:4326 GeoDataFrame from GeoJSON features.
+
+        Args:
+            features: The features to wrap (each a GeoJSON Feature mapping).
+
+        Returns:
+            A ``geopandas.GeoDataFrame`` in EPSG:4326.
+
+        Raises:
+            ImportError: If GeoPandas is not installed.
+        """
+        try:
+            import geopandas
+        except ImportError as exc:
+            raise ImportError(
+                "Returning features as a GeoDataFrame requires GeoPandas. Install "
+                "it with `pip install geopandas`, or omit as_gdf=True to get a list "
+                "of Feature objects instead."
+            ) from exc
+        # from_features accepts plain GeoJSON mappings (Feature is a dict subclass)
+        # and yields an empty frame for an empty list, so no special-casing.
+        return geopandas.GeoDataFrame.from_features(features, crs="EPSG:4326")
+
+    def get_selected_features(
+        self, *, as_gdf: bool = False, timeout: float = 10.0
+    ) -> list[Feature] | Any:
+        """Return the features currently selected in the app.
+
+        Reads the live selection (the layer/feature highlighted by clicking a
+        feature in the UI). Selection is a single feature, so the result is a
+        list of zero or one :class:`Feature`; the list shape leaves room for
+        future multi-select.
+
+        Args:
+            as_gdf: Return a ``geopandas.GeoDataFrame`` instead of a list of
+                :class:`Feature` objects (requires GeoPandas).
+            timeout: Seconds to wait for the reply.
+
+        Returns:
+            A list of :class:`Feature` objects, or a ``GeoDataFrame`` when
+            ``as_gdf`` is true.
+        """
+        features = self.request("getSelectedFeatures", timeout=timeout)
+        feats = [Feature(f) for f in features or []]
+        return self._features_to_gdf(feats) if as_gdf else feats
+
+    def get_drawn_features(
+        self, *, as_gdf: bool = False, timeout: float = 10.0
+    ) -> list[Feature] | Any:
+        """Return the features the user drew with the Geo Editor.
+
+        Gathers the features from the app's "Sketches" layer(s) (the regions of
+        interest drawn with the drawing tools), so a notebook can read back what
+        was sketched on the map without knowing which layer it landed in.
+
+        Args:
+            as_gdf: Return a ``geopandas.GeoDataFrame`` instead of a list of
+                :class:`Feature` objects (requires GeoPandas).
+            timeout: Seconds to wait for the reply.
+
+        Returns:
+            A list of :class:`Feature` objects, or a ``GeoDataFrame`` when
+            ``as_gdf`` is true.
+        """
+        features = self.request("getDrawnFeatures", timeout=timeout)
+        feats = [Feature(f) for f in features or []]
+        return self._features_to_gdf(feats) if as_gdf else feats
+
+    @property
+    def user_rois(self) -> dict[str, Any]:
+        """The user-drawn regions of interest as a GeoJSON FeatureCollection.
+
+        A leafmap-style accessor over :meth:`get_drawn_features`; reading it
+        round-trips to the running app, so display the map first.
+        """
+        return {
+            "type": "FeatureCollection",
+            "features": [dict(f) for f in self.get_drawn_features()],
+        }
+
     def list_algorithms(self, *, timeout: float = 10.0) -> list[dict[str, Any]]:
         """List the available client-side processing algorithms.
 
@@ -612,6 +749,75 @@ class Map(anywidget.AnyWidget):
             out.write_bytes(png)
             return None
         return png
+
+    # Hosted GeoLibre viewer used as the default to_html() app, so an exported
+    # file is portable (loads the app over the network instead of the
+    # session-bound localhost bundle).
+    _DEFAULT_HTML_APP_URL = "https://viewer.geolibre.app/"
+
+    def to_html(
+        self,
+        path: str | None = None,
+        *,
+        title: str = "GeoLibre Map",
+        width: str = "100%",
+        height: str | None = None,
+        app_url: str | None = None,
+    ) -> str | None:
+        """Export the current map as a standalone HTML page.
+
+        The page embeds the GeoLibre app in an ``<iframe>`` and injects the
+        current project into it over the same ``postMessage`` bridge the widget
+        uses, so it renders the map exactly as configured here. Unlike
+        :meth:`to_image` this needs no running kernel to view; by default it
+        loads the hosted GeoLibre app over the network so the file stays
+        portable.
+
+        Args:
+            path: If given, write the HTML here (parent dirs are created) and
+                return ``None``. Otherwise return the HTML string.
+            title: The exported page's ``<title>``.
+            width: CSS width of the embedded map (e.g. ``"100%"`` or ``"800px"``).
+            height: CSS height of the embedded map; defaults to this map's
+                :attr:`height`.
+            app_url: Base URL of the GeoLibre app to embed. Defaults to the
+                hosted viewer so the export is portable. Pass a self-hosted
+                deployment URL to pin a specific version, or this map's live
+                ``_app_url`` to embed the session-bound localhost bundle.
+
+        Returns:
+            The HTML string, or ``None`` when written to ``path``.
+
+        Note:
+            Layers backed by kernel-side local files (e.g. a local GeoTIFF added
+            via :meth:`add_cog`) are served only for this kernel session, so the
+            exported page cannot reach them once the kernel stops. Use hosted
+            URLs or tile sources for a fully self-contained export.
+        """
+        base_url = app_url or self._DEFAULT_HTML_APP_URL
+        # Force the embed bridge on (isEmbedded() honours ?embed=1), appending
+        # with the right separator so an app_url that already carries a query
+        # string still parses.
+        separator = "&" if "?" in base_url else "?"
+        iframe_src = f"{base_url}{separator}embed=1"
+        frame_height = height or self.height
+        # Inline the project inside a JSON <script> block and escape "<" so a
+        # property value can never break out of the script element; "<" is
+        # valid JSON that JSON.parse restores to "<".
+        project_json = json.dumps(self.project).replace("<", "\\u003c")
+        html = _HTML_EXPORT_TEMPLATE.format(
+            title=_html_escape(title),
+            width=_html_escape(width),
+            height=_html_escape(frame_height),
+            iframe_src=_html_escape(iframe_src),
+            project_json=project_json,
+        )
+        if path is not None:
+            out = pathlib.Path(path).expanduser()
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(html, encoding="utf-8")
+            return None
+        return html
 
     # -- layer object model ---------------------------------------------
 

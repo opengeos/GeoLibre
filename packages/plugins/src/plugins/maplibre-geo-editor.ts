@@ -15,7 +15,10 @@ import type {
   GeoLibrePlugin,
 } from "../types";
 
-export { canEditLayerGeometry } from "./geo-editor-geometry";
+export {
+  canEditLayerGeometry,
+  SKETCHES_SOURCE_KIND,
+} from "./geo-editor-geometry";
 
 const SKETCHES_LAYER_NAME = "Sketches";
 const SKETCHES_SOURCE_PATH = "geoeditor://sketches";

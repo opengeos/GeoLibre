@@ -212,6 +212,92 @@ def test_get_features_wraps_in_feature(m, monkeypatch):
     assert feats[0].properties == {"a": 1}
 
 
+def test_get_selected_features_wraps_in_feature(m, monkeypatch):
+    monkeypatch.setattr(
+        m,
+        "request",
+        lambda method, params=None, **_k: [
+            {"type": "Feature", "properties": {"sel": 1}, "geometry": None}
+        ]
+        if method == "getSelectedFeatures"
+        else [],
+    )
+    feats = m.get_selected_features()
+    assert isinstance(feats[0], Feature)
+    assert feats[0].properties == {"sel": 1}
+
+
+def test_get_drawn_features_wraps_in_feature(m, monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        m,
+        "request",
+        lambda method, params=None, **_k: captured.update(method=method)
+        or [{"type": "Feature", "properties": {"roi": 1}, "geometry": None}],
+    )
+    feats = m.get_drawn_features()
+    assert captured["method"] == "getDrawnFeatures"
+    assert isinstance(feats[0], Feature)
+    assert feats[0].properties == {"roi": 1}
+
+
+def test_user_rois_returns_featurecollection(m, monkeypatch):
+    monkeypatch.setattr(
+        m,
+        "request",
+        lambda *_a, **_k: [
+            {"type": "Feature", "properties": {}, "geometry": None}
+        ],
+    )
+    fc = m.user_rois
+    assert fc["type"] == "FeatureCollection"
+    assert len(fc["features"]) == 1
+    # Plain dicts, not Feature instances, so the result is a clean GeoJSON value.
+    assert type(fc["features"][0]) is dict
+
+
+def test_get_drawn_features_as_gdf(m, monkeypatch):
+    geopandas = pytest.importorskip("geopandas")
+    monkeypatch.setattr(
+        m,
+        "request",
+        lambda *_a, **_k: [
+            {
+                "type": "Feature",
+                "properties": {"roi": 1},
+                "geometry": {"type": "Point", "coordinates": [1, 2]},
+            }
+        ],
+    )
+    gdf = m.get_drawn_features(as_gdf=True)
+    assert isinstance(gdf, geopandas.GeoDataFrame)
+    assert len(gdf) == 1
+    assert gdf.crs is not None
+
+
+def test_to_html_returns_string_with_project(m):
+    html = m.to_html()
+    assert "<iframe" in html
+    assert "embed=1" in html
+    assert "geolibre:load-project" in html
+    # The project rides inside the JSON <script> block.
+    assert '"mapView"' in html
+
+
+def test_to_html_writes_path(m, tmp_path):
+    out = tmp_path / "nested" / "map.html"
+    assert m.to_html(str(out)) is None
+    text = out.read_text(encoding="utf-8")
+    assert "<iframe" in text
+
+
+def test_to_html_app_url_query_separator(m):
+    # An app_url that already carries a query string must keep parsing, so the
+    # embed flag is appended with "&", not a second "?".
+    html = m.to_html(app_url="https://example.com/app?foo=bar")
+    assert "https://example.com/app?foo=bar&amp;embed=1" in html
+
+
 def test_to_image_decodes_base64(m, monkeypatch):
     png = b"\x89PNG\r\n\x1a\n fake"
     data_url = "data:image/png;base64," + base64.b64encode(png).decode()

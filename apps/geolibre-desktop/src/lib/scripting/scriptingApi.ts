@@ -7,7 +7,8 @@ import {
   type ProcessingAlgorithm,
   type ProcessingContext,
 } from "@geolibre/processing";
-import type { FeatureCollection } from "geojson";
+import { SKETCHES_SOURCE_KIND } from "@geolibre/plugins";
+import type { Feature, FeatureCollection } from "geojson";
 import type { MapController } from "@geolibre/map";
 import { captureMapImage } from "../print-layout-export";
 
@@ -88,6 +89,33 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         .layers.find((item) => item.id === layerId);
       if (!layer) throw new Error(`No layer with id "${layerId}"`);
       return layer.geojson?.features ?? [];
+    },
+    getSelectedFeatures: () => {
+      // Selection is a single layer+feature pair in the store; return it as a
+      // (0-or-1 element) list so the shape is forward-compatible with
+      // multi-select and matches getLayerFeatures/getDrawnFeatures.
+      const state = useAppStore.getState();
+      const { selectedLayerId, selectedFeatureId } = state;
+      if (!selectedLayerId || !selectedFeatureId) return [];
+      const layer = state.layers.find((item) => item.id === selectedLayerId);
+      const features = layer?.geojson?.features ?? [];
+      // Mirror the controller's id convention (String(feature.id ?? index)) so a
+      // selectedFeatureId derived from an index still resolves.
+      const match = features.find(
+        (feature, index) => String(feature.id ?? index) === selectedFeatureId,
+      );
+      return match ? [match] : [];
+    },
+    getDrawnFeatures: () => {
+      // Features the user drew with the Geo Editor land in store layers tagged
+      // with the Sketches source kind; gather every such layer's features.
+      const features: Feature[] = [];
+      for (const layer of useAppStore.getState().layers) {
+        if (layer.metadata.sourceKind === SKETCHES_SOURCE_KIND) {
+          features.push(...(layer.geojson?.features ?? []));
+        }
+      }
+      return features;
     },
     listLayers: () =>
       useAppStore.getState().layers.map((layer) => ({
