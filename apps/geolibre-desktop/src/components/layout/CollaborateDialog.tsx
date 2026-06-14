@@ -252,9 +252,12 @@ export function CollaborateDialog({
               </div>
             </div>
 
-            {error && (
+            {/* Show local validation errors and connect failures, the latter
+                arriving asynchronously in the store (the WebSocket handshake
+                fails after this dialog's call already resolved). */}
+            {(error || collaboration.error) && (
               <p className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">
-                {error}
+                {error || collaboration.error}
               </p>
             )}
           </div>

@@ -179,7 +179,9 @@ export class CollabConnection {
         return;
       }
       this.handlers.onClose(true);
-      this.scheduleReconnect();
+      // onClose may have called close() (e.g. a failed initial connect the app
+      // treats as fatal); only schedule a retry if it didn't.
+      if (!this.closedByUs) this.scheduleReconnect();
     });
     // An error is always followed by a close event, where reconnect is handled.
     ws.addEventListener("error", () => {});

@@ -171,8 +171,10 @@ export class CollabSession extends DurableObject<Env> {
     }
   }
 
-  async webSocketError(ws: WebSocket): Promise<void> {
-    await this.webSocketClose(ws);
+  async webSocketError(): Promise<void> {
+    // Intentional no-op: Cloudflare fires webSocketClose after webSocketError,
+    // so all cleanup (presence removal, participant broadcast, TTL alarm)
+    // happens there once — delegating here would double-broadcast.
   }
 
   async alarm(): Promise<void> {

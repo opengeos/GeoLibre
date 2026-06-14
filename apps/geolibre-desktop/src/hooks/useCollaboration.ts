@@ -71,6 +71,11 @@ export function useCollaboration(
   const lastContentRef = useRef<string | null>(null);
   const revRef = useRef(0);
   const selfIdRef = useRef<string | null>(null);
+  // Whether we ever completed the initial join (received a `welcome`). A
+  // disconnect before that means the session code was bad or the relay is
+  // unreachable, which we treat as a fatal connect failure rather than retrying
+  // a dead session forever.
+  const joinedRef = useRef(false);
 
   // Tear everything down on unmount: close the socket AND clear the slice so a
   // stale "active" session can't linger in the store if the host unmounts.
@@ -120,6 +125,7 @@ export function useCollaboration(
     const store = useAppStore.getState();
     switch (message.type) {
       case "welcome": {
+        joinedRef.current = true;
         selfIdRef.current = message.clientId;
         store.setCollaboration({
           isActive: true,
@@ -254,6 +260,7 @@ export function useCollaboration(
     hostToken: string | undefined,
   ): void => {
     disconnect();
+    joinedRef.current = false;
     selfIdRef.current = crypto.randomUUID();
     lastContentRef.current = null;
     revRef.current = 0;
@@ -268,11 +275,24 @@ export function useCollaboration(
       onOpen: () => attach(displayName, color, hostToken),
       onMessage: handleMessage,
       onClose: (reconnecting) => {
-        useAppStore.getState().setCollaboration({ connecting: reconnecting });
         // A reconnect re-runs onOpen -> attach -> join, so drop the stale
         // store subscription/handlers first.
         teardownRef.current?.();
         teardownRef.current = null;
+        // A disconnect before the first successful join (bad session code,
+        // unreachable relay) is fatal: stop retrying and surface the error to
+        // the dialog instead of spinning forever. close() here suppresses the
+        // pending reconnect (see CollabConnection).
+        if (reconnecting && !joinedRef.current) {
+          disconnect();
+          useAppStore.getState().setCollaboration({
+            connecting: false,
+            isActive: false,
+            error: i18n.t("collaborate.connectFailed"),
+          });
+          return;
+        }
+        useAppStore.getState().setCollaboration({ connecting: reconnecting });
       },
     });
     connRef.current = conn;
