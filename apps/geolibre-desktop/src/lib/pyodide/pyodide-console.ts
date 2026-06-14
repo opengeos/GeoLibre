@@ -69,10 +69,9 @@ function loadPyodideScript(indexURL: string): Promise<void> {
     const script = document.createElement("script");
     script.src = `${indexURL}pyodide.js`;
     script.onload = () => resolve();
-    script.onerror = () => {
-      scriptPromise = null;
+    // The shared `.catch` below owns resetting scriptPromise on failure.
+    script.onerror = () =>
       reject(new Error("Failed to load the Pyodide runtime script."));
-    };
     document.head.appendChild(script);
   }).catch((error) => {
     scriptPromise = null;

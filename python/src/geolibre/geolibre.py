@@ -372,9 +372,10 @@ class Map(anywidget.AnyWidget):
             "value": None,
             "error": None,
         }
-        self._pending[request_id] = slot
         try:
-            # Inside the try so a failing send() still cleans up the slot.
+            # Register and send inside the try so a failing send() still cleans
+            # up the slot in finally.
+            self._pending[request_id] = slot
             self.send(
                 {
                     "type": "geolibre:command",
@@ -590,7 +591,9 @@ class Map(anywidget.AnyWidget):
             The PNG bytes, or ``None`` when written to ``path``.
         """
         data_url = self.request("toImage", timeout=timeout)
-        _, _, encoded = str(data_url).partition(",")
+        _, sep, encoded = str(data_url).partition(",")
+        if not sep:
+            raise ValueError(f"toImage returned an unexpected value: {data_url!r}")
         png = base64.b64decode(encoded)
         if path is not None:
             out = pathlib.Path(path).expanduser()

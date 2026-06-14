@@ -11,10 +11,13 @@
  * or when it is opened with an explicit `?embed=1` query parameter, which lets
  * the host force the bridge on for a standalone `to_html()` export.
  *
- * Trust model: a cross-origin framing parent throws on `window.parent` access
- * and is therefore NOT auto-trusted (the try/catch returns false), so a random
- * page that iframes a deployed app never activates the bridge. The explicit
- * `?embed=1` opt-in, however, trusts whatever the framing parent is — the bridge
+ * Trust model: auto-detection trusts only a SAME-ORIGIN framing parent — it
+ * confirms same-origin by reading `window.parent.location.href`, which throws
+ * for a cross-origin parent (merely comparing `window.parent !== window` does
+ * not throw cross-origin, so it can't be used for this). A random cross-origin
+ * page that iframes a deployed app therefore never auto-activates the bridge.
+ * The explicit `?embed=1` opt-in, however, trusts whatever the framing parent
+ * is — the bridge
  * broadcasts full project state to it. Because the legitimate hosts (the Jupyter
  * widget, Colab's proxy) have arbitrary, unknowable origins, an origin allowlist
  * is not viable here; instead the deployment constraint is: an `?embed=1`
@@ -28,13 +31,18 @@ export function isEmbedded(): boolean {
   // widget and `to_html()` exports run (they load the app with `?embed=1`).
   const embed = new URLSearchParams(window.location.search).get("embed");
   if (embed === "1" || embed === "true") return true;
+  if (!window.parent || window.parent === window) return false;
   try {
-    // A same-origin framing host (readable parent) is trusted, so activate.
-    return Boolean(window.parent && window.parent !== window);
+    // `window.parent !== window` does NOT throw cross-origin, so it can't tell a
+    // same-origin host from a third-party framer on its own. Probe a restricted
+    // property (location.href): readable only for a SAME-ORIGIN parent, throws
+    // for cross-origin. So a same-origin framing host auto-activates the bridge,
+    // while a cross-origin page that iframes a deployed app does not (it would
+    // need the explicit `?embed=1` opt-in, which must only be served from a
+    // trusted context — see below).
+    void window.parent.location.href;
+    return true;
   } catch {
-    // A cross-origin parent throws on access. Without the explicit `?embed=1`
-    // opt-in, don't activate the bridge — otherwise any third-party page that
-    // iframes a deployed app would start receiving project state.
     return false;
   }
 }

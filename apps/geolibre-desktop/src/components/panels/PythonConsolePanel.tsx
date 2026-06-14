@@ -51,6 +51,9 @@ export function PythonConsolePanel({
 
   const sectionRef = useRef<HTMLElement>(null);
   const outputRef = useRef<HTMLDivElement>(null);
+  // Tears down an in-flight drag's window listeners; set while dragging so an
+  // unmount mid-drag (e.g. closing the panel) doesn't leak them.
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
   const [height, setHeight] = useState(DEFAULT_CONSOLE_HEIGHT);
   const [code, setCode] = useState("");
   const [history, setHistory] = useState<Entry[]>([]);
@@ -163,6 +166,7 @@ export function PythonConsolePanel({
     const onUp = () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      resizeCleanupRef.current = null;
       if (frame !== null) window.cancelAnimationFrame(frame);
       setHeight(nextHeight);
       window.dispatchEvent(new Event(PANEL_RESIZE_END_EVENT));
@@ -172,7 +176,18 @@ export function PythonConsolePanel({
 
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
+    // Expose teardown so an unmount during the drag can remove the listeners.
+    resizeCleanupRef.current = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+    };
   };
+
+  // On unmount, tear down any in-flight drag listeners.
+  useEffect(() => () => resizeCleanupRef.current?.(), []);
 
   return (
     <section

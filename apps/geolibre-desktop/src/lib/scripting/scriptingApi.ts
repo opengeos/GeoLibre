@@ -120,7 +120,19 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       return null;
     },
     setBasemap: (params) => {
-      useAppStore.getState().setBasemapStyleUrl(String(params.url));
+      // Validate the scheme: reject undefined/non-string (would store the literal
+      // "undefined") and non-http(s) schemes like javascript:/data: that would
+      // be persisted into project state and snapshots.
+      const url = params.url;
+      if (
+        typeof url !== "string" ||
+        (!/^https?:\/\//i.test(url) && !url.startsWith("/"))
+      ) {
+        throw new Error(
+          "setBasemap: url must be an http(s) or root-relative URL string",
+        );
+      }
+      useAppStore.getState().setBasemapStyleUrl(url);
       return null;
     },
     zoomToLayer: (params) => {

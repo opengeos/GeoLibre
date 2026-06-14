@@ -201,6 +201,10 @@ class _GeoLibre:
         from pyodide.http import pyfetch
 
         response = await pyfetch(url)
+        # pyfetch resolves for 4xx/5xx too; surface a clear HTTP error instead of
+        # trying to parse an error body as GeoJSON.
+        if not response.ok:
+            raise RuntimeError(f"Failed to fetch {url!r}: HTTP {response.status}")
         fc = _coerce_featurecollection(await response.json())
         return _js.addGeoJsonLayer(_to_js({"name": name, "geojson": fc}))
 
@@ -229,7 +233,9 @@ class _GeoLibre:
         returns the bytes; persist them yourself if needed.
         """
         data_url = str(_js.toImage())
-        _, _, encoded = data_url.partition(",")
+        _, sep, encoded = data_url.partition(",")
+        if not sep:
+            raise ValueError(f"toImage returned an unexpected value: {data_url!r}")
         return base64.b64decode(encoded)
 
     async def load_package(self, name):
