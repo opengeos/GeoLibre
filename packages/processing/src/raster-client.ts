@@ -421,9 +421,25 @@ export interface RasterCalcParams {
 export function rasterCalc(input: RasterData, params: RasterCalcParams): RasterData {
   const expr = params.expression.trim();
   if (!expr) throw new Error("Enter an expression.");
-  if (/\b[B-Z]\d*\b/.test(expr.replace(/\b(?:where|clip|log|exp|sqrt|abs|minimum|maximum|sin|cos|tan)\b/g, ""))) {
+  // Allowlist the expression before handing it to `new Function` below: only
+  // band refs (A, A1, A2…), the named math helpers, and numeric/arithmetic
+  // tokens are permitted. This routes multi-raster math (B, C) to the sidecar
+  // AND prevents the evaluated expression from reaching browser globals
+  // (fetch, document, globalThis…) — important for shared Jupyter embeds.
+  const HELPERS_RE = /\b(?:where|clip|log|exp|sqrt|abs|minimum|maximum|sin|cos|tan)\b/g;
+  const withoutBands = expr.replace(HELPERS_RE, " ").replace(/\bA\d*\b/g, " ");
+  if (/\b[B-Z]\d*\b/.test(withoutBands)) {
     throw new Error(
       "The client raster calculator supports a single input (A, A1, A2 …). Use the sidecar engine for multi-raster math.",
+    );
+  }
+  // Strip numeric literals (incl. scientific notation) and check nothing
+  // identifier-like remains.
+  const residual = withoutBands.replace(/\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g, " ");
+  if (/[A-Za-z$_]/.test(residual)) {
+    throw new Error(
+      "Expression contains unsupported identifiers. Only A, A1, A2 … and the math helpers " +
+        "(where, clip, log, exp, sqrt, abs, minimum, maximum, sin, cos, tan) are allowed.",
     );
   }
 

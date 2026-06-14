@@ -131,6 +131,25 @@ describe("raster-client compute", () => {
     assert.throws(() => rasterCalc(raster, { expression: "A + B" }), /single input/);
   });
 
+  it("rejects expressions that reach browser globals", () => {
+    const raster = makeRaster([[1, 2]], 2, 1);
+    assert.throws(
+      () => rasterCalc(raster, { expression: "A + fetch('x')" }),
+      /unsupported identifiers/,
+    );
+    assert.throws(
+      () => rasterCalc(raster, { expression: "globalThis" }),
+      /unsupported identifiers/,
+    );
+  });
+
+  it("allows numeric literals including scientific notation", () => {
+    const raster = makeRaster([[1, 2]], 2, 1);
+    const out = rasterCalc(raster, { expression: "A * 1e3 + 0.5" });
+    assert.equal(out.bands[0][0], 1 * 1e3 + 0.5);
+    assert.equal(out.bands[0][1], 2 * 1e3 + 0.5);
+  });
+
   it("computes a focal mean over a neighbourhood", () => {
     const raster = makeRaster([[1, 2, 3, 4, 5, 6, 7, 8, 9]], 3, 3);
     const out = focalStatistics(raster, { statistic: "mean", size: 3 });

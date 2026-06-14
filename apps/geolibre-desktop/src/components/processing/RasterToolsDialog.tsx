@@ -373,6 +373,10 @@ export function RasterToolsDialog({
     setClientLog([`Running "${tool.name}" in your browser...`]);
     try {
       const raster = await readRasterData(clientInput.bytes);
+      // Compute is a synchronous pixel loop (millions of iterations for a large
+      // DEM). Yield once so React paints the "running" spinner before the main
+      // thread blocks; a Web Worker would be the full fix for very large rasters.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
       const { raster: result, bytes, messages } = runRasterToolClient(
         tool.id,
         raster,
