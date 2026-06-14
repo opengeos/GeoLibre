@@ -22,7 +22,7 @@
     "test": "npm run test:frontend",
     "test:frontend": "node --import tsx --test tests/*.test.ts",
     "test:backend": "python -m pytest backend/geolibre_server/tests",
-    "test:worker": "npm run typecheck -w geolibre-viewer-worker",
+    "test:worker": "npm run typecheck -w geolibre-viewer-worker && npm run typecheck -w geolibre-collab-worker",
     "test:e2e": "playwright test",
     "check:rust": "cargo check --manifest-path apps/geolibre-desktop/src-tauri/Cargo.toml",
     "ci": "npm run lint && npm run build && npm run test:frontend && npm run test:worker && npm run test:backend && npm run check:rust",

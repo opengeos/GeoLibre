@@ -21,6 +21,8 @@ import {
   DEFAULT_LEGEND_CONFIG,
   DEFAULT_PROJECT_PREFERENCES,
   DEFAULT_STORY_MAP,
+  type CollaborationPresence,
+  type CollaborationState,
   type GeoLibreLayer,
   type GeoLibreProject,
   type LayerGroup,
@@ -119,6 +121,10 @@ export interface AppState {
   metadata: Record<string, unknown>;
   recentProjects: RecentProjectEntry[];
   attributeFilter: string;
+  // Ephemeral live-collaboration session state (issue #307). Deliberately
+  // excluded from the project file (project.ts never reads it) and from undo
+  // history (partialize never lists it).
+  collaboration: CollaborationState;
   ui: {
     processingOpen: boolean;
     conversionOpen: ConversionToolKind | null;
@@ -134,6 +140,12 @@ export interface AppState {
   };
 
   setPointerCoords: (coords: [number, number] | null) => void;
+  setCollaboration: (patch: Partial<CollaborationState>) => void;
+  updateCollaborationPresence: (
+    clientId: string,
+    presence: CollaborationPresence | null
+  ) => void;
+  resetCollaboration: () => void;
   setMapView: (view: Partial<MapViewState>, markDirty?: boolean) => void;
   setBasemapStyleUrl: (url: string) => void;
   setBasemapVisible: (visible: boolean) => void;
@@ -213,6 +225,21 @@ export interface AppState {
 }
 
 const MAX_RECENT_PROJECTS = 10;
+
+/** A fresh, inactive collaboration slice (no live session). */
+export const DEFAULT_COLLABORATION_STATE: CollaborationState = {
+  isActive: false,
+  connecting: false,
+  sessionId: null,
+  clientId: null,
+  role: null,
+  mode: "co-edit",
+  selfName: "",
+  selfColor: "",
+  participants: [],
+  presence: {},
+  error: null,
+};
 
 /** Derive a human-friendly display name from a file path or URL. */
 export function projectPathLabel(path: string): string {
@@ -308,6 +335,7 @@ export const useAppStore = create<AppState>()(
       metadata: {},
       recentProjects: [],
       attributeFilter: "",
+      collaboration: DEFAULT_COLLABORATION_STATE,
       ui: {
         processingOpen: false,
         conversionOpen: null,
@@ -323,6 +351,23 @@ export const useAppStore = create<AppState>()(
       },
 
       setPointerCoords: (coords) => set({ pointerCoords: coords }),
+      setCollaboration: (patch) =>
+        set((s) => ({ collaboration: { ...s.collaboration, ...patch } })),
+      // Add or remove a single remote participant's presence without rebuilding
+      // the whole map on every cursor move. Passing `null` drops the entry (on
+      // participant leave).
+      updateCollaborationPresence: (clientId, presence) =>
+        set((s) => {
+          const next = { ...s.collaboration.presence };
+          if (presence === null) {
+            delete next[clientId];
+          } else {
+            next[clientId] = presence;
+          }
+          return { collaboration: { ...s.collaboration, presence: next } };
+        }),
+      resetCollaboration: () =>
+        set({ collaboration: DEFAULT_COLLABORATION_STATE }),
       setMapView: (view, markDirty = false) =>
         set((s) => ({
           mapView: { ...s.mapView, ...view },
