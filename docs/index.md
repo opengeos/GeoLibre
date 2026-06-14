@@ -93,7 +93,7 @@ Chat with your data: a natural-language [assistant](user-guide/ai-assistant.md) 
 <div class="feature-card" markdown>
 ### Collaboration and story maps
 
-Edit the same project with others in real time (MVP), build scroll-driven story maps with a presenter view and standalone HTML export, and compose print layouts with a user-editable legend that export to PNG or PDF.
+Edit the same project with others in real time (MVP; requires `VITE_GEOLIBRE_COLLAB_URL`), build scroll-driven story maps with a presenter view and standalone HTML export, and compose print layouts with a user-editable legend that export to PNG or PDF.
 </div>
 
 <div class="feature-card" markdown>
