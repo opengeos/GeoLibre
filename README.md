@@ -20,27 +20,36 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 
 **Video tutorial:** [GeoLibre 1.0: A Free, Open-Source Cloud-Native GIS That Runs Anywhere (Browser, Desktop & Jupyter)](https://youtu.be/87Cm0QagtxI)
 
-## Features (v1.2)
+## Features (v1.3)
 
 - Runs across desktop (Tauri), web (browser), and mobile or small screens, with a responsive layout that adapts menus, dialogs, and panels, plus per-panel visibility through Layout settings
 - MapLibre map workspace with OpenFreeMap basemaps, blank background support, and toggleable navigation, fullscreen, geolocation, globe, terrain, scale, attribution, and logo controls
 - Load local vector layers supported by DuckDB-WASM Spatial, including common formats such as GeoJSON, GeoParquet, GeoPackage, Shapefile, FlatGeobuf, KML/KMZ, GML, delimited text, GPX, and OpenStreetMap PBF extracts (parsed in-browser with osmix)
 - Reproject vector layers to EPSG:4326 on load and split dragged GPX files into named waypoint, track, and route layers
+- Large local vector layers render through client-side vector tiling, with a warning before loading very large files
 - Add Data menu for XYZ tiles, WMS, WFS, GeoJSON URLs, vector tiles, COG and GeoTIFF rasters, Cloud-Optimized NetCDF/HDF (via kerchunk references), MBTiles, ArcGIS FeatureServer and VectorTileServer layers, PMTiles, Zarr, LiDAR, 3D Tiles (including authenticated tilesets via custom request headers), Gaussian splats, glTF/GLB 3D models placed at coordinates, and georeferenced video overlays
 - Deck.gl Layer builder for composing deck.gl overlays from uploaded files or remote URLs
 - Cloud data integrations through the Planetary Computer and Earth Engine panels, the Overture Maps plugin, and federal Web Services plugins
 - Manual and automatic refresh for WFS, GeoJSON URL, and Add Vector Layer URL layers
-- Layer panel for visibility, opacity, reordering, rename, zoom-to-layer, identify, labels, open attribute table, export, and remove actions
+- Layer panel for visibility, opacity, reordering, rename, zoom-to-layer, identify, labels, open attribute table, export, and remove actions, with collapsible layer groups/folders for organizing the layer stack
 - Live style panel with single, categorized, graduated, and expression symbology (fill, stroke, opacity, circle radius), plus point heatmap and clustering renderers — all including for Add Vector Layer point layers
-- Attribute table with filtering, sorting, resize controls, feature highlighting, optional zoom to selected features, add-field and field-calculator tools, a Charts panel (histogram, scatter, bar, line, box), column management (rename, delete, hide/show, reorder), and export to GeoJSON/GeoParquet/CSV
-- SQL Workspace for running DuckDB Spatial SQL against loaded layers, local files, and remote URLs, with sample queries, query history, and adding results to the map or exporting them, plus an in-browser PostGIS SQL engine via PGlite
+- Attribute table with filtering, sorting, resize controls, feature highlighting, optional zoom to selected features, add-field and field-calculator tools, a Charts panel (histogram, scatter, bar, line, box), a field statistics summary panel, column management (rename, delete, hide/show, reorder), virtualized rows for large layers, and export to GeoJSON/GeoParquet/Shapefile/GeoPackage/CSV
+- SQL Workspace for running DuckDB Spatial SQL against loaded layers, local files, and remote URLs, with sample queries, query history, and adding results to the map or exporting them, plus an in-browser PostGIS SQL engine via PGlite and an Apache Sedona engine for distributed spatial SQL
 - Multiple DuckDB SQL query-result layers with identify, selection, and attribute table support
-- Controls menu with Measure, Bookmark, Minimap, and View State tools, a Search panel, and a Print menu with a print layout composer that exports the map to PNG or PDF
+- Controls menu with Measure, Bookmark, Minimap, and View State tools, a Search panel, and a Print menu with a print layout composer (including a user-editable legend) that exports the map to PNG or PDF
+- Story map builder with a scroll-driven editor, presenter view, and standalone HTML export
+- Real-time multi-user collaboration (MVP) so several people can edit the same project together
+- Natural-language GIS assistant that turns plain-English requests into auditable, undoable GeoLibre operations (Spatial SQL, symbology, add/remove data, and map control), provider-pluggable with your own API key
+- In-app Python Console plus a Python automation API for scripting the app
 - Command palette (`Ctrl`/`Cmd` + `K`) that searches and runs menu and toolbar actions across Add Data, Processing, Controls, Plugins, and Help, global keyboard shortcuts for New/Open/Save/Save As, and a `?` shortcuts cheat sheet
 - Conversion menu for Vector to GeoParquet/FlatGeobuf/PMTiles, CSV to GeoParquet, and Raster to COG; GeoParquet and CSV conversions run in the browser with DuckDB-WASM, while FlatGeobuf, PMTiles, and COG require the optional Python sidecar
 - Whitebox toolbox with batch tools run against a selected input directory
 - Vector menu with common geometry tools (buffer, centroids, convex hull, dissolve, bounding box, simplify, clip, intersection, difference, union, spatial join, attribute join, select by value, select by location) that run in the browser with Turf.js, an optional GeoPandas sidecar engine for every tool, and an in-browser GeoPandas engine via Pyodide (no server, same results as the sidecar)
-- Raster menu with common raster tools (hillshade, slope, aspect, reproject, resample, clip by extent, clip by mask layer, polygonize, contour) backed by a rasterio Python sidecar, with a file path in and a file path out
+- Raster menu with common raster tools (hillshade, slope, aspect, reproject, resample, clip by extent, clip by mask layer, polygonize, contour, zonal statistics, raster calculator, reclassify, mosaic, focal statistics) backed by a rasterio Python sidecar, with a client-side fallback so core tools also run in the browser when no sidecar is available
+- Spatial Statistics toolbox and a Processing batch runner with model/pipeline chaining to run a sequence of tools as one job
+- Single-band pseudocolor with classification and RGB band combination for styling raster layers
+- Network analysis tools for isochrones, service areas, and origin–destination (OD) cost matrices
+- Geocoding tools for forward, batch, and reverse geocoding through a multi-provider abstraction
 - AI Segmentation (SamGeo) that turns imagery into vector features with [segment-geospatial](https://github.com/opengeos/segment-geospatial) and Meta's SAM 3 — text prompts ("trees", "buildings") or automatic segmentation, proxied to a separate `samgeo-api` model server (GPU recommended)
 - H3 tools to create hexagonal grids over an extent and bin point layers into H3 cells
 - Undo/redo for layer and style operations
@@ -58,7 +67,7 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 - Internationalization framework with react-i18next and per-build translation catalogs, plus a `?locale`/`?lang` query parameter to set the embed language
 - Accessibility pass with axe-checked screens, keyboard navigation, and screen-reader labels
 - App-wide, section, and plugin React error boundaries that contain failures and keep the rest of the workspace usable
-- Python package (`geolibre`) that embeds the full app in Jupyter notebooks as an [anywidget](https://anywidget.dev), with an expanded leafmap-style API covering more Add Data layer types and two-way project sync
+- Python package (`geolibre`) that embeds the full app in Jupyter notebooks as an [anywidget](https://anywidget.dev), with an expanded leafmap-style API (local raster, marker/cluster, and choropleth layers; `split_map`, `add_legend`, and `add_colorbar` helpers; typed read-back of selected/drawn features; and `to_html` export) and two-way project sync
 - Optional Python FastAPI sidecar for heavier processing workflows
 
 ## Prerequisites
@@ -199,7 +208,7 @@ Only a single statement is supported per run. Cloud object-store URLs (`s3://`, 
 
 The **Processing → Vector** menu opens a single Vector tools dialog with common geometry operations that run against your loaded GeoJSON layers. Pick a tool, choose the input layer (and an overlay layer for the two-layer tools), set the parameters, and the result is added to the map as a new layer.
 
-- **Geometry tools.** **Buffer** (by a distance in kilometers, meters, or miles), **Centroids** (one centroid point per feature), **Convex hull** (a single polygon enclosing all features), **Dissolve** (merge polygons, optionally grouped by an attribute field), **Bounding box** (the rectangular envelope of all features), and **Simplify** (Douglas-Peucker vertex reduction).
+- **Geometry tools.** **Buffer** (by a distance in kilometers, meters, or miles), **Centroids** (one centroid point per feature), **Convex hull** (a single polygon enclosing all features), **Dissolve** (merge polygons, optionally grouped by an attribute field), **Bounding box** (the rectangular envelope of all features), **Simplify** (Douglas-Peucker vertex reduction), **Smooth** (spline-based line/polygon smoothing), **Regular grid** (a point or polygon grid over an extent), and **Voronoi / Delaunay** (Voronoi polygons or a Delaunay triangulation from a point layer).
 - **Overlay tools.** **Clip** (clip the input to an overlay layer, keeping input attributes), **Intersection**, **Difference**, and **Union** between two polygon layers.
 - **Join tools.** **Spatial join** (attach a join layer's attributes to each input feature by a spatial relationship — intersects, within, or contains — with an inner or left join, for any geometry type) and **Attribute join** (attach a join table's attributes by a matching key field, no geometry — e.g. join census stats to boundary polygons — choosing which fields to bring over, with an inner or left join).
 - **Select tools.** **Select by value** (extract features whose attribute matches a condition — =, ≠, >, ≥, <, ≤, contains, starts with, is empty/not empty) and **Select by location** (extract features by their spatial relationship to a second layer — intersects, within, contains, or disjoint) into new layers.

@@ -140,7 +140,7 @@
 - [x] MIT license
 - [x] CSP allowance for `cdn.jsdelivr.net` so DuckDB-WASM loads its bundles in the browser build
 
-## v1.2: New data sources, attribute analytics, routing, and platform polish (current)
+## v1.2: New data sources, attribute analytics, routing, and platform polish
 
 - [x] OpenStreetMap PBF file loading parsed in-browser with osmix
 - [x] Cloud-Optimized NetCDF/HDF layers loaded via kerchunk references
@@ -165,6 +165,49 @@
 - [x] Playwright end-to-end smoke tests and a CI job
 - [x] Expanded Python `Map` API covering more Add Data layer types
 - [x] CDN-loaded PGlite/PostGIS to shrink the Jupyter wheel and the desktop binary
+
+## v1.3: Analysis depth, real-time collaboration, story maps, scripting, and an AI assistant (current)
+
+### Processing and analysis
+
+- [x] Spatial Statistics toolbox under Processing
+- [x] Vector tools: Smooth, Regular grid, and Voronoi/Delaunay
+- [x] IDW / kriging interpolation (point layer → continuous raster surface)
+- [x] Attribute (table) join vector tool, joining a table's fields by a matching key
+- [x] Raster analysis tools: zonal statistics, raster calculator, reclassify, mosaic, and focal statistics
+- [x] Client-side raster processing fallback that runs in the browser when the Python sidecar is unavailable
+- [x] Single-band pseudocolor with classification and RGB band combination for raster styling
+- [x] Batch run and model/pipeline chaining for processing tools
+- [x] Network analysis: isochrones, service areas, and origin–destination cost matrices
+
+### Data, layers, and export
+
+- [x] Collapsible layer groups/folders in the layer panel
+- [x] glTF/GLB 3D model layers placed at coordinates
+- [x] Client-side vector tiling for large local vector layers
+- [x] Warning before loading very large vector files
+- [x] Transparent rewrite of public S3, GCS, and Azure cloud-storage URLs in SQL queries
+- [x] Shapefile and GeoPackage export
+- [x] Apache Sedona as an additional SQL Workspace engine
+- [x] Batch geocoding and reverse geocoding tools, with a multi-provider geocoding abstraction
+
+### Collaboration, story maps, and sharing
+
+- [x] Real-time multi-user collaboration (MVP) backed by a Cloudflare Worker
+- [x] Scroll-driven story map builder, presenter, and standalone HTML export
+- [x] User-editable legend for the print layout
+- [x] Field statistics summary panel in the attribute table
+
+### AI and scripting
+
+- [x] AI Segmentation toolbox via [segment-geospatial](https://github.com/opengeos/segment-geospatial) (SamGeo) and Meta's SAM 3, proxied through the sidecar to a separate `samgeo-api` model server
+- [x] Natural-language GIS assistant (Strands agent) that turns plain-English requests into auditable, undoable GeoLibre operations
+- [x] Python automation API and an in-app Python Console
+- [x] Python package: local raster, marker/cluster, and choropleth APIs; `split_map`, `add_legend`, and `add_colorbar` helpers; typed read-back of selected/drawn features; and `to_html` export
+
+### Packaging
+
+- [x] Homebrew Cask packaging for macOS
 
 ## Plugin marketplace and registry (design)
 
