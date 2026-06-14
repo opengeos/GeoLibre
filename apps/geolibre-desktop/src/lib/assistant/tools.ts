@@ -94,6 +94,51 @@ function assertPublicHttpUrl(raw: string): void {
   }
 }
 
+/**
+ * Read a response body as text, aborting once `maxBytes` is exceeded — so an
+ * over-large (or Content-Length–less) response can't buffer unbounded into
+ * memory before the size check.
+ */
+async function readTextCapped(
+  response: Response,
+  maxBytes: number,
+): Promise<string> {
+  if (!response.body) {
+    const text = await response.text();
+    if (text.length > maxBytes) throw new Error("Response too large.");
+    return text;
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) {
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        throw new Error(`Response too large (> ${maxBytes} bytes).`);
+      }
+      chunks.push(value);
+    }
+  }
+  return new TextDecoder().decode(
+    chunks.length === 1 ? chunks[0] : concatBytes(chunks, total),
+  );
+}
+
+/** Concatenate byte chunks into one buffer. */
+function concatBytes(chunks: Uint8Array[], total: number): Uint8Array {
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
+}
+
 /** Detect a layer's geometry family from its first feature. */
 function geometryTypeOf(layer: GeoLibreLayer): string | null {
   return layer.geojson?.features?.[0]?.geometry?.type ?? null;
@@ -275,17 +320,15 @@ export function createAssistantTools(
             `Fetch failed: ${response.status} ${response.statusText}`,
           );
         }
-        // Check the advertised length first (cheap), then the actual body —
-        // Content-Length is optional, so a server can omit it to bypass it.
+        // Check the advertised length first (cheap), then stream the body with
+        // a hard byte cap — Content-Length is optional and bypassable.
         const length = response.headers.get("content-length");
         if (length && Number(length) > MAX_BYTES) {
           throw new Error(`Response too large (${length} bytes).`);
         }
-        const body = await response.text();
-        if (body.length > MAX_BYTES) {
-          throw new Error(`Response too large (${body.length} bytes).`);
-        }
-        const geojson = asFeatureCollection(JSON.parse(body));
+        const geojson = asFeatureCollection(
+          JSON.parse(await readTextCapped(response, MAX_BYTES)),
+        );
         const name =
           input.name?.trim() ||
           input.url.split("/").pop()?.split("?")[0] ||
@@ -413,17 +456,28 @@ export function createAssistantTools(
   const webSearchTool = tool({
     name: "web_search",
     description:
-      "Search the web for current information (news, recent data, documentation, tile/style URLs). Returns top results with title, url, and snippet, plus a short answer when available.",
+      "Search the web for current information (news, recent data, documentation). Returns top results with title, url, and snippet, plus a short answer when available. Most reliable when TAVILY_API_KEY is configured; the keyless fallback is best-effort and may be blocked by the browser.",
     inputSchema: z.object({
       query: z.string().describe("The search query."),
     }),
     callback: async (input) => {
-      const response = await webSearch(input.query);
-      return json({
-        provider: response.provider,
-        answer: response.answer ?? null,
-        results: response.results.slice(0, 8),
-      });
+      try {
+        const response = await webSearch(input.query);
+        return json({
+          provider: response.provider,
+          answer: response.answer ?? null,
+          results: response.results.slice(0, 8),
+        });
+      } catch (error) {
+        // Don't surface a raw fetch/CORS error as a tool crash — tell the model
+        // search is unavailable so it can fall back gracefully.
+        return json({
+          error:
+            "Web search is unavailable from the browser. Configure TAVILY_API_KEY in Settings → Environment for reliable search.",
+          detail: error instanceof Error ? error.message : String(error),
+          results: [],
+        });
+      }
     },
   });
 
@@ -483,14 +537,21 @@ export function createAssistantTools(
     }),
     callback: async (input) => {
       const result = await runConsoleCode(pyDeps, input.code);
-      return json({ output: result.output, error: result.error });
+      // Cap stdout so a snippet printing megabytes can't blow the model's
+      // context window on the next turn.
+      const MAX_OUTPUT = 8000;
+      const output =
+        result.output.length > MAX_OUTPUT
+          ? `${result.output.slice(0, MAX_OUTPUT)}\n[truncated]`
+          : result.output;
+      return json({ output, error: result.error });
     },
   });
 
   const runMaplibreJs = tool({
     name: "run_maplibre_js",
     description:
-      "Fallback for tasks with no dedicated tool (e.g. globe projection, terrain, sky, custom paint/layout properties). Runs a small JavaScript snippet against the live map. The snippet is a function body with `map` (the MapLibre GL JS map) in scope and may `return` a JSON-serializable value. Example — switch to globe: `map.setProjection({ type: 'globe' })`. Prefer dedicated tools when one exists.",
+      "Fallback for tasks with no dedicated tool (e.g. globe projection, terrain, sky, custom paint/layout properties). Runs a small JavaScript snippet against the live map. The snippet is a function body with `map` (the MapLibre GL JS map) in scope and may `return` a JSON-serializable value. Example — switch to globe: `map.setProjection({ type: 'globe' })`. Prefer dedicated tools when one exists; changes made here bypass the store and are NOT undoable.",
     inputSchema: z.object({
       code: z
         .string()

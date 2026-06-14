@@ -1,5 +1,22 @@
 import { readRuntimeEnv, type RuntimeEnv } from "./provider";
 
+/** Fetch with a hard timeout so a slow search backend can't hang the tool. */
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit = {},
+  ms = 20_000,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ms);
+  // Honor an upstream signal (e.g. the agent run being cancelled) too.
+  init.signal?.addEventListener("abort", () => controller.abort());
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 /** One web search hit. */
 export interface WebSearchResult {
   title: string;
@@ -21,7 +38,7 @@ async function tavilySearch(
   apiKey: string,
   signal?: AbortSignal,
 ): Promise<WebSearchResponse> {
-  const response = await fetch("https://api.tavily.com/search", {
+  const response = await fetchWithTimeout("https://api.tavily.com/search", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
@@ -50,7 +67,11 @@ async function tavilySearch(
   };
 }
 
-/** Keyless fallback: DuckDuckGo Instant Answer (CORS-enabled, best-effort). */
+/**
+ * Keyless fallback: DuckDuckGo Instant Answer. Best-effort only — DDG does not
+ * reliably send CORS headers, so this may fail from a browser origin; callers
+ * should treat a rejection as "search unavailable" and recommend TAVILY_API_KEY.
+ */
 async function duckDuckGoSearch(
   query: string,
   signal?: AbortSignal,
@@ -58,7 +79,7 @@ async function duckDuckGoSearch(
   const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(
     query,
   )}&format=json&no_html=1&skip_disambig=1&t=geolibre`;
-  const response = await fetch(url, { signal });
+  const response = await fetchWithTimeout(url, { signal });
   if (!response.ok) {
     throw new Error(`DuckDuckGo ${response.status} ${response.statusText}`);
   }

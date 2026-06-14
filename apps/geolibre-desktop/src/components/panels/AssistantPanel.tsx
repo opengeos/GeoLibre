@@ -116,8 +116,9 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   // Guards a synchronous double-submit before `running` re-renders.
   const runningRef = useRef(false);
-  // Set true by Stop/Clear so the stream's rejection isn't shown as an error.
-  const cancelledRef = useRef(false);
+  // Generation that was stopped (0 = none), so a stopped run's rejection isn't
+  // shown as an error even after a newer send has started.
+  const cancelledGenerationRef = useRef(0);
   // Monotonic id source for transcript turns (stable React keys + update target).
   const turnIdRef = useRef(0);
   // Identifies the current send so a stopped run's cleanup can't reset the
@@ -205,7 +206,6 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     const prompt = input.trim();
     if (!prompt || runningRef.current || !hasKey) return;
     runningRef.current = true;
-    cancelledRef.current = false;
     const myGeneration = (sendGenerationRef.current += 1);
     setRunning(true);
     setInput("");
@@ -231,9 +231,12 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
             ),
           );
         } else {
+          const label = describeTool(event.name, event.input);
           const detail = event.error
-            ? `${describeTool(event.name, event.input)} — ${event.error}`.trim()
-            : describeTool(event.name, event.input);
+            ? label
+              ? `${label} — ${event.error}`
+              : event.error
+            : label;
           const toolId = (turnIdRef.current += 1);
           setTurns((prev) => {
             const index = prev.findIndex((turn) => turn.id === assistantId);
@@ -254,7 +257,9 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
       }
     } catch (error) {
       // A user-initiated stop rejects the stream; that isn't an error to show.
-      if (!cancelledRef.current) {
+      // Compare against myGeneration so a newer send can't unmask this older
+      // run's cancellation as a failure.
+      if (cancelledGenerationRef.current !== myGeneration) {
         const message = error instanceof Error ? error.message : String(error);
         const errorId = (turnIdRef.current += 1);
         setTurns((prev) => [...prev, { id: errorId, role: "error", text: message }]);
@@ -277,7 +282,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   };
 
   const stop = () => {
-    cancelledRef.current = true;
+    cancelledGenerationRef.current = sendGenerationRef.current;
     session.cancel();
     runningRef.current = false;
     setRunning(false);
