@@ -58,15 +58,16 @@ installStaleChunkReload();
 //
 // `onNeedReload` takes over that reload flow: the new worker still activates and
 // claims the page (skipWaiting + clientsClaim), so its fresh precache serves
-// every subsequent request, but we do NOT force a reload. The page refreshes
-// only when it genuinely must — a stale lazy chunk that 404s — which
-// installStaleChunkReload above already handles (cooldown-guarded). That keeps
+// every subsequent request, but we do NOT force a reload. Page recovery is
+// delegated to installStaleChunkReload above, which reloads on-demand when a
+// stale lazy chunk 404s (cooldown-guarded; if sessionStorage is blocked it
+// skips the reload and lets the preload error surface instead). That keeps
 // the user's session/map state intact and removes the self-refresh loop.
 registerSW({
   immediate: true,
   onNeedReload() {
     // Intentionally a no-op: the updated SW is already in control, so let the
-    // refreshed shell load on the user's next navigation rather than yanking the
+    // refreshed shell load on the user's next page load rather than yanking the
     // page out from under them. See installStaleChunkReload for the on-demand
     // recovery path when a now-deleted lazy chunk is actually requested.
   },
