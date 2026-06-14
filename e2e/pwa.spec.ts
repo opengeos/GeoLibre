@@ -46,6 +46,18 @@ test("registers a service worker and serves the shell offline after first visit"
   page,
   context,
 }) => {
+  // This test chains several long, sequential waits whose ceilings already sum
+  // past the 60s default per-test timeout (playwright.config.ts): the SW taking
+  // control (30s), the warm map boot, caching every loaded asset (60s), and the
+  // offline cold boot that re-parses/executes the ~13 MB MapLibre chunk from
+  // cache under software WebGL (60s). None of these is a fixed cost — each
+  // returns as soon as its condition is met — but on a slow CI runner the
+  // cumulative time tips past 60s and the whole test times out before the
+  // offline assertion (with its own generous budget) can finish. Give the test
+  // headroom larger than the sum of its steps so the per-assertion budgets,
+  // rather than the test-level cap, govern. See issue #274.
+  test.setTimeout(300_000);
+
   await page.goto("/");
 
   // The service worker activates and (via clientsClaim) takes control of the
