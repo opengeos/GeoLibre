@@ -256,6 +256,42 @@ export function createAssistantTools(
   // facade that drives the live map).
   const pyDeps = consoleDeps(deps.getMapController);
 
+  /** The current map viewport as [west, south, east, north], or null. */
+  const viewBbox = (): [number, number, number, number] | null => {
+    const map = deps.getMapController()?.getMap();
+    if (!map) return null;
+    const b = map.getBounds();
+    return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+  };
+
+  /** Reduce a STAC bbox (2D or 3D) to a 2D [w, s, e, n]. */
+  const bbox2d = (bbox: number[]): [number, number, number, number] | null =>
+    bbox.length >= 6
+      ? [bbox[0], bbox[1], bbox[3], bbox[4]]
+      : bbox.length >= 4
+        ? [bbox[0], bbox[1], bbox[2], bbox[3]]
+        : null;
+
+  // Lazily load the shared processing executor (Phase 2). It pulls in the
+  // algorithm registries (Turf, DuckDB), so it is imported only when used.
+  type ScriptingHandlers = {
+    listAlgorithms: () => unknown;
+    runAlgorithm: (input: {
+      id: string;
+      params: Record<string, unknown>;
+    }) => Promise<{ logs?: string[]; resultLayerIds?: string[] }>;
+  };
+  let scriptingPromise: Promise<ScriptingHandlers> | null = null;
+  const getScripting = (): Promise<ScriptingHandlers> => {
+    scriptingPromise ??= import("../scripting/scriptingApi").then(
+      ({ createScriptingHandlers }) =>
+        createScriptingHandlers({
+          getController: deps.getMapController,
+        }) as unknown as ScriptingHandlers,
+    );
+    return scriptingPromise;
+  };
+
   const listLayers = tool({
     name: "list_layers",
     description:
@@ -613,11 +649,168 @@ export function createAssistantTools(
     },
   });
 
+  const listAlgorithms = tool({
+    name: "list_algorithms",
+    description:
+      "List the available client-side processing algorithms (vector geometry/overlay tools like buffer, clip, dissolve, intersection, difference, union, spatial-join; plus H3 grids) with their id, name, group, and typed parameters. Call this before run_algorithm.",
+    inputSchema: z.object({}),
+    callback: async () => json({ algorithms: (await getScripting()).listAlgorithms() }),
+  });
+
+  const runAlgorithm = tool({
+    name: "run_algorithm",
+    description:
+      "Run a processing algorithm by id (from list_algorithms) and add its result as a new layer. `params` is an object keyed by parameter id; a 'layer' parameter takes a layer id (from list_layers). Build a pipeline by running one algorithm, then passing its returned result layer id into the next. Returns the run log and the new layer id(s).",
+    inputSchema: z.object({
+      id: z.string().describe("Algorithm id, e.g. 'buffer', 'clip', 'dissolve'."),
+      params: z
+        .record(z.string(), z.unknown())
+        .optional()
+        .describe("Parameter values keyed by parameter id; layer params take a layer id."),
+    }),
+    callback: async (input) => {
+      const result = await (await getScripting()).runAlgorithm({
+        id: input.id,
+        params: (input.params as Record<string, unknown>) ?? {},
+      });
+      return json({
+        logs: result.logs ?? [],
+        resultLayerIds: result.resultLayerIds ?? [],
+      });
+    },
+  });
+
+  const searchStac = tool({
+    name: "search_stac",
+    description:
+      "Search the Microsoft Planetary Computer STAC catalog for earth-observation items in a collection (e.g. 'sentinel-2-l2a', 'landsat-c2-l2', 'naip', 'cop-dem-glo-30'). Defaults the bounding box to the current map view and sorts newest-first. Returns matching items (id, datetime, cloud cover, bbox).",
+    inputSchema: z.object({
+      collection: z.string().describe("STAC collection id, e.g. 'sentinel-2-l2a'."),
+      bbox: z
+        .array(z.number())
+        .length(4)
+        .optional()
+        .describe("[west, south, east, north]; defaults to the current view."),
+      datetime: z
+        .string()
+        .optional()
+        .describe("RFC3339 datetime or range, e.g. '2024-06-01/2024-09-30'."),
+      limit: z.number().optional().describe("Max items (default 10)."),
+    }),
+    callback: async (input) => {
+      const { STACClient } = await import("maplibre-gl-planetary-computer");
+      const bbox =
+        (input.bbox as [number, number, number, number] | undefined) ??
+        viewBbox() ??
+        undefined;
+      const items = await new STACClient().search({
+        collections: [input.collection],
+        bbox,
+        datetime: input.datetime,
+        limit: input.limit ?? 10,
+        sortby: [{ field: "datetime", direction: "desc" }],
+      });
+      return json({
+        count: items.length,
+        items: items.map((item) => ({
+          id: item.id,
+          datetime: item.properties.datetime,
+          cloudCover: item.properties["eo:cloud_cover"] ?? null,
+          bbox: item.bbox,
+        })),
+      });
+    },
+  });
+
+  const addStacLayer = tool({
+    name: "add_stac_layer",
+    description:
+      "Add a Planetary Computer STAC item as a raster tile layer (tiles are signed server-side — no credentials needed). Give a collection and optionally a specific itemId from search_stac; otherwise the newest item over the current view is used. Renders with the collection's default band/colormap preset.",
+    inputSchema: z.object({
+      collection: z.string().describe("STAC collection id, e.g. 'sentinel-2-l2a'."),
+      itemId: z
+        .string()
+        .optional()
+        .describe("A specific item id; otherwise the latest over the view is used."),
+      bbox: z.array(z.number()).length(4).optional(),
+      datetime: z.string().optional(),
+      name: z.string().optional(),
+    }),
+    callback: async (input) => {
+      const { STACClient, TiTilerClient, getDefaultPreset } = await import(
+        "maplibre-gl-planetary-computer"
+      );
+      const stac = new STACClient();
+      let item;
+      if (input.itemId) {
+        item = await stac.getItem(input.collection, input.itemId);
+      } else {
+        const bbox =
+          (input.bbox as [number, number, number, number] | undefined) ??
+          viewBbox() ??
+          undefined;
+        const items = await stac.search({
+          collections: [input.collection],
+          bbox,
+          datetime: input.datetime,
+          limit: 1,
+          sortby: [{ field: "datetime", direction: "desc" }],
+        });
+        if (!items.length) {
+          throw new Error(
+            `No ${input.collection} items found for the given area/time.`,
+          );
+        }
+        item = items[0];
+      }
+      const preset = getDefaultPreset(input.collection);
+      const tileUrl = new TiTilerClient().getItemTileUrl(
+        input.collection,
+        item.id,
+        preset?.params,
+      );
+      const bounds = bbox2d(item.bbox);
+      const layer: GeoLibreLayer = {
+        id: crypto.randomUUID(),
+        name:
+          input.name?.trim() ||
+          `${input.collection} ${item.properties.datetime ?? item.id}`,
+        type: "xyz",
+        source: {
+          type: "raster",
+          tiles: [tileUrl],
+          tileSize: 256,
+          attribution: "Microsoft Planetary Computer",
+        },
+        visible: true,
+        opacity: 1,
+        style: { ...DEFAULT_LAYER_STYLE },
+        metadata: {
+          sourceKind: "stac-planetary-computer",
+          stacCollectionId: input.collection,
+          stacItemId: item.id,
+        },
+      };
+      const bottomBeforeId = store().layers[0]?.id ?? null;
+      store().addLayer(layer, bottomBeforeId);
+      if (bounds) deps.getMapController()?.fitBounds(bounds);
+      return json({
+        addedLayerId: layer.id,
+        itemId: item.id,
+        datetime: item.properties.datetime ?? null,
+      });
+    },
+  });
+
   return [
     listLayers,
     runSql,
     addLayerFromUrl,
     addTileLayer,
+    listAlgorithms,
+    runAlgorithm,
+    searchStac,
+    addStacLayer,
     webSearchTool,
     removeLayer,
     setLayerVisibility,

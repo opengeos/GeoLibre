@@ -65,7 +65,8 @@ eraser icon) starts a fresh conversation.
 ```text
 show me all parcels larger than 1 hectare within 500 m of a river
 color the counties by population using a graduated red ramp
-buffer the roads by 100 m and add the result as a layer
+buffer the roads by 100 m, then clip them to the county boundary
+load the latest Sentinel-2 scene over this view
 zoom to Africa, then switch to a dark basemap
 add an Esri World Imagery basemap
 ```
@@ -79,8 +80,10 @@ operations, so its actions stay within GeoLibre's validated surface.
 | --- | --- |
 | **Inspect layers** | Lists loaded layers, their geometry, attribute fields, and SQL table names (schema only — never your full data). |
 | **NL → Spatial SQL** | Generates and runs a **read-only** DuckDB Spatial SQL query through the [SQL Workspace](sql-workspace.md), and can add the result as a layer. |
+| **Geoprocessing** | Runs the registered [processing](processing.md) algorithms (buffer, clip, dissolve, intersection, difference, union, spatial join, simplify, H3 grids, …) and chains them into multi-step pipelines, adding each result as a layer. |
 | **Symbology** | Applies a **graduated** (numeric) or **categorized** (text) color ramp to a layer. |
 | **Add data** | Adds a layer from a public GeoJSON URL, or an XYZ tile basemap by name (`esri-imagery`, `esri-topo`, `osm`, `opentopomap`, `carto-dark`) or a custom `{z}/{x}/{y}` URL. |
+| **Earth observation** | Searches the Microsoft [Planetary Computer](https://planetarycomputer.microsoft.com) STAC catalog (Sentinel-2, Landsat, NAIP, DEMs, …) and adds an item over the current view as a raster layer — tiles are signed server-side, so no credentials are needed. |
 | **Map control** | Moves the camera (fit a layer or a bounding box), switches the basemap, toggles layer visibility/opacity, and removes layers. |
 | **Web search** | Looks up current information online (best with `TAVILY_API_KEY`). |
 | **Code fallback** | For tasks with no dedicated tool, runs a small **JavaScript** snippet against the live map (e.g. globe projection) or a **Python** snippet in the [Pyodide runtime](python-console.md). |
