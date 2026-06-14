@@ -38,6 +38,7 @@ import socket
 import subprocess
 import threading
 import time
+import urllib.parse
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
@@ -97,6 +98,31 @@ def _free_port() -> int:
         return sock.getsockname()[1]
 
 
+def _redact_url(url: str) -> str:
+    """Strip embedded credentials from a URL before surfacing it to clients.
+
+    A configured ``GEOLIBRE_ML_SAMGEO_URL`` may carry ``user:pass@host``; the
+    status payload and error messages are shown in the browser, so credentials
+    must not leak there.
+
+    Args:
+        url: The URL to sanitise.
+
+    Returns:
+        The URL with any userinfo removed, or the original string if it cannot
+        be parsed.
+    """
+    try:
+        parsed = urllib.parse.urlsplit(url)
+    except ValueError:
+        return url
+    if not (parsed.username or parsed.password):
+        return url
+    host = parsed.hostname or ""
+    netloc = f"{host}:{parsed.port}" if parsed.port else host
+    return urllib.parse.urlunsplit(parsed._replace(netloc=netloc))
+
+
 def _is_healthy(base_url: str, timeout: float = 3.0) -> bool:
     """Return True if a samgeo-api server answers /health at ``base_url``."""
     try:
@@ -139,8 +165,8 @@ def _ensure_server() -> str:
         if _is_healthy(base):
             return base
         raise RuntimeBootstrapError(
-            f"GEOLIBRE_ML_SAMGEO_URL is set to {base} but no samgeo-api server "
-            "answered there."
+            f"GEOLIBRE_ML_SAMGEO_URL is set to {_redact_url(base)} but no "
+            "samgeo-api server answered there."
         )
 
     # Decide whether to reuse an existing child or launch a new one. The lock is
@@ -278,7 +304,7 @@ def ml_status():
         payload.update(
             available=True,
             message="Segmentation backend (samgeo-api) is ready.",
-            url=base,
+            url=_redact_url(base),
             version=version,
             models=models,
         )
@@ -286,8 +312,8 @@ def ml_status():
 
     if _EXTERNAL_URL:
         payload["message"] = (
-            f"GEOLIBRE_ML_SAMGEO_URL is set to {_EXTERNAL_URL} but the server "
-            "is not responding."
+            f"GEOLIBRE_ML_SAMGEO_URL is set to {_redact_url(_EXTERNAL_URL)} but "
+            "the server is not responding."
         )
         return payload
 
@@ -378,6 +404,9 @@ async def _forward_segment(request: Request, path: str) -> Response:
             )
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"samgeo-api error: {exc}")
+    # The GeoJSON/PNG response is buffered (resp.content); it is bounded and far
+    # smaller than the upload. Streaming it back would need client.stream() +
+    # StreamingResponse and is left as a follow-up.
     return Response(
         content=resp.content,
         status_code=resp.status_code,
