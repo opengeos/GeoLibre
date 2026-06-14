@@ -47,8 +47,12 @@ export function RemoteCursorsOverlay({
     const render = () => {
       try {
         renderPresence(map, presence, markersRef.current);
-      } catch {
-        // Style was mid-mutation; ignore and let the next render retry.
+      } catch (error) {
+        // Expected when the style mutates mid-render; the next presence/styledata
+        // event retries. Surface it in dev so a persistent bug isn't hidden.
+        if (import.meta.env.DEV) {
+          console.warn("[GeoLibre] presence render failed", error);
+        }
       }
     };
     render();

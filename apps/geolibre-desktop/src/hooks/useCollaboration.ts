@@ -78,6 +78,9 @@ export function useCollaboration(
   // unreachable, which we treat as a fatal connect failure rather than retrying
   // a dead session forever.
   const joinedRef = useRef(false);
+  // Set when the relay rejects a snapshot as too large; stops further sends so
+  // an over-size project doesn't re-fail on every keystroke. Reset on reconnect.
+  const syncPausedRef = useRef(false);
   // Settles when the current connect attempt joins (welcome) or fatally fails,
   // so start()/join() resolve only on real success and the dialog keeps its
   // busy spinner until then.
@@ -107,7 +110,7 @@ export function useCollaboration(
 
   const sendSnapshot = (): void => {
     const conn = connRef.current;
-    if (!conn || !canEdit()) return;
+    if (!conn || !canEdit() || syncPausedRef.current) return;
     const project = buildProjectSnapshot(mapControllerRef);
     const content = serializeProject(project);
     // Skip identical snapshots (selection/presence writes don't change content).
@@ -230,6 +233,9 @@ export function useCollaboration(
         break;
       case "error":
         store.setCollaboration({ error: message.message });
+        // A too-large project will fail on every subsequent edit; pause sending
+        // so it doesn't re-fail in a loop until the session is rejoined.
+        if (message.code === "too-large") syncPausedRef.current = true;
         break;
     }
   };
@@ -322,6 +328,7 @@ export function useCollaboration(
     if (!baseUrl) return Promise.reject(new Error("not configured"));
     disconnect();
     joinedRef.current = false;
+    syncPausedRef.current = false;
     selfIdRef.current = crypto.randomUUID();
     lastContentRef.current = null;
     revRef.current = 0;
