@@ -41,6 +41,7 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 - Whitebox toolbox with batch tools run against a selected input directory
 - Vector menu with common geometry tools (buffer, centroids, convex hull, dissolve, bounding box, simplify, clip, intersection, difference, union, spatial join, attribute join, select by value, select by location) that run in the browser with Turf.js, an optional GeoPandas sidecar engine for every tool, and an in-browser GeoPandas engine via Pyodide (no server, same results as the sidecar)
 - Raster menu with common raster tools (hillshade, slope, aspect, reproject, resample, clip by extent, clip by mask layer, polygonize, contour) backed by a rasterio Python sidecar, with a file path in and a file path out
+- AI Segmentation (SamGeo) that turns imagery into vector features with [segment-geospatial](https://github.com/opengeos/segment-geospatial) and Meta's SAM 3 — text prompts ("trees", "buildings") or automatic segmentation, proxied to a separate `samgeo-api` model server (GPU recommended)
 - H3 tools to create hexagonal grids over an extent and bin point layers into H3 cells
 - Undo/redo for layer and style operations
 - Drag and drop vector and GeoTIFF/COG raster files onto the map to add them as layers
@@ -231,6 +232,21 @@ pip install -e "backend/geolibre_server[raster]"
 # run it
 geolibre-server   # or: uvicorn geolibre_server.app.main:app --host 127.0.0.1 --port 8765
 ```
+
+## AI segmentation
+
+The **Processing → AI Segmentation** dialog turns imagery into vector features with [segment-geospatial](https://github.com/opengeos/segment-geospatial) (SamGeo) and Meta's **SAM 3** model: choose a GeoTIFF, type a text prompt (e.g. "trees", "buildings", "water") or run automatic segmentation, and the resulting polygons are added as a new layer.
+
+The model stack does not run inside the sidecar. The sidecar exposes a thin `/ml` reverse-proxy in front of a separate `samgeo-api` server (the REST server shipped with `segment-geospatial`), which runs SAM 3 and returns GeoJSON. A CUDA GPU is strongly recommended.
+
+```bash
+# install the model server (in an env with a working PyTorch build)
+pip install "segment-geospatial[api,samgeo3]"
+# install the sidecar's ml extra (just an HTTP client; models live in samgeo-api)
+pip install -e "backend/geolibre_server[ml]"
+```
+
+`samgeo-api` is launched on demand when it's on the `PATH`, or point the sidecar at an existing server with `GEOLIBRE_ML_SAMGEO_URL=http://127.0.0.1:8000`. See [docs/user-guide/segmentation.md](docs/user-guide/segmentation.md) for details. Uses SAM 3.
 
 ## Embed the demo
 

@@ -1,9 +1,9 @@
 # Processing Tools
 
-The **Processing** menu collects GeoLibre's analysis and conversion tools: vector geometry and overlay tools, raster terrain and clipping tools, format conversion, and the Whitebox toolbox. The [SQL Workspace](sql-workspace.md), [Python Console](python-console.md), and [AI Assistant](ai-assistant.md) also live here and have their own pages.
+The **Processing** menu collects GeoLibre's analysis and conversion tools: vector geometry and overlay tools, raster terrain and clipping tools, AI segmentation, format conversion, and the Whitebox toolbox. The [SQL Workspace](sql-workspace.md), [Python Console](python-console.md), [AI Assistant](ai-assistant.md), and [AI Segmentation](segmentation.md) also live here and have their own pages.
 
 !!! note "Page order"
-    This page groups the tools by theme. In the menu itself the items appear in a different order: AI Assistant (top), Whitebox, SQL Workspace, Python Console, Conversion, Vector, Raster, Planetary Computer, Earth Engine.
+    This page groups the tools by theme. In the menu itself the items appear in a different order: AI Assistant (top), Whitebox, SQL Workspace, Python Console, Conversion, Vector, Raster, AI Segmentation, Planetary Computer, Earth Engine.
 
 ![Vector tools dialog](https://data.geolibre.app/images/geolibre-processing-vector.webp)
 
@@ -115,6 +115,10 @@ The conversion sidecar is hardened with a path allowlist.
 ## Whitebox
 
 **Processing → Whitebox** opens the Whitebox toolbox for batch geoprocessing, backed by a managed Python sidecar. Point it at an input directory and run tools across the files in it.
+
+## AI Segmentation
+
+**Processing → AI Segmentation** turns imagery into vector features with [segment-geospatial](https://github.com/opengeos/segment-geospatial) (SamGeo) and Meta's SAM 3 model: choose a GeoTIFF, type a text prompt (*"trees"*, *"buildings"*) or run automatic segmentation, and the resulting polygons are added as a new layer. It runs the model in a separate `samgeo-api` server (a GPU is recommended) that the sidecar proxies. See the dedicated [AI Segmentation](segmentation.md) page for setup and usage.
 
 ## Planetary Computer and Earth Engine
 

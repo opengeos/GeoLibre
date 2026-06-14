@@ -194,7 +194,7 @@
       "geocode": "Geocode Addresses",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
-      "segmentation": "AI Segmentation (SamGeo)",
+      "segmentation": "AI Segmentation",
       "toggleControl": "Toggle {{name}} Control",
       "toggleAtmosphereEffects": "Toggle Atmosphere Effects",
       "toggleDirections": "Toggle Directions",
