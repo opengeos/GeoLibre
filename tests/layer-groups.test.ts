@@ -3,6 +3,7 @@ import { beforeEach, describe, it } from "node:test";
 import {
   DEFAULT_LAYER_STYLE,
   applyGroupEffects,
+  applyProjectToStore,
   buildLayerTree,
   createEmptyProject,
   normalizeGroupContiguity,
@@ -284,5 +285,29 @@ describe("layer group serialization", () => {
       }),
     );
     assert.equal(project.layers[0].groupId, undefined);
+  });
+
+  it("normalizes non-contiguous group members when applied to the store", () => {
+    // A hand-edited / externally produced project with a group's members
+    // interleaved among unrelated layers.
+    const project = parseProject(
+      JSON.stringify({
+        version: "0.2.0",
+        name: "Interleaved",
+        mapView: { center: [0, 0], zoom: 1, bearing: 0, pitch: 0 },
+        layers: [
+          layer("g1", { groupId: "g" }),
+          layer("x"),
+          layer("g2", { groupId: "g" }),
+        ],
+        layerGroups: [group("g")],
+      }),
+    );
+    const applied = applyProjectToStore(project);
+    // The group's members must be contiguous so the panel renders one header.
+    assert.deepEqual(
+      applied.layers.map((l) => l.id),
+      ["g1", "g2", "x"],
+    );
   });
 });

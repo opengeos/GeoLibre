@@ -23,7 +23,10 @@ import {
   type StoryLayerOpacityChange,
   type StoryMap,
 } from "./types";
-import { DEFAULT_LAYER_GROUP_OPACITY } from "./layer-groups";
+import {
+  DEFAULT_LAYER_GROUP_OPACITY,
+  normalizeGroupContiguity,
+} from "./layer-groups";
 
 /** Placeholder name a project carries before the user names it. */
 export const DEFAULT_PROJECT_NAME = "Untitled Project";
@@ -685,17 +688,23 @@ export function applyProjectToStore(project: GeoLibreProject): {
   }));
   const layerGroups = normalizeLayerGroups(project.layerGroups);
   const validGroupIds = new Set(layerGroups.map((g) => g.id));
+  // Drop dangling groupIds, then restore the contiguity invariant the layer
+  // panel relies on, in case the project was hand-edited or produced externally
+  // with a group's members interleaved among unrelated layers.
+  const normalizedLayers = normalizeGroupContiguity(
+    layers.map((layer) =>
+      layer.groupId && !validGroupIds.has(layer.groupId)
+        ? { ...layer, groupId: undefined }
+        : layer,
+    ),
+  );
   return {
     projectName: project.name,
     mapView: project.mapView,
     basemapStyleUrl: project.basemapStyleUrl,
     basemapVisible: project.basemapVisible ?? true,
     basemapOpacity: project.basemapOpacity ?? 1,
-    layers: layers.map((layer) =>
-      layer.groupId && !validGroupIds.has(layer.groupId)
-        ? { ...layer, groupId: undefined }
-        : layer,
-    ),
+    layers: normalizedLayers,
     layerGroups,
     preferences: normalizeProjectPreferences(project.preferences),
     projectPlugins: normalizeProjectPlugins(project.plugins),

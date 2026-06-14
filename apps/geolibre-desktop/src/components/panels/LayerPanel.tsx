@@ -5,9 +5,11 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { isDuckDBQueryLayer, useAppStore } from "@geolibre/core";
 import type { GeoLibreLayer, LayerGroup } from "@geolibre/core";
 import {
@@ -169,6 +171,7 @@ export function LayerPanel({
   onCancelGeometryEdit,
   onMaterializeDuckDBLayer,
 }: LayerPanelProps) {
+  const { t } = useTranslation();
   const layers = useAppStore((s) => s.layers);
   const layerGroups = useAppStore((s) => s.layerGroups);
   const addLayerGroup = useAppStore((s) => s.addLayerGroup);
@@ -234,21 +237,29 @@ export function LayerPanel({
   const refreshingLayerIdsRef = useRef(new Set<string>());
   const refreshTimersRef = useRef(new Map<string, LayerRefreshTimer>());
   const refreshStatusTimersRef = useRef(new Map<string, number>());
-  const visibleLayers = [...layers].reverse();
+  const visibleLayers = useMemo(() => [...layers].reverse(), [layers]);
   // Group lookup + the top-most member of each group in display order. Members
   // are kept contiguous in `layers`, so the first occurrence walking the
-  // reversed list is where the group's header is drawn inline.
-  const groupById = new Map(layerGroups.map((g) => [g.id, g] as const));
-  const firstMemberIdByGroup = new Map<string, string>();
-  for (const layer of visibleLayers) {
-    if (layer.groupId && !firstMemberIdByGroup.has(layer.groupId)) {
-      firstMemberIdByGroup.set(layer.groupId, layer.id);
+  // reversed list is where the group's header is drawn inline. Memoized so they
+  // are not rebuilt on renders caused by unrelated state (hover, slider drag).
+  const groupById = useMemo(
+    () => new Map(layerGroups.map((g) => [g.id, g] as const)),
+    [layerGroups],
+  );
+  const firstMemberIdByGroup = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const layer of visibleLayers) {
+      if (layer.groupId && !map.has(layer.groupId)) {
+        map.set(layer.groupId, layer.id);
+      }
     }
-  }
+    return map;
+  }, [visibleLayers]);
   // Empty folders have no member to anchor them, so they render pinned at the
   // top of the panel where they are easy to drop layers into.
-  const emptyGroups = layerGroups.filter(
-    (g) => !firstMemberIdByGroup.has(g.id),
+  const emptyGroups = useMemo(
+    () => layerGroups.filter((g) => !firstMemberIdByGroup.has(g.id)),
+    [layerGroups, firstMemberIdByGroup],
   );
   const refreshSettingsLayer = refreshSettingsLayerId
     ? (layers.find((layer) => layer.id === refreshSettingsLayerId) ?? null)
@@ -687,6 +698,7 @@ export function LayerPanel({
     event.stopPropagation();
     event.dataTransfer.dropEffect = "move";
     setDropTargetLayerId(layerId);
+    setDropTargetGroupId(null);
   };
 
   const handleLayerDrop = (
@@ -723,6 +735,7 @@ export function LayerPanel({
     event.stopPropagation();
     event.dataTransfer.dropEffect = "move";
     setDropTargetGroupId(groupId);
+    setDropTargetLayerId(null);
   };
 
   const handleGroupHeaderDrop = (
@@ -762,8 +775,16 @@ export function LayerPanel({
           <button
             type="button"
             className="rounded p-0.5 text-muted-foreground hover:bg-muted"
-            title={group.collapsed ? "Expand group" : "Collapse group"}
-            aria-label={group.collapsed ? "Expand group" : "Collapse group"}
+            title={
+              group.collapsed
+                ? t("layers.expandGroup")
+                : t("layers.collapseGroup")
+            }
+            aria-label={
+              group.collapsed
+                ? t("layers.expandGroup")
+                : t("layers.collapseGroup")
+            }
             aria-expanded={!group.collapsed}
             onClick={(e) => {
               e.stopPropagation();
@@ -779,8 +800,10 @@ export function LayerPanel({
           <button
             type="button"
             className="rounded p-0.5 hover:bg-muted"
-            title={group.visible ? "Hide group" : "Show group"}
-            aria-label={group.visible ? "Hide group" : "Show group"}
+            title={group.visible ? t("layers.hideGroup") : t("layers.showGroup")}
+            aria-label={
+              group.visible ? t("layers.hideGroup") : t("layers.showGroup")
+            }
             onClick={(e) => {
               e.stopPropagation();
               setLayerGroupVisibility(group.id, !group.visible);
@@ -803,7 +826,7 @@ export function LayerPanel({
               type="text"
               className="flex-1 min-w-0 rounded border border-input bg-background px-1 py-0.5 text-sm font-semibold outline-none focus:ring-1 focus:ring-ring"
               value={editingGroupName}
-              aria-label={`Rename ${group.name}`}
+              aria-label={t("layers.renameNamed", { name: group.name })}
               onChange={(e) => setEditingGroupName(e.target.value)}
               onClick={(e: ReactMouseEvent) => e.stopPropagation()}
               onFocus={(e) => e.currentTarget.select()}
@@ -822,7 +845,7 @@ export function LayerPanel({
           ) : (
             <span
               className="flex-1 truncate text-sm font-semibold"
-              title="Double-click to rename"
+              title={t("layers.doubleClickToRename")}
               onDoubleClick={(e: ReactMouseEvent) => {
                 e.stopPropagation();
                 beginGroupRename(group);
@@ -837,8 +860,8 @@ export function LayerPanel({
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7"
-                title="Group actions"
-                aria-label="Group actions"
+                title={t("layers.groupActions")}
+                aria-label={t("layers.groupActions")}
                 onClick={(e: ReactMouseEvent) => e.stopPropagation()}
               >
                 <MoreHorizontal className="h-3.5 w-3.5" />
@@ -855,7 +878,7 @@ export function LayerPanel({
                 }}
               >
                 <Pencil className="mr-2 h-3.5 w-3.5" />
-                Rename group
+                {t("layers.renameGroup")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={!canReorderGroup}
@@ -865,7 +888,7 @@ export function LayerPanel({
                 }}
               >
                 <ChevronUp className="mr-2 h-3.5 w-3.5" />
-                Move group up
+                {t("layers.moveGroupUp")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={!canReorderGroup}
@@ -875,7 +898,7 @@ export function LayerPanel({
                 }}
               >
                 <ChevronDown className="mr-2 h-3.5 w-3.5" />
-                Move group down
+                {t("layers.moveGroupDown")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -885,7 +908,7 @@ export function LayerPanel({
                 }}
               >
                 <FolderMinus className="mr-2 h-3.5 w-3.5" />
-                Ungroup (keep layers)
+                {t("layers.ungroupKeepLayers")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="text-destructive"
@@ -895,16 +918,18 @@ export function LayerPanel({
                 }}
               >
                 <Trash2 className="mr-2 h-3.5 w-3.5" />
-                Delete group and layers
+                {t("layers.deleteGroupAndLayers")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
         {!group.collapsed && (
           <div className="mt-2 flex items-center gap-1">
-            <span className="text-[10px] text-muted-foreground">Opacity</span>
+            <span className="text-[10px] text-muted-foreground">
+              {t("layers.groupOpacity")}
+            </span>
             <Slider
-              aria-label={`${group.name} group opacity`}
+              aria-label={t("layers.groupOpacityAria", { name: group.name })}
               className="flex-1"
               min={0}
               max={1}
@@ -966,8 +991,8 @@ export function LayerPanel({
             variant="ghost"
             size="icon"
             className="h-7 w-7"
-            title="New group"
-            aria-label="New group"
+            title={t("layers.newGroup")}
+            aria-label={t("layers.newGroup")}
             onClick={handleCreateGroup}
           >
             <FolderPlus className="h-4 w-4" />
@@ -1336,13 +1361,13 @@ export function LayerPanel({
                         }}
                       >
                         <FolderPlus className="mr-2 h-3.5 w-3.5" />
-                        New group from layer
+                        {t("layers.newGroupFromLayer")}
                       </DropdownMenuItem>
                       {layerGroups.length > 0 && (
                         <DropdownMenuSub>
                           <DropdownMenuSubTrigger>
                             <Folder className="h-3.5 w-3.5" />
-                            Move to group
+                            {t("layers.moveToGroup")}
                           </DropdownMenuSubTrigger>
                           <DropdownMenuSubContent>
                             {layerGroups.map((g) => (
@@ -1368,7 +1393,7 @@ export function LayerPanel({
                           }}
                         >
                           <FolderMinus className="mr-2 h-3.5 w-3.5" />
-                          Remove from group
+                          {t("layers.removeFromGroup")}
                         </DropdownMenuItem>
                       )}
                       <DropdownMenuSeparator />

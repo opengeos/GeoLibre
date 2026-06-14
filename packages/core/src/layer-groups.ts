@@ -37,9 +37,18 @@ export function buildLayerTree(
   const groupById = new Map(groups.map((g) => [g.id, g]));
   const display = [...layers].reverse();
 
+  // Bucket every layer's children by group id in a single pass so emitting a
+  // group is an O(1) lookup rather than a per-group filter over `display`.
+  const childrenByGroupId = new Map<string, GeoLibreLayer[]>();
+  for (const layer of display) {
+    if (!layer.groupId || !groupById.has(layer.groupId)) continue;
+    const bucket = childrenByGroupId.get(layer.groupId);
+    if (bucket) bucket.push(layer);
+    else childrenByGroupId.set(layer.groupId, [layer]);
+  }
+
   const items: LayerTreeItem[] = [];
   const emitted = new Set<string>();
-  const nonEmpty = new Set<string>();
 
   for (const layer of display) {
     const group = layer.groupId ? groupById.get(layer.groupId) : undefined;
@@ -47,14 +56,16 @@ export function buildLayerTree(
       items.push({ kind: "layer", layer });
       continue;
     }
-    nonEmpty.add(group.id);
     if (emitted.has(group.id)) continue;
     emitted.add(group.id);
-    const children = display.filter((l) => l.groupId === group.id);
-    items.push({ kind: "group", group, children });
+    items.push({
+      kind: "group",
+      group,
+      children: childrenByGroupId.get(group.id) ?? [],
+    });
   }
 
-  const emptyGroups = groups.filter((g) => !nonEmpty.has(g.id));
+  const emptyGroups = groups.filter((g) => !childrenByGroupId.has(g.id));
   if (emptyGroups.length === 0) return items;
   return [
     ...emptyGroups.map((group) => ({

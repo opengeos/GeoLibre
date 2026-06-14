@@ -453,5 +453,25 @@
     "exportData": "Export",
     "exportJson": "Export JSON",
     "exportCsv": "Export CSV"
+  },
+  "layers": {
+    "newGroup": "New group",
+    "collapseGroup": "Collapse group",
+    "expandGroup": "Expand group",
+    "hideGroup": "Hide group",
+    "showGroup": "Show group",
+    "renameGroup": "Rename group",
+    "moveGroupUp": "Move group up",
+    "moveGroupDown": "Move group down",
+    "ungroupKeepLayers": "Ungroup (keep layers)",
+    "deleteGroupAndLayers": "Delete group and layers",
+    "groupActions": "Group actions",
+    "groupOpacity": "Opacity",
+    "groupOpacityAria": "{{name}} group opacity",
+    "doubleClickToRename": "Double-click to rename",
+    "renameNamed": "Rename {{name}}",
+    "newGroupFromLayer": "New group from layer",
+    "moveToGroup": "Move to group",
+    "removeFromGroup": "Remove from group"
   }
 }
