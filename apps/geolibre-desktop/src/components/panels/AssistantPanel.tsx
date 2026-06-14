@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type RefObject,
   useEffect,
   useMemo,
@@ -30,8 +31,13 @@ import {
   type AssistantProviderId,
 } from "../../lib/assistant/provider";
 
-const PANEL_HEIGHT = 360;
+const DEFAULT_PANEL_HEIGHT = 360;
+const MIN_PANEL_HEIGHT = 160;
+const MAX_PANEL_HEIGHT = 640;
 const RUNTIME_ENV_EVENT = "geolibre:runtime-env-change";
+// Paired with MapCanvas so it suspends pointer interaction while dragging.
+const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
+const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
 const PROVIDER_STORAGE_KEY = "geolibre.assistant.provider";
 const MODEL_STORAGE_KEY = "geolibre.assistant.model";
 const PROVIDER_IDS: readonly AssistantProviderId[] = [
@@ -103,10 +109,16 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   const { t } = useTranslation();
   const setAssistantOpen = useAppStore((s) => s.setAssistantOpen);
 
+  const sectionRef = useRef<HTMLElement>(null);
   const outputRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   // Guards a synchronous double-submit before `running` re-renders.
   const runningRef = useRef(false);
+  // Tears down an in-flight drag's window listeners if the panel unmounts
+  // mid-drag (e.g. the user closes it while dragging).
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
+
+  const [height, setHeight] = useState(DEFAULT_PANEL_HEIGHT);
 
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
@@ -136,6 +148,9 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
 
   // Tear down the session and any in-flight run on unmount.
   useEffect(() => () => session.cancel(), [session]);
+
+  // On unmount mid-drag, tear down the drag's window listeners.
+  useEffect(() => () => resizeCleanupRef.current?.(), []);
 
   // Track which provider keys are configured; rebuild the agent on change so a
   // newly-added key takes effect without reopening the panel.
@@ -259,12 +274,68 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     saveStored(MODEL_STORAGE_KEY, value);
   };
 
+  // Drag the top edge to resize the panel height. Mirrors the Python Console:
+  // writes are throttled to one DOM mutation per frame and committed to state on
+  // mouseup, and the panel-resize events let MapCanvas pause pointer handling.
+  const startResize = (event: ReactMouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const startY = event.clientY;
+    const startHeight = height;
+    let nextHeight = startHeight;
+    let frame: number | null = null;
+    const prevCursor = document.body.style.cursor;
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+    window.dispatchEvent(new Event(PANEL_RESIZE_START_EVENT));
+
+    const onMove = (moveEvent: MouseEvent) => {
+      const available = Math.max(MIN_PANEL_HEIGHT, window.innerHeight - 180);
+      const maxHeight = Math.min(MAX_PANEL_HEIGHT, available);
+      nextHeight = Math.min(
+        maxHeight,
+        Math.max(MIN_PANEL_HEIGHT, startHeight + startY - moveEvent.clientY),
+      );
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        if (sectionRef.current) {
+          sectionRef.current.style.height = `${nextHeight}px`;
+        }
+      });
+    };
+
+    const finish = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", finish);
+      resizeCleanupRef.current = null;
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      setHeight(nextHeight);
+      window.dispatchEvent(new Event(PANEL_RESIZE_END_EVENT));
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", finish);
+    resizeCleanupRef.current = finish;
+  };
+
   return (
     <section
+      ref={sectionRef}
       aria-label={t("assistant.title")}
       className="relative flex shrink-0 flex-col border-t bg-card"
-      style={{ height: PANEL_HEIGHT }}
+      style={{ height }}
     >
+      <div
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label={t("assistant.resize")}
+        className="absolute -top-1 left-0 right-0 z-20 h-2 cursor-row-resize select-none border-t border-transparent hover:border-primary"
+        onMouseDown={startResize}
+      />
       <div className="flex items-center gap-2 border-b px-3 py-1.5">
         <Sparkles className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-semibold">{t("assistant.title")}</span>

@@ -482,6 +482,7 @@
   },
   "assistant": {
     "title": "AI Assistant",
+    "resize": "Resize assistant panel",
     "clear": "Clear conversation",
     "close": "Close assistant",
     "send": "Send",
