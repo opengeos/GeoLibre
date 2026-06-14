@@ -84,6 +84,25 @@ bundled Docker image), set `GEOLIBRE_CONVERSION_ROOTS` so conversions cannot
 read or overwrite arbitrary filesystem paths. It is unset by default for the
 desktop app, where paths are the user's own filesystem.
 
+## Spatial SQL runtime (Apache Sedona)
+
+The **Apache Sedona** engine of the SQL Workspace runs Sedona spatial SQL on
+[SedonaDB](https://sedona.apache.org/sedonadb/) (the single-node Rust engine)
+through the `/sql` endpoints. It is an optional extra:
+
+```bash
+pip install -e ".[sedona]"   # apache-sedona[db] + geopandas + shapely
+geolibre-server
+```
+
+The sidecar reports availability through `/sql/status`. When the extra is **not**
+installed (or the sidecar is not running), the SQL Workspace falls back to the
+in-browser [CereusDB](https://github.com/tobilg/cereusdb) engine — a WebAssembly
+build of SedonaDB — so the Apache Sedona engine works with **no sidecar** too.
+`/sql/run` registers each posted layer as a named view, runs one statement, and
+returns rows (geometry as WKT) plus a GeoJSON FeatureCollection when the result
+has a geometry column.
+
 ## Endpoints
 
 | Method | Path | Description |
@@ -98,6 +117,8 @@ desktop app, where paths are the user's own filesystem.
 | POST | `/conversion/vector-to-pmtiles` | Vector → PMTiles (freestiler) |
 | POST | `/conversion/raster-to-cog` | Raster → Cloud Optimized GeoTIFF |
 | GET | `/conversion/jobs/{id}` | Conversion job status |
+| GET | `/sql/status` | Spatial SQL (SedonaDB) availability |
+| POST | `/sql/run` | Run Sedona spatial SQL over registered layers |
 
 ## Future stack
 
@@ -105,7 +126,6 @@ The sidecar will integrate (see `docs/roadmap.md` v0.5):
 
 - **GDAL / Rasterio** — COG, warping, raster analysis
 - **GeoPandas** — vector ops, reproject, export
-- **DuckDB Spatial** — SQL on cloud-native formats
 - **WhiteboxTools** — terrain & hydrology
 - **Leafmap** — notebook-style geospatial utilities
 - **GeoAI / SamGeo** — ML segmentation workflows

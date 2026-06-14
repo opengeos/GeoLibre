@@ -36,6 +36,15 @@ raster = [
   "numpy>=1.24",
   "contourpy>=1.2.0",
 ]
+# Apache Sedona spatial-SQL engine (SedonaDB, the single-node Rust core). Backs
+# the "Apache Sedona" engine of the SQL Workspace; the desktop app falls back to
+# the in-browser CereusDB (WebAssembly) engine when this is absent. GeoPandas is
+# used to marshal GeoJSON layers in and SedonaDB results out.
+sedona = [
+  "apache-sedona[db]>=1.7.0",
+  "geopandas>=1.0",
+  "shapely>=2.0",
+]
 # Future geospatial stack (not required for MVP UI):
 # geo = [
 #   "gdal",

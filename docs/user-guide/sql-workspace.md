@@ -48,6 +48,17 @@ The bare `FROM s3://…` form works too — the workspace wraps it in the matchi
 !!! tip "CORS"
     Browser-side reads require the bucket's CORS policy to allow cross-origin requests. Most public dataset buckets (e.g. AWS Open Data, Source Cooperative) already allow this. If you hit a CORS error, check the bucket's CORS configuration.
 
+## Choosing a SQL engine
+
+The **Engine** menu (top right) selects which SQL engine runs your query. All three load a spatial extension, so `ST_*` functions are available in each.
+
+- **DuckDB** (default) — DuckDB Spatial, in-browser. Queries loaded layers, local files, and remote URLs (including `s3://`/`gs://`/`az://` public data). Works offline after first use.
+- **PostGIS** — PGlite + PostGIS, in-browser. Queries loaded layers using full PostGIS SQL. The first run loads a ~19 MB engine.
+- **Apache Sedona** — Sedona spatial SQL over your loaded layers. It runs in-browser on [CereusDB](https://github.com/tobilg/cereusdb), a WebAssembly build of Apache [SedonaDB](https://sedona.apache.org/sedonadb/). On the desktop app it uses the **SedonaDB sidecar** instead when the optional `sedona` extra is installed (better for larger layers); otherwise it falls back to the in-browser engine automatically. The CereusDB engine is downloaded lazily on first use.
+
+!!! note "Sedona reads loaded layers"
+    Like PostGIS, the Apache Sedona engine queries layers you have loaded into the map (listed as **Queryable layers**). Use the geometry column as `geometry` (or alias it to `geom`).
+
 ## Sample queries and history
 
 - **Sample queries** and **Sample query for layer** menus drop ready-made queries into the editor to get you started.
