@@ -48,6 +48,7 @@ nav:
       - Map Controls & Tools: user-guide/map-controls.md
       - Processing Tools: user-guide/processing.md
       - SQL Workspace: user-guide/sql-workspace.md
+      - Python Console: user-guide/python-console.md
       - Data Integrations: user-guide/data-integrations.md
       - Plugins & Marketplace: user-guide/plugins.md
       - Settings & Preferences: user-guide/settings.md
