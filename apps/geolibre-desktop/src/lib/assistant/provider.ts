@@ -192,6 +192,10 @@ export async function createModel(
       return new AnthropicModel({
         apiKey: config.apiKey,
         modelId: config.modelId,
+        // GeoLibre runs entirely client-side; the key is the user's own,
+        // entered in their local Settings. Opt into the SDK's browser mode (the
+        // same model as the existing GeoAgent plugin).
+        clientConfig: { dangerouslyAllowBrowser: true },
       }) as unknown as Model;
     }
     case "openai": {
@@ -199,6 +203,7 @@ export async function createModel(
       return new OpenAIModel({
         apiKey: config.apiKey,
         modelId: config.modelId,
+        clientConfig: { dangerouslyAllowBrowser: true },
       }) as unknown as Model;
     }
   }
