@@ -299,9 +299,28 @@ async function parseKmz(
   options?: DuckDbVectorLoadOptions,
 ): Promise<FeatureCollection> {
   const kmlFiles = await readKmzKmlFiles(data);
-  const collections = await Promise.all(
-    kmlFiles.map((file) => loadDuckDbVector(file, options)),
+  // Load each KML independently so declining one large KML inside a multi-KML
+  // archive drops just that layer instead of failing the whole KMZ (Promise.all
+  // is fail-fast). Real load errors still reject and abort the archive.
+  let cancellation: unknown;
+  const settled = await Promise.all(
+    kmlFiles.map((file) =>
+      loadDuckDbVector(file, options).then(
+        (collection): FeatureCollection | null => collection,
+        (error): null => {
+          if (!isVectorLoadCancelled(error)) throw error;
+          cancellation = error;
+          return null;
+        },
+      ),
+    ),
   );
+  const collections = settled.filter(
+    (collection): collection is FeatureCollection => collection !== null,
+  );
+  // Every KML was declined: propagate the cancellation so the caller skips the
+  // whole archive rather than adding an empty layer.
+  if (collections.length === 0 && cancellation) throw cancellation;
   return mergeFeatureCollections(collections);
 }
 

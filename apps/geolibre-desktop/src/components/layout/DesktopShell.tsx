@@ -42,6 +42,7 @@ import {
   type DroppedRaster,
 } from "../../lib/tauri-io";
 import type { LargeVectorDataset } from "../../lib/duckdb-vector-guard";
+import i18n from "../../i18n";
 import {
   addOsmPbfLayers,
   isOsmPbfFileName,
@@ -85,9 +86,10 @@ import type { ProjectUrlLoadState } from "../../hooks/useProjectUrlLoader";
  */
 function confirmLargeVectorDataset({ name, featureCount }: LargeVectorDataset) {
   return window.confirm(
-    `${name} has about ${featureCount.toLocaleString()} features. ` +
-      "Loading it converts every feature to GeoJSON in memory and may slow " +
-      "down or freeze the app. Continue?",
+    i18n.t("toolbar.item.largeVectorDesc", {
+      name,
+      count: featureCount.toLocaleString(),
+    }),
   );
 }
 
