@@ -326,6 +326,87 @@ export async function loadDuckDbVectorFile(
   }
 }
 
+// Monotonic suffix so concurrent reprojections register distinct DuckDB files.
+let reprojectionSeq = 0;
+
+/**
+ * Resolve the EPSG source CRS declared by a legacy GeoJSON ``crs`` member.
+ *
+ * Handles the common forms (``urn:ogc:def:crs:EPSG::3857``, ``EPSG:3857``) and
+ * treats WGS84 variants (``EPSG:4326``, OGC ``CRS84``) as "no reprojection
+ * needed" by returning null.
+ *
+ * @param fc The FeatureCollection that may carry a ``crs`` member.
+ * @returns An ``EPSG:<code>`` string to reproject from, or null when the member
+ *   is absent, unparseable, or already WGS84.
+ */
+function sourceCrsFromGeoJson(fc: FeatureCollection): string | null {
+  const name = (fc as { crs?: { properties?: { name?: unknown } } }).crs
+    ?.properties?.name;
+  if (typeof name !== "string") return null;
+  const upper = name.toUpperCase();
+  // CRS84 and EPSG:4326 are both WGS84 lon/lat; no reprojection is required.
+  if (upper.includes("CRS84") || /EPSG:+4326\b/.test(upper)) return null;
+  const match = upper.match(/EPSG:+(\d+)/);
+  return match ? `EPSG:${match[1]}` : null;
+}
+
+/**
+ * Reproject a FeatureCollection to WGS84 (EPSG:4326) when it declares a
+ * non-WGS84 CRS via a legacy GeoJSON ``crs`` member.
+ *
+ * The AI segmentation backend (samgeo-api) returns polygons in the source
+ * raster's CRS (e.g. EPSG:3857 in metres) tagged with a ``crs`` member, but
+ * MapLibre and the store expect WGS84 lon/lat, so the raw coordinates trip
+ * MapLibre's "Invalid LngLat latitude" guard. Reprojection reuses the bundled
+ * DuckDB-WASM Spatial engine (PROJ) so any EPSG code is handled. A collection
+ * with no CRS member (or one already in WGS84) is returned unchanged, with the
+ * deprecated ``crs`` member stripped either way.
+ *
+ * @param fc The FeatureCollection to reproject.
+ * @returns A WGS84 FeatureCollection without a ``crs`` member.
+ */
+export async function reprojectFeatureCollectionToWgs84(
+  fc: FeatureCollection,
+): Promise<FeatureCollection> {
+  const sourceCrs = sourceCrsFromGeoJson(fc);
+  const { crs: _deprecatedCrs, ...stripped } = fc as FeatureCollection & {
+    crs?: unknown;
+  };
+  if (!sourceCrs) return stripped as FeatureCollection;
+
+  const db = await getDatabase();
+  const connection = await db.connect();
+  const sourceFile = `geolibre-reproject-${(reprojectionSeq += 1)}.geojson`;
+  try {
+    await db.registerFileText(sourceFile, JSON.stringify(fc));
+    await ensureSpatialExtension(connection);
+
+    const sql = `SELECT * FROM ST_Read(${quoteSqlString(sourceFile)})`;
+    const description = rowsFromResult(
+      await connection.query(`DESCRIBE ${sql}`),
+    );
+    const detected = detectGeometryColumn(description);
+    if (!detected) {
+      // No geometry to reproject; hand back the stripped collection untouched.
+      return stripped as FeatureCollection;
+    }
+
+    // Pass the CRS parsed from the `crs` member explicitly rather than relying
+    // on ST_Read_Meta, which does not surface a legacy GeoJSON CRS member.
+    const geometryJsonSql = geometryGeoJsonSql(geometryExpr(detected), sourceCrs);
+    const result = await connection.query(
+      `SELECT *, ${geometryJsonSql} AS ${quoteIdentifier(
+        GEOMETRY_JSON_COLUMN,
+      )} FROM (${sql}) AS data`,
+    );
+    return toFeatureCollection(rowsFromResult(result)) as FeatureCollection;
+  } finally {
+    await connection.close();
+    await dropFilesIfPresent(db, [sourceFile]);
+  }
+}
+
 async function dropFilesIfPresent(
   db: duckdb.AsyncDuckDB,
   fileNames: string[],

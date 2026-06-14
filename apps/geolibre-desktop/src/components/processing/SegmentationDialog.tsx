@@ -28,6 +28,7 @@ import {
 import type { FeatureCollection } from "geojson";
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
+import { reprojectFeatureCollectionToWgs84 } from "../../lib/duckdb-vector-loader";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
 
 interface SegmentationDialogProps {
@@ -130,12 +131,15 @@ export function SegmentationDialog({
     setRunning(true);
     try {
       const blob = new Blob([imageBytes]);
-      const fc: FeatureCollection = await mlSegment(
+      const raw: FeatureCollection = await mlSegment(
         mode,
         blob,
         imageName || "image.tif",
         { prompt: prompt.trim(), confidenceThreshold: confidence },
       );
+      // samgeo-api returns polygons in the source raster's CRS (e.g. EPSG:3857)
+      // tagged with a GeoJSON `crs` member; the map and store need WGS84.
+      const fc = await reprojectFeatureCollectionToWgs84(raw);
       const features = Array.isArray(fc?.features) ? fc.features : [];
       if (!features.length) {
         setResultMessage("No objects found.");
