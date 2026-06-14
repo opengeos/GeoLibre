@@ -55,7 +55,7 @@ import {
   Workflow,
   Wrench,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   createAppAPI,
@@ -163,7 +163,10 @@ export function TopToolbar({
     toggle,
     setMapControlPosition,
   } = usePluginRegistry();
-  const appApi = createAppAPI(mapControllerRef);
+  // mapControllerRef is a stable ref object and createAppAPI dereferences
+  // `.current` lazily, so memoizing on the ref keeps a single appApi identity
+  // across renders without going stale.
+  const appApi = useMemo(() => createAppAPI(mapControllerRef), [mapControllerRef]);
 
   const panels = useToolbarPanels(appApi);
   const projectFiles = useProjectFileActions(mapControllerRef);
