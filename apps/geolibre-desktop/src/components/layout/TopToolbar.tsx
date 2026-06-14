@@ -135,6 +135,7 @@ import {
   Save,
   Search,
   SlidersHorizontal,
+  Sparkles,
   Sun,
   Undo2,
   Wrench,
@@ -414,6 +415,7 @@ export function TopToolbar({
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
   const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
+  const setAssistantOpen = useAppStore((s) => s.setAssistantOpen);
   const setStorymapPanelOpen = useAppStore((s) => s.setStorymapPanelOpen);
   const projectName = useAppStore((s) => s.projectName);
   const projectPath = useAppStore((s) => s.projectPath);
@@ -1262,6 +1264,14 @@ export function TopToolbar({
       run: () => setPythonConsoleOpen(true),
     },
     {
+      id: "proc.assistant",
+      title: t("toolbar.command.assistant"),
+      group: t("toolbar.commandGroup.processing"),
+      keywords: "assistant ai chat llm natural language gemini agent",
+      icon: Sparkles,
+      run: () => setAssistantOpen(true),
+    },
+    {
       id: "proc.geocode",
       title: t("toolbar.command.geocode"),
       group: t("toolbar.commandGroup.processing"),
@@ -1808,6 +1818,9 @@ export function TopToolbar({
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setPythonConsoleOpen(true)}>
             {t("toolbar.command.pythonConsole")}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setAssistantOpen(true)}>
+            {t("toolbar.command.assistant")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setGeocodeOpen(true)}>
             {t("toolbar.item.geocode")}

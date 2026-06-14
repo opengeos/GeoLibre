@@ -176,6 +176,20 @@ const SqlWorkspaceDialog = lazy(() =>
     }),
 );
 
+const AssistantPanel = lazy(() =>
+  import("../panels/AssistantPanel")
+    .then((module) => ({
+      default: module.AssistantPanel,
+    }))
+    .catch((error) => {
+      // Same chunk-load fallback rationale as the dialogs above.
+      console.error("Failed to load AssistantPanel", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../panels/AssistantPanel").AssistantPanel;
+      return { default: Fallback };
+    }),
+);
+
 const PythonConsolePanel = lazy(() =>
   import("../panels/PythonConsolePanel")
     .then((module) => ({
@@ -242,6 +256,7 @@ export function DesktopShell({
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
   const pythonConsoleOpen = useAppStore((s) => s.ui.pythonConsoleOpen);
+  const assistantOpen = useAppStore((s) => s.ui.assistantOpen);
   const geometryEditLayerId = useSyncExternalStore(
     subscribeGeometryEdit,
     getGeometryEditTargetLayerId,
@@ -1000,6 +1015,13 @@ export function DesktopShell({
         <SectionErrorBoundary label="Python console">
           <Suspense fallback={null}>
             <PythonConsolePanel mapControllerRef={mapControllerRef} />
+          </Suspense>
+        </SectionErrorBoundary>
+      ) : null}
+      {assistantOpen ? (
+        <SectionErrorBoundary label="Assistant">
+          <Suspense fallback={null}>
+            <AssistantPanel mapControllerRef={mapControllerRef} />
           </Suspense>
         </SectionErrorBoundary>
       ) : null}

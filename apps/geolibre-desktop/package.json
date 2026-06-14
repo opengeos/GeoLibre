@@ -12,6 +12,7 @@
     "tauri:build": "node ../../scripts/tauri-build.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.92.0",
     "@carbonplan/zarr-layer": "^0.5.0",
     "@deck.gl/aggregation-layers": "9.3.3",
     "@deck.gl/core": "^9.3.3",
@@ -31,9 +32,13 @@
     "@geolibre/processing": "*",
     "@geolibre/ui": "*",
     "@geoman-io/maplibre-geoman-free": "^0.7.1",
+    "@google/genai": "^1.52.0",
+    "@modelcontextprotocol/sdk": "^1.25.2",
+    "@opentelemetry/api": "^1.9.0",
     "@osmix/core": "^0.1.8",
     "@osmix/geojson": "^0.0.13",
     "@osmix/pbf": "^0.0.9",
+    "@strands-agents/sdk": "^1.3.0",
     "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-fs": "^2.5.1",
@@ -63,13 +68,15 @@
     "maplibre-gl-swipe": "^0.7.1",
     "maplibre-gl-time-slider": "^1.0.3",
     "maplibre-gl-vector": "^0.3.0",
+    "openai": "^6.39.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-i18next": "^16.6.6",
     "shpjs": "^6.2.0",
     "sql.js": "^1.14.0",
-    "three": "^0.184.0"
+    "three": "^0.184.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.0",
