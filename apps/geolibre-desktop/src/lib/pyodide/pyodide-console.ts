@@ -15,6 +15,11 @@ import {
 
 // Minimal slice of the Pyodide API we use (Pyodide ships no npm types here; it is
 // loaded from the CDN at runtime, like the worker).
+interface PyProxyFn {
+  (...args: unknown[]): unknown;
+  destroy?: () => void;
+}
+
 interface PyodideAPI {
   loadPackage: (names: string | string[]) => Promise<unknown>;
   runPython: (code: string) => unknown;
@@ -22,6 +27,14 @@ interface PyodideAPI {
   registerJsModule: (name: string, module: object) => void;
   setStdout: (options?: { batched?: (text: string) => void }) => void;
   setStderr: (options?: { batched?: (text: string) => void }) => void;
+  globals: { get: (name: string) => unknown };
+}
+
+export interface ConsoleCompletion {
+  /** The text fragment being completed (the chars to replace before the caret). */
+  prefix: string;
+  /** Candidate identifiers, sorted. */
+  candidates: string[];
 }
 
 type LoadPyodide = (options: { indexURL: string }) => Promise<PyodideAPI>;
@@ -166,6 +179,30 @@ export async function runConsoleCode(
   } finally {
     pyodide.setStdout();
     pyodide.setStderr();
+  }
+}
+
+/**
+ * Compute autocomplete candidates for the editor by introspecting the live
+ * runtime namespace (attributes for `obj.`, otherwise globals/builtins/keywords).
+ *
+ * @param deps - Accessors for the live map controller (used on first init).
+ * @param source - The full editor text.
+ * @param cursor - The caret offset into `source`.
+ * @returns The prefix being completed and the sorted candidate identifiers.
+ */
+export async function completeConsoleCode(
+  deps: ScriptingDeps,
+  source: string,
+  cursor: number,
+): Promise<ConsoleCompletion> {
+  const pyodide = await initConsoleRuntime(deps);
+  const completer = pyodide.globals.get("_geolibre_complete") as PyProxyFn;
+  try {
+    const json = completer(source, cursor) as string;
+    return JSON.parse(json) as ConsoleCompletion;
+  } finally {
+    completer.destroy?.();
   }
 }
 

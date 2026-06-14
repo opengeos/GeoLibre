@@ -21,6 +21,20 @@ close and reopen the panel.
 Type code in the input box and press **Ctrl/Cmd + Enter** (or click **Run**) to
 execute it. Output, return values, and errors appear in the scrollback above.
 
+### Editing shortcuts
+
+| Key | Action |
+| --- | --- |
+| **Ctrl/Cmd + Enter** | Run the current code |
+| **Enter** | Newline (multi-line editing) |
+| **↑ / ↓** | Recall previous / next command (when the caret is on the first / last line) |
+| **Tab** or **Ctrl + Space** | Autocomplete the name or attribute at the caret |
+
+Autocomplete introspects the **live** runtime, so `geolibre.` lists its real
+methods, and your own variables and any imported modules complete too. When more
+than one candidate matches, a list appears — use **↑/↓** to choose and
+**Enter/Tab** to accept, or **Esc** to dismiss.
+
 ```python
 geolibre.get_center()        # [lng, lat] of the current view
 geolibre.get_bounds()        # [west, south, east, north]

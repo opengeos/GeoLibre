@@ -1,8 +1,9 @@
 import { useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import { Button, Textarea } from "@geolibre/ui";
-import { Loader2, Play, Terminal, Trash2, X } from "lucide-react";
+import { Eraser, Loader2, Play, Terminal, X } from "lucide-react";
 import {
+  type ChangeEvent as ReactChangeEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type RefObject,
@@ -13,6 +14,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  completeConsoleCode,
   consoleDeps,
   initConsoleRuntime,
   onConsoleProgress,
@@ -51,9 +53,18 @@ export function PythonConsolePanel({
 
   const sectionRef = useRef<HTMLElement>(null);
   const outputRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   // Tears down an in-flight drag's window listeners; set while dragging so an
   // unmount mid-drag (e.g. closing the panel) doesn't leak them.
   const resizeCleanupRef = useRef<(() => void) | null>(null);
+  // Caret offset to apply after the next controlled `code` update (so a
+  // history recall or accepted completion lands the cursor sensibly).
+  const pendingCaretRef = useRef<number | null>(null);
+  // Submitted commands (newest last) for up/down recall, plus the cursor into
+  // them and the draft saved when history navigation begins.
+  const commandHistoryRef = useRef<string[]>([]);
+  const historyIndexRef = useRef<number | null>(null);
+  const historyDraftRef = useRef("");
   const [height, setHeight] = useState(DEFAULT_CONSOLE_HEIGHT);
   const [code, setCode] = useState("");
   const [history, setHistory] = useState<Entry[]>([]);
@@ -61,6 +72,13 @@ export function PythonConsolePanel({
   const [ready, setReady] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [completion, setCompletion] = useState<{
+    open: boolean;
+    prefix: string;
+    candidates: string[];
+    index: number;
+    cursor: number;
+  }>({ open: false, prefix: "", candidates: [], index: 0, cursor: 0 });
 
   const deps = useMemo(
     () => consoleDeps(() => mapControllerRef.current),
@@ -100,9 +118,17 @@ export function PythonConsolePanel({
     if (el) el.scrollTop = el.scrollHeight;
   }, [history]);
 
+  const closeCompletion = () =>
+    setCompletion((c) => (c.open ? { ...c, open: false } : c));
+
   const run = async () => {
     const source = code.trim();
     if (!source || running) return;
+    // Record for up/down recall (skip a consecutive duplicate), reset the cursor.
+    const cmds = commandHistoryRef.current;
+    if (cmds[cmds.length - 1] !== source) cmds.push(source);
+    historyIndexRef.current = null;
+    closeCompletion();
     setHistory((h) => [...h, { kind: "input", text: source }]);
     setCode("");
     setRunning(true);
@@ -126,12 +152,138 @@ export function PythonConsolePanel({
     }
   };
 
+  // Apply a queued caret position after a programmatic `code` change.
+  useEffect(() => {
+    if (pendingCaretRef.current === null) return;
+    const pos = pendingCaretRef.current;
+    pendingCaretRef.current = null;
+    const ta = textareaRef.current;
+    if (ta) ta.setSelectionRange(pos, pos);
+  }, [code]);
+
+  const applyCompletion = (candidate: string, prefix: string, cursor: number) => {
+    const start = cursor - prefix.length;
+    pendingCaretRef.current = start + candidate.length;
+    setCode(code.slice(0, start) + candidate + code.slice(cursor));
+    closeCompletion();
+  };
+
+  const triggerCompletion = async () => {
+    const ta = textareaRef.current;
+    if (!ta || !ready) return;
+    const cursor = ta.selectionStart ?? code.length;
+    let result;
+    try {
+      result = await completeConsoleCode(deps, code, cursor);
+    } catch {
+      return;
+    }
+    if (result.candidates.length === 0) {
+      closeCompletion();
+    } else if (result.candidates.length === 1) {
+      applyCompletion(result.candidates[0], result.prefix, cursor);
+    } else {
+      setCompletion({
+        open: true,
+        prefix: result.prefix,
+        candidates: result.candidates,
+        index: 0,
+        cursor,
+      });
+    }
+  };
+
+  // Recall a previous command. dir -1 = older, +1 = newer. Only navigates when
+  // the caret is on the first line (older) or last line (newer), so multi-line
+  // editing's arrow keys still move between lines. Returns true when handled.
+  const navigateHistory = (dir: -1 | 1): boolean => {
+    const ta = textareaRef.current;
+    const cmds = commandHistoryRef.current;
+    if (!ta || cmds.length === 0) return false;
+    const pos = ta.selectionStart ?? 0;
+    if (dir === -1) {
+      if (code.slice(0, pos).includes("\n")) return false;
+      if (historyIndexRef.current === null) {
+        historyDraftRef.current = code;
+        historyIndexRef.current = cmds.length - 1;
+      } else if (historyIndexRef.current > 0) {
+        historyIndexRef.current -= 1;
+      } else {
+        return true; // already at the oldest; consume to avoid a caret jump
+      }
+    } else {
+      if (historyIndexRef.current === null) return false;
+      if (code.slice(pos).includes("\n")) return false;
+      if (historyIndexRef.current < cmds.length - 1) {
+        historyIndexRef.current += 1;
+      } else {
+        historyIndexRef.current = null; // past newest → restore the draft
+      }
+    }
+    const text =
+      historyIndexRef.current === null
+        ? historyDraftRef.current
+        : cmds[historyIndexRef.current];
+    pendingCaretRef.current = text.length;
+    setCode(text);
+    return true;
+  };
+
   const onKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    // When the completion list is open, arrows/Enter/Tab/Esc drive it.
+    if (completion.open) {
+      const n = completion.candidates.length;
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setCompletion((c) => ({ ...c, index: (c.index + 1) % n }));
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setCompletion((c) => ({ ...c, index: (c.index - 1 + n) % n }));
+        return;
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault();
+        applyCompletion(
+          completion.candidates[completion.index],
+          completion.prefix,
+          completion.cursor,
+        );
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeCompletion();
+        return;
+      }
+    }
+    // Tab or Ctrl+Space requests completions.
+    if (event.key === "Tab" || (event.key === " " && event.ctrlKey)) {
+      event.preventDefault();
+      void triggerCompletion();
+      return;
+    }
     // Ctrl/Cmd+Enter runs; plain Enter inserts a newline (multi-line editing).
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
       void run();
+      return;
     }
+    if (event.key === "ArrowUp" && navigateHistory(-1)) {
+      event.preventDefault();
+      return;
+    }
+    if (event.key === "ArrowDown" && navigateHistory(1)) {
+      event.preventDefault();
+    }
+  };
+
+  const onChange = (event: ReactChangeEvent<HTMLTextAreaElement>) => {
+    setCode(event.target.value);
+    // The user is typing their own line again — leave history recall.
+    historyIndexRef.current = null;
+    closeCompletion();
   };
 
   const startResize = (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -222,7 +374,7 @@ export function PythonConsolePanel({
             title={t("pythonConsole.clear")}
             onClick={() => setHistory([])}
           >
-            <Trash2 className="h-4 w-4" />
+            <Eraser className="h-4 w-4" />
           </Button>
           <Button
             variant="ghost"
@@ -260,10 +412,39 @@ export function PythonConsolePanel({
         )}
       </div>
 
-      <div className="flex items-end gap-2 border-t px-3 py-2">
+      <div className="relative flex items-end gap-2 border-t px-3 py-2">
+        {completion.open ? (
+          <div
+            role="listbox"
+            aria-label={t("pythonConsole.completions")}
+            className="absolute bottom-full left-3 z-30 mb-1 max-h-48 w-72 overflow-auto rounded-md border bg-popover py-1 text-popover-foreground shadow-md"
+          >
+            {completion.candidates.map((candidate, i) => (
+              <button
+                type="button"
+                key={candidate}
+                role="option"
+                aria-selected={i === completion.index}
+                className={`block w-full px-3 py-1 text-left font-mono text-xs ${
+                  i === completion.index
+                    ? "bg-accent text-accent-foreground"
+                    : "hover:bg-accent/50"
+                }`}
+                // Keep focus in the textarea so the caret update applies.
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  applyCompletion(candidate, completion.prefix, completion.cursor);
+                }}
+              >
+                {candidate}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <Textarea
+          ref={textareaRef}
           value={code}
-          onChange={(event) => setCode(event.target.value)}
+          onChange={onChange}
           onKeyDown={onKeyDown}
           placeholder={t("pythonConsole.placeholder")}
           spellCheck={false}

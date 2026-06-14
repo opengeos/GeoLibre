@@ -244,3 +244,53 @@ class _GeoLibre:
 
 
 geolibre = _GeoLibre()
+
+
+def _geolibre_complete(source: str, end: int) -> str:
+    """Return completion candidates for the console autocomplete.
+
+    Introspects the live runtime namespace (the same globals user code runs in),
+    so attribute access (``geolibre.``) lists real methods and bare names complete
+    from globals, builtins, and keywords. Private (``_``-prefixed) names are hidden
+    unless the prefix explicitly starts with ``_``.
+
+    Args:
+        source: The full editor text.
+        end: The caret offset into ``source``.
+
+    Returns:
+        A JSON string ``{"prefix": str, "candidates": [str, ...]}`` — ``prefix``
+        is the text being replaced; ``candidates`` is sorted and de-duplicated.
+    """
+    import builtins
+    import json
+    import keyword
+    import re
+
+    text = source[: max(0, end)]
+    # The dotted identifier chain ending at the caret, e.g. "geolibre.fly_".
+    match = re.search(r"[A-Za-z_][\w]*(?:\.[A-Za-z_][\w]*)*\.?$", text)
+    token = match.group(0) if match else ""
+    if "." in token:
+        base, _, prefix = token.rpartition(".")
+    else:
+        base, prefix = "", token
+
+    ns = globals()
+
+    def _visible(name: str) -> bool:
+        if name.startswith("_") and not prefix.startswith("_"):
+            return False
+        return name.startswith(prefix)
+
+    if base:
+        try:
+            obj = eval(base, ns)  # noqa: S307 - base is a parsed identifier chain
+        except Exception:  # noqa: BLE001 - any eval failure yields no completions
+            return json.dumps({"prefix": prefix, "candidates": []})
+        names = dir(obj)
+    else:
+        names = list(ns.keys()) + dir(builtins) + keyword.kwlist
+
+    candidates = sorted({name for name in names if _visible(name)})
+    return json.dumps({"prefix": prefix, "candidates": candidates})

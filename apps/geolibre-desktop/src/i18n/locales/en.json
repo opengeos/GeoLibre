@@ -393,8 +393,9 @@
     "close": "Close Python console",
     "run": "Run",
     "runHint": "Run (Ctrl/Cmd+Enter)",
-    "placeholder": "Type Python here, then press Ctrl/Cmd+Enter. Use `geolibre` to drive the map.",
-    "intro": "Python console ready. Use the `geolibre` object to script the map, e.g. geolibre.get_center(). Run `await geolibre.load_package(\"numpy\")` to add packages.",
+    "completions": "Completions",
+    "placeholder": "Python here · Ctrl/Cmd+Enter to run · Tab to autocomplete · ↑/↓ for history",
+    "intro": "Python console ready. Use the `geolibre` object to script the map, e.g. geolibre.get_center(). Tab autocompletes, ↑/↓ recall previous commands, and `await geolibre.load_package(\"numpy\")` adds packages.",
     "loadFailed": "Failed to load the Python runtime."
   },
   "storymap": {
