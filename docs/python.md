@@ -60,6 +60,25 @@ m.add_basemap("dark")
 m.set_center(-120, 47, zoom=8)
 ```
 
+`add_raster` / `add_cog` also accept a **local** GeoTIFF path on the kernel host
+(local Jupyter / VS Code): the file is served by the bundled localhost server so
+the app can read it. That URL is session-scoped, so a project saved with a local
+raster will not restore it when reopened later — pass a hosted URL for durable
+projects.
+
+Add markers and data-driven symbology without precomputing styles:
+
+```python
+m.add_marker(-122.4, 37.8, properties={"name": "San Francisco"})
+m.add_marker_cluster([(-122.4, 37.8), (-122.3, 37.9), (-122.5, 37.7)])
+m.add_choropleth(
+    "https://example.com/counties.geojson",
+    column="population",
+    colormap="blues",
+    scheme="quantile",
+)
+```
+
 ## Two-way sync
 
 Because the project syncs both ways, you can pan or zoom the map in the UI and
@@ -156,6 +175,12 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | --- | --- |
 | `Map(center, zoom, basemap=, height=, layout=, theme=)` | Create a map. |
 | `add_geojson(data, name=, **style)` | Add GeoJSON from a dict, file path, URL, JSON string, or GeoDataFrame. |
+| `add_marker(lng, lat, name=, properties=, **style)` | Add a single point marker (shown as a circle; `properties` appear on click). |
+| `add_markers(points, name=, **style)` | Add point markers from `(lng, lat)` pairs, `{lng/lon/x, lat/y, …}` dicts, GeoJSON, or a GeoDataFrame. |
+| `add_circle_markers(points, name=, radius=, **style)` | Add circle markers with an explicit `radius`. |
+| `add_marker_cluster(points, name=, cluster_radius=, cluster_max_zoom=, **style)` | Add clustered point markers. |
+| `add_choropleth(data, column, name=, class_count=, colormap=, scheme=, **style)` | Add a GeoJSON layer with graduated symbology computed from a numeric `column`. |
+| `add_data(data, column=None, name=, **kwargs)` | Add data; a choropleth when `column` is given, else a plain GeoJSON layer (leafmap parity). |
 | `add_vector(data, name=, render_mode=, data_format=, source_layer=, **style)` | Add a vector dataset from a URL (GeoParquet, FlatGeobuf, zipped Shapefile, GeoJSON, …) or a local file (read via GeoPandas and inlined). |
 | `add_geoparquet(data, name=, **style)` | Add a GeoParquet dataset (URL or local file). |
 | `add_flatgeobuf(data, name=, **style)` | Add a FlatGeobuf dataset (URL or local file). |
@@ -166,8 +191,8 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `add_wms(endpoint, layers, name=, styles=, image_format=, transparent=, tile_size=, **style)` | Add a WMS layer (GetMap, tiled raster). |
 | `add_wmts(url, name=, tile_size=, **style)` | Add a WMTS layer from a tile URL template. |
 | `add_wfs(endpoint, type_name, name=, version=, output_format=, srs_name=, max_features=, **style)` | Add a WFS layer (GetFeature GeoJSON, fetched and inlined). |
-| `add_cog(url, name=, bands=, colormap=, rescale=)` | Add a Cloud Optimized GeoTIFF. |
-| `add_raster(url, name=, bands=, colormap=, rescale=)` | Add a raster (COG/GeoTIFF); alias of `add_cog`. |
+| `add_cog(url, name=, bands=, colormap=, rescale=)` | Add a Cloud Optimized GeoTIFF (URL or a kernel-side local GeoTIFF path). |
+| `add_raster(url, name=, bands=, colormap=, rescale=)` | Add a raster (COG/GeoTIFF), URL or local path; alias of `add_cog`. |
 | `add_3d_tiles(url, name=, altitude_offset=, request_headers=, **style)` | Add a 3D Tiles `tileset.json`. |
 | `add_video(urls, coordinates, name=, **style)` | Add a georeferenced video (four `[lng, lat]` corners). |
 | `add_basemap(basemap)` | Set the background basemap. |

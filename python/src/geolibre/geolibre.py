@@ -16,8 +16,9 @@ import anywidget
 import traitlets
 
 from . import project as _project
-from ._server import app_port, serve_app
+from ._server import app_port, register_local_file, serve_app
 from .basemaps import resolve_basemap
+from .color_ramp import graduated_stops
 
 _HERE = pathlib.Path(__file__).parent
 _STATIC_APP = _HERE / "static" / "app"
@@ -678,6 +679,284 @@ class Map(anywidget.AnyWidget):
             _project.geojson_layer(name, fc, source_url=source_url, **style)
         )
 
+    # -- markers ---------------------------------------------------------
+
+    @staticmethod
+    def _point_feature(
+        lng: float,
+        lat: float,
+        properties: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Build a GeoJSON point Feature at ``[lng, lat]`` with ``properties``."""
+        return {
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [float(lng), float(lat)]},
+            "properties": dict(properties or {}),
+        }
+
+    @staticmethod
+    def _points_to_featurecollection(points: Any) -> dict[str, Any]:
+        """Coerce assorted point inputs into a GeoJSON point FeatureCollection.
+
+        Accepts the same forms as :meth:`add_geojson` (a FeatureCollection /
+        Feature / geometry dict, a GeoJSON string, or a ``__geo_interface__``
+        object such as a GeoDataFrame), plus a sequence of ``(lng, lat)`` pairs
+        or ``{"lng"/"lon"/"x", "lat"/"y", **properties}`` mappings for the common
+        "just give me a list of coordinates" case.
+
+        Args:
+            points: The point input in one of the supported forms.
+
+        Returns:
+            A GeoJSON FeatureCollection dict of point features.
+
+        Raises:
+            ValueError: If a sequence entry is not a coordinate pair or a mapping
+                with longitude/latitude keys.
+        """
+        # Defer dict / GeoJSON-string / __geo_interface__ inputs to the shared
+        # loader so a GeoDataFrame of points or a FeatureCollection works as-is.
+        if hasattr(points, "__geo_interface__") or isinstance(points, (dict, str)):
+            return _project.load_featurecollection(points)
+
+        features: list[dict[str, Any]] = []
+        for entry in points:
+            if isinstance(entry, dict):
+                lng = entry.get("lng", entry.get("lon", entry.get("x")))
+                lat = entry.get("lat", entry.get("y"))
+                if lng is None or lat is None:
+                    raise ValueError(
+                        "Point mapping needs longitude (lng/lon/x) and latitude "
+                        f"(lat/y) keys; got {sorted(entry)}"
+                    )
+                props = {
+                    key: value
+                    for key, value in entry.items()
+                    if key not in ("lng", "lon", "x", "lat", "y")
+                }
+                features.append(Map._point_feature(lng, lat, props))
+            else:
+                pair = list(entry)
+                if len(pair) != 2:
+                    raise ValueError(
+                        f"Point must be a (lng, lat) pair; got {entry!r}"
+                    )
+                features.append(Map._point_feature(pair[0], pair[1]))
+        return {"type": "FeatureCollection", "features": features}
+
+    def add_marker(
+        self,
+        lng: float,
+        lat: float,
+        name: str = "Marker",
+        *,
+        properties: dict[str, Any] | None = None,
+        **style: Any,
+    ) -> str:
+        """Add a single point marker at ``[lng, lat]``.
+
+        The marker is a GeoJSON point layer (rendered as a circle); its
+        ``properties`` are shown when the point is clicked. Style overrides such
+        as ``fillColor`` and ``circleRadius`` control its appearance.
+
+        Args:
+            lng: Marker longitude.
+            lat: Marker latitude.
+            name: Layer display name.
+            properties: Optional feature properties (shown on click).
+            **style: Style overrides (e.g. ``fillColor``, ``circleRadius``).
+
+        Returns:
+            The id of the added layer.
+        """
+        fc = {
+            "type": "FeatureCollection",
+            "features": [self._point_feature(lng, lat, properties)],
+        }
+        return self._add_layer(_project.geojson_layer(name, fc, **style))
+
+    def add_markers(
+        self,
+        points: Any,
+        name: str = "Markers",
+        **style: Any,
+    ) -> str:
+        """Add point markers from a collection of points.
+
+        Args:
+            points: A sequence of ``(lng, lat)`` pairs or
+                ``{"lng"/"lon"/"x", "lat"/"y", **properties}`` mappings, a GeoJSON
+                point FeatureCollection/Feature/geometry, a GeoJSON string, or a
+                ``__geo_interface__`` object (e.g. a point GeoDataFrame).
+            name: Layer display name.
+            **style: Style overrides (e.g. ``fillColor``, ``circleRadius``).
+
+        Returns:
+            The id of the added layer.
+        """
+        fc = self._points_to_featurecollection(points)
+        return self._add_layer(_project.geojson_layer(name, fc, **style))
+
+    def add_circle_markers(
+        self,
+        points: Any,
+        name: str = "Circle Markers",
+        *,
+        radius: float | None = None,
+        **style: Any,
+    ) -> str:
+        """Add circle markers (point markers with an explicit radius).
+
+        Convenience over :meth:`add_markers` that surfaces ``radius`` as a named
+        argument; everything else behaves the same.
+
+        Args:
+            points: Points in any form accepted by :meth:`add_markers`.
+            name: Layer display name.
+            radius: Optional circle radius in pixels (sets ``circleRadius``).
+            **style: Additional style overrides.
+
+        Returns:
+            The id of the added layer.
+        """
+        if radius is not None:
+            style.setdefault("circleRadius", float(radius))
+        return self.add_markers(points, name=name, **style)
+
+    def add_marker_cluster(
+        self,
+        points: Any,
+        name: str = "Marker Cluster",
+        *,
+        cluster_radius: int = 50,
+        cluster_max_zoom: int = 14,
+        **style: Any,
+    ) -> str:
+        """Add clustered point markers.
+
+        Builds a GeoJSON point layer with the cluster renderer enabled, so
+        nearby points collapse into count bubbles that split apart as you zoom
+        in (the same clustering the UI's point renderer offers).
+
+        Args:
+            points: Points in any form accepted by :meth:`add_markers`.
+            name: Layer display name.
+            cluster_radius: Cluster radius in pixels.
+            cluster_max_zoom: Zoom level beyond which points are no longer
+                clustered.
+            **style: Additional style overrides.
+
+        Returns:
+            The id of the added layer.
+        """
+        style.setdefault("pointRenderer", "cluster")
+        style.setdefault("clusterRadius", int(cluster_radius))
+        style.setdefault("clusterMaxZoom", int(cluster_max_zoom))
+        return self.add_markers(points, name=name, **style)
+
+    # -- choropleth ------------------------------------------------------
+
+    def add_choropleth(
+        self,
+        data: Any,
+        column: str,
+        name: str = "Choropleth",
+        *,
+        class_count: int = 5,
+        colormap: str = "viridis",
+        scheme: str = "equal-interval",
+        **style: Any,
+    ) -> str:
+        """Add a GeoJSON layer with data-driven (graduated) symbology.
+
+        Classifies ``column`` into ``class_count`` numeric ranges and colors
+        each range from ``colormap``, building the same graduated symbology the
+        Style panel produces from the UI. The stops are computed kernel-side from
+        the data, so no precomputed styling is required.
+
+        Args:
+            data: Any source accepted by :meth:`add_geojson` (a GeoJSON dict,
+                file path, URL, JSON string, or GeoDataFrame).
+            column: The feature property to classify (must be numeric).
+            name: Layer display name.
+            class_count: Number of classes (clamped to at least 2).
+            colormap: A color ramp name (e.g. ``"viridis"``, ``"blues"``,
+                ``"rdylgn"``).
+            scheme: Classification scheme, ``"equal-interval"`` or ``"quantile"``.
+            **style: Additional style overrides.
+
+        Returns:
+            The id of the added layer.
+
+        Raises:
+            ValueError: If the column is missing from every feature, or ``scheme``
+                is not supported.
+        """
+        source_url = (
+            data
+            if isinstance(data, str) and data.startswith(("http://", "https://"))
+            else None
+        )
+        fc = _project.load_featurecollection(data)
+        features = fc.get("features", [])
+        values = [
+            feature.get("properties", {}).get(column)
+            for feature in features
+            if isinstance(feature, dict)
+        ]
+        if all(value is None for value in values):
+            raise ValueError(
+                f"Column {column!r} not found in any feature's properties"
+            )
+        stops = graduated_stops(
+            values,
+            class_count=class_count,
+            color_ramp=colormap,
+            classification_scheme=scheme,
+        )
+        choropleth_style: dict[str, Any] = {
+            "vectorStyleMode": "graduated",
+            "vectorStyleProperty": column,
+            "vectorStyleClassCount": max(2, int(class_count)),
+            "vectorStyleColorRamp": colormap,
+            "vectorStyleClassificationScheme": scheme,
+            "vectorStyleStops": stops,
+        }
+        # Caller overrides win over the computed symbology.
+        choropleth_style.update(style)
+        return self._add_layer(
+            _project.geojson_layer(
+                name, fc, source_url=source_url, **choropleth_style
+            )
+        )
+
+    # leafmap-style alias: add the data with optional column-driven symbology.
+    def add_data(
+        self,
+        data: Any,
+        column: str | None = None,
+        name: str = "Data",
+        **kwargs: Any,
+    ) -> str:
+        """Add data, optionally styled as a choropleth by ``column``.
+
+        With ``column`` set this is :meth:`add_choropleth`; without it, a plain
+        GeoJSON layer (:meth:`add_geojson`). Provided for leafmap parity.
+
+        Args:
+            data: Any source accepted by :meth:`add_geojson`.
+            column: Optional numeric property to drive graduated symbology.
+            name: Layer display name.
+            **kwargs: Forwarded to :meth:`add_choropleth` (when ``column`` is
+                given) or :meth:`add_geojson`.
+
+        Returns:
+            The id of the added layer.
+        """
+        if column is None:
+            return self.add_geojson(data, name=name, **kwargs)
+        return self.add_choropleth(data, column, name=name, **kwargs)
+
     def add_tile_layer(
         self,
         url: str,
@@ -709,6 +988,29 @@ class Map(anywidget.AnyWidget):
             )
         )
 
+    @staticmethod
+    def _resolve_raster_source(source: Any) -> str:
+        """Resolve a raster source to a URL the in-iframe app can fetch.
+
+        An ``http(s)`` URL is used as-is. Anything else is treated as a
+        kernel-side local file path and exposed through the bundled static
+        server (with HTTP Range support, which the GeoTIFF reader needs), so a
+        local GeoTIFF renders without being hosted elsewhere.
+
+        Args:
+            source: A COG/GeoTIFF URL or a local file path.
+
+        Returns:
+            A URL the app can fetch.
+
+        Raises:
+            ValueError: If a local path is given but no such file exists.
+            RuntimeError: If the static server is not running.
+        """
+        if isinstance(source, str) and source.startswith(("http://", "https://")):
+            return source
+        return register_local_file(source)
+
     def add_cog(
         self,
         url: str,
@@ -722,7 +1024,13 @@ class Map(anywidget.AnyWidget):
         """Add a Cloud Optimized GeoTIFF (COG) layer.
 
         Args:
-            url: URL of the COG / GeoTIFF.
+            url: URL of the COG / GeoTIFF, or a path to a local GeoTIFF on the
+                kernel host. A local file is served by the bundled static server
+                so the app can read it; that URL lives only for this kernel
+                session, so a project saved with a local raster will not restore
+                the raster when reopened later, and the file is only reachable
+                when the browser runs on the same host as the kernel (local
+                Jupyter, VS Code).
             name: Layer display name.
             bands: Optional 1-based band indices to render.
             colormap: Optional colormap name (single-band rendering).
@@ -735,7 +1043,7 @@ class Map(anywidget.AnyWidget):
         return self._add_layer(
             _project.cog_layer(
                 name,
-                url,
+                self._resolve_raster_source(url),
                 bands=bands,
                 colormap=colormap,
                 rescale=rescale,
@@ -755,10 +1063,12 @@ class Map(anywidget.AnyWidget):
     ) -> str:
         """Add a raster (COG / GeoTIFF) layer.
 
-        Alias of :meth:`add_cog` with a generic default name.
+        Alias of :meth:`add_cog` with a generic default name. Accepts a URL or a
+        kernel-side local GeoTIFF path (see :meth:`add_cog` for the local-file
+        caveats).
 
         Args:
-            url: URL of the COG / GeoTIFF.
+            url: URL of the COG / GeoTIFF, or a local GeoTIFF path.
             name: Layer display name.
             bands: Optional 1-based band indices to render.
             colormap: Optional colormap name (single-band rendering).
