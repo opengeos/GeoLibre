@@ -397,6 +397,7 @@ export function TopToolbar({
   const setGeocodeOpen = useAppStore((s) => s.setGeocodeOpen);
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
+  const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
   const setStorymapPanelOpen = useAppStore((s) => s.setStorymapPanelOpen);
   const projectName = useAppStore((s) => s.projectName);
   const projectPath = useAppStore((s) => s.projectPath);
@@ -1187,6 +1188,14 @@ export function TopToolbar({
       run: () => setSqlWorkspaceOpen(true),
     },
     {
+      id: "proc.python",
+      title: t("toolbar.command.pythonConsole"),
+      group: t("toolbar.commandGroup.processing"),
+      keywords: "python console pyodide script repl",
+      icon: Wrench,
+      run: () => setPythonConsoleOpen(true),
+    },
+    {
       id: "proc.geocode",
       title: t("toolbar.command.geocode"),
       group: t("toolbar.commandGroup.processing"),
@@ -1716,6 +1725,9 @@ export function TopToolbar({
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setSqlWorkspaceOpen(true)}>
             {t("toolbar.command.sqlWorkspace")}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setPythonConsoleOpen(true)}>
+            {t("toolbar.command.pythonConsole")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setGeocodeOpen(true)}>
             {t("toolbar.item.geocode")}

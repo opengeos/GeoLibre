@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import base64
 import copy
 import json
 import os
 import pathlib
+import time
+import uuid
 import warnings
 from typing import Any, Callable
 
@@ -189,6 +192,14 @@ class Map(anywidget.AnyWidget):
             zoom=zoom,
             basemap_url=resolve_basemap(basemap) if basemap else None,
         )
+        # Scripting RPC state. Command/result and event traffic ride anywidget's
+        # custom message channel (self.send / on_msg), kept off the project trait
+        # so the project sync loop guard is untouched. `_pending` maps an
+        # in-flight requestId to its result slot; `_event_handlers` maps an event
+        # name to its registered callbacks.
+        self._pending: dict[str, dict[str, Any]] = {}
+        self._event_handlers: dict[str, list[Callable[[Any], None]]] = {}
+        self.on_msg(self._on_custom_msg)
 
     @staticmethod
     def _running_on_colab() -> bool:
@@ -249,6 +260,379 @@ class Map(anywidget.AnyWidget):
     def _add_layer(self, layer: dict[str, Any]) -> str:
         self._update_project(lambda p: p["layers"].append(layer))
         return layer["id"]
+
+    # -- scripting RPC ---------------------------------------------------
+
+    def _on_custom_msg(
+        self, _widget: Any, content: Any, _buffers: Any
+    ) -> None:
+        """Handle out-of-band messages from the app (results and events).
+
+        Args:
+            _widget: The widget instance (unused; required by the on_msg API).
+            content: The decoded message payload.
+            _buffers: Binary buffers (unused).
+        """
+        if not isinstance(content, dict):
+            return
+        msg_type = content.get("type")
+        if msg_type == "geolibre:result":
+            slot = self._pending.get(content.get("requestId"))
+            if slot is None:
+                # A reply for a request that already timed out / was cleaned up.
+                return
+            slot["ok"] = bool(content.get("ok"))
+            slot["value"] = content.get("value")
+            slot["error"] = content.get("error")
+            slot["done"] = True
+        elif msg_type == "geolibre:event":
+            self._dispatch_event(content.get("event"), content.get("payload"))
+
+    def _dispatch_event(self, event: Any, payload: Any) -> None:
+        """Invoke every callback registered for an event, isolating failures."""
+        for handler in list(self._event_handlers.get(event, ())):
+            try:
+                handler(payload)
+            except Exception as exc:  # noqa: BLE001 - never let one callback kill the bus
+                warnings.warn(
+                    f"GeoLibre event handler for {event!r} raised: {exc}",
+                    stacklevel=2,
+                )
+
+    @staticmethod
+    def _wait_for_result(
+        slot: dict[str, Any], method: str, timeout: float
+    ) -> None:
+        """Block the kernel until a result slot resolves or the timeout elapses.
+
+        Jupyter comms are asynchronous, so the kernel must keep processing
+        incoming messages while the calling cell blocks. ``jupyter_ui_poll``
+        pumps the kernel's event loop re-entrantly (handling the ipykernel
+        version differences) so the ``on_msg`` reply lands and fills the slot.
+
+        Args:
+            slot: The pending request slot, resolved in place by ``_on_custom_msg``.
+            method: Command name, for error messages.
+            timeout: Seconds to wait before giving up.
+
+        Raises:
+            TimeoutError: If no reply arrives within ``timeout`` seconds.
+            RuntimeError: If ``jupyter_ui_poll`` is not installed.
+        """
+        try:
+            from jupyter_ui_poll import ui_events
+        except ImportError as exc:
+            raise RuntimeError(
+                "Interactive GeoLibre queries require the 'jupyter_ui_poll' "
+                "package. Install it with `pip install jupyter_ui_poll`."
+            ) from exc
+        deadline = time.monotonic() + timeout
+        with ui_events() as poll:
+            while not slot["done"]:
+                poll(10)
+                if slot["done"]:
+                    break
+                if time.monotonic() > deadline:
+                    raise TimeoutError(
+                        f"GeoLibre command {method!r} timed out after {timeout}s. "
+                        "The map must be displayed and loaded before it can "
+                        "answer; show the map, then retry or pass a larger "
+                        "timeout=."
+                    )
+                time.sleep(0.01)
+
+    def request(
+        self,
+        method: str,
+        params: dict[str, Any] | None = None,
+        *,
+        timeout: float = 10.0,
+    ) -> Any:
+        """Send a command to the running app and block for its reply.
+
+        This is the low-level primitive behind the query/processing methods; call
+        it directly to reach a command without a dedicated wrapper.
+
+        Args:
+            method: The command name (e.g. ``"getCenter"``).
+            params: Command parameters.
+            timeout: Seconds to wait for the reply.
+
+        Returns:
+            The command's result value.
+
+        Raises:
+            TimeoutError: If the app does not reply in time.
+            RuntimeError: If the app reports the command failed.
+        """
+        request_id = uuid.uuid4().hex
+        slot: dict[str, Any] = {
+            "done": False,
+            "ok": False,
+            "value": None,
+            "error": None,
+        }
+        self._pending[request_id] = slot
+        self.send(
+            {
+                "type": "geolibre:command",
+                "requestId": request_id,
+                "method": method,
+                "params": params or {},
+            }
+        )
+        try:
+            self._wait_for_result(slot, method, timeout)
+        finally:
+            self._pending.pop(request_id, None)
+        if not slot["ok"]:
+            raise RuntimeError(
+                slot["error"] or f"GeoLibre command {method!r} failed"
+            )
+        return slot["value"]
+
+    def on(
+        self, event: str, callback: Callable[[Any], None]
+    ) -> Callable[[], None]:
+        """Register a callback for an app event.
+
+        Events are delivered when the map is displayed and the user interacts
+        with it. The known events are ``"click"`` (payload
+        ``{"lngLat": [lng, lat], "features": [...]}``), ``"selection-change"``
+        (``{"layerId", "featureId"}``), and ``"layer-change"``
+        (``{"layerIds": [...]}``).
+
+        Args:
+            event: The event name.
+            callback: Called with the event payload.
+
+        Returns:
+            A function that unregisters this callback.
+        """
+        self._event_handlers.setdefault(event, []).append(callback)
+
+        def _off() -> None:
+            handlers = self._event_handlers.get(event)
+            if handlers and callback in handlers:
+                handlers.remove(callback)
+
+        return _off
+
+    def on_click(self, callback: Callable[[Any], None]) -> Callable[[], None]:
+        """Register a callback fired when the user clicks the map."""
+        return self.on("click", callback)
+
+    def on_selection_change(
+        self, callback: Callable[[Any], None]
+    ) -> Callable[[], None]:
+        """Register a callback fired when the selected layer/feature changes."""
+        return self.on("selection-change", callback)
+
+    def on_layer_change(
+        self, callback: Callable[[Any], None]
+    ) -> Callable[[], None]:
+        """Register a callback fired when layers are added or removed."""
+        return self.on("layer-change", callback)
+
+    # -- live queries / view --------------------------------------------
+
+    def get_view(self, *, timeout: float = 10.0) -> dict[str, Any]:
+        """Return the live camera ``{center, zoom, bearing, pitch, bbox}``."""
+        return self.request("getView", timeout=timeout)
+
+    def get_center(self, *, timeout: float = 10.0) -> list[float]:
+        """Return the live map center as ``[lng, lat]``."""
+        return self.request("getCenter", timeout=timeout)
+
+    def get_bounds(self, *, timeout: float = 10.0) -> list[float]:
+        """Return the live viewport bounds as ``[west, south, east, north]``."""
+        return self.request("getBounds", timeout=timeout)
+
+    def fly_to(
+        self,
+        lng: float | None = None,
+        lat: float | None = None,
+        *,
+        zoom: float | None = None,
+        bearing: float | None = None,
+        pitch: float | None = None,
+        duration: float | None = None,
+        timeout: float = 10.0,
+    ) -> None:
+        """Animate the camera. Only the provided fields change.
+
+        Args:
+            lng: Target longitude (pass with ``lat`` to recenter).
+            lat: Target latitude.
+            zoom: Target zoom level.
+            bearing: Target bearing in degrees.
+            pitch: Target pitch in degrees.
+            duration: Animation duration in milliseconds.
+            timeout: Seconds to wait for acknowledgement.
+        """
+        params: dict[str, Any] = {}
+        if lng is not None and lat is not None:
+            params["center"] = [float(lng), float(lat)]
+        if zoom is not None:
+            params["zoom"] = float(zoom)
+        if bearing is not None:
+            params["bearing"] = float(bearing)
+        if pitch is not None:
+            params["pitch"] = float(pitch)
+        if duration is not None:
+            params["duration"] = float(duration)
+        self.request("flyTo", params, timeout=timeout)
+
+    def fit_bounds(
+        self,
+        bounds: list[float] | tuple[float, float, float, float],
+        *,
+        timeout: float = 10.0,
+    ) -> None:
+        """Fit the camera to ``[west, south, east, north]``."""
+        self.request(
+            "fitBounds", {"bounds": [float(b) for b in bounds]}, timeout=timeout
+        )
+
+    def identify(
+        self,
+        lng: float,
+        lat: float,
+        *,
+        layer_id: str | None = None,
+        timeout: float = 10.0,
+    ) -> list[dict[str, Any]]:
+        """Query rendered features at a geographic point (like clicking it).
+
+        Args:
+            lng: Longitude of the query point.
+            lat: Latitude of the query point.
+            layer_id: Restrict the query to one layer; omit to query all layers.
+            timeout: Seconds to wait for the reply.
+
+        Returns:
+            One ``{"layerId", "featureId", "properties", "geometry"}`` dict per
+            matched feature, topmost first.
+        """
+        params: dict[str, Any] = {"lngLat": [float(lng), float(lat)]}
+        if layer_id is not None:
+            params["layerId"] = layer_id
+        return self.request("identify", params, timeout=timeout)
+
+    def get_features(
+        self, layer_id: str, *, timeout: float = 10.0
+    ) -> list[Feature]:
+        """Return a layer's features as :class:`Feature` (GeoJSON) objects.
+
+        Reads the live store, so features added or edited in the UI are
+        included. Only vector (GeoJSON) layers carry inline features; a tiled or
+        remote layer returns an empty list — use :meth:`identify` for those.
+
+        Args:
+            layer_id: The layer id.
+            timeout: Seconds to wait for the reply.
+
+        Returns:
+            A list of :class:`Feature` objects (each also a plain GeoJSON dict).
+        """
+        features = self.request(
+            "getLayerFeatures", {"layerId": layer_id}, timeout=timeout
+        )
+        return [Feature(f) for f in features or []]
+
+    def list_algorithms(self, *, timeout: float = 10.0) -> list[dict[str, Any]]:
+        """List the available client-side processing algorithms.
+
+        Returns:
+            One ``{"id", "name", "group", "description", "parameters"}`` dict per
+            algorithm, suitable for discovering ids and parameters to pass to
+            :meth:`run_algorithm`.
+        """
+        return self.request("listAlgorithms", timeout=timeout)
+
+    def run_algorithm(
+        self,
+        algorithm_id: str,
+        parameters: dict[str, Any] | None = None,
+        *,
+        timeout: float = 120.0,
+    ) -> dict[str, Any]:
+        """Run a processing algorithm in the app and add its result layers.
+
+        Args:
+            algorithm_id: An id from :meth:`list_algorithms` (e.g. ``"buffer"``).
+            parameters: The algorithm's parameters (see its ``parameters`` from
+                :meth:`list_algorithms`). Layer parameters take a layer id.
+            timeout: Seconds to wait; raise this for large inputs.
+
+        Returns:
+            ``{"logs": [...], "resultLayerIds": [...]}`` — the algorithm's log
+            lines and the ids of any layers it added to the map.
+        """
+        return self.request(
+            "runAlgorithm",
+            {"id": algorithm_id, "params": parameters or {}},
+            timeout=timeout,
+        )
+
+    def to_image(
+        self, path: str | None = None, *, timeout: float = 30.0
+    ) -> bytes | None:
+        """Capture the current map view as a PNG.
+
+        Args:
+            path: If given, write the PNG here (parent dirs are created) and
+                return ``None``. Otherwise return the PNG bytes.
+            timeout: Seconds to wait for the capture.
+
+        Returns:
+            The PNG bytes, or ``None`` when written to ``path``.
+        """
+        data_url = self.request("toImage", timeout=timeout)
+        _, _, encoded = str(data_url).partition(",")
+        png = base64.b64decode(encoded)
+        if path is not None:
+            out = pathlib.Path(path).expanduser()
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_bytes(png)
+            return None
+        return png
+
+    # -- layer object model ---------------------------------------------
+
+    @property
+    def layers(self) -> list[Layer]:
+        """The current layers as :class:`Layer` objects, in draw order."""
+        return [
+            Layer(self, layer["id"])
+            for layer in self.project.get("layers", [])
+            if isinstance(layer, dict) and "id" in layer
+        ]
+
+    def get_layer(self, layer_id: str) -> Layer:
+        """Return a :class:`Layer` handle for ``layer_id``.
+
+        Raises:
+            ValueError: If no layer with that id exists.
+        """
+        for layer in self.project.get("layers", []):
+            if isinstance(layer, dict) and layer.get("id") == layer_id:
+                return Layer(self, layer_id)
+        raise ValueError(f"No layer with id {layer_id!r}")
+
+    def _mutate_layer(
+        self, layer_id: str, mutate: Callable[[dict[str, Any]], None]
+    ) -> None:
+        """Apply an in-place mutation to one layer through the project trait."""
+
+        def _apply(project: dict[str, Any]) -> None:
+            for layer in project.get("layers", []):
+                if isinstance(layer, dict) and layer.get("id") == layer_id:
+                    mutate(layer)
+                    return
+            raise ValueError(f"No layer with id {layer_id!r}")
+
+        self._update_project(_apply)
 
     # -- layer API -------------------------------------------------------
 
@@ -859,3 +1243,131 @@ class Map(anywidget.AnyWidget):
         out = pathlib.Path(path).expanduser()
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(self.project, indent=2), encoding="utf-8")
+
+
+class Feature(dict):
+    """A GeoJSON feature with convenience accessors.
+
+    A ``Feature`` *is* a plain ``dict``, so it serializes to JSON and feeds
+    straight into tools that consume GeoJSON (e.g.
+    ``geopandas.GeoDataFrame.from_features``), while also offering attribute-style
+    access to the common members.
+    """
+
+    @property
+    def geometry(self) -> Any:
+        """The feature's GeoJSON geometry, or ``None``."""
+        return self.get("geometry")
+
+    @property
+    def properties(self) -> dict[str, Any]:
+        """The feature's properties mapping (empty dict if absent)."""
+        return self.get("properties") or {}
+
+    @property
+    def id(self) -> Any:
+        """The feature's id, or ``None``."""
+        return self.get("id")
+
+    @property
+    def __geo_interface__(self) -> dict[str, Any]:
+        """The GeoJSON mapping, for libraries that read ``__geo_interface__``."""
+        return dict(self)
+
+
+class Layer:
+    """A handle to one layer on a :class:`Map`.
+
+    Reads reflect the live project; property setters and :meth:`remove` mutate
+    the project through the same synced trait the rest of the API uses, so edits
+    propagate to the running app. Query helpers (:meth:`get_features`,
+    :meth:`zoom_to`) round-trip to the app.
+    """
+
+    def __init__(self, m: Map, layer_id: str) -> None:
+        """Bind a layer handle.
+
+        Args:
+            m: The owning map.
+            layer_id: The layer's id.
+        """
+        self._map = m
+        self._id = layer_id
+
+    def _layer(self) -> dict[str, Any]:
+        for layer in self._map.project.get("layers", []):
+            if isinstance(layer, dict) and layer.get("id") == self._id:
+                return layer
+        raise ValueError(f"Layer {self._id!r} no longer exists")
+
+    @property
+    def id(self) -> str:
+        """The layer id."""
+        return self._id
+
+    @property
+    def type(self) -> Any:
+        """The layer type (e.g. ``"geojson"``, ``"raster"``)."""
+        return self._layer().get("type")
+
+    @property
+    def name(self) -> Any:
+        """The layer's display name."""
+        return self._layer().get("name")
+
+    @name.setter
+    def name(self, value: str) -> None:
+        self._map._mutate_layer(self._id, lambda layer: layer.update(name=value))
+
+    @property
+    def visible(self) -> bool:
+        """Whether the layer is visible."""
+        return bool(self._layer().get("visible", True))
+
+    @visible.setter
+    def visible(self, value: bool) -> None:
+        self._map._mutate_layer(
+            self._id, lambda layer: layer.update(visible=bool(value))
+        )
+
+    @property
+    def opacity(self) -> float:
+        """The layer's opacity in ``[0, 1]``."""
+        return float(self._layer().get("opacity", 1.0))
+
+    @opacity.setter
+    def opacity(self, value: float) -> None:
+        self._map._mutate_layer(
+            self._id, lambda layer: layer.update(opacity=float(value))
+        )
+
+    @property
+    def style(self) -> dict[str, Any]:
+        """A copy of the layer's style object."""
+        return copy.deepcopy(self._layer().get("style", {}))
+
+    def set_style(self, **style: Any) -> None:
+        """Merge style overrides into the layer (e.g. ``fillColor="#ff0000"``)."""
+
+        def _apply(layer: dict[str, Any]) -> None:
+            layer.setdefault("style", {}).update(style)
+
+        self._map._mutate_layer(self._id, _apply)
+
+    def get_features(self, *, timeout: float = 10.0) -> list[Feature]:
+        """Return this layer's features (see :meth:`Map.get_features`)."""
+        return self._map.get_features(self._id, timeout=timeout)
+
+    def zoom_to(self, *, timeout: float = 10.0) -> None:
+        """Fit the map camera to this layer's extent."""
+        self._map.request("zoomToLayer", {"layerId": self._id}, timeout=timeout)
+
+    def remove(self) -> None:
+        """Remove this layer from the map."""
+        self._map.remove_layer(self._id)
+
+    def __repr__(self) -> str:
+        try:
+            return f"Layer(id={self._id!r}, name={self.name!r}, type={self.type!r})"
+        except ValueError:
+            return f"Layer(id={self._id!r}, removed)"

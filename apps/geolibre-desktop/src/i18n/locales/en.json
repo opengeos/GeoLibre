@@ -148,6 +148,7 @@
       "addDuckdbLayer": "Add DuckDB Layer",
       "whiteboxTools": "Whitebox Tools",
       "sqlWorkspace": "SQL Workspace",
+      "pythonConsole": "Python Console",
       "geocode": "Geocode Addresses",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
@@ -384,6 +385,17 @@
     "reverseNoAddress": "No address found.",
     "reverseCopyAddress": "Copy address",
     "reverseFailed": "Reverse geocoding failed."
+  },
+  "pythonConsole": {
+    "title": "Python Console",
+    "resize": "Resize Python console",
+    "clear": "Clear output",
+    "close": "Close Python console",
+    "run": "Run",
+    "runHint": "Run (Ctrl/Cmd+Enter)",
+    "placeholder": "Type Python here, then press Ctrl/Cmd+Enter. Use `geolibre` to drive the map.",
+    "intro": "Python console ready. Use the `geolibre` object to script the map, e.g. geolibre.get_center(). Run `await geolibre.load_package(\"numpy\")` to add packages.",
+    "loadFailed": "Failed to load the Python runtime."
   },
   "storymap": {
     "title": "Story Map",

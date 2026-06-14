@@ -8,6 +8,7 @@ import {
 import { type RefObject, useEffect } from "react";
 import type { MapController } from "@geolibre/map";
 import { getPluginManager } from "./usePlugins";
+import { getEmbedHost, isEmbedded } from "./embedHost";
 
 // How long to wait after the last store change before posting a fresh project
 // snapshot to the host. Coalesces the burst of store writes a single user
@@ -25,32 +26,6 @@ interface RequestStateMessage {
 }
 
 type InboundMessage = LoadProjectMessage | RequestStateMessage;
-
-/**
- * Detects whether the app is running inside the GeoLibre Jupyter/embed host.
- *
- * The app is considered embedded when it is framed (a different `window.parent`)
- * or when it is opened with an explicit `?embed=1` query parameter, which lets
- * the host force the bridge on for a standalone `to_html()` export.
- *
- * @returns True when the postMessage bridge should be active.
- */
-function isEmbedded(): boolean {
-  if (typeof window === "undefined") return false;
-  // An explicit opt-in always activates the bridge — this is how the Jupyter
-  // widget and `to_html()` exports run (they load the app with `?embed=1`).
-  const embed = new URLSearchParams(window.location.search).get("embed");
-  if (embed === "1" || embed === "true") return true;
-  try {
-    // A same-origin framing host (readable parent) is trusted, so activate.
-    return Boolean(window.parent && window.parent !== window);
-  } catch {
-    // A cross-origin parent throws on access. Without the explicit `?embed=1`
-    // opt-in, don't activate the bridge — otherwise any third-party page that
-    // iframes a deployed app would start receiving project state.
-    return false;
-  }
-}
 
 /**
  * Bridges the running app with an embedding host (the GeoLibre Python widget)
@@ -83,11 +58,11 @@ export function useEmbedBridge(
 ): void {
   useEffect(() => {
     if (!isEmbedded()) return;
-    // The host is the embedding parent (the Jupyter/embed widget). In a browser
-    // `window.parent` is always defined; when the app is the top-level document
-    // (the `?embed=1` self-test) it is `window` itself, so the bridge naturally
-    // posts to and receives from itself.
-    const host = window.parent;
+    // The host is the embedding parent (the Jupyter/embed widget). The shared
+    // channel tracks the host's origin and handshake state (see embedHost.ts).
+    const hostChannel = getEmbedHost();
+    const host = hostChannel.window;
+    const targetOrigin = () => hostChannel.targetOrigin();
 
     let disposed = false;
     let debounceTimer: number | null = null;
@@ -95,19 +70,6 @@ export function useEmbedBridge(
     // correlate a snapshot with the load that triggered it.
     let lastLoadedSeq = 0;
     let lastPostedContent: string | null = null;
-    // The host's origin, learned from the first message it sends (a lightweight
-    // handshake). Outbound project/error messages are scoped to it once known,
-    // so a project a third party frames can never receive the data. Until then
-    // (only the version-only `ready` ping precedes any inbound message) we fall
-    // back to "*".
-    let hostOrigin: string | null = null;
-    // Whether the host has sent at least one message. Until it has, the bridge
-    // must not proactively broadcast project state: a third-party page that
-    // frames a `?embed=1` export but never speaks would otherwise receive every
-    // snapshot through the "*" fallback below. The version-only `ready` ping is
-    // the sole message sent before the handshake completes.
-    let hostHandshakeComplete = false;
-    const targetOrigin = () => hostOrigin ?? "*";
 
     const buildProject = (): GeoLibreProject => {
       const state = useAppStore.getState();
@@ -135,9 +97,9 @@ export function useEmbedBridge(
     const postState = () => {
       if (disposed) return;
       // Don't broadcast state before the host has identified itself (see
-      // hostHandshakeComplete); otherwise an uncooperative third-party frame
-      // that never speaks would keep receiving snapshots via the "*" fallback.
-      if (!hostHandshakeComplete) return;
+      // hostChannel.handshakeComplete); otherwise an uncooperative third-party
+      // frame that never speaks would keep receiving snapshots via "*".
+      if (!hostChannel.handshakeComplete) return;
       const content = serializeProject(buildProject());
       // Many store writes (selection, hover) do not change the serialized
       // project; skip posting an identical snapshot to keep the host quiet.
@@ -205,13 +167,9 @@ export function useEmbedBridge(
       // Only accept messages from the embedding host (the parent window), so an
       // arbitrary same-page script cannot inject a project. This matters most
       // for the standalone `?embed=1` (`to_html()`) export, where the app may be
-      // framed by a third-party page.
-      if (event.source !== host) return;
-      // The host has spoken: proactive state pushes are safe from here on.
-      hostHandshakeComplete = true;
-      // Learn the host's origin from its first message and scope outbound
-      // messages to it from then on. "null" (opaque/file origins) stays "*".
-      if (event.origin && event.origin !== "null") hostOrigin = event.origin;
+      // framed by a third-party page. note() also marks the handshake complete
+      // and learns the host's origin for scoping outbound messages.
+      if (!hostChannel.note(event)) return;
       const data = event.data as Partial<InboundMessage> | null;
       if (!data || typeof data !== "object") return;
       if (data.type === "geolibre:load-project") {
