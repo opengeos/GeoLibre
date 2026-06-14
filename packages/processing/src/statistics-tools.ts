@@ -225,11 +225,12 @@ function readWeightsParams(ctx: ProcessingContext): {
 } {
   const type = (ctx.parameters.weightsType as string) || "knn";
   const k = Math.max(1, Math.round(Number(ctx.parameters.k) || 8));
-  // Fall back to the declared tool default (10 km), and clamp permutations to
-  // the declared [99, 9999] bounds — scripting callers can bypass the UI's
-  // input constraints, so guard against a 0 km band (no neighbors) or a
-  // runaway permutation count here.
-  const threshold = Math.max(0, Number(ctx.parameters.threshold) || 10);
+  // Fall back to the declared tool default (10 km) only when the value is
+  // missing/non-numeric — an explicit 0 is preserved (the parameter allows
+  // min: 0). Clamp permutations to the declared [99, 9999] bounds, since
+  // scripting callers can bypass the UI's input constraints.
+  const thresholdRaw = Number(ctx.parameters.threshold);
+  const threshold = Number.isFinite(thresholdRaw) ? Math.max(0, thresholdRaw) : 10;
   const permutations = Math.min(
     9999,
     Math.max(99, Math.round(Number(ctx.parameters.permutations) || 999)),
@@ -311,7 +312,9 @@ export const globalMoransITool: ProcessingAlgorithm = {
     }
     const expected = -1 / (n - 1);
 
-    // Conditional permutation: shuffle the values, recompute I.
+    // Standard (unconditional) permutation test: freely shuffle all values and
+    // recompute I. (The conditional variant — holding z_i fixed — is used for
+    // the per-feature local statistic below.)
     let ge = 0;
     const permValues = z.slice();
     for (let p = 0; p < permutations; p++) {
@@ -404,6 +407,7 @@ export const localMoransITool: ProcessingAlgorithm = {
       if (!nb.length) {
         props[`${field}_lisa_I`] = null;
         props[`${field}_lisa_p`] = null;
+        props[`${field}_lisa_q`] = null;
         props[`${field}_lisa_cluster`] = "Not significant";
         continue;
       }
@@ -723,6 +727,12 @@ export const kernelDensityTool: ProcessingAlgorithm = {
       }
       points.push({ lon: position[0], lat: position[1], weight });
     });
+    if (points.length > MAX_WEIGHTS_FEATURES) {
+      ctx.log(
+        `Error: ${points.length} points exceeds the ${MAX_WEIGHTS_FEATURES}-point limit. The grid loop is O(cells × points); reduce the input size.`,
+      );
+      return;
+    }
     if (!points.length) {
       ctx.log("Error: no usable points in the layer.");
       return;
