@@ -374,6 +374,33 @@ export function createAssistantTools(
     },
   });
 
+  const runMaplibreJs = tool({
+    name: "run_maplibre_js",
+    description:
+      "Fallback for tasks with no dedicated tool (e.g. globe projection, terrain, sky, custom paint/layout properties). Runs a small JavaScript snippet against the live map. The snippet is a function body with `map` (the MapLibre GL JS map) in scope and may `return` a JSON-serializable value. Example — switch to globe: `map.setProjection({ type: 'globe' })`. Prefer dedicated tools when one exists.",
+    inputSchema: z.object({
+      code: z
+        .string()
+        .describe("JavaScript function body; `map` (MapLibre map) is in scope."),
+    }),
+    callback: (input) => {
+      const map = deps.getMapController()?.getMap();
+      if (!map) throw new Error("The map is not ready yet.");
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
+      const run = new Function("map", input.code) as (map: unknown) => unknown;
+      const result = run(map);
+      // Coerce to a JSON-safe value so non-serializable returns (e.g. the map
+      // object itself) don't blow up the tool result.
+      let safe: JSONValue = null;
+      try {
+        safe = JSON.parse(JSON.stringify(result ?? null)) as JSONValue;
+      } catch {
+        safe = String(result);
+      }
+      return json({ ok: true, result: safe });
+    },
+  });
+
   const applySymbology = tool({
     name: "apply_symbology",
     description:
@@ -418,5 +445,6 @@ export function createAssistantTools(
     setBasemap,
     zoomTo,
     applySymbology,
+    runMaplibreJs,
   ] as InvokableTool<unknown, unknown>[];
 }
