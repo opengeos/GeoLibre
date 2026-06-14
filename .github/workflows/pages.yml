@@ -49,6 +49,10 @@ jobs:
         env:
           GEOLIBRE_APP_BASE: ./
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
+          # Public relay URL (baked into the client bundle), not a secret. Lights
+          # up live collaboration; requires the workers/collab relay to be
+          # deployed (see docs/collaboration.md).
+          VITE_GEOLIBRE_COLLAB_URL: wss://collab.geolibre.app
 
       - name: Build documentation
         run: mkdocs build --strict --site-dir site
