@@ -173,6 +173,31 @@ export function styleValue<K extends keyof LayerStyle>(
   return style[key] ?? DEFAULT_LAYER_STYLE[key];
 }
 
+/**
+ * Feature-count threshold above which a local vector (GeoJSON) layer is rendered
+ * through client-side vector tiles (geojson-vt / supercluster served by a custom
+ * MapLibre protocol) instead of one in-memory geojson source pushed via
+ * `setData`. Small layers stay on the simpler inline path. Mirrors the
+ * `MAX_CEREUS_FEATURES` precedent in the desktop SQL engine.
+ */
+export const LARGE_VECTOR_FEATURE_THRESHOLD = 50_000;
+
+/**
+ * Decide whether a GeoJSON layer should use the tiled rendering path.
+ *
+ * @param geojson - The layer's feature collection (may be undefined for
+ *   non-vector layers).
+ * @returns `true` when the collection exceeds
+ *   {@link LARGE_VECTOR_FEATURE_THRESHOLD} features.
+ */
+export function shouldUseTiledRendering(
+  geojson: GeoJSON.FeatureCollection | undefined,
+): boolean {
+  return (
+    (geojson?.features.length ?? 0) > LARGE_VECTOR_FEATURE_THRESHOLD
+  );
+}
+
 export interface GeoLibreLayer {
   id: string;
   name: string;

@@ -2,11 +2,19 @@ import {
   DEFAULT_LAYER_STYLE,
   type GeoLibreLayer,
   type LayerStyle,
+  shouldUseTiledRendering,
   styleValue,
 } from "@geolibre/core";
 import { addProtocol, config } from "maplibre-gl";
 import type maplibregl from "maplibre-gl";
 import { PMTiles, Protocol } from "pmtiles";
+import {
+  ensureGeoJsonVtProtocol,
+  geojsonVtTileUrl,
+  registerGeoJsonVtSource,
+  TILE_SOURCE_LAYER,
+  unregisterGeoJsonVtSource,
+} from "./geojson-vt-protocol";
 import {
   circleLayerId,
   clusterCountLayerId,
@@ -141,7 +149,11 @@ export function syncLayer(
   if (isPlaceholderLayer(layer)) return;
 
   if (layer.type === "geojson" && layer.geojson) {
-    syncGeoJsonLayer(map, layer, beforeId);
+    if (shouldUseTiledRendering(layer.geojson)) {
+      syncGeoJsonVtLayer(map, layer, beforeId);
+    } else {
+      syncGeoJsonLayer(map, layer, beforeId);
+    }
     return;
   }
 
@@ -978,6 +990,17 @@ function syncGeoJsonLayer(
   const clusterMaxZoom = styleValue(layer.style, "clusterMaxZoom");
   const wantCluster = renderer === "cluster";
 
+  // A layer can drop below the tiling threshold (e.g. a processing tool shrinks
+  // it), leaving behind a vector-tile source from the tiled path. Tear it down
+  // and free its tile index so we can recreate a plain geojson source.
+  const existingSource = map.getSource(src) as maplibregl.Source | undefined;
+  const switchingFromTiled = existingSource?.type === "vector";
+  if (switchingFromTiled) {
+    removeGeoJsonRenderLayers(map, layer.id);
+    map.removeSource(src);
+    unregisterGeoJsonVtSource(layer.id);
+  }
+
   // Clustering is a source-level option, so toggling it (or changing its params)
   // means recreating the source — which first requires dropping every layer that
   // references it. MapLibre forbids removing a source still in use.
@@ -1010,6 +1033,91 @@ function syncGeoJsonLayer(
     (map.getSource(src) as maplibregl.GeoJSONSource).setData(layer.geojson!);
   }
 
+  applyVectorDataRenderLayers(map, layer, src, profile, renderer, beforeId);
+}
+
+/**
+ * Render local vector layers above {@link LARGE_VECTOR_FEATURE_THRESHOLD}
+ * features through client-side vector tiles instead of one in-memory geojson
+ * source. Reuses the same source id and render-layer ids as
+ * {@link syncGeoJsonLayer}; only the source becomes `type:"vector"` (its tiles
+ * served by the geojson-vt protocol) and render layers carry a `source-layer`.
+ */
+function syncGeoJsonVtLayer(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+  beforeId?: string,
+): void {
+  const src = sourceId(layer.id);
+  const profile = detectGeometryProfile(layer.geojson!);
+
+  const pointOnly =
+    profile.hasPoint && !profile.hasLine && !profile.hasPolygon;
+  const renderer = pointOnly ? styleValue(layer.style, "pointRenderer") : "single";
+  const clusterRadius = styleValue(layer.style, "clusterRadius");
+  const clusterMaxZoom = styleValue(layer.style, "clusterMaxZoom");
+  const wantCluster = renderer === "cluster";
+
+  ensureGeoJsonVtProtocol();
+
+  // (Re)build the tile index when the data or clustering config changed. A
+  // rebuild also means cached tiles are stale, so drop the source to force
+  // MapLibre to refetch them.
+  const rebuilt = registerGeoJsonVtSource(layer.id, layer.geojson!, {
+    cluster: wantCluster,
+    clusterRadius,
+    clusterMaxZoom,
+  });
+
+  const existing = map.getSource(src) as maplibregl.Source | undefined;
+  // The source must be recreated when switching in from the inline geojson path
+  // (different source type) or when the index was rebuilt.
+  if (existing && (existing.type !== "vector" || rebuilt)) {
+    removeGeoJsonRenderLayers(map, layer.id);
+    map.removeSource(src);
+  }
+
+  if (!map.getSource(src)) {
+    map.addSource(src, {
+      type: "vector",
+      tiles: [geojsonVtTileUrl(layer.id)],
+      minzoom: 0,
+      maxzoom: 16,
+    });
+  }
+
+  applyVectorDataRenderLayers(
+    map,
+    layer,
+    src,
+    profile,
+    renderer,
+    beforeId,
+    TILE_SOURCE_LAYER,
+  );
+}
+
+/**
+ * Create/update the fill, line, circle, heatmap, cluster, and text render layers
+ * for a vector data layer. Shared by the inline geojson path
+ * ({@link syncGeoJsonLayer}, `sourceLayer` undefined) and the tiled path
+ * ({@link syncGeoJsonVtLayer}, `sourceLayer` set), which differ only in whether
+ * the underlying source is a geojson source or a vector-tile source. When
+ * `sourceLayer` is provided, every render layer references it via `source-layer`.
+ */
+function applyVectorDataRenderLayers(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+  src: string,
+  profile: ReturnType<typeof detectGeometryProfile>,
+  renderer: string,
+  beforeId?: string,
+  sourceLayer?: string,
+): void {
+  const sourceSpec: { source: string; "source-layer"?: string } = sourceLayer
+    ? { source: src, "source-layer": sourceLayer }
+    : { source: src };
+
   const visibility = layer.visible ? "visible" : "none";
   const opacity = layer.opacity;
   const hasTextMarkers = hasTextMarkerFeatures(layer.geojson!);
@@ -1023,7 +1131,7 @@ function syncGeoJsonLayer(
         {
           id: fillExtrusionLayerId(layer.id),
           type: "fill-extrusion",
-          source: src,
+          ...sourceSpec,
           ...styleLayerZoomRange(layer.style),
           filter: [
             "match",
@@ -1045,7 +1153,7 @@ function syncGeoJsonLayer(
         {
           id: fillLayerId(layer.id),
           type: "fill",
-          source: src,
+          ...sourceSpec,
           ...styleLayerZoomRange(layer.style),
           filter: [
             "match",
@@ -1075,7 +1183,7 @@ function syncGeoJsonLayer(
       {
         id: lineLayerId(layer.id),
         type: "line",
-        source: src,
+        ...sourceSpec,
         ...styleLayerZoomRange(layer.style),
         filter: [
           "match",
@@ -1104,7 +1212,7 @@ function syncGeoJsonLayer(
       {
         id: heatmapLayerId(layer.id),
         type: "heatmap",
-        source: src,
+        ...sourceSpec,
         ...styleLayerZoomRange(layer.style),
         // Keep text-marker points out of the density, mirroring single mode;
         // they still render through the text symbol layer below.
@@ -1120,7 +1228,8 @@ function syncGeoJsonLayer(
     renderer === "cluster"
   ) {
     // Cluster renderer: a bubble + count for aggregated clusters, plus a circle
-    // for the individual (unclustered) points. The source carries cluster: true.
+    // for the individual (unclustered) points. The source carries clusters
+    // (geojson source-level clustering, or supercluster tiles on the tiled path).
     removeIfExists(map, heatmapLayerId(layer.id));
     ensureLayer(
       map,
@@ -1128,7 +1237,7 @@ function syncGeoJsonLayer(
       {
         id: clusterLayerId(layer.id),
         type: "circle",
-        source: src,
+        ...sourceSpec,
         ...styleLayerZoomRange(layer.style),
         filter: ["has", "point_count"],
         paint: clusterCirclePaint(layer.style, opacity),
@@ -1142,7 +1251,7 @@ function syncGeoJsonLayer(
       {
         id: clusterCountLayerId(layer.id),
         type: "symbol",
-        source: src,
+        ...sourceSpec,
         ...styleLayerZoomRange(layer.style),
         filter: ["has", "point_count"],
         layout: {
@@ -1166,7 +1275,7 @@ function syncGeoJsonLayer(
       {
         id: circleLayerId(layer.id),
         type: "circle",
-        source: src,
+        ...sourceSpec,
         ...styleLayerZoomRange(layer.style),
         // Unclustered points, excluding text markers (which the symbol layer
         // renders) so they don't also appear as plain circles.
@@ -1187,7 +1296,7 @@ function syncGeoJsonLayer(
       {
         id: circleLayerId(layer.id),
         type: "circle",
-        source: src,
+        ...sourceSpec,
         ...styleLayerZoomRange(layer.style),
         filter: hasTextMarkers ? nonTextMarkerPointFilter : pointGeometryFilter,
         paint: circlePaint(layer.style, opacity),
@@ -1209,7 +1318,7 @@ function syncGeoJsonLayer(
       {
         id: textLayerId(layer.id),
         type: "symbol",
-        source: src,
+        ...sourceSpec,
         ...styleLayerZoomRange(layer.style),
         filter: textMarkerFilter,
         layout: {
@@ -2059,6 +2168,8 @@ export function removeLayerFromMap(
   for (const src of [...getExternalSourceIds(layer), sourceId(layerId)]) {
     if (src && map.getSource(src)) map.removeSource(src);
   }
+  // Free any client-side tile index built for this layer's tiled render path.
+  unregisterGeoJsonVtSource(layerId);
 }
 
 function getExternalNativeLayerIds(layer?: GeoLibreLayer): string[] {
