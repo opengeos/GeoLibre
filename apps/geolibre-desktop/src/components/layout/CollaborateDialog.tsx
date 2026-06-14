@@ -375,20 +375,22 @@ function ActiveSession({
             )}
           </Button>
         </div>
-        {/* Scan to join from a phone/tablet without typing the code. */}
-        <div className="flex flex-col items-center gap-1.5 pt-1">
-          <div className="rounded-md bg-white p-2">
-            <QRCodeSVG
-              value={shareLink}
-              size={132}
-              marginSize={0}
-              title={t("collaborate.scanToJoin")}
-            />
+        {/* Only the host invites others, so the scan-to-join QR is host-only. */}
+        {isHost && (
+          <div className="flex flex-col items-center gap-1.5 pt-1">
+            <div className="rounded-md bg-white p-2">
+              <QRCodeSVG
+                value={shareLink}
+                size={132}
+                marginSize={0}
+                title={t("collaborate.scanToJoin")}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {t("collaborate.scanToJoin")}
+            </p>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {t("collaborate.scanToJoin")}
-          </p>
-        </div>
+        )}
       </div>
 
       <div className="space-y-1.5">
