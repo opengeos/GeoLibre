@@ -4,13 +4,28 @@ import ehWorker from "@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url";
 import duckdbWasmMvp from "@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url";
 import mvpWorker from "@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
+import {
+  detectGeometryColumn,
+  geometryExpr,
+  geometryGeoJsonSql,
+  isGeometryColumnType,
+  quoteIdentifier,
+  quoteSqlString,
+} from "./duckdb-geometry";
 import { ensureGpkgFeatureCount } from "./gpkg-ogr-contents";
 import { getSpatialExtensionPath } from "./spatial-extension-config";
+
+// Re-exported for existing importers (sql-workspace, geopackage-writer, etc.)
+// that reach for these helpers via this module.
+export {
+  isGeometryColumnType,
+  quoteIdentifier,
+  quoteSqlString,
+} from "./duckdb-geometry";
 
 const GEOMETRY_JSON_COLUMN = "__geolibre_geometry_geojson";
 const EXPORT_GEOJSON_EXTENSION = "geojson";
 const EXPORT_GEOPARQUET_EXTENSION = "parquet";
-const TARGET_CRS = "EPSG:4326";
 
 const MANUAL_BUNDLES: duckdb.DuckDBBundles = {
   mvp: {
@@ -142,14 +157,6 @@ async function createDatabase(): Promise<duckdb.AsyncDuckDB> {
   return db;
 }
 
-export function quoteSqlString(value: string): string {
-  return `'${value.replaceAll("'", "''")}'`;
-}
-
-export function quoteIdentifier(value: string): string {
-  return `"${value.replaceAll('"', '""')}"`;
-}
-
 function exportBaseName(): string {
   const suffix = Math.random().toString(36).slice(2);
   return `__geolibre_export_${Date.now()}_${suffix}`;
@@ -158,15 +165,6 @@ function exportBaseName(): string {
 export function rowsFromResult(result: { toArray: () => DuckDbRow[] }) {
   return result.toArray().map((row) =>
     typeof row.toJSON === "function" ? row.toJSON() : { ...row },
-  );
-}
-
-// DuckDB Spatial reports CRS-annotated geometry types such as
-// GEOMETRY('EPSG:4326'), so match on the prefix rather than equality.
-export function isGeometryColumnType(columnType: unknown): boolean {
-  return (
-    typeof columnType === "string" &&
-    columnType.toUpperCase().startsWith("GEOMETRY")
   );
 }
 
@@ -241,22 +239,6 @@ async function readSourceCrs(
   }
 }
 
-function geometryGeoJsonSql(
-  geometryColumn: string,
-  sourceCrs: string | null,
-): string {
-  const geometrySql = quoteIdentifier(geometryColumn);
-  if (!sourceCrs) {
-    return `ST_AsGeoJSON(${geometrySql})`;
-  }
-  // Transform even for EPSG:4326 sources: always_xy=true normalises axis order
-  // to lon/lat, which a no-op EPSG:4326 -> EPSG:4326 transform guarantees for
-  // formats that may store data as lat/lon.
-  return `ST_AsGeoJSON(ST_Transform(${geometrySql}, ${quoteSqlString(
-    sourceCrs,
-  )}, ${quoteSqlString(TARGET_CRS)}, true))`;
-}
-
 function toFeatureCollection(
   rows: Record<string, unknown>[],
 ): FeatureCollection<Geometry | null> {
@@ -320,16 +302,17 @@ export async function loadDuckDbVectorFile(
     const description = rowsFromResult(
       await connection.query(`DESCRIBE ${sql}`),
     );
-    const geometryColumn = description.find((row) =>
-      isGeometryColumnType(row.column_type),
-    )?.column_name;
+    const detected = detectGeometryColumn(description);
 
-    if (typeof geometryColumn !== "string") {
-      throw new Error("DuckDB did not find a GEOMETRY column in this file.");
+    if (!detected) {
+      throw new Error("DuckDB did not find a geometry column in this file.");
     }
 
     const sourceCrs = await readSourceCrs(connection, file);
-    const geometryJsonSql = geometryGeoJsonSql(geometryColumn, sourceCrs);
+    const geometryJsonSql = geometryGeoJsonSql(
+      geometryExpr(detected),
+      sourceCrs,
+    );
     const result = await connection.query(
       `SELECT *, ${geometryJsonSql} AS ${quoteIdentifier(
         GEOMETRY_JSON_COLUMN,
@@ -393,10 +376,6 @@ const GEOPARQUET_COMPRESSIONS = new Set([
 const DEFAULT_GEOPARQUET_COMPRESSION = "zstd";
 const DEFAULT_GEOPARQUET_ROW_GROUP_SIZE = 30000;
 
-// Well-known WKB geometry column names used when a plain Parquet input lacks
-// a GEOMETRY-typed column. Mirrors the sidecar's vector conversion fallback.
-const WKB_GEOMETRY_COLUMN_NAMES = new Set(["geometry", "geom", "wkb_geometry"]);
-
 /**
  * Convert an in-memory vector file to a Hilbert-sorted, compressed GeoParquet
  * entirely inside DuckDB-WASM. Rows are ordered by ST_Hilbert over the
@@ -447,28 +426,17 @@ export async function convertDuckDbVectorToGeoParquet(
       const description = rowsFromResult(
         await connection.query(`DESCRIBE ${sql}`),
       );
-      let detected = description.find((row) =>
-        isGeometryColumnType(row.column_type),
-      )?.column_name;
-      let geometryIsNative = true;
-      if (typeof detected !== "string") {
-        // Plain Parquet files may carry geometry as a WKB blob; rebuild it as a
-        // GEOMETRY column so ST_Hilbert and the GeoParquet writer can use it.
-        detected = description.find(
-          (row) =>
-            typeof row.column_name === "string" &&
-            WKB_GEOMETRY_COLUMN_NAMES.has(row.column_name.toLowerCase()),
-        )?.column_name as string | undefined;
-        geometryIsNative = false;
-      }
-      if (typeof detected !== "string") {
+      const detected = detectGeometryColumn(description);
+      if (!detected) {
         throw new Error("DuckDB did not find a geometry column in this file.");
       }
-      geometryColumn = detected;
+      geometryColumn = detected.column;
       const geometrySql = quoteIdentifier(geometryColumn);
-      source = geometryIsNative
-        ? sql
-        : `SELECT * REPLACE (ST_GeomFromWKB(${geometrySql}) AS ${geometrySql}) FROM (${sql}) AS data`;
+      // Plain Parquet files may carry geometry as a WKB blob; rebuild it as a
+      // GEOMETRY column so ST_Hilbert and the GeoParquet writer can use it.
+      source = detected.isWkb
+        ? `SELECT * REPLACE (ST_GeomFromWKB(${geometrySql}) AS ${geometrySql}) FROM (${sql}) AS data`
+        : sql;
     }
 
     const geometrySql = quoteIdentifier(geometryColumn);

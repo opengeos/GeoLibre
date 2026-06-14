@@ -1,0 +1,112 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import {
+  detectGeometryColumn,
+  geometryExpr,
+  geometryGeoJsonSql,
+  isGeometryColumnType,
+} from "../apps/geolibre-desktop/src/lib/duckdb-geometry";
+
+function describeRow(name: string, type: string) {
+  return { column_name: name, column_type: type };
+}
+
+describe("isGeometryColumnType", () => {
+  it("matches plain and CRS-annotated GEOMETRY types", () => {
+    assert.equal(isGeometryColumnType("GEOMETRY"), true);
+    assert.equal(isGeometryColumnType("geometry"), true);
+    assert.equal(isGeometryColumnType("GEOMETRY('EPSG:4326')"), true);
+  });
+
+  it("rejects non-geometry types", () => {
+    assert.equal(isGeometryColumnType("BLOB"), false);
+    assert.equal(isGeometryColumnType("VARCHAR"), false);
+    assert.equal(isGeometryColumnType(undefined), false);
+  });
+});
+
+describe("detectGeometryColumn", () => {
+  it("prefers a native GEOMETRY column", () => {
+    const detected = detectGeometryColumn([
+      describeRow("id", "BIGINT"),
+      describeRow("geom", "GEOMETRY"),
+    ]);
+    assert.deepEqual(detected, { column: "geom", isWkb: false });
+  });
+
+  it("prefers a native GEOMETRY column even when a WKB name exists", () => {
+    const detected = detectGeometryColumn([
+      describeRow("geometry_wkb", "BLOB"),
+      describeRow("the_geom", "GEOMETRY('EPSG:4326')"),
+    ]);
+    assert.deepEqual(detected, { column: "the_geom", isWkb: false });
+  });
+
+  it("falls back to a geometry_wkb blob column (issue #336)", () => {
+    const detected = detectGeometryColumn([
+      describeRow("id", "VARCHAR"),
+      describeRow("lat", "DOUBLE"),
+      describeRow("lon", "DOUBLE"),
+      describeRow("geometry_wkb", "BLOB"),
+    ]);
+    assert.deepEqual(detected, { column: "geometry_wkb", isWkb: true });
+  });
+
+  it("matches well-known WKB names case-insensitively", () => {
+    for (const name of [
+      "geometry",
+      "geom",
+      "wkb_geometry",
+      "GEOMETRY_WKB",
+      "Geom_WKB",
+      "WKB",
+    ]) {
+      const detected = detectGeometryColumn([
+        describeRow("id", "BIGINT"),
+        describeRow(name, "BLOB"),
+      ]);
+      assert.deepEqual(detected, { column: name, isWkb: true });
+    }
+  });
+
+  it("returns null when no geometry column is present", () => {
+    const detected = detectGeometryColumn([
+      describeRow("id", "BIGINT"),
+      describeRow("name", "VARCHAR"),
+    ]);
+    assert.equal(detected, null);
+  });
+});
+
+describe("geometryExpr", () => {
+  it("references a native geometry column directly", () => {
+    assert.equal(geometryExpr({ column: "geom", isWkb: false }), '"geom"');
+  });
+
+  it("decodes a WKB blob column with ST_GeomFromWKB", () => {
+    assert.equal(
+      geometryExpr({ column: "geometry_wkb", isWkb: true }),
+      'ST_GeomFromWKB("geometry_wkb")',
+    );
+  });
+
+  it("quotes identifiers safely", () => {
+    assert.equal(
+      geometryExpr({ column: 'odd"name', isWkb: false }),
+      '"odd""name"',
+    );
+  });
+});
+
+describe("geometryGeoJsonSql", () => {
+  it("emits ST_AsGeoJSON without a CRS transform when unknown", () => {
+    assert.equal(geometryGeoJsonSql('"geom"', null), 'ST_AsGeoJSON("geom")');
+  });
+
+  it("wraps the expression in ST_Transform when a source CRS is given", () => {
+    assert.equal(
+      geometryGeoJsonSql('ST_GeomFromWKB("geometry_wkb")', "EPSG:3857"),
+      `ST_AsGeoJSON(ST_Transform(ST_GeomFromWKB("geometry_wkb"), 'EPSG:3857', 'EPSG:4326', true))`,
+    );
+  });
+});

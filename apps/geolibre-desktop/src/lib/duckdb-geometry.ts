@@ -1,0 +1,99 @@
+// Pure SQL/geometry-column helpers shared by the DuckDB vector loader and the
+// GeoParquet writer. Kept free of `@duckdb/duckdb-wasm` (and its Vite `?url`
+// imports) so the detection logic can be unit-tested under plain Node.
+
+const TARGET_CRS = "EPSG:4326";
+
+// Well-known WKB geometry column names used when a Parquet input lacks a
+// GEOMETRY-typed column (e.g. plain Parquet carrying geometry as a WKB blob,
+// or a GeoParquet whose CRS metadata DuckDB cannot read). The geometry is
+// rebuilt with ST_GeomFromWKB so ST_AsGeoJSON / ST_Hilbert can use it.
+// Mirrors the sidecar's vector conversion fallback. See issue #336.
+export const WKB_GEOMETRY_COLUMN_NAMES = new Set([
+  "geometry",
+  "geom",
+  "wkb_geometry",
+  "geometry_wkb",
+  "geom_wkb",
+  "wkb",
+]);
+
+export function quoteSqlString(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+export function quoteIdentifier(value: string): string {
+  return `"${value.replaceAll('"', '""')}"`;
+}
+
+// DuckDB Spatial reports CRS-annotated geometry types such as
+// GEOMETRY('EPSG:4326'), so match on the prefix rather than equality.
+export function isGeometryColumnType(columnType: unknown): boolean {
+  return (
+    typeof columnType === "string" &&
+    columnType.toUpperCase().startsWith("GEOMETRY")
+  );
+}
+
+export interface DetectedGeometry {
+  column: string;
+  /** True when the column is a raw WKB blob that needs ST_GeomFromWKB. */
+  isWkb: boolean;
+}
+
+/**
+ * Find the geometry column in a DESCRIBE result. Prefers a native GEOMETRY-typed
+ * column; otherwise falls back to a well-known WKB blob column name so plain
+ * Parquet files (and GeoParquet files DuckDB does not decode natively) load.
+ *
+ * @param description Rows from `DESCRIBE <query>` (column_name / column_type).
+ * @returns The detected geometry column and whether it is a raw WKB blob, or
+ *   null when no geometry column can be identified.
+ */
+export function detectGeometryColumn(
+  description: Record<string, unknown>[],
+): DetectedGeometry | null {
+  const native = description.find((row) =>
+    isGeometryColumnType(row.column_type),
+  )?.column_name;
+  if (typeof native === "string") {
+    return { column: native, isWkb: false };
+  }
+  const wkb = description.find(
+    (row) =>
+      typeof row.column_name === "string" &&
+      WKB_GEOMETRY_COLUMN_NAMES.has(row.column_name.toLowerCase()),
+  )?.column_name;
+  if (typeof wkb === "string") {
+    return { column: wkb, isWkb: true };
+  }
+  return null;
+}
+
+/**
+ * Build a SQL expression that yields the geometry to read. A native GEOMETRY
+ * column is referenced directly; a raw WKB blob is decoded with ST_GeomFromWKB.
+ */
+export function geometryExpr(detected: DetectedGeometry): string {
+  const column = quoteIdentifier(detected.column);
+  return detected.isWkb ? `ST_GeomFromWKB(${column})` : column;
+}
+
+/**
+ * Wrap a geometry SQL expression in ST_AsGeoJSON, transforming to WGS84 when a
+ * source CRS is known.
+ */
+export function geometryGeoJsonSql(
+  geometrySql: string,
+  sourceCrs: string | null,
+): string {
+  if (!sourceCrs) {
+    return `ST_AsGeoJSON(${geometrySql})`;
+  }
+  // Transform even for EPSG:4326 sources: always_xy=true normalises axis order
+  // to lon/lat, which a no-op EPSG:4326 -> EPSG:4326 transform guarantees for
+  // formats that may store data as lat/lon.
+  return `ST_AsGeoJSON(ST_Transform(${geometrySql}, ${quoteSqlString(
+    sourceCrs,
+  )}, ${quoteSqlString(TARGET_CRS)}, true))`;
+}
