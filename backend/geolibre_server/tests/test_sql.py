@@ -94,6 +94,18 @@ def test_registered_layer_is_queryable() -> None:
 
 
 @requires_sedona
+def test_invalid_view_name_returns_400() -> None:
+    with pytest.raises(HTTPException) as exc:
+        sql_run(
+            SqlRunRequest(
+                sql="SELECT 1",
+                layers=[{"name": 'bad"; DROP TABLE x; --', "geojson": POINTS}],
+            )
+        )
+    assert exc.value.status_code == 400
+
+
+@requires_sedona
 def test_invalid_sql_returns_400() -> None:
     with pytest.raises(HTTPException) as exc:
         sql_run(SqlRunRequest(sql="SELECT * FROM no_such_table"))

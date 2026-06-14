@@ -18,6 +18,11 @@ import {
 // deliberately obscure so it does not collide with a user's own CTE/subquery.
 const SQL_SUBQUERY_ALIAS = "__geolibre_sql_subquery";
 
+// Cap the per-layer feature count registered into the in-browser engine so a
+// very large layer cannot exhaust browser memory. Mirrors the sidecar's
+// MAX_FEATURES (sedona_ops.py), which returns HTTP 413 for oversized layers.
+const MAX_CEREUS_FEATURES = 50_000;
+
 // Geometry column names recognised by the CereusDB engine when the Arrow schema
 // carries no GeoArrow extension metadata (the heuristic fallback). The sidecar
 // engine and `registerGeoJSON` both name the column `geometry`; `geom` is the
@@ -111,6 +116,14 @@ async function registerLayerTables(
 
   const registered: SqlWorkspaceTable[] = [];
   for (const { layer, tableName } of assignTableNames(layers)) {
+    const featureCount = (layer.geojson as FeatureCollection).features?.length ?? 0;
+    if (featureCount > MAX_CEREUS_FEATURES) {
+      throw new Error(
+        `Layer "${layer.name}" has ${featureCount} features, exceeding the ` +
+          `${MAX_CEREUS_FEATURES}-feature limit for the in-browser Apache Sedona ` +
+          `engine. Run the SedonaDB sidecar for larger layers.`,
+      );
+    }
     const sourceName = `${tableName}${VIEW_SOURCE_SUFFIX}`;
     db.registerGeoJSON(sourceName, layer.geojson as object);
     const geom = quoteIdentifier(RAW_GEOMETRY_COLUMN);
@@ -190,11 +203,13 @@ interface DescribedQuery {
 
 /**
  * Describe the user's statement to learn its result columns and find the
- * geometry column. The statement is wrapped in `SELECT * FROM (...) LIMIT 0` so
- * the probe works for CTE/UNION queries and returns the schema even when the
- * result is empty. The geometry column is detected from the Arrow schema's
- * GeoArrow extension metadata, falling back to a column-name heuristic. Returns
- * null when the statement cannot be described as a query (e.g. DDL).
+ * geometry column. The schema is read from the Arrow IPC of the statement
+ * itself: CereusDB short-circuits a `LIMIT 0` probe to an empty stream with no
+ * field schema, so it is run in full and the Arrow result discarded (the rows
+ * are re-fetched as JSON afterwards). The geometry column is detected from the
+ * Arrow schema's GeoArrow extension metadata, falling back to a column-name
+ * heuristic. Returns null when the statement cannot be described as a query
+ * (e.g. DDL).
  */
 async function describeQuery(
   db: CereusInstance,
@@ -333,13 +348,29 @@ async function runSidecarQuery(
 // Engine routing
 // ---------------------------------------------------------------------------
 
-/** Probe the SedonaDB sidecar; treat any connection failure as unavailable. */
+// Cache the sidecar `/sql/status` probe so it is not re-fetched on every query.
+// A short TTL keeps a per-query round-trip off the hot path while still picking
+// up the sidecar coming up (or going down) within a few seconds.
+const SIDECAR_PROBE_TTL_MS = 5_000;
+let sidecarProbe: { at: number; available: boolean } | null = null;
+
+/**
+ * Probe the SedonaDB sidecar (cached for {@link SIDECAR_PROBE_TTL_MS}); treat any
+ * connection failure as unavailable.
+ */
 async function sidecarSqlAvailable(): Promise<boolean> {
-  try {
-    return (await fetchSqlStatus()).available;
-  } catch {
-    return false;
+  const now = Date.now();
+  if (sidecarProbe && now - sidecarProbe.at < SIDECAR_PROBE_TTL_MS) {
+    return sidecarProbe.available;
   }
+  let available = false;
+  try {
+    available = (await fetchSqlStatus()).available;
+  } catch {
+    available = false;
+  }
+  sidecarProbe = { at: now, available };
+  return available;
 }
 
 /**

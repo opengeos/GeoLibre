@@ -17,9 +17,15 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from typing import Any, Optional
 
 WGS84 = "EPSG:4326"
+
+# Layer/view names must be plain SQL identifiers. The frontend already sanitises
+# them, but `/sql/run` is an HTTP boundary that can be called directly, so the
+# name is validated again here before it reaches ``to_view`` (defence in depth).
+_SAFE_VIEW_NAME = re.compile(r"^[a-z_][a-z0-9_]*$")
 
 # Cap the per-layer input size so a very large layer cannot exhaust memory while
 # being materialised into a SedonaDB view. The sidecar maps SqlInputTooLarge to
@@ -123,60 +129,72 @@ def run_sql(sql: str, layers: Optional[list[dict]] = None) -> dict:
     import geopandas as gpd  # noqa: PLC0415
 
     connection = sedona_db.connect()
-    for layer in layers or []:
-        name = str(layer.get("name") or "").strip()
-        geojson = layer.get("geojson")
-        if not name or not geojson:
-            continue
-        features = geojson.get("features") or []
-        if len(features) > MAX_FEATURES:
-            raise SqlInputTooLarge(
-                f"Layer '{name}' exceeds the {MAX_FEATURES}-feature limit"
-            )
-        if not features:
-            # An empty layer registers no usable view; skip it rather than fail
-            # the whole query (GeoDataFrame.from_features rejects an empty list).
-            continue
-        gdf = gpd.GeoDataFrame.from_features(features, crs=WGS84)
-        connection.create_data_frame(gdf).to_view(name)
+    try:
+        for layer in layers or []:
+            name = str(layer.get("name") or "").strip()
+            geojson = layer.get("geojson")
+            if not name or not geojson:
+                continue
+            if not _SAFE_VIEW_NAME.match(name):
+                raise ValueError(f"Invalid layer name: {name!r}")
+            features = geojson.get("features") or []
+            if len(features) > MAX_FEATURES:
+                raise SqlInputTooLarge(
+                    f"Layer '{name}' exceeds the {MAX_FEATURES}-feature limit"
+                )
+            if not features:
+                # An empty layer registers no usable view; skip it rather than
+                # fail the whole query (from_features rejects an empty list).
+                continue
+            gdf = gpd.GeoDataFrame.from_features(features, crs=WGS84)
+            connection.create_data_frame(gdf).to_view(name)
 
-    result = connection.sql(sql)
-    # to_pandas() returns a GeoDataFrame when the result has a geometry column,
-    # otherwise a plain DataFrame.
-    frame = result.to_pandas()
-    columns = [str(column) for column in frame.columns]
+        result = connection.sql(sql)
+        # to_pandas() returns a GeoDataFrame when the result has a geometry
+        # column, otherwise a plain DataFrame.
+        frame = result.to_pandas()
+        columns = [str(column) for column in frame.columns]
 
-    geometry_column: Optional[str] = None
-    if isinstance(frame, gpd.GeoDataFrame):
-        try:
-            geometry_column = frame.geometry.name
-        except Exception:  # noqa: BLE001 - no active geometry column
-            geometry_column = None
+        geometry_column: Optional[str] = None
+        if isinstance(frame, gpd.GeoDataFrame):
+            try:
+                geometry_column = frame.geometry.name
+            except Exception:  # noqa: BLE001 - no active geometry column
+                geometry_column = None
 
-    geojson_out: Optional[dict] = None
-    if geometry_column is not None:
-        # GeoPandas only emits valid GeoJSON in WGS84; reproject if needed.
-        gdf_out = frame
-        if gdf_out.crs is not None and gdf_out.crs.to_epsg() != 4326:
-            gdf_out = gdf_out.to_crs(WGS84)
-        geojson_out = json.loads(gdf_out.to_json())
+        geojson_out: Optional[dict] = None
+        if geometry_column is not None:
+            # GeoPandas only emits valid GeoJSON in WGS84; reproject if needed.
+            gdf_out = frame
+            if gdf_out.crs is not None and gdf_out.crs.to_epsg() != 4326:
+                gdf_out = gdf_out.to_crs(WGS84)
+            geojson_out = json.loads(gdf_out.to_json())
 
-    rows: list[dict] = []
-    for record in frame.to_dict(orient="records"):
-        row: dict[str, Any] = {}
-        for column in columns:
-            value = record.get(column)
-            if column == geometry_column:
-                # Render geometry as WKT for the results grid (the GeoJSON path
-                # carries the real geometry); a null geometry stays null.
-                row[column] = None if _is_missing(value) else value.wkt
-            else:
-                row[column] = _json_safe(value)
-        rows.append(row)
+        rows: list[dict] = []
+        for record in frame.to_dict(orient="records"):
+            row: dict[str, Any] = {}
+            for column in columns:
+                value = record.get(column)
+                if column == geometry_column:
+                    # Render geometry as WKT for the grid (the GeoJSON path
+                    # carries the real geometry); a null geometry stays null.
+                    row[column] = None if _is_missing(value) else value.wkt
+                else:
+                    row[column] = _json_safe(value)
+            rows.append(row)
 
-    return {
-        "columns": columns,
-        "rows": rows,
-        "geometry_column": geometry_column,
-        "geojson": geojson_out,
-    }
+        return {
+            "columns": columns,
+            "rows": rows,
+            "geometry_column": geometry_column,
+            "geojson": geojson_out,
+        }
+    finally:
+        # SedonaDB connections are Rust-backed; release promptly rather than
+        # waiting on GC. Tolerate bindings that expose no close().
+        close = getattr(connection, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:  # noqa: BLE001 - best-effort cleanup
+                pass
