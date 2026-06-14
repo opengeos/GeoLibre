@@ -65,24 +65,24 @@ test("registers a service worker and serves the shell offline after first visit"
   // *after* the page's fetch for a chunk resolves — so the map canvas can be
   // visible (the ~13 MB MapLibre chunk ran in-page) while the SW is still
   // persisting that chunk. Going offline in that window leaves the chunk
-  // uncached, so the offline reload can't boot the map. Wait for all first-load
-  // requests to finish, then for the Cache Storage entry count to stop growing,
-  // so every runtime-cached chunk is durably stored before we drop the network.
+  // uncached, so the offline reload can't import MapLibre and never renders the
+  // map. Wait for all first-load requests to finish, then for every heavy
+  // runtime-cached chunk the boot pulled in to be durably stored.
   await page.waitForLoadState("networkidle");
-  await waitForCacheStorageToSettle(page);
+  await waitForHeavyAssetsCached(page);
 
   // Drop the network and reload: the precached shell plus the runtime-cached
   // MapLibre chunk must still bring the app up with no connectivity.
   await context.setOffline(true);
   try {
     await page.reload();
-    // The offline cold boot re-parses/executes every chunk from cache, so give
-    // the canvas the same 30s budget the warm boot above gets.
+    // The offline cold boot re-parses/executes the ~13 MB MapLibre chunk from
+    // cache under software WebGL on CI, so give it a generous budget.
     await expect(page.getByTestId("map-canvas")).toBeVisible({
-      timeout: 30_000,
+      timeout: 60_000,
     });
     await expect(page.locator(".maplibregl-canvas")).toBeVisible({
-      timeout: 30_000,
+      timeout: 60_000,
     });
   } finally {
     await context.setOffline(false);
@@ -90,27 +90,44 @@ test("registers a service worker and serves the shell offline after first visit"
 });
 
 /**
- * Wait until the service worker's Cache Storage stops growing, i.e. it has
- * finished persisting the runtime-cached chunks the first load pulled in.
- * CacheFirst writes happen asynchronously after the page's fetch resolves, so
- * "canvas visible" alone does not guarantee the chunk is cached; polling the
- * total entry count until two consecutive reads match (and it is non-zero)
- * gives a deterministic "caches settled" signal before we go offline.
+ * Wait until every heavy runtime-cached asset the first load pulled in is
+ * durably present in Cache Storage. Chunks larger than the precache size limit
+ * (4 MB — the MapLibre bundle, DuckDB-WASM, etc.) are excluded from the precache
+ * and CacheFirst-cached on first fetch; that write completes asynchronously
+ * after the page's fetch resolves, so "canvas visible" alone does not guarantee
+ * the chunk is on disk. Polling `caches.match()` for each heavy `/assets/` chunk
+ * the page actually loaded gives a deterministic "ready to go offline" signal —
+ * runtime CacheFirst entries are keyed by plain URL, so the match is reliable
+ * (unlike revision-keyed precache entries, which are already durable at SW
+ * install and need no wait).
  */
-async function waitForCacheStorageToSettle(page: Page): Promise<void> {
+async function waitForHeavyAssetsCached(page: Page): Promise<void> {
   await page.waitForFunction(
     async () => {
-      const w = window as unknown as { __prevCacheEntryCount?: number };
-      const names = await caches.keys();
-      let count = 0;
-      for (const name of names) {
-        count += (await (await caches.open(name)).keys()).length;
+      const origin = location.origin;
+      const heavy = performance
+        .getEntriesByType("resource")
+        .filter((entry): entry is PerformanceResourceTiming => {
+          const resource = entry as PerformanceResourceTiming;
+          return (
+            resource.name.startsWith(origin) &&
+            resource.name.includes("/assets/") &&
+            resource.name.endsWith(".js") &&
+            // > 4 MB: globIgnored from the precache, so CacheFirst-cached at
+            // runtime (matches maximumFileSizeToCacheInBytes in vite.config.ts).
+            resource.decodedBodySize > 4 * 1024 * 1024
+          );
+        })
+        .map((resource) => resource.name);
+      // The MapLibre chunk must have loaded for the warm map boot above; if no
+      // heavy chunk is visible yet, keep polling rather than passing vacuously.
+      if (heavy.length === 0) return false;
+      for (const url of heavy) {
+        if (!(await caches.match(url))) return false;
       }
-      const previous = w.__prevCacheEntryCount ?? -1;
-      w.__prevCacheEntryCount = count;
-      return count > 0 && count === previous;
+      return true;
     },
     undefined,
-    { timeout: 30_000, polling: 1000 },
+    { timeout: 60_000, polling: 500 },
   );
 }
