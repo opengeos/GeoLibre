@@ -107,6 +107,11 @@ function viewportCollection(
     const bbox = p.view?.bbox;
     if (!bbox) continue;
     const [w, s, e, n] = bbox;
+    // When the viewport crosses the antimeridian the bbox comes back with
+    // east < west; unwrap east past 180° so the polygon stays the narrow actual
+    // viewport instead of winding the long way around the globe. MapLibre
+    // renders longitudes > 180° correctly in wrapped tile mode.
+    const safeE = e < w ? e + 360 : e;
     features.push({
       type: "Feature",
       properties: { color: p.color },
@@ -115,8 +120,8 @@ function viewportCollection(
         coordinates: [
           [
             [w, s],
-            [e, s],
-            [e, n],
+            [safeE, s],
+            [safeE, n],
             [w, n],
             [w, s],
           ],
