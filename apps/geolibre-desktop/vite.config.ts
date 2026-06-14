@@ -597,10 +597,15 @@ export default defineConfig({
     ],
     // PGlite ships its own WASM + filesystem bundles and must not be pre-bundled
     // by esbuild, which mangles those asset references (per PGlite's Vite guide).
+    // CereusDB (the WASM Sedona engine) is excluded for the same reason, and
+    // because its wasm-bindgen glue imports `./env_shim.js?v=...` — that query
+    // suffix breaks the dev-server dependency optimizer, so it must be served
+    // as-is rather than pre-bundled.
     exclude: [
       ...RADIX_OPTIMIZE_EXCLUDES,
       "@electric-sql/pglite",
       "@electric-sql/pglite-postgis",
+      "@cereusdb/standard",
     ],
   },
   build: {

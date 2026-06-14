@@ -67,16 +67,40 @@ function runExclusive<T>(task: () => Promise<T>): Promise<T> {
   return result;
 }
 
+// CereusDB's registerGeoJSON loads a FeatureCollection as a two-column table —
+// `geometry` as WKT *text* and `properties` as a JSON *string* — not as parsed
+// spatial/struct types. Each layer is therefore registered under a hidden source
+// name and exposed through a view that parses the geometry with ST_GeomFromText
+// so ST_* functions work; `properties` is carried through as JSON and flattened
+// in JS (this CereusDB build implements no struct/JSON field access in SQL).
+const VIEW_SOURCE_SUFFIX = "__geolibre_src";
+
+// Column names CereusDB's registerGeoJSON produces.
+const RAW_GEOMETRY_COLUMN = "geometry";
+const PROPERTIES_COLUMN = "properties";
+
+// Views created on the previous run, dropped before the next one so removed
+// layers do not linger (a view is not removed by dropTable).
+let registeredViews: string[] = [];
+
 /**
- * Drop every previously registered table, then register each layer that carries
- * an in-memory GeoJSON FeatureCollection as a table, so user SQL can reference
- * the current map data by layer name. Rebuilding on each run keeps the tables in
- * sync with edits and drops tables for layers that were since removed.
+ * Drop the previous run's views and source tables, then register each layer that
+ * carries an in-memory GeoJSON FeatureCollection and expose it as a view with a
+ * parsed geometry column, so user SQL can reference the current map data by layer
+ * name. Rebuilding on each run keeps the tables in sync with edits.
  */
-function registerLayerTables(
+async function registerLayerTables(
   db: CereusInstance,
   layers: GeoLibreLayer[],
-): SqlWorkspaceTable[] {
+): Promise<SqlWorkspaceTable[]> {
+  for (const view of registeredViews) {
+    try {
+      await db.sqlJSON(`DROP VIEW IF EXISTS ${quoteIdentifier(view)}`);
+    } catch {
+      // Best-effort cleanup; CREATE OR REPLACE below tolerates a leftover view.
+    }
+  }
+  registeredViews = [];
   for (const name of db.tables()) {
     try {
       db.dropTable(name);
@@ -84,12 +108,79 @@ function registerLayerTables(
       // Best-effort cleanup; a table that cannot be dropped is harmless here.
     }
   }
+
   const registered: SqlWorkspaceTable[] = [];
   for (const { layer, tableName } of assignTableNames(layers)) {
-    db.registerGeoJSON(tableName, layer.geojson as object);
+    const sourceName = `${tableName}${VIEW_SOURCE_SUFFIX}`;
+    db.registerGeoJSON(sourceName, layer.geojson as object);
+    const geom = quoteIdentifier(RAW_GEOMETRY_COLUMN);
+    const props = quoteIdentifier(PROPERTIES_COLUMN);
+    await db.sqlJSON(
+      `CREATE OR REPLACE VIEW ${quoteIdentifier(tableName)} AS ` +
+        `SELECT ST_GeomFromText(${geom}) AS ${geom}, ${props} ` +
+        `FROM ${quoteIdentifier(sourceName)}`,
+    );
+    registeredViews.push(tableName);
     registered.push({ tableName, layerName: layer.name });
   }
   return registered;
+}
+
+/**
+ * Expand a `properties` column holding GeoJSON-style attribute JSON (CereusDB
+ * returns it as a JSON string) into top-level columns, so the results grid and
+ * "Add as layer" match the DuckDB/PostGIS engines. No-op when the result has no
+ * `properties` column. The hidden GeoJSON geometry column is preserved on each
+ * row for {@link rowsToFeatureCollection}.
+ */
+function flattenProperties(
+  rows: Record<string, unknown>[],
+  columns: string[],
+): { rows: Record<string, unknown>[]; columns: string[] } {
+  if (!columns.includes(PROPERTIES_COLUMN)) return { rows, columns };
+  const keyOrder: string[] = [];
+  const seen = new Set<string>();
+  const parsed = rows.map((row) => {
+    const raw = row[PROPERTIES_COLUMN];
+    let obj: Record<string, unknown> = {};
+    if (typeof raw === "string") {
+      try {
+        const value = JSON.parse(raw);
+        if (value && typeof value === "object" && !Array.isArray(value)) {
+          obj = value as Record<string, unknown>;
+        }
+      } catch {
+        // Leave non-JSON text out of the flattened columns.
+      }
+    } else if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      obj = raw as Record<string, unknown>;
+    }
+    for (const key of Object.keys(obj)) {
+      if (!seen.has(key)) {
+        seen.add(key);
+        keyOrder.push(key);
+      }
+    }
+    return { row, obj };
+  });
+  const nextColumns: string[] = [];
+  for (const column of columns) {
+    if (column === PROPERTIES_COLUMN) {
+      for (const key of keyOrder) {
+        if (!nextColumns.includes(key)) nextColumns.push(key);
+      }
+    } else if (!nextColumns.includes(column)) {
+      nextColumns.push(column);
+    }
+  }
+  const nextRows = parsed.map(({ row, obj }) => {
+    const { [PROPERTIES_COLUMN]: _dropped, ...rest } = row;
+    for (const key of keyOrder) {
+      if (!(key in rest)) rest[key] = obj[key] ?? null;
+    }
+    return rest;
+  });
+  return { rows: nextRows, columns: nextColumns };
 }
 
 interface DescribedQuery {
@@ -110,9 +201,10 @@ async function describeQuery(
   statement: string,
 ): Promise<DescribedQuery | null> {
   try {
-    const ipc = await db.sql(
-      `SELECT * FROM (${statement}) AS ${quoteIdentifier(SQL_SUBQUERY_ALIAS)} LIMIT 0`,
-    );
+    // Read the result schema from the Arrow IPC of the statement itself rather
+    // than a `LIMIT 0` probe: CereusDB short-circuits `LIMIT 0` to an empty
+    // stream with no field schema, which would lose every column name.
+    const ipc = await db.sql(statement);
     const fields = tableFromIPC(ipc).schema.fields;
     const columnNames = fields.map((field) => String(field.name));
     const byExtension = fields.find((field) => {
@@ -123,9 +215,11 @@ async function describeQuery(
       byExtension ??
       columnNames.find((name) => GEOMETRY_COLUMN_NAMES.has(name.toLowerCase())) ??
       null;
+    // Keep null as null: stringifying it would yield the literal "null", which
+    // would wrongly trigger the geometry projection and reference `sub."null"`.
     return {
       columnNames,
-      geometryColumn: geometryColumn === undefined ? null : String(geometryColumn),
+      geometryColumn: geometryColumn == null ? null : String(geometryColumn),
     };
   } catch {
     return null;
@@ -148,7 +242,7 @@ async function runCereusQuery(
 ): Promise<SqlQueryResult> {
   return runExclusive(async () => {
     const db = await getDb();
-    registerLayerTables(db, layers);
+    await registerLayerTables(db, layers);
 
     const described = await describeQuery(db, statement);
     const geometryColumn = described?.geometryColumn ?? null;
@@ -171,11 +265,15 @@ async function runCereusQuery(
       const queryRows = await db.sqlJSON(
         `SELECT ${projection.join(", ")} FROM (${statement}) AS ${sub}`,
       );
-      const columns = described.columnNames.filter(
+      const baseColumns = described.columnNames.filter(
         (name) => name !== GEOMETRY_JSON_COLUMN,
       );
-      const geojson = rowsToFeatureCollection(queryRows, geometryColumn);
-      const rows = queryRows.map((row) => normalizeRow(row, columns));
+      const { rows: flatRows, columns } = flattenProperties(
+        queryRows,
+        baseColumns,
+      );
+      const geojson = rowsToFeatureCollection(flatRows, geometryColumn);
+      const rows = flatRows.map((row) => normalizeRow(row, columns));
       return {
         columns,
         rows,
@@ -186,10 +284,16 @@ async function runCereusQuery(
     }
 
     const queryRows = await db.sqlJSON(statement);
-    const columns =
-      described?.columnNames ??
-      (queryRows[0] ? Object.keys(queryRows[0]) : []);
-    const rows = queryRows.map((row) => normalizeRow(row, columns));
+    const baseColumns = described?.columnNames?.length
+      ? described.columnNames
+      : queryRows[0]
+        ? Object.keys(queryRows[0])
+        : [];
+    const { rows: flatRows, columns } = flattenProperties(
+      queryRows,
+      baseColumns,
+    );
+    const rows = flatRows.map((row) => normalizeRow(row, columns));
     return {
       columns,
       rows,
