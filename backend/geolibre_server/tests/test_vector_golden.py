@@ -19,7 +19,6 @@ from typing import Any, Optional
 
 import pytest
 
-from geolibre_server import vector_ops
 from geolibre_server.vector_ops import run_vector_tool
 
 try:
@@ -34,6 +33,17 @@ except Exception:  # pragma: no cover - depends on the optional extra
 # geolibre_server/tests/test_vector_golden.py -> parents[3] is the repo root).
 _CASES_DIR = (
     Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "vector" / "cases"
+)
+
+
+# Fail loudly if the repo layout changes and the parents[3] path no longer
+# resolves, rather than silently skipping the whole suite (green CI, nothing
+# exercised). When the `tests` tree exists but the fixtures dir does not, the
+# path calculation is wrong; when neither exists (e.g. the package is tested in
+# isolation, unpacked away from the JS repo) the suite skips cleanly below.
+assert _CASES_DIR.is_dir() or not _CASES_DIR.parents[2].is_dir(), (
+    f"Expected fixture directory not found: {_CASES_DIR}. "
+    "Check the parents[3] path calculation if this test file was moved."
 )
 
 
@@ -57,8 +67,11 @@ _CASES = _load_cases()
 
 def _almost_equal(a: Any, b: Any, tol: float) -> bool:
     """Numbers compare within ``tol``; everything else compares structurally."""
+    # Treat booleans strictly so this matches the TS harness, where `true === 1`
+    # is `false`. (In Python `bool` subclasses `int`, so a naive `True == 1`
+    # would diverge.) A bool only equals another bool of the same value.
     if isinstance(a, bool) or isinstance(b, bool):
-        return a == b
+        return isinstance(a, bool) and isinstance(b, bool) and a == b
     if isinstance(a, (int, float)) and isinstance(b, (int, float)):
         if math.isnan(a) and math.isnan(b):
             return True
@@ -72,11 +85,6 @@ def _almost_equal(a: Any, b: Any, tol: float) -> bool:
             _almost_equal(x, y, tol) for x, y in zip(a, b)
         )
     return a == b
-
-
-def _canonical(value: Any) -> str:
-    """Stable JSON key for order-insensitive multiset comparison."""
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
 
 
 def _multiset_equal(actual: list, expected: list, tol: float) -> bool:
@@ -99,6 +107,15 @@ def _geometries_equal(a: Optional[dict], b: Optional[dict], tol: float) -> bool:
         return a == b
     if a.get("type") != b.get("type"):
         return False
+    # A GeometryCollection has no `coordinates` — recurse into its `geometries`
+    # so nested parts are compared with tolerance too (and two collections are
+    # not silently accepted as equal). Mirrors the TS harness.
+    if a.get("type") == "GeometryCollection":
+        sub_a = a.get("geometries") or []
+        sub_b = b.get("geometries") or []
+        return len(sub_a) == len(sub_b) and all(
+            _geometries_equal(ga, gb, tol) for ga, gb in zip(sub_a, sub_b)
+        )
     return _almost_equal(a.get("coordinates"), b.get("coordinates"), tol)
 
 
@@ -188,7 +205,8 @@ def test_vector_golden(case: dict) -> None:
     )
 
     if expect.get("error"):
-        with pytest.raises((ValueError, vector_ops.VectorInputTooLarge)):
+        # VectorInputTooLarge subclasses ValueError, so ValueError covers both.
+        with pytest.raises(ValueError):
             run_vector_tool(*args)
         return
 

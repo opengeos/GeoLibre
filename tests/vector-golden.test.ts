@@ -60,6 +60,8 @@ function loadCases(): GoldenCase[] {
 // --- matcher (mirror of the Python harness) -------------------------------
 
 function almostEqual(a: unknown, b: unknown, tol: number): boolean {
+  // Booleans compare strictly (a bool only equals an equal bool); the Python
+  // harness mirrors this even though Python's `bool` subclasses `int`.
   if (typeof a === "boolean" || typeof b === "boolean") return a === b;
   if (typeof a === "number" && typeof b === "number") {
     if (Number.isNaN(a) && Number.isNaN(b)) return true;
@@ -98,8 +100,14 @@ function multisetEqual(actual: unknown[], expected: unknown[], tol: number): boo
 function geometriesEqual(a: Geometry | null, b: Geometry | null, tol: number): boolean {
   if (!a || !b) return a === b;
   if (a.type !== b.type) return false;
-  if (a.type === "GeometryCollection" || b.type === "GeometryCollection") {
-    return JSON.stringify(a) === JSON.stringify(b);
+  // A GeometryCollection has no `coordinates` — recurse into its `geometries`
+  // so nested parts are compared with tolerance too. Mirrors the Python harness.
+  if (a.type === "GeometryCollection") {
+    const subB = (b as typeof a).geometries;
+    return (
+      a.geometries.length === subB.length &&
+      a.geometries.every((g, i) => geometriesEqual(g, subB[i], tol))
+    );
   }
   return almostEqual(a.coordinates, b.coordinates, tol);
 }

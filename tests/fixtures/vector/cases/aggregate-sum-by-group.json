@@ -1,7 +1,7 @@
 {
   "name": "aggregate-sum-by-group",
   "tool": "aggregate",
-  "description": "Sum of val grouped by grp; geometry is dissolved per group.",
+  "description": "Sum of val grouped by grp; geometry is dissolved per group (both engines share the per-group extent).",
   "input": {
     "type": "FeatureCollection",
     "features": [
@@ -133,6 +133,12 @@
         "val_sum": 5
       }
     ],
-    "tolerance": 1e-09
+    "bbox": [
+      0.0,
+      0.0,
+      12.0,
+      12.0
+    ],
+    "tolerance": 1e-06
   }
 }

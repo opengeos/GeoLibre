@@ -1,7 +1,7 @@
 {
   "name": "explode-multipolygon",
   "tool": "explode",
-  "description": "Explode a multipolygon into its parts.",
+  "description": "Explode a multipolygon into its parts (geometry is carried through, so both engines share the exact extent).",
   "input": {
     "type": "FeatureCollection",
     "features": [
@@ -72,6 +72,13 @@
     "geometryTypes": [
       "Polygon",
       "Polygon"
-    ]
+    ],
+    "bbox": [
+      0.0,
+      0.0,
+      6.0,
+      6.0
+    ],
+    "tolerance": 1e-06
   }
 }

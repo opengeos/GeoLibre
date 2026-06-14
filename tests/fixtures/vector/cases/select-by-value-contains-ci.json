@@ -1,7 +1,7 @@
 {
   "name": "select-by-value-contains-ci",
   "tool": "select-by-value",
-  "description": "contains is case-insensitive substring match.",
+  "description": "contains is case-insensitive: uppercase 'LL' still matches the lowercase 'll' in Asheville.",
   "input": {
     "type": "FeatureCollection",
     "features": [
@@ -70,7 +70,7 @@
   "parameters": {
     "field": "name",
     "operator": "contains",
-    "value": "ll"
+    "value": "LL"
   },
   "expect": {
     "featureCount": 1,

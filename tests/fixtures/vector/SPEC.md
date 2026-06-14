@@ -70,17 +70,25 @@ fixture asserts at the strongest tier the two engines *actually* share:
 - **Exact tier** — tools that are pure attribute/selection logic or carry input
   geometry through untouched (`select-by-value`, `select-by-location`,
   `attribute-join`, `spatial-join`), plus the hand-ported identical Chaikin
-  `smooth` and the deterministic `bounding-box`. These assert `properties`
-  and/or `geometry` exactly. This is where the "kept in sync with the backend"
-  attribute logic lives, so it is asserted the hardest.
-- **Structural tier** — geometry-approximation tools (`buffer`, `dissolve`,
-  `aggregate` geometry, `centroids`, `convex-hull`, `simplify`, `clip`,
-  `intersection`, `difference`, `union`, `voronoi`, `explode`). These assert
-  `featureCount`, `geometryTypes`, and a loose `bbox` — the contract is that
-  both engines agree on *shape and extent*, not on every vertex. `aggregate`
-  additionally asserts its computed statistic `properties` exactly (the pandas
-  numeric semantics are hand-replicated and must match), just not the dissolved
-  geometry.
+  `smooth`. These assert `properties` and/or `geometry` exactly. This is where
+  the "kept in sync with the backend" attribute logic lives, so it is asserted
+  the hardest.
+- **Structural tier** — geometry-approximation tools, which assert
+  `featureCount` and `geometryTypes`, plus a `bbox` *only where the two engines
+  share the output extent*:
+  - **count + type + bbox** — the deterministic set ops and hull whose extent
+    matches across engines: `dissolve`, `clip`, `intersection`, `difference`,
+    `union`, `convex-hull`, `explode` (carries input geometry through), and the
+    deterministic `bounding-box` envelope (its extent is asserted via `bbox`
+    rather than `geometry`, because the two engines emit the identical rectangle
+    but start the ring at a different corner). `aggregate` also lands here and
+    additionally asserts its computed statistic `properties` exactly — the
+    pandas numeric semantics are hand-replicated and must match — while its
+    dissolved geometry is checked only by `bbox`.
+  - **count + type only** — tools whose algorithms differ enough that even the
+    extent diverges: `buffer` (Turf is planar, GeoPandas reprojects to UTM),
+    `centroids` (vertex-mean vs area centroid), `simplify` (different
+    Douglas-Peucker pruning), and `voronoi` (different diagram/clip algorithm).
 
 `reproject`'s client `run` is a deliberate no-op that defers to the Python
 engine, so its fixtures are asserted by the Python harness only; the TS harness
