@@ -1069,7 +1069,7 @@ export function DesktopShell({
         <GeocodeDialog mapControllerRef={mapControllerRef} />
       </Suspense>
       <Suspense fallback={null}>
-        <RasterToolsDialog />
+        <RasterToolsDialog mapControllerRef={mapControllerRef} />
       </Suspense>
       <Suspense fallback={null}>
         <SegmentationDialog mapControllerRef={mapControllerRef} />

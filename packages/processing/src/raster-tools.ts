@@ -28,11 +28,13 @@ export interface FileFilter {
 }
 
 /**
- * A raster processing tool. Unlike `ProcessingAlgorithm`, raster tools never
- * run client-side: they always execute on the Python sidecar (rasterio/GDAL)
- * with a file path in and a file path out. The tool only declares its
- * operation parameters; the dialog always renders the primary input/output
- * file pickers from `inputFilters` / `outputFilters` / `defaultOutputName`.
+ * A raster processing tool. Most raster tools execute on the Python sidecar
+ * (rasterio/GDAL) with a file path in and a file path out. A subset also has an
+ * in-browser implementation (`supportsClient`) backed by `geotiff.js`, so the
+ * toolbox degrades gracefully when no sidecar is running, mirroring the vector
+ * tools. The tool only declares its operation parameters; the dialog always
+ * renders the primary input/output file pickers from `inputFilters` /
+ * `outputFilters` / `defaultOutputName`.
  */
 export interface RasterTool {
   id: RasterToolId;
@@ -57,6 +59,12 @@ export interface RasterTool {
    * correctly.
    */
   inputLabel?: string;
+  /**
+   * Whether the tool also runs entirely in the browser (no sidecar required),
+   * via the `geotiff.js` client engine. The dialog shows an engine selector for
+   * these tools and adds the computed raster straight to the map.
+   */
+  supportsClient?: boolean;
   /** Operation knobs (not the primary input/output paths). */
   parameters: AlgorithmParameter[];
 }
@@ -90,6 +98,7 @@ export const hillshadeTool: RasterTool = {
   defaultOutputName: "hillshade.tif",
   inputFilters: GEOTIFF_INPUT,
   outputFilters: GEOTIFF_OUTPUT,
+  supportsClient: true,
   parameters: [
     {
       id: "azimuth",
@@ -129,6 +138,7 @@ export const slopeTool: RasterTool = {
   defaultOutputName: "slope.tif",
   inputFilters: GEOTIFF_INPUT,
   outputFilters: GEOTIFF_OUTPUT,
+  supportsClient: true,
   parameters: [
     {
       id: "units",
@@ -161,6 +171,7 @@ export const aspectTool: RasterTool = {
   defaultOutputName: "aspect.tif",
   inputFilters: GEOTIFF_INPUT,
   outputFilters: GEOTIFF_OUTPUT,
+  supportsClient: true,
   // Aspect is a direction, so a z_factor would have no effect on the result.
   parameters: [],
 };
@@ -231,6 +242,7 @@ export const clipExtentTool: RasterTool = {
   defaultOutputName: "clipped.tif",
   inputFilters: GEOTIFF_INPUT,
   outputFilters: GEOTIFF_OUTPUT,
+  supportsClient: true,
   parameters: [
     { id: "minx", label: "Min X", type: "number", required: true, step: 0.0001 },
     { id: "miny", label: "Min Y", type: "number", required: true, step: 0.0001 },
@@ -445,6 +457,7 @@ export const rasterCalculatorTool: RasterTool = {
   inputFilters: GEOTIFF_INPUT,
   outputFilters: GEOTIFF_OUTPUT,
   inputLabel: "toolbar.rasterTool.inputRasterA",
+  supportsClient: true,
   parameters: [
     {
       id: "expression",
@@ -480,6 +493,7 @@ export const reclassifyTool: RasterTool = {
   defaultOutputName: "reclassified.tif",
   inputFilters: GEOTIFF_INPUT,
   outputFilters: GEOTIFF_OUTPUT,
+  supportsClient: true,
   parameters: [
     { id: "band", label: "Band", type: "number", default: 1, min: 1, max: 99, step: 1 },
     {
@@ -566,6 +580,7 @@ export const focalStatisticsTool: RasterTool = {
   defaultOutputName: "focal.tif",
   inputFilters: GEOTIFF_INPUT,
   outputFilters: GEOTIFF_OUTPUT,
+  supportsClient: true,
   parameters: [
     { id: "band", label: "Band", type: "number", default: 1, min: 1, max: 99, step: 1 },
     {
