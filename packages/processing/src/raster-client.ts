@@ -270,7 +270,12 @@ export function slope(input: RasterData, params: SlopeParams): RasterData {
   return singleBandResult(input, out, TERRAIN_NODATA);
 }
 
-/** Aspect (compass direction of steepest descent, 0–360°; -1 for flat). */
+/**
+ * Aspect (compass direction of steepest descent, 0–360°). Flat cells have no
+ * meaningful direction and are emitted as NoData (rather than GDAL's `-1`
+ * sentinel) so the COG renderer masks them instead of colouring a value just
+ * below zero.
+ */
 export function aspect(input: RasterData): RasterData {
   const band = input.bands[0];
   const { width, height, resX, resY, nodata } = input;
@@ -287,7 +292,7 @@ export function aspect(input: RasterData): RasterData {
       const dzdx = gradX(win, resX);
       const dzdy = gradY(win, resY);
       if (dzdx === 0 && dzdy === 0) {
-        out[i] = -1; // flat
+        out[i] = TERRAIN_NODATA; // flat: no aspect, masked by the renderer
         continue;
       }
       let a = Math.atan2(dzdy, -dzdx) / DEG;

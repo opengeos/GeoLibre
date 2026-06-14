@@ -98,6 +98,11 @@ describe("raster-client compute", () => {
     assert.ok(asp >= 0 && asp <= 360);
   });
 
+  it("emits NoData (not -1) for flat aspect cells", () => {
+    const flat = makeRaster([Array(9).fill(7)], 3, 3);
+    assert.equal(aspect(flat).bands[0][4], TERRAIN_NODATA);
+  });
+
   it("clips to a sub-window in CRS coordinates", () => {
     // 4x4 raster, values = row*4 + col, origin (0,4), 1-unit pixels.
     const values = Array.from({ length: 16 }, (_, i) => i);

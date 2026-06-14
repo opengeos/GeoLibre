@@ -110,6 +110,10 @@ export function RasterToolsDialog({
   const [runtimeMessage, setRuntimeMessage] = useState("");
   const [startingServer, setStartingServer] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
+  // The client log has its own sentinel: both logs can be mounted at once
+  // (a sidecar job, then switching engine to client), so a shared ref would
+  // break the sidecar log's auto-scroll.
+  const clientLogEndRef = useRef<HTMLDivElement>(null);
 
   // Client-engine state. The browser fallback reads a GeoTIFF into memory,
   // computes a new raster, adds it to the map, and offers a download.
@@ -220,6 +224,7 @@ export function RasterToolsDialog({
   // Keep the newest log lines in view as messages stream in.
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ block: "end" });
+    clientLogEndRef.current?.scrollIntoView({ block: "end" });
   }, [job?.messages.length, clientLog.length]);
 
   const setParam = useCallback(
@@ -314,6 +319,10 @@ export function RasterToolsDialog({
     });
     if (picked?.data) {
       setClientInput({ name: picked.path, bytes: picked.data });
+      // Drop any prior run's result/log so the Download button can't offer a
+      // GeoTIFF computed from the previous input.
+      setClientResult(null);
+      setClientLog([]);
     }
   }, [tool]);
 
@@ -681,7 +690,7 @@ export function RasterToolsDialog({
                       {line}
                     </div>
                   ))}
-                  <div ref={logEndRef} />
+                  <div ref={clientLogEndRef} />
                 </ScrollArea>
                 {clientResult && (
                   <Button
