@@ -149,10 +149,15 @@ export function rememberPostgresConnection(connectionString: string): string[] {
     ...readSavedPostgresConnections().filter((value) => value !== trimmed),
   ]).slice(0, MAX_SAVED_POSTGRES_CONNECTIONS);
 
-  window.localStorage.setItem(
-    POSTGRES_CONNECTIONS_STORAGE_KEY,
-    JSON.stringify(connections),
-  );
+  try {
+    window.localStorage.setItem(
+      POSTGRES_CONNECTIONS_STORAGE_KEY,
+      JSON.stringify(connections),
+    );
+  } catch {
+    // Best-effort persistence: a quota/private-mode failure must not abort the
+    // connect flow (mirrors readSavedPostgresConnections' guard).
+  }
   return connections;
 }
 
