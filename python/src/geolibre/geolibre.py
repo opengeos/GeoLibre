@@ -373,15 +373,16 @@ class Map(anywidget.AnyWidget):
             "error": None,
         }
         self._pending[request_id] = slot
-        self.send(
-            {
-                "type": "geolibre:command",
-                "requestId": request_id,
-                "method": method,
-                "params": params or {},
-            }
-        )
         try:
+            # Inside the try so a failing send() still cleans up the slot.
+            self.send(
+                {
+                    "type": "geolibre:command",
+                    "requestId": request_id,
+                    "method": method,
+                    "params": params or {},
+                }
+            )
             self._wait_for_result(slot, method, timeout)
         finally:
             self._pending.pop(request_id, None)

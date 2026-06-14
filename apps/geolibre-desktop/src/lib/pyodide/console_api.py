@@ -90,16 +90,21 @@ class Layer:
         return self._info.get("visible", True)
 
     @visible.setter
-    def visible(self, value):
-        _js.setVisibility(_to_js({"layerId": self._id, "visible": bool(value)}))
+    def visible(self, value) -> None:
+        next_visible = bool(value)
+        _js.setVisibility(_to_js({"layerId": self._id, "visible": next_visible}))
+        # Keep the cached info in sync so a later read on this handle is correct.
+        self._info["visible"] = next_visible
 
     @property
     def opacity(self):
         return self._info.get("opacity", 1.0)
 
     @opacity.setter
-    def opacity(self, value):
-        _js.setOpacity(_to_js({"layerId": self._id, "opacity": float(value)}))
+    def opacity(self, value) -> None:
+        next_opacity = float(value)
+        _js.setOpacity(_to_js({"layerId": self._id, "opacity": next_opacity}))
+        self._info["opacity"] = next_opacity
 
     def set_style(self, **style):
         """Merge style overrides into the layer (e.g. ``fillColor="#ff0000"``)."""

@@ -1699,17 +1699,25 @@ function featureIdForLayer(
   if (!layer.geojson) return null;
   const properties = feature.properties ?? {};
   const propertyKeys = Object.keys(properties);
-  // With no properties, `every` is vacuously true and would match the first
-  // source feature for every hit (common for geometry-only GeoJSON). Bail out
-  // with no stable id instead, consistent with the feature.id guard above.
-  if (propertyKeys.length === 0) return null;
-  const index = layer.geojson.features.findIndex((candidate) => {
-    const candidateProperties = candidate.properties ?? {};
-    return propertyKeys.every(
-      (key) => candidateProperties[key] === properties[key],
-    );
-  });
-  return index >= 0 ? String(layer.geojson.features[index].id ?? index) : null;
+  // Match by full property-set equality (same keys and values), and only accept
+  // an UNAMBIGUOUS hit. Without this, a feature with no/non-unique properties
+  // (common for geometry-only GeoJSON) would vacuously match — and silently pick
+  // the first — source feature. Returning null when the match is ambiguous is
+  // consistent with the feature.id guard above (no stable id).
+  const matches = layer.geojson.features
+    .map((candidate, index) => ({ candidate, index }))
+    .filter(({ candidate }) => {
+      const candidateProperties = candidate.properties ?? {};
+      if (Object.keys(candidateProperties).length !== propertyKeys.length) {
+        return false;
+      }
+      return propertyKeys.every(
+        (key) => candidateProperties[key] === properties[key],
+      );
+    });
+  if (matches.length !== 1) return null;
+  const { candidate, index } = matches[0];
+  return String(candidate.id ?? index);
 }
 
 function effectiveMinZoomForPreferences(

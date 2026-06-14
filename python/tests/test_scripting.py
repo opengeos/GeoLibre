@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import sys
+import types
 
 import pytest
 
@@ -80,12 +82,16 @@ def test_request_raises_on_error_reply(m, monkeypatch):
 
 def test_wait_for_result_times_out(monkeypatch):
     # Replace the kernel pump with a no-op poll so the timeout path runs without a
-    # live kernel; the slot never resolves, so it must raise TimeoutError.
+    # live kernel; the slot never resolves, so it must raise TimeoutError. Inject
+    # a fake jupyter_ui_poll into sys.modules so the test runs even where the
+    # optional package isn't installed (e.g. the package-publish CI job).
     @contextlib.contextmanager
     def fake_ui_events():
         yield lambda _n=1: None
 
-    monkeypatch.setattr("jupyter_ui_poll.ui_events", fake_ui_events)
+    monkeypatch.setitem(
+        sys.modules, "jupyter_ui_poll", types.SimpleNamespace(ui_events=fake_ui_events)
+    )
     slot = {"done": False, "ok": False, "value": None, "error": None}
     with pytest.raises(TimeoutError, match="timed out"):
         Map._wait_for_result(slot, "getCenter", 0.05)

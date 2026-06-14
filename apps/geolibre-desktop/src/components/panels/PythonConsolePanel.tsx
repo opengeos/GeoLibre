@@ -57,6 +57,7 @@ export function PythonConsolePanel({
   const [running, setRunning] = useState(false);
   const [ready, setReady] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const deps = useMemo(
     () => consoleDeps(() => mapControllerRef.current),
@@ -77,7 +78,8 @@ export function PythonConsolePanel({
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        setStatus(
+        setStatus(null);
+        setLoadError(
           error instanceof Error
             ? error.message
             : t("pythonConsole.loadFailed"),
@@ -189,7 +191,9 @@ export function PythonConsolePanel({
       <div className="flex items-center gap-2 border-b px-3 py-1.5">
         <Terminal className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-semibold">{t("pythonConsole.title")}</span>
-        {status ? (
+        {loadError ? (
+          <span className="text-xs text-destructive">{loadError}</span>
+        ) : status ? (
           <span className="flex items-center gap-1 text-xs text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin" />
             {status}

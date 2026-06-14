@@ -184,6 +184,10 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
     toImage: () => {
       const map = getController()?.getMap();
       if (!map) throw new Error("The map is not ready yet");
+      // toDataURL is a synchronous PNG encode (100-400ms on a large/high-DPI
+      // viewport). In the in-app console (main thread) this briefly freezes the
+      // UI, so callers should avoid it in tight loops; the notebook path hides
+      // this behind the postMessage round-trip.
       return captureMapImage(map).image.toDataURL("image/png");
     },
   };

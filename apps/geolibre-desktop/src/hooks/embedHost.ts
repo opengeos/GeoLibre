@@ -11,6 +11,15 @@
  * or when it is opened with an explicit `?embed=1` query parameter, which lets
  * the host force the bridge on for a standalone `to_html()` export.
  *
+ * Trust model: a cross-origin framing parent throws on `window.parent` access
+ * and is therefore NOT auto-trusted (the try/catch returns false), so a random
+ * page that iframes a deployed app never activates the bridge. The explicit
+ * `?embed=1` opt-in, however, trusts whatever the framing parent is — the bridge
+ * broadcasts full project state to it. Because the legitimate hosts (the Jupyter
+ * widget, Colab's proxy) have arbitrary, unknowable origins, an origin allowlist
+ * is not viable here; instead the deployment constraint is: an `?embed=1`
+ * export must only be served from a trusted context, never a public URL.
+ *
  * @returns True when the postMessage bridges should be active.
  */
 export function isEmbedded(): boolean {
