@@ -423,21 +423,6 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     setCalcSelectedOnly(false);
   }, [selectedLayerId, hasLayer, isGeometryEditing]);
 
-  // Bring the selected feature's row into view. With virtualization the row may
-  // be unmounted (e.g. when a feature is picked on the map), so a plain CSS
-  // highlight would be invisible; scroll the virtualizer to it instead. "auto"
-  // alignment leaves an already-visible row untouched.
-  useEffect(() => {
-    if (!selectedFeatureId) return;
-    const index = sorted.findIndex(
-      (row) => row.featureId === selectedFeatureId,
-    );
-    if (index >= 0) rowVirtualizer.scrollToIndex(index, { align: "auto" });
-    // `sorted`/`rowVirtualizer` are rebuilt every render; depend only on the
-    // selection (and the layer, so a layer switch re-runs against fresh rows).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedFeatureId, selectedLayerId]);
-
   // If the selected feature is cleared while the calculator is open, drop the
   // "selected only" flag too: leaving it checked-but-disabled would mislead the
   // user, and the submit guard would silently widen the scope to all features.
@@ -473,8 +458,9 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     getScrollElement: () => scrollViewportRef.current,
     estimateSize: () => ESTIMATED_ROW_HEIGHT,
     // Key by feature id so measured heights stay attached to the right row when
-    // the sort/filter reorders the list.
-    getItemKey: (index) => sorted[index]?.featureId ?? index,
+    // the sort/filter reorders the list. getItemKey is only called with indices
+    // in [0, count), so sorted[index] is always defined.
+    getItemKey: (index) => sorted[index].featureId,
     overscan: 12,
   });
   const virtualRows = rowVirtualizer.getVirtualItems();
@@ -486,6 +472,24 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     virtualRows.length > 0
       ? virtualTotalSize - virtualRows[virtualRows.length - 1].end
       : 0;
+
+  // Bring the selected feature's row into view. With virtualization the row may
+  // be unmounted (e.g. when a feature is picked on the map), so a plain CSS
+  // highlight would be invisible; scroll the virtualizer to it instead. "auto"
+  // alignment leaves an already-visible row untouched. Re-runs when the table
+  // opens (the viewport is null while closed, so scrollToIndex is a no-op then)
+  // and when the sort changes (which can move the selected row off-screen).
+  useEffect(() => {
+    if (!attributeTableOpen || !selectedFeatureId) return;
+    const index = sorted.findIndex(
+      (row) => row.featureId === selectedFeatureId,
+    );
+    if (index >= 0) rowVirtualizer.scrollToIndex(index, { align: "auto" });
+    // `sorted`/`rowVirtualizer` are rebuilt every render and so are intentionally
+    // excluded; the effect re-runs on the selection/layer/open/sort changes that
+    // actually warrant a scroll.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFeatureId, selectedLayerId, attributeTableOpen, sort]);
 
   const propKeys = new Set<string>();
   for (const row of attributeRows) {
