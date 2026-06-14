@@ -1,20 +1,33 @@
 """Named MapLibre basemap styles for the GeoLibre Python API."""
 
 from __future__ import annotations
+from types import MappingProxyType
+from typing import Final, Mapping
+from urllib.parse import urlparse
 
 # The app's default basemap (packages/core/src/types.ts: DEFAULT_BASEMAP).
-DEFAULT_BASEMAP = "https://tiles.openfreemap.org/styles/liberty"
+DEFAULT_BASEMAP: Final[str] = "https://tiles.openfreemap.org/styles/liberty"
 
 # Friendly name -> MapLibre style JSON URL. These are vector basemap styles
 # (set as the project's `basemapStyleUrl`). Raster tile basemaps such as
 # OpenStreetMap are added as layers via `Map.add_tile_layer` instead.
-BASEMAPS: dict[str, str] = {
-    "liberty": "https://tiles.openfreemap.org/styles/liberty",
-    "bright": "https://tiles.openfreemap.org/styles/bright",
-    "positron": "https://tiles.openfreemap.org/styles/positron",
-    "dark": "https://tiles.openfreemap.org/styles/dark",
-    "fiord": "https://tiles.openfreemap.org/styles/fiord",
-}
+BASEMAPS: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "liberty": "https://tiles.openfreemap.org/styles/liberty",
+        "bright": "https://tiles.openfreemap.org/styles/bright",
+        "positron": "https://tiles.openfreemap.org/styles/positron",
+        "dark": "https://tiles.openfreemap.org/styles/dark",
+        "fiord": "https://tiles.openfreemap.org/styles/fiord",
+    }
+)
+
+
+def is_url(value: str) -> bool:
+    """
+    Return ``True`` if *value* appears to be a URL (has a scheme and netloc).
+    """
+    parsed = urlparse(value)
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
 def resolve_basemap(basemap: str) -> str:
@@ -32,13 +45,17 @@ def resolve_basemap(basemap: str) -> str:
     """
     if not isinstance(basemap, str) or not basemap.strip():
         raise ValueError("basemap must be a non-empty string")
+
     value = basemap.strip()
-    if value.startswith(("http://", "https://")):
+
+    if is_url(value):
         return value
-    key = value.lower()
-    if key in BASEMAPS:
-        return BASEMAPS[key]
-    raise ValueError(
-        f"Unknown basemap {basemap!r}. Pass a style URL or one of: "
-        + ", ".join(sorted(BASEMAPS))
-    )
+
+    try:
+        return BASEMAPS[value.lower()]
+    except KeyError as exc:
+        available = ", ".join(sorted(BASEMAPS))
+        raise ValueError(
+            f"Unknown basemap {basemap!r}. "
+            f"Expected a style URL or one of: {available}"
+        ) from exc

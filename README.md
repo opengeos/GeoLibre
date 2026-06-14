@@ -192,7 +192,7 @@ WHERE POP_EST > 50000000
 ORDER BY POP_EST DESC;
 ```
 
-Only a single statement is supported per run; remote `s3://` URLs are not read directly, so use the HTTPS form instead.
+Only a single statement is supported per run. Cloud object-store URLs (`s3://`, `gs://`, `az://`) are transparently rewritten to their public HTTPS equivalents, so they work for anonymous / public datasets.
 
 ## Vector tools
 

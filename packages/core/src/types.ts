@@ -37,7 +37,7 @@ export const DEFAULT_BASEMAP = "https://tiles.openfreemap.org/styles/liberty";
 
 export const BLANK_BASEMAP = "";
 
-export const PROJECT_VERSION = "0.1.0";
+export const PROJECT_VERSION = "0.2.0";
 
 export type LayerType =
   | "geojson"
@@ -185,6 +185,32 @@ export interface GeoLibreLayer {
   beforeId?: string;
   geojson?: FeatureCollection;
   sourcePath?: string;
+  /**
+   * Id of the {@link LayerGroup} this layer belongs to, or `undefined` when the
+   * layer sits at the top level of the layer panel. Layers sharing a `groupId`
+   * are kept contiguous in the store's flat `layers` array so the group renders
+   * as one block; see `@geolibre/core`'s `layer-groups` helpers.
+   */
+  groupId?: string;
+}
+
+/**
+ * A named, collapsible folder in the layer panel that organizes a contiguous
+ * run of layers (single-level nesting; groups never contain other groups).
+ *
+ * The group's `visible` flag and `opacity` multiplier are folded into each
+ * child layer's effective render state by `applyGroupEffects` before the map
+ * syncs, so children keep their own stored `visible`/`opacity` values.
+ */
+export interface LayerGroup {
+  id: string;
+  name: string;
+  /** When true, the group's children are hidden in the panel (not on the map). */
+  collapsed: boolean;
+  /** Group-level visibility; ANDed with each child layer's own visibility. */
+  visible: boolean;
+  /** Group-level opacity in [0, 1]; multiplied into each child's opacity. */
+  opacity: number;
 }
 
 /**
@@ -397,6 +423,8 @@ export interface GeoLibreProject {
   basemapVisible: boolean;
   basemapOpacity: number;
   layers: GeoLibreLayer[];
+  /** Named folders that organize the flat `layers` list in the layer panel. */
+  layerGroups?: LayerGroup[];
   styles: Record<string, LayerStyle>;
   preferences: ProjectPreferences;
   plugins?: ProjectPluginState;

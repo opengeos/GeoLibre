@@ -170,6 +170,33 @@ describe("createRasterStoreLayer", () => {
     assert.equal(layer.metadata.rasterOverlayMode, "overlaid");
     assert.deepEqual(layer.metadata.nativeLayerIds, []);
   });
+
+  it("persists band count and serializes band names to pairs", () => {
+    const layer = createRasterStoreLayer(
+      rasterInfo({
+        bandCount: 2,
+        bandNames: new Map([
+          [1, "Red"],
+          [2, "NIR"],
+        ]),
+      }),
+    );
+
+    assert.equal(layer.metadata.bandCount, 2);
+    assert.deepEqual(layer.metadata.bandNames, [
+      [1, "Red"],
+      [2, "NIR"],
+    ]);
+  });
+
+  it("stores a null band count and band names before the header loads", () => {
+    const layer = createRasterStoreLayer(
+      rasterInfo({ bandCount: null, bandNames: null }),
+    );
+
+    assert.equal(layer.metadata.bandCount, null);
+    assert.equal(layer.metadata.bandNames, null);
+  });
 });
 
 describe("syncRasterLayersToStore", () => {
@@ -230,6 +257,38 @@ describe("syncRasterLayersToStore", () => {
     assert.equal(layer.name, "My DEM");
     assert.equal(layer.opacity, 0.4);
     assert.deepEqual(layer.metadata.bounds, [0, 0, 1, 1]);
+  });
+
+  it("preserves GeoLibre-owned symbology across a control resync", () => {
+    const { control } = fakeControl([rasterInfo()]);
+    syncRasterLayersToStore(control);
+
+    const symbology = {
+      classified: true,
+      ramp: "viridis",
+      reversed: false,
+      method: "equal-interval",
+      classCount: 2,
+      breaks: [0, 50, 100],
+    };
+    const layer = useAppStore.getState().layers[0];
+    useAppStore.getState().updateLayer("raster-1", {
+      metadata: { ...layer.metadata, rasterSymbology: symbology },
+    });
+
+    // A control event (e.g. bounds arriving) rebuilds the store layer's
+    // metadata wholesale; the symbology must survive since it is not on the
+    // control's RasterLayerInfo.
+    syncRasterLayersToStore(
+      fakeControl([
+        rasterInfo({ bounds: { west: 0, south: 0, east: 1, north: 1 } }),
+      ]).control,
+    );
+
+    assert.deepEqual(
+      useAppStore.getState().layers[0].metadata.rasterSymbology,
+      symbology,
+    );
   });
 
   it("refreshes the saved panel collapsed state", () => {
@@ -360,6 +419,70 @@ describe("wireRasterStoreSync", () => {
 
     useAppStore.getState().addLayer(otherStoreLayer());
     useAppStore.getState().updateLayer("unrelated", { opacity: 0.5 });
+
+    assert.deepEqual(calls, []);
+  });
+
+  it("pushes edited rasterState fields through setRasterState", () => {
+    const { control, calls } = fakeControl([rasterInfo()]);
+    syncRasterLayersToStore(control);
+    wireRasterStoreSync(control);
+
+    const layer = useAppStore.getState().layers[0];
+    useAppStore.getState().updateLayer("raster-1", {
+      metadata: {
+        ...layer.metadata,
+        rasterState: {
+          ...(layer.metadata.rasterState as Record<string, unknown>),
+          mode: "single",
+          bands: [2],
+          colormap: "viridis",
+          rescale: [[0, 4000]],
+          nodata: 0,
+          stretch: "sqrt",
+          gamma: 2,
+        },
+      },
+    });
+
+    assert.deepEqual(calls, [
+      {
+        method: "setRasterState",
+        args: [
+          "raster-1",
+          {
+            mode: "single",
+            bands: [2],
+            colormap: "viridis",
+            rescale: [[0, 4000]],
+            nodata: 0,
+            stretch: "sqrt",
+            gamma: 2,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("does not push rasterState when only the symbology metadata changes", () => {
+    const { control, calls } = fakeControl([rasterInfo()]);
+    syncRasterLayersToStore(control);
+    wireRasterStoreSync(control);
+
+    const layer = useAppStore.getState().layers[0];
+    useAppStore.getState().updateLayer("raster-1", {
+      metadata: {
+        ...layer.metadata,
+        rasterSymbology: {
+          classified: true,
+          ramp: "viridis",
+          reversed: false,
+          method: "equal-interval",
+          classCount: 2,
+          breaks: [0, 50, 100],
+        },
+      },
+    });
 
     assert.deepEqual(calls, []);
   });

@@ -56,6 +56,65 @@ const DATA_SOURCE_READERS: Array<{ extensions: string[]; reader: string }> = [
     reader: "ST_Read",
   },
 ];
+
+// ---------------------------------------------------------------------------
+// Cloud object-store URL translation
+// ---------------------------------------------------------------------------
+// s3://, gs://, and az:// URLs are transparently rewritten to their public
+// HTTPS gateway equivalents so they flow through the existing HTTP range reader
+// pipeline without requiring the (unreliable in WASM) httpfs extension or
+// CREATE SECRET. Only anonymous / public access is supported.
+const CLOUD_URL_PATTERN =
+  /\b(s3|gs|az):\/\/([^\s'"`,;)]+)/gi;
+
+/** Map a single cloud URL to its public HTTPS equivalent. */
+function cloudUrlToHttps(scheme: string, path: string): string {
+  const lower = scheme.toLowerCase();
+  const slashIndex = path.indexOf("/");
+  if (lower === "s3") {
+    // s3://bucket/key → https://bucket.s3.amazonaws.com/key
+    const bucket = slashIndex >= 0 ? path.slice(0, slashIndex) : path;
+    const key = slashIndex >= 0 ? path.slice(slashIndex) : "";
+    return `https://${bucket}.s3.amazonaws.com${key}`;
+  }
+  if (lower === "gs") {
+    // gs://bucket/key → https://storage.googleapis.com/bucket/key
+    return `https://storage.googleapis.com/${path}`;
+  }
+  // az://account/container/key → https://account.blob.core.windows.net/container/key
+  const account = slashIndex >= 0 ? path.slice(0, slashIndex) : path;
+  const rest = slashIndex >= 0 ? path.slice(slashIndex) : "";
+  return `https://${account}.blob.core.windows.net${rest}`;
+}
+
+/**
+ * Replace every `s3://`, `gs://`, and `az://` URL in the SQL text with its
+ * public HTTPS equivalent. Operates via {@link maskSqlLiterals} so URLs inside
+ * comments and quoted identifiers are left untouched, but URLs inside string
+ * literals (reader-function arguments) ARE translated since the user intends
+ * those to be data sources.
+ */
+export function rewriteCloudUrls(sql: string): string {
+  // Mask only comments and quoted identifiers (keep string literals intact) —
+  // cloud URLs inside reader args like read_parquet('s3://…') must be rewritten.
+  const masked = maskSqlLiterals(sql, false);
+  let result = "";
+  let lastIndex = 0;
+  // Run the pattern against the original SQL (not the mask) to capture the real
+  // URL text; check the mask only to skip URLs inside comments/identifiers.
+  for (const match of sql.matchAll(CLOUD_URL_PATTERN)) {
+    const index = match.index ?? 0;
+    // If the position is blanked in the mask, it is inside a comment or quoted
+    // identifier — skip it.
+    if (masked[index] === " ") continue;
+    result += sql.slice(lastIndex, index);
+    result += cloudUrlToHttps(match[1], match[2]);
+    lastIndex = index + match[0].length;
+  }
+  result += sql.slice(lastIndex);
+  return result;
+}
+
 const BARE_SOURCE_PATTERN =
   /\b(from|join)\s+((?:https?:\/\/|\/|\.\/|\.\.\/|~\/|[A-Za-z]:[\\/])[^\s,;()]+)/gi;
 
@@ -201,7 +260,7 @@ export async function registerLayerTables(
     registeredFiles?.push(fileName);
     await connection.query(
       `CREATE OR REPLACE TEMP TABLE ${quoteIdentifier(tableName)} AS ` +
-        `SELECT * FROM ST_Read(${quoteSqlString(fileName)})`,
+      `SELECT * FROM ST_Read(${quoteSqlString(fileName)})`,
     );
     registered.push({ tableName, layerName: layer.name });
   }
@@ -275,7 +334,7 @@ async function describeQuery(
     const described = rowsFromResult(
       await connection.query(
         `DESCRIBE SELECT * FROM (${statement}) AS ` +
-          `${quoteIdentifier(SQL_SUBQUERY_ALIAS)} LIMIT 0`,
+        `${quoteIdentifier(SQL_SUBQUERY_ALIAS)} LIMIT 0`,
       ),
     );
     const columnNames = described
@@ -571,9 +630,12 @@ export async function runSqlQuery(
       "Only a single SQL statement is supported. Remove any intermediate semicolons.",
     );
   }
+  // Translate cloud object-store URLs (s3://, gs://, az://) to their public
+  // HTTPS equivalents so they flow through the HTTP range reader pipeline.
+  const withCloudUrls = rewriteCloudUrls(cleaned);
   // Wrap bare URLs/paths after FROM/JOIN in the matching reader so the
   // convenient `SELECT * FROM https://…/x.parquet` form runs.
-  const rewritten = rewriteBareSources(cleaned);
+  const rewritten = rewriteBareSources(withCloudUrls);
 
   const db = await getDatabase();
   const connection = await db.connect();
@@ -635,8 +697,8 @@ export async function runSqlQuery(
         : "";
       const result = await connection.query(
         `SELECT *${excludeClause} REPLACE (ST_AsText(${geomId}) AS ${geomId}), ` +
-          `ST_AsGeoJSON(${geomId}) AS ${hiddenId} ` +
-          `FROM (${statement}) AS ${quoteIdentifier(SQL_SUBQUERY_ALIAS)}`,
+        `ST_AsGeoJSON(${geomId}) AS ${hiddenId} ` +
+        `FROM (${statement}) AS ${quoteIdentifier(SQL_SUBQUERY_ALIAS)}`,
       );
       const allColumns = columnNamesFromResult(result);
       const columns = allColumns.filter(

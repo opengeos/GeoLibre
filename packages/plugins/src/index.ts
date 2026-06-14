@@ -102,6 +102,21 @@ export {
   restoreRasterLayers,
 } from "./plugins/maplibre-raster";
 export {
+  RASTER_MAX_CLASSES,
+  RASTER_MIN_CLASSES,
+  type RasterBandStats,
+  type RasterClassificationMethod,
+  type RasterSymbology,
+  clampRasterClassCount,
+  computeRasterBreaks,
+  defaultRasterSymbology,
+  savedRasterSymbology,
+} from "./plugins/raster-symbology";
+export {
+  RASTER_SOURCE_KIND,
+  getRasterBandStats,
+} from "./plugins/raster-symbology-texture";
+export {
   closeVectorLayerPanel,
   openVectorLayerPanel,
   reloadVectorControlLayer,

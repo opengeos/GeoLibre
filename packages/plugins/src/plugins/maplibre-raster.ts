@@ -14,6 +14,11 @@ import {
   unwireRasterStoreSync,
   wireRasterStoreSync,
 } from "./raster-layer-sync";
+import {
+  activateRasterClassification,
+  disposeAllRasterClassification,
+  disposeRasterClassification,
+} from "./raster-symbology-texture";
 
 const rasterControlPosition: GeoLibreMapControlPosition = "top-left";
 const RASTER_PANEL_CLASS = "geolibre-raster-panel";
@@ -295,6 +300,11 @@ async function ensureRasterControl(
     // The control mounts hidden: project restore must not surface a map
     // button the user never asked for. openRasterLayerPanel shows it.
     await patchTauriRasterOverlayFactory(rasterControl);
+    // Patch the deck.gl render path so classified single-band rasters sample a
+    // custom stepped colormap. Must run after addMapControl: the LayerManager
+    // (and its _renderTileFor / _device) is created in the control's onAdd,
+    // not its constructor.
+    activateRasterClassification(rasterControl);
     hideRasterControl(rasterControl);
     disableRasterClickOutsideCollapse(rasterControl);
     wireRasterCloseButton(rasterControl);
@@ -347,6 +357,10 @@ function createRasterControl(
   for (const event of ["rasteradd", "rasterchange", "rasterremove"] as const) {
     control.on(event, () => syncRasterLayersToStoreForRuntime(control));
   }
+  // Free the per-layer classification GPU texture when its raster is dropped.
+  control.on("rasterremove", (event) => {
+    if (event.layerId) disposeRasterClassification(event.layerId);
+  });
   // syncRasterLayersToStore re-reads getState().collapsed when these fire.
   // Safe: expand()/collapse() delegate to toggle(), which flips
   // _state.collapsed BEFORE emitting the event (verified against v0.2.0) --
@@ -481,6 +495,7 @@ function patchRasterControlOnRemove(
       restorePanelExpandTimeout = null;
     }
     unwireRasterStoreSync();
+    disposeAllRasterClassification();
     // A control torn down mid-restore must not leave its successor
     // permanently suppressing store sync events.
     resetRasterStoreSyncSuspension();

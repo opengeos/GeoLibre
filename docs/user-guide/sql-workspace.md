@@ -25,6 +25,29 @@ FROM https://data.source.coop/giswqs/opengeos/countries.parquet
 LIMIT 100;
 ```
 
+## Cloud URLs (s3://, gs://, az://)
+
+Cloud object-store URLs are transparently rewritten to their public HTTPS equivalents, so you can use them directly in queries:
+
+```sql
+-- Amazon S3
+SELECT * FROM read_parquet('s3://bucket/path/to/data.parquet') LIMIT 10;
+
+-- Google Cloud Storage
+SELECT * FROM read_parquet('gs://bucket/path/to/data.parquet') LIMIT 10;
+
+-- Azure Blob Storage
+SELECT * FROM read_parquet('az://account/container/data.parquet') LIMIT 10;
+```
+
+The bare `FROM s3://…` form works too — the workspace wraps it in the matching reader automatically.
+
+!!! note "Public access only"
+    Cloud URL translation targets anonymous / public buckets. Private buckets that require credentials are not yet supported.
+
+!!! tip "CORS"
+    Browser-side reads require the bucket's CORS policy to allow cross-origin requests. Most public dataset buckets (e.g. AWS Open Data, Source Cooperative) already allow this. If you hit a CORS error, check the bucket's CORS configuration.
+
 ## Sample queries and history
 
 - **Sample queries** and **Sample query for layer** menus drop ready-made queries into the editor to get you started.

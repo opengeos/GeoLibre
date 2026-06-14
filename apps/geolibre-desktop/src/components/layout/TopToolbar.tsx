@@ -601,6 +601,7 @@ export function TopToolbar({
       basemapVisible: state.basemapVisible,
       basemapOpacity: state.basemapOpacity,
       layers: state.layers,
+      layerGroups: state.layerGroups,
       preferences: state.preferences,
       plugins: {
         ...getPluginManager().getProjectState(),
