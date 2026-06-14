@@ -121,7 +121,26 @@ const RADIX_OPTIMIZE_EXCLUDES = [
 
 function manualChunks(id: string): string | undefined {
   if (!id.includes("node_modules")) return undefined;
+  // Only route JS/TS modules into manual chunks. The name-based rules below match
+  // on the module id, so a package's *stylesheet* (e.g.
+  // `maplibre-gl-duckdb/dist/style.css`, imported eagerly in main.tsx so plugin
+  // controls are styled) would otherwise be assigned to that package's JS chunk
+  // and bundled into it. Importing the CSS in the boot entry then forces the
+  // whole heavy plugin JS to load at boot just to fetch its stylesheet, dragging
+  // DuckDB, Earth Engine, GeoAgent, Mapillary, etc. into the offline-critical
+  // boot graph — a cold offline reload can't fetch those runtime-cached chunks
+  // and the shell never mounts (see e2e/pwa.spec.ts). Let CSS and other assets
+  // fall through to default handling so only their JS is code-split.
+  if (!/\.[mc]?[jt]sx?(?:\?|$)/.test(id)) return undefined;
+  // Keep @duckdb/duckdb-wasm AND its apache-arrow dependency together in one
+  // lazily-fetched chunk. apache-arrow is shared with maplibre-gl-duckdb; if it
+  // is left to default chunking it can be hoisted into a chunk the eager
+  // `maplibre` chunk imports, dragging the heavy DuckDB engine into the app's
+  // offline-critical boot graph (the cold offline reload then can't fetch it and
+  // the shell never mounts — see e2e/pwa.spec.ts). Co-locating it here keeps both
+  // out of boot.
   if (id.includes("@duckdb/duckdb-wasm")) return "duckdb";
+  if (id.includes("apache-arrow")) return "duckdb";
   // PGlite + the ~18.8 MB PostGIS extension only load when the user picks the
   // PostGIS SQL engine; keep them in their own lazily-fetched chunk.
   if (id.includes("@electric-sql/pglite")) return "pglite";
@@ -132,6 +151,11 @@ function manualChunks(id: string): string | undefined {
   if (id.includes("@google/earthengine")) return "earth-engine-browser";
   if (id.includes("mapillary-js")) return "mapillary";
   if (id.includes("@geoman-io/maplibre-geoman-free")) return "maplibre-geoman";
+  // maplibre-gl-duckdb pulls in @duckdb/duckdb-wasm + apache-arrow and is only
+  // loaded on demand (the DuckDB map control). It must NOT fall through to the
+  // generic `maplibre-gl` rule below, which would fold it into the eager
+  // `maplibre` chunk and force DuckDB into boot. Give it its own lazy chunk.
+  if (id.includes("maplibre-gl-duckdb")) return "maplibre-duckdb";
   if (id.includes("maplibre-gl")) return "maplibre";
   // Returning undefined hands remaining node_modules back to Rollup's default
   // chunking. We intentionally do not group them into a single "vendor" chunk:

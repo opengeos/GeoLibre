@@ -32,7 +32,6 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { runSqlQuery } from "../../lib/sql-workspace";
 import {
   isTauri,
   loadDroppedRasterFiles,
@@ -450,6 +449,14 @@ export function DesktopShell({
       try {
         // The query is the layer's own stored SQL from the user's project; it is
         // intentionally run unrestricted against the in-memory DuckDB instance.
+        // Import the DuckDB-WASM engine lazily here, not at module load: a static
+        // import would pull the heavy `@duckdb/duckdb-wasm` chunk into the app's
+        // boot graph (DesktopShell is eagerly imported by App), which then has to
+        // load before the shell renders. That broke the offline cold boot — the
+        // chunk is runtime-cached, not precached, so a cache miss failed the boot
+        // and the map never mounted (see e2e/pwa.spec.ts). Loading it on first
+        // materialize keeps DuckDB out of the offline-critical boot path.
+        const { runSqlQuery } = await import("../../lib/sql-workspace");
         const result = await runSqlQuery(query, useAppStore.getState().layers);
         if (!result.geojson) {
           throw new Error("The query did not return a geometry column.");
