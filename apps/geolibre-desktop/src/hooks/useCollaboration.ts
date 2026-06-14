@@ -1,4 +1,6 @@
 import {
+  applyProjectToStore,
+  clearHistory,
   serializeProject,
   useAppStore,
   type CollaborationMode,
@@ -108,22 +110,41 @@ export function useCollaboration(
     conn.send({ type: "snapshot", project, rev: revRef.current });
   };
 
-  const applyRemoteSnapshot = (project: GeoLibreProject): void => {
+  const applyRemoteSnapshot = (
+    project: GeoLibreProject,
+    initial: boolean,
+  ): void => {
     // Keep each participant's own camera: replace the incoming view with the
     // local one before applying, so a peer's edit never yanks our viewport.
     // Where others are looking is conveyed by presence viewport rectangles.
     const localView =
       mapControllerRef.current?.readView() ?? useAppStore.getState().mapView;
     const merged: GeoLibreProject = { ...project, mapView: localView };
-    useAppStore
-      .getState()
-      .loadProject(merged, null, { rememberRecent: false, presenting: false });
+    if (initial) {
+      // First bootstrap (the welcome snapshot): a one-time full loadProject is
+      // fine and runs the plugin/native-layer restoration so the joiner sees
+      // the host's existing 3D-tiles/deck/raster layers.
+      useAppStore
+        .getState()
+        .loadProject(merged, null, { rememberRecent: false, presenting: false });
+    } else {
+      // Incremental remote edit: apply the project slice DIRECTLY, never via
+      // loadProject. loadProject bumps `projectGeneration`, which re-runs
+      // DesktopShell's heavy plugin/native-layer restoration on every remote
+      // snapshot and races the map into "Map failed to render". MapCanvas
+      // reconciles from the changed `layers`/basemap refs and store-subscribing
+      // plugins (deck-viz) rebuild on their own, so a plain slice update is
+      // enough. clearHistory keeps remote edits out of the local undo stack.
+      const applied = applyProjectToStore(merged);
+      useAppStore.setState({ ...applied });
+      clearHistory();
+    }
     // Cache the POST-normalization serialization (mirrors useEmbedBridge): the
-    // store update loadProject just triggered re-serializes to this exact
-    // string and is suppressed, so a remote apply never echoes back as a new
-    // snapshot. Serializing `merged` (the pre-normalization input) instead
-    // would mismatch applyProjectToStore's normalized output (deduped styles,
-    // defaults, reordering) and create a broadcast feedback loop.
+    // store update we just made re-serializes to this exact string and is
+    // suppressed, so a remote apply never echoes back as a new snapshot.
+    // Serializing `merged` (the pre-normalization input) instead would mismatch
+    // applyProjectToStore's normalized output (deduped styles, defaults,
+    // reordering) and create a broadcast feedback loop.
     lastContentRef.current = serializeProject(
       buildProjectSnapshot(mapControllerRef),
     );
@@ -144,12 +165,12 @@ export function useCollaboration(
           participants: message.participants,
           error: null,
         });
-        if (message.snapshot) applyRemoteSnapshot(message.snapshot);
+        if (message.snapshot) applyRemoteSnapshot(message.snapshot, true);
         break;
       }
       case "snapshot":
         if (message.origin !== selfIdRef.current) {
-          applyRemoteSnapshot(message.project);
+          applyRemoteSnapshot(message.project, false);
         }
         break;
       case "presence": {
