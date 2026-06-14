@@ -951,6 +951,11 @@ export function SettingsDialog({
                                 ? t("settings.geocoding.optionalKey")
                                 : t("settings.geocoding.noKey")}
                           </p>
+                          {provider.browserCorsRestricted ? (
+                            <p className="text-xs text-amber-600 dark:text-amber-500">
+                              {t("settings.geocoding.corsNote")}
+                            </p>
+                          ) : null}
                         </div>
 
                         {provider.acceptsApiKey ? (

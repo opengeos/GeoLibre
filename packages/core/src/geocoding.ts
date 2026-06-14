@@ -123,6 +123,12 @@ export interface GeocodingProvider {
    * geocode.earth endpoint needs a key, a self-hosted instance does not).
    */
   acceptsApiKey: boolean;
+  /**
+   * Whether the provider's API blocks browser cross-origin requests, so it
+   * needs a same-origin proxy to work in the webview. The UI surfaces a hint
+   * when true. Only set for Google's Geocoding API today.
+   */
+  browserCorsRestricted?: boolean;
   /** Default forward endpoint used when the project does not override it. */
   defaultForwardEndpoint: string;
   /** Default reverse endpoint used when the project does not override it. */
@@ -565,6 +571,7 @@ const googleProvider: GeocodingProvider = {
   reverse: true,
   requiresApiKey: true,
   acceptsApiKey: true,
+  browserCorsRestricted: true,
   defaultForwardEndpoint: "https://maps.googleapis.com/maps/api/geocode/json",
   defaultReverseEndpoint: "https://maps.googleapis.com/maps/api/geocode/json",
   // The Geocoding API has no result-count parameter, so the batch loop's

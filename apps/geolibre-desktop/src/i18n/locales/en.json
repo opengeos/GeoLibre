@@ -151,7 +151,8 @@
       "email": "Contact email (optional)",
       "emailPlaceholder": "you@example.org",
       "emailHint": "Sent to identify the client to Nominatim, per its usage policy.",
-      "secretsWarning": "Keys are stored in plain text in the project file and may be exposed when the project is shared."
+      "secretsWarning": "Keys are stored in plain text in the project file and may be exposed when the project is shared. They are also sent as query parameters, so they appear in geocoding request URLs visible in browser DevTools and any proxy logs.",
+      "corsNote": "Google does not officially allow browser requests to its Geocoding API, so requests may be blocked unless served through a same-origin proxy."
     },
     "project": {
       "title": "Project",
@@ -484,6 +485,7 @@
     "provider": "Geocoding provider",
     "providerHint": "Configure provider API keys and endpoints in Settings.",
     "apiKeyRequired": "{{provider}} needs an API key. Add one in Settings to get results.",
+    "corsNote": "Google does not officially allow browser requests to its Geocoding API; requests may be blocked unless served through a same-origin proxy.",
     "addressColumn": "Address column",
     "run": "Geocode",
     "cancel": "Cancel",

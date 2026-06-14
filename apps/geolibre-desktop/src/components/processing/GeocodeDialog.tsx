@@ -357,6 +357,12 @@ export function GeocodeDialog({
             </p>
           ) : null}
 
+          {provider.browserCorsRestricted ? (
+            <p className="text-xs text-amber-600 dark:text-amber-500">
+              {t("geocode.corsNote")}
+            </p>
+          ) : null}
+
           {csv ? (
             <div className="flex flex-col gap-1">
               <Label className="text-xs">{t("geocode.addressColumn")}</Label>
