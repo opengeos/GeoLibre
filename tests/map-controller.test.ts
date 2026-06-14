@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { beforeEach, describe, it } from "node:test";
+import { describe, it } from "node:test";
 import {
   DEFAULT_LAYER_STYLE,
   type GeoLibreLayer,
@@ -137,10 +137,16 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
     setLayerZoomRange: record("setLayerZoomRange"),
     // Camera + query helpers used by the controller's public methods.
     project: (lngLat: [number, number]) => ({ x: lngLat[0], y: lngLat[1] }),
-    queryRenderedFeatures: () => {
-      const features = pendingRenderedFeatures;
-      pendingRenderedFeatures = [];
-      return features;
+    queryRenderedFeatures: (_point?: unknown, opts?: { layers?: string[] }) => {
+      // Honor the layers filter the real map applies, and do NOT clear the
+      // queue on read: identifyFeatures calls this once per synced layer, so
+      // clearing here would starve every layer after the first.
+      if (!opts?.layers) return pendingRenderedFeatures;
+      return pendingRenderedFeatures.filter((feature) =>
+        opts.layers?.includes(
+          (feature as { layer?: { id?: string } }).layer?.id ?? "",
+        ),
+      );
     },
     getCenter: () => ({ lng: -100, lat: 40 }),
     getBounds: () => ({
@@ -155,6 +161,8 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
     getProjection: () => ({ type: "mercator" }),
     flyTo: record("flyTo"),
     fitBounds: record("fitBounds"),
+    addControl: record("addControl"),
+    removeControl: record("removeControl"),
     once: () => {},
     on: () => {},
     off: () => {},
@@ -462,6 +470,15 @@ describe("MapController camera and query helpers", () => {
     assert.equal(controller.readProjection(), "mercator");
   });
 
+  it("normalizes any non-mercator projection to globe", () => {
+    const { map } = makeFakeMap();
+    (map as { getProjection: () => unknown }).getProjection = () => ({
+      type: "globe",
+    });
+    const controller = controllerWith(map);
+    assert.equal(controller.readProjection(), "globe");
+  });
+
   it("flies to a degenerate point box instead of fitting bounds", () => {
     const { map, fake } = makeFakeMap();
     const controller = controllerWith(map);
@@ -489,6 +506,9 @@ describe("MapController camera and query helpers", () => {
     fake.queueRenderedFeatures([
       {
         id: "f1",
+        // The fake honors the layers filter the real map applies, so the
+        // feature must report the style layer it was rendered in.
+        layer: { id: circleId("a") },
         properties: { name: "Site" },
         geometry: { type: "Point", coordinates: [0, 0] },
       },
@@ -499,6 +519,26 @@ describe("MapController camera and query helpers", () => {
     assert.equal(hits[0].layerId, "a");
     assert.equal(hits[0].featureId, "f1");
     assert.deepEqual(hits[0].properties, { name: "Site" });
+  });
+
+  it("restricts identify to the requested layer and skips others", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    controller.syncLayers([pointLayer("a"), pointLayer("b")]);
+
+    // A feature rendered only in layer b must not surface when identify is
+    // scoped to layer a — exercising the per-layer queryRenderedFeatures loop.
+    fake.queueRenderedFeatures([
+      {
+        id: "fb",
+        layer: { id: circleId("b") },
+        properties: {},
+        geometry: { type: "Point", coordinates: [0, 0] },
+      },
+    ]);
+
+    assert.equal(controller.identifyFeatures([0, 0], "a").length, 0);
+    assert.equal(controller.identifyFeatures([0, 0], "b").length, 1);
   });
 
   it("writes story opacity directly to the native paint property", () => {
@@ -534,6 +574,23 @@ describe("MapController camera and query helpers", () => {
     assert.ok(op);
     assert.equal(op.args[2], 1);
   });
+
+  it("sets a paint transition when a duration is provided", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    controller.syncLayers([pointLayer("a")]);
+
+    controller.setStoryLayerOpacity("a", 0.5, 500);
+
+    const transition = fake.calls.find(
+      (c) =>
+        c.method === "setPaintProperty" &&
+        c.args[0] === circleId("a") &&
+        c.args[1] === "circle-opacity-transition",
+    );
+    assert.ok(transition, "transition property set");
+    assert.deepEqual(transition.args[2], { duration: 500 });
+  });
 });
 
 describe("MapController built-in control positions", () => {
@@ -548,6 +605,10 @@ describe("MapController built-in control positions", () => {
     const controller = controllerWith(map);
 
     // geolocate defaults to hidden, so setting its position just records it.
+    // The visible-control reposition path tears down and re-creates a real
+    // maplibregl control, whose constructor needs a DOM (`window`) that
+    // `node --test` does not provide, so it cannot be exercised here; the
+    // generic addControl/removeControl passthrough below covers the map calls.
     const ok = controller.setBuiltInControlPosition("geolocate", "bottom-right");
 
     assert.equal(ok, true);
@@ -555,5 +616,30 @@ describe("MapController built-in control positions", () => {
       controller.getBuiltInControlPosition("geolocate"),
       "bottom-right",
     );
+  });
+
+  it("passes a control through to the map and reports success", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    const control = { onAdd: () => document?.createElement?.("div") };
+
+    const added = controller.addControl(control as never, "bottom-left");
+
+    assert.equal(added, true);
+    const call = fake.calls.find((c) => c.method === "addControl");
+    assert.ok(call);
+    assert.deepEqual(call.args, [control, "bottom-left"]);
+  });
+
+  it("swallows errors when removing an already-removed control", () => {
+    const { map } = makeFakeMap();
+    (map as { removeControl: () => void }).removeControl = () => {
+      throw new Error("control already removed");
+    };
+    const controller = controllerWith(map);
+
+    // MapLibre throws if a control was already removed; the controller must
+    // not propagate that.
+    assert.doesNotThrow(() => controller.removeControl({} as never));
   });
 });
