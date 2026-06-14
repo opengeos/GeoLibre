@@ -1,5 +1,6 @@
 import { Button, Textarea } from "@geolibre/ui";
 import {
+  Eraser,
   FilePlus,
   FolderOpen,
   Loader2,
@@ -154,6 +155,14 @@ export function PythonEditorPane({
     setDirty(false);
   };
 
+  const clearEditor = () => {
+    if (!code) return;
+    if (dirty && !window.confirm(t("pythonConsole.discardChanges"))) return;
+    setCode("");
+    // Keep the current filename; the emptied buffer now differs from the file.
+    setDirty(filePath !== null);
+  };
+
   const onKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (completion.tryKey(event)) return;
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
@@ -212,6 +221,15 @@ export function PythonEditorPane({
           onClick={() => void saveScriptAs()}
         >
           <SaveAll className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          title={t("pythonConsole.clearEditor")}
+          onClick={clearEditor}
+        >
+          <Eraser className="h-4 w-4" />
         </Button>
         <span
           className="ml-1 min-w-0 flex-1 truncate text-xs text-muted-foreground"

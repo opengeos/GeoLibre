@@ -245,7 +245,15 @@ async function render({ model, el }) {
     // pre-ready queue stays tiny in practice. Bound it anyway so a caller that
     // bypasses the blocking wait can't grow it without limit (a dropped command
     // simply times out on the Python side).
-    if (pendingCommands.length < 500) pendingCommands.push(msg);
+    if (pendingCommands.length < 500) {
+      pendingCommands.push(msg);
+    } else {
+      // Warn so a full queue is diagnosable; otherwise the dropped command only
+      // surfaces as a confusing TimeoutError on the Python side.
+      console.warn(
+        `[GeoLibre] command queue full (500); dropping "${msg.method}"`,
+      );
+    }
     flushCommands();
   };
   model.on("msg:custom", onCustom);

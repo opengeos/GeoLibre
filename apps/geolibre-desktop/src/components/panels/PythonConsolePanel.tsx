@@ -67,9 +67,12 @@ export function PythonConsolePanel({
   const sectionRef = useRef<HTMLElement>(null);
   const outputRef = useRef<HTMLDivElement>(null);
   const consoleInputRef = useRef<HTMLTextAreaElement>(null);
-  // Tears down an in-flight drag's window listeners; set while dragging so an
-  // unmount mid-drag (e.g. closing the panel) doesn't leak them.
-  const resizeCleanupRef = useRef<(() => void) | null>(null);
+  const editorPaneRef = useRef<HTMLDivElement>(null);
+  // Tear down an in-flight drag's window listeners; set while dragging so an
+  // unmount mid-drag (e.g. closing the panel) doesn't leak them. One per drag
+  // axis so a second drag can't overwrite the other's cleanup.
+  const verticalResizeCleanupRef = useRef<(() => void) | null>(null);
+  const horizontalResizeCleanupRef = useRef<(() => void) | null>(null);
   // Caret to apply after a programmatic console-input change (history recall).
   const historyCaretRef = useRef<number | null>(null);
   // Submitted commands (newest last) for up/down recall, plus the cursor into
@@ -280,7 +283,7 @@ export function PythonConsolePanel({
     const onUp = () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
-      resizeCleanupRef.current = null;
+      verticalResizeCleanupRef.current = null;
       if (frame !== null) window.cancelAnimationFrame(frame);
       setHeight(nextHeight);
       window.dispatchEvent(new Event(PANEL_RESIZE_END_EVENT));
@@ -290,7 +293,7 @@ export function PythonConsolePanel({
 
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
-    resizeCleanupRef.current = () => {
+    verticalResizeCleanupRef.current = () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
       if (frame !== null) window.cancelAnimationFrame(frame);
@@ -309,6 +312,7 @@ export function PythonConsolePanel({
     const startX = event.clientX;
     const startWidth = editorWidth;
     let nextWidth = startWidth;
+    let frame: number | null = null;
     const prevCursor = document.body.style.cursor;
     const prevSelect = document.body.style.userSelect;
     document.body.style.cursor = "col-resize";
@@ -319,27 +323,43 @@ export function PythonConsolePanel({
         MAX_EDITOR_WIDTH,
         Math.max(MIN_EDITOR_WIDTH, startWidth + moveEvent.clientX - startX),
       );
-      setEditorWidth(nextWidth);
+      // Throttle to one DOM write per frame; commit to state only on mouseup.
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        if (editorPaneRef.current) {
+          editorPaneRef.current.style.width = `${nextWidth}px`;
+        }
+      });
     };
     const onUp = () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
-      resizeCleanupRef.current = null;
+      horizontalResizeCleanupRef.current = null;
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      setEditorWidth(nextWidth);
       document.body.style.cursor = prevCursor;
       document.body.style.userSelect = prevSelect;
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
-    resizeCleanupRef.current = () => {
+    horizontalResizeCleanupRef.current = () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      if (frame !== null) window.cancelAnimationFrame(frame);
       document.body.style.cursor = prevCursor;
       document.body.style.userSelect = prevSelect;
     };
   };
 
-  // On unmount, tear down any in-flight drag listeners.
-  useEffect(() => () => resizeCleanupRef.current?.(), []);
+  // On unmount, tear down any in-flight drag listeners (either axis).
+  useEffect(
+    () => () => {
+      verticalResizeCleanupRef.current?.();
+      horizontalResizeCleanupRef.current?.();
+    },
+    [],
+  );
 
   return (
     <section
@@ -410,6 +430,7 @@ export function PythonConsolePanel({
         {editorVisible ? (
           <>
             <div
+              ref={editorPaneRef}
               className="flex min-w-0 flex-col border-r"
               style={{ width: editorWidth }}
             >

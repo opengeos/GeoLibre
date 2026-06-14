@@ -346,7 +346,9 @@ class Map(anywidget.AnyWidget):
                 if slot["done"]:
                     break
                 _check_deadline()
-                time.sleep(0.01)
+                # 20 Hz: imperceptible latency, far less CPU than a 100 Hz spin
+                # (jupyter_ui_poll already pumps 10 kernel events per iteration).
+                time.sleep(0.05)
 
     def request(
         self,

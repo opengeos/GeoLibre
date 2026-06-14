@@ -404,6 +404,7 @@
     "fileOpen": "Open script…",
     "fileSave": "Save script (Ctrl/Cmd+S)",
     "fileSaveAs": "Save script as…",
+    "clearEditor": "Clear editor",
     "runScript": "Run script or selection (Ctrl/Cmd+Enter)",
     "untitled": "untitled.py",
     "discardChanges": "Discard unsaved changes to the current script?",
