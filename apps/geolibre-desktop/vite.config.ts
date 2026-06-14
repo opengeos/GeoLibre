@@ -578,6 +578,22 @@ export default defineConfig({
   },
   envPrefix: ["VITE_", "TAURI_"],
   optimizeDeps: {
+    // Pre-bundle the AI Assistant's heavy deps at dev-server startup. They are
+    // only reached through the lazily-imported assistant panel (and, for the
+    // provider models, through dynamic import() inside it), so Vite would
+    // otherwise discover them on first open and trigger a full-page reload to
+    // re-optimize — which manifests as the map reloading and the panel needing
+    // a second click. Listing them here pre-bundles them up front instead.
+    include: [
+      "@strands-agents/sdk",
+      "@strands-agents/sdk/models/google",
+      "@strands-agents/sdk/models/anthropic",
+      "@strands-agents/sdk/models/openai",
+      "@anthropic-ai/sdk",
+      "@google/genai",
+      "openai",
+      "zod",
+    ],
     // PGlite ships its own WASM + filesystem bundles and must not be pre-bundled
     // by esbuild, which mangles those asset references (per PGlite's Vite guide).
     exclude: [
