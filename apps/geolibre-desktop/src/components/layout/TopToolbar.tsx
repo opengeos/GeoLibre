@@ -661,10 +661,9 @@ export function TopToolbar({
     });
 
   const resolveEnvStripPrompt = (choice: "strip" | "keep" | "cancel") => {
-    setEnvStripPrompt((current) => {
-      current?.resolve(choice);
-      return null;
-    });
+    // Resolve outside the state updater (updaters must be side-effect free).
+    envStripPrompt?.resolve(choice);
+    setEnvStripPrompt(null);
   };
 
   const saveProject = async (options?: {
