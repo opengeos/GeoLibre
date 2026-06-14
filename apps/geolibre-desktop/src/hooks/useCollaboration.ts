@@ -83,6 +83,9 @@ export function useCollaboration(
   // Set when the relay rejects a snapshot as too large; stops further sends so
   // an over-size project doesn't re-fail on every keystroke. Reset on reconnect.
   const syncPausedRef = useRef(false);
+  // Debounces the projectGeneration bump that drives plugin-layer restoration
+  // after a burst of incremental remote edits.
+  const restoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Settles when the current connect attempt joins (welcome) or fatally fails,
   // so start()/join() resolve only on real success and the dialog keeps its
   // busy spinner until then.
@@ -122,6 +125,21 @@ export function useCollaboration(
     conn.send({ type: "snapshot", project, rev: revRef.current });
   };
 
+  // Bump projectGeneration (debounced) to run DesktopShell's plugin/native-layer
+  // restoration once after a burst of incremental edits settles. The bump alone
+  // re-runs the restoration effect; it changes no serialized project field, so
+  // the snapshot subscription dedupes it (no echo).
+  const RESTORE_DEBOUNCE_MS = 200;
+  const scheduleRestore = (): void => {
+    if (restoreTimerRef.current) clearTimeout(restoreTimerRef.current);
+    restoreTimerRef.current = setTimeout(() => {
+      restoreTimerRef.current = null;
+      useAppStore.setState((s) => ({
+        projectGeneration: s.projectGeneration + 1,
+      }));
+    }, RESTORE_DEBOUNCE_MS);
+  };
+
   const applyRemoteSnapshot = (
     project: GeoLibreProject,
     initial: boolean,
@@ -140,16 +158,20 @@ export function useCollaboration(
         .getState()
         .loadProject(merged, null, { rememberRecent: false, presenting: false });
     } else {
-      // Incremental remote edit: apply the project slice DIRECTLY, never via
-      // loadProject. loadProject bumps `projectGeneration`, which re-runs
-      // DesktopShell's heavy plugin/native-layer restoration on every remote
-      // snapshot and races the map into "Map failed to render". MapCanvas
-      // reconciles from the changed `layers`/basemap refs and store-subscribing
-      // plugins (deck-viz) rebuild on their own, so a plain slice update is
-      // enough. clearHistory keeps remote edits out of the local undo stack.
+      // Incremental remote edit: apply the project slice immediately so
+      // MapLibre-native layers (geojson, vector/raster tiles, …) reconcile via
+      // MapCanvas's syncLayers without flicker. We apply directly rather than
+      // via loadProject so the local user's selectedLayerId isn't reset to the
+      // first layer on every remote edit.
       const applied = applyProjectToStore(merged);
       useAppStore.setState({ ...applied });
       clearHistory();
+      // Plugin-rendered layer types (raster-COG, LiDAR, 3D-tiles, deck) are NOT
+      // handled by syncLayers — DesktopShell's restoration effect (keyed on
+      // projectGeneration) renders them. Bump it, debounced, so a burst of edits
+      // triggers that heavier restoration once after it settles rather than on
+      // every snapshot.
+      scheduleRestore();
     }
     // Cache the POST-normalization serialization (mirrors useEmbedBridge): the
     // store update we just made re-serializes to this exact string and is
@@ -388,6 +410,10 @@ export function useCollaboration(
     connRef.current?.close();
     connRef.current = null;
     selfIdRef.current = null;
+    if (restoreTimerRef.current) {
+      clearTimeout(restoreTimerRef.current);
+      restoreTimerRef.current = null;
+    }
     // Drop any in-flight connect promise without settling it; a fresh connect()
     // installs a new one, and the only fatal path settles it explicitly above.
     pendingConnectRef.current = null;
