@@ -26,11 +26,29 @@ const PROVIDER_KEY_NAMES: Record<AssistantProviderId, readonly string[]> = {
   openai: ["OPENAI_API_KEY"],
 };
 
+/**
+ * Selectable models per provider, most capable/common first. The first entry is
+ * also the provider default. Users can still pin any other id via
+ * `GEOLIBRE_ASSISTANT_MODEL`.
+ */
+export const PROVIDER_MODELS: Record<AssistantProviderId, readonly string[]> = {
+  google: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
+  anthropic: ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"],
+  openai: ["gpt-4o", "gpt-4o-mini", "gpt-4.1"],
+};
+
 /** Default model per provider; override with `GEOLIBRE_ASSISTANT_MODEL`. */
 const DEFAULT_MODEL: Record<AssistantProviderId, string> = {
-  google: "gemini-2.5-flash",
-  anthropic: "claude-opus-4-8",
-  openai: "gpt-4o",
+  google: PROVIDER_MODELS.google[0],
+  anthropic: PROVIDER_MODELS.anthropic[0],
+  openai: PROVIDER_MODELS.openai[0],
+};
+
+/** Human-readable provider labels for the UI. */
+export const PROVIDER_LABELS: Record<AssistantProviderId, string> = {
+  google: "Google Gemini",
+  anthropic: "Anthropic",
+  openai: "OpenAI",
 };
 
 /** Provider preference order when several keys are configured. */
@@ -98,6 +116,49 @@ export function resolveProviderConfig(
 /** True when at least one provider key is configured. */
 export function hasProviderKey(env: RuntimeEnv = readRuntimeEnv()): boolean {
   return resolveProviderConfig(env) !== null;
+}
+
+/** The configured API key for a specific provider, or null. */
+export function getApiKey(
+  provider: AssistantProviderId,
+  env: RuntimeEnv = readRuntimeEnv(),
+): string | null {
+  return firstKey(env, PROVIDER_KEY_NAMES[provider]);
+}
+
+/** Providers that currently have an API key, in preference order. */
+export function availableProviders(
+  env: RuntimeEnv = readRuntimeEnv(),
+): AssistantProviderId[] {
+  return PROVIDER_ORDER.filter((provider) => getApiKey(provider, env) !== null);
+}
+
+/** The default model id for a provider. */
+export function defaultModelFor(provider: AssistantProviderId): string {
+  return DEFAULT_MODEL[provider];
+}
+
+/**
+ * Build a config for an explicitly chosen provider/model (the UI picker path).
+ * Falls back to the env model override then the provider default when `model`
+ * is omitted. Returns null when the chosen provider has no API key.
+ *
+ * @param provider The provider the user selected.
+ * @param model An explicit model id, or undefined for the default.
+ * @param env Runtime environment variables.
+ */
+export function configForProvider(
+  provider: AssistantProviderId,
+  model?: string,
+  env: RuntimeEnv = readRuntimeEnv(),
+): AssistantProviderConfig | null {
+  const apiKey = getApiKey(provider, env);
+  if (!apiKey) return null;
+  const modelId =
+    model?.trim() ||
+    env.GEOLIBRE_ASSISTANT_MODEL?.trim() ||
+    DEFAULT_MODEL[provider];
+  return { provider, apiKey, modelId };
 }
 
 /**

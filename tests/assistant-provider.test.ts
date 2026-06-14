@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  availableProviders,
+  configForProvider,
   resolveProviderConfig,
   type RuntimeEnv,
 } from "../apps/geolibre-desktop/src/lib/assistant/provider";
@@ -68,5 +70,50 @@ describe("resolveProviderConfig", () => {
 
   it("ignores blank key values", () => {
     assert.equal(resolveProviderConfig({ GEMINI_API_KEY: "   " }), null);
+  });
+});
+
+describe("availableProviders", () => {
+  it("lists only providers with a configured key, in preference order", () => {
+    assert.deepEqual(availableProviders({}), []);
+    assert.deepEqual(
+      availableProviders({ OPENAI_API_KEY: "o", GEMINI_API_KEY: "g" }),
+      ["google", "openai"],
+    );
+    assert.deepEqual(availableProviders({ ANTHROPIC_API_KEY: "a" }), [
+      "anthropic",
+    ]);
+  });
+});
+
+describe("configForProvider", () => {
+  it("returns null when the chosen provider has no key", () => {
+    assert.equal(configForProvider("anthropic", undefined, { GEMINI_API_KEY: "g" }), null);
+  });
+
+  it("uses the explicit model when provided", () => {
+    const config = configForProvider("google", "gemini-2.5-pro", {
+      GEMINI_API_KEY: "g",
+    });
+    assert.deepEqual(config, {
+      provider: "google",
+      apiKey: "g",
+      modelId: "gemini-2.5-pro",
+    });
+  });
+
+  it("falls back to the env model override, then the provider default", () => {
+    assert.equal(
+      configForProvider("openai", undefined, {
+        OPENAI_API_KEY: "o",
+        GEOLIBRE_ASSISTANT_MODEL: "gpt-4.1",
+      })?.modelId,
+      "gpt-4.1",
+    );
+    assert.equal(
+      configForProvider("anthropic", undefined, { ANTHROPIC_API_KEY: "a" })
+        ?.modelId,
+      "claude-opus-4-8",
+    );
   });
 });

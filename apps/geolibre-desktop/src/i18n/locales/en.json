@@ -186,7 +186,7 @@
       "whiteboxTools": "Whitebox Tools",
       "sqlWorkspace": "SQL Workspace",
       "pythonConsole": "Python Console",
-      "assistant": "Assistant",
+      "assistant": "AI Assistant",
       "geocode": "Geocode Addresses",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
@@ -481,7 +481,7 @@
     "editorPlaceholder": "Write a multi-line Python script here. Ctrl/Cmd+Enter runs it (or the selection) in the console; Tab indents; Ctrl+Space autocompletes."
   },
   "assistant": {
-    "title": "Assistant",
+    "title": "AI Assistant",
     "clear": "Clear conversation",
     "close": "Close assistant",
     "send": "Send",
@@ -491,7 +491,9 @@
     "intro": "Chat with your data. I can run Spatial SQL, add or remove layers, restyle them, and move the map — every change is undoable. Try \"color the countries by population with a graduated red ramp\".",
     "needsKey": "Add an LLM API key (e.g. GEMINI_API_KEY) in Settings → Environment to enable the assistant.",
     "thinking": "Working…",
-    "toolError": "failed"
+    "toolError": "failed",
+    "provider": "LLM provider",
+    "model": "Model"
   },
   "storymap": {
     "title": "Story Map",

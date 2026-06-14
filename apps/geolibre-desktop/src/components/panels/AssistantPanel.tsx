@@ -1,6 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
-import { Button, Textarea, cn } from "@geolibre/ui";
+import { Button, Select, Textarea, cn } from "@geolibre/ui";
 import {
   AlertCircle,
   Eraser,
@@ -21,10 +21,44 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { AssistantSession } from "../../lib/assistant/agent";
-import { hasProviderKey } from "../../lib/assistant/provider";
+import {
+  availableProviders,
+  defaultModelFor,
+  hasProviderKey,
+  PROVIDER_LABELS,
+  PROVIDER_MODELS,
+  type AssistantProviderId,
+} from "../../lib/assistant/provider";
 
 const PANEL_HEIGHT = 360;
 const RUNTIME_ENV_EVENT = "geolibre:runtime-env-change";
+const PROVIDER_STORAGE_KEY = "geolibre.assistant.provider";
+const MODEL_STORAGE_KEY = "geolibre.assistant.model";
+const PROVIDER_IDS: readonly AssistantProviderId[] = [
+  "google",
+  "anthropic",
+  "openai",
+];
+
+/** Read a persisted string setting, ignoring storage failures. */
+function loadStored(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+/** Persist a string setting; ignore quota/privacy-mode failures. */
+function saveStored(key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Best-effort persistence only.
+  }
+}
 
 /** One rendered line in the conversation transcript. */
 interface Turn {
@@ -78,6 +112,18 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   const [input, setInput] = useState("");
   const [running, setRunning] = useState(false);
   const [hasKey, setHasKey] = useState(() => hasProviderKey());
+  const [providers, setProviders] = useState<AssistantProviderId[]>(() =>
+    availableProviders(),
+  );
+  const [provider, setProvider] = useState<AssistantProviderId | null>(() => {
+    const stored = loadStored(PROVIDER_STORAGE_KEY);
+    return stored && PROVIDER_IDS.includes(stored as AssistantProviderId)
+      ? (stored as AssistantProviderId)
+      : null;
+  });
+  const [model, setModel] = useState<string>(
+    () => loadStored(MODEL_STORAGE_KEY) ?? "",
+  );
 
   // One session per mounted panel; conversation history lives inside it.
   const session = useMemo(
@@ -91,16 +137,39 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   // Tear down the session and any in-flight run on unmount.
   useEffect(() => () => session.cancel(), [session]);
 
-  // Track whether a provider key is configured; rebuild the agent on change so
-  // a newly-added key takes effect without reopening the panel.
+  // Track which provider keys are configured; rebuild the agent on change so a
+  // newly-added key takes effect without reopening the panel.
   useEffect(() => {
     const onEnvChange = () => {
       setHasKey(hasProviderKey());
-      session.reset();
+      setProviders(availableProviders());
     };
     window.addEventListener(RUNTIME_ENV_EVENT, onEnvChange);
     return () => window.removeEventListener(RUNTIME_ENV_EVENT, onEnvChange);
-  }, [session]);
+  }, []);
+
+  // Keep the selected provider valid: fall back to the first available one when
+  // the stored choice has no key (e.g. its key was removed).
+  useEffect(() => {
+    if (providers.length === 0) return;
+    setProvider((current) =>
+      current && providers.includes(current) ? current : providers[0],
+    );
+  }, [providers]);
+
+  // Push the resolved provider/model into the session. Selecting null lets the
+  // session auto-resolve from the configured keys.
+  useEffect(() => {
+    if (!provider) {
+      session.setSelection(null);
+      return;
+    }
+    const models = PROVIDER_MODELS[provider];
+    const effectiveModel =
+      model && models.includes(model) ? model : defaultModelFor(provider);
+    if (effectiveModel !== model) setModel(effectiveModel);
+    session.setSelection({ provider, model: effectiveModel });
+  }, [provider, model, session]);
 
   // Keep the latest turn in view.
   useEffect(() => {
@@ -178,6 +247,18 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     }
   };
 
+  const onProviderChange = (value: AssistantProviderId) => {
+    setProvider(value);
+    setModel("");
+    saveStored(PROVIDER_STORAGE_KEY, value);
+    saveStored(MODEL_STORAGE_KEY, "");
+  };
+
+  const onModelChange = (value: string) => {
+    setModel(value);
+    saveStored(MODEL_STORAGE_KEY, value);
+  };
+
   return (
     <section
       aria-label={t("assistant.title")}
@@ -194,6 +275,40 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
           </span>
         ) : null}
         <div className="ml-auto flex items-center gap-1">
+          {hasKey && provider && providers.length > 0 ? (
+            <>
+              {providers.length > 1 ? (
+                <Select
+                  aria-label={t("assistant.provider")}
+                  className="h-8 w-auto text-xs"
+                  value={provider}
+                  disabled={running}
+                  onChange={(event) =>
+                    onProviderChange(event.target.value as AssistantProviderId)
+                  }
+                >
+                  {providers.map((id) => (
+                    <option key={id} value={id}>
+                      {PROVIDER_LABELS[id]}
+                    </option>
+                  ))}
+                </Select>
+              ) : null}
+              <Select
+                aria-label={t("assistant.model")}
+                className="h-8 w-auto text-xs"
+                value={model || defaultModelFor(provider)}
+                disabled={running}
+                onChange={(event) => onModelChange(event.target.value)}
+              >
+                {PROVIDER_MODELS[provider].map((id) => (
+                  <option key={id} value={id}>
+                    {id}
+                  </option>
+                ))}
+              </Select>
+            </>
+          ) : null}
           <Button
             variant="ghost"
             size="icon"

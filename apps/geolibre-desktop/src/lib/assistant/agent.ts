@@ -1,6 +1,11 @@
 import { useAppStore } from "@geolibre/core";
 import { Agent } from "@strands-agents/sdk";
-import { createModel, resolveProviderConfig } from "./provider";
+import {
+  configForProvider,
+  createModel,
+  resolveProviderConfig,
+  type AssistantProviderId,
+} from "./provider";
 import {
   createAssistantTools,
   describeLayers,
@@ -31,12 +36,26 @@ export type AssistantStreamEvent =
  */
 export class AssistantSession {
   private agent: Agent | null = null;
+  /** Explicit provider/model chosen in the UI; null means auto-resolve. */
+  private selection: { provider: AssistantProviderId; model?: string } | null =
+    null;
 
   constructor(private readonly deps: AssistantToolDeps) {}
 
   /** True when a provider API key is currently configured. */
   get available(): boolean {
     return resolveProviderConfig() !== null;
+  }
+
+  /**
+   * Pin the provider/model (from the UI picker), or pass null to auto-resolve
+   * from the configured keys. Rebuilds the agent on the next prompt.
+   */
+  setSelection(
+    selection: { provider: AssistantProviderId; model?: string } | null,
+  ): void {
+    this.selection = selection;
+    this.reset();
   }
 
   /** Drop the underlying agent so the next prompt rebuilds it (and its key). */
@@ -52,7 +71,9 @@ export class AssistantSession {
 
   private async ensureAgent(): Promise<Agent> {
     if (this.agent) return this.agent;
-    const config = resolveProviderConfig();
+    const config = this.selection
+      ? configForProvider(this.selection.provider, this.selection.model)
+      : resolveProviderConfig();
     if (!config) {
       throw new Error(
         "No LLM API key is configured. Add one (e.g. GEMINI_API_KEY) in Settings → Environment.",
