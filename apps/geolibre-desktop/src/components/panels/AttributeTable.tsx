@@ -461,7 +461,11 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     // the sort/filter reorders the list. getItemKey is only called with indices
     // in [0, count), so sorted[index] is always defined.
     getItemKey: (index) => sorted[index].featureId,
-    overscan: 12,
+    // A small cushion of off-screen rows: enough to cover the sticky header's
+    // ~1-row offset (the virtualizer measures from the scroll container top) and
+    // to avoid blank gaps during fast scrolling, without keeping many extra rows
+    // mounted.
+    overscan: 8,
   });
   const virtualRows = rowVirtualizer.getVirtualItems();
   const virtualTotalSize = rowVirtualizer.getTotalSize();
@@ -476,11 +480,13 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   // Bring the selected feature's row into view. With virtualization the row may
   // be unmounted (e.g. when a feature is picked on the map), so a plain CSS
   // highlight would be invisible; scroll the virtualizer to it instead. "auto"
-  // alignment leaves an already-visible row untouched. Re-runs when the table
-  // opens (the viewport is null while closed, so scrollToIndex is a no-op then),
-  // when the sort changes (which can move the selected row off-screen), and when
-  // the row count changes — so the scroll fires once rows materialize
-  // asynchronously (Add Vector Layer layers) and after a filter is cleared.
+  // alignment leaves an already-visible row untouched, so this stays unobtrusive
+  // even when it re-runs on every filter keystroke. Re-runs when the table opens
+  // (the viewport is null while closed, so scrollToIndex is a no-op then), when
+  // the sort changes, when the row count changes (so the scroll fires once rows
+  // materialize asynchronously for Add Vector Layer layers), and when the filter
+  // text changes (two different filters can yield the same row count yet a
+  // different position for the selected row).
   useEffect(() => {
     if (!attributeTableOpen || !selectedFeatureId) return;
     const index = sorted.findIndex(
@@ -488,9 +494,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     );
     if (index >= 0) rowVirtualizer.scrollToIndex(index, { align: "auto" });
     // `sorted`/`rowVirtualizer` are rebuilt every render and so are intentionally
-    // excluded; `sorted.length` is a primitive that stands in for "the row set
-    // changed". The effect re-runs only on the selection/layer/open/sort/count
-    // changes that actually warrant a scroll.
+    // excluded; the dependencies below are the inputs that actually change which
+    // row (if any) the selected feature occupies and warrant a re-scroll.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     selectedFeatureId,
@@ -498,6 +503,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     attributeTableOpen,
     sort,
     sorted.length,
+    attributeFilter,
   ]);
 
   const propKeys = new Set<string>();
