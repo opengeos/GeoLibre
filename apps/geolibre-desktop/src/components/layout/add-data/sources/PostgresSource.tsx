@@ -34,6 +34,8 @@ export function PostgresSource() {
   // after a layer was added.
   useEffect(() => {
     martin.resetOnOpen();
+    // Mount-only: `martin` is intentionally excluded from the deps — re-running
+    // resetOnOpen on every render would clear connection state mid-flow.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

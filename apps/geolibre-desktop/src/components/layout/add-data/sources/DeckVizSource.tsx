@@ -79,6 +79,8 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
   // globe as soon as the Deck.gl Layer dialog opens.
   useEffect(() => {
     ensureMercatorProjection(source.shell.mapControllerRef.current?.getMap());
+    // Mount-only: switch the projection once when the dialog opens.
+    // `mapControllerRef` is a stable ref and must not be a dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
