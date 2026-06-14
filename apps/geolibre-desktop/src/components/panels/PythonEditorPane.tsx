@@ -55,7 +55,8 @@ export function PythonEditorPane({
 }: PythonEditorPaneProps) {
   const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const caretRef = useRef<number | null>(null);
+  // Selection [start, end] to restore after a programmatic `code` change.
+  const caretRef = useRef<[number, number] | null>(null);
   const [code, setCode] = useState("");
   const [filePath, setFilePath] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -71,13 +72,13 @@ export function PythonEditorPane({
     tabTriggers: false,
   });
 
-  // Apply a queued caret after a programmatic `code` change (indent insert).
+  // Apply a queued selection after a programmatic `code` change (indent insert).
   useEffect(() => {
     if (caretRef.current === null) return;
-    const pos = caretRef.current;
+    const [start, end] = caretRef.current;
     caretRef.current = null;
     const ta = textareaRef.current;
-    if (ta) ta.setSelectionRange(pos, pos);
+    if (ta) ta.setSelectionRange(start, end);
   }, [code]);
 
   const onChange = (event: ReactChangeEvent<HTMLTextAreaElement>) => {
@@ -89,10 +90,22 @@ export function PythonEditorPane({
   const insertIndent = () => {
     const ta = textareaRef.current;
     if (!ta) return;
+    const indent = "    "; // 4 spaces (PEP 8)
     const start = ta.selectionStart ?? code.length;
     const end = ta.selectionEnd ?? start;
-    caretRef.current = start + 2;
-    setCode(`${code.slice(0, start)}  ${code.slice(end)}`);
+    if (start === end) {
+      caretRef.current = [start + indent.length, start + indent.length];
+      setCode(code.slice(0, start) + indent + code.slice(end));
+      setDirty(true);
+      return;
+    }
+    // Block-indent every line touched by the selection (don't delete it).
+    const lineStart = code.lastIndexOf("\n", start - 1) + 1;
+    const block = code.slice(lineStart, end);
+    const indented = block.replace(/^/gm, indent);
+    const added = indented.length - block.length;
+    caretRef.current = [start + indent.length, end + added];
+    setCode(code.slice(0, lineStart) + indented + code.slice(end));
     setDirty(true);
   };
 

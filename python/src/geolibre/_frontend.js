@@ -241,11 +241,12 @@ async function render({ model, el }) {
   const onCustom = (msg) => {
     if (!msg || typeof msg !== "object") return;
     if (msg.type !== "geolibre:command") return;
-    // Defensive cap: the blocking request() issues one command at a time, so the
-    // pre-ready queue stays tiny in practice. Bound it anyway so a caller that
-    // bypasses the blocking wait can't grow it without limit (a dropped command
-    // simply times out on the Python side).
-    if (pendingCommands.length < 500) {
+    // Once ready, post straight through; only buffer before the app signals
+    // ready (the queue is flushed on geolibre:ready). Defensive cap so a caller
+    // that bypasses the blocking request() can't grow the queue without limit.
+    if (ready) {
+      post(msg);
+    } else if (pendingCommands.length < 500) {
       pendingCommands.push(msg);
     } else {
       // Warn so a full queue is diagnosable; otherwise the dropped command only
@@ -254,7 +255,6 @@ async function render({ model, el }) {
         `[GeoLibre] command queue full (500); dropping "${msg.method}"`,
       );
     }
-    flushCommands();
   };
   model.on("msg:custom", onCustom);
 

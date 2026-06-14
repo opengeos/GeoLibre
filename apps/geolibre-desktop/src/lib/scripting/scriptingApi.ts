@@ -33,6 +33,15 @@ function allAlgorithms(): ProcessingAlgorithm[] {
   return [...ALGORITHMS, ...VECTOR_TOOLS, ...H3_TOOLS];
 }
 
+/** Validate a required string `layerId` param, with a clear error if missing. */
+function requireLayerId(params: Record<string, unknown>): string {
+  const id = params.layerId;
+  if (typeof id !== "string" || !id) {
+    throw new Error("layerId must be a non-empty string");
+  }
+  return id;
+}
+
 /**
  * Build the scripting command handlers over the live store + map controller.
  *
@@ -72,7 +81,7 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       return getController()?.identifyFeatures(lngLat, layerId) ?? [];
     },
     getLayerFeatures: (params) => {
-      const layerId = params.layerId as string;
+      const layerId = requireLayerId(params);
       const layer = useAppStore
         .getState()
         .layers.find((item) => item.id === layerId);
@@ -95,30 +104,31 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       return useAppStore.getState().addGeoJsonLayer(name, geojson);
     },
     removeLayer: (params) => {
-      useAppStore.getState().removeLayer(params.layerId as string);
+      useAppStore.getState().removeLayer(requireLayerId(params));
       return null;
     },
     setVisibility: (params) => {
       useAppStore
         .getState()
-        .setLayerVisibility(params.layerId as string, Boolean(params.visible));
+        .setLayerVisibility(requireLayerId(params), Boolean(params.visible));
       return null;
     },
     setOpacity: (params) => {
+      const layerId = requireLayerId(params);
       const raw = Number(params.opacity);
       if (!Number.isFinite(raw)) {
         throw new Error("setOpacity: opacity must be a finite number");
       }
       useAppStore
         .getState()
-        .setLayerOpacity(params.layerId as string, Math.min(1, Math.max(0, raw)));
+        .setLayerOpacity(layerId, Math.min(1, Math.max(0, raw)));
       return null;
     },
     setStyle: (params) => {
       useAppStore
         .getState()
         .setLayerStyle(
-          params.layerId as string,
+          requireLayerId(params),
           params.style as Record<string, unknown>,
         );
       return null;
@@ -140,7 +150,7 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       return null;
     },
     zoomToLayer: (params) => {
-      const layerId = params.layerId as string;
+      const layerId = requireLayerId(params);
       const layer = useAppStore
         .getState()
         .layers.find((item) => item.id === layerId);
