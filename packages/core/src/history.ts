@@ -29,6 +29,11 @@ export function getHistoryCoalesceMs(): number {
 let maxHistoryFeatureCount = 500_000;
 
 export function setMaxHistoryFeatureCount(count: number): void {
+  if (!Number.isFinite(count) || count < 0) {
+    throw new RangeError(
+      `maxHistoryFeatureCount must be a non-negative finite number, got ${count}`,
+    );
+  }
   maxHistoryFeatureCount = count;
 }
 
@@ -54,10 +59,12 @@ function distinctFeatureCount(
   let count = 0;
   for (const layer of snapshot.layers ?? []) {
     const geojson = layer?.geojson;
-    const features = geojson?.features;
-    if (!geojson || !Array.isArray(features) || seen.has(geojson)) continue;
+    // Dedup the reference first so a payload shared across snapshots is visited
+    // once even when its `features` is missing/malformed (it then contributes 0).
+    if (!geojson || seen.has(geojson)) continue;
     seen.add(geojson);
-    count += features.length;
+    if (!Array.isArray(geojson.features)) continue;
+    count += geojson.features.length;
   }
   return count;
 }
@@ -79,6 +86,11 @@ export function trimHistoryBySize<T extends HistorySnapshot>(
   pastStates: T[],
   maxFeatures: number,
 ): T[] {
+  if (!Number.isFinite(maxFeatures) || maxFeatures < 0) {
+    throw new RangeError(
+      `maxFeatures must be a non-negative finite number, got ${maxFeatures}`,
+    );
+  }
   if (pastStates.length <= 1) return pastStates;
   const seen = new Set<object>();
   const lastIndex = pastStates.length - 1;

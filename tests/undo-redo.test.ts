@@ -176,14 +176,14 @@ describe("history size budget (issue #341)", () => {
         useAppStore.getState().updateLayer(id, { geojson: bigFC(100) });
       }
       // Without the budget this would be 11 snapshots (add + 10 edits); the
-      // budget keeps only the newest few whose payload fits ~250 features.
-      assert.ok(pastLen() >= 1 && pastLen() <= 3, `got ${pastLen()} snapshots`);
-      // The most recent edit is still undoable.
+      // budget (250) keeps exactly the newest 2 of the 100-feature snapshots.
+      assert.equal(pastLen(), 2, `got ${pastLen()} snapshots`);
+      // The most recent edit is still undoable: undo swaps in the prior payload.
+      const latestGeojson = useAppStore.getState().layers[0].geojson;
       undo();
-      assert.equal(
-        useAppStore.getState().layers[0].geojson?.features.length,
-        100,
-      );
+      const revertedGeojson = useAppStore.getState().layers[0].geojson;
+      assert.notStrictEqual(revertedGeojson, latestGeojson);
+      assert.equal(revertedGeojson?.features.length, 100);
     } finally {
       setMaxHistoryFeatureCount(original);
     }
@@ -208,6 +208,15 @@ describe("history size budget (issue #341)", () => {
     setMaxHistoryFeatureCount(1234);
     assert.equal(getMaxHistoryFeatureCount(), 1234);
     setMaxHistoryFeatureCount(original);
+  });
+
+  it("rejects non-finite or negative budgets", () => {
+    const original = getMaxHistoryFeatureCount();
+    assert.throws(() => setMaxHistoryFeatureCount(Number.NaN), RangeError);
+    assert.throws(() => setMaxHistoryFeatureCount(-1), RangeError);
+    assert.throws(() => setMaxHistoryFeatureCount(Infinity), RangeError);
+    assert.throws(() => trimHistoryBySize([], Number.NaN), RangeError);
+    assert.equal(getMaxHistoryFeatureCount(), original); // unchanged by failed sets
   });
 });
 
