@@ -1,0 +1,98 @@
+{
+  "name": "error-attribute-join-missing-key",
+  "tool": "attribute-join",
+  "description": "A missing target key field is rejected by both engines.",
+  "input": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Raleigh",
+          "pop": 480,
+          "region": "east"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -78.0,
+            35.0
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Charlotte",
+          "pop": 900,
+          "region": "west"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -80.8,
+            35.2
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Asheville",
+          "pop": 95,
+          "region": "west"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -82.5,
+            35.6
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Wilmington",
+          "pop": 120,
+          "region": "east"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -77.9,
+            34.2
+          ]
+        }
+      }
+    ]
+  },
+  "overlay": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "region": "east",
+          "gov": "seat"
+        },
+        "geometry": null
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "region": "west",
+          "gov": "hub"
+        },
+        "geometry": null
+      }
+    ]
+  },
+  "parameters": {
+    "join_field": "region",
+    "how": "left"
+  },
+  "expect": {
+    "error": true
+  }
+}

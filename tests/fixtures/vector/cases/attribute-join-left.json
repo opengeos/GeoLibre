@@ -1,0 +1,156 @@
+{
+  "name": "attribute-join-left",
+  "tool": "attribute-join",
+  "description": "Left attribute join brings the matching table row onto each town.",
+  "input": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Raleigh",
+          "pop": 480,
+          "region": "east"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -78.0,
+            35.0
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Charlotte",
+          "pop": 900,
+          "region": "west"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -80.8,
+            35.2
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Asheville",
+          "pop": 95,
+          "region": "west"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -82.5,
+            35.6
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Wilmington",
+          "pop": 120,
+          "region": "east"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -77.9,
+            34.2
+          ]
+        }
+      }
+    ]
+  },
+  "overlay": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "region": "east",
+          "gov": "seat"
+        },
+        "geometry": null
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "region": "west",
+          "gov": "hub"
+        },
+        "geometry": null
+      }
+    ]
+  },
+  "parameters": {
+    "target_field": "region",
+    "join_field": "region",
+    "how": "left"
+  },
+  "expect": {
+    "featureCount": 4,
+    "geometry": [
+      {
+        "type": "Point",
+        "coordinates": [
+          -78.0,
+          35.0
+        ]
+      },
+      {
+        "type": "Point",
+        "coordinates": [
+          -80.8,
+          35.2
+        ]
+      },
+      {
+        "type": "Point",
+        "coordinates": [
+          -82.5,
+          35.6
+        ]
+      },
+      {
+        "type": "Point",
+        "coordinates": [
+          -77.9,
+          34.2
+        ]
+      }
+    ],
+    "properties": [
+      {
+        "gov": "seat",
+        "name": "Raleigh",
+        "pop": 480,
+        "region": "east"
+      },
+      {
+        "gov": "hub",
+        "name": "Charlotte",
+        "pop": 900,
+        "region": "west"
+      },
+      {
+        "gov": "hub",
+        "name": "Asheville",
+        "pop": 95,
+        "region": "west"
+      },
+      {
+        "gov": "seat",
+        "name": "Wilmington",
+        "pop": 120,
+        "region": "east"
+      }
+    ],
+    "tolerance": 1e-09
+  }
+}

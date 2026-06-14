@@ -1,0 +1,42 @@
+{
+  "name": "reproject-webmercator",
+  "tool": "reproject",
+  "description": "Reinterpret Web Mercator coords and transform to WGS84 (asserted by the Python harness only).",
+  "input": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "p"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -8800000,
+            4200000
+          ]
+        }
+      }
+    ]
+  },
+  "parameters": {
+    "source_crs": "EPSG:3857"
+  },
+  "expect": {
+    "featureCount": 1,
+    "geometryTypes": [
+      "Point"
+    ],
+    "geometry": [
+      {
+        "type": "Point",
+        "coordinates": [
+          -79.05174500251788,
+          35.26535092860737
+        ]
+      }
+    ],
+    "tolerance": 1e-06
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "name": "explode-multipolygon",
+  "tool": "explode",
+  "description": "Explode a multipolygon into its parts.",
+  "input": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "multi"
+        },
+        "geometry": {
+          "type": "MultiPolygon",
+          "coordinates": [
+            [
+              [
+                [
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  1
+                ],
+                [
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  0
+                ],
+                [
+                  0,
+                  0
+                ]
+              ]
+            ],
+            [
+              [
+                [
+                  5,
+                  5
+                ],
+                [
+                  5,
+                  6
+                ],
+                [
+                  6,
+                  6
+                ],
+                [
+                  6,
+                  5
+                ],
+                [
+                  5,
+                  5
+                ]
+              ]
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  "parameters": {},
+  "expect": {
+    "featureCount": 2,
+    "geometryTypes": [
+      "Polygon",
+      "Polygon"
+    ]
+  }
+}

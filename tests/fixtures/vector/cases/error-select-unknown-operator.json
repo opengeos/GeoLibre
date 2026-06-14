@@ -1,0 +1,78 @@
+{
+  "name": "error-select-unknown-operator",
+  "tool": "select-by-value",
+  "description": "An unknown operator is rejected by both engines.",
+  "input": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Raleigh",
+          "pop": 480,
+          "region": "east"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -78.0,
+            35.0
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Charlotte",
+          "pop": 900,
+          "region": "west"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -80.8,
+            35.2
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Asheville",
+          "pop": 95,
+          "region": "west"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -82.5,
+            35.6
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Wilmington",
+          "pop": 120,
+          "region": "east"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -77.9,
+            34.2
+          ]
+        }
+      }
+    ]
+  },
+  "parameters": {
+    "field": "pop",
+    "operator": "between",
+    "value": "1"
+  },
+  "expect": {
+    "error": true
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "name": "intersection-overlap",
+  "tool": "intersection",
+  "description": "Intersection of two overlapping squares.",
+  "input": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "a"
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                0,
+                0
+              ],
+              [
+                0,
+                2
+              ],
+              [
+                2,
+                2
+              ],
+              [
+                2,
+                0
+              ],
+              [
+                0,
+                0
+              ]
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  "overlay": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "b"
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                1,
+                1
+              ],
+              [
+                1,
+                3
+              ],
+              [
+                3,
+                3
+              ],
+              [
+                3,
+                1
+              ],
+              [
+                1,
+                1
+              ]
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  "parameters": {},
+  "expect": {
+    "featureCount": 1,
+    "geometryTypes": [
+      "Polygon"
+    ],
+    "bbox": [
+      1.0,
+      1.0,
+      2.0,
+      2.0
+    ],
+    "tolerance": 1e-06
+  }
+}

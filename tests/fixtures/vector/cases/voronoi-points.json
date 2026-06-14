@@ -1,0 +1,66 @@
+{
+  "name": "voronoi-points",
+  "tool": "voronoi",
+  "description": "Voronoi cells around four points (algorithms differ by engine).",
+  "input": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            2,
+            0
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            1,
+            2
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {},
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -1,
+            1
+          ]
+        }
+      }
+    ]
+  },
+  "parameters": {
+    "type": "voronoi"
+  },
+  "expect": {
+    "featureCount": 4,
+    "geometryTypes": [
+      "Polygon",
+      "Polygon",
+      "Polygon",
+      "Polygon"
+    ]
+  }
+}

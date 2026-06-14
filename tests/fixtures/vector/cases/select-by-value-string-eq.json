@@ -1,0 +1,107 @@
+{
+  "name": "select-by-value-string-eq",
+  "tool": "select-by-value",
+  "description": "String equality is exact and case-sensitive on the raw value.",
+  "input": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Raleigh",
+          "pop": 480,
+          "region": "east"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -78.0,
+            35.0
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Charlotte",
+          "pop": 900,
+          "region": "west"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -80.8,
+            35.2
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Asheville",
+          "pop": 95,
+          "region": "west"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -82.5,
+            35.6
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Wilmington",
+          "pop": 120,
+          "region": "east"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -77.9,
+            34.2
+          ]
+        }
+      }
+    ]
+  },
+  "parameters": {
+    "field": "region",
+    "operator": "eq",
+    "value": "west"
+  },
+  "expect": {
+    "featureCount": 2,
+    "geometry": [
+      {
+        "type": "Point",
+        "coordinates": [
+          -80.8,
+          35.2
+        ]
+      },
+      {
+        "type": "Point",
+        "coordinates": [
+          -82.5,
+          35.6
+        ]
+      }
+    ],
+    "properties": [
+      {
+        "name": "Charlotte",
+        "pop": 900,
+        "region": "west"
+      },
+      {
+        "name": "Asheville",
+        "pop": 95,
+        "region": "west"
+      }
+    ],
+    "tolerance": 1e-09
+  }
+}

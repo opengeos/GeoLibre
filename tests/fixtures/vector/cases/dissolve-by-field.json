@@ -1,0 +1,132 @@
+{
+  "name": "dissolve-by-field",
+  "tool": "dissolve",
+  "description": "Dissolve merges polygons per group; bbox is preserved exactly.",
+  "input": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "a",
+          "grp": "x",
+          "val": 10
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                0,
+                0
+              ],
+              [
+                0,
+                2
+              ],
+              [
+                2,
+                2
+              ],
+              [
+                2,
+                0
+              ],
+              [
+                0,
+                0
+              ]
+            ]
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "b",
+          "grp": "x",
+          "val": 30
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                0.5,
+                0.5
+              ],
+              [
+                0.5,
+                2.5
+              ],
+              [
+                2.5,
+                2.5
+              ],
+              [
+                2.5,
+                0.5
+              ],
+              [
+                0.5,
+                0.5
+              ]
+            ]
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "c",
+          "grp": "y",
+          "val": 5
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                10,
+                10
+              ],
+              [
+                10,
+                12
+              ],
+              [
+                12,
+                12
+              ],
+              [
+                12,
+                10
+              ],
+              [
+                10,
+                10
+              ]
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  "parameters": {
+    "field": "grp"
+  },
+  "expect": {
+    "featureCount": 2,
+    "geometryTypes": [
+      "Polygon",
+      "Polygon"
+    ],
+    "bbox": [
+      0.0,
+      0.0,
+      12.0,
+      12.0
+    ],
+    "tolerance": 1e-06
+  }
+}

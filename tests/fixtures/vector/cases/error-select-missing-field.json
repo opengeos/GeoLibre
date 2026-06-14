@@ -1,0 +1,77 @@
+{
+  "name": "error-select-missing-field",
+  "tool": "select-by-value",
+  "description": "A missing field parameter is rejected by both engines.",
+  "input": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Raleigh",
+          "pop": 480,
+          "region": "east"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -78.0,
+            35.0
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Charlotte",
+          "pop": 900,
+          "region": "west"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -80.8,
+            35.2
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Asheville",
+          "pop": 95,
+          "region": "west"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -82.5,
+            35.6
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Wilmington",
+          "pop": 120,
+          "region": "east"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -77.9,
+            34.2
+          ]
+        }
+      }
+    ]
+  },
+  "parameters": {
+    "operator": "eq",
+    "value": "x"
+  },
+  "expect": {
+    "error": true
+  }
+}

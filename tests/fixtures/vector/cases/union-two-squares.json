@@ -1,0 +1,95 @@
+{
+  "name": "union-two-squares",
+  "tool": "union",
+  "description": "Union merges both layers into one geometry.",
+  "input": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "a"
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                0,
+                0
+              ],
+              [
+                0,
+                2
+              ],
+              [
+                2,
+                2
+              ],
+              [
+                2,
+                0
+              ],
+              [
+                0,
+                0
+              ]
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  "overlay": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "b"
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                1,
+                1
+              ],
+              [
+                1,
+                3
+              ],
+              [
+                3,
+                3
+              ],
+              [
+                3,
+                1
+              ],
+              [
+                1,
+                1
+              ]
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  "parameters": {},
+  "expect": {
+    "featureCount": 1,
+    "geometryTypes": [
+      "Polygon"
+    ],
+    "bbox": [
+      0.0,
+      0.0,
+      3.0,
+      3.0
+    ],
+    "tolerance": 1e-06
+  }
+}

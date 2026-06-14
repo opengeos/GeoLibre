@@ -1,0 +1,54 @@
+{
+  "name": "simplify-line",
+  "tool": "simplify",
+  "description": "Simplify a wiggly line (Douglas-Peucker differs by engine).",
+  "input": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "wiggle"
+        },
+        "geometry": {
+          "type": "LineString",
+          "coordinates": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0.1
+            ],
+            [
+              2,
+              -0.1
+            ],
+            [
+              3,
+              0
+            ],
+            [
+              4,
+              0.05
+            ],
+            [
+              5,
+              0
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  "parameters": {
+    "tolerance": 0.5
+  },
+  "expect": {
+    "featureCount": 1,
+    "geometryTypes": [
+      "LineString"
+    ]
+  }
+}

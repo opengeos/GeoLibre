@@ -1,0 +1,149 @@
+{
+  "name": "spatial-join-inner-intersects",
+  "tool": "spatial-join",
+  "description": "Inner join attaches zone attributes to towns inside the zone.",
+  "input": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Raleigh",
+          "pop": 480,
+          "region": "east"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -78.0,
+            35.0
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Charlotte",
+          "pop": 900,
+          "region": "west"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -80.8,
+            35.2
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Asheville",
+          "pop": 95,
+          "region": "west"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -82.5,
+            35.6
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "Wilmington",
+          "pop": 120,
+          "region": "east"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -77.9,
+            34.2
+          ]
+        }
+      }
+    ]
+  },
+  "overlay": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "zone": "coastal",
+          "code": "01"
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                -78.5,
+                33.5
+              ],
+              [
+                -78.5,
+                35.5
+              ],
+              [
+                -76.5,
+                35.5
+              ],
+              [
+                -76.5,
+                33.5
+              ],
+              [
+                -78.5,
+                33.5
+              ]
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  "parameters": {
+    "predicate": "intersects",
+    "how": "inner"
+  },
+  "expect": {
+    "featureCount": 2,
+    "geometry": [
+      {
+        "type": "Point",
+        "coordinates": [
+          -78.0,
+          35.0
+        ]
+      },
+      {
+        "type": "Point",
+        "coordinates": [
+          -77.9,
+          34.2
+        ]
+      }
+    ],
+    "properties": [
+      {
+        "name": "Raleigh",
+        "pop": 480,
+        "region": "east",
+        "zone": "coastal",
+        "code": "01"
+      },
+      {
+        "name": "Wilmington",
+        "pop": 120,
+        "region": "east",
+        "zone": "coastal",
+        "code": "01"
+      }
+    ],
+    "tolerance": 1e-09
+  }
+}
