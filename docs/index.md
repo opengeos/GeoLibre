@@ -84,6 +84,12 @@ Common raster tools under Processing → Raster: hillshade, slope, aspect, repro
 Embed the full GeoLibre app in a Jupyter notebook with the [`geolibre`](python.md) Python package. An expanded leafmap-style API (`add_geojson`, `add_tile_layer`, `add_cog`, and many more Add Data layer types) drives the map, and the project syncs both ways so UI edits are readable back from Python.
 </div>
 
+<div class="feature-card" markdown>
+### AI Assistant
+
+Chat with your data: a natural-language [assistant](user-guide/ai-assistant.md) that turns plain-English requests into GeoLibre's own operations — Spatial SQL, symbology, add/remove data, and map control — applied through the app so they stay auditable and undoable. Provider-pluggable (Google Gemini, Anthropic, OpenAI) with your own API key, disabled until configured.
+</div>
+
 </div>
 
 ## Learn GeoLibre
@@ -93,6 +99,7 @@ New to GeoLibre? Start with the [User Guide](user-guide/interface.md) for a feat
 - [Interface Overview](user-guide/interface.md): the toolbar, panels, map, and status bar.
 - [Adding Data](user-guide/adding-data.md): every file, web service, cloud, 3D, and database source.
 - [Processing Tools](user-guide/processing.md) and [SQL Workspace](user-guide/sql-workspace.md): analysis with vector, raster, conversion, Whitebox, and DuckDB Spatial SQL.
+- [AI Assistant](user-guide/ai-assistant.md): chat with your data — natural language to SQL, symbology, and map control.
 - [Plugins & Marketplace](user-guide/plugins.md): activate built-ins and install from the registry.
 - [Your First Map](tutorials/first-map.md): add a layer, style it, inspect it, and share it.
 

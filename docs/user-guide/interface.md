@@ -12,7 +12,7 @@ The toolbar across the top of the window groups every action into seven menus:
 | --- | --- |
 | **Project** | Create, open, save, share, and print projects. See [Projects](projects.md). |
 | **Add Data** | Add layers from files, web services, cloud formats, 3D data, and databases. See [Adding Data](adding-data.md). |
-| **Processing** | Run vector, raster, conversion, Whitebox, and SQL tools. See [Processing Tools](processing.md) and [SQL Workspace](sql-workspace.md). |
+| **Processing** | Run vector, raster, conversion, Whitebox, and SQL tools, plus the [AI Assistant](ai-assistant.md). See [Processing Tools](processing.md) and [SQL Workspace](sql-workspace.md). |
 | **Controls** | Toggle map controls and component panels (Measure, Bookmark, Minimap, and more). See [Map Controls & Tools](map-controls.md). |
 | **Plugins** | Activate built-in plugins and set their on-map position. See [Plugins & Marketplace](plugins.md). |
 | **Settings** | Map preferences, layout, environment variables, project settings, and Manage Plugins. See [Settings & Preferences](settings.md). |
