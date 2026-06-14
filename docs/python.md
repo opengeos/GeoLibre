@@ -81,6 +81,22 @@ m.add_choropleth(
 )
 ```
 
+Add a legend, a colorbar, and a swipe (split-map) comparison:
+
+```python
+# A built-in land-cover legend, or your own {label: color} dict.
+m.add_legend(builtin="nlcd")
+m.add_legend(legend_dict={"Water": "#0000ff", "Land": "#00ff00"})
+
+# A colorbar for a continuous raster.
+m.add_colorbar(colormap="terrain", vmin=0, vmax=4000, label="Elevation", units="m")
+
+# Compare two layers (or a layer against the basemap) with a swipe slider.
+before = m.add_cog("https://example.com/before.tif", name="Before")
+after = m.add_cog("https://example.com/after.tif", name="After")
+m.split_map(before, after)
+```
+
 ## Two-way sync
 
 Because the project syncs both ways, you can pan or zoom the map in the UI and
@@ -198,6 +214,10 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `add_3d_tiles(url, name=, altitude_offset=, request_headers=, **style)` | Add a 3D Tiles `tileset.json`. |
 | `add_video(urls, coordinates, name=, **style)` | Add a georeferenced video (four `[lng, lat]` corners). |
 | `add_basemap(basemap)` | Set the background basemap. |
+| `split_map(left_layers=None, right_layers=None, orientation=, position=, control_position=)` | Add a swipe (split-map) comparison slider between two layer sets. |
+| `add_legend(title=None, legend_dict=, labels=, colors=, builtin=, position=, shape=)` | Add a legend from a `{label: color}` dict, parallel `labels`/`colors`, or a `builtin` preset (`"nlcd"`, `"esa_worldcover"`). |
+| `add_colorbar(colormap=, vmin=, vmax=, label=, units=, colors=, orientation=, position=)` | Add a colorbar for a continuous raster, from a named colormap or custom `colors`. |
+| `add_colormap(colormap, vmin=, vmax=, label=, **kwargs)` | Add a colorbar from a named colormap (leafmap-style alias of `add_colorbar`). |
 | `set_center(lng, lat, zoom=None)` | Center (and optionally zoom) the map. |
 | `set_center_zoom(lng, lat, zoom=None)` | Alias of `set_center` (leafmap compatibility). |
 | `remove_layer(layer_id)` / `clear_layers()` | Remove layers. |

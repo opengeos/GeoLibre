@@ -20,6 +20,7 @@ from . import project as _project
 from ._server import app_port, register_local_file, serve_app
 from .basemaps import resolve_basemap
 from .color_ramp import graduated_stops
+from .legends import get_builtin_legend
 
 _HERE = pathlib.Path(__file__).parent
 _STATIC_APP = _HERE / "static" / "app"
@@ -28,6 +29,14 @@ _STATIC_APP = _HERE / "static" / "app"
 # a typo surfaces immediately instead of silently falling back in the front-end.
 _VALID_LAYOUTS = frozenset({"embed", "full", "maponly"})
 _VALID_THEMES = frozenset({"light", "dark"})
+
+# Accepted values for the split-map / legend / colorbar helpers, validated up
+# front so a typo surfaces in Python instead of silently falling back in the app.
+_VALID_CONTROL_POSITIONS = frozenset(
+    {"top-left", "top-right", "bottom-left", "bottom-right"}
+)
+_VALID_ORIENTATIONS = frozenset({"vertical", "horizontal"})
+_VALID_LEGEND_SHAPES = frozenset({"square", "circle", "line"})
 
 
 def _read_local_vector(path: Any, data_format: str | None = None) -> dict[str, Any]:
@@ -1521,6 +1530,312 @@ class Map(anywidget.AnyWidget):
 
     # leafmap compatibility alias for set_center
     set_center_zoom = set_center
+
+    # -- map controls: split map / legend / colorbar --------------------
+
+    @staticmethod
+    def _coerce_layer_ids(value: Any) -> list[str]:
+        """Coerce a layer-id input into a list of layer-id strings.
+
+        Accepts ``None`` (empty), a single layer id string, a :class:`Layer`, or
+        an iterable of those. The literal ``"__basemap__"`` is a valid id (the
+        basemap entry the swipe control recognizes).
+
+        Args:
+            value: The layer input in one of the supported forms.
+
+        Returns:
+            A list of layer-id strings.
+
+        Raises:
+            ValueError: If an entry is neither a string nor a :class:`Layer`.
+        """
+        if value is None:
+            return []
+        if isinstance(value, (str, Layer)):
+            value = [value]
+        ids: list[str] = []
+        for entry in value:
+            if isinstance(entry, Layer):
+                ids.append(entry.id)
+            elif isinstance(entry, str):
+                ids.append(entry)
+            else:
+                raise ValueError(
+                    "Layer reference must be a layer id string or a Layer; got "
+                    f"{entry!r}"
+                )
+        return ids
+
+    def split_map(
+        self,
+        left_layers: Any = None,
+        right_layers: Any = None,
+        *,
+        orientation: str = "vertical",
+        position: float = 50,
+        control_position: str = "top-left",
+    ) -> None:
+        """Add a swipe (split-map) comparison slider between two layer sets.
+
+        Enables the Layer Swipe control, which clips the left/top layers to one
+        side of a draggable slider and the right/bottom layers to the other, for
+        before/after comparisons. Drives the app's built-in swipe plugin through
+        the project, so it appears with no reload.
+
+        Args:
+            left_layers: Layer(s) shown on the left/top of the slider, as a layer
+                id, a :class:`Layer`, or a list of those. The string
+                ``"__basemap__"`` selects the basemap.
+            right_layers: Layer(s) shown on the right/bottom of the slider, in the
+                same forms as ``left_layers``.
+            orientation: ``"vertical"`` (slider moves left/right) or
+                ``"horizontal"`` (slider moves up/down).
+            position: Initial slider position as a percentage in ``[0, 100]``.
+            control_position: Corner for the swipe panel; one of ``"top-left"``,
+                ``"top-right"``, ``"bottom-left"``, ``"bottom-right"``.
+
+        Raises:
+            ValueError: If ``orientation``, ``control_position``, or a layer
+                reference is invalid.
+        """
+        if orientation not in _VALID_ORIENTATIONS:
+            raise ValueError(
+                f"orientation must be one of {sorted(_VALID_ORIENTATIONS)}, "
+                f"got {orientation!r}"
+            )
+        if control_position not in _VALID_CONTROL_POSITIONS:
+            raise ValueError(
+                "control_position must be one of "
+                f"{sorted(_VALID_CONTROL_POSITIONS)}, got {control_position!r}"
+            )
+        left = self._coerce_layer_ids(left_layers)
+        right = self._coerce_layer_ids(right_layers)
+        clamped = min(100.0, max(0.0, float(position)))
+        state = _project.swipe_state(
+            left_layers=left,
+            right_layers=right,
+            orientation=orientation,
+            position=clamped,
+        )
+
+        def mutate(p: dict[str, Any]) -> None:
+            _project.set_plugin_state(
+                p,
+                _project.SWIPE_PLUGIN_ID,
+                state,
+                position=control_position,
+            )
+
+        self._update_project(mutate)
+
+    def _update_components_state(
+        self, key: str, entry_state_builder: Callable[[Any], dict[str, Any]]
+    ) -> None:
+        """Merge one feature's state into the Components plugin settings.
+
+        The Components plugin (legend / colorbar / html) stores all its features
+        under a single settings blob keyed by feature name, so a new legend must
+        be merged in without dropping an existing colorbar (and vice versa).
+
+        Args:
+            key: The feature key (``"legend"`` or ``"colorbar"``).
+            entry_state_builder: Called with the feature's current state (or
+                ``None``) and returns its new state.
+        """
+
+        def mutate(p: dict[str, Any]) -> None:
+            plugins = _project.ensure_plugins_block(p)
+            current = plugins["settings"].get(_project.COMPONENTS_PLUGIN_ID)
+            components = dict(current) if isinstance(current, dict) else {}
+            components[key] = entry_state_builder(components.get(key))
+            # The legend/colorbar restore from their settings blob alone, so the
+            # plugin is configured but not added to activePluginIds (activating
+            # it would also mount the full Components toolbar).
+            _project.set_plugin_state(
+                p,
+                _project.COMPONENTS_PLUGIN_ID,
+                components,
+                activate=False,
+            )
+
+        self._update_project(mutate)
+
+    def add_legend(
+        self,
+        title: str | None = None,
+        *,
+        legend_dict: dict[str, str] | None = None,
+        labels: list[str] | None = None,
+        colors: list[str] | None = None,
+        builtin: str | None = None,
+        position: str = "bottom-left",
+        shape: str = "square",
+    ) -> None:
+        """Add a legend to the map.
+
+        Supply the legend entries one of three ways: a built-in preset
+        (``builtin``), a ``{label: color}`` mapping (``legend_dict``), or parallel
+        ``labels`` and ``colors`` lists. Each call adds another legend, so a map
+        can carry several at once.
+
+        Args:
+            title: Legend title. Defaults to ``"Legend"``, or the preset's title
+                when ``builtin`` is given and no title is passed.
+            legend_dict: A mapping of label to CSS color (preserves order).
+            labels: Item labels, paired position-wise with ``colors``.
+            colors: Item CSS colors, paired position-wise with ``labels``.
+            builtin: A built-in preset name (e.g. ``"nlcd"``,
+                ``"esa_worldcover"``). See
+                :func:`geolibre.legends.builtin_legend_names`.
+            position: Corner for the legend; one of ``"top-left"``,
+                ``"top-right"``, ``"bottom-left"``, ``"bottom-right"``.
+            shape: Swatch shape for every item; ``"square"``, ``"circle"``, or
+                ``"line"``.
+
+        Raises:
+            ValueError: If no entries are supplied, ``labels``/``colors`` lengths
+                differ, or ``position``/``shape``/``builtin`` is invalid.
+        """
+        if position not in _VALID_CONTROL_POSITIONS:
+            raise ValueError(
+                f"position must be one of {sorted(_VALID_CONTROL_POSITIONS)}, "
+                f"got {position!r}"
+            )
+        if shape not in _VALID_LEGEND_SHAPES:
+            raise ValueError(
+                f"shape must be one of {sorted(_VALID_LEGEND_SHAPES)}, "
+                f"got {shape!r}"
+            )
+
+        pairs: list[tuple[str, str]]
+        if builtin is not None:
+            preset = get_builtin_legend(builtin)
+            pairs = list(preset["items"])  # type: ignore[arg-type]
+            if title is None:
+                title = str(preset["title"])
+        elif legend_dict is not None:
+            pairs = [(str(label), str(color)) for label, color in legend_dict.items()]
+        elif labels is not None or colors is not None:
+            if labels is None or colors is None:
+                raise ValueError("labels and colors must be provided together")
+            if len(labels) != len(colors):
+                raise ValueError(
+                    "labels and colors must have the same length "
+                    f"({len(labels)} != {len(colors)})"
+                )
+            pairs = [(str(label), str(color)) for label, color in zip(labels, colors)]
+        else:
+            raise ValueError(
+                "Provide legend entries via builtin=, legend_dict=, or "
+                "labels= and colors=."
+            )
+        if not pairs:
+            raise ValueError("Legend has no items")
+
+        items = [
+            {"label": label, "color": color, "shape": shape}
+            for label, color in pairs
+        ]
+        entry = _project.legend_gui_entry(title or "Legend", items, position)
+        self._update_components_state(
+            "legend",
+            lambda existing: _project.legend_gui_state(entry, existing=existing),
+        )
+
+    def add_colorbar(
+        self,
+        *,
+        colormap: str = "viridis",
+        vmin: float = 0.0,
+        vmax: float = 1.0,
+        label: str = "",
+        units: str = "",
+        colors: list[str] | None = None,
+        orientation: str = "vertical",
+        position: str = "bottom-right",
+    ) -> None:
+        """Add a colorbar for a continuous (single-band) raster.
+
+        Renders a gradient with min/max ticks, from either a named colormap or an
+        explicit list of CSS colors. Each call adds another colorbar.
+
+        Args:
+            colormap: A named colormap (e.g. ``"viridis"``, ``"plasma"``,
+                ``"inferno"``, ``"magma"``, ``"cividis"``, ``"turbo"``,
+                ``"terrain"``). Ignored when ``colors`` is given.
+            vmin: Value at the low end of the colorbar.
+            vmax: Value at the high end of the colorbar.
+            label: Title shown alongside the colorbar.
+            units: Units suffix shown with the values.
+            colors: Optional list of CSS colors defining a custom gradient; when
+                given, the colorbar uses these instead of ``colormap``.
+            orientation: ``"vertical"`` or ``"horizontal"``.
+            position: Corner for the colorbar; one of ``"top-left"``,
+                ``"top-right"``, ``"bottom-left"``, ``"bottom-right"``.
+
+        Raises:
+            ValueError: If ``orientation`` or ``position`` is invalid, or
+                ``colors`` is given but empty.
+        """
+        if orientation not in _VALID_ORIENTATIONS:
+            raise ValueError(
+                f"orientation must be one of {sorted(_VALID_ORIENTATIONS)}, "
+                f"got {orientation!r}"
+            )
+        if position not in _VALID_CONTROL_POSITIONS:
+            raise ValueError(
+                f"position must be one of {sorted(_VALID_CONTROL_POSITIONS)}, "
+                f"got {position!r}"
+            )
+        if colors is not None:
+            if not colors:
+                raise ValueError("colors must be a non-empty list when provided")
+            mode = "custom"
+            custom_colors = ", ".join(str(color) for color in colors)
+        else:
+            mode = "named"
+            custom_colors = ""
+        entry = _project.colorbar_gui_entry(
+            mode=mode,
+            colormap=colormap,
+            custom_colors=custom_colors,
+            vmin=float(vmin),
+            vmax=float(vmax),
+            label=label,
+            units=units,
+            orientation=orientation,
+            position=position,
+        )
+        self._update_components_state(
+            "colorbar",
+            lambda existing: _project.colorbar_gui_state(entry, existing=existing),
+        )
+
+    def add_colormap(
+        self,
+        colormap: str = "viridis",
+        *,
+        vmin: float = 0.0,
+        vmax: float = 1.0,
+        label: str = "",
+        **kwargs: Any,
+    ) -> None:
+        """Add a colorbar from a named colormap (alias of :meth:`add_colorbar`).
+
+        Provided for leafmap parity; ``colormap`` is positional here.
+
+        Args:
+            colormap: A named colormap (see :meth:`add_colorbar`).
+            vmin: Value at the low end of the colorbar.
+            vmax: Value at the high end of the colorbar.
+            label: Title shown alongside the colorbar.
+            **kwargs: Forwarded to :meth:`add_colorbar` (e.g. ``units``,
+                ``orientation``, ``position``).
+        """
+        self.add_colorbar(
+            colormap=colormap, vmin=vmin, vmax=vmax, label=label, **kwargs
+        )
 
     # -- project I/O -----------------------------------------------------
 

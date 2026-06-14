@@ -341,3 +341,185 @@ def test_add_data_without_column_is_plain_geojson(m):
 def test_add_data_with_column_is_choropleth(m):
     m.add_data(_choropleth_fc(), column="pop")
     assert _last_layer(m)["style"]["vectorStyleMode"] == "graduated"
+
+
+# -- split map / legend / colorbar -------------------------------------------
+
+
+def _plugins(widget):
+    return widget.project.get("plugins", {})
+
+
+def test_split_map_activates_swipe_plugin(m):
+    a = m.add_geojson(_choropleth_fc(), name="A")
+    b = m.add_geojson(_choropleth_fc(), name="B")
+    m.split_map(a, b, position=40, control_position="bottom-right")
+    plugins = _plugins(m)
+    assert "maplibre-gl-swipe" in plugins["activePluginIds"]
+    assert plugins["mapControlPositions"]["maplibre-gl-swipe"] == "bottom-right"
+    swipe = plugins["settings"]["maplibre-gl-swipe"]
+    assert swipe["leftLayers"] == [a]
+    assert swipe["rightLayers"] == [b]
+    assert swipe["position"] == 40
+    assert swipe["active"] is True
+
+
+def test_plugins_block_seeds_default_active(m):
+    # A fresh plugins block must keep the app's default plugins active, else
+    # restoreProjectState would tear down the layer control / deck.gl overlay.
+    m.split_map()
+    active = _plugins(m)["activePluginIds"]
+    for plugin_id in (
+        "maplibre-layer-control",
+        "maplibre-deckgl-viz",
+        "maplibre-atmosphere-effects",
+    ):
+        assert plugin_id in active
+
+
+def test_split_map_accepts_layer_objects_and_lists(m):
+    a = m.add_geojson(_choropleth_fc(), name="A")
+    layer = m.get_layer(a)
+    m.split_map(layer, ["__basemap__"])
+    swipe = _plugins(m)["settings"]["maplibre-gl-swipe"]
+    assert swipe["leftLayers"] == [a]
+    assert swipe["rightLayers"] == ["__basemap__"]
+
+
+def test_split_map_clamps_position(m):
+    m.split_map(position=999)
+    assert _plugins(m)["settings"]["maplibre-gl-swipe"]["position"] == 100
+
+
+def test_split_map_rejects_bad_orientation(m):
+    with pytest.raises(ValueError, match="orientation"):
+        m.split_map(orientation="diagonal")
+
+
+def test_split_map_rejects_bad_layer_reference(m):
+    with pytest.raises(ValueError, match="layer id"):
+        m.split_map([123])
+
+
+def test_existing_plugins_block_is_not_reseeded(m):
+    # A project that already carries a plugins block reflects deliberate choices,
+    # so adding a control must not inject the default-active ids into it.
+    project = m.to_project()
+    project["plugins"] = {
+        "manifestUrls": [],
+        "activePluginIds": ["maplibre-layer-control"],
+        "mapControlPositions": {},
+        "settings": {},
+    }
+    m.load_project(project)
+    m.add_legend(legend_dict={"a": "#111"})
+    assert _plugins(m)["activePluginIds"] == ["maplibre-layer-control"]
+
+
+def _components(widget):
+    return _plugins(widget)["settings"]["maplibre-gl-components"]
+
+
+def test_add_legend_from_dict(m):
+    m.add_legend("Cover", legend_dict={"Water": "#0000ff", "Land": "#00ff00"})
+    # The Components plugin restores from settings alone; it is not added to
+    # activePluginIds (that would mount the full Components toolbar).
+    assert "maplibre-gl-components" not in _plugins(m)["activePluginIds"]
+    legend = _components(m)["legend"]
+    assert legend["visible"] is True
+    assert legend["title"] == "Cover"
+    assert legend["hasLegend"] is True
+    assert legend["selectedLegendIndex"] == 0
+    assert legend["legends"][0]["items"] == [
+        {"label": "Water", "color": "#0000ff", "shape": "square"},
+        {"label": "Land", "color": "#00ff00", "shape": "square"},
+    ]
+
+
+def test_add_legend_from_labels_and_colors(m):
+    m.add_legend(labels=["a", "b"], colors=["#111", "#222"], shape="circle")
+    items = _components(m)["legend"]["legends"][0]["items"]
+    assert [i["label"] for i in items] == ["a", "b"]
+    assert all(i["shape"] == "circle" for i in items)
+
+
+def test_add_legend_builtin_nlcd(m):
+    m.add_legend(builtin="nlcd")
+    legend = _components(m)["legend"]
+    assert legend["title"] == "NLCD Land Cover"
+    labels = [i["label"] for i in legend["legends"][0]["items"]]
+    assert "Open Water" in labels
+
+
+def test_add_legend_builtin_esa_alias(m):
+    m.add_legend(builtin="esa")
+    assert _components(m)["legend"]["title"] == "ESA WorldCover"
+
+
+def test_add_legend_unknown_builtin_raises(m):
+    with pytest.raises(ValueError, match="Unknown built-in legend"):
+        m.add_legend(builtin="nope")
+
+
+def test_add_legend_requires_entries(m):
+    with pytest.raises(ValueError, match="Provide legend entries"):
+        m.add_legend("Empty")
+
+
+def test_add_legend_mismatched_labels_colors(m):
+    with pytest.raises(ValueError, match="same length"):
+        m.add_legend(labels=["a", "b"], colors=["#111"])
+
+
+def test_add_legend_appends_multiple(m):
+    m.add_legend(legend_dict={"a": "#111"})
+    m.add_legend(legend_dict={"b": "#222"}, position="top-right")
+    legend = _components(m)["legend"]
+    assert len(legend["legends"]) == 2
+    assert legend["selectedLegendIndex"] == 1
+    assert legend["legends"][1]["legendPosition"] == "top-right"
+
+
+def test_add_colorbar_named(m):
+    m.add_colorbar(colormap="plasma", vmin=0, vmax=255, label="Elevation", units="m")
+    colorbar = _components(m)["colorbar"]
+    assert colorbar["visible"] is True
+    assert colorbar["mode"] == "named"
+    assert colorbar["colormap"] == "plasma"
+    assert colorbar["vmin"] == 0
+    assert colorbar["vmax"] == 255
+    assert colorbar["colorbars"][0]["label"] == "Elevation"
+
+
+def test_add_colorbar_custom_colors(m):
+    m.add_colorbar(colors=["#000000", "#ffffff"])
+    colorbar = _components(m)["colorbar"]
+    assert colorbar["mode"] == "custom"
+    assert colorbar["customColors"] == "#000000, #ffffff"
+
+
+def test_add_colorbar_empty_custom_colors_raises(m):
+    with pytest.raises(ValueError, match="non-empty"):
+        m.add_colorbar(colors=[])
+
+
+def test_add_colorbar_bad_position_raises(m):
+    with pytest.raises(ValueError, match="position"):
+        m.add_colorbar(position="middle")
+
+
+def test_add_colormap_is_colorbar_alias(m):
+    m.add_colormap("inferno", vmin=1, vmax=9, units="K")
+    colorbar = _components(m)["colorbar"]
+    assert colorbar["colormap"] == "inferno"
+    assert colorbar["vmin"] == 1
+    assert colorbar["vmax"] == 9
+
+
+def test_legend_and_colorbar_coexist(m):
+    m.add_legend(legend_dict={"a": "#111"})
+    m.add_colorbar(colormap="viridis")
+    components = _components(m)
+    # Adding a colorbar must not drop the existing legend, and vice versa.
+    assert "legend" in components
+    assert "colorbar" in components
