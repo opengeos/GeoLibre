@@ -97,6 +97,9 @@ export function registerGeoJsonVtSource(
       radius: options.clusterRadius,
       maxZoom: options.clusterMaxZoom,
       extent: TILE_EXTENT,
+      // Match MapLibre's GeoJSON source clustering default so the tiled and
+      // inline (native) clustering paths aggregate at the same point count.
+      minPoints: 2,
     });
     cluster.load(points);
     index = cluster;
@@ -143,9 +146,13 @@ export function ensureGeoJsonVtProtocol(): void {
 
 async function geojsonVtProtocolHandler(
   params: RequestParameters,
+  abortController?: AbortController,
 ): Promise<{ data: ArrayBuffer }> {
   const tile = lookupTile(params.url);
   if (!tile) return { data: new ArrayBuffer(0) };
+  // MapLibre cancels tiles scrolled off-screen; skip the CPU-heavy encode when
+  // the request was already aborted (the result would be discarded anyway).
+  if (abortController?.signal.aborted) return { data: new ArrayBuffer(0) };
   try {
     // vt-pbf bundles an older geojson-vt whose tile type differs nominally from
     // ours; the shapes are runtime-compatible, so cast at the encode boundary.

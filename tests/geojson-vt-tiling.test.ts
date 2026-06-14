@@ -45,13 +45,18 @@ function pointGrid(count: number): GeoJSON.FeatureCollection {
   return { type: "FeatureCollection", features };
 }
 
+// Unique id per layer keeps the module-level tile-index registry from leaking
+// state between tests if one throws before its cleanup runs.
+let layerIdCounter = 0;
+
 function largeLayer(
   count: number,
+  id: string = `big-${layerIdCounter++}`,
   style: Partial<GeoLibreLayer["style"]> = {},
 ): GeoLibreLayer {
   return {
-    id: "big",
-    name: "Big",
+    id,
+    name: id,
     type: "geojson",
     source: { type: "geojson" },
     visible: true,
@@ -218,35 +223,45 @@ describe("geojson-vt protocol", () => {
 describe("syncLayer tiled path", () => {
   it("renders a large layer as a vector source with source-layer'd render layers", () => {
     const { map, sources, layers } = makeMap();
-    syncLayer(map as never, largeLayer(LARGE_VECTOR_FEATURE_THRESHOLD + 1));
+    const id = "big-render";
+    try {
+      syncLayer(map as never, largeLayer(LARGE_VECTOR_FEATURE_THRESHOLD + 1, id));
 
-    const src = sources.get("source-big") as Record<string, unknown>;
-    assert.equal(src.type, "vector");
-    assert.deepEqual(src.tiles, [`${GEOJSONVT_PROTOCOL}://big/{z}/{x}/{y}`]);
+      const src = sources.get(`source-${id}`) as Record<string, unknown>;
+      assert.equal(src.type, "vector");
+      assert.deepEqual(src.tiles, [`${GEOJSONVT_PROTOCOL}://${id}/{z}/{x}/{y}`]);
 
-    const circle = layers.get("layer-big-circle") as Record<string, unknown>;
-    assert.equal(circle.type, "circle");
-    assert.equal(circle["source-layer"], "data");
-    unregisterGeoJsonVtSource("big");
+      const circle = layers.get(`layer-${id}-circle`) as Record<string, unknown>;
+      assert.equal(circle.type, "circle");
+      assert.equal(circle["source-layer"], "data");
+    } finally {
+      unregisterGeoJsonVtSource(id);
+    }
   });
 
   it("switches back to an inline geojson source when shrunk below the threshold", () => {
     const { map, sources, calls } = makeMap();
-    syncLayer(map as never, largeLayer(LARGE_VECTOR_FEATURE_THRESHOLD + 1));
-    assert.equal(
-      (sources.get("source-big") as Record<string, unknown>).type,
-      "vector",
-    );
+    const id = "big-switch";
+    try {
+      syncLayer(map as never, largeLayer(LARGE_VECTOR_FEATURE_THRESHOLD + 1, id));
+      assert.equal(
+        (sources.get(`source-${id}`) as Record<string, unknown>).type,
+        "vector",
+      );
 
-    syncLayer(map as never, largeLayer(10));
-    assert.ok(
-      calls.some((c) => c.method === "removeSource" && c.args[0] === "source-big"),
-      "the vector source should be torn down",
-    );
-    assert.equal(
-      (sources.get("source-big") as Record<string, unknown>).type,
-      "geojson",
-    );
-    unregisterGeoJsonVtSource("big");
+      syncLayer(map as never, largeLayer(10, id));
+      assert.ok(
+        calls.some(
+          (c) => c.method === "removeSource" && c.args[0] === `source-${id}`,
+        ),
+        "the vector source should be torn down",
+      );
+      assert.equal(
+        (sources.get(`source-${id}`) as Record<string, unknown>).type,
+        "geojson",
+      );
+    } finally {
+      unregisterGeoJsonVtSource(id);
+    }
   });
 });

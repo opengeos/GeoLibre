@@ -975,6 +975,32 @@ function setExternalNativeLayerPaint(
   }
 }
 
+// Resolve the point renderer and clustering parameters from a layer's style.
+// The heatmap and cluster renderers only make sense for point geometry, so the
+// setting is ignored on layers that also carry lines/polygons. Shared by the
+// inline and tiled geojson paths so renderer detection lives in one place.
+function resolveVectorRenderMode(
+  layer: GeoLibreLayer,
+  profile: ReturnType<typeof detectGeometryProfile>,
+): {
+  renderer: string;
+  wantCluster: boolean;
+  clusterRadius: number;
+  clusterMaxZoom: number;
+} {
+  const pointOnly =
+    profile.hasPoint && !profile.hasLine && !profile.hasPolygon;
+  const renderer = pointOnly
+    ? styleValue(layer.style, "pointRenderer")
+    : "single";
+  return {
+    renderer,
+    wantCluster: renderer === "cluster",
+    clusterRadius: styleValue(layer.style, "clusterRadius"),
+    clusterMaxZoom: styleValue(layer.style, "clusterMaxZoom"),
+  };
+}
+
 function syncGeoJsonLayer(
   map: maplibregl.Map,
   layer: GeoLibreLayer,
@@ -982,28 +1008,19 @@ function syncGeoJsonLayer(
 ): void {
   const src = sourceId(layer.id);
   const profile = detectGeometryProfile(layer.geojson!);
-
-  // The heatmap and cluster renderers only make sense for point geometry, so
-  // ignore the setting on layers that also carry lines/polygons.
-  const pointOnly =
-    profile.hasPoint && !profile.hasLine && !profile.hasPolygon;
-  const renderer = pointOnly ? styleValue(layer.style, "pointRenderer") : "single";
-  const clusterRadius = styleValue(layer.style, "clusterRadius");
-  const clusterMaxZoom = styleValue(layer.style, "clusterMaxZoom");
-  const wantCluster = renderer === "cluster";
+  const { renderer, wantCluster, clusterRadius, clusterMaxZoom } =
+    resolveVectorRenderMode(layer, profile);
 
   // A layer can drop below the tiling threshold (e.g. a processing tool shrinks
-  // it), leaving behind a vector-tile source from the tiled path. Tear it down
-  // and free its tile index so we can recreate a plain geojson source.
+  // it), or some other code may have left a non-geojson source under this id.
+  // Either way it must be removed before the inline path's setData runs, since
+  // setData only works on a geojson source. Only free a tile index we actually
+  // own (unregister is otherwise a harmless no-op).
   const existingSource = map.getSource(src) as maplibregl.Source | undefined;
-  // Only tear down a vector source we own (the geojson-vt tiled path), never an
-  // unrelated vector source that happens to share the id.
-  const switchingFromTiled =
-    existingSource?.type === "vector" && hasGeoJsonVtSource(layer.id);
-  if (switchingFromTiled) {
+  if (existingSource && existingSource.type !== "geojson") {
     removeGeoJsonRenderLayers(map, layer.id);
     map.removeSource(src);
-    unregisterGeoJsonVtSource(layer.id);
+    if (hasGeoJsonVtSource(layer.id)) unregisterGeoJsonVtSource(layer.id);
   }
 
   // Clustering is a source-level option, so toggling it (or changing its params)
@@ -1055,13 +1072,8 @@ function syncGeoJsonVtLayer(
 ): void {
   const src = sourceId(layer.id);
   const profile = detectGeometryProfile(layer.geojson!);
-
-  const pointOnly =
-    profile.hasPoint && !profile.hasLine && !profile.hasPolygon;
-  const renderer = pointOnly ? styleValue(layer.style, "pointRenderer") : "single";
-  const clusterRadius = styleValue(layer.style, "clusterRadius");
-  const clusterMaxZoom = styleValue(layer.style, "clusterMaxZoom");
-  const wantCluster = renderer === "cluster";
+  const { renderer, wantCluster, clusterRadius, clusterMaxZoom } =
+    resolveVectorRenderMode(layer, profile);
 
   ensureGeoJsonVtProtocol();
 
@@ -1359,10 +1371,25 @@ function applyVectorDataRenderLayers(
   }
 }
 
+// syncs can fire rapidly (e.g. dragging an opacity slider), and this is an O(n)
+// scan that the tiled path now runs against 50k+ feature collections. Memoize by
+// collection reference — the store replaces the object on every mutation.
+const textMarkerCache = new WeakMap<GeoJSON.FeatureCollection, boolean>();
+
 // Keep this predicate aligned with textMarkerFilter: any text-marker-shaped
 // point routes to the symbol layer, even with empty text, so features are
 // never excluded from the circle layer without a matching symbol entry.
 function hasTextMarkerFeatures(
+  collection: GeoJSON.FeatureCollection,
+): boolean {
+  const cached = textMarkerCache.get(collection);
+  if (cached !== undefined) return cached;
+  const result = computeHasTextMarkerFeatures(collection);
+  textMarkerCache.set(collection, result);
+  return result;
+}
+
+function computeHasTextMarkerFeatures(
   collection: GeoJSON.FeatureCollection,
 ): boolean {
   return collection.features.some((feature) => {
