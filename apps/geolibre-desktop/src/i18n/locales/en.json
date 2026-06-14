@@ -494,7 +494,7 @@
     "stop": "Stop",
     "placeholder": "Ask about your data, e.g. \"show countries with population over 50 million\" · Ctrl/Cmd+Enter to send",
     "intro": "Chat with your data. I can run Spatial SQL, add or remove layers, restyle them, and move the map — every change is undoable. Try \"color the countries by population with a graduated red ramp\".",
-    "needsKey": "Add an LLM API key (e.g. GEMINI_API_KEY) in Settings → Environment to enable the assistant.",
+    "needsKey": "Add an LLM API key (GEMINI_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY) in Settings → Environment to enable the assistant.",
     "thinking": "Working…",
     "toolError": "failed",
     "provider": "LLM provider",
