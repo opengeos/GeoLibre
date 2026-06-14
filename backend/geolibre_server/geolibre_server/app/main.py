@@ -4,10 +4,11 @@ GeoLibre processing sidecar (FastAPI).
 Future integrations (v0.9+):
 - GDAL / Rasterio — raster I/O, warping, COG
 - GeoPandas — vector operations, reproject, buffer
-- DuckDB Spatial — SQL on GeoParquet, spatial joins
 - WhiteboxTools — hydrology, terrain analysis
 - Leafmap — interactive mapping helpers
 - GeoAI / SamGeo — segmentation and ML workflows
+
+Spatial SQL is served by the ``/sql`` router (Apache Sedona / SedonaDB).
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from .conversion import router as conversion_router
 from .ml import router as ml_router
 from .ml import stop_child_server
 from .raster import router as raster_router
+from .sql import router as sql_router
 from .vector import router as vector_router
 from .whitebox import router as whitebox_router
 
@@ -45,6 +47,7 @@ app.include_router(whitebox_router)
 app.include_router(conversion_router)
 app.include_router(raster_router)
 app.include_router(vector_router)
+app.include_router(sql_router)
 app.include_router(ml_router)
 
 

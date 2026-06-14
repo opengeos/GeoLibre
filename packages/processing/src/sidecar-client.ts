@@ -696,6 +696,73 @@ export async function mlSegment(
   return (await res.json()) as FeatureCollection;
 }
 
+// --- Spatial SQL (Apache Sedona / SedonaDB) --------------------------------
+
+export interface SqlEngineStatus {
+  available: boolean;
+  message: string;
+}
+
+export interface SedonaSqlLayer {
+  /** View name the SQL references (a sanitised, SQL-safe identifier). */
+  name: string;
+  /** Layer geometry + attributes as a GeoJSON FeatureCollection. */
+  geojson: unknown;
+}
+
+export interface SedonaSqlRequest {
+  sql: string;
+  layers: SedonaSqlLayer[];
+}
+
+export interface SedonaSqlResult {
+  /** Column names in select order (geometry rendered as WKT in `rows`). */
+  columns: string[];
+  /** Result rows keyed by column name. */
+  rows: Record<string, unknown>[];
+  /** Name of the detected geometry column, or null when there is none. */
+  geometry_column: string | null;
+  /** Result as a GeoJSON FeatureCollection when a geometry column is present. */
+  geojson: FeatureCollection | null;
+}
+
+/** Return spatial-SQL (SedonaDB) runtime availability. */
+export async function fetchSqlStatus(
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<SqlEngineStatus> {
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}/sql/status`);
+  } catch (error) {
+    throw sidecarConnectionError(baseUrl, error);
+  }
+  if (!res.ok) {
+    throw new Error(`SQL status failed: HTTP ${res.status}`);
+  }
+  return (await res.json()) as SqlEngineStatus;
+}
+
+/** Run a single Sedona spatial SQL statement via the SedonaDB sidecar. */
+export async function runSedonaSql(
+  request: SedonaSqlRequest,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<SedonaSqlResult> {
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}/sql/run`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request),
+    });
+  } catch (error) {
+    throw sidecarConnectionError(baseUrl, error);
+  }
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Could not run spatial SQL"));
+  }
+  return (await res.json()) as SedonaSqlResult;
+}
+
 async function responseErrorMessage(
   response: Response,
   fallback: string,

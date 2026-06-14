@@ -6,7 +6,7 @@ export { Select } from "./components/select";
 export { Label } from "./components/label";
 export { Slider } from "./components/slider";
 export { Separator } from "./components/separator";
-export { ScrollArea } from "./components/scroll-area";
+export { ScrollArea, type ScrollAreaProps } from "./components/scroll-area";
 export {
   Dialog,
   DialogTrigger,

@@ -433,7 +433,8 @@
     "sqlWorkspace": {
       "description": {
         "postgis": "Run PostGIS SQL against loaded layers. The PostGIS extension is loaded, so ST_* functions are available. The first run loads a ~19 MB database engine.",
-        "duckdb": "Run DuckDB SQL against loaded layers, files, and URLs. The spatial extension is loaded, so ST_* functions are available. Cloud URLs (s3://, gs://, az://) are supported for public data."
+        "duckdb": "Run DuckDB SQL against loaded layers, files, and URLs. The spatial extension is loaded, so ST_* functions are available. Cloud URLs (s3://, gs://, az://) are supported for public data.",
+        "sedona": "Run Apache Sedona spatial SQL against loaded layers. Runs in-browser via CereusDB (a WebAssembly build of SedonaDB); on desktop it uses the SedonaDB sidecar when the optional sedona extra is installed. ST_* functions are available."
       }
     }
   },
