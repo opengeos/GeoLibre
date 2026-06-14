@@ -148,6 +148,22 @@ describe("savedPostgresConnectionLabel", () => {
       "host=localhost password=**** dbname=db",
     );
   });
+
+  it("masks single-quoted passwords that contain spaces", () => {
+    assert.equal(
+      savedPostgresConnectionLabel("host=a password='my secret' dbname=b"),
+      "host=a password=**** dbname=b",
+    );
+  });
+
+  it("masks every password occurrence, not just the first", () => {
+    assert.equal(
+      savedPostgresConnectionLabel(
+        "host=a password=one application_name=x password=two",
+      ),
+      "host=a password=**** application_name=x password=****",
+    );
+  });
 });
 
 describe("geoJsonToPointRows", () => {
@@ -200,5 +216,23 @@ describe("geoJsonToPointRows", () => {
 
   it("returns an empty array when there is no collection", () => {
     assert.deepEqual(geoJsonToPointRows(undefined), []);
+  });
+
+  it("lets geometry coordinates win over lng/lat properties of the same name", () => {
+    const fc: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          // Properties carry their own lng/lat that must NOT shadow the
+          // geometry-derived placement coordinates.
+          properties: { lng: 999, lat: -999, name: "Z" },
+          geometry: { type: "Point", coordinates: [-122, 37] },
+        },
+      ],
+    };
+    assert.deepEqual(geoJsonToPointRows(fc), [
+      { name: "Z", lng: -122, lat: 37 },
+    ]);
   });
 });

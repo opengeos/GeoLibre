@@ -7,7 +7,7 @@
  * matching the original AddDataDialog behavior.
  */
 
-import { useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   stopMartinServer,
   type MartinServerInfo,
@@ -23,8 +23,8 @@ export interface MartinConnection {
   setSelectedSourceId: (id: string) => void;
   status: string | null;
   setStatus: (status: string | null) => void;
-  /** Set once a layer has been added so the server is kept running. */
-  layerAddedRef: React.MutableRefObject<boolean>;
+  /** Mark that a layer was added so the server is kept running across reopens. */
+  markLayerAdded: () => void;
   /** Reset connection state when the PostgreSQL source opens. */
   resetOnOpen: () => void;
   /** Stop and clear the server unless a layer was already added. */
@@ -38,7 +38,11 @@ export function useMartinConnection(): MartinConnection {
   const [status, setStatus] = useState<string | null>(null);
   const layerAddedRef = useRef(false);
 
-  const resetOnOpen = () => {
+  const markLayerAdded = useCallback(() => {
+    layerAddedRef.current = true;
+  }, []);
+
+  const resetOnOpen = useCallback(() => {
     if (!server) layerAddedRef.current = false;
     if (!layerAddedRef.current) {
       setServer(null);
@@ -46,28 +50,41 @@ export function useMartinConnection(): MartinConnection {
       setSelectedSourceId("");
       setStatus(null);
     }
-  };
+  }, [server]);
 
-  const stopTransient = () => {
+  const stopTransient = useCallback(() => {
     if (!server || layerAddedRef.current) return;
-    void stopMartinServer();
+    stopMartinServer().catch((err) => {
+      console.warn("[GeoLibre] Failed to stop Martin:", err);
+    });
     setServer(null);
     setSources([]);
     setSelectedSourceId("");
     setStatus(null);
-  };
+  }, [server]);
 
-  return {
-    server,
-    setServer,
-    sources,
-    setSources,
-    selectedSourceId,
-    setSelectedSourceId,
-    status,
-    setStatus,
-    layerAddedRef,
-    resetOnOpen,
-    stopTransient,
-  };
+  return useMemo(
+    () => ({
+      server,
+      setServer,
+      sources,
+      setSources,
+      selectedSourceId,
+      setSelectedSourceId,
+      status,
+      setStatus,
+      markLayerAdded,
+      resetOnOpen,
+      stopTransient,
+    }),
+    [
+      server,
+      sources,
+      selectedSourceId,
+      status,
+      markLayerAdded,
+      resetOnOpen,
+      stopTransient,
+    ],
+  );
 }

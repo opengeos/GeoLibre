@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@geolibre/ui";
 import { Database } from "lucide-react";
-import { useState, type RefObject } from "react";
+import { useCallback, useMemo, useState, type RefObject } from "react";
 import { AddDataShellProvider } from "./add-data/context";
 import { KIND_DESCRIPTIONS, KIND_LABELS } from "./add-data/constants";
 import { ArcGISSource } from "./add-data/sources/ArcGISSource";
@@ -95,16 +95,32 @@ export function AddDataDialog({
   const title = kind ? KIND_LABELS[kind] : "Add Data";
   const description = kind ? KIND_DESCRIPTIONS[kind] : "";
 
-  const closeDialog = () => {
+  const closeDialog = useCallback(() => {
     martin.stopTransient();
     onOpenChange(false);
-  };
+  }, [martin, onOpenChange]);
 
   const handleOpenChange = (next: boolean) => {
     if (!next && isSubmitting) return;
     if (!next) martin.stopTransient();
     onOpenChange(next);
   };
+
+  // Memoized so context consumers (the source forms) only re-render when shell
+  // state actually changes, not on every shell render. Effective because
+  // `martin` and `closeDialog` are stable across renders (see their hooks).
+  const contextValue = useMemo(
+    () => ({
+      mapControllerRef,
+      addLayer,
+      existingLayers,
+      isSubmitting,
+      setIsSubmitting,
+      closeDialog,
+      martin,
+    }),
+    [mapControllerRef, addLayer, existingLayers, isSubmitting, closeDialog, martin],
+  );
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -118,17 +134,7 @@ export function AddDataDialog({
         </DialogHeader>
 
         {kind ? (
-          <AddDataShellProvider
-            value={{
-              mapControllerRef,
-              addLayer,
-              existingLayers,
-              isSubmitting,
-              setIsSubmitting,
-              closeDialog,
-              martin,
-            }}
-          >
+          <AddDataShellProvider value={contextValue}>
             {renderSource(kind, initialDeckVizKind)}
           </AddDataShellProvider>
         ) : null}

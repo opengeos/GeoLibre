@@ -90,7 +90,6 @@ export function PostgresSource() {
     source.shell.setIsSubmitting(true);
     try {
       await stopMartinServer();
-      martin.layerAddedRef.current = false;
       martin.setServer(null);
       martin.setSources([]);
       martin.setSelectedSourceId("");
@@ -116,7 +115,7 @@ export function PostgresSource() {
       (candidate) => candidate.id === sourceId,
     );
     const tilejsonUrl = martinTileJsonUrl(server, sourceId);
-    martin.layerAddedRef.current = true;
+    martin.markLayerAdded();
     source.addAndClose(
       createBaseLayer(
         source.layerName.trim() ||

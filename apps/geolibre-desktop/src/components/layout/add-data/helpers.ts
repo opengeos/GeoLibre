@@ -164,7 +164,7 @@ export function savedPostgresConnectionLabel(connectionString: string): string {
   } catch {
     return connectionString
       .replace(/(:\/\/[^:\s/@]+:)[^@\s]+@/, "$1****@")
-      .replace(/(password\s*=\s*)('[^']*'|[^\s]+)/i, "$1****");
+      .replace(/(password\s*=\s*)('[^']*'|[^\s]+)/gi, "$1****");
   }
 }
 
