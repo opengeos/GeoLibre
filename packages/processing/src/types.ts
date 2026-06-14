@@ -89,6 +89,11 @@ export interface ProcessingContext {
   duckdb?: DuckDbCapability;
   /** Current map viewport as [west, south, east, north], when available. */
   viewportBounds?: () => [number, number, number, number] | null;
+  /**
+   * Abort signal for long-running or networked tools (e.g. Network analysis),
+   * so in-flight requests can be cancelled when the host dialog closes.
+   */
+  signal?: AbortSignal;
 }
 
 export interface ProcessingAlgorithm {

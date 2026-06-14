@@ -177,6 +177,10 @@ import {
   hasReverseGeocodeConsent,
   recordReverseGeocodeConsent,
 } from "../../lib/reverse-geocode-consent";
+import {
+  hasRoutingConsent,
+  recordRoutingConsent,
+} from "../../lib/routing-consent";
 import { mergeStringLists } from "../../lib/string-lists";
 import { normalizeProjectUrl } from "../../lib/urls";
 import { resolveProjectXyzLayers } from "../../lib/xyz-url";
@@ -448,6 +452,10 @@ export function TopToolbar({
   const [directionsNoticeOpen, setDirectionsNoticeOpen] = useState(false);
   const [reverseGeocodeNoticeOpen, setReverseGeocodeNoticeOpen] =
     useState(false);
+  const [routingNoticeOpen, setRoutingNoticeOpen] = useState(false);
+  const [pendingNetworkTool, setPendingNetworkTool] = useState<
+    "isochrone" | "od-matrix" | null
+  >(null);
   const [osmPbfLoading, setOsmPbfLoading] = useState(false);
   const osmPbfAbortRef = useRef<AbortController | null>(null);
   const [osmPbfDialogOpen, setOsmPbfDialogOpen] = useState(false);
@@ -708,6 +716,23 @@ export function TopToolbar({
     recordReverseGeocodeConsent();
     setReverseGeocodeNoticeOpen(false);
     toggle(REVERSE_GEOCODE_PLUGIN_ID, appApi);
+  };
+  // Network analysis tools send the coordinates of the input points to a public
+  // Valhalla routing server, so they show the same one-time consent notice as
+  // Directions before opening, gated on every activation path (each menu item).
+  const openNetworkTool = (kind: "isochrone" | "od-matrix") => {
+    if (hasRoutingConsent()) {
+      setNetworkToolOpen(kind);
+      return;
+    }
+    setPendingNetworkTool(kind);
+    setRoutingNoticeOpen(true);
+  };
+  const confirmOpenNetworkTool = () => {
+    recordRoutingConsent();
+    setRoutingNoticeOpen(false);
+    if (pendingNetworkTool) setNetworkToolOpen(pendingNetworkTool);
+    setPendingNetworkTool(null);
   };
   const resetRuntimeControlsForNewProject = () => {
     closeMaplibreComponentControls(appApi);
@@ -1887,12 +1912,12 @@ export function TopToolbar({
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
               <DropdownMenuItem
-                onSelect={() => setNetworkToolOpen("isochrone")}
+                onSelect={() => openNetworkTool("isochrone")}
               >
                 {t("toolbar.networkTool.isochrone")}
               </DropdownMenuItem>
               <DropdownMenuItem
-                onSelect={() => setNetworkToolOpen("od-matrix")}
+                onSelect={() => openNetworkTool("od-matrix")}
               >
                 {t("toolbar.networkTool.odMatrix")}
               </DropdownMenuItem>
@@ -2403,6 +2428,38 @@ export function TopToolbar({
               {t("common.cancel")}
             </Button>
             <Button onClick={confirmEnableReverseGeocode}>
+              {t("toolbar.item.continue")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={routingNoticeOpen}
+        onOpenChange={(open: boolean) => {
+          setRoutingNoticeOpen(open);
+          if (!open) setPendingNetworkTool(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {t("toolbar.item.networkNoticeTitle")}
+            </DialogTitle>
+            <DialogDescription>
+              {t("toolbar.item.networkNoticeDesc")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRoutingNoticeOpen(false);
+                setPendingNetworkTool(null);
+              }}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button onClick={confirmOpenNetworkTool}>
               {t("toolbar.item.continue")}
             </Button>
           </div>

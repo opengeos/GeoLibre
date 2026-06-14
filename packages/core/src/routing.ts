@@ -215,7 +215,7 @@ export function matrixResponseToFeatures(
   for (const row of rows) {
     if (!Array.isArray(row)) continue;
     for (const cell of row) {
-      if (cell?.time == null) continue;
+      if (cell?.time == null || cell.distance == null) continue;
       const origin = origins[cell.from_index];
       const target = targets[cell.to_index];
       if (!origin || !target) continue;
@@ -232,7 +232,7 @@ export function matrixResponseToFeatures(
           origin_id: origin.id,
           dest_id: target.id,
           time_s: cell.time,
-          distance_km: cell.distance ?? 0,
+          distance_km: cell.distance,
           mode: ctx.mode,
         },
       });

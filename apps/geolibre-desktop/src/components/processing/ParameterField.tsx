@@ -1,6 +1,7 @@
 import type { AlgorithmParameter } from "@geolibre/processing";
 import { Input, Label, Select } from "@geolibre/ui";
 import type { ReactElement } from "react";
+import { useTranslation } from "react-i18next";
 
 export interface ParameterFieldProps {
   param: AlgorithmParameter;
@@ -26,6 +27,7 @@ export function ParameterField({
   fieldOptions,
   onChange,
 }: ParameterFieldProps): ReactElement {
+  const { t } = useTranslation();
   const label = (
     <Label htmlFor={param.id} className="text-xs">
       {param.label}
@@ -42,7 +44,7 @@ export function ParameterField({
           value={(value as string) ?? ""}
           onChange={(e) => onChange(e.target.value)}
         >
-          <option value="">Select a layer...</option>
+          <option value="">{t("processing.parameterField.selectLayer")}</option>
           {layerOptions.map((layer) => (
             <option key={layer.id} value={layer.id}>
               {layer.name}
@@ -85,7 +87,9 @@ export function ParameterField({
           onChange={(e) => onChange(e.target.value)}
         >
           <option value="">
-            {fieldOptions?.length ? "Select a field..." : "Select a layer first"}
+            {fieldOptions?.length
+              ? t("processing.parameterField.selectField")
+              : t("processing.parameterField.selectLayerFirst")}
           </option>
           {fieldOptions?.map((name) => (
             <option key={name} value={name}>

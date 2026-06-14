@@ -339,6 +339,8 @@
       "reverseGeocodeTooltip": "Click the map to look up an address. The clicked coordinates are sent to the public Nominatim service (nominatim.openstreetmap.org).",
       "reverseGeocodeNoticeTitle": "Reverse Geocode uses a public service",
       "reverseGeocodeNoticeDesc": "Turning on Reverse Geocode sends the coordinates of each point you click to the public Nominatim service (nominatim.openstreetmap.org) to resolve an address — your coordinates leave your device for those requests. The public service is rate-limited.",
+      "networkNoticeTitle": "Network analysis uses a public routing server",
+      "networkNoticeDesc": "Running a Network analysis tool sends the coordinates of your input points to the public Valhalla routing server (valhalla1.openstreetmap.de) to compute isochrones and cost matrices — your coordinates leave your device for those requests. The public server is rate-limited; point it at your own server (Settings → Environment, VITE_ROUTING_ENDPOINT) for heavy use.",
       "continue": "Continue",
       "largeOsmPbfTitle": "Large OSM PBF file",
       "largeOsmPbfDesc": "This file is about {{sizeMb}} MB. Parsing it converts every feature to GeoJSON in memory, which can be slow and may use a lot of memory in the browser. Continue?",
@@ -458,5 +460,20 @@
     "exportData": "Export",
     "exportJson": "Export JSON",
     "exportCsv": "Export CSV"
+  },
+  "network": {
+    "title": "Network analysis",
+    "description": "Isochrones, service areas, and origin–destination cost matrices from your point layers.",
+    "heading": "Network",
+    "run": "Run",
+    "outputPlaceholder": "Output will appear here.",
+    "endpointNotice": "Point coordinates are sent to the routing server ({{endpoint}}). The default is a shared public Valhalla server (FOSSGIS) with usage limits — point it at your own server (Settings → Environment, VITE_ROUTING_ENDPOINT) for heavy use."
+  },
+  "processing": {
+    "parameterField": {
+      "selectLayer": "Select a layer...",
+      "selectField": "Select a field...",
+      "selectLayerFirst": "Select a layer first"
+    }
   }
 }

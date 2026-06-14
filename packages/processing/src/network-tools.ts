@@ -25,6 +25,8 @@ import type { ProcessingAlgorithm, ProcessingContext } from "./types";
 
 /** Cap on isochrone origins per run, to avoid overloading the public server. */
 const MAX_ISOCHRONE_POINTS = 25;
+/** Valhalla's hard limit on contour values per isochrone request. */
+const MAX_ISOCHRONE_CONTOURS = 4;
 /** Cap on OD matrix cells (origins × destinations) per run. */
 const MAX_MATRIX_CELLS = 2500;
 
@@ -113,7 +115,10 @@ export const isochroneTool: ProcessingAlgorithm = {
       id: "endpoint",
       label: "Routing server (Valhalla)",
       type: "string",
-      default: getRoutingConfig().endpoint,
+      // Left empty so the live routing config is resolved when the tool runs
+      // (or seeded by the dialog), not baked in at module-import time. See
+      // resolveEndpoint, which falls back to getRoutingConfig().endpoint.
+      default: "",
     },
   ],
   run: async (ctx) => {
@@ -129,6 +134,12 @@ export const isochroneTool: ProcessingAlgorithm = {
       ctx.log("Error: enter at least one positive contour value");
       return;
     }
+    if (contours.length > MAX_ISOCHRONE_CONTOURS) {
+      ctx.log(
+        `Error: Valhalla supports at most ${MAX_ISOCHRONE_CONTOURS} contour values per request — reduce the list.`,
+      );
+      return;
+    }
     const endpoint = resolveEndpoint(ctx);
 
     const used = points.slice(0, MAX_ISOCHRONE_POINTS);
@@ -140,6 +151,7 @@ export const isochroneTool: ProcessingAlgorithm = {
 
     const features: Feature[] = [];
     for (const point of used) {
+      if (ctx.signal?.aborted) return;
       try {
         const response = await requestIsochrone(
           endpoint,
@@ -148,6 +160,7 @@ export const isochroneTool: ProcessingAlgorithm = {
             metric,
             contours,
           }),
+          ctx.signal,
         );
         features.push(
           ...isochroneResponseToFeatures(response, {
@@ -157,6 +170,7 @@ export const isochroneTool: ProcessingAlgorithm = {
           }),
         );
       } catch (error) {
+        if (ctx.signal?.aborted) return;
         ctx.log(
           `Isochrone failed for point ${point.id}: ${
             error instanceof Error ? error.message : String(error)
@@ -208,7 +222,10 @@ export const odMatrixTool: ProcessingAlgorithm = {
       id: "endpoint",
       label: "Routing server (Valhalla)",
       type: "string",
-      default: getRoutingConfig().endpoint,
+      // Left empty so the live routing config is resolved when the tool runs
+      // (or seeded by the dialog), not baked in at module-import time. See
+      // resolveEndpoint, which falls back to getRoutingConfig().endpoint.
+      default: "",
     },
   ],
   run: async (ctx) => {
@@ -232,6 +249,7 @@ export const odMatrixTool: ProcessingAlgorithm = {
       const response = await requestMatrix(
         endpoint,
         buildMatrixRequest(origins, destinations, mode),
+        ctx.signal,
       );
       const features = matrixResponseToFeatures(
         response,
@@ -248,6 +266,7 @@ export const odMatrixTool: ProcessingAlgorithm = {
       );
       ctx.addResultLayer?.("OD cost matrix", featureCollection(features));
     } catch (error) {
+      if (ctx.signal?.aborted) return;
       ctx.log(
         `OD matrix failed: ${
           error instanceof Error ? error.message : String(error)

@@ -26,6 +26,7 @@ import {
   useState,
   type ReactElement,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { ParameterField } from "./ParameterField";
 
 interface NetworkToolsDialogProps {
@@ -43,6 +44,7 @@ interface NetworkToolsDialogProps {
 export function NetworkToolsDialog({
   mapControllerRef,
 }: NetworkToolsDialogProps): ReactElement {
+  const { t } = useTranslation();
   const openTool = useAppStore((s) => s.ui.networkToolOpen);
   const setNetworkToolOpen = useAppStore((s) => s.setNetworkToolOpen);
   const layers = useAppStore((s) => s.layers);
@@ -56,6 +58,10 @@ export function NetworkToolsDialog({
   const [log, setLog] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
+  // Cancels the in-flight run (and any pending routing requests) when the
+  // dialog closes or a new run starts, so closing the dialog mid-batch does not
+  // keep hitting the server and silently adding result layers.
+  const abortRef = useRef<AbortController | null>(null);
 
   const tool = useMemo(
     () => getNetworkTool(selectedId) ?? NETWORK_TOOLS[0],
@@ -130,12 +136,22 @@ export function NetworkToolsDialog({
     for (const param of tool.parameters) {
       if (!param.required) continue;
       const value = params[param.id];
-      if (value === undefined || value === "" || value === null) {
+      if (
+        value === undefined ||
+        value === "" ||
+        value === null ||
+        (param.type === "number" &&
+          typeof value === "number" &&
+          Number.isNaN(value))
+      ) {
         appendLog(`Error: "${param.label}" is required`);
         return;
       }
     }
 
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setRunning(true);
     try {
       const ctx: ProcessingContext = {
@@ -144,11 +160,13 @@ export function NetworkToolsDialog({
         log: appendLog,
         fitBounds: (bounds) => mapControllerRef.current?.fitBounds(bounds),
         addResultLayer,
+        signal: controller.signal,
       };
       await tool.run(ctx);
     } catch (error) {
       appendLog(`Error: ${(error as Error).message}`);
     } finally {
+      if (abortRef.current === controller) abortRef.current = null;
       setRunning(false);
     }
   }, [tool, params, layers, appendLog, addResultLayer, mapControllerRef]);
@@ -159,16 +177,17 @@ export function NetworkToolsDialog({
     <Dialog
       open={open}
       onOpenChange={(next: boolean) => {
-        if (!next) setNetworkToolOpen(null);
+        if (!next) {
+          abortRef.current?.abort();
+          abortRef.current = null;
+          setNetworkToolOpen(null);
+        }
       }}
     >
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Network analysis</DialogTitle>
-          <DialogDescription>
-            Isochrones, service areas, and origin–destination cost matrices from
-            your point layers.
-          </DialogDescription>
+          <DialogTitle>{t("network.title")}</DialogTitle>
+          <DialogDescription>{t("network.description")}</DialogDescription>
         </DialogHeader>
 
         <div className="flex gap-4">
@@ -176,7 +195,7 @@ export function NetworkToolsDialog({
           <ScrollArea className="h-[22rem] w-48 shrink-0 rounded-md border">
             <div className="p-1">
               <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
-                Network
+                {t("network.heading")}
               </div>
               {NETWORK_TOOLS.map((entry) => (
                 <button
@@ -212,10 +231,7 @@ export function NetworkToolsDialog({
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Point coordinates are sent to the routing server ({endpoint}). The
-              default is a shared public Valhalla server (FOSSGIS) with usage
-              limits — point it at your own server (Settings → Environment,
-              VITE_ROUTING_ENDPOINT) for heavy use.
+              {t("network.endpointNotice", { endpoint })}
             </p>
 
             <div>
@@ -225,14 +241,14 @@ export function NetworkToolsDialog({
                 ) : (
                   <Play className="h-4 w-4" />
                 )}
-                Run
+                {t("network.run")}
               </Button>
             </div>
 
             <ScrollArea className="h-24 rounded-md border bg-muted/30 p-2 font-mono text-xs">
               {log.length === 0 ? (
                 <span className="text-muted-foreground">
-                  Output will appear here.
+                  {t("network.outputPlaceholder")}
                 </span>
               ) : (
                 log.map((line, index) => (
