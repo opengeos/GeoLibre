@@ -7,9 +7,11 @@ export type ScrollAreaProps = React.ComponentPropsWithoutRef<
 > & {
   /**
    * Ref to the scrollable viewport element. Exposed so consumers (e.g. a
-   * virtualized list) can use it as their scroll container.
+   * virtualized list) can use it as their scroll container. Typed as a
+   * RefObject because that is what scroll-container consumers need (a callback
+   * ref would not give them a stable element to read).
    */
-  viewportRef?: React.Ref<HTMLDivElement>;
+  viewportRef?: React.RefObject<HTMLDivElement | null>;
 };
 
 export const ScrollArea = React.forwardRef<

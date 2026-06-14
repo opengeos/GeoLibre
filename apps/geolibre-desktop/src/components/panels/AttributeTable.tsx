@@ -477,8 +477,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   // be unmounted (e.g. when a feature is picked on the map), so a plain CSS
   // highlight would be invisible; scroll the virtualizer to it instead. "auto"
   // alignment leaves an already-visible row untouched. Re-runs when the table
-  // opens (the viewport is null while closed, so scrollToIndex is a no-op then)
-  // and when the sort changes (which can move the selected row off-screen).
+  // opens (the viewport is null while closed, so scrollToIndex is a no-op then),
+  // when the sort changes (which can move the selected row off-screen), and when
+  // the row count changes — so the scroll fires once rows materialize
+  // asynchronously (Add Vector Layer layers) and after a filter is cleared.
   useEffect(() => {
     if (!attributeTableOpen || !selectedFeatureId) return;
     const index = sorted.findIndex(
@@ -486,10 +488,17 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     );
     if (index >= 0) rowVirtualizer.scrollToIndex(index, { align: "auto" });
     // `sorted`/`rowVirtualizer` are rebuilt every render and so are intentionally
-    // excluded; the effect re-runs on the selection/layer/open/sort changes that
-    // actually warrant a scroll.
+    // excluded; `sorted.length` is a primitive that stands in for "the row set
+    // changed". The effect re-runs only on the selection/layer/open/sort/count
+    // changes that actually warrant a scroll.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedFeatureId, selectedLayerId, attributeTableOpen, sort]);
+  }, [
+    selectedFeatureId,
+    selectedLayerId,
+    attributeTableOpen,
+    sort,
+    sorted.length,
+  ]);
 
   const propKeys = new Set<string>();
   for (const row of attributeRows) {
