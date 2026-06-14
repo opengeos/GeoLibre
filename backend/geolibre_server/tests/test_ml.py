@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import subprocess
 
 import pytest
 
@@ -40,6 +41,13 @@ class _FakeAsyncClient:
         return False
 
     async def post(self, url, content=None, headers=None):
+        # _forward_segment streams the body as an async generator; consume it so
+        # assertions can inspect the forwarded bytes.
+        if hasattr(content, "__aiter__"):
+            buffered = b""
+            async for chunk in content:
+                buffered += chunk
+            content = buffered
         _FakeHttpx.calls.append(("POST", url, content, headers))
         return _FakeResp(content=b'{"type": "FeatureCollection", "features": []}')
 
@@ -126,6 +134,50 @@ def test_ensure_server_raises_without_command(monkeypatch):
     monkeypatch.setattr(ml, "_launch_command", lambda: None)
     with pytest.raises(RuntimeBootstrapError):
         ml._ensure_server()
+
+
+def test_ensure_server_timeout_cleans_up_child(monkeypatch):
+    """A child that never becomes healthy is terminated, killed, and forgotten."""
+
+    class _FakeProc:
+        def __init__(self):
+            self.terminated = False
+            self.killed = False
+
+        def poll(self):
+            return None  # always "running" so the timeout path is taken
+
+        def terminate(self):
+            self.terminated = True
+
+        def kill(self):
+            self.killed = True
+
+        def wait(self, timeout=None):
+            # Ignore SIGTERM so _terminate_process escalates to kill().
+            raise subprocess.TimeoutExpired(cmd="samgeo-api", timeout=timeout)
+
+    created = []
+
+    def fake_popen(*args, **kwargs):
+        proc = _FakeProc()
+        created.append(proc)
+        return proc
+
+    monkeypatch.setattr(ml, "_EXTERNAL_URL", None)
+    monkeypatch.setattr(ml, "_child", {"proc": None, "url": None})
+    monkeypatch.setattr(ml, "_launch_command", lambda: ["samgeo-api"])
+    monkeypatch.setattr(ml, "_free_port", lambda: 12345)
+    monkeypatch.setattr(ml, "_is_healthy", lambda base, timeout=3.0: False)
+    monkeypatch.setattr(ml, "_HEALTH_TIMEOUT_SECS", 0)
+    monkeypatch.setattr(ml.subprocess, "Popen", fake_popen)
+
+    with pytest.raises(RuntimeBootstrapError):
+        ml._ensure_server()
+
+    assert created and created[0].terminated and created[0].killed
+    assert ml._child["proc"] is None
+    assert ml._child["url"] is None
 
 
 def test_resolve_base_maps_bootstrap_error_to_503(monkeypatch):

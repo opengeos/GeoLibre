@@ -27,7 +27,8 @@ import {
 } from "lucide-react";
 import type { FeatureCollection } from "geojson";
 import { useCallback, useEffect, useState, type ReactElement } from "react";
-import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
+import { useTranslation } from "react-i18next";
+import { isTauri, openLocalDataFileWithFallback } from "../../lib/tauri-io";
 import { reprojectFeatureCollectionToWgs84 } from "../../lib/duckdb-vector-loader";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
 
@@ -52,6 +53,7 @@ const IMAGE_ACCEPT = ".tif,.tiff,.png,.jpg,.jpeg";
 export function SegmentationDialog({
   mapControllerRef,
 }: SegmentationDialogProps): ReactElement {
+  const { t } = useTranslation();
   const open = useAppStore((s) => s.ui.segmentationOpen);
   const setOpen = useAppStore((s) => s.setSegmentationOpen);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
@@ -77,15 +79,20 @@ export function SegmentationDialog({
         message:
           err instanceof Error
             ? err.message
-            : "Could not reach the GeoLibre sidecar.",
+            : t("segmentation.error.sidecarUnreachable"),
       });
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!open) return;
+    // Reset transient state so a re-opened dialog never shows a stale error,
+    // result, or a `running` spinner left over from a previous session.
     setError(null);
     setResultMessage(null);
+    setRunning(false);
+    setImageBytes(null);
+    setImageName("");
     void checkStatus();
   }, [open, checkStatus]);
 
@@ -110,22 +117,24 @@ export function SegmentationDialog({
       await checkStatus();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Could not start GeoLibre sidecar.",
+        err instanceof Error
+          ? err.message
+          : t("segmentation.error.startServer"),
       );
     } finally {
       setStartingServer(false);
     }
-  }, [checkStatus]);
+  }, [checkStatus, t]);
 
   const handleRun = useCallback(async () => {
     setError(null);
     setResultMessage(null);
     if (!imageBytes) {
-      setError("Choose an image (GeoTIFF) to segment.");
+      setError(t("segmentation.error.chooseImage"));
       return;
     }
     if (mode === "text" && !prompt.trim()) {
-      setError("Enter a text prompt, e.g. “trees” or “buildings”.");
+      setError(t("segmentation.error.enterPrompt"));
       return;
     }
     setRunning(true);
@@ -142,19 +151,25 @@ export function SegmentationDialog({
       const fc = await reprojectFeatureCollectionToWgs84(raw);
       const features = Array.isArray(fc?.features) ? fc.features : [];
       if (!features.length) {
-        setResultMessage("No objects found.");
+        setResultMessage(t("segmentation.noObjects"));
         return;
       }
       const name =
-        mode === "text" ? `Segmentation: ${prompt.trim()}` : "Segmentation";
+        mode === "text"
+          ? t("segmentation.layerName", { prompt: prompt.trim() })
+          : t("segmentation.layerNameDefault");
       const layerId = addGeoJsonLayer(name, fc);
       const layer = useAppStore
         .getState()
         .layers.find((item) => item.id === layerId);
       if (layer) mapControllerRef.current?.fitLayer(layer);
-      setResultMessage(`Added ${features.length} feature(s) as “${name}”.`);
+      setResultMessage(
+        t("segmentation.added", { count: features.length, name }),
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Segmentation failed.");
+      setError(
+        err instanceof Error ? err.message : t("segmentation.error.failed"),
+      );
     } finally {
       setRunning(false);
     }
@@ -166,6 +181,7 @@ export function SegmentationDialog({
     confidence,
     addGeoJsonLayer,
     mapControllerRef,
+    t,
   ]);
 
   const available = status?.available === true;
@@ -179,11 +195,9 @@ export function SegmentationDialog({
     >
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>AI Segmentation</DialogTitle>
+          <DialogTitle>{t("segmentation.title")}</DialogTitle>
           <DialogDescription>
-            Turn imagery into vector features with SAM3 (segment-geospatial).
-            Choose a GeoTIFF, describe what to segment, and get polygons back as
-            a new layer.
+            {t("segmentation.description")}
           </DialogDescription>
         </DialogHeader>
 
@@ -194,40 +208,45 @@ export function SegmentationDialog({
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 {status.message}
               </p>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void startServer()}
-                disabled={startingServer}
-                className="gap-2"
-              >
-                {startingServer ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Server className="h-4 w-4" />
-                )}
-                Start server
-              </Button>
+              {/* Launching the sidecar is a desktop-only (Tauri) capability;
+                  hide the action in the browser build where it cannot work. */}
+              {isTauri() && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void startServer()}
+                  disabled={startingServer}
+                  className="gap-2"
+                >
+                  {startingServer ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Server className="h-4 w-4" />
+                  )}
+                  {t("segmentation.startServer")}
+                </Button>
+              )}
             </div>
           )}
 
           {/* Image source */}
           <div className="grid gap-1.5">
             <Label htmlFor="seg-image" className="text-xs">
-              Image (GeoTIFF)<span className="text-destructive"> *</span>
+              {t("segmentation.imageLabel")}
+              <span className="text-destructive"> *</span>
             </Label>
             <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2">
               <Input
                 id="seg-image"
                 readOnly
                 value={imageName}
-                placeholder="Choose a GeoTIFF…"
+                placeholder={t("segmentation.imagePlaceholder")}
               />
               <Button
                 type="button"
                 variant="outline"
                 size="icon"
-                title="Choose image"
+                title={t("segmentation.chooseImage")}
                 onClick={() => void pickImage()}
               >
                 <FolderOpen className="h-4 w-4" />
@@ -238,7 +257,7 @@ export function SegmentationDialog({
           {/* Mode */}
           <div className="grid gap-1.5">
             <Label htmlFor="seg-mode" className="text-xs">
-              Mode
+              {t("segmentation.modeLabel")}
             </Label>
             <Select
               id="seg-mode"
@@ -247,8 +266,10 @@ export function SegmentationDialog({
                 setMode(e.target.value as "text" | "automatic")
               }
             >
-              <option value="text">Text prompt</option>
-              <option value="automatic">Automatic (everything)</option>
+              <option value="text">{t("segmentation.modeText")}</option>
+              <option value="automatic">
+                {t("segmentation.modeAutomatic")}
+              </option>
             </Select>
           </div>
 
@@ -256,18 +277,19 @@ export function SegmentationDialog({
             <>
               <div className="grid gap-1.5">
                 <Label htmlFor="seg-prompt" className="text-xs">
-                  Prompt<span className="text-destructive"> *</span>
+                  {t("segmentation.promptLabel")}
+                  <span className="text-destructive"> *</span>
                 </Label>
                 <Input
                   id="seg-prompt"
                   value={prompt}
-                  placeholder="e.g. trees, buildings, water"
+                  placeholder={t("segmentation.promptPlaceholder")}
                   onChange={(e) => setPrompt(e.target.value)}
                 />
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="seg-confidence" className="text-xs">
-                  Confidence threshold
+                  {t("segmentation.confidenceLabel")}
                 </Label>
                 <Input
                   id="seg-confidence"
@@ -276,11 +298,17 @@ export function SegmentationDialog({
                   max={1}
                   step={0.05}
                   value={String(confidence)}
-                  onChange={(e) =>
-                    setConfidence(
-                      e.target.value === "" ? 0.4 : Number(e.target.value),
-                    )
-                  }
+                  onChange={(e) => {
+                    if (e.target.value === "") {
+                      setConfidence(0.4);
+                      return;
+                    }
+                    const parsed = Number(e.target.value);
+                    // Ignore non-numeric input and clamp to [0, 1] so a NaN or
+                    // out-of-range confidence is never sent to the backend.
+                    if (!Number.isFinite(parsed)) return;
+                    setConfidence(Math.min(1, Math.max(0, parsed)));
+                  }}
                 />
               </div>
             </>
@@ -297,7 +325,7 @@ export function SegmentationDialog({
               ) : (
                 <Play className="h-4 w-4" />
               )}
-              Segment
+              {t("segmentation.segment")}
             </Button>
           </div>
 

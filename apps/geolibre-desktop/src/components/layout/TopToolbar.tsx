@@ -1315,6 +1315,14 @@ export function TopToolbar({
       icon: MapPin,
       run: () => setGeocodeOpen(true),
     },
+    {
+      id: "proc.segmentation",
+      title: t("toolbar.command.segmentation"),
+      group: t("toolbar.commandGroup.processing"),
+      keywords: "segmentation samgeo sam3 ai segment imagery",
+      icon: Sparkles,
+      run: () => setSegmentationOpen(true),
+    },
     ...CONVERSION_COMMANDS.map(({ kind, titleKey }) => ({
       id: `proc.conversion.${kind}`,
       title: t(titleKey),

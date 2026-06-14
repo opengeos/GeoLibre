@@ -584,6 +584,32 @@
       "selectLayerFirst": "Select a layer first"
     }
   },
+  "segmentation": {
+    "title": "AI Segmentation",
+    "description": "Turn imagery into vector features with SAM3 (segment-geospatial). Choose a GeoTIFF, describe what to segment, and get polygons back as a new layer.",
+    "startServer": "Start server",
+    "imageLabel": "Image (GeoTIFF)",
+    "imagePlaceholder": "Choose a GeoTIFF…",
+    "chooseImage": "Choose image",
+    "modeLabel": "Mode",
+    "modeText": "Text prompt",
+    "modeAutomatic": "Automatic (everything)",
+    "promptLabel": "Prompt",
+    "promptPlaceholder": "e.g. trees, buildings, water",
+    "confidenceLabel": "Confidence threshold",
+    "segment": "Segment",
+    "error": {
+      "chooseImage": "Choose an image (GeoTIFF) to segment.",
+      "enterPrompt": "Enter a text prompt, e.g. “trees” or “buildings”.",
+      "sidecarUnreachable": "Could not reach the GeoLibre sidecar.",
+      "startServer": "Could not start GeoLibre sidecar.",
+      "failed": "Segmentation failed."
+    },
+    "noObjects": "No objects found.",
+    "added": "Added {{count}} feature(s) as “{{name}}”.",
+    "layerName": "Segmentation: {{prompt}}",
+    "layerNameDefault": "Segmentation"
+  },
   "layers": {
     "newGroup": "New group",
     "collapseGroup": "Collapse group",

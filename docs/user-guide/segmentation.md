@@ -20,7 +20,7 @@ separate **`samgeo-api`** server (the REST server shipped with
 `segment-geospatial`). GeoLibre uploads the image to the sidecar, which forwards
 it to `samgeo-api`, runs SAM 3, and returns GeoJSON polygons.
 
-```
+```text
 SegmentationDialog ──image+prompt──▶ sidecar /ml/segment/* ──▶ samgeo-api (SAM 3) ──▶ GeoJSON
 ```
 

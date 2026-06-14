@@ -99,10 +99,14 @@ def _free_port() -> int:
 
 def _is_healthy(base_url: str, timeout: float = 3.0) -> bool:
     """Return True if a samgeo-api server answers /health at ``base_url``."""
-    httpx = _require_httpx()
     try:
+        httpx = _require_httpx()
         resp = httpx.get(f"{base_url}/health", timeout=timeout)
         return resp.status_code == 200 and resp.json().get("status") == "ok"
+    except RuntimeBootstrapError:
+        # The `ml` extra (httpx) is missing: report "not reachable" rather than
+        # raising, so callers like /ml/status degrade gracefully.
+        return False
     except Exception:
         return False
 
@@ -139,55 +143,94 @@ def _ensure_server() -> str:
             "answered there."
         )
 
+    # Decide whether to reuse an existing child or launch a new one. The lock is
+    # held only for this decision and the Popen call, never for the health-poll
+    # below: holding it across the multi-second startup wait would block other
+    # thread-pool workers serving concurrent /ml requests (and could starve the
+    # pool entirely), since _ensure_server runs via run_in_threadpool.
     with _child_lock:
         proc = _child["proc"]
         url = _child["url"]
-        if url and proc is not None and proc.poll() is None and _is_healthy(url):
-            return url
-
-        command = _launch_command()
-        if command is None:
-            raise RuntimeBootstrapError(
-                "samgeo-api was not found on PATH. Install the segmentation "
-                "stack with: pip install segment-geospatial[api,samgeo3], or set "
-                "GEOLIBRE_ML_SAMGEO_URL to an existing samgeo-api server."
-            )
-
-        port = _free_port()
-        url = f"http://127.0.0.1:{port}"
-        full_cmd = command + ["--host", "127.0.0.1", "--port", str(port)]
-        logger.info("Launching samgeo-api: %s", " ".join(full_cmd))
-        try:
-            proc = subprocess.Popen(  # noqa: S603 - command is operator-configured
-                full_cmd,
-                env=_clean_env(),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                **_subprocess_startup_kwargs(),
-            )
-        except OSError as exc:
-            raise RuntimeBootstrapError(
-                f"Failed to launch samgeo-api: {exc}"
-            ) from exc
-
-        deadline = time.monotonic() + _HEALTH_TIMEOUT_SECS
-        while time.monotonic() < deadline:
-            if proc.poll() is not None:
+        if proc is not None and proc.poll() is None and url:
+            # Another request already launched (or is launching) the server;
+            # reuse its URL and wait for health below instead of duplicating it.
+            launched = proc
+        else:
+            command = _launch_command()
+            if command is None:
                 raise RuntimeBootstrapError(
-                    "samgeo-api exited during startup. Check that "
-                    "segment-geospatial[api] is installed in its environment."
+                    "samgeo-api was not found on PATH. Install the segmentation "
+                    "stack with: pip install segment-geospatial[api,samgeo3], or set "
+                    "GEOLIBRE_ML_SAMGEO_URL to an existing samgeo-api server."
                 )
-            if _is_healthy(url):
-                _child["proc"] = proc
-                _child["url"] = url
-                return url
-            time.sleep(1.0)
 
-        proc.terminate()
-        raise RuntimeBootstrapError(
-            "samgeo-api did not become healthy within "
-            f"{_HEALTH_TIMEOUT_SECS}s."
-        )
+            port = _free_port()
+            url = f"http://127.0.0.1:{port}"
+            full_cmd = command + ["--host", "127.0.0.1", "--port", str(port)]
+            logger.info("Launching samgeo-api: %s", " ".join(full_cmd))
+            try:
+                launched = subprocess.Popen(  # noqa: S603 - command is operator-configured
+                    full_cmd,
+                    env=_clean_env(),
+                    stdout=subprocess.DEVNULL,
+                    # Inherit stderr so samgeo-api startup errors reach the
+                    # sidecar's log instead of being discarded.
+                    stderr=None,
+                    **_subprocess_startup_kwargs(),
+                )
+            except OSError as exc:
+                raise RuntimeBootstrapError(
+                    f"Failed to launch samgeo-api: {exc}"
+                ) from exc
+            _child["proc"] = launched
+            _child["url"] = url
+
+    deadline = time.monotonic() + _HEALTH_TIMEOUT_SECS
+    while time.monotonic() < deadline:
+        if launched.poll() is not None:
+            _forget_child(launched)
+            raise RuntimeBootstrapError(
+                "samgeo-api exited during startup. Check that "
+                "segment-geospatial[api] is installed in its environment."
+            )
+        if _is_healthy(url):
+            return url
+        time.sleep(1.0)
+
+    _terminate_process(launched)
+    _forget_child(launched)
+    raise RuntimeBootstrapError(
+        "samgeo-api did not become healthy within " f"{_HEALTH_TIMEOUT_SECS}s."
+    )
+
+
+def _terminate_process(proc) -> None:
+    """Terminate a child process, escalating to kill if it ignores SIGTERM.
+
+    Args:
+        proc: A ``subprocess.Popen`` instance (or None / already-exited).
+    """
+    if proc is None or proc.poll() is not None:
+        return
+    proc.terminate()
+    try:
+        proc.wait(timeout=5)
+    except Exception:
+        proc.kill()
+
+
+def _forget_child(proc) -> None:
+    """Clear the shared child slot if it still refers to ``proc``.
+
+    Guards against clobbering a newer launch recorded by a concurrent request.
+
+    Args:
+        proc: The process whose slot should be released.
+    """
+    with _child_lock:
+        if _child["proc"] is proc:
+            _child["proc"] = None
+            _child["url"] = None
 
 
 def stop_child_server() -> None:
@@ -200,12 +243,7 @@ def stop_child_server() -> None:
         proc = _child["proc"]
         _child["proc"] = None
         _child["url"] = None
-    if proc is not None and proc.poll() is None:
-        proc.terminate()
-        try:
-            proc.wait(timeout=5)
-        except Exception:
-            proc.kill()
+    _terminate_process(proc)
 
 
 @router.get("/status")
@@ -222,8 +260,14 @@ def ml_status():
     """
     payload: dict = {"available": False, "default_model": DEFAULT_MODEL}
 
-    # 1) A reachable server (external URL or an already-launched child).
-    base = _EXTERNAL_URL.rstrip("/") if _EXTERNAL_URL else _child.get("url")
+    # 1) A reachable server (external URL or an already-launched child). Read the
+    # child URL under the lock so a concurrent stop_child_server() cannot null
+    # it mid-read.
+    if _EXTERNAL_URL:
+        base = _EXTERNAL_URL.rstrip("/")
+    else:
+        with _child_lock:
+            base = _child.get("url")
     if base and _is_healthy(base):
         try:
             httpx = _require_httpx()
@@ -303,7 +347,8 @@ async def _forward_segment(request: Request, path: str) -> Response:
     """Transparently forward a multipart segmentation request to samgeo-api.
 
     Streams the raw request body and content-type through so every form field
-    and ``output_format`` supported by samgeo-api works without re-encoding.
+    and ``output_format`` supported by samgeo-api works without re-encoding, and
+    so a large GeoTIFF upload is never buffered whole in the sidecar's memory.
 
     Args:
         request: The incoming FastAPI request (multipart/form-data).
@@ -314,14 +359,23 @@ async def _forward_segment(request: Request, path: str) -> Response:
     """
     httpx = _require_httpx()
     base = await _resolve_base()
-    body = await request.body()
     headers = {}
     content_type = request.headers.get("content-type")
     if content_type:
         headers["content-type"] = content_type
+
+    async def _body_iter():
+        # Forward the upload chunk-by-chunk so the whole payload never sits in
+        # memory at once (uvicorn/httpx negotiate chunked transfer encoding).
+        async for chunk in request.stream():
+            if chunk:
+                yield chunk
+
     try:
         async with httpx.AsyncClient(timeout=_PROXY_TIMEOUT_SECS) as client:
-            resp = await client.post(f"{base}{path}", content=body, headers=headers)
+            resp = await client.post(
+                f"{base}{path}", content=_body_iter(), headers=headers
+            )
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"samgeo-api error: {exc}")
     return Response(
