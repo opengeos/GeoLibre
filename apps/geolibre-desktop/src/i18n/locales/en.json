@@ -105,6 +105,8 @@
     "exportGcps": "Export",
     "gcpsImported": "Imported {{count}} control point(s).",
     "gcpsReadError": "Couldn't read control points from that file.",
+    "gcpsOutsideImage": "Some control points fall outside the loaded image — they may be from a different image.",
+    "transformNeedsMore": "This transform needs at least {{min}} control points.",
     "gcps": "Control points ({{count}})",
     "needGcps": "Add at least {{min}} control points to georeference.",
     "collinear": "Control points are collinear or coincident — move one off the line.",

@@ -48,7 +48,16 @@ function invert3x3(m: number[][]): number[][] | null {
   const B = -(d * i - f * g);
   const C = d * h - e * g;
   const det = a * A + b * B + c * C;
-  if (!Number.isFinite(det) || Math.abs(det) < 1e-12) return null;
+  // Relative singularity test: the determinant of a 3×3 scales as (matrix
+  // magnitude)³, so an absolute epsilon misses near-collinear configs when the
+  // pixel coordinates are large. Scale the threshold by the matrix norm.
+  const scale = Math.max(
+    Math.abs(a), Math.abs(b), Math.abs(c),
+    Math.abs(d), Math.abs(e), Math.abs(f),
+    Math.abs(g), Math.abs(h), Math.abs(i),
+    1,
+  );
+  if (!Number.isFinite(det) || Math.abs(det) < 1e-12 * scale ** 3) return null;
   const inv = 1 / det;
   return [
     [A * inv, (c * h - b * i) * inv, (b * f - c * e) * inv],
@@ -202,6 +211,17 @@ export function cornersToBounds(
 export type GeoTransform = "affine" | "polynomial" | "tps";
 
 /**
+ * Minimum GCPs a warp method needs to be well-posed: affine needs 3, GDAL's
+ * order-2 polynomial needs 6, and a thin plate spline needs at least 4 to avoid
+ * a degenerate system. Below these, gdalwarp errors.
+ */
+export function minGcpsForTransform(transform: GeoTransform): number {
+  if (transform === "polynomial") return 6;
+  if (transform === "tps") return 4;
+  return MIN_GCPS;
+}
+
+/**
  * gdal_translate args that stamp the GCPs (in EPSG:4326) onto the source raster.
  * GDAL's `-gcp` order is `<pixelX> <pixelY> <X> <Y>` = px, py, lng, lat.
  */
@@ -249,6 +269,7 @@ export function parseGcpsCsv(text: string): GCP[] {
     if (parts.length < 4) continue;
     const [px, py, lng, lat] = parts.map((p) => Number(p.trim()));
     if (![px, py, lng, lat].every(Number.isFinite)) continue; // skips the header
+    if (px < 0 || py < 0) continue; // pixel coords can't be negative
     if (lng < -180 || lng > 180 || lat < -90 || lat > 90) continue;
     out.push({ px, py, lng, lat });
   }

@@ -48,26 +48,36 @@ export async function exportGeoTiff(
   const ds = opened.datasets[0];
   if (!ds) throw new Error("GDAL could not open the image.");
 
-  // 1) Stamp the GCPs into a self-contained GeoTIFF.
-  const withGcps = await Gdal.gdal_translate(
-    ds,
-    buildGcpTranslateArgs(gcps),
-    "gcps.tif",
-  );
-  // Round-trip through bytes to reopen as a fresh dataset (robust across the
-  // gdal3.js virtual filesystem) before warping.
-  const gcpBytes = await Gdal.getFileBytes(withGcps);
-  const reopened = await Gdal.open(
-    new File([gcpBytes as BlobPart], "gcps.tif", { type: "image/tiff" }),
-  );
-  const gcpDs = reopened.datasets[0];
-  if (!gcpDs) throw new Error("GDAL could not apply the control points.");
+  // Track opened datasets so they're always closed (free the WASM-FS handles),
+  // even on the error paths — otherwise repeated exports leak memory.
+  const open: Awaited<ReturnType<typeof Gdal.open>>["datasets"] = [ds];
+  try {
+    // 1) Stamp the GCPs into a self-contained GeoTIFF.
+    const withGcps = await Gdal.gdal_translate(
+      ds,
+      buildGcpTranslateArgs(gcps),
+      "gcps.tif",
+    );
+    // Round-trip through bytes to reopen as a fresh dataset (robust across the
+    // gdal3.js virtual filesystem) before warping.
+    const gcpBytes = await Gdal.getFileBytes(withGcps);
+    const reopened = await Gdal.open(
+      new File([gcpBytes as BlobPart], "gcps.tif", { type: "image/tiff" }),
+    );
+    const gcpDs = reopened.datasets[0];
+    if (!gcpDs) throw new Error("GDAL could not apply the control points.");
+    open.push(gcpDs);
 
-  // 2) Warp to a Cloud-Optimized GeoTIFF.
-  const warped = await Gdal.gdalwarp(
-    gcpDs,
-    warpArgsForTransform(transform),
-    "georeferenced.tif",
-  );
-  return Gdal.getFileBytes(warped);
+    // 2) Warp to a Cloud-Optimized GeoTIFF.
+    const warped = await Gdal.gdalwarp(
+      gcpDs,
+      warpArgsForTransform(transform),
+      "georeferenced.tif",
+    );
+    return await Gdal.getFileBytes(warped);
+  } finally {
+    for (const d of open) {
+      await Gdal.close(d).catch(() => undefined);
+    }
+  }
 }

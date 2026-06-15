@@ -9,6 +9,7 @@ import {
 } from "@geolibre/core";
 import {
   Button,
+  cn,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -41,6 +42,7 @@ import {
   type GeoTransform,
   imageCornersToMap,
   MIN_GCPS,
+  minGcpsForTransform,
   parseGcpsCsv,
   solveAffine,
 } from "../../lib/georeference";
@@ -78,8 +80,12 @@ function download(filename: string, data: BlobPart, mime: string): void {
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  // Defer revoke so the browser can fetch the blob first (Firefox races and
+  // silently drops the download if the URL is revoked synchronously).
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 function createId(): string {
@@ -116,7 +122,10 @@ export function GeoreferencerDialog({
   const [zoom, setZoom] = useState(1);
   const [transform, setTransform] = useState<GeoTransform>("affine");
   const [exporting, setExporting] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{
+    msg: string;
+    kind: "error" | "info";
+  } | null>(null);
 
   const imgRef = useRef<HTMLImageElement | null>(null);
   const linkPixelRef = useRef<{ px: number; py: number } | null>(null);
@@ -154,19 +163,20 @@ export function GeoreferencerDialog({
       e.target.value = "";
       if (!file) return;
       if (file.size > MAX_IMAGE_BYTES) {
-        setNotice(
-          t("georeferencer.imageTooLarge", {
+        setNotice({
+          msg: t("georeferencer.imageTooLarge", {
             max: `${Math.round(MAX_IMAGE_BYTES / (1024 * 1024))} MB`,
           }),
-        );
+          kind: "error",
+        });
         return;
       }
       const reader = new FileReader();
-      reader.onerror = () => setNotice(t("georeferencer.imageReadError"));
+      reader.onerror = () => setNotice({ msg: t("georeferencer.imageReadError"), kind: "error" });
       reader.onload = () => {
         const url = typeof reader.result === "string" ? reader.result : "";
         if (!url) {
-          setNotice(t("georeferencer.imageReadError"));
+          setNotice({ msg: t("georeferencer.imageReadError"), kind: "error" });
           return;
         }
         const probe = new Image();
@@ -174,7 +184,7 @@ export function GeoreferencerDialog({
           // Reject images with no intrinsic pixel size (e.g. an SVG without a
           // width/height) — the GCP pixel math needs real raster dimensions.
           if (probe.naturalWidth === 0 || probe.naturalHeight === 0) {
-            setNotice(t("georeferencer.imageNoDimensions"));
+            setNotice({ msg: t("georeferencer.imageNoDimensions"), kind: "error" });
             return;
           }
           setImage({
@@ -188,7 +198,7 @@ export function GeoreferencerDialog({
           setZoom(1);
           setNotice(null);
         };
-        probe.onerror = () => setNotice(t("georeferencer.imageReadError"));
+        probe.onerror = () => setNotice({ msg: t("georeferencer.imageReadError"), kind: "error" });
         probe.src = url;
       };
       reader.readAsDataURL(file);
@@ -271,7 +281,7 @@ export function GeoreferencerDialog({
     // A poor fit can project corners outside world bounds, which the map's image
     // source would silently reject — warn instead of adding an invisible layer.
     if (!cornersInRange(coordinates)) {
-      setNotice(t("georeferencer.cornersOutOfRange"));
+      setNotice({ msg: t("georeferencer.cornersOutOfRange"), kind: "error" });
       return;
     }
     const bounds = cornersToBounds(coordinates);
@@ -295,13 +305,13 @@ export function GeoreferencerDialog({
     onOpenChange(false);
   }, [affine, image, opacity, gcps, addLayer, mapControllerRef, onOpenChange, t]);
 
-  const removeGcp = (index: number) =>
-    setGcps((gs) => gs.filter((_, i) => i !== index));
+  const removeGcp = (key: number) =>
+    setGcps((gs) => gs.filter((g) => g.key !== key));
 
   const handleExportGeoTiff = useCallback(async () => {
     if (!affine || !image || exporting) return;
     setExporting(true);
-    setNotice(t("georeferencer.exporting"));
+    setNotice({ msg: t("georeferencer.exporting"), kind: "info" });
     try {
       const bytes = await exportGeoTiff(
         image.url,
@@ -314,10 +324,10 @@ export function GeoreferencerDialog({
         bytes as BlobPart,
         "image/tiff",
       );
-      setNotice(t("georeferencer.exported"));
+      setNotice({ msg: t("georeferencer.exported"), kind: "info" });
     } catch (err) {
       console.error("GeoTIFF export failed", err);
-      setNotice(t("georeferencer.exportFailed"));
+      setNotice({ msg: t("georeferencer.exportFailed"), kind: "error" });
     } finally {
       setExporting(false);
     }
@@ -335,21 +345,33 @@ export function GeoreferencerDialog({
       e.target.value = "";
       if (!file) return;
       const reader = new FileReader();
-      reader.onerror = () => setNotice(t("georeferencer.gcpsReadError"));
+      reader.onerror = () => setNotice({ msg: t("georeferencer.gcpsReadError"), kind: "error" });
       reader.onload = () => {
         const text = typeof reader.result === "string" ? reader.result : "";
         const parsed = parseGcpsCsv(text);
         if (parsed.length === 0) {
-          setNotice(t("georeferencer.gcpsReadError"));
+          setNotice({ msg: t("georeferencer.gcpsReadError"), kind: "error" });
           return;
         }
         setGcps(parsed.map((g) => ({ ...g, key: (gcpKeyRef.current += 1) })));
         setPendingPixel(null);
-        setNotice(t("georeferencer.gcpsImported", { count: parsed.length }));
+        // Warn if any point falls outside the loaded image (e.g. a CSV made for
+        // a different-resolution version) — the markers would sit off-image.
+        const outside =
+          image != null &&
+          parsed.some((g) => g.px > image.width || g.py > image.height);
+        setNotice(
+          outside
+            ? { msg: t("georeferencer.gcpsOutsideImage"), kind: "error" }
+            : {
+                msg: t("georeferencer.gcpsImported", { count: parsed.length }),
+                kind: "info",
+              },
+        );
       };
       reader.readAsText(file);
     },
-    [t],
+    [t, image],
   );
 
   const zoomIn = () =>
@@ -555,7 +577,7 @@ export function GeoreferencerDialog({
                                 <button
                                   type="button"
                                   aria-label={t("common.remove")}
-                                  onClick={() => removeGcp(i)}
+                                  onClick={() => removeGcp(g.key)}
                                   className="text-muted-foreground hover:text-destructive"
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />
@@ -613,7 +635,11 @@ export function GeoreferencerDialog({
                     <Button
                       variant="outline"
                       className="shrink-0"
-                      disabled={!affine || exporting}
+                      disabled={
+                        !affine ||
+                        exporting ||
+                        gcps.length < minGcpsForTransform(transform)
+                      }
                       onClick={handleExportGeoTiff}
                     >
                       {exporting ? (
@@ -625,7 +651,11 @@ export function GeoreferencerDialog({
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {t("georeferencer.exportTiffHint")}
+                    {affine && gcps.length < minGcpsForTransform(transform)
+                      ? t("georeferencer.transformNeedsMore", {
+                          min: minGcpsForTransform(transform),
+                        })
+                      : t("georeferencer.exportTiffHint")}
                   </p>
                 </div>
               </>
@@ -634,9 +664,14 @@ export function GeoreferencerDialog({
             {notice && (
               <p
                 aria-live="polite"
-                className="rounded-md bg-muted p-2 text-sm text-muted-foreground"
+                className={cn(
+                  "rounded-md p-2 text-sm",
+                  notice.kind === "error"
+                    ? "bg-destructive/10 text-destructive"
+                    : "bg-muted text-muted-foreground",
+                )}
               >
-                {notice}
+                {notice.msg}
               </p>
             )}
           </div>

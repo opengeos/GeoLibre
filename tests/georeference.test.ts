@@ -11,6 +11,7 @@ import {
   gcpsToCsv,
   haversineMeters,
   imageCornersToMap,
+  minGcpsForTransform,
   parseGcpsCsv,
   solveAffine,
   warpArgsForTransform,
@@ -164,6 +165,12 @@ describe("GDAL export args", () => {
     assert.equal(warpArgsForTransform("polynomial")[1], "2");
     assert.equal(warpArgsForTransform("tps")[0], "-tps");
   });
+
+  it("minGcpsForTransform: 3 / 6 / 4", () => {
+    assert.equal(minGcpsForTransform("affine"), 3);
+    assert.equal(minGcpsForTransform("polynomial"), 6);
+    assert.equal(minGcpsForTransform("tps"), 4);
+  });
 });
 
 describe("cornersInRange", () => {
@@ -207,6 +214,7 @@ describe("GCP CSV round-trip", () => {
       "93,70,-109.615,55.9797",
       "garbage,row,here,x",
       "1,2,999,0", // lng out of range
+      "-50,-30,-1.5,2.5", // negative pixels
       "5,6", // too few columns
       "10,20,-1.5,2.5",
     ].join("\n");
