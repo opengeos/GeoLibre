@@ -40,6 +40,19 @@ describe("isMobile", () => {
     );
   });
 
+  it("detects iPadOS 13+ reporting a desktop Macintosh UA (multi-touch)", () => {
+    const iPadDesktopUA =
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15";
+    assert.equal(isMobile(iPadDesktopUA, 5), true);
+  });
+
+  it("is false for a real Mac (Macintosh UA, no multi-touch)", () => {
+    const macUA =
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15";
+    assert.equal(isMobile(macUA, 0), false);
+    assert.equal(isMobile(macUA, 1), false);
+  });
+
   it("is false for an empty user agent", () => {
     assert.equal(isMobile(""), false);
   });

@@ -36,6 +36,13 @@ const AVG_TILE_BYTES = 30 * 1024;
 
 const MAX_EXTRA_LEVELS = 5;
 
+/**
+ * The basemap service-worker cache cap (geolibre-basemaps maxEntries in
+ * vite.config.ts). Beyond this, Workbox evicts the oldest tiles as new ones
+ * arrive, so a region larger than this can't be fully retained — warn the user.
+ */
+const MAX_CACHE_ENTRIES = 8000;
+
 type Phase = "idle" | "running" | "done";
 
 function formatBytes(bytes: number): string {
@@ -108,11 +115,15 @@ export function OfflineRegionDialog({
     [open],
   );
 
-  // Reset transient state each time the dialog is opened.
+  // Reset transient state each time the dialog is opened, and abort any
+  // in-flight download when it is closed (Radix keeps the dialog mounted, so
+  // closing it would otherwise leave the download running in the background).
   useEffect(() => {
     if (open) {
       setPhase("idle");
       setProgress({ done: 0, total: 0, failed: 0 });
+    } else {
+      abortRef.current?.abort();
     }
   }, [open]);
 
@@ -127,16 +138,24 @@ export function OfflineRegionDialog({
     setPhase("running");
     setProgress({ done: 0, total: 0, failed: 0 });
     try {
-      const urls = await collectOfflineUrls(map, bbox, baseZoom, maxZoom);
+      const urls = await collectOfflineUrls(map, bbox, baseZoom, maxZoom, {
+        signal: controller.signal,
+      });
       setProgress({ done: 0, total: urls.length, failed: 0 });
       const result = await warmUrls(urls, {
         signal: controller.signal,
         onProgress: setProgress,
       });
       setProgress(result);
-    } finally {
       if (!controller.signal.aborted) setPhase("done");
-      abortRef.current = null;
+    } catch {
+      // collectOfflineUrls swallows TileJSON errors, but guard the rare throw
+      // (e.g. getStyle failing) so the UI doesn't show a false "done" state.
+      if (!controller.signal.aborted) setPhase("idle");
+    } finally {
+      // Only clear the ref if it still points to this run — a quick
+      // cancel-then-redownload may have already installed a newer controller.
+      if (abortRef.current === controller) abortRef.current = null;
     }
   }, [mapControllerRef, bbox, baseZoom, maxZoom]);
 
@@ -196,6 +215,14 @@ export function OfflineRegionDialog({
             </span>
           </div>
 
+          {tileCount > MAX_CACHE_ENTRIES && (
+            <p className="rounded-md bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
+              {t("offline.tooManyTiles", {
+                max: MAX_CACHE_ENTRIES.toLocaleString(),
+              })}
+            </p>
+          )}
+
           {phase !== "idle" && (
             <div className="space-y-1">
               <div className="h-2 w-full overflow-hidden rounded-full bg-primary/20">
@@ -232,7 +259,7 @@ export function OfflineRegionDialog({
           )}
           <Button
             onClick={handleDownload}
-            disabled={phase === "running" || tileCount === 0}
+            disabled={phase === "running" || tileCount === 0 || !swActive}
           >
             {phase === "running" ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

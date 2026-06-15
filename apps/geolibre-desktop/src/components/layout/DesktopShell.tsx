@@ -305,6 +305,10 @@ export function DesktopShell({
 }: DesktopShellProps) {
   const shellRef = useRef<HTMLDivElement>(null);
   const verticalResizeGuideRef = useRef<HTMLDivElement>(null);
+  // Teardown for an in-progress panel resize, so a pointercancel or an unmount
+  // mid-drag still detaches the global listeners and restores document.body.
+  const activeResizeCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => activeResizeCleanupRef.current?.(), []);
   const mapControllerRef = useRef<MapController | null>(null);
   const dragDepthRef = useRef(0);
   const dropMessageTimeoutRef = useRef<number | null>(null);
@@ -881,6 +885,9 @@ export function DesktopShell({
     (event: ReactPointerEvent<HTMLDivElement>) => {
       event.preventDefault();
       event.stopPropagation();
+      // Route all pointer events for this drag to the handle, so a touch that
+      // slides off it (or off-screen) still reaches the listeners below.
+      event.currentTarget.setPointerCapture?.(event.pointerId);
 
       const startX = event.clientX;
       const startWidth = layerPanelWidth;
@@ -922,6 +929,8 @@ export function DesktopShell({
       const onPointerUp = () => {
         window.removeEventListener("pointermove", onPointerMove);
         window.removeEventListener("pointerup", onPointerUp);
+        window.removeEventListener("pointercancel", onPointerUp);
+        activeResizeCleanupRef.current = null;
         if (resizeFrame !== null) {
           window.cancelAnimationFrame(resizeFrame);
           resizeFrame = null;
@@ -937,8 +946,12 @@ export function DesktopShell({
         document.body.style.userSelect = previousUserSelect;
       };
 
+      // pointercancel fires when the gesture is interrupted (OS scroll, app
+      // backgrounded); run the same teardown so styles/listeners don't stick.
+      activeResizeCleanupRef.current = onPointerUp;
       window.addEventListener("pointermove", onPointerMove);
       window.addEventListener("pointerup", onPointerUp);
+      window.addEventListener("pointercancel", onPointerUp);
     },
     [deferPanelResize, layerPanelWidth],
   );
@@ -947,6 +960,9 @@ export function DesktopShell({
     (event: ReactPointerEvent<HTMLDivElement>) => {
       event.preventDefault();
       event.stopPropagation();
+      // Route all pointer events for this drag to the handle, so a touch that
+      // slides off it (or off-screen) still reaches the listeners below.
+      event.currentTarget.setPointerCapture?.(event.pointerId);
 
       const startX = event.clientX;
       const startWidth = stylePanelWidth;
@@ -988,6 +1004,8 @@ export function DesktopShell({
       const onPointerUp = () => {
         window.removeEventListener("pointermove", onPointerMove);
         window.removeEventListener("pointerup", onPointerUp);
+        window.removeEventListener("pointercancel", onPointerUp);
+        activeResizeCleanupRef.current = null;
         if (resizeFrame !== null) {
           window.cancelAnimationFrame(resizeFrame);
           resizeFrame = null;
@@ -1003,8 +1021,12 @@ export function DesktopShell({
         document.body.style.userSelect = previousUserSelect;
       };
 
+      // pointercancel fires when the gesture is interrupted (OS scroll, app
+      // backgrounded); run the same teardown so styles/listeners don't stick.
+      activeResizeCleanupRef.current = onPointerUp;
       window.addEventListener("pointermove", onPointerMove);
       window.addEventListener("pointerup", onPointerUp);
+      window.addEventListener("pointercancel", onPointerUp);
     },
     [deferPanelResize, stylePanelWidth],
   );

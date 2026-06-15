@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@geolibre/ui";
 import { Database } from "lucide-react";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { AddDataKind } from "../AddDataDialog";
 import { isMobile } from "../../../lib/is-mobile";
@@ -34,7 +35,8 @@ export function AddDataMenu({
   const { t } = useTranslation();
   // PostgreSQL layers are served through the Martin tile server, a local helper
   // binary with no Android build, so hide the source on mobile.
-  const mobile = isMobile();
+  // The user agent is stable for the session, so evaluate once.
+  const mobile = useMemo(() => isMobile(), []);
 
   return (
     <DropdownMenu>

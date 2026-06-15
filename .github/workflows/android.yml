@@ -25,7 +25,7 @@ env:
 
 jobs:
   build:
-    name: Build Android APK (debug)
+    name: Build Android APK (release)
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository
@@ -47,9 +47,9 @@ jobs:
           java-version: "21"
 
       - name: Set up Android SDK
-        # Third-party action — pin to a commit SHA to match the repo's policy
-        # for non-official actions before relying on this in protected branches.
-        uses: android-actions/setup-android@v3
+        # Third-party action pinned to a full commit SHA (v3 tag head) per the
+        # repo's policy for non-official actions; a tag could be re-pointed.
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
 
       - name: Install Android NDK, platform, and build-tools
         run: |
@@ -112,12 +112,20 @@ jobs:
         run: |
           set -euo pipefail
           build_tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          store_pass_file="$RUNNER_TEMP/ks.pass"
+          key_pass_file="$RUNNER_TEMP/key.pass"
           if [ -n "${KEYSTORE_BASE64:-}" ]; then
+            # Fail fast if the keystore secret is set but its companions are not,
+            # instead of a cryptic apksigner error later.
+            if [ -z "${KEYSTORE_PASSWORD:-}" ] || [ -z "${KEY_ALIAS:-}" ]; then
+              echo "::error::ANDROID_KEYSTORE_PASSWORD and ANDROID_KEY_ALIAS must be set when ANDROID_KEYSTORE_BASE64 is provided"
+              exit 1
+            fi
             echo "Signing with the release keystore from secrets."
             echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
             keystore="$RUNNER_TEMP/release.jks"
-            store_pass="$KEYSTORE_PASSWORD"
-            key_pass="${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
+            printf '%s' "$KEYSTORE_PASSWORD" > "$store_pass_file"
+            printf '%s' "${KEY_PASSWORD:-$KEYSTORE_PASSWORD}" > "$key_pass_file"
             alias="$KEY_ALIAS"
           else
             echo "::warning::No ANDROID_KEYSTORE_BASE64 secret set — signing with a throwaway debug keystore. Installable for testing only, NOT for distribution."
@@ -126,7 +134,9 @@ jobs:
               -storepass android -keypass android -alias androiddebugkey \
               -keyalg RSA -keysize 2048 -validity 10000 \
               -dname "CN=Android Debug,O=Android,C=US"
-            store_pass=android; key_pass=android; alias=androiddebugkey
+            printf '%s' android > "$store_pass_file"
+            printf '%s' android > "$key_pass_file"
+            alias=androiddebugkey
           fi
           out="$RUNNER_TEMP/apks"; mkdir -p "$out"
           found=0
@@ -137,13 +147,16 @@ jobs:
             aligned="$RUNNER_TEMP/aligned-$abi.apk"
             signed="$out/geolibre-android-$abi.apk"
             "$build_tools/zipalign" -p -f 4 "$unsigned" "$aligned"
+            # Pass passwords via files (pass:file:) so they never appear in the
+            # process argument list / CI logs.
             "$build_tools/apksigner" sign --ks "$keystore" \
-              --ks-pass "pass:$store_pass" --key-pass "pass:$key_pass" \
+              --ks-pass "file:$store_pass_file" --key-pass "file:$key_pass_file" \
               --ks-key-alias "$alias" --out "$signed" "$aligned"
             "$build_tools/apksigner" verify "$signed"
             echo "signed $signed ($(du -h "$signed" | cut -f1))"
           done < <(find apps/geolibre-desktop/src-tauri/gen/android \
             -name '*release-unsigned.apk')
+          rm -f "$store_pass_file" "$key_pass_file"
           if [ "$found" -eq 0 ]; then
             echo "::error::No release-unsigned APKs found"; exit 1
           fi

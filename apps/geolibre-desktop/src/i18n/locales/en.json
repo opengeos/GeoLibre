@@ -16,6 +16,7 @@
     "detailLevels": "Extra detail levels",
     "zoomRange": "Zoom {{min}}–{{max}}",
     "tiles": "Tiles to download",
+    "tooManyTiles": "This area exceeds the offline cache limit ({{max}} tiles); the oldest tiles may be evicted as newer ones download. Reduce the detail levels or pick a smaller area.",
     "download": "Download",
     "cancel": "Cancel",
     "progress": "Downloading {{done}} / {{total}}…",

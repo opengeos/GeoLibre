@@ -74,6 +74,22 @@ export function tileRangeForBbox(
 }
 
 /**
+ * Split a bbox that crosses the antimeridian (`west > east`, e.g. a Pacific view
+ * where MapLibre returns west≈170, east≈-170) into the two non-wrapping halves
+ * `[west, 180]` and `[-180, east]`. A normal bbox is returned unchanged. Without
+ * this, `tileRangeForBbox` would cover the wrong (Eurasian) strip.
+ */
+function splitAntimeridian(bbox: Bbox): Bbox[] {
+  const [west, south, east, north] = bbox;
+  return west > east
+    ? [
+        [west, south, 180, north],
+        [-180, south, east, north],
+      ]
+    : [bbox];
+}
+
+/**
  * Count the tiles covering `bbox` across `[minZoom, maxZoom]` without
  * materializing them — used to preview download size before committing.
  */
@@ -83,9 +99,11 @@ export function countTiles(
   maxZoom: number,
 ): number {
   let total = 0;
-  for (let z = minZoom; z <= maxZoom; z++) {
-    const r = tileRangeForBbox(bbox, z);
-    total += (r.maxX - r.minX + 1) * (r.maxY - r.minY + 1);
+  for (const part of splitAntimeridian(bbox)) {
+    for (let z = minZoom; z <= maxZoom; z++) {
+      const r = tileRangeForBbox(part, z);
+      total += (r.maxX - r.minX + 1) * (r.maxY - r.minY + 1);
+    }
   }
   return total;
 }
@@ -96,11 +114,13 @@ export function* enumerateTiles(
   minZoom: number,
   maxZoom: number,
 ): Generator<TileCoord> {
-  for (let z = minZoom; z <= maxZoom; z++) {
-    const r = tileRangeForBbox(bbox, z);
-    for (let x = r.minX; x <= r.maxX; x++) {
-      for (let y = r.minY; y <= r.maxY; y++) {
-        yield { z, x, y };
+  for (const part of splitAntimeridian(bbox)) {
+    for (let z = minZoom; z <= maxZoom; z++) {
+      const r = tileRangeForBbox(part, z);
+      for (let x = r.minX; x <= r.maxX; x++) {
+        for (let y = r.minY; y <= r.maxY; y++) {
+          yield { z, x, y };
+        }
       }
     }
   }
@@ -122,8 +142,10 @@ export function tileToQuadkey({ z, x, y }: TileCoord): string {
 /**
  * Expand a tile URL template for a tile coordinate, supporting the `{z}`/`{x}`/
  * `{y}`, TMS `{-y}`, and `{quadkey}` placeholders. `{s}` subdomain placeholders
- * are resolved to the first listed subdomain (or dropped) so every tile maps to
- * a single, stable URL.
+ * are resolved to the first listed subdomain so every tile maps to a single,
+ * stable URL; when no subdomains are given, `{s}` is dropped together with its
+ * trailing `.` separator so `https://{s}.host/…` becomes `https://host/…`
+ * rather than the invalid `https://.host/…`.
  */
 export function expandTileUrl(
   template: string,
@@ -131,13 +153,16 @@ export function expandTileUrl(
   subdomains?: string[],
 ): string {
   const tmsY = 2 ** tile.z - 1 - tile.y;
+  const sub = subdomains?.[0];
   return template
     .replace(/\{z\}/g, String(tile.z))
     .replace(/\{x\}/g, String(tile.x))
     .replace(/\{y\}/g, String(tile.y))
     .replace(/\{-y\}/g, String(tmsY))
     .replace(/\{quadkey\}/g, tileToQuadkey(tile))
-    .replace(/\{s\}/g, subdomains?.[0] ?? "");
+    .replace(/\{s\}\.?/g, (match) =>
+      sub ? (match.endsWith(".") ? `${sub}.` : sub) : "",
+    );
 }
 
 /** Resolve a possibly-relative style asset URL against the document origin. */
@@ -167,9 +192,11 @@ interface RasterTileJson {
  *   bbox: Region to cover, [west, south, east, north].
  *   minZoom: Lowest zoom to include.
  *   maxZoom: Highest zoom to include.
- *   glyphRanges: Unicode glyph ranges to warm per fontstack (e.g. ["0-255"]).
- *     Glyphs are otherwise fetched lazily as labels render, so warming the
- *     common ranges is what makes offline labels appear.
+ *   options.glyphRanges: Unicode glyph ranges to warm per fontstack (default
+ *     ["0-255", "256-511"]). Glyphs are otherwise fetched lazily as labels
+ *     render, so warming the common ranges is what makes offline labels appear.
+ *   options.signal: Aborts the TileJSON discovery fetch (so Cancel is responsive
+ *     before warming starts).
  *
  * Returns:
  *   A de-duplicated list of absolute URLs to fetch.
@@ -179,8 +206,9 @@ export async function collectOfflineUrls(
   bbox: Bbox,
   minZoom: number,
   maxZoom: number,
-  glyphRanges: string[] = ["0-255", "256-511"],
+  options: { glyphRanges?: string[]; signal?: AbortSignal } = {},
 ): Promise<string[]> {
+  const { glyphRanges = ["0-255", "256-511"], signal } = options;
   const style = map.getStyle();
   const urls = new Set<string>();
 
@@ -190,13 +218,14 @@ export async function collectOfflineUrls(
       type?: string;
       tiles?: string[];
       url?: string;
+      subdomains?: string[];
     };
     if (spec.type !== "vector" && spec.type !== "raster") continue;
 
     let templates = spec.tiles;
     if ((!templates || templates.length === 0) && spec.url) {
       try {
-        const res = await fetch(absolute(spec.url));
+        const res = await fetch(absolute(spec.url), { signal });
         if (res.ok) {
           const tilejson = (await res.json()) as RasterTileJson;
           templates = tilejson.tiles;
@@ -209,20 +238,31 @@ export async function collectOfflineUrls(
 
     const template = templates[0];
     for (const tile of enumerateTiles(bbox, minZoom, maxZoom)) {
-      urls.add(absolute(expandTileUrl(template, tile)));
+      urls.add(absolute(expandTileUrl(template, tile, spec.subdomains)));
     }
   }
 
-  // Sprite (icons): json + png at 1x and 2x.
-  const sprite = typeof style.sprite === "string" ? style.sprite : undefined;
-  if (sprite) {
+  // Sprite (icons): json + png at 1x and 2x. MapLibre allows `sprite` to be a
+  // string or an array of { id, url } objects (multi-sprite styles).
+  const spriteSpec = style.sprite;
+  const spriteUrls =
+    typeof spriteSpec === "string"
+      ? [spriteSpec]
+      : Array.isArray(spriteSpec)
+        ? (spriteSpec as { url: string }[]).map((s) => s.url)
+        : [];
+  for (const sprite of spriteUrls) {
     for (const suffix of ["", "@2x"]) {
       urls.add(absolute(`${sprite}${suffix}.json`));
       urls.add(absolute(`${sprite}${suffix}.png`));
     }
   }
 
-  // Glyphs (label fonts): one PBF per (fontstack, range).
+  // Glyphs (label fonts): one PBF per (fontstack, range). MapLibre substitutes
+  // `{fontstack}` with a raw string (commas and spaces unescaped) and lets the
+  // browser normalize the request URL; we do the same so our warmed URL matches
+  // MapLibre's actual glyph request and the SW cache key lines up. (Encoding the
+  // fontstack here would percent-encode the comma separators and miss.)
   const glyphs = style.glyphs;
   if (glyphs) {
     const fontstacks = new Set<string>();
@@ -238,9 +278,7 @@ export async function collectOfflineUrls(
       for (const range of glyphRanges) {
         urls.add(
           absolute(
-            glyphs
-              .replace("{fontstack}", encodeURIComponent(stack))
-              .replace("{range}", range),
+            glyphs.replace("{fontstack}", stack).replace("{range}", range),
           ),
         );
       }
@@ -295,16 +333,23 @@ export async function warmUrls(
         if (signal?.aborted) return;
         progress.failed++;
       } finally {
-        progress.done++;
-        onProgress?.({ ...progress });
+        // `finally` runs even after the `return` above, so only count requests
+        // that actually settled — not ones interrupted by an abort.
+        if (!signal?.aborted) {
+          progress.done++;
+          onProgress?.({ ...progress });
+        }
       }
     }
   }
 
-  const workers = Array.from(
-    { length: Math.min(concurrency, urls.length) },
-    worker,
+  // Clamp to at least one worker (a 0/negative concurrency would spawn none and
+  // silently warm nothing), and never more than there are URLs.
+  const workerCount = Math.min(
+    Math.max(1, Math.floor(concurrency)),
+    urls.length,
   );
+  const workers = Array.from({ length: workerCount }, worker);
   await Promise.all(workers);
   return progress;
 }

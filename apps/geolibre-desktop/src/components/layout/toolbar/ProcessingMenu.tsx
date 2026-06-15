@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@geolibre/ui";
 import { Wrench } from "lucide-react";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { ToolbarPanel } from "../../../hooks/useToolbarPanels";
 import { isMobile } from "../../../lib/is-mobile";
@@ -48,7 +49,8 @@ export function ProcessingMenu({
   // the Python sidecar, which cannot run on Android/iOS — hide them on mobile so
   // they don't present and then fail. Vector (Turf), SQL (PGlite/DuckDB), Python
   // (Pyodide), geocode, statistics, and the assistant run client-side and stay.
-  const mobile = isMobile();
+  // The user agent is stable for the session, so evaluate once.
+  const mobile = useMemo(() => isMobile(), []);
 
   return (
     <DropdownMenu>
