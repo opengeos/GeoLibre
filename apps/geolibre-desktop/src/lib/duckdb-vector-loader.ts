@@ -17,6 +17,11 @@ import {
   type DuckDbVectorLoadOptions,
 } from "./duckdb-vector-guard";
 import { ensureGpkgFeatureCount } from "./gpkg-ogr-contents";
+import {
+  countGeoPackageFeatures,
+  isGeoPackage,
+  loadGeoPackageVectorFile,
+} from "./gpkg-reader";
 import { getSpatialExtensionPath } from "./spatial-extension-config";
 
 // Re-exported for existing importers (sql-workspace, duckdb-processing, etc.)
@@ -312,10 +317,55 @@ async function countFeatures(
   return typeof raw === "bigint" ? Number(raw) : Number(raw ?? 0);
 }
 
+/**
+ * Read a GeoPackage with sql.js + {@link decodeWkb} instead of DuckDB's
+ * `ST_Read`, which crashes on the single-threaded WASM build for all but the
+ * smallest layers (GDAL fills Arrow batches on a background thread). The
+ * geometries are reprojected to WGS84 via the shared DuckDB-based path when the
+ * layer is not already in EPSG:4326. See `gpkg-reader.ts` and issue #393.
+ */
+async function loadGeoPackageVector(
+  file: DuckDbVectorFile,
+  options: DuckDbVectorLoadOptions,
+): Promise<FeatureCollection> {
+  if (options.onLargeDataset) {
+    const counted = await countGeoPackageFeatures(file.data);
+    if (counted) {
+      await confirmLargeDataset(
+        { name: file.name, featureCount: counted.featureCount },
+        options.onLargeDataset,
+      );
+    }
+  }
+
+  const { featureCollection, epsgCode } = await loadGeoPackageVectorFile(
+    file.data,
+  );
+  if (epsgCode == null) {
+    return featureCollection as FeatureCollection;
+  }
+
+  // Tag the collection with its source CRS and reproject to WGS84 through the
+  // shared DuckDB ST_Transform path (the GeoJSON reader it uses is not affected
+  // by the GeoPackage threading bug).
+  const tagged = {
+    ...featureCollection,
+    crs: { type: "name", properties: { name: `EPSG:${epsgCode}` } },
+  } as FeatureCollection;
+  return reprojectFeatureCollectionToWgs84(tagged);
+}
+
 export async function loadDuckDbVectorFile(
   file: DuckDbVectorFile,
   options: DuckDbVectorLoadOptions = {},
 ): Promise<FeatureCollection> {
+  // GeoPackages are read without GDAL to avoid the single-threaded-WASM thread
+  // crash in DuckDB's ST_Read (issue #393). A file mislabelled `.gpkg` that is
+  // not actually SQLite falls through to the generic ST_Read path below.
+  if (file.extension === "gpkg" && isGeoPackage(file.data)) {
+    return loadGeoPackageVector(file, options);
+  }
+
   const db = await getDatabase();
   const connection = await db.connect();
 

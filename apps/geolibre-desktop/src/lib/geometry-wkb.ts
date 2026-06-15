@@ -131,6 +131,140 @@ export function encodeWkb(geometry: Geometry): Uint8Array {
   return writer.bytes();
 }
 
+const WKB_TYPE_NAME: Record<number, Geometry["type"]> = {
+  1: "Point",
+  2: "LineString",
+  3: "Polygon",
+  4: "MultiPoint",
+  5: "MultiLineString",
+  6: "MultiPolygon",
+  7: "GeometryCollection",
+};
+
+/**
+ * Decode a standalone WKB (Well-Known Binary) buffer into a GeoJSON geometry.
+ *
+ * The inverse of {@link encodeWkb}, used to read GeoPackage geometry blobs
+ * without GDAL (see `gpkg-reader.ts`). Handles mixed byte order, ISO WKB
+ * dimensionality (Z/M, where the type code is offset by 1000/2000/3000) and the
+ * PostGIS EWKB Z/M/SRID high-bit flags. The M ordinate is dropped; Z is kept so
+ * a `[x, y, z]` position survives. Throws on the curved geometry types
+ * (CircularString and friends, codes 8-12) that GeoJSON cannot represent.
+ *
+ * @param bytes The WKB buffer (no GeoPackage header).
+ * @returns The decoded GeoJSON geometry.
+ */
+export function decodeWkb(bytes: Uint8Array): Geometry {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let offset = 0;
+
+  function readGeometry(): Geometry {
+    const little = view.getUint8(offset) === 1;
+    offset += 1;
+    const rawType = view.getUint32(offset, little);
+    offset += 4;
+
+    // PostGIS EWKB encodes Z/M/SRID in the high bits; ISO WKB encodes Z/M by
+    // offsetting the type code (1000 = Z, 2000 = M, 3000 = ZM). Support both so
+    // any standards-conformant GeoPackage geometry blob decodes.
+    const hasEwkbZ = (rawType & 0x80000000) !== 0;
+    const hasEwkbM = (rawType & 0x40000000) !== 0;
+    const hasSrid = (rawType & 0x20000000) !== 0;
+    const baseType = rawType & 0xffff;
+    const isoGroup = Math.floor((baseType % 4000) / 1000);
+    const code = baseType % 1000;
+    const hasZ = hasEwkbZ || isoGroup === 1 || isoGroup === 3;
+    const hasM = hasEwkbM || isoGroup === 2 || isoGroup === 3;
+    const dimensions = 2 + (hasZ ? 1 : 0) + (hasM ? 1 : 0);
+
+    // An EWKB SRID prefix precedes the coordinates; skip it (the layer CRS is
+    // taken from the GeoPackage metadata, not the per-geometry SRID).
+    if (hasSrid) offset += 4;
+
+    const readPosition = (): Position => {
+      const x = view.getFloat64(offset, little);
+      offset += 8;
+      const y = view.getFloat64(offset, little);
+      offset += 8;
+      let z: number | undefined;
+      if (hasZ) {
+        z = view.getFloat64(offset, little);
+        offset += 8;
+      }
+      if (hasM) offset += 8; // M is not represented in GeoJSON.
+      return z === undefined ? [x, y] : [x, y, z];
+    };
+
+    const readPositions = (): Position[] => {
+      const count = view.getUint32(offset, little);
+      offset += 4;
+      const positions: Position[] = [];
+      for (let i = 0; i < count; i += 1) positions.push(readPosition());
+      return positions;
+    };
+
+    const readRings = (): Position[][] => {
+      const count = view.getUint32(offset, little);
+      offset += 4;
+      const rings: Position[][] = [];
+      for (let i = 0; i < count; i += 1) rings.push(readPositions());
+      return rings;
+    };
+
+    const readChildren = (): Geometry[] => {
+      const count = view.getUint32(offset, little);
+      offset += 4;
+      const children: Geometry[] = [];
+      for (let i = 0; i < count; i += 1) children.push(readGeometry());
+      return children;
+    };
+
+    switch (code) {
+      case 1:
+        return { type: "Point", coordinates: readPosition() };
+      case 2:
+        return { type: "LineString", coordinates: readPositions() };
+      case 3:
+        return { type: "Polygon", coordinates: readRings() };
+      case 4: {
+        const points = readChildren();
+        return {
+          type: "MultiPoint",
+          coordinates: points.map((p) => (p as { coordinates: Position }).coordinates),
+        };
+      }
+      case 5: {
+        const lines = readChildren();
+        return {
+          type: "MultiLineString",
+          coordinates: lines.map(
+            (l) => (l as { coordinates: Position[] }).coordinates,
+          ),
+        };
+      }
+      case 6: {
+        const polygons = readChildren();
+        return {
+          type: "MultiPolygon",
+          coordinates: polygons.map(
+            (p) => (p as { coordinates: Position[][] }).coordinates,
+          ),
+        };
+      }
+      case 7:
+        return { type: "GeometryCollection", geometries: readChildren() };
+      default:
+        throw new Error(
+          `Unsupported WKB geometry type ${code}${
+            WKB_TYPE_NAME[code] ? "" : " (curved geometries are not supported)"
+          }.`,
+        );
+    }
+  }
+
+  return readGeometry();
+}
+
 export interface BoundingBox {
   minX: number;
   minY: number;
