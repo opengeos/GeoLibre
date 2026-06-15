@@ -74,10 +74,8 @@ interface DraftField {
   optionsText: string;
 }
 
-let draftCounter = 0;
-function newDraftField(): DraftField {
-  draftCounter += 1;
-  return { id: draftCounter, label: "", type: "text", required: false, optionsText: "" };
+function newDraftField(id: number): DraftField {
+  return { id, label: "", type: "text", required: false, optionsText: "" };
 }
 
 function formatLatLng(lng: number, lat: number): string {
@@ -174,12 +172,30 @@ export function FieldCollectionDialog({
   const [locating, setLocating] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
-  const [savedCount, setSavedCount] = useState(0);
+  // Only the setter is used (the count is read inside its functional updater).
+  const [, setSavedCount] = useState(0);
 
   const markerRef = useRef<maplibregl.Marker | null>(null);
   // Set just before we reopen the dialog after a map capture, so the open-reset
   // effect below doesn't wipe the freshly captured geometry/form.
   const suppressResetRef = useRef(false);
+  // True while the tool is in use; gates async GPS callbacks so a fix that
+  // arrives after the dialog is dismissed doesn't mutate the map/state.
+  const activeRef = useRef(false);
+  // Guards handleCreateLayer against a double-tap creating duplicate layers.
+  const creatingRef = useRef(false);
+  // Per-instance monotonic id for draft-field React keys.
+  const draftIdRef = useRef(0);
+  const makeDraft = useCallback(() => newDraftField((draftIdRef.current += 1)), []);
+
+  useEffect(() => {
+    activeRef.current = open || picking || drawing;
+  }, [open, picking, drawing]);
+
+  // Allow creating again after returning to the "new layer" setup step.
+  useEffect(() => {
+    if (!layerId) creatingRef.current = false;
+  }, [layerId]);
 
   const activeLayer = layerId
     ? (layers.find((l) => l.id === layerId) ?? null)
@@ -220,7 +236,7 @@ export function FieldCollectionDialog({
     setLayerId(first);
     setLayerName("");
     setGeometry("point");
-    setDrafts(first ? [] : [newDraftField()]);
+    setDrafts(first ? [] : [makeDraft()]);
     setPending(null);
     setValues({});
     setPhoto(null);
@@ -395,6 +411,8 @@ export function FieldCollectionDialog({
       setNotice(null);
       navigator.geolocation.getCurrentPosition(
         (pos) => {
+          // The fix may arrive after the tool was dismissed; don't act on it.
+          if (!activeRef.current) return;
           setLocating(false);
           const { longitude, latitude } = pos.coords;
           if (asVertex) {
@@ -405,6 +423,7 @@ export function FieldCollectionDialog({
           recenter(longitude, latitude);
         },
         () => {
+          if (!activeRef.current) return;
           setLocating(false);
           setNotice(t("fieldCollection.geolocationDenied"));
         },
@@ -439,6 +458,10 @@ export function FieldCollectionDialog({
   );
 
   const handleCreateLayer = useCallback(() => {
+    // Guard against a fast double-tap creating two identical layers before the
+    // setLayerId re-render swaps the setup step out (reset in the layerId effect).
+    if (creatingRef.current) return;
+    creatingRef.current = true;
     const collectionSchema = buildSchema(
       drafts.map((d) => ({
         label: d.label,
@@ -472,13 +495,12 @@ export function FieldCollectionDialog({
     const fc = current?.geojson ?? emptyFeatureCollection();
     updateLayer(activeLayer.id, { geojson: appendFeature(fc, feature) });
 
-    setSavedCount((n) => n + 1);
-    setNotice(
-      t("fieldCollection.saved", {
-        count: savedCount + 1,
-        layer: activeLayer.name,
-      }),
-    );
+    setSavedCount((n) => {
+      setNotice(
+        t("fieldCollection.saved", { count: n + 1, layer: activeLayer.name }),
+      );
+      return n + 1;
+    });
     setPending(null);
     setValues({});
     setPhoto(null);
@@ -493,7 +515,6 @@ export function FieldCollectionDialog({
     photo,
     activeGeometry,
     updateLayer,
-    savedCount,
     t,
     clearPreview,
   ]);
@@ -502,10 +523,12 @@ export function FieldCollectionDialog({
     setValues((v) => ({ ...v, [key]: value }));
 
   const errorText = (code: string | undefined): string | null => {
+    if (!code) return null;
     if (code === "required") return t("fieldCollection.errorRequired");
     if (code === "number") return t("fieldCollection.errorNumber");
     if (code === "choice") return t("fieldCollection.errorChoice");
-    return null;
+    // Surface any future validation code rather than hiding it silently.
+    return code;
   };
 
   const inSetup = !activeLayer;
@@ -567,7 +590,7 @@ export function FieldCollectionDialog({
                     setErrors({});
                     setNotice(null);
                     if (!e.target.value && drafts.length === 0) {
-                      setDrafts([newDraftField()]);
+                      setDrafts([makeDraft()]);
                     }
                   }}
                 >
@@ -588,6 +611,7 @@ export function FieldCollectionDialog({
                   onGeometry={setGeometry}
                   drafts={drafts}
                   onDrafts={setDrafts}
+                  newDraft={makeDraft}
                   onCreate={handleCreateLayer}
                 />
               ) : (
@@ -611,7 +635,10 @@ export function FieldCollectionDialog({
               )}
 
               {notice && (
-                <p className="rounded-md bg-muted p-2 text-sm text-muted-foreground">
+                <p
+                  aria-live="polite"
+                  className="rounded-md bg-muted p-2 text-sm text-muted-foreground"
+                >
                   {notice}
                 </p>
               )}
@@ -701,6 +728,7 @@ interface SetupStepProps {
   onGeometry: (g: GeometryType) => void;
   drafts: DraftField[];
   onDrafts: (next: DraftField[]) => void;
+  newDraft: () => DraftField;
   onCreate: () => void;
 }
 
@@ -711,6 +739,7 @@ function SetupStep({
   onGeometry,
   drafts,
   onDrafts,
+  newDraft,
   onCreate,
 }: SetupStepProps) {
   const { t } = useTranslation();
@@ -751,7 +780,7 @@ function SetupStep({
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => onDrafts([...drafts, newDraftField()])}
+          onClick={() => onDrafts([...drafts, newDraft()])}
         >
           <Plus className="mr-1 h-3.5 w-3.5" />
           {t("fieldCollection.addField")}

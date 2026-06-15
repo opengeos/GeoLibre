@@ -57,6 +57,13 @@ describe("buildSchema", () => {
     );
   });
 
+  it("avoids the reserved photo key for a user 'Photo' field", () => {
+    const schema = buildSchema([{ label: "Photo", type: "text" }]);
+    // "Photo" would slug to "photo", which is reserved for the attached image.
+    assert.notEqual(schema.fields[0].key, PHOTO_PROPERTY);
+    assert.equal(schema.fields[0].key, "photo_2");
+  });
+
   it("keeps required and choice options only where relevant", () => {
     const schema = buildSchema([
       { label: "Status", type: "choice", required: true, options: ["a", "b"] },

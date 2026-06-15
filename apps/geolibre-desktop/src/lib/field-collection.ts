@@ -51,6 +51,9 @@ export const COLLECTION_GEOMETRY_KEY = "collectionGeometry";
 /** Property key under which a captured photo (data URL) is stored. */
 export const PHOTO_PROPERTY = "photo";
 
+/** Property keys the tool manages itself; user fields must not reuse them. */
+export const RESERVED_PROPERTY_KEYS: readonly string[] = [PHOTO_PROPERTY];
+
 /**
  * Cap embedded photos so a capture session can't bloat the project JSON without
  * bound. Photos are stored inline as data URLs, so this is a hard per-photo cap.
@@ -150,12 +153,14 @@ export function buildSchema(
   }>,
 ): CollectionSchema {
   const fields: CollectionField[] = [];
+  // Reserve system-managed property keys so a user field (e.g. a "Photo" label
+  // slugged to "photo") can't collide with the attached photo and be silently
+  // overwritten when buildProperties merges the extras.
+  const taken = new Set<string>(RESERVED_PROPERTY_KEYS);
   for (const draft of drafts) {
     if (!draft.label.trim()) continue;
-    const key = slugifyKey(
-      draft.label,
-      fields.map((f) => f.key),
-    );
+    const key = slugifyKey(draft.label, taken);
+    taken.add(key);
     const field: CollectionField = {
       key,
       label: draft.label.trim(),
