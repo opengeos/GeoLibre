@@ -48,7 +48,6 @@ import {
   MoreHorizontal,
   Pencil,
   PanelBottomClose,
-  PanelBottomOpen,
   Plus,
   RotateCcw,
   Save,
@@ -1149,25 +1148,11 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     );
   };
 
+  // Hidden by default: render nothing when closed. The panel is opened on
+  // demand via the "Open attribute table" action in a vector layer's context
+  // menu (LayerPanel), which sets attributeTableOpen to true.
   if (!attributeTableOpen) {
-    return (
-      <section className="flex h-11 shrink-0 items-center gap-2 border-t bg-card px-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          title="Expand attribute table"
-          aria-label="Expand attribute table"
-          onClick={() => setAttributeTableOpen(true)}
-        >
-          <PanelBottomOpen className="h-4 w-4" />
-        </Button>
-        <TableProperties className="h-4 w-4 text-muted-foreground" />
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Attribute table
-        </span>
-      </section>
-    );
+    return null;
   }
 
   return (

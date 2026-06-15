@@ -48,7 +48,6 @@ import {
   Plus,
   RotateCcw,
   Settings,
-  TableProperties,
   Type,
   Trash2,
   TriangleAlert,
@@ -583,17 +582,6 @@ export function SettingsDialog({
               >
                 {t("settings.layout.showStylePanel")}
               </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem
-                checked={desktopSettings.layout.attributePanelVisible}
-                onCheckedChange={(checked: boolean) =>
-                  updateSavedLayoutSettings({
-                    attributePanelVisible: checked === true,
-                  })
-                }
-                onSelect={(event: Event) => event.preventDefault()}
-              >
-                {t("settings.layout.showAttributePanel")}
-              </DropdownMenuCheckboxItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onSelect={() => {
@@ -885,22 +873,6 @@ export function SettingsDialog({
                       />
                       <PanelRight className="h-4 w-4 text-muted-foreground" />
                       <span>{t("settings.layout.showStylePanel")}</span>
-                    </label>
-                    <label className="flex items-center gap-3 rounded-md border p-3 text-sm">
-                      <input
-                        className="h-4 w-4"
-                        type="checkbox"
-                        checked={
-                          draftDesktopSettings.layout.attributePanelVisible
-                        }
-                        onChange={(event) =>
-                          updateDraftLayoutSettings({
-                            attributePanelVisible: event.target.checked,
-                          })
-                        }
-                      />
-                      <TableProperties className="h-4 w-4 text-muted-foreground" />
-                      <span>{t("settings.layout.showAttributePanel")}</span>
                     </label>
                   </div>
                   <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
