@@ -23,6 +23,7 @@ interface ProcessingMenuProps {
   earthEnginePanel: ToolbarPanel;
   onOpenNetworkTool: (kind: "isochrone" | "od-matrix") => void;
   onOpenPlanetaryComputer: () => void;
+  onOpenGeoreferencer: () => void;
 }
 
 /** The Processing menu: assistant, toolboxes, conversion/vector/network/statistics/raster submenus. */
@@ -31,6 +32,7 @@ export function ProcessingMenu({
   earthEnginePanel,
   onOpenNetworkTool,
   onOpenPlanetaryComputer,
+  onOpenGeoreferencer,
 }: ProcessingMenuProps) {
   const { t } = useTranslation();
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
@@ -364,6 +366,9 @@ export function ProcessingMenu({
             {t("toolbar.command.segmentation")}
           </DropdownMenuItem>
         )}
+        <DropdownMenuItem onSelect={onOpenGeoreferencer}>
+          {t("toolbar.item.georeferencing")}
+        </DropdownMenuItem>
         <DropdownMenuItem onSelect={onOpenPlanetaryComputer}>
           {t("toolbar.command.planetaryComputer")}
         </DropdownMenuItem>

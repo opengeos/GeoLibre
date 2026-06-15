@@ -468,7 +468,7 @@
       "sectionCloudFormats": "Cloud formats",
       "section3dLayers": "3D layers",
       "sectionDatabases": "Databases",
-      "georeferenceImage": "Georeference Image...",
+      "georeferencing": "Georeferencing",
       "vectorLayer": "Vector Layer",
       "rasterLayer": "Raster Layer",
       "osmPbfLayer": "OSM PBF Layer",

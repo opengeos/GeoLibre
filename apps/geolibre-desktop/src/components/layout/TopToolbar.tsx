@@ -752,13 +752,13 @@ export function TopToolbar({
           setAddDataKind("deckgl-viz");
         }}
         onOpenOsmPbfDialog={() => osmPbf.setDialogOpen(true)}
-        onOpenGeoreferencer={() => setGeoreferencerOpen(true)}
       />
       <ProcessingMenu
         chrome={chrome}
         earthEnginePanel={panels.earthEngine}
         onOpenNetworkTool={consent.openNetworkTool}
         onOpenPlanetaryComputer={handleOpenPlanetaryComputer}
+        onOpenGeoreferencer={() => setGeoreferencerOpen(true)}
       />
       <ControlsMenu
         chrome={chrome}
