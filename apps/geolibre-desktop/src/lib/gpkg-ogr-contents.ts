@@ -80,7 +80,13 @@ export function ensureGpkgFeatureCountSync(
         : []),
     ]) {
       for (const row of db.exec(sql)[0]?.values ?? []) {
-        if (typeof row[0] === "string") featureTables.set(row[0].toLowerCase(), row[0]);
+        // First-seen wins: gpkg_contents is queried first, so its (spec-primary)
+        // spelling is kept as the canonical name even when gpkg_geometry_columns
+        // lists the same table with different casing.
+        const name = row[0];
+        if (typeof name === "string" && !featureTables.has(name.toLowerCase())) {
+          featureTables.set(name.toLowerCase(), name);
+        }
       }
     }
     if (featureTables.size === 0) return bytes;
@@ -98,13 +104,18 @@ export function ensureGpkgFeatureCountSync(
     const tablesWithRow = new Set<string>(); // lowercase keys
     if (hasOgrContents) {
       for (const row of db.exec(
-        "SELECT table_name, typeof(feature_count) FROM gpkg_ogr_contents",
+        "SELECT table_name, typeof(feature_count), feature_count FROM gpkg_ogr_contents",
       )[0]?.values ?? []) {
         const name = row[0];
         if (typeof name !== "string") continue;
         const key = name.toLowerCase();
         tablesWithRow.add(key);
-        if (row[1] === "integer") tablesWithValidCount.add(key);
+        // A valid cached count is a non-negative integer. GDAL uses -1 as a
+        // "dirty/invalid" sentinel and recomputes the count for it (the
+        // multithreaded path that crashes WASM), so a negative value is not safe.
+        if (row[1] === "integer" && (row[2] as number) >= 0) {
+          tablesWithValidCount.add(key);
+        }
       }
     }
 
