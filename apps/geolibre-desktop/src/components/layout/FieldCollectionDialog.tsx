@@ -17,31 +17,40 @@ import {
   Separator,
 } from "@geolibre/ui";
 import {
+  Check,
+  ClipboardList,
   Crosshair,
   Loader2,
   MapPin,
   Navigation,
+  Pencil,
   Plus,
   Save,
   Trash2,
+  Undo2,
   X,
 } from "lucide-react";
 import {
   appendFeature,
+  buildGeometryFeature,
   buildProperties,
   buildSchema,
   collectionMetadata,
   type CollectionSchema,
   dataUrlByteLength,
+  drawPreview,
   emptyFeatureCollection,
   type FieldType,
+  getGeometryType,
   getSchema,
+  type GeometryType,
   isCollectionLayer,
-  makePointFeature,
   MAX_PHOTO_BYTES,
+  minVertices,
   parseOptions,
   PHOTO_PROPERTY,
   validateForm,
+  type Vertex,
 } from "../../lib/field-collection";
 
 interface FieldCollectionDialogProps {
@@ -51,6 +60,11 @@ interface FieldCollectionDialogProps {
 }
 
 const FIELD_TYPES: FieldType[] = ["text", "number", "date", "choice"];
+const GEOMETRY_TYPES: GeometryType[] = ["point", "line", "polygon"];
+
+/** Transient map source/layers used to preview an in-progress line/polygon. */
+const DRAW_SOURCE = "__fc_draw__";
+const DRAW_COLOR = "#ef4444";
 
 interface DraftField {
   id: number;
@@ -70,12 +84,64 @@ function formatLatLng(lng: number, lat: number): string {
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 }
 
+/** Add/update the transient drawing preview on the map. */
+function syncDrawPreview(
+  map: maplibregl.Map,
+  geometry: GeometryType,
+  verts: Vertex[],
+): void {
+  const data = drawPreview(geometry, verts);
+  const src = map.getSource(DRAW_SOURCE) as maplibregl.GeoJSONSource | undefined;
+  if (src) {
+    src.setData(data);
+    return;
+  }
+  map.addSource(DRAW_SOURCE, { type: "geojson", data });
+  map.addLayer({
+    id: `${DRAW_SOURCE}-line`,
+    type: "line",
+    source: DRAW_SOURCE,
+    filter: ["==", ["geometry-type"], "LineString"],
+    paint: { "line-color": DRAW_COLOR, "line-width": 2, "line-dasharray": [2, 1] },
+  });
+  map.addLayer({
+    id: `${DRAW_SOURCE}-pt`,
+    type: "circle",
+    source: DRAW_SOURCE,
+    filter: ["==", ["geometry-type"], "Point"],
+    paint: {
+      "circle-radius": 4,
+      "circle-color": DRAW_COLOR,
+      "circle-stroke-color": "#ffffff",
+      "circle-stroke-width": 1,
+    },
+  });
+}
+
+function removeDrawPreview(map: maplibregl.Map): void {
+  for (const id of [`${DRAW_SOURCE}-line`, `${DRAW_SOURCE}-pt`]) {
+    if (map.getLayer(id)) map.removeLayer(id);
+  }
+  if (map.getSource(DRAW_SOURCE)) map.removeSource(DRAW_SOURCE);
+}
+
 /**
- * Field Collection: capture point observations against a custom attribute form,
- * placing each by GPS or by tapping the map. Points are written to a tagged
- * `geojson` collection layer in the store, so they persist in the project, show
- * in the attribute table, export, and work offline. Designed mobile-first to pair
- * with the native Android build and the offline tile cache.
+ * Radix locks `document.body { pointer-events: none }` while a modal dialog is
+ * open and can leave it set after a programmatic close, which would stop the map
+ * from receiving the capture click. Clear it whenever we hide the dialog to draw.
+ */
+function releaseBodyPointerEvents(): void {
+  if (document.body.style.pointerEvents === "none") {
+    document.body.style.pointerEvents = "";
+  }
+}
+
+/**
+ * Field Collection: capture point, line, or polygon observations against a
+ * custom attribute form, placing geometry by GPS or by tapping the map. Captures
+ * are written to a tagged `geojson` collection layer in the store, so they
+ * persist in the project, show in the attribute table, export, and work offline.
+ * Designed mobile-first to pair with the native Android build and tile cache.
  */
 export function FieldCollectionDialog({
   open,
@@ -95,19 +161,25 @@ export function FieldCollectionDialog({
   // Target layer: "" means "create a new layer" (the setup step is shown).
   const [layerId, setLayerId] = useState<string>("");
   const [layerName, setLayerName] = useState("");
+  const [geometry, setGeometry] = useState<GeometryType>("point");
   const [drafts, setDrafts] = useState<DraftField[]>([]);
 
-  // Capture state.
-  const [pending, setPending] = useState<{ lng: number; lat: number } | null>(null);
+  // Capture state. `pending` holds the captured coordinate(s) awaiting attributes.
+  const [pending, setPending] = useState<Vertex[] | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [photo, setPhoto] = useState<string | null>(null);
-  const [picking, setPicking] = useState(false);
+  const [picking, setPicking] = useState(false); // point: one-shot map click
+  const [drawing, setDrawing] = useState(false); // line/polygon: multi-vertex
+  const [vertices, setVertices] = useState<Vertex[]>([]);
   const [locating, setLocating] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
   const [savedCount, setSavedCount] = useState(0);
 
   const markerRef = useRef<maplibregl.Marker | null>(null);
+  // Set just before we reopen the dialog after a map capture, so the open-reset
+  // effect below doesn't wipe the freshly captured geometry/form.
+  const suppressResetRef = useRef(false);
 
   const activeLayer = layerId
     ? (layers.find((l) => l.id === layerId) ?? null)
@@ -115,19 +187,44 @@ export function FieldCollectionDialog({
   const schema: CollectionSchema | null = activeLayer
     ? getSchema(activeLayer)
     : null;
+  const activeGeometry: GeometryType = activeLayer
+    ? getGeometryType(activeLayer)
+    : geometry;
+
+  const getMap = useCallback(
+    () => mapControllerRef.current?.getMap() ?? null,
+    [mapControllerRef],
+  );
+
+  const clearMarker = useCallback(() => {
+    markerRef.current?.remove();
+    markerRef.current = null;
+  }, []);
+
+  const clearPreview = useCallback(() => {
+    clearMarker();
+    const map = getMap();
+    if (map) removeDrawPreview(map);
+  }, [clearMarker, getMap]);
 
   // Reset everything when the dialog opens; default to the first existing
   // collection layer if there is one, otherwise the "new layer" setup step.
   useEffect(() => {
     if (!open) return;
+    // Reopened after a map capture — keep the captured state, skip the reset.
+    if (suppressResetRef.current) {
+      suppressResetRef.current = false;
+      return;
+    }
     const first = collectionLayers[0]?.id ?? "";
     setLayerId(first);
     setLayerName("");
+    setGeometry("point");
     setDrafts(first ? [] : [newDraftField()]);
     setPending(null);
     setValues({});
     setPhoto(null);
-    setPicking(false);
+    setVertices([]);
     setLocating(false);
     setErrors({});
     setNotice(null);
@@ -136,100 +233,191 @@ export function FieldCollectionDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Clean up the preview marker when the dialog closes or unmounts.
-  const clearMarker = useCallback(() => {
-    markerRef.current?.remove();
-    markerRef.current = null;
-  }, []);
+  // Tear down any preview when the dialog fully closes (not while drawing with
+  // it intentionally hidden) and on unmount.
   useEffect(() => {
-    if (!open) clearMarker();
-  }, [open, clearMarker]);
-  useEffect(() => () => clearMarker(), [clearMarker]);
+    if (!open && !picking && !drawing) clearPreview();
+  }, [open, picking, drawing, clearPreview]);
+  useEffect(() => () => clearPreview(), [clearPreview]);
 
-  // Show / move a transient marker at the pending capture location.
   const showMarker = useCallback(
     (lng: number, lat: number) => {
-      const map = mapControllerRef.current?.getMap();
+      const map = getMap();
       if (!map) return;
       if (markerRef.current) {
         markerRef.current.setLngLat([lng, lat]);
       } else {
-        markerRef.current = new maplibregl.Marker({ color: "#ef4444" })
+        markerRef.current = new maplibregl.Marker({ color: DRAW_COLOR })
           .setLngLat([lng, lat])
           .addTo(map);
       }
     },
-    [mapControllerRef],
+    [getMap],
   );
 
-  const captureAt = useCallback(
-    (lng: number, lat: number, recenter: boolean) => {
-      setPending({ lng, lat });
+  const recenter = useCallback(
+    (lng: number, lat: number) => {
+      mapControllerRef.current?.flyTo({
+        center: [lng, lat],
+        zoom: Math.max(getMap()?.getZoom() ?? 0, 15),
+      });
+    },
+    [mapControllerRef, getMap],
+  );
+
+  // ---- Point capture (single coordinate) -------------------------------------
+
+  const capturePoint = useCallback(
+    (lng: number, lat: number, fly: boolean) => {
+      setPending([[lng, lat]]);
       setErrors({});
       setNotice(null);
       showMarker(lng, lat);
-      if (recenter) {
-        mapControllerRef.current?.flyTo({
-          center: [lng, lat],
-          zoom: Math.max(mapControllerRef.current?.getMap()?.getZoom() ?? 0, 15),
-        });
-      }
+      if (fly) recenter(lng, lat);
     },
-    [mapControllerRef, showMarker],
+    [showMarker, recenter],
   );
 
-  // Pick-on-map: hide the modal so the map is clickable, arm a one-shot click.
   const handlePickOnMap = useCallback(() => {
-    if (!mapControllerRef.current?.getMap()) return;
+    if (!getMap()) return;
     setPicking(true);
     onOpenChange(false);
-  }, [mapControllerRef, onOpenChange]);
+  }, [getMap, onOpenChange]);
 
   useEffect(() => {
     if (!picking) return;
-    const map = mapControllerRef.current?.getMap();
+    const map = getMap();
     if (!map) {
       setPicking(false);
       return;
     }
+    releaseBodyPointerEvents();
+    const raf = requestAnimationFrame(releaseBodyPointerEvents);
     const prevCursor = map.getCanvas().style.cursor;
     map.getCanvas().style.cursor = "crosshair";
     const handler = (e: maplibregl.MapMouseEvent) => {
-      captureAt(e.lngLat.lng, e.lngLat.lat, false);
+      capturePoint(e.lngLat.lng, e.lngLat.lat, false);
       setPicking(false);
+      suppressResetRef.current = true;
       onOpenChange(true);
     };
     map.once("click", handler);
     return () => {
+      cancelAnimationFrame(raf);
       map.off("click", handler);
       map.getCanvas().style.cursor = prevCursor;
     };
-  }, [picking, mapControllerRef, onOpenChange, captureAt]);
+  }, [picking, getMap, onOpenChange, capturePoint]);
 
-  const handleUseGps = useCallback(() => {
-    if (!("geolocation" in navigator)) {
-      setNotice(t("fieldCollection.noGeolocation"));
+  // ---- Line / polygon drawing (multi-vertex) ---------------------------------
+
+  const pushVertex = useCallback(
+    (lng: number, lat: number) => {
+      setVertices((vs) => {
+        const next: Vertex[] = [...vs, [lng, lat]];
+        const map = getMap();
+        if (map) syncDrawPreview(map, activeGeometry, next);
+        return next;
+      });
+    },
+    [getMap, activeGeometry],
+  );
+
+  const handleStartDrawing = useCallback(() => {
+    if (!getMap()) return;
+    setVertices([]);
+    setPending(null);
+    setNotice(null);
+    setDrawing(true);
+    onOpenChange(false);
+  }, [getMap, onOpenChange]);
+
+  useEffect(() => {
+    if (!drawing) return;
+    const map = getMap();
+    if (!map) {
+      setDrawing(false);
       return;
     }
-    setLocating(true);
-    setNotice(null);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLocating(false);
-        captureAt(pos.coords.longitude, pos.coords.latitude, true);
-      },
-      () => {
-        setLocating(false);
-        setNotice(t("fieldCollection.geolocationDenied"));
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
-    );
-  }, [t, captureAt]);
+    releaseBodyPointerEvents();
+    const raf = requestAnimationFrame(releaseBodyPointerEvents);
+    const prevCursor = map.getCanvas().style.cursor;
+    map.getCanvas().style.cursor = "crosshair";
+    const handler = (e: maplibregl.MapMouseEvent) => {
+      pushVertex(e.lngLat.lng, e.lngLat.lat);
+    };
+    map.on("click", handler);
+    return () => {
+      cancelAnimationFrame(raf);
+      map.off("click", handler);
+      map.getCanvas().style.cursor = prevCursor;
+    };
+  }, [drawing, getMap, pushVertex]);
+
+  const handleUndoVertex = useCallback(() => {
+    setVertices((vs) => {
+      const next = vs.slice(0, -1);
+      const map = getMap();
+      if (map) syncDrawPreview(map, activeGeometry, next);
+      return next;
+    });
+  }, [getMap, activeGeometry]);
+
+  const handleFinishDrawing = useCallback(() => {
+    if (vertices.length < minVertices(activeGeometry)) return;
+    setPending(vertices);
+    setErrors({});
+    setDrawing(false);
+    const map = getMap();
+    if (map) removeDrawPreview(map);
+    suppressResetRef.current = true;
+    onOpenChange(true);
+  }, [vertices, activeGeometry, getMap, onOpenChange]);
+
+  const handleCancelDrawing = useCallback(() => {
+    setDrawing(false);
+    setVertices([]);
+    const map = getMap();
+    if (map) removeDrawPreview(map);
+    suppressResetRef.current = true;
+    onOpenChange(true);
+  }, [getMap, onOpenChange]);
+
+  // ---- GPS (a point, or one vertex while drawing) ----------------------------
+
+  const handleUseGps = useCallback(
+    (asVertex: boolean) => {
+      if (!("geolocation" in navigator)) {
+        setNotice(t("fieldCollection.noGeolocation"));
+        return;
+      }
+      setLocating(true);
+      setNotice(null);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setLocating(false);
+          const { longitude, latitude } = pos.coords;
+          if (asVertex) {
+            pushVertex(longitude, latitude);
+          } else {
+            capturePoint(longitude, latitude, true);
+          }
+          recenter(longitude, latitude);
+        },
+        () => {
+          setLocating(false);
+          setNotice(t("fieldCollection.geolocationDenied"));
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+      );
+    },
+    [t, pushVertex, capturePoint, recenter],
+  );
 
   const handlePhoto = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
-      e.target.value = ""; // allow re-selecting the same file
+      e.target.value = "";
       if (!file) return;
       const reader = new FileReader();
       reader.onload = () => {
@@ -250,7 +438,6 @@ export function FieldCollectionDialog({
     [t],
   );
 
-  // Create the collection layer from the draft schema and switch into capture mode.
   const handleCreateLayer = useCallback(() => {
     const collectionSchema = buildSchema(
       drafts.map((d) => ({
@@ -262,12 +449,12 @@ export function FieldCollectionDialog({
     );
     const name = layerName.trim() || t("fieldCollection.layerNamePlaceholder");
     const id = addGeoJsonLayer(name, emptyFeatureCollection());
-    updateLayer(id, { metadata: collectionMetadata(collectionSchema) });
+    updateLayer(id, { metadata: collectionMetadata(collectionSchema, geometry) });
     setLayerId(id);
     setNotice(null);
-  }, [drafts, layerName, addGeoJsonLayer, updateLayer, t]);
+  }, [drafts, layerName, geometry, addGeoJsonLayer, updateLayer, t]);
 
-  const handleSavePoint = useCallback(() => {
+  const handleSave = useCallback(() => {
     if (!activeLayer || !schema || !pending) return;
     const result = validateForm(schema, values);
     if (!result.ok) {
@@ -277,9 +464,8 @@ export function FieldCollectionDialog({
     const extra: Record<string, unknown> = {};
     if (photo) extra[PHOTO_PROPERTY] = photo;
     const props = buildProperties(schema, values, extra);
-    const feature = makePointFeature(pending.lng, pending.lat, props);
+    const feature = buildGeometryFeature(activeGeometry, pending, props);
 
-    // Read the layer fresh from the store so we append to the latest features.
     const current = useAppStore
       .getState()
       .layers.find((l) => l.id === activeLayer.id);
@@ -293,29 +479,29 @@ export function FieldCollectionDialog({
         layer: activeLayer.name,
       }),
     );
-    // Clear the form for the next capture but keep the chosen layer.
     setPending(null);
     setValues({});
     setPhoto(null);
+    setVertices([]);
     setErrors({});
-    clearMarker();
+    clearPreview();
   }, [
     activeLayer,
     schema,
     pending,
     values,
     photo,
+    activeGeometry,
     updateLayer,
     savedCount,
     t,
-    clearMarker,
+    clearPreview,
   ]);
 
   const setValue = (key: string, value: string) =>
     setValues((v) => ({ ...v, [key]: value }));
 
   const errorText = (code: string | undefined): string | null => {
-    if (!code) return null;
     if (code === "required") return t("fieldCollection.errorRequired");
     if (code === "number") return t("fieldCollection.errorNumber");
     if (code === "choice") return t("fieldCollection.errorChoice");
@@ -324,91 +510,195 @@ export function FieldCollectionDialog({
 
   const inSetup = !activeLayer;
 
+  // Quick-access control on the map: once a collection layer exists, surface a
+  // floating button so users can reopen the tool without the Controls menu
+  // during a collection session. Hidden while capturing (dialog reopens itself).
+  const showQuickOpen =
+    !open && !picking && !drawing && collectionLayers.length > 0;
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>{t("fieldCollection.title")}</DialogTitle>
-          <DialogDescription>
-            {t("fieldCollection.description")}
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      {showQuickOpen && (
+        <button
+          type="button"
+          onClick={() => onOpenChange(true)}
+          aria-label={t("fieldCollection.reopen")}
+          className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full border bg-card px-4 py-2 text-sm font-medium shadow-lg transition-colors hover:bg-accent"
+        >
+          <ClipboardList className="h-4 w-4 text-primary" />
+          {t("fieldCollection.title")}
+        </button>
+      )}
 
-        <ScrollArea className="max-h-[60vh] pr-3">
-          <div className="space-y-4 py-1">
-            {/* Target layer selector */}
-            <div className="space-y-1.5">
-              <Label>{t("fieldCollection.targetLayer")}</Label>
-              <Select
-                value={layerId}
-                onChange={(e) => {
-                  setLayerId(e.target.value);
-                  setPending(null);
-                  setValues({});
-                  setPhoto(null);
-                  setErrors({});
-                  setNotice(null);
-                  if (!e.target.value && drafts.length === 0) {
-                    setDrafts([newDraftField()]);
-                  }
-                }}
-              >
-                {collectionLayers.map((l: GeoLibreLayer) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}
-                  </option>
-                ))}
-                <option value="">{t("fieldCollection.newLayer")}</option>
-              </Select>
+      {drawing && (
+        <DrawToolbar
+          geometry={activeGeometry}
+          count={vertices.length}
+          minCount={minVertices(activeGeometry)}
+          locating={locating}
+          onAddGps={() => handleUseGps(true)}
+          onUndo={handleUndoVertex}
+          onFinish={handleFinishDrawing}
+          onCancel={handleCancelDrawing}
+        />
+      )}
+
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("fieldCollection.title")}</DialogTitle>
+            <DialogDescription>
+              {t("fieldCollection.description")}
+            </DialogDescription>
+          </DialogHeader>
+
+          <ScrollArea className="max-h-[60vh] pr-3">
+            <div className="space-y-4 py-1">
+              <div className="space-y-1.5">
+                <Label>{t("fieldCollection.targetLayer")}</Label>
+                <Select
+                  value={layerId}
+                  onChange={(e) => {
+                    setLayerId(e.target.value);
+                    setPending(null);
+                    setValues({});
+                    setPhoto(null);
+                    setVertices([]);
+                    setErrors({});
+                    setNotice(null);
+                    if (!e.target.value && drafts.length === 0) {
+                      setDrafts([newDraftField()]);
+                    }
+                  }}
+                >
+                  {collectionLayers.map((l: GeoLibreLayer) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
+                  <option value="">{t("fieldCollection.newLayer")}</option>
+                </Select>
+              </div>
+
+              {inSetup ? (
+                <SetupStep
+                  layerName={layerName}
+                  onLayerName={setLayerName}
+                  geometry={geometry}
+                  onGeometry={setGeometry}
+                  drafts={drafts}
+                  onDrafts={setDrafts}
+                  onCreate={handleCreateLayer}
+                />
+              ) : (
+                <CaptureStep
+                  geometry={activeGeometry}
+                  schema={schema!}
+                  pending={pending}
+                  values={values}
+                  setValue={setValue}
+                  errors={errors}
+                  errorText={errorText}
+                  photo={photo}
+                  onPhoto={handlePhoto}
+                  onRemovePhoto={() => setPhoto(null)}
+                  locating={locating}
+                  onUseGps={() => handleUseGps(false)}
+                  onPickOnMap={handlePickOnMap}
+                  onStartDrawing={handleStartDrawing}
+                  onSave={handleSave}
+                />
+              )}
+
+              {notice && (
+                <p className="rounded-md bg-muted p-2 text-sm text-muted-foreground">
+                  {notice}
+                </p>
+              )}
             </div>
+          </ScrollArea>
 
-            {inSetup ? (
-              <SetupStep
-                layerName={layerName}
-                onLayerName={setLayerName}
-                drafts={drafts}
-                onDrafts={setDrafts}
-                onCreate={handleCreateLayer}
-              />
-            ) : (
-              <CaptureStep
-                schema={schema!}
-                pending={pending}
-                values={values}
-                setValue={setValue}
-                errors={errors}
-                errorText={errorText}
-                photo={photo}
-                onPhoto={handlePhoto}
-                onRemovePhoto={() => setPhoto(null)}
-                locating={locating}
-                onUseGps={handleUseGps}
-                onPickOnMap={handlePickOnMap}
-                onSave={handleSavePoint}
-              />
-            )}
-
-            {notice && (
-              <p className="rounded-md bg-muted p-2 text-sm text-muted-foreground">
-                {notice}
-              </p>
-            )}
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              {t("common.close")}
+            </Button>
           </div>
-        </ScrollArea>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
 
-        <div className="flex justify-end">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            {t("common.close")}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+interface DrawToolbarProps {
+  geometry: GeometryType;
+  count: number;
+  minCount: number;
+  locating: boolean;
+  onAddGps: () => void;
+  onUndo: () => void;
+  onFinish: () => void;
+  onCancel: () => void;
+}
+
+/** Floating control shown while drawing a line/polygon (dialog hidden). */
+function DrawToolbar({
+  geometry,
+  count,
+  minCount,
+  locating,
+  onAddGps,
+  onUndo,
+  onFinish,
+  onCancel,
+}: DrawToolbarProps) {
+  const { t } = useTranslation();
+  const ready = count >= minCount;
+  return (
+    <div className="fixed bottom-6 left-1/2 z-50 flex max-w-[95vw] -translate-x-1/2 flex-col gap-2 rounded-lg border bg-card p-3 shadow-xl">
+      <div className="flex items-center gap-2 text-sm">
+        <Pencil className="h-4 w-4 text-primary" />
+        <span className="font-medium">{t(`fieldCollection.geom.${geometry}`)}</span>
+        <span className="text-muted-foreground">
+          {ready
+            ? t("fieldCollection.vertices", { count })
+            : t("fieldCollection.needMore", { min: minCount })}
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="outline" size="sm" onClick={onAddGps} disabled={locating}>
+          {locating ? (
+            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Navigation className="mr-1 h-3.5 w-3.5" />
+          )}
+          {t("fieldCollection.addGpsVertex")}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onUndo}
+          disabled={count === 0}
+        >
+          <Undo2 className="mr-1 h-3.5 w-3.5" />
+          {t("fieldCollection.undo")}
+        </Button>
+        <Button size="sm" onClick={onFinish} disabled={!ready}>
+          <Check className="mr-1 h-3.5 w-3.5" />
+          {t("fieldCollection.finish")}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onCancel}>
+          {t("common.cancel")}
+        </Button>
+      </div>
+    </div>
   );
 }
 
 interface SetupStepProps {
   layerName: string;
   onLayerName: (v: string) => void;
+  geometry: GeometryType;
+  onGeometry: (g: GeometryType) => void;
   drafts: DraftField[];
   onDrafts: (next: DraftField[]) => void;
   onCreate: () => void;
@@ -417,6 +707,8 @@ interface SetupStepProps {
 function SetupStep({
   layerName,
   onLayerName,
+  geometry,
+  onGeometry,
   drafts,
   onDrafts,
   onCreate,
@@ -435,6 +727,21 @@ function SetupStep({
           placeholder={t("fieldCollection.layerNamePlaceholder")}
           onChange={(e) => onLayerName(e.target.value)}
         />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="fc-geometry">{t("fieldCollection.geometry")}</Label>
+        <Select
+          id="fc-geometry"
+          value={geometry}
+          onChange={(e) => onGeometry(e.target.value as GeometryType)}
+        >
+          {GEOMETRY_TYPES.map((g) => (
+            <option key={g} value={g}>
+              {t(`fieldCollection.geom.${g}`)}
+            </option>
+          ))}
+        </Select>
       </div>
 
       <Separator />
@@ -519,8 +826,9 @@ function SetupStep({
 }
 
 interface CaptureStepProps {
+  geometry: GeometryType;
   schema: CollectionSchema;
-  pending: { lng: number; lat: number } | null;
+  pending: Vertex[] | null;
   values: Record<string, string>;
   setValue: (key: string, value: string) => void;
   errors: Record<string, string>;
@@ -531,10 +839,12 @@ interface CaptureStepProps {
   locating: boolean;
   onUseGps: () => void;
   onPickOnMap: () => void;
+  onStartDrawing: () => void;
   onSave: () => void;
 }
 
 function CaptureStep({
+  geometry,
   schema,
   pending,
   values,
@@ -547,36 +857,50 @@ function CaptureStep({
   locating,
   onUseGps,
   onPickOnMap,
+  onStartDrawing,
   onSave,
 }: CaptureStepProps) {
   const { t } = useTranslation();
+  const isPoint = geometry === "point";
+
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-2">
-        <Button variant="outline" onClick={onUseGps} disabled={locating}>
-          {locating ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Navigation className="mr-2 h-4 w-4" />
-          )}
-          {locating ? t("fieldCollection.locating") : t("fieldCollection.useGps")}
+      {isPoint ? (
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="outline" onClick={onUseGps} disabled={locating}>
+            {locating ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Navigation className="mr-2 h-4 w-4" />
+            )}
+            {locating ? t("fieldCollection.locating") : t("fieldCollection.useGps")}
+          </Button>
+          <Button variant="outline" onClick={onPickOnMap}>
+            <Crosshair className="mr-2 h-4 w-4" />
+            {t("fieldCollection.pickOnMap")}
+          </Button>
+        </div>
+      ) : (
+        <Button variant="outline" className="w-full" onClick={onStartDrawing}>
+          <Pencil className="mr-2 h-4 w-4" />
+          {t("fieldCollection.drawOnMap")}
         </Button>
-        <Button variant="outline" onClick={onPickOnMap}>
-          <Crosshair className="mr-2 h-4 w-4" />
-          {t("fieldCollection.pickOnMap")}
-        </Button>
-      </div>
+      )}
 
       {!pending ? (
         <p className="text-sm text-muted-foreground">
-          {t("fieldCollection.captureHint")}
+          {isPoint
+            ? t("fieldCollection.captureHint")
+            : t("fieldCollection.drawHint")}
         </p>
       ) : (
         <>
           <div className="flex items-center gap-2 rounded-md bg-muted p-2 text-sm">
             <MapPin className="h-4 w-4 shrink-0 text-primary" />
             <span className="tabular-nums">
-              {formatLatLng(pending.lng, pending.lat)}
+              {isPoint
+                ? formatLatLng(pending[0][0], pending[0][1])
+                : t("fieldCollection.vertices", { count: pending.length })}
             </span>
           </div>
 

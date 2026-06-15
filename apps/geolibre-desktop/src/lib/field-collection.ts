@@ -11,10 +11,22 @@
  * `metadata.collectionSchema`. Both ride through `.geolibre.json` save/load via
  * the layer's free-form `metadata` bag, so collection layers reopen ready to use.
  */
-import type { Feature, FeatureCollection, Point } from "geojson";
+import type {
+  Feature,
+  FeatureCollection,
+  LineString,
+  Point,
+  Polygon,
+} from "geojson";
 
 /** The attribute field kinds a collection form can declare. */
 export type FieldType = "text" | "number" | "date" | "choice";
+
+/** Geometry a collection layer captures. A layer holds one geometry type. */
+export type GeometryType = "point" | "line" | "polygon";
+
+/** A captured coordinate as [lng, lat]. */
+export type Vertex = [number, number];
 
 export interface CollectionField {
   /** Stable, slugified property key written to every captured feature. */
@@ -34,6 +46,7 @@ export interface CollectionSchema {
 /** `metadata` keys used to tag a collection layer and store its schema. */
 export const FIELD_COLLECTION_FLAG = "fieldCollection";
 export const COLLECTION_SCHEMA_KEY = "collectionSchema";
+export const COLLECTION_GEOMETRY_KEY = "collectionGeometry";
 
 /** Property key under which a captured photo (data URL) is stored. */
 export const PHOTO_PROPERTY = "photo";
@@ -76,15 +89,30 @@ export function getSchema(layer: CollectionLayerLike): CollectionSchema {
   return { fields: [] };
 }
 
+/** Read a layer's captured geometry type, defaulting to `point`. */
+export function getGeometryType(layer: CollectionLayerLike): GeometryType {
+  const g = layer.metadata?.[COLLECTION_GEOMETRY_KEY];
+  return g === "line" || g === "polygon" ? g : "point";
+}
+
+/** Minimum vertices a geometry needs before it can be finished/saved. */
+export function minVertices(geometry: GeometryType): number {
+  if (geometry === "polygon") return 3;
+  if (geometry === "line") return 2;
+  return 1;
+}
+
 /** Build the metadata patch that tags a layer as a collection layer. */
 export function collectionMetadata(
   schema: CollectionSchema,
+  geometry: GeometryType = "point",
   existing: Record<string, unknown> = {},
 ): Record<string, unknown> {
   return {
     ...existing,
     [FIELD_COLLECTION_FLAG]: true,
     [COLLECTION_SCHEMA_KEY]: schema,
+    [COLLECTION_GEOMETRY_KEY]: geometry,
   };
 }
 
@@ -230,6 +258,67 @@ export function makePointFeature(
     geometry: { type: "Point", coordinates: [lng, lat] },
     properties,
   };
+}
+
+/** Construct a GeoJSON LineString feature from captured vertices. */
+export function makeLineFeature(
+  coords: Vertex[],
+  properties: Record<string, unknown>,
+): Feature<LineString> {
+  return {
+    type: "Feature",
+    geometry: { type: "LineString", coordinates: coords.map((c) => [...c]) },
+    properties,
+  };
+}
+
+/**
+ * Construct a GeoJSON Polygon feature from captured vertices, closing the ring
+ * (repeating the first vertex at the end) if the caller didn't already.
+ */
+export function makePolygonFeature(
+  coords: Vertex[],
+  properties: Record<string, unknown>,
+): Feature<Polygon> {
+  const ring: Vertex[] = coords.map((c) => [...c] as Vertex);
+  const first = ring[0];
+  const last = ring[ring.length - 1];
+  if (first && last && (first[0] !== last[0] || first[1] !== last[1])) {
+    ring.push([...first] as Vertex);
+  }
+  return {
+    type: "Feature",
+    geometry: { type: "Polygon", coordinates: [ring] },
+    properties,
+  };
+}
+
+/** Build the appropriate feature for a geometry type from captured vertices. */
+export function buildGeometryFeature(
+  geometry: GeometryType,
+  coords: Vertex[],
+  properties: Record<string, unknown>,
+): Feature {
+  if (geometry === "line") return makeLineFeature(coords, properties);
+  if (geometry === "polygon") return makePolygonFeature(coords, properties);
+  return makePointFeature(coords[0][0], coords[0][1], properties);
+}
+
+/** A GeoJSON preview of in-progress drawing (the line/ring plus its vertices). */
+export function drawPreview(
+  geometry: GeometryType,
+  coords: Vertex[],
+): FeatureCollection {
+  const features: Feature[] = coords.map((c, i) =>
+    makePointFeature(c[0], c[1], { index: i }),
+  );
+  if (geometry === "line" && coords.length >= 2) {
+    features.push(makeLineFeature(coords, {}));
+  } else if (geometry === "polygon" && coords.length >= 2) {
+    // Show the open ring while drawing; it visually closes at >= 3 vertices.
+    features.push(makeLineFeature(coords, {}));
+  }
+  return { type: "FeatureCollection", features };
 }
 
 /** Return a new FeatureCollection with `feature` appended (immutably). */

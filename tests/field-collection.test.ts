@@ -2,17 +2,24 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   appendFeature,
+  buildGeometryFeature,
   buildProperties,
   buildSchema,
   collectionMetadata,
+  COLLECTION_GEOMETRY_KEY,
   COLLECTION_SCHEMA_KEY,
   coerceValue,
   dataUrlByteLength,
+  drawPreview,
   emptyFeatureCollection,
   FIELD_COLLECTION_FLAG,
+  getGeometryType,
   getSchema,
   isCollectionLayer,
+  makeLineFeature,
   makePointFeature,
+  makePolygonFeature,
+  minVertices,
   parseOptions,
   PHOTO_PROPERTY,
   slugifyKey,
@@ -162,16 +169,26 @@ describe("buildProperties", () => {
 });
 
 describe("collection layer helpers", () => {
-  it("round-trips the schema through metadata", () => {
+  it("round-trips the schema and geometry through metadata", () => {
     const schema = buildSchema([{ label: "Name", type: "text" }]);
-    const meta = collectionMetadata(schema, { existing: 1 });
+    const meta = collectionMetadata(schema, "polygon", { existing: 1 });
     assert.equal(meta[FIELD_COLLECTION_FLAG], true);
     assert.equal(meta.existing, 1);
     assert.deepEqual(meta[COLLECTION_SCHEMA_KEY], schema);
+    assert.equal(meta[COLLECTION_GEOMETRY_KEY], "polygon");
 
     const layer = { type: "geojson", metadata: meta };
     assert.equal(isCollectionLayer(layer), true);
     assert.deepEqual(getSchema(layer), schema);
+    assert.equal(getGeometryType(layer), "polygon");
+  });
+
+  it("defaults geometry to point when unset or invalid", () => {
+    assert.equal(getGeometryType({ type: "geojson", metadata: {} }), "point");
+    assert.equal(
+      getGeometryType({ type: "geojson", metadata: { collectionGeometry: "blob" } }),
+      "point",
+    );
   });
 
   it("does not treat ordinary layers as collection layers", () => {
@@ -202,6 +219,101 @@ describe("feature builders", () => {
     const next = appendFeature(fc, makePointFeature(0, 0, {}));
     assert.equal(fc.features.length, 0);
     assert.equal(next.features.length, 1);
+  });
+});
+
+describe("line/polygon geometry", () => {
+  it("minVertices is 1/2/3 for point/line/polygon", () => {
+    assert.equal(minVertices("point"), 1);
+    assert.equal(minVertices("line"), 2);
+    assert.equal(minVertices("polygon"), 3);
+  });
+
+  it("makeLineFeature keeps the vertex order", () => {
+    const f = makeLineFeature(
+      [
+        [0, 0],
+        [1, 1],
+        [2, 0],
+      ],
+      { name: "Trail" },
+    );
+    assert.equal(f.geometry.type, "LineString");
+    assert.deepEqual(f.geometry.coordinates, [
+      [0, 0],
+      [1, 1],
+      [2, 0],
+    ]);
+  });
+
+  it("makePolygonFeature closes an open ring", () => {
+    const f = makePolygonFeature(
+      [
+        [0, 0],
+        [2, 0],
+        [2, 2],
+      ],
+      {},
+    );
+    assert.equal(f.geometry.type, "Polygon");
+    const ring = f.geometry.coordinates[0];
+    assert.deepEqual(ring[0], ring[ring.length - 1]); // closed
+    assert.equal(ring.length, 4);
+  });
+
+  it("makePolygonFeature does not double-close an already-closed ring", () => {
+    const ring = [
+      [0, 0],
+      [2, 0],
+      [2, 2],
+      [0, 0],
+    ] as [number, number][];
+    const f = makePolygonFeature(ring, {});
+    assert.equal(f.geometry.coordinates[0].length, 4);
+  });
+
+  it("buildGeometryFeature dispatches on geometry type", () => {
+    assert.equal(
+      buildGeometryFeature("point", [[1, 2]], {}).geometry.type,
+      "Point",
+    );
+    assert.equal(
+      buildGeometryFeature(
+        "line",
+        [
+          [0, 0],
+          [1, 1],
+        ],
+        {},
+      ).geometry.type,
+      "LineString",
+    );
+    assert.equal(
+      buildGeometryFeature(
+        "polygon",
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+        ],
+        {},
+      ).geometry.type,
+      "Polygon",
+    );
+  });
+
+  it("drawPreview includes a vertex point per coord and a line at >= 2", () => {
+    const one = drawPreview("line", [[0, 0]]);
+    assert.equal(one.features.length, 1); // just the vertex
+    const two = drawPreview("line", [
+      [0, 0],
+      [1, 1],
+    ]);
+    // two vertices + one line
+    assert.equal(two.features.length, 3);
+    assert.ok(
+      two.features.some((f) => f.geometry?.type === "LineString"),
+    );
   });
 });
 
