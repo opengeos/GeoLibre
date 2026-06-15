@@ -71,6 +71,11 @@ ENV GEOLIBRE_CONVERSION_PYTHON=/usr/local/bin/python \
     GEOLIBRE_CONVERSION_ROOTS=/data
 RUN mkdir -p /data
 
+# WARNING: docker/nginx.conf's CSP allows http://localhost:* / ws://localhost:*
+# in connect-src for local-dev data sources (PMTiles/COGs from a dev server on
+# another port). This image is intended for local/single-user use; on a public
+# host those allowances let the served JS probe each visitor's loopback. Drop
+# them from the CSP before publishing publicly.
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
