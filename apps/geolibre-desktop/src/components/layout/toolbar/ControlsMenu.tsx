@@ -7,7 +7,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@geolibre/ui";
-import { SlidersHorizontal } from "lucide-react";
+import { ClipboardList, SlidersHorizontal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ToolbarPanels } from "../../../hooks/useToolbarPanels";
 import {
@@ -27,6 +27,7 @@ interface ControlsMenuProps {
   onToggleEffects: () => void;
   onToggleDirections: () => void;
   onToggleReverseGeocode: () => void;
+  onOpenFieldCollection: () => void;
 }
 
 /** The Controls menu: built-in map controls, atmosphere/routing toggles, and panels. */
@@ -41,6 +42,7 @@ export function ControlsMenu({
   onToggleEffects,
   onToggleDirections,
   onToggleReverseGeocode,
+  onOpenFieldCollection,
 }: ControlsMenuProps) {
   const { t } = useTranslation();
 
@@ -119,6 +121,11 @@ export function ControlsMenu({
         <DropdownMenuItem onSelect={panels.viewState.toggle}>
           {t("toolbar.item.viewState")}
           {panels.viewState.visible ? " ✓" : ""}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={onOpenFieldCollection}>
+          <ClipboardList className="mr-2 h-3.5 w-3.5" />
+          {t("toolbar.item.fieldCollection")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

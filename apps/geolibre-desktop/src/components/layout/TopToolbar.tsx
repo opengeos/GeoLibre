@@ -82,6 +82,7 @@ import { CollaborateDialog } from "./CollaborateDialog";
 import { useCollaboration } from "../../hooks/useCollaboration";
 import { SettingsDialog } from "./SettingsDialog";
 import { PrintLayoutDialog } from "./PrintLayoutDialog";
+import { FieldCollectionDialog } from "./FieldCollectionDialog";
 import { OfflineRegionDialog } from "./OfflineRegionDialog";
 import { AddDataMenu } from "./toolbar/AddDataMenu";
 import { ConsentNoticeDialogs } from "./toolbar/ConsentNoticeDialogs";
@@ -210,6 +211,7 @@ export function TopToolbar({
   const [aboutOpen, setAboutOpen] = useState(false);
   const [printLayoutOpen, setPrintLayoutOpen] = useState(false);
   const [offlineRegionOpen, setOfflineRegionOpen] = useState(false);
+  const [fieldCollectionOpen, setFieldCollectionOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [checkForUpdatesRequest, setCheckForUpdatesRequest] = useState(0);
@@ -766,6 +768,7 @@ export function TopToolbar({
         onToggleEffects={() => toggle(EFFECTS_PLUGIN_ID, appApi)}
         onToggleDirections={consent.handleToggleDirections}
         onToggleReverseGeocode={consent.handleToggleReverseGeocode}
+        onOpenFieldCollection={() => setFieldCollectionOpen(true)}
       />
       <PluginsMenu
         chrome={chrome}
@@ -797,6 +800,11 @@ export function TopToolbar({
       <OfflineRegionDialog
         open={offlineRegionOpen}
         onOpenChange={setOfflineRegionOpen}
+        mapControllerRef={mapControllerRef}
+      />
+      <FieldCollectionDialog
+        open={fieldCollectionOpen}
+        onOpenChange={setFieldCollectionOpen}
         mapControllerRef={mapControllerRef}
       />
       <ShareProjectDialog
