@@ -60,6 +60,7 @@
     "finish": "Finish",
     "vertices": "{{count}} vertices",
     "needMore": "Add at least {{min}} vertices",
+    "dblClickHint": "Tap to add vertices; double-click to finish.",
     "locating": "Locating…",
     "photo": "Photo",
     "removePhoto": "Remove",

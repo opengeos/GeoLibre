@@ -309,7 +309,11 @@ export function buildGeometryFeature(
   return makePointFeature(coords[0][0], coords[0][1], properties);
 }
 
-/** A GeoJSON preview of in-progress drawing (the line/ring plus its vertices). */
+/**
+ * A GeoJSON preview of in-progress drawing: a vertex point per coordinate, the
+ * connecting line, and — for a polygon with enough vertices — the closed,
+ * fillable ring so the user sees the finished shape before saving.
+ */
 export function drawPreview(
   geometry: GeometryType,
   coords: Vertex[],
@@ -317,10 +321,13 @@ export function drawPreview(
   const features: Feature[] = coords.map((c, i) =>
     makePointFeature(c[0], c[1], { index: i }),
   );
-  if (geometry === "line" && coords.length >= 2) {
-    features.push(makeLineFeature(coords, {}));
-  } else if (geometry === "polygon" && coords.length >= 2) {
-    // Show the open ring while drawing; it visually closes at >= 3 vertices.
+  if (geometry === "polygon" && coords.length >= 3) {
+    features.push(makePolygonFeature(coords, {}));
+  }
+  if (
+    (geometry === "line" || geometry === "polygon") &&
+    coords.length >= 2
+  ) {
     features.push(makeLineFeature(coords, {}));
   }
   return { type: "FeatureCollection", features };

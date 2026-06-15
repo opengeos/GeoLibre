@@ -322,6 +322,23 @@ describe("line/polygon geometry", () => {
       two.features.some((f) => f.geometry?.type === "LineString"),
     );
   });
+
+  it("drawPreview closes the polygon fill at >= 3 vertices", () => {
+    const two = drawPreview("polygon", [
+      [0, 0],
+      [1, 0],
+    ]);
+    // 2 vertices + ring line, no fill yet
+    assert.ok(!two.features.some((f) => f.geometry?.type === "Polygon"));
+    const three = drawPreview("polygon", [
+      [0, 0],
+      [1, 0],
+      [1, 1],
+    ]);
+    // 3 vertices + line + polygon fill
+    assert.equal(three.features.length, 5);
+    assert.ok(three.features.some((f) => f.geometry?.type === "Polygon"));
+  });
 });
 
 describe("dataUrlByteLength", () => {

@@ -96,6 +96,13 @@ function syncDrawPreview(
   }
   map.addSource(DRAW_SOURCE, { type: "geojson", data });
   map.addLayer({
+    id: `${DRAW_SOURCE}-fill`,
+    type: "fill",
+    source: DRAW_SOURCE,
+    filter: ["==", ["geometry-type"], "Polygon"],
+    paint: { "fill-color": DRAW_COLOR, "fill-opacity": 0.2 },
+  });
+  map.addLayer({
     id: `${DRAW_SOURCE}-line`,
     type: "line",
     source: DRAW_SOURCE,
@@ -117,7 +124,11 @@ function syncDrawPreview(
 }
 
 function removeDrawPreview(map: maplibregl.Map): void {
-  for (const id of [`${DRAW_SOURCE}-line`, `${DRAW_SOURCE}-pt`]) {
+  for (const id of [
+    `${DRAW_SOURCE}-fill`,
+    `${DRAW_SOURCE}-line`,
+    `${DRAW_SOURCE}-pt`,
+  ]) {
     if (map.getLayer(id)) map.removeLayer(id);
   }
   if (map.getSource(DRAW_SOURCE)) map.removeSource(DRAW_SOURCE);
@@ -187,6 +198,8 @@ export function FieldCollectionDialog({
   // Per-instance monotonic id for draft-field React keys.
   const draftIdRef = useRef(0);
   const makeDraft = useCallback(() => newDraftField((draftIdRef.current += 1)), []);
+  // Mirrors `vertices` so the map double-click handler can finish synchronously.
+  const verticesRef = useRef<Vertex[]>([]);
 
   useEffect(() => {
     activeRef.current = open || picking || drawing;
@@ -241,6 +254,7 @@ export function FieldCollectionDialog({
     setValues({});
     setPhoto(null);
     setVertices([]);
+    verticesRef.current = [];
     setLocating(false);
     setErrors({});
     setNotice(null);
@@ -327,26 +341,49 @@ export function FieldCollectionDialog({
 
   // ---- Line / polygon drawing (multi-vertex) ---------------------------------
 
-  const pushVertex = useCallback(
-    (lng: number, lat: number) => {
-      setVertices((vs) => {
-        const next: Vertex[] = [...vs, [lng, lat]];
-        const map = getMap();
-        if (map) syncDrawPreview(map, activeGeometry, next);
-        return next;
-      });
+  const setVerticesSynced = useCallback(
+    (next: Vertex[]) => {
+      verticesRef.current = next;
+      setVertices(next);
+      const map = getMap();
+      if (map) syncDrawPreview(map, activeGeometry, next);
     },
     [getMap, activeGeometry],
   );
 
+  const pushVertex = useCallback(
+    (lng: number, lat: number) => {
+      setVerticesSynced([...verticesRef.current, [lng, lat]]);
+    },
+    [setVerticesSynced],
+  );
+
   const handleStartDrawing = useCallback(() => {
     if (!getMap()) return;
-    setVertices([]);
+    setVerticesSynced([]);
     setPending(null);
     setNotice(null);
     setDrawing(true);
     onOpenChange(false);
-  }, [getMap, onOpenChange]);
+  }, [getMap, onOpenChange, setVerticesSynced]);
+
+  // Finish the current geometry: keep the preview visible (so the user sees the
+  // finished shape while filling the form) and reopen the dialog.
+  const finishDrawing = useCallback(
+    (verts: Vertex[]) => {
+      if (verts.length < minVertices(activeGeometry)) return;
+      const map = getMap();
+      if (map) syncDrawPreview(map, activeGeometry, verts);
+      verticesRef.current = verts;
+      setVertices(verts);
+      setPending(verts);
+      setErrors({});
+      setDrawing(false);
+      suppressResetRef.current = true;
+      onOpenChange(true);
+    },
+    [activeGeometry, getMap, onOpenChange],
+  );
 
   useEffect(() => {
     if (!drawing) return;
@@ -359,45 +396,39 @@ export function FieldCollectionDialog({
     const raf = requestAnimationFrame(releaseBodyPointerEvents);
     const prevCursor = map.getCanvas().style.cursor;
     map.getCanvas().style.cursor = "crosshair";
-    const handler = (e: maplibregl.MapMouseEvent) => {
+    // Double-click finishes the geometry; disable the default zoom-on-dblclick
+    // and drop the extra vertex the dblclick's second click added.
+    map.doubleClickZoom.disable();
+    const onClick = (e: maplibregl.MapMouseEvent) => {
       pushVertex(e.lngLat.lng, e.lngLat.lat);
     };
-    map.on("click", handler);
+    const onDblClick = (e: maplibregl.MapMouseEvent) => {
+      e.preventDefault();
+      finishDrawing(verticesRef.current.slice(0, -1));
+    };
+    map.on("click", onClick);
+    map.on("dblclick", onDblClick);
     return () => {
       cancelAnimationFrame(raf);
-      map.off("click", handler);
+      map.off("click", onClick);
+      map.off("dblclick", onDblClick);
+      map.doubleClickZoom.enable();
       map.getCanvas().style.cursor = prevCursor;
     };
-  }, [drawing, getMap, pushVertex]);
+  }, [drawing, getMap, pushVertex, finishDrawing]);
 
   const handleUndoVertex = useCallback(() => {
-    setVertices((vs) => {
-      const next = vs.slice(0, -1);
-      const map = getMap();
-      if (map) syncDrawPreview(map, activeGeometry, next);
-      return next;
-    });
-  }, [getMap, activeGeometry]);
-
-  const handleFinishDrawing = useCallback(() => {
-    if (vertices.length < minVertices(activeGeometry)) return;
-    setPending(vertices);
-    setErrors({});
-    setDrawing(false);
-    const map = getMap();
-    if (map) removeDrawPreview(map);
-    suppressResetRef.current = true;
-    onOpenChange(true);
-  }, [vertices, activeGeometry, getMap, onOpenChange]);
+    setVerticesSynced(verticesRef.current.slice(0, -1));
+  }, [setVerticesSynced]);
 
   const handleCancelDrawing = useCallback(() => {
     setDrawing(false);
-    setVertices([]);
+    setVerticesSynced([]);
     const map = getMap();
     if (map) removeDrawPreview(map);
     suppressResetRef.current = true;
     onOpenChange(true);
-  }, [getMap, onOpenChange]);
+  }, [getMap, onOpenChange, setVerticesSynced]);
 
   // ---- GPS (a point, or one vertex while drawing) ----------------------------
 
@@ -508,6 +539,7 @@ export function FieldCollectionDialog({
     setValues({});
     setPhoto(null);
     setVertices([]);
+    verticesRef.current = [];
     setErrors({});
     clearPreview();
   }, [
@@ -564,7 +596,7 @@ export function FieldCollectionDialog({
           locating={locating}
           onAddGps={() => handleUseGps(true)}
           onUndo={handleUndoVertex}
-          onFinish={handleFinishDrawing}
+          onFinish={() => finishDrawing(vertices)}
           onCancel={handleCancelDrawing}
         />
       )}
@@ -590,6 +622,8 @@ export function FieldCollectionDialog({
                     setValues({});
                     setPhoto(null);
                     setVertices([]);
+                    verticesRef.current = [];
+                    clearPreview();
                     setErrors({});
                     setNotice(null);
                     if (!e.target.value && drafts.length === 0) {
@@ -694,6 +728,9 @@ function DrawToolbar({
             : t("fieldCollection.needMore", { min: minCount })}
         </span>
       </div>
+      <p className="text-xs text-muted-foreground">
+        {t("fieldCollection.dblClickHint")}
+      </p>
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" size="sm" onClick={onAddGps} disabled={locating}>
           {locating ? (
