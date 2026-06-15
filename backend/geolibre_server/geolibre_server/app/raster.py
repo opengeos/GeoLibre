@@ -1359,8 +1359,12 @@ _EXTRA_INPUTS: dict[str, list[tuple[str, str, set[str], bool]]] = {
         ("b_path", "Raster B", _GEOTIFF_EXTS, False),
         ("c_path", "Raster C", _GEOTIFF_EXTS, False),
     ],
-    # Spectral index reuses _RASTER_CALC_SCRIPT, which honors b_path/c_path, so
-    # those auxiliary paths must clear the same allowlist/extension checks.
+    # Spectral index is single-input in the UI (the compiled expression only
+    # references A<n> bands), but it reuses _RASTER_CALC_SCRIPT, which opens
+    # b_path/c_path whenever they are present in the request. These entries are a
+    # defense-in-depth guard: a hand-crafted request to the local sidecar that
+    # smuggles in b_path/c_path still has those paths checked against the
+    # allowlist/extensions, rather than opened unvalidated. Not multi-raster.
     "spectral-index": [
         ("b_path", "Raster B", _GEOTIFF_EXTS, False),
         ("c_path", "Raster C", _GEOTIFF_EXTS, False),

@@ -211,8 +211,9 @@ export function buildSpectralIndexExpression(
   const tok = (name: BandName): string => {
     const band = resolveBand(name, sensor, params);
     if (!used.includes(band)) used.push(band);
-    // The ratio cancels a multiplicative scale, so only emit it when it differs
-    // from 1 (EVI/SAVI's additive constants need true reflectance units).
+    // When scale=1, s*A = A so we emit the bare reference. When scale != 1 we
+    // wrap every band uniformly — for ratio indices the scale cancels anyway;
+    // for EVI/SAVI the additive constants require true reflectance values.
     return scale === 1 ? `A${band}` : `(${scale} * A${band})`;
   };
 

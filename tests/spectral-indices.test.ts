@@ -112,6 +112,14 @@ describe("spectral index expression builder", () => {
     );
   });
 
+  it("throws when the sensor preset lacks a required band (NAIP + NDMI)", () => {
+    // NAIP carries only R/G/B/NIR, so a SWIR-dependent index can't resolve.
+    assert.throws(
+      () => buildSpectralIndexExpression({ index: "ndmi", sensor: "naip" }),
+      /naip preset does not include the "swir1" band/i,
+    );
+  });
+
   it("rejects an unknown index id", () => {
     assert.throws(
       () => buildSpectralIndexExpression({ index: "nope", sensor: "sentinel2" }),
