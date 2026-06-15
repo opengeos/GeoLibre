@@ -9,8 +9,10 @@ on:
     types: [published]
   workflow_dispatch:
 
+# contents: write so the release job can attach signed APKs to the GitHub
+# Release. workflow_dispatch runs (no release) only upload a CI artifact.
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: android-${{ github.ref }}
@@ -101,9 +103,12 @@ jobs:
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
 
       - name: Sign APKs
+        id: sign
         # With release-keystore secrets set, the APKs are signed for distribution.
         # Without them, they're signed with a throwaway debug keystore so the CI
         # artifacts are still installable for testing (do NOT publish those).
+        # Emits signed=release|debug so the release-upload step can refuse to
+        # attach debug-signed APKs to a public GitHub Release.
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -127,8 +132,10 @@ jobs:
             printf '%s' "$KEYSTORE_PASSWORD" > "$store_pass_file"
             printf '%s' "${KEY_PASSWORD:-$KEYSTORE_PASSWORD}" > "$key_pass_file"
             alias="$KEY_ALIAS"
+            echo "signed=release" >> "$GITHUB_OUTPUT"
           else
             echo "::warning::No ANDROID_KEYSTORE_BASE64 secret set — signing with a throwaway debug keystore. Installable for testing only, NOT for distribution."
+            echo "signed=debug" >> "$GITHUB_OUTPUT"
             keystore="$RUNNER_TEMP/debug.jks"
             "$JAVA_HOME/bin/keytool" -genkeypair -v -keystore "$keystore" \
               -storepass android -keypass android -alias androiddebugkey \
@@ -168,3 +175,20 @@ jobs:
           path: ${{ runner.temp }}/apks/*.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Attach APKs to GitHub Release
+        # Only on a published release, and only when the APKs were signed with the
+        # real release keystore — never publish debug-signed builds as official
+        # downloads. workflow_dispatch runs still get the CI artifact above.
+        if: github.event_name == 'release' && steps.sign.outputs.signed == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" "$RUNNER_TEMP"/apks/*.apk --clobber
+
+      - name: Note skipped release upload
+        # Surface why a release run did not attach APKs (missing keystore secrets),
+        # so it does not look like a silent failure.
+        if: github.event_name == 'release' && steps.sign.outputs.signed != 'release'
+        run: |
+          echo "::warning::APKs were debug-signed (no ANDROID_KEYSTORE_BASE64 secret) and were NOT attached to the release. They are available as the CI artifact for testing only."
