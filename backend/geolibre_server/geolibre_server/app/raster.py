@@ -339,6 +339,14 @@ if isinstance(crs_member, dict):
                 f"({exc}); assuming WGS84 (EPSG:4326)",
                 file=sys.stderr,
             )
+    elif name:
+        # Consistent with the zones/interpolate sections: warn on a non-empty
+        # name we could not interpret, stay silent for an absent/blank field.
+        print(
+            f"Warning: could not parse mask CRS '{name}'; "
+            "assuming WGS84 (EPSG:4326)",
+            file=sys.stderr,
+        )
 
 with rasterio.open(input_path) as src:
     if src.crs is None:
@@ -593,6 +601,13 @@ if isinstance(crs_member, dict):
     if digits:
         # digits matches ``(\\d+)$``, so int() can never raise here.
         epsg = int(digits.group(1))
+    elif name:
+        # Consistent with the mask/zones sections: warn on a non-empty name we
+        # could not interpret, stay silent for an absent/blank field.
+        print(
+            f"Warning: could not parse CRS '{name}'; assuming WGS84 (EPSG:4326)",
+            file=sys.stderr,
+        )
 try:
     crs = CRS.from_epsg(epsg)
 except Exception as exc:
@@ -832,7 +847,9 @@ if isinstance(crs_member, dict):
                     f"({exc}); assuming WGS84 (EPSG:4326)",
                     file=sys.stderr,
                 )
-        else:
+        elif name:
+            # A non-empty name we could not interpret; an absent/blank name is
+            # just a missing field, not a parse failure, so stay silent there.
             print(
                 f"Warning: could not parse zones CRS '{name}'; "
                 "assuming WGS84 (EPSG:4326)",

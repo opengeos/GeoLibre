@@ -37,7 +37,9 @@ The `:coverage` variants run the same suites and print a coverage summary; CI
 runs them so every build reports coverage. They are **not** gated on a threshold
 yet (the report is informational, so a low number never fails CI). The frontend
 report only counts files a test actually imports, so a module with no test does
-not appear at all rather than as 0%.
+not appear at all rather than as 0%. The backend coverage run (and `npm run ci`,
+which calls the `:coverage` variants) needs `pytest-cov` from the backend `dev`
+extra: `pip install -e "backend/geolibre_server[dev]"`.
 
 `npm run test:e2e` builds the web app, serves it with `vite preview`, and drives
 it with Playwright (`@playwright/test`). First run: `npx playwright install
