@@ -208,6 +208,37 @@ describe("ensureGpkgFeatureCountSync", () => {
     ]);
   });
 
+  it("updates a NULL count for a table registered only in gpkg_geometry_columns", () => {
+    // Exercises the UPDATE branch of the geometry-columns path: the table is
+    // absent from gpkg_contents but has a NULL-count gpkg_ogr_contents row, so
+    // the repair must UPDATE that row rather than INSERT a duplicate.
+    const db: Database = new SQL.Database();
+    db.run(`
+      CREATE TABLE gpkg_contents (
+        table_name TEXT NOT NULL PRIMARY KEY, data_type TEXT NOT NULL, srs_id INTEGER
+      );
+      CREATE TABLE gpkg_geometry_columns (
+        table_name TEXT NOT NULL, column_name TEXT NOT NULL,
+        geometry_type_name TEXT NOT NULL, srs_id INTEGER NOT NULL, z TINYINT NOT NULL, m TINYINT NOT NULL
+      );
+      CREATE TABLE mounds (fid INTEGER PRIMARY KEY, geom BLOB);
+      INSERT INTO gpkg_geometry_columns VALUES ('mounds', 'geom', 'POLYGON', 4326, 0, 0);
+      INSERT INTO mounds (geom) VALUES (NULL), (NULL), (NULL), (NULL);
+      CREATE TABLE gpkg_ogr_contents (
+        table_name TEXT NOT NULL PRIMARY KEY, feature_count INTEGER
+      );
+      INSERT INTO gpkg_ogr_contents (table_name, feature_count) VALUES ('mounds', NULL);
+    `);
+    const original = db.export();
+    db.close();
+
+    const patched = ensureGpkgFeatureCountSync(SQL, original);
+    assert.notEqual(patched, original);
+    assert.deepEqual(readOgrContents(patched), [
+      { table_name: "mounds", feature_count: 4 },
+    ]);
+  });
+
   it("matches table names case-insensitively across metadata tables", () => {
     // gpkg_contents and gpkg_ogr_contents disagree on casing for the same
     // (case-insensitive) SQLite table. The repair must treat them as one table

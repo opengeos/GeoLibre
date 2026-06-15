@@ -156,8 +156,13 @@ export function ensureGpkgFeatureCountSync(
             { ":name": tableName, ":count": count },
           );
         }
-      } catch {
-        // Leave this table to GDAL's normal error path; other tables still get fixed.
+      } catch (error) {
+        // Leave this table to GDAL's normal error path; other tables still get
+        // fixed. Warn so a malformed GeoPackage is diagnosable rather than silent.
+        console.warn(
+          `[GeoLibre] Could not repair gpkg_ogr_contents for table "${tableName}":`,
+          error,
+        );
       }
     }
 
