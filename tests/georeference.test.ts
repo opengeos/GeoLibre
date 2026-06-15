@@ -6,8 +6,10 @@ import {
   cornersToBounds,
   type GCP,
   gcpResidualsMeters,
+  gcpsToCsv,
   haversineMeters,
   imageCornersToMap,
+  parseGcpsCsv,
   solveAffine,
 } from "../apps/geolibre-desktop/src/lib/georeference";
 
@@ -118,5 +120,40 @@ describe("cornersToBounds", () => {
       ]),
       [10, 49.92, 10.1, 50],
     );
+  });
+});
+
+describe("GCP CSV round-trip", () => {
+  const gcps: GCP[] = [
+    { px: 93, py: 70, lng: -109.615, lat: 55.9797 },
+    { px: 882, py: 68, lng: -85.8178, lat: 42.7052 },
+  ];
+
+  it("round-trips through CSV", () => {
+    const csv = gcpsToCsv(gcps);
+    assert.ok(csv.startsWith("pixelX,pixelY,lng,lat\n"));
+    assert.deepEqual(parseGcpsCsv(csv), gcps);
+  });
+
+  it("skips the header, blanks, comments, and malformed rows", () => {
+    const text = [
+      "pixelX,pixelY,lng,lat",
+      "",
+      "# a comment",
+      "93,70,-109.615,55.9797",
+      "garbage,row,here,x",
+      "1,2,999,0", // lng out of range
+      "5,6", // too few columns
+      "10,20,-1.5,2.5",
+    ].join("\n");
+    assert.deepEqual(parseGcpsCsv(text), [
+      { px: 93, py: 70, lng: -109.615, lat: 55.9797 },
+      { px: 10, py: 20, lng: -1.5, lat: 2.5 },
+    ]);
+  });
+
+  it("tolerates whitespace and CRLF", () => {
+    const text = "pixelX,pixelY,lng,lat\r\n 1 , 2 , 3 , 4 \r\n";
+    assert.deepEqual(parseGcpsCsv(text), [{ px: 1, py: 2, lng: 3, lat: 4 }]);
   });
 });

@@ -18,14 +18,26 @@ import {
   ScrollArea,
   Slider,
 } from "@geolibre/ui";
-import { Crosshair, ImagePlus, MapPin, Trash2 } from "lucide-react";
+import {
+  Crosshair,
+  Download,
+  ImagePlus,
+  MapPin,
+  Maximize2,
+  Trash2,
+  Upload,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
 import {
   cornersToBounds,
   type GCP,
   gcpResidualsMeters,
+  gcpsToCsv,
   imageCornersToMap,
   type LngLat,
   MIN_GCPS,
+  parseGcpsCsv,
   solveAffine,
 } from "../../lib/georeference";
 import { releaseBodyPointerEvents } from "../../lib/radix-compat";
@@ -45,6 +57,20 @@ interface LoadedImage {
 
 /** Reject pathologically large images so the project JSON stays manageable. */
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
+
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 8;
+const ZOOM_STEP = 1.5;
+
+/** Trigger a browser download of text content. */
+function downloadText(filename: string, text: string, mime: string): void {
+  const url = URL.createObjectURL(new Blob([text], { type: mime }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 function createId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -90,6 +116,7 @@ export function GeoreferencerDialog({
   );
   const [linking, setLinking] = useState(false);
   const [opacity, setOpacity] = useState(1);
+  const [zoom, setZoom] = useState(1);
   const [notice, setNotice] = useState<string | null>(null);
 
   const imgRef = useRef<HTMLImageElement | null>(null);
@@ -121,6 +148,7 @@ export function GeoreferencerDialog({
     setPendingPixel(null);
     setLinking(false);
     setOpacity(1);
+    setZoom(1);
     setNotice(null);
   }, [open]);
 
@@ -155,6 +183,7 @@ export function GeoreferencerDialog({
           });
           setGcps([]);
           setPendingPixel(null);
+          setZoom(1);
           setNotice(null);
         };
         probe.onerror = () => setNotice(t("georeferencer.imageReadError"));
@@ -266,6 +295,40 @@ export function GeoreferencerDialog({
   const removeGcp = (index: number) =>
     setGcps((gs) => gs.filter((_, i) => i !== index));
 
+  const handleExportGcps = useCallback(() => {
+    if (gcps.length === 0) return;
+    const base = image?.name || "georeference";
+    downloadText(`${base}-gcps.csv`, gcpsToCsv(gcps), "text/csv");
+  }, [gcps, image]);
+
+  const handleImportGcps = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = "";
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onerror = () => setNotice(t("georeferencer.gcpsReadError"));
+      reader.onload = () => {
+        const text = typeof reader.result === "string" ? reader.result : "";
+        const parsed = parseGcpsCsv(text);
+        if (parsed.length === 0) {
+          setNotice(t("georeferencer.gcpsReadError"));
+          return;
+        }
+        setGcps(parsed.map((g) => ({ ...g, key: (gcpKeyRef.current += 1) })));
+        setPendingPixel(null);
+        setNotice(t("georeferencer.gcpsImported", { count: parsed.length }));
+      };
+      reader.readAsText(file);
+    },
+    [t],
+  );
+
+  const zoomIn = () =>
+    setZoom((z) => Math.min(MAX_ZOOM, +(z * ZOOM_STEP).toFixed(2)));
+  const zoomOut = () =>
+    setZoom((z) => Math.max(MIN_ZOOM, +(z / ZOOM_STEP).toFixed(2)));
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
@@ -290,42 +353,80 @@ export function GeoreferencerDialog({
             ) : (
               <>
                 <div className="space-y-1.5">
-                  <Label>
-                    {t("georeferencer.sourceImage", {
-                      w: image.width,
-                      h: image.height,
-                    })}
-                  </Label>
-                  <div className="relative inline-block max-w-full overflow-hidden rounded-md border">
-                    <img
-                      ref={imgRef}
-                      src={image.url}
-                      alt={image.name}
-                      onClick={handleImageClick}
-                      className="block max-h-64 max-w-full cursor-crosshair select-none"
-                      draggable={false}
-                    />
-                    {gcps.map((g, i) => (
-                      <span
-                        key={g.key}
-                        className="pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-primary text-[8px] leading-3 text-white"
-                        style={{
-                          left: `${(g.px / image.width) * 100}%`,
-                          top: `${(g.py / image.height) * 100}%`,
-                        }}
+                  <div className="flex items-center justify-between">
+                    <Label>
+                      {t("georeferencer.sourceImage", {
+                        w: image.width,
+                        h: image.height,
+                      })}
+                    </Label>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={t("georeferencer.zoomOut")}
+                        disabled={zoom <= MIN_ZOOM}
+                        onClick={zoomOut}
                       >
-                        {i + 1}
+                        <ZoomOut className="h-4 w-4" />
+                      </Button>
+                      <span className="w-10 text-center text-xs tabular-nums text-muted-foreground">
+                        {Math.round(zoom * 100)}%
                       </span>
-                    ))}
-                    {pendingPixel && (
-                      <span
-                        className="pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 animate-pulse rounded-full border border-white bg-amber-500"
-                        style={{
-                          left: `${(pendingPixel.px / image.width) * 100}%`,
-                          top: `${(pendingPixel.py / image.height) * 100}%`,
-                        }}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={t("georeferencer.zoomIn")}
+                        disabled={zoom >= MAX_ZOOM}
+                        onClick={zoomIn}
+                      >
+                        <ZoomIn className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={t("georeferencer.zoomReset")}
+                        disabled={zoom === MIN_ZOOM}
+                        onClick={() => setZoom(1)}
+                      >
+                        <Maximize2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  {/* Scroll viewport; the inner wrapper scales with zoom so GCP
+                      markers (positioned by %) and click→pixel math stay aligned. */}
+                  <div className="relative max-h-72 overflow-auto rounded-md border">
+                    <div className="relative" style={{ width: `${zoom * 100}%` }}>
+                      <img
+                        ref={imgRef}
+                        src={image.url}
+                        alt={image.name}
+                        onClick={handleImageClick}
+                        className="block w-full cursor-crosshair select-none"
+                        draggable={false}
                       />
-                    )}
+                      {gcps.map((g, i) => (
+                        <span
+                          key={g.key}
+                          className="pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-primary text-[8px] leading-3 text-white"
+                          style={{
+                            left: `${(g.px / image.width) * 100}%`,
+                            top: `${(g.py / image.height) * 100}%`,
+                          }}
+                        >
+                          {i + 1}
+                        </span>
+                      ))}
+                      {pendingPixel && (
+                        <span
+                          className="pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 animate-pulse rounded-full border border-white bg-amber-500"
+                          style={{
+                            left: `${(pendingPixel.px / image.width) * 100}%`,
+                            top: `${(pendingPixel.py / image.height) * 100}%`,
+                          }}
+                        />
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -351,17 +452,38 @@ export function GeoreferencerDialog({
 
                 {/* GCP table */}
                 <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label>
+                  <div className="flex items-center justify-between gap-2">
+                    <Label className="shrink-0">
                       {t("georeferencer.gcps", { count: gcps.length })}
                     </Label>
-                    {residuals && (
-                      <span className="text-sm tabular-nums text-muted-foreground">
-                        {t("georeferencer.rms", {
-                          rms: residuals.rms.toFixed(1),
-                        })}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {residuals && (
+                        <span className="text-sm tabular-nums text-muted-foreground">
+                          {t("georeferencer.rms", {
+                            rms: residuals.rms.toFixed(1),
+                          })}
+                        </span>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={gcps.length === 0}
+                        onClick={handleExportGcps}
+                      >
+                        <Download className="mr-1 h-3.5 w-3.5" />
+                        {t("georeferencer.exportGcps")}
+                      </Button>
+                      <label className="inline-flex cursor-pointer items-center rounded-md px-2 py-1 text-sm hover:bg-accent">
+                        <Upload className="mr-1 h-3.5 w-3.5" />
+                        {t("georeferencer.importGcps")}
+                        <input
+                          type="file"
+                          accept=".csv,.txt,text/csv"
+                          className="hidden"
+                          onChange={handleImportGcps}
+                        />
+                      </label>
+                    </div>
                   </div>
                   {gcps.length < MIN_GCPS ? (
                     <p className="text-sm text-muted-foreground">

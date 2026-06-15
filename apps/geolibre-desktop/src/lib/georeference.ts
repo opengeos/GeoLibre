@@ -184,3 +184,32 @@ export function cornersToBounds(
     Math.max(...lats),
   ];
 }
+
+/** Header for the GCP CSV exchange format. */
+export const GCP_CSV_HEADER = "pixelX,pixelY,lng,lat";
+
+/** Serialize GCPs to a CSV string (pixelX,pixelY,lng,lat) for export. */
+export function gcpsToCsv(gcps: GCP[]): string {
+  const rows = gcps.map((g) => `${g.px},${g.py},${g.lng},${g.lat}`);
+  return [GCP_CSV_HEADER, ...rows].join("\n") + "\n";
+}
+
+/**
+ * Parse a GCP CSV (as written by {@link gcpsToCsv}). Tolerant: skips a header
+ * row, blank lines, `#` comments, and any row that isn't four valid numbers or
+ * whose lng/lat fall outside world bounds.
+ */
+export function parseGcpsCsv(text: string): GCP[] {
+  const out: GCP[] = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const parts = line.split(",");
+    if (parts.length < 4) continue;
+    const [px, py, lng, lat] = parts.map((p) => Number(p.trim()));
+    if (![px, py, lng, lat].every(Number.isFinite)) continue; // skips the header
+    if (lng < -180 || lng > 180 || lat < -90 || lat > 90) continue;
+    out.push({ px, py, lng, lat });
+  }
+  return out;
+}
