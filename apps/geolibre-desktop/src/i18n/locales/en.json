@@ -113,6 +113,7 @@
     "rms": "RMS {{rms}} m",
     "opacity": "Overlay opacity",
     "addToMap": "Add to map",
+    "clear": "Clear",
     "defaultName": "Georeferenced image",
     "exportTiff": "Export GeoTIFF",
     "exportTiffButton": "Export",

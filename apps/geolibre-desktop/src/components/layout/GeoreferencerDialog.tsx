@@ -120,8 +120,6 @@ export function GeoreferencerDialog({
 
   const imgRef = useRef<HTMLImageElement | null>(null);
   const linkPixelRef = useRef<{ px: number; py: number } | null>(null);
-  // Skip the open-reset when we reopen after a map link, to keep captured state.
-  const suppressResetRef = useRef(false);
   // Monotonic id for stable GCP React keys.
   const gcpKeyRef = useRef(0);
 
@@ -136,12 +134,9 @@ export function GeoreferencerDialog({
     [affine, gcps],
   );
 
-  useEffect(() => {
-    if (!open) return;
-    if (suppressResetRef.current) {
-      suppressResetRef.current = false;
-      return;
-    }
+  // The dialog keeps its image + GCPs across close/reopen (and after "Add to
+  // map") so the session persists; only an explicit Clear resets it.
+  const handleClear = useCallback(() => {
     setImage(null);
     setGcps([]);
     setPendingPixel(null);
@@ -151,7 +146,7 @@ export function GeoreferencerDialog({
     setTransform("affine");
     setExporting(false);
     setNotice(null);
-  }, [open]);
+  }, []);
 
   const handleImageFile = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -248,7 +243,6 @@ export function GeoreferencerDialog({
         setPendingPixel(null);
       }
       setLinking(false);
-      suppressResetRef.current = true;
       onOpenChange(true);
     };
     // Escape aborts the link and restores the dialog (keeps the pending pixel).
@@ -258,7 +252,6 @@ export function GeoreferencerDialog({
       // fire onClick (and add a stray GCP) before the effect cleanup runs.
       map.off("click", onClick);
       setLinking(false);
-      suppressResetRef.current = true;
       onOpenChange(true);
     };
     map.once("click", onClick);
@@ -366,7 +359,7 @@ export function GeoreferencerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="w-[48rem] min-w-[22rem] max-w-[95vw] resize">
         <DialogHeader>
           <DialogTitle>{t("georeferencer.title")}</DialogTitle>
           <DialogDescription>{t("georeferencer.description")}</DialogDescription>
@@ -430,7 +423,7 @@ export function GeoreferencerDialog({
                   </div>
                   {/* Scroll viewport; the inner wrapper scales with zoom so GCP
                       markers (positioned by %) and click→pixel math stay aligned. */}
-                  <div className="relative max-h-72 overflow-auto rounded-md border">
+                  <div className="relative max-h-[60vh] min-h-[12rem] resize-y overflow-auto rounded-md border">
                     <div className="relative" style={{ width: `${zoom * 100}%` }}>
                       <img
                         ref={imgRef}
@@ -649,14 +642,25 @@ export function GeoreferencerDialog({
           </div>
         </ScrollArea>
 
-        <div className="flex items-center justify-end gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            {t("common.close")}
+        <div className="flex items-center justify-between gap-2">
+          <Button
+            variant="ghost"
+            className="text-muted-foreground"
+            disabled={!image && gcps.length === 0}
+            onClick={handleClear}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            {t("georeferencer.clear")}
           </Button>
-          <Button onClick={handleApply} disabled={!affine || !image}>
-            <MapPin className="mr-2 h-4 w-4" />
-            {t("georeferencer.addToMap")}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              {t("common.close")}
+            </Button>
+            <Button onClick={handleApply} disabled={!affine || !image}>
+              <MapPin className="mr-2 h-4 w-4" />
+              {t("georeferencer.addToMap")}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
