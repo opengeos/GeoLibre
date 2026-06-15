@@ -358,6 +358,10 @@ export function ProcessingMenu({
             <DropdownMenuItem onSelect={() => setRasterToolOpen("focal")}>
               {t("toolbar.rasterTool.focal")}
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={onOpenGeoreferencer}>
+              {t("toolbar.item.georeferencing")}
+            </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         )}
@@ -366,9 +370,6 @@ export function ProcessingMenu({
             {t("toolbar.command.segmentation")}
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem onSelect={onOpenGeoreferencer}>
-          {t("toolbar.item.georeferencing")}
-        </DropdownMenuItem>
         <DropdownMenuItem onSelect={onOpenPlanetaryComputer}>
           {t("toolbar.command.planetaryComputer")}
         </DropdownMenuItem>
