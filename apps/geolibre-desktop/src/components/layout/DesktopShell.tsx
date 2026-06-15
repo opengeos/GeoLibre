@@ -23,7 +23,7 @@ import {
 import {
   type CSSProperties,
   type DragEvent,
-  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
   lazy,
   Suspense,
   useCallback,
@@ -878,7 +878,7 @@ export function DesktopShell({
   );
 
   const startLayerPanelResize = useCallback(
-    (event: ReactMouseEvent<HTMLDivElement>) => {
+    (event: ReactPointerEvent<HTMLDivElement>) => {
       event.preventDefault();
       event.stopPropagation();
 
@@ -894,7 +894,7 @@ export function DesktopShell({
       document.body.style.userSelect = "none";
       window.dispatchEvent(new Event(PANEL_RESIZE_START_EVENT));
 
-      const onMouseMove = (moveEvent: MouseEvent) => {
+      const onPointerMove = (moveEvent: PointerEvent) => {
         nextWidth = clamp(
           startWidth + moveEvent.clientX - startX,
           MIN_SIDE_PANEL_WIDTH,
@@ -919,9 +919,9 @@ export function DesktopShell({
         });
       };
 
-      const onMouseUp = () => {
-        window.removeEventListener("mousemove", onMouseMove);
-        window.removeEventListener("mouseup", onMouseUp);
+      const onPointerUp = () => {
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
         if (resizeFrame !== null) {
           window.cancelAnimationFrame(resizeFrame);
           resizeFrame = null;
@@ -937,14 +937,14 @@ export function DesktopShell({
         document.body.style.userSelect = previousUserSelect;
       };
 
-      window.addEventListener("mousemove", onMouseMove);
-      window.addEventListener("mouseup", onMouseUp);
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
     },
     [deferPanelResize, layerPanelWidth],
   );
 
   const startStylePanelResize = useCallback(
-    (event: ReactMouseEvent<HTMLDivElement>) => {
+    (event: ReactPointerEvent<HTMLDivElement>) => {
       event.preventDefault();
       event.stopPropagation();
 
@@ -960,7 +960,7 @@ export function DesktopShell({
       document.body.style.userSelect = "none";
       window.dispatchEvent(new Event(PANEL_RESIZE_START_EVENT));
 
-      const onMouseMove = (moveEvent: MouseEvent) => {
+      const onPointerMove = (moveEvent: PointerEvent) => {
         nextWidth = clamp(
           startWidth + startX - moveEvent.clientX,
           MIN_SIDE_PANEL_WIDTH,
@@ -985,9 +985,9 @@ export function DesktopShell({
         });
       };
 
-      const onMouseUp = () => {
-        window.removeEventListener("mousemove", onMouseMove);
-        window.removeEventListener("mouseup", onMouseUp);
+      const onPointerUp = () => {
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
         if (resizeFrame !== null) {
           window.cancelAnimationFrame(resizeFrame);
           resizeFrame = null;
@@ -1003,8 +1003,8 @@ export function DesktopShell({
         document.body.style.userSelect = previousUserSelect;
       };
 
-      window.addEventListener("mousemove", onMouseMove);
-      window.addEventListener("mouseup", onMouseUp);
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
     },
     [deferPanelResize, stylePanelWidth],
   );
@@ -1033,7 +1033,7 @@ export function DesktopShell({
           />
         </SectionErrorBoundary>
       ) : null}
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+      <div className="relative flex min-h-0 flex-1 flex-col md:flex-row">
         {layoutOptions.layerPanelVisible ? (
           <SectionErrorBoundary label="Layer panel">
             <LayerPanel

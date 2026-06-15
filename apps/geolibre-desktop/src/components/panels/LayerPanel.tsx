@@ -1,6 +1,7 @@
 import {
   type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type RefObject,
   Fragment,
   useCallback,
@@ -18,6 +19,7 @@ import {
 } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
 import { isPlaceholderLayer, placeholderMessage } from "@geolibre/map";
+import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import {
   Button,
   Dialog,
@@ -86,7 +88,7 @@ import {
 
 interface LayerPanelProps {
   mapControllerRef: RefObject<MapController | null>;
-  onResizeStart: (event: ReactMouseEvent<HTMLDivElement>) => void;
+  onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   /** Id of the layer currently in a geometry-edit session, or null. */
   geometryEditLayerId: string | null;
   /** Toggle in-place geometry editing for a layer (toggling off saves). */
@@ -156,13 +158,6 @@ function hasNativeIdentifyLayers(layer: GeoLibreLayer): boolean {
   );
 }
 
-function isMobileViewport(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    window.matchMedia("(max-width: 767px)").matches
-  );
-}
-
 export function LayerPanel({
   mapControllerRef,
   onResizeStart,
@@ -214,7 +209,7 @@ export function LayerPanel({
   >({});
   const [refreshIntervalChoice, setRefreshIntervalChoice] = useState("0");
   const [customRefreshSeconds, setCustomRefreshSeconds] = useState("");
-  const [isCollapsed, setIsCollapsed] = useState(isMobileViewport);
+  const [isCollapsed, setIsCollapsed] = useState(getIsMobileViewport);
   const [draggedLayerId, setDraggedLayerId] = useState<string | null>(null);
   const [dropTargetLayerId, setDropTargetLayerId] = useState<string | null>(
     null,
@@ -974,14 +969,14 @@ export function LayerPanel({
   return (
     <aside
       aria-label="Layers"
-      className="relative flex max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-b bg-card md:max-h-none md:w-[var(--layer-panel-width)] md:border-b-0 md:border-r"
+      className="relative flex max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-b bg-card max-md:absolute max-md:inset-x-0 max-md:top-0 max-md:z-30 max-md:shadow-xl md:max-h-none md:w-[var(--layer-panel-width)] md:border-b-0 md:border-r"
     >
       <div
         role="separator"
         aria-orientation="vertical"
         aria-label="Resize Layers panel"
-        className="absolute -right-1 top-0 z-20 hidden h-full w-2 cursor-col-resize select-none border-r border-transparent hover:border-primary md:block"
-        onMouseDown={onResizeStart}
+        className="absolute -right-1 top-0 z-20 hidden h-full w-2 cursor-col-resize touch-none select-none border-r border-transparent hover:border-primary md:block"
+        onPointerDown={onResizeStart}
       />
       <div className="flex items-center justify-between border-b px-3 py-1.5">
         <span className="text-sm font-semibold">Layers</span>

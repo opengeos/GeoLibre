@@ -34,23 +34,17 @@ import {
   Trash2,
 } from "lucide-react";
 import {
-  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type RefObject,
   useEffect,
   useMemo,
   useState,
 } from "react";
+import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 
 interface StylePanelProps {
   mapControllerRef: RefObject<MapController | null>;
-  onResizeStart: (event: ReactMouseEvent<HTMLDivElement>) => void;
-}
-
-function isMobileViewport(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    window.matchMedia("(max-width: 767px)").matches
-  );
+  onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
 }
 
 function isRasterPaintLayer(type: LayerType): boolean {
@@ -621,9 +615,10 @@ function clampNumber(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-// Shared shell classes for every StylePanel return branch.
+// Shared shell classes for every expanded StylePanel return branch. On phones
+// (max-md) it overlays the map as a bottom sheet instead of squeezing it.
 const STYLE_PANEL_ASIDE_CLASS =
-  "relative flex max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-t bg-card md:max-h-none md:w-[var(--style-panel-width)] md:border-l md:border-t-0";
+  "relative flex max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-t bg-card max-md:absolute max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:shadow-xl md:max-h-none md:w-[var(--style-panel-width)] md:border-l md:border-t-0";
 
 const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
 const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;
@@ -814,7 +809,7 @@ export function StylePanel({
   const setLayerStyle = useAppStore((s) => s.setLayerStyle);
   const updateLayer = useAppStore((s) => s.updateLayer);
   const moveLayer = useAppStore((s) => s.moveLayer);
-  const [isCollapsed, setIsCollapsed] = useState(isMobileViewport);
+  const [isCollapsed, setIsCollapsed] = useState(getIsMobileViewport);
   const [draftBeforeId, setDraftBeforeId] = useState("");
   const [draftColorExpression, setDraftColorExpression] = useState("");
   const [draftHeightExpression, setDraftHeightExpression] = useState("");
@@ -970,8 +965,8 @@ export function StylePanel({
       role="separator"
       aria-orientation="vertical"
       aria-label="Resize Style panel"
-      className="absolute -left-1 top-0 z-20 hidden h-full w-2 cursor-col-resize select-none border-l border-transparent hover:border-primary md:block"
-      onMouseDown={onResizeStart}
+      className="absolute -left-1 top-0 z-20 hidden h-full w-2 cursor-col-resize touch-none select-none border-l border-transparent hover:border-primary md:block"
+      onPointerDown={onResizeStart}
     />
   );
 
