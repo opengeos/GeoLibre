@@ -37,6 +37,17 @@ export {
   type FileFilter,
 } from "./raster-tools";
 export {
+  SPECTRAL_INDICES,
+  SENSOR_IDS,
+  SENSOR_PRESETS,
+  getSpectralIndex,
+  buildSpectralIndexExpression,
+  type SpectralIndex,
+  type BandName,
+  type BandLayout,
+  type BuiltSpectralIndex,
+} from "./spectral-indices";
+export {
   CLIENT_RASTER_TOOL_IDS,
   TERRAIN_NODATA,
   supportsClientRaster,

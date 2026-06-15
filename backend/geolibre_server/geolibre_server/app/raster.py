@@ -1030,6 +1030,15 @@ try:
 except SystemExit:
     raise
 except Exception as exc:
+    # A bare `A<n>` reference past the input's band count surfaces as an opaque
+    # NameError; hint at the real cause (e.g. a spectral index whose band layout
+    # exceeds the raster) instead of the raw "name 'A4' is not defined".
+    band_ref = re.search(r"name '(A\\d+)' is not defined", str(exc))
+    if band_ref:
+        raise SystemExit(
+            f"Expression references band {band_ref.group(1)}, which the input "
+            "raster does not have. Check the band layout / sensor preset."
+        )
     raise SystemExit(f"Failed to evaluate expression: {exc}")
 
 result = np.asarray(result, dtype="float64")
@@ -1321,6 +1330,9 @@ _RASTER_TOOL_SCRIPTS: dict[str, str] = {
     "interpolate": _INTERPOLATE_SCRIPT,
     "zonal": _ZONAL_STATS_SCRIPT,
     "raster-calc": _RASTER_CALC_SCRIPT,
+    # The Spectral Index tool compiles to a band-math expression on the client
+    # and reuses the raster calculator to evaluate it over the input's bands.
+    "spectral-index": _RASTER_CALC_SCRIPT,
     "reclassify": _RECLASSIFY_SCRIPT,
     "mosaic": _MOSAIC_SCRIPT,
     "focal": _FOCAL_SCRIPT,
@@ -1344,6 +1356,16 @@ _EXTRA_INPUTS: dict[str, list[tuple[str, str, set[str], bool]]] = {
     "clip-mask": [("mask_path", "Mask layer", _GEOJSON_EXTS, True)],
     "zonal": [("zones_path", "Zones layer", _GEOJSON_EXTS, True)],
     "raster-calc": [
+        ("b_path", "Raster B", _GEOTIFF_EXTS, False),
+        ("c_path", "Raster C", _GEOTIFF_EXTS, False),
+    ],
+    # Spectral index is single-input in the UI (the compiled expression only
+    # references A<n> bands), but it reuses _RASTER_CALC_SCRIPT, which opens
+    # b_path/c_path whenever they are present in the request. These entries are a
+    # defense-in-depth guard: a hand-crafted request to the local sidecar that
+    # smuggles in b_path/c_path still has those paths checked against the
+    # allowlist/extensions, rather than opened unvalidated. Not multi-raster.
+    "spectral-index": [
         ("b_path", "Raster B", _GEOTIFF_EXTS, False),
         ("c_path", "Raster C", _GEOTIFF_EXTS, False),
     ],

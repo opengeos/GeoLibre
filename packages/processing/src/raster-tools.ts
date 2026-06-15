@@ -1,4 +1,5 @@
 import type { AlgorithmParameter } from "./types";
+import { SENSOR_IDS, SPECTRAL_INDICES } from "./spectral-indices";
 
 /**
  * Identifiers of the raster processing tools. Kept in sync by hand with the
@@ -17,6 +18,7 @@ export type RasterToolId =
   | "interpolate"
   | "zonal"
   | "raster-calc"
+  | "spectral-index"
   | "reclassify"
   | "mosaic"
   | "focal";
@@ -484,6 +486,88 @@ export const rasterCalculatorTool: RasterTool = {
   ],
 };
 
+const SENSOR_LABELS: Record<(typeof SENSOR_IDS)[number], string> = {
+  sentinel2: "Sentinel-2 (B2, B3, B4, B8, B11, B12)",
+  landsat89: "Landsat 8/9 (B1–B7)",
+  naip: "NAIP (R, G, B, NIR)",
+  custom: "Custom (set band numbers below)",
+};
+
+/** A custom-only band-number input, gated on the "custom" sensor. */
+function bandParam(id: string, label: string): AlgorithmParameter {
+  return {
+    id,
+    label,
+    type: "number",
+    min: 1,
+    step: 1,
+    visibleWhen: { param: "sensor", in: ["custom"] },
+  };
+}
+
+export const spectralIndexTool: RasterTool = {
+  id: "spectral-index",
+  name: "Spectral index",
+  description:
+    "Compute a named spectral index (NDVI, NDWI, EVI, …) from a multiband raster. Pick a sensor preset for the band layout, or set band numbers manually with the Custom sensor.",
+  group: "Analysis",
+  outputKind: "raster",
+  defaultOutputName: "index.tif",
+  inputFilters: GEOTIFF_INPUT,
+  outputFilters: GEOTIFF_OUTPUT,
+  supportsClient: true,
+  parameters: [
+    {
+      id: "index",
+      label: "Index",
+      type: "select",
+      default: SPECTRAL_INDICES[0].id,
+      options: SPECTRAL_INDICES.map((index) => ({
+        value: index.id,
+        label: index.name,
+      })),
+    },
+    {
+      id: "sensor",
+      label: "Sensor / band layout",
+      type: "select",
+      default: SENSOR_IDS[0],
+      options: SENSOR_IDS.map((id) => ({ value: id, label: SENSOR_LABELS[id] })),
+      description:
+        "Preset band numbers for common sensors. Choose Custom to map bands by hand for a differently stacked GeoTIFF.",
+    },
+    bandParam("red", "Red band number"),
+    bandParam("green", "Green band number"),
+    bandParam("blue", "Blue band number"),
+    bandParam("nir", "NIR band number"),
+    bandParam("swir1", "SWIR1 band number"),
+    bandParam("swir2", "SWIR2 band number"),
+    {
+      id: "L",
+      label: "Soil factor (L)",
+      type: "number",
+      default: 0.5,
+      min: 0,
+      max: 1,
+      step: 0.1,
+      visibleWhen: { param: "index", in: ["savi"] },
+      description: "SAVI soil-brightness correction (0 dense cover → 1 bare soil).",
+    },
+    {
+      id: "scale",
+      label: "Reflectance scale",
+      type: "number",
+      default: 1,
+      // Must stay > 0 to match buildSpectralIndexExpression's guard; a tiny
+      // floor still permits sub-0.0001 scales (e.g. Landsat C2's 0.0000275).
+      min: 0.000001,
+      step: 0.0001,
+      description:
+        "Multiplier converting pixel values to reflectance (0–1). Leave at 1 for normalized-difference indices; set it for EVI/SAVI on integer-DN imagery (e.g. 0.0001 for Sentinel-2 L2A).",
+    },
+  ],
+};
+
 export const reclassifyTool: RasterTool = {
   id: "reclassify",
   name: "Reclassify",
@@ -625,6 +709,7 @@ export const RASTER_TOOLS: RasterTool[] = [
   interpolateTool,
   zonalStatisticsTool,
   rasterCalculatorTool,
+  spectralIndexTool,
   reclassifyTool,
   mosaicTool,
   focalStatisticsTool,

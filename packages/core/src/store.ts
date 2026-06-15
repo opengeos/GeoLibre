@@ -110,6 +110,7 @@ export type RasterToolKind =
   | "interpolate"
   | "zonal"
   | "raster-calc"
+  | "spectral-index"
   | "reclassify"
   | "mosaic"
   | "focal";

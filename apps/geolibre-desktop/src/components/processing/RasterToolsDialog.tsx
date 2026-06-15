@@ -9,6 +9,7 @@ import {
   runRasterTool,
   readRasterData,
   runRasterToolClient,
+  buildSpectralIndexExpression,
   type AlgorithmParameter,
   type ConversionJob,
   type RasterTool,
@@ -340,13 +341,31 @@ export function RasterToolsDialog({
       setError(invalid);
       return;
     }
+    // The Spectral Index tool compiles to a band-math expression the sidecar's
+    // `raster-calc` script evaluates, so inject it into the request params.
+    let sidecarParams = params;
+    if (tool.id === "spectral-index") {
+      try {
+        sidecarParams = {
+          ...params,
+          expression: buildSpectralIndexExpression(params).expression,
+        };
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : t("toolbar.rasterTool.invalidSpectralIndex"),
+        );
+        return;
+      }
+    }
     try {
       setJob(
         await runRasterTool({
           tool_id: tool.id,
           input_path: inputPath.trim(),
           output_path: outputPath.trim(),
-          parameters: params,
+          parameters: sidecarParams,
         }),
       );
     } catch (err) {
@@ -354,7 +373,7 @@ export function RasterToolsDialog({
         err instanceof Error ? err.message : "Could not start raster tool.",
       );
     }
-  }, [tool, inputPath, outputPath, params, validateParams]);
+  }, [tool, inputPath, outputPath, params, validateParams, t]);
 
   const runClient = useCallback(async () => {
     setError(null);
