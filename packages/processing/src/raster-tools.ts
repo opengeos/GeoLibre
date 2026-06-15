@@ -558,7 +558,9 @@ export const spectralIndexTool: RasterTool = {
       label: "Reflectance scale",
       type: "number",
       default: 1,
-      min: 0,
+      // Must stay > 0 to match buildSpectralIndexExpression's guard; a tiny
+      // floor still permits sub-0.0001 scales (e.g. Landsat C2's 0.0000275).
+      min: 0.000001,
       step: 0.0001,
       description:
         "Multiplier converting pixel values to reflectance (0–1). Leave at 1 for normalized-difference indices; set it for EVI/SAVI on integer-DN imagery (e.g. 0.0001 for Sentinel-2 L2A).",

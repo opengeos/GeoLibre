@@ -1030,6 +1030,15 @@ try:
 except SystemExit:
     raise
 except Exception as exc:
+    # A bare `A<n>` reference past the input's band count surfaces as an opaque
+    # NameError; hint at the real cause (e.g. a spectral index whose band layout
+    # exceeds the raster) instead of the raw "name 'A4' is not defined".
+    band_ref = re.search(r"name '(A\\d+)' is not defined", str(exc))
+    if band_ref:
+        raise SystemExit(
+            f"Expression references band {band_ref.group(1)}, which the input "
+            "raster does not have. Check the band layout / sensor preset."
+        )
     raise SystemExit(f"Failed to evaluate expression: {exc}")
 
 result = np.asarray(result, dtype="float64")
@@ -1347,6 +1356,12 @@ _EXTRA_INPUTS: dict[str, list[tuple[str, str, set[str], bool]]] = {
     "clip-mask": [("mask_path", "Mask layer", _GEOJSON_EXTS, True)],
     "zonal": [("zones_path", "Zones layer", _GEOJSON_EXTS, True)],
     "raster-calc": [
+        ("b_path", "Raster B", _GEOTIFF_EXTS, False),
+        ("c_path", "Raster C", _GEOTIFF_EXTS, False),
+    ],
+    # Spectral index reuses _RASTER_CALC_SCRIPT, which honors b_path/c_path, so
+    # those auxiliary paths must clear the same allowlist/extension checks.
+    "spectral-index": [
         ("b_path", "Raster B", _GEOTIFF_EXTS, False),
         ("c_path", "Raster C", _GEOTIFF_EXTS, False),
     ],

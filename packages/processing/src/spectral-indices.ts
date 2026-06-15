@@ -14,8 +14,6 @@
  * GeoTIFFs.
  */
 
-import type { AlgorithmParameter } from "./types";
-
 /** Canonical reflectance bands an index formula can reference. */
 export type BandName = "blue" | "green" | "red" | "nir" | "swir1" | "swir2";
 
@@ -139,7 +137,7 @@ export function getSpectralIndex(id: string): SpectralIndex | undefined {
  * surface-reflectance stack order for each sensor; they are editable via the
  * "custom" sensor when a file is stacked differently.
  */
-export const SENSOR_PRESETS: Record<string, BandLayout> = {
+export const SENSOR_PRESETS: Record<(typeof SENSOR_IDS)[number], BandLayout> = {
   // Sentinel-2 6-band reflectance stack [B2, B3, B4, B8, B11, B12].
   sentinel2: { blue: 1, green: 2, red: 3, nir: 4, swir1: 5, swir2: 6 },
   // Landsat 8/9 (OLI) Collection 2 surface reflectance bands B1–B7.
@@ -173,12 +171,17 @@ function resolveBand(
   sensor: string,
   params: Record<string, unknown>,
 ): number {
-  const fromParam = asNumber(params[name]);
-  const fromPreset = SENSOR_PRESETS[sensor]?.[name];
-  const band = sensor === "custom" ? fromParam : (fromParam ?? fromPreset);
+  // Preset sensors always use their preset band layout; only the Custom sensor
+  // reads the manual band-number params. (Mixing the two would let a stale
+  // hidden custom value override a freshly selected preset.)
+  const preset = SENSOR_PRESETS[sensor as (typeof SENSOR_IDS)[number]];
+  const band = sensor === "custom" ? asNumber(params[name]) : preset?.[name];
   if (band == null) {
     throw new Error(
-      `Band "${name}" is required for this index — set it under the band numbers.`,
+      sensor === "custom"
+        ? `Band "${name}" is required for this index — enter a band number above.`
+        : `The ${sensor} preset does not include the "${name}" band this index needs. ` +
+          `Switch to a sensor that has it, or select Custom to enter a band number.`,
     );
   }
   if (!Number.isInteger(band) || band < 1) {

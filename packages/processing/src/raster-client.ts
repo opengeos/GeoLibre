@@ -698,6 +698,9 @@ export function runRasterToolClient(
       break;
     case "spectral-index": {
       const { expression, bands } = buildSpectralIndexExpression(parameters);
+      if (bands.length === 0) {
+        throw new Error("Spectral index produced no band references.");
+      }
       const maxBand = Math.max(...bands);
       if (maxBand > input.bands.length) {
         throw new Error(

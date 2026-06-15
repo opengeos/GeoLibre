@@ -351,7 +351,11 @@ export function RasterToolsDialog({
           expression: buildSpectralIndexExpression(params).expression,
         };
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Invalid spectral index.");
+        setError(
+          err instanceof Error
+            ? err.message
+            : t("toolbar.rasterTool.invalidSpectralIndex"),
+        );
         return;
       }
     }
@@ -369,7 +373,7 @@ export function RasterToolsDialog({
         err instanceof Error ? err.message : "Could not start raster tool.",
       );
     }
-  }, [tool, inputPath, outputPath, params, validateParams]);
+  }, [tool, inputPath, outputPath, params, validateParams, t]);
 
   const runClient = useCallback(async () => {
     setError(null);

@@ -35,7 +35,7 @@ describe("spectral index expression builder", () => {
     assert.equal(supportsClientRaster("spectral-index"), true);
   });
 
-  it("builds NDVI from the Sentinel-2 preset (red B3, NIR B4)", () => {
+  it("builds NDVI from the Sentinel-2 preset (red at stack pos 3, NIR at stack pos 4)", () => {
     const { expression, bands, index } = buildSpectralIndexExpression({
       index: "ndvi",
       sensor: "sentinel2",
