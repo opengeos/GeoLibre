@@ -101,7 +101,7 @@ export function ensureGpkgFeatureCountSync(
     // the row's presence (the previous behaviour) let those files through. See
     // issues #258 and #376.
     const tablesWithValidCount = new Set<string>(); // lowercase keys
-    const tablesWithRow = new Set<string>(); // lowercase keys
+    const tablesWithRow = new Map<string, string>(); // lowercase key → name as stored
     if (hasOgrContents) {
       for (const row of db.exec(
         "SELECT table_name, typeof(feature_count), feature_count FROM gpkg_ogr_contents",
@@ -109,7 +109,7 @@ export function ensureGpkgFeatureCountSync(
         const name = row[0];
         if (typeof name !== "string") continue;
         const key = name.toLowerCase();
-        tablesWithRow.add(key);
+        tablesWithRow.set(key, name);
         // A valid cached count is a non-negative integer. GDAL uses -1 as a
         // "dirty/invalid" sentinel and recomputes the count for it (the
         // multithreaded path that crashes WASM), so a negative value is not safe.
@@ -143,12 +143,18 @@ export function ensureGpkgFeatureCountSync(
           `SELECT count(*) FROM ${quoteIdentifier(tableName)}`,
         );
         const count = countResult[0]?.values[0]?.[0] ?? 0;
-        if (tablesWithRow.has(key)) {
+        const storedName = tablesWithRow.get(key);
+        if (storedName !== undefined) {
           // Repair a stale/NULL count rather than INSERT (which would collide
-          // with the existing primary-key row).
+          // with the existing primary-key row). Match on the exact stored name
+          // (SQLite's lower() is ASCII-only, so a `lower(table_name) = :key`
+          // predicate would miss non-ASCII names) and normalise table_name to
+          // the canonical (gpkg_contents) casing: GDAL looks the row up with a
+          // case-sensitive `table_name = <name from gpkg_contents>`, so a
+          // wrong-cased row would not be found and would still crash.
           db.run(
-            "UPDATE gpkg_ogr_contents SET feature_count = :count WHERE lower(table_name) = :name",
-            { ":name": key, ":count": count },
+            "UPDATE gpkg_ogr_contents SET feature_count = :count, table_name = :canonical WHERE table_name = :stored",
+            { ":canonical": tableName, ":stored": storedName, ":count": count },
           );
         } else {
           db.run(

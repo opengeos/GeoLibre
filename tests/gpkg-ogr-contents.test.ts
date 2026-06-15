@@ -239,10 +239,12 @@ describe("ensureGpkgFeatureCountSync", () => {
     ]);
   });
 
-  it("matches table names case-insensitively across metadata tables", () => {
+  it("matches table names case-insensitively and normalises to the canonical casing", () => {
     // gpkg_contents and gpkg_ogr_contents disagree on casing for the same
-    // (case-insensitive) SQLite table. The repair must treat them as one table
-    // and UPDATE the existing NULL row rather than INSERT a duplicate.
+    // (case-insensitive) SQLite table. The repair must treat them as one table,
+    // UPDATE the existing NULL row rather than INSERT a duplicate, and rewrite
+    // table_name to the gpkg_contents spelling so GDAL's case-sensitive lookup
+    // finds it.
     const db: Database = new SQL.Database();
     db.run(`
       CREATE TABLE gpkg_contents (
@@ -262,7 +264,34 @@ describe("ensureGpkgFeatureCountSync", () => {
     const patched = ensureGpkgFeatureCountSync(SQL, original);
     assert.notEqual(patched, original);
     assert.deepEqual(readOgrContents(patched), [
-      { table_name: "places", feature_count: 3 },
+      { table_name: "Places", feature_count: 3 },
+    ]);
+  });
+
+  it("repairs a non-ASCII table name whose count is NULL", () => {
+    // SQLite's lower() is ASCII-only, so a `lower(table_name) = :key` predicate
+    // would never match a non-ASCII name; matching on the exact stored name
+    // keeps the UPDATE working here.
+    const db: Database = new SQL.Database();
+    db.run(`
+      CREATE TABLE gpkg_contents (
+        table_name TEXT NOT NULL PRIMARY KEY, data_type TEXT NOT NULL, srs_id INTEGER
+      );
+      CREATE TABLE "Über" (fid INTEGER PRIMARY KEY, geom BLOB);
+      INSERT INTO gpkg_contents VALUES ('Über', 'features', 4326);
+      INSERT INTO "Über" (geom) VALUES (NULL), (NULL);
+      CREATE TABLE gpkg_ogr_contents (
+        table_name TEXT NOT NULL PRIMARY KEY, feature_count INTEGER
+      );
+      INSERT INTO gpkg_ogr_contents (table_name, feature_count) VALUES ('Über', NULL);
+    `);
+    const original = db.export();
+    db.close();
+
+    const patched = ensureGpkgFeatureCountSync(SQL, original);
+    assert.notEqual(patched, original);
+    assert.deepEqual(readOgrContents(patched), [
+      { table_name: "Über", feature_count: 2 },
     ]);
   });
 
@@ -318,6 +347,31 @@ describe("ensureGpkgFeatureCountSync", () => {
     assert.notEqual(patched, original);
     assert.deepEqual(readOgrContents(patched), [
       { table_name: "swamps", feature_count: 2 },
+    ]);
+  });
+
+  it("skips an unreadable phantom table and still repairs the others", () => {
+    // gpkg_contents lists a table that does not exist as a real SQLite table
+    // (a deleted/virtual/view entry). count(*) on it throws; the repair must
+    // skip it and still patch the readable feature table.
+    const db: Database = new SQL.Database();
+    db.run(`
+      CREATE TABLE gpkg_contents (
+        table_name TEXT NOT NULL PRIMARY KEY, data_type TEXT NOT NULL, srs_id INTEGER
+      );
+      CREATE TABLE real_table (fid INTEGER PRIMARY KEY, geom BLOB);
+      INSERT INTO gpkg_contents VALUES ('real_table', 'features', 4326);
+      INSERT INTO gpkg_contents VALUES ('ghost_table', 'features', 4326);
+      INSERT INTO real_table (geom) VALUES (NULL), (NULL);
+    `);
+    const original = db.export();
+    db.close();
+
+    const patched = ensureGpkgFeatureCountSync(SQL, original);
+    assert.notEqual(patched, original);
+    // ghost_table is silently skipped; real_table is repaired.
+    assert.deepEqual(readOgrContents(patched), [
+      { table_name: "real_table", feature_count: 2 },
     ]);
   });
 
