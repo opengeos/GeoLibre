@@ -15,6 +15,7 @@ const EXPECTED_IDS = [
   "interpolate",
   "zonal",
   "raster-calc",
+  "spectral-index",
   "reclassify",
   "mosaic",
   "focal",

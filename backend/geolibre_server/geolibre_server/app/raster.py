@@ -1321,6 +1321,9 @@ _RASTER_TOOL_SCRIPTS: dict[str, str] = {
     "interpolate": _INTERPOLATE_SCRIPT,
     "zonal": _ZONAL_STATS_SCRIPT,
     "raster-calc": _RASTER_CALC_SCRIPT,
+    # The Spectral Index tool compiles to a band-math expression on the client
+    # and reuses the raster calculator to evaluate it over the input's bands.
+    "spectral-index": _RASTER_CALC_SCRIPT,
     "reclassify": _RECLASSIFY_SCRIPT,
     "mosaic": _MOSAIC_SCRIPT,
     "focal": _FOCAL_SCRIPT,

@@ -429,6 +429,7 @@
       "interpolate": "Interpolation (IDW / Kriging)",
       "zonal": "Zonal statistics",
       "rasterCalc": "Raster calculator",
+      "spectralIndex": "Spectral index",
       "reclassify": "Reclassify",
       "mosaic": "Mosaic / merge",
       "focal": "Focal statistics",

@@ -185,6 +185,7 @@ export const RASTER_TOOL_COMMANDS: Array<{
   { kind: "interpolate", titleKey: "toolbar.rasterTool.interpolate" },
   { kind: "zonal", titleKey: "toolbar.rasterTool.zonal" },
   { kind: "raster-calc", titleKey: "toolbar.rasterTool.rasterCalc" },
+  { kind: "spectral-index", titleKey: "toolbar.rasterTool.spectralIndex" },
   { kind: "reclassify", titleKey: "toolbar.rasterTool.reclassify" },
   { kind: "mosaic", titleKey: "toolbar.rasterTool.mosaic" },
   { kind: "focal", titleKey: "toolbar.rasterTool.focal" },

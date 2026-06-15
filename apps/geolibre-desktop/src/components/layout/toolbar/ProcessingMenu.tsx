@@ -349,6 +349,9 @@ export function ProcessingMenu({
             <DropdownMenuItem onSelect={() => setRasterToolOpen("raster-calc")}>
               {t("toolbar.rasterTool.rasterCalc")}
             </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setRasterToolOpen("spectral-index")}>
+              {t("toolbar.rasterTool.spectralIndex")}
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setRasterToolOpen("reclassify")}>
               {t("toolbar.rasterTool.reclassify")}
             </DropdownMenuItem>

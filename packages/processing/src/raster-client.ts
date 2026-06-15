@@ -1,5 +1,6 @@
 import { fromArrayBuffer, writeArrayBuffer } from "geotiff";
 import type { RasterToolId } from "./raster-tools";
+import { buildSpectralIndexExpression } from "./spectral-indices";
 
 /**
  * In-browser raster processing engine.
@@ -50,6 +51,7 @@ export const CLIENT_RASTER_TOOL_IDS: ReadonlySet<RasterToolId> = new Set<RasterT
   "clip-extent",
   "reclassify",
   "raster-calc",
+  "spectral-index",
   "focal",
 ]);
 
@@ -694,6 +696,19 @@ export function runRasterToolClient(
     case "raster-calc":
       raster = rasterCalc(input, { expression: String(parameters.expression ?? "") });
       break;
+    case "spectral-index": {
+      const { expression, bands } = buildSpectralIndexExpression(parameters);
+      const maxBand = Math.max(...bands);
+      if (maxBand > input.bands.length) {
+        throw new Error(
+          `This index needs band ${maxBand}, but the raster has only ${input.bands.length} band(s). ` +
+            "Check the sensor preset or set band numbers with the Custom sensor.",
+        );
+      }
+      messages.push(`Index expression: ${expression}`);
+      raster = rasterCalc(input, { expression });
+      break;
+    }
     case "focal":
       raster = focalStatistics(input, {
         band: num("band", 1),
