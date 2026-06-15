@@ -57,12 +57,10 @@ test("registers a service worker and serves the shell offline after first visit"
   // their sum for those budgets, rather than the cap, to govern. See issue #274.
   test.setTimeout(360_000);
 
-  // waitForLoadedAssetsCached() below enumerates the assets the boot pulled in
-  // from performance.getEntriesByType("resource"), whose buffer defaults to 250
-  // entries. The warm boot loads ~285 same-origin assets, so the *earliest*
-  // chunks (the entry, React, and the runtime-cached MapLibre chunk the offline
-  // boot depends on) get evicted from the buffer and silently skipped by the
-  // cache check — letting the test go offline before they are durably cached.
+  // waitForLoadedAssetsCached() below enumerates the boot's assets from
+  // performance.getEntriesByType("resource"), whose buffer defaults to 250
+  // entries; once full, the *earliest* entries (the entry/React/MapLibre chunks
+  // the offline boot needs) are dropped and silently skipped by the cache check.
   // Enlarge the buffer before any resource loads so every asset is verified.
   await page.addInitScript(() => {
     performance.setResourceTimingBufferSize(1000);
@@ -76,9 +74,19 @@ test("registers a service worker and serves the shell offline after first visit"
     timeout: 30_000,
   });
 
-  // Warm the runtime caches: the map boot fetches the (non-precached) MapLibre
-  // chunk, which CacheFirst then stores for offline use.
-  await expect(page.getByTestId("map-canvas")).toBeVisible();
+  // On the very first visit the SW installs and (via clientsClaim) takes control
+  // of the already-open page — but the heavy globIgnored chunks (notably the
+  // ~13 MB MapLibre chunk) were fetched *before* the SW was controlling, so they
+  // bypassed the CacheFirst runtime rule and were never stored. Reload once while
+  // still online so the now-controlling SW serves the navigation and routes every
+  // boot asset through CacheFirst, populating the runtime cache the offline boot
+  // depends on. (Without this, waitForLoadedAssetsCached below never sees those
+  // chunks reach Cache Storage.)
+  await page.reload();
+
+  // Warm boot under SW control: the map fetches the (non-precached) MapLibre
+  // chunk through the SW, which CacheFirst then stores for offline use.
+  await expect(page.getByTestId("map-canvas")).toBeVisible({ timeout: 30_000 });
   await expect(page.locator(".maplibregl-canvas")).toBeVisible({
     timeout: 30_000,
   });
@@ -88,8 +96,8 @@ test("registers a service worker and serves the shell offline after first visit"
   // visible (the ~13 MB MapLibre chunk ran in-page) while the SW is still
   // persisting that chunk. Going offline in that window leaves the chunk
   // uncached, so the offline reload can't import it and never renders the map.
-  // Wait for all first-load requests to finish, then for every same-origin
-  // build asset the boot pulled in to be durably present in Cache Storage.
+  // Wait for all requests to finish, then for every same-origin build asset the
+  // boot pulled in to be durably present in Cache Storage.
   await page.waitForLoadState("networkidle", { timeout: 60_000 });
   await waitForLoadedAssetsCached(page);
 
@@ -123,29 +131,51 @@ test("registers a service worker and serves the shell offline after first visit"
  * "ready to go offline" signal. `ignoreSearch` lets the plain resource URL match
  * a revision-keyed precache entry (`…?__WB_REVISION__=…`) as well as the
  * plain-URL runtime entry.
+ *
+ * NOTE: this must NOT use `page.waitForFunction` with an async predicate.
+ * waitForFunction does not await a promise the predicate returns — a returned
+ * promise is truthy, so the poll "passes" on the very first tick without ever
+ * checking the caches. (That silent vacuous pass is exactly why this gate let
+ * the test go offline before the ~13 MB MapLibre chunk's CacheFirst write had
+ * finished, intermittently failing the offline boot.) `page.evaluate` *does*
+ * await the async function and return its resolved value, so we drive the poll
+ * from Node with `expect.poll`.
  */
 async function waitForLoadedAssetsCached(page: Page): Promise<void> {
-  await page.waitForFunction(
-    async () => {
-      const origin = location.origin;
-      const urls = performance
-        .getEntriesByType("resource")
-        .map((entry) => (entry as PerformanceResourceTiming).name)
-        .filter(
-          (name) =>
-            name.startsWith(origin) &&
-            name.includes("/assets/") &&
-            (name.endsWith(".js") || name.endsWith(".css")),
-        );
-      // The shell's JS/CSS must have loaded for the warm boot above; if nothing
-      // is visible yet, keep polling rather than passing vacuously.
-      if (urls.length === 0) return false;
-      for (const url of urls) {
-        if (!(await caches.match(url, { ignoreSearch: true }))) return false;
-      }
-      return true;
-    },
-    undefined,
-    { timeout: 60_000, polling: 500 },
-  );
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => {
+          const origin = location.origin;
+          const urls = performance
+            .getEntriesByType("resource")
+            .map((entry) => (entry as PerformanceResourceTiming).name)
+            .filter(
+              (name) =>
+                name.startsWith(origin) &&
+                name.includes("/assets/") &&
+                (name.endsWith(".js") || name.endsWith(".css")),
+            );
+          // The shell's JS/CSS must have loaded for the warm boot above; if
+          // nothing is visible yet, keep polling rather than passing vacuously.
+          if (urls.length === 0) return false;
+          for (const url of urls) {
+            // ignoreVary: the heavy chunks are fetched via crossorigin
+            // modulepreload, so their cached responses carry a Vary header; a
+            // plain-URL match would false-negative without it. ignoreSearch lets
+            // the plain URL match a revision-keyed precache entry too.
+            if (
+              !(await caches.match(url, {
+                ignoreSearch: true,
+                ignoreVary: true,
+              }))
+            ) {
+              return false;
+            }
+          }
+          return true;
+        }),
+      { timeout: 60_000, intervals: [500] },
+    )
+    .toBe(true);
 }
