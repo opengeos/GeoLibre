@@ -321,6 +321,7 @@ export function FieldCollectionDialog({
   const handlePickOnMap = useCallback(() => {
     if (!getMap()) return;
     gpsSeqRef.current += 1; // invalidate any in-flight GPS fix
+    setLocating(false); // its callback bails, so clear the spinner here
     setPicking(true);
     onOpenChange(false);
   }, [getMap, onOpenChange]);
@@ -381,6 +382,7 @@ export function FieldCollectionDialog({
   const handleStartDrawing = useCallback(() => {
     if (!getMap()) return;
     gpsSeqRef.current += 1; // invalidate any in-flight GPS fix
+    setLocating(false); // its callback bails, so clear the spinner here
     setVerticesSynced([]);
     setPending(null);
     setNotice(null);
@@ -407,6 +409,16 @@ export function FieldCollectionDialog({
     [activeGeometry, getMap, onOpenChange],
   );
 
+  const handleCancelDrawing = useCallback(() => {
+    setDrawing(false);
+    setVerticesSynced([]);
+    setNotice(null);
+    const map = getMap();
+    if (map) removeDrawPreview(map);
+    suppressResetRef.current = true;
+    onOpenChange(true);
+  }, [getMap, onOpenChange, setVerticesSynced]);
+
   useEffect(() => {
     if (!drawing) return;
     const map = getMap();
@@ -428,30 +440,26 @@ export function FieldCollectionDialog({
       e.preventDefault();
       finishDrawing(verticesRef.current.slice(0, -1));
     };
+    // Escape aborts drawing (mirrors point-pick mode and the toolbar's Cancel).
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") handleCancelDrawing();
+    };
     map.on("click", onClick);
     map.on("dblclick", onDblClick);
+    window.addEventListener("keydown", onKey);
     return () => {
       cancelAnimationFrame(raf);
       map.off("click", onClick);
       map.off("dblclick", onDblClick);
+      window.removeEventListener("keydown", onKey);
       map.doubleClickZoom.enable();
       map.getCanvas().style.cursor = prevCursor;
     };
-  }, [drawing, getMap, pushVertex, finishDrawing]);
+  }, [drawing, getMap, pushVertex, finishDrawing, handleCancelDrawing]);
 
   const handleUndoVertex = useCallback(() => {
     setVerticesSynced(verticesRef.current.slice(0, -1));
   }, [setVerticesSynced]);
-
-  const handleCancelDrawing = useCallback(() => {
-    setDrawing(false);
-    setVerticesSynced([]);
-    setNotice(null);
-    const map = getMap();
-    if (map) removeDrawPreview(map);
-    suppressResetRef.current = true;
-    onOpenChange(true);
-  }, [getMap, onOpenChange, setVerticesSynced]);
 
   // ---- GPS (a point, or one vertex while drawing) ----------------------------
 
@@ -496,13 +504,17 @@ export function FieldCollectionDialog({
       const file = e.target.files?.[0];
       e.target.value = "";
       if (!file) return;
-      // file.size is the exact decoded byte count, so guard before the read.
-      if (file.size > MAX_PHOTO_BYTES) {
+      const tooLarge = () =>
         setNotice(
           t("fieldCollection.photoTooLarge", {
             max: `${Math.round(MAX_PHOTO_BYTES / (1024 * 1024))} MB`,
           }),
         );
+      // Fast-reject before reading: the stored value is a base64 data URL (~4/3
+      // the file size), so a file already over the cap can't fit. The exact
+      // check is on the encoded length below.
+      if (file.size > MAX_PHOTO_BYTES) {
+        tooLarge();
         return;
       }
       const reader = new FileReader();
@@ -511,6 +523,10 @@ export function FieldCollectionDialog({
         const dataUrl = typeof reader.result === "string" ? reader.result : "";
         if (!dataUrl) {
           setNotice(t("fieldCollection.photoReadError"));
+          return;
+        }
+        if (dataUrl.length > MAX_PHOTO_BYTES) {
+          tooLarge();
           return;
         }
         setPhoto(dataUrl);
@@ -591,17 +607,21 @@ export function FieldCollectionDialog({
     clearPreview,
   ]);
 
-  const setValue = (key: string, value: string) =>
+  const setValue = useCallback((key: string, value: string) => {
     setValues((v) => ({ ...v, [key]: value }));
+  }, []);
 
-  const errorText = (code: string | undefined): string | null => {
-    if (!code) return null;
-    if (code === "required") return t("fieldCollection.errorRequired");
-    if (code === "number") return t("fieldCollection.errorNumber");
-    if (code === "choice") return t("fieldCollection.errorChoice");
-    // Surface any future validation code rather than hiding it silently.
-    return code;
-  };
+  const errorText = useCallback(
+    (code: string | undefined): string | null => {
+      if (!code) return null;
+      if (code === "required") return t("fieldCollection.errorRequired");
+      if (code === "number") return t("fieldCollection.errorNumber");
+      if (code === "choice") return t("fieldCollection.errorChoice");
+      // Surface any future validation code rather than hiding it silently.
+      return code;
+    },
+    [t],
+  );
 
   const inSetup = !activeLayer;
 

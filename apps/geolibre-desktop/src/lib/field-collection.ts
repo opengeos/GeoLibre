@@ -325,8 +325,9 @@ export function drawPreview(
   );
   if (geometry === "polygon" && coords.length >= 3) {
     features.push(makePolygonFeature(coords, {}));
-  }
-  if (
+    // Close the dashed stroke so it matches the filled ring (back to the start).
+    features.push(makeLineFeature([...coords, coords[0]], {}));
+  } else if (
     (geometry === "line" || geometry === "polygon") &&
     coords.length >= 2
   ) {
