@@ -88,16 +88,62 @@ jobs:
         working-directory: apps/geolibre-desktop
         run: npx tauri android init
 
-      - name: Build debug APK
+      - name: Build release APK
+        # Release (not --debug): the size-optimized + stripped Cargo profile keeps
+        # the .so small, so the APK is ~40 MB instead of ~200 MB. Release APKs are
+        # unsigned by default; the next step signs them.
         working-directory: apps/geolibre-desktop
-        run: npx tauri android build --debug --apk
+        run: npx tauri android build --apk
         env:
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
 
-      - name: Upload APK artifact
+      - name: Sign APK
+        id: sign
+        # With release-keystore secrets set, the APK is signed for distribution.
+        # Without them, it's signed with a throwaway debug keystore so the CI
+        # artifact is still installable for testing (do NOT publish that one).
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          build_tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          unsigned="$(find apps/geolibre-desktop/src-tauri/gen/android \
+            -name '*release-unsigned.apk' | head -1)"
+          if [ -z "$unsigned" ]; then
+            echo "::error::No release-unsigned APK found"; exit 1
+          fi
+          if [ -n "${KEYSTORE_BASE64:-}" ]; then
+            echo "Signing with the release keystore from secrets."
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            keystore="$RUNNER_TEMP/release.jks"
+            store_pass="$KEYSTORE_PASSWORD"
+            key_pass="${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
+            alias="$KEY_ALIAS"
+          else
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret set — signing with a throwaway debug keystore. Installable for testing only, NOT for distribution."
+            keystore="$RUNNER_TEMP/debug.jks"
+            "$JAVA_HOME/bin/keytool" -genkeypair -v -keystore "$keystore" \
+              -storepass android -keypass android -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+            store_pass=android; key_pass=android; alias=androiddebugkey
+          fi
+          aligned="$RUNNER_TEMP/app-release-aligned.apk"
+          signed="$RUNNER_TEMP/geolibre-android-release.apk"
+          "$build_tools/zipalign" -p -f 4 "$unsigned" "$aligned"
+          "$build_tools/apksigner" sign --ks "$keystore" \
+            --ks-pass "pass:$store_pass" --key-pass "pass:$key_pass" \
+            --ks-key-alias "$alias" --out "$signed" "$aligned"
+          "$build_tools/apksigner" verify "$signed"
+          echo "apk=$signed" >> "$GITHUB_OUTPUT"
+
+      - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: geolibre-android-debug-apk
-          path: apps/geolibre-desktop/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          name: geolibre-android-release-apk
+          path: ${{ steps.sign.outputs.apk }}
           if-no-files-found: error
           retention-days: 14
