@@ -202,8 +202,36 @@ describe("ensureGpkgFeatureCountSync", () => {
     db.close();
 
     const patched = ensureGpkgFeatureCountSync(SQL, original);
+    assert.notEqual(patched, original);
     assert.deepEqual(readOgrContents(patched), [
       { table_name: "mounds", feature_count: 2 },
+    ]);
+  });
+
+  it("matches table names case-insensitively across metadata tables", () => {
+    // gpkg_contents and gpkg_ogr_contents disagree on casing for the same
+    // (case-insensitive) SQLite table. The repair must treat them as one table
+    // and UPDATE the existing NULL row rather than INSERT a duplicate.
+    const db: Database = new SQL.Database();
+    db.run(`
+      CREATE TABLE gpkg_contents (
+        table_name TEXT NOT NULL PRIMARY KEY, data_type TEXT NOT NULL, srs_id INTEGER
+      );
+      CREATE TABLE "Places" (fid INTEGER PRIMARY KEY, geom BLOB);
+      INSERT INTO gpkg_contents VALUES ('Places', 'features', 4326);
+      INSERT INTO "Places" (geom) VALUES (NULL), (NULL), (NULL);
+      CREATE TABLE gpkg_ogr_contents (
+        table_name TEXT NOT NULL PRIMARY KEY, feature_count INTEGER
+      );
+      INSERT INTO gpkg_ogr_contents (table_name, feature_count) VALUES ('places', NULL);
+    `);
+    const original = db.export();
+    db.close();
+
+    const patched = ensureGpkgFeatureCountSync(SQL, original);
+    assert.notEqual(patched, original);
+    assert.deepEqual(readOgrContents(patched), [
+      { table_name: "places", feature_count: 3 },
     ]);
   });
 

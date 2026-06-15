@@ -67,7 +67,12 @@ export function ensureGpkgFeatureCountSync(
     // the gpkg_contents row while still registering the geometry column, so
     // relying on gpkg_contents alone misses those tables. lower() so producers
     // writing 'Features'/'FEATURES' still match.
-    const featureTables = new Set<string>();
+    // SQLite identifiers are case-insensitive, but the metadata tables can
+    // disagree on casing (e.g. gpkg_contents says 'Places' while
+    // gpkg_ogr_contents says 'places'). Key everything by the lowercased name so
+    // those resolve to one table — comparing case-sensitively would otherwise
+    // report a false "missing" table and INSERT a duplicate ogr_contents row.
+    const featureTables = new Map<string, string>(); // lowercase key → canonical name
     for (const sql of [
       "SELECT table_name FROM gpkg_contents WHERE lower(data_type)='features'",
       ...(tableExists(db, "gpkg_geometry_columns")
@@ -75,7 +80,7 @@ export function ensureGpkgFeatureCountSync(
         : []),
     ]) {
       for (const row of db.exec(sql)[0]?.values ?? []) {
-        if (typeof row[0] === "string") featureTables.add(row[0]);
+        if (typeof row[0] === "string") featureTables.set(row[0].toLowerCase(), row[0]);
       }
     }
     if (featureTables.size === 0) return bytes;
@@ -89,21 +94,22 @@ export function ensureGpkgFeatureCountSync(
     // gpkg_ogr_contents row but leave feature_count NULL, so checking only for
     // the row's presence (the previous behaviour) let those files through. See
     // issues #258 and #376.
-    const tablesWithValidCount = new Set<string>();
-    const tablesWithRow = new Set<string>();
+    const tablesWithValidCount = new Set<string>(); // lowercase keys
+    const tablesWithRow = new Set<string>(); // lowercase keys
     if (hasOgrContents) {
       for (const row of db.exec(
         "SELECT table_name, typeof(feature_count) FROM gpkg_ogr_contents",
       )[0]?.values ?? []) {
         const name = row[0];
         if (typeof name !== "string") continue;
-        tablesWithRow.add(name);
-        if (row[1] === "integer") tablesWithValidCount.add(name);
+        const key = name.toLowerCase();
+        tablesWithRow.add(key);
+        if (row[1] === "integer") tablesWithValidCount.add(key);
       }
     }
 
-    const needsCount = [...featureTables].filter(
-      (name) => !tablesWithValidCount.has(name),
+    const needsCount = [...featureTables.keys()].filter(
+      (key) => !tablesWithValidCount.has(key),
     );
     if (needsCount.length === 0) return bytes;
 
@@ -115,23 +121,32 @@ export function ensureGpkgFeatureCountSync(
       );
     }
 
-    for (const tableName of needsCount) {
-      const countResult = db.exec(
-        `SELECT count(*) FROM ${quoteIdentifier(tableName)}`,
-      );
-      const count = countResult[0]?.values[0]?.[0] ?? 0;
-      if (tablesWithRow.has(tableName)) {
-        // Repair a stale/NULL count rather than INSERT (which would collide
-        // with the existing primary-key row).
-        db.run(
-          "UPDATE gpkg_ogr_contents SET feature_count = :count WHERE table_name = :name",
-          { ":name": tableName, ":count": count },
+    for (const key of needsCount) {
+      const tableName = featureTables.get(key)!;
+      // Best-effort per table: a malformed GeoPackage can register a view, a
+      // deleted table, or a virtual table that count(*) cannot read. Skipping it
+      // keeps the other feature tables repairable instead of aborting the whole
+      // file (which would leave every table unpatched).
+      try {
+        const countResult = db.exec(
+          `SELECT count(*) FROM ${quoteIdentifier(tableName)}`,
         );
-      } else {
-        db.run(
-          "INSERT INTO gpkg_ogr_contents (table_name, feature_count) VALUES (:name, :count)",
-          { ":name": tableName, ":count": count },
-        );
+        const count = countResult[0]?.values[0]?.[0] ?? 0;
+        if (tablesWithRow.has(key)) {
+          // Repair a stale/NULL count rather than INSERT (which would collide
+          // with the existing primary-key row).
+          db.run(
+            "UPDATE gpkg_ogr_contents SET feature_count = :count WHERE lower(table_name) = :name",
+            { ":name": key, ":count": count },
+          );
+        } else {
+          db.run(
+            "INSERT INTO gpkg_ogr_contents (table_name, feature_count) VALUES (:name, :count)",
+            { ":name": tableName, ":count": count },
+          );
+        }
+      } catch {
+        // Leave this table to GDAL's normal error path; other tables still get fixed.
       }
     }
 
