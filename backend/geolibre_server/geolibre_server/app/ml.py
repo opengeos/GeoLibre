@@ -134,7 +134,7 @@ def _is_healthy(base_url: str, timeout: float = 3.0) -> bool:
         # raising, so callers like /ml/status degrade gracefully.
         return False
     except Exception as exc:  # noqa: BLE001 - a probe failure means "not healthy"
-        logger.debug("Health check for %s failed: %s", base_url, exc)
+        logger.debug("Health check for %s failed: %s", _redact_url(base_url), exc)
         return False
 
 

@@ -221,7 +221,7 @@ def _overlay_op(
 def _clip(
     geojson: Optional[dict], overlay: Optional[dict], parameters: dict[str, Any]
 ) -> tuple[dict, list[str]]:
-    """Clip the input layer to the overlay layer's extent."""
+    """Clip the input layer to the overlay layer's geometry."""
     gpd = _import_geopandas()
     left = _load_gdf(geojson, "Input layer")
     right = _load_gdf(overlay, "Overlay layer")
