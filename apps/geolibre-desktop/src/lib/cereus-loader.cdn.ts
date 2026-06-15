@@ -37,6 +37,10 @@ export async function loadCereusDb(): Promise<CereusInstance> {
   }
   // The JS glue is bundled, so this import resolves to a local chunk; the network
   // fetch happens inside create() when it loads the wasm from the CDN URL.
+  // Version-pinned but not integrity-checked: the package fetches the wasm with
+  // no `integrity` option, so there is no SRI guard on the CDN binary. Accepted
+  // risk (the same trade-off as PGlite/Pyodide) — the wasm runs inside the
+  // WebAssembly sandbox and the jsDelivr URL is version-immutable.
   const mod = (await import("@cereusdb/standard")) as unknown as CereusModule;
   try {
     return await mod.CereusDB.create({ wasmUrl: __CEREUS_WASM_CDN_URL__ });

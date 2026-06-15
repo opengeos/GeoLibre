@@ -73,25 +73,32 @@ function esmEntry(manifest: Record<string, unknown>): string {
   if (typeof importDefault === "string") return importDefault;
   return "dist/index.js";
 }
-// The PGlite packages do not expose "./package.json" via their `exports`, so
-// resolve the package entry and walk up to its package.json to read the
-// installed version and ESM entry path (so the CDN URL tracks the lockfile and
-// any future dist restructuring instead of hardcoding `/dist/index.js`).
-function installedPackage(pkg: string): { version: string; entry: string } {
-  let dir = path.dirname(pgliteCdnRequire.resolve(pkg));
+// These packages do not expose "./package.json" via their `exports`, so resolve
+// a known file inside the package and walk up to the owning package.json (the
+// one whose `name` matches) to read the installed version and entry paths — so a
+// CDN URL tracks the lockfile and any future dist restructuring instead of
+// hardcoding paths.
+function findPackageManifest(
+  startFile: string,
+  pkg: string,
+): { dir: string; manifest: Record<string, unknown> } {
+  let dir = path.dirname(startFile);
   while (dir !== path.dirname(dir)) {
-    const manifest = path.join(dir, "package.json");
     try {
-      const parsed = JSON.parse(readFileSync(manifest, "utf8"));
-      if (parsed.name === pkg) {
-        return { version: parsed.version as string, entry: esmEntry(parsed) };
-      }
+      const parsed = JSON.parse(
+        readFileSync(path.join(dir, "package.json"), "utf8"),
+      );
+      if (parsed.name === pkg) return { dir, manifest: parsed };
     } catch {
       // Not this directory's package.json; keep walking up.
     }
     dir = path.dirname(dir);
   }
   throw new Error(`Could not resolve installed version of ${pkg}`);
+}
+function installedPackage(pkg: string): { version: string; entry: string } {
+  const { manifest } = findPackageManifest(pgliteCdnRequire.resolve(pkg), pkg);
+  return { version: manifest.version as string, entry: esmEntry(manifest) };
 }
 function pgliteCdnUrl(pkg: string): string | null {
   if (!PGLITE_CDN) return null;
@@ -122,22 +129,9 @@ function cereusWasmCdnUrl(): string | null {
   // owning package.json for the installed version and the file's package-relative
   // path, so the URL tracks the lockfile and any future dist restructuring.
   const wasmFile = pgliteCdnRequire.resolve(`${pkg}/wasm`);
-  let dir = path.dirname(wasmFile);
-  while (dir !== path.dirname(dir)) {
-    try {
-      const parsed = JSON.parse(
-        readFileSync(path.join(dir, "package.json"), "utf8"),
-      );
-      if (parsed.name === pkg) {
-        const rel = path.relative(dir, wasmFile).split(path.sep).join("/");
-        return `https://cdn.jsdelivr.net/npm/${pkg}@${parsed.version}/${rel}`;
-      }
-    } catch {
-      // Not this directory's package.json; keep walking up.
-    }
-    dir = path.dirname(dir);
-  }
-  throw new Error(`Could not resolve installed version of ${pkg}`);
+  const { dir, manifest } = findPackageManifest(wasmFile, pkg);
+  const rel = path.relative(dir, wasmFile).split(path.sep).join("/");
+  return `https://cdn.jsdelivr.net/npm/${pkg}@${manifest.version}/${rel}`;
 }
 const CEREUS_WASM_CDN_URL = cereusWasmCdnUrl();
 const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
@@ -420,13 +414,27 @@ function cereusCdnLoaderPlugin(): Plugin {
     },
     transform(code, id) {
       const file = id.split("?")[0].replaceAll("\\", "/");
-      if (!file.endsWith(CEREUS_WASM_GLUE) || !code.includes(CEREUS_DEFAULT_WASM_URL)) {
+      if (!file.endsWith(CEREUS_WASM_GLUE)) return null;
+      if (!code.includes(CEREUS_DEFAULT_WASM_URL)) {
+        // The glue is here but the expected expression is gone — most likely a
+        // new @cereusdb/standard shipped a different wasm-bindgen string or dist
+        // path. Warn loudly instead of silently returning null, which would let
+        // Vite re-emit the 40 MB wasm into dist with no error and a green CI.
+        this.warn(
+          `${CEREUS_WASM_GLUE} no longer contains the expected default wasm URL ` +
+            `expression; the ~40 MB wasm may be silently re-emitted into dist. ` +
+            `Update CEREUS_WASM_GLUE / CEREUS_DEFAULT_WASM_URL in vite.config.ts.`,
+        );
         return null;
       }
       // Replace the dead default-path expression so Vite never sees the asset.
-      // If the branch is somehow reached (init with no wasmUrl), throw clearly.
+      // replaceAll: wasm-bindgen can emit the pattern more than once (sync + async
+      // init paths). If the branch is somehow reached (init with no wasmUrl),
+      // throw clearly. map:null is fine — the replacement adds no newlines, so
+      // only columns on this one line shift; per-line stepping stays correct, and
+      // sourcemaps are off anyway unless TAURI_DEBUG.
       return {
-        code: code.replace(
+        code: code.replaceAll(
           CEREUS_DEFAULT_WASM_URL,
           "(()=>{throw new Error('CereusDB must be initialised with an explicit wasmUrl (GEOLIBRE_CEREUS_CDN build)')})()",
         ),
