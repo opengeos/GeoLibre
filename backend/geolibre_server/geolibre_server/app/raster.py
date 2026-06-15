@@ -834,6 +834,12 @@ if isinstance(crs_member, dict):
                     f"({exc}); assuming WGS84 (EPSG:4326)",
                     file=sys.stderr,
                 )
+        else:
+            print(
+                f"Warning: could not parse zones CRS '{name}'; "
+                "assuming WGS84 (EPSG:4326)",
+                file=sys.stderr,
+            )
 
 out_features = []
 with_data = 0
