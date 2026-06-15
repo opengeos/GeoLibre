@@ -243,7 +243,7 @@ def _terminate_process(proc) -> None:
     try:
         proc.wait(timeout=5)
     except Exception as exc:  # noqa: BLE001 - escalate to kill on any wait failure
-        logger.debug("Process ignored SIGTERM (%s); sending SIGKILL", exc)
+        logger.debug("SIGTERM wait failed (%s); escalating to SIGKILL", exc)
         proc.kill()
 
 

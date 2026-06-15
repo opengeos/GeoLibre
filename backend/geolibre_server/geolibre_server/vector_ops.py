@@ -89,6 +89,10 @@ def _to_feature_collection(gdf: Any) -> dict:
     return json.loads(gdf.to_json())
 
 
+# Every tool handler below shares the signature
+# ``(geojson, overlay, parameters) -> (feature_collection, messages)`` so they
+# can be dispatched uniformly (see _DISPATCH). Single-layer tools accept but
+# ignore ``overlay``; two-layer tools (clip/overlay/union/joins) read it.
 def _buffer(
     geojson: Optional[dict], overlay: Optional[dict], parameters: dict[str, Any]
 ) -> tuple[dict, list[str]]:

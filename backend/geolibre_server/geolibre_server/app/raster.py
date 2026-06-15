@@ -591,10 +591,8 @@ if isinstance(crs_member, dict):
     name = crs_member.get("properties", {}).get("name", "")
     digits = re.search(r"(\\d+)$", str(name))
     if digits:
-        try:
-            epsg = int(digits.group(1))
-        except ValueError:
-            pass
+        # digits matches ``(\\d+)$``, so int() can never raise here.
+        epsg = int(digits.group(1))
 try:
     crs = CRS.from_epsg(epsg)
 except Exception as exc:
