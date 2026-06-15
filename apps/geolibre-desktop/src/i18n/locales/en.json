@@ -8,6 +8,19 @@
     "add": "Add",
     "ok": "OK"
   },
+  "offline": {
+    "title": "Download Offline Area",
+    "description": "Save the current map view's basemap tiles so this area keeps working without a network connection.",
+    "noServiceWorker": "Offline caching needs the installed web app. Tiles you download here won't be saved for offline use in this build.",
+    "uncacheable": "The active basemap ({{hosts}}) isn't on the offline-cacheable host list, so its tiles won't persist. Switch to an OpenFreeMap or CARTO basemap for offline use.",
+    "detailLevels": "Extra detail levels",
+    "zoomRange": "Zoom {{min}}–{{max}}",
+    "tiles": "Tiles to download",
+    "download": "Download",
+    "cancel": "Cancel",
+    "progress": "Downloading {{done}} / {{total}}…",
+    "complete": "Saved {{done}} of {{total}} tiles ({{failed}} failed)."
+  },
   "collaborate": {
     "title": "Live collaboration",
     "description": "Share a live session so others can see and edit this map with you in real time.",
@@ -363,6 +376,7 @@
       "collaborateEllipsis": "Collaborate...",
       "printEllipsis": "Print...",
       "printLayoutEllipsis": "Print Layout...",
+      "offlineRegionEllipsis": "Download Offline Area...",
       "undo": "Undo",
       "redo": "Redo",
       "sectionFiles": "Files",

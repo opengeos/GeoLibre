@@ -37,8 +37,11 @@ const IS_TAURI_BUILD = !!process.env.TAURI_ENV_PLATFORM;
 // relative to these. jsDelivr is already an allowed script-src in the web
 // (docker/nginx.conf) and desktop (tauri.conf.json) CSPs — it serves Pyodide — so
 // this adds no new external origin. Trade-off: the PostGIS SQL engine needs
-// network on first use and is not cached for offline use (the desktop app already
-// fetches map tiles, Pyodide, the DuckDB spatial extension, and H3 the same way).
+// network on FIRST use. After that, the web build's service worker runtime-caches
+// the jsDelivr-served Pyodide and PGlite/PostGIS engines (see the
+// "geolibre-cdn-engines" CacheFirst rule below), so both the browser SQL and
+// Python features keep working offline. (The desktop Tauri build has no service
+// worker and still fetches these per the same first-use rule.)
 const PGLITE_CDN = process.env.GEOLIBRE_PGLITE_CDN !== "0";
 
 // PWA/offline support targets the standalone web build only. The Tauri desktop
@@ -546,6 +549,30 @@ function pwaPlugin(): Plugin[] {
           },
         },
         {
+          // CDN-loaded heavy engines: Pyodide (the Python runtime + its wheels)
+          // and PGlite/PostGIS, both served version-pinned from jsDelivr (see
+          // PGLITE_CDN_URL and pyodide-config.ts). Their URLs embed the exact
+          // package version, so a redeploy/upgrade mints new URLs and CacheFirst
+          // never serves a stale engine. Caching them here is what lets the
+          // browser SQL (PostGIS) and Python features work OFFLINE after their
+          // first online use — closing the gap noted at the top of this file.
+          // jsDelivr sends permissive CORS headers, so these come back as normal
+          // (non-opaque) 200s and can be revalidated/evicted like any cache
+          // entry. When GEOLIBRE_PGLITE_CDN=0, PGlite is bundled under /assets/
+          // instead and this rule simply never matches it (Pyodide is always
+          // CDN-loaded regardless).
+          urlPattern: ({ url }: { url: URL }) =>
+            url.hostname === "cdn.jsdelivr.net" &&
+            (url.pathname.startsWith("/pyodide/") ||
+              url.pathname.startsWith("/npm/@electric-sql/")),
+          handler: "CacheFirst",
+          options: {
+            cacheName: "geolibre-cdn-engines",
+            expiration: { maxEntries: 400, maxAgeSeconds: 60 * 60 * 24 * 30 },
+            cacheableResponse: { statuses: [0, 200] },
+          },
+        },
+        {
           // Basemap tiles/styles from the CORS-friendly default hosts only
           // (OpenFreeMap, CARTO). Other remote tiles/services stay network-only
           // by design — see docs for what is and isn't available offline.
@@ -553,8 +580,11 @@ function pwaPlugin(): Plugin[] {
             /(?:^|\.)(?:openfreemap\.org|cartocdn\.com)$/.test(url.hostname),
           handler: "CacheFirst",
           options: {
+            // Generous cap: the "Download Offline Area" feature
+            // (lib/offline-tiles.ts) warms a whole region's tiles at once and
+            // would otherwise evict its own freshly-cached tiles past 600.
             cacheName: "geolibre-basemaps",
-            expiration: { maxEntries: 600, maxAgeSeconds: 60 * 60 * 24 * 7 },
+            expiration: { maxEntries: 8000, maxAgeSeconds: 60 * 60 * 24 * 30 },
             cacheableResponse: { statuses: [0, 200] },
           },
         },

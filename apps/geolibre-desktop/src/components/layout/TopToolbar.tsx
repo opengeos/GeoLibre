@@ -82,6 +82,7 @@ import { CollaborateDialog } from "./CollaborateDialog";
 import { useCollaboration } from "../../hooks/useCollaboration";
 import { SettingsDialog } from "./SettingsDialog";
 import { PrintLayoutDialog } from "./PrintLayoutDialog";
+import { OfflineRegionDialog } from "./OfflineRegionDialog";
 import { AddDataMenu } from "./toolbar/AddDataMenu";
 import { ConsentNoticeDialogs } from "./toolbar/ConsentNoticeDialogs";
 import { ControlsMenu } from "./toolbar/ControlsMenu";
@@ -208,6 +209,7 @@ export function TopToolbar({
   const [collaborateDialogOpen, setCollaborateDialogOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [printLayoutOpen, setPrintLayoutOpen] = useState(false);
+  const [offlineRegionOpen, setOfflineRegionOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [checkForUpdatesRequest, setCheckForUpdatesRequest] = useState(0);
@@ -727,6 +729,7 @@ export function TopToolbar({
         onShare={() => setShareDialogOpen(true)}
         onCollaborate={() => setCollaborateDialogOpen(true)}
         onPrintLayout={() => setPrintLayoutOpen(true)}
+        onDownloadOffline={() => setOfflineRegionOpen(true)}
       />
       <EditMenu chrome={chrome} />
       <NewProjectDialog
@@ -789,6 +792,11 @@ export function TopToolbar({
       <PrintLayoutDialog
         open={printLayoutOpen}
         onOpenChange={setPrintLayoutOpen}
+        mapControllerRef={mapControllerRef}
+      />
+      <OfflineRegionDialog
+        open={offlineRegionOpen}
+        onOpenChange={setOfflineRegionOpen}
         mapControllerRef={mapControllerRef}
       />
       <ShareProjectDialog

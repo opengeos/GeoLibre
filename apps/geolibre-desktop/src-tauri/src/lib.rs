@@ -20,6 +20,10 @@ use std::thread;
 use std::time::Duration;
 use tauri::Manager;
 
+// OAuth popups are a desktop-only, multi-window concept; Android/iOS have no
+// equivalent, and `WebviewWindowBuilder::{on_new_window, window_features}` do
+// not exist on the mobile runtime.
+#[cfg(desktop)]
 static POPUP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 const MARTIN_VERSION: &str = "martin-v1.10.1";
@@ -1728,17 +1732,25 @@ fn create_main_window(app: &mut tauri::App) -> tauri::Result<()> {
         .first()
         .cloned()
         .expect("GeoLibre Desktop requires a main window config");
-    let app_handle = app.handle().clone();
 
-    tauri::WebviewWindowBuilder::from_config(app, &window_config)?
-        .on_new_window(move |url, features| {
+    let builder = tauri::WebviewWindowBuilder::from_config(app, &window_config)?;
+
+    // Only desktop opens OAuth flows in child windows; on mobile they navigate
+    // in-page (or via the system browser), so skip the new-window handler.
+    #[cfg(desktop)]
+    let builder = {
+        let app_handle = app.handle().clone();
+        builder.on_new_window(move |url, features| {
             create_oauth_popup_window(app_handle.clone(), url, features)
         })
-        .build()?;
+    };
+
+    builder.build()?;
 
     Ok(())
 }
 
+#[cfg(desktop)]
 fn create_oauth_popup_window(
     app_handle: tauri::AppHandle,
     url: tauri::Url,

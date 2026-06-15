@@ -18,6 +18,7 @@ import {
   FileText,
   Folder,
   FolderOpen,
+  HardDriveDownload,
   History,
   LayoutTemplate,
   Link2,
@@ -44,6 +45,7 @@ interface ProjectMenuProps {
   onShare: () => void;
   onCollaborate: () => void;
   onPrintLayout: () => void;
+  onDownloadOffline: () => void;
 }
 
 /** The Project menu: new/open/save/share, recent projects, print, and storymap. */
@@ -60,6 +62,7 @@ export function ProjectMenu({
   onShare,
   onCollaborate,
   onPrintLayout,
+  onDownloadOffline,
 }: ProjectMenuProps) {
   const { t } = useTranslation();
   const projectPath = useAppStore((s) => s.projectPath);
@@ -201,6 +204,10 @@ export function ProjectMenu({
         <DropdownMenuItem onSelect={onPrintLayout}>
           <LayoutTemplate className="mr-2 h-3.5 w-3.5" />
           {t("toolbar.item.printLayoutEllipsis")}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={onDownloadOffline}>
+          <HardDriveDownload className="mr-2 h-3.5 w-3.5" />
+          {t("toolbar.item.offlineRegionEllipsis")}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => setStorymapPanelOpen(true)}>
