@@ -14,6 +14,7 @@ import {
 import { Wrench } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ToolbarPanel } from "../../../hooks/useToolbarPanels";
+import { isMobile } from "../../../lib/is-mobile";
 import type { ToolbarChrome } from "./constants";
 
 interface ProcessingMenuProps {
@@ -43,6 +44,12 @@ export function ProcessingMenu({
   const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
   const setAssistantOpen = useAppStore((s) => s.setAssistantOpen);
 
+  // Whitebox, format Conversion, Raster tools, and AI Segmentation all require
+  // the Python sidecar, which cannot run on Android/iOS — hide them on mobile so
+  // they don't present and then fail. Vector (Turf), SQL (PGlite/DuckDB), Python
+  // (Pyodide), geocode, statistics, and the assistant run client-side and stay.
+  const mobile = isMobile();
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -63,9 +70,11 @@ export function ProcessingMenu({
           {t("toolbar.command.assistant")}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => setProcessingOpen(true)}>
-          {t("toolbar.item.whitebox")}
-        </DropdownMenuItem>
+        {!mobile && (
+          <DropdownMenuItem onSelect={() => setProcessingOpen(true)}>
+            {t("toolbar.item.whitebox")}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onSelect={() => setSqlWorkspaceOpen(true)}>
           {t("toolbar.command.sqlWorkspace")}
         </DropdownMenuItem>
@@ -78,6 +87,7 @@ export function ProcessingMenu({
         <DropdownMenuItem onSelect={() => setModelBuilderOpen(true)}>
           {t("toolbar.item.modelBuilder")}
         </DropdownMenuItem>
+        {!mobile && (
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             {t("toolbar.item.conversion")}
@@ -120,6 +130,7 @@ export function ProcessingMenu({
             </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+        )}
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             {t("toolbar.item.vector")}
@@ -269,6 +280,7 @@ export function ProcessingMenu({
             </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+        {!mobile && (
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             {t("toolbar.item.raster")}
@@ -344,9 +356,12 @@ export function ProcessingMenu({
             </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
-        <DropdownMenuItem onSelect={() => setSegmentationOpen(true)}>
-          {t("toolbar.command.segmentation")}
-        </DropdownMenuItem>
+        )}
+        {!mobile && (
+          <DropdownMenuItem onSelect={() => setSegmentationOpen(true)}>
+            {t("toolbar.command.segmentation")}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onSelect={onOpenPlanetaryComputer}>
           {t("toolbar.command.planetaryComputer")}
         </DropdownMenuItem>
