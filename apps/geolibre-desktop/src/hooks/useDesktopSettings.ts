@@ -28,7 +28,6 @@ export interface DesktopSettings {
 }
 
 export interface DesktopLayoutSettings {
-  attributePanelVisible: boolean;
   layerPanelVisible: boolean;
   showProjectInfo: boolean;
   stylePanelVisible: boolean;
@@ -41,7 +40,6 @@ interface DesktopSettingsState {
 }
 
 export const DEFAULT_DESKTOP_LAYOUT_SETTINGS: DesktopLayoutSettings = {
-  attributePanelVisible: true,
   layerPanelVisible: true,
   showProjectInfo: true,
   stylePanelVisible: true,
@@ -90,10 +88,6 @@ function normalizeDesktopLayoutSettings(
   // cannot smuggle non-boolean values into the layout settings.
   const candidate = layout as Partial<DesktopLayoutSettings>;
   return {
-    attributePanelVisible:
-      typeof candidate.attributePanelVisible === "boolean"
-        ? candidate.attributePanelVisible
-        : DEFAULT_DESKTOP_LAYOUT_SETTINGS.attributePanelVisible,
     layerPanelVisible:
       typeof candidate.layerPanelVisible === "boolean"
         ? candidate.layerPanelVisible

@@ -1149,8 +1149,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   };
 
   // Hidden by default: render nothing when closed. The panel is opened on
-  // demand via the "Open attribute table" action in a vector layer's context
-  // menu (LayerPanel), which sets attributeTableOpen to true.
+  // demand from a vector layer's context menu, which sets attributeTableOpen
+  // to true.
   if (!attributeTableOpen) {
     return null;
   }

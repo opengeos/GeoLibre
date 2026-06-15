@@ -38,6 +38,7 @@ export function layoutOptionsFromLocation(
 ): LayoutOptions {
   if (typeof window === "undefined") {
     return {
+      attributePanelVisible: true,
       compact: false,
       statusBarVisible: true,
       toolbarVisible: true,
@@ -75,9 +76,10 @@ export function layoutOptionsFromLocation(
   const stylePanelVisible = panelsHidden
     ? false
     : layoutSettings.stylePanelVisible;
-  const attributePanelVisible = panelsHidden
-    ? false
-    : layoutSettings.attributePanelVisible;
+  // The attribute table is hidden by default and opened on demand from a
+  // vector layer's context menu, so it has no persisted settings toggle; it
+  // only needs to be unmounted when the embed chrome is hidden.
+  const attributePanelVisible = !panelsHidden;
 
   return {
     attributePanelVisible,
