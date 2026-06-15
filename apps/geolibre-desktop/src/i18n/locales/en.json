@@ -24,7 +24,7 @@
   },
   "fieldCollection": {
     "title": "Field Collection",
-    "description": "Capture point observations against a custom form, placing each by GPS or by tapping the map.",
+    "description": "Capture point, line, or polygon observations against a custom form, placing geometry by GPS or by drawing on the map.",
     "reopen": "Open Field Collection",
     "targetLayer": "Collection layer",
     "newLayer": "New collection layer…",
@@ -70,10 +70,14 @@
       "polygon": "Save polygon"
     },
     "saved": {
-      "point": "Saved {{count}} point(s) to {{layer}}.",
-      "line": "Saved {{count}} line(s) to {{layer}}.",
-      "polygon": "Saved {{count}} polygon(s) to {{layer}}."
+      "point_one": "Saved {{count}} point to {{layer}}.",
+      "point_other": "Saved {{count}} points to {{layer}}.",
+      "line_one": "Saved {{count}} line to {{layer}}.",
+      "line_other": "Saved {{count}} lines to {{layer}}.",
+      "polygon_one": "Saved {{count}} polygon to {{layer}}.",
+      "polygon_other": "Saved {{count}} polygons to {{layer}}."
     },
+    "layerGone": "The collection layer is no longer available.",
     "noGeolocation": "Geolocation isn't available on this device.",
     "geolocationDenied": "Couldn't get your location. Check location permissions and try again.",
     "photoTooLarge": "That photo is too large (max {{max}}). Choose a smaller image.",

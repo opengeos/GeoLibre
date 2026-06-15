@@ -279,6 +279,10 @@ describe("line/polygon geometry", () => {
     assert.equal(f.geometry.coordinates[0].length, 4);
   });
 
+  it("buildGeometryFeature throws on empty point coords", () => {
+    assert.throws(() => buildGeometryFeature("point", [], {}));
+  });
+
   it("buildGeometryFeature dispatches on geometry type", () => {
     assert.equal(
       buildGeometryFeature("point", [[1, 2]], {}).geometry.type,

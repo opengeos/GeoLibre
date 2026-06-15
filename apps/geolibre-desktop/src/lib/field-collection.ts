@@ -306,7 +306,9 @@ export function buildGeometryFeature(
 ): Feature {
   if (geometry === "line") return makeLineFeature(coords, properties);
   if (geometry === "polygon") return makePolygonFeature(coords, properties);
-  return makePointFeature(coords[0][0], coords[0][1], properties);
+  const pt = coords[0];
+  if (!pt) throw new Error("buildGeometryFeature: a point needs one vertex");
+  return makePointFeature(pt[0], pt[1], properties);
 }
 
 /**

@@ -183,8 +183,9 @@ export function FieldCollectionDialog({
   const [locating, setLocating] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
-  // Only the setter is used (the count is read inside its functional updater).
-  const [, setSavedCount] = useState(0);
+  // Running count of features saved this session, shown in the notice. A ref so
+  // bumping it neither re-renders nor runs a side effect inside a state updater.
+  const savedCountRef = useRef(0);
 
   const markerRef = useRef<maplibregl.Marker | null>(null);
   // Set just before we reopen the dialog after a map capture, so the open-reset
@@ -200,6 +201,9 @@ export function FieldCollectionDialog({
   const makeDraft = useCallback(() => newDraftField((draftIdRef.current += 1)), []);
   // Mirrors `vertices` so the map double-click handler can finish synchronously.
   const verticesRef = useRef<Vertex[]>([]);
+  // Bumped on each GPS request and on any other capture, so a slow GPS fix that
+  // resolves after a newer capture is ignored instead of overwriting it.
+  const gpsSeqRef = useRef(0);
 
   useEffect(() => {
     activeRef.current = open || picking || drawing;
@@ -258,7 +262,7 @@ export function FieldCollectionDialog({
     setLocating(false);
     setErrors({});
     setNotice(null);
-    setSavedCount(0);
+    savedCountRef.current = 0;
     // collectionLayers is derived from layers; intentionally snapshot on open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -310,6 +314,7 @@ export function FieldCollectionDialog({
 
   const handlePickOnMap = useCallback(() => {
     if (!getMap()) return;
+    gpsSeqRef.current += 1; // invalidate any in-flight GPS fix
     setPicking(true);
     onOpenChange(false);
   }, [getMap, onOpenChange]);
@@ -331,10 +336,19 @@ export function FieldCollectionDialog({
       suppressResetRef.current = true;
       onOpenChange(true);
     };
+    // Escape aborts picking and restores the dialog without capturing.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setPicking(false);
+      suppressResetRef.current = true;
+      onOpenChange(true);
+    };
     map.once("click", handler);
+    window.addEventListener("keydown", onKey);
     return () => {
       cancelAnimationFrame(raf);
       map.off("click", handler);
+      window.removeEventListener("keydown", onKey);
       map.getCanvas().style.cursor = prevCursor;
     };
   }, [picking, getMap, onOpenChange, capturePoint]);
@@ -360,6 +374,7 @@ export function FieldCollectionDialog({
 
   const handleStartDrawing = useCallback(() => {
     if (!getMap()) return;
+    gpsSeqRef.current += 1; // invalidate any in-flight GPS fix
     setVerticesSynced([]);
     setPending(null);
     setNotice(null);
@@ -378,6 +393,7 @@ export function FieldCollectionDialog({
       setVertices(verts);
       setPending(verts);
       setErrors({});
+      setNotice(null);
       setDrawing(false);
       suppressResetRef.current = true;
       onOpenChange(true);
@@ -424,6 +440,7 @@ export function FieldCollectionDialog({
   const handleCancelDrawing = useCallback(() => {
     setDrawing(false);
     setVerticesSynced([]);
+    setNotice(null);
     const map = getMap();
     if (map) removeDrawPreview(map);
     suppressResetRef.current = true;
@@ -440,21 +457,25 @@ export function FieldCollectionDialog({
       }
       setLocating(true);
       setNotice(null);
+      const seq = (gpsSeqRef.current += 1);
+      // Ignore a fix that resolves after the tool was dismissed or superseded by
+      // a newer capture (e.g. the user picked/drew a point while GPS was pending).
+      const stale = () => !activeRef.current || seq !== gpsSeqRef.current;
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          // The fix may arrive after the tool was dismissed; don't act on it.
-          if (!activeRef.current) return;
+          if (stale()) return;
           setLocating(false);
           const { longitude, latitude } = pos.coords;
           if (asVertex) {
             pushVertex(longitude, latitude);
+            recenter(longitude, latitude);
           } else {
+            // capturePoint(..., true) already recenters the map.
             capturePoint(longitude, latitude, true);
           }
-          recenter(longitude, latitude);
         },
         () => {
-          if (!activeRef.current) return;
+          if (stale()) return;
           setLocating(false);
           setNotice(t("fieldCollection.geolocationDenied"));
         },
@@ -523,18 +544,22 @@ export function FieldCollectionDialog({
     const current = useAppStore
       .getState()
       .layers.find((l) => l.id === activeLayer.id);
-    const fc = current?.geojson ?? emptyFeatureCollection();
+    if (!current) {
+      // The collection layer was removed while the form was open — don't claim
+      // a save that silently goes nowhere.
+      setNotice(t("fieldCollection.layerGone"));
+      return;
+    }
+    const fc = current.geojson ?? emptyFeatureCollection();
     updateLayer(activeLayer.id, { geojson: appendFeature(fc, feature) });
 
-    setSavedCount((n) => {
-      setNotice(
-        t(`fieldCollection.saved.${activeGeometry}`, {
-          count: n + 1,
-          layer: activeLayer.name,
-        }),
-      );
-      return n + 1;
-    });
+    savedCountRef.current += 1;
+    setNotice(
+      t(`fieldCollection.saved.${activeGeometry}`, {
+        count: savedCountRef.current,
+        layer: activeLayer.name,
+      }),
+    );
     setPending(null);
     setValues({});
     setPhoto(null);
@@ -1016,7 +1041,7 @@ function CaptureStep({
           })}
 
           <div className="space-y-1.5">
-            <Label>{t("fieldCollection.photo")}</Label>
+            <Label htmlFor="fc-photo">{t("fieldCollection.photo")}</Label>
             {photo ? (
               <div className="flex items-center gap-2">
                 <img
@@ -1030,10 +1055,12 @@ function CaptureStep({
                 </Button>
               </div>
             ) : (
+              // No `capture` attribute: let the user pick an existing photo or
+              // take a new one (capture="environment" forces the camera on iOS).
               <Input
+                id="fc-photo"
                 type="file"
                 accept="image/*"
-                capture="environment"
                 onChange={onPhoto}
               />
             )}
