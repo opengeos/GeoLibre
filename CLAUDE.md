@@ -23,13 +23,21 @@ Tests:
 
 ```bash
 npm run test:frontend                              # node --test over tests/*.test.ts (tsx loader)
+npm run test:frontend:coverage                     # same, plus a per-file coverage summary (Node built-in)
 node --import tsx --test tests/<name>.test.ts      # a single frontend test file
 npm run test:backend                               # pytest backend/geolibre_server/tests
+npm run test:backend:coverage                      # same, plus a pytest-cov term-missing report
 python -m pytest backend/geolibre_server/tests/test_x.py::test_y   # a single backend test
 npm run test:worker                                # typecheck workers/viewer
 npm run test:e2e                                    # Playwright smoke tests (e2e/) against the built web app
 npm run check:rust                                 # cargo check the Tauri crate
 ```
+
+The `:coverage` variants run the same suites and print a coverage summary; CI
+runs them so every build reports coverage. They are **not** gated on a threshold
+yet (the report is informational, so a low number never fails CI). The frontend
+report only counts files a test actually imports, so a module with no test does
+not appear at all rather than as 0%.
 
 `npm run test:e2e` builds the web app, serves it with `vite preview`, and drives
 it with Playwright (`@playwright/test`). First run: `npx playwright install

@@ -17,6 +17,12 @@ apps/geolibre-desktop/src/lib/pyodide/vector_ops.generated.py
 .venv/
 *.egg-info/
 .pytest_cache/
+# Coverage artifacts (pytest-cov data file, HTML/XML reports, c8 output)
+.coverage
+.coverage.*
+coverage/
+htmlcov/
+coverage.xml
 .idea/
 .vscode/
 *.tsbuildinfo

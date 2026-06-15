@@ -333,8 +333,12 @@ if isinstance(crs_member, dict):
     if digits:
         try:
             mask_crs = CRS.from_epsg(int(digits.group(1)))
-        except Exception:
-            pass
+        except Exception as exc:
+            print(
+                f"Warning: could not parse mask CRS '{name}' "
+                f"({exc}); assuming WGS84 (EPSG:4326)",
+                file=sys.stderr,
+            )
 
 with rasterio.open(input_path) as src:
     if src.crs is None:
@@ -593,7 +597,12 @@ if isinstance(crs_member, dict):
             pass
 try:
     crs = CRS.from_epsg(epsg)
-except Exception:
+except Exception as exc:
+    print(
+        f"Warning: could not use EPSG:{epsg} ({exc}); "
+        "assuming WGS84 (EPSG:4326)",
+        file=sys.stderr,
+    )
     crs = CRS.from_epsg(4326)
 
 # --- Build the output grid from the points' extent -------------------------
@@ -819,8 +828,12 @@ if isinstance(crs_member, dict):
         if digits:
             try:
                 zone_crs = CRS.from_epsg(int(digits.group(1)))
-            except Exception:
-                pass
+            except Exception as exc:
+                print(
+                    f"Warning: could not parse zones CRS '{name}' "
+                    f"({exc}); assuming WGS84 (EPSG:4326)",
+                    file=sys.stderr,
+                )
 
 out_features = []
 with_data = 0

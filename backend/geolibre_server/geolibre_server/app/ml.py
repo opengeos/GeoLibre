@@ -133,7 +133,8 @@ def _is_healthy(base_url: str, timeout: float = 3.0) -> bool:
         # The `ml` extra (httpx) is missing: report "not reachable" rather than
         # raising, so callers like /ml/status degrade gracefully.
         return False
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - a probe failure means "not healthy"
+        logger.debug("Health check for %s failed: %s", base_url, exc)
         return False
 
 
@@ -241,7 +242,8 @@ def _terminate_process(proc) -> None:
     proc.terminate()
     try:
         proc.wait(timeout=5)
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - escalate to kill on any wait failure
+        logger.debug("Process ignored SIGTERM (%s); sending SIGKILL", exc)
         proc.kill()
 
 

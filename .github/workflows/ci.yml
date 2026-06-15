@@ -129,14 +129,14 @@ jobs:
         env:
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
 
-      - name: Run frontend tests
-        run: npm run test:frontend
+      - name: Run frontend tests (with coverage summary)
+        run: npm run test:frontend:coverage
 
       - name: Typecheck viewer worker
         run: npm run test:worker
 
-      - name: Run backend tests
-        run: npm run test:backend
+      - name: Run backend tests (with coverage summary)
+        run: npm run test:backend:coverage
 
       - name: Check Tauri Rust code
         run: npm run check:rust

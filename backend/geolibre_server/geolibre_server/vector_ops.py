@@ -81,7 +81,7 @@ def _load_gdf(geojson: Optional[dict], label: str) -> Any:
     return gdf
 
 
-def _to_feature_collection(gdf) -> dict:
+def _to_feature_collection(gdf: Any) -> dict:
     """Serialize a GeoDataFrame back to a GeoJSON FeatureCollection dict."""
     # GeoPandas only emits valid GeoJSON in WGS84; reproject if needed.
     if gdf.crs is not None and gdf.crs.to_epsg() != 4326:
@@ -89,7 +89,16 @@ def _to_feature_collection(gdf) -> dict:
     return json.loads(gdf.to_json())
 
 
-def _buffer(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+def _buffer(
+    geojson: Optional[dict], overlay: Optional[dict], parameters: dict[str, Any]
+) -> tuple[dict, list[str]]:
+    """Buffer each feature by a distance applied in a local metric (UTM) CRS.
+
+    Reads ``distance`` (in ``units``: kilometers/meters/miles) from
+    ``parameters``, buffers in the estimated UTM CRS so the offset is in
+    real-world meters, then reprojects back to WGS84. Negative distance is
+    rejected.
+    """
     gdf = _load_gdf(geojson, "Input layer")
     distance = float(parameters.get("distance", 1) or 0)
     units = str(parameters.get("units", "kilometers"))
@@ -112,7 +121,10 @@ def _buffer(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     )
 
 
-def _centroids(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+def _centroids(
+    geojson: Optional[dict], overlay: Optional[dict], parameters: dict[str, Any]
+) -> tuple[dict, list[str]]:
+    """Replace each feature with its centroid (computed in a local metric CRS)."""
     gdf = _load_gdf(geojson, "Input layer")
     # Compute centroids in a local metric CRS (like _buffer) so the result is
     # accurate for large or elongated features, then reproject back to WGS84.
@@ -124,7 +136,10 @@ def _centroids(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     return _to_feature_collection(result), [f"Computed {len(result)} centroid(s)"]
 
 
-def _convex_hull(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+def _convex_hull(
+    geojson: Optional[dict], overlay: Optional[dict], parameters: dict[str, Any]
+) -> tuple[dict, list[str]]:
+    """Compute the single convex hull enclosing every input feature."""
     gpd = _import_geopandas()
     gdf = _load_gdf(geojson, "Input layer")
     hull = gdf.geometry.union_all().convex_hull
@@ -132,7 +147,10 @@ def _convex_hull(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     return _to_feature_collection(result), ["Computed convex hull"]
 
 
-def _dissolve(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+def _dissolve(
+    geojson: Optional[dict], overlay: Optional[dict], parameters: dict[str, Any]
+) -> tuple[dict, list[str]]:
+    """Merge features into one geometry, optionally grouped by ``field``."""
     gdf = _load_gdf(geojson, "Input layer")
     field = str(parameters.get("field", "") or "").strip()
     if field and field not in gdf.columns:
@@ -147,7 +165,10 @@ def _dissolve(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     )
 
 
-def _bounding_box(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+def _bounding_box(
+    geojson: Optional[dict], overlay: Optional[dict], parameters: dict[str, Any]
+) -> tuple[dict, list[str]]:
+    """Compute the axis-aligned bounding box of all features as one polygon."""
     gpd = _import_geopandas()
     from shapely.geometry import box  # noqa: PLC0415
 
@@ -157,7 +178,10 @@ def _bounding_box(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     return _to_feature_collection(result), ["Computed bounding box"]
 
 
-def _simplify(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+def _simplify(
+    geojson: Optional[dict], overlay: Optional[dict], parameters: dict[str, Any]
+) -> tuple[dict, list[str]]:
+    """Reduce vertex count with Douglas-Peucker (``tolerance`` in degrees)."""
     gdf = _load_gdf(geojson, "Input layer")
     # Tolerance is in degrees (the geometry stays in WGS84), matching the UI
     # label and the client engine. Do not introduce a metric-projected path
@@ -171,7 +195,13 @@ def _simplify(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     )
 
 
-def _overlay_op(geojson, overlay, parameters, how: str) -> tuple[dict, list[str]]:
+def _overlay_op(
+    geojson: Optional[dict],
+    overlay: Optional[dict],
+    parameters: dict[str, Any],
+    how: str,
+) -> tuple[dict, list[str]]:
+    """Run a two-layer GeoPandas overlay (``how``: intersection/difference)."""
     gpd = _import_geopandas()
     left = _load_gdf(geojson, "Input layer")
     right = _load_gdf(overlay, "Overlay layer")
@@ -184,7 +214,10 @@ def _overlay_op(geojson, overlay, parameters, how: str) -> tuple[dict, list[str]
     )
 
 
-def _clip(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+def _clip(
+    geojson: Optional[dict], overlay: Optional[dict], parameters: dict[str, Any]
+) -> tuple[dict, list[str]]:
+    """Clip the input layer to the overlay layer's extent."""
     gpd = _import_geopandas()
     left = _load_gdf(geojson, "Input layer")
     right = _load_gdf(overlay, "Overlay layer")
@@ -201,7 +234,14 @@ _SJOIN_PREDICATES = {"intersects", "within", "contains"}
 _SJOIN_HOW = {"inner", "left"}
 
 
-def _spatial_join(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+def _spatial_join(
+    geojson: Optional[dict], overlay: Optional[dict], parameters: dict[str, Any]
+) -> tuple[dict, list[str]]:
+    """Join overlay attributes onto input features by a spatial ``predicate``.
+
+    ``predicate`` is one of intersects/within/contains and ``how`` is inner or
+    left; an empty overlay keeps every input feature (left) or none (inner).
+    """
     gpd = _import_geopandas()
     # Validate parameters before loading the layers so an unknown predicate/how
     # surfaces its actionable message instead of a generic load error.
@@ -324,7 +364,10 @@ def _match_value(value: Any, operator: str, raw: str) -> bool:
     return False
 
 
-def _select_by_value(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+def _select_by_value(
+    geojson: Optional[dict], overlay: Optional[dict], parameters: dict[str, Any]
+) -> tuple[dict, list[str]]:
+    """Filter features by an attribute ``field``/``operator``/``value`` test."""
     # Pure attribute filter on the raw GeoJSON properties (no geometry), so it
     # produces byte-identical results to the client engine and needs no GeoPandas.
     if not geojson or not geojson.get("features"):
@@ -357,7 +400,14 @@ def _select_by_value(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     )
 
 
-def _select_by_location(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+def _select_by_location(
+    geojson: Optional[dict], overlay: Optional[dict], parameters: dict[str, Any]
+) -> tuple[dict, list[str]]:
+    """Select input features by spatial relationship to the filter layer.
+
+    ``predicate`` is one of intersects/within/contains/disjoint; an empty
+    filter layer selects everything for disjoint and nothing otherwise.
+    """
     gpd = _import_geopandas()
     predicate = str(parameters.get("predicate", "intersects") or "intersects")
     if predicate not in _SELECT_LOCATION_PREDICATES:
@@ -417,7 +467,9 @@ def _attribute_join_key(value: Any) -> Optional[str]:
     return _value_to_string(value)
 
 
-def _attribute_join(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+def _attribute_join(
+    geojson: Optional[dict], overlay: Optional[dict], parameters: dict[str, Any]
+) -> tuple[dict, list[str]]:
     """Attach a join layer's attributes onto each input feature by a key field.
 
     A pure attribute (non-spatial) join on the raw GeoJSON properties (geometry
@@ -545,7 +597,10 @@ def _attribute_join(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     return fc, messages
 
 
-def _union(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+def _union(
+    geojson: Optional[dict], overlay: Optional[dict], parameters: dict[str, Any]
+) -> tuple[dict, list[str]]:
+    """Merge both layers into a single dissolved geometry."""
     gpd = _import_geopandas()
     left = _load_gdf(geojson, "Input layer")
     right = _load_gdf(overlay, "Overlay layer")
@@ -559,7 +614,9 @@ def _union(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     return _to_feature_collection(result), ["Union: produced 1 feature"]
 
 
-def _reproject(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+def _reproject(
+    geojson: Optional[dict], overlay: Optional[dict], parameters: dict[str, Any]
+) -> tuple[dict, list[str]]:
     """Reinterpret a layer's coordinates as a source CRS and transform to WGS84.
 
     GeoLibre stores and displays every vector layer as WGS84 GeoJSON, so the
@@ -590,7 +647,9 @@ def _reproject(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     )
 
 
-def _explode(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+def _explode(
+    geojson: Optional[dict], overlay: Optional[dict], parameters: dict[str, Any]
+) -> tuple[dict, list[str]]:
     """Split multipart geometries into single-part features (multi -> single)."""
     gdf = _load_gdf(geojson, "Input layer")
     # index_parts=False keeps a flat index so the output is a plain list of
@@ -607,7 +666,9 @@ def _explode(geojson, overlay, parameters) -> tuple[dict, list[str]]:
 _AGGREGATE_STATS = {"count", "sum", "mean", "min", "max", "median"}
 
 
-def _aggregate(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+def _aggregate(
+    geojson: Optional[dict], overlay: Optional[dict], parameters: dict[str, Any]
+) -> tuple[dict, list[str]]:
     """Dissolve geometries by an attribute and attach a per-group summary stat.
 
     Mirrors GeoPandas ``dissolve(by=...)`` for the geometry merge plus a
@@ -727,6 +788,7 @@ def _chaikin(points: list[list[float]], closed: bool) -> list[list[float]]:
 
 
 def _smooth_line(coords: list[list[float]], iterations: int) -> list[list[float]]:
+    """Apply ``iterations`` Chaikin passes to an open line's coordinates."""
     pts = [list(p[:3]) for p in coords]
     for _ in range(iterations):
         pts = _chaikin(pts, False)
@@ -734,6 +796,7 @@ def _smooth_line(coords: list[list[float]], iterations: int) -> list[list[float]
 
 
 def _smooth_ring(ring: list[list[float]], iterations: int) -> list[list[float]]:
+    """Apply ``iterations`` Chaikin passes to a polygon ring (re-closed)."""
     closed = (
         len(ring) > 1
         and ring[0][0] == ring[-1][0]
@@ -791,7 +854,9 @@ def _smooth_geometry(geometry: dict, iterations: int) -> dict:
     return geometry
 
 
-def _smooth(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+def _smooth(
+    geojson: Optional[dict], overlay: Optional[dict], parameters: dict[str, Any]
+) -> tuple[dict, list[str]]:
     """Round the corners of line/polygon features with Chaikin's algorithm.
 
     Works directly on the GeoJSON coordinates (no GeoPandas) so it produces
@@ -856,7 +921,9 @@ def _smooth(geojson, overlay, parameters) -> tuple[dict, list[str]]:
     return fc, [f"Smoothed {smoothed} feature(s) with {iterations} iteration(s)"]
 
 
-def _voronoi(geojson, overlay, parameters) -> tuple[dict, list[str]]:
+def _voronoi(
+    geojson: Optional[dict], overlay: Optional[dict], parameters: dict[str, Any]
+) -> tuple[dict, list[str]]:
     """Build a Voronoi diagram or Delaunay triangulation from a point layer."""
     gpd = _import_geopandas()
     from shapely.geometry import MultiPoint, box  # noqa: PLC0415

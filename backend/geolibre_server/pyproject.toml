@@ -12,6 +12,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0.0",
+  "pytest-cov>=5.0.0",
 ]
 whitebox = [
   "whitebox-workflows>=2.0.2",
