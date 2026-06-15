@@ -497,7 +497,10 @@ export function FieldCollectionDialog({
 
     setSavedCount((n) => {
       setNotice(
-        t("fieldCollection.saved", { count: n + 1, layer: activeLayer.name }),
+        t(`fieldCollection.saved.${activeGeometry}`, {
+          count: n + 1,
+          layer: activeLayer.name,
+        }),
       );
       return n + 1;
     });
@@ -1001,7 +1004,7 @@ function CaptureStep({
 
           <Button className="w-full" onClick={onSave}>
             <Save className="mr-2 h-4 w-4" />
-            {t("fieldCollection.savePoint")}
+            {t(`fieldCollection.save.${geometry}`)}
           </Button>
         </>
       )}
