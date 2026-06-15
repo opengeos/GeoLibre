@@ -5,6 +5,8 @@
 //
 // As of Pyodide 0.27.x, geopandas/shapely/pyproj (with PROJ data) ship in the
 // distribution, so a single loadPackage("geopandas") pulls the whole graph.
+import { getRuntimeEnvironment } from "@geolibre/core";
+
 export const PYODIDE_VERSION = "0.27.7";
 
 const DEFAULT_INDEX_URL = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
@@ -24,7 +26,7 @@ const DEFAULT_INDEX_URL = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/
  *   The indexURL string, guaranteed to end with a slash.
  */
 export function getPyodideIndexUrl(
-  env: Record<string, string | undefined> = import.meta.env,
+  env: Record<string, string | undefined> = getRuntimeEnvironment(),
 ): string {
   const override = env.VITE_PYODIDE_INDEX_URL?.trim();
   const url = override || DEFAULT_INDEX_URL;

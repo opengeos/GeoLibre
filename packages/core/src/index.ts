@@ -71,3 +71,4 @@ export {
   type GeocodeRequest,
   type ReverseGeocodeDisplay,
 } from "./geocoding";
+export { getRuntimeEnvironment } from "./runtime-env";

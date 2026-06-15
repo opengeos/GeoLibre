@@ -74,16 +74,6 @@ export function getDatabase(): Promise<duckdb.AsyncDuckDB> {
 
 let spatialExtensionPromise: Promise<void> | null = null;
 
-function configuredSpatialExtensionPath(): string | undefined {
-  try {
-    const env = (import.meta as { env?: Record<string, string | undefined> })
-      .env;
-    return getSpatialExtensionPath(env);
-  } catch {
-    return undefined;
-  }
-}
-
 /**
  * Install and load the DuckDB spatial extension once per database instance.
  * `getDatabase` returns a memoized singleton, so the extension persists across
@@ -102,7 +92,7 @@ export async function ensureSpatialExtension(
   beforeLoad?: () => Promise<void>,
 ): Promise<void> {
   spatialExtensionPromise ??= (async () => {
-    const customPath = configuredSpatialExtensionPath();
+    const customPath = getSpatialExtensionPath();
     if (customPath) {
       const normalizedPath = customPath.replace(/\\/g, "/");
       await connection.query(`LOAD ${quoteSqlString(normalizedPath)}`);
