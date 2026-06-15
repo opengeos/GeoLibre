@@ -1,16 +1,12 @@
 name: Android
 
+# Android builds run on published releases (matching release.yml), not on every
+# PR — the Rust cross-compile + Gradle build is slow and rarely needs per-PR
+# coverage. Use the manual "Run workflow" button (workflow_dispatch) to build a
+# signed APK on demand from any branch.
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "apps/**"
-      - "packages/**"
-      - "package.json"
-      - "package-lock.json"
-      - ".github/workflows/android.yml"
-  push:
-    branches: [main]
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -21,7 +17,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Keep these in sync with docs/android-port-spike.md and the local setup.
+  # Keep these in sync with docs/android.md and the local setup.
   ANDROID_PLATFORM: "platforms;android-34"
   ANDROID_BUILD_TOOLS: "build-tools;34.0.0"
   # NDK r27 LTS — Tauri v2's supported line. Bump deliberately.

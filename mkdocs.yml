@@ -66,6 +66,7 @@ nav:
       - Sharing & Embedding: tutorials/sharing-embedding.md
   - Reference:
       - Architecture: architecture.md
+      - Android: android.md
       - Project Format: project-format.md
       - Plugin API: plugin-api.md
       - Internationalization: i18n.md

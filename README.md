@@ -12,9 +12,9 @@
 [![image](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 
-A lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data across desktop and web environments, with a responsive layout for mobile screens.
+A lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data across desktop, web, and Android, with a responsive layout for mobile screens.
 
-GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS**, **DuckDB-WASM Spatial**, and **deck.gl**. The same workspace runs as a native desktop app, in any modern web browser, and adapts responsively to mobile and small screens.
+GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS**, **DuckDB-WASM Spatial**, and **deck.gl**. The same workspace runs as a native desktop app, a native Android app, in any modern web browser, and adapts responsively to mobile and small screens.
 
 [![GeoLibre demo showing 3D Tiles rendered on a MapLibre map](https://files.opengeos.org/GeoLibre-demo.webp)](https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json)
 
@@ -22,7 +22,7 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 
 ## Features (v1.3)
 
-- Runs across desktop (Tauri), web (browser), and mobile or small screens, with a responsive layout that adapts menus, dialogs, and panels, plus per-panel visibility through Layout settings
+- Runs across desktop (Tauri), web (browser), native Android (Tauri v2 mobile), and mobile or small screens, with a responsive, touch-friendly layout that adapts menus, dialogs, and panels (on phones the Layers/Style panels overlay the map as slide-over sheets), plus per-panel visibility through Layout settings
 - MapLibre map workspace with OpenFreeMap basemaps, blank background support, and toggleable navigation, fullscreen, geolocation, globe, terrain, scale, attribution, and logo controls
 - Load local vector layers supported by DuckDB-WASM Spatial, including common formats such as GeoJSON, GeoParquet, GeoPackage, Shapefile, FlatGeobuf, KML/KMZ, GML, delimited text, GPX, and OpenStreetMap PBF extracts (parsed in-browser with osmix)
 - Reproject vector layers to EPSG:4326 on load and split dragged GPX files into named waypoint, track, and route layers
@@ -63,7 +63,8 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 - External plugin zip loading from the app data plugins directory and local development plugin directories
 - Bundled drop-in plugins under `public/plugins/<id>/` that bake into both the web and desktop builds and load automatically with no manifest URL
 - Browser deployment with Docker, embed-friendly URL parameters, and a `maponly` chrome-free mode
-- Installable, offline-capable Progressive Web App (PWA) build
+- Native Android app built from the same codebase with Tauri v2 mobile, producing signed, per-architecture APKs (~40 MB) through a GitHub Actions workflow; tools that depend on a local desktop process (Whitebox, Raster, Conversion, AI Segmentation, PostgreSQL/Martin) are hidden on mobile so nothing is shown that cannot run. See [Android](docs/android.md)
+- Installable, offline-capable Progressive Web App (PWA) build, plus a **Download Offline Area** tool that pre-caches the current map view's basemap tiles, and service-worker caching of the CDN-loaded Pyodide and PGlite/PostGIS engines so browser SQL and Python keep working offline after first use
 - Internationalization framework with react-i18next and per-build translation catalogs, plus a `?locale`/`?lang` query parameter to set the embed language
 - Accessibility pass with axe-checked screens, keyboard navigation, and screen-reader labels
 - App-wide, section, and plugin React error boundaries that contain failures and keep the rest of the workspace usable
@@ -378,6 +379,28 @@ Where to find the output:
 - **Web build** — static files in `apps/geolibre-desktop/dist/`. Serve this directory with any static web server (or the Docker image above).
 - **Desktop installers** — `apps/geolibre-desktop/src-tauri/target/release/bundle/`, with per-platform subfolders: `deb/`, `rpm/`, and `appimage/` on Linux; `msi/` and `nsis/` on Windows; `dmg/` and `macos/` on macOS. The unbundled executable is in `apps/geolibre-desktop/src-tauri/target/release/`. On Linux, `npm run tauri:build` builds `deb` and `rpm` by default; passing `--bundles` replaces that default selection rather than adding to it, so list every format you want, for example `npm run tauri:build -- --bundles deb,rpm,appimage` for all three.
 
+## Android
+
+GeoLibre builds as a native Android app from the same codebase via Tauri v2
+mobile. You need the Android SDK + NDK, a JDK (17 or 21), and the Rust Android
+targets; see [docs/android.md](docs/android.md) for the full toolchain setup,
+signing, and sideloading guide. Once set up:
+
+```bash
+cd apps/geolibre-desktop
+npx tauri android init                          # generate the Gradle project (once)
+npm run tauri android dev                        # run on a connected device/emulator
+npx tauri android build --apk --split-per-abi    # release APKs, ~40 MB per ABI
+```
+
+Install the `arm64-v8a` APK on real phones. The CI workflow
+(`.github/workflows/android.yml`) builds and signs per-ABI release APKs on each
+published GitHub release (and on demand via the "Run workflow" button) and
+uploads them as artifacts; set the `ANDROID_KEYSTORE_*` repository secrets
+to sign with a real release key (otherwise a debug key is used for testable
+builds). Heavy tools that need the Python sidecar or local helper processes are
+hidden on mobile.
+
 ## Quality checks
 
 Run the fast TypeScript unit tests:
@@ -521,6 +544,7 @@ Full documentation, including the User Guide and Tutorials, is published at
 - **Tutorials** - [hands-on, end-to-end workflows](https://geolibre.app/tutorials/): your first map, cloud-native data, vector analysis, terrain analysis, spatial SQL, and sharing and embedding.
 - **Reference**
   - [Architecture](docs/architecture.md)
+  - [Android](docs/android.md)
   - [Project format](docs/project-format.md)
   - [Plugin API](docs/plugin-api.md)
   - [Python package (Jupyter)](docs/python.md)
