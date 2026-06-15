@@ -84,6 +84,12 @@ test("registers a service worker and serves the shell offline after first visit"
   // chunks reach Cache Storage.)
   await page.reload();
 
+  // The active SW should retain control immediately on the reloaded page, but
+  // assert it before relying on CacheFirst to store the boot assets.
+  await page.waitForFunction(() => navigator.serviceWorker?.controller != null, {
+    timeout: 30_000,
+  });
+
   // Warm boot under SW control: the map fetches the (non-precached) MapLibre
   // chunk through the SW, which CacheFirst then stores for offline use.
   await expect(page.getByTestId("map-canvas")).toBeVisible({ timeout: 30_000 });
@@ -175,7 +181,7 @@ async function waitForLoadedAssetsCached(page: Page): Promise<void> {
           }
           return true;
         }),
-      { timeout: 60_000, intervals: [500] },
+      { timeout: 60_000, intervals: [0, 500] },
     )
     .toBe(true);
 }
