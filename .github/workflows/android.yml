@@ -88,20 +88,26 @@ jobs:
         working-directory: apps/geolibre-desktop
         run: npx tauri android init
 
-      - name: Build release APK
-        # Release (not --debug): the size-optimized + stripped Cargo profile keeps
-        # the .so small, so the APK is ~40 MB instead of ~200 MB. Release APKs are
-        # unsigned by default; the next step signs them.
+      - name: Apply GeoLibre launcher icons
+        # `tauri android init` writes default Tauri icons; overwrite the generated
+        # mipmaps with the GeoLibre launcher icons checked in under src-tauri/icons.
         working-directory: apps/geolibre-desktop
-        run: npx tauri android build --apk
+        run: cp -r src-tauri/icons/android/. src-tauri/gen/android/app/src/main/res/
+
+      - name: Build release APKs (per ABI)
+        # Release (not --debug): the size-optimized + stripped Cargo profile keeps
+        # each .so small. --split-per-abi emits one ~40 MB APK per architecture
+        # instead of a single ~150 MB universal APK bundling all four ABIs.
+        # Release APKs are unsigned by default; the next step signs them.
+        working-directory: apps/geolibre-desktop
+        run: npx tauri android build --apk --split-per-abi
         env:
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
 
-      - name: Sign APK
-        id: sign
-        # With release-keystore secrets set, the APK is signed for distribution.
-        # Without them, it's signed with a throwaway debug keystore so the CI
-        # artifact is still installable for testing (do NOT publish that one).
+      - name: Sign APKs
+        # With release-keystore secrets set, the APKs are signed for distribution.
+        # Without them, they're signed with a throwaway debug keystore so the CI
+        # artifacts are still installable for testing (do NOT publish those).
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -110,11 +116,6 @@ jobs:
         run: |
           set -euo pipefail
           build_tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
-          unsigned="$(find apps/geolibre-desktop/src-tauri/gen/android \
-            -name '*release-unsigned.apk' | head -1)"
-          if [ -z "$unsigned" ]; then
-            echo "::error::No release-unsigned APK found"; exit 1
-          fi
           if [ -n "${KEYSTORE_BASE64:-}" ]; then
             echo "Signing with the release keystore from secrets."
             echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
@@ -131,19 +132,30 @@ jobs:
               -dname "CN=Android Debug,O=Android,C=US"
             store_pass=android; key_pass=android; alias=androiddebugkey
           fi
-          aligned="$RUNNER_TEMP/app-release-aligned.apk"
-          signed="$RUNNER_TEMP/geolibre-android-release.apk"
-          "$build_tools/zipalign" -p -f 4 "$unsigned" "$aligned"
-          "$build_tools/apksigner" sign --ks "$keystore" \
-            --ks-pass "pass:$store_pass" --key-pass "pass:$key_pass" \
-            --ks-key-alias "$alias" --out "$signed" "$aligned"
-          "$build_tools/apksigner" verify "$signed"
-          echo "apk=$signed" >> "$GITHUB_OUTPUT"
+          out="$RUNNER_TEMP/apks"; mkdir -p "$out"
+          found=0
+          while IFS= read -r unsigned; do
+            found=1
+            # e.g. app-arm64-v8a-release-unsigned.apk -> geolibre-arm64-v8a.apk
+            abi="$(basename "$unsigned" | sed -E 's/^app-(.*)-release-unsigned\.apk$/\1/')"
+            aligned="$RUNNER_TEMP/aligned-$abi.apk"
+            signed="$out/geolibre-android-$abi.apk"
+            "$build_tools/zipalign" -p -f 4 "$unsigned" "$aligned"
+            "$build_tools/apksigner" sign --ks "$keystore" \
+              --ks-pass "pass:$store_pass" --key-pass "pass:$key_pass" \
+              --ks-key-alias "$alias" --out "$signed" "$aligned"
+            "$build_tools/apksigner" verify "$signed"
+            echo "signed $signed ($(du -h "$signed" | cut -f1))"
+          done < <(find apps/geolibre-desktop/src-tauri/gen/android \
+            -name '*release-unsigned.apk')
+          if [ "$found" -eq 0 ]; then
+            echo "::error::No release-unsigned APKs found"; exit 1
+          fi
 
-      - name: Upload signed APK
+      - name: Upload signed APKs
         uses: actions/upload-artifact@v4
         with:
-          name: geolibre-android-release-apk
-          path: ${{ steps.sign.outputs.apk }}
+          name: geolibre-android-release-apks
+          path: ${{ runner.temp }}/apks/*.apk
           if-no-files-found: error
           retention-days: 14

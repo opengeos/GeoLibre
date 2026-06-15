@@ -5,7 +5,13 @@
     <link rel="icon" type="image/png" href="%BASE_URL%favicon.png" sizes="32x32" />
     <link rel="icon" href="%BASE_URL%favicon.ico" sizes="any" />
     <link rel="apple-touch-icon" href="%BASE_URL%apple-touch-icon.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover lets the page extend under the mobile status/nav bars
+         and display cutouts so env(safe-area-inset-*) report their sizes; the app
+         shell then pads itself by those insets (see #root in src/index.css). -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
     <meta
       name="description"
       content="A lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data."

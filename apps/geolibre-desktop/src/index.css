@@ -12,6 +12,19 @@ body,
   overflow: hidden;
 }
 
+/* Keep the app chrome out from under mobile system bars and display cutouts.
+   With viewport-fit=cover (see index.html) the webview draws edge-to-edge on
+   Android/iOS, so without this the top toolbar renders under the status bar —
+   where the system intercepts taps, making those menu buttons unclickable. The
+   insets are 0 on desktop/web, so this only affects mobile. */
+#root {
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
 .geoagent-control .geoagent-control-toggle {
   align-items: center;
   display: flex;
