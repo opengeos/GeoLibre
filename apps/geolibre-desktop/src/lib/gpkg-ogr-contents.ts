@@ -14,7 +14,9 @@ import type { Database, SqlJsStatic } from "sql.js";
  *   "thread constructor failed: Resource temporarily unavailable"
  *
  * Injecting `gpkg_ogr_contents` with a cached count keeps GDAL on the fast,
- * single-threaded path. See GitHub issue #258.
+ * single-threaded path. The same crash happens when the row exists but its
+ * `feature_count` is NULL/stale (GDAL recomputes it), so we repair those too.
+ * See GitHub issues #258 and #376.
  */
 
 const SQLITE_MAGIC = "SQLite format 3\0";
@@ -59,33 +61,51 @@ export function ensureGpkgFeatureCountSync(
     // Only touch real GeoPackages; gpkg_contents is mandatory in the spec.
     if (!tableExists(db, "gpkg_contents")) return bytes;
 
-    const featureTablesResult = db.exec(
-      // lower() so out-of-spec producers writing 'Features'/'FEATURES' still match.
+    // The set of feature (vector) tables is the union of two authoritative
+    // sources: gpkg_contents rows typed 'features', and every table listed in
+    // gpkg_geometry_columns. Out-of-spec producers sometimes mistype or omit
+    // the gpkg_contents row while still registering the geometry column, so
+    // relying on gpkg_contents alone misses those tables. lower() so producers
+    // writing 'Features'/'FEATURES' still match.
+    const featureTables = new Set<string>();
+    for (const sql of [
       "SELECT table_name FROM gpkg_contents WHERE lower(data_type)='features'",
-    );
-    if (
-      featureTablesResult.length === 0 ||
-      featureTablesResult[0].values.length === 0
-    ) {
-      return bytes;
+      ...(tableExists(db, "gpkg_geometry_columns")
+        ? ["SELECT table_name FROM gpkg_geometry_columns"]
+        : []),
+    ]) {
+      for (const row of db.exec(sql)[0]?.values ?? []) {
+        if (typeof row[0] === "string") featureTables.add(row[0]);
+      }
     }
-    const featureTables = featureTablesResult[0].values
-      .map((row) => row[0])
-      .filter((name): name is string => typeof name === "string");
+    if (featureTables.size === 0) return bytes;
 
     const hasOgrContents = tableExists(db, "gpkg_ogr_contents");
-    const existingCounts = hasOgrContents
-      ? new Set(
-          (
-            db.exec("SELECT table_name FROM gpkg_ogr_contents")[0]?.values ?? []
-          )
-            .map((row) => row[0])
-            .filter((name): name is string => typeof name === "string"),
-        )
-      : new Set<string>();
+    // A table is only "safe" when its cached count is a real integer. A row
+    // whose feature_count is NULL (or any non-integer) is NOT safe: GDAL treats
+    // it as unknown and recomputes the count on read, which is the multithreaded
+    // path that aborts with "thread constructor failed: Resource temporarily
+    // unavailable" on the single-threaded WASM build. Many writers create the
+    // gpkg_ogr_contents row but leave feature_count NULL, so checking only for
+    // the row's presence (the previous behaviour) let those files through. See
+    // issues #258 and #376.
+    const tablesWithValidCount = new Set<string>();
+    const tablesWithRow = new Set<string>();
+    if (hasOgrContents) {
+      for (const row of db.exec(
+        "SELECT table_name, typeof(feature_count) FROM gpkg_ogr_contents",
+      )[0]?.values ?? []) {
+        const name = row[0];
+        if (typeof name !== "string") continue;
+        tablesWithRow.add(name);
+        if (row[1] === "integer") tablesWithValidCount.add(name);
+      }
+    }
 
-    const missing = featureTables.filter((name) => !existingCounts.has(name));
-    if (missing.length === 0) return bytes;
+    const needsCount = [...featureTables].filter(
+      (name) => !tablesWithValidCount.has(name),
+    );
+    if (needsCount.length === 0) return bytes;
 
     if (!hasOgrContents) {
       db.run(
@@ -95,15 +115,24 @@ export function ensureGpkgFeatureCountSync(
       );
     }
 
-    for (const tableName of missing) {
+    for (const tableName of needsCount) {
       const countResult = db.exec(
         `SELECT count(*) FROM ${quoteIdentifier(tableName)}`,
       );
       const count = countResult[0]?.values[0]?.[0] ?? 0;
-      db.run(
-        "INSERT INTO gpkg_ogr_contents (table_name, feature_count) VALUES (:name, :count)",
-        { ":name": tableName, ":count": count },
-      );
+      if (tablesWithRow.has(tableName)) {
+        // Repair a stale/NULL count rather than INSERT (which would collide
+        // with the existing primary-key row).
+        db.run(
+          "UPDATE gpkg_ogr_contents SET feature_count = :count WHERE table_name = :name",
+          { ":name": tableName, ":count": count },
+        );
+      } else {
+        db.run(
+          "INSERT INTO gpkg_ogr_contents (table_name, feature_count) VALUES (:name, :count)",
+          { ":name": tableName, ":count": count },
+        );
+      }
     }
 
     // sql.js always exports an ArrayBuffer-backed Uint8Array; re-narrow the type.

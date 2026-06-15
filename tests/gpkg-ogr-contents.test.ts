@@ -154,6 +154,59 @@ describe("ensureGpkgFeatureCountSync", () => {
     ]);
   });
 
+  it("repairs a NULL feature_count (the crash in issue #376)", () => {
+    // A row exists but its count is NULL, so GDAL recomputes it on read and
+    // crashes the single-threaded WASM build. The previous logic saw the row
+    // and skipped the file; the fix must overwrite the NULL with a real count.
+    const db: Database = new SQL.Database();
+    db.run(`
+      CREATE TABLE gpkg_contents (
+        table_name TEXT NOT NULL PRIMARY KEY, data_type TEXT NOT NULL, srs_id INTEGER
+      );
+      CREATE TABLE swamps (fid INTEGER PRIMARY KEY, geom BLOB);
+      INSERT INTO gpkg_contents VALUES ('swamps', 'features', 4326);
+      INSERT INTO swamps (geom) VALUES (NULL), (NULL), (NULL), (NULL), (NULL);
+      CREATE TABLE gpkg_ogr_contents (
+        table_name TEXT NOT NULL PRIMARY KEY, feature_count INTEGER
+      );
+      INSERT INTO gpkg_ogr_contents (table_name, feature_count) VALUES ('swamps', NULL);
+    `);
+    const original = db.export();
+    db.close();
+
+    const patched = ensureGpkgFeatureCountSync(SQL, original);
+    assert.notEqual(patched, original);
+    assert.deepEqual(readOgrContents(patched), [
+      { table_name: "swamps", feature_count: 5 },
+    ]);
+  });
+
+  it("counts a feature table registered only in gpkg_geometry_columns", () => {
+    // Out-of-spec producers sometimes register the geometry column without a
+    // matching gpkg_contents 'features' row; the table is still a feature table
+    // and still triggers the threaded count path, so it must be repaired.
+    const db: Database = new SQL.Database();
+    db.run(`
+      CREATE TABLE gpkg_contents (
+        table_name TEXT NOT NULL PRIMARY KEY, data_type TEXT NOT NULL, srs_id INTEGER
+      );
+      CREATE TABLE gpkg_geometry_columns (
+        table_name TEXT NOT NULL, column_name TEXT NOT NULL,
+        geometry_type_name TEXT NOT NULL, srs_id INTEGER NOT NULL, z TINYINT NOT NULL, m TINYINT NOT NULL
+      );
+      CREATE TABLE mounds (fid INTEGER PRIMARY KEY, geom BLOB);
+      INSERT INTO gpkg_geometry_columns VALUES ('mounds', 'geom', 'POLYGON', 4326, 0, 0);
+      INSERT INTO mounds (geom) VALUES (NULL), (NULL);
+    `);
+    const original = db.export();
+    db.close();
+
+    const patched = ensureGpkgFeatureCountSync(SQL, original);
+    assert.deepEqual(readOgrContents(patched), [
+      { table_name: "mounds", feature_count: 2 },
+    ]);
+  });
+
   it("leaves a complete GeoPackage untouched", () => {
     const original = buildGpkg({ withOgrContents: true, featureCount: 3 });
     const patched = ensureGpkgFeatureCountSync(SQL, original);
