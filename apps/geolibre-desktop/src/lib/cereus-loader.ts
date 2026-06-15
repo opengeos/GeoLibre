@@ -1,5 +1,6 @@
-// Lazy loader for CereusDB — a WebAssembly build of Apache SedonaDB (Rust /
-// DataFusion / Arrow) that runs Sedona spatial SQL entirely in the browser.
+// Bundled (offline) loader for CereusDB — a WebAssembly build of Apache SedonaDB
+// (Rust / DataFusion / Arrow) that runs Sedona spatial SQL entirely in the
+// browser.
 //
 // The `standard` tier bundles a large (~40 MB unpacked) WASM module, so the
 // package is imported *dynamically* and lives in its own Vite chunk: it is only
@@ -10,6 +11,15 @@
 // same approach the DuckDB loader uses) and handed to `CereusDB.create` via its
 // `wasmUrl` option, so loading does not rely on `import.meta.url` resolution
 // inside the published package.
+//
+// By default this module is NOT used: a Vite alias swaps it for
+// `cereus-loader.cdn.ts` (see vite.config.ts, gated on GEOLIBRE_CEREUS_CDN) so
+// the ~40 MB `?url` wasm is dropped from the graph and never embedded into the
+// Tauri binary (it was ~8.6 MB brotli — the whole 27 → 36 MB v1.3 installer
+// growth). This bundled variant is reached only for a fully offline build
+// (GEOLIBRE_CEREUS_CDN=0). A bundler emits the asset for every `?url` import it
+// parses regardless of reachability, so the CDN/bundled choice must be a module
+// swap, not an `if` inside one module.
 
 // The WASM asset, emitted as a hashed file and referenced by URL by the bundler.
 import cereusWasmUrl from "@cereusdb/standard/wasm?url";

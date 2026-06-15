@@ -10,6 +10,13 @@ declare const __GEOLIBRE_VERSION__: string;
 declare const __PGLITE_CDN_URL__: string | null;
 declare const __PGLITE_POSTGIS_CDN_URL__: string | null;
 
+// jsDelivr URL for the CereusDB (Apache Sedona) WASM blob, injected by
+// vite.config.ts and read by cereus-loader.cdn.ts. By default every build
+// (web/desktop/embed) CDN-loads it so the ~40 MB wasm never lands in dist; the
+// value is null only when GEOLIBRE_CEREUS_CDN=0 force-bundles it via the `?url`
+// import in cereus-loader.ts.
+declare const __CEREUS_WASM_CDN_URL__: string | null;
+
 declare module "virtual:bundled-plugins" {
   // Manifest paths (base-relative, no leading slash) for plugins dropped into
   // public/plugins/<id>/, discovered at build time by the bundledPlugins() Vite

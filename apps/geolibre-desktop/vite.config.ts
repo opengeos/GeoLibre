@@ -102,6 +102,44 @@ function pgliteCdnUrl(pkg: string): string | null {
 }
 const PGLITE_CDN_URL = pgliteCdnUrl("@electric-sql/pglite");
 const PGLITE_POSTGIS_CDN_URL = pgliteCdnUrl("@electric-sql/pglite-postgis");
+
+// CereusDB (Apache Sedona spatial SQL, compiled to WASM) ships a ~40 MB wasm
+// blob that brotli only shrinks to ~8.6 MB — the entire 27 → 36 MB desktop
+// installer growth in v1.3. Like PGlite above, fetch the wasm from jsDelivr at
+// runtime for every target (web, desktop, embed) so it never inflates any build
+// output; the small JS glue stays bundled and lazy-chunked. Override with
+// GEOLIBRE_CEREUS_CDN=0 to force-bundle the wasm for a fully offline build. The
+// URL is pinned to the installed version (so it tracks the lockfile) and jsDelivr
+// is already an allowed connect-src in both the web (docker/nginx.conf) and
+// desktop (tauri.conf.json) CSPs. Trade-off: the Sedona engine needs network on
+// first use (the desktop app already fetches PGlite, Pyodide, tiles, and the
+// DuckDB spatial extension the same way).
+const CEREUS_CDN = process.env.GEOLIBRE_CEREUS_CDN !== "0";
+function cereusWasmCdnUrl(): string | null {
+  if (!CEREUS_CDN) return null;
+  const pkg = "@cereusdb/standard";
+  // The "./wasm" export resolves straight to the .wasm file; walk up to the
+  // owning package.json for the installed version and the file's package-relative
+  // path, so the URL tracks the lockfile and any future dist restructuring.
+  const wasmFile = pgliteCdnRequire.resolve(`${pkg}/wasm`);
+  let dir = path.dirname(wasmFile);
+  while (dir !== path.dirname(dir)) {
+    try {
+      const parsed = JSON.parse(
+        readFileSync(path.join(dir, "package.json"), "utf8"),
+      );
+      if (parsed.name === pkg) {
+        const rel = path.relative(dir, wasmFile).split(path.sep).join("/");
+        return `https://cdn.jsdelivr.net/npm/${pkg}@${parsed.version}/${rel}`;
+      }
+    } catch {
+      // Not this directory's package.json; keep walking up.
+    }
+    dir = path.dirname(dir);
+  }
+  throw new Error(`Could not resolve installed version of ${pkg}`);
+}
+const CEREUS_WASM_CDN_URL = cereusWasmCdnUrl();
 const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
 const WFS_PROXY_PATH = "/__geolibre_wfs_proxy";
 const GPX_PROXY_PATH = "/__geolibre_gpx_proxy";
@@ -358,6 +396,46 @@ function pgliteCdnLoaderPlugin(): Plugin {
   };
 }
 
+// Keep the ~40 MB CereusDB wasm out of `dist` (and out of the Tauri binary) in
+// two places, both required:
+//   1. Swap the bundled loader for the CDN one so cereus-loader.ts's
+//      `@cereusdb/standard/wasm?url` import is dropped from the module graph (a
+//      bundler emits the asset for every `?url` import it parses, so this must be
+//      a module swap, not an `if` inside one module — same reasoning as PGlite).
+//   2. Neutralize wasm-bindgen's own default `new URL('cereusdb_bg.wasm',
+//      import.meta.url)` inside the package glue. We always init CereusDB with an
+//      explicit `wasmUrl` (the CDN), so that default branch is dead at runtime —
+//      but Vite statically emits the asset from the `new URL(..., import.meta.url)`
+//      pattern regardless of reachability, which re-introduced the 40 MB file.
+const CEREUS_WASM_GLUE = "@cereusdb/standard/dist/wasm/cereusdb.js";
+const CEREUS_DEFAULT_WASM_URL = "new URL('cereusdb_bg.wasm', import.meta.url)";
+function cereusCdnLoaderPlugin(): Plugin {
+  const cdnLoader = path.resolve(__dirname, "src/lib/cereus-loader.cdn.ts");
+  return {
+    name: "geolibre-cereus-cdn-loader",
+    enforce: "pre",
+    resolveId(source) {
+      // Match `./cereus-loader` (and `.ts`) but never `cereus-loader.cdn`.
+      return /(?:^|\/)cereus-loader(?:\.ts)?$/.test(source) ? cdnLoader : null;
+    },
+    transform(code, id) {
+      const file = id.split("?")[0].replaceAll("\\", "/");
+      if (!file.endsWith(CEREUS_WASM_GLUE) || !code.includes(CEREUS_DEFAULT_WASM_URL)) {
+        return null;
+      }
+      // Replace the dead default-path expression so Vite never sees the asset.
+      // If the branch is somehow reached (init with no wasmUrl), throw clearly.
+      return {
+        code: code.replace(
+          CEREUS_DEFAULT_WASM_URL,
+          "(()=>{throw new Error('CereusDB must be initialised with an explicit wasmUrl (GEOLIBRE_CEREUS_CDN build)')})()",
+        ),
+        map: null,
+      };
+    },
+  };
+}
+
 function projectUrlQueryPlugin(): Plugin {
   return {
     name: "geolibre-project-url-query",
@@ -549,22 +627,24 @@ function pwaPlugin(): Plugin[] {
           },
         },
         {
-          // CDN-loaded heavy engines: Pyodide (the Python runtime + its wheels)
-          // and PGlite/PostGIS, both served version-pinned from jsDelivr (see
-          // PGLITE_CDN_URL and pyodide-config.ts). Their URLs embed the exact
-          // package version, so a redeploy/upgrade mints new URLs and CacheFirst
-          // never serves a stale engine. Caching them here is what lets the
-          // browser SQL (PostGIS) and Python features work OFFLINE after their
-          // first online use — closing the gap noted at the top of this file.
-          // jsDelivr sends permissive CORS headers, so these come back as normal
-          // (non-opaque) 200s and can be revalidated/evicted like any cache
-          // entry. When GEOLIBRE_PGLITE_CDN=0, PGlite is bundled under /assets/
-          // instead and this rule simply never matches it (Pyodide is always
-          // CDN-loaded regardless).
+          // CDN-loaded heavy engines: Pyodide (the Python runtime + its wheels),
+          // PGlite/PostGIS, and the CereusDB (Apache Sedona) wasm — all served
+          // version-pinned from jsDelivr (see PGLITE_CDN_URL, CEREUS_WASM_CDN_URL,
+          // and pyodide-config.ts). Their URLs embed the exact package version, so
+          // a redeploy/upgrade mints new URLs and CacheFirst never serves a stale
+          // engine. Caching them here is what lets the browser SQL (PostGIS),
+          // Sedona SQL, and Python features work OFFLINE after their first online
+          // use — closing the gap noted at the top of this file. jsDelivr sends
+          // permissive CORS headers, so these come back as normal (non-opaque)
+          // 200s and can be revalidated/evicted like any cache entry. When
+          // GEOLIBRE_PGLITE_CDN=0 / GEOLIBRE_CEREUS_CDN=0, those engines are
+          // bundled under /assets/ instead and this rule simply never matches them
+          // (Pyodide is always CDN-loaded regardless).
           urlPattern: ({ url }: { url: URL }) =>
             url.hostname === "cdn.jsdelivr.net" &&
             (url.pathname.startsWith("/pyodide/") ||
-              url.pathname.startsWith("/npm/@electric-sql/")),
+              url.pathname.startsWith("/npm/@electric-sql/") ||
+              url.pathname.startsWith("/npm/@cereusdb/")),
           handler: "CacheFirst",
           options: {
             cacheName: "geolibre-cdn-engines",
@@ -602,6 +682,7 @@ export default defineConfig({
   base: APP_BASE,
   plugins: [
     ...(PGLITE_CDN ? [pgliteCdnLoaderPlugin()] : []),
+    ...(CEREUS_CDN ? [cereusCdnLoaderPlugin()] : []),
     stripDuckDbWorkerSourcemapPlugin(),
     projectUrlQueryPlugin(),
     bundledPlugins(path.resolve(__dirname, "public/plugins")),
@@ -622,6 +703,7 @@ export default defineConfig({
     __GEOLIBRE_VERSION__: JSON.stringify(APP_VERSION),
     __PGLITE_CDN_URL__: JSON.stringify(PGLITE_CDN_URL),
     __PGLITE_POSTGIS_CDN_URL__: JSON.stringify(PGLITE_POSTGIS_CDN_URL),
+    __CEREUS_WASM_CDN_URL__: JSON.stringify(CEREUS_WASM_CDN_URL),
   },
   server: {
     port: 5173,
