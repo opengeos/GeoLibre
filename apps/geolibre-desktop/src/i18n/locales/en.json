@@ -99,6 +99,8 @@
     "linkOnMap": "Link on map",
     "gcps": "Control points ({{count}})",
     "needGcps": "Add at least {{min}} control points to georeference.",
+    "collinear": "Control points are collinear or coincident — move one off the line.",
+    "cornersOutOfRange": "This fit places the image outside valid map bounds. Adjust the control points.",
     "residual": "Residual",
     "rms": "RMS {{rms}} m",
     "opacity": "Overlay opacity",

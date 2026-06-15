@@ -51,6 +51,7 @@ import {
   validateForm,
   type Vertex,
 } from "../../lib/field-collection";
+import { releaseBodyPointerEvents } from "../../lib/radix-compat";
 
 interface FieldCollectionDialogProps {
   open: boolean;
@@ -131,17 +132,6 @@ function removeDrawPreview(map: maplibregl.Map): void {
     if (map.getLayer(id)) map.removeLayer(id);
   }
   if (map.getSource(DRAW_SOURCE)) map.removeSource(DRAW_SOURCE);
-}
-
-/**
- * Radix locks `document.body { pointer-events: none }` while a modal dialog is
- * open and can leave it set after a programmatic close, which would stop the map
- * from receiving the capture click. Clear it whenever we hide the dialog to draw.
- */
-function releaseBodyPointerEvents(): void {
-  if (document.body.style.pointerEvents === "none") {
-    document.body.style.pointerEvents = "";
-  }
 }
 
 /**

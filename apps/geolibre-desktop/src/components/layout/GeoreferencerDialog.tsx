@@ -24,9 +24,11 @@ import {
   type GCP,
   gcpResidualsMeters,
   imageCornersToMap,
+  type LngLat,
   MIN_GCPS,
   solveAffine,
 } from "../../lib/georeference";
+import { releaseBodyPointerEvents } from "../../lib/radix-compat";
 
 interface GeoreferencerDialogProps {
   open: boolean;
@@ -50,14 +52,20 @@ function createId(): string {
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-/**
- * Radix locks `document.body { pointer-events: none }` while a modal dialog is
- * open; clear it when we hide the dialog so the map receives the link click.
- */
-function releaseBodyPointerEvents(): void {
-  if (document.body.style.pointerEvents === "none") {
-    document.body.style.pointerEvents = "";
-  }
+/** A GCP plus a stable React key, so deleting one doesn't shuffle the rest. */
+type KeyedGCP = GCP & { key: number };
+
+/** True when every corner is a valid [lng, lat] within world bounds. */
+function cornersInRange(corners: LngLat[]): boolean {
+  return corners.every(
+    ([lng, lat]) =>
+      Number.isFinite(lng) &&
+      Number.isFinite(lat) &&
+      lng >= -180 &&
+      lng <= 180 &&
+      lat >= -90 &&
+      lat <= 90,
+  );
 }
 
 /**
@@ -76,7 +84,7 @@ export function GeoreferencerDialog({
   const addLayer = useAppStore((s) => s.addLayer);
 
   const [image, setImage] = useState<LoadedImage | null>(null);
-  const [gcps, setGcps] = useState<GCP[]>([]);
+  const [gcps, setGcps] = useState<KeyedGCP[]>([]);
   const [pendingPixel, setPendingPixel] = useState<{ px: number; py: number } | null>(
     null,
   );
@@ -88,6 +96,8 @@ export function GeoreferencerDialog({
   const linkPixelRef = useRef<{ px: number; py: number } | null>(null);
   // Skip the open-reset when we reopen after a map link, to keep captured state.
   const suppressResetRef = useRef(false);
+  // Monotonic id for stable GCP React keys.
+  const gcpKeyRef = useRef(0);
 
   const getMap = useCallback(
     () => mapControllerRef.current?.getMap() ?? null,
@@ -165,8 +175,8 @@ export function GeoreferencerDialog({
       const px = Math.round(((e.clientX - rect.left) / rect.width) * image.width);
       const py = Math.round(((e.clientY - rect.top) / rect.height) * image.height);
       setPendingPixel({
-        px: Math.max(0, Math.min(image.width, px)),
-        py: Math.max(0, Math.min(image.height, py)),
+        px: Math.max(0, Math.min(image.width - 1, px)),
+        py: Math.max(0, Math.min(image.height - 1, py)),
       });
       setNotice(null);
     },
@@ -194,7 +204,11 @@ export function GeoreferencerDialog({
     const onClick = (e: maplibregl.MapMouseEvent) => {
       const p = linkPixelRef.current;
       if (p) {
-        setGcps((gs) => [...gs, { px: p.px, py: p.py, lng: e.lngLat.lng, lat: e.lngLat.lat }]);
+        const key = (gcpKeyRef.current += 1);
+        setGcps((gs) => [
+          ...gs,
+          { px: p.px, py: p.py, lng: e.lngLat.lng, lat: e.lngLat.lat, key },
+        ]);
         setPendingPixel(null);
       }
       setLinking(false);
@@ -222,6 +236,12 @@ export function GeoreferencerDialog({
     if (!affine || !image) return;
     const c = imageCornersToMap(affine, image.width, image.height);
     const coordinates = [c.tl, c.tr, c.br, c.bl];
+    // A poor fit can project corners outside world bounds, which the map's image
+    // source would silently reject — warn instead of adding an invisible layer.
+    if (!cornersInRange(coordinates)) {
+      setNotice(t("georeferencer.cornersOutOfRange"));
+      return;
+    }
     const bounds = cornersToBounds(coordinates);
     const layer: GeoLibreLayer = {
       id: createId(),
@@ -231,7 +251,12 @@ export function GeoreferencerDialog({
       visible: true,
       opacity,
       style: { ...DEFAULT_LAYER_STYLE },
-      metadata: { sourceKind: "georeferenced-image", bounds, gcps },
+      metadata: {
+        sourceKind: "georeferenced-image",
+        bounds,
+        // Persist plain GCPs (drop the transient React key) for reproducibility.
+        gcps: gcps.map(({ px, py, lng, lat }) => ({ px, py, lng, lat })),
+      },
     };
     addLayer(layer);
     mapControllerRef.current?.fitBounds(bounds);
@@ -282,7 +307,7 @@ export function GeoreferencerDialog({
                     />
                     {gcps.map((g, i) => (
                       <span
-                        key={i}
+                        key={g.key}
                         className="pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-primary text-[8px] leading-3 text-white"
                         style={{
                           left: `${(g.px / image.width) * 100}%`,
@@ -338,11 +363,16 @@ export function GeoreferencerDialog({
                       </span>
                     )}
                   </div>
-                  {gcps.length === 0 ? (
+                  {gcps.length < MIN_GCPS ? (
                     <p className="text-sm text-muted-foreground">
                       {t("georeferencer.needGcps", { min: MIN_GCPS })}
                     </p>
-                  ) : (
+                  ) : !affine ? (
+                    <p className="text-sm text-destructive">
+                      {t("georeferencer.collinear")}
+                    </p>
+                  ) : null}
+                  {gcps.length > 0 && (
                     <div className="overflow-hidden rounded-md border text-sm">
                       <table className="w-full">
                         <thead className="bg-muted/50 text-xs text-muted-foreground">
@@ -358,7 +388,7 @@ export function GeoreferencerDialog({
                         </thead>
                         <tbody>
                           {gcps.map((g, i) => (
-                            <tr key={i} className="border-t">
+                            <tr key={g.key} className="border-t">
                               <td className="px-2 py-1">{i + 1}</td>
                               <td className="px-2 py-1 text-right tabular-nums">
                                 {g.px}, {g.py}

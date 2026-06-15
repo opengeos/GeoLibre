@@ -1502,15 +1502,15 @@ function syncRasterTileLayer(
   );
 }
 
-type VideoCoordinates = [
+type CornerCoordinates = [
   [number, number],
   [number, number],
   [number, number],
   [number, number],
 ];
 
-/** Validate persisted video corners: four in-range [lng, lat] pairs. */
-function isVideoCoordinates(value: unknown): value is VideoCoordinates {
+/** Validate persisted overlay corners (video/image): four in-range [lng, lat] pairs. */
+function isCornerCoordinates(value: unknown): value is CornerCoordinates {
   return (
     Array.isArray(value) &&
     value.length === 4 &&
@@ -1550,7 +1550,7 @@ function syncVideoLayer(
           typeof value === "string" && value.trim().length > 0,
       )
     : [];
-  const coordinates = isVideoCoordinates(layer.source.coordinates)
+  const coordinates = isCornerCoordinates(layer.source.coordinates)
     ? layer.source.coordinates
     : undefined;
   if (urls.length === 0 || !coordinates) return;
@@ -1591,12 +1591,18 @@ function syncImageLayer(
     typeof layer.source.url === "string" && layer.source.url.length > 0
       ? layer.source.url
       : undefined;
-  const coordinates = isVideoCoordinates(layer.source.coordinates)
+  const coordinates = isCornerCoordinates(layer.source.coordinates)
     ? layer.source.coordinates
     : undefined;
   if (!url || !coordinates) return;
-  if (!map.getSource(src)) {
+  const existing = map.getSource(src);
+  if (!existing) {
     map.addSource(src, { type: "image", url, coordinates });
+  } else if (existing.type === "image") {
+    // Unlike VideoSource, MapLibre's ImageSource can replace both the url and
+    // the corners in place, so a re-render (e.g. a future edit-GCPs flow) keeps
+    // the overlay in sync instead of leaving the old image pinned.
+    (existing as maplibregl.ImageSource).updateImage({ url, coordinates });
   }
   ensureLayer(
     map,
