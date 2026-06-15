@@ -17,6 +17,11 @@ declare const __PGLITE_POSTGIS_CDN_URL__: string | null;
 // import in cereus-loader.ts.
 declare const __CEREUS_WASM_CDN_URL__: string | null;
 
+// jsDelivr URLs for the gdal3.js (GDAL-WASM) engine + data, injected by
+// vite.config.ts and read by gdal-loader.ts for the Georeferencer's client-side
+// GeoTIFF export. null only when GEOLIBRE_GDAL_CDN=0 (export then unavailable).
+declare const __GDAL3_CDN_PATHS__: { wasm: string; data: string } | null;
+
 declare module "virtual:bundled-plugins" {
   // Manifest paths (base-relative, no leading slash) for plugins dropped into
   // public/plugins/<id>/, discovered at build time by the bundledPlugins() Vite

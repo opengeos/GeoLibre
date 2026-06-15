@@ -113,7 +113,18 @@
     "rms": "RMS {{rms}} m",
     "opacity": "Overlay opacity",
     "addToMap": "Add to map",
-    "defaultName": "Georeferenced image"
+    "defaultName": "Georeferenced image",
+    "exportTiff": "Export GeoTIFF",
+    "exportTiffButton": "Export",
+    "exportTiffHint": "Warps the image to a Cloud-Optimized GeoTIFF in your browser (GDAL/WASM). The engine downloads on first use.",
+    "transform": {
+      "affine": "Affine (linear)",
+      "polynomial": "Polynomial (order 2)",
+      "tps": "Thin plate spline"
+    },
+    "exporting": "Exporting GeoTIFF… (loading GDAL on first use)",
+    "exported": "GeoTIFF exported.",
+    "exportFailed": "GeoTIFF export failed. See the console for details."
   },
   "collaborate": {
     "title": "Live collaboration",

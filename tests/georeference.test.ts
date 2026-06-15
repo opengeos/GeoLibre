@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   type Affine,
   applyAffine,
+  buildGcpTranslateArgs,
   cornersInRange,
   cornersToBounds,
   type GCP,
@@ -12,6 +13,7 @@ import {
   imageCornersToMap,
   parseGcpsCsv,
   solveAffine,
+  warpArgsForTransform,
 } from "../apps/geolibre-desktop/src/lib/georeference";
 
 /** A known affine: lng = 0.001·px + 10, lat = -0.001·py + 50 (y flips). */
@@ -121,6 +123,46 @@ describe("cornersToBounds", () => {
       ]),
       [10, 49.92, 10.1, 50],
     );
+  });
+});
+
+describe("GDAL export args", () => {
+  it("builds gdal_translate -gcp args (px py lng lat) with the SRS", () => {
+    const args = buildGcpTranslateArgs([
+      { px: 40, py: 30, lng: -124.5, lat: 48.5 },
+      { px: 360, py: 30, lng: -67, lat: 47.2 },
+    ]);
+    assert.deepEqual(args, [
+      "-of",
+      "GTiff",
+      "-a_srs",
+      "EPSG:4326",
+      "-gcp",
+      "40",
+      "30",
+      "-124.5",
+      "48.5",
+      "-gcp",
+      "360",
+      "30",
+      "-67",
+      "47.2",
+    ]);
+  });
+
+  it("maps the transform to the right gdalwarp method + COG output", () => {
+    assert.deepEqual(warpArgsForTransform("affine"), [
+      "-order",
+      "1",
+      "-t_srs",
+      "EPSG:4326",
+      "-r",
+      "bilinear",
+      "-of",
+      "COG",
+    ]);
+    assert.equal(warpArgsForTransform("polynomial")[1], "2");
+    assert.equal(warpArgsForTransform("tps")[0], "-tps");
   });
 });
 

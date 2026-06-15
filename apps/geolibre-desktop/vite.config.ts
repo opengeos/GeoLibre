@@ -134,6 +134,28 @@ function cereusWasmCdnUrl(): string | null {
   return `https://cdn.jsdelivr.net/npm/${pkg}@${manifest.version}/${rel}`;
 }
 const CEREUS_WASM_CDN_URL = cereusWasmCdnUrl();
+
+// gdal3.js (GDAL compiled to WASM) powers the Georeferencer's client-side
+// GeoTIFF/COG export. Its wasm (~28 MB) + data (~12 MB) are huge, so — like
+// PGlite/Cereus above — fetch them from jsDelivr at runtime (version-pinned to
+// the lockfile) so they never inflate any build; the small JS glue stays
+// bundled and lazy-chunked, loaded only when the user exports. jsDelivr is
+// already an allowed connect-src in both CSPs. Set GEOLIBRE_GDAL_CDN=0 to force
+// network-free use (then the loader has no paths and export is unavailable).
+const GDAL_CDN = process.env.GEOLIBRE_GDAL_CDN !== "0";
+function gdal3CdnPaths(): { wasm: string; data: string } | null {
+  if (!GDAL_CDN) return null;
+  const { manifest } = findPackageManifest(
+    pgliteCdnRequire.resolve("gdal3.js"),
+    "gdal3.js",
+  );
+  const base = `https://cdn.jsdelivr.net/npm/gdal3.js@${manifest.version}/dist/package`;
+  return {
+    wasm: `${base}/gdal3WebAssembly.wasm`,
+    data: `${base}/gdal3WebAssembly.data`,
+  };
+}
+const GDAL3_CDN_PATHS = gdal3CdnPaths();
 const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
 const WFS_PROXY_PATH = "/__geolibre_wfs_proxy";
 const GPX_PROXY_PATH = "/__geolibre_gpx_proxy";
@@ -186,6 +208,8 @@ function manualChunks(id: string): string | undefined {
   if (id.includes("@google/earthengine")) return "earth-engine-browser";
   if (id.includes("mapillary-js")) return "mapillary";
   if (id.includes("@geoman-io/maplibre-geoman-free")) return "maplibre-geoman";
+  // gdal3.js JS glue (the big wasm/data load from the CDN); lazy on export only.
+  if (id.includes("gdal3.js")) return "gdal3";
   // maplibre-gl-duckdb pulls in @duckdb/duckdb-wasm + apache-arrow and is only
   // loaded on demand (the DuckDB map control). It must NOT fall through to the
   // generic `maplibre-gl` rule below, which would fold it into the eager
@@ -652,7 +676,8 @@ function pwaPlugin(): Plugin[] {
             url.hostname === "cdn.jsdelivr.net" &&
             (url.pathname.startsWith("/pyodide/") ||
               url.pathname.startsWith("/npm/@electric-sql/") ||
-              url.pathname.startsWith("/npm/@cereusdb/")),
+              url.pathname.startsWith("/npm/@cereusdb/") ||
+              url.pathname.startsWith("/npm/gdal3.js")),
           handler: "CacheFirst",
           options: {
             cacheName: "geolibre-cdn-engines",
@@ -712,6 +737,7 @@ export default defineConfig({
     __PGLITE_CDN_URL__: JSON.stringify(PGLITE_CDN_URL),
     __PGLITE_POSTGIS_CDN_URL__: JSON.stringify(PGLITE_POSTGIS_CDN_URL),
     __CEREUS_WASM_CDN_URL__: JSON.stringify(CEREUS_WASM_CDN_URL),
+    __GDAL3_CDN_PATHS__: JSON.stringify(GDAL3_CDN_PATHS),
   },
   server: {
     port: 5173,

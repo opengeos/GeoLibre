@@ -16,12 +16,15 @@ import {
   DialogTitle,
   Label,
   ScrollArea,
+  Select,
   Slider,
 } from "@geolibre/ui";
 import {
   Crosshair,
   Download,
+  FileDown,
   ImagePlus,
+  Loader2,
   MapPin,
   Maximize2,
   Trash2,
@@ -35,11 +38,13 @@ import {
   type GCP,
   gcpResidualsMeters,
   gcpsToCsv,
+  type GeoTransform,
   imageCornersToMap,
   MIN_GCPS,
   parseGcpsCsv,
   solveAffine,
 } from "../../lib/georeference";
+import { exportGeoTiff } from "../../lib/georeference-gdal";
 import { releaseBodyPointerEvents } from "../../lib/radix-compat";
 
 interface GeoreferencerDialogProps {
@@ -67,9 +72,9 @@ const MIN_ZOOM = 1;
 const MAX_ZOOM = 8;
 const ZOOM_STEP = 1.5;
 
-/** Trigger a browser download of text content. */
-function downloadText(filename: string, text: string, mime: string): void {
-  const url = URL.createObjectURL(new Blob([text], { type: mime }));
+/** Trigger a browser download of text or binary content. */
+function download(filename: string, data: BlobPart, mime: string): void {
+  const url = URL.createObjectURL(new Blob([data], { type: mime }));
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
@@ -109,6 +114,8 @@ export function GeoreferencerDialog({
   const [linking, setLinking] = useState(false);
   const [opacity, setOpacity] = useState(1);
   const [zoom, setZoom] = useState(1);
+  const [transform, setTransform] = useState<GeoTransform>("affine");
+  const [exporting, setExporting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   const imgRef = useRef<HTMLImageElement | null>(null);
@@ -141,6 +148,8 @@ export function GeoreferencerDialog({
     setLinking(false);
     setOpacity(1);
     setZoom(1);
+    setTransform("affine");
+    setExporting(false);
     setNotice(null);
   }, [open]);
 
@@ -296,10 +305,35 @@ export function GeoreferencerDialog({
   const removeGcp = (index: number) =>
     setGcps((gs) => gs.filter((_, i) => i !== index));
 
+  const handleExportGeoTiff = useCallback(async () => {
+    if (!affine || !image || exporting) return;
+    setExporting(true);
+    setNotice(t("georeferencer.exporting"));
+    try {
+      const bytes = await exportGeoTiff(
+        image.url,
+        image.name || "georeferenced",
+        gcps,
+        transform,
+      );
+      download(
+        `${image.name || "georeferenced"}.tif`,
+        bytes as BlobPart,
+        "image/tiff",
+      );
+      setNotice(t("georeferencer.exported"));
+    } catch (err) {
+      console.error("GeoTIFF export failed", err);
+      setNotice(t("georeferencer.exportFailed"));
+    } finally {
+      setExporting(false);
+    }
+  }, [affine, image, exporting, gcps, transform, t]);
+
   const handleExportGcps = useCallback(() => {
     if (gcps.length === 0) return;
     const base = image?.name || "georeference";
-    downloadText(`${base}-gcps.csv`, gcpsToCsv(gcps), "text/csv");
+    download(`${base}-gcps.csv`, gcpsToCsv(gcps), "text/csv");
   }, [gcps, image]);
 
   const handleImportGcps = useCallback(
@@ -556,6 +590,50 @@ export function GeoreferencerDialog({
                     value={[opacity]}
                     onValueChange={(v: number[]) => setOpacity(v[0])}
                   />
+                </div>
+
+                {/* GeoTIFF export (client-side, via gdal3.js) */}
+                <div className="space-y-1.5 rounded-md border p-2">
+                  <Label htmlFor="georef-transform">
+                    {t("georeferencer.exportTiff")}
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      id="georef-transform"
+                      className="flex-1"
+                      value={transform}
+                      disabled={exporting}
+                      onChange={(e) =>
+                        setTransform(e.target.value as GeoTransform)
+                      }
+                    >
+                      <option value="affine">
+                        {t("georeferencer.transform.affine")}
+                      </option>
+                      <option value="polynomial">
+                        {t("georeferencer.transform.polynomial")}
+                      </option>
+                      <option value="tps">
+                        {t("georeferencer.transform.tps")}
+                      </option>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      className="shrink-0"
+                      disabled={!affine || exporting}
+                      onClick={handleExportGeoTiff}
+                    >
+                      {exporting ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <FileDown className="mr-2 h-4 w-4" />
+                      )}
+                      {t("georeferencer.exportTiffButton")}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {t("georeferencer.exportTiffHint")}
+                  </p>
                 </div>
               </>
             )}

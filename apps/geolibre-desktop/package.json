@@ -48,6 +48,7 @@
     "apache-arrow": "^17.0.0",
     "dompurify": "^3.4.10",
     "fflate": "^0.8.3",
+    "gdal3.js": "^2.8.1",
     "i18next": "^25.10.10",
     "jspdf": "^4.2.1",
     "mapillary-js": "^4.1.2",

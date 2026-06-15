@@ -198,6 +198,34 @@ export function cornersToBounds(
   ];
 }
 
+/** Warp method for GeoTIFF export. */
+export type GeoTransform = "affine" | "polynomial" | "tps";
+
+/**
+ * gdal_translate args that stamp the GCPs (in EPSG:4326) onto the source raster.
+ * GDAL's `-gcp` order is `<pixelX> <pixelY> <X> <Y>` = px, py, lng, lat.
+ */
+export function buildGcpTranslateArgs(gcps: GCP[]): string[] {
+  // `-of GTiff` is required: gdal3.js derives the output file's driver/extension
+  // from it (without it the intermediate becomes `*.unknown` and GDAL errors).
+  const args = ["-of", "GTiff", "-a_srs", "EPSG:4326"];
+  for (const g of gcps) {
+    args.push("-gcp", String(g.px), String(g.py), String(g.lng), String(g.lat));
+  }
+  return args;
+}
+
+/** gdalwarp args for a GCP-based warp to a Cloud-Optimized GeoTIFF. */
+export function warpArgsForTransform(transform: GeoTransform): string[] {
+  const method =
+    transform === "tps"
+      ? ["-tps"]
+      : transform === "polynomial"
+        ? ["-order", "2"]
+        : ["-order", "1"];
+  return [...method, "-t_srs", "EPSG:4326", "-r", "bilinear", "-of", "COG"];
+}
+
 /** Header for the GCP CSV exchange format. */
 export const GCP_CSV_HEADER = "pixelX,pixelY,lng,lat";
 
