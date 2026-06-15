@@ -29,6 +29,7 @@ const NON_LEGEND_TYPES: ReadonlySet<LayerType> = new Set<LayerType>([
   "gaussian-splat",
   "3d-tiles",
   "video",
+  "image",
 ]);
 
 const NEUTRAL_SWATCH = "#94a3b8";

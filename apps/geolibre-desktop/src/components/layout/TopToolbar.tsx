@@ -83,6 +83,7 @@ import { useCollaboration } from "../../hooks/useCollaboration";
 import { SettingsDialog } from "./SettingsDialog";
 import { PrintLayoutDialog } from "./PrintLayoutDialog";
 import { FieldCollectionDialog } from "./FieldCollectionDialog";
+import { GeoreferencerDialog } from "./GeoreferencerDialog";
 import { OfflineRegionDialog } from "./OfflineRegionDialog";
 import { AddDataMenu } from "./toolbar/AddDataMenu";
 import { ConsentNoticeDialogs } from "./toolbar/ConsentNoticeDialogs";
@@ -212,6 +213,7 @@ export function TopToolbar({
   const [printLayoutOpen, setPrintLayoutOpen] = useState(false);
   const [offlineRegionOpen, setOfflineRegionOpen] = useState(false);
   const [fieldCollectionOpen, setFieldCollectionOpen] = useState(false);
+  const [georeferencerOpen, setGeoreferencerOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [checkForUpdatesRequest, setCheckForUpdatesRequest] = useState(0);
@@ -750,6 +752,7 @@ export function TopToolbar({
           setAddDataKind("deckgl-viz");
         }}
         onOpenOsmPbfDialog={() => osmPbf.setDialogOpen(true)}
+        onOpenGeoreferencer={() => setGeoreferencerOpen(true)}
       />
       <ProcessingMenu
         chrome={chrome}
@@ -805,6 +808,11 @@ export function TopToolbar({
       <FieldCollectionDialog
         open={fieldCollectionOpen}
         onOpenChange={setFieldCollectionOpen}
+        mapControllerRef={mapControllerRef}
+      />
+      <GeoreferencerDialog
+        open={georeferencerOpen}
+        onOpenChange={setGeoreferencerOpen}
         mapControllerRef={mapControllerRef}
       />
       <ShareProjectDialog

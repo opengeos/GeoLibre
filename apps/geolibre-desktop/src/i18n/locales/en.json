@@ -87,6 +87,24 @@
     "errorNumber": "Enter a valid number.",
     "errorChoice": "Choose one of the listed options."
   },
+  "georeferencer": {
+    "title": "Georeference Image",
+    "description": "Pin an image to the map: load it, link image points to map locations, then add it as a georeferenced overlay.",
+    "loadImage": "Click to load an image (PNG, JPG, TIFF)",
+    "imageTooLarge": "That image is too large (max {{max}}). Choose a smaller image.",
+    "imageReadError": "Couldn't read that image. Try another file.",
+    "sourceImage": "Source image ({{w}} × {{h}} px)",
+    "clickImageHint": "Click a point on the image, then link it on the map.",
+    "pixelPicked": "Image point: {{x}}, {{y}}",
+    "linkOnMap": "Link on map",
+    "gcps": "Control points ({{count}})",
+    "needGcps": "Add at least {{min}} control points to georeference.",
+    "residual": "Residual",
+    "rms": "RMS {{rms}} m",
+    "opacity": "Overlay opacity",
+    "addToMap": "Add to map",
+    "defaultName": "Georeferenced image"
+  },
   "collaborate": {
     "title": "Live collaboration",
     "description": "Share a live session so others can see and edit this map with you in real time.",
@@ -450,6 +468,7 @@
       "sectionCloudFormats": "Cloud formats",
       "section3dLayers": "3D layers",
       "sectionDatabases": "Databases",
+      "georeferenceImage": "Georeference Image...",
       "vectorLayer": "Vector Layer",
       "rasterLayer": "Raster Layer",
       "osmPbfLayer": "OSM PBF Layer",

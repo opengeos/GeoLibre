@@ -1461,6 +1461,10 @@ export class MapController {
       return [{ id: `layer-${layer.id}-video` }];
     }
 
+    if (layer.type === "image") {
+      return [{ id: `layer-${layer.id}-image` }];
+    }
+
     if (layer.type === "vector-tiles") {
       return vectorTileStyleLayerIds(layer).map((id) => ({
         id,

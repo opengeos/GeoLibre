@@ -183,6 +183,11 @@ export function syncLayer(
     syncVideoLayer(map, layer, beforeId);
     return;
   }
+
+  if (layer.type === "image") {
+    syncImageLayer(map, layer, beforeId);
+    return;
+  }
 }
 
 function isExternalNativeLayer(layer: GeoLibreLayer): boolean {
@@ -1569,6 +1574,45 @@ function syncVideoLayer(
   );
 }
 
+/**
+ * A georeferenced image overlay (MapLibre `type: "image"` source rendered as a
+ * raster layer), produced by the Raster Georeferencer. The source carries a
+ * single image `url` (an http(s) or data URL) and the four corner `coordinates`
+ * in [lng, lat] order: top-left, top-right, bottom-right, bottom-left.
+ */
+function syncImageLayer(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+  beforeId?: string,
+): void {
+  const src = sourceId(layer.id);
+  const lid = `layer-${layer.id}-image`;
+  const url =
+    typeof layer.source.url === "string" && layer.source.url.length > 0
+      ? layer.source.url
+      : undefined;
+  const coordinates = isVideoCoordinates(layer.source.coordinates)
+    ? layer.source.coordinates
+    : undefined;
+  if (!url || !coordinates) return;
+  if (!map.getSource(src)) {
+    map.addSource(src, { type: "image", url, coordinates });
+  }
+  ensureLayer(
+    map,
+    lid,
+    {
+      id: lid,
+      type: "raster",
+      source: src,
+      ...styleLayerZoomRange(layer.style),
+      paint: rasterPaint(layer.style, layer.opacity),
+      layout: { visibility: layer.visible ? "visible" : "none" },
+    },
+    beforeId,
+  );
+}
+
 function getRenderableRasterTiles(layer: GeoLibreLayer): string[] {
   const tiles = (layer.source.tiles as string[]) ?? [];
   if (layer.type !== "wms" || !isViteDevServer()) return tiles;
@@ -2189,6 +2233,7 @@ export function removeLayerFromMap(
     textLayerId(layerId),
     `layer-${layerId}-raster`,
     `layer-${layerId}-video`,
+    `layer-${layerId}-image`,
     ...(layer ? vectorTileAllStyleLayerIds(layer) : []),
     vectorTileCircleLayerId(layerId),
     vectorTileLineLayerId(layerId),

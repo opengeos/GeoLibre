@@ -58,7 +58,8 @@ export type LayerType =
   | "geoparquet"
   | "duckdb-query"
   | "deckgl-viz"
-  | "video";
+  | "video"
+  | "image";
 
 export type VectorStyleMode =
   | "single"

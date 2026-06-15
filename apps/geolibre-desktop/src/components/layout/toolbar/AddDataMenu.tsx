@@ -21,6 +21,7 @@ interface AddDataMenuProps {
   onSetAddDataKind: (kind: AddDataKind) => void;
   onAddGltfModel: () => void;
   onOpenOsmPbfDialog: () => void;
+  onOpenGeoreferencer: () => void;
 }
 
 /** The Add Data menu: files, web services, cloud formats, 3D layers, databases. */
@@ -31,6 +32,7 @@ export function AddDataMenu({
   onSetAddDataKind,
   onAddGltfModel,
   onOpenOsmPbfDialog,
+  onOpenGeoreferencer,
 }: AddDataMenuProps) {
   const { t } = useTranslation();
   // PostgreSQL layers are served through the Martin tile server, a local helper
@@ -137,6 +139,9 @@ export function AddDataMenu({
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={onAddGltfModel}>
           {t("toolbar.layerType.gltfModel")}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={onOpenGeoreferencer}>
+          {t("toolbar.item.georeferenceImage")}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-xs text-muted-foreground">

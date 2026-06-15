@@ -1,0 +1,122 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import {
+  type Affine,
+  applyAffine,
+  cornersToBounds,
+  type GCP,
+  gcpResidualsMeters,
+  haversineMeters,
+  imageCornersToMap,
+  solveAffine,
+} from "../apps/geolibre-desktop/src/lib/georeference";
+
+/** A known affine: lng = 0.001·px + 10, lat = -0.001·py + 50 (y flips). */
+const KNOWN: Affine = { a: 0.001, b: 0, c: 10, d: 0, e: -0.001, f: 50 };
+
+function gcpFrom(t: Affine, px: number, py: number): GCP {
+  const [lng, lat] = applyAffine(t, px, py);
+  return { px, py, lng, lat };
+}
+
+describe("solveAffine", () => {
+  it("returns null with fewer than 3 GCPs", () => {
+    assert.equal(solveAffine([]), null);
+    assert.equal(solveAffine([gcpFrom(KNOWN, 0, 0), gcpFrom(KNOWN, 1, 1)]), null);
+  });
+
+  it("returns null for collinear GCPs", () => {
+    const collinear = [
+      gcpFrom(KNOWN, 0, 0),
+      gcpFrom(KNOWN, 1, 0),
+      gcpFrom(KNOWN, 2, 0),
+    ];
+    assert.equal(solveAffine(collinear), null);
+  });
+
+  it("recovers a known transform exactly from 3 points", () => {
+    const gcps = [
+      gcpFrom(KNOWN, 0, 0),
+      gcpFrom(KNOWN, 100, 0),
+      gcpFrom(KNOWN, 0, 80),
+    ];
+    const t = solveAffine(gcps);
+    assert.ok(t);
+    for (const k of ["a", "b", "c", "d", "e", "f"] as const) {
+      assert.ok(Math.abs(t[k] - KNOWN[k]) < 1e-9, `${k}: ${t[k]} vs ${KNOWN[k]}`);
+    }
+  });
+
+  it("least-squares fits an over-determined, slightly noisy set", () => {
+    const gcps = [
+      gcpFrom(KNOWN, 0, 0),
+      gcpFrom(KNOWN, 100, 0),
+      gcpFrom(KNOWN, 0, 80),
+      gcpFrom(KNOWN, 100, 80),
+      gcpFrom(KNOWN, 50, 40),
+    ];
+    // nudge one point's map coord slightly
+    gcps[4].lng += 0.0001;
+    const t = solveAffine(gcps);
+    assert.ok(t);
+    // The fit should stay close to the underlying transform.
+    assert.ok(Math.abs(t.a - KNOWN.a) < 1e-4);
+    assert.ok(Math.abs(t.c - KNOWN.c) < 1e-2);
+  });
+});
+
+describe("imageCornersToMap", () => {
+  it("projects corners in TL, TR, BR, BL order", () => {
+    const c = imageCornersToMap(KNOWN, 100, 80);
+    assert.deepEqual(c.tl, [10, 50]);
+    assert.deepEqual(c.tr, [10.1, 50]);
+    assert.deepEqual(c.br, [10.1, 49.92]);
+    assert.deepEqual(c.bl, [10, 49.92]);
+  });
+});
+
+describe("gcpResidualsMeters", () => {
+  it("is ~zero for an exact fit", () => {
+    const gcps = [
+      gcpFrom(KNOWN, 0, 0),
+      gcpFrom(KNOWN, 100, 0),
+      gcpFrom(KNOWN, 0, 80),
+    ];
+    const t = solveAffine(gcps)!;
+    const { rms, perPoint } = gcpResidualsMeters(t, gcps);
+    assert.equal(perPoint.length, 3);
+    assert.ok(rms < 1e-3, `rms=${rms}`);
+  });
+
+  it("reports a non-zero residual for a misplaced point", () => {
+    const t = KNOWN;
+    const gcps = [{ px: 0, py: 0, lng: 10.001, lat: 50 }]; // ~71 m east of fit
+    const { perPoint } = gcpResidualsMeters(t, gcps);
+    assert.ok(perPoint[0] > 50 && perPoint[0] < 100, `${perPoint[0]} m`);
+  });
+});
+
+describe("haversineMeters", () => {
+  it("measures ~111 km per degree of latitude", () => {
+    const d = haversineMeters([0, 0], [0, 1]);
+    assert.ok(Math.abs(d - 111195) < 500, `${d} m`);
+  });
+
+  it("is zero for identical points", () => {
+    assert.equal(haversineMeters([5, 5], [5, 5]), 0);
+  });
+});
+
+describe("cornersToBounds", () => {
+  it("returns [west, south, east, north]", () => {
+    assert.deepEqual(
+      cornersToBounds([
+        [10, 50],
+        [10.1, 50],
+        [10.1, 49.92],
+        [10, 49.92],
+      ]),
+      [10, 49.92, 10.1, 50],
+    );
+  });
+});
