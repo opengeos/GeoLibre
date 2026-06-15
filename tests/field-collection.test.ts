@@ -9,7 +9,6 @@ import {
   COLLECTION_GEOMETRY_KEY,
   COLLECTION_SCHEMA_KEY,
   coerceValue,
-  dataUrlByteLength,
   drawPreview,
   emptyFeatureCollection,
   FIELD_COLLECTION_FLAG,
@@ -342,15 +341,5 @@ describe("line/polygon geometry", () => {
     // 3 vertices + line + polygon fill
     assert.equal(three.features.length, 5);
     assert.ok(three.features.some((f) => f.geometry?.type === "Polygon"));
-  });
-});
-
-describe("dataUrlByteLength", () => {
-  it("estimates the decoded byte length of a base64 data URL", () => {
-    // "AAAA" decodes to 3 bytes; "AAA=" to 2; "AA==" to 1.
-    assert.equal(dataUrlByteLength("data:image/png;base64,AAAA"), 3);
-    assert.equal(dataUrlByteLength("data:image/png;base64,AAA="), 2);
-    assert.equal(dataUrlByteLength("data:image/png;base64,AA=="), 1);
-    assert.equal(dataUrlByteLength("not-a-data-url"), 0);
   });
 });

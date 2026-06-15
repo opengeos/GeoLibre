@@ -81,6 +81,7 @@
     "noGeolocation": "Geolocation isn't available on this device.",
     "geolocationDenied": "Couldn't get your location. Check location permissions and try again.",
     "photoTooLarge": "That photo is too large (max {{max}}). Choose a smaller image.",
+    "photoReadError": "Couldn't read that image. Try another file.",
     "errorRequired": "This field is required.",
     "errorNumber": "Enter a valid number.",
     "errorChoice": "Choose one of the listed options."

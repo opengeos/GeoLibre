@@ -37,7 +37,6 @@ import {
   buildSchema,
   collectionMetadata,
   type CollectionSchema,
-  dataUrlByteLength,
   drawPreview,
   emptyFeatureCollection,
   type FieldType,
@@ -312,6 +311,13 @@ export function FieldCollectionDialog({
     [showMarker, recenter],
   );
 
+  // Closing cancels any in-flight GPS fix so its async callback can't act on a
+  // dismissed dialog (the activeRef effect lags a render behind the close).
+  const handleClose = useCallback(() => {
+    gpsSeqRef.current += 1;
+    onOpenChange(false);
+  }, [onOpenChange]);
+
   const handlePickOnMap = useCallback(() => {
     if (!getMap()) return;
     gpsSeqRef.current += 1; // invalidate any in-flight GPS fix
@@ -490,15 +496,21 @@ export function FieldCollectionDialog({
       const file = e.target.files?.[0];
       e.target.value = "";
       if (!file) return;
+      // file.size is the exact decoded byte count, so guard before the read.
+      if (file.size > MAX_PHOTO_BYTES) {
+        setNotice(
+          t("fieldCollection.photoTooLarge", {
+            max: `${Math.round(MAX_PHOTO_BYTES / (1024 * 1024))} MB`,
+          }),
+        );
+        return;
+      }
       const reader = new FileReader();
+      reader.onerror = () => setNotice(t("fieldCollection.photoReadError"));
       reader.onload = () => {
         const dataUrl = typeof reader.result === "string" ? reader.result : "";
-        if (dataUrlByteLength(dataUrl) > MAX_PHOTO_BYTES) {
-          setNotice(
-            t("fieldCollection.photoTooLarge", {
-              max: `${Math.round(MAX_PHOTO_BYTES / (1024 * 1024))} MB`,
-            }),
-          );
+        if (!dataUrl) {
+          setNotice(t("fieldCollection.photoReadError"));
           return;
         }
         setPhoto(dataUrl);
@@ -708,7 +720,7 @@ export function FieldCollectionDialog({
           </ScrollArea>
 
           <div className="flex justify-end">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
+            <Button variant="outline" onClick={handleClose}>
               {t("common.close")}
             </Button>
           </div>

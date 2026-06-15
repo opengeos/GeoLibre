@@ -342,13 +342,3 @@ export function appendFeature(
 ): FeatureCollection {
   return { type: "FeatureCollection", features: [...fc.features, feature] };
 }
-
-/** Rough byte size of a data URL's payload (for the photo size guard). */
-export function dataUrlByteLength(dataUrl: string): number {
-  const comma = dataUrl.indexOf(",");
-  if (comma === -1) return 0;
-  const payload = dataUrl.slice(comma + 1);
-  // base64 expands by 4/3; the last group may carry one or two `=` pads.
-  const padding = payload.endsWith("==") ? 2 : payload.endsWith("=") ? 1 : 0;
-  return Math.max(0, Math.floor((payload.length * 3) / 4) - padding);
-}
