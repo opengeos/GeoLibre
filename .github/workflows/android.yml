@@ -9,10 +9,10 @@ on:
     types: [published]
   workflow_dispatch:
 
-# contents: write so the release job can attach signed APKs to the GitHub
-# Release. workflow_dispatch runs (no release) only upload a CI artifact.
+# Least privilege at the workflow level; the build job below elevates to
+# contents: write only where it needs to attach release assets.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: android-${{ github.ref }}
@@ -29,6 +29,10 @@ jobs:
   build:
     name: Build Android APK (release)
     runs-on: ubuntu-22.04
+    # Elevated here (not workflow-level) so only this job can write release
+    # assets; workflow_dispatch runs never attach but the grant is harmless.
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -132,10 +136,10 @@ jobs:
             printf '%s' "$KEYSTORE_PASSWORD" > "$store_pass_file"
             printf '%s' "${KEY_PASSWORD:-$KEYSTORE_PASSWORD}" > "$key_pass_file"
             alias="$KEY_ALIAS"
-            echo "signed=release" >> "$GITHUB_OUTPUT"
+            sign_mode=release
           else
             echo "::warning::No ANDROID_KEYSTORE_BASE64 secret set — signing with a throwaway debug keystore. Installable for testing only, NOT for distribution."
-            echo "signed=debug" >> "$GITHUB_OUTPUT"
+            sign_mode=debug
             keystore="$RUNNER_TEMP/debug.jks"
             "$JAVA_HOME/bin/keytool" -genkeypair -v -keystore "$keystore" \
               -storepass android -keypass android -alias androiddebugkey \
@@ -167,6 +171,9 @@ jobs:
           if [ "$found" -eq 0 ]; then
             echo "::error::No release-unsigned APKs found"; exit 1
           fi
+          # Emit the outcome only after every APK has signed and verified, so a
+          # downstream always() step can never read signed=release on a failure.
+          echo "signed=$sign_mode" >> "$GITHUB_OUTPUT"
 
       - name: Upload signed APKs
         uses: actions/upload-artifact@v4
