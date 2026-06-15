@@ -43,8 +43,13 @@ export const DropdownMenuSubContent = React.forwardRef<
       className,
     )}
     style={{
+      // Cap to the visible viewport on mobile: dvh tracks the dynamic viewport
+      // and subtracting the safe-area insets keeps the menu (and its scrollable
+      // overflow) within the area not covered by the system status/navigation
+      // bars, so long menus scroll instead of clipping under them. On desktop/web
+      // dvh == vh and the insets are 0, so behavior is unchanged.
       maxHeight:
-        "min(var(--radix-dropdown-menu-content-available-height, 100vh), calc(100vh - 1rem))",
+        "min(var(--radix-dropdown-menu-content-available-height, 100dvh), calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1rem))",
       ...style,
     }}
     {...props}
