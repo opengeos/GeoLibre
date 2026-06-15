@@ -93,6 +93,7 @@
     "loadImage": "Click to load an image (PNG, JPG, TIFF)",
     "imageTooLarge": "That image is too large (max {{max}}). Choose a smaller image.",
     "imageReadError": "Couldn't read that image. Try another file.",
+    "imageNoDimensions": "Couldn't determine the image size. Use a raster image (PNG, JPG, TIFF).",
     "sourceImage": "Source image ({{w}} × {{h}} px)",
     "clickImageHint": "Click a point on the image, then link it on the map.",
     "pixelPicked": "Image point: {{x}}, {{y}}",

@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   type Affine,
   applyAffine,
+  cornersInRange,
   cornersToBounds,
   type GCP,
   gcpResidualsMeters,
@@ -120,6 +121,27 @@ describe("cornersToBounds", () => {
       ]),
       [10, 49.92, 10.1, 50],
     );
+  });
+});
+
+describe("cornersInRange", () => {
+  it("accepts in-bounds corners", () => {
+    assert.equal(
+      cornersInRange([
+        [10, 50],
+        [-179, -89],
+        [180, 90],
+        [0, 0],
+      ]),
+      true,
+    );
+  });
+
+  it("rejects out-of-range or non-finite corners", () => {
+    assert.equal(cornersInRange([[200, 0]]), false);
+    assert.equal(cornersInRange([[0, 95]]), false);
+    assert.equal(cornersInRange([[Number.NaN, 0]]), false);
+    assert.equal(cornersInRange([[0, Infinity]]), false);
   });
 });
 

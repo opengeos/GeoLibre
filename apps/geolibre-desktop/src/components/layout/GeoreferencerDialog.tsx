@@ -30,12 +30,12 @@ import {
   ZoomOut,
 } from "lucide-react";
 import {
+  cornersInRange,
   cornersToBounds,
   type GCP,
   gcpResidualsMeters,
   gcpsToCsv,
   imageCornersToMap,
-  type LngLat,
   MIN_GCPS,
   parseGcpsCsv,
   solveAffine,
@@ -55,8 +55,13 @@ interface LoadedImage {
   name: string;
 }
 
-/** Reject pathologically large images so the project JSON stays manageable. */
-const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
+/**
+ * Cap the source image size. It's stored inline as a base64 data URL (~4/3 the
+ * file size) in the project and in every collaboration snapshot, so keep it
+ * modest. A true GeoTIFF/COG export path (rasterio sidecar) would avoid the
+ * inline payload for large scans.
+ */
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 8;
@@ -80,19 +85,6 @@ function createId(): string {
 
 /** A GCP plus a stable React key, so deleting one doesn't shuffle the rest. */
 type KeyedGCP = GCP & { key: number };
-
-/** True when every corner is a valid [lng, lat] within world bounds. */
-function cornersInRange(corners: LngLat[]): boolean {
-  return corners.every(
-    ([lng, lat]) =>
-      Number.isFinite(lng) &&
-      Number.isFinite(lat) &&
-      lng >= -180 &&
-      lng <= 180 &&
-      lat >= -90 &&
-      lat <= 90,
-  );
-}
 
 /**
  * Raster Georeferencer: load a non-georeferenced image, place ground control
@@ -175,6 +167,12 @@ export function GeoreferencerDialog({
         }
         const probe = new Image();
         probe.onload = () => {
+          // Reject images with no intrinsic pixel size (e.g. an SVG without a
+          // width/height) — the GCP pixel math needs real raster dimensions.
+          if (probe.naturalWidth === 0 || probe.naturalHeight === 0) {
+            setNotice(t("georeferencer.imageNoDimensions"));
+            return;
+          }
           setImage({
             url,
             width: probe.naturalWidth,
@@ -247,6 +245,9 @@ export function GeoreferencerDialog({
     // Escape aborts the link and restores the dialog (keeps the pending pixel).
     const onKey = (ev: KeyboardEvent) => {
       if (ev.key !== "Escape") return;
+      // Remove the click handler synchronously so a queued click can't still
+      // fire onClick (and add a stray GCP) before the effect cleanup runs.
+      map.off("click", onClick);
       setLinking(false);
       suppressResetRef.current = true;
       onOpenChange(true);

@@ -116,6 +116,19 @@ export function applyAffine(t: Affine, px: number, py: number): LngLat {
   return [t.a * px + t.b * py + t.c, t.d * px + t.e * py + t.f];
 }
 
+/** True when every corner is a finite [lng, lat] within world bounds. */
+export function cornersInRange(corners: LngLat[]): boolean {
+  return corners.every(
+    ([lng, lat]) =>
+      Number.isFinite(lng) &&
+      Number.isFinite(lat) &&
+      lng >= -180 &&
+      lng <= 180 &&
+      lat >= -90 &&
+      lat <= 90,
+  );
+}
+
 /**
  * Project the four image corners to map space, in the order MapLibre's `image`
  * source expects: top-left, top-right, bottom-right, bottom-left. Image pixel
