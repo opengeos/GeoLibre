@@ -18,3 +18,4 @@ export {
   circleLayerId,
 } from "./geojson-loader";
 export { isPlaceholderLayer, placeholderMessage } from "./placeholders";
+export { setExternalDeckLayerOrderHandler } from "./layer-sync";

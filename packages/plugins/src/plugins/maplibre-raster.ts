@@ -147,6 +147,25 @@ export async function addRasterToMap(
   await control.addRaster(source, { name: options.name, zoomTo: true });
 }
 
+/**
+ * Pushes a layer's interleave position into the raster control: draw the raster
+ * (a deck.gl COG) beneath `beforeId`, or on top when `beforeId` is undefined.
+ *
+ * `@geolibre/map`'s layer-sync computes the beforeId from the store order but
+ * cannot move the deck layer itself (it has no real MapLibre style layer), so
+ * the desktop shell wires this as its deck-layer order handler. A no-op for any
+ * id the raster control does not own.
+ *
+ * @param layerId - The store/raster layer id.
+ * @param beforeId - The MapLibre style layer id to draw beneath, or undefined.
+ */
+export function applyRasterLayerOrder(
+  layerId: string,
+  beforeId: string | undefined,
+): void {
+  rasterControl?.setRasterBeforeId(layerId, beforeId ?? null);
+}
+
 export function closeRasterLayerPanel(app: GeoLibreAppAPI): void {
   if (restorePanelExpandTimeout !== null) {
     window.clearTimeout(restorePanelExpandTimeout);

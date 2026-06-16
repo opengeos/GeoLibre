@@ -1,9 +1,10 @@
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import type { MapController, MapDiagnosticEvent } from "@geolibre/map";
-import { MapCanvas } from "@geolibre/map";
+import { MapCanvas, setExternalDeckLayerOrderHandler } from "@geolibre/map";
 import {
   addRasterToMap,
+  applyRasterLayerOrder,
   DECK_VIZ_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
   EFFECTS_PLUGIN_ID,
@@ -515,6 +516,10 @@ export function DesktopShell({
     restoreThreeDTilesLayers(appAPI);
     restoreRasterLayers(appAPI);
     restoreVectorLayers(appAPI);
+    // Let layer-sync push the store-derived beforeId into the raster control so
+    // deck.gl COG rasters interleave with vector layers instead of always
+    // drawing on top.
+    setExternalDeckLayerOrderHandler(applyRasterLayerOrder);
     // activeByDefault plugins are marked active without activate() being
     // called, so the effects engine must be kicked explicitly to match the
     // restored active state (idempotent).
