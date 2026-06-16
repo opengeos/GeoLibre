@@ -58,9 +58,16 @@ ml = [
 # the web build embeds the in-browser JupyterLite site instead, so this extra is
 # desktop-only. geopandas/rasterio/etc. install alongside via the relevant extras
 # (or `%pip install` in a cell).
+#
+# `pip` is seeded explicitly: uv-managed environments do not include pip, so a
+# `%pip install` cell (which runs `sys.executable -m pip`) would otherwise fail
+# with "No module named pip", and a bare `!pip install` falls through PATH to the
+# host's system pip (PEP-668 externally-managed -> error). Installing pip into the
+# kernel's own env makes `%pip install` work like a normal Jupyter environment.
 notebook = [
   "jupyterlab>=4.2,<5",
   "jupyter-server>=2.14",
+  "pip>=24",
 ]
 # Future geospatial stack (not required for MVP UI):
 # geo = [
