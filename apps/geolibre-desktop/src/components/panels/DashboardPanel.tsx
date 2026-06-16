@@ -291,10 +291,8 @@ function WidgetCard({
     () => computeChart(data.rows, widgetToSpec(widget)),
     [data.rows, widget],
   );
-  const title = widget.title?.trim() || defaultWidgetTitle();
-
-  /** A readable title from the widget's chart type and fields when untitled. */
-  function defaultWidgetTitle(): string {
+  // A readable title from the widget's chart type and fields when untitled.
+  const defaultWidgetTitle = (): string => {
     switch (widget.type) {
       case "histogram":
         return `${t("dashboard.chartType.histogram")} · ${widget.field ?? ""}`;
@@ -316,7 +314,8 @@ function WidgetCard({
       case "pie":
         return `${t("dashboard.chartType.pie")} · ${widget.category ?? ""}`;
     }
-  }
+  };
+  const title = widget.title?.trim() || defaultWidgetTitle();
 
   return (
     <div className="flex flex-col gap-2 rounded-md border bg-background p-3">

@@ -275,6 +275,7 @@ const DashboardPanel = lazy(() =>
       return { default: Fallback };
     }),
 );
+
 const PythonConsolePanel = lazy(() =>
   import("../panels/PythonConsolePanel")
     .then((module) => ({

@@ -99,13 +99,16 @@ export function WidgetEditorDialog({
 
   // A widget can only be saved when its chart type has the fields it needs in
   // the chosen layer: bar/pie need a category (and a numeric field too when they
-  // sum/average rather than count); the rest need a numeric field.
+  // sum/average rather than count); scatter needs two numeric fields so x and y
+  // aren't forced to the same column; the rest need one numeric field.
   const isCategorical = type === "bar" || type === "pie";
   const canSave =
     layerId !== "" &&
     (isCategorical
       ? hasCategory && (aggregation === "count" || hasNumeric)
-      : hasNumeric);
+      : type === "scatter"
+        ? numericCols.length >= 2
+        : hasNumeric);
 
   const save = () => {
     if (!canSave) return;

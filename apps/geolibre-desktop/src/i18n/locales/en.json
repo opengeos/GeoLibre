@@ -707,6 +707,16 @@
       "sum": "Sum",
       "mean": "Average"
     },
+    "chart": {
+      "emptyNumeric": "No numeric values to plot.",
+      "emptyScatter": "No rows have both fields set to a number.",
+      "emptyBar": "No rows to group.",
+      "emptyPie": "No positive values to chart.",
+      "pieCaptionCount_one": "row count · {{count}} category",
+      "pieCaptionCount_other": "row count · {{count}} categories",
+      "pieCaptionSum_one": "sum · {{count}} category",
+      "pieCaptionSum_other": "sum · {{count}} categories"
+    },
     "editor": {
       "addTitle": "Add widget",
       "editTitle": "Edit widget",
@@ -726,7 +736,7 @@
       "titlePlaceholder": "Optional title",
       "color": "Color",
       "colorReset": "Reset",
-      "colorDefault": "Default palette",
+      "colorDefault": "Default chart colors",
       "cancel": "Cancel",
       "save": "Save"
     }

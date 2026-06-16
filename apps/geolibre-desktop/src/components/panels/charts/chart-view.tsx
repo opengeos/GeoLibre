@@ -6,6 +6,7 @@
  * charting library) and themed via CSS variables so both surfaces look the same.
  */
 import { type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import {
   formatAxisValue,
   type BarAggregation,
@@ -212,7 +213,9 @@ function HistogramChart({
   field: string;
   color: string;
 }) {
-  if (!result) return <EmptyChart message="No numeric values to plot." />;
+  const { t } = useTranslation();
+  if (!result)
+    return <EmptyChart message={t("dashboard.chart.emptyNumeric")} />;
 
   const { bins, maxCount, min, max, total } = result;
   const slot = INNER_W / bins.length;
@@ -271,8 +274,9 @@ function ScatterChart({
   yField: string;
   color: string;
 }) {
+  const { t } = useTranslation();
   if (!result) {
-    return <EmptyChart message="No rows have both fields set to a number." />;
+    return <EmptyChart message={t("dashboard.chart.emptyScatter")} />;
   }
 
   const { points, total, xMin, xMax, yMin, yMax } = result;
@@ -332,7 +336,8 @@ function BarChart({
   category: string;
   color?: string;
 }) {
-  if (!result) return <EmptyChart message="No rows to group." />;
+  const { t } = useTranslation();
+  if (!result) return <EmptyChart message={t("dashboard.chart.emptyBar")} />;
 
   const { bars, maxValue, minValue, truncated } = result;
   const colors = categoryColors(color, bars.length);
@@ -412,7 +417,9 @@ function LineChart({
   field: string;
   color: string;
 }) {
-  if (!result) return <EmptyChart message="No numeric values to plot." />;
+  const { t } = useTranslation();
+  if (!result)
+    return <EmptyChart message={t("dashboard.chart.emptyNumeric")} />;
 
   const { points, min, max, length } = result;
   const scaleX = (index: number) =>
@@ -478,7 +485,9 @@ function BoxChart({
   field: string;
   color: string;
 }) {
-  if (!result) return <EmptyChart message="No numeric values to plot." />;
+  const { t } = useTranslation();
+  if (!result)
+    return <EmptyChart message={t("dashboard.chart.emptyNumeric")} />;
 
   const { min, q1, median, q3, max, count } = result;
   const centerX = MARGIN.left + INNER_W / 2;
@@ -565,7 +574,8 @@ function PieChart({
   category: string;
   color?: string;
 }) {
-  if (!result) return <EmptyChart message="No positive values to chart." />;
+  const { t } = useTranslation();
+  if (!result) return <EmptyChart message={t("dashboard.chart.emptyPie")} />;
 
   const { slices, total } = result;
   const colors = categoryColors(color, slices.length);
@@ -633,8 +643,12 @@ function PieChart({
         })}
       </svg>
       <Caption>
-        {aggregation === "count" ? "row count" : "sum"} · {slices.length}{" "}
-        {slices.length === 1 ? "category" : "categories"}
+        {t(
+          aggregation === "count"
+            ? "dashboard.chart.pieCaptionCount"
+            : "dashboard.chart.pieCaptionSum",
+          { count: slices.length },
+        )}
       </Caption>
     </>
   );
