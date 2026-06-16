@@ -23,8 +23,16 @@ describe("isFullViewportMapCanvas", () => {
     );
   });
 
+  it("keeps a canvas exactly at the 90% boundary", () => {
+    // The threshold is inclusive (>=): 1920 * 0.9 = 1728, 1080 * 0.9 = 972.
+    assert.equal(
+      isFullViewportMapCanvas({ width: 1728, height: 972 }, base),
+      true,
+    );
+  });
+
   it("drops a canvas just below the 90% threshold in height", () => {
-    // 1920 * 0.9 = 1728 (pass), 1080 * 0.9 = 972 -> 971 should fail.
+    // 1920 passes width; 971 < 972 (1080 * 0.9) fails height -> overall false.
     assert.equal(
       isFullViewportMapCanvas({ width: 1920, height: 971 }, base),
       false,
@@ -44,6 +52,14 @@ describe("isFullViewportMapCanvas", () => {
   it("drops a canvas that is wide but short", () => {
     assert.equal(
       isFullViewportMapCanvas({ width: 1920, height: 24 }, base),
+      false,
+    );
+  });
+
+  it("drops a canvas that is tall but narrow", () => {
+    // 1727 < 1728 (1920 * 0.9) fails width; height passes -> overall false.
+    assert.equal(
+      isFullViewportMapCanvas({ width: 1727, height: 1080 }, base),
       false,
     );
   });
