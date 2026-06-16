@@ -84,7 +84,11 @@ export function stripGeoPackageHeader(blob: Uint8Array): Uint8Array {
  * argument), which is what the previous `ST_Read` path used.
  */
 function selectLayer(db: Database): GeoPackageLayer | null {
+  // Both tables are referenced by the JOIN below. gpkg_contents is mandatory in
+  // the spec, but guard it too so a malformed file returns null (no layer) here
+  // rather than throwing an opaque sql.js error from the JOIN.
   if (!tableExists(db, "gpkg_geometry_columns")) return null;
+  if (!tableExists(db, "gpkg_contents")) return null;
   const result = db.exec(
     `SELECT g.table_name, g.column_name, g.srs_id
      FROM gpkg_geometry_columns g
@@ -178,9 +182,20 @@ function readLayerFeatures(
       const rawGeometry = row[geometryIndex];
       let geometry: Geometry | null = null;
       if (rawGeometry instanceof Uint8Array && rawGeometry.length > 0) {
-        const wkb = stripGeoPackageHeader(rawGeometry);
-        // A GeoPackage "empty geometry" header carries no WKB body.
-        geometry = wkb.length > 0 ? decodeWkb(wkb) : null;
+        try {
+          const wkb = stripGeoPackageHeader(rawGeometry);
+          // A GeoPackage "empty geometry" header carries no WKB body.
+          geometry = wkb.length > 0 ? decodeWkb(wkb) : null;
+        } catch (error) {
+          // One unreadable geometry (malformed header, truncated WKB, or an
+          // unsupported curved type) must not abort the whole layer. Keep the
+          // feature with a null geometry and warn so the loss is diagnosable
+          // rather than silent.
+          console.warn(
+            `[GeoLibre] Skipped an unreadable geometry in GeoPackage layer "${layer.table}":`,
+            error,
+          );
+        }
       }
       features.push({ type: "Feature", geometry, properties });
     }

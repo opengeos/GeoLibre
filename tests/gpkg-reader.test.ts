@@ -209,9 +209,10 @@ describe("readGeoPackageSync", () => {
     );
   });
 
-  it("throws on a malformed geometry blob", () => {
-    // A 'GP' blob with a reserved envelope indicator cannot be located, so the
-    // feature surfaces as an explicit error rather than a silent null geometry.
+  it("keeps the feature but drops an unreadable geometry blob, warning once", () => {
+    // A 'GP' blob with a reserved envelope indicator cannot be located. The bad
+    // feature must not abort the layer: it is kept with a null geometry (and the
+    // good feature still loads), with a warning rather than a silent drop.
     const badBlob = new Uint8Array(16);
     badBlob[0] = 0x47;
     badBlob[1] = 0x50;
@@ -224,13 +225,38 @@ describe("readGeoPackageSync", () => {
       INSERT INTO gpkg_contents VALUES ('places','features',4326);
       INSERT INTO gpkg_geometry_columns VALUES ('places','geom','GEOMETRY',4326,0,0);
     `);
-    db.run("INSERT INTO places (geom, name) VALUES (:g, 'a')", { ":g": badBlob });
+    db.run("INSERT INTO places (geom, name) VALUES (:g, 'bad')", { ":g": badBlob });
+    db.run("INSERT INTO places (geom, name) VALUES (:g, 'good')", {
+      ":g": geoPackageBlob({ type: "Point", coordinates: [1, 2] }),
+    });
     const bytes = db.export();
     db.close();
-    assert.throws(
-      () => readGeoPackageSync(SQL, bytes),
-      /reserved envelope indicator 6/,
+
+    const warnings: unknown[][] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => warnings.push(args);
+    try {
+      const { featureCollection } = readGeoPackageSync(SQL, bytes);
+      assert.equal(featureCollection.features.length, 2);
+      assert.equal(featureCollection.features[0].geometry, null);
+      assert.deepEqual(featureCollection.features[0].properties, { name: "bad" });
+      assert.equal(featureCollection.features[1].geometry?.type, "Point");
+    } finally {
+      console.warn = originalWarn;
+    }
+    assert.equal(warnings.length, 1);
+  });
+
+  it("returns null (no layer) when gpkg_contents is missing", () => {
+    // A malformed file with gpkg_geometry_columns but no gpkg_contents must not
+    // throw an opaque sql.js error from the JOIN.
+    const db = new SQL.Database();
+    db.run(
+      "CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, geometry_type_name TEXT, srs_id INTEGER, z TINYINT, m TINYINT)",
     );
+    const bytes = db.export();
+    db.close();
+    assert.throws(() => readGeoPackageSync(SQL, bytes), /No vector feature layer/);
   });
 });
 
