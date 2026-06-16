@@ -134,7 +134,7 @@ type: `field` (histogram/line/box), `xField`/`yField` (scatter), `category` +
 `count`/`sum`/`mean`; pie is `count`/`sum` only. `title` is an optional label;
 unused keys are ignored. The Dashboard panel (Tools → Dashboard, or the
 **Dashboard** button in the attribute table) also stores `dashboardColumns`, the
-widget-grid column count (1-4, default 2), at the top level of the project.
+widget-grid column count (1-6, default 2), at the top level of the project.
 Charts read from GeoJSON-backed vector layers and DuckDB query layers; widgets
 bound to a missing or non-attribute layer are shown as empty.
 

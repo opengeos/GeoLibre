@@ -153,7 +153,7 @@ describe("normalizeDashboardColumns", () => {
   it("clamps into range and falls back to the default", () => {
     assert.equal(normalizeDashboardColumns(3), 3);
     assert.equal(normalizeDashboardColumns(0), 1);
-    assert.equal(normalizeDashboardColumns(99), 4);
+    assert.equal(normalizeDashboardColumns(99), 6);
     assert.equal(normalizeDashboardColumns(2.9), 2);
     assert.equal(normalizeDashboardColumns(undefined), DEFAULT_DASHBOARD_COLUMNS);
     assert.equal(normalizeDashboardColumns("x"), DEFAULT_DASHBOARD_COLUMNS);
@@ -209,7 +209,7 @@ describe("app store widget actions", () => {
     useAppStore.getState().setDashboardColumns(3);
     assert.equal(useAppStore.getState().dashboardColumns, 3);
     useAppStore.getState().setDashboardColumns(99);
-    assert.equal(useAppStore.getState().dashboardColumns, 4);
+    assert.equal(useAppStore.getState().dashboardColumns, 6);
     useAppStore.getState().setDashboardColumns(0);
     assert.equal(useAppStore.getState().dashboardColumns, 1);
   });

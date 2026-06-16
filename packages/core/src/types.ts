@@ -545,7 +545,7 @@ export interface ProcessingModel {
 
 /** Column-count bounds for the Dashboard panel's widget grid. */
 export const MIN_DASHBOARD_COLUMNS = 1;
-export const MAX_DASHBOARD_COLUMNS = 4;
+export const MAX_DASHBOARD_COLUMNS = 6;
 export const DEFAULT_DASHBOARD_COLUMNS = 2;
 
 /** The chart a {@link DashboardWidget} draws. Mirrors the attribute Charts
