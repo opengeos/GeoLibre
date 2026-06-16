@@ -34,6 +34,12 @@ jobs:
       - name: Install documentation dependencies
         run: python -m pip install -r requirements-docs.txt
 
+      - name: Install JupyterLite build dependencies
+        # Lets the web build's `prebuild` hook generate the self-hosted
+        # JupyterLite site (served in the Notebook panel); without these the step
+        # skips and the demo's notebook 404s on the published site.
+        run: python -m pip install -r apps/geolibre-desktop/jupyterlite/requirements.txt
+
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
@@ -62,6 +68,7 @@ jobs:
           mkdir -p site/demo
           cp -R apps/geolibre-desktop/dist/. site/demo/
           test -f site/demo/index.html
+          test -f site/demo/jupyterlite/lab/index.html
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
