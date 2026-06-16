@@ -6,7 +6,7 @@ import initSqlJs from "sql.js";
 import type { Database, SqlJsStatic } from "sql.js";
 import { encodeWkb } from "../apps/geolibre-desktop/src/lib/geometry-wkb";
 import {
-  isGeoPackage,
+  isLikelyGeoPackage,
   readGeoPackageSync,
   stripGeoPackageHeader,
 } from "../apps/geolibre-desktop/src/lib/gpkg-reader";
@@ -180,6 +180,27 @@ describe("readGeoPackageSync", () => {
     assert.equal(readGeoPackageSync(SQL, bytes).epsgCode, null);
   });
 
+  it("treats a non-numeric EPSG code as no reprojection (not EPSG:NaN)", () => {
+    // organization_coordsys_id has no column affinity here, so the text value is
+    // stored verbatim; Number(...) yields NaN, which must resolve to null.
+    const db = new SQL.Database();
+    db.run(`
+      CREATE TABLE gpkg_spatial_ref_sys (srs_name TEXT, srs_id INTEGER PRIMARY KEY, organization TEXT, organization_coordsys_id, definition TEXT, description TEXT);
+      CREATE TABLE gpkg_contents (table_name TEXT PRIMARY KEY, data_type TEXT, srs_id INTEGER);
+      CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, geometry_type_name TEXT, srs_id INTEGER, z TINYINT, m TINYINT);
+      CREATE TABLE "places" (fid INTEGER PRIMARY KEY, geom BLOB, name TEXT);
+      INSERT INTO gpkg_spatial_ref_sys VALUES ('custom', 9999, 'EPSG', 'not-a-number', '', '');
+      INSERT INTO gpkg_contents VALUES ('places','features',9999);
+      INSERT INTO gpkg_geometry_columns VALUES ('places','geom','GEOMETRY',9999,0,0);
+    `);
+    db.run("INSERT INTO places (geom, name) VALUES (:g, 'a')", {
+      ":g": geoPackageBlob({ type: "Point", coordinates: [1, 2] }, 9999),
+    });
+    const bytes = db.export();
+    db.close();
+    assert.equal(readGeoPackageSync(SQL, bytes).epsgCode, null);
+  });
+
   it("throws when there is no feature layer", () => {
     const db = new SQL.Database();
     db.run(
@@ -260,9 +281,9 @@ describe("readGeoPackageSync", () => {
   });
 });
 
-describe("isGeoPackage", () => {
+describe("isLikelyGeoPackage", () => {
   it("recognises a SQLite/GeoPackage buffer", () => {
-    assert.equal(isGeoPackage(buildGpkg([])), true);
-    assert.equal(isGeoPackage(new Uint8Array([1, 2, 3, 4])), false);
+    assert.equal(isLikelyGeoPackage(buildGpkg([])), true);
+    assert.equal(isLikelyGeoPackage(new Uint8Array([1, 2, 3, 4])), false);
   });
 });

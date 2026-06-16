@@ -136,7 +136,12 @@ function resolveEpsgCode(db: Database, srsId: number | null): number | null {
   if (!row) return null;
   const organization = String(row[0] ?? "").toUpperCase();
   const code = row[1] == null ? null : Number(row[1]);
-  if (organization !== "EPSG" || code == null) return null;
+  // A non-numeric organization_coordsys_id yields NaN, which is not null; guard
+  // it so a malformed row is treated as "no reprojection" instead of tagging the
+  // collection "EPSG:NaN" (which silently fails to reproject and misrenders).
+  if (organization !== "EPSG" || code == null || !Number.isFinite(code)) {
+    return null;
+  }
   return WGS84_EPSG_CODES.has(code) ? null : code;
 }
 
@@ -232,8 +237,16 @@ export function readGeoPackageSync(
   }
 }
 
-/** Whether {@link loadGeoPackageVectorFile} can handle these bytes (a SQLite file). */
-export function isGeoPackage(bytes: Uint8Array): boolean {
+/**
+ * Cheap pre-check: whether these bytes are a SQLite file (a GeoPackage is one).
+ *
+ * Only the SQLite magic is inspected, so a non-GeoPackage SQLite database with a
+ * `.gpkg` name also passes; such a file then fails in {@link readGeoPackageSync}
+ * with "No vector feature layer found" rather than falling through to `ST_Read`.
+ * That is acceptable: `ST_Read` cannot read a SQLite file with no feature layer
+ * either, and full GeoPackage validation only happens once the tables are read.
+ */
+export function isLikelyGeoPackage(bytes: Uint8Array): boolean {
   return looksLikeSqlite(bytes);
 }
 

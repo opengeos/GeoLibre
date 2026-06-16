@@ -17,7 +17,7 @@ import {
   type DuckDbVectorLoadOptions,
 } from "./duckdb-vector-guard";
 import { ensureGpkgFeatureCount } from "./gpkg-ogr-contents";
-import { isGeoPackage, loadGeoPackageVectorFile } from "./gpkg-reader";
+import { isLikelyGeoPackage, loadGeoPackageVectorFile } from "./gpkg-reader";
 import { getSpatialExtensionPath } from "./spatial-extension-config";
 
 // Re-exported for existing importers (sql-workspace, duckdb-processing, etc.)
@@ -359,7 +359,7 @@ export async function loadDuckDbVectorFile(
   // GeoPackages are read without GDAL to avoid the single-threaded-WASM thread
   // crash in DuckDB's ST_Read (issue #393). A file mislabelled `.gpkg` that is
   // not actually SQLite falls through to the generic ST_Read path below.
-  if (file.extension === "gpkg" && isGeoPackage(file.data)) {
+  if (file.extension === "gpkg" && isLikelyGeoPackage(file.data)) {
     return loadGeoPackageVector(file, options);
   }
 
