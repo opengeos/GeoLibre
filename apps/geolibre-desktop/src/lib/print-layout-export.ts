@@ -6,6 +6,7 @@
  * export helpers rasterize {@link drawLayout} at print resolution.
  */
 import jsPDF from "jspdf";
+import { isFullViewportMapCanvas } from "./print-capture";
 import {
   drawLayout,
   pageDimensionsMm,
@@ -61,6 +62,12 @@ export function captureMapImage(map: MapLike): CapturedMap {
   }
   const canvases = map.getContainer().querySelectorAll("canvas");
   canvases.forEach((c) => {
+    // Composite only the full-viewport render surfaces (the MapLibre base
+    // canvas and any deck.gl overlay). Map controls also add canvases to the
+    // container -- the raster colorbar/colormap previews, the lidar profile
+    // chart -- and stretching one of those over the page would overwrite the
+    // map with, for example, a horizontal colormap ramp.
+    if (!isFullViewportMapCanvas(c, base)) return;
     try {
       ctx.drawImage(c, 0, 0, out.width, out.height);
     } catch (err) {
