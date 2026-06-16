@@ -24,19 +24,35 @@ const BANNER =
   "// Regenerated on each Vite dev-server start / build by\n" +
   "// apps/geolibre-desktop/vite-plugins/copy-rtl-text.ts\n\n";
 
+const PKG = "@mapbox/mapbox-gl-rtl-text";
+
 // Resolve the package's self-contained UMD bundle. `require.resolve` honors the
-// `exports` map and lands on `src/index.js`; the dist bundle sits one level up.
+// `exports` map and lands on `src/index.js`, and the package does not expose
+// `./package.json` (so `require.resolve("<pkg>/package.json")` throws
+// ERR_PACKAGE_PATH_NOT_EXPORTED). So walk up from the entry to the owning
+// package.json and read its declared `main` (the self-contained `dist` bundle),
+// which tracks any future source-layout change instead of assuming `../dist/`.
 function resolveRtlTextDist(): string {
   const require = createRequire(import.meta.url);
-  const entry = require.resolve("@mapbox/mapbox-gl-rtl-text");
-  const dist = resolve(dirname(entry), "../dist/mapbox-gl-rtl-text.js");
-  if (!existsSync(dist)) {
-    throw new Error(
-      `copy-rtl-text: expected the RTL plugin bundle at ${dist}. Is ` +
-        `@mapbox/mapbox-gl-rtl-text installed?`,
-    );
+  const entryDir = dirname(require.resolve(PKG));
+  for (
+    let parent = entryDir;
+    parent !== dirname(parent);
+    parent = dirname(parent)
+  ) {
+    const manifestPath = resolve(parent, "package.json");
+    if (!existsSync(manifestPath)) continue;
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    if (manifest.name !== PKG) continue;
+    const main = typeof manifest.main === "string" ? manifest.main : "";
+    if (!main) break;
+    const dist = resolve(parent, main);
+    if (!existsSync(dist)) break;
+    return dist;
   }
-  return dist;
+  throw new Error(
+    `copy-rtl-text: could not locate ${PKG}'s "main" bundle. Is it installed?`,
+  );
 }
 
 export function copyRtlText(destPath: string): Plugin {
