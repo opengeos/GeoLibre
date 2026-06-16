@@ -178,6 +178,9 @@ export function AttributeChartDialog({
                   <option value="box" disabled={!hasNumeric}>
                     Box plot
                   </option>
+                  <option value="pie" disabled={!hasCategory}>
+                    Pie
+                  </option>
                 </Select>
               </div>
 
@@ -248,7 +251,7 @@ export function AttributeChartDialog({
                 </>
               )}
 
-              {chartType === "bar" && (
+              {(chartType === "bar" || chartType === "pie") && (
                 <>
                   <FieldSelect
                     id="chart-category"
@@ -271,9 +274,12 @@ export function AttributeChartDialog({
                       <option value="sum" disabled={!hasNumeric}>
                         Sum
                       </option>
-                      <option value="mean" disabled={!hasNumeric}>
-                        Average
-                      </option>
+                      {/* Averaging parts of a whole is meaningless for a pie. */}
+                      {chartType !== "pie" && (
+                        <option value="mean" disabled={!hasNumeric}>
+                          Average
+                        </option>
+                      )}
                     </Select>
                   </div>
                   {barAgg !== "count" && (

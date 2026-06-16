@@ -1,6 +1,10 @@
 import type { DashboardWidget } from "@geolibre/core";
-import { useAppStore } from "@geolibre/core";
-import { Button } from "@geolibre/ui";
+import {
+  MAX_DASHBOARD_COLUMNS,
+  MIN_DASHBOARD_COLUMNS,
+  useAppStore,
+} from "@geolibre/core";
+import { Button, Select } from "@geolibre/ui";
 import {
   ChevronLeft,
   ChevronRight,
@@ -57,11 +61,22 @@ export function DashboardPanel() {
   const { t } = useTranslation();
   const widgets = useAppStore((s) => s.widgets);
   const layers = useAppStore((s) => s.layers);
+  const columns = useAppStore((s) => s.dashboardColumns);
   const setDashboardOpen = useAppStore((s) => s.setDashboardOpen);
+  const setDashboardColumns = useAppStore((s) => s.setDashboardColumns);
   const addWidget = useAppStore((s) => s.addWidget);
   const updateWidget = useAppStore((s) => s.updateWidget);
   const removeWidget = useAppStore((s) => s.removeWidget);
   const moveWidget = useAppStore((s) => s.moveWidget);
+
+  // Choices for the column-count picker, derived from the supported range.
+  const columnOptions = useMemo(() => {
+    const values: number[] = [];
+    for (let n = MIN_DASHBOARD_COLUMNS; n <= MAX_DASHBOARD_COLUMNS; n += 1) {
+      values.push(n);
+    }
+    return values;
+  }, []);
 
   const sectionRef = useRef<HTMLElement>(null);
   const resizeCleanupRef = useRef<(() => void) | null>(null);
@@ -165,7 +180,26 @@ export function DashboardPanel() {
         <span className="text-xs text-muted-foreground">
           {t("dashboard.widgetCount", { count: widgets.length })}
         </span>
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex items-center gap-2">
+          {widgets.length > 0 ? (
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span className="hidden sm:inline">{t("dashboard.columns")}</span>
+              <Select
+                aria-label={t("dashboard.columns")}
+                className="h-8 w-16"
+                value={String(columns)}
+                onChange={(event) =>
+                  setDashboardColumns(Number(event.target.value))
+                }
+              >
+                {columnOptions.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </Select>
+            </label>
+          ) : null}
           <Button
             variant="outline"
             size="sm"
@@ -204,7 +238,12 @@ export function DashboardPanel() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
+          <div
+            className="grid gap-3"
+            style={{
+              gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+            }}
+          >
             {widgets.map((widget, index) => (
               <WidgetCard
                 key={widget.id}
@@ -274,6 +313,8 @@ function WidgetCard({
         return `${t("dashboard.chartType.line")} · ${widget.field ?? ""}`;
       case "box":
         return `${t("dashboard.chartType.box")} · ${widget.field ?? ""}`;
+      case "pie":
+        return `${t("dashboard.chartType.pie")} · ${widget.category ?? ""}`;
     }
   }
 

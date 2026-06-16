@@ -681,6 +681,7 @@
     "title": "Dashboard",
     "resize": "Resize dashboard panel",
     "close": "Close dashboard",
+    "columns": "Columns",
     "addWidget": "Add widget",
     "widgetCount_one": "{{count}} widget",
     "widgetCount_other": "{{count}} widgets",
@@ -698,7 +699,8 @@
       "scatter": "Scatter",
       "bar": "Bar",
       "line": "Line",
-      "box": "Box plot"
+      "box": "Box plot",
+      "pie": "Pie"
     },
     "aggregate": {
       "count": "Count",

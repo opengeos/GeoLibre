@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import {
   DEFAULT_BASEMAP,
+  DEFAULT_DASHBOARD_COLUMNS,
   createEmptyProject,
+  normalizeDashboardColumns,
   normalizeWidgets,
   parseProject,
   projectFromStore,
@@ -47,7 +49,7 @@ describe("normalizeWidgets", () => {
     const result = normalizeWidgets([
       { id: "", layerId: "a", type: "bar" },
       { id: "x", layerId: "", type: "bar" },
-      { id: "y", layerId: "a", type: "pie" },
+      { id: "y", layerId: "a", type: "donut" },
       widget({ id: "good", layerId: "a", type: "box", field: "pop" }),
     ] as never);
     assert.deepEqual(
@@ -109,6 +111,28 @@ describe("widgets in the project file", () => {
     assert.deepEqual(reparsed.widgets, widgets);
   });
 
+  it("persists a non-default column count and omits the default", () => {
+    const base = {
+      projectName: "Widgets",
+      mapView: { center: [0, 0] as [number, number], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [],
+      preferences: createEmptyProject().preferences,
+      metadata: {},
+    };
+    const custom = projectFromStore({ ...base, dashboardColumns: 3 });
+    assert.equal(custom.dashboardColumns, 3);
+    assert.equal(parseProject(serializeProject(custom)).dashboardColumns, 3);
+
+    const defaulted = projectFromStore({
+      ...base,
+      dashboardColumns: DEFAULT_DASHBOARD_COLUMNS,
+    });
+    assert.equal("dashboardColumns" in defaulted, false);
+  });
+
   it("omits the widgets key when none are valid", () => {
     const project = projectFromStore({
       projectName: "Widgets",
@@ -122,6 +146,17 @@ describe("widgets in the project file", () => {
       metadata: {},
     });
     assert.equal("widgets" in project, false);
+  });
+});
+
+describe("normalizeDashboardColumns", () => {
+  it("clamps into range and falls back to the default", () => {
+    assert.equal(normalizeDashboardColumns(3), 3);
+    assert.equal(normalizeDashboardColumns(0), 1);
+    assert.equal(normalizeDashboardColumns(99), 4);
+    assert.equal(normalizeDashboardColumns(2.9), 2);
+    assert.equal(normalizeDashboardColumns(undefined), DEFAULT_DASHBOARD_COLUMNS);
+    assert.equal(normalizeDashboardColumns("x"), DEFAULT_DASHBOARD_COLUMNS);
   });
 });
 
@@ -169,6 +204,15 @@ describe("app store widget actions", () => {
       ["a"],
     );
   });
+
+  it("clamps the dashboard column count", () => {
+    useAppStore.getState().setDashboardColumns(3);
+    assert.equal(useAppStore.getState().dashboardColumns, 3);
+    useAppStore.getState().setDashboardColumns(99);
+    assert.equal(useAppStore.getState().dashboardColumns, 4);
+    useAppStore.getState().setDashboardColumns(0);
+    assert.equal(useAppStore.getState().dashboardColumns, 1);
+  });
 });
 
 describe("computeChart", () => {
@@ -194,6 +238,19 @@ describe("computeChart", () => {
     assert.equal(result.type, "bar");
     if (result.type === "bar") {
       assert.equal(result.result?.bars.length, 2);
+    }
+  });
+
+  it("dispatches a pie of category shares that sum to the whole", () => {
+    const result = computeChart(rows, {
+      type: "pie",
+      category: "kind",
+      aggregation: "count",
+    });
+    assert.equal(result.type, "pie");
+    if (result.type === "pie") {
+      assert.equal(result.result?.total, 3);
+      assert.equal(result.result?.slices.length, 2);
     }
   });
 

@@ -22,10 +22,13 @@ import {
 } from "./layer-groups";
 import {
   DEFAULT_BASEMAP,
+  DEFAULT_DASHBOARD_COLUMNS,
   DEFAULT_LAYER_STYLE,
   DEFAULT_LEGEND_CONFIG,
   DEFAULT_PROJECT_PREFERENCES,
   DEFAULT_STORY_MAP,
+  MAX_DASHBOARD_COLUMNS,
+  MIN_DASHBOARD_COLUMNS,
   type CollaborationParticipant,
   type CollaborationPresence,
   type CollaborationState,
@@ -135,6 +138,8 @@ export interface AppState {
   models: ProcessingModel[];
   /** Saved Dashboard panel chart widgets (issue #401). */
   widgets: DashboardWidget[];
+  /** Number of columns in the Dashboard widget grid. */
+  dashboardColumns: number;
   selectedLayerId: string | null;
   selectedFeatureId: string | null;
   identifyLayerId: string | null;
@@ -220,6 +225,8 @@ export interface AppState {
   removeWidget: (id: string) => void;
   /** Move a widget to a new index, clamped into range, preserving the rest. */
   moveWidget: (id: string, toIndex: number) => void;
+  /** Set the Dashboard widget-grid column count (clamped into range). */
+  setDashboardColumns: (columns: number) => void;
 
   setStorymap: (storymap: StoryMap | null) => void;
   updateStorymapSettings: (
@@ -404,6 +411,7 @@ export const useAppStore = create<AppState>()(
       storymap: null,
       models: [],
       widgets: [],
+      dashboardColumns: DEFAULT_DASHBOARD_COLUMNS,
       selectedLayerId: null,
       selectedFeatureId: null,
       identifyLayerId: null,
@@ -554,6 +562,14 @@ export const useAppStore = create<AppState>()(
           const [moved] = widgets.splice(from, 1);
           widgets.splice(target, 0, moved);
           return { widgets, isDirty: true };
+        }),
+      setDashboardColumns: (columns) =>
+        set({
+          dashboardColumns: Math.max(
+            MIN_DASHBOARD_COLUMNS,
+            Math.min(MAX_DASHBOARD_COLUMNS, Math.trunc(columns)),
+          ),
+          isDirty: true,
         }),
 
       setStorymap: (storymap) => set({ storymap, isDirty: true }),

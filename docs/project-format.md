@@ -128,13 +128,15 @@ self-contained HTML page for static hosting.
 ```
 
 Each widget binds a chart to a layer's attributes. `type` is one of `histogram`,
-`scatter`, `bar`, `line`, or `box`. Which other keys apply depends on the type:
-`field` (histogram/line/box), `xField`/`yField` (scatter), `category` +
-`aggregation` (`count`/`sum`/`mean`) + `valueField` (bar), `bins` (histogram).
-`title` is an optional label; unused keys are ignored. Build them in the
-**Dashboard** panel (Tools → Dashboard). Charts read from GeoJSON-backed vector
-layers and DuckDB query layers; widgets bound to a missing or non-attribute
-layer are shown as empty.
+`scatter`, `bar`, `line`, `box`, or `pie`. Which other keys apply depends on the
+type: `field` (histogram/line/box), `xField`/`yField` (scatter), `category` +
+`aggregation` + `valueField` (bar/pie), `bins` (histogram). Bar `aggregation` is
+`count`/`sum`/`mean`; pie is `count`/`sum` only. `title` is an optional label;
+unused keys are ignored. The Dashboard panel (Tools → Dashboard, or the
+**Dashboard** button in the attribute table) also stores `dashboardColumns`, the
+widget-grid column count (1-4, default 2), at the top level of the project.
+Charts read from GeoJSON-backed vector layers and DuckDB query layers; widgets
+bound to a missing or non-attribute layer are shown as empty.
 
 ## Layer object
 

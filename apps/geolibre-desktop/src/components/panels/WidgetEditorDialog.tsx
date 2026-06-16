@@ -95,9 +95,9 @@ export function WidgetEditorDialog({
   const hasChartable = hasNumeric || hasCategory;
 
   // A widget can only be saved when its chart type has the fields it needs in
-  // the chosen layer (bar needs a category; the rest need a numeric field).
-  const canSave =
-    layerId !== "" && (type === "bar" ? hasCategory : hasNumeric);
+  // the chosen layer (bar/pie need a category; the rest need a numeric field).
+  const isCategorical = type === "bar" || type === "pie";
+  const canSave = layerId !== "" && (isCategorical ? hasCategory : hasNumeric);
 
   const save = () => {
     if (!canSave) return;
@@ -116,10 +116,12 @@ export function WidgetEditorDialog({
       next.xField = pick(xField, numericCols);
       next.yField = pick(yField, numericCols);
     }
-    if (type === "bar") {
+    if (type === "bar" || type === "pie") {
       next.category = pick(category, categoryCols);
-      next.aggregation = aggregation;
-      if (aggregation !== "count") next.valueField = pick(valueField, numericCols);
+      // A pie shows parts of a whole, so it only counts or sums (no average).
+      const agg = type === "pie" && aggregation === "mean" ? "sum" : aggregation;
+      next.aggregation = agg;
+      if (agg !== "count") next.valueField = pick(valueField, numericCols);
     }
     onSave(next);
     onOpenChange(false);
@@ -184,6 +186,9 @@ export function WidgetEditorDialog({
                     </option>
                     <option value="box" disabled={!hasNumeric}>
                       {t("dashboard.chartType.box")}
+                    </option>
+                    <option value="pie" disabled={!hasCategory}>
+                      {t("dashboard.chartType.pie")}
                     </option>
                   </Select>
                 </div>
@@ -250,7 +255,7 @@ export function WidgetEditorDialog({
                   </>
                 )}
 
-                {type === "bar" && (
+                {(type === "bar" || type === "pie") && (
                   <>
                     <FieldSelect
                       id="widget-category"
@@ -273,9 +278,12 @@ export function WidgetEditorDialog({
                         <option value="sum" disabled={!hasNumeric}>
                           {t("dashboard.aggregate.sum")}
                         </option>
-                        <option value="mean" disabled={!hasNumeric}>
-                          {t("dashboard.aggregate.mean")}
-                        </option>
+                        {/* Averaging parts of a whole is meaningless for a pie. */}
+                        {type !== "pie" && (
+                          <option value="mean" disabled={!hasNumeric}>
+                            {t("dashboard.aggregate.mean")}
+                          </option>
+                        )}
                       </Select>
                     </div>
                     {aggregation !== "count" && (

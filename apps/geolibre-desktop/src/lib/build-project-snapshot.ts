@@ -41,6 +41,7 @@ export function buildProjectSnapshot(
     storymap: state.storymap,
     models: state.models,
     widgets: state.widgets,
+    dashboardColumns: state.dashboardColumns,
     metadata: state.metadata,
   });
 }

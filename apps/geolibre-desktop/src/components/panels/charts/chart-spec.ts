@@ -11,6 +11,7 @@ import {
   computeBox,
   computeHistogram,
   computeLine,
+  computePie,
   computeScatter,
   DEFAULT_HISTOGRAM_BINS,
   numericValues,
@@ -21,6 +22,7 @@ import {
   type ChartType,
   type HistogramResult,
   type LineResult,
+  type PieResult,
   type ScatterResult,
 } from "../../../lib/attribute-charts";
 
@@ -61,7 +63,13 @@ export type ChartResult =
       category: string;
     }
   | { type: "line"; result: LineResult | null; field: string }
-  | { type: "box"; result: BoxResult | null; field: string };
+  | { type: "box"; result: BoxResult | null; field: string }
+  | {
+      type: "pie";
+      result: PieResult | null;
+      category: string;
+      aggregation: BarAggregation;
+    };
 
 /**
  * Compute a chart from `rows` and a {@link ChartSpec}. Pure (no React); the
@@ -128,6 +136,23 @@ export function computeChart(rows: ChartRow[], spec: ChartSpec): ChartResult {
         type: "box",
         field,
         result: field ? computeBox(numericValues(rows, field)) : null,
+      };
+    }
+    case "pie": {
+      const category = spec.category ?? "";
+      const aggregation = spec.aggregation ?? "count";
+      return {
+        type: "pie",
+        category,
+        aggregation,
+        result: category
+          ? computePie(
+              rows,
+              category,
+              aggregation,
+              aggregation === "count" ? null : (spec.valueField ?? ""),
+            )
+          : null,
       };
     }
   }

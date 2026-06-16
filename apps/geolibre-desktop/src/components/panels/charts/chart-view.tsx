@@ -13,9 +13,32 @@ import {
   type BoxResult,
   type HistogramResult,
   type LineResult,
+  type PieResult,
   type ScatterResult,
 } from "../../../lib/attribute-charts";
 import { type ChartResult } from "./chart-spec";
+
+/**
+ * Categorical color palette for charts whose marks are distinct categories
+ * (bar, pie). Fixed hues (not theme CSS vars) so each category reads as its own
+ * color on both light and dark backgrounds, à la Foursquare/CARTO dashboards.
+ * Single-series charts (histogram/line/scatter/box) keep the theme primary.
+ */
+export const CHART_PALETTE = [
+  "#3fb1ce", // teal
+  "#f4a259", // orange
+  "#8b5cf6", // violet
+  "#22c55e", // green
+  "#eab308", // amber
+  "#ef4444", // red
+  "#0ea5e9", // sky
+  "#ec4899", // pink
+];
+
+/** The palette color for the category at `index`, cycling when it overflows. */
+function paletteColor(index: number): string {
+  return CHART_PALETTE[index % CHART_PALETTE.length];
+}
 
 export {
   chartResultHasData,
@@ -49,6 +72,14 @@ export function ChartView({ result }: { result: ChartResult }) {
       return <LineChart result={result.result} field={result.field} />;
     case "box":
       return <BoxChart result={result.result} field={result.field} />;
+    case "pie":
+      return (
+        <PieChart
+          result={result.result}
+          aggregation={result.aggregation}
+          category={result.category}
+        />
+      );
   }
 }
 
@@ -333,8 +364,8 @@ function BarChart({
                 y={top}
                 width={Math.max(1, slot - gap)}
                 height={Math.max(0, height)}
-                fill={SERIES}
-                opacity={0.85}
+                fill={paletteColor(index)}
+                opacity={0.9}
               >
                 <title>{`${datum.label}: ${formatAxisValue(datum.value)} (${datum.count} row${datum.count === 1 ? "" : "s"})`}</title>
               </rect>
@@ -506,6 +537,88 @@ function BoxChart({
       <Caption>
         {count.toLocaleString()} value{count === 1 ? "" : "s"} · five-number
         summary
+      </Caption>
+    </>
+  );
+}
+
+function PieChart({
+  result,
+  aggregation,
+  category,
+}: {
+  result: PieResult | null;
+  aggregation: BarAggregation;
+  category: string;
+}) {
+  if (!result) return <EmptyChart message="No positive values to chart." />;
+
+  const { slices, total } = result;
+  const radius = INNER_H / 2 - 6;
+  const cx = MARGIN.left + radius;
+  const cy = MARGIN.top + INNER_H / 2;
+  const legendX = cx + radius + 24;
+  const legendStep = Math.min(22, INNER_H / Math.max(slices.length, 1));
+
+  // Accumulate slice angles from the top (12 o'clock), clockwise.
+  let angle = -Math.PI / 2;
+  const arcs = slices.map((slice, index) => {
+    const fraction = slice.value / total;
+    const start = angle;
+    const end = angle + fraction * Math.PI * 2;
+    angle = end;
+    const x0 = cx + radius * Math.cos(start);
+    const y0 = cy + radius * Math.sin(start);
+    const x1 = cx + radius * Math.cos(end);
+    const y1 = cy + radius * Math.sin(end);
+    const largeArc = end - start > Math.PI ? 1 : 0;
+    // A lone slice is a full circle, which a single arc cannot express; draw it
+    // as two half-circle arcs instead.
+    const d =
+      slices.length === 1
+        ? `M ${cx - radius} ${cy} A ${radius} ${radius} 0 1 1 ${cx + radius} ${cy} A ${radius} ${radius} 0 1 1 ${cx - radius} ${cy} Z`
+        : `M ${cx} ${cy} L ${x0} ${y0} A ${radius} ${radius} 0 ${largeArc} 1 ${x1} ${y1} Z`;
+    return { d, color: paletteColor(index), slice, fraction };
+  });
+
+  return (
+    <>
+      <svg
+        viewBox={`0 0 ${CHART_W} ${CHART_H}`}
+        width="100%"
+        role="img"
+        aria-label={`Pie chart of ${aggregation} by ${category}`}
+        className="h-auto w-full"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        {arcs.map(({ d, color, slice }) => (
+          <path key={slice.label} d={d} fill={color} stroke="hsl(var(--background))" strokeWidth={1}>
+            <title>{`${slice.label}: ${formatAxisValue(slice.value)} (${Math.round(
+              (slice.value / total) * 100,
+            )}%)`}</title>
+          </path>
+        ))}
+        {arcs.map(({ color, slice, fraction }, index) => {
+          const y = MARGIN.top + index * legendStep;
+          return (
+            <g key={`legend-${slice.label}`}>
+              <rect x={legendX} y={y} width={10} height={10} rx={2} fill={color} />
+              <text
+                x={legendX + 16}
+                y={y + 5}
+                dominantBaseline="middle"
+                fontSize={11}
+                fill={TICK}
+              >
+                {`${truncateLabel(slice.label, 18)} · ${Math.round(fraction * 100)}%`}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      <Caption>
+        {aggregation === "count" ? "row count" : "sum"} · {slices.length} categor
+        {slices.length === 1 ? "y" : "ies"}
       </Caption>
     </>
   );

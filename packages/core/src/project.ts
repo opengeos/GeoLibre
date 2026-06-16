@@ -3,7 +3,10 @@ import {
   DEFAULT_LAYER_STYLE,
   DEFAULT_LEGEND_CONFIG,
   DEFAULT_PROJECT_PREFERENCES,
+  DEFAULT_DASHBOARD_COLUMNS,
   DEFAULT_STORY_MAP,
+  MAX_DASHBOARD_COLUMNS,
+  MIN_DASHBOARD_COLUMNS,
   PROJECT_VERSION,
   type DashboardWidget,
   type DashboardWidgetAggregation,
@@ -104,6 +107,9 @@ export function parseProject(json: string): GeoLibreProject {
     storymap: normalizeStoryMap(data.storymap) ?? undefined,
     models: normalizeModels(data.models) ?? undefined,
     widgets: normalizeWidgets(data.widgets) ?? undefined,
+    ...(data.dashboardColumns === undefined
+      ? {}
+      : { dashboardColumns: normalizeDashboardColumns(data.dashboardColumns) }),
     metadata: data.metadata ?? {},
   };
 }
@@ -402,6 +408,7 @@ const DASHBOARD_WIDGET_TYPES: readonly DashboardWidgetType[] = [
   "bar",
   "line",
   "box",
+  "pie",
 ];
 const DASHBOARD_WIDGET_AGGREGATIONS: readonly DashboardWidgetAggregation[] = [
   "count",
@@ -458,6 +465,23 @@ export function normalizeWidgets(value: unknown): DashboardWidget[] | null {
     widgets.push(widget);
   }
   return widgets.length > 0 ? widgets : null;
+}
+
+/**
+ * Clamp an untrusted dashboard column count into the supported range, falling
+ * back to the default for a missing or non-finite value.
+ *
+ * @param value Raw `dashboardColumns` value from the project JSON.
+ * @returns An integer column count within [MIN, MAX].
+ */
+export function normalizeDashboardColumns(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_DASHBOARD_COLUMNS;
+  }
+  return Math.max(
+    MIN_DASHBOARD_COLUMNS,
+    Math.min(MAX_DASHBOARD_COLUMNS, Math.trunc(value)),
+  );
 }
 
 function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
@@ -743,6 +767,7 @@ export function projectFromStore(state: {
   storymap?: StoryMap | null;
   models?: ProcessingModel[] | null;
   widgets?: DashboardWidget[] | null;
+  dashboardColumns?: number;
   metadata: Record<string, unknown>;
 }): GeoLibreProject {
   const styles: Record<string, LayerStyle> = {};
@@ -754,6 +779,12 @@ export function projectFromStore(state: {
   const storymap = normalizeStoryMap(state.storymap);
   const models = normalizeModels(state.models);
   const widgets = normalizeWidgets(state.widgets);
+  // Persist a non-default column count only; a default-layout dashboard (or a
+  // widget-less project) stays free of the key for legacy readers.
+  const dashboardColumns =
+    state.dashboardColumns === undefined
+      ? DEFAULT_DASHBOARD_COLUMNS
+      : normalizeDashboardColumns(state.dashboardColumns);
   // Persist every group (including empty folders, which the UI supports). The
   // key is spread only when non-empty so legacy readers that don't recognise it
   // are unaffected; normalizeLayerGroups round-trips them back on load.
@@ -774,6 +805,7 @@ export function projectFromStore(state: {
     ...(storymap ? { storymap } : {}),
     ...(models ? { models } : {}),
     ...(widgets ? { widgets } : {}),
+    ...(dashboardColumns !== DEFAULT_DASHBOARD_COLUMNS ? { dashboardColumns } : {}),
     metadata: state.metadata,
   };
 }
@@ -848,6 +880,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
   storymap: StoryMap | null;
   models: ProcessingModel[];
   widgets: DashboardWidget[];
+  dashboardColumns: number;
   metadata: Record<string, unknown>;
 } {
   const layers = project.layers.map((layer) => ({
@@ -887,6 +920,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
     storymap: normalizeStoryMap(project.storymap),
     models: normalizeModels(project.models) ?? [],
     widgets: normalizeWidgets(project.widgets) ?? [],
+    dashboardColumns: normalizeDashboardColumns(project.dashboardColumns),
     metadata: project.metadata,
   };
 }

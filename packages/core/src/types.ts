@@ -543,6 +543,11 @@ export interface ProcessingModel {
   steps: ProcessingModelStep[];
 }
 
+/** Column-count bounds for the Dashboard panel's widget grid. */
+export const MIN_DASHBOARD_COLUMNS = 1;
+export const MAX_DASHBOARD_COLUMNS = 4;
+export const DEFAULT_DASHBOARD_COLUMNS = 2;
+
 /** The chart a {@link DashboardWidget} draws. Mirrors the attribute Charts
  * panel's types so a widget reuses the same rendering. */
 export type DashboardWidgetType =
@@ -550,7 +555,8 @@ export type DashboardWidgetType =
   | "scatter"
   | "bar"
   | "line"
-  | "box";
+  | "box"
+  | "pie";
 
 /** How a bar widget reduces its category groups. */
 export type DashboardWidgetAggregation = "count" | "sum" | "mean";
@@ -608,6 +614,8 @@ export interface GeoLibreProject {
   models?: ProcessingModel[];
   /** Saved Dashboard panel chart widgets (issue #401). */
   widgets?: DashboardWidget[];
+  /** Number of columns in the Dashboard widget grid; omitted when default. */
+  dashboardColumns?: number;
   metadata: Record<string, unknown>;
 }
 
