@@ -23,6 +23,14 @@ describe("isFullViewportMapCanvas", () => {
     );
   });
 
+  it("drops a canvas just below the 90% threshold in height", () => {
+    // 1920 * 0.9 = 1728 (pass), 1080 * 0.9 = 972 -> 971 should fail.
+    assert.equal(
+      isFullViewportMapCanvas({ width: 1920, height: 971 }, base),
+      false,
+    );
+  });
+
   it("drops a small raster colorbar/colormap preview canvas", () => {
     // The raster control renders a horizontal colormap ramp into a small canvas
     // (createLinearGradient(0, 0, width, 0)); stretching it over the page was
@@ -40,10 +48,15 @@ describe("isFullViewportMapCanvas", () => {
     );
   });
 
-  it("is permissive when the base size is unknown", () => {
+  it("keeps only the base when the base size is unknown", () => {
+    const unknownBase = { width: 0, height: 0 };
+    // The base itself is still kept (by identity)...
+    assert.equal(isFullViewportMapCanvas(unknownBase, unknownBase), true);
+    // ...but other canvases are dropped, so a 0x0 base cannot reintroduce the
+    // colorbar-clobbering bug.
     assert.equal(
-      isFullViewportMapCanvas({ width: 280, height: 24 }, { width: 0, height: 0 }),
-      true,
+      isFullViewportMapCanvas({ width: 280, height: 24 }, unknownBase),
+      false,
     );
   });
 });

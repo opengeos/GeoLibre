@@ -17,7 +17,8 @@
  * capture loop stretches them to fill the whole page and clobbers the map with,
  * for example, a horizontal colormap ramp.
  *
- * @param canvas - A candidate canvas (only its dimensions are read).
+ * @param canvas - A candidate canvas, kept if it is the base by identity or
+ *   matches the base size.
  * @param base - The MapLibre base canvas, used as the reference size.
  * @returns True for the base canvas and any other canvas at least 90% of the
  *   base's width and height; false for the smaller control/preview canvases.
@@ -27,7 +28,9 @@ export function isFullViewportMapCanvas(
   base: { width: number; height: number },
 ): boolean {
   if (canvas === base) return true;
-  // If the base size is unknown, be permissive rather than drop everything.
-  if (base.width === 0 || base.height === 0) return true;
+  // If the base size is unknown, keep only the base itself: compositing other
+  // canvases into a 0-sized output is a no-op anyway, and returning true here
+  // would let a control's colorbar canvas through and reintroduce the bug.
+  if (base.width === 0 || base.height === 0) return false;
   return canvas.width >= base.width * 0.9 && canvas.height >= base.height * 0.9;
 }
