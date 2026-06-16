@@ -117,6 +117,7 @@ export {
   RASTER_SOURCE_KIND,
   getRasterBandStats,
 } from "./plugins/raster-symbology-texture";
+export { colormapColors, warmColormapColors } from "./plugins/colormap-colors";
 export {
   closeVectorLayerPanel,
   openVectorLayerPanel,

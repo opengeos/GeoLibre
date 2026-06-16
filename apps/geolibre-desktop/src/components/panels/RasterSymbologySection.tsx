@@ -1,7 +1,5 @@
 import {
   type GeoLibreLayer,
-  VECTOR_COLOR_RAMPS,
-  getVectorColorRamp,
   parseHexColorList,
   useAppStore,
 } from "@geolibre/core";
@@ -11,11 +9,14 @@ import {
   type RasterBandStats,
   type RasterClassificationMethod,
   type RasterSymbology,
+  colormapColors,
   computeRasterBreaks,
   getRasterBandStats,
   savedRasterSymbology,
+  warmColormapColors,
 } from "@geolibre/plugins";
 import { Input, Label, Select, Separator, Textarea } from "@geolibre/ui";
+import { COLORMAP_OPTIONS } from "maplibre-gl-raster";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type RasterStateRecord = {
@@ -44,11 +45,12 @@ const CUSTOM_RAMP_VALUE = "__custom__";
 /** A custom ramp needs at least this many colors to interpolate. */
 const MIN_CUSTOM_COLORS = 2;
 /**
- * Named ramps sorted by label for the dropdown. A copy is sorted (not the
- * source array) so `getVectorColorRamp`'s first-ramp fallback stays viridis.
+ * Every renderer colormap (the same list the maplibre-gl-raster panel offers),
+ * sorted by display label for the dropdown. Labels use matplotlib casing
+ * (RdBu, YlOrBr, …); the value is the lowercase colormap key.
  */
-const SORTED_COLOR_RAMPS = [...VECTOR_COLOR_RAMPS].sort((a, b) =>
-  a.label.localeCompare(b.label),
+const SORTED_COLORMAPS = [...COLORMAP_OPTIONS].sort((a, b) =>
+  a.label.toLowerCase().localeCompare(b.label.toLowerCase()),
 );
 
 function readRasterState(layer: GeoLibreLayer): RasterStateRecord {
@@ -176,6 +178,38 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
     });
   }, [bandCount, bandNames]);
 
+  // Colors for the ramp preview gradient. Custom ramps use their own colors;
+  // built-in ramps resolve synchronously; other (sprite) colormaps are sampled
+  // from the renderer's sprite asynchronously and cached. Declared here (before
+  // the RGB early return) so the hook order stays stable.
+  const previewRamp = symbology?.ramp ?? state.colormap ?? DEFAULT_RAMP;
+  const previewCustom =
+    (symbology?.customColors?.length ?? 0) >= MIN_CUSTOM_COLORS
+      ? (symbology?.customColors as string[])
+      : null;
+  const [rampPreview, setRampPreview] = useState<readonly string[]>([]);
+  const previewCustomKey = previewCustom?.join(",") ?? "";
+  useEffect(() => {
+    if (previewCustom) {
+      setRampPreview(previewCustom);
+      return;
+    }
+    const known = colormapColors(previewRamp);
+    if (known) {
+      setRampPreview(known);
+      return;
+    }
+    let cancelled = false;
+    void warmColormapColors(previewRamp).then((colors) => {
+      if (!cancelled && colors) setRampPreview(colors);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // previewCustomKey captures the custom-colors identity for the deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewRamp, previewCustomKey]);
+
   function commit(options: {
     statePatch?: Partial<RasterStateRecord>;
     symbology?: RasterSymbology | null;
@@ -282,12 +316,9 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
   const reversed = symbology?.reversed ?? false;
   const customColors = symbology?.customColors;
   const isCustom = (customColors?.length ?? 0) >= MIN_CUSTOM_COLORS;
-  // A custom ramp interpolates the user's colors; otherwise the named ramp's
-  // anchors. The preview mirrors the reverse toggle either way.
-  const baseColors = isCustom
-    ? (customColors as string[])
-    : getVectorColorRamp(ramp).colors;
-  const orderedPreview = reversed ? [...baseColors].reverse() : baseColors;
+  // rampPreview (resolved above) holds the ramp's colors; mirror the reverse
+  // toggle for the preview gradient.
+  const orderedPreview = reversed ? [...rampPreview].reverse() : rampPreview;
   const rampSelectValue = isCustom ? CUSTOM_RAMP_VALUE : ramp;
 
   // Reverse and custom colors are GeoLibre extensions the upstream control
@@ -407,24 +438,32 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
           onChange={(event) => {
             const value = event.target.value;
             if (value === CUSTOM_RAMP_VALUE) {
-              // Seed the editable list from the current named ramp's anchors so
-              // the user starts from a sensible, valid (>= 2 color) ramp.
-              setCustomColors([...getVectorColorRamp(ramp).colors]);
+              // Seed the editable list from the current ramp's resolved colors
+              // so the user starts from a sensible, valid (>= 2 color) ramp.
+              const seed = colormapColors(ramp) ?? rampPreview;
+              if (seed.length >= MIN_CUSTOM_COLORS) {
+                setCustomColors([...seed]);
+              } else {
+                void warmColormapColors(ramp).then((colors) => {
+                  if (colors && colors.length >= MIN_CUSTOM_COLORS) {
+                    setCustomColors([...colors]);
+                  }
+                });
+              }
             } else {
               selectNamedRamp(value);
             }
           }}
         >
-          {/* A raster may arrive with any upstream colormap name (e.g. the
-              control's "gray"/"palette" default); surface it so the select
-              reflects what is actually rendered instead of silently showing
-              the first ramp. */}
-          {!isCustom && !VECTOR_COLOR_RAMPS.some((r) => r.value === ramp) && (
+          {/* A raster may arrive with a colormap name not in the list (e.g. the
+              control's "palette" default); surface it so the select reflects
+              what is actually rendered instead of silently showing the first. */}
+          {!isCustom && !COLORMAP_OPTIONS.some((o) => o.name === ramp) && (
             <option value={ramp}>{ramp}</option>
           )}
-          {SORTED_COLOR_RAMPS.map((colorRamp) => (
-            <option key={colorRamp.value} value={colorRamp.value}>
-              {colorRamp.label}
+          {SORTED_COLORMAPS.map((colormap) => (
+            <option key={colormap.name} value={colormap.name}>
+              {colormap.label}
             </option>
           ))}
           <option value={CUSTOM_RAMP_VALUE}>Custom…</option>
@@ -433,7 +472,11 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
           aria-hidden="true"
           className="h-4 rounded-sm border"
           style={{
-            background: `linear-gradient(90deg, ${orderedPreview.join(", ")})`,
+            // Empty while a sprite colormap is still being sampled.
+            background:
+              orderedPreview.length >= 2
+                ? `linear-gradient(90deg, ${orderedPreview.join(", ")})`
+                : undefined,
           }}
         />
         {isCustom && (

@@ -18,6 +18,12 @@ import {
   isRasterControlStoreLayer,
   isRasterStoreSyncSuspended,
 } from "./raster-layer-sync";
+import { colormapColors, warmColormapColors } from "./colormap-colors";
+
+/** Whether a symbology carries user-entered custom colors (>= 2). */
+function hasCustomRamp(symbology: RasterSymbology): boolean {
+  return (symbology.customColors?.length ?? 0) >= 2;
+}
 
 // These types mirror undocumented private members of the maplibre-gl-raster
 // LayerManager (verified against v0.2.0) and the deck.gl-raster Colormap
@@ -194,9 +200,18 @@ function ensureTexture(
     const { classified, breaks, ramp, reversed, customColors } = entry.symbology;
     // Classified ramps step through the class breaks; a custom continuous ramp
     // is a smooth gradient of the user's colors. (A built-in continuous ramp
-    // never reaches here -- it has no texture.)
+    // never reaches here -- it has no texture.) For a named sprite colormap the
+    // colors come from the warmed cache; until it resolves, colormapColors is
+    // null and buildSteppedColormapRgba falls back (reconcile rebuilds on warm).
+    const custom =
+      customColors && customColors.length >= 2 ? customColors : undefined;
     const rgba = classified
-      ? buildSteppedColormapRgba(breaks, ramp, reversed, customColors)
+      ? buildSteppedColormapRgba(
+          breaks,
+          ramp,
+          reversed,
+          custom ?? colormapColors(ramp) ?? undefined,
+        )
       : buildContinuousColormapRgba(customColors ?? [], reversed);
     // The DOM ImageData ctor types its buffer as ArrayBuffer (not the wider
     // ArrayBufferLike the Uint8ClampedArray generic carries); the runtime
@@ -263,6 +278,27 @@ function reconcile(control: unknown): void {
       existing.symbology = symbology;
       // Texture rebuilt lazily on next render via ensureTexture's key check.
       changed = true;
+    }
+
+    // A classified sprite colormap (named, not a built-in ramp, no custom
+    // colors) needs its colors sampled from the renderer's sprite. Warm the
+    // cache and, once the colors arrive, drop the stale fallback texture and
+    // re-render. symbologyKey can't see the async colors, so invalidate here.
+    if (
+      symbology.classified &&
+      !hasCustomRamp(symbology) &&
+      colormapColors(symbology.ramp) === null
+    ) {
+      const id = layer.id;
+      const ramp = symbology.ramp;
+      void warmColormapColors(ramp).then((colors) => {
+        if (!colors) return;
+        const current = entries.get(id);
+        if (!current || current.symbology.ramp !== ramp) return;
+        current.texture?.destroy?.();
+        current.texture = undefined;
+        manager._rebuild?.();
+      });
     }
   }
 
