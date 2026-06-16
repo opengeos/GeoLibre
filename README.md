@@ -20,7 +20,7 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 
 **Video tutorial:** [GeoLibre 1.0: A Free, Open-Source Cloud-Native GIS That Runs Anywhere (Browser, Desktop & Jupyter)](https://youtu.be/87Cm0QagtxI)
 
-## Features (v1.3)
+## Features (v1.4)
 
 - Runs across desktop (Tauri), web (browser), native Android (Tauri v2 mobile), and mobile or small screens, with a responsive, touch-friendly layout that adapts menus, dialogs, and panels (on phones the Layers/Style panels overlay the map as slide-over sheets), plus per-panel visibility through Layout settings
 - MapLibre map workspace with OpenFreeMap basemaps, blank background support, and toggleable navigation, fullscreen, geolocation, globe, terrain, scale, attribution, and logo controls
@@ -37,16 +37,20 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 - SQL Workspace for running DuckDB Spatial SQL against loaded layers, local files, and remote URLs, with sample queries, query history, and adding results to the map or exporting them, plus an in-browser PostGIS SQL engine via PGlite and an Apache Sedona spatial SQL engine
 - Multiple DuckDB SQL query-result layers with identify, selection, and attribute table support
 - Controls menu with Measure, Bookmark, Minimap, and View State tools, a Search panel, and a Print menu with a print layout composer (including a user-editable legend) that exports the map to PNG or PDF
+- Field Collection tool for capturing point, line, and polygon observations with a per-layer custom form (text/number/date/choice fields and an optional photo), placed by device GPS or by tapping the map, written to a GeoJSON layer that flows into the attribute table, export, and offline use
 - Story map builder with a scroll-driven editor, presenter view, and standalone HTML export
 - Real-time multi-user collaboration (MVP; requires the `VITE_GEOLIBRE_COLLAB_URL` build variable — see [docs/collaboration.md](docs/collaboration.md)) so several people can edit the same project together
 - Natural-language GIS assistant that turns plain-English requests into auditable, undoable GeoLibre operations (Spatial SQL, symbology, add/remove data, and map control), provider-pluggable with your own API key
 - In-app Python Console plus a Python automation API for scripting the app
+- Notebook panel docked beside the map for running Jupyter against the live map: the web build embeds a self-hosted JupyterLite site (in-browser Pyodide kernel) and the desktop build launches a uv-managed JupyterLab server, with notebook cells driving the map through an auto-loaded `geolibre` client. See [Notebook Panel](docs/notebook.md)
 - Command palette (`Ctrl`/`Cmd` + `K`) that searches and runs menu and toolbar actions across Add Data, Processing, Controls, Plugins, and Help, global keyboard shortcuts for New/Open/Save/Save As, and a `?` shortcuts cheat sheet
 - Conversion menu for Vector to GeoParquet/FlatGeobuf/PMTiles, CSV to GeoParquet, and Raster to COG; GeoParquet and CSV conversions run in the browser with DuckDB-WASM, while FlatGeobuf, PMTiles, and COG require the optional Python sidecar
 - Whitebox toolbox with batch tools run against a selected input directory
 - Vector menu with common geometry tools (buffer, centroids, convex hull, dissolve, bounding box, simplify, clip, intersection, difference, union, spatial join, attribute join, select by value, select by location) that run in the browser with Turf.js, an optional GeoPandas sidecar engine for every tool, and an in-browser GeoPandas engine via Pyodide (no server, same results as the sidecar)
 - Raster menu with common raster tools (hillshade, slope, aspect, reproject, resample, clip by extent, clip by mask layer, polygonize, contour, zonal statistics, raster calculator, reclassify, mosaic, focal statistics) backed by a rasterio Python sidecar, with a client-side fallback so core tools also run in the browser when no sidecar is available
+- Spectral Index toolbox (NDVI, GNDVI, NDWI, NDMI, NDBI, NBR, EVI, SAVI) with Sentinel-2, Landsat 8-9, NAIP, and custom band layouts, evaluated client-side with geotiff.js or on the rasterio sidecar
 - Spatial Statistics toolbox and a Processing batch runner with model/pipeline chaining to run a sequence of tools as one job
+- Raster Georeferencer (Processing → Georeferencing) that pins a non-georeferenced image to the map with ground control points using a least-squares affine fit, reporting per-GCP and RMS residuals
 - Single-band pseudocolor with classification and RGB band combination for styling raster layers
 - Network analysis tools for isochrones, service areas, and origin–destination (OD) cost matrices
 - Geocoding tools for forward, batch, and reverse geocoding through a multi-provider abstraction
@@ -358,6 +362,8 @@ The optional **Python (Pyodide)** vector engine loads its runtime from the publi
 ```env
 VITE_PYODIDE_INDEX_URL=https://your-host/pyodide/v0.27.7/full/
 ```
+
+`VITE_PYODIDE_INDEX_URL` and `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` can also be set at runtime through the Settings dialog's runtime environment variables (no rebuild required), so air-gapped or corporate deployments can point Pyodide and the DuckDB Spatial extension at internal mirrors.
 
 Restart `npm run dev` or `npm run tauri:dev` after changing these values. Vite only exposes variables with the `VITE_` prefix to the frontend.
 

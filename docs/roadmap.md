@@ -166,9 +166,7 @@
 - [x] Expanded Python `Map` API covering more Add Data layer types
 - [x] CDN-loaded PGlite/PostGIS to shrink the Jupyter wheel and the desktop binary
 
-## v1.3: Analysis depth, real-time collaboration, story maps, scripting, and an AI assistant (current)
-
-### Processing and analysis
+## v1.3: Analysis depth, real-time collaboration, story maps, scripting, and an AI assistant
 
 - [x] Spatial Statistics toolbox under Processing
 - [x] Vector tools: Smooth, Regular grid, and Voronoi/Delaunay
@@ -179,9 +177,6 @@
 - [x] Single-band pseudocolor with classification and RGB band combination for raster styling
 - [x] Batch run and model/pipeline chaining for processing tools
 - [x] Network analysis: isochrones, service areas, and origin–destination cost matrices
-
-### Data, layers, and export
-
 - [x] Collapsible layer groups/folders in the layer panel
 - [x] glTF/GLB 3D model layers placed at coordinates
 - [x] Client-side vector tiling for large local vector layers
@@ -190,32 +185,28 @@
 - [x] Shapefile and GeoPackage export
 - [x] Apache Sedona as an additional SQL Workspace engine
 - [x] Batch geocoding and reverse geocoding tools, with a multi-provider geocoding abstraction
-
-### Collaboration, story maps, and sharing
-
 - [x] Real-time multi-user collaboration (MVP) backed by a Cloudflare Worker
 - [x] Scroll-driven story map builder, presenter, and standalone HTML export
 - [x] User-editable legend for the print layout
 - [x] Field statistics summary panel in the attribute table
-
-### AI and scripting
-
 - [x] AI Segmentation toolbox via [segment-geospatial](https://github.com/opengeos/segment-geospatial) (SamGeo) and Meta's SAM 3, proxied through the sidecar to a separate `samgeo-api` model server
 - [x] Natural-language GIS assistant (Strands agent) that turns plain-English requests into auditable, undoable GeoLibre operations
 - [x] Python automation API and an in-app Python Console
 - [x] Python package: local raster, marker/cluster, and choropleth APIs; `split_map`, `add_legend`, and `add_colorbar` helpers; typed read-back of selected/drawn features; and `to_html` export
-
-### Mobile, offline, and Android
-
 - [x] Native Android app from the same codebase via Tauri v2 mobile, with a CI workflow that builds signed, per-ABI release APKs (~40 MB) — see [Android](android.md)
 - [x] `isMobile()` feature-gating that hides desktop-process tools (Whitebox, Raster, Conversion, AI Segmentation, PostgreSQL/Martin) on Android so nothing is shown that cannot run
 - [x] Responsive, touch-friendly mobile layout: Layers/Style panels overlay the map as slide-over sheets on phones, pointer-event (touch) panel resizing, and safe-area insets so the toolbar clears the system status bar
 - [x] Download Offline Area tool that pre-caches the current map view's basemap tiles into the service-worker cache
 - [x] Service-worker caching of the CDN-loaded Pyodide and PGlite/PostGIS engines so browser SQL and Python keep working offline after first use
-
-### Packaging
-
 - [x] Homebrew Cask packaging for macOS
+
+## v1.4: Jupyter beside the map, spectral indices, georeferencing, and field collection (current)
+
+- [x] Resizable, collapsible Notebook panel docked beside the map: the web build embeds a self-hosted JupyterLite site (in-browser Pyodide kernel) and the desktop build launches a uv-managed JupyterLab server, both seeded with a runnable Welcome tour. Notebook cells drive the live map through the shared scripting bridge via an auto-loaded `geolibre` client, and the JupyterLite theme follows the app theme — see [Notebook Panel](notebook.md)
+- [x] Spectral Index toolbox under Processing → Raster (NDVI, GNDVI, NDWI, NDMI, NDBI, NBR, EVI, and SAVI) with Sentinel-2, Landsat 8-9, NAIP, and custom band layouts and a reflectance-scale knob, evaluated client-side via geotiff.js or on the rasterio sidecar through the existing raster calculator
+- [x] Raster Georeferencer (Processing → Georeferencing): pin a non-georeferenced image to the map with ground control points, using a least-squares affine fit and per-GCP and RMS residuals, added as a corner-pinned overlay that persists in the project and works offline
+- [x] Field Collection tool (Controls menu) for capturing point, line, and polygon observations with a per-layer custom form (text/number/date/choice fields and an optional inline photo), placed by device GPS or by tapping the map, with a floating quick-open control; captures are written to a tagged GeoJSON layer that flows into the attribute table, export, and offline use
+- [x] Runtime overrides for `VITE_PYODIDE_INDEX_URL` and `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` through the existing runtime-environment system, so air-gapped or corporate deployments can point Pyodide and the DuckDB Spatial extension at internal mirrors without rebuilding the app
 
 ## Plugin marketplace and registry (design)
 

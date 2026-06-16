@@ -1281,7 +1281,7 @@ dependencies = [
 
 [[package]]
 name = "geolibre-desktop"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "flate2",
  "getrandom 0.2.17",

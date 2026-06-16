@@ -4,7 +4,7 @@ from typing import Any
 
 from .geolibre import Feature, Layer, Map
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 __all__ = ["Feature", "Layer", "Map", "__version__"]
 
 
