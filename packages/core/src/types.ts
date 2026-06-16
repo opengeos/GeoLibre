@@ -543,6 +543,51 @@ export interface ProcessingModel {
   steps: ProcessingModelStep[];
 }
 
+/** The chart a {@link DashboardWidget} draws. Mirrors the attribute Charts
+ * panel's types so a widget reuses the same rendering. */
+export type DashboardWidgetType =
+  | "histogram"
+  | "scatter"
+  | "bar"
+  | "line"
+  | "box";
+
+/** How a bar widget reduces its category groups. */
+export type DashboardWidgetAggregation = "count" | "sum" | "mean";
+
+/**
+ * One chart in the Dashboard panel: a chart type bound to a layer and the
+ * field(s) it plots. Which `field*`/`category`/`aggregation` keys apply depends
+ * on `type` (histogram/line/box use `field`; scatter uses `xField`/`yField`;
+ * bar uses `category` + `aggregation` and, for sum/mean, `valueField`). Unused
+ * keys are simply ignored, so the record stays flat and easy to hand-edit.
+ * Saved in the project file so a dashboard reopens with its widgets intact.
+ */
+export interface DashboardWidget {
+  /** Stable id, unique within the project (React key and store key). */
+  id: string;
+  /** The layer whose features feed this widget. */
+  layerId: string;
+  /** The chart to draw. */
+  type: DashboardWidgetType;
+  /** Optional custom title; the panel derives a label from the fields if absent. */
+  title?: string;
+  /** Value field for histogram/line/box. */
+  field?: string;
+  /** X-axis field for scatter. */
+  xField?: string;
+  /** Y-axis field for scatter. */
+  yField?: string;
+  /** Number of bins for a histogram. */
+  bins?: number;
+  /** Category field for a bar chart. */
+  category?: string;
+  /** Aggregation for a bar chart (default `count`). */
+  aggregation?: DashboardWidgetAggregation;
+  /** Value field a bar chart's sum/mean reduces (ignored for `count`). */
+  valueField?: string;
+}
+
 export interface GeoLibreProject {
   version: string;
   name: string;
@@ -561,6 +606,8 @@ export interface GeoLibreProject {
   storymap?: StoryMap;
   /** Saved processing pipelines (batch/model chaining; issue #344). */
   models?: ProcessingModel[];
+  /** Saved Dashboard panel chart widgets (issue #401). */
+  widgets?: DashboardWidget[];
   metadata: Record<string, unknown>;
 }
 

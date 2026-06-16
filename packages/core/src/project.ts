@@ -5,6 +5,9 @@ import {
   DEFAULT_PROJECT_PREFERENCES,
   DEFAULT_STORY_MAP,
   PROJECT_VERSION,
+  type DashboardWidget,
+  type DashboardWidgetAggregation,
+  type DashboardWidgetType,
   type GeoLibreLayer,
   type GeoLibreProject,
   type LayerGroup,
@@ -100,6 +103,7 @@ export function parseProject(json: string): GeoLibreProject {
     legend: normalizeLegendConfig(data.legend),
     storymap: normalizeStoryMap(data.storymap) ?? undefined,
     models: normalizeModels(data.models) ?? undefined,
+    widgets: normalizeWidgets(data.widgets) ?? undefined,
     metadata: data.metadata ?? {},
   };
 }
@@ -392,6 +396,70 @@ export function normalizeModels(value: unknown): ProcessingModel[] | null {
   return models.length > 0 ? models : null;
 }
 
+const DASHBOARD_WIDGET_TYPES: readonly DashboardWidgetType[] = [
+  "histogram",
+  "scatter",
+  "bar",
+  "line",
+  "box",
+];
+const DASHBOARD_WIDGET_AGGREGATIONS: readonly DashboardWidgetAggregation[] = [
+  "count",
+  "sum",
+  "mean",
+];
+
+/**
+ * Coerce an untrusted (possibly hand-edited) `widgets` array into valid
+ * {@link DashboardWidget} records. Drops widgets without a usable id, layer id,
+ * or recognized chart type, de-duplicates by id, and keeps only the optional
+ * keys that are present and well-typed (the Dashboard panel falls back to
+ * sensible defaults for anything missing). Returns `null` when there is nothing
+ * worth persisting, so a widget-less project stays free of the key.
+ *
+ * @param value Raw `widgets` value from the project JSON.
+ * @returns Normalized widgets, or `null` when none survive.
+ */
+export function normalizeWidgets(value: unknown): DashboardWidget[] | null {
+  if (!Array.isArray(value)) return null;
+  const widgets: DashboardWidget[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const candidate = entry as Partial<DashboardWidget>;
+    const id = normalizeString(candidate.id).trim();
+    const layerId = normalizeString(candidate.layerId).trim();
+    if (!id || !layerId || seen.has(id)) continue;
+    const type = candidate.type;
+    if (!type || !DASHBOARD_WIDGET_TYPES.includes(type)) continue;
+    seen.add(id);
+    const widget: DashboardWidget = { id, layerId, type };
+    const title = normalizeString(candidate.title).trim();
+    if (title) widget.title = title;
+    const field = normalizeString(candidate.field).trim();
+    if (field) widget.field = field;
+    const xField = normalizeString(candidate.xField).trim();
+    if (xField) widget.xField = xField;
+    const yField = normalizeString(candidate.yField).trim();
+    if (yField) widget.yField = yField;
+    if (typeof candidate.bins === "number" && Number.isFinite(candidate.bins)) {
+      widget.bins = Math.trunc(candidate.bins);
+    }
+    const category = normalizeString(candidate.category).trim();
+    if (category) widget.category = category;
+    if (
+      candidate.aggregation &&
+      DASHBOARD_WIDGET_AGGREGATIONS.includes(candidate.aggregation)
+    ) {
+      widget.aggregation = candidate.aggregation;
+    }
+    const valueField = normalizeString(candidate.valueField).trim();
+    if (valueField) widget.valueField = valueField;
+    widgets.push(widget);
+  }
+  return widgets.length > 0 ? widgets : null;
+}
+
 function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
   if (!preferences || typeof preferences !== "object") {
     return DEFAULT_PROJECT_PREFERENCES;
@@ -674,6 +742,7 @@ export function projectFromStore(state: {
   legend?: LegendConfig | null;
   storymap?: StoryMap | null;
   models?: ProcessingModel[] | null;
+  widgets?: DashboardWidget[] | null;
   metadata: Record<string, unknown>;
 }): GeoLibreProject {
   const styles: Record<string, LayerStyle> = {};
@@ -684,6 +753,7 @@ export function projectFromStore(state: {
   const legend = normalizeLegendConfig(state.legend);
   const storymap = normalizeStoryMap(state.storymap);
   const models = normalizeModels(state.models);
+  const widgets = normalizeWidgets(state.widgets);
   // Persist every group (including empty folders, which the UI supports). The
   // key is spread only when non-empty so legacy readers that don't recognise it
   // are unaffected; normalizeLayerGroups round-trips them back on load.
@@ -703,6 +773,7 @@ export function projectFromStore(state: {
     ...(legend ? { legend } : {}),
     ...(storymap ? { storymap } : {}),
     ...(models ? { models } : {}),
+    ...(widgets ? { widgets } : {}),
     metadata: state.metadata,
   };
 }
@@ -776,6 +847,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
   legend: LegendConfig;
   storymap: StoryMap | null;
   models: ProcessingModel[];
+  widgets: DashboardWidget[];
   metadata: Record<string, unknown>;
 } {
   const layers = project.layers.map((layer) => ({
@@ -814,6 +886,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
     legend: normalizeLegendConfig(project.legend) ?? { ...DEFAULT_LEGEND_CONFIG },
     storymap: normalizeStoryMap(project.storymap),
     models: normalizeModels(project.models) ?? [],
+    widgets: normalizeWidgets(project.widgets) ?? [],
     metadata: project.metadata,
   };
 }

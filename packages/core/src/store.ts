@@ -29,6 +29,7 @@ import {
   type CollaborationParticipant,
   type CollaborationPresence,
   type CollaborationState,
+  type DashboardWidget,
   type GeoLibreLayer,
   type GeoLibreProject,
   type LayerGroup,
@@ -132,6 +133,8 @@ export interface AppState {
   storymap: StoryMap | null;
   /** Saved processing pipelines (batch/model chaining; issue #344). */
   models: ProcessingModel[];
+  /** Saved Dashboard panel chart widgets (issue #401). */
+  widgets: DashboardWidget[];
   selectedLayerId: string | null;
   selectedFeatureId: string | null;
   identifyLayerId: string | null;
@@ -157,6 +160,7 @@ export interface AppState {
     notebookOpen: boolean;
     assistantOpen: boolean;
     attributeTableOpen: boolean;
+    dashboardOpen: boolean;
     storymapPanelOpen: boolean;
     storymapPresenting: boolean;
     modelBuilderOpen: boolean;
@@ -197,6 +201,7 @@ export interface AppState {
   setNotebookOpen: (open: boolean) => void;
   setAssistantOpen: (open: boolean) => void;
   setAttributeTableOpen: (open: boolean) => void;
+  setDashboardOpen: (open: boolean) => void;
   setStorymapPanelOpen: (open: boolean) => void;
   setStorymapPresenting: (presenting: boolean) => void;
   setModelBuilderOpen: (open: boolean) => void;
@@ -206,6 +211,15 @@ export interface AppState {
   saveModel: (model: ProcessingModel) => void;
   /** Remove a saved model by id. */
   deleteModel: (id: string) => void;
+
+  /** Append a new dashboard widget. */
+  addWidget: (widget: DashboardWidget) => void;
+  /** Patch an existing dashboard widget by id (no-op if absent). */
+  updateWidget: (id: string, patch: Partial<Omit<DashboardWidget, "id">>) => void;
+  /** Remove a dashboard widget by id. */
+  removeWidget: (id: string) => void;
+  /** Move a widget to a new index, clamped into range, preserving the rest. */
+  moveWidget: (id: string, toIndex: number) => void;
 
   setStorymap: (storymap: StoryMap | null) => void;
   updateStorymapSettings: (
@@ -389,6 +403,7 @@ export const useAppStore = create<AppState>()(
       legend: { ...DEFAULT_LEGEND_CONFIG },
       storymap: null,
       models: [],
+      widgets: [],
       selectedLayerId: null,
       selectedFeatureId: null,
       identifyLayerId: null,
@@ -411,6 +426,7 @@ export const useAppStore = create<AppState>()(
         notebookOpen: false,
         assistantOpen: false,
         attributeTableOpen: false,
+        dashboardOpen: false,
         storymapPanelOpen: false,
         storymapPresenting: false,
         modelBuilderOpen: false,
@@ -485,6 +501,8 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ ui: { ...s.ui, assistantOpen: open } })),
       setAttributeTableOpen: (open) =>
         set((s) => ({ ui: { ...s.ui, attributeTableOpen: open } })),
+      setDashboardOpen: (open) =>
+        set((s) => ({ ui: { ...s.ui, dashboardOpen: open } })),
       setStorymapPanelOpen: (open) =>
         set((s) => ({ ui: { ...s.ui, storymapPanelOpen: open } })),
       setStorymapPresenting: (presenting) =>
@@ -507,6 +525,36 @@ export const useAppStore = create<AppState>()(
           models: s.models.filter((m) => m.id !== id),
           isDirty: true,
         })),
+
+      addWidget: (widget) =>
+        set((s) => ({ widgets: [...s.widgets, widget], isDirty: true })),
+      updateWidget: (id, patch) =>
+        set((s) => {
+          const exists = s.widgets.some((w) => w.id === id);
+          if (!exists) return s;
+          return {
+            widgets: s.widgets.map((w) =>
+              w.id === id ? { ...w, ...patch, id: w.id } : w,
+            ),
+            isDirty: true,
+          };
+        }),
+      removeWidget: (id) =>
+        set((s) => ({
+          widgets: s.widgets.filter((w) => w.id !== id),
+          isDirty: true,
+        })),
+      moveWidget: (id, toIndex) =>
+        set((s) => {
+          const from = s.widgets.findIndex((w) => w.id === id);
+          if (from < 0) return s;
+          const target = Math.max(0, Math.min(s.widgets.length - 1, toIndex));
+          if (target === from) return s;
+          const widgets = [...s.widgets];
+          const [moved] = widgets.splice(from, 1);
+          widgets.splice(target, 0, moved);
+          return { widgets, isDirty: true };
+        }),
 
       setStorymap: (storymap) => set({ storymap, isDirty: true }),
       updateStorymapSettings: (patch) =>

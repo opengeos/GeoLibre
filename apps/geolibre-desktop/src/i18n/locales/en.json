@@ -332,6 +332,7 @@
       "sqlWorkspace": "SQL Workspace",
       "pythonConsole": "Python Console",
       "notebook": "Jupyter Notebook",
+      "dashboard": "Dashboard",
       "assistant": "AI Assistant",
       "geocode": "Geocode Addresses",
       "modelBuilder": "Batch & Models",
@@ -675,6 +676,55 @@
     "close": "Close notebook",
     "loading": "Loading notebook…",
     "loadFailed": "Failed to load the notebook."
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "resize": "Resize dashboard panel",
+    "close": "Close dashboard",
+    "addWidget": "Add widget",
+    "widgetCount_one": "{{count}} widget",
+    "widgetCount_other": "{{count}} widgets",
+    "empty": "No widgets yet. Add a chart to summarize a layer.",
+    "emptyNoLayers": "Add a vector or DuckDB query layer to start building charts.",
+    "noLayersHint": "Add a vector or DuckDB query layer first.",
+    "layerMissing": "Layer unavailable",
+    "noData": "This layer has no chartable attributes.",
+    "moveBack": "Move back",
+    "moveForward": "Move forward",
+    "editWidget": "Edit widget",
+    "removeWidget": "Remove widget",
+    "chartType": {
+      "histogram": "Histogram",
+      "scatter": "Scatter",
+      "bar": "Bar",
+      "line": "Line",
+      "box": "Box plot"
+    },
+    "aggregate": {
+      "count": "Count",
+      "sum": "Sum",
+      "mean": "Average"
+    },
+    "editor": {
+      "addTitle": "Add widget",
+      "editTitle": "Edit widget",
+      "description": "Choose a layer, a chart type, and the fields to plot.",
+      "noLayers": "No chartable layers. Add a vector or DuckDB query layer first.",
+      "noFields": "This layer has no numeric or categorical fields to chart.",
+      "layer": "Layer",
+      "chartType": "Chart type",
+      "field": "Field",
+      "bins": "Bins",
+      "xAxis": "X axis",
+      "yAxis": "Y axis",
+      "category": "Category",
+      "aggregate": "Aggregate",
+      "value": "Value",
+      "titleLabel": "Title",
+      "titlePlaceholder": "Optional title",
+      "cancel": "Cancel",
+      "save": "Save"
+    }
   },
   "assistant": {
     "title": "AI Assistant",

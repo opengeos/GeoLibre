@@ -40,6 +40,7 @@ export function buildProjectSnapshot(
     legend: state.legend,
     storymap: state.storymap,
     models: state.models,
+    widgets: state.widgets,
     metadata: state.metadata,
   });
 }

@@ -17,6 +17,7 @@ Projects are saved as **`.geolibre.json`** files.
 | `plugins`         | object  | Optional external plugin manifest URLs, active plugin IDs, plugin map-control positions, and plugin settings |
 | `legend`          | object  | Optional Print Layout legend customizations (title, grouping, ordering, per-item rename/hide)                |
 | `storymap`        | object  | Optional scroll-driven story map (chapters and presentation settings); omitted when there are no chapters    |
+| `widgets`         | array   | Optional Dashboard panel chart widgets (see below); omitted when there are none                              |
 | `metadata`        | object  | Free-form project metadata                                                                                   |
 
 ## Plugin state
@@ -114,6 +115,26 @@ enter/exit. The section is omitted entirely when the project has no chapters.
 `flyTo`, `easeTo`, or `jumpTo`. Layer opacity changes reference project layer
 ids. Build and present story maps from **Project → Story Map**, or export a
 self-contained HTML page for static hosting.
+
+## Dashboard widgets
+
+```json
+{
+  "widgets": [
+    { "id": "w1", "layerId": "layer-a", "type": "histogram", "field": "pop", "bins": 12 },
+    { "id": "w2", "layerId": "layer-a", "type": "bar", "category": "kind", "aggregation": "sum", "valueField": "pop", "title": "Population by kind" }
+  ]
+}
+```
+
+Each widget binds a chart to a layer's attributes. `type` is one of `histogram`,
+`scatter`, `bar`, `line`, or `box`. Which other keys apply depends on the type:
+`field` (histogram/line/box), `xField`/`yField` (scatter), `category` +
+`aggregation` (`count`/`sum`/`mean`) + `valueField` (bar), `bins` (histogram).
+`title` is an optional label; unused keys are ignored. Build them in the
+**Dashboard** panel (Tools → Dashboard). Charts read from GeoJSON-backed vector
+layers and DuckDB query layers; widgets bound to a missing or non-attribute
+layer are shown as empty.
 
 ## Layer object
 
