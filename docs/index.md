@@ -33,7 +33,7 @@ hide:
 <div class="feature-card" markdown>
 ### MapLibre map workspace
 
-Pan, zoom, rotate, and tilt a MapLibre map with OpenFreeMap basemaps or a blank background. Toggle controls for navigation, globe, terrain, geolocation, scale, and attribution, plus on-map tools like Measure, Bookmark, Minimap, View State, and Field Collection for capturing observations by GPS or map tap.
+Pan, zoom, rotate, and tilt a MapLibre map with OpenFreeMap basemaps or a blank background. Toggle controls for navigation, globe, terrain, geolocation, scale, attribution, and logo, plus on-map tools like Measure, Bookmark, Minimap, View State, and Field Collection for capturing point, line, and polygon observations with a custom form by GPS or map tap.
 </div>
 
 <div class="feature-card" markdown>
@@ -51,7 +51,7 @@ Activate built-in plugins for layer control, basemaps, MapLibre components, swip
 <div class="feature-card" markdown>
 ### Advanced layer formats
 
-Add Data covers XYZ, WMS, WFS, WMTS, ArcGIS, and STAC services; GeoParquet, FlatGeobuf, PMTiles, Zarr, and OpenStreetMap PBF; COG, GeoTIFF, Cloud-Optimized NetCDF/HDF, and MBTiles rasters; LiDAR, Gaussian splats, 3D Tiles, georeferenced video, and deck.gl layers; and DuckDB and PostgreSQL databases.
+Add Data covers XYZ, WMS, WFS, WMTS, ArcGIS, and STAC services; GeoParquet, FlatGeobuf, PMTiles, Zarr, and OpenStreetMap PBF; COG, GeoTIFF, Cloud-Optimized NetCDF/HDF, and MBTiles rasters; LiDAR, Gaussian splats, 3D Tiles (including authenticated tilesets), georeferenced video, and deck.gl layers; and DuckDB and PostgreSQL databases.
 </div>
 
 <div class="feature-card" markdown>
@@ -63,13 +63,13 @@ Convert vector and raster data to cloud-native GeoParquet, FlatGeobuf, PMTiles, 
 <div class="feature-card" markdown>
 ### SQL Workspace
 
-Run DuckDB Spatial SQL in the browser against loaded layers, local files, and remote URLs, or query with the in-browser PostGIS engine powered by PGlite. Bare URLs auto-wrap into the matching reader and stream over HTTP range requests. Includes sample queries, query history, and adding results to the map or exporting them as CSV or GeoParquet.
+Run DuckDB Spatial SQL in the browser against loaded layers, local files, and remote URLs, or query with the in-browser PostGIS (PGlite) and Apache Sedona engines. Bare URLs auto-wrap into the matching reader and stream over HTTP range requests. Includes sample queries, query history, and adding results to the map or exporting them as CSV or GeoParquet.
 </div>
 
 <div class="feature-card" markdown>
 ### Vector tools
 
-Geometry tools under Processing → Vector — buffer, centroids, convex hull, dissolve, simplify, smooth, clip, overlay, spatial and attribute joins, selection, Voronoi/Delaunay, and H3 grids and binning — run in the browser with Turf.js, with an optional GeoPandas sidecar engine. A Spatial Statistics toolbox and a batch runner with model/pipeline chaining round out Processing.
+Geometry tools under Processing → Vector — buffer, centroids, convex hull, dissolve, bounding box, simplify, smooth, regular grid, clip, overlay (intersect/difference/union), spatial and attribute joins, selection, Voronoi/Delaunay, and H3 grids and binning — run in the browser with Turf.js, with an optional GeoPandas sidecar engine. A Spatial Statistics toolbox and a batch runner with model/pipeline chaining round out Processing.
 </div>
 
 <div class="feature-card" markdown>
