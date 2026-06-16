@@ -52,7 +52,7 @@ export type FieldStats = NumericFieldStats | TextFieldStats;
 export const DEFAULT_TOP_VALUES = 5;
 
 /** True when a value reads as null for statistics: nullish or a blank string. */
-function isBlank(value: unknown): boolean {
+export function isBlank(value: unknown): boolean {
   return value == null || (typeof value === "string" && value.trim() === "");
 }
 
