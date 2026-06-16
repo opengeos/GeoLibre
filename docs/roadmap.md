@@ -193,12 +193,12 @@
 - [x] Natural-language GIS assistant (Strands agent) that turns plain-English requests into auditable, undoable GeoLibre operations
 - [x] Python automation API and an in-app Python Console
 - [x] Python package: local raster, marker/cluster, and choropleth APIs; `split_map`, `add_legend`, and `add_colorbar` helpers; typed read-back of selected/drawn features; and `to_html` export
+- [x] Homebrew Cask packaging for macOS
 - [x] Native Android app from the same codebase via Tauri v2 mobile, with a CI workflow that builds signed, per-ABI release APKs (~40 MB) — see [Android](android.md)
 - [x] `isMobile()` feature-gating that hides desktop-process tools (Whitebox, Raster, Conversion, AI Segmentation, PostgreSQL/Martin) on Android so nothing is shown that cannot run
 - [x] Responsive, touch-friendly mobile layout: Layers/Style panels overlay the map as slide-over sheets on phones, pointer-event (touch) panel resizing, and safe-area insets so the toolbar clears the system status bar
 - [x] Download Offline Area tool that pre-caches the current map view's basemap tiles into the service-worker cache
 - [x] Service-worker caching of the CDN-loaded Pyodide and PGlite/PostGIS engines so browser SQL and Python keep working offline after first use
-- [x] Homebrew Cask packaging for macOS
 
 ## v1.4: Jupyter beside the map, spectral indices, georeferencing, and field collection (current)
 

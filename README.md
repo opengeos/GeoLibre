@@ -363,7 +363,16 @@ The optional **Python (Pyodide)** vector engine loads its runtime from the publi
 VITE_PYODIDE_INDEX_URL=https://your-host/pyodide/v0.27.7/full/
 ```
 
-`VITE_PYODIDE_INDEX_URL` and `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` can also be set at runtime through the Settings dialog's runtime environment variables (no rebuild required), so air-gapped or corporate deployments can point Pyodide and the DuckDB Spatial extension at internal mirrors.
+Similarly, the DuckDB Spatial extension is installed from DuckDB's remote
+extension repository by default. To load it from a mirror instead (so
+`INSTALL spatial` is skipped and the extension is loaded directly), set the full
+path or URL to the extension file:
+
+```env
+VITE_DUCKDB_SPATIAL_EXTENSION_PATH=https://your-host/duckdb/spatial.duckdb_extension.wasm
+```
+
+Both `VITE_PYODIDE_INDEX_URL` and `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` can also be set at runtime through the Settings dialog's runtime environment variables (no rebuild required), so air-gapped or corporate deployments can point Pyodide and the DuckDB Spatial extension at internal mirrors without rebuilding.
 
 Restart `npm run dev` or `npm run tauri:dev` after changing these values. Vite only exposes variables with the `VITE_` prefix to the frontend.
 
