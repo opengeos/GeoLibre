@@ -30,11 +30,13 @@ export function looksLikeSqlite(bytes: Uint8Array): boolean {
   return true;
 }
 
-function quoteIdentifier(value: string): string {
+/** Quote a SQLite identifier (table/column name) by doubling embedded quotes. */
+export function quoteIdentifier(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
-function tableExists(db: Database, name: string): boolean {
+/** Whether a table of the given name exists in the SQLite database. */
+export function tableExists(db: Database, name: string): boolean {
   const result = db.exec(
     "SELECT 1 FROM sqlite_master WHERE type='table' AND name=:name",
     { ":name": name },

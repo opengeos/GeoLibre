@@ -17,11 +17,7 @@ import {
   type DuckDbVectorLoadOptions,
 } from "./duckdb-vector-guard";
 import { ensureGpkgFeatureCount } from "./gpkg-ogr-contents";
-import {
-  countGeoPackageFeatures,
-  isGeoPackage,
-  loadGeoPackageVectorFile,
-} from "./gpkg-reader";
+import { isGeoPackage, loadGeoPackageVectorFile } from "./gpkg-reader";
 import { getSpatialExtensionPath } from "./spatial-extension-config";
 
 // Re-exported for existing importers (sql-workspace, duckdb-processing, etc.)
@@ -328,18 +324,19 @@ async function loadGeoPackageVector(
   file: DuckDbVectorFile,
   options: DuckDbVectorLoadOptions,
 ): Promise<FeatureCollection> {
-  if (options.onLargeDataset) {
-    const counted = await countGeoPackageFeatures(file.data);
-    if (counted) {
-      await confirmLargeDataset(
-        { name: file.name, featureCount: counted.featureCount },
-        options.onLargeDataset,
-      );
-    }
-  }
+  // Guard large datasets on the single GeoPackage open: the count is taken
+  // before the rows are read, so the file is not parsed twice.
+  const onBeforeRead = options.onLargeDataset
+    ? ({ featureCount }: { featureCount: number }) =>
+        confirmLargeDataset(
+          { name: file.name, featureCount },
+          options.onLargeDataset,
+        )
+    : undefined;
 
   const { featureCollection, epsgCode } = await loadGeoPackageVectorFile(
     file.data,
+    onBeforeRead,
   );
   if (epsgCode == null) {
     return featureCollection as FeatureCollection;

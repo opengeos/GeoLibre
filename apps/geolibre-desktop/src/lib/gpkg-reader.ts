@@ -1,7 +1,12 @@
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { Database, SqlJsStatic } from "sql.js";
 import { decodeWkb } from "./geometry-wkb";
-import { loadSqlJs, looksLikeSqlite } from "./gpkg-ogr-contents";
+import {
+  loadSqlJs,
+  looksLikeSqlite,
+  quoteIdentifier,
+  tableExists,
+} from "./gpkg-ogr-contents";
 
 /**
  * Read GeoPackages with sql.js (SQLite/WASM) instead of DuckDB's `ST_Read`.
@@ -37,9 +42,9 @@ export interface GeoPackageReadResult {
   epsgCode: number | null;
 }
 
-function quoteIdentifier(value: string): string {
-  return `"${value.replaceAll('"', '""')}"`;
-}
+// Envelope byte sizes by GeoPackage envelope indicator: 0=none, 1=XY, 2=XYZ,
+// 3=XYM, 4=XYZM. Indicators 5-7 are reserved/invalid (OGC 12-128r18, Table 1).
+const ENVELOPE_BYTES = [0, 32, 48, 48, 64];
 
 /**
  * Strip the GeoPackage geometry-blob header, returning the standard WKB inside.
@@ -47,26 +52,30 @@ function quoteIdentifier(value: string): string {
  * The header is the "GP" magic, a version byte, a flags byte, a 4-byte srs_id,
  * and an optional envelope whose size is encoded in flag bits 1-3. A blob that
  * is already bare WKB (first byte a 0x00/0x01 byte-order marker) is returned
- * unchanged so non-conformant producers still read.
+ * unchanged so non-conformant producers still read. A blob that claims the "GP"
+ * magic but is truncated or carries a reserved envelope indicator throws, so a
+ * malformed geometry surfaces as an explicit error instead of decoding from the
+ * wrong offset into a silently wrong (or null) geometry.
  */
 export function stripGeoPackageHeader(blob: Uint8Array): Uint8Array {
   // 'G','P' magic identifies a GeoPackage geometry blob; otherwise assume the
   // value is already standalone WKB (byte-order byte 0x00 or 0x01).
   if (blob.length < 2 || blob[0] !== 0x47 || blob[1] !== 0x50) return blob;
+  if (blob.length < 8) {
+    throw new Error("Invalid GeoPackage geometry blob: truncated header.");
+  }
   const flags = blob[3];
   const envelopeIndicator = (flags >> 1) & 0x07;
-  // Envelope byte sizes by indicator: 0=none, 1=XY, 2=XYZ, 3=XYM, 4=XYZM.
-  const envelopeBytes = [0, 32, 48, 48, 64, 0, 0, 0][envelopeIndicator];
-  const headerLength = 8 + envelopeBytes;
+  if (envelopeIndicator >= ENVELOPE_BYTES.length) {
+    throw new Error(
+      `Invalid GeoPackage geometry blob: reserved envelope indicator ${envelopeIndicator}.`,
+    );
+  }
+  const headerLength = 8 + ENVELOPE_BYTES[envelopeIndicator];
+  if (blob.length < headerLength) {
+    throw new Error("Invalid GeoPackage geometry blob: truncated envelope.");
+  }
   return blob.subarray(headerLength);
-}
-
-function tableExists(db: Database, name: string): boolean {
-  const result = db.exec(
-    "SELECT 1 FROM sqlite_master WHERE type='table' AND name=:name",
-    { ":name": name },
-  );
-  return result.length > 0 && result[0].values.length > 0;
 }
 
 /**
@@ -127,22 +136,68 @@ function resolveEpsgCode(db: Database, srsId: number | null): number | null {
   return WGS84_EPSG_CODES.has(code) ? null : code;
 }
 
-/** Count the layer's rows for the large-dataset guard without materializing them. */
-export function countGeoPackageFeaturesSync(
-  SQL: SqlJsStatic,
-  bytes: Uint8Array,
-): { name: string; featureCount: number } | null {
-  const db = new SQL.Database(bytes);
-  try {
-    const layer = selectLayer(db);
-    if (!layer) return null;
-    const row = db.exec(
-      `SELECT count(*) FROM ${quoteIdentifier(layer.table)}`,
-    )[0]?.values[0];
-    return { name: layer.table, featureCount: Number(row?.[0] ?? 0) };
-  } finally {
-    db.close();
+/** Count a layer's rows without materializing them (for the large-dataset guard). */
+function countLayerRows(db: Database, table: string): number {
+  const row = db.exec(`SELECT count(*) FROM ${quoteIdentifier(table)}`)[0]
+    ?.values[0];
+  return Number(row?.[0] ?? 0);
+}
+
+/** Read every feature of `layer` from an open database into a FeatureCollection. */
+function readLayerFeatures(
+  db: Database,
+  layer: GeoPackageLayer,
+): FeatureCollection<Geometry | null> {
+  const result = db.exec(`SELECT * FROM ${quoteIdentifier(layer.table)}`);
+  const features: Feature<Geometry | null>[] = [];
+  if (result.length > 0) {
+    const columns = result[0].columns;
+    const geometryIndex = columns.indexOf(layer.geometryColumn);
+    // The geometry column is declared in gpkg_geometry_columns; if SELECT * does
+    // not return it, the file is inconsistent. Fail loudly rather than emit every
+    // feature with a silent null geometry.
+    if (geometryIndex < 0) {
+      throw new Error(
+        `GeoPackage layer "${layer.table}" is missing its declared geometry ` +
+          `column "${layer.geometryColumn}".`,
+      );
+    }
+    const idIndex = layer.idColumn ? columns.indexOf(layer.idColumn) : -1;
+
+    for (const row of result[0].values) {
+      const properties: Record<string, unknown> = {};
+      for (let i = 0; i < columns.length; i += 1) {
+        if (i === geometryIndex || i === idIndex) continue;
+        const value = row[i];
+        // sql.js returns BLOB columns as Uint8Array; binary attributes are not
+        // JSON-serialisable, so drop them (matching the ST_Read path).
+        if (value instanceof Uint8Array) continue;
+        properties[columns[i]] = value;
+      }
+
+      const rawGeometry = row[geometryIndex];
+      let geometry: Geometry | null = null;
+      if (rawGeometry instanceof Uint8Array && rawGeometry.length > 0) {
+        const wkb = stripGeoPackageHeader(rawGeometry);
+        // A GeoPackage "empty geometry" header carries no WKB body.
+        geometry = wkb.length > 0 ? decodeWkb(wkb) : null;
+      }
+      features.push({ type: "Feature", geometry, properties });
+    }
   }
+  return { type: "FeatureCollection", features };
+}
+
+/** Read the first feature layer of an open GeoPackage database. */
+function readGeoPackage(db: Database): GeoPackageReadResult {
+  const layer = selectLayer(db);
+  if (!layer) {
+    throw new Error("No vector feature layer found in this GeoPackage.");
+  }
+  return {
+    featureCollection: readLayerFeatures(db, layer),
+    epsgCode: resolveEpsgCode(db, layer.srsId),
+  };
 }
 
 /**
@@ -156,45 +211,7 @@ export function readGeoPackageSync(
 ): GeoPackageReadResult {
   const db = new SQL.Database(bytes);
   try {
-    const layer = selectLayer(db);
-    if (!layer) {
-      throw new Error("No vector feature layer found in this GeoPackage.");
-    }
-    const epsgCode = resolveEpsgCode(db, layer.srsId);
-
-    const result = db.exec(`SELECT * FROM ${quoteIdentifier(layer.table)}`);
-    const features: Feature<Geometry | null>[] = [];
-    if (result.length > 0) {
-      const columns = result[0].columns;
-      const geometryIndex = columns.indexOf(layer.geometryColumn);
-      const idIndex = layer.idColumn ? columns.indexOf(layer.idColumn) : -1;
-
-      for (const row of result[0].values) {
-        const properties: Record<string, unknown> = {};
-        for (let i = 0; i < columns.length; i += 1) {
-          if (i === geometryIndex || i === idIndex) continue;
-          const value = row[i];
-          // sql.js returns BLOB columns as Uint8Array; binary attributes are not
-          // JSON-serialisable, so drop them (matching the ST_Read path).
-          if (value instanceof Uint8Array) continue;
-          properties[columns[i]] = value;
-        }
-
-        const rawGeometry = row[geometryIndex];
-        let geometry: Geometry | null = null;
-        if (rawGeometry instanceof Uint8Array && rawGeometry.length > 0) {
-          const wkb = stripGeoPackageHeader(rawGeometry);
-          // A GeoPackage "empty geometry" header carries no WKB body.
-          geometry = wkb.length > 0 ? decodeWkb(wkb) : null;
-        }
-        features.push({ type: "Feature", geometry, properties });
-      }
-    }
-
-    return {
-      featureCollection: { type: "FeatureCollection", features },
-      epsgCode,
-    };
+    return readGeoPackage(db);
   } finally {
     db.close();
   }
@@ -205,22 +222,51 @@ export function isGeoPackage(bytes: Uint8Array): boolean {
   return looksLikeSqlite(bytes);
 }
 
+/** First-layer feature count, passed to {@link LargeGeoPackageGuard}. */
+export interface GeoPackageLayerCount {
+  name: string;
+  featureCount: number;
+}
+
+/**
+ * Invoked with the first layer's feature count before its rows are read, so a
+ * caller can prompt about a large dataset. Throw (or reject) to abort the load.
+ */
+export type LargeGeoPackageGuard = (
+  count: GeoPackageLayerCount,
+) => void | Promise<void>;
+
 /**
  * Read a GeoPackage buffer into a GeoJSON FeatureCollection via sql.js,
  * bypassing GDAL. Returns the collection plus the source EPSG code (null when
  * already WGS84) so the caller can reproject. Loads sql.js on demand.
+ *
+ * The database is opened once: when `onBeforeRead` is supplied, the layer's
+ * feature count is taken on that same open and passed to the guard before the
+ * rows are materialized, so a counted load does not parse the file twice.
  */
 export async function loadGeoPackageVectorFile(
   bytes: Uint8Array,
+  onBeforeRead?: LargeGeoPackageGuard,
 ): Promise<GeoPackageReadResult> {
   const SQL = await loadSqlJs();
-  return readGeoPackageSync(SQL, bytes);
-}
-
-/** Count a GeoPackage's first-layer features, loading sql.js on demand. */
-export async function countGeoPackageFeatures(
-  bytes: Uint8Array,
-): Promise<{ name: string; featureCount: number } | null> {
-  const SQL = await loadSqlJs();
-  return countGeoPackageFeaturesSync(SQL, bytes);
+  const db = new SQL.Database(bytes);
+  try {
+    const layer = selectLayer(db);
+    if (!layer) {
+      throw new Error("No vector feature layer found in this GeoPackage.");
+    }
+    if (onBeforeRead) {
+      await onBeforeRead({
+        name: layer.table,
+        featureCount: countLayerRows(db, layer.table),
+      });
+    }
+    return {
+      featureCollection: readLayerFeatures(db, layer),
+      epsgCode: resolveEpsgCode(db, layer.srsId),
+    };
+  } finally {
+    db.close();
+  }
 }

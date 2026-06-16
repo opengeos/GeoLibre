@@ -131,16 +131,6 @@ export function encodeWkb(geometry: Geometry): Uint8Array {
   return writer.bytes();
 }
 
-const WKB_TYPE_NAME: Record<number, Geometry["type"]> = {
-  1: "Point",
-  2: "LineString",
-  3: "Polygon",
-  4: "MultiPoint",
-  5: "MultiLineString",
-  6: "MultiPolygon",
-  7: "GeometryCollection",
-};
-
 /**
  * Decode a standalone WKB (Well-Known Binary) buffer into a GeoJSON geometry.
  *
@@ -175,7 +165,6 @@ export function decodeWkb(bytes: Uint8Array): Geometry {
     const code = baseType % 1000;
     const hasZ = hasEwkbZ || isoGroup === 1 || isoGroup === 3;
     const hasM = hasEwkbM || isoGroup === 2 || isoGroup === 3;
-    const dimensions = 2 + (hasZ ? 1 : 0) + (hasM ? 1 : 0);
 
     // An EWKB SRID prefix precedes the coordinates; skip it (the layer CRS is
     // taken from the GeoPackage metadata, not the per-geometry SRID).
@@ -254,9 +243,13 @@ export function decodeWkb(bytes: Uint8Array): Geometry {
       case 7:
         return { type: "GeometryCollection", geometries: readChildren() };
       default:
+        // Codes 8-12 are the curved geometries (CircularString, CompoundCurve,
+        // CurvePolygon, MultiCurve, MultiSurface) that GeoJSON cannot represent.
         throw new Error(
           `Unsupported WKB geometry type ${code}${
-            WKB_TYPE_NAME[code] ? "" : " (curved geometries are not supported)"
+            code >= 8 && code <= 12
+              ? " (curved geometries are not supported)"
+              : ""
           }.`,
         );
     }

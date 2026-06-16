@@ -6,7 +6,6 @@ import initSqlJs from "sql.js";
 import type { Database, SqlJsStatic } from "sql.js";
 import { encodeWkb } from "../apps/geolibre-desktop/src/lib/geometry-wkb";
 import {
-  countGeoPackageFeaturesSync,
   isGeoPackage,
   readGeoPackageSync,
   stripGeoPackageHeader,
@@ -110,6 +109,31 @@ describe("stripGeoPackageHeader", () => {
     const wkb = encodeWkb({ type: "Point", coordinates: [1, 2] });
     assert.deepEqual([...stripGeoPackageHeader(wkb)], [...wkb]);
   });
+
+  it("throws on a reserved envelope indicator (5-7)", () => {
+    const blob = new Uint8Array(16);
+    blob[0] = 0x47;
+    blob[1] = 0x50;
+    blob[3] = 5 << 1; // envelope indicator 5 (reserved) in bits 1-3
+    assert.throws(
+      () => stripGeoPackageHeader(blob),
+      /reserved envelope indicator 5/,
+    );
+  });
+
+  it("throws on a truncated header", () => {
+    // 'GP' magic but fewer than the 8 mandatory header bytes.
+    const blob = new Uint8Array([0x47, 0x50, 0x00, 0x01]);
+    assert.throws(() => stripGeoPackageHeader(blob), /truncated header/);
+  });
+
+  it("throws on a truncated envelope", () => {
+    const blob = new Uint8Array(10); // declares an XY envelope (needs 8 + 32)
+    blob[0] = 0x47;
+    blob[1] = 0x50;
+    blob[3] = 0b0000_0010; // envelope indicator 1 (XY)
+    assert.throws(() => stripGeoPackageHeader(blob), /truncated envelope/);
+  });
 });
 
 describe("readGeoPackageSync", () => {
@@ -165,21 +189,52 @@ describe("readGeoPackageSync", () => {
     db.close();
     assert.throws(() => readGeoPackageSync(SQL, bytes), /No vector feature layer/);
   });
-});
 
-describe("countGeoPackageFeaturesSync / isGeoPackage", () => {
-  it("counts the first layer's features", () => {
-    const bytes = buildGpkg([
-      { geometry: { type: "Point", coordinates: [0, 0] }, name: "a" },
-      { geometry: { type: "Point", coordinates: [1, 1] }, name: "b" },
-      { geometry: { type: "Point", coordinates: [2, 2] }, name: "c" },
-    ]);
-    assert.deepEqual(countGeoPackageFeaturesSync(SQL, bytes), {
-      name: "places",
-      featureCount: 3,
-    });
+  it("throws when the declared geometry column is missing from the table", () => {
+    // gpkg_geometry_columns declares "geom" but the table column is "shape".
+    const db = new SQL.Database();
+    db.run(`
+      CREATE TABLE gpkg_contents (table_name TEXT PRIMARY KEY, data_type TEXT, srs_id INTEGER);
+      CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, geometry_type_name TEXT, srs_id INTEGER, z TINYINT, m TINYINT);
+      CREATE TABLE "places" (fid INTEGER PRIMARY KEY, shape BLOB, name TEXT);
+      INSERT INTO gpkg_contents VALUES ('places','features',4326);
+      INSERT INTO gpkg_geometry_columns VALUES ('places','geom','GEOMETRY',4326,0,0);
+      INSERT INTO "places" (name) VALUES ('a');
+    `);
+    const bytes = db.export();
+    db.close();
+    assert.throws(
+      () => readGeoPackageSync(SQL, bytes),
+      /missing its declared geometry column "geom"/,
+    );
   });
 
+  it("throws on a malformed geometry blob", () => {
+    // A 'GP' blob with a reserved envelope indicator cannot be located, so the
+    // feature surfaces as an explicit error rather than a silent null geometry.
+    const badBlob = new Uint8Array(16);
+    badBlob[0] = 0x47;
+    badBlob[1] = 0x50;
+    badBlob[3] = 6 << 1; // reserved envelope indicator 6
+    const db = new SQL.Database();
+    db.run(`
+      CREATE TABLE gpkg_contents (table_name TEXT PRIMARY KEY, data_type TEXT, srs_id INTEGER);
+      CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, geometry_type_name TEXT, srs_id INTEGER, z TINYINT, m TINYINT);
+      CREATE TABLE "places" (fid INTEGER PRIMARY KEY, geom BLOB, name TEXT);
+      INSERT INTO gpkg_contents VALUES ('places','features',4326);
+      INSERT INTO gpkg_geometry_columns VALUES ('places','geom','GEOMETRY',4326,0,0);
+    `);
+    db.run("INSERT INTO places (geom, name) VALUES (:g, 'a')", { ":g": badBlob });
+    const bytes = db.export();
+    db.close();
+    assert.throws(
+      () => readGeoPackageSync(SQL, bytes),
+      /reserved envelope indicator 6/,
+    );
+  });
+});
+
+describe("isGeoPackage", () => {
   it("recognises a SQLite/GeoPackage buffer", () => {
     assert.equal(isGeoPackage(buildGpkg([])), true);
     assert.equal(isGeoPackage(new Uint8Array([1, 2, 3, 4])), false);
