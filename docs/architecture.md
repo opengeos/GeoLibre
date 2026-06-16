@@ -106,12 +106,16 @@ browser build runs in. The most visible effect is **map panning at low zoom**:
   at the same zoom. Low zoom only makes it constant because panning across the
   whole world loads tiles continuously and the cache never settles.
 
-The cost is WebKitGTK integrating each newly-loaded tile on the main thread
-(GPU upload plus the per-tile bucket build and fade-in repaints). Each
-tile-integration render measured ~125 ms in WebKitGTK's JavaScriptCore versus a
-few ms in Chromium's V8. This is a WebView-engine limitation, not a bug in
-GeoLibre, and it does not affect the browser build or (untested) the
-macOS/Windows WebViews.
+The cost is WebKitGTK processing each newly-loaded tile on the main thread: the
+GPU upload of its texture (raster) or vertex buffers (vector) via synchronous
+WebGL calls, plus the subsequent fade-in repaint frames. Vector tile parsing and
+bucket building run in MapLibre's Web Workers, so they are not the bottleneck
+here. Each tile-integration render cycle measured ~125 ms wall-clock in
+WebKitGTK versus a few ms in Chromium. The gap is in WebKitGTK's WebGL
+implementation and compositor pipeline (driver command-stream flush, TextureMapper
+GL surface composition), not solely its JavaScriptCore JS engine. This is a
+WebView-engine limitation, not a bug in GeoLibre, and it does not affect the
+browser build or (untested) the macOS/Windows WebViews.
 
 Ruled out during diagnosis (so future investigation does not repeat them):
 software rendering (the GPU is used, Intel i915 confirmed), GPU saturation (the
