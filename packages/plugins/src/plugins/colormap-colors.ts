@@ -47,14 +47,19 @@ export function warmColormapColors(
   if (!pending) {
     pending = sampleColormapStops(name, ANCHOR_STOPS, false)
       .then((stops) => {
+        // Clear the in-flight marker only after the cache is written, so a
+        // re-entrant call in the same microtask can't miss both.
+        inflight.delete(name);
         if (stops.length >= 2) {
           anchorCache.set(name, stops);
-          return stops;
+          return stops as readonly string[];
         }
         return null;
       })
-      .catch(() => null)
-      .finally(() => inflight.delete(name));
+      .catch(() => {
+        inflight.delete(name);
+        return null;
+      });
     inflight.set(name, pending);
   }
   return pending;

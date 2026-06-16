@@ -891,5 +891,12 @@
     "newGroupFromLayer": "New group from layer",
     "moveToGroup": "Move to group",
     "removeFromGroup": "Remove from group"
+  },
+  "rasterSymbology": {
+    "reverseRamp": "Reverse ramp",
+    "customRamp": "Custom…",
+    "customColors": "Custom colors",
+    "customColorsValid": "{{count}} colors, low to high. Use Reverse to flip.",
+    "customColorsHint": "Enter at least two hex codes, separated by commas or spaces."
   }
 }

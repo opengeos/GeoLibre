@@ -19,6 +19,7 @@ import {
 import { Input, Label, Select, Separator, Textarea } from "@geolibre/ui";
 import { COLORMAP_OPTIONS } from "maplibre-gl-raster";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 type RasterStateRecord = {
   mode: "single" | "rgb";
@@ -56,6 +57,17 @@ const SORTED_COLORMAPS = [...COLORMAP_OPTIONS].sort((a, b) =>
   a.label.localeCompare(b.label, "en", { sensitivity: "base" }),
 );
 
+/** True when a pre-migration project stored `reversed` on rasterSymbology. */
+function legacyReversed(layer: GeoLibreLayer): boolean {
+  const sym = layer.metadata.rasterSymbology;
+  return (
+    typeof sym === "object" &&
+    sym !== null &&
+    !Array.isArray(sym) &&
+    (sym as Record<string, unknown>).reversed === true
+  );
+}
+
 function readRasterState(layer: GeoLibreLayer): RasterStateRecord {
   const raw =
     layer.metadata.rasterState &&
@@ -77,7 +89,9 @@ function readRasterState(layer: GeoLibreLayer): RasterStateRecord {
     mode: raw.mode === "rgb" ? "rgb" : "single",
     bands: bands.length > 0 ? bands : [1],
     colormap: typeof raw.colormap === "string" ? raw.colormap : DEFAULT_RAMP,
-    reversed: raw.reversed === true,
+    // Reverse lives on rasterState now; migrate projects saved before that move
+    // (the flag used to live on rasterSymbology) so they keep their reversal.
+    reversed: raw.reversed === true || legacyReversed(layer),
     rescale,
     nodata:
       raw.nodata === "off" || typeof raw.nodata === "number"
@@ -127,6 +141,7 @@ function rangeFromBreaks(breaks: number[]): [number, number][] {
  * @param props.layer - The selected raster store layer.
  */
 export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
+  const { t } = useTranslation();
   const updateLayer = useAppStore((s) => s.updateLayer);
   const state = readRasterState(layer);
   const bandCount = readBandCount(layer);
@@ -449,7 +464,9 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
               {colormap.label}
             </option>
           ))}
-          <option value={CUSTOM_RAMP_VALUE}>Custom…</option>
+          <option value={CUSTOM_RAMP_VALUE}>
+            {t("rasterSymbology.customRamp")}
+          </option>
         </Select>
         <div
           aria-hidden="true"
@@ -476,7 +493,7 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
           checked={reversed}
           onChange={(event) => setReversed(event.target.checked)}
         />
-        Reverse ramp
+        {t("rasterSymbology.reverseRamp")}
       </label>
 
       <label className="flex items-center gap-2 text-xs">
@@ -814,6 +831,7 @@ function CustomColorsField({
   colors: string[];
   onCommit: (colors: string[]) => void;
 }) {
+  const { t } = useTranslation();
   // `colors` is a fresh array each parent render (savedRasterSymbology rebuilds
   // it), so sync the draft off its content, not its reference -- otherwise an
   // unrelated re-render (e.g. band stats loading) would wipe what the user is
@@ -828,7 +846,7 @@ function CustomColorsField({
   return (
     <div className="space-y-1">
       <Label htmlFor="rasterCustomColors" className="text-xs">
-        Custom colors
+        {t("rasterSymbology.customColors")}
       </Label>
       <Textarea
         id="rasterCustomColors"
@@ -844,8 +862,8 @@ function CustomColorsField({
       />
       <p className="text-[10px] text-muted-foreground">
         {valid
-          ? `${parsed.length} colors, low to high. Use Reverse to flip.`
-          : "Enter at least two hex codes, separated by commas or spaces."}
+          ? t("rasterSymbology.customColorsValid", { count: parsed.length })
+          : t("rasterSymbology.customColorsHint")}
       </p>
     </div>
   );
