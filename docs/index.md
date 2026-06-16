@@ -33,13 +33,13 @@ hide:
 <div class="feature-card" markdown>
 ### MapLibre map workspace
 
-Pan, zoom, rotate, and tilt a MapLibre map with OpenFreeMap basemaps or a blank background. Toggle built-in controls for navigation, globe, terrain, geolocation, scale, attribution, and logo, plus on-map tools like Measure, Bookmark, Minimap, View State, and Field Collection for capturing point, line, and polygon observations with a custom form by GPS or map tap.
+Pan, zoom, rotate, and tilt a MapLibre map with OpenFreeMap basemaps or a blank background. Toggle controls for navigation, globe, terrain, geolocation, scale, and attribution, plus on-map tools like Measure, Bookmark, Minimap, View State, and Field Collection for capturing observations by GPS or map tap.
 </div>
 
 <div class="feature-card" markdown>
 ### Local and remote data
 
-Load local and remote vector and raster data, inspect and manage attributes in the table (add fields, a field calculator, a Charts panel, a field statistics summary, plus rename, hide, reorder, delete, and export to GeoJSON/GeoParquet/Shapefile/GeoPackage/CSV), style layers with single, categorized, graduated, and expression symbology (plus point heatmap and clustering renderers), organize the layer stack with collapsible groups, reorder, rename, and refresh layers with undo/redo, and save, reopen, or share `.geolibre.json` projects.
+Load local and remote vector and raster data, then inspect and edit attributes in a table with a field calculator, charts, statistics, and export to GeoJSON, GeoParquet, Shapefile, GeoPackage, or CSV. Style layers with categorized, graduated, expression, heatmap, and clustering renderers, group and reorder the layer stack with undo/redo, and save or share `.geolibre.json` projects.
 </div>
 
 <div class="feature-card" markdown>
@@ -51,55 +51,55 @@ Activate built-in plugins for layer control, basemaps, MapLibre components, swip
 <div class="feature-card" markdown>
 ### Advanced layer formats
 
-Add Data covers XYZ, WMS, WFS, WMTS, ArcGIS, and STAC services; GeoParquet, FlatGeobuf, PMTiles, Zarr, and OpenStreetMap PBF; COG and GeoTIFF rasters, Cloud-Optimized NetCDF/HDF, and MBTiles; LiDAR, Gaussian splats, 3D Tiles (including authenticated tilesets), georeferenced video overlays, and deck.gl layers; and DuckDB and PostgreSQL databases.
+Add Data covers XYZ, WMS, WFS, WMTS, ArcGIS, and STAC services; GeoParquet, FlatGeobuf, PMTiles, Zarr, and OpenStreetMap PBF; COG, GeoTIFF, Cloud-Optimized NetCDF/HDF, and MBTiles rasters; LiDAR, Gaussian splats, 3D Tiles, georeferenced video, and deck.gl layers; and DuckDB and PostgreSQL databases.
 </div>
 
 <div class="feature-card" markdown>
 ### Conversion and Whitebox
 
-Convert data to cloud-native GeoParquet, FlatGeobuf, PMTiles, and COG from the Conversion menu, and run batch geoprocessing with the Whitebox toolbox on the optional Python sidecar.
+Convert vector and raster data to cloud-native GeoParquet, FlatGeobuf, PMTiles, and COG from the Conversion menu, and run batch geoprocessing with the extensive Whitebox toolbox running on the optional Python sidecar.
 </div>
 
 <div class="feature-card" markdown>
 ### SQL Workspace
 
-Run DuckDB Spatial SQL in the browser against loaded layers, local files, and remote URLs, or query with the in-browser PostGIS engine powered by PGlite. Auto-wraps bare URLs into the matching reader and streams remote files over HTTP range requests. Includes sample queries, query history, and adding a result (with an optional layer name) to the map or exporting it as CSV or GeoParquet.
+Run DuckDB Spatial SQL in the browser against loaded layers, local files, and remote URLs, or query with the in-browser PostGIS engine powered by PGlite. Bare URLs auto-wrap into the matching reader and stream over HTTP range requests. Includes sample queries, query history, and adding results to the map or exporting them as CSV or GeoParquet.
 </div>
 
 <div class="feature-card" markdown>
 ### Vector tools
 
-Common geometry tools under Processing → Vector: buffer, centroids, convex hull, dissolve, bounding box, simplify, smooth, regular grid, Voronoi/Delaunay, clip, intersection, difference, union, spatial join, attribute join, select by value, select by location, and H3 hexagonal grids and binning. They run in the browser with Turf.js, with an optional GeoPandas sidecar engine for every tool. A Spatial Statistics toolbox and a batch runner with model/pipeline chaining round out Processing.
+Geometry tools under Processing → Vector — buffer, centroids, convex hull, dissolve, simplify, smooth, clip, overlay, spatial and attribute joins, selection, Voronoi/Delaunay, and H3 grids and binning — run in the browser with Turf.js, with an optional GeoPandas sidecar engine. A Spatial Statistics toolbox and a batch runner with model/pipeline chaining round out Processing.
 </div>
 
 <div class="feature-card" markdown>
 ### Raster tools
 
-Common raster tools under Processing → Raster: hillshade, slope, aspect, reproject, resample, clip by extent, clip by mask layer, polygonize, contour, zonal statistics, raster calculator, reclassify, mosaic, focal statistics, and a Spectral Index toolbox (NDVI, NDWI, EVI, and more with Sentinel-2, Landsat, and NAIP band presets). They run on a rasterio Python sidecar, with a client-side fallback for core tools when no sidecar is available. Pin a non-georeferenced image to the map with the Georeferencer (ground control points and an affine fit), style rasters with single-band pseudocolor classification or RGB band combination, and drag a GeoTIFF/COG onto the map to add it as a raster layer.
+Raster tools under Processing → Raster — hillshade, slope, aspect, reproject, resample, clip, polygonize, contour, zonal and focal statistics, raster calculator, reclassify, mosaic, and a Spectral Index toolbox (NDVI, NDWI, EVI with band presets) — run on a rasterio sidecar with a client-side fallback. Includes a Georeferencer and single-band or RGB raster styling.
 </div>
 
 <div class="feature-card" markdown>
 ### Python and Jupyter
 
-Embed the full GeoLibre app in a Jupyter notebook with the [`geolibre`](python.md) Python package. An expanded leafmap-style API (`add_geojson`, `add_tile_layer`, `add_cog`, local raster, marker/cluster, and choropleth layers, plus `split_map`, `add_legend`, `add_colorbar`, and `to_html`) drives the map, and the project syncs both ways so UI edits — including selected and drawn features — are readable back from Python. An in-app Python Console and automation API script the app directly, and a docked [Notebook panel](notebook.md) runs Jupyter beside the map (in-browser JupyterLite on the web, a desktop JupyterLab server) with cells driving the live map.
+Embed the full GeoLibre app in a Jupyter notebook with the [`geolibre`](python.md) Python package, driving the map through an expanded leafmap-style API that syncs both ways so UI edits read back from Python. An in-app Python Console scripts the app, and a docked [Notebook panel](notebook.md) runs Jupyter beside the map — JupyterLite on the web, a JupyterLab server on desktop.
 </div>
 
 <div class="feature-card" markdown>
 ### AI Assistant
 
-Chat with your data: a natural-language [assistant](user-guide/ai-assistant.md) that turns plain-English requests into GeoLibre's own operations — Spatial SQL, symbology, add/remove data, and map control — applied through the app so they stay auditable and undoable. Provider-pluggable (Google Gemini, Anthropic, OpenAI) with your own API key, disabled until configured.
+Chat with your data: a natural-language [assistant](user-guide/ai-assistant.md) that turns plain-English requests into GeoLibre operations — Spatial SQL, symbology, add or remove data, and map control — applied through the app so they stay auditable and undoable. Provider-pluggable (Google Gemini, Anthropic, OpenAI) with your own API key, disabled until configured.
 </div>
 
 <div class="feature-card" markdown>
 ### Collaboration and story maps
 
-Edit the same project with others in real time ([collaboration](collaboration.md) MVP; requires `VITE_GEOLIBRE_COLLAB_URL`), and build scroll-driven [story maps](user-guide/storymaps.md) with a presenter view and standalone HTML export.
+Edit the same project with others in real time ([collaboration](collaboration.md) MVP; requires `VITE_GEOLIBRE_COLLAB_URL`), and build scroll-driven [story maps](user-guide/storymaps.md) with a presenter view and a standalone HTML export you can publish anywhere.
 </div>
 
 <div class="feature-card" markdown>
 ### Network analysis and geocoding
 
-Compute isochrones, service areas, and origin–destination cost matrices for network analysis, and run forward, batch, and reverse [geocoding](user-guide/data-integrations.md#geocoding) through a multi-provider abstraction.
+Compute isochrones, service areas, and origin–destination cost matrices for network analysis, and run forward, batch, and reverse [geocoding](user-guide/data-integrations.md#geocoding) through a multi-provider abstraction with pluggable providers.
 </div>
 
 </div>
