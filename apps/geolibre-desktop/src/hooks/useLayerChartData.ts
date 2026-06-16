@@ -54,7 +54,10 @@ function buildLayerChartData(layer: GeoLibreLayer | null): LayerChartData {
     rows,
     columns: Array.from(keys),
     layerName: layer.name,
-    hasData: isChartableLayer(layer),
+    // Require actual rows, not just a chartable layer type: a DuckDB layer whose
+    // query cache is still empty has no rows yet, and the widget should show its
+    // own "no data" fallback rather than an empty chart.
+    hasData: isChartableLayer(layer) && rows.length > 0,
   };
 }
 

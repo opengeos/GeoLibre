@@ -535,7 +535,12 @@ export const useAppStore = create<AppState>()(
         })),
 
       addWidget: (widget) =>
-        set((s) => ({ widgets: [...s.widgets, widget], isDirty: true })),
+        set((s) => {
+          // Ignore a duplicate id so updateWidget/removeWidget stay unambiguous
+          // and a later entry isn't silently dropped when normalized on save.
+          if (s.widgets.some((w) => w.id === widget.id)) return s;
+          return { widgets: [...s.widgets, widget], isDirty: true };
+        }),
       updateWidget: (id, patch) =>
         set((s) => {
           const exists = s.widgets.some((w) => w.id === id);
@@ -564,12 +569,16 @@ export const useAppStore = create<AppState>()(
           return { widgets, isDirty: true };
         }),
       setDashboardColumns: (columns) =>
-        set({
-          dashboardColumns: Math.max(
-            MIN_DASHBOARD_COLUMNS,
-            Math.min(MAX_DASHBOARD_COLUMNS, Math.trunc(columns)),
-          ),
-          isDirty: true,
+        set((s) => {
+          // Guard non-finite input so the clamp can't yield NaN columns.
+          if (!Number.isFinite(columns)) return s;
+          return {
+            dashboardColumns: Math.max(
+              MIN_DASHBOARD_COLUMNS,
+              Math.min(MAX_DASHBOARD_COLUMNS, Math.trunc(columns)),
+            ),
+            isDirty: true,
+          };
         }),
 
       setStorymap: (storymap) => set({ storymap, isDirty: true }),

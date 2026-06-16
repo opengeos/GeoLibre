@@ -18,6 +18,7 @@ Projects are saved as **`.geolibre.json`** files.
 | `legend`          | object  | Optional Print Layout legend customizations (title, grouping, ordering, per-item rename/hide)                |
 | `storymap`        | object  | Optional scroll-driven story map (chapters and presentation settings); omitted when there are no chapters    |
 | `widgets`         | array   | Optional Dashboard panel chart widgets (see below); omitted when there are none                              |
+| `dashboardColumns`| number  | Optional Dashboard widget-grid column count (1-6, default 2); omitted when default                          |
 | `metadata`        | object  | Free-form project metadata                                                                                   |
 
 ## Plugin state

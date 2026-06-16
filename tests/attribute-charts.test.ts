@@ -356,4 +356,21 @@ describe("computePie", () => {
       null,
     );
   });
+
+  it("renames the overflow slice when a real (other) category exists", () => {
+    const data = rows(
+      { kind: "(other)" },
+      { kind: "(other)" },
+      { kind: "a" },
+      { kind: "b" },
+      { kind: "c" },
+    );
+    // Cap at 2 slices: one real category plus the folded remainder. The real
+    // "(other)" category is the largest, so the fold must use a distinct label.
+    const result = computePie(data, "kind", "count", null, 2);
+    assert.ok(result);
+    const labels = result.slices.map((s) => s.label);
+    assert.equal(new Set(labels).size, labels.length); // no duplicate labels
+    assert.ok(labels.includes("(other categories)"));
+  });
 });

@@ -98,9 +98,14 @@ export function WidgetEditorDialog({
   const hasChartable = hasNumeric || hasCategory;
 
   // A widget can only be saved when its chart type has the fields it needs in
-  // the chosen layer (bar/pie need a category; the rest need a numeric field).
+  // the chosen layer: bar/pie need a category (and a numeric field too when they
+  // sum/average rather than count); the rest need a numeric field.
   const isCategorical = type === "bar" || type === "pie";
-  const canSave = layerId !== "" && (isCategorical ? hasCategory : hasNumeric);
+  const canSave =
+    layerId !== "" &&
+    (isCategorical
+      ? hasCategory && (aggregation === "count" || hasNumeric)
+      : hasNumeric);
 
   const save = () => {
     if (!canSave) return;
@@ -115,7 +120,11 @@ export function WidgetEditorDialog({
     if (type === "histogram" || type === "line" || type === "box") {
       next.field = pick(field, numericCols);
     }
-    if (type === "histogram") next.bins = bins;
+    // Clicking Save can skip the bins input's onBlur, so guard the cleared/0
+    // sentinel here rather than persisting an invalid bin count.
+    if (type === "histogram") {
+      next.bins = Math.max(MIN_HISTOGRAM_BINS, bins || MIN_HISTOGRAM_BINS);
+    }
     if (type === "scatter") {
       next.xField = pick(xField, numericCols);
       next.yField = pick(yField, numericCols);
@@ -174,7 +183,15 @@ export function WidgetEditorDialog({
                     id="widget-type"
                     className="w-36"
                     value={type}
-                    onChange={(event) => setType(event.target.value as ChartType)}
+                    onChange={(event) => {
+                      const nextType = event.target.value as ChartType;
+                      setType(nextType);
+                      // Pie has no "average"; drop a carried-over mean so the
+                      // select doesn't show a stale value with no matching option.
+                      if (nextType === "pie" && aggregation === "mean") {
+                        setAggregation("count");
+                      }
+                    }}
                   >
                     <option value="histogram" disabled={!hasNumeric}>
                       {t("dashboard.chartType.histogram")}

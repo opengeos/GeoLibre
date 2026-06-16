@@ -99,6 +99,24 @@ describe("normalizeWidgets", () => {
     assert.equal("aggregation" in (result?.[1] ?? {}), false);
   });
 
+  it("drops a non-positive bin count and caps a huge one", () => {
+    const result = normalizeWidgets([
+      { id: "a", layerId: "l", type: "histogram", field: "pop", bins: 0 },
+      { id: "b", layerId: "l", type: "histogram", field: "pop", bins: 999 },
+    ] as never);
+    assert.equal("bins" in (result?.find((w) => w.id === "a") ?? {}), false);
+    assert.equal(result?.find((w) => w.id === "b")?.bins, 50);
+  });
+
+  it("drops a mean aggregation on a pie widget", () => {
+    const result = normalizeWidgets([
+      { id: "p", layerId: "l", type: "pie", category: "kind", aggregation: "mean" },
+      { id: "b", layerId: "l", type: "bar", category: "kind", aggregation: "mean" },
+    ] as never);
+    assert.equal("aggregation" in (result?.find((w) => w.id === "p") ?? {}), false);
+    assert.equal(result?.find((w) => w.id === "b")?.aggregation, "mean");
+  });
+
   it("returns null for a non-array or an all-invalid list", () => {
     assert.equal(normalizeWidgets(undefined), null);
     assert.equal(normalizeWidgets("nope"), null);
@@ -238,6 +256,14 @@ describe("app store widget actions", () => {
     );
   });
 
+  it("ignores a duplicate widget id in addWidget", () => {
+    useAppStore.getState().addWidget(widget({ id: "a", title: "first" }));
+    useAppStore.getState().addWidget(widget({ id: "a", title: "second" }));
+    const widgets = useAppStore.getState().widgets;
+    assert.equal(widgets.length, 1);
+    assert.equal(widgets[0].title, "first");
+  });
+
   it("ignores updates and moves for an unknown widget id", () => {
     useAppStore.getState().addWidget(widget({ id: "a" }));
     useAppStore.getState().updateWidget("missing", { title: "x" });
@@ -254,6 +280,9 @@ describe("app store widget actions", () => {
     useAppStore.getState().setDashboardColumns(99);
     assert.equal(useAppStore.getState().dashboardColumns, 6);
     useAppStore.getState().setDashboardColumns(0);
+    assert.equal(useAppStore.getState().dashboardColumns, 1);
+    // Non-finite input is ignored, leaving the last valid value intact.
+    useAppStore.getState().setDashboardColumns(Number.NaN);
     assert.equal(useAppStore.getState().dashboardColumns, 1);
   });
 });

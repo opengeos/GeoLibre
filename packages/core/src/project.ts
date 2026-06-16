@@ -405,6 +405,10 @@ export function normalizeModels(value: unknown): ProcessingModel[] | null {
 /** A 3- or 6-digit hex color, the only widget color format we persist. */
 const HEX_COLOR = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
+/** Upper bound for a persisted histogram bin count, mirroring the chart
+ * renderer's clamp (`MAX_HISTOGRAM_BINS` in the desktop app's chart helpers). */
+const MAX_PERSISTED_BINS = 50;
+
 const DASHBOARD_WIDGET_TYPES: readonly DashboardWidgetType[] = [
   "histogram",
   "scatter",
@@ -455,13 +459,19 @@ export function normalizeWidgets(value: unknown): DashboardWidget[] | null {
     const yField = normalizeString(candidate.yField).trim();
     if (yField) widget.yField = yField;
     if (typeof candidate.bins === "number" && Number.isFinite(candidate.bins)) {
-      widget.bins = Math.trunc(candidate.bins);
+      // Persist only a sane positive bin count; the histogram renderer clamps to
+      // [1, 50], so mirror that here rather than round-tripping 0 or huge values.
+      const bins = Math.trunc(candidate.bins);
+      if (bins >= 1) widget.bins = Math.min(MAX_PERSISTED_BINS, bins);
     }
     const category = normalizeString(candidate.category).trim();
     if (category) widget.category = category;
     if (
       candidate.aggregation &&
-      DASHBOARD_WIDGET_AGGREGATIONS.includes(candidate.aggregation)
+      DASHBOARD_WIDGET_AGGREGATIONS.includes(candidate.aggregation) &&
+      // A pie has no "average"; the renderer would silently treat mean as sum,
+      // so drop it here and let the default (count) stand for hand-edited files.
+      !(type === "pie" && candidate.aggregation === "mean")
     ) {
       widget.aggregation = candidate.aggregation;
     }

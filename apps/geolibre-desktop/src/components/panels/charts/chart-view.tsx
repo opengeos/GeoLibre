@@ -578,9 +578,10 @@ function PieChart({
   // Accumulate slice angles from the top (12 o'clock), clockwise.
   let angle = -Math.PI / 2;
   const arcs = slices.map((slice, index) => {
-    const fraction = slice.value / total;
+    // `share` (not `fraction`) so it doesn't shadow the module-level helper.
+    const share = slice.value / total;
     const start = angle;
-    const end = angle + fraction * Math.PI * 2;
+    const end = angle + share * Math.PI * 2;
     angle = end;
     const x0 = cx + radius * Math.cos(start);
     const y0 = cy + radius * Math.sin(start);
@@ -593,7 +594,7 @@ function PieChart({
       slices.length === 1
         ? `M ${cx - radius} ${cy} A ${radius} ${radius} 0 1 1 ${cx + radius} ${cy} A ${radius} ${radius} 0 1 1 ${cx - radius} ${cy} Z`
         : `M ${cx} ${cy} L ${x0} ${y0} A ${radius} ${radius} 0 ${largeArc} 1 ${x1} ${y1} Z`;
-    return { d, color: colors[index], slice, fraction };
+    return { d, color: colors[index], slice, share };
   });
 
   return (
@@ -613,7 +614,7 @@ function PieChart({
             )}%)`}</title>
           </path>
         ))}
-        {arcs.map(({ color, slice, fraction }, index) => {
+        {arcs.map(({ color, slice, share }, index) => {
           const y = MARGIN.top + index * legendStep;
           return (
             <g key={`legend-${slice.label}`}>
@@ -625,15 +626,15 @@ function PieChart({
                 fontSize={11}
                 fill={TICK}
               >
-                {`${truncateLabel(slice.label, 18)} · ${Math.round(fraction * 100)}%`}
+                {`${truncateLabel(slice.label, 18)} · ${Math.round(share * 100)}%`}
               </text>
             </g>
           );
         })}
       </svg>
       <Caption>
-        {aggregation === "count" ? "row count" : "sum"} · {slices.length} categor
-        {slices.length === 1 ? "y" : "ies"}
+        {aggregation === "count" ? "row count" : "sum"} · {slices.length}{" "}
+        {slices.length === 1 ? "category" : "categories"}
       </Caption>
     </>
   );

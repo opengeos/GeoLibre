@@ -410,7 +410,12 @@ export function computePie(
     const tail = all.slice(limit - 1);
     const otherValue = tail.reduce((sum, slice) => sum + slice.value, 0);
     otherCount = tail.reduce((sum, slice) => sum + slice.count, 0);
-    slices = [...head, { label: "(other)", value: otherValue, count: otherCount }];
+    // Avoid a duplicate label (and a React key collision) if the data already
+    // has a real "(other)" category among the shown slices.
+    const foldLabel = head.some((slice) => slice.label === "(other)")
+      ? "(other categories)"
+      : "(other)";
+    slices = [...head, { label: foldLabel, value: otherValue, count: otherCount }];
   }
   const total = slices.reduce((sum, slice) => sum + slice.value, 0);
   if (total <= 0) return null;
