@@ -1107,6 +1107,40 @@ body,
   color: hsl(var(--foreground));
 }
 
+/*
+ * Make the Colorbar / Legend / HTML plugin GUI panels resizable in both width
+ * and height, in any map corner. Each panel is anchored to its toggle button:
+ * `.right` opens rightward (CSS left-anchored), `.left` opens leftward (CSS
+ * right-anchored). A left-anchored panel resizes naturally from the native
+ * bottom-right grip. A right-anchored panel sets `direction: rtl` so the grip
+ * moves to the inward bottom-left corner and the panel grows toward the map
+ * interior instead of off-screen; its content is reset to LTR. Both grow
+ * downward from `top: 0`, which suits the top corners.
+ */
+.geolibre-colorbar-control .colorbar-gui-panel,
+.geolibre-legend-control .legend-gui-panel,
+.geolibre-html-control .html-gui-panel {
+  resize: both;
+  overflow: auto;
+  min-width: 220px;
+  min-height: 140px;
+  max-width: min(90vw, 720px);
+  /* Override the library's inline max-height so the panel can grow taller. */
+  max-height: min(85vh, 720px) !important;
+}
+
+.geolibre-colorbar-control .colorbar-gui-panel.left,
+.geolibre-legend-control .legend-gui-panel.left,
+.geolibre-html-control .html-gui-panel.left {
+  direction: rtl;
+}
+
+.geolibre-colorbar-control .colorbar-gui-panel.left > *,
+.geolibre-legend-control .legend-gui-panel.left > *,
+.geolibre-html-control .html-gui-panel.left > * {
+  direction: ltr;
+}
+
 .geolibre-components-control input[type="radio"] {
   appearance: none;
   background-color: #fff;
