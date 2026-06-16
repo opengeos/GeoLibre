@@ -144,15 +144,73 @@ export function interpolateRampColors(
   colorRamp: string,
   count: number,
 ): string[] {
-  const colors = getVectorColorRamp(colorRamp).colors;
-  if (count <= 1) return [colors[colors.length - 1]];
+  return interpolateColors(getVectorColorRamp(colorRamp).colors, count);
+}
+
+/**
+ * Samples an explicit list of anchor colors into `count` evenly spaced hex
+ * colors by linear interpolation. Backs both the named ramps and user-defined
+ * custom ramps, so a list of hex codes is sampled identically to a built-in.
+ *
+ * @param colors - The anchor colors (at least one).
+ * @param count - Number of colors to produce.
+ * @returns An array of `count` hex colors (a single end color when count <= 1).
+ */
+export function interpolateColors(
+  colors: readonly string[],
+  count: number,
+): string[] {
+  const anchors = colors.length > 0 ? colors : ["#000000"];
+  if (count <= 1) return [anchors[anchors.length - 1]];
+  if (anchors.length === 1) {
+    return Array.from({ length: count }, () => anchors[0]);
+  }
   return Array.from({ length: count }, (_, index) => {
-    const scaled = (index / (count - 1)) * (colors.length - 1);
+    const scaled = (index / (count - 1)) * (anchors.length - 1);
     const lowerIndex = Math.floor(scaled);
-    const upperIndex = Math.min(colors.length - 1, Math.ceil(scaled));
+    const upperIndex = Math.min(anchors.length - 1, Math.ceil(scaled));
     const ratio = scaled - lowerIndex;
-    return interpolateHexColor(colors[lowerIndex], colors[upperIndex], ratio);
+    return interpolateHexColor(anchors[lowerIndex], anchors[upperIndex], ratio);
   });
+}
+
+/**
+ * Normalizes a single user-entered color token into a canonical `#rrggbb`
+ * lowercase hex string, or null when it is not a valid 3- or 6-digit hex
+ * color. Accepts values with or without a leading `#` and expands shorthand
+ * (`#abc` → `#aabbcc`).
+ *
+ * @param token - A raw color token (e.g. "FF0000", "#f00", " #AaBbCc ").
+ * @returns The canonical `#rrggbb` color, or null when invalid.
+ */
+export function normalizeHexColor(token: string): string | null {
+  let value = token.trim().toLowerCase();
+  if (value === "") return null;
+  if (!value.startsWith("#")) value = `#${value}`;
+  if (/^#[0-9a-f]{3}$/.test(value)) {
+    value = `#${value
+      .slice(1)
+      .split("")
+      .map((channel) => channel + channel)
+      .join("")}`;
+  }
+  return /^#[0-9a-f]{6}$/.test(value) ? value : null;
+}
+
+/**
+ * Parses a free-text list of hex color codes into canonical `#rrggbb` colors,
+ * for the custom color-ramp inputs. Tokens may be separated by commas,
+ * semicolons, or any whitespace (including newlines); invalid tokens are
+ * dropped so a partial paste still yields the colors it can.
+ *
+ * @param input - The raw text the user entered.
+ * @returns The valid, normalized colors in input order.
+ */
+export function parseHexColorList(input: string): string[] {
+  return input
+    .split(/[\s,;]+/)
+    .map(normalizeHexColor)
+    .filter((color): color is string => color !== null);
 }
 
 /**

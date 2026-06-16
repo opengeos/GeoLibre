@@ -9,6 +9,7 @@ import {
   COLORMAP_TEXTURE_WIDTH,
   type RasterBandStats,
   type RasterSymbology,
+  buildContinuousColormapRgba,
   buildSteppedColormapRgba,
   savedRasterSymbology,
 } from "./raster-symbology";
@@ -53,10 +54,25 @@ type RasterInfoLike = {
 
 type ClassificationEntry = {
   symbology: RasterSymbology;
-  /** Cache key for the built texture (breaks + ramp + reversed). */
+  /** Cache key for the built texture (breaks + ramp + customColors + reversed). */
   key: string;
   texture?: GpuTexture;
 };
+
+/** Whether a symbology carries a usable custom color ramp (>= 2 colors). */
+function hasCustomColors(symbology: RasterSymbology): boolean {
+  return (symbology.customColors?.length ?? 0) >= 2;
+}
+
+/**
+ * Whether a single-band layer needs a GeoLibre-injected colormap texture: a
+ * stepped lookup when classified, or a smooth gradient when a custom ramp is
+ * applied to a continuous layer. A built-in continuous ramp renders through
+ * the upstream sprite (reversal aside) and needs no texture.
+ */
+function needsTexture(symbology: RasterSymbology): boolean {
+  return symbology.classified || hasCustomColors(symbology);
+}
 
 // Per-layer classification state and built GPU textures. Module-global to
 // match the single mounted raster control (see maplibre-raster.ts).
@@ -70,16 +86,23 @@ const statsInflight = new Map<string, AbortController>();
 let storeUnsubscribe: (() => void) | null = null;
 
 function symbologyKey(symbology: RasterSymbology): string {
-  return JSON.stringify([symbology.breaks, symbology.ramp, symbology.reversed]);
+  return JSON.stringify([
+    symbology.breaks,
+    symbology.ramp,
+    symbology.customColors ?? null,
+    symbology.reversed,
+  ]);
 }
 
 /**
- * Installs the per-layer classification injection on a raster control. Wraps
- * the LayerManager's `_renderTileFor` so that a classified single-band layer
- * renders through the unchanged upstream pipeline (composite / nodata /
- * rescale / stretch) but samples a custom stepped colormap texture instead of
- * the shared named-colormap sprite. Idempotent and feature-detected: if the
- * private surface is missing it warns once and leaves the control untouched.
+ * Installs the per-layer symbology injection on a raster control. Wraps the
+ * LayerManager's `_renderTileFor` so a single-band layer renders through the
+ * unchanged upstream pipeline (composite / nodata / rescale / stretch) but,
+ * when classified, samples a custom stepped colormap texture instead of the
+ * shared named-colormap sprite, and, when its continuous ramp is reversed,
+ * flips the colormap module's `reversed` shader uniform. Idempotent and
+ * feature-detected: if the private surface is missing it warns once and
+ * leaves the control untouched.
  *
  * @param control - The mounted maplibre-gl-raster control.
  */
@@ -102,9 +125,16 @@ export function installRasterClassification(control: unknown): void {
     manager._renderTileFor = (layer: RasterLayerLike): RenderTileFn => {
       const renderTile = originalRenderTileFor(layer);
       const entry = entries.get(layer.id);
+      // A texture is injected for classified / custom ramps; a built-in
+      // continuous ramp is only patched to reverse it via the shader uniform.
+      // Everything else renders straight through the upstream pipeline.
+      const usesTexture = entry ? needsTexture(entry.symbology) : false;
+      const reverseBuiltIn =
+        !usesTexture && (entry?.symbology.reversed ?? false);
       if (
         layer.state?.mode !== "single" ||
-        !entry?.symbology.classified ||
+        !entry ||
+        (!usesTexture && !reverseBuiltIn) ||
         !manager._device
       ) {
         return renderTile;
@@ -113,25 +143,34 @@ export function installRasterClassification(control: unknown): void {
         const result = renderTile(data);
         const pipeline = result?.renderPipeline;
         if (!Array.isArray(pipeline)) return result;
-        const texture = ensureTexture(manager, entry);
-        if (!texture) return result;
-        // Swap ONLY the trailing colormap module's texture; every other
-        // module (composite, nodata, rescale, stretch, gamma) is reused as
-        // built upstream, so nodata transparency and the rescale window
-        // behave identically to the named-colormap path.
+        // Texture-backed ramps sample an injected lookup; bail if it could not
+        // be built. The reverse-only path keeps the upstream texture.
+        const texture = usesTexture ? ensureTexture(manager, entry) : null;
+        if (usesTexture && !texture) return result;
+        // Touch ONLY the trailing colormap module; every other module
+        // (composite, nodata, rescale, stretch, gamma) is reused as built
+        // upstream, so nodata transparency and the rescale window behave
+        // identically to the named-colormap path.
         const patched = pipeline.map((mod) =>
           mod?.module?.name === "colormap"
             ? {
                 ...mod,
-                props: {
-                  ...mod.props,
-                  colormapTexture: texture,
-                  colormapIndex: 0,
-                  // The reversal is already baked into the texture's class
-                  // colors (buildSteppedColormapRgba), so the shader uniform
-                  // must stay false or the two cancel out.
-                  reversed: false,
-                },
+                props: usesTexture
+                  ? {
+                      ...mod.props,
+                      colormapTexture: texture,
+                      colormapIndex: 0,
+                      // Any reversal is already baked into the injected
+                      // texture's colors, so the shader uniform must stay false
+                      // or the two cancel out.
+                      reversed: false,
+                    }
+                  : {
+                      // Keep the upstream named colormap; just flip the shader
+                      // uniform so the result mirrors the forward ramp exactly.
+                      ...mod.props,
+                      reversed: true,
+                    },
               }
             : mod,
         );
@@ -152,11 +191,13 @@ function ensureTexture(
   if (entry.texture && entry.key === key) return entry.texture;
   entry.texture?.destroy?.();
   try {
-    const rgba = buildSteppedColormapRgba(
-      entry.symbology.breaks,
-      entry.symbology.ramp,
-      entry.symbology.reversed,
-    );
+    const { classified, breaks, ramp, reversed, customColors } = entry.symbology;
+    // Classified ramps step through the class breaks; a custom continuous ramp
+    // is a smooth gradient of the user's colors. (A built-in continuous ramp
+    // never reaches here -- it has no texture.)
+    const rgba = classified
+      ? buildSteppedColormapRgba(breaks, ramp, reversed, customColors)
+      : buildContinuousColormapRgba(customColors ?? [], reversed);
     // The DOM ImageData ctor types its buffer as ArrayBuffer (not the wider
     // ArrayBufferLike the Uint8ClampedArray generic carries); the runtime
     // buffer is a plain ArrayBuffer, so narrow it for the type checker.
@@ -199,7 +240,13 @@ function reconcile(control: unknown): void {
     const symbology = savedRasterSymbology(layer);
     const existing = entries.get(layer.id);
 
-    if (!symbology || !symbology.classified) {
+    // Track the layer while it needs custom rendering: a classified or custom
+    // texture, or a reversed built-in continuous ramp. A plain built-in
+    // continuous ramp needs none of these, so drop any stale entry.
+    if (
+      !symbology ||
+      (!needsTexture(symbology) && !symbology.reversed)
+    ) {
       if (existing) {
         existing.texture?.destroy?.();
         entries.delete(layer.id);

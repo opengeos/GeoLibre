@@ -1,7 +1,9 @@
 import {
   type GeoLibreLayer,
   createEqualIntervalBreaks,
-  interpolateRampColors,
+  getVectorColorRamp,
+  interpolateColors,
+  normalizeHexColor,
   parseHexColor,
 } from "@geolibre/core";
 
@@ -16,16 +18,30 @@ export type RasterClassificationMethod = "equal-interval" | "quantile" | "manual
  * GeoLibre-owned raster symbology, stored at `metadata.rasterSymbology`. The
  * upstream `maplibre-gl-raster` control owns the continuous render state
  * (`metadata.rasterState`: mode/bands/colormap/rescale/nodata/stretch/gamma);
- * this record adds discrete classification that the control cannot express.
- * When `classified` is true the stepped colormap drives color and
- * `rasterState.colormap` is ignored.
+ * this record adds what the control cannot express: discrete classification
+ * and a reversed color ramp. When `classified` is true the stepped colormap
+ * drives color and `rasterState.colormap` is ignored; when only `reversed` is
+ * true the continuous named colormap is kept but sampled back-to-front. When
+ * neither is set the record is unnecessary (the control renders on its own).
  */
 export type RasterSymbology = {
   /** Whether the single band is rendered as discrete classes. */
   classified: boolean;
   /** Color ramp name (a `VECTOR_COLOR_RAMPS` value / deck.gl-raster colormap). */
   ramp: string;
-  /** Sample the ramp in reverse (classified-only; continuous path can't reverse). */
+  /**
+   * User-defined anchor colors (`#rrggbb`) overriding the named ramp when set
+   * (length >= 2). The upstream control only renders its built-in colormaps,
+   * so a custom ramp is always injected as a texture: a stepped lookup when
+   * classified, a smooth gradient when continuous.
+   */
+  customColors?: string[];
+  /**
+   * Sample the ramp in reverse. For classified and custom-continuous layers
+   * the reversal is baked into the injected texture; for a built-in continuous
+   * colormap it flips the deck.gl-raster colormap module's `reversed` shader
+   * uniform, so the result is the exact mirror of the forward ramp.
+   */
   reversed: boolean;
   /** How the class edges are derived. */
   method: RasterClassificationMethod;
@@ -146,6 +162,23 @@ export function computeRasterBreaks(
 }
 
 /**
+ * Resolves the anchor colors a symbology samples: the custom colors when at
+ * least two were supplied, otherwise the named ramp's colors.
+ *
+ * @param ramp - The named color ramp value.
+ * @param customColors - Optional user-defined anchor colors.
+ * @returns The anchor colors to interpolate.
+ */
+export function rampBaseColors(
+  ramp: string,
+  customColors?: readonly string[],
+): readonly string[] {
+  return customColors && customColors.length >= 2
+    ? customColors
+    : getVectorColorRamp(ramp).colors;
+}
+
+/**
  * Builds a 256-wide RGBA lookup row for a classified single-band raster. Each
  * column is colored by the class its normalized position (within
  * `[breaks[0], breaks[last]]`) falls into, so the deck.gl-raster `Colormap`
@@ -156,17 +189,19 @@ export function computeRasterBreaks(
  * @param breaks - Class edges, ascending, length `classCount + 1`.
  * @param ramp - The color ramp name.
  * @param reversed - Whether to reverse the class colors.
+ * @param customColors - Optional user-defined anchor colors overriding `ramp`.
  * @returns A 256x1 RGBA buffer (length COLORMAP_TEXTURE_WIDTH * 4).
  */
 export function buildSteppedColormapRgba(
   breaks: number[],
   ramp: string,
   reversed = false,
+  customColors?: readonly string[],
 ): Uint8ClampedArray {
   const width = COLORMAP_TEXTURE_WIDTH;
   const rgba = new Uint8ClampedArray(width * 4);
   const classCount = Math.max(1, breaks.length - 1);
-  const colors = interpolateRampColors(ramp, classCount);
+  const colors = interpolateColors(rampBaseColors(ramp, customColors), classCount);
   const orderedColors = reversed ? [...colors].reverse() : colors;
 
   const min = breaks[0];
@@ -191,6 +226,37 @@ export function buildSteppedColormapRgba(
     const color = parseHexColor(
       orderedColors[classIndex] ?? orderedColors.at(-1) ?? "#000000",
     );
+    const offset = column * 4;
+    rgba[offset] = color.r;
+    rgba[offset + 1] = color.g;
+    rgba[offset + 2] = color.b;
+    rgba[offset + 3] = 255;
+  }
+  return rgba;
+}
+
+/**
+ * Builds a 256-wide RGBA lookup row that interpolates custom anchor colors
+ * smoothly across the rescaled [0, 1] data window, for a continuous
+ * (unclassified) single-band raster whose ramp is user-defined. The upstream
+ * control renders only its named colormaps, so a custom continuous ramp is
+ * injected as this texture. Returned as a flat `Uint8ClampedArray` so it is
+ * constructible and testable without a DOM.
+ *
+ * @param colors - The custom anchor colors (at least one).
+ * @param reversed - Whether to sample the colors back-to-front.
+ * @returns A 256x1 RGBA buffer (length COLORMAP_TEXTURE_WIDTH * 4).
+ */
+export function buildContinuousColormapRgba(
+  colors: readonly string[],
+  reversed = false,
+): Uint8ClampedArray {
+  const width = COLORMAP_TEXTURE_WIDTH;
+  const rgba = new Uint8ClampedArray(width * 4);
+  const ordered = reversed ? [...colors].reverse() : colors;
+  const sampled = interpolateColors(ordered, width);
+  for (let column = 0; column < width; column += 1) {
+    const color = parseHexColor(sampled[column] ?? "#000000");
     const offset = column * 4;
     rgba[offset] = color.r;
     rgba[offset + 1] = color.g;
@@ -244,9 +310,22 @@ export function savedRasterSymbology(
     if (breaks[index] < breaks[index - 1]) return null;
   }
 
+  // A custom ramp needs at least two valid colors; drop malformed entries so a
+  // hand-edited project silently falls back to the named ramp rather than
+  // rendering a broken texture.
+  let customColors: string[] | undefined;
+  if (Array.isArray(candidate.customColors)) {
+    const normalized = candidate.customColors
+      .filter((color): color is string => typeof color === "string")
+      .map(normalizeHexColor)
+      .filter((color): color is string => color !== null);
+    if (normalized.length >= 2) customColors = normalized;
+  }
+
   return {
     classified: candidate.classified,
     ramp: candidate.ramp,
+    ...(customColors ? { customColors } : {}),
     reversed: candidate.reversed === true,
     method: candidate.method,
     classCount,

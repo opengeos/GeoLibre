@@ -2,6 +2,7 @@ import {
   type GeoLibreLayer,
   VECTOR_COLOR_RAMPS,
   getVectorColorRamp,
+  parseHexColorList,
   useAppStore,
 } from "@geolibre/core";
 import {
@@ -14,7 +15,7 @@ import {
   getRasterBandStats,
   savedRasterSymbology,
 } from "@geolibre/plugins";
-import { Input, Label, Select, Separator } from "@geolibre/ui";
+import { Input, Label, Select, Separator, Textarea } from "@geolibre/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type RasterStateRecord = {
@@ -38,6 +39,17 @@ const CLASSIFICATION_METHODS: {
 
 const DEFAULT_RAMP = "viridis";
 const DEFAULT_CLASS_COUNT = 5;
+/** Sentinel `<Select>` value that switches the ramp to a user-defined list. */
+const CUSTOM_RAMP_VALUE = "__custom__";
+/** A custom ramp needs at least this many colors to interpolate. */
+const MIN_CUSTOM_COLORS = 2;
+/**
+ * Named ramps sorted by label for the dropdown. A copy is sorted (not the
+ * source array) so `getVectorColorRamp`'s first-ramp fallback stays viridis.
+ */
+const SORTED_COLOR_RAMPS = [...VECTOR_COLOR_RAMPS].sort((a, b) =>
+  a.label.localeCompare(b.label),
+);
 
 function readRasterState(layer: GeoLibreLayer): RasterStateRecord {
   const raw =
@@ -181,7 +193,10 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
   }
 
   function recomputeSymbology(
-    next: Pick<RasterSymbology, "ramp" | "reversed" | "method" | "classCount">,
+    next: Pick<
+      RasterSymbology,
+      "ramp" | "reversed" | "method" | "classCount" | "customColors"
+    >,
     overrides: { range?: [number, number]; manualBreaks?: number[] } = {},
   ): void {
     // Reusing the prior histogram here is safe: a range override only happens
@@ -196,9 +211,21 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
       next.classCount,
       overrides.manualBreaks ?? symbology?.breaks,
     );
+    const custom =
+      (next.customColors?.length ?? 0) >= MIN_CUSTOM_COLORS
+        ? next.customColors
+        : undefined;
     commit({
       statePatch: { colormap: next.ramp, rescale: rangeFromBreaks(breaks) },
-      symbology: { classified: true, ...next, breaks },
+      symbology: {
+        classified: true,
+        ramp: next.ramp,
+        reversed: next.reversed,
+        method: next.method,
+        classCount: next.classCount,
+        breaks,
+        ...(custom ? { customColors: custom } : {}),
+      },
     });
   }
 
@@ -252,7 +279,97 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
   const classified = symbology?.classified ?? false;
   const classCount = symbology?.classCount ?? DEFAULT_CLASS_COUNT;
   const method = symbology?.method ?? "equal-interval";
-  const previewColors = getVectorColorRamp(ramp).colors;
+  const reversed = symbology?.reversed ?? false;
+  const customColors = symbology?.customColors;
+  const isCustom = (customColors?.length ?? 0) >= MIN_CUSTOM_COLORS;
+  // A custom ramp interpolates the user's colors; otherwise the named ramp's
+  // anchors. The preview mirrors the reverse toggle either way.
+  const baseColors = isCustom
+    ? (customColors as string[])
+    : getVectorColorRamp(ramp).colors;
+  const orderedPreview = reversed ? [...baseColors].reverse() : baseColors;
+  const rampSelectValue = isCustom ? CUSTOM_RAMP_VALUE : ramp;
+
+  // Reverse and custom colors are GeoLibre extensions the upstream control
+  // can't express; a continuous (unclassified) layer carries them in a
+  // classified:false record the render injection reads, or none at all when
+  // both are off (the plain upstream colormap renders on its own). Breaks are
+  // required by the record but unused while continuous, so seed them from
+  // whatever range is known.
+  function continuousSymbology(opts: {
+    ramp: string;
+    reversed: boolean;
+    customColors?: string[];
+  }): RasterSymbology | null {
+    const custom =
+      (opts.customColors?.length ?? 0) >= MIN_CUSTOM_COLORS
+        ? opts.customColors
+        : undefined;
+    if (!opts.reversed && !custom) return null;
+    return {
+      classified: false,
+      ramp: opts.ramp,
+      reversed: opts.reversed,
+      method,
+      classCount,
+      breaks: computeRasterBreaks(method, stats, classCount),
+      ...(custom ? { customColors: custom } : {}),
+    };
+  }
+
+  // Reverse applies to both render paths. Classified bakes the flip into the
+  // injected texture, so toggling only rewrites the symbology (breaks unchanged).
+  function setReversed(next: boolean): void {
+    if (classified && symbology) {
+      commit({ symbology: { ...symbology, reversed: next } });
+    } else {
+      commit({
+        symbology: continuousSymbology({ ramp, reversed: next, customColors }),
+      });
+    }
+  }
+
+  // Switch to / edit / clear a user-defined ramp. `next` is the parsed color
+  // list (>= 2 colors) or undefined to drop back to the named ramp.
+  function setCustomColors(next: string[] | undefined): void {
+    if (classified && symbology) {
+      recomputeSymbology({
+        ramp,
+        reversed,
+        method,
+        classCount,
+        customColors: next,
+      });
+    } else {
+      commit({
+        symbology: continuousSymbology({ ramp, reversed, customColors: next }),
+      });
+    }
+  }
+
+  // Select a built-in named ramp (clears any custom colors). Classified
+  // recomputes through the named ramp; continuous pushes the colormap to the
+  // control and keeps only the reverse extra (if any).
+  function selectNamedRamp(value: string): void {
+    if (classified && symbology) {
+      recomputeSymbology({
+        ramp: value,
+        reversed,
+        method,
+        classCount,
+        customColors: undefined,
+      });
+    } else {
+      commit({
+        statePatch: { colormap: value },
+        symbology: continuousSymbology({
+          ramp: value,
+          reversed,
+          customColors: undefined,
+        }),
+      });
+    }
+  }
 
   return (
     <div className="space-y-3">
@@ -286,13 +403,15 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
         <Label htmlFor="rasterRamp">Color ramp</Label>
         <Select
           id="rasterRamp"
-          value={ramp}
+          value={rampSelectValue}
           onChange={(event) => {
             const value = event.target.value;
-            if (classified && symbology) {
-              recomputeSymbology({ ...symbology, ramp: value });
+            if (value === CUSTOM_RAMP_VALUE) {
+              // Seed the editable list from the current named ramp's anchors so
+              // the user starts from a sensible, valid (>= 2 color) ramp.
+              setCustomColors([...getVectorColorRamp(ramp).colors]);
             } else {
-              commit({ statePatch: { colormap: value } });
+              selectNamedRamp(value);
             }
           }}
         >
@@ -300,23 +419,39 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
               control's "gray"/"palette" default); surface it so the select
               reflects what is actually rendered instead of silently showing
               the first ramp. */}
-          {!VECTOR_COLOR_RAMPS.some((r) => r.value === ramp) && (
+          {!isCustom && !VECTOR_COLOR_RAMPS.some((r) => r.value === ramp) && (
             <option value={ramp}>{ramp}</option>
           )}
-          {VECTOR_COLOR_RAMPS.map((colorRamp) => (
+          {SORTED_COLOR_RAMPS.map((colorRamp) => (
             <option key={colorRamp.value} value={colorRamp.value}>
               {colorRamp.label}
             </option>
           ))}
+          <option value={CUSTOM_RAMP_VALUE}>Custom…</option>
         </Select>
         <div
           aria-hidden="true"
           className="h-4 rounded-sm border"
           style={{
-            background: `linear-gradient(90deg, ${previewColors.join(", ")})`,
+            background: `linear-gradient(90deg, ${orderedPreview.join(", ")})`,
           }}
         />
+        {isCustom && (
+          <CustomColorsField
+            colors={customColors as string[]}
+            onCommit={(colors) => setCustomColors(colors)}
+          />
+        )}
       </div>
+
+      <label className="flex items-center gap-2 text-xs">
+        <input
+          type="checkbox"
+          checked={reversed}
+          onChange={(event) => setReversed(event.target.checked)}
+        />
+        Reverse ramp
+      </label>
 
       <label className="flex items-center gap-2 text-xs">
         <input
@@ -326,12 +461,16 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
             if (event.target.checked) {
               recomputeSymbology({
                 ramp,
-                reversed: symbology?.reversed ?? false,
+                reversed,
                 method,
                 classCount,
+                customColors,
               });
             } else {
-              commit({ symbology: null });
+              // Drop classification but keep any reversed / custom ramp extras.
+              commit({
+                symbology: continuousSymbology({ ramp, reversed, customColors }),
+              });
             }
           }}
         />
@@ -347,9 +486,6 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
           }
           onClassCount={(count) =>
             recomputeSymbology({ ...symbology, classCount: count })
-          }
-          onReversed={(reversed) =>
-            commit({ symbology: { ...symbology, reversed } })
           }
           onManualBreaks={(breaks) => {
             // Keep edges ascending: savedRasterSymbology rejects unsorted
@@ -463,7 +599,6 @@ function ClassificationControls({
   stats,
   onMethod,
   onClassCount,
-  onReversed,
   onManualBreaks,
   onRange,
 }: {
@@ -471,7 +606,6 @@ function ClassificationControls({
   stats: RasterBandStats | null;
   onMethod: (method: RasterClassificationMethod) => void;
   onClassCount: (count: number) => void;
-  onReversed: (reversed: boolean) => void;
   onManualBreaks: (breaks: number[]) => void;
   onRange: (range: [number, number]) => void;
 }) {
@@ -552,15 +686,6 @@ function ClassificationControls({
           ))}
         </div>
       )}
-
-      <label className="flex items-center gap-2 text-xs">
-        <input
-          type="checkbox"
-          checked={symbology.reversed}
-          onChange={(event) => onReversed(event.target.checked)}
-        />
-        Reverse ramp
-      </label>
 
       {symbology.method !== "manual" && !stats && (
         <p className="text-[10px] text-muted-foreground">
@@ -648,6 +773,53 @@ function NodataControl({
           onCommit={(value) => onChange(value)}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Free-text editor for a user-defined color ramp: a list of hex codes parsed
+ * into the ramp's anchor colors. Edits are committed on blur, and only when
+ * they yield a usable ramp (>= 2 valid colors) so the layer never lands in an
+ * invalid state; an unusable draft is reverted to the last good list.
+ *
+ * @param props.colors - The current custom colors.
+ * @param props.onCommit - Receives the parsed colors when the draft is valid.
+ */
+function CustomColorsField({
+  colors,
+  onCommit,
+}: {
+  colors: string[];
+  onCommit: (colors: string[]) => void;
+}) {
+  const [draft, setDraft] = useState(colors.join(", "));
+  useEffect(() => {
+    setDraft(colors.join(", "));
+  }, [colors]);
+  const parsed = parseHexColorList(draft);
+  const valid = parsed.length >= MIN_CUSTOM_COLORS;
+  return (
+    <div className="space-y-1">
+      <Label htmlFor="rasterCustomColors" className="text-xs">
+        Custom colors
+      </Label>
+      <Textarea
+        id="rasterCustomColors"
+        rows={2}
+        value={draft}
+        placeholder="#440154, #21908c, #fde725"
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() => {
+          if (valid) onCommit(parsed);
+          else setDraft(colors.join(", "));
+        }}
+      />
+      <p className="text-[10px] text-muted-foreground">
+        {valid
+          ? `${parsed.length} colors, low to high. Use Reverse to flip.`
+          : "Enter at least two hex codes, separated by commas or spaces."}
+      </p>
     </div>
   );
 }

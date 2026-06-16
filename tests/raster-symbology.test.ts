@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { GeoLibreLayer } from "@geolibre/core";
 import {
+  buildContinuousColormapRgba,
   buildSteppedColormapRgba,
   clampRasterClassCount,
   computeRasterBreaks,
@@ -124,6 +125,42 @@ describe("buildSteppedColormapRgba", () => {
     assert.equal(rgba.length, 256 * 4);
     assert.deepEqual([rgba[0], rgba[255 * 4]], [rgba[0], rgba[0]]);
   });
+
+  it("uses custom colors over the named ramp when supplied", () => {
+    // Two custom classes: pure red then pure blue, ignoring "viridis".
+    const rgba = buildSteppedColormapRgba([0, 1, 2], "viridis", false, [
+      "#ff0000",
+      "#0000ff",
+    ]);
+    assert.deepEqual([rgba[0], rgba[1], rgba[2]], [255, 0, 0]);
+    assert.deepEqual(
+      [rgba[255 * 4], rgba[255 * 4 + 1], rgba[255 * 4 + 2]],
+      [0, 0, 255],
+    );
+  });
+});
+
+describe("buildContinuousColormapRgba", () => {
+  it("interpolates a smooth gradient across the row", () => {
+    const rgba = buildContinuousColormapRgba(["#000000", "#ffffff"], false);
+    assert.equal(rgba.length, 256 * 4);
+    // Endpoints are the anchor colors; the middle is a midpoint gray.
+    assert.deepEqual([rgba[0], rgba[1], rgba[2]], [0, 0, 0]);
+    assert.deepEqual(
+      [rgba[255 * 4], rgba[255 * 4 + 1], rgba[255 * 4 + 2]],
+      [255, 255, 255],
+    );
+    assert.ok(rgba[128 * 4] > 0 && rgba[128 * 4] < 255);
+  });
+
+  it("flips the gradient when reversed", () => {
+    const rgba = buildContinuousColormapRgba(["#000000", "#ffffff"], true);
+    assert.deepEqual([rgba[0], rgba[1], rgba[2]], [255, 255, 255]);
+    assert.deepEqual(
+      [rgba[255 * 4], rgba[255 * 4 + 1], rgba[255 * 4 + 2]],
+      [0, 0, 0],
+    );
+  });
 });
 
 describe("savedRasterSymbology", () => {
@@ -149,6 +186,38 @@ describe("savedRasterSymbology", () => {
     assert.equal(result.classCount, 12);
     assert.equal(result.method, "quantile");
     assert.equal(result.reversed, true);
+  });
+
+  it("keeps and normalizes custom colors with >= 2 valid entries", () => {
+    const result = savedRasterSymbology(
+      layerWith({
+        classified: false,
+        ramp: "viridis",
+        customColors: ["#F00", "00ff00", "garbage"],
+        reversed: false,
+        method: "equal-interval",
+        classCount: 5,
+        breaks: [0, 1, 2, 3, 4, 5],
+      }),
+    );
+    assert.ok(result);
+    assert.deepEqual(result.customColors, ["#ff0000", "#00ff00"]);
+  });
+
+  it("drops custom colors that resolve to fewer than two valid entries", () => {
+    const result = savedRasterSymbology(
+      layerWith({
+        classified: false,
+        ramp: "viridis",
+        customColors: ["#ff0000", "nope"],
+        reversed: false,
+        method: "equal-interval",
+        classCount: 5,
+        breaks: [0, 1, 2, 3, 4, 5],
+      }),
+    );
+    assert.ok(result);
+    assert.equal(result.customColors, undefined);
   });
 
   it("rejects non-ascending or wrong-length breaks", () => {
