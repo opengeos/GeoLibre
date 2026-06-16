@@ -47,7 +47,7 @@ INSTALL spatial;
 LOAD spatial;
 ```
 
-GeoParquet is read with DuckDB's Parquet reader after loading Spatial. Other local vector formats are passed to Spatial `ST_Read` when the WebAssembly extension can load the GDAL-backed reader. Zipped Shapefiles are parsed with `shpjs` first, then DuckDB Spatial is tried if that parser cannot read the file. KMZ archives are unzipped in the browser and their KML files are passed through the same DuckDB Spatial KML reader.
+GeoParquet is read with DuckDB's Parquet reader after loading Spatial. Other local vector formats are passed to Spatial `ST_Read` when the WebAssembly extension can load the GDAL-backed reader. Zipped Shapefiles are parsed with `shpjs` first, then DuckDB Spatial is tried if that parser cannot read the file. KML files (and the KML inside unzipped KMZ archives) are read by an in-house parser that preserves embedded symbology, emitting [simplestyle-spec](https://github.com/mapbox/simplestyle-spec) properties (`fill`, `stroke`, `stroke-width`, and so on) so styled KML renders the way it does in Google Earth; KML the parser cannot handle falls back to the DuckDB Spatial reader, which loads the geometry without the styling. A vector layer whose features carry simplestyle properties is rendered per-feature: paint expressions read the per-feature color/width and fall back to the flat layer style.
 
 ## Advanced Add Data workflows
 

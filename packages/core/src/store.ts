@@ -46,6 +46,7 @@ import {
   type StoryChapter,
   type StoryMap,
 } from "./types";
+import { hasSimpleStyleProperties } from "./vector-color";
 
 export type ConversionToolKind =
   | "vector-to-geoparquet"
@@ -751,7 +752,10 @@ export const useAppStore = create<AppState>()(
           source: { type: "geojson" },
           visible: true,
           opacity: 1,
-          style: { ...DEFAULT_LAYER_STYLE },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            simpleStyleEnabled: hasSimpleStyleProperties(geojson),
+          },
           metadata: {},
           geojson,
           sourcePath,

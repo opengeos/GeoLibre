@@ -107,6 +107,15 @@ export interface LayerStyle {
   vectorStyleClassificationScheme: string;
   vectorStyleStops: VectorStyleStop[];
   vectorStyleExpression: string;
+  /**
+   * When true, per-feature [simplestyle-spec](https://github.com/mapbox/simplestyle-spec)
+   * properties (`fill`, `fill-opacity`, `stroke`, `stroke-width`,
+   * `stroke-opacity`, `marker-color`) override the flat layer style on a
+   * per-feature basis. Set automatically when a GeoJSON layer is added whose
+   * features carry these properties (e.g. styled KML/KMZ), so embedded
+   * symbology renders without manual configuration.
+   */
+  simpleStyleEnabled: boolean;
   pointRenderer: PointRenderer;
   heatmapRadius: number;
   heatmapIntensity: number;
@@ -150,6 +159,7 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
     { value: 1, color: "#2563eb" },
   ],
   vectorStyleExpression: "",
+  simpleStyleEnabled: false,
   pointRenderer: "single",
   heatmapRadius: 30,
   heatmapIntensity: 1,

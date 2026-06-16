@@ -16,6 +16,7 @@ import type { DuckDbVectorFile } from "./duckdb-vector-loader";
 import type { DuckDbVectorLoadOptions } from "./duckdb-vector-guard";
 import { parseGpxLayer } from "./gpx";
 import { isTauri } from "./is-tauri";
+import { parseKmlText } from "./kml";
 
 // Re-exported so existing `import { isTauri } from "./tauri-io"` consumers keep
 // working; the implementation lives in the lightweight ./is-tauri module.
@@ -305,7 +306,7 @@ async function parseKmz(
   let cancellation: unknown;
   const settled = await Promise.all(
     kmlFiles.map((file) =>
-      loadDuckDbVector(file, options).then(
+      loadKmlFile(file, options).then(
         (collection): FeatureCollection | null => collection,
         (error): null => {
           if (!isVectorLoadCancelled(error)) throw error;
@@ -330,6 +331,23 @@ async function loadDuckDbVector(
 ) {
   const { loadDuckDbVectorFile } = await import("./duckdb-vector-loader");
   return loadDuckDbVectorFile(file, options);
+}
+
+/**
+ * Load one KML entry, preferring the styled in-house reader so embedded
+ * symbology survives, and falling back to DuckDB/GDAL for KML the reader does
+ * not cover (so geometry still loads, without the styling). Cancellation from
+ * the DuckDB fallback is allowed to propagate.
+ */
+async function loadKmlFile(
+  file: DuckDbVectorFile,
+  options?: DuckDbVectorLoadOptions,
+): Promise<FeatureCollection> {
+  try {
+    return parseKmlText(new TextDecoder("utf-8").decode(file.data));
+  } catch {
+    return loadDuckDbVector(file, options);
+  }
 }
 
 /**
@@ -386,6 +404,17 @@ async function loadBrowserVectorFile(
       data: await parseKmz(await file.arrayBuffer(), options),
       path: file.name,
     };
+  }
+
+  if (extension === "kml") {
+    try {
+      return {
+        data: parseKmlText(await file.text()),
+        path: file.name,
+      };
+    } catch {
+      // The styled reader does not cover this KML; let DuckDB Spatial try it.
+    }
   }
 
   if (extension === "gpx") {
@@ -489,6 +518,17 @@ async function loadTauriVectorFile(
       if (isVectorLoadCancelled(error)) throw error;
       const detail = error instanceof Error ? error.message : "Unknown error";
       throw new Error(`Could not read this KMZ file. ${detail}`);
+    }
+  }
+
+  if (extension === "kml") {
+    try {
+      return {
+        data: parseKmlText(await readTextFile(path)),
+        path,
+      };
+    } catch {
+      // The styled reader does not cover this KML; let DuckDB Spatial try it.
     }
   }
 
