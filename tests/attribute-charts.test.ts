@@ -6,6 +6,7 @@ import {
   computeBox,
   computeHistogram,
   computeLine,
+  computePie,
   computeScatter,
   formatAxisValue,
   numericColumns,
@@ -303,5 +304,73 @@ describe("formatAxisValue", () => {
     assert.equal(formatAxisValue(-0.0001), "-1.0e-4");
     // very large integers switch to exponential so labels stay short
     assert.equal(formatAxisValue(9007199254740991), "9.0e+15");
+  });
+});
+
+describe("computePie", () => {
+  it("counts rows per category and totals the whole", () => {
+    const data = rows(
+      { kind: "a" },
+      { kind: "a" },
+      { kind: "b" },
+      { kind: null },
+    );
+    const result = computePie(data, "kind", "count", null);
+    assert.ok(result);
+    assert.equal(result.total, 4);
+    assert.equal(result.slices.length, 3); // a, b, (blank)
+    assert.equal(result.slices[0].label, "a");
+    assert.equal(result.slices[0].value, 2);
+  });
+
+  it("sums a value field and keeps only positive contributions", () => {
+    const data = rows(
+      { kind: "a", amt: 10 },
+      { kind: "b", amt: -5 },
+      { kind: "c", amt: 0 },
+    );
+    const result = computePie(data, "kind", "sum", "amt");
+    assert.ok(result);
+    // Only "a" has a positive sum; non-positive slices are dropped.
+    assert.equal(result.slices.length, 1);
+    assert.equal(result.total, 10);
+  });
+
+  it("folds categories beyond the cap into an (other) slice", () => {
+    const data = rows(
+      ...Array.from({ length: 12 }, (_, i) => ({ kind: `k${i}` })),
+    );
+    const result = computePie(data, "kind", "count", null, 4);
+    assert.ok(result);
+    assert.equal(result.slices.length, 4);
+    assert.equal(result.slices[3].label, "(other)");
+    // 12 unique singletons; the top 3 are shown, the other 9 fold together.
+    assert.equal(result.otherCount, 9);
+    assert.equal(result.total, 12);
+  });
+
+  it("returns null when there is nothing positive to chart", () => {
+    assert.equal(computePie(rows(), "kind", "count", null), null);
+    assert.equal(
+      computePie(rows({ kind: "a", amt: -1 }), "kind", "sum", "amt"),
+      null,
+    );
+  });
+
+  it("renames the overflow slice when a real (other) category exists", () => {
+    const data = rows(
+      { kind: "(other)" },
+      { kind: "(other)" },
+      { kind: "a" },
+      { kind: "b" },
+      { kind: "c" },
+    );
+    // Cap at 2 slices: one real category plus the folded remainder. The real
+    // "(other)" category is the largest, so the fold must use a distinct label.
+    const result = computePie(data, "kind", "count", null, 2);
+    assert.ok(result);
+    const labels = result.slices.map((s) => s.label);
+    assert.equal(new Set(labels).size, labels.length); // no duplicate labels
+    assert.ok(labels.includes("(other categories)"));
   });
 });

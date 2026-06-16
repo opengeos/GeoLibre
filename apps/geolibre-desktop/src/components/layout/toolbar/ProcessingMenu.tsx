@@ -47,6 +47,7 @@ export function ProcessingMenu({
   const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
   const setNotebookOpen = useAppStore((s) => s.setNotebookOpen);
   const setAssistantOpen = useAppStore((s) => s.setAssistantOpen);
+  const setDashboardOpen = useAppStore((s) => s.setDashboardOpen);
 
   // Whitebox, format Conversion, Raster tools, and AI Segmentation all require
   // the Python sidecar, which cannot run on Android/iOS — hide them on mobile so
@@ -88,6 +89,9 @@ export function ProcessingMenu({
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => setNotebookOpen(true)}>
           {t("toolbar.command.notebook")}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => setDashboardOpen(true)}>
+          {t("toolbar.command.dashboard")}
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => setGeocodeOpen(true)}>
           {t("toolbar.item.geocode")}

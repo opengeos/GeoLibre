@@ -45,6 +45,7 @@ import {
   Columns3,
   Download,
   EyeOff,
+  LayoutDashboard,
   MoreHorizontal,
   Pencil,
   PanelBottomClose,
@@ -264,6 +265,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const selectFeature = useAppStore((s) => s.selectFeature);
   const attributeTableOpen = useAppStore((s) => s.ui.attributeTableOpen);
   const setAttributeTableOpen = useAppStore((s) => s.setAttributeTableOpen);
+  const setDashboardOpen = useAppStore((s) => s.setDashboardOpen);
   const updateLayer = useAppStore((s) => s.updateLayer);
   const zoomToSelectedFeature = useAppStore(
     (s) => s.ui.zoomToSelectedFeature,
@@ -1381,6 +1383,19 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           >
             <ChartColumn className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Charts</span>
+          </Button>
+        ) : null}
+        {!isEditing ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2"
+            title="Open the dashboard to build chart widgets"
+            aria-label="Dashboard"
+            onClick={() => setDashboardOpen(true)}
+          >
+            <LayoutDashboard className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Dashboard</span>
           </Button>
         ) : null}
         <DropdownMenu>

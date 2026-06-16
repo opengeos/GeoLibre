@@ -262,6 +262,20 @@ const AssistantPanel = lazy(() =>
     }),
 );
 
+const DashboardPanel = lazy(() =>
+  import("../panels/DashboardPanel")
+    .then((module) => ({
+      default: module.DashboardPanel,
+    }))
+    .catch((error) => {
+      // Same chunk-load fallback rationale as the dialogs above.
+      console.error("Failed to load DashboardPanel", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../panels/DashboardPanel").DashboardPanel;
+      return { default: Fallback };
+    }),
+);
+
 const PythonConsolePanel = lazy(() =>
   import("../panels/PythonConsolePanel")
     .then((module) => ({
@@ -342,6 +356,7 @@ export function DesktopShell({
   const pythonConsoleOpen = useAppStore((s) => s.ui.pythonConsoleOpen);
   const notebookOpen = useAppStore((s) => s.ui.notebookOpen);
   const assistantOpen = useAppStore((s) => s.ui.assistantOpen);
+  const dashboardOpen = useAppStore((s) => s.ui.dashboardOpen);
   const geometryEditLayerId = useSyncExternalStore(
     subscribeGeometryEdit,
     getGeometryEditTargetLayerId,
@@ -1217,6 +1232,13 @@ export function DesktopShell({
       {layoutOptions.attributePanelVisible ? (
         <SectionErrorBoundary label="Attribute table">
           <AttributeTable mapControllerRef={mapControllerRef} />
+        </SectionErrorBoundary>
+      ) : null}
+      {dashboardOpen ? (
+        <SectionErrorBoundary label="Dashboard">
+          <Suspense fallback={null}>
+            <DashboardPanel />
+          </Suspense>
         </SectionErrorBoundary>
       ) : null}
       {pythonConsoleOpen ? (

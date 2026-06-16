@@ -195,6 +195,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       legend: state.legend,
       storymap: state.storymap,
       models: state.models,
+      widgets: state.widgets,
+      dashboardColumns: state.dashboardColumns,
       metadata: state.metadata,
     });
     return {

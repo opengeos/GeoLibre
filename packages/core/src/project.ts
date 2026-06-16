@@ -3,8 +3,14 @@ import {
   DEFAULT_LAYER_STYLE,
   DEFAULT_LEGEND_CONFIG,
   DEFAULT_PROJECT_PREFERENCES,
+  DEFAULT_DASHBOARD_COLUMNS,
   DEFAULT_STORY_MAP,
+  MAX_DASHBOARD_COLUMNS,
+  MIN_DASHBOARD_COLUMNS,
   PROJECT_VERSION,
+  type DashboardWidget,
+  type DashboardWidgetAggregation,
+  type DashboardWidgetType,
   type GeoLibreLayer,
   type GeoLibreProject,
   type LayerGroup,
@@ -100,6 +106,10 @@ export function parseProject(json: string): GeoLibreProject {
     legend: normalizeLegendConfig(data.legend),
     storymap: normalizeStoryMap(data.storymap) ?? undefined,
     models: normalizeModels(data.models) ?? undefined,
+    widgets: normalizeWidgets(data.widgets) ?? undefined,
+    ...(data.dashboardColumns === undefined
+      ? {}
+      : { dashboardColumns: normalizeDashboardColumns(data.dashboardColumns) }),
     metadata: data.metadata ?? {},
   };
 }
@@ -392,6 +402,103 @@ export function normalizeModels(value: unknown): ProcessingModel[] | null {
   return models.length > 0 ? models : null;
 }
 
+/** A 3- or 6-digit hex color, the only widget color format we persist. */
+const HEX_COLOR = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
+/** Upper bound for a persisted histogram bin count, mirroring the chart
+ * renderer's clamp (`MAX_HISTOGRAM_BINS` in the desktop app's chart helpers). */
+const MAX_PERSISTED_BINS = 50;
+
+const DASHBOARD_WIDGET_TYPES: readonly DashboardWidgetType[] = [
+  "histogram",
+  "scatter",
+  "bar",
+  "line",
+  "box",
+  "pie",
+];
+const DASHBOARD_WIDGET_AGGREGATIONS: readonly DashboardWidgetAggregation[] = [
+  "count",
+  "sum",
+  "mean",
+];
+
+/**
+ * Coerce an untrusted (possibly hand-edited) `widgets` array into valid
+ * {@link DashboardWidget} records. Drops widgets without a usable id, layer id,
+ * or recognized chart type, de-duplicates by id, and keeps only the optional
+ * keys that are present and well-typed (the Dashboard panel falls back to
+ * sensible defaults for anything missing). Returns `null` when there is nothing
+ * worth persisting, so a widget-less project stays free of the key.
+ *
+ * @param value Raw `widgets` value from the project JSON.
+ * @returns Normalized widgets, or `null` when none survive.
+ */
+export function normalizeWidgets(value: unknown): DashboardWidget[] | null {
+  if (!Array.isArray(value)) return null;
+  const widgets: DashboardWidget[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const candidate = entry as Partial<DashboardWidget>;
+    const id = normalizeString(candidate.id).trim();
+    const layerId = normalizeString(candidate.layerId).trim();
+    if (!id || !layerId || seen.has(id)) continue;
+    const type = candidate.type;
+    if (!type || !DASHBOARD_WIDGET_TYPES.includes(type)) continue;
+    seen.add(id);
+    const widget: DashboardWidget = { id, layerId, type };
+    const title = normalizeString(candidate.title).trim();
+    if (title) widget.title = title;
+    const color = normalizeString(candidate.color).trim();
+    if (HEX_COLOR.test(color)) widget.color = color;
+    const field = normalizeString(candidate.field).trim();
+    if (field) widget.field = field;
+    const xField = normalizeString(candidate.xField).trim();
+    if (xField) widget.xField = xField;
+    const yField = normalizeString(candidate.yField).trim();
+    if (yField) widget.yField = yField;
+    if (typeof candidate.bins === "number" && Number.isFinite(candidate.bins)) {
+      // Persist only a sane positive bin count; the histogram renderer clamps to
+      // [1, 50], so mirror that here rather than round-tripping 0 or huge values.
+      const bins = Math.trunc(candidate.bins);
+      if (bins >= 1) widget.bins = Math.min(MAX_PERSISTED_BINS, bins);
+    }
+    const category = normalizeString(candidate.category).trim();
+    if (category) widget.category = category;
+    if (
+      candidate.aggregation &&
+      DASHBOARD_WIDGET_AGGREGATIONS.includes(candidate.aggregation) &&
+      // A pie has no "average"; the renderer would silently treat mean as sum,
+      // so drop it here and let the default (count) stand for hand-edited files.
+      !(type === "pie" && candidate.aggregation === "mean")
+    ) {
+      widget.aggregation = candidate.aggregation;
+    }
+    const valueField = normalizeString(candidate.valueField).trim();
+    if (valueField) widget.valueField = valueField;
+    widgets.push(widget);
+  }
+  return widgets.length > 0 ? widgets : null;
+}
+
+/**
+ * Clamp an untrusted dashboard column count into the supported range, falling
+ * back to the default for a missing or non-finite value.
+ *
+ * @param value Raw `dashboardColumns` value from the project JSON.
+ * @returns An integer column count within [MIN, MAX].
+ */
+export function normalizeDashboardColumns(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_DASHBOARD_COLUMNS;
+  }
+  return Math.max(
+    MIN_DASHBOARD_COLUMNS,
+    Math.min(MAX_DASHBOARD_COLUMNS, Math.trunc(value)),
+  );
+}
+
 function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
   if (!preferences || typeof preferences !== "object") {
     return DEFAULT_PROJECT_PREFERENCES;
@@ -674,6 +781,8 @@ export function projectFromStore(state: {
   legend?: LegendConfig | null;
   storymap?: StoryMap | null;
   models?: ProcessingModel[] | null;
+  widgets?: DashboardWidget[] | null;
+  dashboardColumns?: number;
   metadata: Record<string, unknown>;
 }): GeoLibreProject {
   const styles: Record<string, LayerStyle> = {};
@@ -684,6 +793,13 @@ export function projectFromStore(state: {
   const legend = normalizeLegendConfig(state.legend);
   const storymap = normalizeStoryMap(state.storymap);
   const models = normalizeModels(state.models);
+  const widgets = normalizeWidgets(state.widgets);
+  // Persist a non-default column count only; a default-layout dashboard (or a
+  // widget-less project) stays free of the key for legacy readers.
+  const dashboardColumns =
+    state.dashboardColumns === undefined
+      ? DEFAULT_DASHBOARD_COLUMNS
+      : normalizeDashboardColumns(state.dashboardColumns);
   // Persist every group (including empty folders, which the UI supports). The
   // key is spread only when non-empty so legacy readers that don't recognise it
   // are unaffected; normalizeLayerGroups round-trips them back on load.
@@ -703,6 +819,8 @@ export function projectFromStore(state: {
     ...(legend ? { legend } : {}),
     ...(storymap ? { storymap } : {}),
     ...(models ? { models } : {}),
+    ...(widgets ? { widgets } : {}),
+    ...(dashboardColumns !== DEFAULT_DASHBOARD_COLUMNS ? { dashboardColumns } : {}),
     metadata: state.metadata,
   };
 }
@@ -776,6 +894,8 @@ export function applyProjectToStore(project: GeoLibreProject): {
   legend: LegendConfig;
   storymap: StoryMap | null;
   models: ProcessingModel[];
+  widgets: DashboardWidget[];
+  dashboardColumns: number;
   metadata: Record<string, unknown>;
 } {
   const layers = project.layers.map((layer) => ({
@@ -814,6 +934,8 @@ export function applyProjectToStore(project: GeoLibreProject): {
     legend: normalizeLegendConfig(project.legend) ?? { ...DEFAULT_LEGEND_CONFIG },
     storymap: normalizeStoryMap(project.storymap),
     models: normalizeModels(project.models) ?? [],
+    widgets: normalizeWidgets(project.widgets) ?? [],
+    dashboardColumns: normalizeDashboardColumns(project.dashboardColumns),
     metadata: project.metadata,
   };
 }

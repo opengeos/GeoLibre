@@ -6,7 +6,13 @@
  * already builds for both GeoJSON and DuckDB query layers.
  */
 
-export type ChartType = "histogram" | "scatter" | "bar" | "line" | "box";
+export type ChartType =
+  | "histogram"
+  | "scatter"
+  | "bar"
+  | "line"
+  | "box"
+  | "pie";
 
 /** A row as seen by the chart helpers — only its property bag matters. */
 export interface ChartRow {
@@ -21,6 +27,8 @@ export const DEFAULT_HISTOGRAM_BINS = 10;
 export const MAX_CATEGORY_CARDINALITY = 50;
 /** The bar chart renders at most this many categories (top-N by value). */
 export const MAX_BAR_CATEGORIES = 20;
+/** The pie chart renders at most this many slices; the rest fold into "(other)". */
+export const MAX_PIE_SLICES = 8;
 
 /**
  * Parse a value into a finite number, or null when it cannot be one. Numeric
@@ -336,6 +344,84 @@ export function computeBar(
     if (bar.value < minValue) minValue = bar.value;
   }
   return { bars, maxValue, minValue, truncated: Math.max(0, all.length - bars.length) };
+}
+
+export interface PieSlice {
+  label: string;
+  /** The slice's share of the whole (count, or summed value). */
+  value: number;
+  /** How many rows fell into this slice. */
+  count: number;
+}
+
+export interface PieResult {
+  slices: PieSlice[];
+  /** Sum of every slice value (the whole the slices divide). */
+  total: number;
+  /** Rows folded into the trailing "(other)" slice (0 when none). */
+  otherCount: number;
+}
+
+/**
+ * Group rows by a category field into pie slices. `count` tallies rows per
+ * category; any other aggregation sums the finite values of `valueKey`. Because
+ * a pie shows parts of a whole, only positive contributions are kept (negative
+ * or zero sums are dropped). Slices are sorted by value descending and capped at
+ * `maxSlices`; the remainder is merged into a single "(other)" slice rather than
+ * dropped. Null/blank category values bucket as "(blank)". Returns null when no
+ * positive slice survives.
+ */
+export function computePie(
+  rows: ChartRow[],
+  categoryKey: string,
+  aggregation: BarAggregation,
+  valueKey: string | null,
+  maxSlices: number = MAX_PIE_SLICES,
+): PieResult | null {
+  const groups = new Map<string, { count: number; sum: number }>();
+  for (const row of rows) {
+    const raw = row.properties[categoryKey];
+    const label = raw == null || raw === "" ? "(blank)" : String(raw);
+    const group = groups.get(label) ?? { count: 0, sum: 0 };
+    group.count += 1;
+    if (aggregation !== "count" && valueKey) {
+      const value = toFiniteNumber(row.properties[valueKey]);
+      if (value !== null) group.sum += value;
+    }
+    groups.set(label, group);
+  }
+  if (groups.size === 0) return null;
+
+  const all = [...groups.entries()]
+    .map(([label, group]) => ({
+      label,
+      value: aggregation === "count" ? group.count : group.sum,
+      count: group.count,
+    }))
+    .filter((slice) => slice.value > 0);
+  if (all.length === 0) return null;
+  all.sort((a, b) => b.value - a.value);
+
+  // Floor at 2 so there is always a named slice plus the overflow bucket; a
+  // limit of 1 would put every row under "(other)", which is meaningless.
+  const limit = Math.max(2, maxSlices);
+  let slices: PieSlice[] = all;
+  let otherCount = 0;
+  if (all.length > limit) {
+    const head = all.slice(0, limit - 1);
+    const tail = all.slice(limit - 1);
+    const otherValue = tail.reduce((sum, slice) => sum + slice.value, 0);
+    otherCount = tail.reduce((sum, slice) => sum + slice.count, 0);
+    // Avoid a duplicate label (and a React key collision) if the data already
+    // has a real "(other)" category among the shown slices.
+    const foldLabel = head.some((slice) => slice.label === "(other)")
+      ? "(other categories)"
+      : "(other)";
+    slices = [...head, { label: foldLabel, value: otherValue, count: otherCount }];
+  }
+  const total = slices.reduce((sum, slice) => sum + slice.value, 0);
+  if (total <= 0) return null;
+  return { slices, total, otherCount };
 }
 
 export interface LinePoint {
