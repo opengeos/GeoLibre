@@ -29,7 +29,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: requirements-docs.txt
+          cache-dependency-path: |
+            requirements-docs.txt
+            apps/geolibre-desktop/jupyterlite/requirements.txt
 
       - name: Install documentation dependencies
         run: python -m pip install -r requirements-docs.txt
