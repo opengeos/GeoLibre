@@ -578,6 +578,10 @@ export interface DashboardWidget {
   type: DashboardWidgetType;
   /** Optional custom title; the panel derives a label from the fields if absent. */
   title?: string;
+  /** Optional hex color (`#rgb`/`#rrggbb`) for the chart's marks. Single-series
+   * charts use it as the series color; bar/pie use it as the base of a
+   * monochromatic ramp. Defaults to the theme primary / multi-color palette. */
+  color?: string;
   /** Value field for histogram/line/box. */
   field?: string;
   /** X-axis field for scatter. */

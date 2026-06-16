@@ -64,6 +64,8 @@ export function WidgetEditorDialog({
   const [aggregation, setAggregation] = useState<BarAggregation>("count");
   const [valueField, setValueField] = useState("");
   const [title, setTitle] = useState("");
+  // "" means no custom color: fall back to the theme primary / palette.
+  const [color, setColor] = useState("");
 
   // Seed the form when it opens, from the edited widget or sensible defaults.
   useEffect(() => {
@@ -78,6 +80,7 @@ export function WidgetEditorDialog({
     setAggregation(widget?.aggregation ?? "count");
     setValueField(widget?.valueField ?? "");
     setTitle(widget?.title ?? "");
+    setColor(widget?.color ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, widget]);
 
@@ -108,6 +111,7 @@ export function WidgetEditorDialog({
     };
     const trimmedTitle = title.trim();
     if (trimmedTitle) next.title = trimmedTitle;
+    if (color) next.color = color;
     if (type === "histogram" || type === "line" || type === "box") {
       next.field = pick(field, numericCols);
     }
@@ -308,6 +312,36 @@ export function WidgetEditorDialog({
                 placeholder={t("dashboard.editor.titlePlaceholder")}
                 onChange={(event) => setTitle(event.target.value)}
               />
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="widget-color">{t("dashboard.editor.color")}</Label>
+              <div className="flex items-center gap-2">
+                <input
+                  id="widget-color"
+                  type="color"
+                  className="h-8 w-12 cursor-pointer rounded border border-input bg-background p-0.5"
+                  // Native color inputs need a concrete value; show a neutral
+                  // swatch while no custom color is set.
+                  value={color || "#3fb1ce"}
+                  onChange={(event) => setColor(event.target.value)}
+                />
+                {color ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 text-xs"
+                    onClick={() => setColor("")}
+                  >
+                    {t("dashboard.editor.colorReset")}
+                  </Button>
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    {t("dashboard.editor.colorDefault")}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         )}

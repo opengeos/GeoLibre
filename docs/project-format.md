@@ -131,8 +131,10 @@ Each widget binds a chart to a layer's attributes. `type` is one of `histogram`,
 `scatter`, `bar`, `line`, `box`, or `pie`. Which other keys apply depends on the
 type: `field` (histogram/line/box), `xField`/`yField` (scatter), `category` +
 `aggregation` + `valueField` (bar/pie), `bins` (histogram). Bar `aggregation` is
-`count`/`sum`/`mean`; pie is `count`/`sum` only. `title` is an optional label;
-unused keys are ignored. The Dashboard panel (Tools → Dashboard, or the
+`count`/`sum`/`mean`; pie is `count`/`sum` only. `title` is an optional label and
+`color` an optional hex (`#rgb`/`#rrggbb`) for the chart's marks (the series
+color for single-series charts; the base of a monochromatic ramp for bar/pie).
+Unused keys are ignored. The Dashboard panel (Tools → Dashboard, or the
 **Dashboard** button in the attribute table) also stores `dashboardColumns`, the
 widget-grid column count (1-6, default 2), at the top level of the project.
 Charts read from GeoJSON-backed vector layers and DuckDB query layers; widgets

@@ -16,6 +16,12 @@ import {
   computeChart,
   chartResultHasData,
 } from "../apps/geolibre-desktop/src/components/panels/charts/chart-spec";
+import {
+  CHART_PALETTE,
+  categoryColors,
+  isHexColor,
+  shadeRamp,
+} from "../apps/geolibre-desktop/src/components/panels/charts/chart-colors";
 import type { ChartRow } from "../apps/geolibre-desktop/src/lib/attribute-charts";
 
 function widget(patch: Partial<DashboardWidget> = {}): DashboardWidget {
@@ -65,6 +71,17 @@ describe("normalizeWidgets", () => {
     ]);
     assert.equal(result?.length, 1);
     assert.equal(result?.[0].title, "first");
+  });
+
+  it("keeps a valid hex color and drops an invalid one", () => {
+    const result = normalizeWidgets([
+      widget({ id: "a", color: "#ff0000" }),
+      widget({ id: "b", color: "red" }),
+      widget({ id: "c", color: "#abc" }),
+    ]);
+    assert.equal(result?.find((w) => w.id === "a")?.color, "#ff0000");
+    assert.equal("color" in (result?.find((w) => w.id === "b") ?? {}), false);
+    assert.equal(result?.find((w) => w.id === "c")?.color, "#abc");
   });
 
   it("coerces bins to an integer and drops a bad aggregation", () => {
@@ -146,6 +163,32 @@ describe("widgets in the project file", () => {
       metadata: {},
     });
     assert.equal("widgets" in project, false);
+  });
+});
+
+describe("chart colors", () => {
+  it("recognizes hex colors and rejects other strings", () => {
+    assert.equal(isHexColor("#fff"), true);
+    assert.equal(isHexColor("#3fb1ce"), true);
+    assert.equal(isHexColor("blue"), false);
+    assert.equal(isHexColor("#12"), false);
+    assert.equal(isHexColor(undefined), false);
+  });
+
+  it("builds a ramp that starts at the base and lightens", () => {
+    const ramp = shadeRamp("#000000", 3);
+    assert.equal(ramp.length, 3);
+    assert.equal(ramp[0], "#000000");
+    // Later shades are lighter than the base.
+    assert.notEqual(ramp[2], "#000000");
+  });
+
+  it("falls back to the palette when no valid color is given", () => {
+    const palette = categoryColors(undefined, 3);
+    assert.deepEqual(palette, CHART_PALETTE.slice(0, 3));
+    const ramp = categoryColors("#3fb1ce", 4);
+    assert.equal(ramp.length, 4);
+    assert.equal(ramp[0], "#3fb1ce");
   });
 });
 

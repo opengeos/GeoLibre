@@ -402,6 +402,9 @@ export function normalizeModels(value: unknown): ProcessingModel[] | null {
   return models.length > 0 ? models : null;
 }
 
+/** A 3- or 6-digit hex color, the only widget color format we persist. */
+const HEX_COLOR = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
 const DASHBOARD_WIDGET_TYPES: readonly DashboardWidgetType[] = [
   "histogram",
   "scatter",
@@ -443,6 +446,8 @@ export function normalizeWidgets(value: unknown): DashboardWidget[] | null {
     const widget: DashboardWidget = { id, layerId, type };
     const title = normalizeString(candidate.title).trim();
     if (title) widget.title = title;
+    const color = normalizeString(candidate.color).trim();
+    if (HEX_COLOR.test(color)) widget.color = color;
     const field = normalizeString(candidate.field).trim();
     if (field) widget.field = field;
     const xField = normalizeString(candidate.xField).trim();

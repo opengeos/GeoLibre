@@ -376,7 +376,7 @@ function WidgetCard({
       </div>
 
       {data.hasData ? (
-        <ChartView result={result} />
+        <ChartView result={result} color={widget.color} />
       ) : (
         <p className="py-8 text-center text-xs text-muted-foreground">
           {t("dashboard.noData")}

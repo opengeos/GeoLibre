@@ -724,6 +724,9 @@
       "value": "Value",
       "titleLabel": "Title",
       "titlePlaceholder": "Optional title",
+      "color": "Color",
+      "colorReset": "Reset",
+      "colorDefault": "Default palette",
       "cancel": "Cancel",
       "save": "Save"
     }

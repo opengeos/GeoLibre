@@ -17,28 +17,7 @@ import {
   type ScatterResult,
 } from "../../../lib/attribute-charts";
 import { type ChartResult } from "./chart-spec";
-
-/**
- * Categorical color palette for charts whose marks are distinct categories
- * (bar, pie). Fixed hues (not theme CSS vars) so each category reads as its own
- * color on both light and dark backgrounds, à la Foursquare/CARTO dashboards.
- * Single-series charts (histogram/line/scatter/box) keep the theme primary.
- */
-export const CHART_PALETTE = [
-  "#3fb1ce", // teal
-  "#f4a259", // orange
-  "#8b5cf6", // violet
-  "#22c55e", // green
-  "#eab308", // amber
-  "#ef4444", // red
-  "#0ea5e9", // sky
-  "#ec4899", // pink
-];
-
-/** The palette color for the category at `index`, cycling when it overflows. */
-function paletteColor(index: number): string {
-  return CHART_PALETTE[index % CHART_PALETTE.length];
-}
+import { categoryColors, isHexColor } from "./chart-colors";
 
 export {
   chartResultHasData,
@@ -47,17 +26,35 @@ export {
   type ChartSpec,
 } from "./chart-spec";
 
-/** Render a computed {@link ChartResult} as an inline SVG with a caption. */
-export function ChartView({ result }: { result: ChartResult }) {
+/**
+ * Render a computed {@link ChartResult} as an inline SVG with a caption.
+ * `color` (a hex string) customizes the marks: it is the series color for
+ * single-series charts (histogram/line/scatter/box) and the base of a
+ * monochromatic ramp for categorical charts (bar/pie). When unset, single-series
+ * charts use the theme primary and categorical charts use the multi-color
+ * palette.
+ */
+export function ChartView({
+  result,
+  color,
+}: {
+  result: ChartResult;
+  color?: string;
+}) {
+  // Effective single-series color: the chosen hex, else the theme primary.
+  const series = isHexColor(color) ? color : SERIES;
   switch (result.type) {
     case "histogram":
-      return <HistogramChart result={result.result} field={result.field} />;
+      return (
+        <HistogramChart result={result.result} field={result.field} color={series} />
+      );
     case "scatter":
       return (
         <ScatterChart
           result={result.result}
           xField={result.xField}
           yField={result.yField}
+          color={series}
         />
       );
     case "bar":
@@ -66,18 +63,22 @@ export function ChartView({ result }: { result: ChartResult }) {
           result={result.result}
           aggregation={result.aggregation}
           category={result.category}
+          color={color}
         />
       );
     case "line":
-      return <LineChart result={result.result} field={result.field} />;
+      return (
+        <LineChart result={result.result} field={result.field} color={series} />
+      );
     case "box":
-      return <BoxChart result={result.result} field={result.field} />;
+      return <BoxChart result={result.result} field={result.field} color={series} />;
     case "pie":
       return (
         <PieChart
           result={result.result}
           aggregation={result.aggregation}
           category={result.category}
+          color={color}
         />
       );
   }
@@ -205,9 +206,11 @@ function Caption({ children }: { children: ReactNode }) {
 function HistogramChart({
   result,
   field,
+  color,
 }: {
   result: HistogramResult | null;
   field: string;
+  color: string;
 }) {
   if (!result) return <EmptyChart message="No numeric values to plot." />;
 
@@ -229,7 +232,7 @@ function HistogramChart({
               y={MARGIN.top + INNER_H - height}
               width={Math.max(1, slot - gap)}
               height={height}
-              fill={SERIES}
+              fill={color}
               opacity={0.85}
             >
               <title>{`[${formatAxisValue(bin.x0)}, ${formatAxisValue(bin.x1)}${
@@ -261,10 +264,12 @@ function ScatterChart({
   result,
   xField,
   yField,
+  color,
 }: {
   result: ScatterResult | null;
   xField: string;
   yField: string;
+  color: string;
 }) {
   if (!result) {
     return <EmptyChart message="No rows have both fields set to a number." />;
@@ -291,7 +296,7 @@ function ScatterChart({
           const cy =
             MARGIN.top + INNER_H - fraction(point.y, yMin, yMax) * INNER_H;
           return (
-            <circle key={index} cx={cx} cy={cy} r={3} fill={SERIES} opacity={0.6}>
+            <circle key={index} cx={cx} cy={cy} r={3} fill={color} opacity={0.6}>
               <title>{`${xField}: ${formatAxisValue(point.x)}, ${yField}: ${formatAxisValue(point.y)}`}</title>
             </circle>
           );
@@ -320,14 +325,17 @@ function BarChart({
   result,
   aggregation,
   category,
+  color,
 }: {
   result: BarResult | null;
   aggregation: BarAggregation;
   category: string;
+  color?: string;
 }) {
   if (!result) return <EmptyChart message="No rows to group." />;
 
   const { bars, maxValue, minValue, truncated } = result;
+  const colors = categoryColors(color, bars.length);
   const domainMin = Math.min(0, minValue);
   // Keep 0 as the top of the scale when every bar is <= 0 (possible for
   // sum/mean); only fall back to 1 when the domain would otherwise be zero-width
@@ -364,7 +372,7 @@ function BarChart({
                 y={top}
                 width={Math.max(1, slot - gap)}
                 height={Math.max(0, height)}
-                fill={paletteColor(index)}
+                fill={colors[index]}
                 opacity={0.9}
               >
                 <title>{`${datum.label}: ${formatAxisValue(datum.value)} (${datum.count} row${datum.count === 1 ? "" : "s"})`}</title>
@@ -398,9 +406,11 @@ function BarChart({
 function LineChart({
   result,
   field,
+  color,
 }: {
   result: LineResult | null;
   field: string;
+  color: string;
 }) {
   if (!result) return <EmptyChart message="No numeric values to plot." />;
 
@@ -425,7 +435,7 @@ function LineChart({
       <ChartFrame label={`Line chart of ${field} by feature order`}>
         {tickText(MARGIN.left - 6, MARGIN.top, formatAxisValue(max), "end", "middle")}
         {tickText(MARGIN.left - 6, MARGIN.top + INNER_H, formatAxisValue(min), "end", "middle")}
-        <path d={path} fill="none" stroke={SERIES} strokeWidth={1.5} />
+        <path d={path} fill="none" stroke={color} strokeWidth={1.5} />
         {points.length <= 80
           ? points.map((p) => (
               <circle
@@ -433,7 +443,7 @@ function LineChart({
                 cx={scaleX(p.index)}
                 cy={scaleY(p.value)}
                 r={2}
-                fill={SERIES}
+                fill={color}
               >
                 <title>{`#${p.index}: ${formatAxisValue(p.value)}`}</title>
               </circle>
@@ -462,9 +472,11 @@ function LineChart({
 function BoxChart({
   result,
   field,
+  color,
 }: {
   result: BoxResult | null;
   field: string;
+  color: string;
 }) {
   if (!result) return <EmptyChart message="No numeric values to plot." />;
 
@@ -495,16 +507,16 @@ function BoxChart({
           y={scaleY(q3)}
           width={boxWidth}
           height={Math.max(1, scaleY(q1) - scaleY(q3))}
-          fill={SERIES}
+          fill={color}
           opacity={0.25}
-          stroke={SERIES}
+          stroke={color}
         />
         <line
           x1={centerX - boxWidth / 2}
           y1={scaleY(median)}
           x2={centerX + boxWidth / 2}
           y2={scaleY(median)}
-          stroke={SERIES}
+          stroke={color}
           strokeWidth={2}
         />
         {/* When every value is identical the five stats share one y position;
@@ -546,14 +558,17 @@ function PieChart({
   result,
   aggregation,
   category,
+  color,
 }: {
   result: PieResult | null;
   aggregation: BarAggregation;
   category: string;
+  color?: string;
 }) {
   if (!result) return <EmptyChart message="No positive values to chart." />;
 
   const { slices, total } = result;
+  const colors = categoryColors(color, slices.length);
   const radius = INNER_H / 2 - 6;
   const cx = MARGIN.left + radius;
   const cy = MARGIN.top + INNER_H / 2;
@@ -578,7 +593,7 @@ function PieChart({
       slices.length === 1
         ? `M ${cx - radius} ${cy} A ${radius} ${radius} 0 1 1 ${cx + radius} ${cy} A ${radius} ${radius} 0 1 1 ${cx - radius} ${cy} Z`
         : `M ${cx} ${cy} L ${x0} ${y0} A ${radius} ${radius} 0 ${largeArc} 1 ${x1} ${y1} Z`;
-    return { d, color: paletteColor(index), slice, fraction };
+    return { d, color: colors[index], slice, fraction };
   });
 
   return (
