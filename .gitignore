@@ -5,9 +5,10 @@ dist-embed/
 apps/geolibre-desktop/public/jupyterlite/
 # JupyterLite (doit) build cache, written to the working dir during the build.
 .jupyterlite.doit.db
-# The kernel-side geolibre client is staged here from its canonical backend copy
-# by scripts/build-jupyterlite.mjs.
+# The kernel-side geolibre client and the Welcome example are staged here from
+# their canonical backend copies by scripts/build-jupyterlite.mjs.
 apps/geolibre-desktop/jupyterlite/files/geolibre.py
+apps/geolibre-desktop/jupyterlite/files/Welcome.ipynb
 site/
 target/
 .tauri/
