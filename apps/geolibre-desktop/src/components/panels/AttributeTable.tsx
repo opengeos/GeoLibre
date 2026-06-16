@@ -53,6 +53,7 @@ import {
   Save,
   Sigma,
   TableProperties,
+  Telescope,
   Trash2,
   X,
 } from "lucide-react";
@@ -89,6 +90,7 @@ import {
 } from "../../lib/attribute-expression";
 import { AttributeChartDialog } from "./AttributeChartDialog";
 import { AttributeStatsDialog } from "./AttributeStatsDialog";
+import { ColumnExplorerDialog } from "./ColumnExplorerDialog";
 import {
   exportVectorLayer,
   formatAttributeValue,
@@ -303,6 +305,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const [chartOpen, setChartOpen] = useState(false);
   // Field-statistics dialog state.
   const [statsOpen, setStatsOpen] = useState(false);
+  // Column-explorer dialog state.
+  const [explorerOpen, setExplorerOpen] = useState(false);
   // Field-calculator dialog state.
   const [calcOpen, setCalcOpen] = useState(false);
   const [calcMode, setCalcMode] = useState<"update" | "create">("update");
@@ -1332,6 +1336,24 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             className="h-7 px-2"
             title={
               hasAttributeSource
+                ? "Explore all fields at a glance"
+                : "Column explorer requires a vector or DuckDB query layer"
+            }
+            aria-label="Column explorer"
+            disabled={!hasAttributeSource}
+            onClick={() => setExplorerOpen(true)}
+          >
+            <Telescope className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Explore</span>
+          </Button>
+        ) : null}
+        {!isEditing ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2"
+            title={
+              hasAttributeSource
                 ? "Field statistics summary"
                 : "Statistics require a vector or DuckDB query layer"
             }
@@ -1849,6 +1871,14 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       <AttributeStatsDialog
         open={statsOpen}
         onOpenChange={setStatsOpen}
+        rows={attributeRows}
+        filteredRows={filtered}
+        columns={discoveredColumns}
+        layerName={layer?.name ?? ""}
+      />
+      <ColumnExplorerDialog
+        open={explorerOpen}
+        onOpenChange={setExplorerOpen}
         rows={attributeRows}
         filteredRows={filtered}
         columns={discoveredColumns}
