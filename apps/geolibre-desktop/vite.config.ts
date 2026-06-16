@@ -578,6 +578,11 @@ function pwaPlugin(): Plugin[] {
     "**/mapillary-*",
     "**/*.wasm",
     "**/*.data",
+    // The self-hosted JupyterLite site (apps/.../public/jupyterlite/, ~70 MB of
+    // JS/HTML) is loaded on demand inside the Notebook panel's iframe and has
+    // its own service worker scoped to /jupyterlite/. Keep it entirely out of
+    // the app shell precache, or first visit would balloon by thousands of files.
+    "**/jupyterlite/**",
   ];
   // Note: the 4 KB public/pyodide/pyodide-worker.js shim is intentionally left
   // in the precache (revisioned, so no stale-after-deploy risk). The heavy

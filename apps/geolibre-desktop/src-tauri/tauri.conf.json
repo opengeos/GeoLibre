@@ -21,7 +21,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' blob: https: http://127.0.0.1:* http://localhost:* wss://collab.geolibre.app ws://127.0.0.1:* ws://localhost:*; img-src 'self' data: blob: https:; media-src 'self' blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self' blob: 'unsafe-eval' 'wasm-unsafe-eval' https://cdn.jsdelivr.net/npm/ https://cdn.jsdelivr.net/pyodide/ https://accounts.google.com; child-src 'self' https://accounts.google.com https://www.google.com; frame-src 'self' https://accounts.google.com https://www.google.com; worker-src blob: 'self'",
+      "csp": "default-src 'self'; connect-src 'self' blob: https: http://127.0.0.1:* http://localhost:* wss://collab.geolibre.app ws://127.0.0.1:* ws://localhost:*; img-src 'self' data: blob: https:; media-src 'self' blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self' blob: 'unsafe-eval' 'wasm-unsafe-eval' https://cdn.jsdelivr.net/npm/ https://cdn.jsdelivr.net/pyodide/ https://accounts.google.com; child-src 'self' http://127.0.0.1:* http://localhost:* https://accounts.google.com https://www.google.com; frame-src 'self' http://127.0.0.1:* http://localhost:* https://accounts.google.com https://www.google.com; worker-src blob: 'self'",
       "capabilities": ["default"]
     }
   },

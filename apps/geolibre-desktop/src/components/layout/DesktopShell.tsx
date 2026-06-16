@@ -233,6 +233,20 @@ const SqlWorkspaceDialog = lazy(() =>
     }),
 );
 
+const NotebookPanel = lazy(() =>
+  import("../panels/NotebookPanel")
+    .then((module) => ({
+      default: module.NotebookPanel,
+    }))
+    .catch((error) => {
+      // Same chunk-load fallback rationale as the dialogs above.
+      console.error("Failed to load NotebookPanel", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../panels/NotebookPanel").NotebookPanel;
+      return { default: Fallback };
+    }),
+);
+
 const AssistantPanel = lazy(() =>
   import("../panels/AssistantPanel")
     .then((module) => ({
@@ -287,6 +301,11 @@ type ImportedVectorLayer = Awaited<
 const DEFAULT_SIDE_PANEL_WIDTH = 256;
 const MIN_SIDE_PANEL_WIDTH = 180;
 const MAX_SIDE_PANEL_WIDTH = 460;
+// The notebook panel hosts a full Jupyter UI, so it needs far more room than
+// the layer/style side panels.
+const DEFAULT_NOTEBOOK_PANEL_WIDTH = 480;
+const MIN_NOTEBOOK_PANEL_WIDTH = 320;
+const MAX_NOTEBOOK_PANEL_WIDTH = 1100;
 const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
 const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
 
@@ -295,7 +314,10 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 type ShellStyle = CSSProperties &
-  Record<"--layer-panel-width" | "--style-panel-width", string>;
+  Record<
+    "--layer-panel-width" | "--style-panel-width" | "--notebook-panel-width",
+    string
+  >;
 
 export function DesktopShell({
   layoutOptions,
@@ -317,6 +339,7 @@ export function DesktopShell({
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
   const pythonConsoleOpen = useAppStore((s) => s.ui.pythonConsoleOpen);
+  const notebookOpen = useAppStore((s) => s.ui.notebookOpen);
   const assistantOpen = useAppStore((s) => s.ui.assistantOpen);
   const geometryEditLayerId = useSyncExternalStore(
     subscribeGeometryEdit,
@@ -341,10 +364,14 @@ export function DesktopShell({
   const [stylePanelWidth, setStylePanelWidth] = useState(
     DEFAULT_SIDE_PANEL_WIDTH,
   );
+  const [notebookPanelWidth, setNotebookPanelWidth] = useState(
+    DEFAULT_NOTEBOOK_PANEL_WIDTH,
+  );
   const deferPanelResize = isTauri();
   const shellStyle: ShellStyle = {
     "--layer-panel-width": `${layerPanelWidth}px`,
     "--style-panel-width": `${stylePanelWidth}px`,
+    "--notebook-panel-width": `${notebookPanelWidth}px`,
   };
 
   const clearDropMessageLater = useCallback(() => {
@@ -1031,6 +1058,80 @@ export function DesktopShell({
     [deferPanelResize, stylePanelWidth],
   );
 
+  // The notebook panel is right-docked like the Style panel, so its left-edge
+  // handle widens the panel as the pointer moves left (mirrors
+  // startStylePanelResize, with the notebook's own width constants/CSS var).
+  const startNotebookPanelResize = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+
+      const startX = event.clientX;
+      const startWidth = notebookPanelWidth;
+      const panelRect =
+        event.currentTarget.parentElement?.getBoundingClientRect();
+      let nextWidth = startWidth;
+      let resizeFrame: number | null = null;
+      const previousCursor = document.body.style.cursor;
+      const previousUserSelect = document.body.style.userSelect;
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      window.dispatchEvent(new Event(PANEL_RESIZE_START_EVENT));
+
+      const onPointerMove = (moveEvent: PointerEvent) => {
+        nextWidth = clamp(
+          startWidth + startX - moveEvent.clientX,
+          MIN_NOTEBOOK_PANEL_WIDTH,
+          MAX_NOTEBOOK_PANEL_WIDTH,
+        );
+        if (resizeFrame !== null) return;
+        resizeFrame = window.requestAnimationFrame(() => {
+          resizeFrame = null;
+          if (deferPanelResize) {
+            if (verticalResizeGuideRef.current && panelRect) {
+              verticalResizeGuideRef.current.style.left = `${
+                panelRect.right - nextWidth
+              }px`;
+              verticalResizeGuideRef.current.classList.remove("hidden");
+            }
+            return;
+          }
+          shellRef.current?.style.setProperty(
+            "--notebook-panel-width",
+            `${nextWidth}px`,
+          );
+        });
+      };
+
+      const onPointerUp = () => {
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
+        window.removeEventListener("pointercancel", onPointerUp);
+        activeResizeCleanupRef.current = null;
+        if (resizeFrame !== null) {
+          window.cancelAnimationFrame(resizeFrame);
+          resizeFrame = null;
+        }
+        shellRef.current?.style.setProperty(
+          "--notebook-panel-width",
+          `${nextWidth}px`,
+        );
+        verticalResizeGuideRef.current?.classList.add("hidden");
+        setNotebookPanelWidth(nextWidth);
+        window.dispatchEvent(new Event(PANEL_RESIZE_END_EVENT));
+        document.body.style.cursor = previousCursor;
+        document.body.style.userSelect = previousUserSelect;
+      };
+
+      activeResizeCleanupRef.current = onPointerUp;
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+      window.addEventListener("pointercancel", onPointerUp);
+    },
+    [deferPanelResize, notebookPanelWidth],
+  );
+
   return (
     <div
       ref={shellRef}
@@ -1094,6 +1195,17 @@ export function DesktopShell({
               mapControllerRef={mapControllerRef}
               onResizeStart={startStylePanelResize}
             />
+          </SectionErrorBoundary>
+        ) : null}
+        {notebookOpen ? (
+          <SectionErrorBoundary label="Notebook">
+            <Suspense fallback={null}>
+              <NotebookPanel
+                onResizeStart={startNotebookPanelResize}
+                mapControllerRef={mapControllerRef}
+                themeMode={themeMode}
+              />
+            </Suspense>
           </SectionErrorBoundary>
         ) : null}
       </div>

@@ -45,6 +45,7 @@ export function ProcessingMenu({
   const setSegmentationOpen = useAppStore((s) => s.setSegmentationOpen);
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
   const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
+  const setNotebookOpen = useAppStore((s) => s.setNotebookOpen);
   const setAssistantOpen = useAppStore((s) => s.setAssistantOpen);
 
   // Whitebox, format Conversion, Raster tools, and AI Segmentation all require
@@ -84,6 +85,9 @@ export function ProcessingMenu({
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => setPythonConsoleOpen(true)}>
           {t("toolbar.command.pythonConsole")}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => setNotebookOpen(true)}>
+          {t("toolbar.command.notebook")}
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => setGeocodeOpen(true)}>
           {t("toolbar.item.geocode")}

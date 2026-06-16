@@ -1,0 +1,12 @@
+# Build-time dependencies for the self-hosted JupyterLite site embedded in the
+# GeoLibre web build (see scripts/build-jupyterlite.mjs). These are NOT runtime
+# app dependencies — they are only needed by whoever runs `npm run
+# build:jupyterlite` to regenerate apps/geolibre-desktop/public/jupyterlite/.
+#
+# The in-browser Python kernel itself ships as WASM via jupyterlite-pyodide-kernel
+# and pulls Pyodide (numpy, pandas, …) at runtime from a CDN; geopandas/shapely
+# install on demand with `%pip install ...` / piplite.
+jupyterlite-core>=0.4,<0.6
+jupyterlite-pyodide-kernel>=0.4,<0.6
+jupyterlab>=4.2,<5
+notebook>=7.2,<8

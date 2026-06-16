@@ -1,0 +1,6 @@
+{
+  "LiteBuildConfig": {
+    "apps": ["lab", "tree", "notebooks", "repl"],
+    "no_unused_shared_packages": true
+  }
+}

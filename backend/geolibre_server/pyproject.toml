@@ -53,6 +53,15 @@ sedona = [
 ml = [
   "httpx>=0.27",
 ]
+# Full JupyterLab server for the desktop Notebook panel. The desktop app
+# launches `jupyter lab` from this uv-managed env (see src-tauri/src/lib.rs);
+# the web build embeds the in-browser JupyterLite site instead, so this extra is
+# desktop-only. geopandas/rasterio/etc. install alongside via the relevant extras
+# (or `%pip install` in a cell).
+notebook = [
+  "jupyterlab>=4.2,<5",
+  "jupyter-server>=2.14",
+]
 # Future geospatial stack (not required for MVP UI):
 # geo = [
 #   "gdal",

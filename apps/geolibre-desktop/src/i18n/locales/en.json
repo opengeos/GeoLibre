@@ -331,6 +331,7 @@
       "whiteboxTools": "Whitebox Tools",
       "sqlWorkspace": "SQL Workspace",
       "pythonConsole": "Python Console",
+      "notebook": "Jupyter Notebook",
       "assistant": "AI Assistant",
       "geocode": "Geocode Addresses",
       "modelBuilder": "Batch & Models",
@@ -663,6 +664,16 @@
     "untitled": "untitled.py",
     "discardChanges": "Discard unsaved changes to the current script?",
     "editorPlaceholder": "Write a multi-line Python script here. Ctrl/Cmd+Enter runs it (or the selection) in the console; Tab indents; Ctrl+Space autocompletes."
+  },
+  "notebook": {
+    "title": "Notebook",
+    "collapsedTitle": "Notebook (collapsed)",
+    "resize": "Resize notebook panel",
+    "collapse": "Collapse notebook",
+    "expand": "Expand notebook",
+    "close": "Close notebook",
+    "loading": "Loading notebook…",
+    "loadFailed": "Failed to load the notebook."
   },
   "assistant": {
     "title": "AI Assistant",

@@ -1,0 +1,112 @@
+// Build the self-hosted JupyterLite site that the web build embeds in the
+// Notebook panel (an <iframe> pointed at apps/geolibre-desktop/public/jupyterlite/).
+//
+// JupyterLite is a full Jupyter UI running entirely in the browser on a Pyodide
+// (WASM) kernel — no server. The desktop (Tauri) build launches a real
+// JupyterLab server instead and does not use this output.
+//
+// This step needs the `jupyter lite` CLI (see
+// apps/geolibre-desktop/jupyterlite/requirements.txt:
+//   pip install -r apps/geolibre-desktop/jupyterlite/requirements.txt
+// ). It is intentionally **best-effort**: if the CLI is not installed, it logs a
+// warning and exits 0 so a Node-only `npm run build` still succeeds. When the
+// assets are absent the Notebook panel shows a "not built" message on web; run
+// this script (or install the deps) to enable it.
+//
+// Output: apps/geolibre-desktop/public/jupyterlite/  (git-ignored; Vite copies
+// public/ into dist/ at build time).
+
+import { spawnSync } from "node:child_process";
+import { copyFileSync, existsSync, rmSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const liteDir = resolve(repoRoot, "apps/geolibre-desktop/jupyterlite");
+const contentsDir = resolve(liteDir, "files");
+// The kernel-side `geolibre` client (drives the host map from a notebook cell).
+// Its canonical source lives with the backend; copy it into the JupyterLite
+// contents as `geolibre.py` so `import geolibre` works in the browser kernel.
+const notebookClientSrc = resolve(
+  repoRoot,
+  "backend/geolibre_server/notebook_client.py",
+);
+const notebookClientDest = resolve(contentsDir, "geolibre.py");
+const outputDir = resolve(
+  repoRoot,
+  "apps/geolibre-desktop/public/jupyterlite",
+);
+
+const isWin = process.platform === "win32";
+
+// The desktop (Tauri) build launches a real JupyterLab server, so the static
+// JupyterLite site is dead weight in the installer. Tauri sets TAURI_ENV_* on
+// its beforeBuildCommand; skip the build there. The plain web build and the
+// embed build (Jupyter widget) do not set it, so they still get the site.
+if (process.env.TAURI_ENV_PLATFORM) {
+  console.log(
+    "[build-jupyterlite] Tauri build detected — skipping JupyterLite " +
+      "(desktop uses a real JupyterLab server).",
+  );
+  process.exit(0);
+}
+
+// Probe for the CLI. `jupyter lite --version` exits non-zero / ENOENT when the
+// jupyterlite-core package (or jupyter itself) is missing.
+const probe = spawnSync("jupyter", ["lite", "--version"], {
+  cwd: repoRoot,
+  shell: isWin,
+  stdio: "ignore",
+});
+
+if (probe.status !== 0) {
+  console.warn(
+    "[build-jupyterlite] `jupyter lite` is not available — skipping the " +
+      "JupyterLite build. The web Notebook panel will show a 'not built' " +
+      "message. To enable it, install the build deps:\n" +
+      "  pip install -r apps/geolibre-desktop/jupyterlite/requirements.txt\n" +
+      "then re-run `npm run build:jupyterlite`.",
+  );
+  process.exit(0);
+}
+
+// Stage the kernel-side `geolibre` client into the contents so `import geolibre`
+// works in the browser kernel.
+copyFileSync(notebookClientSrc, notebookClientDest);
+
+// Rebuild cleanly so stale assets from an older JupyterLite version don't linger.
+rmSync(outputDir, { recursive: true, force: true });
+
+const result = spawnSync(
+  "jupyter",
+  [
+    "lite",
+    "build",
+    "--lite-dir",
+    liteDir,
+    "--contents",
+    contentsDir,
+    "--output-dir",
+    outputDir,
+  ],
+  {
+    cwd: repoRoot,
+    shell: isWin,
+    stdio: "inherit",
+  },
+);
+
+if (result.status !== 0) {
+  console.error("[build-jupyterlite] `jupyter lite build` failed.");
+  process.exit(result.status ?? 1);
+}
+
+if (!existsSync(resolve(outputDir, "lab", "index.html"))) {
+  console.error(
+    "[build-jupyterlite] build finished but lab/index.html is missing in " +
+      `${outputDir}. Check the JupyterLite output above.`,
+  );
+  process.exit(1);
+}
+
+console.log(`[build-jupyterlite] Built JupyterLite site into ${outputDir}`);

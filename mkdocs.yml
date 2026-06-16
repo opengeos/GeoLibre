@@ -71,6 +71,7 @@ nav:
       - Plugin API: plugin-api.md
       - Internationalization: i18n.md
       - Python Package: python.md
+      - Notebook Panel: notebook.md
       - Roadmap: roadmap.md
       - Contributing: contributing.md
 
