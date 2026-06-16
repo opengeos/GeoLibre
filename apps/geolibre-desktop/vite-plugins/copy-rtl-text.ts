@@ -41,7 +41,17 @@ function resolveRtlTextDist(): string {
 
 export function copyRtlText(destPath: string): Plugin {
   const sync = (): void => {
-    const next = BANNER + readFileSync(resolveRtlTextDist(), "utf8");
+    const bundle = readFileSync(resolveRtlTextDist(), "utf8");
+    // Guard against the package reorganising its layout: `../dist/` navigation
+    // could still resolve to some other file. The real plugin always exposes the
+    // `registerRTLTextPlugin` hook the MapLibre worker calls via importScripts.
+    if (!bundle.includes("registerRTLTextPlugin")) {
+      throw new Error(
+        "copy-rtl-text: the resolved bundle does not look like the RTL text " +
+          "plugin (no registerRTLTextPlugin hook). Check @mapbox/mapbox-gl-rtl-text.",
+      );
+    }
+    const next = BANNER + bundle;
     // Skip the write when unchanged so the dev-server file watcher does not
     // fire an extra reload on every restart.
     if (existsSync(destPath) && readFileSync(destPath, "utf8") === next) return;

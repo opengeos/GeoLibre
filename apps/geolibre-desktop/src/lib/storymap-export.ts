@@ -467,7 +467,9 @@ function renderTemplate(
         // basemap labels are not rendered reversed. Lazy-loaded, so it only
         // downloads when an RTL label is actually encountered.
         if (maplibregl.getRTLTextPluginStatus() === 'unavailable') {
-            maplibregl.setRTLTextPlugin('https://unpkg.com/@mapbox/mapbox-gl-rtl-text@0.4.0/dist/mapbox-gl-rtl-text.js', null, true);
+            // MapLibre GL v4+ signature is (url, lazy?) returning a Promise; the
+            // lazy flag is the SECOND arg, and the Promise must be caught.
+            maplibregl.setRTLTextPlugin('https://unpkg.com/@mapbox/mapbox-gl-rtl-text@0.4.0/dist/mapbox-gl-rtl-text.js', true).catch(function (e) { console.error('[GeoLibre] RTL plugin failed', e); });
         }
 
         var map = new maplibregl.Map({
