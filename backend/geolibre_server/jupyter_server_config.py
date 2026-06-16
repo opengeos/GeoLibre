@@ -54,6 +54,11 @@ c.ServerApp.open_browser = False
 # the embedded URL already authenticates every request, so disabling the XSRF
 # check is safe here (loopback-bound + token-gated) and is what lets the kernel
 # connect from the embedded iframe.
+#
+# NOTE: this disables XSRF for every endpoint, not just the WebSocket. It is
+# acceptable only because the server binds loopback (127.0.0.1) and every request
+# is gated by the per-launch token. Revisit (e.g. scope CORS/allow_origin
+# instead) if this server is ever bound to a non-loopback interface.
 c.ServerApp.disable_check_xsrf = True
 
 # The panel embeds the server from a different top-level origin (the Tauri

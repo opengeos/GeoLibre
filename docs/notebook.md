@@ -99,6 +99,3 @@ precache (see `pwaPlugin` in `apps/geolibre-desktop/vite.config.ts`).
   `Content-Security-Policy: frame-ancestors` to the Tauri webview / loopback
   origins so the app can embed the server; the Tauri CSP (`tauri.conf.json`)
   adds the loopback origins to `frame-src`/`child-src`.
-
-> Driving the live map from notebook cells (a kernel-side `geolibre` client over
-> the existing scripting bridge) is a follow-up — see the project plan.

@@ -157,6 +157,11 @@ export function NotebookPanel({
               >
                 <PanelRightClose className="h-4 w-4" />
               </Button>
+              {/* Close just unmounts the panel. On desktop the JupyterLab
+                  server (started via startJupyterServer) is intentionally left
+                  running for the app's lifetime — so reopening is instant and
+                  kernel state is preserved — and is torn down on app exit by
+                  the Rust JupyterProcess::Drop, not here. */}
               <Button
                 variant="ghost"
                 size="icon"

@@ -58,11 +58,21 @@ def _send(method: str, params: dict[str, Any] | None = None) -> None:
         "method": method,
         "params": params or {},
     }
-    payload = json.dumps(message)
+    # json.dumps leaves "<" and ">" unescaped; escape them so a value containing
+    # "</script>" (e.g. a layer name) can't break out of the <script> block that
+    # IPython's Javascript() display wraps this code in. The \uXXXX escapes are
+    # valid JSON and decode back to the same characters in the browser.
+    payload = json.dumps(message).replace("<", "\\u003c").replace(">", "\\u003e")
+    # Target the embedding host's origin rather than "*" so the command payload
+    # isn't broadcast to an arbitrary parent; fall back to "*" when the referrer
+    # is unavailable (e.g. a strict referrer policy).
     display(
         Javascript(
             "if (window.parent && window.parent !== window) {"
-            f"  window.parent.postMessage({payload}, '*');"
+            "  var target = document.referrer"
+            "    ? new URL(document.referrer).origin"
+            "    : '*';"
+            f"  window.parent.postMessage({payload}, target);"
             "}"
         )
     )

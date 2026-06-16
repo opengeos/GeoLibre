@@ -667,7 +667,6 @@
   },
   "notebook": {
     "title": "Notebook",
-    "collapsedTitle": "Notebook (collapsed)",
     "resize": "Resize notebook panel",
     "collapse": "Collapse notebook",
     "expand": "Expand notebook",

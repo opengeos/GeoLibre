@@ -17,7 +17,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 use tauri::Manager;
 
 // OAuth popups are a desktop-only, multi-window concept; Android/iOS have no
@@ -36,6 +36,8 @@ const SIDECAR_PORT: u16 = 8765;
 // token-gated; uses its own uv project environment so it never disturbs the
 // FastAPI sidecar's env. First start can be slow while uv syncs JupyterLab.
 const JUPYTER_PORT: u16 = 8766;
+// Polled once per second, so up to ~4 minutes — generous headroom for the
+// first-run `uv sync` of JupyterLab on a cold cache.
 const JUPYTER_HEALTH_ATTEMPTS: usize = 240;
 const UV_INSTALL_BASE_URL: &str = "https://astral.sh/uv";
 const REMOTE_TILE_TIMEOUT_SECS: u64 = 8;
@@ -1030,8 +1032,9 @@ fn start_jupyter_server_blocking(app: tauri::AppHandle) -> Result<JupyterServerI
         .env("UV_CACHE_DIR", runtime_dir.join("uv-cache"))
         .env("UV_PYTHON_INSTALL_DIR", runtime_dir.join("uv-python"))
         .env("UV_PROJECT_ENVIRONMENT", runtime_dir.join("jupyter-server"))
-        // Put the bundled `geolibre` client on the kernel import path.
-        .env("PYTHONPATH", &lib_dir)
+        // Prepend the bundled `geolibre` client to the kernel import path,
+        // preserving any inherited PYTHONPATH rather than replacing it.
+        .env("PYTHONPATH", prepend_pythonpath(&lib_dir))
         .stdin(Stdio::null())
         // Inherit (don't capture) stdout/stderr. Unlike the sidecar's quiet
         // uvicorn, `uv sync` of JupyterLab + JupyterLab's own startup write a lot;
@@ -1051,9 +1054,6 @@ fn start_jupyter_server_blocking(app: tauri::AppHandle) -> Result<JupyterServerI
         terminate_sidecar_child(&mut child);
         return Err(error);
     }
-
-    let _ = child.stdout.take();
-    let _ = child.stderr.take();
 
     // We hold the startup lock, so no concurrent start could have stored a
     // process; record ours as the live server.
@@ -1119,13 +1119,24 @@ fn wait_for_port_free(port: u16) {
     }
 }
 
-fn jupyter_health_is_ready(base_url: &str, token: &str) -> bool {
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_millis(500))
-        .build();
-    let Ok(client) = client else {
-        return false;
-    };
+// Prepend `dir` to any inherited PYTHONPATH (platform separator), so a user's
+// existing value is preserved rather than clobbered.
+fn prepend_pythonpath(dir: &Path) -> String {
+    let dir = dir.display().to_string();
+    match env::var("PYTHONPATH") {
+        Ok(existing) if !existing.is_empty() => {
+            let sep = if cfg!(windows) { ";" } else { ":" };
+            format!("{dir}{sep}{existing}")
+        }
+        _ => dir,
+    }
+}
+
+fn jupyter_health_is_ready(
+    client: &reqwest::blocking::Client,
+    base_url: &str,
+    token: &str,
+) -> bool {
     client
         .get(format!("{base_url}/api/status"))
         .header("Authorization", format!("token {token}"))
@@ -1135,20 +1146,26 @@ fn jupyter_health_is_ready(base_url: &str, token: &str) -> bool {
 }
 
 fn wait_for_jupyter_health(base_url: &str, token: &str, child: &mut Child) -> Result<(), String> {
+    // Build the HTTP client once and reuse it across all health polls (this loop
+    // runs up to JUPYTER_HEALTH_ATTEMPTS = 240 times).
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_millis(500))
+        .build()
+        .map_err(|error| format!("Could not build HTTP client: {error}"))?;
     for _ in 0..JUPYTER_HEALTH_ATTEMPTS {
         if let Some(status) = child
             .try_wait()
             .map_err(|error| format!("Could not inspect Jupyter process: {error}"))?
         {
-            let output = read_child_output(child);
-            return Err(if output.trim().is_empty() {
-                format!("Jupyter server exited before it was ready: {status}")
-            } else {
-                format!("Jupyter server exited before it was ready: {output}")
-            });
+            // Output is inherited (visible in the terminal), not captured, so we
+            // surface only the exit status here.
+            return Err(format!(
+                "Jupyter server exited before it was ready (exit status: {status}). \
+                 Check the terminal for the Jupyter/uv startup output."
+            ));
         }
 
-        if jupyter_health_is_ready(base_url, token) {
+        if jupyter_health_is_ready(&client, base_url, token) {
             return Ok(());
         }
 
@@ -1158,22 +1175,19 @@ fn wait_for_jupyter_health(base_url: &str, token: &str, child: &mut Child) -> Re
     Err("Jupyter server did not become ready in time.".to_string())
 }
 
-// A loopback-bound, per-launch token for the desktop Jupyter server. Not
-// cryptographically strong, but the server only listens on 127.0.0.1 and the
-// token is short-lived (regenerated each launch), so this guards casual local
-// access. Mixes wall-clock nanos, the pid, and a monotonic counter so repeated
-// launches in the same process differ.
+// A loopback-bound, per-launch token for the desktop Jupyter server. It is the
+// only barrier once the XSRF check is disabled for the embedded iframe (see
+// jupyter_server_config.py), so use the OS CSPRNG (128 random bits) rather than
+// anything derived from the clock/pid.
 fn generate_jupyter_token() -> String {
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|delta| delta.as_nanos() as u64)
-        .unwrap_or(0);
-    let counter = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let pid = u64::from(std::process::id());
-    let a = nanos ^ pid.rotate_left(17);
-    let b = nanos.rotate_left(31) ^ counter.wrapping_mul(0x9E37_79B9_7F4A_7C15);
-    format!("{a:016x}{b:016x}")
+    let mut bytes = [0u8; 16];
+    getrandom::getrandom(&mut bytes).expect("OS CSPRNG (getrandom) unavailable");
+    let mut token = String::with_capacity(32);
+    for byte in bytes {
+        use std::fmt::Write;
+        let _ = write!(token, "{byte:02x}");
+    }
+    token
 }
 
 fn sidecar_base_url() -> String {
@@ -1289,6 +1303,12 @@ fn terminate_jupyter_listeners_on_port(port: u16) -> Result<(), String> {
     terminate_listeners_on_port(port, is_geolibre_jupyter_process)
 }
 
+// Known gap: this is a no-op on macOS/Windows (the /proc-based listener lookup is
+// Linux-only). The current session's child is still reaped on exit via
+// JupyterProcess::Drop, but an orphan left by a *previous* crashed session can
+// keep holding the port there, in which case the next launch fails to bind and
+// surfaces "exited before it was ready". A cross-platform port-owner lookup
+// (e.g. lsof on macOS) would be needed to close this.
 #[cfg(not(target_os = "linux"))]
 fn terminate_jupyter_listeners_on_port(_port: u16) -> Result<(), String> {
     Ok(())

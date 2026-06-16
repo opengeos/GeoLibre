@@ -46,10 +46,22 @@ export function useNotebookBridge(
     const controller = () => mapControllerRef.current;
     const handlers = createScriptingHandlers({ getController: controller });
 
-    // The iframe's origin differs from the app's on desktop (127.0.0.1:<port>)
-    // and matches it on web; learn it from the first message and scope replies
-    // to it. Until then, and for opaque ("null") origins, fall back to "*".
-    let frameOrigin = "*";
+    // The notebook iframe's expected origin, derived from its src — same-origin
+    // on web (JupyterLite), the loopback server origin on desktop. Used both to
+    // reject messages from a different origin (a WindowProxy can outlive a
+    // navigation, so event.source alone is not enough) and to scope replies.
+    const expectedOrigin = (): string | null => {
+      const src = iframeRef.current?.src;
+      if (!src) return null;
+      try {
+        return new URL(src, window.location.href).origin;
+      } catch {
+        return null;
+      }
+    };
+    // Start scoped to the expected origin (not "*") so even the first reply is
+    // not broadcast; refined to the actual origin once a message is accepted.
+    let frameOrigin = expectedOrigin() ?? window.location.origin;
     // Whether the notebook client has announced itself; gates outbound events.
     let connected = false;
 
@@ -88,9 +100,12 @@ export function useNotebookBridge(
     };
 
     const handleMessage = (event: MessageEvent) => {
-      // Trust only the notebook iframe's own window.
+      // Trust only the notebook iframe's own window AND its expected origin (so a
+      // page navigated into the same frame slot can't drive the map).
       const win = frameWindow();
       if (!win || event.source !== win) return;
+      const allowed = expectedOrigin();
+      if (allowed && event.origin !== allowed) return;
       if (event.origin && event.origin !== "null") frameOrigin = event.origin;
       const data = event.data as
         | { type?: string; requestId?: unknown }
