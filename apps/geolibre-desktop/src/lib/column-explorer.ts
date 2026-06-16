@@ -10,11 +10,16 @@
 
 import {
   computeHistogram,
-  numericValues,
+  numericColumns,
+  toFiniteNumber,
   type ChartRow,
   type HistogramResult,
 } from "./attribute-charts";
-import { computeFieldStats, type FieldStats } from "./attribute-stats";
+import {
+  computeNumericStats,
+  computeTextStats,
+  type FieldStats,
+} from "./attribute-stats";
 
 /** Bins used for a numeric column's distribution sparkline. */
 export const COLUMN_EXPLORER_BINS = 12;
@@ -36,22 +41,49 @@ export interface ColumnSummary {
   total: number;
 }
 
+/** True when a value reads as null for statistics: nullish or a blank string. */
+function isBlank(value: unknown): boolean {
+  return value == null || (typeof value === "string" && value.trim() === "");
+}
+
 /**
  * Summarize one field across `rows`: its statistics (numeric or text, chosen by
  * the same heuristic the Statistics/Charts panels use) plus a numeric
  * distribution when the field reads as numeric. Returns null only when the field
  * yields no statistics at all, so callers can skip it.
+ *
+ * For numeric fields the finite values are extracted in a single pass and fed to
+ * both `computeNumericStats` and `computeHistogram`, rather than re-scanning the
+ * rows for each — so a large layer's columns are summarized without redundant
+ * passes before the dialog first renders. The blank/non-numeric classification
+ * here mirrors `computeFieldStats` so the two agree on what counts as a number.
  */
 export function summarizeColumn(
   rows: ChartRow[],
   key: string,
 ): ColumnSummary | null {
-  const stats = computeFieldStats(rows, key, COLUMN_EXPLORER_TOP_VALUES);
+  if (numericColumns(rows, [key]).length === 0) {
+    const stats = computeTextStats(rows, key, COLUMN_EXPLORER_TOP_VALUES);
+    return { key, stats, histogram: null, total: rows.length };
+  }
+
+  const values: number[] = [];
+  let nulls = 0;
+  let nonNumeric = 0;
+  for (const row of rows) {
+    const raw = row.properties[key];
+    if (isBlank(raw)) {
+      nulls += 1;
+      continue;
+    }
+    const next = toFiniteNumber(raw);
+    if (next === null) nonNumeric += 1;
+    else values.push(next);
+  }
+
+  const stats = computeNumericStats(values, nulls, nonNumeric);
   if (!stats) return null;
-  const histogram =
-    stats.kind === "numeric"
-      ? computeHistogram(numericValues(rows, key), COLUMN_EXPLORER_BINS)
-      : null;
+  const histogram = computeHistogram(values, COLUMN_EXPLORER_BINS);
   return { key, stats, histogram, total: rows.length };
 }
 
