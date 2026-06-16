@@ -72,6 +72,21 @@ describe("decodeWkb", () => {
     assert.deepEqual(decoded, { type: "Point", coordinates: [-85.6, 42.9, 100] });
   });
 
+  it("skips the EWKB SRID prefix", () => {
+    // EWKB POINT with the SRID flag (0x20000000): byte order, type, 4-byte SRID,
+    // then x,y. The SRID is skipped (the CRS comes from GeoPackage metadata).
+    const writer = new DataView(new ArrayBuffer(1 + 4 + 4 + 8 + 8));
+    writer.setUint8(0, 1); // little-endian
+    writer.setUint32(1, 0x20000001, true); // Point + SRID flag
+    writer.setUint32(5, 4326, true); // SRID (skipped)
+    writer.setFloat64(9, -85.6, true);
+    writer.setFloat64(17, 42.9, true);
+    assert.deepEqual(decodeWkb(new Uint8Array(writer.buffer)), {
+      type: "Point",
+      coordinates: [-85.6, 42.9],
+    });
+  });
+
   it("throws on unsupported curved geometry types", () => {
     // Type code 8 = CircularString, which GeoJSON cannot represent.
     const bytes = new Uint8Array([0x01, 0x08, 0x00, 0x00, 0x00]);

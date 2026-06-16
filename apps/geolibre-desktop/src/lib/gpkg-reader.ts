@@ -90,9 +90,13 @@ function selectLayer(db: Database): GeoPackageLayer | null {
   if (!tableExists(db, "gpkg_geometry_columns")) return null;
   if (!tableExists(db, "gpkg_contents")) return null;
   const result = db.exec(
+    // COLLATE NOCASE: SQLite's default BINARY collation makes the join
+    // case-sensitive, but a producer can spell the same table differently in
+    // gpkg_contents and gpkg_geometry_columns (SQLite table names are
+    // case-insensitive). gpkg-ogr-contents.ts handles the same mismatch.
     `SELECT g.table_name, g.column_name, g.srs_id
      FROM gpkg_geometry_columns g
-     JOIN gpkg_contents c ON c.table_name = g.table_name
+     JOIN gpkg_contents c ON c.table_name = g.table_name COLLATE NOCASE
      WHERE lower(c.data_type) = 'features'
      ORDER BY c.rowid
      LIMIT 1`,
