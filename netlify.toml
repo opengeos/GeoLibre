@@ -11,15 +11,22 @@
 
 [build]
   # Mirrors the steps previously run in .github/workflows/netlify-preview.yml:
-  #   docs deps -> frontend deps -> web demo build -> docs build -> bundle demo
-  # The trailing test -f guards against a silently empty/misplaced demo copy.
+  #   docs deps -> jupyterlite deps -> frontend deps -> web demo build -> docs
+  #   build -> bundle demo
+  # The jupyterlite deps let the web build's `prebuild` hook generate the
+  # self-hosted JupyterLite site (apps/.../public/jupyterlite/, served in the
+  # Notebook panel); without them that step skips and the panel 404s.
+  # The two trailing test -f checks guard against a silently empty/misplaced
+  # demo copy and a missing JupyterLite build.
   command = """python -m pip install -r requirements-docs.txt \
+    && python -m pip install -r apps/geolibre-desktop/jupyterlite/requirements.txt \
     && npm ci \
     && npm run build -w geolibre-desktop \
     && mkdocs build --strict --site-dir site \
     && mkdir -p site/demo \
     && cp -R apps/geolibre-desktop/dist/. site/demo/ \
-    && test -f site/demo/index.html"""
+    && test -f site/demo/index.html \
+    && test -f site/demo/jupyterlite/lab/index.html"""
   publish = "site"
 
 [build.environment]

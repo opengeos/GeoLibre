@@ -69,11 +69,18 @@ pip install -r apps/geolibre-desktop/jupyterlite/requirements.txt
 npm run build:jupyterlite
 ```
 
-`npm run build` runs this automatically (via the `prebuild` hook) but **skips it
-gracefully** when `jupyter lite` is not installed — a Node-only build still
-succeeds, and the web Notebook panel shows a "not built" message until the site
-is generated. The desktop (Tauri) build skips it entirely (it uses the real
-JupyterLab server), so the static site never bloats the installer.
+Both `npm run dev` and `npm run build` run this automatically:
+
+- `npm run dev` builds it **once** on first run via a `predev` hook
+  (`--if-missing`), then is instant on subsequent runs.
+- `npm run build` always rebuilds it (via `prebuild`) so a changed client/config
+  is picked up.
+
+Both **skip gracefully** when `jupyter lite` is not installed — a Node-only build
+still succeeds and the web Notebook panel shows a "not built" message until the
+site is generated (install the deps above and re-run). The desktop (Tauri) dev
+and build paths skip it entirely (they use the real JupyterLab server), so the
+static site never bloats the installer.
 
 Build config lives in `apps/geolibre-desktop/jupyterlite/` (a
 `jupyter_lite_config.json`, the build `requirements.txt`, and a starter

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "predev": "node ../../scripts/build-jupyterlite.mjs --if-missing",
     "prebuild": "node ../../scripts/build-jupyterlite.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",

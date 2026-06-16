@@ -51,6 +51,19 @@ if (process.env.TAURI_ENV_PLATFORM) {
   process.exit(0);
 }
 
+// `--if-missing` (used by the `predev` hook) builds only when the site is not
+// already present, so `npm run dev` pays the build cost once and is instant
+// afterwards. The authoritative `build`/`build:jupyterlite` paths omit the flag
+// and always rebuild so a changed client/config is picked up.
+const onlyIfMissing = process.argv.includes("--if-missing");
+if (onlyIfMissing && existsSync(resolve(outputDir, "lab", "index.html"))) {
+  console.log(
+    "[build-jupyterlite] JupyterLite site already present — skipping " +
+      "(run `npm run build:jupyterlite` to rebuild it).",
+  );
+  process.exit(0);
+}
+
 // Probe for the CLI. `jupyter lite --version` exits non-zero / ENOENT when the
 // jupyterlite-core package (or jupyter itself) is missing.
 const probe = spawnSync("jupyter", ["lite", "--version"], {
