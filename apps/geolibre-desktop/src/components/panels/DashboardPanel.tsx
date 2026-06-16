@@ -171,8 +171,24 @@ export function DashboardPanel() {
         role="separator"
         aria-orientation="horizontal"
         aria-label={t("dashboard.resize")}
-        className="absolute -top-1 left-0 right-0 z-20 h-2 cursor-row-resize select-none border-t border-transparent hover:border-primary"
+        aria-valuenow={Math.round(height)}
+        aria-valuemin={MIN_DASHBOARD_HEIGHT}
+        aria-valuemax={MAX_DASHBOARD_HEIGHT}
+        tabIndex={0}
+        className="absolute -top-1 left-0 right-0 z-20 h-2 cursor-row-resize select-none border-t border-transparent hover:border-primary focus-visible:border-primary focus-visible:outline-none"
         onMouseDown={startResize}
+        onKeyDown={(event) => {
+          // Arrow keys resize for keyboard-only users (Shift = larger step).
+          const step = event.shiftKey ? 24 : 8;
+          if (event.key === "ArrowUp") {
+            setHeight((h) => Math.min(MAX_DASHBOARD_HEIGHT, h + step));
+          } else if (event.key === "ArrowDown") {
+            setHeight((h) => Math.max(MIN_DASHBOARD_HEIGHT, h - step));
+          } else {
+            return;
+          }
+          event.preventDefault();
+        }}
       />
       <div className="flex items-center gap-2 border-b px-3 py-1.5">
         <LayoutDashboard className="h-4 w-4 text-muted-foreground" />

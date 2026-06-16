@@ -402,7 +402,9 @@ export function computePie(
   if (all.length === 0) return null;
   all.sort((a, b) => b.value - a.value);
 
-  const limit = Math.max(1, maxSlices);
+  // Floor at 2 so there is always a named slice plus the overflow bucket; a
+  // limit of 1 would put every row under "(other)", which is meaningless.
+  const limit = Math.max(2, maxSlices);
   let slices: PieSlice[] = all;
   let otherCount = 0;
   if (all.length > limit) {
