@@ -9,7 +9,11 @@ import {
   vectorLineColorValue,
   type LayerStyle,
 } from "@geolibre/core";
-import { fillPaint, linePaint } from "../packages/map/src/style-mapper";
+import {
+  circlePaint,
+  fillPaint,
+  linePaint,
+} from "../packages/map/src/style-mapper";
 
 function style(patch: Partial<LayerStyle> = {}): LayerStyle {
   return { ...DEFAULT_LAYER_STYLE, ...patch };
@@ -148,6 +152,20 @@ describe("paint with simplestyle enabled", () => {
     ]);
   });
 
+  it("circlePaint reads per-feature marker-color and marker-opacity", () => {
+    const paint = circlePaint(style({ simpleStyleEnabled: true }), 1);
+    assert.deepEqual(paint["circle-color"], [
+      "coalesce",
+      ["get", "marker-color"],
+      DEFAULT_LAYER_STYLE.fillColor,
+    ]);
+    assert.deepEqual(paint["circle-opacity"], [
+      "*",
+      ["to-number", ["get", "marker-opacity"], DEFAULT_LAYER_STYLE.fillOpacity],
+      1,
+    ]);
+  });
+
   it("keeps flat numeric paint when disabled", () => {
     const paint = fillPaint(style(), 0.5);
     assert.equal(
@@ -155,5 +173,9 @@ describe("paint with simplestyle enabled", () => {
       DEFAULT_LAYER_STYLE.fillOpacity * 0.5,
     );
     assert.equal(linePaint(style(), 1)["line-width"], DEFAULT_LAYER_STYLE.strokeWidth);
+    assert.equal(
+      circlePaint(style(), 0.5)["circle-opacity"],
+      DEFAULT_LAYER_STYLE.fillOpacity * 0.5,
+    );
   });
 });

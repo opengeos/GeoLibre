@@ -35,6 +35,8 @@ const SIMPLE_STYLE_NUMBER_KEYS = [
   "fill-opacity",
   "stroke-width",
   "stroke-opacity",
+  // Non-standard: alpha from a KML IconStyle color, wired into circle-opacity.
+  "marker-opacity",
 ] as const;
 
 function isSimpleStyleEnabled(style: LayerStyle): boolean {

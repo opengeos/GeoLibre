@@ -39,6 +39,9 @@ export function fillPaint(style: LayerStyle, opacity: number) {
       simpleStyleNumberValue(style, "fill-opacity", styleValue(style, "fillOpacity")),
       opacity,
     ),
+    // vectorLineColorValue honors simpleStyle's per-feature stroke property; in
+    // expression mode it also applies the user's expression to the hairline
+    // outline (matching the separate line layer that draws the polygon stroke).
     "fill-outline-color": vectorLineColorValue(
       style,
     ) as PropertyValueSpecification<string>,
@@ -113,7 +116,10 @@ export function circlePaint(style: LayerStyle, opacity: number) {
       style,
     ) as PropertyValueSpecification<string>,
     "circle-radius": styleValue(style, "circleRadius"),
-    "circle-opacity": styleValue(style, "fillOpacity") * opacity,
+    "circle-opacity": scaleByOpacity(
+      simpleStyleNumberValue(style, "marker-opacity", styleValue(style, "fillOpacity")),
+      opacity,
+    ),
     "circle-stroke-color": styleValue(style, "strokeColor"),
     "circle-stroke-width": styleValue(style, "strokeWidth"),
   };
