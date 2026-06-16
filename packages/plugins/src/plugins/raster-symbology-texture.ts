@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import { createColormapTexture } from "@developmentseed/deck.gl-raster/gpu-modules";
 import {
   type AutoStats,
@@ -60,6 +60,9 @@ type RasterInfoLike = {
 
 type ClassificationEntry = {
   symbology: RasterSymbology;
+  /** Whether the ramp is reversed (from `rasterState.reversed`); baked into
+   * the injected texture. */
+  reversed: boolean;
   /** Cache key for the built texture (breaks + ramp + customColors + reversed). */
   key: string;
   texture?: GpuTexture;
@@ -74,10 +77,21 @@ function hasCustomColors(symbology: RasterSymbology): boolean {
  * Whether a single-band layer needs a GeoLibre-injected colormap texture: a
  * stepped lookup when classified, or a smooth gradient when a custom ramp is
  * applied to a continuous layer. A built-in continuous ramp renders through
- * the upstream sprite (reversal aside) and needs no texture.
+ * the upstream sprite (including its native `reversed`), so it needs no texture.
  */
 function needsTexture(symbology: RasterSymbology): boolean {
   return symbology.classified || hasCustomColors(symbology);
+}
+
+/** Reads `rasterState.reversed` from a store layer's metadata. */
+function readRasterReversed(layer: GeoLibreLayer): boolean {
+  const raw = layer.metadata.rasterState;
+  return (
+    !!raw &&
+    typeof raw === "object" &&
+    !Array.isArray(raw) &&
+    (raw as Record<string, unknown>).reversed === true
+  );
 }
 
 // Per-layer classification state and built GPU textures. Module-global to
@@ -91,12 +105,12 @@ const statsCache = new Map<string, AutoStats>();
 const statsInflight = new Map<string, AbortController>();
 let storeUnsubscribe: (() => void) | null = null;
 
-function symbologyKey(symbology: RasterSymbology): string {
+function symbologyKey(symbology: RasterSymbology, reversed: boolean): string {
   return JSON.stringify([
     symbology.breaks,
     symbology.ramp,
     symbology.customColors ?? null,
-    symbology.reversed,
+    reversed,
   ]);
 }
 
@@ -104,11 +118,12 @@ function symbologyKey(symbology: RasterSymbology): string {
  * Installs the per-layer symbology injection on a raster control. Wraps the
  * LayerManager's `_renderTileFor` so a single-band layer renders through the
  * unchanged upstream pipeline (composite / nodata / rescale / stretch) but,
- * when classified, samples a custom stepped colormap texture instead of the
- * shared named-colormap sprite, and, when its continuous ramp is reversed,
- * flips the colormap module's `reversed` shader uniform. Idempotent and
- * feature-detected: if the private surface is missing it warns once and
- * leaves the control untouched.
+ * when classified or using a custom ramp, samples a GeoLibre-built colormap
+ * texture instead of the shared named-colormap sprite (reversal baked in).
+ * Built-in continuous ramps -- including their reversal via
+ * `rasterState.reversed` -- render through the upstream control untouched.
+ * Idempotent and feature-detected: if the private surface is missing it warns
+ * once and leaves the control untouched.
  *
  * @param control - The mounted maplibre-gl-raster control.
  */
@@ -131,16 +146,13 @@ export function installRasterClassification(control: unknown): void {
     manager._renderTileFor = (layer: RasterLayerLike): RenderTileFn => {
       const renderTile = originalRenderTileFor(layer);
       const entry = entries.get(layer.id);
-      // A texture is injected for classified / custom ramps; a built-in
-      // continuous ramp is only patched to reverse it via the shader uniform.
-      // Everything else renders straight through the upstream pipeline.
-      const usesTexture = entry ? needsTexture(entry.symbology) : false;
-      const reverseBuiltIn =
-        !usesTexture && (entry?.symbology.reversed ?? false);
+      // A texture is injected only for classified / custom ramps. A built-in
+      // continuous ramp (including its reversal) renders through the upstream
+      // sprite via rasterState.reversed, so it has no entry and passes through.
       if (
         layer.state?.mode !== "single" ||
         !entry ||
-        (!usesTexture && !reverseBuiltIn) ||
+        !needsTexture(entry.symbology) ||
         !manager._device
       ) {
         return renderTile;
@@ -149,34 +161,24 @@ export function installRasterClassification(control: unknown): void {
         const result = renderTile(data);
         const pipeline = result?.renderPipeline;
         if (!Array.isArray(pipeline)) return result;
-        // Texture-backed ramps sample an injected lookup; bail if it could not
-        // be built. The reverse-only path keeps the upstream texture.
-        const texture = usesTexture ? ensureTexture(manager, entry) : null;
-        if (usesTexture && !texture) return result;
-        // Touch ONLY the trailing colormap module; every other module
+        const texture = ensureTexture(manager, entry);
+        if (!texture) return result;
+        // Swap ONLY the trailing colormap module's texture; every other module
         // (composite, nodata, rescale, stretch, gamma) is reused as built
         // upstream, so nodata transparency and the rescale window behave
-        // identically to the named-colormap path.
+        // identically to the named-colormap path. Any reversal is already baked
+        // into the injected texture, so the shader uniform must stay false or
+        // the two cancel out.
         const patched = pipeline.map((mod) =>
           mod?.module?.name === "colormap"
             ? {
                 ...mod,
-                props: usesTexture
-                  ? {
-                      ...mod.props,
-                      colormapTexture: texture,
-                      colormapIndex: 0,
-                      // Any reversal is already baked into the injected
-                      // texture's colors, so the shader uniform must stay false
-                      // or the two cancel out.
-                      reversed: false,
-                    }
-                  : {
-                      // Keep the upstream named colormap; just flip the shader
-                      // uniform so the result mirrors the forward ramp exactly.
-                      ...mod.props,
-                      reversed: true,
-                    },
+                props: {
+                  ...mod.props,
+                  colormapTexture: texture,
+                  colormapIndex: 0,
+                  reversed: false,
+                },
               }
             : mod,
         );
@@ -193,11 +195,12 @@ function ensureTexture(
   manager: RasterLayerManager,
   entry: ClassificationEntry,
 ): GpuTexture | null {
-  const key = symbologyKey(entry.symbology);
+  const key = symbologyKey(entry.symbology, entry.reversed);
   if (entry.texture && entry.key === key) return entry.texture;
   entry.texture?.destroy?.();
   try {
-    const { classified, breaks, ramp, reversed, customColors } = entry.symbology;
+    const { classified, breaks, ramp, customColors } = entry.symbology;
+    const reversed = entry.reversed;
     // Classified ramps step through the class breaks; a custom continuous ramp
     // is a smooth gradient of the user's colors. (A built-in continuous ramp
     // never reaches here -- it has no texture.) For a named sprite colormap the
@@ -255,13 +258,10 @@ function reconcile(control: unknown): void {
     const symbology = savedRasterSymbology(layer);
     const existing = entries.get(layer.id);
 
-    // Track the layer while it needs custom rendering: a classified or custom
-    // texture, or a reversed built-in continuous ramp. A plain built-in
-    // continuous ramp needs none of these, so drop any stale entry.
-    if (
-      !symbology ||
-      (!needsTexture(symbology) && !symbology.reversed)
-    ) {
+    // Track the layer only while it needs an injected texture (classified or a
+    // custom ramp). A built-in continuous ramp -- reversed or not -- renders
+    // through the upstream sprite, so drop any stale entry.
+    if (!symbology || !needsTexture(symbology)) {
       if (existing) {
         existing.texture?.destroy?.();
         entries.delete(layer.id);
@@ -270,12 +270,16 @@ function reconcile(control: unknown): void {
       continue;
     }
 
-    const key = symbologyKey(symbology);
+    // Reverse lives on rasterState (the control renders it for built-in ramps;
+    // the injected texture bakes it here for classified / custom).
+    const reversed = readRasterReversed(layer);
+    const key = symbologyKey(symbology, reversed);
     if (!existing) {
-      entries.set(layer.id, { symbology, key });
+      entries.set(layer.id, { symbology, reversed, key });
       changed = true;
     } else if (existing.key !== key) {
       existing.symbology = symbology;
+      existing.reversed = reversed;
       // Texture rebuilt lazily on next render via ensureTexture's key check.
       changed = true;
     }

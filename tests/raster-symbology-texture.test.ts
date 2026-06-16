@@ -25,8 +25,8 @@ type PipelineModule = { module?: { name?: string }; props?: Record<string, unkno
 /**
  * Minimal stand-in for the maplibre-gl-raster LayerManager + RasterControl
  * surface the symbology injection patches. `_renderTileFor` returns a render
- * pipeline whose trailing "colormap" module starts with `reversed: false`,
- * mirroring the upstream default the patch is expected to flip.
+ * pipeline whose trailing "colormap" module starts with the upstream defaults
+ * (`reversed: false`, a named-colormap texture/index).
  */
 function fakeControl() {
   const manager: Record<string, unknown> = {
@@ -64,7 +64,7 @@ function renderColormapProps(
 
 function rasterLayer(
   id: string,
-  rasterSymbology?: Record<string, unknown>,
+  opts: { rasterSymbology?: Record<string, unknown>; reversed?: boolean } = {},
 ): GeoLibreLayer {
   return {
     id,
@@ -78,21 +78,19 @@ function rasterLayer(
     metadata: {
       sourceKind: RASTER_SOURCE_KIND,
       externalNativeLayer: true,
-      ...(rasterSymbology ? { rasterSymbology } : {}),
+      // Reverse lives on rasterState now (the control renders it for built-in
+      // colormaps; the injected texture reads it for classified / custom).
+      rasterState: {
+        mode: "single",
+        colormap: "viridis",
+        reversed: opts.reversed ?? false,
+      },
+      ...(opts.rasterSymbology ? { rasterSymbology: opts.rasterSymbology } : {}),
     },
   } as GeoLibreLayer;
 }
 
-const CONTINUOUS_REVERSED = {
-  classified: false,
-  ramp: "viridis",
-  reversed: true,
-  method: "equal-interval",
-  classCount: 5,
-  breaks: [0, 0.2, 0.4, 0.6, 0.8, 1],
-};
-
-describe("raster symbology render injection (continuous reverse)", () => {
+describe("raster symbology render injection", () => {
   beforeEach(() => {
     useAppStore.setState({ layers: [] });
   });
@@ -102,19 +100,20 @@ describe("raster symbology render injection (continuous reverse)", () => {
     useAppStore.setState({ layers: [] });
   });
 
-  it("flips the colormap module's reversed uniform for a reversed continuous layer", () => {
-    useAppStore.getState().addLayer(rasterLayer("r1", CONTINUOUS_REVERSED));
+  it("leaves a built-in continuous ramp to the upstream control, reversed or not", () => {
+    // A built-in colormap (even reversed) renders through the control via
+    // rasterState.reversed; GeoLibre injects nothing and the patch is a no-op.
+    useAppStore.getState().addLayer(rasterLayer("r1", { reversed: true }));
     const control = fakeControl();
     activateRasterClassification(control);
 
     const props = renderColormapProps(control, "r1");
-    assert.equal(props?.reversed, true);
-    // The upstream named colormap is preserved; only the uniform changes.
-    assert.equal(props?.colormapTexture, "upstream");
+    assert.equal(props?.reversed, false); // patch did not touch the uniform
+    assert.equal(props?.colormapTexture, "upstream"); // upstream colormap kept
     assert.equal(props?.colormapIndex, 4);
   });
 
-  it("leaves the pipeline untouched for a plain (non-reversed) continuous layer", () => {
+  it("leaves the pipeline untouched for a plain continuous layer", () => {
     useAppStore.getState().addLayer(rasterLayer("r1"));
     const control = fakeControl();
     activateRasterClassification(control);
@@ -125,13 +124,14 @@ describe("raster symbology render injection (continuous reverse)", () => {
   it("injects a gradient texture for a custom continuous ramp", () => {
     useAppStore.getState().addLayer(
       rasterLayer("r1", {
-        classified: false,
-        ramp: "viridis",
-        customColors: ["#ff0000", "#0000ff"],
-        reversed: false,
-        method: "equal-interval",
-        classCount: 5,
-        breaks: [0, 1, 2, 3, 4, 5],
+        rasterSymbology: {
+          classified: false,
+          ramp: "viridis",
+          customColors: ["#ff0000", "#0000ff"],
+          method: "equal-interval",
+          classCount: 5,
+          breaks: [0, 1, 2, 3, 4, 5],
+        },
       }),
     );
     const control = fakeControl();
@@ -154,18 +154,5 @@ describe("raster symbology render injection (continuous reverse)", () => {
     assert.ok(props?.colormapTexture, "expected an injected colormap texture");
     assert.equal(created.length >= 1, true);
     assert.equal(created[0]?.opts.width, 256);
-  });
-
-  it("stops reversing once the reverse flag is cleared", () => {
-    useAppStore.getState().addLayer(rasterLayer("r1", CONTINUOUS_REVERSED));
-    const control = fakeControl();
-    activateRasterClassification(control);
-    assert.equal(renderColormapProps(control, "r1")?.reversed, true);
-
-    // Clearing the symbology (reverse off) drops the entry; the patch should
-    // then pass the upstream pipeline straight through.
-    const cleared = rasterLayer("r1");
-    useAppStore.getState().updateLayer("r1", { metadata: cleared.metadata });
-    assert.equal(renderColormapProps(control, "r1")?.reversed, false);
   });
 });

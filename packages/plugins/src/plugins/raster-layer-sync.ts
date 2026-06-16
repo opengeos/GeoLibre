@@ -257,6 +257,7 @@ const SYNCED_RASTER_STATE_KEYS = [
   "mode",
   "bands",
   "colormap",
+  "reversed",
   "rescale",
   "nodata",
   "stretch",
@@ -419,6 +420,9 @@ export function savedRasterState(
   // than throwing on restore.
   if (typeof candidate.colormap === "string" && candidate.colormap) {
     state.colormap = candidate.colormap;
+  }
+  if (typeof candidate.reversed === "boolean") {
+    state.reversed = candidate.reversed;
   }
   if (
     candidate.nodata === "off" ||

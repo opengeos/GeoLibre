@@ -175,7 +175,6 @@ describe("savedRasterSymbology", () => {
       layerWith({
         classified: true,
         ramp: "plasma",
-        reversed: true,
         method: "quantile",
         classCount: 99,
         // classCount clamps to 12, so breaks must have 13 edges.
@@ -185,7 +184,6 @@ describe("savedRasterSymbology", () => {
     assert.ok(result);
     assert.equal(result.classCount, 12);
     assert.equal(result.method, "quantile");
-    assert.equal(result.reversed, true);
   });
 
   it("keeps and normalizes custom colors with >= 2 valid entries", () => {

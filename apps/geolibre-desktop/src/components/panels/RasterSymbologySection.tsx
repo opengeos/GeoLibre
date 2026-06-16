@@ -23,6 +23,7 @@ type RasterStateRecord = {
   mode: "single" | "rgb";
   bands: number[];
   colormap: string;
+  reversed: boolean;
   rescale: [number, number][] | null;
   nodata: number | "auto" | "off";
   stretch: "linear" | "log" | "sqrt";
@@ -74,6 +75,7 @@ function readRasterState(layer: GeoLibreLayer): RasterStateRecord {
     mode: raw.mode === "rgb" ? "rgb" : "single",
     bands: bands.length > 0 ? bands : [1],
     colormap: typeof raw.colormap === "string" ? raw.colormap : DEFAULT_RAMP,
+    reversed: raw.reversed === true,
     rescale,
     nodata:
       raw.nodata === "off" || typeof raw.nodata === "number"
@@ -229,7 +231,7 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
   function recomputeSymbology(
     next: Pick<
       RasterSymbology,
-      "ramp" | "reversed" | "method" | "classCount" | "customColors"
+      "ramp" | "method" | "classCount" | "customColors"
     >,
     overrides: { range?: [number, number]; manualBreaks?: number[] } = {},
   ): void {
@@ -254,7 +256,6 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
       symbology: {
         classified: true,
         ramp: next.ramp,
-        reversed: next.reversed,
         method: next.method,
         classCount: next.classCount,
         breaks,
@@ -313,7 +314,9 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
   const classified = symbology?.classified ?? false;
   const classCount = symbology?.classCount ?? DEFAULT_CLASS_COUNT;
   const method = symbology?.method ?? "equal-interval";
-  const reversed = symbology?.reversed ?? false;
+  // Reverse lives on rasterState: the control renders it for built-in
+  // colormaps, and the injected texture bakes it for classified / custom.
+  const reversed = state.reversed;
   const customColors = symbology?.customColors;
   const isCustom = (customColors?.length ?? 0) >= MIN_CUSTOM_COLORS;
   // rampPreview (resolved above) holds the ramp's colors; mirror the reverse
@@ -321,71 +324,54 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
   const orderedPreview = reversed ? [...rampPreview].reverse() : rampPreview;
   const rampSelectValue = isCustom ? CUSTOM_RAMP_VALUE : ramp;
 
-  // Reverse and custom colors are GeoLibre extensions the upstream control
-  // can't express; a continuous (unclassified) layer carries them in a
-  // classified:false record the render injection reads, or none at all when
-  // both are off (the plain upstream colormap renders on its own). Breaks are
-  // required by the record but unused while continuous, so seed them from
-  // whatever range is known.
+  // A custom ramp is the only thing the upstream control can't express for a
+  // continuous layer, so it carries a classified:false symbology record the
+  // render injection reads; otherwise no record is needed (the control renders
+  // the named colormap, reversal included). Breaks are required by the record
+  // but unused while continuous, so seed them from whatever range is known.
   function continuousSymbology(opts: {
     ramp: string;
-    reversed: boolean;
     customColors?: string[];
   }): RasterSymbology | null {
     const custom =
       (opts.customColors?.length ?? 0) >= MIN_CUSTOM_COLORS
         ? opts.customColors
         : undefined;
-    if (!opts.reversed && !custom) return null;
+    if (!custom) return null;
     return {
       classified: false,
       ramp: opts.ramp,
-      reversed: opts.reversed,
       method,
       classCount,
       breaks: computeRasterBreaks(method, stats, classCount),
-      ...(custom ? { customColors: custom } : {}),
+      customColors: custom,
     };
   }
 
-  // Reverse applies to both render paths. Classified bakes the flip into the
-  // injected texture, so toggling only rewrites the symbology (breaks unchanged).
+  // Reverse is a single rasterState flag for every mode: the control reverses
+  // built-in colormaps natively, and the injected texture reads it to bake the
+  // flip for classified / custom ramps.
   function setReversed(next: boolean): void {
-    if (classified && symbology) {
-      commit({ symbology: { ...symbology, reversed: next } });
-    } else {
-      commit({
-        symbology: continuousSymbology({ ramp, reversed: next, customColors }),
-      });
-    }
+    commit({ statePatch: { reversed: next } });
   }
 
   // Switch to / edit / clear a user-defined ramp. `next` is the parsed color
   // list (>= 2 colors) or undefined to drop back to the named ramp.
   function setCustomColors(next: string[] | undefined): void {
     if (classified && symbology) {
-      recomputeSymbology({
-        ramp,
-        reversed,
-        method,
-        classCount,
-        customColors: next,
-      });
+      recomputeSymbology({ ramp, method, classCount, customColors: next });
     } else {
-      commit({
-        symbology: continuousSymbology({ ramp, reversed, customColors: next }),
-      });
+      commit({ symbology: continuousSymbology({ ramp, customColors: next }) });
     }
   }
 
   // Select a built-in named ramp (clears any custom colors). Classified
   // recomputes through the named ramp; continuous pushes the colormap to the
-  // control and keeps only the reverse extra (if any).
+  // control (which renders it, reversal included) and drops any custom record.
   function selectNamedRamp(value: string): void {
     if (classified && symbology) {
       recomputeSymbology({
         ramp: value,
-        reversed,
         method,
         classCount,
         customColors: undefined,
@@ -393,11 +379,7 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
     } else {
       commit({
         statePatch: { colormap: value },
-        symbology: continuousSymbology({
-          ramp: value,
-          reversed,
-          customColors: undefined,
-        }),
+        symbology: continuousSymbology({ ramp: value, customColors: undefined }),
       });
     }
   }
@@ -502,17 +484,12 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
           checked={classified}
           onChange={(event) => {
             if (event.target.checked) {
-              recomputeSymbology({
-                ramp,
-                reversed,
-                method,
-                classCount,
-                customColors,
-              });
+              recomputeSymbology({ ramp, method, classCount, customColors });
             } else {
-              // Drop classification but keep any reversed / custom ramp extras.
+              // Drop classification but keep a custom ramp (reverse lives on
+              // rasterState and is untouched here).
               commit({
-                symbology: continuousSymbology({ ramp, reversed, customColors }),
+                symbology: continuousSymbology({ ramp, customColors }),
               });
             }
           }}

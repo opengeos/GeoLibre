@@ -17,12 +17,12 @@ export type RasterClassificationMethod = "equal-interval" | "quantile" | "manual
 /**
  * GeoLibre-owned raster symbology, stored at `metadata.rasterSymbology`. The
  * upstream `maplibre-gl-raster` control owns the continuous render state
- * (`metadata.rasterState`: mode/bands/colormap/rescale/nodata/stretch/gamma);
- * this record adds what the control cannot express: discrete classification
- * and a reversed color ramp. When `classified` is true the stepped colormap
- * drives color and `rasterState.colormap` is ignored; when only `reversed` is
- * true the continuous named colormap is kept but sampled back-to-front. When
- * neither is set the record is unnecessary (the control renders on its own).
+ * (`metadata.rasterState`: mode/bands/colormap/reversed/rescale/…); this record
+ * adds what the control cannot express: discrete classification and custom
+ * color ramps. When `classified` is true the stepped colormap drives color and
+ * `rasterState.colormap` is ignored; otherwise the record is needed only for a
+ * custom ramp. Reverse lives on `rasterState.reversed` (the control renders it
+ * for built-in colormaps; the injected texture reads it for classified/custom).
  */
 export type RasterSymbology = {
   /** Whether the single band is rendered as discrete classes. */
@@ -36,13 +36,6 @@ export type RasterSymbology = {
    * classified, a smooth gradient when continuous.
    */
   customColors?: string[];
-  /**
-   * Sample the ramp in reverse. For classified and custom-continuous layers
-   * the reversal is baked into the injected texture; for a built-in continuous
-   * colormap it flips the deck.gl-raster colormap module's `reversed` shader
-   * uniform, so the result is the exact mirror of the forward ramp.
-   */
-  reversed: boolean;
   /** How the class edges are derived. */
   method: RasterClassificationMethod;
   /** Number of classes, clamped to [2, 12]. */
@@ -326,7 +319,6 @@ export function savedRasterSymbology(
     classified: candidate.classified,
     ramp: candidate.ramp,
     ...(customColors ? { customColors } : {}),
-    reversed: candidate.reversed === true,
     method: candidate.method,
     classCount,
     breaks,
@@ -349,7 +341,6 @@ export function defaultRasterSymbology(
   return {
     classified: false,
     ramp,
-    reversed: false,
     method: "equal-interval",
     classCount,
     breaks: computeRasterBreaks("equal-interval", stats, classCount),
