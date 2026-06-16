@@ -51,6 +51,9 @@ export const RASTER_MAX_CLASSES = 12;
 /** Number of columns in a colormap lookup texture (matches deck.gl-raster). */
 export const COLORMAP_TEXTURE_WIDTH = 256;
 
+/** Minimum colors that make a usable custom ramp (fewer can't interpolate). */
+export const RASTER_MIN_CUSTOM_COLORS = 2;
+
 /** A single band's statistics, as produced by `computeAutoStats`. */
 export type RasterBandStats = {
   min: number;
@@ -166,7 +169,7 @@ export function rampBaseColors(
   ramp: string,
   customColors?: readonly string[],
 ): readonly string[] {
-  return customColors && customColors.length >= 2
+  return customColors && customColors.length >= RASTER_MIN_CUSTOM_COLORS
     ? customColors
     : getVectorColorRamp(ramp).colors;
 }
@@ -312,7 +315,7 @@ export function savedRasterSymbology(
       .filter((color): color is string => typeof color === "string")
       .map(normalizeHexColor)
       .filter((color): color is string => color !== null);
-    if (normalized.length >= 2) customColors = normalized;
+    if (normalized.length >= RASTER_MIN_CUSTOM_COLORS) customColors = normalized;
   }
 
   return {

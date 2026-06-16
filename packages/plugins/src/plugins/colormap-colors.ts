@@ -8,9 +8,11 @@ const ANCHOR_STOPS = 32;
 const anchorCache = new Map<string, readonly string[]>();
 const inflight = new Map<string, Promise<readonly string[] | null>>();
 
+const BUILT_IN_RAMP_NAMES = new Set(VECTOR_COLOR_RAMPS.map((ramp) => ramp.value));
+
 /** Whether GeoLibre ships exact JS anchor colors for this ramp (its curated set). */
 function isBuiltInRamp(name: string): boolean {
-  return VECTOR_COLOR_RAMPS.some((ramp) => ramp.value === name);
+  return BUILT_IN_RAMP_NAMES.has(name);
 }
 
 /**

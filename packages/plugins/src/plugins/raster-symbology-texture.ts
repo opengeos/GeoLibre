@@ -7,6 +7,7 @@ import {
 } from "maplibre-gl-raster";
 import {
   COLORMAP_TEXTURE_WIDTH,
+  RASTER_MIN_CUSTOM_COLORS,
   type RasterBandStats,
   type RasterSymbology,
   buildContinuousColormapRgba,
@@ -19,11 +20,6 @@ import {
   isRasterStoreSyncSuspended,
 } from "./raster-layer-sync";
 import { colormapColors, warmColormapColors } from "./colormap-colors";
-
-/** Whether a symbology carries user-entered custom colors (>= 2). */
-function hasCustomRamp(symbology: RasterSymbology): boolean {
-  return (symbology.customColors?.length ?? 0) >= 2;
-}
 
 // These types mirror undocumented private members of the maplibre-gl-raster
 // LayerManager (verified against v0.2.0) and the deck.gl-raster Colormap
@@ -68,9 +64,9 @@ type ClassificationEntry = {
   texture?: GpuTexture;
 };
 
-/** Whether a symbology carries a usable custom color ramp (>= 2 colors). */
+/** Whether a symbology carries a usable custom color ramp. */
 function hasCustomColors(symbology: RasterSymbology): boolean {
-  return (symbology.customColors?.length ?? 0) >= 2;
+  return (symbology.customColors?.length ?? 0) >= RASTER_MIN_CUSTOM_COLORS;
 }
 
 /**
@@ -207,7 +203,12 @@ function ensureTexture(
     // colors come from the warmed cache; until it resolves, colormapColors is
     // null and buildSteppedColormapRgba falls back (reconcile rebuilds on warm).
     const custom =
-      customColors && customColors.length >= 2 ? customColors : undefined;
+      customColors && customColors.length >= RASTER_MIN_CUSTOM_COLORS
+        ? customColors
+        : undefined;
+    // The continuous branch only runs for a custom ramp (needsTexture), so
+    // `custom` is set; the grayscale fallback just keeps the contract explicit
+    // rather than producing a silent all-black gradient.
     const rgba = classified
       ? buildSteppedColormapRgba(
           breaks,
@@ -215,7 +216,7 @@ function ensureTexture(
           reversed,
           custom ?? colormapColors(ramp) ?? undefined,
         )
-      : buildContinuousColormapRgba(customColors ?? [], reversed);
+      : buildContinuousColormapRgba(custom ?? ["#000000", "#ffffff"], reversed);
     // The DOM ImageData ctor types its buffer as ArrayBuffer (not the wider
     // ArrayBufferLike the Uint8ClampedArray generic carries); the runtime
     // buffer is a plain ArrayBuffer, so narrow it for the type checker.
@@ -290,7 +291,7 @@ function reconcile(control: unknown): void {
     // re-render. symbologyKey can't see the async colors, so invalidate here.
     if (
       symbology.classified &&
-      !hasCustomRamp(symbology) &&
+      !hasCustomColors(symbology) &&
       colormapColors(symbology.ramp) === null
     ) {
       const id = layer.id;

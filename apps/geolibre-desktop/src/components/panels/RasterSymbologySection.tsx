@@ -6,6 +6,7 @@ import {
 import {
   RASTER_MAX_CLASSES,
   RASTER_MIN_CLASSES,
+  RASTER_MIN_CUSTOM_COLORS,
   type RasterBandStats,
   type RasterClassificationMethod,
   type RasterSymbology,
@@ -44,14 +45,15 @@ const DEFAULT_CLASS_COUNT = 5;
 /** Sentinel `<Select>` value that switches the ramp to a user-defined list. */
 const CUSTOM_RAMP_VALUE = "__custom__";
 /** A custom ramp needs at least this many colors to interpolate. */
-const MIN_CUSTOM_COLORS = 2;
+const MIN_CUSTOM_COLORS = RASTER_MIN_CUSTOM_COLORS;
 /**
  * Every renderer colormap (the same list the maplibre-gl-raster panel offers),
  * sorted by display label for the dropdown. Labels use matplotlib casing
- * (RdBu, YlOrBr, …); the value is the lowercase colormap key.
+ * (RdBu, YlOrBr, …); the value is the lowercase colormap key. A fixed "en"
+ * locale keeps the order identical across browsers.
  */
 const SORTED_COLORMAPS = [...COLORMAP_OPTIONS].sort((a, b) =>
-  a.label.toLowerCase().localeCompare(b.label.toLowerCase()),
+  a.label.localeCompare(b.label, "en", { sensitivity: "base" }),
 );
 
 function readRasterState(layer: GeoLibreLayer): RasterStateRecord {
@@ -420,18 +422,17 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
           onChange={(event) => {
             const value = event.target.value;
             if (value === CUSTOM_RAMP_VALUE) {
-              // Seed the editable list from the current ramp's resolved colors
-              // so the user starts from a sensible, valid (>= 2 color) ramp.
+              // Seed the editable list synchronously from the current ramp's
+              // resolved colors (or the already-resolved preview), falling back
+              // to viridis so custom mode always activates with a valid (>= 2
+              // color) ramp -- no async warm, so switching away can't be
+              // clobbered by a late callback.
               const seed = colormapColors(ramp) ?? rampPreview;
-              if (seed.length >= MIN_CUSTOM_COLORS) {
-                setCustomColors([...seed]);
-              } else {
-                void warmColormapColors(ramp).then((colors) => {
-                  if (colors && colors.length >= MIN_CUSTOM_COLORS) {
-                    setCustomColors([...colors]);
-                  }
-                });
-              }
+              const colors =
+                seed.length >= MIN_CUSTOM_COLORS
+                  ? seed
+                  : (colormapColors("viridis") ?? []);
+              setCustomColors([...colors]);
             } else {
               selectNamedRamp(value);
             }
@@ -813,11 +814,16 @@ function CustomColorsField({
   colors: string[];
   onCommit: (colors: string[]) => void;
 }) {
-  const [draft, setDraft] = useState(colors.join(", "));
+  // `colors` is a fresh array each parent render (savedRasterSymbology rebuilds
+  // it), so sync the draft off its content, not its reference -- otherwise an
+  // unrelated re-render (e.g. band stats loading) would wipe what the user is
+  // typing.
+  const committed = colors.join(", ");
+  const [draft, setDraft] = useState(committed);
   useEffect(() => {
-    setDraft(colors.join(", "));
-  }, [colors]);
-  const parsed = parseHexColorList(draft);
+    setDraft(committed);
+  }, [committed]);
+  const parsed = useMemo(() => parseHexColorList(draft), [draft]);
   const valid = parsed.length >= MIN_CUSTOM_COLORS;
   return (
     <div className="space-y-1">
@@ -831,8 +837,9 @@ function CustomColorsField({
         placeholder="#440154, #21908c, #fde725"
         onChange={(event) => setDraft(event.target.value)}
         onBlur={() => {
-          if (valid) onCommit(parsed);
-          else setDraft(colors.join(", "));
+          // Only commit a usable, actually-changed ramp; otherwise restore.
+          if (valid && parsed.join(",") !== colors.join(",")) onCommit(parsed);
+          else setDraft(committed);
         }}
       />
       <p className="text-[10px] text-muted-foreground">

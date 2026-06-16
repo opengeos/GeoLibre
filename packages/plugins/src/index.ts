@@ -105,6 +105,7 @@ export {
 export {
   RASTER_MAX_CLASSES,
   RASTER_MIN_CLASSES,
+  RASTER_MIN_CUSTOM_COLORS,
   type RasterBandStats,
   type RasterClassificationMethod,
   type RasterSymbology,

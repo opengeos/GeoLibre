@@ -161,7 +161,8 @@ export function interpolateColors(
   count: number,
 ): string[] {
   const anchors = colors.length > 0 ? colors : ["#000000"];
-  if (count <= 1) return [anchors[anchors.length - 1]];
+  if (count <= 0) return [];
+  if (count === 1) return [anchors[anchors.length - 1]];
   if (anchors.length === 1) {
     return Array.from({ length: count }, () => anchors[0]);
   }
