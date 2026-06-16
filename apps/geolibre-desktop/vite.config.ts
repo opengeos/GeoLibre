@@ -11,6 +11,7 @@ import type {
 import { defineConfig, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { bundledPlugins } from "./vite-plugins/bundled-plugins";
+import { copyRtlText } from "./vite-plugins/copy-rtl-text";
 import { copyVectorOps } from "./vite-plugins/copy-vector-ops";
 
 const GEOAGENT_BROWSER_BUNDLE = "maplibre-gl-geoagent/dist/browser-";
@@ -725,6 +726,9 @@ export default defineConfig({
         "../../backend/geolibre_server/geolibre_server/vector_ops.py",
       ),
       path.resolve(__dirname, "src/lib/pyodide/vector_ops.generated.py"),
+    ),
+    copyRtlText(
+      path.resolve(__dirname, "src/lib/vendor/mapbox-gl-rtl-text.generated.js"),
     ),
     react(),
     wmsProxyPlugin(),

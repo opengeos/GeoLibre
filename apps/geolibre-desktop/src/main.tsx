@@ -27,6 +27,10 @@ import "./index.css";
 import "./lib/basemap-style";
 import "./lib/geoagent-style";
 import "./lib/lidar-style";
+// Register the MapLibre RTL text plugin so Arabic/Hebrew/Persian basemap labels
+// are shaped correctly instead of rendering reversed. Must run before any map is
+// created. See https://github.com/hyperknot/openfreemap/issues/118.
+import "./lib/rtl-text";
 import "./lib/swipe-style";
 import { registerSW } from "virtual:pwa-register";
 import { I18nextProvider } from "react-i18next";

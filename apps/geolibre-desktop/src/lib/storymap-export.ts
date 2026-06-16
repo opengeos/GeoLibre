@@ -463,6 +463,13 @@ function renderTemplate(
         if (config.footer) { var f = document.createElement('p'); f.innerHTML = config.footer; footer.appendChild(f); }
         if (footer.children.length > 0) { footer.classList.add(config.theme); footer.setAttribute('id', 'footer'); story.appendChild(footer); }
 
+        // Shape right-to-left scripts (Arabic, Hebrew, Persian, …) correctly so
+        // basemap labels are not rendered reversed. Lazy-loaded, so it only
+        // downloads when an RTL label is actually encountered.
+        if (maplibregl.getRTLTextPluginStatus() === 'unavailable') {
+            maplibregl.setRTLTextPlugin('https://unpkg.com/@mapbox/mapbox-gl-rtl-text@0.4.0/dist/mapbox-gl-rtl-text.js', null, true);
+        }
+
         var map = new maplibregl.Map({
             container: 'map',
             style: config.style,
