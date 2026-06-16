@@ -121,7 +121,13 @@ the globe vs. mercator projection, and `preserveDrawingBuffer`.
 
 To reproduce the measurement: temporarily log MapLibre `render` events,
 `dataloading` (tile) events, and a `requestAnimationFrame` counter once per
-second; FPS tracks tile-load count inversely.
+second; FPS tracks tile-load count inversely. The quickest check is this
+frame-rate meter pasted into the WebView devtools console, then pan while
+watching the logged FPS:
+
+```js
+let f=0,t=performance.now();(function loop(n){f++;if(n-t>=1000){console.log('FPS',f);f=0;t=n;}requestAnimationFrame(loop);})(t);
+```
 
 Mitigations (reduce *how many* tiles load during a pan, since per-tile cost is
 fixed by the engine) are not yet implemented: a larger `maxTileCacheSize`,
