@@ -135,6 +135,9 @@ def _points_to_featurecollection(points: Iterable[Any]) -> dict[str, Any]:
 class HostMap:
     """A handle to the live map in the surrounding GeoLibre app."""
 
+    def __repr__(self) -> str:
+        return "<GeoLibre map (live, connected to the app)>"
+
     # -- camera ---------------------------------------------------------------
 
     def fly_to(
