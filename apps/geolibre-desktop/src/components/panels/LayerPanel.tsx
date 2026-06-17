@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { isDuckDBQueryLayer, useAppStore } from "@geolibre/core";
 import type { GeoLibreLayer, LayerGroup } from "@geolibre/core";
 import {
@@ -126,7 +127,13 @@ type LayerRefreshTimer = {
   timer: number;
 };
 
-function layerTypeLabel(layer: GeoLibreLayer): string {
+function layerTypeLabel(
+  layer: GeoLibreLayer,
+  t: TFunction,
+): string {
+  if (layer.metadata?.sourceKind === "maplibre-basemap-control") {
+    return t("layers.typeBasemap");
+  }
   if (layer.type === "geojson" || layer.type === "vector-tiles") {
     return "vector";
   }
@@ -1222,7 +1229,7 @@ export function LayerPanel({
                     </span>
                   )}
                   <span className="text-[10px] uppercase text-muted-foreground">
-                    {layerTypeLabel(layer)}
+                    {layerTypeLabel(layer, t)}
                   </span>
                 </div>
                 {isPlaceholderLayer(layer) && (
@@ -1638,7 +1645,7 @@ export function LayerPanel({
           >
             <div className="flex items-center gap-1">
               <span
-                title="Background cannot be reordered"
+                title={t("layers.backgroundCannotReorder")}
                 className="rounded p-0.5 text-muted-foreground/50"
               >
                 <GripVertical className="h-3.5 w-3.5" />
@@ -1646,9 +1653,15 @@ export function LayerPanel({
               <button
                 type="button"
                 className="rounded p-0.5 hover:bg-muted"
-                title={basemapVisible ? "Hide background" : "Show background"}
+                title={
+                  basemapVisible
+                    ? t("layers.hideBackground")
+                    : t("layers.showBackground")
+                }
                 aria-label={
-                  basemapVisible ? "Hide background" : "Show background"
+                  basemapVisible
+                    ? t("layers.hideBackground")
+                    : t("layers.showBackground")
                 }
                 onClick={(e) => {
                   e.stopPropagation();
@@ -1663,16 +1676,18 @@ export function LayerPanel({
               </button>
               <Layers className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="flex-1 truncate text-sm font-medium">
-                Background
+                {t("layers.background")}
               </span>
               <span className="text-[10px] uppercase text-muted-foreground">
-                basemap
+                {t("layers.typeBasemap")}
               </span>
             </div>
             <div className="mt-2 flex items-center gap-1">
-              <span className="text-[10px] text-muted-foreground">Opacity</span>
+              <span className="text-[10px] text-muted-foreground">
+                {t("layers.opacity")}
+              </span>
               <Slider
-                aria-label="Basemap opacity"
+                aria-label={t("layers.basemapOpacity")}
                 className="flex-1"
                 min={0}
                 max={1}
