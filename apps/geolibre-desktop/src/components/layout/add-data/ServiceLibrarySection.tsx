@@ -29,6 +29,9 @@ import {
   writeUserServices,
 } from "./service-library";
 
+/** Upper bound for an imported library file; a real one is only a few KB. */
+const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
+
 interface ServiceLibrarySectionProps {
   /** Which web-service source this section belongs to. */
   kind: ServiceLibraryKind;
@@ -162,6 +165,12 @@ export function ServiceLibrarySection({
     if (!file) return;
     setError(null);
     setNotice(null);
+    // A library JSON is tiny; guard against accidentally reading a huge file
+    // fully into memory (the entry cap only applies after parsing).
+    if (file.size > MAX_IMPORT_BYTES) {
+      setError("File is too large to import (max 5 MB).");
+      return;
+    }
     try {
       const imported = parseImportedServices(await file.text());
       if (imported.length === 0) {
