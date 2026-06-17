@@ -102,6 +102,17 @@ function isTiff(b: Uint8Array): boolean {
   return magic === 0x2a || magic === 0x2b;
 }
 
+// LAS/LAZ magic: every LAS and LAZ file begins with the signature "LASF".
+function isLas(b: Uint8Array): boolean {
+  return (
+    b.length >= 4 &&
+    b[0] === 0x4c &&
+    b[1] === 0x41 &&
+    b[2] === 0x53 &&
+    b[3] === 0x46
+  );
+}
+
 function describeBytes(b: Uint8Array): string {
   const head = String.fromCharCode(...b.slice(0, 14));
   if (/^\s*<(!doctype|html|\?xml)/i.test(head)) return "an HTML/XML page";
@@ -167,7 +178,11 @@ export async function runWhiteboxToolWasm(
       const file = `${name}.geojson`;
       input[file] = encoder.encode(JSON.stringify(geojson));
       args.push(`--${name}=/work/${file}`);
-    } else if (kind === "raster_in" || kind === "lidar_in") {
+    } else if (
+      kind === "raster_in" ||
+      kind === "lidar_in" ||
+      kind === "file_in"
+    ) {
       // Prefer bytes the caller resolved (the dialog fetches the layer's data);
       // otherwise try to fetch the parameter as a URL.
       const bytes =
@@ -175,7 +190,7 @@ export async function runWhiteboxToolWasm(
         (await fetchBytes(request.parameters[name]));
       if (!bytes) {
         throw new Error(
-          `Could not read raster/LiDAR input "${name}" in the browser. Its data is not fetchable here (only available via the sidecar); turn off "Run locally (WASM)" to use the sidecar.`,
+          `Could not read input "${name}" in the browser. Its data is not fetchable here (only available via the sidecar); turn off "Run locally (WASM)" to use the sidecar.`,
         );
       }
       if (kind === "raster_in" && !isTiff(bytes)) {
@@ -183,7 +198,13 @@ export async function runWhiteboxToolWasm(
           `Input "${name}" is not a readable GeoTIFF in the browser (received ${describeBytes(bytes)}). Load the raster as a COG/GeoTIFF, or use the sidecar.`,
         );
       }
-      const ext = kind === "lidar_in" ? "las" : "tif";
+      if (kind === "lidar_in" && !isLas(bytes)) {
+        throw new Error(
+          `Input "${name}" is not a readable LAS/LAZ file in the browser (received ${describeBytes(bytes)}). Load a LAS/LAZ file, or use the sidecar.`,
+        );
+      }
+      const ext =
+        kind === "lidar_in" ? "las" : kind === "file_in" ? "dat" : "tif";
       const file = `${name}.${ext}`;
       input[file] = bytes;
       args.push(`--${name}=/work/${file}`);
@@ -191,8 +212,11 @@ export async function runWhiteboxToolWasm(
       const file = `${name}.geojson`;
       outputs.push({ name, file, raster: false });
       args.push(`--${name}=/work/${file}`);
-    } else if (kind === "raster_out") {
-      const file = `${name}.tif`;
+    } else if (kind === "raster_out" || kind === "file_out") {
+      // file_out is treated as an opaque binary output (no GeoJSON parsing),
+      // mirroring how raster outputs are returned as raw bytes.
+      const ext = kind === "file_out" ? "dat" : "tif";
+      const file = `${name}.${ext}`;
       outputs.push({ name, file, raster: true });
       args.push(`--${name}=/work/${file}`);
     } else {
@@ -222,18 +246,16 @@ export async function runWhiteboxToolWasm(
       out[entry.name] = bytes;
       continue;
     }
-    // Skip a vector output whose JSON is malformed (e.g. a tool that crashed
-    // mid-write) rather than letting one bad file reject the whole job and lose
+    // Skip a vector output that is not a valid FeatureCollection - malformed
+    // JSON (e.g. a tool that crashed mid-write) or valid JSON of the wrong
+    // shape - rather than letting one bad file reject the whole job and lose
     // every other output. Matches the sidecar path's tolerant handling.
     try {
-      out[entry.name] = JSON.parse(
-        new TextDecoder().decode(bytes),
-      ) as FeatureCollection;
+      const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
+      if (isFeatureCollection(parsed)) out[entry.name] = parsed;
     } catch {
       // leave this output out
     }
   }
   return job(request.tool_id, "succeeded", stdout, out, null);
 }
-
-export { isFeatureCollection as isWhiteboxFeatureCollection };

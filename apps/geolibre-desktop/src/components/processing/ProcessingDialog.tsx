@@ -372,6 +372,10 @@ export function ProcessingDialog({
   const [startingServer, setStartingServer] = useState(false);
   const [stoppingServer, setStoppingServer] = useState(false);
   const [job, setJob] = useState<WhiteboxJob | null>(null);
+  // True while a run is in flight. The WASM runner resolves straight to a
+  // terminal job (never "pending"/"running"), so without this flag the Run
+  // button would stay enabled mid-execution and allow concurrent runs.
+  const [runningLocal, setRunningLocal] = useState(false);
   const importedJobIdRef = useRef<string | null>(null);
   // Bytes of input files the user browsed from disk (web build, where the
   // browser cannot expose a real path). Keyed by parameter name; consumed by
@@ -701,6 +705,7 @@ export function ProcessingDialog({
     }
 
     try {
+      setRunningLocal(true);
       const request = {
         tool_id: selectedTool.id,
         parameters,
@@ -716,6 +721,8 @@ export function ProcessingDialog({
       setError(
         err instanceof Error ? err.message : "Could not start Whitebox tool.",
       );
+    } finally {
+      setRunningLocal(false);
     }
   };
 
@@ -751,7 +758,8 @@ export function ProcessingDialog({
     }
   };
 
-  const running = Boolean(job && RUNNING_JOB_STATUSES.has(job.status));
+  const running =
+    runningLocal || Boolean(job && RUNNING_JOB_STATUSES.has(job.status));
   const serverBusy = loadingTools || startingServer || stoppingServer;
 
   return (
