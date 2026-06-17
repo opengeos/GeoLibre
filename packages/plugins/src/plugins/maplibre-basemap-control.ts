@@ -125,9 +125,13 @@ function registerRasterBasemap(
 
   const layerId = `basemap-${basemap.id}`;
   // In replace mode the control keeps a single raster basemap, so drop any
-  // other registered raster basemaps. In add mode they stack, so keep them.
+  // other registered raster basemaps. In add mode they stack, so keep them; if
+  // this basemap is already registered (a duplicate add event), there is
+  // nothing to do.
   if (event.mode !== "add") {
     unregisterRasterBasemapsExcept(app, basemap.id);
+  } else if (registeredRasterLayers.has(basemap.id)) {
+    return;
   }
 
   app.registerExternalNativeLayer({
@@ -194,6 +198,11 @@ function relinkRestoredRasterBasemaps(): void {
     const basemapId = layer.metadata?.basemapId;
     if (typeof basemapId === "string") {
       registeredRasterLayers.set(basemapId, layer.id);
+    } else if (layer.id.startsWith("basemap-")) {
+      // Fallback for projects saved before basemapId was stored in metadata.
+      // The layer id is deterministic (`basemap-${basemap.id}`), so the
+      // original basemap id can be recovered by stripping the prefix.
+      registeredRasterLayers.set(layer.id.slice("basemap-".length), layer.id);
     }
   }
 }
