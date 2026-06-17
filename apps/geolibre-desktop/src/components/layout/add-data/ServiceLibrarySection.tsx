@@ -235,6 +235,7 @@ export function ServiceLibrarySection({
             type="button"
             size="icon"
             variant="ghost"
+            aria-label="Import library from JSON"
             title="Import library from JSON"
             onClick={() => importInputRef.current?.click()}
           >
@@ -244,6 +245,7 @@ export function ServiceLibrarySection({
             type="button"
             size="icon"
             variant="ghost"
+            aria-label="Export library to JSON"
             title="Export library to JSON"
             disabled={userEntries.length === 0}
             onClick={handleExport}
@@ -277,6 +279,7 @@ export function ServiceLibrarySection({
             type="button"
             size="icon"
             variant="ghost"
+            aria-label="Delete saved service"
             title="Delete saved service"
             disabled={!canDeleteSelected}
             onClick={handleDelete}

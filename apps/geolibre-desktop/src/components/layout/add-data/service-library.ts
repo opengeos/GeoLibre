@@ -136,12 +136,16 @@ function normalizeEntry(value: unknown): ServiceLibraryEntry | null {
 
 /**
  * Validates an arbitrary parsed value into a clean entry list: drops invalid
- * items, re-ids duplicates so each id stays unique, and caps the length.
+ * items, re-ids duplicates (and any clash with a built-in id) so each id stays
+ * unique, and caps the length.
  */
 export function normalizeServiceEntries(value: unknown): ServiceLibraryEntry[] {
   if (!Array.isArray(value)) return [];
   const entries: ServiceLibraryEntry[] = [];
-  const seenIds = new Set<string>();
+  // Seed with built-in ids so a stored/imported entry reusing one (e.g.
+  // "builtin-xyz-osm") is re-assigned rather than being shadowed by the preset
+  // in listServices and becoming unreachable/non-deletable.
+  const seenIds = new Set<string>(BUILTIN_SERVICES.map((entry) => entry.id));
   for (const item of value) {
     const entry = normalizeEntry(item);
     if (!entry) continue;

@@ -74,6 +74,12 @@ describe("normalizeServiceEntries", () => {
     assert.deepEqual(entry.fields, { endpoint: "https://x.test" });
   });
 
+  it("re-ids an entry whose id collides with a built-in id", () => {
+    const builtinId = BUILTIN_SERVICES[0].id;
+    const [entry] = normalizeServiceEntries([makeEntry({ id: builtinId })]);
+    assert.notEqual(entry.id, builtinId);
+  });
+
   it("returns an empty list for non-array input", () => {
     assert.deepEqual(normalizeServiceEntries({ services: [] }), []);
     assert.deepEqual(normalizeServiceEntries(null), []);
