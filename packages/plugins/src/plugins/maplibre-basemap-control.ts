@@ -89,17 +89,19 @@ function handleBasemapChange(
   app: GeoLibreAppAPI,
   event: BasemapControlEventPayload,
 ): void {
+  // Narrows the BasemapControlEventPayload union so event.basemap is accessible.
   if (event.type !== "basemapchange") return;
   const { source } = event.basemap;
   if (source.type === "raster") {
     registerRasterBasemap(app, event.basemap, event);
     return;
   }
-  // Any non-raster basemap (including an unrecognized future source type)
-  // replaces the whole map style, which drops every managed raster overlay, so
-  // clear them all from the layer manager too.
-  unregisterAllRasterBasemaps(app);
+  // Only a style/vector-style basemap actually replaces the whole map style
+  // (and so drops every managed raster overlay). Bail out on any other type
+  // before touching the layer manager, so an unrecognized future source type
+  // does not evict the raster overlays without replacing the style.
   if (source.type !== "style" && source.type !== "vector-style") return;
+  unregisterAllRasterBasemaps(app);
   app.setBasemap(source.url);
 }
 
@@ -107,6 +109,7 @@ function handleBasemapRemove(
   app: GeoLibreAppAPI,
   event: BasemapControlEventPayload,
 ): void {
+  // Narrows the BasemapControlEventPayload union so event.basemap is accessible.
   if (event.type !== "basemapremove") return;
   const layerId = registeredRasterLayers.get(event.basemap.id);
   if (!layerId) return;
@@ -180,6 +183,7 @@ function unregisterRasterBasemapsExcept(
   app: GeoLibreAppAPI,
   keepBasemapId: string,
 ): void {
+  // Snapshot the entries so deleting from the Map mid-loop is safe.
   for (const [basemapId, layerId] of [...registeredRasterLayers.entries()]) {
     if (basemapId === keepBasemapId) continue;
     app.unregisterExternalNativeLayer?.(layerId);
