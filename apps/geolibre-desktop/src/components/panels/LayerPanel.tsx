@@ -1210,7 +1210,7 @@ export function LayerPanel({
                       }`}
                       title={
                         groupHidden
-                          ? t("layers.hiddenByGroup")
+                          ? `${t("layers.hiddenByGroup")} — ${t("layers.doubleClickToRename")}`
                           : t("layers.doubleClickToRename")
                       }
                       onDoubleClick={(e: ReactMouseEvent) => {
