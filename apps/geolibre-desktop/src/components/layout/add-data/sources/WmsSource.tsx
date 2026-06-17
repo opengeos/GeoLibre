@@ -1,5 +1,6 @@
 import { Input, Label, Select } from "@geolibre/ui";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { DEFAULT_WMS_ENDPOINT, DEFAULT_WMS_LAYERS } from "../constants";
 import { createBaseLayer, createWmsTileUrl } from "../helpers";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
@@ -11,7 +12,8 @@ import {
 import { AddDataSourceForm, useAddDataSource } from "../shared";
 
 export function WmsSource() {
-  const source = useAddDataSource("WMS Layer");
+  const { t } = useTranslation();
+  const source = useAddDataSource(t("addData.wms.defaultName"));
   const [wmsEndpoint, setWmsEndpoint] = useState(DEFAULT_WMS_ENDPOINT);
   const [wmsLayers, setWmsLayers] = useState(DEFAULT_WMS_LAYERS);
   const [wmsStyles, setWmsStyles] = useState("");
@@ -38,10 +40,10 @@ export function WmsSource() {
   };
 
   const handleSubmit = source.runSubmit(() => {
-    const name = source.layerName.trim() || "WMS Layer";
-    if (!wmsEndpoint.trim()) throw new Error("Enter a WMS service URL.");
+    const name = source.layerName.trim() || t("addData.wms.defaultName");
+    if (!wmsEndpoint.trim()) throw new Error(t("addData.wms.errorUrl"));
     if (!wmsLayers.trim()) {
-      throw new Error("Enter one or more WMS layer names.");
+      throw new Error(t("addData.wms.errorLayers"));
     }
     const tileSize = Number(wmsTileSize) || 256;
     const tileUrl = createWmsTileUrl({
@@ -93,26 +95,26 @@ export function WmsSource() {
           }}
         />
         <div className="space-y-1.5">
-          <Label htmlFor="wms-endpoint">Service URL</Label>
+          <Label htmlFor="wms-endpoint">{t("addData.common.serviceUrl")}</Label>
           <Input
             id="wms-endpoint"
-            placeholder="https://example.com/geoserver/wms"
+            placeholder={t("addData.wms.urlPlaceholder")}
             value={wmsEndpoint}
             onChange={(event) => setWmsEndpoint(event.target.value)}
           />
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="wms-layers">Layers</Label>
+            <Label htmlFor="wms-layers">{t("addData.wms.layers")}</Label>
             <Input
               id="wms-layers"
-              placeholder="workspace:layer"
+              placeholder={t("addData.common.workspaceLayerPlaceholder")}
               value={wmsLayers}
               onChange={(event) => setWmsLayers(event.target.value)}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="wms-styles">Styles</Label>
+            <Label htmlFor="wms-styles">{t("addData.wms.styles")}</Label>
             <Input
               id="wms-styles"
               value={wmsStyles}
@@ -120,7 +122,7 @@ export function WmsSource() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="wms-format">Format</Label>
+            <Label htmlFor="wms-format">{t("addData.common.format")}</Label>
             <Select
               id="wms-format"
               value={wmsFormat}
@@ -131,7 +133,7 @@ export function WmsSource() {
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="wms-tile-size">Tile size</Label>
+            <Label htmlFor="wms-tile-size">{t("addData.common.tileSize")}</Label>
             <Input
               id="wms-tile-size"
               inputMode="numeric"
@@ -146,7 +148,7 @@ export function WmsSource() {
             checked={wmsTransparent}
             onChange={(event) => setWmsTransparent(event.target.checked)}
           />
-          Transparent background
+          {t("addData.wms.transparent")}
         </label>
       </div>
     </AddDataSourceForm>

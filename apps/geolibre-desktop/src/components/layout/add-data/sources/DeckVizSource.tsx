@@ -42,7 +42,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
   const [startLng, startLat] = startExample?.scenegraphLocation ?? ["", ""];
 
   const source = useAddDataSource(
-    getDeckVizLayerDef(startKind)?.label ?? "Deck.gl Layer",
+    getDeckVizLayerDef(startKind)?.label ?? t("addData.deckViz.defaultName"),
   );
 
   const [deckVizKind, setDeckVizKind] = useState(startKind);
@@ -100,7 +100,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
     source.setError(null);
     setDeckVizStyle({ ...DEFAULT_DECK_VIZ_STYLE });
     const nextDef = getDeckVizLayerDef(nextKind);
-    source.setLayerName(nextDef?.label ?? "Deck.gl Layer");
+    source.setLayerName(nextDef?.label ?? t("addData.deckViz.defaultName"));
     // Pre-fill the scenegraph model URL and transform from the bundled example
     // so the user can place a model immediately (and tweak from there).
     const exampleSg = nextDef?.example.scenegraph;
@@ -154,15 +154,15 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
         readText: true,
       });
       if (!selected?.text) {
-        throw new Error("Choose a CSV, JSON, or GeoJSON file.");
+        throw new Error(t("addData.deckViz.errorChooseFile"));
       }
       result = { sourcePath: selected.path, text: selected.text };
     } else {
       const sourcePath = deckVizUrl.trim();
-      if (!sourcePath) throw new Error("Enter a data URL.");
+      if (!sourcePath) throw new Error(t("addData.deckViz.errorUrl"));
       const response = await fetch(sourcePath);
       if (!response.ok) {
-        throw new Error(`Request failed with status ${response.status}`);
+        throw new Error(t("addData.common.requestFailed", { status: response.status }));
       }
       result = { sourcePath, text: await response.text() };
     }
@@ -186,7 +186,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
     scenegraph?: DeckVizScenegraphConfig;
   }) => {
     const def = getDeckVizLayerDef(deckVizKind);
-    if (!def) throw new Error("Unknown layer type.");
+    if (!def) throw new Error(t("addData.deckViz.errorUnknownType"));
     // The model URL is already enforced by the submit handler and the disabled
     // state of the Add button, and the example path always supplies one, so no
     // redundant guard is needed here.
@@ -212,10 +212,10 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
     }
 
     if (def.format === "geojson" && parsed.format !== "geojson") {
-      throw new Error(`${def.label} needs a GeoJSON file.`);
+      throw new Error(t("addData.deckViz.needsGeojson", { label: def.label }));
     }
     if (def.format !== "geojson" && parsed.format === "geojson") {
-      throw new Error(`${def.label} needs tabular CSV/JSON data, not GeoJSON.`);
+      throw new Error(t("addData.deckViz.needsTabular", { label: def.label }));
     }
     const missing = def.roles.filter(
       (role) =>
@@ -224,9 +224,10 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
     );
     if (missing.length > 0) {
       throw new Error(
-        `Map the required field${missing.length > 1 ? "s" : ""}: ${missing
-          .map((role) => role.label)
-          .join(", ")}.`,
+        t("addData.deckViz.mapRequiredFields", {
+          count: missing.length,
+          fields: missing.map((role) => role.label).join(", "),
+        }),
       );
     }
 
@@ -268,7 +269,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
     try {
       const response = await fetch(def.example.url);
       if (!response.ok) {
-        throw new Error(`Request failed with status ${response.status}`);
+        throw new Error(t("addData.common.requestFailed", { status: response.status }));
       }
       const parsed = detectAndParseDeckVizInput(await response.text());
       finalizeDeckVizLayer({
@@ -279,7 +280,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
         scenegraph: def.example.scenegraph,
       });
     } catch (err) {
-      source.setError(errorMessage(err, "Could not load the example data."));
+      source.setError(errorMessage(err, t("addData.deckViz.errorExample")));
     } finally {
       setIsLoadingDeckViz(false);
     }
@@ -295,27 +296,25 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
       const { sourcePath, text } = await readDeckVizSource();
       const parsed = detectAndParseDeckVizInput(text);
       if (def.format === "geojson" && parsed.format !== "geojson") {
-        throw new Error(`${def.label} needs a GeoJSON file.`);
+        throw new Error(t("addData.deckViz.needsGeojson", { label: def.label }));
       }
       if (def.format !== "geojson" && parsed.format === "geojson") {
-        throw new Error(
-          `${def.label} needs tabular CSV/JSON data, not GeoJSON.`,
-        );
+        throw new Error(t("addData.deckViz.needsTabular", { label: def.label }));
       }
       setDeckVizParsed(parsed);
       setDeckVizSourcePath(sourcePath);
       setDeckVizMapping(autoDetectFieldMapping(def.roles, parsed.columns));
       setDeckVizStatus(
         parsed.format === "geojson"
-          ? `Loaded ${parsed.rowCount} feature${parsed.rowCount === 1 ? "" : "s"}.`
-          : `Loaded ${parsed.rowCount} row${
-              parsed.rowCount === 1 ? "" : "s"
-            } · ${parsed.columns.length} column${
-              parsed.columns.length === 1 ? "" : "s"
-            }.`,
+          ? t("addData.deckViz.loadedFeatures", { count: parsed.rowCount })
+          : `${t("addData.deckViz.loadedRows", {
+              count: parsed.rowCount,
+            })} · ${t("addData.deckViz.loadedColumns", {
+              count: parsed.columns.length,
+            })}.`,
       );
     } catch (err) {
-      source.setError(errorMessage(err, "Could not load the data."));
+      source.setError(errorMessage(err, t("addData.deckViz.errorLoad")));
       setDeckVizParsed(null);
     } finally {
       setIsLoadingDeckViz(false);
@@ -378,7 +377,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
       return;
     }
     if (!deckVizParsed) {
-      throw new Error("Load the example data, or a file/URL, first.");
+      throw new Error(t("addData.deckViz.errorLoadFirst"));
     }
     finalizeDeckVizLayer({
       parsed: deckVizParsed,
@@ -408,7 +407,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
     >
       <div className="space-y-3">
         <div className="space-y-1.5">
-          <Label htmlFor="deckviz-kind">Layer type</Label>
+          <Label htmlFor="deckviz-kind">{t("addData.common.layerType")}</Label>
           <Select
             id="deckviz-kind"
             value={deckVizKind}
@@ -447,7 +446,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
               </Label>
               <Input
                 id="deckviz-model-url"
-                placeholder="https://example.com/model.glb"
+                placeholder={t("addData.deckViz.modelUrlPlaceholder")}
                 value={deckVizModelUrl}
                 onChange={(event) => setDeckVizModelUrl(event.target.value)}
               />
@@ -555,11 +554,11 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
               disabled={isLoadingDeckViz}
             >
               <Globe2 className="mr-2 h-3.5 w-3.5" />
-              {isLoadingDeckViz ? "Loading..." : "Use example data"}
+              {isLoadingDeckViz ? t("addData.common.loading") : t("addData.deckViz.useExample")}
             </Button>
 
             <div className="space-y-1.5">
-              <Label htmlFor="deckviz-mode">Or load your own</Label>
+              <Label htmlFor="deckviz-mode">{t("addData.deckViz.loadYourOwn")}</Label>
               <Select
                 id="deckviz-mode"
                 value={deckVizMode}
@@ -571,17 +570,17 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
                   setIsLoadingDeckViz(false);
                 }}
               >
-                <option value="url">Data URL</option>
-                <option value="file">Local file</option>
+                <option value="url">{t("addData.deckViz.dataUrl")}</option>
+                <option value="file">{t("addData.deckViz.localFile")}</option>
               </Select>
             </div>
 
             {deckVizMode === "url" ? (
               <div className="space-y-1.5">
-                <Label htmlFor="deckviz-url">Data URL</Label>
+                <Label htmlFor="deckviz-url">{t("addData.deckViz.dataUrl")}</Label>
                 <Input
                   id="deckviz-url"
-                  placeholder="https://example.com/data.csv"
+                  placeholder={t("addData.deckViz.urlPlaceholder")}
                   value={deckVizUrl}
                   onChange={(event) => {
                     setDeckVizUrl(event.target.value);
@@ -605,10 +604,10 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
                 <Columns3 className="mr-2 h-3.5 w-3.5" />
               )}
               {isLoadingDeckViz
-                ? "Loading..."
+                ? t("addData.common.loading")
                 : deckVizMode === "file"
-                  ? "Choose file & load"
-                  : "Load data"}
+                  ? t("addData.deckViz.chooseFileLoad")
+                  : t("addData.deckViz.loadData")}
             </Button>
             {deckVizStatus ? (
               <p className="text-xs text-muted-foreground">{deckVizStatus}</p>
@@ -629,7 +628,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
                       }
                     >
                       <option value="">
-                        {role.required ? "— select —" : "(none)"}
+                        {role.required ? t("addData.deckViz.selectRole") : t("addData.deckViz.roleNone")}
                       </option>
                       {deckVizParsed.columns.map((column) => (
                         <option
@@ -651,7 +650,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
           <div className="grid gap-3 sm:grid-cols-2">
             {deckVizDef.styleControls.includes("color") ? (
               <div className="space-y-1.5">
-                <Label htmlFor="deckviz-color">Color</Label>
+                <Label htmlFor="deckviz-color">{t("addData.deckViz.color")}</Label>
                 <input
                   id="deckviz-color"
                   type="color"
@@ -668,7 +667,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
             ) : null}
             {deckVizDef.styleControls.includes("radius") ? (
               <div className="space-y-1.5">
-                <Label htmlFor="deckviz-radius">Point size</Label>
+                <Label htmlFor="deckviz-radius">{t("addData.deckViz.pointSize")}</Label>
                 <Input
                   id="deckviz-radius"
                   inputMode="numeric"
@@ -686,7 +685,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
             ) : null}
             {deckVizDef.styleControls.includes("cellSize") ? (
               <div className="space-y-1.5">
-                <Label htmlFor="deckviz-cellsize">Cell size</Label>
+                <Label htmlFor="deckviz-cellsize">{t("addData.deckViz.cellSize")}</Label>
                 <Input
                   id="deckviz-cellsize"
                   inputMode="numeric"
@@ -704,7 +703,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
             ) : null}
             {deckVizDef.styleControls.includes("lineWidth") ? (
               <div className="space-y-1.5">
-                <Label htmlFor="deckviz-linewidth">Line width</Label>
+                <Label htmlFor="deckviz-linewidth">{t("addData.deckViz.lineWidth")}</Label>
                 <Input
                   id="deckviz-linewidth"
                   inputMode="numeric"
@@ -732,7 +731,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
                     }))
                   }
                 />
-                3D extrusion
+                {t("addData.deckViz.extrusion")}
               </label>
             ) : null}
           </div>

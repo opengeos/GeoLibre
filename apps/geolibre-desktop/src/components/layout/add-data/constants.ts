@@ -12,37 +12,38 @@ import type {
 // not block) when a very large payload would bloat saved projects.
 export const DECK_VIZ_SIZE_WARN_BYTES = 10 * 1024 * 1024;
 
-export const KIND_LABELS: Record<AddDataKind, string> = {
-  xyz: "Add XYZ Layer",
-  wms: "Add WMS Layer",
-  wfs: "Add WFS Layer",
-  wmts: "Add WMTS Layer",
-  gpx: "Add GPX Layer",
-  "delimited-text": "Add Delimited Text Layer",
-  mbtiles: "Add MBTiles Layer",
-  arcgis: "Add ArcGIS Layer",
-  postgres: "Add PostgreSQL Layer",
-  "deckgl-viz": "Add Deck.gl Layer",
-  video: "Add Video Layer",
-};
+/** The `addData.kind.<key>` segments, kept as a literal union so the dialog's
+ * `t(\`addData.kind.${key}.label\`)` lookups stay type-checked against en.json. */
+export type KindI18nKey =
+  | "xyz"
+  | "wms"
+  | "wfs"
+  | "wmts"
+  | "gpx"
+  | "delimitedText"
+  | "mbtiles"
+  | "arcgis"
+  | "postgres"
+  | "deckglViz"
+  | "video";
 
-export const KIND_DESCRIPTIONS: Record<AddDataKind, string> = {
-  xyz: "Add a raster tile template using x, y, and z placeholders.",
-  wms: "Add a WMS GetMap service as a tiled raster layer.",
-  wfs: "Add WFS features by requesting GeoJSON from a GetFeature service.",
-  wmts: "Add a WMTS tile URL template as a raster layer.",
-  gpx: "Add GPX waypoints, routes, and tracks as one or more vector layers.",
-  "delimited-text":
-    "Add a delimited text file or URL as a point layer using longitude and latitude fields.",
-  mbtiles: "Add a local MBTiles file as a raster or vector tile layer.",
-  arcgis:
-    "Add an ArcGIS FeatureServer layer, VectorTileServer layer, or portal item.",
-  postgres:
-    "Start Martin locally, discover PostGIS sources, and add a source as vector tiles.",
-  video:
-    "Add a georeferenced video overlay by supplying an MP4 URL and four corner coordinates.",
-  "deckgl-viz":
-    "Pick a deck.gl layer type, then load the example data or upload a CSV/JSON/GeoJSON file or URL.",
+/**
+ * Maps each Add Data kind to its `addData.kind.<key>` i18n segment. The dialog
+ * title and description are resolved via `t()` from these keys; `en.json` is the
+ * source of truth (see `i18n/locales/en.json`).
+ */
+export const KIND_I18N_KEY: Record<AddDataKind, KindI18nKey> = {
+  xyz: "xyz",
+  wms: "wms",
+  wfs: "wfs",
+  wmts: "wmts",
+  gpx: "gpx",
+  "delimited-text": "delimitedText",
+  mbtiles: "mbtiles",
+  arcgis: "arcgis",
+  postgres: "postgres",
+  "deckgl-viz": "deckglViz",
+  video: "video",
 };
 
 export const DEFAULT_XYZ_URL =

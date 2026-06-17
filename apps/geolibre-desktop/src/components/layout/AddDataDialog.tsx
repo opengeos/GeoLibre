@@ -9,8 +9,9 @@ import {
 } from "@geolibre/ui";
 import { Database } from "lucide-react";
 import { useCallback, useMemo, useState, type RefObject } from "react";
+import { useTranslation } from "react-i18next";
 import { AddDataShellProvider } from "./add-data/context";
-import { KIND_DESCRIPTIONS, KIND_LABELS } from "./add-data/constants";
+import { KIND_I18N_KEY } from "./add-data/constants";
 import { ArcGISSource } from "./add-data/sources/ArcGISSource";
 import { DeckVizSource } from "./add-data/sources/DeckVizSource";
 import { DelimitedTextSource } from "./add-data/sources/DelimitedTextSource";
@@ -86,14 +87,19 @@ export function AddDataDialog({
   onOpenChange,
   initialDeckVizKind,
 }: AddDataDialogProps) {
+  const { t } = useTranslation();
   const open = kind !== null;
   const addLayer = useAppStore((s) => s.addLayer);
   const existingLayers = useAppStore((s) => s.layers);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const martin = useMartinConnection();
 
-  const title = kind ? KIND_LABELS[kind] : "Add Data";
-  const description = kind ? KIND_DESCRIPTIONS[kind] : "";
+  const title = kind
+    ? t(`addData.kind.${KIND_I18N_KEY[kind]}.label`)
+    : t("addData.title");
+  const description = kind
+    ? t(`addData.kind.${KIND_I18N_KEY[kind]}.description`)
+    : "";
 
   const closeDialog = useCallback(() => {
     martin.stopTransient();

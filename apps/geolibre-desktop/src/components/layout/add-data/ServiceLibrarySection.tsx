@@ -11,6 +11,7 @@
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import { Bookmark, Download, Save, Trash2, Upload, X } from "lucide-react";
 import { type KeyboardEvent, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { saveTextFileWithFallback } from "../../../lib/tauri-io";
 import {
   createServiceEntry,
@@ -72,6 +73,7 @@ export function ServiceLibrarySection({
   getFields,
   onApply,
 }: ServiceLibrarySectionProps) {
+  const { t } = useTranslation();
   const [userEntries, setUserEntries] = useState<ServiceLibraryEntry[]>(() =>
     readUserServices(),
   );
@@ -120,7 +122,7 @@ export function ServiceLibrarySection({
   const handleSave = () => {
     const name = saveName.trim();
     if (!name) {
-      setError("Enter a name for the saved service.");
+      setError(t("addData.serviceLibrary.errorName"));
       return;
     }
     // Update the selected entry in place when it's a user-owned service;
@@ -137,7 +139,7 @@ export function ServiceLibrarySection({
     setSelectedId(entry.id);
     setIsSaving(false);
     setError(null);
-    setNotice(`Saved "${name}" to the service library.`);
+    setNotice(t("addData.serviceLibrary.saved", { name }));
   };
 
   // The save-form inputs live inside AddDataSourceForm's <form>, so a bare
@@ -157,7 +159,9 @@ export function ServiceLibrarySection({
     persist(removeServiceEntry(userEntries, selectedEntry.id));
     setSelectedId("");
     setError(null);
-    setNotice(`Removed "${selectedEntry.name}".`);
+    setNotice(
+      t("addData.serviceLibrary.removed", { name: selectedEntry.name }),
+    );
   };
 
   const handleExport = async () => {
@@ -173,7 +177,11 @@ export function ServiceLibrarySection({
         mimeType: "application/json",
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not export library.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : t("addData.serviceLibrary.errorExport"),
+      );
     }
   };
 
@@ -184,13 +192,13 @@ export function ServiceLibrarySection({
     // A library JSON is tiny; guard against accidentally reading a huge file
     // fully into memory (the entry cap only applies after parsing).
     if (file.size > MAX_IMPORT_BYTES) {
-      setError("File is too large to import (max 5 MB).");
+      setError(t("addData.serviceLibrary.errorTooLarge"));
       return;
     }
     try {
       const imported = parseImportedServices(await file.text());
       if (imported.length === 0) {
-        setError("No valid services found in that file.");
+        setError(t("addData.serviceLibrary.errorNoServices"));
         return;
       }
       // Merge against the freshly-persisted list rather than the closed-over
@@ -204,13 +212,15 @@ export function ServiceLibrarySection({
       const before = current.length;
       const added = next.length - before;
       const dropped = imported.length - added;
+      const suffix =
+        dropped > 0
+          ? t("addData.serviceLibrary.importedDropped", { count: dropped })
+          : "";
       setNotice(
-        `Imported ${added} service${added === 1 ? "" : "s"}${
-          dropped > 0 ? ` (${dropped} skipped — library full)` : ""
-        }.`,
+        t("addData.serviceLibrary.imported", { count: added, suffix }),
       );
     } catch {
-      setError("Could not read that file as a service library.");
+      setError(t("addData.serviceLibrary.errorRead"));
     }
   };
 
@@ -219,7 +229,7 @@ export function ServiceLibrarySection({
       <div className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-1.5 text-sm font-medium">
           <Bookmark className="h-3.5 w-3.5" />
-          Saved services
+          {t("addData.serviceLibrary.title")}
         </span>
         <div className="flex items-center gap-1">
           <Button
@@ -229,14 +239,14 @@ export function ServiceLibrarySection({
             onClick={openSaveForm}
           >
             <Save className="mr-1.5 h-3.5 w-3.5" />
-            Save current
+            {t("addData.serviceLibrary.saveCurrent")}
           </Button>
           <Button
             type="button"
             size="icon"
             variant="ghost"
-            aria-label="Import library from JSON"
-            title="Import library from JSON"
+            aria-label={t("addData.serviceLibrary.importLibrary")}
+            title={t("addData.serviceLibrary.importLibrary")}
             onClick={() => importInputRef.current?.click()}
           >
             <Upload className="h-3.5 w-3.5" />
@@ -245,8 +255,8 @@ export function ServiceLibrarySection({
             type="button"
             size="icon"
             variant="ghost"
-            aria-label="Export library to JSON"
-            title="Export library to JSON"
+            aria-label={t("addData.serviceLibrary.exportLibrary")}
+            title={t("addData.serviceLibrary.exportLibrary")}
             disabled={userEntries.length === 0}
             onClick={handleExport}
           >
@@ -258,18 +268,28 @@ export function ServiceLibrarySection({
       {entries.length > 0 ? (
         <div className="flex items-center gap-2">
           <Select
-            aria-label="Load a saved service"
+            aria-label={t("addData.serviceLibrary.loadAria")}
             className="flex-1"
             value={selectedId}
             onChange={(event) => handleSelect(event.target.value)}
           >
-            <option value="">Load a saved service…</option>
+            <option value="">
+              {t("addData.serviceLibrary.loadPlaceholder")}
+            </option>
             {groups.map((group) => (
-              <optgroup key={group.label} label={group.label}>
+              <optgroup
+                key={group.label}
+                label={
+                  group.label === UNCATEGORIZED_LABEL
+                    ? t("addData.serviceLibrary.uncategorized")
+                    : group.label
+                }
+              >
                 {group.entries.map((entry) => (
                   <option key={entry.id} value={entry.id}>
-                    {entry.name}
-                    {entry.builtin ? " (built-in)" : ""}
+                    {entry.builtin
+                      ? t("addData.serviceLibrary.builtin", { name: entry.name })
+                      : entry.name}
                   </option>
                 ))}
               </optgroup>
@@ -279,8 +299,8 @@ export function ServiceLibrarySection({
             type="button"
             size="icon"
             variant="ghost"
-            aria-label="Delete saved service"
-            title="Delete saved service"
+            aria-label={t("addData.serviceLibrary.deleteAria")}
+            title={t("addData.serviceLibrary.deleteAria")}
             disabled={!canDeleteSelected}
             onClick={handleDelete}
           >
@@ -289,7 +309,7 @@ export function ServiceLibrarySection({
         </div>
       ) : (
         <p className="text-xs text-muted-foreground">
-          No saved services yet — fill in the form and choose “Save current”.
+          {t("addData.serviceLibrary.empty")}
         </p>
       )}
 
@@ -297,7 +317,9 @@ export function ServiceLibrarySection({
         <div className="space-y-2 rounded-md border border-border/60 bg-background p-2">
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="space-y-1">
-              <Label htmlFor={`service-save-name-${kind}`}>Name</Label>
+              <Label htmlFor={`service-save-name-${kind}`}>
+                {t("addData.serviceLibrary.name")}
+              </Label>
               <Input
                 id={`service-save-name-${kind}`}
                 value={saveName}
@@ -306,11 +328,13 @@ export function ServiceLibrarySection({
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor={`service-save-category-${kind}`}>Category</Label>
+              <Label htmlFor={`service-save-category-${kind}`}>
+                {t("addData.serviceLibrary.category")}
+              </Label>
               <Input
                 id={`service-save-category-${kind}`}
                 list={categoryListId}
-                placeholder="Optional (e.g. country, theme)"
+                placeholder={t("addData.serviceLibrary.categoryPlaceholder")}
                 value={saveCategory}
                 onChange={(event) => setSaveCategory(event.target.value)}
                 onKeyDown={handleSaveFieldKeyDown}
@@ -330,11 +354,11 @@ export function ServiceLibrarySection({
               onClick={() => setIsSaving(false)}
             >
               <X className="mr-1.5 h-3.5 w-3.5" />
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="button" size="sm" onClick={handleSave}>
               <Save className="mr-1.5 h-3.5 w-3.5" />
-              Save
+              {t("common.save")}
             </Button>
           </div>
         </div>

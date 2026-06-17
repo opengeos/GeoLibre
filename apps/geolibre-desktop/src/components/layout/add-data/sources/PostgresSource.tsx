@@ -1,5 +1,6 @@
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ensureMartinBinary,
   fetchMartinCatalog,
@@ -19,7 +20,8 @@ import {
 import { AddDataSourceForm, useAddDataSource } from "../shared";
 
 export function PostgresSource() {
-  const source = useAddDataSource("PostgreSQL Layer");
+  const { t } = useTranslation();
+  const source = useAddDataSource(t("addData.postgres.defaultName"));
   const { martin } = source.shell;
   const [postgresConnectionString, setPostgresConnectionString] = useState(
     () => readSavedPostgresConnections()[0] ?? "",
@@ -48,19 +50,19 @@ export function PostgresSource() {
 
     try {
       if (!isTauri()) {
-        throw new Error("PostgreSQL layers require GeoLibre Desktop.");
+        throw new Error(t("addData.postgres.errorDesktopOnly"));
       }
       if (!postgresConnectionString.trim()) {
-        throw new Error("Enter a PostgreSQL connection string.");
+        throw new Error(t("addData.postgres.errorConnectionString"));
       }
       const connectionString = postgresConnectionString.trim();
 
-      martin.setStatus("Checking Martin binary...");
+      martin.setStatus(t("addData.postgres.statusCheckingBinary"));
       const binary = await ensureMartinBinary();
       martin.setStatus(
         binary.downloaded
-          ? "Martin downloaded. Starting local server..."
-          : "Starting local Martin server...",
+          ? t("addData.postgres.statusDownloaded")
+          : t("addData.postgres.statusStarting"),
       );
       const server = await startMartinServer({
         connectionString,
@@ -68,19 +70,21 @@ export function PostgresSource() {
       });
       setSavedPostgresConnections(rememberPostgresConnection(connectionString));
       martin.setServer(server);
-      martin.setStatus("Reading Martin catalog...");
+      martin.setStatus(t("addData.postgres.statusReadingCatalog"));
 
       const sources = await fetchMartinCatalog(server);
       martin.setSources(sources);
       martin.setSelectedSourceId(sources[0]?.id ?? "");
       martin.setStatus(
         sources.length > 0
-          ? `Found ${sources.length} source${sources.length === 1 ? "" : "s"}.`
-          : "Martin is running, but no compatible PostGIS sources were found.",
+          ? t("addData.postgres.statusFound", { count: sources.length })
+          : t("addData.postgres.statusNoSources"),
       );
     } catch (err) {
       martin.setServer(null);
-      source.setError(errorMessage(err, "Could not connect to PostgreSQL."));
+      source.setError(
+        errorMessage(err, t("addData.postgres.errorConnect")),
+      );
       martin.setStatus(null);
     } finally {
       source.shell.setIsSubmitting(false);
@@ -95,9 +99,9 @@ export function PostgresSource() {
       martin.setServer(null);
       martin.setSources([]);
       martin.setSelectedSourceId("");
-      martin.setStatus("Martin stopped.");
+      martin.setStatus(t("addData.postgres.statusStopped"));
     } catch (err) {
-      source.setError(errorMessage(err, "Could not stop Martin."));
+      source.setError(errorMessage(err, t("addData.postgres.errorStop")));
     } finally {
       source.shell.setIsSubmitting(false);
     }
@@ -105,12 +109,12 @@ export function PostgresSource() {
 
   const addMartinSource = async (sourceId: string) => {
     const server = martin.server;
-    if (!server) throw new Error("Connect to PostgreSQL first.");
+    if (!server) throw new Error(t("addData.postgres.errorConnectFirst"));
     const tilejson = await fetchMartinTileJson(server, sourceId);
     const vectorLayers = tilejson.vector_layers ?? tilejson.vectorLayers ?? [];
     const sourceLayer = vectorLayers[0]?.id;
     if (!sourceLayer) {
-      throw new Error("The selected Martin source has no vector layers.");
+      throw new Error(t("addData.postgres.errorNoVectorLayers"));
     }
 
     const summary = martin.sources.find(
@@ -152,10 +156,10 @@ export function PostgresSource() {
 
   const handleSubmit = source.runSubmit(async () => {
     if (!martin.server) {
-      throw new Error("Connect to PostgreSQL first.");
+      throw new Error(t("addData.postgres.errorConnectFirst"));
     }
     if (!martin.selectedSourceId) {
-      throw new Error("Select a Martin source to add.");
+      throw new Error(t("addData.postgres.errorSelectSource"));
     }
     await addMartinSource(martin.selectedSourceId);
   });
@@ -175,14 +179,14 @@ export function PostgresSource() {
       <div className="space-y-3">
         {!isTauri() ? (
           <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-            PostgreSQL layers are only available in GeoLibre Desktop. This
-            feature runs a local Martin tile server, which the web app cannot
-            launch.
+            {t("addData.postgres.desktopOnlyNotice")}
           </p>
         ) : null}
         {savedPostgresConnections.length > 0 ? (
           <div className="space-y-1.5">
-            <Label htmlFor="postgres-saved-connection">Saved connection</Label>
+            <Label htmlFor="postgres-saved-connection">
+              {t("addData.postgres.savedConnection")}
+            </Label>
             <Select
               id="postgres-saved-connection"
               value={
@@ -194,7 +198,9 @@ export function PostgresSource() {
                 setPostgresConnectionString(event.target.value)
               }
             >
-              <option value="">Select saved connection</option>
+              <option value="">
+                {t("addData.postgres.selectSavedConnection")}
+              </option>
               {savedPostgresConnections.map((connection) => (
                 <option key={connection} value={connection}>
                   {savedPostgresConnectionLabel(connection)}
@@ -205,13 +211,13 @@ export function PostgresSource() {
         ) : null}
         <div className="space-y-1.5">
           <Label htmlFor="postgres-connection">
-            PostgreSQL connection string
+            {t("addData.postgres.connectionString")}
           </Label>
           <Input
             id="postgres-connection"
             type="password"
             autoComplete="off"
-            placeholder="postgres://user:password@host:5432/database"
+            placeholder={t("addData.postgres.connectionStringPlaceholder")}
             value={postgresConnectionString}
             onChange={(event) =>
               setPostgresConnectionString(event.target.value)
@@ -220,11 +226,13 @@ export function PostgresSource() {
         </div>
         <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
           <div className="space-y-1.5">
-            <Label htmlFor="postgres-default-srid">Default SRID</Label>
+            <Label htmlFor="postgres-default-srid">
+              {t("addData.postgres.defaultSrid")}
+            </Label>
             <Input
               id="postgres-default-srid"
               inputMode="numeric"
-              placeholder="Optional"
+              placeholder={t("addData.common.optional")}
               value={postgresDefaultSrid}
               onChange={(event) => setPostgresDefaultSrid(event.target.value)}
             />
@@ -237,7 +245,7 @@ export function PostgresSource() {
                 onClick={handleConnectPostgres}
                 disabled={source.isSubmitting || !isTauri()}
               >
-                Connect
+                {t("addData.postgres.connect")}
               </Button>
               {martin.server ? (
                 <Button
@@ -246,7 +254,7 @@ export function PostgresSource() {
                   onClick={handleStopMartin}
                   disabled={source.isSubmitting}
                 >
-                  Stop
+                  {t("addData.postgres.stop")}
                 </Button>
               ) : null}
             </div>
@@ -257,7 +265,9 @@ export function PostgresSource() {
         ) : null}
         {martin.sources.length > 0 ? (
           <div className="space-y-1.5">
-            <Label htmlFor="martin-source">Martin source</Label>
+            <Label htmlFor="martin-source">
+              {t("addData.postgres.martinSource")}
+            </Label>
             <Select
               id="martin-source"
               value={martin.selectedSourceId}
@@ -275,7 +285,7 @@ export function PostgresSource() {
         ) : null}
         {martin.server ? (
           <p className="text-xs text-muted-foreground">
-            Martin is running on port {martin.server.port}.
+            {t("addData.postgres.runningOnPort", { port: martin.server.port })}
           </p>
         ) : null}
       </div>

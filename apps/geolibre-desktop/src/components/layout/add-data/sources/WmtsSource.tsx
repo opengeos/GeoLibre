@@ -1,5 +1,6 @@
 import { Input, Label } from "@geolibre/ui";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { DEFAULT_WMTS_URL } from "../constants";
 import { createBaseLayer } from "../helpers";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
@@ -10,7 +11,8 @@ import {
 import { AddDataSourceForm, useAddDataSource } from "../shared";
 
 export function WmtsSource() {
-  const source = useAddDataSource("WMTS Layer");
+  const { t } = useTranslation();
+  const source = useAddDataSource(t("addData.wmts.defaultName"));
   const [wmtsUrl, setWmtsUrl] = useState(DEFAULT_WMTS_URL);
   const [wmtsTileSize, setWmtsTileSize] = useState("256");
 
@@ -25,9 +27,9 @@ export function WmtsSource() {
   };
 
   const handleSubmit = source.runSubmit(() => {
-    const name = source.layerName.trim() || "WMTS Layer";
+    const name = source.layerName.trim() || t("addData.wmts.defaultName");
     if (!wmtsUrl.trim()) {
-      throw new Error("Enter a WMTS tile URL template.");
+      throw new Error(t("addData.wmts.errorUrl"));
     }
     source.addAndClose(
       createBaseLayer(
@@ -67,16 +69,16 @@ export function WmtsSource() {
         />
         <div className="grid gap-3 sm:grid-cols-[1fr_7rem]">
           <div className="space-y-1.5">
-            <Label htmlFor="wmts-url">Tile URL template</Label>
+            <Label htmlFor="wmts-url">{t("addData.common.tileUrlTemplate")}</Label>
             <Input
               id="wmts-url"
-              placeholder="https://example.com/wmts/{z}/{y}/{x}.png"
+              placeholder={t("addData.wmts.urlPlaceholder")}
               value={wmtsUrl}
               onChange={(event) => setWmtsUrl(event.target.value)}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="wmts-tile-size">Tile size</Label>
+            <Label htmlFor="wmts-tile-size">{t("addData.common.tileSize")}</Label>
             <Input
               id="wmts-tile-size"
               inputMode="numeric"

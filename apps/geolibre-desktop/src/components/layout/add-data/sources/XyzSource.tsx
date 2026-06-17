@@ -1,5 +1,6 @@
 import { Input, Label } from "@geolibre/ui";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   createXyzTileUrlTemplate,
   registerXyzTileProtocol,
@@ -16,7 +17,8 @@ import {
 import { AddDataSourceForm, useAddDataSource } from "../shared";
 
 export function XyzSource() {
-  const source = useAddDataSource("XYZ Layer");
+  const { t } = useTranslation();
+  const source = useAddDataSource(t("addData.xyz.defaultName"));
   const [xyzUrl, setXyzUrl] = useState(DEFAULT_XYZ_URL);
   const [xyzTileSize, setXyzTileSize] = useState("256");
   const [xyzShortUrl, setXyzShortUrl] = useState(false);
@@ -34,8 +36,8 @@ export function XyzSource() {
   };
 
   const handleSubmit = source.runSubmit(async () => {
-    const name = source.layerName.trim() || "XYZ Layer";
-    if (!xyzUrl.trim()) throw new Error("Enter an XYZ tile URL template.");
+    const name = source.layerName.trim() || t("addData.xyz.defaultName");
+    if (!xyzUrl.trim()) throw new Error(t("addData.xyz.errorUrl"));
     if (xyzShortUrl) registerXyzTileProtocol();
     const tileUrl = xyzShortUrl
       ? await resolveXyzTileUrlTemplate(xyzUrl)
@@ -81,20 +83,20 @@ export function XyzSource() {
         />
         <div className="grid gap-3 sm:grid-cols-[1fr_7rem]">
           <div className="space-y-1.5">
-            <Label htmlFor="xyz-url">Tile URL template</Label>
+            <Label htmlFor="xyz-url">{t("addData.common.tileUrlTemplate")}</Label>
             <Input
               id="xyz-url"
               placeholder={
                 xyzShortUrl
-                  ? "https://go.example.com/layer"
-                  : "https://example.com/{z}/{x}/{y}.png"
+                  ? t("addData.xyz.shortUrlPlaceholder")
+                  : t("addData.xyz.urlPlaceholder")
               }
               value={xyzUrl}
               onChange={(event) => setXyzUrl(event.target.value)}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="xyz-tile-size">Tile size</Label>
+            <Label htmlFor="xyz-tile-size">{t("addData.common.tileSize")}</Label>
             <Input
               id="xyz-tile-size"
               inputMode="numeric"
@@ -109,7 +111,7 @@ export function XyzSource() {
             checked={xyzShortUrl}
             onChange={(event) => setXyzShortUrl(event.target.checked)}
           />
-          Short URL
+          {t("addData.xyz.shortUrl")}
         </label>
       </div>
     </AddDataSourceForm>

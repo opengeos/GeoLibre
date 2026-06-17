@@ -12,6 +12,7 @@ import {
   type ReactNode,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { useAddDataShell } from "./context";
 import { errorMessage } from "./helpers";
 
@@ -23,6 +24,7 @@ import { errorMessage } from "./helpers";
  * @param defaultLayerName - The initial layer name for this source.
  */
 export function useAddDataSource(defaultLayerName: string) {
+  const { t } = useTranslation();
   const shell = useAddDataShell();
   const [layerName, setLayerName] = useState(defaultLayerName);
   const [beforeLayerId, setBeforeLayerId] = useState("");
@@ -52,7 +54,7 @@ export function useAddDataSource(defaultLayerName: string) {
       try {
         await action();
       } catch (err) {
-        setError(errorMessage(err, "Could not add layer."));
+        setError(errorMessage(err, t("addData.shared.addError")));
       } finally {
         shell.setIsSubmitting(false);
       }
@@ -80,9 +82,10 @@ export function LayerNameField({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1.5">
-      <Label htmlFor="add-data-layer-name">Layer name</Label>
+      <Label htmlFor="add-data-layer-name">{t("addData.shared.layerName")}</Label>
       <Input
         id="add-data-layer-name"
         value={value}
@@ -99,6 +102,7 @@ export function InsertBeforeField({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const { t } = useTranslation();
   const { existingLayers, mapControllerRef } = useAddDataShell();
   // Computed during render (not memoized) so the list picks up the map
   // controller once it finishes initialising; the call is a cheap filter.
@@ -106,15 +110,17 @@ export function InsertBeforeField({
     mapControllerRef.current?.getBasemapStyleLayerIds() ?? [];
   return (
     <div className="space-y-1.5">
-      <Label htmlFor="add-data-before-id">Insert before</Label>
+      <Label htmlFor="add-data-before-id">
+        {t("addData.shared.insertBefore")}
+      </Label>
       <Select
         id="add-data-before-id"
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >
-        <option value="">Top of layer list (default)</option>
+        <option value="">{t("addData.shared.insertTop")}</option>
         {existingLayers.length > 0 && (
-          <optgroup label="Layers">
+          <optgroup label={t("addData.shared.layersGroup")}>
             {[...existingLayers].reverse().map((existingLayer) => (
               <option key={existingLayer.id} value={existingLayer.id}>
                 {existingLayer.name}
@@ -123,7 +129,7 @@ export function InsertBeforeField({
           </optgroup>
         )}
         {basemapStyleLayerIds.length > 0 && (
-          <optgroup label="Basemap layers">
+          <optgroup label={t("addData.shared.basemapLayersGroup")}>
             {basemapStyleLayerIds.map((styleLayerId) => (
               <option key={styleLayerId} value={styleLayerId}>
                 {styleLayerId}
@@ -146,6 +152,7 @@ export function AddDataFooter({
   submitDisabled: boolean;
   useServiceIcon?: boolean;
 }) {
+  const { t } = useTranslation();
   const { isSubmitting, closeDialog } = useAddDataShell();
   return (
     <>
@@ -158,7 +165,7 @@ export function AddDataFooter({
           onClick={closeDialog}
           disabled={isSubmitting}
         >
-          Cancel
+          {t("common.cancel")}
         </Button>
         <Button type="submit" disabled={submitDisabled}>
           {!isSubmitting ? (
@@ -168,7 +175,7 @@ export function AddDataFooter({
               <MapIcon className="mr-2 h-3.5 w-3.5" />
             )
           ) : null}
-          {isSubmitting ? "Adding…" : "Add layer"}
+          {isSubmitting ? t("addData.shared.adding") : t("addData.shared.addLayer")}
         </Button>
       </div>
     </>

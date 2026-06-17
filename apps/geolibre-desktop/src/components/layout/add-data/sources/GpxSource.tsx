@@ -3,6 +3,7 @@ import { Button, Input, Label, Select } from "@geolibre/ui";
 import type { FeatureCollection } from "geojson";
 import { FileUp } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { parseGpxLayer } from "../../../../lib/gpx";
 import { openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
 import { DEFAULT_GPX_URL } from "../constants";
@@ -17,7 +18,8 @@ import { AddDataSourceForm, useAddDataSource } from "../shared";
 import type { GpxLayerKind, GpxMode } from "../types";
 
 export function GpxSource() {
-  const source = useAddDataSource("GPX Layer");
+  const { t } = useTranslation();
+  const source = useAddDataSource(t("addData.gpx.defaultName"));
   const [gpxMode, setGpxMode] = useState<GpxMode>("url");
   const [gpxUrl, setGpxUrl] = useState(DEFAULT_GPX_URL);
   const [selectedGpx, setSelectedGpx] = useState<{
@@ -68,18 +70,18 @@ export function GpxSource() {
         readText: true,
       });
       if (!result) return;
-      if (!result.text) throw new Error("GPX file data is missing.");
+      if (!result.text) throw new Error(t("addData.gpx.errorFileMissing"));
       setSelectedGpx({
         path: result.path,
         text: result.text,
       });
       source.setLayerName((current) =>
-        current.trim() && current !== "GPX Layer"
+        current.trim() && current !== t("addData.gpx.defaultName")
           ? current
-          : layerNameFromPath(result.path, "GPX Layer"),
+          : layerNameFromPath(result.path, t("addData.gpx.defaultName")),
       );
     } catch (err) {
-      source.setError(errorMessage(err, "Could not read GPX file."));
+      source.setError(errorMessage(err, t("addData.gpx.readError")));
     }
   };
 
@@ -88,7 +90,7 @@ export function GpxSource() {
     text: string;
   }> => {
     if (gpxMode === "file") {
-      if (!selectedGpx) throw new Error("Choose a GPX file.");
+      if (!selectedGpx) throw new Error(t("addData.gpx.errorChooseFile"));
       return {
         sourcePath: selectedGpx.path,
         text: selectedGpx.text,
@@ -96,11 +98,13 @@ export function GpxSource() {
     }
 
     const sourcePath = gpxUrl.trim();
-    if (!sourcePath) throw new Error("Enter a GPX URL.");
+    if (!sourcePath) throw new Error(t("addData.gpx.errorUrl"));
 
     const response = await fetch(proxyGpxRequestUrl(sourcePath));
     if (!response.ok) {
-      throw new Error(`Request failed with status ${response.status}`);
+      throw new Error(
+        t("addData.common.requestFailed", { status: response.status }),
+      );
     }
     return {
       sourcePath,
@@ -109,9 +113,9 @@ export function GpxSource() {
   };
 
   const handleSubmit = source.runSubmit(async () => {
-    const name = source.layerName.trim() || "GPX Layer";
+    const name = source.layerName.trim() || t("addData.gpx.defaultName");
     if (!hasSelectedGpxLayerKind) {
-      throw new Error("Select at least one GPX layer type.");
+      throw new Error(t("addData.gpx.errorSelectType"));
     }
 
     const { sourcePath, text } = await readGpxSource();
@@ -124,17 +128,17 @@ export function GpxSource() {
       {
         featureCollection: result.waypoints,
         kind: "waypoints",
-        label: "Waypoints",
+        label: t("addData.gpx.waypoints"),
       },
       {
         featureCollection: result.tracks,
         kind: "tracks",
-        label: "Tracks",
+        label: t("addData.gpx.tracks"),
       },
       {
         featureCollection: result.routes,
         kind: "routes",
-        label: "Routes",
+        label: t("addData.gpx.routes"),
       },
     ];
     const layers = gpxLayerGroups
@@ -165,7 +169,7 @@ export function GpxSource() {
       }));
 
     if (layers.length === 0) {
-      throw new Error("The selected GPX layer types were not found.");
+      throw new Error(t("addData.gpx.errorNotFound"));
     }
 
     for (const layer of layers) {
@@ -204,7 +208,7 @@ export function GpxSource() {
     >
       <div className="space-y-3">
         <div className="space-y-1.5">
-          <Label htmlFor="gpx-mode">Source type</Label>
+          <Label htmlFor="gpx-mode">{t("addData.common.sourceType")}</Label>
           <Select
             id="gpx-mode"
             value={gpxMode}
@@ -212,8 +216,8 @@ export function GpxSource() {
               handleGpxModeChange(event.target.value as GpxMode)
             }
           >
-            <option value="url">GPX URL</option>
-            <option value="file">GPX file</option>
+            <option value="url">{t("addData.gpx.url")}</option>
+            <option value="file">{t("addData.gpx.file")}</option>
           </Select>
         </div>
 
@@ -221,20 +225,20 @@ export function GpxSource() {
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" variant="outline" onClick={handleChooseGpx}>
               <FileUp className="mr-2 h-3.5 w-3.5" />
-              Choose file
+              {t("addData.common.chooseFile")}
             </Button>
             <span className="min-w-0 truncate text-xs text-muted-foreground">
               {selectedGpx
                 ? fileNameFromPath(selectedGpx.path)
-                : "No file selected"}
+                : t("addData.common.noFileSelected")}
             </span>
           </div>
         ) : (
           <div className="space-y-1.5">
-            <Label htmlFor="gpx-url">GPX URL</Label>
+            <Label htmlFor="gpx-url">{t("addData.gpx.url")}</Label>
             <Input
               id="gpx-url"
-              placeholder="https://example.com/route.gpx"
+              placeholder={t("addData.gpx.urlPlaceholder")}
               value={gpxUrl}
               onChange={(event) => setGpxUrl(event.target.value)}
             />
@@ -242,7 +246,7 @@ export function GpxSource() {
         )}
 
         <div className="space-y-2">
-          <Label>Layer types</Label>
+          <Label>{t("addData.gpx.layerTypes")}</Label>
           <div className="grid gap-2 sm:grid-cols-3">
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -252,7 +256,7 @@ export function GpxSource() {
                   setGpxLayerKindSelected("waypoints", event.target.checked)
                 }
               />
-              Waypoints
+              {t("addData.gpx.waypoints")}
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -262,7 +266,7 @@ export function GpxSource() {
                   setGpxLayerKindSelected("tracks", event.target.checked)
                 }
               />
-              Tracks
+              {t("addData.gpx.tracks")}
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -272,7 +276,7 @@ export function GpxSource() {
                   setGpxLayerKindSelected("routes", event.target.checked)
                 }
               />
-              Routes
+              {t("addData.gpx.routes")}
             </label>
           </div>
         </div>

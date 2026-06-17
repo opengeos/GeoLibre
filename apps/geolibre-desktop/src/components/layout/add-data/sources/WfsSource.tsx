@@ -1,5 +1,6 @@
 import { Input, Label, Select } from "@geolibre/ui";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   createWfsGetFeatureUrl,
   fetchGeoJsonFeatureCollection,
@@ -14,7 +15,8 @@ import {
 import { AddDataSourceForm, useAddDataSource } from "../shared";
 
 export function WfsSource() {
-  const source = useAddDataSource("WFS Layer");
+  const { t } = useTranslation();
+  const source = useAddDataSource(t("addData.wfs.defaultName"));
   const [wfsEndpoint, setWfsEndpoint] = useState(DEFAULT_WFS_ENDPOINT);
   const [wfsTypeName, setWfsTypeName] = useState(DEFAULT_WFS_TYPE_NAME);
   const [wfsVersion, setWfsVersion] = useState("2.0.0");
@@ -43,13 +45,13 @@ export function WfsSource() {
   };
 
   const handleSubmit = source.runSubmit(async () => {
-    const name = source.layerName.trim() || "WFS Layer";
-    if (!wfsEndpoint.trim()) throw new Error("Enter a WFS service URL.");
+    const name = source.layerName.trim() || t("addData.wfs.defaultName");
+    if (!wfsEndpoint.trim()) throw new Error(t("addData.wfs.errorUrl"));
     if (!wfsTypeName.trim()) {
-      throw new Error("Enter a WFS feature type name.");
+      throw new Error(t("addData.wfs.errorTypeName"));
     }
     if (!wfsOutputFormat.trim()) {
-      throw new Error("Enter a WFS output format.");
+      throw new Error(t("addData.wfs.errorOutputFormat"));
     }
     parseOptionalNumber(wfsMaxFeatures, "max features");
 
@@ -114,26 +116,26 @@ export function WfsSource() {
           }}
         />
         <div className="space-y-1.5">
-          <Label htmlFor="wfs-endpoint">Service URL</Label>
+          <Label htmlFor="wfs-endpoint">{t("addData.common.serviceUrl")}</Label>
           <Input
             id="wfs-endpoint"
-            placeholder="https://example.com/geoserver/wfs"
+            placeholder={t("addData.wfs.urlPlaceholder")}
             value={wfsEndpoint}
             onChange={(event) => setWfsEndpoint(event.target.value)}
           />
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="wfs-type-name">Feature type</Label>
+            <Label htmlFor="wfs-type-name">{t("addData.wfs.featureType")}</Label>
             <Input
               id="wfs-type-name"
-              placeholder="workspace:layer"
+              placeholder={t("addData.common.workspaceLayerPlaceholder")}
               value={wfsTypeName}
               onChange={(event) => setWfsTypeName(event.target.value)}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="wfs-version">Version</Label>
+            <Label htmlFor="wfs-version">{t("addData.wfs.version")}</Label>
             <Select
               id="wfs-version"
               value={wfsVersion}
@@ -145,7 +147,9 @@ export function WfsSource() {
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="wfs-output-format">Output format</Label>
+            <Label htmlFor="wfs-output-format">
+              {t("addData.wfs.outputFormat")}
+            </Label>
             <Input
               id="wfs-output-format"
               value={wfsOutputFormat}
@@ -153,20 +157,22 @@ export function WfsSource() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="wfs-srs-name">SRS name</Label>
+            <Label htmlFor="wfs-srs-name">{t("addData.wfs.srsName")}</Label>
             <Input
               id="wfs-srs-name"
-              placeholder="Optional"
+              placeholder={t("addData.common.optional")}
               value={wfsSrsName}
               onChange={(event) => setWfsSrsName(event.target.value)}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="wfs-max-features">Max features</Label>
+            <Label htmlFor="wfs-max-features">
+              {t("addData.wfs.maxFeatures")}
+            </Label>
             <Input
               id="wfs-max-features"
               inputMode="numeric"
-              placeholder="Optional"
+              placeholder={t("addData.common.optional")}
               value={wfsMaxFeatures}
               onChange={(event) => setWfsMaxFeatures(event.target.value)}
             />
