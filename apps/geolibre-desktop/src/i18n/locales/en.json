@@ -844,6 +844,11 @@
       "selectLayer": "Select a layer...",
       "selectField": "Select a field...",
       "selectLayerFirst": "Select a layer first"
+    },
+    "whitebox": {
+      "runLocal": "Run locally (WASM)",
+      "runLocalHint": "Run locally in WebAssembly (no Python sidecar)",
+      "runningLocally": "Running locally with WebAssembly. No sidecar required."
     }
   },
   "segmentation": {
@@ -873,6 +878,9 @@
     "layerNameDefault": "Segmentation"
   },
   "layers": {
+    "exportGeoTiff": "GeoTIFF (COG)",
+    "exportRasterSuccess": "Raster exported.",
+    "exportRasterError": "Could not export this raster.",
     "newGroup": "New group",
     "collapseGroup": "Collapse group",
     "expandGroup": "Expand group",

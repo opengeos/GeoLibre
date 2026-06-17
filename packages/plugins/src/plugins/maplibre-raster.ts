@@ -161,6 +161,10 @@ export async function addRasterToMap(
     const store = useAppStore.getState();
     const layer = store.layers.find((current) => current.id === id);
     if (layer) {
+      // Defensive: if this id ever reused an existing entry, revoke the old
+      // blob URL before replacing it so it cannot leak.
+      const previous = localBytesUrls.get(id);
+      if (previous) URL.revokeObjectURL(previous);
       const blobUrl = URL.createObjectURL(source);
       localBytesUrls.set(id, blobUrl);
       store.updateLayer(id, {

@@ -50,6 +50,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import {
   isTauri,
   openLocalDataFileWithFallback,
@@ -349,6 +350,7 @@ export function ProcessingDialog({
   mapControllerRef,
   onAddRaster,
 }: ProcessingDialogProps) {
+  const { t } = useTranslation();
   const open = useAppStore((s) => s.ui.processingOpen);
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
   const layers = useAppStore((s) => s.layers);
@@ -362,8 +364,10 @@ export function ProcessingDialog({
   const [loadingTools, setLoadingTools] = useState(false);
   const [runtimeMessage, setRuntimeMessage] = useState("");
   const [runtimeAvailable, setRuntimeAvailable] = useState<boolean | null>(null);
-  // Run tools locally in WebAssembly (no Python sidecar). Default on.
-  const [runLocal, setRunLocal] = useState(true);
+  // Run tools locally in WebAssembly (no Python sidecar). Default on in the
+  // browser, where there is no sidecar; off under Tauri, where the sidecar is
+  // available and can read native file paths that the WASM runner cannot fetch.
+  const [runLocal, setRunLocal] = useState(!isTauri());
   const [error, setError] = useState<string | null>(null);
   const [startingServer, setStartingServer] = useState(false);
   const [stoppingServer, setStoppingServer] = useState(false);
@@ -449,7 +453,7 @@ export function ProcessingDialog({
     // parameter UI.
     if (runLocal) {
       await applyRemoteCatalogSnapshot(
-        "Running locally with WebAssembly. No sidecar required.",
+        t("processing.whitebox.runningLocally"),
         false,
       );
       setLoadingTools(false);
@@ -509,7 +513,7 @@ export function ProcessingDialog({
     } finally {
       setLoadingTools(false);
     }
-  }, [runLocal]);
+  }, [runLocal, t]);
 
   useEffect(() => {
     if (!open) return;
@@ -886,7 +890,7 @@ export function ProcessingDialog({
                 </div>
                 <label
                   className="flex items-center gap-1.5 text-xs text-muted-foreground"
-                  title="Run locally in WebAssembly (no Python sidecar)"
+                  title={t("processing.whitebox.runLocalHint")}
                 >
                   <input
                     type="checkbox"
@@ -894,7 +898,7 @@ export function ProcessingDialog({
                     checked={runLocal}
                     onChange={(e) => setRunLocal(e.target.checked)}
                   />
-                  Run locally (WASM)
+                  {t("processing.whitebox.runLocal")}
                 </label>
                 <Button
                   type="button"

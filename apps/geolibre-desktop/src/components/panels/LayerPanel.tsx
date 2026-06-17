@@ -564,7 +564,10 @@ export function LayerPanel({
         if (savedPath !== null) {
           setRefreshStatuses((current) => ({
             ...current,
-            [layer.id]: { type: "success", message: "Raster exported." },
+            [layer.id]: {
+              type: "success",
+              message: t("layers.exportRasterSuccess"),
+            },
           }));
           scheduleStatusClear(layer.id);
         }
@@ -572,7 +575,7 @@ export function LayerPanel({
         const message =
           error instanceof Error
             ? error.message
-            : "Could not export this raster.";
+            : t("layers.exportRasterError");
         setRefreshStatuses((current) => ({
           ...current,
           [layer.id]: { type: "error", message },
@@ -580,7 +583,7 @@ export function LayerPanel({
         scheduleStatusClear(layer.id);
       }
     },
-    [clearRefreshStatusTimer, scheduleStatusClear],
+    [clearRefreshStatusTimer, scheduleStatusClear, t],
   );
 
   // Read through a ref inside interval callbacks so long-lived timers never
@@ -1534,7 +1537,7 @@ export function LayerPanel({
                                 void handleExportRasterLayer(layer);
                               }}
                             >
-                              GeoTIFF (COG)
+                              {t("layers.exportGeoTiff")}
                             </DropdownMenuItem>
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
