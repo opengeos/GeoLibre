@@ -80,6 +80,26 @@ describe("normalizeServiceEntries", () => {
   });
 });
 
+describe("createServiceEntry", () => {
+  it("reuses a provided id (update in place) or mints a new one", () => {
+    const updated = createServiceEntry({
+      id: "keep-me",
+      name: "Updated",
+      category: "Imagery",
+      kind: "wms",
+      fields: { endpoint: "https://x.test" },
+    });
+    assert.equal(updated.id, "keep-me");
+    const fresh = createServiceEntry({
+      name: "Fresh",
+      category: "",
+      kind: "wms",
+      fields: { endpoint: "https://x.test" },
+    });
+    assert.ok(fresh.id && fresh.id !== "keep-me");
+  });
+});
+
 describe("upsert / remove", () => {
   it("prepends a new entry and replaces by id", () => {
     const a = makeEntry({ id: "a", name: "A" });

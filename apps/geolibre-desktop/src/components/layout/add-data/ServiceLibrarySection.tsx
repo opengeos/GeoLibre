@@ -10,7 +10,7 @@
 
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import { Bookmark, Download, Save, Trash2, Upload, X } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { type KeyboardEvent, useMemo, useRef, useState } from "react";
 import { saveTextFileWithFallback } from "../../../lib/tauri-io";
 import {
   createServiceEntry,
@@ -123,7 +123,11 @@ export function ServiceLibrarySection({
       setError("Enter a name for the saved service.");
       return;
     }
+    // Update the selected entry in place when it's a user-owned service;
+    // otherwise (nothing or a built-in selected) mint a new one.
     const entry = createServiceEntry({
+      id:
+        selectedEntry && !selectedEntry.builtin ? selectedEntry.id : undefined,
       name,
       category: saveCategory,
       kind,
@@ -134,6 +138,18 @@ export function ServiceLibrarySection({
     setIsSaving(false);
     setError(null);
     setNotice(`Saved "${name}" to the service library.`);
+  };
+
+  // The save-form inputs live inside AddDataSourceForm's <form>, so a bare
+  // Enter would submit it (adding a layer). Intercept Enter to save instead;
+  // forms can't be nested, so this is the keyboard path for the save form.
+  const handleSaveFieldKeyDown = (
+    event: KeyboardEvent<HTMLInputElement>,
+  ) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handleSave();
+    }
   };
 
   const handleDelete = () => {
@@ -279,6 +295,7 @@ export function ServiceLibrarySection({
                 id={`service-save-name-${kind}`}
                 value={saveName}
                 onChange={(event) => setSaveName(event.target.value)}
+                onKeyDown={handleSaveFieldKeyDown}
               />
             </div>
             <div className="space-y-1">
@@ -289,6 +306,7 @@ export function ServiceLibrarySection({
                 placeholder="Optional (e.g. country, theme)"
                 value={saveCategory}
                 onChange={(event) => setSaveCategory(event.target.value)}
+                onKeyDown={handleSaveFieldKeyDown}
               />
               <datalist id={categoryListId}>
                 {categories.map((category) => (

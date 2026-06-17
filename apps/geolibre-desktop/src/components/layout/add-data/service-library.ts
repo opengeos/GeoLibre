@@ -184,13 +184,15 @@ export function writeUserServices(entries: ServiceLibraryEntry[]): void {
  * result via {@link upsertServiceEntry} + {@link writeUserServices}.
  */
 export function createServiceEntry(input: {
+  /** Reuse an existing id to update in place; omit to mint a new entry. */
+  id?: string;
   name: string;
   category: string;
   kind: ServiceLibraryKind;
   fields: ServiceFields;
 }): ServiceLibraryEntry {
   return {
-    id: createServiceId(),
+    id: input.id ?? createServiceId(),
     name: input.name.trim(),
     category: input.category.trim(),
     kind: input.kind,
