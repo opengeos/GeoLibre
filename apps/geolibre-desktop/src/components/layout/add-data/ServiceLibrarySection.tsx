@@ -129,6 +129,7 @@ export function ServiceLibrarySection({
     persist(upsertServiceEntry(userEntries, entry));
     setSelectedId(entry.id);
     setIsSaving(false);
+    setError(null);
     setNotice(`Saved "${name}" to the service library.`);
   };
 
@@ -136,6 +137,7 @@ export function ServiceLibrarySection({
     if (!selectedEntry || selectedEntry.builtin) return;
     persist(removeServiceEntry(userEntries, selectedEntry.id));
     setSelectedId("");
+    setError(null);
     setNotice(`Removed "${selectedEntry.name}".`);
   };
 
@@ -166,9 +168,17 @@ export function ServiceLibrarySection({
         setError("No valid services found in that file.");
         return;
       }
-      persist(mergeImportedServices(userEntries, imported));
+      // mergeImportedServices caps the combined list at MAX_SAVED_SERVICES, so
+      // report the count actually kept rather than the count in the file.
+      const before = userEntries.length;
+      const next = mergeImportedServices(userEntries, imported);
+      persist(next);
+      const added = next.length - before;
+      const dropped = imported.length - added;
       setNotice(
-        `Imported ${imported.length} service${imported.length === 1 ? "" : "s"}.`,
+        `Imported ${added} service${added === 1 ? "" : "s"}${
+          dropped > 0 ? ` (${dropped} skipped — library full)` : ""
+        }.`,
       );
     } catch {
       setError("Could not read that file as a service library.");
