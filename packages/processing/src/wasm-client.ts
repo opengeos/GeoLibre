@@ -26,7 +26,15 @@ let toolsModulePromise: Promise<ToolsModule> | null = null;
 
 function loadToolsModule(): Promise<ToolsModule> {
   // Lazy import: the ~5 MB (gzipped) WASI runtime only downloads on first use.
-  toolsModulePromise ??= import("whitebox-wasm/tools") as unknown as Promise<ToolsModule>;
+  // Reset the memoized promise on failure (e.g. a transient network error) so
+  // the next call retries instead of being stuck with a permanently rejected
+  // promise for the rest of the session.
+  toolsModulePromise ??= (
+    import("whitebox-wasm/tools") as unknown as Promise<ToolsModule>
+  ).catch((error) => {
+    toolsModulePromise = null;
+    throw error;
+  });
   return toolsModulePromise;
 }
 

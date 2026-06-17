@@ -518,6 +518,9 @@ export function ProcessingDialog({
 
   useEffect(() => {
     setValues(createDefaultValues(selectedTool));
+    // Drop any browsed input bytes from the previous tool so they cannot be
+    // silently reused by a same-named parameter on the new tool.
+    browsedInputsRef.current.clear();
     setJob(null);
     importedJobIdRef.current = null;
   }, [selectedTool?.id]);
