@@ -898,7 +898,8 @@
     "renameNamed": "Rename {{name}}",
     "newGroupFromLayer": "New group from layer",
     "moveToGroup": "Move to group",
-    "removeFromGroup": "Remove from group"
+    "removeFromGroup": "Remove from group",
+    "hiddenByGroup": "Hidden because its group is not visible"
   },
   "rasterSymbology": {
     "reverseRamp": "Reverse ramp",

@@ -1075,6 +1075,10 @@ export function LayerPanel({
               ? firstMemberIdByGroup.get(group.id) === layer.id
               : false;
             const groupCollapsed = group?.collapsed ?? false;
+            // When the parent group is hidden, the layer is not rendered even
+            // though its own visibility toggle stays on. Grey the row out as a
+            // cue that the group-level setting is what's hiding it (issue #430).
+            const groupHidden = group ? !group.visible : false;
             const canIdentify =
               layer.type === "geojson" ||
               isDuckDBQueryLayer(layer) ||
@@ -1199,8 +1203,14 @@ export function LayerPanel({
                     />
                   ) : (
                     <span
-                      className="flex-1 truncate text-sm font-medium"
-                      title="Double-click to rename"
+                      className={`flex-1 truncate text-sm font-medium ${
+                        groupHidden ? "text-muted-foreground" : ""
+                      }`}
+                      title={
+                        groupHidden
+                          ? t("layers.hiddenByGroup")
+                          : "Double-click to rename"
+                      }
                       onDoubleClick={(e: ReactMouseEvent) => {
                         e.stopPropagation();
                         beginRename(layer);
