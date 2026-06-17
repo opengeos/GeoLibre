@@ -1075,10 +1075,12 @@ export function LayerPanel({
               ? firstMemberIdByGroup.get(group.id) === layer.id
               : false;
             const groupCollapsed = group?.collapsed ?? false;
-            // When the parent group is hidden, the layer is not rendered even
-            // though its own visibility toggle stays on. Grey the row out as a
-            // cue that the group-level setting is what's hiding it (issue #430).
-            const groupHidden = group ? !group.visible : false;
+            // When the parent group is hidden, a layer whose own visibility
+            // toggle is still on is not rendered — a surprising state. Grey its
+            // name out as a cue that the group-level setting is what's hiding
+            // it (issue #430). If the layer's own toggle is also off, the
+            // EyeOff icon already explains it, so skip the group cue then.
+            const groupHidden = group ? !group.visible && layer.visible : false;
             const canIdentify =
               layer.type === "geojson" ||
               isDuckDBQueryLayer(layer) ||
@@ -1209,7 +1211,7 @@ export function LayerPanel({
                       title={
                         groupHidden
                           ? t("layers.hiddenByGroup")
-                          : "Double-click to rename"
+                          : t("layers.doubleClickToRename")
                       }
                       onDoubleClick={(e: ReactMouseEvent) => {
                         e.stopPropagation();
