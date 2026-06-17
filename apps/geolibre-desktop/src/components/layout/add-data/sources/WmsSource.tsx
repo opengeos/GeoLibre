@@ -2,6 +2,12 @@ import { Input, Label, Select } from "@geolibre/ui";
 import { useState } from "react";
 import { DEFAULT_WMS_ENDPOINT, DEFAULT_WMS_LAYERS } from "../constants";
 import { createBaseLayer, createWmsTileUrl } from "../helpers";
+import { ServiceLibrarySection } from "../ServiceLibrarySection";
+import {
+  serviceFieldBoolean,
+  serviceFieldString,
+  type ServiceFields,
+} from "../service-library";
 import { AddDataSourceForm, useAddDataSource } from "../shared";
 
 export function WmsSource() {
@@ -12,6 +18,24 @@ export function WmsSource() {
   const [wmsFormat, setWmsFormat] = useState("image/png");
   const [wmsTransparent, setWmsTransparent] = useState(true);
   const [wmsTileSize, setWmsTileSize] = useState("256");
+
+  const getFields = (): ServiceFields => ({
+    endpoint: wmsEndpoint,
+    layers: wmsLayers,
+    styles: wmsStyles,
+    format: wmsFormat,
+    transparent: wmsTransparent,
+    tileSize: wmsTileSize,
+  });
+
+  const applyFields = (fields: ServiceFields) => {
+    setWmsEndpoint(serviceFieldString(fields, "endpoint", DEFAULT_WMS_ENDPOINT));
+    setWmsLayers(serviceFieldString(fields, "layers", DEFAULT_WMS_LAYERS));
+    setWmsStyles(serviceFieldString(fields, "styles"));
+    setWmsFormat(serviceFieldString(fields, "format", "image/png"));
+    setWmsTransparent(serviceFieldBoolean(fields, "transparent", true));
+    setWmsTileSize(serviceFieldString(fields, "tileSize", "256"));
+  };
 
   const handleSubmit = source.runSubmit(() => {
     const name = source.layerName.trim() || "WMS Layer";
@@ -59,6 +83,15 @@ export function WmsSource() {
       useServiceIcon
     >
       <div className="space-y-3">
+        <ServiceLibrarySection
+          kind="wms"
+          layerName={source.layerName}
+          getFields={getFields}
+          onApply={(entry) => {
+            source.setLayerName(entry.name);
+            applyFields(entry.fields);
+          }}
+        />
         <div className="space-y-1.5">
           <Label htmlFor="wms-endpoint">Service URL</Label>
           <Input

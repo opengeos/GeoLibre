@@ -6,6 +6,11 @@ import {
 } from "../../../../lib/layer-refresh";
 import { DEFAULT_WFS_ENDPOINT, DEFAULT_WFS_TYPE_NAME } from "../constants";
 import { createBaseLayer, parseOptionalNumber } from "../helpers";
+import { ServiceLibrarySection } from "../ServiceLibrarySection";
+import {
+  serviceFieldString,
+  type ServiceFields,
+} from "../service-library";
 import { AddDataSourceForm, useAddDataSource } from "../shared";
 
 export function WfsSource() {
@@ -16,6 +21,26 @@ export function WfsSource() {
   const [wfsOutputFormat, setWfsOutputFormat] = useState("application/json");
   const [wfsSrsName, setWfsSrsName] = useState("EPSG:4326");
   const [wfsMaxFeatures, setWfsMaxFeatures] = useState("1000");
+
+  const getFields = (): ServiceFields => ({
+    endpoint: wfsEndpoint,
+    typeName: wfsTypeName,
+    version: wfsVersion,
+    outputFormat: wfsOutputFormat,
+    srsName: wfsSrsName,
+    maxFeatures: wfsMaxFeatures,
+  });
+
+  const applyFields = (fields: ServiceFields) => {
+    setWfsEndpoint(serviceFieldString(fields, "endpoint", DEFAULT_WFS_ENDPOINT));
+    setWfsTypeName(serviceFieldString(fields, "typeName", DEFAULT_WFS_TYPE_NAME));
+    setWfsVersion(serviceFieldString(fields, "version", "2.0.0"));
+    setWfsOutputFormat(
+      serviceFieldString(fields, "outputFormat", "application/json"),
+    );
+    setWfsSrsName(serviceFieldString(fields, "srsName", "EPSG:4326"));
+    setWfsMaxFeatures(serviceFieldString(fields, "maxFeatures", "1000"));
+  };
 
   const handleSubmit = source.runSubmit(async () => {
     const name = source.layerName.trim() || "WFS Layer";
@@ -79,6 +104,15 @@ export function WfsSource() {
       useServiceIcon
     >
       <div className="space-y-3">
+        <ServiceLibrarySection
+          kind="wfs"
+          layerName={source.layerName}
+          getFields={getFields}
+          onApply={(entry) => {
+            source.setLayerName(entry.name);
+            applyFields(entry.fields);
+          }}
+        />
         <div className="space-y-1.5">
           <Label htmlFor="wfs-endpoint">Service URL</Label>
           <Input

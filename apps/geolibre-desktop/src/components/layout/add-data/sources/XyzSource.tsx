@@ -7,6 +7,12 @@ import {
 } from "../../../../lib/xyz-url";
 import { DEFAULT_XYZ_URL } from "../constants";
 import { createBaseLayer } from "../helpers";
+import { ServiceLibrarySection } from "../ServiceLibrarySection";
+import {
+  serviceFieldBoolean,
+  serviceFieldString,
+  type ServiceFields,
+} from "../service-library";
 import { AddDataSourceForm, useAddDataSource } from "../shared";
 
 export function XyzSource() {
@@ -14,6 +20,18 @@ export function XyzSource() {
   const [xyzUrl, setXyzUrl] = useState(DEFAULT_XYZ_URL);
   const [xyzTileSize, setXyzTileSize] = useState("256");
   const [xyzShortUrl, setXyzShortUrl] = useState(false);
+
+  const getFields = (): ServiceFields => ({
+    url: xyzUrl,
+    tileSize: xyzTileSize,
+    shortUrl: xyzShortUrl,
+  });
+
+  const applyFields = (fields: ServiceFields) => {
+    setXyzUrl(serviceFieldString(fields, "url", DEFAULT_XYZ_URL));
+    setXyzTileSize(serviceFieldString(fields, "tileSize", "256"));
+    setXyzShortUrl(serviceFieldBoolean(fields, "shortUrl", false));
+  };
 
   const handleSubmit = source.runSubmit(async () => {
     const name = source.layerName.trim() || "XYZ Layer";
@@ -52,6 +70,15 @@ export function XyzSource() {
       submitDisabled={source.isSubmitting}
     >
       <div className="space-y-3">
+        <ServiceLibrarySection
+          kind="xyz"
+          layerName={source.layerName}
+          getFields={getFields}
+          onApply={(entry) => {
+            source.setLayerName(entry.name);
+            applyFields(entry.fields);
+          }}
+        />
         <div className="grid gap-3 sm:grid-cols-[1fr_7rem]">
           <div className="space-y-1.5">
             <Label htmlFor="xyz-url">Tile URL template</Label>

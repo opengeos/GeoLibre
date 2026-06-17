@@ -10,6 +10,11 @@ import {
   DEFAULT_ARCGIS_FEATURE_URL,
   DEFAULT_ARCGIS_URLS,
 } from "../constants";
+import { ServiceLibrarySection } from "../ServiceLibrarySection";
+import {
+  serviceFieldString,
+  type ServiceFields,
+} from "../service-library";
 import { AddDataSourceForm, useAddDataSource } from "../shared";
 
 export function ArcGISSource() {
@@ -22,6 +27,32 @@ export function ArcGISSource() {
   const [arcgisItemId, setArcgisItemId] = useState("");
   const [arcgisPortalUrl, setArcgisPortalUrl] = useState("");
   const [arcgisAccessToken, setArcgisAccessToken] = useState("");
+
+  // The access token is intentionally excluded from saved fields — credentials
+  // must not be persisted to the shared, exportable service library.
+  const getFields = (): ServiceFields => ({
+    layerType: arcgisLayerType,
+    sourceType: arcgisSourceType,
+    url: arcgisUrl,
+    itemId: arcgisItemId,
+    portalUrl: arcgisPortalUrl,
+  });
+
+  const applyFields = (fields: ServiceFields) => {
+    setArcgisLayerType(
+      serviceFieldString(fields, "layerType") === "vector-tile"
+        ? "vector-tile"
+        : "feature",
+    );
+    setArcgisSourceType(
+      serviceFieldString(fields, "sourceType") === "portal-item"
+        ? "portal-item"
+        : "url",
+    );
+    setArcgisUrl(serviceFieldString(fields, "url", DEFAULT_ARCGIS_FEATURE_URL));
+    setArcgisItemId(serviceFieldString(fields, "itemId"));
+    setArcgisPortalUrl(serviceFieldString(fields, "portalUrl"));
+  };
 
   const handleArcgisLayerTypeChange = (nextLayerType: ArcGISLayerType) => {
     const currentUrl = arcgisUrl.trim();
@@ -57,6 +88,15 @@ export function ArcGISSource() {
       submitDisabled={source.isSubmitting}
     >
       <div className="space-y-3">
+        <ServiceLibrarySection
+          kind="arcgis"
+          layerName={source.layerName}
+          getFields={getFields}
+          onApply={(entry) => {
+            source.setLayerName(entry.name);
+            applyFields(entry.fields);
+          }}
+        />
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="arcgis-layer-type">Layer type</Label>

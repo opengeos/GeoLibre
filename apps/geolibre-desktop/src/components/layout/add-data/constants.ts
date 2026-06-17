@@ -85,6 +85,10 @@ export const GPX_PROXY_PATH = "/__geolibre_gpx_proxy";
 export const POSTGRES_CONNECTIONS_STORAGE_KEY =
   "geolibre.postgres.connectionStrings";
 export const MAX_SAVED_POSTGRES_CONNECTIONS = 10;
+// Cross-project catalog of reusable web-service layer definitions (see
+// service-library.ts). Bumping the key would orphan a user's saved services.
+export const SERVICE_LIBRARY_STORAGE_KEY = "geolibre.serviceLibrary";
+export const MAX_SAVED_SERVICES = 200;
 export const DELIMITED_TEXT_DELIMITERS: Record<
   Exclude<DelimitedTextDelimiter, "custom">,
   string
