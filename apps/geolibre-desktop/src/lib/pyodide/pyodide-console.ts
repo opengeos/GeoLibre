@@ -109,12 +109,32 @@ function loadPyodideScript(indexURL: string): Promise<void> {
       await new Promise<void>((resolve, reject) => {
         const script = document.createElement("script");
         script.src = blobUrl;
-        script.onload = () => resolve();
+        // `onload` fires when the blob script is parsed and executed, which does
+        // not guarantee it actually exposed `window.loadPyodide` — a mirror can
+        // return a 200 with an HTML error page or corrupted JS. Verify the global
+        // here so a bad payload rejects (and the `.catch` clears the memo for a
+        // re-fetch) instead of resolving and wedging every later retry.
+        script.onload = () => {
+          if (window.loadPyodide) {
+            resolve();
+            return;
+          }
+          script.remove();
+          reject(
+            new Error(
+              `Pyodide script loaded but window.loadPyodide is not defined; the content at ${scriptUrl} may be incorrect.`,
+            ),
+          );
+        };
         // The shared `.catch` below owns resetting scriptPromise on failure;
         // remove the dead element so a retry doesn't leave orphan <script> tags.
         script.onerror = () => {
           script.remove();
-          reject(new Error("Failed to load the Pyodide runtime script."));
+          reject(
+            new Error(
+              `Failed to execute the Pyodide runtime script from ${scriptUrl}.`,
+            ),
+          );
         };
         document.head.appendChild(script);
       });
