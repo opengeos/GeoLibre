@@ -14,7 +14,6 @@ interface ToolRunResult {
 }
 
 interface ToolsModule {
-  initTools: (source?: unknown) => Promise<unknown>;
   listTools: () => Promise<string[]>;
   runTool: (
     tool: string,
@@ -54,8 +53,33 @@ export async function listWhiteboxWasmTools(): Promise<string[]> {
   return listTools();
 }
 
+function datasetParameterKind(dataKind: string, suffix: "in" | "out"): string {
+  return ["raster", "vector", "lidar", "file"].includes(dataKind)
+    ? `${dataKind}_${suffix}`
+    : `file_${suffix}`;
+}
+
+// Mirror ProcessingDialog's parameterKind: prefer an explicit `kind`, otherwise
+// resolve it from the parameter schema (`schema.dataset.kind` + `io_role`).
+// Without the schema branch, tools that express their kind only through the
+// schema would have their raster/vector/lidar inputs misrouted as scalars.
 function paramKind(p: WhiteboxToolParameter): string {
-  return String(p.kind ?? p.data_kind ?? p.io_role ?? p.type ?? "").toLowerCase();
+  if (p.kind) return String(p.kind).toLowerCase();
+  const schema =
+    p.schema && typeof p.schema === "object"
+      ? (p.schema as Record<string, unknown>)
+      : {};
+  const dataset =
+    schema.dataset && typeof schema.dataset === "object"
+      ? (schema.dataset as Record<string, unknown>)
+      : {};
+  const dataKind = String(
+    p.data_kind ?? dataset.kind ?? p.type ?? "",
+  ).toLowerCase();
+  const role = String(p.io_role ?? schema.kind ?? "").toLowerCase();
+  if (role === "input") return datasetParameterKind(dataKind, "in");
+  if (role === "output") return datasetParameterKind(dataKind, "out");
+  return dataKind;
 }
 
 function isFeatureCollection(value: unknown): value is FeatureCollection {
@@ -66,13 +90,16 @@ function isFeatureCollection(value: unknown): value is FeatureCollection {
   );
 }
 
-/** TIFF magic: "II*\0" (little-endian) or "MM\0*" (big-endian). */
+// TIFF magic: "II" (little-endian) or "MM" (big-endian) followed by the version
+// number in the byte-order's own endianness - 42 (0x2a) for classic TIFF or 43
+// (0x2b) for BigTIFF (rasters larger than 4 GiB).
 function isTiff(b: Uint8Array): boolean {
-  return (
-    b.length >= 4 &&
-    ((b[0] === 0x49 && b[1] === 0x49 && b[2] === 0x2a && b[3] === 0x00) ||
-      (b[0] === 0x4d && b[1] === 0x4d && b[2] === 0x00 && b[3] === 0x2a))
-  );
+  if (b.length < 4) return false;
+  const le = b[0] === 0x49 && b[1] === 0x49;
+  const be = b[0] === 0x4d && b[1] === 0x4d;
+  if (!le && !be) return false;
+  const magic = le ? b[2] : b[3];
+  return magic === 0x2a || magic === 0x2b;
 }
 
 function describeBytes(b: Uint8Array): string {
@@ -191,25 +218,22 @@ export async function runWhiteboxToolWasm(
   for (const entry of outputs) {
     const bytes = files[entry.file];
     if (!bytes) continue;
-    out[entry.name] = entry.raster
-      ? bytes
-      : (JSON.parse(new TextDecoder().decode(bytes)) as FeatureCollection);
+    if (entry.raster) {
+      out[entry.name] = bytes;
+      continue;
+    }
+    // Skip a vector output whose JSON is malformed (e.g. a tool that crashed
+    // mid-write) rather than letting one bad file reject the whole job and lose
+    // every other output. Matches the sidecar path's tolerant handling.
+    try {
+      out[entry.name] = JSON.parse(
+        new TextDecoder().decode(bytes),
+      ) as FeatureCollection;
+    } catch {
+      // leave this output out
+    }
   }
   return job(request.tool_id, "succeeded", stdout, out, null);
 }
 
 export { isFeatureCollection as isWhiteboxFeatureCollection };
-
-// Dev-only hook so end-to-end tests can drive the WASM runner directly in a real
-// browser without clicking through the UI. Tree-shaken out of production builds.
-if (
-  typeof window !== "undefined" &&
-  typeof import.meta !== "undefined" &&
-  (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV
-) {
-  (window as unknown as Record<string, unknown>).__geolibreWhiteboxWasm = {
-    runWhiteboxToolWasm,
-    listWhiteboxWasmTools,
-    whiteboxWasmAvailable,
-  };
-}
