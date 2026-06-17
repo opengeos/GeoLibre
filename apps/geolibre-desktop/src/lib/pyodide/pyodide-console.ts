@@ -72,24 +72,56 @@ function emitProgress(phase: string): void {
 
 let scriptPromise: Promise<void> | null = null;
 
-/** Inject the CDN `pyodide.js` once so `window.loadPyodide` is available. */
+/**
+ * Load `pyodide.js` once so `window.loadPyodide` is available.
+ *
+ * We `fetch()` the script and inject it via a `blob:` URL instead of pointing a
+ * `<script src>` straight at `indexURL`. Tauri's `script-src` CSP only allows
+ * the jsDelivr CDN origins, so a custom `VITE_PYODIDE_INDEX_URL` mirror would be
+ * blocked as a direct script source — but `connect-src` permits `https:`
+ * fetches and `script-src` permits `blob:`, so fetch-then-blob reaches any
+ * mirror. The vector-tools worker sidesteps the same CSP via `importScripts`;
+ * this is the main-thread equivalent, mirroring `external-plugins.ts`. Pyodide's
+ * own asset resolution is unaffected because `indexURL` is passed explicitly to
+ * `loadPyodide({ indexURL })`.
+ */
 function loadPyodideScript(indexURL: string): Promise<void> {
-  scriptPromise ??= new Promise<void>((resolve, reject) => {
-    if (window.loadPyodide) {
-      resolve();
-      return;
+  scriptPromise ??= (async () => {
+    if (window.loadPyodide) return;
+    const scriptUrl = `${indexURL}pyodide.js`;
+    let source: string;
+    try {
+      const response = await fetch(scriptUrl);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      source = await response.text();
+    } catch (cause) {
+      throw new Error(
+        `Failed to load the Pyodide runtime script from ${scriptUrl}.`,
+        { cause },
+      );
     }
-    const script = document.createElement("script");
-    script.src = `${indexURL}pyodide.js`;
-    script.onload = () => resolve();
-    // The shared `.catch` below owns resetting scriptPromise on failure; remove
-    // the dead element so a retry doesn't leave orphan <script> tags in <head>.
-    script.onerror = () => {
-      script.remove();
-      reject(new Error("Failed to load the Pyodide runtime script."));
-    };
-    document.head.appendChild(script);
-  }).catch((error) => {
+    const blobUrl = URL.createObjectURL(
+      new Blob([source], { type: "text/javascript" }),
+    );
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = blobUrl;
+        script.onload = () => resolve();
+        // The shared `.catch` below owns resetting scriptPromise on failure;
+        // remove the dead element so a retry doesn't leave orphan <script> tags.
+        script.onerror = () => {
+          script.remove();
+          reject(new Error("Failed to load the Pyodide runtime script."));
+        };
+        document.head.appendChild(script);
+      });
+    } finally {
+      URL.revokeObjectURL(blobUrl);
+    }
+  })().catch((error) => {
     scriptPromise = null;
     throw error;
   });
