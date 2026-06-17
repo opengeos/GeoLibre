@@ -22,6 +22,11 @@ import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
  */
 
 export const EFFECTS_PLUGIN_ID = "maplibre-atmosphere-effects";
+const EFFECTS_MAP_CLASS = "geolibre-effects-map";
+const EFFECTS_OVERLAY_STYLE_ID = "geolibre-effects-maplibre-overlays";
+const MAP_CANVAS_Z_INDEX = "4";
+const CONTROL_CONTAINER_Z_INDEX = "5";
+const MAPLIBRE_OVERLAY_Z_INDEX = "6";
 
 // Roughly one star per this many CSS pixels of starfield area.
 const STAR_AREA_PER_STAR = 900;
@@ -280,6 +285,7 @@ function solveLinear(m: number[][], b: number[]): number[] | null {
  */
 class EffectsEngine {
   private readonly map: MapLibreMap;
+  private readonly mapRoot: HTMLElement | null;
   private readonly spaceCanvas: HTMLCanvasElement;
   private readonly starsCanvas: HTMLCanvasElement;
   private readonly cometCanvas: HTMLCanvasElement;
@@ -292,6 +298,7 @@ class EffectsEngine {
   private readonly previousMapCanvasZIndex: string;
   private readonly controlContainer: HTMLElement | null;
   private readonly previousControlContainerZIndex: string;
+  private readonly overlayStyle: HTMLStyleElement;
 
   private starfield: HTMLCanvasElement | null = null;
   private starfieldOriginLng = 0;
@@ -311,13 +318,14 @@ class EffectsEngine {
   constructor(map: MapLibreMap) {
     this.map = map;
     this.mapCanvas = map.getCanvas();
+    this.mapRoot = this.mapCanvas.closest(".maplibregl-map");
     this.previousMapCanvasZIndex = this.mapCanvas.style.zIndex;
     this.controlContainer =
-      this.mapCanvas
-        .closest(".maplibregl-map")
-        ?.querySelector<HTMLElement>(".maplibregl-control-container") ?? null;
+      this.mapRoot?.querySelector<HTMLElement>(".maplibregl-control-container") ??
+      null;
     this.previousControlContainerZIndex =
       this.controlContainer?.style.zIndex ?? "";
+    this.overlayStyle = this.ensureOverlayStyle();
     this.spaceCanvas = this.createCanvas(0);
     this.starsCanvas = this.createCanvas(1);
     this.cometCanvas = this.createCanvas(2);
@@ -332,8 +340,11 @@ class EffectsEngine {
     container.appendChild(this.starsCanvas);
     container.appendChild(this.cometCanvas);
     container.appendChild(this.haloCanvas);
-    this.mapCanvas.style.zIndex = "4";
-    if (this.controlContainer) this.controlContainer.style.zIndex = "5";
+    this.mapRoot?.classList.add(EFFECTS_MAP_CLASS);
+    this.mapCanvas.style.zIndex = MAP_CANVAS_Z_INDEX;
+    if (this.controlContainer) {
+      this.controlContainer.style.zIndex = CONTROL_CONTAINER_Z_INDEX;
+    }
 
     this.handleResize = this.handleResize.bind(this);
     this.handleVisibility = this.handleVisibility.bind(this);
@@ -365,10 +376,27 @@ class EffectsEngine {
     if (this.controlContainer) {
       this.controlContainer.style.zIndex = this.previousControlContainerZIndex;
     }
+    this.mapRoot?.classList.remove(EFFECTS_MAP_CLASS);
+    this.overlayStyle.remove();
     this.spaceCanvas.remove();
     this.starsCanvas.remove();
     this.cometCanvas.remove();
     this.haloCanvas.remove();
+  }
+
+  private ensureOverlayStyle(): HTMLStyleElement {
+    const existing = document.getElementById(EFFECTS_OVERLAY_STYLE_ID);
+    if (existing instanceof HTMLStyleElement) return existing;
+
+    const style = document.createElement("style");
+    style.id = EFFECTS_OVERLAY_STYLE_ID;
+    style.textContent = `
+      .${EFFECTS_MAP_CLASS} .maplibregl-boxzoom {
+        z-index: ${MAPLIBRE_OVERLAY_Z_INDEX};
+      }
+    `;
+    document.head.appendChild(style);
+    return style;
   }
 
   private createCanvas(zIndex: number): HTMLCanvasElement {
