@@ -1496,6 +1496,7 @@ body,
   .geolibre-pmtiles-control .maplibre-gl-pmtiles-layer-panel,
   .geolibre-zarr-control .maplibre-gl-zarr-layer-panel,
   .maplibregl-map .pc-control-panel,
+  .maplibregl-map .layer-control-panel,
   .duckdb-control-panel {
     box-sizing: border-box;
     /* 96px clears the mobile top toolbar plus the panel's own top offset */
