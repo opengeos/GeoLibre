@@ -9,7 +9,7 @@ let layerControlPosition: GeoLibreMapControlPosition = "top-right";
 export const maplibreLayerControlPlugin: GeoLibrePlugin = {
   id: "maplibre-layer-control",
   name: "Layer Control",
-  version: "0.14.1",
+  version: "0.16.0",
   activeByDefault: true,
   activate: (app: GeoLibreAppAPI) =>
     app.setBuiltInMapControlVisible("layer-control", true),
