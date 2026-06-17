@@ -1,4 +1,9 @@
-import { type GeoLibreLayer, styleValue, useAppStore } from "@geolibre/core";
+import {
+  type GeoLibreLayer,
+  lineWidthValue,
+  styleValue,
+  useAppStore,
+} from "@geolibre/core";
 import { Geoman, defaultLayerStyles } from "@geoman-io/maplibre-geoman-free";
 import type { Feature, FeatureCollection } from "geojson";
 import type maplibregl from "maplibre-gl";
@@ -990,6 +995,7 @@ function applyGeomanSketchesStyle(
   for (const layer of style.layers) {
     if (!isGeomanDisplayLayer(layer)) continue;
     applyGeomanDisplayLayerOpacity(map, layer, sketchesLayer.opacity);
+    applyGeomanDisplayLayerWidth(map, layer, sketchesLayer.style);
     if (!isGeomanTextMarkerLayer(layer)) continue;
     try {
       map.setLayoutProperty(
@@ -1017,6 +1023,26 @@ function applyGeomanSketchesStyle(
       // Geoman may rebuild its temporary layers while an interaction is active.
     }
   }
+}
+
+/**
+ * Mirror the Sketches layer's stroke width onto Geoman's committed-feature
+ * display line layers. While the draw/edit tools are active the store Sketches
+ * layer is suppressed and Geoman renders the existing features instead; without
+ * this, those features fall back to Geoman's fixed default width, so a custom
+ * (or scale-proportional "meters") stroke width would visibly revert. The
+ * transient drawing aids (in-progress `gm_temporary-*` geometry and snap
+ * guides) keep Geoman's defaults so editing stays legible.
+ */
+function applyGeomanDisplayLayerWidth(
+  map: maplibregl.Map,
+  layer: maplibregl.LayerSpecification,
+  style: GeoLibreLayer["style"],
+): void {
+  if (layer.type !== "line") return;
+  const id = layer.id.toLowerCase();
+  if (!id.startsWith("gm_main") || id.includes("snap")) return;
+  setGeomanPaintProperty(map, layer.id, "line-width", lineWidthValue(style));
 }
 
 function applyGeomanDisplayLayerOpacity(

@@ -80,6 +80,73 @@ export function simpleStyleNumberValue(
   return ["to-number", ["get", property], base];
 }
 
+// Ground resolution (meters per pixel) at MapLibre zoom 0 on the equator, for
+// the Web Mercator projection: earth circumference (2*pi*6378137) over the
+// 512px world at zoom 0. Resolution halves with every zoom level.
+const MERCATOR_METERS_PER_PIXEL_AT_ZOOM_0 = (2 * Math.PI * 6378137) / 512;
+
+// Largest zoom MapLibre renders; used as the upper interpolation stop.
+const MAX_MERCATOR_ZOOM = 24;
+
+/**
+ * Build a zoom-driven width expression that keeps a stroke proportional to the
+ * map scale, so a width given in ground meters renders thicker when zoomed in
+ * and thinner when zoomed out (QGIS "map units" behavior).
+ *
+ * In Web Mercator the pixels-per-meter ratio doubles with each zoom level, so
+ * an `["exponential", 2]` interpolation between two stops one zoom apart is
+ * exact across the whole range. The conversion is referenced to the equator;
+ * because Mercator stretches distances toward the poles, the on-screen width at
+ * higher latitudes is correspondingly larger, matching how the underlying map
+ * is itself stretched.
+ *
+ * Typed maplibre-agnostically (`unknown[]`); consumers cast to the concrete
+ * `PropertyValueSpecification<number>` where the MapLibre types are in scope.
+ *
+ * @param meters - The stroke width in ground meters.
+ * @returns A MapLibre `interpolate` expression array.
+ */
+export function metersWidthExpression(meters: number): unknown[] {
+  const widthAtZoom0 = meters / MERCATOR_METERS_PER_PIXEL_AT_ZOOM_0;
+  return [
+    "interpolate",
+    ["exponential", 2],
+    ["zoom"],
+    0,
+    widthAtZoom0,
+    MAX_MERCATOR_ZOOM,
+    widthAtZoom0 * 2 ** MAX_MERCATOR_ZOOM,
+  ];
+}
+
+/**
+ * Resolve the `line-width` paint value for a layer style, honoring the
+ * {@link LayerStyle.strokeWidthUnit}:
+ *
+ * - `"meters"`: a zoom-driven {@link metersWidthExpression} from the flat
+ *   `strokeWidth`, so the stroke scales with the map. A per-feature pixel
+ *   `stroke-width` override no longer applies in this mode.
+ * - `"pixels"` (default): the constant pixel width, still honoring any
+ *   per-feature simplestyle `stroke-width`.
+ *
+ * Shared by the map style-mapper and the geo-editor plugin so the Sketches
+ * store layer and Geoman's interaction display layers render an identical
+ * width.
+ *
+ * @param style - The layer style.
+ * @returns A number (constant pixels) or a MapLibre expression array.
+ */
+export function lineWidthValue(style: LayerStyle): number | unknown[] {
+  if (styleValue(style, "strokeWidthUnit") === "meters") {
+    return metersWidthExpression(styleValue(style, "strokeWidth"));
+  }
+  return simpleStyleNumberValue(
+    style,
+    "stroke-width",
+    styleValue(style, "strokeWidth"),
+  );
+}
+
 /**
  * Whether a FeatureCollection carries per-feature simplestyle-spec properties
  * worth honoring: at least one feature with a valid hex color in a color key

@@ -1,5 +1,7 @@
 import {
   DEFAULT_LAYER_STYLE,
+  lineWidthValue,
+  metersWidthExpression,
   parseJsonExpression,
   simpleStyleNumberValue,
   vectorCircleColorValue,
@@ -20,40 +22,10 @@ function styleValue<K extends keyof LayerStyle>(
   return style[key] ?? DEFAULT_LAYER_STYLE[key];
 }
 
-// Ground resolution (meters per pixel) at MapLibre zoom 0 on the equator, for
-// the Web Mercator projection: earth circumference (2*pi*6378137) over the
-// 512px world at zoom 0. Resolution halves with every zoom level.
-const MERCATOR_METERS_PER_PIXEL_AT_ZOOM_0 = (2 * Math.PI * 6378137) / 512;
-
-// Largest zoom MapLibre renders; used as the upper interpolation stop.
-const MAX_MERCATOR_ZOOM = 24;
-
-/**
- * Build a zoom-driven `line-width` value that keeps a stroke proportional to
- * the map scale, so a width given in ground meters renders thicker when zoomed
- * in and thinner when zoomed out (QGIS "map units" behavior).
- *
- * In Web Mercator the pixels-per-meter ratio doubles with each zoom level, so
- * an `["exponential", 2]` interpolation between two stops one zoom apart is
- * exact across the whole range. The conversion is referenced to the equator;
- * because Mercator stretches distances toward the poles, the on-screen width at
- * higher latitudes is correspondingly larger, matching how the underlying map
- * is itself stretched.
- */
-export function metersWidthExpression(
-  meters: number,
-): ExpressionSpecification {
-  const widthAtZoom0 = meters / MERCATOR_METERS_PER_PIXEL_AT_ZOOM_0;
-  return [
-    "interpolate",
-    ["exponential", 2],
-    ["zoom"],
-    0,
-    widthAtZoom0,
-    MAX_MERCATOR_ZOOM,
-    widthAtZoom0 * 2 ** MAX_MERCATOR_ZOOM,
-  ];
-}
+// Re-exported for consumers and tests that import the Web Mercator width
+// expression from the map style-mapper; the implementation lives in
+// `@geolibre/core` so the geo-editor plugin can share it.
+export { metersWidthExpression };
 
 // Fold the layer's opacity multiplier into a paint value that may itself be a
 // data-driven (simplestyle) expression rather than a plain number.
@@ -129,25 +101,13 @@ export function fillExtrusionPaint(style: LayerStyle, opacity: number) {
 }
 
 export function linePaint(style: LayerStyle, opacity: number) {
-  // In "meters" mode the width is a ground distance, so it must scale with the
-  // map and a per-feature pixel stroke-width override no longer applies; emit a
-  // zoom expression from the flat width. Otherwise keep the existing pixel
-  // width (which still honors any per-feature simplestyle stroke-width).
-  const lineWidth =
-    styleValue(style, "strokeWidthUnit") === "meters"
-      ? (metersWidthExpression(
-          styleValue(style, "strokeWidth"),
-        ) as unknown as PropertyValueSpecification<number>)
-      : (simpleStyleNumberValue(
-          style,
-          "stroke-width",
-          styleValue(style, "strokeWidth"),
-        ) as unknown as PropertyValueSpecification<number>);
   return {
     "line-color": vectorLineColorValue(
       style,
     ) as PropertyValueSpecification<string>,
-    "line-width": lineWidth,
+    "line-width": lineWidthValue(
+      style,
+    ) as unknown as PropertyValueSpecification<number>,
     "line-opacity": scaleByOpacity(
       simpleStyleNumberValue(style, "stroke-opacity", 1),
       opacity,

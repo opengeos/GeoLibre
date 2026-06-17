@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { DEFAULT_LAYER_STYLE, type LayerStyle } from "@geolibre/core";
-import { linePaint, metersWidthExpression } from "../packages/map/src/style-mapper";
+import {
+  DEFAULT_LAYER_STYLE,
+  lineWidthValue,
+  metersWidthExpression,
+  type LayerStyle,
+} from "@geolibre/core";
+import { linePaint } from "../packages/map/src/style-mapper";
 
 function style(patch: Partial<LayerStyle> = {}): LayerStyle {
   return { ...DEFAULT_LAYER_STYLE, ...patch };
@@ -50,6 +55,27 @@ describe("linePaint with meter stroke width", () => {
     // A pixel-based per-feature override would surface as a ["to-number", ...]
     // expression; meters mode must instead keep the scale-proportional one.
     assert.equal((paint["line-width"] as unknown[])[0], "interpolate");
+  });
+});
+
+describe("lineWidthValue (shared by map + geo-editor plugin)", () => {
+  it("returns a constant pixel width by default", () => {
+    assert.equal(lineWidthValue(style({ strokeWidth: 3 })), 3);
+  });
+
+  it("returns the per-feature simplestyle override when enabled (pixels)", () => {
+    assert.deepEqual(
+      lineWidthValue(style({ strokeWidth: 3, simpleStyleEnabled: true })),
+      ["to-number", ["get", "stroke-width"], 3],
+    );
+  });
+
+  it("returns the meters expression in meters mode, ignoring simplestyle", () => {
+    const value = lineWidthValue(
+      style({ strokeWidth: 80, strokeWidthUnit: "meters", simpleStyleEnabled: true }),
+    ) as unknown[];
+    assert.equal(value[0], "interpolate");
+    assert.deepEqual(value, metersWidthExpression(80));
   });
 });
 
