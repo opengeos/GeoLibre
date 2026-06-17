@@ -131,3 +131,8 @@ export {
   type WhiteboxTool,
   type WhiteboxToolParameter,
 } from "./sidecar-client";
+export {
+  runWhiteboxToolWasm,
+  whiteboxWasmAvailable,
+  listWhiteboxWasmTools,
+} from "./wasm-client";

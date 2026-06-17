@@ -124,6 +124,9 @@ export interface WhiteboxLayerInput {
   name: string;
   kind: string;
   geojson?: FeatureCollection;
+  /** Raw bytes for non-vector inputs (e.g. a GeoTIFF for a raster_in); used by
+   *  the in-browser WASM runner, ignored by the sidecar. */
+  bytes?: Uint8Array;
 }
 
 export interface RunWhiteboxToolRequest {

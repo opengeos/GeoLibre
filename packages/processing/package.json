@@ -9,11 +9,10 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@bjorn3/browser_wasi_shim": "^0.4.2",
     "@geolibre/core": "*",
     "@turf/area": "^7.3.5",
     "@turf/bbox": "^7.3.5",
-    "@turf/tin": "^7.3.5",
-    "@turf/voronoi": "^7.3.5",
     "@turf/boolean-contains": "^7.3.5",
     "@turf/boolean-intersects": "^7.3.5",
     "@turf/boolean-within": "^7.3.5",
@@ -27,8 +26,11 @@
     "@turf/helpers": "^7.3.5",
     "@turf/intersect": "^7.3.5",
     "@turf/simplify": "^7.3.5",
+    "@turf/tin": "^7.3.5",
     "@turf/union": "^7.3.5",
-    "geotiff": "^3.0.5"
+    "@turf/voronoi": "^7.3.5",
+    "geotiff": "^3.0.5",
+    "whitebox-wasm": "^0.4.0"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",

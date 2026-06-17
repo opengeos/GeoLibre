@@ -144,7 +144,27 @@ export async function addRasterToMap(
   if (!control) {
     throw new Error("The raster control could not be initialized.");
   }
-  await control.addRaster(source, { name: options.name, zoomTo: true });
+  const id = await control.addRaster(source, {
+    name: options.name,
+    zoomTo: true,
+  });
+  // Retain the source bytes for File-backed rasters. The store layer only
+  // records the file name (no fetchable URL), so in-browser tools (the WASM
+  // Whitebox runner) could not read it back. Stamp a blob URL onto the layer
+  // so the data stays runnable for the lifetime of the session. The raster
+  // store sync preserves this key across its metadata rebuilds.
+  if (typeof source !== "string") {
+    const store = useAppStore.getState();
+    const layer = store.layers.find((current) => current.id === id);
+    if (layer) {
+      store.updateLayer(id, {
+        metadata: {
+          ...layer.metadata,
+          localBytesUrl: URL.createObjectURL(source),
+        },
+      });
+    }
+  }
 }
 
 /**

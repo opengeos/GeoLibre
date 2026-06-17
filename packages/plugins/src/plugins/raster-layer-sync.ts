@@ -164,15 +164,22 @@ export function syncRasterLayersToStoreWithOptions(
         continue;
       }
 
-      // rasterSymbology (discrete classification) is GeoLibre-owned and not
-      // present on RasterLayerInfo, so carry it forward across the wholesale
-      // metadata rebuild instead of letting every control event wipe it.
+      // rasterSymbology (discrete classification) and localBytesUrl (a blob URL
+      // retaining a File-loaded raster's bytes for in-browser tools) are
+      // GeoLibre-owned and absent from RasterLayerInfo, so carry them forward
+      // across the wholesale metadata rebuild instead of letting every control
+      // event wipe them.
+      const preserved = {
+        ...(existing.metadata.rasterSymbology !== undefined
+          ? { rasterSymbology: existing.metadata.rasterSymbology }
+          : {}),
+        ...(existing.metadata.localBytesUrl !== undefined
+          ? { localBytesUrl: existing.metadata.localBytesUrl }
+          : {}),
+      };
       const metadata =
-        existing.metadata.rasterSymbology !== undefined
-          ? {
-              ...layer.metadata,
-              rasterSymbology: existing.metadata.rasterSymbology,
-            }
+        Object.keys(preserved).length > 0
+          ? { ...layer.metadata, ...preserved }
           : layer.metadata;
 
       if (

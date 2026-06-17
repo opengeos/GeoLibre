@@ -1271,7 +1271,15 @@ export function DesktopShell({
         onOpenChange={setDiagnosticsOpen}
       />
       <Suspense fallback={null}>
-        <ProcessingDialog mapControllerRef={mapControllerRef} />
+        <ProcessingDialog
+          mapControllerRef={mapControllerRef}
+          onAddRaster={async (bytes, name) => {
+            const file = new File([bytes as BlobPart], `${name}.tif`, {
+              type: "image/tiff",
+            });
+            await addRasterToMap(createAppAPI(mapControllerRef), file, { name });
+          }}
+        />
       </Suspense>
       <Suspense fallback={null}>
         <ConversionDialog />
