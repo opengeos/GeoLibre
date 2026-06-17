@@ -52,6 +52,9 @@ export function ArcGISSource() {
     setArcgisUrl(serviceFieldString(fields, "url", DEFAULT_ARCGIS_FEATURE_URL));
     setArcgisItemId(serviceFieldString(fields, "itemId"));
     setArcgisPortalUrl(serviceFieldString(fields, "portalUrl"));
+    // Tokens are never saved, so clear any token typed for a previous entry to
+    // avoid sending it to the newly selected service's endpoint.
+    setArcgisAccessToken("");
   };
 
   const handleArcgisLayerTypeChange = (nextLayerType: ArcGISLayerType) => {

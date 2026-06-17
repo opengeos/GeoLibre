@@ -251,7 +251,13 @@ export function mergeImportedServices(
   imported: ServiceLibraryEntry[],
 ): ServiceLibraryEntry[] {
   const merged = [...existing];
-  const seen = new Set(existing.map((entry) => entry.id));
+  // Reserve built-in ids too: an imported entry reusing one (e.g.
+  // "builtin-xyz-osm") would otherwise be shadowed by the preset in
+  // listServices and become unreachable/non-deletable.
+  const seen = new Set([
+    ...BUILTIN_SERVICES.map((entry) => entry.id),
+    ...existing.map((entry) => entry.id),
+  ]);
   for (const entry of imported) {
     const id = seen.has(entry.id) ? createServiceId() : entry.id;
     seen.add(id);

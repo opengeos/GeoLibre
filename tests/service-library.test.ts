@@ -166,4 +166,12 @@ describe("import / export round-trip", () => {
       ["Existing", "Imported"],
     );
   });
+
+  it("re-ids an imported entry that collides with a built-in id", () => {
+    const builtinId = BUILTIN_SERVICES[0].id;
+    const imported = [makeEntry({ id: builtinId, name: "Imported" })];
+    const merged = mergeImportedServices([], imported);
+    assert.equal(merged.length, 1);
+    assert.notEqual(merged[0].id, builtinId);
+  });
 });
