@@ -82,10 +82,11 @@ describe("lineWidthValue (shared by map + geo-editor plugin)", () => {
 describe("metersWidthExpression", () => {
   it("scales the width so it doubles each zoom level (Web Mercator)", () => {
     const expr = metersWidthExpression(METERS_PER_PIXEL_AT_ZOOM_0) as unknown[];
-    // 1px wide at zoom 0 by construction (width == one pixel of ground).
+    // First stop: zoom level 0 (expr[3]) with a 1px width (expr[4]), because the
+    // input meters == MERCATOR_METERS_PER_PIXEL_AT_ZOOM_0 by construction.
     assert.equal(expr[3], 0);
     assert.equal(expr[4], 1);
-    // ...and 2^24 px wide at zoom 24.
+    // Last stop: zoom level 24 (expr[5]) with a 2^24 px width (expr[6]).
     assert.equal(expr[5], 24);
     assert.equal(expr[6], 2 ** 24);
   });

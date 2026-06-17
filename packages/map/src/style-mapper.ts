@@ -1,7 +1,6 @@
 import {
   DEFAULT_LAYER_STYLE,
   lineWidthValue,
-  metersWidthExpression,
   parseJsonExpression,
   simpleStyleNumberValue,
   vectorCircleColorValue,
@@ -21,11 +20,6 @@ function styleValue<K extends keyof LayerStyle>(
 ): LayerStyle[K] {
   return style[key] ?? DEFAULT_LAYER_STYLE[key];
 }
-
-// Re-exported for consumers and tests that import the Web Mercator width
-// expression from the map style-mapper; the implementation lives in
-// `@geolibre/core` so the geo-editor plugin can share it.
-export { metersWidthExpression };
 
 // Fold the layer's opacity multiplier into a paint value that may itself be a
 // data-driven (simplestyle) expression rather than a plain number.
