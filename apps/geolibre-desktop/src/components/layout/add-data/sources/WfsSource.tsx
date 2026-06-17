@@ -6,7 +6,7 @@ import {
   fetchGeoJsonFeatureCollection,
 } from "../../../../lib/layer-refresh";
 import { DEFAULT_WFS_ENDPOINT, DEFAULT_WFS_TYPE_NAME } from "../constants";
-import { createBaseLayer, parseOptionalNumber } from "../helpers";
+import { createBaseLayer } from "../helpers";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
 import {
   serviceFieldString,
@@ -53,7 +53,9 @@ export function WfsSource() {
     if (!wfsOutputFormat.trim()) {
       throw new Error(t("addData.wfs.errorOutputFormat"));
     }
-    parseOptionalNumber(wfsMaxFeatures, "max features");
+    if (wfsMaxFeatures.trim() && !Number.isFinite(Number(wfsMaxFeatures))) {
+      throw new Error(t("addData.wfs.errorMaxFeaturesNumeric"));
+    }
 
     const featureUrl = createWfsGetFeatureUrl({
       endpoint: wfsEndpoint.trim(),

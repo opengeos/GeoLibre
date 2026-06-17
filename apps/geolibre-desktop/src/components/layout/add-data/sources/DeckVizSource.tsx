@@ -307,7 +307,13 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
       setDeckVizStatus(
         parsed.format === "geojson"
           ? t("addData.deckViz.loadedFeatures", { count: parsed.rowCount })
-          : t("addData.deckViz.loadedTabular", {
+          : // `loadedTabular` interpolates {{rows}} and {{columns}} as already-
+            // pluralized fragments ("3 rows", "2 columns") from loadedRows/
+            // loadedColumns. Composing this way keeps each count on its own
+            // i18next plural rules (correct for languages with >2 plural forms),
+            // while loadedTabular still owns the "Loaded …", the separator, and
+            // the trailing period so translators control order and punctuation.
+            t("addData.deckViz.loadedTabular", {
               rows: t("addData.deckViz.loadedRows", { count: parsed.rowCount }),
               columns: t("addData.deckViz.loadedColumns", {
                 count: parsed.columns.length,

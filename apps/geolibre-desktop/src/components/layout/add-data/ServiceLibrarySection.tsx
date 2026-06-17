@@ -212,12 +212,16 @@ export function ServiceLibrarySection({
       const before = current.length;
       const added = next.length - before;
       const dropped = imported.length - added;
-      const suffix =
-        dropped > 0
-          ? t("addData.serviceLibrary.importedDropped", { dropped })
-          : "";
+      // Two self-contained plural keys (rather than a concatenated suffix) so
+      // translators get a complete sentence and can place the "(N skipped)"
+      // clause wherever their language needs it.
       setNotice(
-        t("addData.serviceLibrary.imported", { count: added, suffix }),
+        dropped > 0
+          ? t("addData.serviceLibrary.importedWithDropped", {
+              count: added,
+              dropped,
+            })
+          : t("addData.serviceLibrary.imported", { count: added }),
       );
     } catch {
       setError(t("addData.serviceLibrary.errorRead"));

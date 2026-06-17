@@ -29,13 +29,19 @@ describe("Add Data dialog kind i18n keys", () => {
         "string",
         `addData.kind.${key}.label is missing or not a string`,
       );
-      assert.ok(entry.label, `addData.kind.${key}.label is empty`);
+      assert.ok(
+        entry.label.trim().length > 0,
+        `addData.kind.${key}.label is empty`,
+      );
       assert.equal(
         typeof entry.description,
         "string",
         `addData.kind.${key}.description is missing or not a string`,
       );
-      assert.ok(entry.description, `addData.kind.${key}.description is empty`);
+      assert.ok(
+        entry.description.trim().length > 0,
+        `addData.kind.${key}.description is empty`,
+      );
     });
   }
 });

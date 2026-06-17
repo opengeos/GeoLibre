@@ -101,9 +101,10 @@
       "errorTooLarge": "File is too large to import (max 5 MB).",
       "errorNoServices": "No valid services found in that file.",
       "errorRead": "Could not read that file as a service library.",
-      "imported_one": "Imported {{count}} service{{suffix}}.",
-      "imported_other": "Imported {{count}} services{{suffix}}.",
-      "importedDropped": " ({{dropped}} skipped — library full)"
+      "imported_one": "Imported {{count}} service.",
+      "imported_other": "Imported {{count}} services.",
+      "importedWithDropped_one": "Imported {{count}} service ({{dropped}} skipped — library full).",
+      "importedWithDropped_other": "Imported {{count}} services ({{dropped}} skipped — library full)."
     },
     "xyz": {
       "defaultName": "XYZ Layer",
@@ -131,7 +132,8 @@
       "version": "Version",
       "outputFormat": "Output format",
       "srsName": "SRS name",
-      "maxFeatures": "Max features"
+      "maxFeatures": "Max features",
+      "errorMaxFeaturesNumeric": "Enter a numeric max features value."
     },
     "wmts": {
       "defaultName": "WMTS Layer",
@@ -231,6 +233,14 @@
       "defaultName": "Video Layer",
       "errorUrl": "Enter a video URL.",
       "errorHttps": "Video URLs must start with https://.",
+      "cornerTopLeft": "top-left",
+      "cornerTopRight": "top-right",
+      "cornerBottomRight": "bottom-right",
+      "cornerBottomLeft": "bottom-left",
+      "errorCornerFormat": "Enter the {{corner}} corner as \"longitude, latitude\".",
+      "errorCornerNumber": "Enter a numeric {{corner}} longitude and latitude.",
+      "errorCornerLng": "{{corner}} longitude must be between -180 and 180.",
+      "errorCornerLat": "{{corner}} latitude must be between -90 and 90.",
       "primaryUrl": "Primary video URL",
       "primaryUrlPlaceholder": "https://example.com/clip.mp4",
       "fallbackUrl": "Fallback video URL (optional)",

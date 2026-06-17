@@ -9,7 +9,7 @@ import {
   DEFAULT_VIDEO_TOP_RIGHT,
   DEFAULT_VIDEO_WEBM_URL,
 } from "../constants";
-import { createBaseLayer, parseVideoCorner } from "../helpers";
+import { createBaseLayer } from "../helpers";
 import { AddDataSourceForm, useAddDataSource } from "../shared";
 
 export function VideoSource() {
@@ -25,6 +25,28 @@ export function VideoSource() {
   const [videoBottomLeft, setVideoBottomLeft] = useState(
     DEFAULT_VIDEO_BOTTOM_LEFT,
   );
+
+  // Local, translated equivalent of helpers' parseVideoCorner: parses a
+  // "longitude, latitude" corner into a [lng, lat] pair and throws localized
+  // validation errors (the shared helper stays English for its unit tests).
+  const parseCorner = (value: string, corner: string): [number, number] => {
+    const parts = value.split(",").map((part) => part.trim());
+    if (parts.length !== 2) {
+      throw new Error(t("addData.video.errorCornerFormat", { corner }));
+    }
+    const lng = Number(parts[0]);
+    const lat = Number(parts[1]);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+      throw new Error(t("addData.video.errorCornerNumber", { corner }));
+    }
+    if (lng < -180 || lng > 180) {
+      throw new Error(t("addData.video.errorCornerLng", { corner }));
+    }
+    if (lat < -90 || lat > 90) {
+      throw new Error(t("addData.video.errorCornerLat", { corner }));
+    }
+    return [lng, lat];
+  };
 
   const handleSubmit = source.runSubmit(() => {
     const name = source.layerName.trim() || t("addData.video.defaultName");
@@ -46,10 +68,10 @@ export function VideoSource() {
       [number, number],
       [number, number],
     ] = [
-      parseVideoCorner(videoTopLeft, "top-left"),
-      parseVideoCorner(videoTopRight, "top-right"),
-      parseVideoCorner(videoBottomRight, "bottom-right"),
-      parseVideoCorner(videoBottomLeft, "bottom-left"),
+      parseCorner(videoTopLeft, t("addData.video.cornerTopLeft")),
+      parseCorner(videoTopRight, t("addData.video.cornerTopRight")),
+      parseCorner(videoBottomRight, t("addData.video.cornerBottomRight")),
+      parseCorner(videoBottomLeft, t("addData.video.cornerBottomLeft")),
     ];
     const lngs = coordinates.map((corner) => corner[0]);
     const lats = coordinates.map((corner) => corner[1]);
