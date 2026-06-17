@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { getSpatialExtensionPath, useAppStore } from "@geolibre/core";
 import type {
   VectorControl,
   VectorControlEventHandler,
@@ -301,6 +301,9 @@ function createVectorControl(
     panelWidth: 380,
     title: "Add Vector Layer",
     urlPlaceholder: DEFAULT_VECTOR_URL,
+    // Skip the remote spatial-extension install in offline/sandboxed
+    // environments when a local extension path is configured.
+    spatialExtensionPath: getSpatialExtensionPath(),
   });
 
   for (const event of ["layeradded", "layerremoved", "layerupdated"] as const) {
