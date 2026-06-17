@@ -346,7 +346,10 @@ const COLORBAR_OPTIONS = {
   className: "geolibre-colorbar-control",
   collapsed: false,
   fontColor: "hsl(var(--popover-foreground))",
-  maxHeight: 520,
+  // Omit maxHeight so the control auto-fits the available viewport height
+  // (maplibre-gl-components >= 0.20.6). A fixed cap forced an unnecessary
+  // scrollbar even on tall screens, because the panel starts expanded and so
+  // never fires the "expand" event that constrainGuiPanelToViewport hooks.
   panelWidth: 320,
   position: colorbarControlPosition,
 } satisfies ColorbarGuiControlOptions;
@@ -356,7 +359,8 @@ const LEGEND_OPTIONS = {
   className: "geolibre-legend-control",
   collapsed: false,
   fontColor: "hsl(var(--popover-foreground))",
-  maxHeight: 520,
+  // Omit maxHeight so the control auto-fits the available viewport height
+  // (maplibre-gl-components >= 0.20.6); see COLORBAR_OPTIONS above.
   panelWidth: 320,
   position: legendControlPosition,
 } satisfies LegendGuiControlOptions;
