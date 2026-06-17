@@ -307,11 +307,12 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
       setDeckVizStatus(
         parsed.format === "geojson"
           ? t("addData.deckViz.loadedFeatures", { count: parsed.rowCount })
-          : `${t("addData.deckViz.loadedRows", {
-              count: parsed.rowCount,
-            })} · ${t("addData.deckViz.loadedColumns", {
-              count: parsed.columns.length,
-            })}.`,
+          : t("addData.deckViz.loadedTabular", {
+              rows: t("addData.deckViz.loadedRows", { count: parsed.rowCount }),
+              columns: t("addData.deckViz.loadedColumns", {
+                count: parsed.columns.length,
+              }),
+            }),
       );
     } catch (err) {
       source.setError(errorMessage(err, t("addData.deckViz.errorLoad")));

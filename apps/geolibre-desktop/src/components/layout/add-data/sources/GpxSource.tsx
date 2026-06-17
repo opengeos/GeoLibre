@@ -19,7 +19,10 @@ import type { GpxLayerKind, GpxMode } from "../types";
 
 export function GpxSource() {
   const { t } = useTranslation();
-  const source = useAddDataSource(t("addData.gpx.defaultName"));
+  // Captured once on mount so the "did the user rename it?" comparisons below
+  // stay stable even if the UI language changes while the dialog is open.
+  const [defaultName] = useState(() => t("addData.gpx.defaultName"));
+  const source = useAddDataSource(defaultName);
   const [gpxMode, setGpxMode] = useState<GpxMode>("url");
   const [gpxUrl, setGpxUrl] = useState(DEFAULT_GPX_URL);
   const [selectedGpx, setSelectedGpx] = useState<{
@@ -76,9 +79,9 @@ export function GpxSource() {
         text: result.text,
       });
       source.setLayerName((current) =>
-        current.trim() && current !== t("addData.gpx.defaultName")
+        current.trim() && current !== defaultName
           ? current
-          : layerNameFromPath(result.path, t("addData.gpx.defaultName")),
+          : layerNameFromPath(result.path, defaultName),
       );
     } catch (err) {
       source.setError(errorMessage(err, t("addData.gpx.readError")));
@@ -113,7 +116,7 @@ export function GpxSource() {
   };
 
   const handleSubmit = source.runSubmit(async () => {
-    const name = source.layerName.trim() || t("addData.gpx.defaultName");
+    const name = source.layerName.trim() || defaultName;
     if (!hasSelectedGpxLayerKind) {
       throw new Error(t("addData.gpx.errorSelectType"));
     }

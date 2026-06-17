@@ -25,7 +25,10 @@ import type { DelimitedTextDelimiter, DelimitedTextMode } from "../types";
 
 export function DelimitedTextSource() {
   const { t } = useTranslation();
-  const source = useAddDataSource(t("addData.delimitedText.defaultName"));
+  // Captured once on mount so the "did the user rename it?" comparisons below
+  // stay stable even if the UI language changes while the dialog is open.
+  const [defaultName] = useState(() => t("addData.delimitedText.defaultName"));
+  const source = useAddDataSource(defaultName);
   const [delimitedTextMode, setDelimitedTextMode] =
     useState<DelimitedTextMode>("url");
   const [delimitedTextUrl, setDelimitedTextUrl] = useState(
@@ -118,12 +121,11 @@ export function DelimitedTextSource() {
       });
       resetDelimitedTextColumns();
       source.setLayerName((current) =>
-        current.trim() &&
-        current !== t("addData.delimitedText.defaultName")
+        current.trim() && current !== defaultName
           ? current
           : layerNameFromPath(
               result.path,
-              t("addData.delimitedText.defaultName"),
+              defaultName,
             ),
       );
     } catch (err) {
@@ -181,7 +183,7 @@ export function DelimitedTextSource() {
 
   const handleSubmit = source.runSubmit(async () => {
     const name =
-      source.layerName.trim() || t("addData.delimitedText.defaultName");
+      source.layerName.trim() || defaultName;
     const delimiter = resolveDelimitedTextDelimiter(
       delimitedTextDelimiter,
       delimitedTextCustomDelimiter,

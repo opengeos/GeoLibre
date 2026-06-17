@@ -19,7 +19,10 @@ import { AddDataSourceForm, useAddDataSource } from "../shared";
 
 export function MbtilesSource() {
   const { t } = useTranslation();
-  const source = useAddDataSource(t("addData.mbtiles.defaultName"));
+  // Captured once on mount so the "did the user rename it?" comparison below
+  // stays stable even if the UI language changes while the dialog is open.
+  const [defaultName] = useState(() => t("addData.mbtiles.defaultName"));
+  const source = useAddDataSource(defaultName);
   const [selectedMbtiles, setSelectedMbtiles] = useState<{
     metadata: MbtilesMetadata;
     path: string;
@@ -43,10 +46,9 @@ export function MbtilesSource() {
       setSelectedMbtiles({ metadata, path: result.path });
       setMbtilesSourceLayers(metadata.sourceLayers.join(", "));
       source.setLayerName((current) =>
-        current.trim() && current !== t("addData.mbtiles.defaultName")
+        current.trim() && current !== defaultName
           ? current
-          : metadata.name ||
-            layerNameFromPath(result.path, t("addData.mbtiles.defaultName")),
+          : metadata.name || layerNameFromPath(result.path, defaultName),
       );
     } catch (err) {
       source.setError(errorMessage(err, t("addData.mbtiles.readError")));
@@ -54,7 +56,7 @@ export function MbtilesSource() {
   };
 
   const handleSubmit = source.runSubmit(() => {
-    const name = source.layerName.trim() || t("addData.mbtiles.defaultName");
+    const name = source.layerName.trim() || defaultName;
     if (!selectedMbtiles)
       throw new Error(t("addData.mbtiles.errorChooseFile"));
     registerMbtilesProtocol();

@@ -103,7 +103,7 @@
       "errorRead": "Could not read that file as a service library.",
       "imported_one": "Imported {{count}} service{{suffix}}.",
       "imported_other": "Imported {{count}} services{{suffix}}.",
-      "importedDropped": " ({{count}} skipped — library full)"
+      "importedDropped": " ({{dropped}} skipped — library full)"
     },
     "xyz": {
       "defaultName": "XYZ Layer",
@@ -253,10 +253,11 @@
       "errorExample": "Could not load the example data.",
       "loadedFeatures_one": "Loaded {{count}} feature.",
       "loadedFeatures_other": "Loaded {{count}} features.",
-      "loadedRows_one": "Loaded {{count}} row",
-      "loadedRows_other": "Loaded {{count}} rows",
+      "loadedRows_one": "{{count}} row",
+      "loadedRows_other": "{{count}} rows",
       "loadedColumns_one": "{{count}} column",
       "loadedColumns_other": "{{count}} columns",
+      "loadedTabular": "Loaded {{rows}} · {{columns}}.",
       "errorLoad": "Could not load the data.",
       "errorLoadFirst": "Load the example data, or a file/URL, first.",
       "useExample": "Use example data",

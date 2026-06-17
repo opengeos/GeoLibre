@@ -214,7 +214,7 @@ export function ServiceLibrarySection({
       const dropped = imported.length - added;
       const suffix =
         dropped > 0
-          ? t("addData.serviceLibrary.importedDropped", { count: dropped })
+          ? t("addData.serviceLibrary.importedDropped", { dropped })
           : "";
       setNotice(
         t("addData.serviceLibrary.imported", { count: added, suffix }),
