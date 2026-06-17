@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { getRuntimeEnvironment, useAppStore } from "@geolibre/core";
 import type {
   VectorControl,
   VectorControlEventHandler,
@@ -20,6 +20,28 @@ const vectorControlPosition: GeoLibreMapControlPosition = "top-left";
 const VECTOR_PANEL_CLASS = "geolibre-vector-panel";
 const DEFAULT_VECTOR_URL =
   "https://data.source.coop/giswqs/opengeos/countries.parquet";
+
+/**
+ * Resolve a local DuckDB spatial extension path from the runtime environment.
+ *
+ * The control's own DuckDB-WASM engine installs the spatial extension from a
+ * remote repository, which hangs in sandboxed or firewalled environments. When
+ * `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` is set (the same variable GeoLibre's own
+ * DuckDB loader honours), the path is forwarded so the control loads the
+ * extension locally instead. Mirrors `getSpatialExtensionPath` in the desktop
+ * app, kept here so the plugin package does not depend on the app.
+ *
+ * @param env - Environment record (defaults to the runtime environment);
+ *   injectable for testing.
+ * @returns The trimmed extension path, or undefined when unset.
+ */
+export function vectorSpatialExtensionPath(
+  env?: Record<string, string | undefined>,
+): string | undefined {
+  const runtimeEnv = env ?? getRuntimeEnvironment();
+  const value = runtimeEnv.VITE_DUCKDB_SPATIAL_EXTENSION_PATH;
+  return value && value.trim() ? value.trim() : undefined;
+}
 
 // These types mirror undocumented private members of VectorControl from
 // maplibre-gl-vector (verified against v0.2.0). All access is optional (?.)
@@ -301,6 +323,9 @@ function createVectorControl(
     panelWidth: 380,
     title: "Add Vector Layer",
     urlPlaceholder: DEFAULT_VECTOR_URL,
+    // Skip the remote spatial-extension install in offline/sandboxed
+    // environments when a local extension path is configured.
+    spatialExtensionPath: vectorSpatialExtensionPath(),
   });
 
   for (const event of ["layeradded", "layerremoved", "layerupdated"] as const) {
