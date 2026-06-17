@@ -157,6 +157,7 @@ bound to a missing or non-attribute layer are shown as empty.
     "fillColor": "#3b82f6",
     "strokeColor": "#1e40af",
     "strokeWidth": 2,
+    "strokeWidthUnit": "pixels",
     "fillOpacity": 0.6,
     "circleRadius": 6,
     "rasterBrightnessMin": 0,

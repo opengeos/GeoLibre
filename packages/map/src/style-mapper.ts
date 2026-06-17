@@ -1,5 +1,6 @@
 import {
   DEFAULT_LAYER_STYLE,
+  lineWidthValue,
   parseJsonExpression,
   simpleStyleNumberValue,
   vectorCircleColorValue,
@@ -98,10 +99,8 @@ export function linePaint(style: LayerStyle, opacity: number) {
     "line-color": vectorLineColorValue(
       style,
     ) as PropertyValueSpecification<string>,
-    "line-width": simpleStyleNumberValue(
+    "line-width": lineWidthValue(
       style,
-      "stroke-width",
-      styleValue(style, "strokeWidth"),
     ) as unknown as PropertyValueSpecification<number>,
     "line-opacity": scaleByOpacity(
       simpleStyleNumberValue(style, "stroke-opacity", 1),

@@ -2,6 +2,7 @@ import {
   DEFAULT_LAYER_STYLE,
   type LayerType,
   type PointRenderer,
+  type StrokeWidthUnit,
   VECTOR_COLOR_RAMPS,
   type VectorStyleMode,
   type VectorStyleStop,
@@ -1059,6 +1060,12 @@ export function StylePanel({
     layer.metadata.sourceKind === "maplibre-gl-vector" &&
     layer.metadata.geometryType === "point";
   const supportsPointRenderer = isCoreGeoJsonPoint || isVectorControlPoint;
+  const strokeWidthUnit = styleValue(style, "strokeWidthUnit");
+  // The unit only affects line/polygon-outline rendering. Point layers always
+  // stroke in pixels, so never present meters semantics (label/range/selector)
+  // for them, even if a hand-edited project set "meters".
+  const strokeWidthInMeters =
+    strokeWidthUnit === "meters" && !supportsPointRenderer;
   const pointRenderer = styleValue(style, "pointRenderer");
   const extrusionEnabled = styleValue(style, "extrusionEnabled");
   const extrusionHeightPropertyOptions = getAttributePropertyNames(layer);
@@ -1706,13 +1713,38 @@ export function StylePanel({
       </div>
       <NumericStyleInput
         id="strokeWidth"
-        label="Stroke width"
+        label={strokeWidthInMeters ? "Stroke width (meters)" : "Stroke width"}
         min={0}
-        max={20}
-        step={0.5}
+        max={strokeWidthInMeters ? 100000 : 20}
+        step={strokeWidthInMeters ? 1 : 0.5}
         value={style.strokeWidth}
         onChange={(strokeWidth) => setLayerStyle(layer.id, { strokeWidth })}
       />
+      {supportsPointRenderer ? null : (
+        <div className="space-y-2">
+          <Label htmlFor="strokeWidthUnit">Stroke width unit</Label>
+          <Select
+            id="strokeWidthUnit"
+            value={strokeWidthUnit}
+            onChange={(event) => {
+              const nextUnit = event.target.value as StrokeWidthUnit;
+              // Meters and pixels are not freely convertible (pixel size
+              // depends on zoom), so a large meters width would render as a
+              // map-filling pixel width when switched back. Reset to the pixel
+              // default when leaving meters with an out-of-range value.
+              setLayerStyle(layer.id, {
+                strokeWidthUnit: nextUnit,
+                ...(nextUnit === "pixels" && style.strokeWidth > 20
+                  ? { strokeWidth: DEFAULT_LAYER_STYLE.strokeWidth }
+                  : {}),
+              });
+            }}
+          >
+            <option value="pixels">Pixels (constant on screen)</option>
+            <option value="meters">Meters (scales with map)</option>
+          </Select>
+        </div>
+      )}
       <NumericStyleInput
         id="fillOpacity"
         label="Fill opacity"

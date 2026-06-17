@@ -73,6 +73,13 @@ export type VectorStyleMode =
  */
 export type PointRenderer = "single" | "heatmap" | "cluster";
 
+/**
+ * Unit a stroke/line width is measured in. `"pixels"` is constant screen space;
+ * `"meters"` is ground distance, so the rendered width scales with the map
+ * scale (zoom). See {@link LayerStyle.strokeWidthUnit}.
+ */
+export type StrokeWidthUnit = "pixels" | "meters";
+
 export interface VectorStyleStop {
   value: string | number;
   color: string;
@@ -85,6 +92,17 @@ export interface LayerStyle {
   fillColor: string;
   strokeColor: string;
   strokeWidth: number;
+  /**
+   * Unit the {@link strokeWidth} value is expressed in.
+   *
+   * - `"pixels"` (default): a constant screen-space width that never changes
+   *   with zoom — the historical behavior.
+   * - `"meters"`: a ground-distance width, so the rendered line stays
+   *   proportional to the map scale (thicker zoomed in, thinner zoomed out),
+   *   matching QGIS "map units". Only affects line/polygon-outline rendering;
+   *   point/circle outlines remain pixel-based.
+   */
+  strokeWidthUnit: StrokeWidthUnit;
   fillOpacity: number;
   circleRadius: number;
   textColor: string;
@@ -134,6 +152,7 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
   fillColor: "#3b82f6",
   strokeColor: "#1e40af",
   strokeWidth: 2,
+  strokeWidthUnit: "pixels",
   fillOpacity: 0.6,
   circleRadius: 6,
   textColor: "#111827",
