@@ -127,7 +127,7 @@ function normalizeEntry(value: unknown): ServiceLibraryEntry | null {
   if (Object.keys(fields).length === 0) return null;
   const id =
     typeof record.id === "string" && record.id.trim()
-      ? record.id
+      ? record.id.trim()
       : createServiceId();
   const category =
     typeof record.category === "string" ? record.category.trim() : "";

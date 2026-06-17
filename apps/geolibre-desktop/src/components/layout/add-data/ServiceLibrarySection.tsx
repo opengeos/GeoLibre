@@ -193,11 +193,15 @@ export function ServiceLibrarySection({
         setError("No valid services found in that file.");
         return;
       }
+      // Merge against the freshly-persisted list rather than the closed-over
+      // `userEntries`, which may be stale after the `await file.text()` if the
+      // user saved/deleted in the meantime.
       // mergeImportedServices caps the combined list at MAX_SAVED_SERVICES, so
       // report the count actually kept rather than the count in the file.
-      const before = userEntries.length;
-      const next = mergeImportedServices(userEntries, imported);
+      const current = readUserServices();
+      const next = mergeImportedServices(current, imported);
       persist(next);
+      const before = current.length;
       const added = next.length - before;
       const dropped = imported.length - added;
       setNotice(
