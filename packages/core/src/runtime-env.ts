@@ -27,3 +27,25 @@ export function getRuntimeEnvironment(): Record<string, string | undefined> {
     ...(window.__GEOLIBRE_RUNTIME_ENV__ ?? {}),
   };
 }
+
+/**
+ * Resolves a local DuckDB spatial extension path from the runtime environment.
+ *
+ * When `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` is set, DuckDB consumers (the
+ * desktop app's own loader and the Add Vector panel's maplibre-gl-vector
+ * control) load the spatial extension from this path with `LOAD '<path>'`
+ * instead of installing it from the remote repository, which hangs in
+ * sandboxed or firewalled environments. Lives in `@geolibre/core` so every
+ * consumer shares one implementation.
+ *
+ * @param env - Environment record (defaults to the runtime environment);
+ *   injectable for testing.
+ * @returns The trimmed extension path, or undefined when unset.
+ */
+export function getSpatialExtensionPath(
+  env?: Record<string, string | undefined>,
+): string | undefined {
+  const runtimeEnv = env ?? getRuntimeEnvironment();
+  const value = runtimeEnv.VITE_DUCKDB_SPATIAL_EXTENSION_PATH;
+  return value && value.trim() ? value.trim() : undefined;
+}
