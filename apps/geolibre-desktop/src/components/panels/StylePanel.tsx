@@ -2,6 +2,7 @@ import {
   DEFAULT_LAYER_STYLE,
   type LayerType,
   type PointRenderer,
+  type StrokeWidthUnit,
   VECTOR_COLOR_RAMPS,
   type VectorStyleMode,
   type VectorStyleStop,
@@ -1706,13 +1707,34 @@ export function StylePanel({
       </div>
       <NumericStyleInput
         id="strokeWidth"
-        label="Stroke width"
+        label={
+          styleValue(style, "strokeWidthUnit") === "meters"
+            ? "Stroke width (meters)"
+            : "Stroke width"
+        }
         min={0}
-        max={20}
-        step={0.5}
+        max={styleValue(style, "strokeWidthUnit") === "meters" ? 100000 : 20}
+        step={styleValue(style, "strokeWidthUnit") === "meters" ? 1 : 0.5}
         value={style.strokeWidth}
         onChange={(strokeWidth) => setLayerStyle(layer.id, { strokeWidth })}
       />
+      {isPointOnly ? null : (
+        <div className="space-y-2">
+          <Label htmlFor="strokeWidthUnit">Stroke width unit</Label>
+          <Select
+            id="strokeWidthUnit"
+            value={styleValue(style, "strokeWidthUnit")}
+            onChange={(event) =>
+              setLayerStyle(layer.id, {
+                strokeWidthUnit: event.target.value as StrokeWidthUnit,
+              })
+            }
+          >
+            <option value="pixels">Pixels (constant on screen)</option>
+            <option value="meters">Meters (scales with map)</option>
+          </Select>
+        </div>
+      )}
       <NumericStyleInput
         id="fillOpacity"
         label="Fill opacity"
