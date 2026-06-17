@@ -83,6 +83,10 @@ let rasterControl: RasterControl | null = null;
 let rasterControlMounted = false;
 let restorePanelExpandTimeout: number | null = null;
 let rasterControlInterleaved = true;
+// Blob URLs minted for File-backed rasters (see addRasterToMap), keyed by
+// raster layer id. Tracked here so they can be revoked when the raster is
+// removed; otherwise each would leak until the page unloads.
+const localBytesUrls = new Map<string, string>();
 
 /**
  * Opens the maplibre-gl-raster panel, mounting the control on first use.
@@ -157,10 +161,12 @@ export async function addRasterToMap(
     const store = useAppStore.getState();
     const layer = store.layers.find((current) => current.id === id);
     if (layer) {
+      const blobUrl = URL.createObjectURL(source);
+      localBytesUrls.set(id, blobUrl);
       store.updateLayer(id, {
         metadata: {
           ...layer.metadata,
-          localBytesUrl: URL.createObjectURL(source),
+          localBytesUrl: blobUrl,
         },
       });
     }
@@ -396,9 +402,16 @@ function createRasterControl(
   for (const event of ["rasteradd", "rasterchange", "rasterremove"] as const) {
     control.on(event, () => syncRasterLayersToStoreForRuntime(control));
   }
-  // Free the per-layer classification GPU texture when its raster is dropped.
+  // Free the per-layer classification GPU texture, and revoke any retained
+  // local-bytes blob URL, when its raster is dropped.
   control.on("rasterremove", (event) => {
-    if (event.layerId) disposeRasterClassification(event.layerId);
+    if (!event.layerId) return;
+    disposeRasterClassification(event.layerId);
+    const blobUrl = localBytesUrls.get(event.layerId);
+    if (blobUrl) {
+      URL.revokeObjectURL(blobUrl);
+      localBytesUrls.delete(event.layerId);
+    }
   });
   // syncRasterLayersToStore re-reads getState().collapsed when these fire.
   // Safe: expand()/collapse() delegate to toggle(), which flips

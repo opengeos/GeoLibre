@@ -57,6 +57,7 @@ import {
   pickSavePathWithFallback,
   type FileDialogFilter,
 } from "../../lib/tauri-io";
+import { fetchableUrl } from "../../lib/url-utils";
 import { startGeoLibreSidecar, stopGeoLibreSidecar } from "../../lib/sidecar";
 
 interface ProcessingDialogProps {
@@ -235,16 +236,6 @@ function layerPath(layer: GeoLibreLayer): string {
   const tiles = layer.source.tiles;
   if (Array.isArray(tiles) && typeof tiles[0] === "string") return tiles[0];
   return "";
-}
-
-// Resolve a fetchable http/blob/data URL from a layer source value, stripping a
-// MapLibre custom protocol prefix (e.g. "cog://https://..." or "cog://blob:...").
-function fetchableUrl(value: unknown): string | null {
-  if (typeof value !== "string" || value.length === 0) return null;
-  if (/^(https?|blob|data|file):/i.test(value)) return value;
-  const inner = value.match(/^[a-z][\w+.-]*:\/\/(.+)$/i);
-  if (inner && /^(https?|blob|data):/i.test(inner[1])) return inner[1];
-  return null;
 }
 
 // Fetch a raster/LiDAR layer's underlying bytes for the in-browser WASM runner.
@@ -684,7 +675,10 @@ export function ProcessingDialog({
           };
         } else if (runLocal && (kind === "raster_in" || kind === "lidar_in")) {
           // WASM runs in-browser: pass the layer's actual bytes (fetched here),
-          // not a path. Fall back to a path/the sidecar when not fetchable.
+          // not a path. When the bytes are not fetchable in the browser (e.g. a
+          // desktop file path), fall back to the path: the WASM runner tries to
+          // fetch it as a URL and, failing that, surfaces a clear "data is not
+          // fetchable here; turn off Run locally" error (see wasm-client.ts).
           const bytes = await fetchLayerBytes(layer);
           if (bytes) {
             layerInputs[param.name] = { name: layer.name, kind, bytes };

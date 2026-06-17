@@ -1,16 +1,7 @@
 import type { GeoLibreLayer } from "@geolibre/core";
 
 import { saveBinaryFileWithFallback } from "./tauri-io";
-
-// Accept http(s)/blob/data/file URLs and unwrap a `cog://`-style wrapper, the
-// same scheme handling the Processing dialog uses to read raster bytes.
-function fetchableUrl(value: unknown): string | null {
-  if (typeof value !== "string" || value.length === 0) return null;
-  if (/^(https?|blob|data|file):/i.test(value)) return value;
-  const inner = value.match(/^[a-z][\w+.-]*:\/\/(.+)$/i);
-  if (inner && /^(https?|blob|data):/i.test(inner[1])) return inner[1];
-  return null;
-}
+import { fetchableUrl } from "./url-utils";
 
 /**
  * A fetchable URL for a raster layer's underlying GeoTIFF/COG bytes, or null.

@@ -554,6 +554,7 @@ export function LayerPanel({
 
   const handleExportRasterLayer = useCallback(
     async (layer: GeoLibreLayer) => {
+      clearRefreshStatusTimer(layer.id);
       try {
         const savedPath = await exportRasterLayer(
           layer,
@@ -579,7 +580,7 @@ export function LayerPanel({
         scheduleStatusClear(layer.id);
       }
     },
-    [scheduleStatusClear],
+    [clearRefreshStatusTimer, scheduleStatusClear],
   );
 
   // Read through a ref inside interval callbacks so long-lived timers never
