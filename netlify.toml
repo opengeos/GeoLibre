@@ -22,7 +22,7 @@
     && python -m pip install -r apps/geolibre-desktop/jupyterlite/requirements.txt \
     && npm ci \
     && npm run build -w geolibre-desktop \
-    && mkdocs build --strict --site-dir site \
+    && zensical build --strict \
     && mkdir -p site/demo \
     && cp -R apps/geolibre-desktop/dist/. site/demo/ \
     && test -f site/demo/index.html \

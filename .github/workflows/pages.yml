@@ -63,7 +63,7 @@ jobs:
           VITE_GEOLIBRE_COLLAB_URL: wss://collab.geolibre.app
 
       - name: Build documentation
-        run: mkdocs build --strict --site-dir site
+        run: zensical build --strict
 
       - name: Add web demo to site
         run: |

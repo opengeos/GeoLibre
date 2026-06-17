@@ -152,16 +152,17 @@ uploads its report as an artifact on failure.
 
 ## Documentation
 
-The site is built with [MkDocs Material](https://squidfunk.github.io/mkdocs-material/).
-To preview your changes locally:
+The site is built with [Zensical](https://zensical.org), the successor to
+MkDocs Material from the same team. It reads the existing `mkdocs.yml`
+configuration directly. To preview your changes locally:
 
 ```bash
 python -m pip install -r requirements-docs.txt
-mkdocs serve
+zensical serve
 ```
 
 Open <http://localhost:8000>. When you add a new page, add it to the `nav` in
-`mkdocs.yml`. The site is built with `mkdocs build --strict` in CI, so broken
+`mkdocs.yml`. The site is built with `zensical build --strict` in CI, so broken
 links and pages left out of the navigation fail the build. Link to other docs
 pages with a relative path (for example `architecture.md`), and link to files
 outside `docs/` with a full GitHub URL.
