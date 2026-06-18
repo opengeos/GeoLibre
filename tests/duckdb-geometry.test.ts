@@ -175,6 +175,11 @@ describe("stripAutoFidColumn", () => {
     assert.equal(stripAutoFidColumn(input), input);
   });
 
+  it("yields empty-object properties when OGC_FID is the only property", () => {
+    const out = stripAutoFidColumn(collection({ OGC_FID: 7 }));
+    assert.deepEqual(out.features[0].properties, {});
+  });
+
   it("strips OGC_FID from every feature that has it", () => {
     const input: FeatureCollection = {
       type: "FeatureCollection",
@@ -196,10 +201,13 @@ describe("stripAutoFidColumn", () => {
         },
       ],
     };
+    const inputClone = JSON.parse(JSON.stringify(input));
     const out = stripAutoFidColumn(input);
     assert.deepEqual(
       out.features.map((f) => f.properties),
       [{ name: "a" }, { name: "b" }, { name: "c" }],
     );
+    // The original multi-feature collection is left unmodified.
+    assert.deepEqual(input, inputClone);
   });
 });

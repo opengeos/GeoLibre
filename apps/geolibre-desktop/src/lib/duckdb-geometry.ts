@@ -118,7 +118,7 @@ export function geometryGeoJsonSql(
 // result, e.g. a SQL query result added back as a layer or created by the AI
 // assistant — re-reading it makes GDAL emit a *second* `OGC_FID`, so `ST_Read`
 // fails to bind with `duplicate column name "OGC_FID"` (issue #499).
-const GDAL_AUTO_FID_COLUMN = "OGC_FID";
+export const GDAL_AUTO_FID_COLUMN = "OGC_FID";
 
 /**
  * Return a copy of `geojson` with the reserved GDAL FID column
