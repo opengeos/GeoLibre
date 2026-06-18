@@ -16,6 +16,7 @@ import { isDuckDBQueryLayer, useAppStore } from "@geolibre/core";
 import type { GeoLibreLayer, LayerGroup } from "@geolibre/core";
 import {
   canEditLayerGeometry,
+  RASTER_SOURCE_KIND,
   reloadVectorControlLayer,
 } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
@@ -59,6 +60,7 @@ import {
   Layers,
   MoreHorizontal,
   MousePointerClick,
+  Palette,
   PanelLeftClose,
   PanelLeftOpen,
   Pencil,
@@ -102,6 +104,8 @@ interface LayerPanelProps {
   onCancelGeometryEdit: () => void;
   /** Materialize a DuckDB query layer into an editable GeoJSON layer. */
   onMaterializeDuckDBLayer: (layer: GeoLibreLayer) => void;
+  /** Open the floating Add Raster Layer panel for advanced raster styling. */
+  onOpenRasterStylePanel: () => void;
 }
 
 const BACKGROUND_SELECTION_ID = "__geolibre-background__";
@@ -176,6 +180,7 @@ export function LayerPanel({
   onToggleGeometryEdit,
   onCancelGeometryEdit,
   onMaterializeDuckDBLayer,
+  onOpenRasterStylePanel,
 }: LayerPanelProps) {
   const { t } = useTranslation();
   const layers = useAppStore((s) => s.layers);
@@ -1121,6 +1126,11 @@ export function LayerPanel({
             // Raster/COG layers backed by a downloadable file (a retained
             // local-bytes blob URL or a source URL) export to GeoTIFF.
             const canExportRaster = canExportRasterLayer(layer);
+            // Rasters added through the floating Add Raster Layer panel are
+            // styled there; offer a shortcut to reopen that panel since it is
+            // dismissed (and its on-map icon removed) when closed.
+            const canEditRasterStyle =
+              layer.metadata.sourceKind === RASTER_SOURCE_KIND;
             const canRefresh = isRefreshableLayer(layer);
             const refreshConfig = getLayerRefreshConfig(layer);
             const refreshStatus = refreshStatuses[layer.id];
@@ -1542,6 +1552,18 @@ export function LayerPanel({
                             </DropdownMenuItem>
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
+                      )}
+                      {canEditRasterStyle && (
+                        <DropdownMenuItem
+                          onSelect={(e: Event) => {
+                            e.preventDefault();
+                            selectLayer(layer.id);
+                            onOpenRasterStylePanel();
+                          }}
+                        >
+                          <Palette className="mr-2 h-3.5 w-3.5" />
+                          {t("layers.openRasterStylePanel")}
+                        </DropdownMenuItem>
                       )}
                       {canExportRaster && (
                         <DropdownMenuSub>

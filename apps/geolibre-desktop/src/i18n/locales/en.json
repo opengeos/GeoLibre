@@ -1183,6 +1183,7 @@
   },
   "layers": {
     "exportGeoTiff": "GeoTIFF (COG)",
+    "openRasterStylePanel": "Edit raster style…",
     "exportRasterSuccess": "Raster exported.",
     "exportRasterError": "Could not export this raster.",
     "typeBasemap": "basemap",

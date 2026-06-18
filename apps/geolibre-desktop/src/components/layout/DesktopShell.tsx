@@ -11,6 +11,7 @@ import {
   EFFECTS_PLUGIN_ID,
   endLayerGeometryEdit,
   getGeometryEditTargetLayerId,
+  openRasterLayerPanel,
   restoreDeckViz,
   restoreDirections,
   restoreReverseGeocode,
@@ -1201,6 +1202,9 @@ export function DesktopShell({
               onToggleGeometryEdit={handleToggleGeometryEdit}
               onCancelGeometryEdit={handleCancelGeometryEdit}
               onMaterializeDuckDBLayer={handleMaterializeDuckDBLayer}
+              onOpenRasterStylePanel={() =>
+                openRasterLayerPanel(createAppAPI(mapControllerRef))
+              }
             />
           </SectionErrorBoundary>
         ) : null}

@@ -1953,7 +1953,7 @@ async function openStandaloneMeasureControl(
   const { MeasureControl: MeasureControlClass } =
     await getComponentsConstructors();
 
-  measureControl ??= createMeasureControl(MeasureControlClass, app);
+  measureControl ??= createMeasureControl(MeasureControlClass);
 
   if (!measureControlMounted) {
     const added = app.addMapControl(measureControl, measureControlPosition);
@@ -2011,7 +2011,6 @@ async function openStandaloneMinimapControl(
   minimapControl ??= createMinimapControl(
     MinimapControlClass,
     app.getActiveBasemap(),
-    app,
   );
 
   if (!minimapControlMounted) {
@@ -2061,7 +2060,6 @@ async function refreshMinimapBasemap(app: GeoLibreAppAPI): Promise<void> {
   minimapControl = createMinimapControl(
     MinimapControlClass,
     app.getActiveBasemap(),
-    app,
   );
   const added = app.addMapControl(minimapControl, minimapControlPosition);
   if (!added) {
@@ -2089,7 +2087,7 @@ async function openStandaloneViewStateControl(
   const { ViewStateControl: ViewStateControlClass } =
     await getComponentsConstructors();
 
-  viewStateControl ??= createViewStateControl(ViewStateControlClass, app);
+  viewStateControl ??= createViewStateControl(ViewStateControlClass);
 
   if (!viewStateControlMounted) {
     const added = app.addMapControl(viewStateControl, viewStateControlPosition);
@@ -2551,30 +2549,22 @@ function createPMTilesControl(
   return control;
 }
 
+// The panel's close (X) / collapse button emits "collapse". We deliberately do
+// NOT tear the control down on collapse: collapsing just folds the panel back
+// to its on-map icon (matching the Colorbar/Legend/HTML panels). Whether the
+// icon stays on the map is governed solely by the Controls-menu checkbox —
+// unchecking it calls the close*Panel helpers, which remove the control.
 function createSearchControl(
   SearchControlClass: SearchControlConstructor,
 ): SearchControl {
   const control = new SearchControlClass(SEARCH_OPTIONS);
-  control.on("collapse", hideSearchControl);
   return control;
 }
 
-// The panel's close (X) / collapse button emits "collapse". Treat that as a
-// request to remove the control entirely so the in-panel close button and the
-// Controls-menu toggle stay in sync — otherwise a collapsed icon button lingers
-// on the map with no way to dismiss it. Teardown is deferred so it runs after
-// the control finishes emitting the event.
 function createMeasureControl(
   MeasureControlClass: MeasureControlConstructor,
-  app: GeoLibreAppAPI,
 ): MeasureControl {
   const control = new MeasureControlClass(MEASURE_OPTIONS);
-  control.on("collapse", () => {
-    if (control !== measureControl) return;
-    setTimeout(() => {
-      if (control === measureControl) teardownMeasureControl(app);
-    }, 0);
-  });
   return control;
 }
 
@@ -2585,12 +2575,6 @@ function createBookmarkControl(
   const control = new BookmarkControlClass({
     ...BOOKMARK_OPTIONS,
     captureStateLabel: bookmarkCaptureLabel,
-  });
-  control.on("collapse", () => {
-    if (control !== bookmarkControl) return;
-    setTimeout(() => {
-      if (control === bookmarkControl) teardownBookmarkControl(app);
-    }, 0);
   });
   routeBookmarkFileIoThroughHost(control, app);
   return control;
@@ -2688,32 +2672,18 @@ function routeBookmarkFileIoThroughHost(
 function createMinimapControl(
   MinimapControlClass: MinimapControlConstructor,
   basemapStyleUrl: string,
-  app: GeoLibreAppAPI,
 ): MinimapControl {
   const control = new MinimapControlClass({
     ...MINIMAP_OPTIONS,
     style: basemapStyleUrl,
-  });
-  control.on("collapse", () => {
-    if (control !== minimapControl) return;
-    setTimeout(() => {
-      if (control === minimapControl) teardownMinimapControl(app);
-    }, 0);
   });
   return control;
 }
 
 function createViewStateControl(
   ViewStateControlClass: ViewStateControlConstructor,
-  app: GeoLibreAppAPI,
 ): ViewStateControl {
   const control = new ViewStateControlClass(VIEW_STATE_OPTIONS);
-  control.on("collapse", () => {
-    if (control !== viewStateControl) return;
-    setTimeout(() => {
-      if (control === viewStateControl) teardownViewStateControl(app);
-    }, 0);
-  });
   return control;
 }
 
