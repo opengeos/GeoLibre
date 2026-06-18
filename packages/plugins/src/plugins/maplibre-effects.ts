@@ -64,12 +64,13 @@ const EFFECTS_OVERLAY_STYLE_ID = "geolibre-effects-maplibre-overlays";
 const MAP_CANVAS_Z_INDEX = "4";
 const CONTROL_CONTAINER_Z_INDEX = "5";
 const MAPLIBRE_OVERLAY_Z_INDEX = "6";
-// DOM markers (e.g. Geoman's draw/edit vertex handles) live in the canvas
-// container and normally paint above the map canvas. Raising the map canvas to
-// MAP_CANVAS_Z_INDEX would otherwise bury them — invisible and unclickable, so a
-// drawn polygon's vertices vanish and you can't click the first one to close it.
-// Match the control container's z-index so markers clear the canvas while the
-// controls (later in the DOM) still win the tie and stay on top.
+// All DOM markers (e.g. Geoman's draw/edit vertex handles, plus any custom
+// `new Marker()` the app adds) live in the canvas container and normally paint
+// above the map canvas. Raising the map canvas to MAP_CANVAS_Z_INDEX would
+// otherwise bury them — invisible and unclickable, so a drawn polygon's vertices
+// vanish and you can't click the first one to close it. Match the control
+// container's z-index so markers clear the canvas while the controls (later in
+// the DOM) still win the tie and stay on top.
 const MARKER_Z_INDEX = CONTROL_CONTAINER_Z_INDEX;
 
 // Roughly one star per this many CSS pixels of starfield area.
@@ -562,7 +563,9 @@ class EffectsEngine {
         z-index: ${MAPLIBRE_OVERLAY_Z_INDEX};
       }
       .${EFFECTS_MAP_CLASS} .maplibregl-marker {
-        z-index: ${MARKER_Z_INDEX};
+        /* !important guards against a future Geoman release injecting an inline
+           z-index on vertex markers, which would otherwise outrank this rule. */
+        z-index: ${MARKER_Z_INDEX} !important;
       }
     `;
     document.head.appendChild(style);
