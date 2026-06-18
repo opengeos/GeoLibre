@@ -1061,10 +1061,8 @@ export function StylePanel({
     layer.metadata.sourceKind === "maplibre-gl-vector" &&
     layer.metadata.geometryType === "point";
   const supportsPointRenderer = isCoreGeoJsonPoint || isVectorControlPoint;
-  // The GeoEditor's "Sketches" layer mixes point/line/polygon (and circle)
-  // sketches under one style, so "Circle radius" only applies to its point
-  // markers and is misleading for the drawn circle/polygon/line shapes. Hide it
-  // for that layer (see issue #483).
+  // The "Sketches" layer mixes geometry types under one style, so "Circle
+  // radius" only applies to its point markers and is misleading otherwise (#483).
   const isSketchLayer = layer.metadata.sourceKind === SKETCHES_SOURCE_KIND;
   const strokeWidthUnit = styleValue(style, "strokeWidthUnit");
   // The unit only affects line/polygon-outline rendering. Point layers always
