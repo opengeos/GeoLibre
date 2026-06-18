@@ -39,6 +39,7 @@
       "east": "东",
       "north": "北",
       "useCurrentView": "使用当前视图",
+      "useCurrentViewGlobeHint": "使用此功能前请切换到墨卡托投影。在地球投影下，地图仍可能略微超出已捕获的范围。",
       "minZoom": "最小缩放级别",
       "maxZoom": "最大缩放级别",
       "maxPitch": "最大倾斜角",

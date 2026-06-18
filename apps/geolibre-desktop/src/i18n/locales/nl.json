@@ -39,6 +39,7 @@
       "east": "Oost",
       "north": "Noord",
       "useCurrentView": "Huidige weergave gebruiken",
+      "useCurrentViewGlobeHint": "Schakel over naar de Mercator-projectie voordat u dit gebruikt. In de Wereldbol-projectie kan de kaart nog steeds iets buiten de vastgelegde grenzen schuiven.",
       "minZoom": "Minimale zoom",
       "maxZoom": "Maximale zoom",
       "maxPitch": "Maximale hellingshoek",

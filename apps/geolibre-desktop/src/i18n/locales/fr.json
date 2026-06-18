@@ -39,6 +39,7 @@
       "east": "Est",
       "north": "Nord",
       "useCurrentView": "Utiliser la vue actuelle",
+      "useCurrentViewGlobeHint": "Passez à la projection de Mercator avant d'utiliser ceci. Dans la projection Globe, la carte peut encore se déplacer légèrement au-delà des limites capturées.",
       "minZoom": "Zoom minimum",
       "maxZoom": "Zoom maximum",
       "maxPitch": "Inclinaison maximale",

@@ -39,6 +39,7 @@
       "east": "東",
       "north": "北",
       "useCurrentView": "現在のビューを使用",
+      "useCurrentViewGlobeHint": "これを使用する前にメルカトル図法に切り替えてください。地球儀表示では、地図が取得した範囲をわずかに超えて移動する場合があります。",
       "minZoom": "最小ズーム",
       "maxZoom": "最大ズーム",
       "maxPitch": "最大ピッチ",

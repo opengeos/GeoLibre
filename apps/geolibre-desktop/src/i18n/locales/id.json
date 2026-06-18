@@ -39,6 +39,7 @@
       "east": "Timur",
       "north": "Utara",
       "useCurrentView": "Gunakan Tampilan Saat Ini",
+      "useCurrentViewGlobeHint": "Beralih ke proyeksi Mercator sebelum menggunakan ini. Pada proyeksi Bola dunia, peta masih dapat bergeser sedikit melampaui batas yang ditangkap.",
       "minZoom": "Zoom minimum",
       "maxZoom": "Zoom maksimum",
       "maxPitch": "Kemiringan maksimum",

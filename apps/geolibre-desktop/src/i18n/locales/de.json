@@ -39,6 +39,7 @@
       "east": "Ost",
       "north": "Nord",
       "useCurrentView": "Aktuelle Ansicht verwenden",
+      "useCurrentViewGlobeHint": "Wechseln Sie zur Mercator-Projektion, bevor Sie dies verwenden. In der Globus-Projektion kann die Karte noch leicht über die erfassten Grenzen hinaus verschoben werden.",
       "minZoom": "Min. Zoom",
       "maxZoom": "Max. Zoom",
       "maxPitch": "Max. Neigung",

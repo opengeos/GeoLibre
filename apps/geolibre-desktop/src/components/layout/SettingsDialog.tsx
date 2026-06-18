@@ -289,7 +289,12 @@ export function SettingsDialog({
   // preferences/projectName would reset in-progress edits if the store changed
   // while the dialog is open (e.g. a slow ?url= project finishes loading).
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      // Clear so the stale projection can't flash the Globe hint for a frame
+      // on the next open before this effect re-reads it.
+      setLiveProjection(null);
+      return;
+    }
     setDraftPreferences(clonePreferences(useAppStore.getState().preferences));
     setDraftDesktopSettings(
       cloneDesktopSettings(useDesktopSettingsStore.getState().desktopSettings),

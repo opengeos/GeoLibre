@@ -39,6 +39,7 @@
       "east": "동쪽",
       "north": "북쪽",
       "useCurrentView": "현재 뷰 사용",
+      "useCurrentViewGlobeHint": "이 기능을 사용하기 전에 메르카토르 투영으로 전환하세요. 지구본 투영에서는 지도가 캡처된 경계를 약간 벗어나 이동할 수 있습니다.",
       "minZoom": "최소 확대/축소",
       "maxZoom": "최대 확대/축소",
       "maxPitch": "최대 피치",

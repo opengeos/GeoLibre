@@ -39,6 +39,7 @@
       "east": "Doğu",
       "north": "Kuzey",
       "useCurrentView": "Mevcut Görünümü Kullan",
+      "useCurrentViewGlobeHint": "Bunu kullanmadan önce Mercator projeksiyonuna geçin. Küre projeksiyonunda harita, yakalanan sınırların biraz dışına kayabilir.",
       "minZoom": "Minimum yakınlaştırma",
       "maxZoom": "Maksimum yakınlaştırma",
       "maxPitch": "Maksimum eğim",
