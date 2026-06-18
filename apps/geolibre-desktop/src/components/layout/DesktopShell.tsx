@@ -565,7 +565,11 @@ export function DesktopShell({
     // activeByDefault plugins are marked active without activate() being
     // called, so the effects engine must be kicked explicitly to match the
     // restored active state (idempotent).
-    restoreEffects(appAPI, pluginManager.isActive(EFFECTS_PLUGIN_ID));
+    restoreEffects(
+      appAPI,
+      pluginManager.isActive(EFFECTS_PLUGIN_ID),
+      useAppStore.getState().projectPlugins?.settings?.[EFFECTS_PLUGIN_ID],
+    );
     // Rebind the directions tool to the (possibly new) map instance after a
     // map re-init, since restoreProjectState skips an already-active plugin.
     restoreDirections(appAPI, pluginManager.isActive(DIRECTIONS_PLUGIN_ID));

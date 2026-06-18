@@ -9,6 +9,9 @@ import {
   maplibreDeckGlVizPlugin,
   maplibreDirectionsPlugin,
   maplibreEffectsPlugin,
+  getEffectsSettings,
+  setEffectsSettings,
+  type EffectsSettings,
   maplibreEnviroAtlasPlugin,
   maplibreEsriWaybackPlugin,
   maplibreFemaWmsPlugin,
@@ -205,6 +208,15 @@ export function usePluginRegistry() {
         reportPluginError(id, "reposition", error);
         return;
       }
+      persistProjectPluginState(before);
+    },
+    getEffectsSettings,
+    // Apply atmosphere appearance changes live and persist them with the
+    // project when they actually change. Mirrors the toggle/reposition flow so
+    // edits flag the project dirty and survive save/reload.
+    updateEffectsSettings: (next: Partial<EffectsSettings>) => {
+      const before = JSON.stringify(projectPluginStateSnapshot());
+      if (!setEffectsSettings(next)) return;
       persistProjectPluginState(before);
     },
   };

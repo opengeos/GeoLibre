@@ -574,6 +574,14 @@
       "help": "Help",
       "settings": "Settings"
     },
+    "atmosphere": {
+      "haloColor": "Halo color",
+      "haloExtent": "Halo extent",
+      "haloExtentHint": "How far the atmospheric glow reaches past the globe. Lower keeps data tight to the surface; higher gives a wide, airy halo.",
+      "haloOpacity": "Halo strength",
+      "spaceColor": "Space color",
+      "reset": "Reset to defaults"
+    },
     "commandGroup": {
       "project": "Project",
       "addData": "Add Data",
@@ -811,6 +819,7 @@
       "mapControls": "Map controls",
       "fieldCollection": "Field Collection...",
       "atmosphereEffects": "Atmosphere Effects",
+      "atmosphereEnabled": "Enabled",
       "directions": "Directions",
       "directionsTooltip": "Routing sends your waypoints to the public OSRM demo server (router.project-osrm.org).",
       "search": "Search",

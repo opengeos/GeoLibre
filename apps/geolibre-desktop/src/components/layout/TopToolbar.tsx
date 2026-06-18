@@ -165,6 +165,8 @@ export function TopToolbar({
     getMapControlPosition,
     toggle,
     setMapControlPosition,
+    getEffectsSettings,
+    updateEffectsSettings,
   } = usePluginRegistry();
   // mapControllerRef is a stable ref object and createAppAPI dereferences
   // `.current` lazily, so memoizing on the ref keeps a single appApi identity
@@ -773,6 +775,8 @@ export function TopToolbar({
         reverseGeocodeActive={isActive(REVERSE_GEOCODE_PLUGIN_ID)}
         onToggleMapControl={toggleMapControl}
         onToggleEffects={() => toggle(EFFECTS_PLUGIN_ID, appApi)}
+        getEffectsSettings={getEffectsSettings}
+        onUpdateEffectsSettings={updateEffectsSettings}
         onToggleDirections={consent.handleToggleDirections}
         onToggleReverseGeocode={consent.handleToggleReverseGeocode}
         onOpenFieldCollection={() => setFieldCollectionOpen(true)}

@@ -141,9 +141,17 @@ export {
   type ReverseGeocodeLabels,
 } from "./plugins/maplibre-reverse-geocode";
 export {
+  DEFAULT_EFFECTS_SETTINGS,
   EFFECTS_PLUGIN_ID,
+  type EffectsSettings,
+  getEffectsSettings,
+  HALO_EXTENT_MAX,
+  HALO_EXTENT_MIN,
+  HALO_OPACITY_MAX,
+  HALO_OPACITY_MIN,
   maplibreEffectsPlugin,
   restoreEffects,
+  setEffectsSettings,
 } from "./plugins/maplibre-effects";
 export {
   DECK_VIZ_PLUGIN_ID,

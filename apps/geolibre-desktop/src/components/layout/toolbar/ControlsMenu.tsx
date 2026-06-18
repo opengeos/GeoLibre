@@ -1,13 +1,26 @@
 import {
+  DEFAULT_EFFECTS_SETTINGS,
+  type EffectsSettings,
+  HALO_EXTENT_MAX,
+  HALO_EXTENT_MIN,
+  HALO_OPACITY_MAX,
+  HALO_OPACITY_MIN,
+} from "@geolibre/plugins";
+import {
   Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
+  Slider,
 } from "@geolibre/ui";
 import { ClipboardList, SlidersHorizontal } from "lucide-react";
+import { type MouseEvent as ReactMouseEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ToolbarPanels } from "../../../hooks/useToolbarPanels";
 import {
@@ -25,6 +38,8 @@ interface ControlsMenuProps {
   reverseGeocodeActive: boolean;
   onToggleMapControl: (control: ToolbarMapControl) => void;
   onToggleEffects: () => void;
+  getEffectsSettings: () => EffectsSettings;
+  onUpdateEffectsSettings: (next: Partial<EffectsSettings>) => void;
   onToggleDirections: () => void;
   onToggleReverseGeocode: () => void;
   onOpenFieldCollection: () => void;
@@ -40,6 +55,8 @@ export function ControlsMenu({
   reverseGeocodeActive,
   onToggleMapControl,
   onToggleEffects,
+  getEffectsSettings,
+  onUpdateEffectsSettings,
   onToggleDirections,
   onToggleReverseGeocode,
   onOpenFieldCollection,
@@ -71,10 +88,12 @@ export function ControlsMenu({
             {controlsVisible[control.id] ? " ✓" : ""}
           </DropdownMenuItem>
         ))}
-        <DropdownMenuItem onClick={onToggleEffects}>
-          {t("toolbar.item.atmosphereEffects")}
-          {effectsActive ? " ✓" : ""}
-        </DropdownMenuItem>
+        <AtmosphereEffectsSubmenu
+          active={effectsActive}
+          onToggle={onToggleEffects}
+          getSettings={getEffectsSettings}
+          onUpdate={onUpdateEffectsSettings}
+        />
         <DropdownMenuItem
           title={t("toolbar.item.directionsTooltip")}
           onClick={onToggleDirections}
@@ -129,5 +148,168 @@ export function ControlsMenu({
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+interface AtmosphereEffectsSubmenuProps {
+  active: boolean;
+  onToggle: () => void;
+  getSettings: () => EffectsSettings;
+  onUpdate: (next: Partial<EffectsSettings>) => void;
+}
+
+/**
+ * Submenu for the globe atmosphere: an on/off toggle plus live controls for the
+ * halo color, how far the halo reaches past the globe (the "floats above the
+ * surface" vs "tight to the surface" look), the halo strength, and the deep
+ * space backdrop color. Edits apply immediately and persist with the project.
+ *
+ * Settings live in module state in the effects plugin, so this keeps a local
+ * mirror seeded each time the submenu opens; every edit updates both the mirror
+ * (for an instant UI response) and the plugin (for the live globe + persistence).
+ */
+function AtmosphereEffectsSubmenu({
+  active,
+  onToggle,
+  getSettings,
+  onUpdate,
+}: AtmosphereEffectsSubmenuProps) {
+  const { t } = useTranslation();
+  const [settings, setSettings] = useState<EffectsSettings>(getSettings);
+
+  const apply = (next: Partial<EffectsSettings>) => {
+    setSettings((prev) => ({ ...prev, ...next }));
+    onUpdate(next);
+  };
+
+  return (
+    <DropdownMenuSub
+      onOpenChange={(open: boolean) => {
+        // Re-seed from the source of truth on open so the controls reflect a
+        // project that loaded new settings while the menu was closed.
+        if (open) setSettings(getSettings());
+      }}
+    >
+      <DropdownMenuSubTrigger>
+        {t("toolbar.item.atmosphereEffects")}
+        {active ? " ✓" : ""}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="w-64">
+        <DropdownMenuItem
+          onSelect={(e: Event) => e.preventDefault()}
+          onClick={onToggle}
+        >
+          {t("toolbar.item.atmosphereEnabled")}
+          {active ? " ✓" : ""}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {/* Stop key events from reaching the menu's roving-focus/typeahead
+            handlers so sliders respond to arrow keys and the color inputs work. */}
+        <div
+          className="space-y-3 px-2 py-1.5"
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <ColorRow
+            label={t("toolbar.atmosphere.haloColor")}
+            value={settings.haloColor}
+            onChange={(haloColor) => apply({ haloColor })}
+          />
+          <SliderRow
+            label={t("toolbar.atmosphere.haloExtent")}
+            hint={t("toolbar.atmosphere.haloExtentHint")}
+            min={HALO_EXTENT_MIN}
+            max={HALO_EXTENT_MAX}
+            step={0.05}
+            value={settings.haloExtent}
+            format={(v) => `${v.toFixed(2)}×`}
+            onChange={(haloExtent) => apply({ haloExtent })}
+          />
+          <SliderRow
+            label={t("toolbar.atmosphere.haloOpacity")}
+            min={HALO_OPACITY_MIN}
+            max={HALO_OPACITY_MAX}
+            step={0.05}
+            value={settings.haloOpacity}
+            format={(v) => `${Math.round(v * 100)}%`}
+            onChange={(haloOpacity) => apply({ haloOpacity })}
+          />
+          <ColorRow
+            label={t("toolbar.atmosphere.spaceColor")}
+            value={settings.spaceColor}
+            onChange={(spaceColor) => apply({ spaceColor })}
+          />
+        </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onSelect={(e: Event) => e.preventDefault()}
+          onClick={() => apply({ ...DEFAULT_EFFECTS_SETTINGS })}
+        >
+          {t("toolbar.atmosphere.reset")}
+        </DropdownMenuItem>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
+
+interface ColorRowProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}
+
+function ColorRow({ label, value, onChange }: ColorRowProps) {
+  return (
+    <label className="flex items-center justify-between gap-2 text-xs">
+      <span className="text-muted-foreground">{label}</span>
+      <input
+        type="color"
+        aria-label={label}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-6 w-10 cursor-pointer rounded border border-input bg-transparent p-0.5"
+      />
+    </label>
+  );
+}
+
+interface SliderRowProps {
+  label: string;
+  hint?: string;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  format: (value: number) => string;
+  onChange: (value: number) => void;
+}
+
+function SliderRow({
+  label,
+  hint,
+  min,
+  max,
+  step,
+  value,
+  format,
+  onChange,
+}: SliderRowProps) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-muted-foreground" title={hint}>
+          {label}
+        </span>
+        <span className="tabular-nums text-foreground">{format(value)}</span>
+      </div>
+      <Slider
+        aria-label={label}
+        min={min}
+        max={max}
+        step={step}
+        value={[value]}
+        onValueChange={([v]: number[]) => onChange(v ?? value)}
+        onClick={(e: ReactMouseEvent) => e.stopPropagation()}
+      />
+    </div>
   );
 }

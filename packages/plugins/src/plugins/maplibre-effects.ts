@@ -22,6 +22,43 @@ import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
  */
 
 export const EFFECTS_PLUGIN_ID = "maplibre-atmosphere-effects";
+
+/**
+ * User-tunable appearance of the globe atmosphere. Persisted with the project
+ * (see the plugin's getProjectState/applyProjectState) so a styled globe — for
+ * example one prepared for image export — reopens the way it was saved.
+ *
+ * - `haloColor` is the base color of the atmospheric halo; the gradient stops
+ *   are derived from it (lightened toward white near the globe edge, darkened
+ *   in the faint outer falloff).
+ * - `haloExtent` is how far the halo reaches past the globe, as a multiple of
+ *   the globe radius. Lower values pull the glow tight to the surface so data
+ *   reads as painted onto the sphere; higher values give the stylized "air"
+ *   look where the limb floats in a wide blue haze.
+ * - `haloOpacity` scales the whole halo's strength (0 hides it).
+ * - `spaceColor` is the center color of the deep-space radial backdrop; the
+ *   outer edge is a darkened shade of it.
+ */
+export interface EffectsSettings {
+  haloColor: string;
+  haloExtent: number;
+  haloOpacity: number;
+  spaceColor: string;
+}
+
+export const DEFAULT_EFFECTS_SETTINGS: EffectsSettings = {
+  haloColor: "#4d9fe6",
+  haloExtent: 2.8,
+  haloOpacity: 1,
+  spaceColor: "#0c1b33",
+};
+
+// Slider bounds shared by the UI and the settings normalizer.
+export const HALO_EXTENT_MIN = 1.05;
+export const HALO_EXTENT_MAX = 4;
+export const HALO_OPACITY_MIN = 0;
+export const HALO_OPACITY_MAX = 1;
+
 const EFFECTS_MAP_CLASS = "geolibre-effects-map";
 const EFFECTS_OVERLAY_STYLE_ID = "geolibre-effects-maplibre-overlays";
 const MAP_CANVAS_Z_INDEX = "4";
@@ -35,19 +72,117 @@ const STAR_AREA_PER_STAR = 900;
 const STARFIELD_LNG_PERIOD_DEGREES = 360;
 const STARFIELD_LAT_PERIOD_DEGREES = 180;
 
-// Halo radial gradient — color stops are fractions of the gradient span, which
-// runs from the globe edge out to HALO_RADIUS_SCALE × the globe radius.
-const HALO_RADIUS_SCALE = 2.8;
 const HALO_SAMPLE_COUNT = 16;
-const HALO_STOPS: Array<[number, string]> = [
-  [0.0, "rgba(200, 235, 255, 1.0)"],
-  [0.03, "rgba(130, 200, 250, 0.6)"],
-  [0.08, "rgba(70, 150, 230, 0.35)"],
-  [0.18, "rgba(40, 100, 200, 0.15)"],
-  [0.35, "rgba(25, 65, 160, 0.06)"],
-  [0.6, "rgba(15, 40, 110, 0.02)"],
-  [1.0, "rgba(10, 25, 70, 0.0)"],
+
+// Halo radial gradient as a *shape* independent of the chosen color: each stop
+// is [offset, alpha, shade] where offset is the fraction of the gradient span
+// (globe edge → haloExtent × radius), alpha is the base opacity, and shade
+// blends the base color toward white (positive) or black (negative). The
+// defaults reproduce the original light-blue glow when applied to the default
+// haloColor (#4d9fe6): a bright near-white rim falling off to a faint dark blue.
+const HALO_STOP_SHAPE: Array<[number, number, number]> = [
+  [0.0, 1.0, 0.7],
+  [0.03, 0.6, 0.32],
+  [0.08, 0.35, 0.0],
+  [0.18, 0.15, -0.2],
+  [0.35, 0.06, -0.4],
+  [0.6, 0.02, -0.55],
+  [1.0, 0.0, -0.7],
 ];
+
+// The space backdrop runs from spaceColor at the center to this much darker at
+// the edge, matching the original #0c1b33 → #081222 falloff.
+const SPACE_EDGE_DARKEN = 0.33;
+
+interface Rgb {
+  r: number;
+  g: number;
+  b: number;
+}
+
+/** Parse `#rgb`/`#rrggbb` (defaulting to mid-blue on anything unparseable). */
+function parseHex(hex: string): Rgb {
+  const value = hex.trim().replace(/^#/, "");
+  const expanded =
+    value.length === 3
+      ? value
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : value;
+  if (!/^[0-9a-fA-F]{6}$/.test(expanded)) return { r: 77, g: 159, b: 230 };
+  return {
+    r: parseInt(expanded.slice(0, 2), 16),
+    g: parseInt(expanded.slice(2, 4), 16),
+    b: parseInt(expanded.slice(4, 6), 16),
+  };
+}
+
+/** Blend `rgb` toward white (shade > 0) or black (shade < 0) by |shade|. */
+function shadeRgb({ r, g, b }: Rgb, shade: number): Rgb {
+  const target = shade >= 0 ? 255 : 0;
+  const t = Math.min(1, Math.abs(shade));
+  return {
+    r: Math.round(r + (target - r) * t),
+    g: Math.round(g + (target - g) * t),
+    b: Math.round(b + (target - b) * t),
+  };
+}
+
+function rgba({ r, g, b }: Rgb, alpha: number): string {
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/** Clamp `value` into `[min, max]`, falling back to `fallback` if non-finite. */
+function clampNumber(
+  value: unknown,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
+}
+
+/** Coerce arbitrary persisted/partial input into a complete EffectsSettings. */
+export function normalizeEffectsSettings(
+  value: unknown,
+  base: EffectsSettings = DEFAULT_EFFECTS_SETTINGS,
+): EffectsSettings {
+  const candidate = (value ?? {}) as Partial<EffectsSettings>;
+  const isHex = (v: unknown): v is string =>
+    typeof v === "string" && /^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(v.trim());
+  const withHash = (v: string) => (v.startsWith("#") ? v : `#${v}`);
+  return {
+    haloColor: isHex(candidate.haloColor)
+      ? withHash(candidate.haloColor.trim())
+      : base.haloColor,
+    haloExtent: clampNumber(
+      candidate.haloExtent,
+      HALO_EXTENT_MIN,
+      HALO_EXTENT_MAX,
+      base.haloExtent,
+    ),
+    haloOpacity: clampNumber(
+      candidate.haloOpacity,
+      HALO_OPACITY_MIN,
+      HALO_OPACITY_MAX,
+      base.haloOpacity,
+    ),
+    spaceColor: isHex(candidate.spaceColor)
+      ? withHash(candidate.spaceColor.trim())
+      : base.spaceColor,
+  };
+}
+
+function effectsSettingsEqual(a: EffectsSettings, b: EffectsSettings): boolean {
+  return (
+    a.haloColor === b.haloColor &&
+    a.haloExtent === b.haloExtent &&
+    a.haloOpacity === b.haloOpacity &&
+    a.spaceColor === b.spaceColor
+  );
+}
 
 interface Star {
   x: number;
@@ -311,12 +446,14 @@ class EffectsEngine {
   private height = 0;
   private dpr = 1;
   private starsDirty = true;
+  private settings: EffectsSettings;
 
   private rafId: number | null = null;
   private destroyed = false;
 
-  constructor(map: MapLibreMap) {
+  constructor(map: MapLibreMap, settings: EffectsSettings) {
     this.map = map;
+    this.settings = settings;
     this.mapCanvas = map.getCanvas();
     this.mapRoot = this.mapCanvas.closest(".maplibregl-map");
     this.previousMapCanvasZIndex = this.mapCanvas.style.zIndex;
@@ -364,6 +501,18 @@ class EffectsEngine {
   /** The map this engine is bound to (used to detect a map re-init). */
   getMapInstance(): MapLibreMap {
     return this.map;
+  }
+
+  /**
+   * Swap in new appearance settings. The space gradient is size-cached, so drop
+   * it to rebuild with the new color on the next frame; the halo is rebuilt
+   * every frame already. Restart the loop in case it idled (a settings change
+   * can arrive while the map sits still in globe mode).
+   */
+  applySettings(settings: EffectsSettings): void {
+    this.settings = settings;
+    this.spaceGradient = null;
+    if (!document.hidden) this.start();
   }
 
   destroy(): void {
@@ -622,8 +771,9 @@ class EffectsEngine {
         this.height / 2,
         Math.max(this.width, this.height) * 0.75,
       );
-      gradient.addColorStop(0, "#0c1b33");
-      gradient.addColorStop(1, "#081222");
+      const space = parseHex(this.settings.spaceColor);
+      gradient.addColorStop(0, rgba(space, 1));
+      gradient.addColorStop(1, rgba(shadeRgb(space, -SPACE_EDGE_DARKEN), 1));
       this.spaceGradient = gradient;
     }
     ctx.save();
@@ -633,8 +783,11 @@ class EffectsEngine {
   }
 
   private drawHalo(disc: GlobeCircle): void {
-    if (disc.radius < 5) return;
+    const { haloExtent, haloOpacity } = this.settings;
+    if (disc.radius < 5 || haloOpacity <= 0 || haloExtent <= 1) return;
     const ctx = this.haloCtx;
+    const base = parseHex(this.settings.haloColor);
+    const outerRadius = disc.radius * haloExtent;
     ctx.save();
     const gradient = ctx.createRadialGradient(
       disc.x,
@@ -642,15 +795,15 @@ class EffectsEngine {
       disc.radius,
       disc.x,
       disc.y,
-      disc.radius * HALO_RADIUS_SCALE,
+      outerRadius,
     );
-    for (const [stop, color] of HALO_STOPS) {
-      gradient.addColorStop(stop, color);
+    for (const [stop, alpha, shade] of HALO_STOP_SHAPE) {
+      gradient.addColorStop(stop, rgba(shadeRgb(base, shade), alpha * haloOpacity));
     }
     ctx.globalCompositeOperation = "screen";
     ctx.fillStyle = gradient;
     ctx.beginPath();
-    ctx.arc(disc.x, disc.y, disc.radius * HALO_RADIUS_SCALE, 0, Math.PI * 2);
+    ctx.arc(disc.x, disc.y, outerRadius, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -688,6 +841,11 @@ class EffectsEngine {
  * is needed here. On by default.
  */
 let engine: EffectsEngine | null = null;
+// Live appearance settings, shared by the engine and the Controls-menu UI.
+// Kept at module scope so they survive the engine being torn down and rebuilt
+// (map re-init, toggle off/on) and so applyProjectState can stage them before
+// the engine exists.
+let currentSettings: EffectsSettings = { ...DEFAULT_EFFECTS_SETTINGS };
 
 function attachEngine(app: GeoLibreAppAPI): boolean {
   const map = app.getMap?.();
@@ -695,7 +853,28 @@ function attachEngine(app: GeoLibreAppAPI): boolean {
   // A map re-init hands back a different MapLibreMap instance; tear down the
   // engine bound to the old map (its canvases/listeners) before rebinding.
   if (engine && engine.getMapInstance() !== map) detachEngine();
-  if (!engine) engine = new EffectsEngine(map);
+  if (!engine) engine = new EffectsEngine(map, currentSettings);
+  return true;
+}
+
+/** Current atmosphere appearance settings (a copy callers may freely mutate). */
+export function getEffectsSettings(): EffectsSettings {
+  return { ...currentSettings };
+}
+
+/**
+ * Update the atmosphere appearance and push it to the live engine if running.
+ * Input is normalized, so partial or out-of-range values are safe. Returns true
+ * when the settings actually changed (callers persist only on a real change).
+ */
+export function setEffectsSettings(next: Partial<EffectsSettings>): boolean {
+  const normalized = normalizeEffectsSettings(
+    { ...currentSettings, ...next },
+    DEFAULT_EFFECTS_SETTINGS,
+  );
+  if (effectsSettingsEqual(normalized, currentSettings)) return false;
+  currentSettings = normalized;
+  engine?.applySettings(currentSettings);
   return true;
 }
 
@@ -713,7 +892,21 @@ function detachEngine(): void {
  * after restoring plugin state — mirroring `restoreRasterLayers` — to bridge
  * that gap. Idempotent: safe to call on every project load / map reinit.
  */
-export function restoreEffects(app: GeoLibreAppAPI, active: boolean): void {
+export function restoreEffects(
+  app: GeoLibreAppAPI,
+  active: boolean,
+  settings?: unknown,
+): void {
+  // Apply the project's saved appearance (or defaults when absent) before
+  // attaching. restoreProjectState only invokes applyProjectState when the
+  // project actually carries effects settings, so a project saved with the
+  // default look would otherwise inherit the previously open project's colors;
+  // resetting here keeps the in-memory appearance in step with what loaded.
+  const next = normalizeEffectsSettings(settings, DEFAULT_EFFECTS_SETTINGS);
+  if (!effectsSettingsEqual(next, currentSettings)) {
+    currentSettings = next;
+    engine?.applySettings(currentSettings);
+  }
   if (active) attachEngine(app);
   else detachEngine();
 }
@@ -725,4 +918,19 @@ export const maplibreEffectsPlugin: GeoLibrePlugin = {
   activeByDefault: true,
   activate: (app: GeoLibreAppAPI) => attachEngine(app),
   deactivate: (_app: GeoLibreAppAPI) => detachEngine(),
+  // Persist the appearance only when it differs from the defaults, so untouched
+  // projects don't carry an effects settings blob.
+  getProjectState: () =>
+    effectsSettingsEqual(currentSettings, DEFAULT_EFFECTS_SETTINGS)
+      ? undefined
+      : { ...currentSettings },
+  applyProjectState: (_app: GeoLibreAppAPI, state: unknown) => {
+    // A project without saved settings (state === undefined) resets to defaults,
+    // matching how applyProjectState is invoked with resetMissingSettings.
+    const next = normalizeEffectsSettings(state, DEFAULT_EFFECTS_SETTINGS);
+    if (effectsSettingsEqual(next, currentSettings)) return false;
+    currentSettings = next;
+    engine?.applySettings(currentSettings);
+    return true;
+  },
 };
