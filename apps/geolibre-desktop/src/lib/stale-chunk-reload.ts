@@ -64,13 +64,20 @@ export function reloadForStaleChunk(deps: StaleChunkReloadDeps): boolean {
  * stale). When it reloads it calls `preventDefault()` so Vite does not also
  * rethrow the error.
  *
- * @param options.enabled - Pass false to skip installation (e.g. in Tauri).
+ * Installed for the production web build only. Stale chunks are a
+ * redeploy-on-a-static-host phenomenon, so there is nothing to recover from in
+ * the desktop (Tauri) build or under the dev server — where a `vite:preloadError`
+ * instead signals a transient dependency re-optimization (e.g. the first time a
+ * lazy engine like cog-tiler-wasm is loaded), which must NOT reload the app out
+ * from under the user's in-progress map.
+ *
+ * @param options.enabled - Overrides the default gate (production web only).
  * @returns A cleanup function that removes the listener.
  */
 export function installStaleChunkReload(options?: {
   enabled?: boolean;
 }): () => void {
-  const enabled = options?.enabled ?? !isTauri();
+  const enabled = options?.enabled ?? (import.meta.env.PROD && !isTauri());
   if (!enabled || typeof window === "undefined") {
     return () => {};
   }

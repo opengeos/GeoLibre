@@ -773,6 +773,13 @@ export default defineConfig({
       "@google/genai",
       "openai",
       "zod",
+      // cog-tiler-wasm's plain-JS deps (the wasm tiler itself is excluded below
+      // so its asset URL survives). These are only reached through that lazy
+      // engine, so without pre-bundling Vite discovers them on first use and
+      // triggers a full-page reload to re-optimize. (geotiff is already
+      // pre-bundled via the deck.gl-geotiff static import.)
+      "proj4",
+      "geotiff-geokeys-to-proj4",
     ],
     // PGlite ships its own WASM + filesystem bundles and must not be pre-bundled
     // by esbuild, which mangles those asset references (per PGlite's Vite guide).
@@ -789,6 +796,11 @@ export default defineConfig({
       // `new URL("./whitebox-cli.wasm", import.meta.url)`; esbuild pre-bundling
       // mangles that asset reference, so serve it as-is.
       "whitebox-wasm",
+      // cog-tiler-wasm (the lazy CPU/WASM raster tiler) loads its
+      // cog_tiler_wasm_bg.wasm the same wasm-bindgen way; esbuild pre-bundling
+      // breaks that asset reference so the tiler stops rendering. Serve it
+      // as-is. (Its plain-JS deps are pre-bundled via optimizeDeps.include.)
+      "cog-tiler-wasm",
     ],
   },
   build: {
