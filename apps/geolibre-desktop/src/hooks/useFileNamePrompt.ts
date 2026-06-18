@@ -31,7 +31,10 @@ interface FileNamePromptState {
 
 // Resolver for the active prompt promise. Kept in a module-scoped closure rather
 // than in the store state: it is an implementation detail of the promise/dialog
-// handshake, not part of the public store contract the dialog consumes.
+// handshake, not part of the public store contract the dialog consumes. Being a
+// module singleton, tests that exercise prompt() without reaching submit/cancel
+// should reset it (or the store) in beforeEach so a leftover resolver from one
+// test cannot resolve the next test's promise.
 let activeResolve: ((name: string | null) => void) | null = null;
 
 /**

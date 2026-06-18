@@ -1,4 +1,7 @@
 {
+  "bookmark": {
+    "captureStateLabel": "Include visible layers"
+  },
   "fileNamePrompt": {
     "title": "Save file as",
     "titleTyped": "Save {{type}} as",

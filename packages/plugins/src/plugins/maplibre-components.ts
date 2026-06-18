@@ -284,13 +284,24 @@ const MEASURE_OPTIONS = {
 } satisfies MeasureControlOptions;
 
 /**
+ * Label for the bookmark "capture state" checkbox. Default is English; the
+ * desktop shell pushes a translated value via {@link setBookmarkCaptureLabel}
+ * since this package is framework-agnostic and has no react-i18next access.
+ */
+let bookmarkCaptureLabel = "Include visible layers";
+
+/** Override the bookmark capture-state checkbox label with translated text. */
+export function setBookmarkCaptureLabel(label: string): void {
+  if (label) bookmarkCaptureLabel = label;
+}
+
+/**
  * Capture which layers are currently visible so a bookmark can restore the same
- * displayed set later. Returns `undefined` when no layers are loaded, so an
- * empty capture never hides everything on restore.
+ * displayed set later. Always records the set (empty when no layers are
+ * visible) so the restore faithfully reproduces the displayed state.
  */
 function captureVisibleLayers(): Record<string, unknown> | undefined {
   const { layers } = useAppStore.getState();
-  if (layers.length === 0) return undefined;
   return {
     visibleLayerIds: layers.filter((layer) => layer.visible).map((l) => l.id),
   };
@@ -342,11 +353,12 @@ const BOOKMARK_OPTIONS = {
   position: bookmarkControlPosition,
   storageKey: "geolibre-bookmarks",
   // Resizable panel and drag reordering are on by default upstream; enable
-  // per-bookmark export selection and visible-layer capture here.
+  // per-bookmark export selection and visible-layer capture here. The
+  // capture-checkbox label is applied per-instance in createBookmarkControl so
+  // it can pick up the translated string.
   selectable: true,
   captureState: captureVisibleLayers,
   restoreState: restoreVisibleLayers,
-  captureStateLabel: "Include visible layers",
 } satisfies BookmarkControlOptions;
 
 const MINIMAP_OPTIONS = {
@@ -2570,7 +2582,10 @@ function createBookmarkControl(
   BookmarkControlClass: BookmarkControlConstructor,
   app: GeoLibreAppAPI,
 ): BookmarkControl {
-  const control = new BookmarkControlClass(BOOKMARK_OPTIONS);
+  const control = new BookmarkControlClass({
+    ...BOOKMARK_OPTIONS,
+    captureStateLabel: bookmarkCaptureLabel,
+  });
   control.on("collapse", () => {
     if (control !== bookmarkControl) return;
     setTimeout(() => {

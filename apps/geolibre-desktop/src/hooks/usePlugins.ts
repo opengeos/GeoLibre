@@ -65,7 +65,8 @@ function ensureFileExtension(name: string, extensions: string[]): string {
   if (extensions.some((e) => lower.endsWith(`.${e.toLowerCase()}`))) {
     return name;
   }
-  return `${name}.${ext}`;
+  // Strip any trailing dots first so "my-bookmarks." doesn't become a double dot.
+  return `${name.replace(/\.+$/, "")}.${ext}`;
 }
 
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
