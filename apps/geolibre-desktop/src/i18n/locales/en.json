@@ -875,7 +875,7 @@
       "reverseGeocodeNoticeTitle": "Reverse Geocode uses an external service",
       "reverseGeocodeNoticeDesc": "Turning on Reverse Geocode sends the coordinates of each point you click to the configured geocoding provider (the public Nominatim service by default) to resolve an address — your coordinates leave your device for those requests. You can choose a different provider in Settings → Geocoding.",
       "networkNoticeTitle": "Network analysis uses a public routing server",
-      "networkNoticeDesc": "Running a Network analysis tool sends the coordinates of your input points to the public Valhalla routing server (valhalla1.openstreetmap.de) to compute isochrones and cost matrices — your coordinates leave your device for those requests. The public server is rate-limited; point it at your own server (Settings → Environment, VITE_ROUTING_ENDPOINT) for heavy use.",
+      "networkNoticeDesc": "Running a Network analysis tool sends the coordinates of your input points to the public Valhalla routing server (valhalla1.openstreetmap.de) to compute isochrones and cost matrices — your coordinates leave your device for those requests. The public server is rate-limited; point it at your own server (Settings → Environment Variables, VITE_ROUTING_ENDPOINT) for heavy use.",
       "continue": "Continue",
       "largeOsmPbfTitle": "Large OSM PBF file",
       "largeOsmPbfDesc": "This file is about {{sizeMb}} MB. Parsing it converts every feature to GeoJSON in memory, which can be slow and may use a lot of memory in the browser. Continue?",
@@ -1066,7 +1066,9 @@
     "stop": "Stop",
     "placeholder": "Ask about your data, e.g. \"show countries with population over 50 million\" · Ctrl/Cmd+Enter to send",
     "intro": "Chat with your data. I can run Spatial SQL, add or remove layers, restyle them, and move the map — every change is undoable. Try \"color the countries by population with a graduated red ramp\".",
-    "needsKey": "Configure an LLM provider in Settings → Environment to enable the assistant — an API key (GEMINI_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY), AWS credentials for Bedrock, a local Ollama (OLLAMA_BASE_URL), or a custom OpenAI-compatible endpoint (OPENAI_COMPATIBLE_BASE_URL).",
+    "needsKeyTitle": "No AI provider configured",
+    "needsKeyStatus": "The assistant is inactive because no LLM provider or API key was detected.",
+    "needsKeyAction": "To enable it, open Settings → Environment Variables and add your provider credentials: an API key (GEMINI_API_KEY, GOOGLE_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY), AWS credentials for Bedrock, a local Ollama URL (OLLAMA_BASE_URL), or a custom OpenAI-compatible endpoint (OPENAI_COMPATIBLE_BASE_URL).",
     "thinking": "Working…",
     "toolError": "failed",
     "provider": "LLM provider",
@@ -1145,7 +1147,7 @@
     "heading": "Network",
     "run": "Run",
     "outputPlaceholder": "Output will appear here.",
-    "endpointNotice": "Point coordinates are sent to the routing server ({{endpoint}}). The default is a shared public Valhalla server (FOSSGIS) with usage limits — point it at your own server (Settings → Environment, VITE_ROUTING_ENDPOINT) for heavy use."
+    "endpointNotice": "Point coordinates are sent to the routing server ({{endpoint}}). The default is a shared public Valhalla server (FOSSGIS) with usage limits — point it at your own server (Settings → Environment Variables, VITE_ROUTING_ENDPOINT) for heavy use."
   },
   "statistics": {
     "title": "Spatial statistics",

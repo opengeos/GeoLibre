@@ -512,9 +512,13 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
       </div>
 
       {!hasKey ? (
-        <p className="border-t bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-          {t("assistant.needsKey")}
-        </p>
+        <div className="space-y-1 border-t bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          <p className="font-medium text-foreground">
+            {t("assistant.needsKeyTitle")}
+          </p>
+          <p>{t("assistant.needsKeyStatus")}</p>
+          <p>{t("assistant.needsKeyAction")}</p>
+        </div>
       ) : null}
 
       <div className="flex items-end gap-2 border-t px-3 py-2">
