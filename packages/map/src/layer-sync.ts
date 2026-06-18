@@ -254,6 +254,16 @@ function syncExternalNativeLayer(
     return;
   }
 
+  // Generic external raster tiles registered by third-party plugins (e.g. a
+  // titiler-served XYZ source) carry no recognized sourceKind, so they match
+  // none of the handlers above. Honor the documented external-layer contract
+  // (a `source` with `tiles` and `type: "raster"`) by building the source and
+  // raster layer here instead of dropping through to the GeoJSON path below.
+  if (isExternalRasterTileLayer(layer)) {
+    syncExternalRasterTileLayer(map, layer, nativeLayerIds, beforeId);
+    return;
+  }
+
   ensureExternalGeoJsonNativeLayer(map, layer, nativeLayerIds, beforeId);
 
   const nativeFillLayerSpecs = nativeLayerIds
@@ -761,6 +771,65 @@ function isBasemapControlRasterLayer(layer: GeoLibreLayer): boolean {
     layer.type === "raster" &&
     layer.metadata.sourceKind === "maplibre-basemap-control" &&
     layer.metadata.externalNativeLayer === true
+  );
+}
+
+// A raster layer registered by a third-party plugin through
+// registerExternalNativeLayer that supplies its own XYZ tile template(s) in
+// `source.tiles`. Unlike the basemap/web-service/PMTiles raster paths above it
+// carries no GeoLibre-internal sourceKind, so it is matched structurally: any
+// external raster layer with concrete tiles and no dedicated handler.
+function isExternalRasterTileLayer(layer: GeoLibreLayer): boolean {
+  return layer.type === "raster" && getBasemapControlTiles(layer).length > 0;
+}
+
+// Build the MapLibre source and raster layer for a generic external raster tile
+// registration. Mirrors syncBasemapControlRasterLayer/syncWebServiceTileRasterLayer
+// but reads everything from the registration's own `source`, so any plugin that
+// hands GeoLibre an XYZ raster source renders without needing a bespoke handler.
+function syncExternalRasterTileLayer(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+  nativeLayerIds: string[],
+  beforeId?: string,
+): void {
+  const nativeLayerId = nativeLayerIds[0] ?? layer.id;
+  const sourceId = getExternalSourceIds(layer)[0] ?? `${nativeLayerId}-source`;
+  const tiles = getBasemapControlTiles(layer);
+  if (tiles.length === 0) return;
+
+  if (!map.getSource(sourceId)) {
+    const bounds = boundsSource(layer.source.bounds);
+    map.addSource(sourceId, {
+      type: "raster",
+      tiles,
+      tileSize: numberSource(layer.source.tileSize) ?? 256,
+      ...(numberSource(layer.source.minzoom) !== undefined
+        ? { minzoom: numberSource(layer.source.minzoom) }
+        : {}),
+      ...(numberSource(layer.source.maxzoom) !== undefined
+        ? { maxzoom: numberSource(layer.source.maxzoom) }
+        : {}),
+      ...(bounds ? { bounds } : {}),
+      ...(layer.source.scheme === "tms" ? { scheme: "tms" as const } : {}),
+      ...(stringSource(layer.source.attribution)
+        ? { attribution: stringSource(layer.source.attribution) }
+        : {}),
+    });
+  }
+
+  ensureLayer(
+    map,
+    nativeLayerId,
+    {
+      id: nativeLayerId,
+      type: "raster",
+      source: sourceId,
+      ...styleLayerZoomRange(layer.style),
+      paint: rasterPaint(layer.style, layer.opacity),
+      layout: { visibility: layer.visible ? "visible" : "none" },
+    },
+    beforeId,
   );
 }
 
