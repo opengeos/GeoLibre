@@ -211,13 +211,30 @@ export function usePluginRegistry() {
       persistProjectPluginState(before);
     },
     getEffectsSettings,
-    // Apply atmosphere appearance changes live and persist them with the
-    // project when they actually change. Mirrors the toggle/reposition flow so
-    // edits flag the project dirty and survive save/reload.
-    updateEffectsSettings: (next: Partial<EffectsSettings>) => {
-      const before = JSON.stringify(projectPluginStateSnapshot());
-      if (!setEffectsSettings(next)) return;
-      persistProjectPluginState(before);
+    // Live preview: push the appearance change straight to the engine for an
+    // instant redraw, but do NOT persist. A color-picker drag or slider scrub
+    // fires this every frame, so keeping persistence out avoids marking the
+    // project dirty and sweeping Zustand subscribers on every pixel of movement.
+    previewEffectsSettings: (next: Partial<EffectsSettings>) => {
+      setEffectsSettings(next);
+    },
+    // Commit: called once when an edit gesture ends (slider release, color
+    // input blur, reset, or the submenu closing). Persists only when the
+    // appearance actually differs from what the project already holds, so a
+    // no-op gesture does not flag the project dirty.
+    commitEffectsSettings: () => {
+      const storedSettings =
+        useAppStore.getState().projectPlugins?.settings?.[
+          maplibreEffectsPlugin.id
+        ];
+      const currentSettings = maplibreEffectsPlugin.getProjectState?.();
+      if (
+        JSON.stringify(storedSettings ?? null) ===
+        JSON.stringify(currentSettings ?? null)
+      ) {
+        return;
+      }
+      useAppStore.getState().setProjectPlugins(projectPluginStateSnapshot());
     },
   };
 }

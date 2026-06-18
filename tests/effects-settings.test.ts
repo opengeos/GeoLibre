@@ -5,6 +5,7 @@ import {
   HALO_EXTENT_MAX,
   HALO_EXTENT_MIN,
   HALO_OPACITY_MAX,
+  HALO_OPACITY_MIN,
   normalizeEffectsSettings,
 } from "../packages/plugins/src/plugins/maplibre-effects";
 
@@ -14,13 +15,14 @@ describe("normalizeEffectsSettings", () => {
     assert.deepEqual(normalizeEffectsSettings({}), DEFAULT_EFFECTS_SETTINGS);
   });
 
-  it("keeps valid hex colors and prefixes a missing '#'", () => {
+  it("prefixes a missing '#' and lowercases hex", () => {
     const result = normalizeEffectsSettings({
       haloColor: "ff0000",
       spaceColor: "#00FF00",
     });
     assert.equal(result.haloColor, "#ff0000");
-    assert.equal(result.spaceColor, "#00FF00");
+    // Uppercase is lowercased so casing can't read as a non-default value.
+    assert.equal(result.spaceColor, "#00ff00");
   });
 
   it("accepts shorthand 3-digit hex", () => {
@@ -36,7 +38,7 @@ describe("normalizeEffectsSettings", () => {
     assert.equal(normalizeEffectsSettings({ haloExtent: 99 }).haloExtent, HALO_EXTENT_MAX);
     assert.equal(normalizeEffectsSettings({ haloExtent: 0 }).haloExtent, HALO_EXTENT_MIN);
     assert.equal(normalizeEffectsSettings({ haloOpacity: 5 }).haloOpacity, HALO_OPACITY_MAX);
-    assert.equal(normalizeEffectsSettings({ haloOpacity: -1 }).haloOpacity, 0);
+    assert.equal(normalizeEffectsSettings({ haloOpacity: -1 }).haloOpacity, HALO_OPACITY_MIN);
   });
 
   it("ignores non-finite numbers, keeping the base value", () => {

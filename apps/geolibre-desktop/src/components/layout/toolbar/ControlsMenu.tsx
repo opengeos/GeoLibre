@@ -39,7 +39,8 @@ interface ControlsMenuProps {
   onToggleMapControl: (control: ToolbarMapControl) => void;
   onToggleEffects: () => void;
   getEffectsSettings: () => EffectsSettings;
-  onUpdateEffectsSettings: (next: Partial<EffectsSettings>) => void;
+  onPreviewEffectsSettings: (next: Partial<EffectsSettings>) => void;
+  onCommitEffectsSettings: () => void;
   onToggleDirections: () => void;
   onToggleReverseGeocode: () => void;
   onOpenFieldCollection: () => void;
@@ -56,7 +57,8 @@ export function ControlsMenu({
   onToggleMapControl,
   onToggleEffects,
   getEffectsSettings,
-  onUpdateEffectsSettings,
+  onPreviewEffectsSettings,
+  onCommitEffectsSettings,
   onToggleDirections,
   onToggleReverseGeocode,
   onOpenFieldCollection,
@@ -92,7 +94,8 @@ export function ControlsMenu({
           active={effectsActive}
           onToggle={onToggleEffects}
           getSettings={getEffectsSettings}
-          onUpdate={onUpdateEffectsSettings}
+          onPreview={onPreviewEffectsSettings}
+          onCommit={onCommitEffectsSettings}
         />
         <DropdownMenuItem
           title={t("toolbar.item.directionsTooltip")}
@@ -155,39 +158,49 @@ interface AtmosphereEffectsSubmenuProps {
   active: boolean;
   onToggle: () => void;
   getSettings: () => EffectsSettings;
-  onUpdate: (next: Partial<EffectsSettings>) => void;
+  onPreview: (next: Partial<EffectsSettings>) => void;
+  onCommit: () => void;
 }
 
 /**
  * Submenu for the globe atmosphere: an on/off toggle plus live controls for the
  * halo color, how far the halo reaches past the globe (the "floats above the
  * surface" vs "tight to the surface" look), the halo strength, and the deep
- * space backdrop color. Edits apply immediately and persist with the project.
+ * space backdrop color.
  *
  * Settings live in module state in the effects plugin, so this keeps a local
- * mirror seeded each time the submenu opens; every edit updates both the mirror
- * (for an instant UI response) and the plugin (for the live globe + persistence).
+ * mirror seeded each time the submenu opens. Edits preview live (instant UI +
+ * globe redraw) on every change, and persist only when a gesture ends — a
+ * slider release, a color input blur, a reset, or the submenu closing — so a
+ * color-picker drag doesn't churn the project-dirty flag on every frame.
  */
 function AtmosphereEffectsSubmenu({
   active,
   onToggle,
   getSettings,
-  onUpdate,
+  onPreview,
+  onCommit,
 }: AtmosphereEffectsSubmenuProps) {
   const { t } = useTranslation();
   const [settings, setSettings] = useState<EffectsSettings>(getSettings);
 
-  const apply = (next: Partial<EffectsSettings>) => {
+  const preview = (next: Partial<EffectsSettings>) => {
     setSettings((prev) => ({ ...prev, ...next }));
-    onUpdate(next);
+    onPreview(next);
   };
 
   return (
     <DropdownMenuSub
       onOpenChange={(open: boolean) => {
-        // Re-seed from the source of truth on open so the controls reflect a
-        // project that loaded new settings while the menu was closed.
-        if (open) setSettings(getSettings());
+        if (open) {
+          // Re-seed from the source of truth on open so the controls reflect a
+          // project that loaded new settings while the menu was closed.
+          setSettings(getSettings());
+        } else {
+          // Backstop: persist any previewed change whose gesture-end commit
+          // didn't fire (e.g. a color picked then the menu dismissed).
+          onCommit();
+        }
       }}
     >
       <DropdownMenuSubTrigger>
@@ -212,7 +225,8 @@ function AtmosphereEffectsSubmenu({
           <ColorRow
             label={t("toolbar.atmosphere.haloColor")}
             value={settings.haloColor}
-            onChange={(haloColor) => apply({ haloColor })}
+            onPreview={(haloColor) => preview({ haloColor })}
+            onCommit={onCommit}
           />
           <SliderRow
             label={t("toolbar.atmosphere.haloExtent")}
@@ -222,7 +236,8 @@ function AtmosphereEffectsSubmenu({
             step={0.05}
             value={settings.haloExtent}
             format={(v) => `${v.toFixed(2)}×`}
-            onChange={(haloExtent) => apply({ haloExtent })}
+            onPreview={(haloExtent) => preview({ haloExtent })}
+            onCommit={onCommit}
           />
           <SliderRow
             label={t("toolbar.atmosphere.haloOpacity")}
@@ -231,18 +246,24 @@ function AtmosphereEffectsSubmenu({
             step={0.05}
             value={settings.haloOpacity}
             format={(v) => `${Math.round(v * 100)}%`}
-            onChange={(haloOpacity) => apply({ haloOpacity })}
+            onPreview={(haloOpacity) => preview({ haloOpacity })}
+            onCommit={onCommit}
           />
           <ColorRow
             label={t("toolbar.atmosphere.spaceColor")}
             value={settings.spaceColor}
-            onChange={(spaceColor) => apply({ spaceColor })}
+            onPreview={(spaceColor) => preview({ spaceColor })}
+            onCommit={onCommit}
           />
         </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={(e: Event) => e.preventDefault()}
-          onClick={() => apply({ ...DEFAULT_EFFECTS_SETTINGS })}
+          onClick={() => {
+            // A discrete action: preview the defaults, then commit immediately.
+            preview({ ...DEFAULT_EFFECTS_SETTINGS });
+            onCommit();
+          }}
         >
           {t("toolbar.atmosphere.reset")}
         </DropdownMenuItem>
@@ -254,10 +275,11 @@ function AtmosphereEffectsSubmenu({
 interface ColorRowProps {
   label: string;
   value: string;
-  onChange: (value: string) => void;
+  onPreview: (value: string) => void;
+  onCommit: () => void;
 }
 
-function ColorRow({ label, value, onChange }: ColorRowProps) {
+function ColorRow({ label, value, onPreview, onCommit }: ColorRowProps) {
   return (
     <label className="flex items-center justify-between gap-2 text-xs">
       <span className="text-muted-foreground">{label}</span>
@@ -265,7 +287,10 @@ function ColorRow({ label, value, onChange }: ColorRowProps) {
         type="color"
         aria-label={label}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        // onChange fires continuously while dragging in the picker (preview);
+        // onBlur fires once when the picker closes / focus leaves (commit).
+        onChange={(e) => onPreview(e.target.value)}
+        onBlur={onCommit}
         className="h-6 w-10 cursor-pointer rounded border border-input bg-transparent p-0.5"
       />
     </label>
@@ -280,7 +305,8 @@ interface SliderRowProps {
   step: number;
   value: number;
   format: (value: number) => string;
-  onChange: (value: number) => void;
+  onPreview: (value: number) => void;
+  onCommit: () => void;
 }
 
 function SliderRow({
@@ -291,7 +317,8 @@ function SliderRow({
   step,
   value,
   format,
-  onChange,
+  onPreview,
+  onCommit,
 }: SliderRowProps) {
   return (
     <div className="space-y-1">
@@ -307,7 +334,10 @@ function SliderRow({
         max={max}
         step={step}
         value={[value]}
-        onValueChange={([v]: number[]) => onChange(v ?? value)}
+        // onValueChange streams every scrub frame (preview); onValueCommit
+        // fires once on pointer-up / keyboard commit (persist).
+        onValueChange={([v]: number[]) => onPreview(v ?? value)}
+        onValueCommit={onCommit}
         onClick={(e: ReactMouseEvent) => e.stopPropagation()}
       />
     </div>

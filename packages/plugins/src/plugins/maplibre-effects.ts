@@ -100,8 +100,13 @@ interface Rgb {
   b: number;
 }
 
-/** Parse `#rgb`/`#rrggbb` (defaulting to mid-blue on anything unparseable). */
-function parseHex(hex: string): Rgb {
+/**
+ * Parse `#rgb`/`#rrggbb` into RGB. Inputs reaching here are already validated by
+ * normalizeEffectsSettings, so `fallback` is only for defensive use; pass the
+ * caller's own default (halo vs space) so a corrupt value degrades to the right
+ * neutral color rather than always to halo blue.
+ */
+function parseHex(hex: string, fallback: Rgb = { r: 77, g: 159, b: 230 }): Rgb {
   const value = hex.trim().replace(/^#/, "");
   const expanded =
     value.length === 3
@@ -110,7 +115,7 @@ function parseHex(hex: string): Rgb {
           .map((c) => c + c)
           .join("")
       : value;
-  if (!/^[0-9a-fA-F]{6}$/.test(expanded)) return { r: 77, g: 159, b: 230 };
+  if (!/^[0-9a-fA-F]{6}$/.test(expanded)) return fallback;
   return {
     r: parseInt(expanded.slice(0, 2), 16),
     g: parseInt(expanded.slice(2, 4), 16),
@@ -152,10 +157,16 @@ export function normalizeEffectsSettings(
   const candidate = (value ?? {}) as Partial<EffectsSettings>;
   const isHex = (v: unknown): v is string =>
     typeof v === "string" && /^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(v.trim());
-  const withHash = (v: string) => (v.startsWith("#") ? v : `#${v}`);
+  // Lowercase so casing never leaks into the equality check: uppercase hex from
+  // a hand-edited project would otherwise read as "non-default" and get
+  // serialized even when the rendered color matches a default exactly.
+  const withHash = (v: string) => {
+    const hex = v.trim().toLowerCase();
+    return hex.startsWith("#") ? hex : `#${hex}`;
+  };
   return {
     haloColor: isHex(candidate.haloColor)
-      ? withHash(candidate.haloColor.trim())
+      ? withHash(candidate.haloColor)
       : base.haloColor,
     haloExtent: clampNumber(
       candidate.haloExtent,
@@ -170,7 +181,7 @@ export function normalizeEffectsSettings(
       base.haloOpacity,
     ),
     spaceColor: isHex(candidate.spaceColor)
-      ? withHash(candidate.spaceColor.trim())
+      ? withHash(candidate.spaceColor)
       : base.spaceColor,
   };
 }
@@ -771,7 +782,7 @@ class EffectsEngine {
         this.height / 2,
         Math.max(this.width, this.height) * 0.75,
       );
-      const space = parseHex(this.settings.spaceColor);
+      const space = parseHex(this.settings.spaceColor, { r: 12, g: 27, b: 51 });
       gradient.addColorStop(0, rgba(space, 1));
       gradient.addColorStop(1, rgba(shadeRgb(space, -SPACE_EDGE_DARKEN), 1));
       this.spaceGradient = gradient;
