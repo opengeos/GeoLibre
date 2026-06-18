@@ -15,7 +15,7 @@ interface ProjectFileDialogsProps {
   projectFiles: ReturnType<typeof useProjectFileActions>;
 }
 
-/** The project-file dialogs: Open-from-URL, the error dialog, and the env-var strip prompt. */
+/** The project-file dialogs: Open-from-URL, the error dialog, the save-name prompt, and the env-var strip prompt. */
 export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
   const { t } = useTranslation();
 
@@ -83,6 +83,55 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
               {t("toolbar.item.dismiss")}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={projectFiles.saveNamePrompt !== null}
+        onOpenChange={(open: boolean) => {
+          if (!open) projectFiles.cancelSaveNamePrompt();
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("toolbar.item.saveProjectAsTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("toolbar.item.saveProjectAsDesc")}
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={projectFiles.submitSaveNamePrompt}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="save-project-name">
+                {t("toolbar.item.saveProjectFileName")}
+              </Label>
+              <Input
+                id="save-project-name"
+                autoFocus
+                placeholder={t("toolbar.item.saveProjectFileNamePlaceholder")}
+                value={projectFiles.saveNameInput}
+                onChange={(event) =>
+                  projectFiles.setSaveNameInput(event.target.value)
+                }
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => projectFiles.cancelSaveNamePrompt()}
+              >
+                {t("common.cancel")}
+              </Button>
+              <Button
+                type="submit"
+                disabled={!projectFiles.saveNameInput.trim()}
+              >
+                {t("common.save")}
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
       <Dialog

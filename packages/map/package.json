@@ -15,7 +15,7 @@
     "@turf/bbox": "^7.3.5",
     "@turf/helpers": "^7.3.5",
     "maplibre-gl": "^5.24.0",
-    "maplibre-gl-layer-control": "^0.17.2",
+    "maplibre-gl-layer-control": "^0.17.3",
     "pmtiles": "^4.4.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
