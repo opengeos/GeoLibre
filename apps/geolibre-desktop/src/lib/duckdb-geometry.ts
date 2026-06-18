@@ -1,6 +1,7 @@
 // Pure SQL/geometry-column helpers shared by the DuckDB vector loader and the
 // GeoParquet writer. Kept free of `@duckdb/duckdb-wasm` (and its Vite `?url`
 // imports) so the detection logic can be unit-tested under plain Node.
+import type { FeatureCollection } from "geojson";
 
 const TARGET_CRS = "EPSG:4326";
 
@@ -109,4 +110,38 @@ export function geometryGeoJsonSql(
   return `ST_AsGeoJSON(ST_Transform(${geometryExpression}, ${quoteSqlString(
     sourceCrs,
   )}, ${quoteSqlString(TARGET_CRS)}, true))`;
+}
+
+// GDAL's GeoJSON driver (used by `ST_Read`) synthesises an `OGC_FID` column for
+// every feature. When a layer's GeoJSON already carries an `OGC_FID` property —
+// which happens whenever the layer was itself derived from a prior `ST_Read`
+// result, e.g. a SQL query result added back as a layer or created by the AI
+// assistant — re-reading it makes GDAL emit a *second* `OGC_FID`, so `ST_Read`
+// fails to bind with `duplicate column name "OGC_FID"` (issue #499).
+const GDAL_AUTO_FID_COLUMN = "OGC_FID";
+
+/**
+ * Return a copy of `geojson` with the reserved GDAL FID column
+ * (`OGC_FID`) removed from every feature's properties, so re-reading it with
+ * `ST_Read` cannot collide with GDAL's auto-generated FID column. The input is
+ * left untouched and the same object is returned when no feature carries the
+ * property, so unaffected layers pay no allocation cost.
+ *
+ * @param geojson Feature collection about to be handed to `ST_Read`.
+ * @returns The collection without any `OGC_FID` properties.
+ */
+export function stripAutoFidColumn(
+  geojson: FeatureCollection,
+): FeatureCollection {
+  let changed = false;
+  const features = geojson.features.map((feature) => {
+    const props = feature.properties;
+    if (props && GDAL_AUTO_FID_COLUMN in props) {
+      changed = true;
+      const { [GDAL_AUTO_FID_COLUMN]: _omit, ...rest } = props;
+      return { ...feature, properties: rest };
+    }
+    return feature;
+  });
+  return changed ? { ...geojson, features } : geojson;
 }

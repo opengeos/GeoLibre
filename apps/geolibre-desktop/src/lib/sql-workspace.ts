@@ -13,6 +13,7 @@ import {
   quoteSqlString,
   rowsFromResult,
 } from "./duckdb-vector-loader";
+import { stripAutoFidColumn } from "./duckdb-geometry";
 
 // Hidden column appended to the user's query so geometry can be returned as
 // GeoJSON for the "Add as layer" / export paths without disturbing the columns
@@ -253,8 +254,13 @@ export async function registerLayerTables(
   const registered: SqlWorkspaceTable[] = [];
 
   for (const { layer, tableName } of assignTableNames(layers)) {
+    // assignTableNames only yields layers that carry a GeoJSON collection.
+    if (!layer.geojson) continue;
     const fileName = `${filePrefix}__${tableName}.geojson`;
-    await db.registerFileText(fileName, JSON.stringify(layer.geojson));
+    await db.registerFileText(
+      fileName,
+      JSON.stringify(stripAutoFidColumn(layer.geojson)),
+    );
     // Track immediately after registration so a failure in the CREATE TABLE
     // below still leaves this file in the cleanup list.
     registeredFiles?.push(fileName);

@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { FeatureCollection } from "geojson";
 import {
   detectGeometryColumn,
   geometryExpr,
   geometryGeoJsonSql,
   isGeometryColumnType,
+  stripAutoFidColumn,
 } from "../apps/geolibre-desktop/src/lib/duckdb-geometry";
 
 function describeRow(name: string, type: string) {
@@ -126,6 +128,73 @@ describe("geometryGeoJsonSql", () => {
     assert.equal(
       geometryGeoJsonSql('ST_GeomFromWKB("geometry_wkb")', "EPSG:3857"),
       `ST_AsGeoJSON(ST_Transform(ST_GeomFromWKB("geometry_wkb"), 'EPSG:3857', 'EPSG:4326', true))`,
+    );
+  });
+});
+
+describe("stripAutoFidColumn", () => {
+  function collection(
+    properties: Record<string, unknown> | null,
+  ): FeatureCollection {
+    return {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties,
+          geometry: { type: "Point", coordinates: [0, 0] },
+        },
+      ],
+    };
+  }
+
+  it("removes the GDAL-synthesised OGC_FID property (issue #499)", () => {
+    const out = stripAutoFidColumn(collection({ OGC_FID: 5, name: "a" }));
+    assert.deepEqual(out.features[0].properties, { name: "a" });
+    assert.equal(out.features[0].geometry?.type, "Point");
+  });
+
+  it("does not mutate the input collection", () => {
+    const input = collection({ OGC_FID: 5, name: "a" });
+    stripAutoFidColumn(input);
+    assert.deepEqual(input.features[0].properties, { OGC_FID: 5, name: "a" });
+  });
+
+  it("returns the same object when no feature carries OGC_FID", () => {
+    const input = collection({ name: "a" });
+    assert.equal(stripAutoFidColumn(input), input);
+  });
+
+  it("tolerates features with null properties", () => {
+    const out = stripAutoFidColumn(collection(null));
+    assert.equal(out.features[0].properties, null);
+  });
+
+  it("strips OGC_FID from every feature that has it", () => {
+    const input: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { OGC_FID: 1, name: "a" },
+          geometry: { type: "Point", coordinates: [0, 0] },
+        },
+        {
+          type: "Feature",
+          properties: { name: "b" },
+          geometry: { type: "Point", coordinates: [1, 1] },
+        },
+        {
+          type: "Feature",
+          properties: { OGC_FID: 3, name: "c" },
+          geometry: { type: "Point", coordinates: [2, 2] },
+        },
+      ],
+    };
+    const out = stripAutoFidColumn(input);
+    assert.deepEqual(
+      out.features.map((f) => f.properties),
+      [{ name: "a" }, { name: "b" }, { name: "c" }],
     );
   });
 });
