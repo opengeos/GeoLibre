@@ -996,6 +996,7 @@ function applyGeomanSketchesStyle(
     if (!isGeomanDisplayLayer(layer)) continue;
     applyGeomanDisplayLayerOpacity(map, layer, sketchesLayer.opacity);
     applyGeomanDisplayLayerWidth(map, layer, sketchesLayer.style);
+    applyGeomanDisplayLayerCircleRadius(map, layer, sketchesLayer.style);
     if (!isGeomanTextMarkerLayer(layer)) continue;
     try {
       map.setLayoutProperty(
@@ -1045,6 +1046,52 @@ function applyGeomanDisplayLayerWidth(
   setGeomanPaintProperty(map, layer.id, "line-width", lineWidthValue(style));
 }
 
+/**
+ * The store's default point circle radius and Geoman's default marker icon size.
+ * Used to scale the marker icon proportionally so an editing marker grows with
+ * the layer's circle radius the same way the idle store-rendered circle does.
+ */
+const DEFAULT_POINT_CIRCLE_RADIUS = 6;
+const DEFAULT_GEOMAN_MARKER_ICON_SIZE = 0.18;
+
+/**
+ * Mirror the Sketches layer's circle radius onto Geoman's committed point
+ * display layers. While the draw/edit tools are active the store Sketches layer
+ * is suppressed and Geoman renders the existing features instead, so without this
+ * a point marker's circle radius (which works in the idle store rendering) has no
+ * visible effect during selection/editing. Circle-type point layers take the
+ * radius directly; the default `marker` symbol icon is scaled proportionally so
+ * it grows to match. Editing aids (vertex/center/edge handles, snap guides) and
+ * text markers keep Geoman's defaults so editing stays legible.
+ */
+function applyGeomanDisplayLayerCircleRadius(
+  map: maplibregl.Map,
+  layer: maplibregl.LayerSpecification,
+  style: GeoLibreLayer["style"],
+): void {
+  const id = layer.id.toLowerCase();
+  if (!id.startsWith("gm_main") || id.includes("snap")) return;
+
+  const radius = Math.max(1, styleValue(style, "circleRadius"));
+
+  if (layer.type === "circle") {
+    setGeomanPaintProperty(map, layer.id, "circle-radius", radius);
+    return;
+  }
+
+  // Geoman renders the `marker` geometry as an icon symbol (id `...-marker__…`).
+  // Exclude the `text_marker` symbol (id `...-text_marker__…`), which carries its
+  // own text styling, by skipping ids containing "text".
+  if (layer.type === "symbol" && id.includes("marker") && !id.includes("text")) {
+    setGeomanLayoutProperty(
+      map,
+      layer.id,
+      "icon-size",
+      (radius / DEFAULT_POINT_CIRCLE_RADIUS) * DEFAULT_GEOMAN_MARKER_ICON_SIZE,
+    );
+  }
+}
+
 function applyGeomanDisplayLayerOpacity(
   map: maplibregl.Map,
   layer: maplibregl.LayerSpecification,
@@ -1075,6 +1122,19 @@ function setGeomanPaintProperty(
     map.setPaintProperty(layerId, property, value);
   } catch {
     // Geoman layers are rebuilt often and may not support every paint property.
+  }
+}
+
+function setGeomanLayoutProperty(
+  map: maplibregl.Map,
+  layerId: string,
+  property: string,
+  value: unknown,
+): void {
+  try {
+    map.setLayoutProperty(layerId, property, value);
+  } catch {
+    // Geoman layers are rebuilt often and may not support every layout property.
   }
 }
 
