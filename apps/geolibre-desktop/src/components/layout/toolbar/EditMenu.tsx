@@ -42,20 +42,20 @@ export function EditMenu({ chrome }: EditMenuProps) {
           {chrome.renderLabel(t("toolbar.menu.edit"))}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-56">
+      <DropdownMenuContent align="start" className="min-w-56">
         <DropdownMenuLabel>{t("toolbar.menu.edit")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem disabled={!canUndo} onSelect={undo}>
-          <Undo2 className="mr-2 h-3.5 w-3.5" />
-          {t("toolbar.item.undo")}
-          <span className="ml-auto text-xs text-muted-foreground">
+          <Undo2 className="mr-2 h-3.5 w-3.5 shrink-0" />
+          <span className="whitespace-nowrap">{t("toolbar.item.undo")}</span>
+          <span className="ml-auto shrink-0 whitespace-nowrap pl-4 text-xs text-muted-foreground">
             Ctrl/Cmd+Z
           </span>
         </DropdownMenuItem>
         <DropdownMenuItem disabled={!canRedo} onSelect={redo}>
-          <Redo2 className="mr-2 h-3.5 w-3.5" />
-          {t("toolbar.item.redo")}
-          <span className="ml-auto text-xs text-muted-foreground">
+          <Redo2 className="mr-2 h-3.5 w-3.5 shrink-0" />
+          <span className="whitespace-nowrap">{t("toolbar.item.redo")}</span>
+          <span className="ml-auto shrink-0 whitespace-nowrap pl-4 text-xs text-muted-foreground">
             Ctrl/Cmd+Shift+Z / Ctrl+Y
           </span>
         </DropdownMenuItem>
