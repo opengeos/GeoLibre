@@ -151,8 +151,8 @@ export function ShareProjectDialog({
           <div className="space-y-3 text-sm">
             <p className="text-muted-foreground">
               Add a share.geolibre.app API token in Settings → Environment
-              Variables before sharing. Create one under Settings &gt; API
-              tokens on the website.
+              Variables before sharing. Create one under Settings → API tokens
+              on the website.
             </p>
             <Button
               type="button"
