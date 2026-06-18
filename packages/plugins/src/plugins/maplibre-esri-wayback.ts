@@ -37,7 +37,7 @@ let stateChangeHandler: EsriWaybackControlEventHandler | null = null;
 export const maplibreEsriWaybackPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-esri-wayback",
   name: "Esri Wayback",
-  version: "0.1.0",
+  version: "0.2.0",
   activate: (app: GeoLibreAppAPI) => {
     if (!esriWaybackControl) {
       esriWaybackControl = new EsriWaybackControl(
