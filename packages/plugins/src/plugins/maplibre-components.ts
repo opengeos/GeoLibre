@@ -2056,6 +2056,10 @@ async function refreshMinimapBasemap(app: GeoLibreAppAPI): Promise<void> {
     return;
   }
 
+  // Preserve the user's panel state across the rebuild: a basemap change must
+  // not re-open a minimap the user had collapsed to its on-map icon.
+  const wasCollapsed = minimapControl.getState().collapsed;
+
   app.removeMapControl(minimapControl);
   minimapControl = createMinimapControl(
     MinimapControlClass,
@@ -2077,7 +2081,7 @@ async function refreshMinimapBasemap(app: GeoLibreAppAPI): Promise<void> {
   setTimeout(() => {
     if (!minimapControl) return;
     minimapControl.show();
-    minimapControl.expand();
+    if (!wasCollapsed) minimapControl.expand();
   }, 0);
 }
 

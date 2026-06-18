@@ -22,10 +22,12 @@ export function useBeforeUnloadGuard(): void {
       // render-time snapshot, so the listener never needs to be re-registered.
       if (!useAppStore.getState().isDirty) return;
       // preventDefault + a non-empty returnValue is what triggers the browser's
-      // built-in "Leave site?" confirmation; the custom string is ignored by
-      // modern browsers but is still required for the prompt to appear.
+      // built-in "Leave site?" confirmation. Modern browsers honour
+      // preventDefault alone and ignore the string, but Safari and older
+      // Firefox still require a truthy returnValue, so set a non-empty sentinel
+      // (its text is never shown).
       event.preventDefault();
-      event.returnValue = "";
+      event.returnValue = "unsaved";
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);

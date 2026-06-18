@@ -59,18 +59,21 @@ import {
 import { startGeoLibreSidecar } from "../../lib/sidecar";
 import { createAppAPI } from "../../hooks/usePlugins";
 import { canExportRasterLayer, rasterExportUrl } from "../../lib/raster-export";
+import { fetchableUrl } from "../../lib/url-utils";
 
 /**
  * The input URL the Python sidecar can read for an added raster layer, or null
- * if there is none. Only `http(s)` sources qualify: rasterio/GDAL fetches
- * remote COGs over the network (via `/vsicurl`), but file-loaded rasters keep
- * only a blob URL plus a bare file name in the store — neither is readable by
- * the backend process — and blob/data URLs cannot be opened server-side.
+ * if there is none. Only raster layers with an `http(s)` source qualify:
+ * rasterio/GDAL fetches remote COGs over the network (via `/vsicurl`), but
+ * file-loaded rasters keep only a blob URL plus a bare file name in the store —
+ * neither is readable by the backend process — and blob/data URLs cannot be
+ * opened server-side. `fetchableUrl` unwraps `scheme://` wrappers (e.g.
+ * `cog://https://…`) before the `http(s)` check.
  */
 function sidecarRasterUrl(layer: GeoLibreLayer): string | null {
-  const url = (layer.source as { url?: unknown }).url;
-  if (typeof url !== "string") return null;
-  return /^https?:\/\//i.test(url) ? url : null;
+  if (layer.type !== "cog" && layer.type !== "raster") return null;
+  const url = fetchableUrl((layer.source as { url?: unknown }).url);
+  return url && /^https?:\/\//i.test(url) ? url : null;
 }
 
 /** Which engine runs the selected tool: Python sidecar or the browser. */
@@ -131,6 +134,9 @@ export function RasterToolsDialog({
   // (a sidecar job, then switching engine to client), so a shared ref would
   // break the sidecar log's auto-scroll.
   const clientLogEndRef = useRef<HTMLDivElement>(null);
+  // Aborts an in-flight layer-bytes fetch when the dialog closes/unmounts or a
+  // new pick supersedes it, so its state setters never fire on a dead component.
+  const layerFetchAbortRef = useRef<AbortController | null>(null);
 
   // Client-engine state. The browser fallback reads a GeoTIFF into memory,
   // computes a new raster, adds it to the map, and offers a download.
@@ -382,26 +388,37 @@ export function RasterToolsDialog({
       }
       const url = rasterExportUrl(layer);
       if (!url) return;
+      // Supersede any prior in-flight fetch and tie this one to an abort signal
+      // so closing the dialog mid-fetch cancels it instead of updating state on
+      // an unmounted component.
+      layerFetchAbortRef.current?.abort();
+      const controller = new AbortController();
+      layerFetchAbortRef.current = controller;
       setResolvingLayer(true);
       try {
-        const response = await fetch(url);
+        const response = await fetch(url, { signal: controller.signal });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const bytes = await response.arrayBuffer();
+        if (controller.signal.aborted) return;
         setClientInput({ name: layer.name, bytes });
         setClientResult(null);
         setClientLog([]);
       } catch (err) {
+        if (controller.signal.aborted) return;
         setError(
           err instanceof Error
             ? err.message
             : t("toolbar.rasterTool.layerLoadError"),
         );
       } finally {
-        setResolvingLayer(false);
+        if (!controller.signal.aborted) setResolvingLayer(false);
       }
     },
     [layers, engine, t],
   );
+
+  // Abort any in-flight layer-bytes fetch when the dialog unmounts.
+  useEffect(() => () => layerFetchAbortRef.current?.abort(), []);
 
   const runSidecar = useCallback(async () => {
     setError(null);
