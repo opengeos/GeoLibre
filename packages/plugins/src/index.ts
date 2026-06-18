@@ -49,6 +49,7 @@ export {
   openZarrLayerPanel,
   addCloudNetcdfLayer,
   type CloudNetcdfLayerOptions,
+  setBookmarkCaptureLabel,
   subscribeBookmarkPanel,
   subscribeColorbarPanel,
   subscribeHtmlPanel,

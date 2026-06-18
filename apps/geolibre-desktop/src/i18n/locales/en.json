@@ -1,4 +1,12 @@
 {
+  "bookmark": {
+    "captureStateLabel": "Include visible layers"
+  },
+  "fileNamePrompt": {
+    "title": "Save file as",
+    "description": "Choose a file name. The file downloads to your browser's downloads folder.",
+    "label": "File name"
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",

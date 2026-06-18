@@ -283,6 +283,66 @@ const MEASURE_OPTIONS = {
   position: measureControlPosition,
 } satisfies MeasureControlOptions;
 
+/**
+ * Label for the bookmark "capture state" checkbox. Default is English; the
+ * desktop shell pushes a translated value via {@link setBookmarkCaptureLabel}
+ * since this package is framework-agnostic and has no react-i18next access.
+ */
+let bookmarkCaptureLabel = "Include visible layers";
+
+/** Override the bookmark capture-state checkbox label with translated text. */
+export function setBookmarkCaptureLabel(label: string): void {
+  if (label) bookmarkCaptureLabel = label;
+}
+
+/**
+ * Capture which layers are currently visible so a bookmark can restore the same
+ * displayed set later. Always records the set (empty when no layers are
+ * visible) so the restore faithfully reproduces the displayed state.
+ */
+function captureVisibleLayers(): Record<string, unknown> {
+  const { layers } = useAppStore.getState();
+  return {
+    visibleLayerIds: layers.filter((layer) => layer.visible).map((l) => l.id),
+  };
+}
+
+/**
+ * Restore the visible-layer set captured with a bookmark: show the layers that
+ * were visible, hide the rest. Captured layers that no longer exist are skipped
+ * (they cannot be re-added from a view bookmark).
+ */
+function restoreVisibleLayers(
+  extra: Record<string, unknown> | undefined,
+): void {
+  const ids = extra?.visibleLayerIds;
+  if (!Array.isArray(ids)) return;
+  const wanted = new Set(
+    ids.filter((id): id is string => typeof id === "string"),
+  );
+  const { layers } = useAppStore.getState();
+  // Apply every visibility change in one store update (instead of one per layer)
+  // so restoring a bookmark triggers a single re-render and layer-sync pass.
+  // Unchanged layers keep their identity so the sync skips them.
+  let changed = false;
+  const next = layers.map((layer) => {
+    const shouldShow = wanted.has(layer.id);
+    if (layer.visible === shouldShow) return layer;
+    changed = true;
+    return { ...layer, visible: shouldShow };
+  });
+  if (changed) {
+    useAppStore.setState({ layers: next, isDirty: true });
+  }
+  const present = new Set(layers.map((layer) => layer.id));
+  const missing = [...wanted].filter((id) => !present.has(id)).length;
+  if (missing > 0) {
+    console.info(
+      `BookmarkControl: ${missing} captured layer(s) are no longer present and were skipped.`,
+    );
+  }
+}
+
 const BOOKMARK_OPTIONS = {
   backgroundColor: "hsl(var(--popover))",
   className: "geolibre-bookmark-control",
@@ -292,6 +352,13 @@ const BOOKMARK_OPTIONS = {
   panelWidth: 280,
   position: bookmarkControlPosition,
   storageKey: "geolibre-bookmarks",
+  // Resizable panel and drag reordering are on by default upstream; enable
+  // per-bookmark export selection and visible-layer capture here. The
+  // capture-checkbox label is applied per-instance in createBookmarkControl so
+  // it can pick up the translated string.
+  selectable: true,
+  captureState: captureVisibleLayers,
+  restoreState: restoreVisibleLayers,
 } satisfies BookmarkControlOptions;
 
 const MINIMAP_OPTIONS = {
@@ -2515,7 +2582,10 @@ function createBookmarkControl(
   BookmarkControlClass: BookmarkControlConstructor,
   app: GeoLibreAppAPI,
 ): BookmarkControl {
-  const control = new BookmarkControlClass(BOOKMARK_OPTIONS);
+  const control = new BookmarkControlClass({
+    ...BOOKMARK_OPTIONS,
+    captureStateLabel: bookmarkCaptureLabel,
+  });
   control.on("collapse", () => {
     if (control !== bookmarkControl) return;
     setTimeout(() => {
@@ -2539,7 +2609,7 @@ function routeBookmarkFileIoThroughHost(
   app: GeoLibreAppAPI,
 ): void {
   // `_exportToFile`/`_importFromFile` are private (underscore-prefixed) members
-  // of BookmarkControl as of maplibre-gl-components@0.20.1. If a future version
+  // of BookmarkControl as of maplibre-gl-components@0.21.0. If a future version
   // renames them, the overrides below silently stop being called and file I/O
   // regresses to the WebView-incompatible Blob/file-input path — so warn loudly
   // to flag it when bumping the dependency.
@@ -2562,6 +2632,9 @@ function routeBookmarkFileIoThroughHost(
     description: "Bookmarks",
     extensions: ["json"],
     mimeType: "application/json",
+    // Let the user name the export when the browser has no native save picker
+    // (Firefox, Safari); Tauri and Chromium already prompt for a name.
+    promptName: true,
   };
 
   io._exportToFile = () => {

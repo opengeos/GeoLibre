@@ -47,10 +47,27 @@ import {
 import { appendDiagnostic } from "../lib/diagnostics";
 import { mergeStringLists } from "../lib/string-lists";
 import {
+  browserSaveFallsBackToDownload,
   openLocalDataFileWithFallback,
   saveTextFileWithFallback,
 } from "../lib/tauri-io";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
+import { useFileNamePrompt } from "./useFileNamePrompt";
+
+/**
+ * Append the first allowed extension to a user-entered file name when it lacks
+ * one, so a name like "my-bookmarks" becomes "my-bookmarks.json".
+ */
+function ensureFileExtension(name: string, extensions: string[]): string {
+  const ext = extensions[0];
+  if (!ext) return name;
+  const lower = name.toLowerCase();
+  if (extensions.some((e) => lower.endsWith(`.${e.toLowerCase()}`))) {
+    return name;
+  }
+  // Strip any trailing dots first so "my-bookmarks." doesn't become a double dot.
+  return `${name.replace(/\.+$/, "")}.${ext}`;
+}
 
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
 
@@ -375,17 +392,30 @@ export function createAppAPI(
       const description = options?.description ?? "GeoJSON";
       const extensions = options?.extensions ?? ["geojson", "json"];
       const mimeType = options?.mimeType ?? "application/geo+json";
-      void saveTextFileWithFallback(content, {
-        defaultName: filename,
-        filters: [{ name: description, extensions }],
-        browserTypes: [
-          {
-            description,
-            accept: { [mimeType]: extensions.map((ext) => `.${ext}`) },
-          },
-        ],
-        mimeType,
-      }).catch((error) => {
+      void (async () => {
+        let defaultName = filename;
+        // Browsers without the File System Access picker can only download under
+        // a fixed name. When the caller opts in, prompt so the user can choose
+        // it (Tauri and Chromium already offer a name via their save dialogs).
+        if (options?.promptName && browserSaveFallsBackToDownload()) {
+          const chosen = await useFileNamePrompt.getState().prompt({
+            defaultName: filename,
+          });
+          if (chosen === null) return;
+          defaultName = ensureFileExtension(chosen, extensions);
+        }
+        await saveTextFileWithFallback(content, {
+          defaultName,
+          filters: [{ name: description, extensions }],
+          browserTypes: [
+            {
+              description,
+              accept: { [mimeType]: extensions.map((ext) => `.${ext}`) },
+            },
+          ],
+          mimeType,
+        });
+      })().catch((error) => {
         console.error(`Could not export ${filename}.`, error);
       });
     },
