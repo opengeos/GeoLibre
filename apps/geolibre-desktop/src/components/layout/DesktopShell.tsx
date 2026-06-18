@@ -417,7 +417,12 @@ export function DesktopShell({
       ? COLLAPSED_PANEL_RAIL_WIDTH
       : 0;
     const half = Math.round((shellWidth - layerWidth - styleRailWidth) / 2);
-    setNotebookPanelWidth(Math.max(MIN_NOTEBOOK_PANEL_WIDTH, half));
+    // Honor the same min/max bounds as the drag-resize handler so the auto-size
+    // and manual-resize paths cannot diverge (an ultrawide shell would otherwise
+    // initialize past MAX, a width the user could never drag back to).
+    setNotebookPanelWidth(
+      clamp(half, MIN_NOTEBOOK_PANEL_WIDTH, MAX_NOTEBOOK_PANEL_WIDTH),
+    );
   }, [
     notebookOpen,
     layoutOptions.layerPanelVisible,
