@@ -479,6 +479,10 @@
       "hideEntry": "Hide entry"
     }
   },
+  "map": {
+    "boundsRestricted": "Bounds locked",
+    "boundsRestrictedTooltip": "Map bounds are restricted. You can change this in Settings."
+  },
   "settings": {
     "title": "Settings",
     "description": "Configure project preferences and runtime settings.",

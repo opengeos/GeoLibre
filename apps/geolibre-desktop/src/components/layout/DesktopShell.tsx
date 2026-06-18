@@ -62,6 +62,7 @@ import { registerMbtilesProtocol } from "../../lib/mbtiles";
 import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
 import { registerXyzTileProtocol } from "../../lib/xyz-url";
 import { useEmbedBridge } from "../../hooks/useEmbedBridge";
+import { BoundsRestrictionIndicator } from "./BoundsRestrictionIndicator";
 import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
 import { useCommandBridge } from "../../hooks/useCommandBridge";
 import {
@@ -1261,6 +1262,7 @@ export function DesktopShell({
               onControllerReady={handleMapControllerReady}
             />
             <RemoteCursorsOverlay mapControllerRef={mapControllerRef} />
+            <BoundsRestrictionIndicator />
           </SectionErrorBoundary>
         </main>
         {/* The notebook claims the workspace's right half, so the Style panel
