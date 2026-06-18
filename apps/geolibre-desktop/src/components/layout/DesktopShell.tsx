@@ -395,6 +395,22 @@ export function DesktopShell({
   const [notebookPanelWidth, setNotebookPanelWidth] = useState(
     DEFAULT_NOTEBOOK_PANEL_WIDTH,
   );
+  // Opening the notebook (Processing → Jupyter Notebook) splits the workspace
+  // 50/50 between the map and the notebook: we size the notebook to half of the
+  // space it shares with the map (the row width minus the layer panel, if
+  // shown), while the Style panel is hidden (see its render gate below). Fire
+  // only on the closed→open transition so a later manual resize is preserved.
+  const notebookWasOpenRef = useRef(notebookOpen);
+  useEffect(() => {
+    const wasOpen = notebookWasOpenRef.current;
+    notebookWasOpenRef.current = notebookOpen;
+    if (!notebookOpen || wasOpen) return;
+    const shellWidth = shellRef.current?.getBoundingClientRect().width ?? 0;
+    if (shellWidth <= 0) return;
+    const layerWidth = layoutOptions.layerPanelVisible ? layerPanelWidth : 0;
+    const half = Math.round((shellWidth - layerWidth) / 2);
+    setNotebookPanelWidth(Math.max(MIN_NOTEBOOK_PANEL_WIDTH, half));
+  }, [notebookOpen, layoutOptions.layerPanelVisible, layerPanelWidth]);
   const deferPanelResize = isTauri();
   const shellStyle: ShellStyle = {
     "--layer-panel-width": `${layerPanelWidth}px`,
@@ -1229,7 +1245,10 @@ export function DesktopShell({
             <RemoteCursorsOverlay mapControllerRef={mapControllerRef} />
           </SectionErrorBoundary>
         </main>
-        {layoutOptions.stylePanelVisible ? (
+        {/* The notebook claims the workspace's right half, so the Style panel
+            is hidden while it is open (Processing → Jupyter Notebook). It
+            returns, respecting the persisted setting, once the notebook closes. */}
+        {layoutOptions.stylePanelVisible && !notebookOpen ? (
           <SectionErrorBoundary label="Style panel">
             <StylePanel
               mapControllerRef={mapControllerRef}
