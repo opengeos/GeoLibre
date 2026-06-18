@@ -108,6 +108,13 @@ export function InsertBeforeField({
   // controller once it finishes initialising; the call is a cheap filter.
   const basemapStyleLayerIds =
     mapControllerRef.current?.getBasemapStyleLayerIds() ?? [];
+  // The basemap style exposes dozens of internal layer ids that overwhelm the
+  // dropdown for standard users (issue #453). Keep them behind an opt-in
+  // "advanced" toggle so the default list only shows the user's own layers —
+  // but reveal them automatically if the current value is one of them.
+  const valueIsBasemapLayer = basemapStyleLayerIds.includes(value);
+  const [showBasemapLayers, setShowBasemapLayers] = useState(valueIsBasemapLayer);
+  const basemapLayersVisible = showBasemapLayers || valueIsBasemapLayer;
   return (
     <div className="space-y-1.5">
       <Label htmlFor="add-data-before-id">
@@ -128,7 +135,7 @@ export function InsertBeforeField({
             ))}
           </optgroup>
         )}
-        {basemapStyleLayerIds.length > 0 && (
+        {basemapStyleLayerIds.length > 0 && basemapLayersVisible && (
           <optgroup label={t("addData.shared.basemapLayersGroup")}>
             {basemapStyleLayerIds.map((styleLayerId) => (
               <option key={styleLayerId} value={styleLayerId}>
@@ -138,6 +145,17 @@ export function InsertBeforeField({
           </optgroup>
         )}
       </Select>
+      {basemapStyleLayerIds.length > 0 && !valueIsBasemapLayer && (
+        <button
+          type="button"
+          className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          onClick={() => setShowBasemapLayers((prev) => !prev)}
+        >
+          {showBasemapLayers
+            ? t("addData.shared.hideBasemapLayers")
+            : t("addData.shared.showBasemapLayers")}
+        </button>
+      )}
     </div>
   );
 }

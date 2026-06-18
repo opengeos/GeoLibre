@@ -62,6 +62,8 @@
       "insertTop": "Top of layer list (default)",
       "layersGroup": "Layers",
       "basemapLayersGroup": "Basemap layers",
+      "showBasemapLayers": "Show basemap layers (advanced)",
+      "hideBasemapLayers": "Hide basemap layers",
       "addLayer": "Add layer",
       "adding": "Adding…",
       "addError": "Could not add layer."
