@@ -1071,6 +1071,15 @@ export class MapController {
       panelWidth: 340,
       panelMinWidth: 240,
       panelMaxWidth: 450,
+      // The control toggles the basemap internally; mirror the change into the
+      // store (the source of truth) so external basemap UI — e.g. the left
+      // layer panel's visibility icon and opacity slider — stays in sync.
+      onBackgroundVisibilityChange: (visible) => {
+        useAppStore.getState().setBasemapVisible(visible);
+      },
+      onBackgroundOpacityChange: (opacity) => {
+        useAppStore.getState().setBasemapOpacity(opacity);
+      },
       ...layerControlConfig,
     });
     this.map.addControl(
