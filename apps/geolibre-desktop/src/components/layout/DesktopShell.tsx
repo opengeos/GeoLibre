@@ -1190,12 +1190,7 @@ export function DesktopShell({
           </SectionErrorBoundary>
         ) : null}
         <main
-          // `isolate` makes the map area its own stacking context so map-control
-          // panels appended to the map container (e.g. the basemap control's
-          // panel at z-index:1000, and others) stay contained below the modal
-          // layer. Without it those z-indexes escape to the root stacking
-          // context and cover body-portaled dialogs like the layer-removal
-          // confirmation (z-50). See issue #451.
+          // `isolate` creates a stacking context so map-panel z-indexes (up to 10000) stay below body-portaled dialogs. See #451.
           className={`relative isolate min-w-0 flex-1 overflow-hidden ${
             layoutOptions.compact ? "min-h-0" : "min-h-72 md:min-h-0"
           }`}
