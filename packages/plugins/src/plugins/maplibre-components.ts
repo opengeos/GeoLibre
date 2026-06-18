@@ -283,6 +283,48 @@ const MEASURE_OPTIONS = {
   position: measureControlPosition,
 } satisfies MeasureControlOptions;
 
+/**
+ * Capture which layers are currently visible so a bookmark can restore the same
+ * displayed set later. Returns `undefined` when no layers are loaded, so an
+ * empty capture never hides everything on restore.
+ */
+function captureVisibleLayers(): Record<string, unknown> | undefined {
+  const { layers } = useAppStore.getState();
+  if (layers.length === 0) return undefined;
+  return {
+    visibleLayerIds: layers.filter((layer) => layer.visible).map((l) => l.id),
+  };
+}
+
+/**
+ * Restore the visible-layer set captured with a bookmark: show the layers that
+ * were visible, hide the rest. Captured layers that no longer exist are skipped
+ * (they cannot be re-added from a view bookmark).
+ */
+function restoreVisibleLayers(
+  extra: Record<string, unknown> | undefined,
+): void {
+  const ids = extra?.visibleLayerIds;
+  if (!Array.isArray(ids)) return;
+  const wanted = new Set(
+    ids.filter((id): id is string => typeof id === "string"),
+  );
+  const { layers, setLayerVisibility } = useAppStore.getState();
+  for (const layer of layers) {
+    const shouldShow = wanted.has(layer.id);
+    if (layer.visible !== shouldShow) {
+      setLayerVisibility(layer.id, shouldShow);
+    }
+  }
+  const present = new Set(layers.map((layer) => layer.id));
+  const missing = [...wanted].filter((id) => !present.has(id)).length;
+  if (missing > 0) {
+    console.info(
+      `BookmarkControl: ${missing} captured layer(s) are no longer present and were skipped.`,
+    );
+  }
+}
+
 const BOOKMARK_OPTIONS = {
   backgroundColor: "hsl(var(--popover))",
   className: "geolibre-bookmark-control",
@@ -292,6 +334,13 @@ const BOOKMARK_OPTIONS = {
   panelWidth: 280,
   position: bookmarkControlPosition,
   storageKey: "geolibre-bookmarks",
+  // Resizable panel (#468) and drag reordering (#471) are on by default
+  // upstream; enable per-bookmark export selection (#470) and layer capture
+  // (#467) here.
+  selectable: true,
+  captureState: captureVisibleLayers,
+  restoreState: restoreVisibleLayers,
+  captureStateLabel: "Include visible layers",
 } satisfies BookmarkControlOptions;
 
 const MINIMAP_OPTIONS = {
@@ -2539,7 +2588,7 @@ function routeBookmarkFileIoThroughHost(
   app: GeoLibreAppAPI,
 ): void {
   // `_exportToFile`/`_importFromFile` are private (underscore-prefixed) members
-  // of BookmarkControl as of maplibre-gl-components@0.20.1. If a future version
+  // of BookmarkControl as of maplibre-gl-components@0.21.0. If a future version
   // renames them, the overrides below silently stop being called and file I/O
   // regresses to the WebView-incompatible Blob/file-input path — so warn loudly
   // to flag it when bumping the dependency.
@@ -2562,6 +2611,9 @@ function routeBookmarkFileIoThroughHost(
     description: "Bookmarks",
     extensions: ["json"],
     mimeType: "application/json",
+    // Let the user name the export when the browser has no native save picker
+    // (Firefox, Safari); Tauri and Chromium already prompt for a name (#469).
+    promptName: true,
   };
 
   io._exportToFile = () => {

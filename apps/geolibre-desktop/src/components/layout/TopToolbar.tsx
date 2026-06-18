@@ -91,6 +91,7 @@ import { ControlsMenu } from "./toolbar/ControlsMenu";
 import { EditMenu } from "./toolbar/EditMenu";
 import { HelpMenu } from "./toolbar/HelpMenu";
 import { OsmPbfDialogs } from "./toolbar/OsmPbfDialogs";
+import { FileNamePromptDialog } from "./FileNamePromptDialog";
 import { PluginsMenu } from "./toolbar/PluginsMenu";
 import { ProcessingMenu } from "./toolbar/ProcessingMenu";
 import { ProjectFileDialogs } from "./toolbar/ProjectFileDialogs";
@@ -870,6 +871,7 @@ export function TopToolbar({
         onOpenChange={setNetcdfDialogOpen}
       />
       <ProjectFileDialogs projectFiles={projectFiles} />
+      <FileNamePromptDialog />
       <ConsentNoticeDialogs consent={consent} />
       <OsmPbfDialogs osmPbf={osmPbf} />
       <AboutDialog

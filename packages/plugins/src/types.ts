@@ -47,6 +47,14 @@ export interface GeoLibreFileDialogOptions {
   extensions?: string[];
   /** MIME type used for the browser download blob. */
   mimeType?: string;
+  /**
+   * For {@link GeoLibreAppAPI.exportTextFile}: when true, ask the user for a
+   * file name first in browsers that cannot show a native save picker (Firefox,
+   * Safari), where the export would otherwise download under a fixed name. Has
+   * no effect under Tauri or in browsers with the File System Access picker,
+   * which already let the user choose the name.
+   */
+  promptName?: boolean;
 }
 
 /**
