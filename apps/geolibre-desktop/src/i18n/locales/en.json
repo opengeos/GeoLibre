@@ -963,6 +963,8 @@
   "dashboard": {
     "title": "Dashboard",
     "resize": "Resize dashboard panel",
+    "collapse": "Collapse dashboard",
+    "expand": "Expand dashboard",
     "close": "Close dashboard",
     "columns": "Columns",
     "addWidget": "Add widget",

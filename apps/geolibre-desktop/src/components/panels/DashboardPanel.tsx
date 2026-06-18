@@ -9,6 +9,8 @@ import {
   ChevronLeft,
   ChevronRight,
   LayoutDashboard,
+  PanelBottomClose,
+  PanelBottomOpen,
   Pencil,
   Plus,
   Trash2,
@@ -81,6 +83,10 @@ export function DashboardPanel() {
   const sectionRef = useRef<HTMLElement>(null);
   const resizeCleanupRef = useRef<(() => void) | null>(null);
   const [height, setHeight] = useState(DEFAULT_DASHBOARD_HEIGHT);
+  // Collapse the panel to just its header bar for a full map view, without
+  // losing the last height (issue #459). The height is kept in state so an
+  // expand restores the panel to exactly the size the user last dragged it to.
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<DashboardWidget | null>(null);
 
@@ -164,32 +170,34 @@ export function DashboardPanel() {
   return (
     <section
       ref={sectionRef}
-      style={{ height }}
+      style={isCollapsed ? undefined : { height }}
       className="relative flex shrink-0 flex-col border-t bg-card"
     >
-      <div
-        role="separator"
-        aria-orientation="horizontal"
-        aria-label={t("dashboard.resize")}
-        aria-valuenow={Math.round(height)}
-        aria-valuemin={MIN_DASHBOARD_HEIGHT}
-        aria-valuemax={MAX_DASHBOARD_HEIGHT}
-        tabIndex={0}
-        className="absolute -top-1 left-0 right-0 z-20 h-2 cursor-row-resize select-none border-t border-transparent hover:border-primary focus-visible:border-primary focus-visible:outline-none"
-        onMouseDown={startResize}
-        onKeyDown={(event) => {
-          // Arrow keys resize for keyboard-only users (Shift = larger step).
-          const step = event.shiftKey ? 24 : 8;
-          if (event.key === "ArrowUp") {
-            setHeight((h) => Math.min(MAX_DASHBOARD_HEIGHT, h + step));
-          } else if (event.key === "ArrowDown") {
-            setHeight((h) => Math.max(MIN_DASHBOARD_HEIGHT, h - step));
-          } else {
-            return;
-          }
-          event.preventDefault();
-        }}
-      />
+      {!isCollapsed ? (
+        <div
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label={t("dashboard.resize")}
+          aria-valuenow={Math.round(height)}
+          aria-valuemin={MIN_DASHBOARD_HEIGHT}
+          aria-valuemax={MAX_DASHBOARD_HEIGHT}
+          tabIndex={0}
+          className="absolute -top-1 left-0 right-0 z-20 h-2 cursor-row-resize select-none border-t border-transparent hover:border-primary focus-visible:border-primary focus-visible:outline-none"
+          onMouseDown={startResize}
+          onKeyDown={(event) => {
+            // Arrow keys resize for keyboard-only users (Shift = larger step).
+            const step = event.shiftKey ? 24 : 8;
+            if (event.key === "ArrowUp") {
+              setHeight((h) => Math.min(MAX_DASHBOARD_HEIGHT, h + step));
+            } else if (event.key === "ArrowDown") {
+              setHeight((h) => Math.max(MIN_DASHBOARD_HEIGHT, h - step));
+            } else {
+              return;
+            }
+            event.preventDefault();
+          }}
+        />
+      ) : null}
       <div className="flex items-center gap-2 border-b px-3 py-1.5">
         <LayoutDashboard className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-semibold">{t("dashboard.title")}</span>
@@ -197,7 +205,7 @@ export function DashboardPanel() {
           {t("dashboard.widgetCount", { count: widgets.length })}
         </span>
         <div className="ml-auto flex items-center gap-2">
-          {widgets.length > 0 ? (
+          {!isCollapsed && widgets.length > 0 ? (
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <span className="hidden sm:inline">{t("dashboard.columns")}</span>
               <Select
@@ -216,20 +224,42 @@ export function DashboardPanel() {
               </Select>
             </label>
           ) : null}
+          {!isCollapsed ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2"
+              onClick={openAdd}
+              disabled={chartableLayers.length === 0}
+              title={
+                chartableLayers.length === 0
+                  ? t("dashboard.noLayersHint")
+                  : t("dashboard.addWidget")
+              }
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">
+                {t("dashboard.addWidget")}
+              </span>
+            </Button>
+          ) : null}
           <Button
-            variant="outline"
-            size="sm"
-            className="h-8 px-2"
-            onClick={openAdd}
-            disabled={chartableLayers.length === 0}
-            title={
-              chartableLayers.length === 0
-                ? t("dashboard.noLayersHint")
-                : t("dashboard.addWidget")
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            aria-label={
+              isCollapsed ? t("dashboard.expand") : t("dashboard.collapse")
             }
+            title={
+              isCollapsed ? t("dashboard.expand") : t("dashboard.collapse")
+            }
+            onClick={() => setIsCollapsed((c) => !c)}
           >
-            <Plus className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{t("dashboard.addWidget")}</span>
+            {isCollapsed ? (
+              <PanelBottomOpen className="h-4 w-4" />
+            ) : (
+              <PanelBottomClose className="h-4 w-4" />
+            )}
           </Button>
           <Button
             variant="ghost"
@@ -244,36 +274,38 @@ export function DashboardPanel() {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto p-3">
-        {widgets.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-1 text-center">
-            <p className="text-sm text-muted-foreground">
-              {chartableLayers.length === 0
-                ? t("dashboard.emptyNoLayers")
-                : t("dashboard.empty")}
-            </p>
-          </div>
-        ) : (
-          <div
-            className="grid gap-3"
-            style={{
-              gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-            }}
-          >
-            {widgets.map((widget, index) => (
-              <WidgetCard
-                key={widget.id}
-                widget={widget}
-                index={index}
-                count={widgets.length}
-                onEdit={() => openEdit(widget)}
-                onRemove={() => removeWidget(widget.id)}
-                onMove={(toIndex) => moveWidget(widget.id, toIndex)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      {!isCollapsed ? (
+        <div className="min-h-0 flex-1 overflow-auto p-3">
+          {widgets.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center gap-1 text-center">
+              <p className="text-sm text-muted-foreground">
+                {chartableLayers.length === 0
+                  ? t("dashboard.emptyNoLayers")
+                  : t("dashboard.empty")}
+              </p>
+            </div>
+          ) : (
+            <div
+              className="grid gap-3"
+              style={{
+                gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+              }}
+            >
+              {widgets.map((widget, index) => (
+                <WidgetCard
+                  key={widget.id}
+                  widget={widget}
+                  index={index}
+                  count={widgets.length}
+                  onEdit={() => openEdit(widget)}
+                  onRemove={() => removeWidget(widget.id)}
+                  onMove={(toIndex) => moveWidget(widget.id, toIndex)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
 
       <WidgetEditorDialog
         open={editorOpen}
