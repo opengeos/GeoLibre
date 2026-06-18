@@ -471,6 +471,30 @@ export function SettingsDialog({
     updateDraftLayoutSettings(DEFAULT_DESKTOP_LAYOUT_SETTINGS);
   };
 
+  // Live updates from the Settings dropdown's Interface submenu (not the draft,
+  // which only the dialog commits on Save). Reads the latest state so rapid
+  // toggles do not clobber each other.
+  const updateSavedUiProfile = (patch: Partial<UiProfileSettings>) => {
+    const current = useDesktopSettingsStore.getState().desktopSettings;
+    setDesktopSettings({
+      ...current,
+      uiProfile: { ...current.uiProfile, ...patch },
+    });
+  };
+
+  const applySavedExperiencePreset = (level: ExperienceLevel) => {
+    const { hiddenDataSources, hiddenPlugins } = presetHiddenSets(
+      level,
+      profilePlugins.map((plugin) => plugin.id),
+    );
+    updateSavedUiProfile({
+      enabled: true,
+      level,
+      hiddenDataSources,
+      hiddenPlugins,
+    });
+  };
+
   const updateShareToken = (value: string) => {
     // Kept in the draft and only committed on Save, so editing the token and
     // then closing the dialog without saving discards the change (a secret
@@ -705,6 +729,57 @@ export function SettingsDialog({
               <DropdownMenuLabel className="px-2 py-1 text-xs font-normal text-muted-foreground">
                 {t("settings.menu.urlOverrideNote")}
               </DropdownMenuLabel>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <SlidersHorizontal className="mr-2 h-3.5 w-3.5" />
+              {t("settings.section.interface")}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-56">
+              <DropdownMenuCheckboxItem
+                checked={desktopSettings.uiProfile.enabled}
+                disabled={desktopSettings.uiProfile.locked}
+                onCheckedChange={(checked: boolean) =>
+                  updateSavedUiProfile({ enabled: checked === true })
+                }
+                onSelect={(event: Event) => event.preventDefault()}
+              >
+                {t("settings.interface.enable")}
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="px-2 py-1 text-xs font-normal text-muted-foreground">
+                {t("settings.interface.presets")}
+              </DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={desktopSettings.uiProfile.level ?? ""}
+                onValueChange={(value: string) =>
+                  applySavedExperiencePreset(value as ExperienceLevel)
+                }
+              >
+                {EXPERIENCE_LEVELS.map((level) => (
+                  <DropdownMenuRadioItem
+                    key={level}
+                    value={level}
+                    disabled={
+                      desktopSettings.uiProfile.locked ||
+                      !desktopSettings.uiProfile.enabled
+                    }
+                    onSelect={(event: Event) => event.preventDefault()}
+                  >
+                    {t(`settings.interface.level.${level}`)}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => {
+                  setSection("interface");
+                  setOpen(true);
+                }}
+              >
+                {t("settings.menu.interfaceSettings")}
+              </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
           <DropdownMenuItem

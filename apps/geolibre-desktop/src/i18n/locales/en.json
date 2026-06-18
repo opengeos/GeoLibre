@@ -517,6 +517,7 @@
     "menu": {
       "mapPreferences": "Map Preferences",
       "layoutSettings": "Layout Settings",
+      "interfaceSettings": "Interface Settings",
       "geocoding": "Geocoding",
       "environmentVariables": "Environment Variables",
       "projectSettings": "Project Settings",
