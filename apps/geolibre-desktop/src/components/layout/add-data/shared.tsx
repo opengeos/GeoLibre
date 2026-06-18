@@ -148,6 +148,8 @@ export function InsertBeforeField({
       {basemapStyleLayerIds.length > 0 && !valueIsBasemapLayer && (
         <button
           type="button"
+          aria-expanded={showBasemapLayers}
+          aria-controls="add-data-before-id"
           className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
           onClick={() => setShowBasemapLayers((prev) => !prev)}
         >
