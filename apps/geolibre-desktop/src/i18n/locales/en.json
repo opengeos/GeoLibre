@@ -1068,7 +1068,7 @@
     "intro": "Chat with your data. I can run Spatial SQL, add or remove layers, restyle them, and move the map — every change is undoable. Try \"color the countries by population with a graduated red ramp\".",
     "needsKeyTitle": "No AI provider configured",
     "needsKeyStatus": "The assistant is inactive because no LLM provider or API key was detected.",
-    "needsKeyAction": "To enable it, open Settings → Environment Variables and add your provider credentials: an API key (GEMINI_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY), AWS credentials for Bedrock, a local Ollama URL (OLLAMA_BASE_URL), or a custom OpenAI-compatible endpoint (OPENAI_COMPATIBLE_BASE_URL).",
+    "needsKeyAction": "To enable it, open Settings → Environment Variables and add your provider credentials: an API key (GEMINI_API_KEY, GOOGLE_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY), AWS credentials for Bedrock, a local Ollama URL (OLLAMA_BASE_URL), or a custom OpenAI-compatible endpoint (OPENAI_COMPATIBLE_BASE_URL).",
     "thinking": "Working…",
     "toolError": "failed",
     "provider": "LLM provider",
