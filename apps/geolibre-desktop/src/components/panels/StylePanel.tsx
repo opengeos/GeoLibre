@@ -23,7 +23,7 @@ import {
   Separator,
   Slider,
 } from "@geolibre/ui";
-import { RASTER_SOURCE_KIND } from "@geolibre/plugins";
+import { RASTER_SOURCE_KIND, SKETCHES_SOURCE_KIND } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
 import { RasterSymbologySection } from "./RasterSymbologySection";
 import {
@@ -1061,6 +1061,11 @@ export function StylePanel({
     layer.metadata.sourceKind === "maplibre-gl-vector" &&
     layer.metadata.geometryType === "point";
   const supportsPointRenderer = isCoreGeoJsonPoint || isVectorControlPoint;
+  // The GeoEditor's "Sketches" layer mixes point/line/polygon (and circle)
+  // sketches under one style, so "Circle radius" only applies to its point
+  // markers and is misleading for the drawn circle/polygon/line shapes. Hide it
+  // for that layer (see issue #483).
+  const isSketchLayer = layer.metadata.sourceKind === SKETCHES_SOURCE_KIND;
   const strokeWidthUnit = styleValue(style, "strokeWidthUnit");
   // The unit only affects line/polygon-outline rendering. Point layers always
   // stroke in pixels, so never present meters semantics (label/range/selector)
@@ -1751,15 +1756,17 @@ export function StylePanel({
         value={style.fillOpacity}
         onChange={(fillOpacity) => setLayerStyle(layer.id, { fillOpacity })}
       />
-      <NumericStyleInput
-        id="circleRadius"
-        label="Circle radius"
-        min={1}
-        max={50}
-        step={1}
-        value={style.circleRadius}
-        onChange={(circleRadius) => setLayerStyle(layer.id, { circleRadius })}
-      />
+      {isSketchLayer ? null : (
+        <NumericStyleInput
+          id="circleRadius"
+          label="Circle radius"
+          min={1}
+          max={50}
+          step={1}
+          value={style.circleRadius}
+          onChange={(circleRadius) => setLayerStyle(layer.id, { circleRadius })}
+        />
+      )}
       {hasTextMarkerControls ? (
         <>
           <Separator />
