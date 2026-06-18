@@ -780,7 +780,11 @@ function isBasemapControlRasterLayer(layer: GeoLibreLayer): boolean {
 // carries no GeoLibre-internal sourceKind, so it is matched structurally: any
 // external raster layer with concrete tiles and no dedicated handler.
 function isExternalRasterTileLayer(layer: GeoLibreLayer): boolean {
-  return layer.type === "raster" && getBasemapControlTiles(layer).length > 0;
+  return (
+    layer.type === "raster" &&
+    layer.metadata.externalNativeLayer === true &&
+    getSourceTiles(layer).length > 0
+  );
 }
 
 // Build the MapLibre source and raster layer for a generic external raster tile
@@ -795,7 +799,7 @@ function syncExternalRasterTileLayer(
 ): void {
   const nativeLayerId = nativeLayerIds[0] ?? layer.id;
   const sourceId = getExternalSourceIds(layer)[0] ?? `${nativeLayerId}-source`;
-  const tiles = getBasemapControlTiles(layer);
+  const tiles = getSourceTiles(layer);
   if (tiles.length === 0) return;
 
   if (!map.getSource(sourceId)) {
@@ -979,14 +983,24 @@ function boundsSource(
     : undefined;
 }
 
-function getBasemapControlTiles(layer: GeoLibreLayer): string[] {
+// Concrete XYZ tile templates from the registration's own `source.tiles`. This
+// is the documented external-raster contract and the only source the generic
+// external-raster path reads — it deliberately does not look at
+// metadata.tileUrl (see getBasemapControlTiles for that basemap-internal key).
+function getSourceTiles(layer: GeoLibreLayer): string[] {
   const tiles = layer.source.tiles;
-  if (Array.isArray(tiles)) {
-    const valid = tiles.filter(
-      (tile): tile is string => typeof tile === "string" && tile.length > 0,
-    );
-    if (valid.length > 0) return valid;
-  }
+  if (!Array.isArray(tiles)) return [];
+  return tiles.filter(
+    (tile): tile is string => typeof tile === "string" && tile.length > 0,
+  );
+}
+
+function getBasemapControlTiles(layer: GeoLibreLayer): string[] {
+  const tiles = getSourceTiles(layer);
+  if (tiles.length > 0) return tiles;
+  // The basemap control stores its single tile template under this internal
+  // metadata key rather than source.tiles; that fallback is specific to the
+  // basemap/web-service paths and intentionally not part of getSourceTiles.
   const tileUrl = stringMetadata(layer.metadata.tileUrl);
   return tileUrl ? [tileUrl] : [];
 }

@@ -34,6 +34,34 @@ function makeEmptyMapStub() {
   return { map, calls };
 }
 
+// A fake map where the source and layer already exist (the second sync pass,
+// e.g. after a paint/visibility change), so syncLayer must update the existing
+// layer in place rather than recreating the source.
+function makePopulatedMapStub(layerId: string) {
+  const calls: MapCall[] = [];
+  const record =
+    (method: string) =>
+    (...args: unknown[]) => {
+      calls.push({ method, args });
+    };
+  const map = {
+    getStyle: () => ({ layers: [{ id: layerId }] }),
+    getLayer: (id: string) =>
+      id === layerId ? { id, type: "raster", minzoom: 0, maxzoom: 22 } : undefined,
+    getSource: () => ({ type: "raster" }),
+    getFilter: () => undefined,
+    setLayoutProperty: record("setLayoutProperty"),
+    setPaintProperty: record("setPaintProperty"),
+    setLayerZoomRange: record("setLayerZoomRange"),
+    moveLayer: record("moveLayer"),
+    removeLayer: record("removeLayer"),
+    removeSource: record("removeSource"),
+    addLayer: record("addLayer"),
+    addSource: record("addSource"),
+  };
+  return { map, calls };
+}
+
 // The store layer GeoLibre derives (via createExternalNativeStoreLayer) from a
 // third-party plugin's generic raster registration — e.g. the GeoLibre D2S
 // plugin handing the host titiler XYZ tiles. It carries no GeoLibre-internal
@@ -84,6 +112,8 @@ describe("generic external raster tile layers", () => {
     ]);
     assert.equal(sourceSpec.tileSize, 256);
     assert.deepEqual(sourceSpec.bounds, [-90, 30, -89, 31]);
+    assert.equal(sourceSpec.minzoom, 0);
+    assert.equal(sourceSpec.maxzoom, 22);
 
     const addLayer = calls.find((c) => c.method === "addLayer");
     assert.ok(addLayer, "expected a raster layer to be created");
@@ -104,5 +134,53 @@ describe("generic external raster tile layers", () => {
       layout?: { visibility?: string };
     };
     assert.equal(layerSpec.layout?.visibility, "none");
+  });
+
+  it("forwards attribution from the registration's source", () => {
+    const { map, calls } = makeEmptyMapStub();
+    const layer = d2sRasterStoreLayer();
+    layer.source.attribution = "© Example Imagery";
+
+    syncLayer(map as never, layer);
+
+    const addSource = calls.find((c) => c.method === "addSource");
+    assert.ok(addSource, "expected a raster source to be created");
+    const sourceSpec = addSource.args[1] as Record<string, unknown>;
+    assert.equal(sourceSpec.attribution, "© Example Imagery");
+  });
+
+  it("forwards the tms scheme from the registration's source", () => {
+    const { map, calls } = makeEmptyMapStub();
+    const layer = d2sRasterStoreLayer();
+    layer.source.scheme = "tms";
+
+    syncLayer(map as never, layer);
+
+    const addSource = calls.find((c) => c.method === "addSource");
+    assert.ok(addSource, "expected a raster source to be created");
+    const sourceSpec = addSource.args[1] as Record<string, unknown>;
+    assert.equal(sourceSpec.scheme, "tms");
+  });
+
+  it("updates the existing layer without recreating the source on re-sync", () => {
+    const { map, calls } = makePopulatedMapStub("d2s-raster-1-layer");
+
+    syncLayer(map as never, d2sRasterStoreLayer({ visible: false }));
+
+    assert.equal(
+      calls.find((c) => c.method === "addSource"),
+      undefined,
+      "should not recreate an already-present source",
+    );
+    assert.equal(
+      calls.find((c) => c.method === "addLayer"),
+      undefined,
+      "should not recreate an already-present layer",
+    );
+    const setVisibility = calls.find(
+      (c) => c.method === "setLayoutProperty" && c.args[1] === "visibility",
+    );
+    assert.ok(setVisibility, "expected visibility to be updated in place");
+    assert.equal(setVisibility.args[2], "none");
   });
 });
