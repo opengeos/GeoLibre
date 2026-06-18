@@ -55,7 +55,11 @@ export function FileNamePromptDialog() {
               spellCheck={false}
               autoComplete="off"
               value={value}
-              onChange={(event) => setValue(event.target.value)}
+              // Strip path separators so a typed name like "2024/bookmarks"
+              // isn't silently truncated to "bookmarks" by the browser saver.
+              onChange={(event) =>
+                setValue(event.target.value.replace(/[/\\]/g, ""))
+              }
             />
           </div>
           <div className="flex justify-end gap-2">
