@@ -19,7 +19,7 @@ data leaves your machine until you add a key and send a prompt.
 
 The assistant is **provider-pluggable** — it uses the
 [Strands Agents](https://strandsagents.com) SDK. Configure one (or more)
-providers in **Settings → Environment** as environment variables:
+providers in **Settings → Environment Variables** as environment variables:
 
 | Provider | Environment variable(s) | Default model |
 | --- | --- | --- |

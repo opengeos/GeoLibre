@@ -510,7 +510,7 @@ export function createAssistantTools(
         // search is unavailable so it can fall back gracefully.
         return json({
           error:
-            "Web search is unavailable from the browser. Configure TAVILY_API_KEY in Settings → Environment for reliable search.",
+            "Web search is unavailable from the browser. Configure TAVILY_API_KEY in Settings → Environment Variables for reliable search.",
           detail: error instanceof Error ? error.message : String(error),
           results: [],
         });
