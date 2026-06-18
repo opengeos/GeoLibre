@@ -78,6 +78,7 @@ nav:
       - Notebook Panel: notebook.md
       - Roadmap: roadmap.md
       - Contributing: contributing.md
+      - Acknowledgements: acknowledgements.md
 
 plugins:
   - search
