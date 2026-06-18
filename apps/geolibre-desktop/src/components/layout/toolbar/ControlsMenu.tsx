@@ -209,8 +209,12 @@ function AtmosphereEffectsSubmenu({
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className="w-64">
         <DropdownMenuItem
-          onSelect={(e: Event) => e.preventDefault()}
-          onClick={onToggle}
+          // onSelect (not onClick) fires for both mouse and keyboard
+          // (Enter/Space); preventDefault keeps the submenu open after toggling.
+          onSelect={(e: Event) => {
+            e.preventDefault();
+            onToggle();
+          }}
         >
           {t("toolbar.item.atmosphereEnabled")}
           {active ? " ✓" : ""}
@@ -258,9 +262,11 @@ function AtmosphereEffectsSubmenu({
         </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          onSelect={(e: Event) => e.preventDefault()}
-          onClick={() => {
-            // A discrete action: preview the defaults, then commit immediately.
+          // onSelect fires for mouse and keyboard alike. A discrete action:
+          // preview the defaults, then commit immediately. preventDefault keeps
+          // the submenu open so the reset is visible in the controls.
+          onSelect={(e: Event) => {
+            e.preventDefault();
             preview({ ...DEFAULT_EFFECTS_SETTINGS });
             onCommit();
           }}
