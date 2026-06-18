@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import { getPluginManager } from "./usePlugins";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
 import {
+  browserSaveFallsBackToDownload,
   isHttpUrl,
   isTauri,
   openProjectFile,
@@ -26,6 +27,30 @@ import type { MapControllerRef } from "../components/layout/toolbar/constants";
 export interface EnvStripPrompt {
   count: number;
   resolve: (choice: "strip" | "keep" | "cancel") => void;
+}
+
+/**
+ * A pending "name this project file" prompt, shown when Save As (or a first
+ * Save) runs in a browser that can only download under a fixed name.
+ */
+export interface SaveNamePrompt {
+  resolve: (name: string | null) => void;
+}
+
+/**
+ * Ensure a user-entered project file name carries a recognized extension,
+ * defaulting to `.geolibre.json` when none is present so the downloaded file
+ * opens cleanly again later. Falls back to the default project name when blank.
+ *
+ * @param name - The raw file name the user typed.
+ * @returns A sanitized file name ending in a project extension.
+ */
+function ensureProjectFileName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return `${DEFAULT_PROJECT_NAME}.geolibre.json`;
+  return /\.(geolibre\.json|geolibre|json)$/i.test(trimmed)
+    ? trimmed
+    : `${trimmed}.geolibre.json`;
 }
 
 /**
@@ -52,6 +77,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const [envStripPrompt, setEnvStripPrompt] = useState<EnvStripPrompt | null>(
     null,
   );
+  const [saveNamePrompt, setSaveNamePrompt] = useState<SaveNamePrompt | null>(
+    null,
+  );
+  const [saveNameInput, setSaveNameInput] = useState("");
   const projectUrlAbortRef = useRef<AbortController | null>(null);
   const recentAbortRef = useRef<AbortController | null>(null);
 
@@ -222,6 +251,26 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     setEnvStripPrompt(null);
   };
 
+  // Ask the user to name the project file. Used only when saving falls back to
+  // a browser download (no File System Access picker), where the name is the
+  // only thing the user can control. Resolves with the name, or null if cancelled.
+  const askSaveName = (defaultName: string) =>
+    new Promise<string | null>((resolve) => {
+      setSaveNameInput(defaultName);
+      setSaveNamePrompt({ resolve });
+    });
+
+  const submitSaveNamePrompt = (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
+    saveNamePrompt?.resolve(saveNameInput);
+    setSaveNamePrompt(null);
+  };
+
+  const cancelSaveNamePrompt = () => {
+    saveNamePrompt?.resolve(null);
+    setSaveNamePrompt(null);
+  };
+
   const saveProject = async (options?: {
     saveAs?: boolean;
   }): Promise<boolean> => {
@@ -247,6 +296,19 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     // Save As fall back to the save dialog for them.
     const existingLocalPath =
       projectPath && !isHttpUrl(projectPath) ? projectPath : null;
+    // Browsers without the File System Access picker (Firefox, Safari) can only
+    // download under a fixed name, so Save As (and a first Save) would otherwise
+    // reuse a default name — exactly the bug users hit. Prompt for the name so
+    // they can choose it; later in-place Saves reuse the chosen name silently.
+    let saveName = `${defaultProjectName}.geolibre.json`;
+    const promptForName =
+      browserSaveFallsBackToDownload() &&
+      (options?.saveAs === true || !existingLocalPath);
+    if (promptForName) {
+      const chosen = await askSaveName(saveName);
+      if (chosen === null) return false;
+      saveName = ensureProjectFileName(chosen);
+    }
     let path: string | null;
     try {
       path =
@@ -254,7 +316,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           ? await saveProjectFileToPath(contentToSave, existingLocalPath)
           : await saveProjectFile(
               contentToSave,
-              existingLocalPath ?? `${defaultProjectName}.geolibre.json`,
+              promptForName ? saveName : (existingLocalPath ?? saveName),
             );
     } catch (error) {
       console.error("Failed to save project", error);
@@ -305,6 +367,11 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     projectUrlLoading,
     envStripPrompt,
     resolveEnvStripPrompt,
+    saveNamePrompt,
+    saveNameInput,
+    setSaveNameInput,
+    submitSaveNamePrompt,
+    cancelSaveNamePrompt,
     handleOpenFromFile,
     handleOpenFromUrl,
     handleOpenRecent,

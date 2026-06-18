@@ -628,6 +628,24 @@ async function openProjectFileBrowser(): Promise<{
   };
 }
 
+/**
+ * Whether saving a project in the current environment would silently fall back
+ * to an anchor download under a fixed name — i.e. a browser (not Tauri) that
+ * lacks the File System Access save picker (`window.showSaveFilePicker`).
+ * Chromium browsers expose the picker and let the user name the file; Firefox
+ * and Safari do not, so callers prompt for a file name themselves before saving.
+ *
+ * @returns True only in a browser without the save picker; false under Tauri
+ *   (which uses the native save dialog) or when the picker is available.
+ */
+export function browserSaveFallsBackToDownload(): boolean {
+  if (isTauri()) return false;
+  if (typeof window === "undefined") return false;
+  return (
+    typeof (window as BrowserFilePickerWindow).showSaveFilePicker !== "function"
+  );
+}
+
 async function saveProjectFileBrowser(
   content: string,
   defaultName?: string,
