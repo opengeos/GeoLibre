@@ -69,6 +69,22 @@ body,
   cursor: pointer;
 }
 
+.geoagent-panel button.geolibre-ee-sign-in:hover {
+  border-color: #b0bec5;
+  background: #f1f5f9;
+}
+
+.geoagent-panel button.geolibre-ee-sign-in:focus-visible {
+  border-color: #2f8f85;
+  box-shadow: inset 0 0 0 1px #2f8f85;
+  outline: none;
+}
+
+.geoagent-panel button.geolibre-ee-sign-in:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .geo-editor-control .geo-editor-tool-button {
   align-items: center;
   box-sizing: border-box;
