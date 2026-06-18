@@ -22,7 +22,6 @@ export function BoundsRestrictionIndicator() {
     <div
       className="pointer-events-auto absolute left-2 top-2 z-10 flex items-center gap-1 rounded-md border bg-background/90 px-2 py-1 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm"
       role="status"
-      aria-label={tooltip}
       title={tooltip}
       data-testid="bounds-restriction-indicator"
     >
@@ -31,6 +30,9 @@ export function BoundsRestrictionIndicator() {
         aria-hidden="true"
       />
       <span>{t("map.boundsRestricted")}</span>
+      {/* Full description for assistive tech; the live region announces this
+          along with the visible label, while sighted users get it via title. */}
+      <span className="sr-only">{tooltip}</span>
     </div>
   );
 }
