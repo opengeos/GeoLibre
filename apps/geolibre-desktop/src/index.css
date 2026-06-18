@@ -54,6 +54,21 @@ body,
   outline: none;
 }
 
+/* The Earth Engine "Sign in" button is injected between the project grid and
+   the status text inside the (un-padded) details element, so inset it to match
+   the 10px gutter of the surrounding content and space it from the status. */
+.geoagent-panel button.geolibre-ee-sign-in {
+  margin: 0 10px 8px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid #d7dde5;
+  border-radius: 6px;
+  background: #fff;
+  color: #17202a;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .geo-editor-control .geo-editor-tool-button {
   align-items: center;
   box-sizing: border-box;

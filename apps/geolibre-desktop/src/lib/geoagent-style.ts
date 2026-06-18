@@ -147,7 +147,11 @@ const openGeoAgentSelectMenu = (
       item.classList.add("is-selected", "is-active");
       item.setAttribute("aria-selected", "true");
     }
-    item.addEventListener("click", () => {
+    item.addEventListener("click", (event) => {
+      // The menu lives on document.body, outside the GeoAgent panel, so let the
+      // click reach neither the document-level menu closer nor the upstream
+      // control's click-outside handler (which would collapse the panel).
+      event.stopPropagation();
       select.value = option.value;
       select.dispatchEvent(new Event("change", { bubbles: true }));
       syncGeoAgentSelectProxy(select, button);
