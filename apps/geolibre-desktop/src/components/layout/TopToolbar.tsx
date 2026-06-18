@@ -919,6 +919,14 @@ export function TopToolbar({
               className="hidden h-7 w-44 border-transparent px-2 text-xs shadow-none focus-visible:border-input md:block"
               value={projectName}
               onChange={(event) => setProjectName(event.target.value)}
+              onKeyDown={(event) => {
+                // Pressing Enter/Return commits the name and releases focus
+                // so the field no longer stays in an active editing state.
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  event.currentTarget.blur();
+                }
+              }}
               onBlur={(event) => {
                 const nextName = event.target.value.trim();
                 // Persist the canonical, locale-independent default name; a
