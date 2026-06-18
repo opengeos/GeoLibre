@@ -81,7 +81,6 @@ function d2sRasterStoreLayer(
       bounds: [-90, 30, -89, 31],
       minzoom: 0,
       maxzoom: 22,
-      sourceId: `${id}-source`,
     },
     visible: true,
     opacity: 1,
@@ -162,6 +161,9 @@ describe("generic external raster tile layers", () => {
     assert.equal(sourceSpec.scheme, "tms");
   });
 
+  // The source is built once and frozen: a re-sync updates the layer (paint,
+  // visibility, ordering) in place but does not rebuild the source, so tile
+  // URLs registered on the first sync stay fixed for the source's lifetime.
   it("updates the existing layer without recreating the source on re-sync", () => {
     const { map, calls } = makePopulatedMapStub("d2s-raster-1-layer");
 

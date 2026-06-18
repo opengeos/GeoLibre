@@ -259,6 +259,9 @@ function syncExternalNativeLayer(
   // none of the handlers above. Honor the documented external-layer contract
   // (a `source` with `tiles` and `type: "raster"`) by building the source and
   // raster layer here instead of dropping through to the GeoJSON path below.
+  // IMPORTANT: this is a structural catch-all, so add any new named raster
+  // handler (new sourceKind) BEFORE this check — placing it after would let a
+  // layer that also has `source.tiles` be intercepted by the generic path.
   if (isExternalRasterTileLayer(layer)) {
     syncExternalRasterTileLayer(map, layer, nativeLayerIds, beforeId);
     return;
@@ -802,6 +805,10 @@ function syncExternalRasterTileLayer(
   const tiles = getSourceTiles(layer);
   if (tiles.length === 0) return;
 
+  // The source is built once and never rebuilt while it exists, matching the
+  // other raster handlers above. A plugin that re-registers the same sourceId
+  // with a different `tiles` array will keep serving the original tiles; to
+  // switch tile URLs it must register under a new sourceId.
   if (!map.getSource(sourceId)) {
     const bounds = boundsSource(layer.source.bounds);
     map.addSource(sourceId, {
