@@ -1050,6 +1050,11 @@ function applyGeomanDisplayLayerWidth(
  * The store's default point circle radius and Geoman's default marker icon size.
  * Used to scale the marker icon proportionally so an editing marker grows with
  * the layer's circle radius the same way the idle store-rendered circle does.
+ *
+ * `DEFAULT_GEOMAN_MARKER_ICON_SIZE` mirrors Geoman 0.7.1's default marker
+ * `icon-size`; recheck it after upgrading `@geoman-io/maplibre-geoman-free` so
+ * the neutral case (radius === DEFAULT_POINT_CIRCLE_RADIUS) keeps matching the
+ * idle store rendering.
  */
 const DEFAULT_POINT_CIRCLE_RADIUS = 6;
 const DEFAULT_GEOMAN_MARKER_ICON_SIZE = 0.18;
@@ -1069,10 +1074,14 @@ function applyGeomanDisplayLayerCircleRadius(
   layer: maplibregl.LayerSpecification,
   style: GeoLibreLayer["style"],
 ): void {
+  if (layer.type !== "circle" && layer.type !== "symbol") return;
   const id = layer.id.toLowerCase();
   if (!id.startsWith("gm_main") || id.includes("snap")) return;
 
-  const radius = Math.max(1, styleValue(style, "circleRadius"));
+  // Mirror the store rendering, which applies `circleRadius` unclamped, so the
+  // editing view stays consistent with the idle view (e.g. radius 0 hides the
+  // point in both).
+  const radius = styleValue(style, "circleRadius");
 
   if (layer.type === "circle") {
     setGeomanPaintProperty(map, layer.id, "circle-radius", radius);
@@ -1081,8 +1090,8 @@ function applyGeomanDisplayLayerCircleRadius(
 
   // Geoman renders the `marker` geometry as an icon symbol (id `...-marker__…`).
   // Exclude the `text_marker` symbol (id `...-text_marker__…`), which carries its
-  // own text styling, by skipping ids containing "text".
-  if (layer.type === "symbol" && id.includes("marker") && !id.includes("text")) {
+  // own text styling.
+  if (id.includes("marker") && !id.includes("text_marker")) {
     setGeomanLayoutProperty(
       map,
       layer.id,
