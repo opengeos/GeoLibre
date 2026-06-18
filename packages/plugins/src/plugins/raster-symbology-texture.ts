@@ -22,7 +22,7 @@ import {
 import { colormapColors, warmColormapColors } from "./colormap-colors";
 
 // These types mirror undocumented private members of the maplibre-gl-raster
-// LayerManager (verified against v0.2.0) and the deck.gl-raster Colormap
+// LayerManager (verified against v0.5.0) and the deck.gl-raster Colormap
 // module name (deck.gl-raster v0.7.0). Access is feature-detected and falls
 // back to a no-op rather than throwing -- re-verify these names AND the
 // "colormap" module name when bumping either dependency.
