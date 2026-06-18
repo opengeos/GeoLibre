@@ -320,6 +320,10 @@ type ImportedVectorLayer = Awaited<
 const DEFAULT_SIDE_PANEL_WIDTH = 256;
 const MIN_SIDE_PANEL_WIDTH = 180;
 const MAX_SIDE_PANEL_WIDTH = 460;
+// Width of a side panel's collapsed rail (`md:w-11` = 2.75rem). The Style panel
+// stays mounted (collapsed) beside the notebook, so its rail still occupies this
+// much of the row when computing the map/notebook 50/50 split.
+const COLLAPSED_PANEL_RAIL_WIDTH = 44;
 // The notebook panel hosts a full Jupyter UI, so it needs far more room than
 // the layer/style side panels.
 const DEFAULT_NOTEBOOK_PANEL_WIDTH = 480;
@@ -397,9 +401,10 @@ export function DesktopShell({
   );
   // Opening the notebook (Processing → Jupyter Notebook) splits the workspace
   // 50/50 between the map and the notebook: we size the notebook to half of the
-  // space it shares with the map (the row width minus the layer panel, if
-  // shown), while the Style panel is hidden (see its render gate below). Fire
-  // only on the closed→open transition so a later manual resize is preserved.
+  // space it shares with the map (the row width minus the layer panel and the
+  // Style panel's collapsed rail, when shown), while the Style panel collapses
+  // to that rail (see `autoCollapse` below). Fire only on the closed→open
+  // transition so a later manual resize is preserved.
   const notebookWasOpenRef = useRef(notebookOpen);
   useEffect(() => {
     const wasOpen = notebookWasOpenRef.current;
@@ -408,9 +413,17 @@ export function DesktopShell({
     const shellWidth = shellRef.current?.getBoundingClientRect().width ?? 0;
     if (shellWidth <= 0) return;
     const layerWidth = layoutOptions.layerPanelVisible ? layerPanelWidth : 0;
-    const half = Math.round((shellWidth - layerWidth) / 2);
+    const styleRailWidth = layoutOptions.stylePanelVisible
+      ? COLLAPSED_PANEL_RAIL_WIDTH
+      : 0;
+    const half = Math.round((shellWidth - layerWidth - styleRailWidth) / 2);
     setNotebookPanelWidth(Math.max(MIN_NOTEBOOK_PANEL_WIDTH, half));
-  }, [notebookOpen, layoutOptions.layerPanelVisible, layerPanelWidth]);
+  }, [
+    notebookOpen,
+    layoutOptions.layerPanelVisible,
+    layoutOptions.stylePanelVisible,
+    layerPanelWidth,
+  ]);
   const deferPanelResize = isTauri();
   const shellStyle: ShellStyle = {
     "--layer-panel-width": `${layerPanelWidth}px`,
@@ -1246,13 +1259,14 @@ export function DesktopShell({
           </SectionErrorBoundary>
         </main>
         {/* The notebook claims the workspace's right half, so the Style panel
-            is hidden while it is open (Processing → Jupyter Notebook). It
-            returns, respecting the persisted setting, once the notebook closes. */}
-        {layoutOptions.stylePanelVisible && !notebookOpen ? (
+            collapses to its rail while the notebook is open (Processing →
+            Jupyter Notebook) rather than unmounting; the user can re-expand it. */}
+        {layoutOptions.stylePanelVisible ? (
           <SectionErrorBoundary label="Style panel">
             <StylePanel
               mapControllerRef={mapControllerRef}
               onResizeStart={startStylePanelResize}
+              autoCollapse={notebookOpen}
             />
           </SectionErrorBoundary>
         ) : null}
