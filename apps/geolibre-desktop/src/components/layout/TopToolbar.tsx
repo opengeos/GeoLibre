@@ -55,7 +55,7 @@ import {
   Workflow,
   Wrench,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   createAppAPI,
@@ -187,6 +187,10 @@ export function TopToolbar({
       setCollaborateDialogOpen(true);
     }
   }, [collaboration.enabled]);
+
+  // Tracks an active IME composition so pressing Enter to confirm a CJK
+  // candidate doesn't blur the project-name field mid-composition.
+  const projectNameComposingRef = useRef(false);
 
   const [controlsVisible, setControlsVisible] = useState<
     Record<ToolbarMapControl, boolean>
@@ -921,6 +925,21 @@ export function TopToolbar({
               className="hidden h-7 w-44 border-transparent px-2 text-xs shadow-none focus-visible:border-input md:block"
               value={projectName}
               onChange={(event) => setProjectName(event.target.value)}
+              onKeyDown={(event) => {
+                if (
+                  event.key === "Enter" &&
+                  !projectNameComposingRef.current &&
+                  !event.nativeEvent.isComposing
+                ) {
+                  event.currentTarget.blur();
+                }
+              }}
+              onCompositionStart={() => {
+                projectNameComposingRef.current = true;
+              }}
+              onCompositionEnd={() => {
+                projectNameComposingRef.current = false;
+              }}
               onBlur={(event) => {
                 const nextName = event.target.value.trim();
                 // Persist the canonical, locale-independent default name; a

@@ -51,6 +51,12 @@ test("persists a story map across save and reopen", async ({ page }) => {
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Project" }).click();
   await page.getByRole("menuitem", { name: "Save", exact: true }).click();
+  // Browsers without the File System Access picker (deleted above) prompt for a
+  // file name before downloading; accept the pre-filled default and confirm.
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Save", exact: true })
+    .click();
   const download = await downloadPromise;
   const downloadPath = await download.path();
   expect(downloadPath).toBeTruthy();

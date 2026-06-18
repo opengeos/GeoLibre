@@ -81,6 +81,12 @@ test("groups a layer and persists the folder across save and reopen", async ({
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Project" }).click();
   await page.getByRole("menuitem", { name: "Save", exact: true }).click();
+  // Browsers without the File System Access picker (deleted above) prompt for a
+  // file name before downloading; accept the pre-filled default and confirm.
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Save", exact: true })
+    .click();
   const download = await downloadPromise;
   const stream = await download.createReadStream();
   const chunks: Buffer[] = [];
