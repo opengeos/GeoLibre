@@ -7,6 +7,7 @@ import {
 } from "@geolibre/ui";
 import { useTranslation } from "react-i18next";
 import {
+  EXPERIENCE_LEVELS,
   useDesktopSettingsStore,
   type ExperienceLevel,
 } from "../../hooks/useDesktopSettings";
@@ -17,12 +18,6 @@ interface OnboardingDialogProps {
   open: boolean;
   onClose: () => void;
 }
-
-const LEVELS: readonly ExperienceLevel[] = [
-  "beginner",
-  "intermediate",
-  "advanced",
-];
 
 /**
  * First-launch wizard (issue #500) that lets the user pick an experience level,
@@ -76,7 +71,7 @@ export function OnboardingDialog({ open, onClose }: OnboardingDialogProps) {
           <DialogDescription>{t("onboarding.description")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
-          {LEVELS.map((level) => (
+          {EXPERIENCE_LEVELS.map((level) => (
             <button
               key={level}
               type="button"

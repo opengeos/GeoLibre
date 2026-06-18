@@ -61,7 +61,7 @@ wizard is skipped, and — if `lock` is set — the Interface settings are read-
 | --- | --- | --- |
 | `enabled` | boolean | Whether filtering is active. Defaults to `true` for an admin file. |
 | `level` | `"beginner" \| "intermediate" \| "advanced"` | Seeds the hidden lists from each item's tier. Optional. |
-| `lock` | boolean | When `true`, users cannot change the profile from Settings. |
+| `lock` | boolean | When `true`, users cannot change the profile from Settings. Removing the file (or serving one without `lock`) releases the lock on the next launch. |
 | `hiddenDataSources` | string[] | Explicit data-source ids to hide. Overrides the preset when present. |
 | `hiddenPlugins` | string[] | Explicit plugin ids to hide. Overrides the preset when present. |
 
@@ -69,3 +69,7 @@ Data-source ids are the catalog ids in
 `apps/geolibre-desktop/src/lib/ui-profile.ts` (e.g. `vector`, `xyz`, `mbtiles`,
 `postgres`). Plugin ids are the stable ids defined in
 `packages/plugins/src/plugins/*` (e.g. `maplibre-gl-geoagent`).
+
+When a `level` preset is active, external/bundled drop-in plugins (which load
+asynchronously after startup) are folded into the hidden set as they appear, so
+a beginner profile keeps hiding advanced plugins even when they load late.

@@ -60,6 +60,7 @@ import { Trans, useTranslation } from "react-i18next";
 import {
   DEFAULT_DESKTOP_LAYOUT_SETTINGS,
   DEFAULT_UI_PROFILE_SETTINGS,
+  EXPERIENCE_LEVELS,
   useDesktopSettingsStore,
   type DesktopSettings,
   type DesktopLayoutSettings,
@@ -1040,9 +1041,7 @@ export function SettingsDialog({
                       {t("settings.interface.presets")}
                     </h4>
                     <div className="flex flex-wrap gap-2">
-                      {(
-                        ["beginner", "intermediate", "advanced"] as const
-                      ).map((level) => (
+                      {EXPERIENCE_LEVELS.map((level) => (
                         <Button
                           key={level}
                           type="button"

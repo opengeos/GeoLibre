@@ -98,7 +98,8 @@ const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   uiProfile: DEFAULT_UI_PROFILE_SETTINGS,
 };
 
-const EXPERIENCE_LEVELS: readonly ExperienceLevel[] = [
+/** The experience-level presets, in order. Single source of truth. */
+export const EXPERIENCE_LEVELS: readonly ExperienceLevel[] = [
   "beginner",
   "intermediate",
   "advanced",

@@ -8,19 +8,14 @@
 // See `docs/ui-profiles.md`.
 
 import { invoke } from "@tauri-apps/api/core";
-import type {
-  ExperienceLevel,
-  UiProfileSettings,
+import {
+  EXPERIENCE_LEVELS,
+  type ExperienceLevel,
+  type UiProfileSettings,
 } from "../hooks/useDesktopSettings";
 import { isTauri } from "./is-tauri";
 import { normalizeStringList } from "./string-lists";
 import { presetHiddenSets } from "./ui-profile";
-
-const EXPERIENCE_LEVELS: readonly ExperienceLevel[] = [
-  "beginner",
-  "intermediate",
-  "advanced",
-];
 
 /** The raw shape an admin may author in `admin-profile.json`. */
 interface AdminProfileFile {
