@@ -71,4 +71,9 @@ export {
   type GeocodeRequest,
   type ReverseGeocodeDisplay,
 } from "./geocoding";
-export { getRuntimeEnvironment, getSpatialExtensionPath } from "./runtime-env";
+export {
+  getProtomapsApiKey,
+  getProtomapsStyleUrl,
+  getRuntimeEnvironment,
+  getSpatialExtensionPath,
+} from "./runtime-env";

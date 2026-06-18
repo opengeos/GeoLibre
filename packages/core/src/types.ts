@@ -7,6 +7,11 @@ export const OPENFREEMAP_BASEMAPS = [
     styleUrl: "https://tiles.openfreemap.org/styles/liberty",
   },
   {
+    id: "liberty-3d",
+    name: "Liberty 3D",
+    styleUrl: "https://tiles.openfreemap.org/styles/liberty",
+  },
+  {
     id: "positron",
     name: "Positron",
     styleUrl: "https://tiles.openfreemap.org/styles/positron",
@@ -26,11 +31,21 @@ export const OPENFREEMAP_BASEMAPS = [
     name: "Fiord",
     styleUrl: "https://tiles.openfreemap.org/styles/fiord",
   },
-  {
-    id: "liberty-3d",
-    name: "3D",
-    styleUrl: "https://tiles.openfreemap.org/styles/liberty",
-  },
+] as const;
+
+/**
+ * Protomaps v5 basemap flavors. These are resolved to full style URLs at use
+ * time by `getProtomapsStyleUrl`, which injects the `VITE_PROTOMAPS_API_KEY`
+ * runtime env var. The key is only present in builds configured with it (e.g.
+ * the GitHub Pages web demo), so consumers should hide these options when no
+ * key is available.
+ */
+export const PROTOMAPS_BASEMAPS = [
+  { id: "protomaps-light", name: "Light", flavor: "light" },
+  { id: "protomaps-dark", name: "Dark", flavor: "dark" },
+  { id: "protomaps-white", name: "White", flavor: "white" },
+  { id: "protomaps-grayscale", name: "Grayscale", flavor: "grayscale" },
+  { id: "protomaps-black", name: "Black", flavor: "black" },
 ] as const;
 
 export const DEFAULT_BASEMAP = "https://tiles.openfreemap.org/styles/liberty";

@@ -57,6 +57,10 @@ jobs:
         env:
           GEOLIBRE_APP_BASE: ./
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
+          # Protomaps API key, baked into the client bundle so the New map
+          # dialog can offer Protomaps basemaps. When unset, those options are
+          # hidden (see getProtomapsStyleUrl in @geolibre/core).
+          VITE_PROTOMAPS_API_KEY: ${{ secrets.VITE_PROTOMAPS_API_KEY }}
           # Public relay URL (baked into the client bundle), not a secret. Lights
           # up live collaboration; requires the workers/collab relay to be
           # deployed (see docs/collaboration.md).

@@ -49,3 +49,43 @@ export function getSpatialExtensionPath(
   const trimmed = runtimeEnv.VITE_DUCKDB_SPATIAL_EXTENSION_PATH?.trim();
   return trimmed || undefined;
 }
+
+/**
+ * Resolves the Protomaps API key from the runtime environment.
+ *
+ * Protomaps' hosted styles require an API key embedded in the style URL. The
+ * key is supplied via `VITE_PROTOMAPS_API_KEY` (baked in at build time for the
+ * web demo; see the deploy workflow). When unset, the Protomaps basemaps are
+ * unavailable and should be hidden from the UI.
+ *
+ * @param env - Environment record (defaults to the runtime environment);
+ *   injectable for testing.
+ * @returns The trimmed API key, or undefined when unset.
+ */
+export function getProtomapsApiKey(
+  env?: Record<string, string | undefined>,
+): string | undefined {
+  const runtimeEnv = env ?? getRuntimeEnvironment();
+  const trimmed = runtimeEnv.VITE_PROTOMAPS_API_KEY?.trim();
+  return trimmed || undefined;
+}
+
+/**
+ * Builds a full Protomaps v5 style URL for a flavor, injecting the API key.
+ *
+ * @param flavor - The Protomaps flavor name (e.g. `light`, `dark`, `white`,
+ *   `grayscale`, `black`).
+ * @param env - Environment record (defaults to the runtime environment);
+ *   injectable for testing.
+ * @returns The resolved style URL, or undefined when no API key is configured.
+ */
+export function getProtomapsStyleUrl(
+  flavor: string,
+  env?: Record<string, string | undefined>,
+): string | undefined {
+  const key = getProtomapsApiKey(env);
+  if (!key) return undefined;
+  return `https://api.protomaps.com/styles/v5/${flavor}/en.json?key=${encodeURIComponent(
+    key,
+  )}`;
+}

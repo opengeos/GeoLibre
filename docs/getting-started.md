@@ -112,6 +112,22 @@ For Google Street View, enable the Maps Embed API for the key in Google Cloud. F
 
 Restart `npm run dev` or `npm run tauri:dev` after changing environment variables.
 
+## Optional basemap credentials
+
+The **New map** dialog offers [Protomaps](https://protomaps.com) basemaps (Light, Dark, White, Grayscale, Black) when a Protomaps API key is configured. Without a key these options are hidden, and you can still use the OpenFreeMap basemaps or a custom style URL.
+
+Use your own key — create one in the [Protomaps dashboard](https://protomaps.com). Set it one of two ways:
+
+- **For your own deployment** — bake it into the build with the `VITE_PROTOMAPS_API_KEY` environment variable, for example in `apps/geolibre-desktop/.env.local`:
+
+  ```env
+  VITE_PROTOMAPS_API_KEY=your_protomaps_api_key
+  ```
+
+  In CI/CD, pass it as a build-time environment variable (the GitHub Pages workflow reads it from the `VITE_PROTOMAPS_API_KEY` repository secret). The resulting style URL is `https://api.protomaps.com/styles/v5/<flavor>/en.json?key=<your_key>`.
+
+- **At runtime, no rebuild** — add an environment variable named `VITE_PROTOMAPS_API_KEY` in **Settings → Environment Variables**. The Protomaps basemaps appear as soon as the key is enabled. See [Settings](user-guide/settings.md#environment-variables).
+
 ## Optional Python sidecar
 
 The optional FastAPI sidecar is reserved for heavier processing workflows and is not required for the desktop UI.
