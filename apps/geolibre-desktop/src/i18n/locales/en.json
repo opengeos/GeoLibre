@@ -512,6 +512,7 @@
       "east": "East",
       "north": "North",
       "useCurrentView": "Use Current View",
+      "useCurrentViewGlobeHint": "Switch to the Mercator projection before using this. In the Globe projection the map can still drift slightly beyond the captured bounds.",
       "minZoom": "Min zoom",
       "maxZoom": "Max zoom",
       "maxPitch": "Max pitch",

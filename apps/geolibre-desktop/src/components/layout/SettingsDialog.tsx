@@ -6,6 +6,7 @@ import {
   PROJECT_VERSION,
   useAppStore,
   type MapPreferences,
+  type MapProjection,
   type ProjectPreferences,
   type RuntimeEnvironmentVariable,
 } from "@geolibre/core";
@@ -265,6 +266,12 @@ export function SettingsDialog({
     useState<DraftDesktopSettings>(() => cloneDesktopSettings(desktopSettings));
   const [draftProjectName, setDraftProjectName] = useState(projectName);
   const [error, setError] = useState<string | null>(null);
+  // Live map projection, captured when the dialog opens. The Globe projection
+  // lets the map drift slightly past restricted bounds, so we warn users to
+  // switch to Mercator before capturing the current view (see #505).
+  const [liveProjection, setLiveProjection] = useState<MapProjection | null>(
+    null,
+  );
   // Ids of variables whose value is temporarily revealed; values are masked
   // by default so secrets are not shown on screen.
   const [revealedValueIds, setRevealedValueIds] = useState<Set<string>>(
@@ -290,7 +297,8 @@ export function SettingsDialog({
     setDraftProjectName(useAppStore.getState().projectName);
     setRevealedValueIds(new Set());
     setError(null);
-  }, [open]);
+    setLiveProjection(mapControllerRef.current?.readProjection() ?? null);
+  }, [open, mapControllerRef]);
 
   const toggleValueVisibility = (id: string) => {
     setRevealedValueIds((current) => {
@@ -717,6 +725,12 @@ export function SettingsDialog({
                     <Crosshair className="h-3.5 w-3.5" />
                     {t("settings.map.useCurrentView")}
                   </Button>
+                  {liveProjection === "globe" ? (
+                    <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                      <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                      <span>{t("settings.map.useCurrentViewGlobeHint")}</span>
+                    </p>
+                  ) : null}
                   <div className="grid gap-3 sm:grid-cols-3">
                     <div className="space-y-1.5">
                       <Label htmlFor="settings-min-zoom">
