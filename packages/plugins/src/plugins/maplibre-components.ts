@@ -309,12 +309,19 @@ function restoreVisibleLayers(
   const wanted = new Set(
     ids.filter((id): id is string => typeof id === "string"),
   );
-  const { layers, setLayerVisibility } = useAppStore.getState();
-  for (const layer of layers) {
+  const { layers } = useAppStore.getState();
+  // Apply every visibility change in one store update (instead of one per layer)
+  // so restoring a bookmark triggers a single re-render and layer-sync pass.
+  // Unchanged layers keep their identity so the sync skips them.
+  let changed = false;
+  const next = layers.map((layer) => {
     const shouldShow = wanted.has(layer.id);
-    if (layer.visible !== shouldShow) {
-      setLayerVisibility(layer.id, shouldShow);
-    }
+    if (layer.visible === shouldShow) return layer;
+    changed = true;
+    return { ...layer, visible: shouldShow };
+  });
+  if (changed) {
+    useAppStore.setState({ layers: next, isDirty: true });
   }
   const present = new Set(layers.map((layer) => layer.id));
   const missing = [...wanted].filter((id) => !present.has(id)).length;
@@ -334,9 +341,8 @@ const BOOKMARK_OPTIONS = {
   panelWidth: 280,
   position: bookmarkControlPosition,
   storageKey: "geolibre-bookmarks",
-  // Resizable panel (#468) and drag reordering (#471) are on by default
-  // upstream; enable per-bookmark export selection (#470) and layer capture
-  // (#467) here.
+  // Resizable panel and drag reordering are on by default upstream; enable
+  // per-bookmark export selection and visible-layer capture here.
   selectable: true,
   captureState: captureVisibleLayers,
   restoreState: restoreVisibleLayers,
@@ -2612,7 +2618,7 @@ function routeBookmarkFileIoThroughHost(
     extensions: ["json"],
     mimeType: "application/json",
     // Let the user name the export when the browser has no native save picker
-    // (Firefox, Safari); Tauri and Chromium already prompt for a name (#469).
+    // (Firefox, Safari); Tauri and Chromium already prompt for a name.
     promptName: true,
   };
 

@@ -18,8 +18,6 @@ interface FileNamePromptState {
   request: FileNamePromptRequest | null;
   /** Current value of the name input. */
   value: string;
-  /** Resolver for the active prompt promise. */
-  resolve: ((name: string | null) => void) | null;
   setValue: (value: string) => void;
   /**
    * Open the prompt and resolve with the chosen name, or null if cancelled.
@@ -31,6 +29,11 @@ interface FileNamePromptState {
   cancel: () => void;
 }
 
+// Resolver for the active prompt promise. Kept in a module-scoped closure rather
+// than in the store state: it is an implementation detail of the promise/dialog
+// handshake, not part of the public store contract the dialog consumes.
+let activeResolve: ((name: string | null) => void) | null = null;
+
 /**
  * App-wide store backing a single reusable "choose a file name" dialog. Used by
  * the plugin host's text-file export when the browser cannot show a native save
@@ -39,23 +42,29 @@ interface FileNamePromptState {
 export const useFileNamePrompt = create<FileNamePromptState>((set, get) => ({
   request: null,
   value: "",
-  resolve: null,
   setValue: (value) => set({ value }),
   prompt: (request) => {
-    get().resolve?.(null);
+    activeResolve?.(null);
     return new Promise<string | null>((resolve) => {
-      set({ request, value: request.defaultName, resolve });
+      activeResolve = resolve;
+      set({ request, value: request.defaultName });
     });
   },
+  // Clear store state before invoking the resolver so a handler that
+  // synchronously re-enters the store (e.g. opens another prompt) sees a clean
+  // slate and cannot trigger a double-resolve.
   submit: () => {
-    const { resolve, value } = get();
-    const trimmed = value.trim();
+    const trimmed = get().value.trim();
     if (!trimmed) return;
+    const resolve = activeResolve;
+    activeResolve = null;
+    set({ request: null, value: "" });
     resolve?.(trimmed);
-    set({ request: null, value: "", resolve: null });
   },
   cancel: () => {
-    get().resolve?.(null);
-    set({ request: null, value: "", resolve: null });
+    const resolve = activeResolve;
+    activeResolve = null;
+    set({ request: null, value: "" });
+    resolve?.(null);
   },
 }));
