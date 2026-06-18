@@ -22,7 +22,6 @@ import {
   openThreeDTilesLayerPanel,
   openVectorLayerPanel,
   openZarrLayerPanel,
-  setBookmarkCaptureLabel,
   setReverseGeocodeLabels,
   DECK_VIZ_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
@@ -92,7 +91,6 @@ import { ControlsMenu } from "./toolbar/ControlsMenu";
 import { EditMenu } from "./toolbar/EditMenu";
 import { HelpMenu } from "./toolbar/HelpMenu";
 import { OsmPbfDialogs } from "./toolbar/OsmPbfDialogs";
-import { FileNamePromptDialog } from "./FileNamePromptDialog";
 import { PluginsMenu } from "./toolbar/PluginsMenu";
 import { ProcessingMenu } from "./toolbar/ProcessingMenu";
 import { ProjectFileDialogs } from "./toolbar/ProjectFileDialogs";
@@ -135,9 +133,9 @@ export function TopToolbar({
   onToggleThemeMode,
 }: TopToolbarProps) {
   const { t } = useTranslation();
-  // The reverse-geocode plugin and the bookmark control live in the
-  // framework-agnostic plugins package and cannot call t() themselves, so push
-  // the translated strings into them here and refresh on language change.
+  // The reverse-geocode plugin lives in the framework-agnostic plugins package
+  // and cannot call t() itself, so push the translated popup strings into it
+  // here and refresh them whenever the active language changes.
   useEffect(() => {
     setReverseGeocodeLabels({
       lookingUp: t("geocode.reverseLookingUp"),
@@ -145,7 +143,6 @@ export function TopToolbar({
       copyAddress: t("geocode.reverseCopyAddress"),
       failed: t("geocode.reverseFailed"),
     });
-    setBookmarkCaptureLabel(t("bookmark.captureStateLabel"));
   }, [t]);
 
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
@@ -877,7 +874,6 @@ export function TopToolbar({
         onOpenChange={setNetcdfDialogOpen}
       />
       <ProjectFileDialogs projectFiles={projectFiles} />
-      <FileNamePromptDialog />
       <ConsentNoticeDialogs consent={consent} />
       <OsmPbfDialogs osmPbf={osmPbf} />
       <AboutDialog

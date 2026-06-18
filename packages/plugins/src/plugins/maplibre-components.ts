@@ -300,7 +300,7 @@ export function setBookmarkCaptureLabel(label: string): void {
  * displayed set later. Always records the set (empty when no layers are
  * visible) so the restore faithfully reproduces the displayed state.
  */
-function captureVisibleLayers(): Record<string, unknown> | undefined {
+function captureVisibleLayers(): Record<string, unknown> {
   const { layers } = useAppStore.getState();
   return {
     visibleLayerIds: layers.filter((layer) => layer.visible).map((l) => l.id),

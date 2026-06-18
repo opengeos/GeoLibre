@@ -2,6 +2,7 @@ import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import type { MapController, MapDiagnosticEvent } from "@geolibre/map";
 import { MapCanvas, setExternalDeckLayerOrderHandler } from "@geolibre/map";
+import { useTranslation } from "react-i18next";
 import {
   addRasterToMap,
   applyRasterLayerOrder,
@@ -18,6 +19,7 @@ import {
   restoreRasterLayers,
   restoreThreeDTilesLayers,
   restoreVectorLayers,
+  setBookmarkCaptureLabel,
   startLayerGeometryEdit,
   subscribeGeometryEdit,
 } from "@geolibre/plugins";
@@ -72,6 +74,7 @@ import { StylePanel } from "../panels/StylePanel";
 import { StoryMapPanel } from "../storymap/StoryMapPanel";
 import { StoryMapPresenter } from "../storymap/StoryMapPresenter";
 import { DiagnosticsDialog } from "./DiagnosticsDialog";
+import { FileNamePromptDialog } from "./FileNamePromptDialog";
 import { StatusBar } from "./StatusBar";
 import { TopToolbar } from "./TopToolbar";
 import type { LayoutOptions } from "../../hooks/useLayoutOptions";
@@ -340,8 +343,16 @@ export function DesktopShell({
   themeMode,
   onToggleThemeMode,
 }: DesktopShellProps) {
+  const { t } = useTranslation();
   const shellRef = useRef<HTMLDivElement>(null);
   const verticalResizeGuideRef = useRef<HTMLDivElement>(null);
+  // Push the translated bookmark capture-checkbox label into the
+  // framework-agnostic plugins package (which can't call t() itself). Done here
+  // rather than in TopToolbar so it still applies when the toolbar is hidden
+  // (e.g. `?maponly`), where the BookmarkControl overlay is still present.
+  useEffect(() => {
+    setBookmarkCaptureLabel(t("bookmark.captureStateLabel"));
+  }, [t]);
   // Teardown for an in-progress panel resize, so a pointercancel or an unmount
   // mid-drag still detaches the global listeners and restores document.body.
   const activeResizeCleanupRef = useRef<(() => void) | null>(null);
@@ -1271,6 +1282,9 @@ export function DesktopShell({
         open={diagnosticsOpen}
         onOpenChange={setDiagnosticsOpen}
       />
+      {/* Mounted in the always-rendered shell (not the toolbar) so the bookmark
+          export name prompt works even when the toolbar is hidden (`?maponly`). */}
+      <FileNamePromptDialog />
       <Suspense fallback={null}>
         <ProcessingDialog
           mapControllerRef={mapControllerRef}
