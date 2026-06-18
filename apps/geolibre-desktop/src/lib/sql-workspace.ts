@@ -254,7 +254,9 @@ export async function registerLayerTables(
   const registered: SqlWorkspaceTable[] = [];
 
   for (const { layer, tableName } of assignTableNames(layers)) {
-    // assignTableNames only yields layers that carry a GeoJSON collection.
+    // assignTableNames already filters out layers without geojson; this guard
+    // narrows the optional `layer.geojson` to FeatureCollection for the call
+    // below (TypeScript does not carry the filter's narrowing across functions).
     if (!layer.geojson) continue;
     const fileName = `${filePrefix}__${tableName}.geojson`;
     await db.registerFileText(

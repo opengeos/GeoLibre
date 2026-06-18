@@ -133,15 +133,20 @@ const GDAL_AUTO_FID_COLUMN = "OGC_FID";
 export function stripAutoFidColumn(
   geojson: FeatureCollection,
 ): FeatureCollection {
-  let changed = false;
+  // Scan first so the common (no-OGC_FID) path returns the original object
+  // without allocating a throw-away features array or any feature copies.
+  const needsStrip = geojson.features.some(
+    (feature) =>
+      feature.properties != null && GDAL_AUTO_FID_COLUMN in feature.properties,
+  );
+  if (!needsStrip) return geojson;
   const features = geojson.features.map((feature) => {
     const props = feature.properties;
     if (props && GDAL_AUTO_FID_COLUMN in props) {
-      changed = true;
       const { [GDAL_AUTO_FID_COLUMN]: _omit, ...rest } = props;
       return { ...feature, properties: rest };
     }
     return feature;
   });
-  return changed ? { ...geojson, features } : geojson;
+  return { ...geojson, features };
 }

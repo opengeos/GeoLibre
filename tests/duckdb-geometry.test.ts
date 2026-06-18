@@ -170,6 +170,11 @@ describe("stripAutoFidColumn", () => {
     assert.equal(out.features[0].properties, null);
   });
 
+  it("returns the same object for an empty feature collection", () => {
+    const input: FeatureCollection = { type: "FeatureCollection", features: [] };
+    assert.equal(stripAutoFidColumn(input), input);
+  });
+
   it("strips OGC_FID from every feature that has it", () => {
     const input: FeatureCollection = {
       type: "FeatureCollection",
