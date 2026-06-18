@@ -3,6 +3,16 @@ const BASEMAP_SELECT_PROXY_CLASS = "basemap-select-proxy";
 const BASEMAP_SELECT_MENU_CLASS = "basemap-select-menu";
 
 const BASEMAP_SELECT_FIXES = `
+/* Issue #452: once the user drags the panel to an explicit size, drop the
+   upstream default max-width/max-height caps so the panel honours the dragged
+   dimensions (already clamped to the map bounds in JS) instead of snapping back
+   to 420x560. Mirrors the fix in maplibre-gl-basemap-control; remove this
+   override once the bundled version ships it. */
+.basemap-control-panel.is-resized {
+  max-width: none;
+  max-height: none;
+}
+
 .basemap-control-panel .basemap-control-select {
   color: #111827;
   color-scheme: light;
