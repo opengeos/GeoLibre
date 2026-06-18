@@ -400,7 +400,6 @@ export function createAppAPI(
         if (options?.promptName && browserSaveFallsBackToDownload()) {
           const chosen = await useFileNamePrompt.getState().prompt({
             defaultName: filename,
-            typeLabel: options?.description,
           });
           if (chosen === null) return;
           defaultName = ensureFileExtension(chosen, extensions);

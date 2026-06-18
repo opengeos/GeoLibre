@@ -31,10 +31,6 @@ export function FileNamePromptDialog() {
     submit();
   };
 
-  const title = request?.typeLabel
-    ? t("fileNamePrompt.titleTyped", { type: request.typeLabel })
-    : t("fileNamePrompt.title");
-
   return (
     <Dialog
       open={request !== null}
@@ -44,7 +40,7 @@ export function FileNamePromptDialog() {
     >
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle>{t("fileNamePrompt.title")}</DialogTitle>
           <DialogDescription>{t("fileNamePrompt.description")}</DialogDescription>
         </DialogHeader>
         <form className="space-y-4" onSubmit={handleSubmit}>
@@ -55,6 +51,9 @@ export function FileNamePromptDialog() {
             <Input
               id="file-name-prompt-input"
               autoFocus
+              maxLength={255}
+              spellCheck={false}
+              autoComplete="off"
               value={value}
               onChange={(event) => setValue(event.target.value)}
             />

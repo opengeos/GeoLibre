@@ -6,11 +6,6 @@ import { create } from "zustand";
 export interface FileNamePromptRequest {
   /** Suggested file name, pre-filled in the input. */
   defaultName: string;
-  /**
-   * Human-readable file-type label (e.g. "Bookmarks"), interpolated into the
-   * dialog title. Optional.
-   */
-  typeLabel?: string;
 }
 
 interface FileNamePromptState {
