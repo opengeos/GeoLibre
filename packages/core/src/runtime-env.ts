@@ -85,7 +85,7 @@ export function getProtomapsStyleUrl(
 ): string | undefined {
   const key = getProtomapsApiKey(env);
   if (!key) return undefined;
-  return `https://api.protomaps.com/styles/v5/${flavor}/en.json?key=${encodeURIComponent(
-    key,
-  )}`;
+  return `https://api.protomaps.com/styles/v5/${encodeURIComponent(
+    flavor,
+  )}/en.json?key=${encodeURIComponent(key)}`;
 }

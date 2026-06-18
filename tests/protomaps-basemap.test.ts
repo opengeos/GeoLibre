@@ -36,6 +36,13 @@ describe("getProtomapsStyleUrl", () => {
     );
   });
 
+  it("encodes the flavor path segment", () => {
+    assert.equal(
+      getProtomapsStyleUrl("a/b?c", { VITE_PROTOMAPS_API_KEY: "key" }),
+      "https://api.protomaps.com/styles/v5/a%2Fb%3Fc/en.json?key=key",
+    );
+  });
+
   it("resolves a URL for every advertised flavor", () => {
     for (const basemap of PROTOMAPS_BASEMAPS) {
       const url = getProtomapsStyleUrl(basemap.flavor, {

@@ -20,6 +20,7 @@ import {
 } from "@geolibre/ui";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 const DEFAULT_BASEMAP_ID = "liberty";
 const CUSTOM_BASEMAP_ID = "custom";
@@ -33,8 +34,17 @@ const THREE_D_MAP_VIEW: MapViewState = {
   pitch: 60,
 };
 
+// Well-known basemap ids stay type-checked. Protomaps ids are still dynamic
+// (only present when a key is configured), but they come from the const array,
+// so the union catches typos and stale sentinel values.
+type BasemapChoice =
+  | (typeof OPENFREEMAP_BASEMAPS)[number]["id"]
+  | (typeof PROTOMAPS_BASEMAPS)[number]["id"]
+  | typeof CUSTOM_BASEMAP_ID
+  | typeof BLANK_BASEMAP_ID;
+
 interface PresetBasemap {
-  id: string;
+  id: BasemapChoice;
   name: string;
   styleUrl: string;
 }
@@ -52,7 +62,31 @@ function resolveProtomapsPresets(): PresetBasemap[] {
   });
 }
 
-type BasemapChoice = string;
+interface BasemapButtonProps {
+  id: BasemapChoice;
+  name: string;
+  selected: boolean;
+  onSelect: (id: BasemapChoice) => void;
+}
+
+function BasemapButton({ id, name, selected, onSelect }: BasemapButtonProps) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      className={cn(
+        "h-10 rounded-md border px-3 text-sm font-medium transition-colors",
+        "hover:bg-accent hover:text-accent-foreground",
+        selected
+          ? "border-primary bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+          : "border-input bg-background",
+      )}
+      onClick={() => onSelect(id)}
+    >
+      {name}
+    </button>
+  );
+}
 
 interface NewProjectDialogProps {
   open: boolean;
@@ -67,6 +101,7 @@ export function NewProjectDialog({
   onSaveCurrentProject,
   onProjectCreated,
 }: NewProjectDialogProps) {
+  const { t } = useTranslation();
   const newProject = useAppStore((s) => s.newProject);
   const isDirty = useAppStore((s) => s.isDirty);
   const [selectedBasemapId, setSelectedBasemapId] =
@@ -87,6 +122,7 @@ export function NewProjectDialog({
     resolveProtomapsPresets,
   );
   useEffect(() => {
+    if (!open) return;
     const refresh = () => setProtomapsPresets(resolveProtomapsPresets());
     refresh();
     window.addEventListener("geolibre:runtime-env-change", refresh);
@@ -173,24 +209,6 @@ export function NewProjectDialog({
     }
   };
 
-  const renderBasemapButton = (id: string, name: string) => (
-    <button
-      key={id}
-      type="button"
-      aria-pressed={selectedBasemapId === id}
-      className={cn(
-        "h-10 rounded-md border px-3 text-sm font-medium transition-colors",
-        "hover:bg-accent hover:text-accent-foreground",
-        selectedBasemapId === id
-          ? "border-primary bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
-          : "border-input bg-background",
-      )}
-      onClick={() => setSelectedBasemapId(id)}
-    >
-      {name}
-    </button>
-  );
-
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-xl">
@@ -234,8 +252,7 @@ export function NewProjectDialog({
             <DialogHeader>
               <DialogTitle>New map</DialogTitle>
               <DialogDescription>
-                Choose an OpenFreeMap or Protomaps basemap, a blank background,
-                or a MapLibre style URL.
+                {t("newProject.basemapDescription")}
               </DialogDescription>
             </DialogHeader>
             <form className="space-y-5" onSubmit={handleCreate}>
@@ -254,34 +271,51 @@ export function NewProjectDialog({
 
                 <div className="space-y-2">
                   <p className="text-xs font-medium text-muted-foreground">
-                    OpenFreeMap
+                    {t("newProject.sectionOpenFreeMap")}
                   </p>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {OPENFREEMAP_BASEMAPS.map((basemap) =>
-                      renderBasemapButton(basemap.id, basemap.name),
-                    )}
+                    {OPENFREEMAP_BASEMAPS.map((basemap) => (
+                      <BasemapButton
+                        key={basemap.id}
+                        id={basemap.id}
+                        name={basemap.name}
+                        selected={selectedBasemapId === basemap.id}
+                        onSelect={setSelectedBasemapId}
+                      />
+                    ))}
                   </div>
                 </div>
 
                 {protomapsPresets.length > 0 ? (
                   <div className="space-y-2">
                     <p className="text-xs font-medium text-muted-foreground">
-                      Protomaps
+                      {t("newProject.sectionProtomaps")}
                     </p>
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                      {protomapsPresets.map((basemap) =>
-                        renderBasemapButton(basemap.id, basemap.name),
-                      )}
+                      {protomapsPresets.map((basemap) => (
+                        <BasemapButton
+                          key={basemap.id}
+                          id={basemap.id}
+                          name={basemap.name}
+                          selected={selectedBasemapId === basemap.id}
+                          onSelect={setSelectedBasemapId}
+                        />
+                      ))}
                     </div>
                   </div>
                 ) : null}
 
                 <div className="space-y-2">
                   <p className="text-xs font-medium text-muted-foreground">
-                    Other
+                    {t("newProject.sectionOther")}
                   </p>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {renderBasemapButton(BLANK_BASEMAP_ID, "Blank")}
+                    <BasemapButton
+                      id={BLANK_BASEMAP_ID}
+                      name="Blank"
+                      selected={selectedBasemapId === BLANK_BASEMAP_ID}
+                      onSelect={setSelectedBasemapId}
+                    />
                   </div>
                 </div>
               </div>
