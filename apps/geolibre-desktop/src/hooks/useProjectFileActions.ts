@@ -83,6 +83,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const [saveNameInput, setSaveNameInput] = useState("");
   const projectUrlAbortRef = useRef<AbortController | null>(null);
   const recentAbortRef = useRef<AbortController | null>(null);
+  // Guards against overlapping saves: a second save started while a prompt
+  // dialog is open would overwrite the pending prompt and strand the first
+  // call's unresolved promise.
+  const isSavingRef = useRef(false);
 
   const handleOpenFromFile = async () => {
     const result = await openProjectFile();
@@ -264,14 +268,16 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     event?.preventDefault();
     saveNamePrompt?.resolve(saveNameInput);
     setSaveNamePrompt(null);
+    setSaveNameInput("");
   };
 
   const cancelSaveNamePrompt = () => {
     saveNamePrompt?.resolve(null);
     setSaveNamePrompt(null);
+    setSaveNameInput("");
   };
 
-  const saveProject = async (options?: {
+  const runSaveProject = async (options?: {
     saveAs?: boolean;
   }): Promise<boolean> => {
     const { project, defaultProjectName, content, projectPath } =
@@ -336,6 +342,19 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     });
     markSaved();
     return true;
+  };
+
+  // Serialize saves so overlapping invocations cannot clobber a pending prompt.
+  const saveProject = async (options?: {
+    saveAs?: boolean;
+  }): Promise<boolean> => {
+    if (isSavingRef.current) return false;
+    isSavingRef.current = true;
+    try {
+      return await runSaveProject(options);
+    } finally {
+      isSavingRef.current = false;
+    }
   };
 
   const handleSave = () => saveProject();

@@ -15,7 +15,7 @@ interface ProjectFileDialogsProps {
   projectFiles: ReturnType<typeof useProjectFileActions>;
 }
 
-/** The project-file dialogs: Open-from-URL, the error dialog, and the env-var strip prompt. */
+/** The project-file dialogs: Open-from-URL, the error dialog, the save-name prompt, and the env-var strip prompt. */
 export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
   const { t } = useTranslation();
 
@@ -124,7 +124,12 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
               >
                 {t("common.cancel")}
               </Button>
-              <Button type="submit">{t("common.save")}</Button>
+              <Button
+                type="submit"
+                disabled={!projectFiles.saveNameInput.trim()}
+              >
+                {t("common.save")}
+              </Button>
             </div>
           </form>
         </DialogContent>
