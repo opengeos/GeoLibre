@@ -2,6 +2,7 @@ import { DesktopShell } from "./components/layout/DesktopShell";
 import { useDesktopSettingsPersistence } from "./hooks/useDesktopSettings";
 import { useLayoutOptions } from "./hooks/useLayoutOptions";
 import { useProjectUrlLoader } from "./hooks/useProjectUrlLoader";
+import { useBeforeUnloadGuard } from "./hooks/useBeforeUnloadGuard";
 import { useRecentProjectsPersistence } from "./hooks/useRecentProjectsPersistence";
 import { useRuntimeEnvironmentVariables } from "./hooks/useRuntimeEnvironmentVariables";
 import { useThemeMode } from "./hooks/useThemeMode";
@@ -16,6 +17,7 @@ export default function App() {
   useRecentProjectsPersistence();
   useRuntimeEnvironmentVariables();
   useUndoRedoShortcuts();
+  useBeforeUnloadGuard();
   return (
     <DesktopShell
       layoutOptions={layoutOptions}

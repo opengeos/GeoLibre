@@ -1,4 +1,5 @@
 import { useAppStore } from "@geolibre/core";
+import type { GeoLibreLayer } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import { addCogRasterLayer } from "@geolibre/plugins";
 import {
@@ -57,6 +58,20 @@ import {
 } from "../../lib/tauri-io";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
 import { createAppAPI } from "../../hooks/usePlugins";
+import { canExportRasterLayer, rasterExportUrl } from "../../lib/raster-export";
+
+/**
+ * The input URL the Python sidecar can read for an added raster layer, or null
+ * if there is none. Only `http(s)` sources qualify: rasterio/GDAL fetches
+ * remote COGs over the network (via `/vsicurl`), but file-loaded rasters keep
+ * only a blob URL plus a bare file name in the store — neither is readable by
+ * the backend process — and blob/data URLs cannot be opened server-side.
+ */
+function sidecarRasterUrl(layer: GeoLibreLayer): string | null {
+  const url = (layer.source as { url?: unknown }).url;
+  if (typeof url !== "string") return null;
+  return /^https?:\/\//i.test(url) ? url : null;
+}
 
 /** Which engine runs the selected tool: Python sidecar or the browser. */
 type RasterEngine = "sidecar" | "client";
@@ -96,6 +111,7 @@ export function RasterToolsDialog({
   const { t } = useTranslation();
   const openTool = useAppStore((s) => s.ui.rasterToolOpen);
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
+  const layers = useAppStore((s) => s.layers);
 
   const open = openTool !== null;
   const desktop = isTauri();
@@ -127,6 +143,8 @@ export function RasterToolsDialog({
   } | null>(null);
   const [clientLog, setClientLog] = useState<string[]>([]);
   const [clientRunning, setClientRunning] = useState(false);
+  // True while fetching a picked layer's bytes for the client engine.
+  const [resolvingLayer, setResolvingLayer] = useState(false);
   const [clientResult, setClientResult] = useState<{
     name: string;
     bytes: ArrayBuffer;
@@ -325,6 +343,65 @@ export function RasterToolsDialog({
       setClientLog([]);
     }
   }, [tool]);
+
+  // Raster layers already on the map that can seed this tool's input, so the
+  // user need not browse to a file again. The client engine reads any raster's
+  // bytes (URL or local file); the sidecar can only open `http(s)` COGs. The
+  // quick-pick is skipped for tools whose primary input is a vector (e.g.
+  // interpolation reads point GeoJSON), since those want a different layer kind.
+  const toolTakesRasterInput = useMemo(
+    () =>
+      tool.inputFilters.some((filter) =>
+        filter.extensions.some((ext) => ext === "tif" || ext === "tiff"),
+      ),
+    [tool],
+  );
+  const inputLayerOptions = useMemo(
+    () =>
+      toolTakesRasterInput
+        ? layers.filter((layer) =>
+            engine === "client"
+              ? canExportRasterLayer(layer)
+              : sidecarRasterUrl(layer) !== null,
+          )
+        : [],
+    [layers, engine, toolTakesRasterInput],
+  );
+
+  // Populate the input from a layer chosen in the quick-pick dropdown: a URL for
+  // the sidecar, or the fetched bytes for the in-browser engine.
+  const chooseInputLayer = useCallback(
+    async (layerId: string) => {
+      const layer = layers.find((l) => l.id === layerId);
+      if (!layer) return;
+      setError(null);
+      if (engine === "sidecar") {
+        const url = sidecarRasterUrl(layer);
+        if (url) setInputPath(url);
+        return;
+      }
+      const url = rasterExportUrl(layer);
+      if (!url) return;
+      setResolvingLayer(true);
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const bytes = await response.arrayBuffer();
+        setClientInput({ name: layer.name, bytes });
+        setClientResult(null);
+        setClientLog([]);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : t("toolbar.rasterTool.layerLoadError"),
+        );
+      } finally {
+        setResolvingLayer(false);
+      }
+    },
+    [layers, engine, t],
+  );
 
   const runSidecar = useCallback(async () => {
     setError(null);
@@ -595,6 +672,35 @@ export function RasterToolsDialog({
                     {t("toolbar.rasterTool.switchToClientHint")}
                   </p>
                 )}
+              </div>
+            )}
+
+            {/* Quick-pick from rasters already on the map, mirroring the vector
+                tools' layer dropdown so the user need not re-browse to a file. */}
+            {inputLayerOptions.length > 0 && (
+              <div className="grid gap-1.5">
+                <Label htmlFor="raster-input-layer" className="text-xs">
+                  {t("toolbar.rasterTool.useAddedLayer")}
+                </Label>
+                <Select
+                  id="raster-input-layer"
+                  value=""
+                  disabled={resolvingLayer || running}
+                  onChange={(e) => {
+                    if (e.target.value) void chooseInputLayer(e.target.value);
+                  }}
+                >
+                  <option value="">
+                    {resolvingLayer
+                      ? t("toolbar.rasterTool.loadingLayer")
+                      : t("toolbar.rasterTool.useAddedLayerPlaceholder")}
+                  </option>
+                  {inputLayerOptions.map((layer) => (
+                    <option key={layer.id} value={layer.id}>
+                      {layer.name}
+                    </option>
+                  ))}
+                </Select>
               </div>
             )}
 
