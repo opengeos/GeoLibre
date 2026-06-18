@@ -68,6 +68,8 @@ import { useProjectFileActions } from "../../hooks/useProjectFileActions";
 import { useToolbarPanels } from "../../hooks/useToolbarPanels";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import { isTauri } from "../../lib/tauri-io";
+import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
+import { isPluginVisible } from "../../lib/ui-profile";
 import { CommandPalette } from "../command/CommandPalette";
 import { KeyboardShortcutsDialog } from "../command/KeyboardShortcutsDialog";
 import { useGlobalShortcuts } from "../../hooks/useGlobalShortcuts";
@@ -169,6 +171,37 @@ export function TopToolbar({
     previewEffectsSettings,
     commitEffectsSettings,
   } = usePluginRegistry();
+  // Plugin ids hidden by the active UI profile (issue #500). Recompute only when
+  // the profile changes so the Plugins menu can drop them.
+  const uiProfile = useDesktopSettingsStore(
+    (state) => state.desktopSettings.uiProfile,
+  );
+  const hiddenPluginIds = useMemo(
+    () =>
+      new Set(
+        plugins
+          .filter((plugin) => !isPluginVisible(uiProfile, plugin.id))
+          .map((plugin) => plugin.id),
+      ),
+    [plugins, uiProfile],
+  );
+  // Plugins the user can toggle from the Plugins menu, offered as visibility
+  // checkboxes in Settings → Interface. Excludes the four plugins that are
+  // toggled elsewhere (Effects/Directions/Reverse Geocode via Controls, deck.gl
+  // viz via Add Data), matching PluginsMenu's skip list.
+  const profilePlugins = useMemo(
+    () =>
+      plugins
+        .filter(
+          (plugin) =>
+            plugin.id !== EFFECTS_PLUGIN_ID &&
+            plugin.id !== DIRECTIONS_PLUGIN_ID &&
+            plugin.id !== REVERSE_GEOCODE_PLUGIN_ID &&
+            plugin.id !== DECK_VIZ_PLUGIN_ID,
+        )
+        .map((plugin) => ({ id: plugin.id, name: plugin.name })),
+    [plugins],
+  );
   // mapControllerRef is a stable ref object and createAppAPI dereferences
   // `.current` lazily, so memoizing on the ref keeps a single appApi identity
   // across renders without going stale.
@@ -791,6 +824,7 @@ export function TopToolbar({
         toggle={toggle}
         getMapControlPosition={getMapControlPosition}
         setMapControlPosition={setMapControlPosition}
+        hiddenPluginIds={hiddenPluginIds}
       />
       <SettingsDialog
         buttonClassName={toolbarButtonClass}
@@ -799,6 +833,7 @@ export function TopToolbar({
         mapControllerRef={mapControllerRef}
         showLabels={showLabels}
         onOpenManagePlugins={() => setManagePluginsOpen(true)}
+        profilePlugins={profilePlugins}
       />
       <ManagePluginsDialog
         open={managePluginsOpen}

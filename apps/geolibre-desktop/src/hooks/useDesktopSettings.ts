@@ -25,6 +25,12 @@ export interface DesktopSettings {
    * hardening (see PR #190 review).
    */
   shareToken: string;
+  /**
+   * Customizable UI profile: which data sources / web services / plugins are
+   * visible, an optional experience-level preset, first-launch onboarding state,
+   * and an admin lock. See `src/lib/ui-profile.ts` and `docs/ui-profiles.md`.
+   */
+  uiProfile: UiProfileSettings;
 }
 
 export interface DesktopLayoutSettings {
@@ -32,6 +38,34 @@ export interface DesktopLayoutSettings {
   showProjectInfo: boolean;
   stylePanelVisible: boolean;
   toolbarLabels: boolean;
+}
+
+/** Experience-level presets offered by the onboarding wizard and Settings. */
+export type ExperienceLevel = "beginner" | "intermediate" | "advanced";
+
+export interface UiProfileSettings {
+  /**
+   * When false, every data source and plugin is visible regardless of the hidden
+   * lists below. This is the back-compat default so existing users see no change
+   * until they opt in via onboarding, the Settings dialog, or an admin file.
+   */
+  enabled: boolean;
+  /**
+   * The experience-level preset last applied, or null for a custom selection
+   * (the user manually toggled an item). Only used to highlight the active preset.
+   */
+  level: ExperienceLevel | null;
+  /** Whether the first-launch onboarding wizard has been completed or dismissed. */
+  onboarded: boolean;
+  /**
+   * Set by an admin config file (`docs/ui-profiles.md`). When true the profile is
+   * managed centrally and the Settings controls are disabled.
+   */
+  locked: boolean;
+  /** Data-source catalog ids hidden from the Add Data menu. */
+  hiddenDataSources: string[];
+  /** Plugin ids hidden from the Plugins menu. */
+  hiddenPlugins: string[];
 }
 
 interface DesktopSettingsState {
@@ -46,13 +80,29 @@ export const DEFAULT_DESKTOP_LAYOUT_SETTINGS: DesktopLayoutSettings = {
   toolbarLabels: true,
 };
 
+export const DEFAULT_UI_PROFILE_SETTINGS: UiProfileSettings = {
+  enabled: false,
+  level: null,
+  onboarded: false,
+  locked: false,
+  hiddenDataSources: [],
+  hiddenPlugins: [],
+};
+
 const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   additionalPluginDirectories: [],
   language: "",
   layout: DEFAULT_DESKTOP_LAYOUT_SETTINGS,
   pluginManifestUrls: [],
   shareToken: "",
+  uiProfile: DEFAULT_UI_PROFILE_SETTINGS,
 };
+
+const EXPERIENCE_LEVELS: readonly ExperienceLevel[] = [
+  "beginner",
+  "intermediate",
+  "advanced",
+];
 
 function normalizeDesktopSettings(settings: unknown): DesktopSettings {
   if (!settings || typeof settings !== "object") {
@@ -74,6 +124,38 @@ function normalizeDesktopSettings(settings: unknown): DesktopSettings {
     ),
     shareToken:
       typeof candidate.shareToken === "string" ? candidate.shareToken.trim() : "",
+    uiProfile: normalizeUiProfileSettings(candidate.uiProfile),
+  };
+}
+
+function normalizeUiProfileSettings(profile: unknown): UiProfileSettings {
+  if (!profile || typeof profile !== "object") {
+    return DEFAULT_UI_PROFILE_SETTINGS;
+  }
+
+  // Require strict booleans and a known level so tampered localStorage values
+  // cannot smuggle non-boolean / unknown values into the profile.
+  const candidate = profile as Partial<UiProfileSettings>;
+  return {
+    enabled:
+      typeof candidate.enabled === "boolean"
+        ? candidate.enabled
+        : DEFAULT_UI_PROFILE_SETTINGS.enabled,
+    level:
+      typeof candidate.level === "string" &&
+      EXPERIENCE_LEVELS.includes(candidate.level as ExperienceLevel)
+        ? (candidate.level as ExperienceLevel)
+        : null,
+    onboarded:
+      typeof candidate.onboarded === "boolean"
+        ? candidate.onboarded
+        : DEFAULT_UI_PROFILE_SETTINGS.onboarded,
+    locked:
+      typeof candidate.locked === "boolean"
+        ? candidate.locked
+        : DEFAULT_UI_PROFILE_SETTINGS.locked,
+    hiddenDataSources: normalizeStringList(candidate.hiddenDataSources),
+    hiddenPlugins: normalizeStringList(candidate.hiddenPlugins),
   };
 }
 

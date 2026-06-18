@@ -73,6 +73,7 @@ nav:
       - Android: android.md
       - Project Format: project-format.md
       - Plugin API: plugin-api.md
+      - UI Profiles: ui-profiles.md
       - Internationalization: i18n.md
       - Python Package: python.md
       - Notebook Panel: notebook.md

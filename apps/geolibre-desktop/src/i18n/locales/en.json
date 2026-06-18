@@ -483,6 +483,25 @@
     "boundsRestricted": "Bounds locked",
     "boundsRestrictedTooltip": "Map bounds are restricted. You can change this in Settings."
   },
+  "onboarding": {
+    "title": "Welcome to GeoLibre",
+    "description": "Choose your experience level to tailor the interface. You can change this any time in Settings → Interface.",
+    "level": {
+      "beginner": {
+        "title": "Beginner",
+        "description": "Show only the essential data sources and tools."
+      },
+      "intermediate": {
+        "title": "Intermediate",
+        "description": "Show common data sources, services, and plugins."
+      },
+      "advanced": {
+        "title": "Advanced",
+        "description": "Show everything GeoLibre has to offer."
+      }
+    },
+    "showEverything": "Skip — show everything"
+  },
   "settings": {
     "title": "Settings",
     "description": "Configure project preferences and runtime settings.",
@@ -490,6 +509,7 @@
     "section": {
       "map": "Map",
       "layout": "Layout",
+      "interface": "Interface",
       "geocoding": "Geocoding",
       "environment": "Environment",
       "project": "Project"
@@ -531,6 +551,21 @@
       "showStylePanel": "Show Style panel",
       "showAttributePanel": "Show Attribute panel",
       "urlParamsNote": "URL layout parameters still apply when present in shared viewer links."
+    },
+    "interface": {
+      "title": "Interface profile",
+      "description": "Hide data sources and plugins to simplify the interface. Nothing is removed — re-enable items here at any time.",
+      "enable": "Simplify the interface",
+      "presets": "Experience level",
+      "presetsHint": "Pick a level to show items suited to that experience, then fine-tune below.",
+      "level": {
+        "beginner": "Beginner",
+        "intermediate": "Intermediate",
+        "advanced": "Advanced"
+      },
+      "dataSources": "Data sources",
+      "plugins": "Plugins",
+      "lockedNote": "This interface profile is managed by your administrator and cannot be changed."
     },
     "env": {
       "tokenTitle": "Share.GeoLibre API token",

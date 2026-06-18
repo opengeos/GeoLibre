@@ -179,6 +179,7 @@ pub fn run() {
             ensure_martin_binary,
             fetch_url_bytes,
             load_external_plugin_bundles,
+            read_admin_profile,
             read_project_file,
             resolve_url_redirect,
             read_mbtiles_metadata,
@@ -203,6 +204,25 @@ pub fn run() {
 #[tauri::command]
 fn read_project_file(path: String) -> Result<String, String> {
     fs::read_to_string(&path).map_err(|error| format!("Could not read project file: {error}"))
+}
+
+/// Read the optional admin UI-profile file (`<app_config_dir>/admin-profile.json`).
+///
+/// Returns `Ok(None)` when the file is absent so a missing file is not an error;
+/// administrators drop one in to pre-configure and optionally lock the UI profile
+/// for a deployment. See `docs/ui-profiles.md`.
+#[tauri::command]
+fn read_admin_profile(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let config_dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|error| format!("Could not resolve config directory: {error}"))?;
+    let path = config_dir.join("admin-profile.json");
+    match fs::read_to_string(&path) {
+        Ok(contents) => Ok(Some(contents)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!("Could not read admin profile: {error}")),
+    }
 }
 
 #[tauri::command]

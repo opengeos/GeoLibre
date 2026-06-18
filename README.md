@@ -562,6 +562,7 @@ Full documentation, including the User Guide and Tutorials, is published at
   - [Android](docs/android.md)
   - [Project format](docs/project-format.md)
   - [Plugin API](docs/plugin-api.md)
+  - [UI Profiles](docs/ui-profiles.md)
   - [Python package (Jupyter)](docs/python.md)
   - [Roadmap](docs/roadmap.md)
 

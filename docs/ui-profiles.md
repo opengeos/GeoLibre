@@ -1,0 +1,71 @@
+# UI Profiles & Data Source Filtering
+
+GeoLibre can hide data sources, web services, and plugins to simplify the
+interface for beginners or to standardize a deployment across a team. Hiding is
+**non-destructive** — nothing is removed, and any item can be re-enabled at any
+time. Profile preferences are stored locally in the browser/app and never travel
+inside a saved `.geolibre.json` project.
+
+## For users
+
+### Onboarding
+
+On first launch (when no administrator profile is present) GeoLibre asks for an
+experience level:
+
+- **Beginner** — only the essential data sources and tools.
+- **Intermediate** — common data sources, services, and plugins.
+- **Advanced** — everything GeoLibre offers.
+
+Choosing *Skip — show everything* keeps the full interface. The wizard appears
+only once; you can revisit the choice later in **Settings → Interface**.
+
+### Settings → Interface
+
+Open **Settings → Interface** to:
+
+- Toggle **Simplify the interface** on or off. When off, everything is visible
+  regardless of the lists below.
+- Apply an **experience-level** preset (Beginner / Intermediate / Advanced),
+  which fills the checklists from each item's complexity.
+- Check or uncheck individual **data sources** and **plugins**. Editing an item
+  makes the selection *custom* (no preset highlighted).
+
+## For administrators
+
+A deployment can be pre-configured (and optionally locked) with an
+`admin-profile.json` file. When present, it is applied on startup, the onboarding
+wizard is skipped, and — if `lock` is set — the Interface settings are read-only.
+
+### File location
+
+- **Web / embed:** serve `admin-profile.json` from the application root (for the
+  Docker/nginx build, the served document root). A missing file is ignored.
+- **Desktop:** place `admin-profile.json` in the app config directory
+  (`read_admin_profile` reads `<app_config_dir>/admin-profile.json`). The desktop
+  file takes precedence over a bundled web file.
+
+### File format
+
+```json
+{
+  "enabled": true,
+  "level": "intermediate",
+  "lock": true,
+  "hiddenDataSources": ["postgres", "video"],
+  "hiddenPlugins": ["maplibre-gl-geoagent"]
+}
+```
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `enabled` | boolean | Whether filtering is active. Defaults to `true` for an admin file. |
+| `level` | `"beginner" \| "intermediate" \| "advanced"` | Seeds the hidden lists from each item's tier. Optional. |
+| `lock` | boolean | When `true`, users cannot change the profile from Settings. |
+| `hiddenDataSources` | string[] | Explicit data-source ids to hide. Overrides the preset when present. |
+| `hiddenPlugins` | string[] | Explicit plugin ids to hide. Overrides the preset when present. |
+
+Data-source ids are the catalog ids in
+`apps/geolibre-desktop/src/lib/ui-profile.ts` (e.g. `vector`, `xyz`, `mbtiles`,
+`postgres`). Plugin ids are the stable ids defined in
+`packages/plugins/src/plugins/*` (e.g. `maplibre-gl-geoagent`).
