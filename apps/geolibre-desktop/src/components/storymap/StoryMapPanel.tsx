@@ -19,6 +19,7 @@ import {
 import type { MapController } from "@geolibre/map";
 import {
   Button,
+  ColorField,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -451,12 +452,14 @@ function StorySettings({
           {t("storymap.field.showMarkers")}
         </label>
         {story.showMarkers ? (
-          <input
-            type="color"
+          <ColorField
+            fill={false}
             aria-label={t("storymap.field.markerColor")}
+            eyedropperLabel={t("storymap.field.markerColor")}
             value={story.markerColor}
-            onChange={(e) => onChange({ markerColor: e.target.value })}
-            className="h-7 w-10 cursor-pointer rounded border"
+            onChange={(markerColor) => onChange({ markerColor })}
+            className="h-7 w-10 cursor-pointer p-0.5"
+            buttonClassName="h-7 w-7"
           />
         ) : null}
         <label className="flex items-center gap-2">

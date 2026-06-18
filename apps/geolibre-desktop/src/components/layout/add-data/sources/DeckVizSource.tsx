@@ -11,7 +11,7 @@ import {
   type DeckVizScenegraphConfig,
   type DeckVizStyle,
 } from "@geolibre/plugins";
-import { Button, Input, Label, Select } from "@geolibre/ui";
+import { Button, ColorField, Input, Label, Select } from "@geolibre/ui";
 import { Columns3, FileUp, Globe2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -658,15 +658,14 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
             {deckVizDef.styleControls.includes("color") ? (
               <div className="space-y-1.5">
                 <Label htmlFor="deckviz-color">{t("addData.deckViz.color")}</Label>
-                <input
+                <ColorField
                   id="deckviz-color"
-                  type="color"
-                  className="h-9 w-full rounded-md border border-input bg-background"
+                  eyedropperLabel={t("common.pickColorFromScreen")}
                   value={deckVizStyle.color}
-                  onChange={(event) =>
+                  onChange={(color) =>
                     setDeckVizStyle((style) => ({
                       ...style,
-                      color: event.target.value,
+                      color,
                     }))
                   }
                 />

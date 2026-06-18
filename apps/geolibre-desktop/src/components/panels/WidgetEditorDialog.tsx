@@ -1,6 +1,7 @@
 import type { DashboardWidget } from "@geolibre/core";
 import {
   Button,
+  ColorField,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -337,14 +338,16 @@ export function WidgetEditorDialog({
             <div className="grid gap-1.5">
               <Label htmlFor="widget-color">{t("dashboard.editor.color")}</Label>
               <div className="flex items-center gap-2">
-                <input
+                <ColorField
                   id="widget-color"
-                  type="color"
-                  className="h-8 w-12 cursor-pointer rounded border border-input bg-background p-0.5"
+                  eyedropperLabel={t("common.pickColorFromScreen")}
+                  fill={false}
+                  className="h-8 w-12 cursor-pointer p-0.5"
+                  buttonClassName="h-8 w-8"
                   // Native color inputs need a concrete value; show a neutral
                   // swatch while no custom color is set.
                   value={color || "#3fb1ce"}
-                  onChange={(event) => setColor(event.target.value)}
+                  onChange={(next) => setColor(next)}
                 />
                 {color ? (
                   <Button

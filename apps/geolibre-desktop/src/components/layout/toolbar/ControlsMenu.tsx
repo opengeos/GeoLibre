@@ -8,6 +8,7 @@ import {
 } from "@geolibre/plugins";
 import {
   Button,
+  ColorField,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -289,15 +290,19 @@ function ColorRow({ label, value, onPreview, onCommit }: ColorRowProps) {
   return (
     <label className="flex items-center justify-between gap-2 text-xs">
       <span className="text-muted-foreground">{label}</span>
-      <input
-        type="color"
+      <ColorField
+        fill={false}
         aria-label={label}
+        eyedropperLabel={label}
         value={value}
         // onChange fires continuously while dragging in the picker (preview);
-        // onBlur fires once when the picker closes / focus leaves (commit).
-        onChange={(e) => onPreview(e.target.value)}
+        // onBlur fires once when the picker closes / focus leaves (commit). The
+        // eyedropper has no blur, so ColorField commits via onCommit instead.
+        onChange={onPreview}
+        onCommit={onCommit}
         onBlur={onCommit}
-        className="h-6 w-10 cursor-pointer rounded border border-input bg-transparent p-0.5"
+        className="h-6 w-10 cursor-pointer p-0.5"
+        buttonClassName="h-6 w-6"
       />
     </label>
   );

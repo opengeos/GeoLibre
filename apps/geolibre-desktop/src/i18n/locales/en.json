@@ -8,6 +8,7 @@
     "label": "File name"
   },
   "common": {
+    "pickColorFromScreen": "Pick a color from the screen",
     "save": "Save",
     "cancel": "Cancel",
     "close": "Close",

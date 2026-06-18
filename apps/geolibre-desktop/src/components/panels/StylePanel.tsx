@@ -1541,16 +1541,18 @@ export function StylePanel({
             {draftVectorStyleStops.map((stop, index) => (
               <div
                 key={index}
-                className="grid grid-cols-[2.25rem_1fr_2rem] items-center gap-2"
+                className="grid grid-cols-[auto_1fr_2rem] items-center gap-2"
               >
-                <Input
-                  type="color"
+                <ColorField
+                  fill={false}
                   aria-label={`Class ${index + 1} color`}
-                  className="h-9 p-1"
+                  eyedropperLabel={`Pick class ${index + 1} color from the screen`}
+                  className="h-9 w-9 p-1"
+                  buttonClassName="h-9 w-9"
                   value={stop.color}
-                  onChange={(event) =>
+                  onChange={(color) =>
                     updateDraftVectorStyleStop(index, {
-                      color: event.target.value,
+                      color,
                     })
                   }
                 />
