@@ -6,6 +6,7 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@geolibre/ui";
 import { Pencil, Redo2, Undo2 } from "lucide-react";
@@ -48,16 +49,12 @@ export function EditMenu({ chrome }: EditMenuProps) {
         <DropdownMenuItem disabled={!canUndo} onSelect={undo}>
           <Undo2 className="mr-2 h-3.5 w-3.5 shrink-0" />
           <span className="whitespace-nowrap">{t("toolbar.item.undo")}</span>
-          <span className="ml-auto shrink-0 whitespace-nowrap pl-4 text-xs text-muted-foreground">
-            Ctrl/Cmd+Z
-          </span>
+          <DropdownMenuShortcut>Ctrl/Cmd+Z</DropdownMenuShortcut>
         </DropdownMenuItem>
         <DropdownMenuItem disabled={!canRedo} onSelect={redo}>
           <Redo2 className="mr-2 h-3.5 w-3.5 shrink-0" />
           <span className="whitespace-nowrap">{t("toolbar.item.redo")}</span>
-          <span className="ml-auto shrink-0 whitespace-nowrap pl-4 text-xs text-muted-foreground">
-            Ctrl/Cmd+Shift+Z / Ctrl+Y
-          </span>
+          <DropdownMenuShortcut>Ctrl/Cmd+Shift+Z / Ctrl+Y</DropdownMenuShortcut>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
