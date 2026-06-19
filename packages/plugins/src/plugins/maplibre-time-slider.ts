@@ -355,6 +355,10 @@ let preBindingRange: {
 } | null = null;
 // Guards our own timeFilter writes from re-entering the store subscription.
 let applyingBoundFilters = false;
+// JSON of the last time filter pushed to each bound layer, so a playback tick
+// that lands in the same window does not re-serialize the stored filter and
+// re-write the store. Cleared when a layer is unbound or the dock detaches.
+const appliedFilterKeys = new Map<string, string>();
 
 interface BoundLayer {
   id: string;
@@ -393,10 +397,12 @@ function applyBoundFilters(
       const layer = store.layers.find((item) => item.id === id);
       if (!layer) continue;
       const filter = buildTimeFilter(binding, date);
-      if (
-        JSON.stringify(layer.timeFilter ?? null) !== JSON.stringify(filter)
-      ) {
+      const key = JSON.stringify(filter);
+      // Compare against the last filter we applied (one serialization) rather
+      // than re-serializing the stored filter on every tick.
+      if (appliedFilterKeys.get(id) !== key) {
         store.updateLayer(id, { timeFilter: filter });
+        appliedFilterKeys.set(id, key);
       }
     }
   } finally {
@@ -415,6 +421,7 @@ function clearBoundFilters(ids: string[]): void {
   applyingBoundFilters = true;
   try {
     for (const id of ids) {
+      appliedFilterKeys.delete(id);
       const layer = store.layers.find((item) => item.id === id);
       if (layer && layer.timeFilter !== undefined) {
         store.updateLayer(id, { timeFilter: undefined });
@@ -490,6 +497,7 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
 function attachBindingSync(control: TimeSliderControl): () => void {
   lastBoundRangeKey = null;
   preBindingRange = null;
+  appliedFilterKeys.clear();
   // `statechange` fires on every date change (scrub and each playback tick) plus
   // range/granularity changes, which is exactly when bound filters must update.
   const onStateChange = () => applyBoundFilters(control, getBoundLayers());
@@ -518,6 +526,7 @@ function attachBindingSync(control: TimeSliderControl): () => void {
     control.off("statechange", onStateChange);
     unsubscribe();
     clearBoundFilters(getBoundLayers().map((entry) => entry.id));
+    appliedFilterKeys.clear();
     lastBoundRangeKey = null;
     preBindingRange = null;
   };

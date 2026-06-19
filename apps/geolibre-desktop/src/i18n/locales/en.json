@@ -1343,6 +1343,7 @@
     "bindDialogDescription": "Filter this layer's features by a date or timestamp property as you scrub the timeline. The layer keeps its styling and opacity.",
     "bindScanning": "Scanning features for date and timestamp properties…",
     "bindNoProperty": "No date or timestamp property was found in this layer.",
+    "bindNoTimestamps": "The selected property has no readable timestamps. Pick a different property.",
     "bindProperty": "Time property",
     "bindWindow": "Show features",
     "bindWindowStep": "In the current step",

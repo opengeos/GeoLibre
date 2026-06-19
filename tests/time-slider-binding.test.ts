@@ -80,6 +80,18 @@ describe("detectValueKind", () => {
       "isoDateTime",
     );
   });
+
+  it("does not classify a mixed numeric/string sample as epoch", () => {
+    // A 50/50 epoch-number vs ISO-string sample must not become epoch, which
+    // would coerce the ISO strings to NaN and silently drop them.
+    assert.equal(
+      detectValueKind([1_600_000_000_000, "2016-06-01T10:00:00Z"]),
+      "isoDateTime",
+    );
+    assert.equal(detectValueKind([1_600_000_000, "2016-06-01"]), "isoDate");
+    // An empty / unknown sample falls back to the safe string comparison.
+    assert.equal(detectValueKind([]), "isoDateTime");
+  });
 });
 
 describe("detectTimeProperties", () => {
@@ -187,12 +199,30 @@ describe("buildTimeFilter", () => {
     window: { unit: "year", before: 0, after: 1 },
   };
 
-  it("builds a date-only string comparison window", () => {
+  it("builds a date-only string comparison window on a 10-char slice", () => {
     const filter = buildTimeFilter(isoBinding, new Date("2016-01-01T00:00:00Z"));
     assert.deepEqual(filter, [
       "all",
-      [">=", ["to-string", ["get", "date"]], "2016-01-01"],
-      ["<", ["to-string", ["get", "date"]], "2017-01-01"],
+      [">=", ["slice", ["to-string", ["get", "date"]], 0, 10], "2016-01-01"],
+      ["<", ["slice", ["to-string", ["get", "date"]], 0, 10], "2017-01-01"],
+    ]);
+  });
+
+  it("compares datetimes on a 19-char slice so Z/offset/ms do not break bounds", () => {
+    const binding: TimeBinding = { ...isoBinding, valueKind: "isoDateTime" };
+    const filter = buildTimeFilter(binding, new Date("2016-01-01T00:00:00Z"));
+    assert.deepEqual(filter, [
+      "all",
+      [
+        ">=",
+        ["slice", ["to-string", ["get", "date"]], 0, 19],
+        "2016-01-01T00:00:00",
+      ],
+      [
+        "<",
+        ["slice", ["to-string", ["get", "date"]], 0, 19],
+        "2017-01-01T00:00:00",
+      ],
     ]);
   });
 

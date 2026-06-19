@@ -176,12 +176,16 @@ export function detectValueKind(values: unknown[]): TimeValueKind {
     }
   }
 
-  // Numbers dominate -> epoch. Magnitude tells milliseconds from seconds.
-  if (numeric >= strings) {
+  // Only a purely numeric column is treated as epoch. If any date strings are
+  // present the column is compared as ISO text, so a mixed (or exactly 50/50)
+  // sample is never misclassified as epoch — which would coerce the ISO strings
+  // to NaN and silently drop them. Magnitude tells milliseconds from seconds.
+  if (numeric > 0 && strings === 0) {
     return maxMagnitude >= EPOCH_MS_THRESHOLD ? "epochMs" : "epochS";
   }
-  // All sampled strings are bare calendar dates -> compare as date-only.
-  return isoDateOnly === strings ? "isoDate" : "isoDateTime";
+  // Bare calendar dates compare date-only; otherwise (datetimes, or an empty /
+  // ambiguous sample) fall back to the safe full-string comparison.
+  return strings > 0 && isoDateOnly === strings ? "isoDate" : "isoDateTime";
 }
 
 /**
@@ -306,14 +310,19 @@ export function buildTimeFilter(binding: TimeBinding, date: Date): unknown[] {
     ];
   }
 
-  const toBound = (ms: number): string => {
-    const iso = new Date(ms).toISOString();
-    return valueKind === "isoDate" ? iso.slice(0, 10) : iso;
-  };
+  // Compare a fixed-length leading slice of the ISO text on both sides so a
+  // trailing `Z`, a `.SSS` milliseconds fraction, or a timezone offset cannot
+  // break the boundary comparison: `YYYY-MM-DD` for date-only,
+  // `YYYY-MM-DDTHH:MM:SS` for datetimes. Timestamps are therefore compared by
+  // their wall-clock text and should use a consistent representation (UTC is
+  // recommended); mixed explicit offsets are not normalized.
+  const boundLength = valueKind === "isoDate" ? 10 : 19;
+  const toBound = (ms: number): string =>
+    new Date(ms).toISOString().slice(0, boundLength);
   // `to-string` coerces missing/null values to "" so the comparison never
   // throws on a feature that lacks the property; "" sorts before any real
   // timestamp, so undated features fall outside every window.
-  const value = ["to-string", ["get", property]];
+  const value = ["slice", ["to-string", ["get", property]], 0, boundLength];
   return [
     "all",
     [">=", value, toBound(lowerMs)],

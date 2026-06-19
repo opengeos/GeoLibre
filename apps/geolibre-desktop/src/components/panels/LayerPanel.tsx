@@ -253,9 +253,13 @@ export function LayerPanel({
   // a large layer is scanned only once.
   const [bindLayerGeojson, setBindLayerGeojson] =
     useState<FeatureCollection | null>(null);
-  // Latest bind-dialog request id, so a stale async scan cannot populate a
-  // dialog that has since been closed or reopened for another layer.
-  const bindRequestRef = useRef<string | null>(null);
+  // Shown in the dialog when binding fails (e.g. the chosen property has no
+  // parseable timestamps) instead of closing the dialog with no feedback.
+  const [bindError, setBindError] = useState<string | null>(null);
+  // Monotonic token for the active bind request. Each open/close bumps it, so a
+  // stale async scan or confirm (even for the same layer reopened) is dropped
+  // when it no longer matches the latest token.
+  const bindRequestRef = useRef(0);
   const { isActive: isPluginActive, toggle: togglePlugin } =
     usePluginRegistry();
   const [isCollapsed, setIsCollapsed] = useState(getIsMobileViewport);
@@ -603,7 +607,7 @@ export function LayerPanel({
   // Close the bind dialog and invalidate any in-flight scan/confirm so a late
   // async result cannot reopen it, write stale candidates, or bind after cancel.
   const closeBindTimeSliderDialog = useCallback(() => {
-    bindRequestRef.current = null;
+    bindRequestRef.current += 1;
     setBindTimeSliderLayerId(null);
   }, []);
 
@@ -612,27 +616,27 @@ export function LayerPanel({
   // finishes so the dialog can show a "scanning" state for large layers.
   const openBindTimeSliderDialog = useCallback(
     async (layer: GeoLibreLayer) => {
-      // Tag this request so a stale async scan (open A -> close -> open B)
-      // cannot populate the dialog now showing a different layer.
-      const requestId = layer.id;
-      bindRequestRef.current = requestId;
+      // Tag this request with a fresh token so a stale async scan (open ->
+      // close/reopen, even for the same layer) cannot populate this dialog.
+      const token = (bindRequestRef.current += 1);
       setBindTimeSliderLayerId(layer.id);
       setBindCandidates(null);
       setBindProperty("");
       setBindWindowMode("step");
       setBindLayerGeojson(null);
+      setBindError(null);
       try {
         const geojson = await resolveLayerGeojson(
           layer,
           mapControllerRef.current?.getMap() ?? undefined,
         );
-        if (bindRequestRef.current !== requestId) return;
+        if (bindRequestRef.current !== token) return;
         const candidates = detectTimeProperties(geojson ?? undefined);
         setBindLayerGeojson(geojson ?? null);
         setBindCandidates(candidates);
         if (candidates.length > 0) setBindProperty(candidates[0].property);
       } catch {
-        if (bindRequestRef.current !== requestId) return;
+        if (bindRequestRef.current !== token) return;
         setBindCandidates([]);
       }
     },
@@ -645,7 +649,7 @@ export function LayerPanel({
   const confirmBindTimeSlider = useCallback(async () => {
     const layer = bindTimeSliderLayer;
     if (!layer || !bindProperty) return;
-    const requestId = layer.id;
+    const token = bindRequestRef.current;
     // Reuse the feature collection resolved when the dialog opened so large
     // layers are not scanned twice.
     const geojson =
@@ -656,10 +660,11 @@ export function LayerPanel({
       ));
     // If the dialog was cancelled (or reopened for another layer) while the
     // fallback scan was in flight, abandon this commit.
-    if (bindRequestRef.current !== requestId) return;
+    if (bindRequestRef.current !== token) return;
     const binding = buildTimeBinding(geojson ?? undefined, bindProperty);
     if (!binding) {
-      closeBindTimeSliderDialog();
+      // Keep the dialog open and explain why, rather than closing silently.
+      setBindError(t("layers.bindNoTimestamps"));
       return;
     }
     const timeWindow =
@@ -686,6 +691,7 @@ export function LayerPanel({
     isPluginActive,
     togglePlugin,
     closeBindTimeSliderDialog,
+    t,
   ]);
 
   // Remove a layer's binding and clear its transient time filter so it shows
@@ -754,7 +760,7 @@ export function LayerPanel({
       bindTimeSliderLayerId &&
       !layers.some((layer) => layer.id === bindTimeSliderLayerId)
     ) {
-      bindRequestRef.current = null;
+      bindRequestRef.current += 1;
       setBindTimeSliderLayerId(null);
     }
 
@@ -1930,7 +1936,10 @@ export function LayerPanel({
                 <Select
                   id="time-slider-property"
                   value={bindProperty}
-                  onChange={(event) => setBindProperty(event.target.value)}
+                  onChange={(event) => {
+                    setBindProperty(event.target.value);
+                    setBindError(null);
+                  }}
                 >
                   {bindCandidates.map((candidate) => (
                     <option key={candidate.property} value={candidate.property}>
@@ -1960,6 +1969,9 @@ export function LayerPanel({
                   <option value="wider">{t("layers.bindWindowWider")}</option>
                 </Select>
               </div>
+              {bindError && (
+                <p className="text-sm text-destructive">{bindError}</p>
+              )}
             </div>
           )}
           <div className="flex justify-end gap-2">
