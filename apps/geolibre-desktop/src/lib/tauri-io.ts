@@ -257,25 +257,34 @@ function isDelimitedTextFileName(path: string): boolean {
  * Parses dropped/opened delimited text into a point FeatureCollection by
  * auto-detecting the delimiter and the longitude/latitude columns. Throws a
  * helpful error (pointing at the Add Data dialog) when the coordinate columns
- * cannot be identified, so the column picker stays the way to handle ambiguous
- * files.
+ * cannot be identified or the auto-detected columns hold no usable WGS84
+ * coordinates (e.g. a CSV whose `x`/`y` columns are actually projected), so the
+ * column picker stays the way to handle ambiguous files.
  */
 function parseDelimitedTextFile(text: string, path: string): FeatureCollection {
   const name = browserSafeFileName(path);
+  const pickColumns = `Use Add Data → Delimited Text to choose the coordinate columns for ${name}.`;
   const delimiter = detectDelimitedTextDelimiter(text);
   const fields = parseDelimitedTextFields(text, delimiter);
   const coordinateFields = detectCoordinateFields(fields);
   if (!coordinateFields) {
     throw new Error(
-      `Could not find longitude and latitude columns in ${name}. ` +
-        "Use Add Data → Delimited Text to choose the coordinate columns.",
+      `Could not find longitude and latitude columns in ${name}. ${pickColumns}`,
     );
   }
-  return parseDelimitedTextLayer(text, {
-    delimiter,
-    longitudeField: coordinateFields.longitudeField,
-    latitudeField: coordinateFields.latitudeField,
-  }).data;
+  try {
+    return parseDelimitedTextLayer(text, {
+      delimiter,
+      longitudeField: coordinateFields.longitudeField,
+      latitudeField: coordinateFields.latitudeField,
+    }).data;
+  } catch (error) {
+    // The columns matched a coordinate name but held no valid lon/lat values
+    // (e.g. projected x/y). Point the user at the dialog instead of surfacing
+    // the lower-level "no valid coordinates" message.
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`${detail} ${pickColumns}`);
+  }
 }
 
 async function parseShapefileZip(

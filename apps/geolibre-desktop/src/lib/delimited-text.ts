@@ -240,7 +240,7 @@ export function parseCoordinate(value: string | undefined): number {
   const normalized = trimmed
     .split(groupingSeparator)
     .join("")
-    .replace(decimalSeparator, ".");
+    .replaceAll(decimalSeparator, ".");
   return Number(normalized);
 }
 
@@ -277,7 +277,7 @@ const DELIMITER_CANDIDATES = [",", "\t", ";", "|"];
  * @returns The detected delimiter; defaults to a comma when none stands out.
  */
 export function detectDelimitedTextDelimiter(text: string): string {
-  const header = text.replace(/^﻿/, "").split(/\r?\n/, 1)[0] ?? "";
+  const header = text.replace(/^\uFEFF/, "").split(/\r?\n/, 1)[0] ?? "";
   let best = ",";
   let bestCount = 0;
   for (const delimiter of DELIMITER_CANDIDATES) {
