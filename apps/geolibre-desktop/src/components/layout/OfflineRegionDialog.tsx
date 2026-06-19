@@ -75,6 +75,12 @@ export function OfflineRegionDialog({
     failedUrls: [],
   });
   const abortRef = useRef<AbortController | null>(null);
+  // Mirror `progress` in a ref so `handleRetry` can read the latest failed URLs
+  // without listing `progress` as a dependency — otherwise the callback would be
+  // recreated on every settled tile, since each `onProgress` emits a fresh
+  // `failedUrls` array.
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
 
   // Snapshot the view when the dialog opens; re-reading live would let the
   // estimate drift while the user is interacting with the dialog.
@@ -172,7 +178,7 @@ export function OfflineRegionDialog({
   // download (e.g. after a transient network blip) without re-fetching the
   // whole region. The failure message then reflects this retry batch.
   const handleRetry = useCallback(async () => {
-    const failedUrls = progress.failedUrls;
+    const failedUrls = progressRef.current.failedUrls;
     if (failedUrls.length === 0) return;
     const controller = new AbortController();
     abortRef.current = controller;
@@ -195,7 +201,7 @@ export function OfflineRegionDialog({
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
     }
-  }, [progress.failedUrls]);
+  }, []);
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort();
@@ -338,7 +344,17 @@ export function OfflineRegionDialog({
           )}
           <Button
             onClick={handleDownload}
-            disabled={phase === "running" || tileCount === 0 || !swActive}
+            // Disabled while failures are outstanding so the user resolves them
+            // via Retry first. This also removes the race where clicking Retry
+            // then Download in quick succession (before phase flips to
+            // "running") would start two concurrent warmUrls runs and clobber
+            // abortRef. Retry clears the count, re-enabling a full re-download.
+            disabled={
+              phase === "running" ||
+              tileCount === 0 ||
+              !swActive ||
+              (phase === "done" && progress.failed > 0)
+            }
           >
             {phase === "running" ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
