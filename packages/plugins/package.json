@@ -49,7 +49,7 @@
     "maplibre-gl-streetview": "^0.6.0",
     "maplibre-gl-swipe": "^0.7.1",
     "maplibre-gl-time-slider": "^1.0.3",
-    "maplibre-gl-usgs-lidar": "^0.10.0",
+    "maplibre-gl-usgs-lidar": "^0.11.0",
     "maplibre-gl-vector": "^0.4.0",
     "proj4": "^2.20.9",
     "shpjs": "^6.2.0",

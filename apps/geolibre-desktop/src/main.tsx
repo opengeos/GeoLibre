@@ -21,13 +21,13 @@ import "maplibre-gl-raster/style.css";
 import "maplibre-gl-streetview/style.css";
 import "maplibre-gl-swipe/style.css";
 import "maplibre-gl-time-slider/style.css";
+import "maplibre-gl-usgs-lidar/style.css";
 import "maplibre-gl-vector/style.css";
 import "mapillary-js/dist/mapillary.css";
 import "./index.css";
 import "./lib/basemap-style";
 import "./lib/geoagent-style";
 import "./lib/lidar-style";
-import "./lib/usgs-lidar-style";
 // Register the MapLibre RTL text plugin so Arabic/Hebrew/Persian basemap labels
 // are shaped correctly instead of rendering reversed. Must run before any map is
 // created. See https://github.com/hyperknot/openfreemap/issues/118.
