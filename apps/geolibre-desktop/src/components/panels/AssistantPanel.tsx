@@ -58,9 +58,12 @@ const SETUP_PROVIDERS: ReadonlyArray<{
   { id: "google", env: "GEMINI_API_KEY" },
   { id: "anthropic", env: "ANTHROPIC_API_KEY" },
   { id: "openai", env: "OPENAI_API_KEY" },
-  { id: "bedrock", env: "AWS_ACCESS_KEY_ID" },
+  // Bedrock and custom need two variables each before configForProvider()
+  // resolves them; list both so following the card never leaves the user stuck
+  // on this screen with no hint about what is missing.
+  { id: "bedrock", env: "AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY" },
   { id: "ollama", env: "OLLAMA_BASE_URL" },
-  { id: "custom", env: "OPENAI_COMPATIBLE_BASE_URL" },
+  { id: "custom", env: "OPENAI_COMPATIBLE_BASE_URL + OPENAI_COMPATIBLE_MODEL" },
 ];
 
 /** Read a persisted string setting, ignoring storage failures. */
@@ -384,6 +387,11 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     resizeCleanupRef.current = finish;
   };
 
+  // Show the onboarding setup card only when no provider is configured and no
+  // run is in flight. Keeping the chat layout (and its Stop button) while a run
+  // streams means a key removed mid-run can't strand an unstoppable request.
+  const showSetup = !hasKey && !running;
+
   return (
     <section
       ref={sectionRef}
@@ -469,10 +477,12 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
         ref={outputRef}
         className="flex-1 space-y-2 overflow-auto px-3 py-2 text-sm leading-relaxed"
       >
-        {!hasKey ? (
+        {showSetup ? (
           // No provider yet: show only the setup card. The capability blurb and
           // input box stay hidden until a provider is configured, so we never
-          // invite a prompt the assistant can't run (issue #547).
+          // invite a prompt the assistant can't run (issue #547). The action
+          // button lives in the footer below so it stays visible if the list
+          // grows past the panel height.
           <div className="mx-auto flex max-w-md flex-col gap-2.5">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 shrink-0 text-primary" />
@@ -485,30 +495,22 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
               <p className="mb-1.5 text-xs font-medium text-foreground">
                 {t("assistant.setupProviders")}
               </p>
-              <ul className="space-y-0.5">
+              <ul className="space-y-1">
                 {SETUP_PROVIDERS.map(({ id, env }) => (
                   <li
                     key={id}
-                    className="flex items-center justify-between gap-2 text-xs"
+                    className="flex items-start justify-between gap-3 text-xs"
                   >
-                    <span className="text-foreground">
+                    <span className="shrink-0 text-foreground">
                       {PROVIDER_LABELS[id]}
                     </span>
-                    <code className="rounded bg-background px-1 py-0.5 font-mono text-[11px] text-muted-foreground">
+                    <code className="break-words text-right font-mono text-[11px] text-muted-foreground">
                       {env}
                     </code>
                   </li>
                 ))}
               </ul>
             </div>
-            <Button
-              size="sm"
-              className="self-start"
-              onClick={() => openSettingsSection("environment")}
-            >
-              <Settings className="mr-1 h-4 w-4" />
-              {t("assistant.setupOpenSettings")}
-            </Button>
           </div>
         ) : turns.length === 0 ? (
           <p className="text-muted-foreground">{t("assistant.intro")}</p>
@@ -575,7 +577,20 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
         )}
       </div>
 
-      {hasKey ? (
+      {showSetup ? (
+        // Keep the call to action pinned to the bottom so it is reachable even
+        // when the provider list scrolls.
+        <div className="border-t px-3 py-2">
+          <Button
+            size="sm"
+            className="w-full"
+            onClick={() => openSettingsSection("environment")}
+          >
+            <Settings className="mr-1 h-4 w-4" />
+            {t("assistant.setupOpenSettings")}
+          </Button>
+        </div>
+      ) : (
         <div className="flex items-end gap-2 border-t px-3 py-2">
           <Textarea
             ref={inputRef}
@@ -601,7 +616,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
             <Button
               size="sm"
               onClick={() => void send()}
-              disabled={!input.trim()}
+              disabled={!hasKey || !input.trim()}
               title={t("assistant.sendHint")}
             >
               <Send className="mr-1 h-4 w-4" />
@@ -609,7 +624,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
             </Button>
           )}
         </div>
-      ) : null}
+      )}
     </section>
   );
 }
