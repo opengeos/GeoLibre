@@ -383,9 +383,11 @@ export function SettingsDialog({
     const onOpenSettings = (event: Event) => {
       const detail = (event as CustomEvent<{ section?: SettingsSection }>)
         .detail;
-      // setSection must run before setOpen: React batches both, and the
-      // open-gated seed effect re-reads `section` once `open` flips true, so the
-      // section has to already be correct by then.
+      // setSection before setOpen so the section is already in state when React
+      // renders the open dialog (effectiveSection derives from it at render
+      // time). Note: if the active UI profile gates the requested section out,
+      // effectiveSection falls back to the first visible tab, so a deep-link to
+      // a hidden section (e.g. "environment") lands elsewhere.
       if (detail?.section) setSection(detail.section);
       setOpen(true);
     };

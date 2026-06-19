@@ -55,6 +55,8 @@ const SETUP_PROVIDERS: ReadonlyArray<{
   id: AssistantProviderId;
   envs: readonly string[];
 }> = [
+  // Google also accepts GOOGLE_API_KEY / GOOGLE_GENAI_API_KEY; only the primary
+  // name is shown since the chips mean "all required", not "any of".
   { id: "google", envs: ["GEMINI_API_KEY"] },
   { id: "anthropic", envs: ["ANTHROPIC_API_KEY"] },
   { id: "openai", envs: ["OPENAI_API_KEY"] },
@@ -384,10 +386,12 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     resizeCleanupRef.current = finish;
   };
 
-  // Show the onboarding setup card only when no provider is configured and no
-  // run is in flight. Keeping the chat layout (and its Stop button) while a run
-  // streams means a key removed mid-run can't strand an unstoppable request.
-  const showSetup = !hasKey && !running;
+  // Show the onboarding setup card only when no provider is configured, no run
+  // is in flight, and there is no conversation to preserve. Gating on `running`
+  // keeps the Stop button reachable if a key is removed mid-run; gating on
+  // `turns.length` keeps a finished conversation visible afterwards instead of
+  // hiding it behind the setup card (it returns when the user clears the chat).
+  const showSetup = !hasKey && !running && turns.length === 0;
 
   // When the panel leaves the setup card for the chat input (e.g. the user just
   // added their first provider key), focus the input so they can type at once.
