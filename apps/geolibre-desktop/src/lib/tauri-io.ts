@@ -11,7 +11,12 @@ import {
 import { unzip } from "fflate";
 import type { FeatureCollection } from "geojson";
 import shp from "shpjs";
-import { parseDelimitedTextFields } from "./delimited-text";
+import {
+  detectCoordinateFields,
+  detectDelimitedTextDelimiter,
+  parseDelimitedTextFields,
+  parseDelimitedTextLayer,
+} from "./delimited-text";
 import type { DuckDbVectorFile } from "./duckdb-vector-loader";
 import type { DuckDbVectorLoadOptions } from "./duckdb-vector-guard";
 import { parseGpxLayer } from "./gpx";
@@ -240,6 +245,39 @@ function parseGpxTextLayers(text: string, path: string): LoadedVectorLayer[] {
     }));
 }
 
+/** Delimited text formats the drag-and-drop / open path loads as points. */
+const DELIMITED_TEXT_DROP_EXTENSIONS = ["csv", "tsv"];
+
+/** Whether a filename looks like a delimited text table (CSV/TSV). */
+function isDelimitedTextFileName(path: string): boolean {
+  return DELIMITED_TEXT_DROP_EXTENSIONS.includes(fileExtension(path));
+}
+
+/**
+ * Parses dropped/opened delimited text into a point FeatureCollection by
+ * auto-detecting the delimiter and the longitude/latitude columns. Throws a
+ * helpful error (pointing at the Add Data dialog) when the coordinate columns
+ * cannot be identified, so the column picker stays the way to handle ambiguous
+ * files.
+ */
+function parseDelimitedTextFile(text: string, path: string): FeatureCollection {
+  const name = browserSafeFileName(path);
+  const delimiter = detectDelimitedTextDelimiter(text);
+  const fields = parseDelimitedTextFields(text, delimiter);
+  const coordinateFields = detectCoordinateFields(fields);
+  if (!coordinateFields) {
+    throw new Error(
+      `Could not find longitude and latitude columns in ${name}. ` +
+        "Use Add Data → Delimited Text to choose the coordinate columns.",
+    );
+  }
+  return parseDelimitedTextLayer(text, {
+    delimiter,
+    longitudeField: coordinateFields.longitudeField,
+    latitudeField: coordinateFields.latitudeField,
+  }).data;
+}
+
 async function parseShapefileZip(
   data: ArrayBuffer | Uint8Array,
 ): Promise<FeatureCollection> {
@@ -424,6 +462,13 @@ async function loadBrowserVectorFile(
     };
   }
 
+  if (isDelimitedTextFileName(file.name)) {
+    return {
+      data: parseDelimitedTextFile(await file.text(), file.name),
+      path: file.name,
+    };
+  }
+
   return {
     data: await loadDuckDbVector(
       {
@@ -542,6 +587,13 @@ async function loadTauriVectorFile(
       const detail = error instanceof Error ? error.message : "Unknown error";
       throw new Error(`Could not read this GPX file. ${detail}`);
     }
+  }
+
+  if (isDelimitedTextFileName(path)) {
+    return {
+      data: parseDelimitedTextFile(await readTextFile(path), path),
+      path,
+    };
   }
 
   try {
