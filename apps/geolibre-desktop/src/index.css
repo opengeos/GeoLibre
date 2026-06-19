@@ -1526,7 +1526,11 @@ body,
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-size: 8px;
   font-weight: 700;
+  /* The label is a real SVG text node: stop it from being text-selected on a
+     click-drag and from firing the native text context menu on right-click. */
+  pointer-events: none;
   transition: fill 150ms ease;
+  user-select: none;
 }
 
 .geolibre-reset-bearing-needle-north {
