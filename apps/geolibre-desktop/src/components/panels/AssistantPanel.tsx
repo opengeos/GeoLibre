@@ -55,8 +55,9 @@ const SETUP_PROVIDERS: ReadonlyArray<{
   id: AssistantProviderId;
   envs: readonly string[];
 }> = [
-  // Google also accepts GOOGLE_API_KEY / GOOGLE_GENAI_API_KEY; only the primary
-  // name is shown since the chips mean "all required", not "any of".
+  // Within a row the listed vars are all required (not alternatives), so Google
+  // shows only its primary name; GOOGLE_API_KEY / GOOGLE_GENAI_API_KEY also work
+  // but listing them as extra chips would wrongly read as "all three required".
   { id: "google", envs: ["GEMINI_API_KEY"] },
   { id: "anthropic", envs: ["ANTHROPIC_API_KEY"] },
   { id: "openai", envs: ["OPENAI_API_KEY"] },
@@ -504,7 +505,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
               <p className="mb-1.5 text-xs font-medium text-foreground">
                 {t("assistant.setupProviders")}
               </p>
-              <ul className="space-y-1">
+              <ul aria-label={t("assistant.setupProviders")} className="space-y-1">
                 {SETUP_PROVIDERS.map(({ id, envs }) => (
                   <li
                     key={id}

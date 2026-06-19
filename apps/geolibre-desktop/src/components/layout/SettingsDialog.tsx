@@ -385,10 +385,17 @@ export function SettingsDialog({
         .detail;
       // setSection before setOpen so the section is already in state when React
       // renders the open dialog (effectiveSection derives from it at render
-      // time). Note: if the active UI profile gates the requested section out,
-      // effectiveSection falls back to the first visible tab, so a deep-link to
-      // a hidden section (e.g. "environment") lands elsewhere.
-      if (detail?.section) setSection(detail.section);
+      // time). Only honor the request when the active UI profile actually shows
+      // that section; otherwise effectiveSection would silently fall back to
+      // another tab. The profile is read fresh (not via the effect's closure) so
+      // a profile change after mount is respected.
+      const requested = detail?.section;
+      if (requested) {
+        const gate = SECTION_GATE[requested];
+        const profile =
+          useDesktopSettingsStore.getState().desktopSettings.uiProfile;
+        if (!gate || isMenuItemVisible(profile, gate)) setSection(requested);
+      }
       setOpen(true);
     };
     window.addEventListener(OPEN_SETTINGS_EVENT, onOpenSettings);
