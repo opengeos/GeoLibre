@@ -83,7 +83,7 @@ export class ResetBearingControl implements maplibregl.IControl {
     // tail stays light and slim so the arrow keeps one clear destination point
     // instead of two mirrored triangles of equal weight.
     needle.innerHTML =
-      '<text class="geolibre-reset-bearing-needle-label" x="12" y="5.6" text-anchor="middle">N</text>' +
+      '<text class="geolibre-reset-bearing-needle-label" x="12" y="6.5" text-anchor="middle">N</text>' +
       '<polygon class="geolibre-reset-bearing-needle-north" points="12,7 9,19 12,16 15,19" />' +
       '<polygon class="geolibre-reset-bearing-needle-south" points="12,22.5 9.6,19 12,17 14.4,19" />';
     button.appendChild(needle);
