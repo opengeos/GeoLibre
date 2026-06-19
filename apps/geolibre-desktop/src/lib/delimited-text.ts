@@ -12,6 +12,14 @@ export interface DelimitedTextLayerResult {
   totalRows: number;
 }
 
+/**
+ * Thrown by {@link parseDelimitedTextLayer} when the chosen columns parse but no
+ * row holds a valid WGS84 coordinate. Exported so callers can recognize this
+ * specific failure without matching a duplicated literal string.
+ */
+export const NO_VALID_COORDINATES_MESSAGE =
+  "No rows contained valid longitude and latitude values.";
+
 export function parseDelimitedTextFields(
   text: string,
   delimiter: string,
@@ -90,7 +98,7 @@ export function parseDelimitedTextLayer(
   }
 
   if (features.length === 0) {
-    throw new Error("No rows contained valid longitude and latitude values.");
+    throw new Error(NO_VALID_COORDINATES_MESSAGE);
   }
 
   return {

@@ -13,6 +13,7 @@ import type { FeatureCollection } from "geojson";
 import shp from "shpjs";
 import {
   DELIMITER_CANDIDATES,
+  NO_VALID_COORDINATES_MESSAGE,
   detectCoordinateFields,
   detectDelimitedTextDelimiter,
   parseDelimitedTextFields,
@@ -256,13 +257,18 @@ function isDelimitedTextFileName(path: string): boolean {
 
 /**
  * Parses dropped/opened delimited text into a point FeatureCollection by
- * auto-detecting the delimiter and the longitude/latitude columns. Throws a
- * helpful error (pointing at the Add Data dialog) when the coordinate columns
- * cannot be identified or the auto-detected columns hold no usable WGS84
- * coordinates (e.g. a CSV whose `x`/`y` columns are actually projected), so the
- * column picker stays the way to handle ambiguous files.
+ * auto-detecting the delimiter and the longitude/latitude columns.
+ *
+ * Returns `null` when no longitude/latitude columns can be identified, so the
+ * caller can fall back to the DuckDB path and still load spatial CSV variants
+ * (e.g. a CSV with a WKT geometry column). Throws a helpful error (pointing at
+ * the Add Data dialog) when the file is empty or the auto-detected columns hold
+ * no usable WGS84 coordinates (e.g. a CSV whose `x`/`y` columns are projected).
  */
-function parseDelimitedTextFile(text: string, path: string): FeatureCollection {
+function parseDelimitedTextFile(
+  text: string,
+  path: string,
+): FeatureCollection | null {
   const name = browserSafeFileName(path);
   const pickColumns = `Use Add Data → Delimited Text to choose the coordinate columns for ${name}.`;
   const delimiter = detectDelimitedTextDelimiter(text);
@@ -275,11 +281,7 @@ function parseDelimitedTextFile(text: string, path: string): FeatureCollection {
   }
   const fields = parseDelimitedTextFields(headerLine, delimiter);
   const coordinateFields = detectCoordinateFields(fields);
-  if (!coordinateFields) {
-    throw new Error(
-      `Could not find longitude and latitude columns in ${name}. ${pickColumns}`,
-    );
-  }
+  if (!coordinateFields) return null;
   try {
     return parseDelimitedTextLayer(text, {
       delimiter,
@@ -292,9 +294,7 @@ function parseDelimitedTextFile(text: string, path: string): FeatureCollection {
     // (e.g. the auto-detected columns are actually projected x/y); append the
     // column-picker hint just for that case. Other errors (e.g. a header with
     // no data rows) are already self-explanatory, so surface them unchanged.
-    const isCoordinateError = detail.includes(
-      "No rows contained valid longitude and latitude",
-    );
+    const isCoordinateError = detail === NO_VALID_COORDINATES_MESSAGE;
     throw new Error(isCoordinateError ? `${detail} ${pickColumns}` : detail);
   }
 }
@@ -484,10 +484,12 @@ async function loadBrowserVectorFile(
   }
 
   if (isDelimitedTextFileName(file.name)) {
-    return {
-      data: parseDelimitedTextFile(await file.text(), file.name),
-      path: file.name,
-    };
+    const points = parseDelimitedTextFile(await file.text(), file.name);
+    // No lon/lat columns: fall through to DuckDB so spatial CSV variants
+    // (e.g. a WKT geometry column) still load.
+    if (points) {
+      return { data: points, path: file.name };
+    }
   }
 
   return {
@@ -611,10 +613,12 @@ async function loadTauriVectorFile(
   }
 
   if (isDelimitedTextFileName(path)) {
-    return {
-      data: parseDelimitedTextFile(await readTextFile(path), path),
-      path,
-    };
+    const points = parseDelimitedTextFile(await readTextFile(path), path);
+    // No lon/lat columns: fall through to DuckDB so spatial CSV variants
+    // (e.g. a WKT geometry column) still load.
+    if (points) {
+      return { data: points, path };
+    }
   }
 
   try {
