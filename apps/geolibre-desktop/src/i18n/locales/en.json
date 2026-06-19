@@ -566,6 +566,7 @@
       },
       "dataSources": "Data sources",
       "plugins": "Plugins",
+      "menus": "Menus",
       "lockedNote": "This interface profile is managed by your administrator and cannot be changed."
     },
     "env": {

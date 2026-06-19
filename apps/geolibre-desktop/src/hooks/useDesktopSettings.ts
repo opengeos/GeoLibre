@@ -66,6 +66,13 @@ export interface UiProfileSettings {
   hiddenDataSources: string[];
   /** Plugin ids hidden from the Plugins menu. */
   hiddenPlugins: string[];
+  /** Top-level toolbar menu ids hidden entirely (e.g. `processing`, `help`). */
+  hiddenMenus: string[];
+  /**
+   * Menu-item catalog ids hidden from their menu (Project/Edit/Processing/
+   * Controls/Settings/Help). Add Data and Plugins use the two lists above.
+   */
+  hiddenMenuItems: string[];
 }
 
 interface DesktopSettingsState {
@@ -87,6 +94,8 @@ export const DEFAULT_UI_PROFILE_SETTINGS: UiProfileSettings = {
   locked: false,
   hiddenDataSources: [],
   hiddenPlugins: [],
+  hiddenMenus: [],
+  hiddenMenuItems: [],
 };
 
 const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
@@ -157,6 +166,8 @@ function normalizeUiProfileSettings(profile: unknown): UiProfileSettings {
         : DEFAULT_UI_PROFILE_SETTINGS.locked,
     hiddenDataSources: normalizeStringList(candidate.hiddenDataSources),
     hiddenPlugins: normalizeStringList(candidate.hiddenPlugins),
+    hiddenMenus: normalizeStringList(candidate.hiddenMenus),
+    hiddenMenuItems: normalizeStringList(candidate.hiddenMenuItems),
   };
 }
 

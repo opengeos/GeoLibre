@@ -24,6 +24,8 @@ import { ClipboardList, SlidersHorizontal } from "lucide-react";
 import { type MouseEvent as ReactMouseEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ToolbarPanels } from "../../../hooks/useToolbarPanels";
+import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
+import { isMenuItemVisible } from "../../../lib/ui-profile";
 import {
   MAP_CONTROL_ITEMS,
   type ToolbarChrome,
@@ -65,6 +67,8 @@ export function ControlsMenu({
   onOpenFieldCollection,
 }: ControlsMenuProps) {
   const { t } = useTranslation();
+  const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
+  const show = (id: string) => isMenuItemVisible(uiProfile, id);
 
   return (
     <DropdownMenu>
@@ -82,7 +86,9 @@ export function ControlsMenu({
       <DropdownMenuContent align="start">
         <DropdownMenuLabel>{t("toolbar.item.mapControls")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {MAP_CONTROL_ITEMS.map((control) => (
+        {MAP_CONTROL_ITEMS.filter((control) =>
+          show(`controls.mapControl.${control.id}`),
+        ).map((control) => (
           <DropdownMenuItem
             key={control.id}
             onClick={() => onToggleMapControl(control.id)}
@@ -91,65 +97,91 @@ export function ControlsMenu({
             {controlsVisible[control.id] ? " ✓" : ""}
           </DropdownMenuItem>
         ))}
-        <AtmosphereEffectsSubmenu
-          active={effectsActive}
-          onToggle={onToggleEffects}
-          getSettings={getEffectsSettings}
-          onPreview={onPreviewEffectsSettings}
-          onCommit={onCommitEffectsSettings}
-        />
-        <DropdownMenuItem
-          title={t("toolbar.item.directionsTooltip")}
-          onClick={onToggleDirections}
-        >
-          {t("toolbar.item.directions")}
-          {directionsActive ? " ✓" : ""}
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          title={t("toolbar.item.reverseGeocodeTooltip")}
-          onClick={onToggleReverseGeocode}
-        >
-          {t("toolbar.item.reverseGeocode")}
-          {reverseGeocodeActive ? " ✓" : ""}
-        </DropdownMenuItem>
+        {show("controls.atmosphereEffects") && (
+          <AtmosphereEffectsSubmenu
+            active={effectsActive}
+            onToggle={onToggleEffects}
+            getSettings={getEffectsSettings}
+            onPreview={onPreviewEffectsSettings}
+            onCommit={onCommitEffectsSettings}
+          />
+        )}
+        {show("controls.directions") && (
+          <DropdownMenuItem
+            title={t("toolbar.item.directionsTooltip")}
+            onClick={onToggleDirections}
+          >
+            {t("toolbar.item.directions")}
+            {directionsActive ? " ✓" : ""}
+          </DropdownMenuItem>
+        )}
+        {show("controls.reverseGeocode") && (
+          <DropdownMenuItem
+            title={t("toolbar.item.reverseGeocodeTooltip")}
+            onClick={onToggleReverseGeocode}
+          >
+            {t("toolbar.item.reverseGeocode")}
+            {reverseGeocodeActive ? " ✓" : ""}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={panels.searchPlaces.toggle}>
-          {t("toolbar.item.search")}
-          {panels.searchPlaces.visible ? " ✓" : ""}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={panels.colorbar.toggle}>
-          {t("toolbar.item.colorbar")}
-          {panels.colorbar.visible ? " ✓" : ""}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={panels.legend.toggle}>
-          {t("toolbar.item.legend")}
-          {panels.legend.visible ? " ✓" : ""}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={panels.html.toggle}>
-          {t("toolbar.item.html")}
-          {panels.html.visible ? " ✓" : ""}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={panels.measure.toggle}>
-          {t("toolbar.item.measure")}
-          {panels.measure.visible ? " ✓" : ""}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={panels.bookmark.toggle}>
-          {t("toolbar.item.bookmark")}
-          {panels.bookmark.visible ? " ✓" : ""}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={panels.minimap.toggle}>
-          {t("toolbar.item.minimap")}
-          {panels.minimap.visible ? " ✓" : ""}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={panels.viewState.toggle}>
-          {t("toolbar.item.viewState")}
-          {panels.viewState.visible ? " ✓" : ""}
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={onOpenFieldCollection}>
-          <ClipboardList className="mr-2 h-3.5 w-3.5" />
-          {t("toolbar.item.fieldCollection")}
-        </DropdownMenuItem>
+        {show("controls.search") && (
+          <DropdownMenuItem onSelect={panels.searchPlaces.toggle}>
+            {t("toolbar.item.search")}
+            {panels.searchPlaces.visible ? " ✓" : ""}
+          </DropdownMenuItem>
+        )}
+        {show("controls.colorbar") && (
+          <DropdownMenuItem onSelect={panels.colorbar.toggle}>
+            {t("toolbar.item.colorbar")}
+            {panels.colorbar.visible ? " ✓" : ""}
+          </DropdownMenuItem>
+        )}
+        {show("controls.legend") && (
+          <DropdownMenuItem onSelect={panels.legend.toggle}>
+            {t("toolbar.item.legend")}
+            {panels.legend.visible ? " ✓" : ""}
+          </DropdownMenuItem>
+        )}
+        {show("controls.html") && (
+          <DropdownMenuItem onSelect={panels.html.toggle}>
+            {t("toolbar.item.html")}
+            {panels.html.visible ? " ✓" : ""}
+          </DropdownMenuItem>
+        )}
+        {show("controls.measure") && (
+          <DropdownMenuItem onSelect={panels.measure.toggle}>
+            {t("toolbar.item.measure")}
+            {panels.measure.visible ? " ✓" : ""}
+          </DropdownMenuItem>
+        )}
+        {show("controls.bookmark") && (
+          <DropdownMenuItem onSelect={panels.bookmark.toggle}>
+            {t("toolbar.item.bookmark")}
+            {panels.bookmark.visible ? " ✓" : ""}
+          </DropdownMenuItem>
+        )}
+        {show("controls.minimap") && (
+          <DropdownMenuItem onSelect={panels.minimap.toggle}>
+            {t("toolbar.item.minimap")}
+            {panels.minimap.visible ? " ✓" : ""}
+          </DropdownMenuItem>
+        )}
+        {show("controls.viewState") && (
+          <DropdownMenuItem onSelect={panels.viewState.toggle}>
+            {t("toolbar.item.viewState")}
+            {panels.viewState.visible ? " ✓" : ""}
+          </DropdownMenuItem>
+        )}
+        {show("controls.fieldCollection") && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={onOpenFieldCollection}>
+              <ClipboardList className="mr-2 h-3.5 w-3.5" />
+              {t("toolbar.item.fieldCollection")}
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

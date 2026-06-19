@@ -41,7 +41,12 @@ export function OnboardingDialog({ open, onClose }: OnboardingDialogProps) {
             level,
             plugins.map((plugin) => plugin.id),
           )
-        : { hiddenDataSources: [], hiddenPlugins: [] };
+        : {
+            hiddenDataSources: [],
+            hiddenPlugins: [],
+            hiddenMenus: [],
+            hiddenMenuItems: [],
+          };
     setDesktopSettings({
       ...current,
       uiProfile: {
@@ -49,8 +54,7 @@ export function OnboardingDialog({ open, onClose }: OnboardingDialogProps) {
         enabled: level !== null,
         level,
         onboarded: true,
-        hiddenDataSources: sets.hiddenDataSources,
-        hiddenPlugins: sets.hiddenPlugins,
+        ...sets,
       },
     });
     onClose();

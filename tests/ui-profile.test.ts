@@ -8,7 +8,11 @@ import {
 } from "../apps/geolibre-desktop/src/hooks/useDesktopSettings";
 import {
   DATA_SOURCE_CATALOG,
+  MENU_ITEM_CATALOG,
+  TOP_LEVEL_MENUS,
   isDataSourceVisible,
+  isMenuItemVisible,
+  isMenuVisible,
   isPluginVisible,
   levelAllowsTier,
   pluginTier,
@@ -71,6 +75,51 @@ describe("presetHiddenSets", () => {
     assert.deepEqual(sets.hiddenPlugins, ["maplibre-gl-geoagent"]);
     assert.ok(sets.hiddenDataSources.includes("zarr")); // advanced
     assert.ok(!sets.hiddenDataSources.includes("wfs")); // intermediate
+  });
+});
+
+describe("menu presets and predicates", () => {
+  it("advanced hides no menus or items", () => {
+    const sets = presetHiddenSets("advanced", []);
+    assert.deepEqual(sets.hiddenMenus, []);
+    assert.deepEqual(sets.hiddenMenuItems, []);
+  });
+
+  it("beginner hides the intermediate plugins menu and advanced items", () => {
+    const sets = presetHiddenSets("beginner", []);
+    // The Plugins top-level menu is intermediate-tier → hidden for beginners.
+    assert.ok(sets.hiddenMenus.includes("plugins"));
+    // A basic menu like Project stays.
+    assert.ok(!sets.hiddenMenus.includes("project"));
+    // Advanced items are hidden; basic ones are not.
+    assert.ok(sets.hiddenMenuItems.includes("processing.raster"));
+    assert.ok(sets.hiddenMenuItems.includes("help.diagnostics"));
+    assert.ok(!sets.hiddenMenuItems.includes("project.save"));
+    assert.ok(!sets.hiddenMenuItems.includes("edit.undo"));
+  });
+
+  it("never hides the Settings menu (excluded from TOP_LEVEL_MENUS)", () => {
+    assert.ok(!TOP_LEVEL_MENUS.some((menu) => menu.id === "settings"));
+  });
+
+  it("never hides the Settings Interface entry", () => {
+    assert.ok(
+      !MENU_ITEM_CATALOG.some((entry) => entry.id === "settings.interface"),
+    );
+  });
+
+  it("respects enabled for menu and item predicates", () => {
+    const disabled = profile({ enabled: false, hiddenMenus: ["help"] });
+    assert.equal(isMenuVisible(disabled, "help"), true);
+    const enabled = profile({
+      enabled: true,
+      hiddenMenus: ["help"],
+      hiddenMenuItems: ["processing.raster"],
+    });
+    assert.equal(isMenuVisible(enabled, "help"), false);
+    assert.equal(isMenuVisible(enabled, "project"), true);
+    assert.equal(isMenuItemVisible(enabled, "processing.raster"), false);
+    assert.equal(isMenuItemVisible(enabled, "processing.vector"), true);
   });
 });
 

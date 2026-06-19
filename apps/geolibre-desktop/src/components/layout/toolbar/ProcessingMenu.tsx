@@ -16,6 +16,8 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { ToolbarPanel } from "../../../hooks/useToolbarPanels";
 import { isMobile } from "../../../lib/is-mobile";
+import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
+import { isMenuItemVisible } from "../../../lib/ui-profile";
 import type { ToolbarChrome } from "./constants";
 
 interface ProcessingMenuProps {
@@ -55,6 +57,8 @@ export function ProcessingMenu({
   // (Pyodide), geocode, statistics, and the assistant run client-side and stay.
   // The user agent is stable for the session, so evaluate once.
   const mobile = useMemo(() => isMobile(), []);
+  const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
+  const show = (id: string) => isMenuItemVisible(uiProfile, id);
 
   return (
     <DropdownMenu>
@@ -72,34 +76,48 @@ export function ProcessingMenu({
       <DropdownMenuContent align="start">
         <DropdownMenuLabel>{t("toolbar.menu.processing")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => setAssistantOpen(true)}>
-          {t("toolbar.command.assistant")}
-        </DropdownMenuItem>
+        {show("processing.assistant") && (
+          <DropdownMenuItem onSelect={() => setAssistantOpen(true)}>
+            {t("toolbar.command.assistant")}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
-        {!mobile && (
+        {!mobile && show("processing.whitebox") && (
           <DropdownMenuItem onSelect={() => setProcessingOpen(true)}>
             {t("toolbar.item.whitebox")}
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem onSelect={() => setSqlWorkspaceOpen(true)}>
-          {t("toolbar.command.sqlWorkspace")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => setPythonConsoleOpen(true)}>
-          {t("toolbar.command.pythonConsole")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => setNotebookOpen(true)}>
-          {t("toolbar.command.notebook")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => setDashboardOpen(true)}>
-          {t("toolbar.command.dashboard")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => setGeocodeOpen(true)}>
-          {t("toolbar.item.geocode")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => setModelBuilderOpen(true)}>
-          {t("toolbar.item.modelBuilder")}
-        </DropdownMenuItem>
-        {!mobile && (
+        {show("processing.sqlWorkspace") && (
+          <DropdownMenuItem onSelect={() => setSqlWorkspaceOpen(true)}>
+            {t("toolbar.command.sqlWorkspace")}
+          </DropdownMenuItem>
+        )}
+        {show("processing.pythonConsole") && (
+          <DropdownMenuItem onSelect={() => setPythonConsoleOpen(true)}>
+            {t("toolbar.command.pythonConsole")}
+          </DropdownMenuItem>
+        )}
+        {show("processing.notebook") && (
+          <DropdownMenuItem onSelect={() => setNotebookOpen(true)}>
+            {t("toolbar.command.notebook")}
+          </DropdownMenuItem>
+        )}
+        {show("processing.dashboard") && (
+          <DropdownMenuItem onSelect={() => setDashboardOpen(true)}>
+            {t("toolbar.command.dashboard")}
+          </DropdownMenuItem>
+        )}
+        {show("processing.geocode") && (
+          <DropdownMenuItem onSelect={() => setGeocodeOpen(true)}>
+            {t("toolbar.item.geocode")}
+          </DropdownMenuItem>
+        )}
+        {show("processing.modelBuilder") && (
+          <DropdownMenuItem onSelect={() => setModelBuilderOpen(true)}>
+            {t("toolbar.item.modelBuilder")}
+          </DropdownMenuItem>
+        )}
+        {!mobile && show("processing.conversion") && (
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             {t("toolbar.item.conversion")}
@@ -143,6 +161,7 @@ export function ProcessingMenu({
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         )}
+        {show("processing.vector") && (
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             {t("toolbar.item.vector")}
@@ -245,6 +264,8 @@ export function ProcessingMenu({
             </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+        )}
+        {show("processing.network") && (
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             {t("toolbar.item.network")}
@@ -258,6 +279,8 @@ export function ProcessingMenu({
             </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+        )}
+        {show("processing.statistics") && (
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             {t("toolbar.item.statistics")}
@@ -292,7 +315,8 @@ export function ProcessingMenu({
             </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
-        {!mobile && (
+        )}
+        {!mobile && show("processing.raster") && (
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             {t("toolbar.item.raster")}
@@ -376,18 +400,22 @@ export function ProcessingMenu({
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         )}
-        {!mobile && (
+        {!mobile && show("processing.segmentation") && (
           <DropdownMenuItem onSelect={() => setSegmentationOpen(true)}>
             {t("toolbar.command.segmentation")}
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem onSelect={onOpenPlanetaryComputer}>
-          {t("toolbar.command.planetaryComputer")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={earthEnginePanel.toggle}>
-          {t("toolbar.command.earthEngine")}
-          {earthEnginePanel.visible ? " ✓" : ""}
-        </DropdownMenuItem>
+        {show("processing.planetaryComputer") && (
+          <DropdownMenuItem onSelect={onOpenPlanetaryComputer}>
+            {t("toolbar.command.planetaryComputer")}
+          </DropdownMenuItem>
+        )}
+        {show("processing.earthEngine") && (
+          <DropdownMenuItem onSelect={earthEnginePanel.toggle}>
+            {t("toolbar.command.earthEngine")}
+            {earthEnginePanel.visible ? " ✓" : ""}
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

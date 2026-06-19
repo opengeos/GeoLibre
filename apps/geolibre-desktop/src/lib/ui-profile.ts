@@ -113,6 +113,128 @@ export const PLUGIN_TIERS: Record<string, ComplexityTier> = {
   "maplibre-gl-streetview": "advanced",
 };
 
+/** Top-level toolbar menus that can be hidden as a whole (Settings is excluded
+ * so the profile UI can never be locked away). */
+export type TopLevelMenuId =
+  | "project"
+  | "edit"
+  | "addData"
+  | "processing"
+  | "controls"
+  | "plugins"
+  | "help";
+
+export interface TopLevelMenuEntry {
+  id: TopLevelMenuId;
+  labelKey: ParseKeys;
+  tier: ComplexityTier;
+}
+
+/** Hideable top-level menus, in toolbar order. */
+export const TOP_LEVEL_MENUS: readonly TopLevelMenuEntry[] = [
+  { id: "project", labelKey: "toolbar.menu.project", tier: "basic" },
+  { id: "edit", labelKey: "toolbar.menu.edit", tier: "basic" },
+  { id: "addData", labelKey: "toolbar.menu.addData", tier: "basic" },
+  { id: "processing", labelKey: "toolbar.menu.processing", tier: "basic" },
+  { id: "controls", labelKey: "toolbar.menu.controls", tier: "basic" },
+  { id: "plugins", labelKey: "toolbar.menu.plugins", tier: "intermediate" },
+  { id: "help", labelKey: "toolbar.menu.help", tier: "basic" },
+];
+
+export interface MenuItemCatalogEntry {
+  id: string;
+  /** Owning menu id, used to group the Settings checklist. */
+  menuId: string;
+  labelKey: ParseKeys;
+  tier: ComplexityTier;
+}
+
+/**
+ * Individually toggleable items across the Project, Edit, Processing, Controls,
+ * Settings, and Help menus. Submenus (Conversion, Vector, Raster, …) are single
+ * toggles, not per-tool. Add Data items and plugins use `DATA_SOURCE_CATALOG`
+ * and `PLUGIN_TIERS` instead. Keep ids in sync with the menu components.
+ */
+export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
+  // Project
+  { id: "project.new", menuId: "project", labelKey: "toolbar.item.newEllipsis", tier: "basic" },
+  { id: "project.openFrom", menuId: "project", labelKey: "toolbar.item.openFrom", tier: "basic" },
+  { id: "project.openRecent", menuId: "project", labelKey: "toolbar.item.openRecent", tier: "basic" },
+  { id: "project.save", menuId: "project", labelKey: "common.save", tier: "basic" },
+  { id: "project.saveAs", menuId: "project", labelKey: "toolbar.item.saveAsEllipsis", tier: "basic" },
+  { id: "project.share", menuId: "project", labelKey: "toolbar.item.shareEllipsis", tier: "intermediate" },
+  { id: "project.collaborate", menuId: "project", labelKey: "toolbar.item.collaborateEllipsis", tier: "advanced" },
+  { id: "project.print", menuId: "project", labelKey: "toolbar.item.printEllipsis", tier: "intermediate" },
+  { id: "project.printLayout", menuId: "project", labelKey: "toolbar.item.printLayoutEllipsis", tier: "advanced" },
+  { id: "project.offlineRegion", menuId: "project", labelKey: "toolbar.item.offlineRegionEllipsis", tier: "advanced" },
+  { id: "project.storymap", menuId: "project", labelKey: "toolbar.item.storymapEllipsis", tier: "advanced" },
+  // Edit
+  { id: "edit.undo", menuId: "edit", labelKey: "toolbar.item.undo", tier: "basic" },
+  { id: "edit.redo", menuId: "edit", labelKey: "toolbar.item.redo", tier: "basic" },
+  // Processing
+  { id: "processing.assistant", menuId: "processing", labelKey: "toolbar.command.assistant", tier: "basic" },
+  { id: "processing.whitebox", menuId: "processing", labelKey: "toolbar.item.whitebox", tier: "advanced" },
+  { id: "processing.sqlWorkspace", menuId: "processing", labelKey: "toolbar.command.sqlWorkspace", tier: "intermediate" },
+  { id: "processing.pythonConsole", menuId: "processing", labelKey: "toolbar.command.pythonConsole", tier: "advanced" },
+  { id: "processing.notebook", menuId: "processing", labelKey: "toolbar.command.notebook", tier: "advanced" },
+  { id: "processing.dashboard", menuId: "processing", labelKey: "toolbar.command.dashboard", tier: "intermediate" },
+  { id: "processing.geocode", menuId: "processing", labelKey: "toolbar.item.geocode", tier: "intermediate" },
+  { id: "processing.modelBuilder", menuId: "processing", labelKey: "toolbar.item.modelBuilder", tier: "advanced" },
+  { id: "processing.conversion", menuId: "processing", labelKey: "toolbar.item.conversion", tier: "intermediate" },
+  { id: "processing.vector", menuId: "processing", labelKey: "toolbar.item.vector", tier: "intermediate" },
+  { id: "processing.network", menuId: "processing", labelKey: "toolbar.item.network", tier: "advanced" },
+  { id: "processing.statistics", menuId: "processing", labelKey: "toolbar.item.statistics", tier: "advanced" },
+  { id: "processing.raster", menuId: "processing", labelKey: "toolbar.item.raster", tier: "advanced" },
+  { id: "processing.segmentation", menuId: "processing", labelKey: "toolbar.command.segmentation", tier: "advanced" },
+  { id: "processing.planetaryComputer", menuId: "processing", labelKey: "toolbar.command.planetaryComputer", tier: "advanced" },
+  { id: "processing.earthEngine", menuId: "processing", labelKey: "toolbar.command.earthEngine", tier: "advanced" },
+  // Controls — built-in map controls
+  { id: "controls.mapControl.navigation", menuId: "controls", labelKey: "toolbar.mapControl.navigation", tier: "basic" },
+  { id: "controls.mapControl.fullscreen", menuId: "controls", labelKey: "toolbar.mapControl.fullscreen", tier: "basic" },
+  { id: "controls.mapControl.geolocate", menuId: "controls", labelKey: "toolbar.mapControl.geolocate", tier: "intermediate" },
+  { id: "controls.mapControl.globe", menuId: "controls", labelKey: "toolbar.mapControl.globe", tier: "intermediate" },
+  { id: "controls.mapControl.terrain", menuId: "controls", labelKey: "toolbar.mapControl.terrain", tier: "intermediate" },
+  { id: "controls.mapControl.scale", menuId: "controls", labelKey: "toolbar.mapControl.scale", tier: "intermediate" },
+  { id: "controls.mapControl.attribution", menuId: "controls", labelKey: "toolbar.mapControl.attribution", tier: "advanced" },
+  { id: "controls.mapControl.logo", menuId: "controls", labelKey: "toolbar.mapControl.logo", tier: "advanced" },
+  // Controls — overlays and panels
+  { id: "controls.atmosphereEffects", menuId: "controls", labelKey: "toolbar.item.atmosphereEffects", tier: "advanced" },
+  { id: "controls.directions", menuId: "controls", labelKey: "toolbar.item.directions", tier: "intermediate" },
+  { id: "controls.reverseGeocode", menuId: "controls", labelKey: "toolbar.item.reverseGeocode", tier: "intermediate" },
+  { id: "controls.search", menuId: "controls", labelKey: "toolbar.item.search", tier: "basic" },
+  { id: "controls.colorbar", menuId: "controls", labelKey: "toolbar.item.colorbar", tier: "intermediate" },
+  { id: "controls.legend", menuId: "controls", labelKey: "toolbar.item.legend", tier: "basic" },
+  { id: "controls.html", menuId: "controls", labelKey: "toolbar.item.html", tier: "advanced" },
+  { id: "controls.measure", menuId: "controls", labelKey: "toolbar.item.measure", tier: "intermediate" },
+  { id: "controls.bookmark", menuId: "controls", labelKey: "toolbar.item.bookmark", tier: "intermediate" },
+  { id: "controls.minimap", menuId: "controls", labelKey: "toolbar.item.minimap", tier: "intermediate" },
+  { id: "controls.viewState", menuId: "controls", labelKey: "toolbar.item.viewState", tier: "advanced" },
+  { id: "controls.fieldCollection", menuId: "controls", labelKey: "toolbar.item.fieldCollection", tier: "advanced" },
+  // Settings (the Settings menu and its Language/Layout/Interface entries always show)
+  { id: "settings.mapPreferences", menuId: "settings", labelKey: "settings.menu.mapPreferences", tier: "intermediate" },
+  { id: "settings.geocoding", menuId: "settings", labelKey: "settings.menu.geocoding", tier: "advanced" },
+  { id: "settings.environment", menuId: "settings", labelKey: "settings.menu.environmentVariables", tier: "advanced" },
+  { id: "settings.projectSettings", menuId: "settings", labelKey: "settings.menu.projectSettings", tier: "intermediate" },
+  { id: "settings.managePlugins", menuId: "settings", labelKey: "settings.menu.managePlugins", tier: "intermediate" },
+  // Help
+  { id: "help.commandPalette", menuId: "help", labelKey: "toolbar.item.commandPalette", tier: "basic" },
+  { id: "help.keyboardShortcuts", menuId: "help", labelKey: "toolbar.command.keyboardShortcuts", tier: "intermediate" },
+  { id: "help.diagnostics", menuId: "help", labelKey: "toolbar.command.diagnostics", tier: "advanced" },
+  { id: "help.feedback", menuId: "help", labelKey: "toolbar.command.giveFeedback", tier: "intermediate" },
+  { id: "help.checkForUpdates", menuId: "help", labelKey: "toolbar.command.checkForUpdates", tier: "intermediate" },
+  { id: "help.about", menuId: "help", labelKey: "toolbar.command.about", tier: "basic" },
+];
+
+/** Group order + header label key for the per-menu item checklists in Settings. */
+export const MENU_ITEM_GROUPS: ReadonlyArray<{ menuId: string; labelKey: ParseKeys }> = [
+  { menuId: "project", labelKey: "toolbar.menu.project" },
+  { menuId: "edit", labelKey: "toolbar.menu.edit" },
+  { menuId: "processing", labelKey: "toolbar.menu.processing" },
+  { menuId: "controls", labelKey: "toolbar.menu.controls" },
+  { menuId: "settings", labelKey: "settings.title" },
+  { menuId: "help", labelKey: "toolbar.menu.help" },
+];
+
 const DEFAULT_PLUGIN_TIER: ComplexityTier = "intermediate";
 
 const TIER_RANK: Record<ComplexityTier, number> = {
@@ -149,17 +271,30 @@ export function pluginTier(pluginId: string): ComplexityTier {
  * @param pluginIds - All currently registered plugin ids to tier.
  * @returns The hidden id lists to store on {@link UiProfileSettings}.
  */
+export interface HiddenSets {
+  hiddenDataSources: string[];
+  hiddenPlugins: string[];
+  hiddenMenus: string[];
+  hiddenMenuItems: string[];
+}
+
 export function presetHiddenSets(
   level: ExperienceLevel,
   pluginIds: readonly string[],
-): { hiddenDataSources: string[]; hiddenPlugins: string[] } {
+): HiddenSets {
   const hiddenDataSources = DATA_SOURCE_CATALOG.filter(
     (entry) => !levelAllowsTier(level, entry.tier),
   ).map((entry) => entry.id);
   const hiddenPlugins = pluginIds.filter(
     (id) => !levelAllowsTier(level, pluginTier(id)),
   );
-  return { hiddenDataSources, hiddenPlugins };
+  const hiddenMenus = TOP_LEVEL_MENUS.filter(
+    (menu) => !levelAllowsTier(level, menu.tier),
+  ).map((menu) => menu.id);
+  const hiddenMenuItems = MENU_ITEM_CATALOG.filter(
+    (entry) => !levelAllowsTier(level, entry.tier),
+  ).map((entry) => entry.id);
+  return { hiddenDataSources, hiddenPlugins, hiddenMenus, hiddenMenuItems };
 }
 
 /** Whether a data-source id should be shown in the Add Data menu. */
@@ -176,4 +311,20 @@ export function isPluginVisible(
   id: string,
 ): boolean {
   return !profile.enabled || !profile.hiddenPlugins.includes(id);
+}
+
+/** Whether a top-level toolbar menu should be shown. */
+export function isMenuVisible(
+  profile: UiProfileSettings,
+  menuId: string,
+): boolean {
+  return !profile.enabled || !profile.hiddenMenus.includes(menuId);
+}
+
+/** Whether a menu-item catalog id should be shown in its menu. */
+export function isMenuItemVisible(
+  profile: UiProfileSettings,
+  itemId: string,
+): boolean {
+  return !profile.enabled || !profile.hiddenMenuItems.includes(itemId);
 }

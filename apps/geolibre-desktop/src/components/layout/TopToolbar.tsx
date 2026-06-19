@@ -69,7 +69,7 @@ import { useToolbarPanels } from "../../hooks/useToolbarPanels";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import { isTauri } from "../../lib/tauri-io";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
-import { isPluginVisible } from "../../lib/ui-profile";
+import { isMenuVisible, isPluginVisible } from "../../lib/ui-profile";
 import { CommandPalette } from "../command/CommandPalette";
 import { KeyboardShortcutsDialog } from "../command/KeyboardShortcutsDialog";
 import { useGlobalShortcuts } from "../../hooks/useGlobalShortcuts";
@@ -760,72 +760,82 @@ export function TopToolbar({
           <span className="hidden sm:inline">{appTitle}</span>
         ) : null}
       </span>
-      <ProjectMenu
-        chrome={chrome}
-        collaborationEnabled={collaboration.enabled}
-        printPanel={panels.print}
-        onNewProject={() => setNewProjectDialogOpen(true)}
-        onOpenFromFile={() => void projectFiles.handleOpenFromFile()}
-        onOpenFromUrl={() => projectFiles.setProjectUrlDialogOpen(true)}
-        onOpenRecent={(path) => void projectFiles.handleOpenRecent(path)}
-        onSave={() => void projectFiles.handleSave()}
-        onSaveAs={() => void projectFiles.handleSaveAs()}
-        onShare={() => setShareDialogOpen(true)}
-        onCollaborate={() => setCollaborateDialogOpen(true)}
-        onPrintLayout={() => setPrintLayoutOpen(true)}
-        onDownloadOffline={() => setOfflineRegionOpen(true)}
-      />
-      <EditMenu chrome={chrome} />
+      {isMenuVisible(uiProfile, "project") && (
+        <ProjectMenu
+          chrome={chrome}
+          collaborationEnabled={collaboration.enabled}
+          printPanel={panels.print}
+          onNewProject={() => setNewProjectDialogOpen(true)}
+          onOpenFromFile={() => void projectFiles.handleOpenFromFile()}
+          onOpenFromUrl={() => projectFiles.setProjectUrlDialogOpen(true)}
+          onOpenRecent={(path) => void projectFiles.handleOpenRecent(path)}
+          onSave={() => void projectFiles.handleSave()}
+          onSaveAs={() => void projectFiles.handleSaveAs()}
+          onShare={() => setShareDialogOpen(true)}
+          onCollaborate={() => setCollaborateDialogOpen(true)}
+          onPrintLayout={() => setPrintLayoutOpen(true)}
+          onDownloadOffline={() => setOfflineRegionOpen(true)}
+        />
+      )}
+      {isMenuVisible(uiProfile, "edit") && <EditMenu chrome={chrome} />}
       <NewProjectDialog
         open={newProjectDialogOpen}
         onOpenChange={setNewProjectDialogOpen}
         onSaveCurrentProject={projectFiles.handleSave}
         onProjectCreated={resetRuntimeControlsForNewProject}
       />
-      <AddDataMenu
-        chrome={chrome}
-        addLayer={addLayer}
-        osmPbfBusy={osmPbf.busy}
-        onSetAddDataKind={setAddDataKind}
-        onAddGltfModel={() => {
-          setAddDataDeckVizKind("scenegraph");
-          setAddDataKind("deckgl-viz");
-        }}
-        onOpenOsmPbfDialog={() => osmPbf.setDialogOpen(true)}
-      />
-      <ProcessingMenu
-        chrome={chrome}
-        earthEnginePanel={panels.earthEngine}
-        onOpenNetworkTool={consent.openNetworkTool}
-        onOpenPlanetaryComputer={handleOpenPlanetaryComputer}
-        onOpenGeoreferencer={() => setGeoreferencerOpen(true)}
-      />
-      <ControlsMenu
-        chrome={chrome}
-        controlsVisible={controlsVisible}
-        panels={panels}
-        effectsActive={isActive(EFFECTS_PLUGIN_ID)}
-        directionsActive={isActive(DIRECTIONS_PLUGIN_ID)}
-        reverseGeocodeActive={isActive(REVERSE_GEOCODE_PLUGIN_ID)}
-        onToggleMapControl={toggleMapControl}
-        onToggleEffects={() => toggle(EFFECTS_PLUGIN_ID, appApi)}
-        getEffectsSettings={getEffectsSettings}
-        onPreviewEffectsSettings={previewEffectsSettings}
-        onCommitEffectsSettings={commitEffectsSettings}
-        onToggleDirections={consent.handleToggleDirections}
-        onToggleReverseGeocode={consent.handleToggleReverseGeocode}
-        onOpenFieldCollection={() => setFieldCollectionOpen(true)}
-      />
-      <PluginsMenu
-        chrome={chrome}
-        appApi={appApi}
-        plugins={plugins}
-        isActive={isActive}
-        toggle={toggle}
-        getMapControlPosition={getMapControlPosition}
-        setMapControlPosition={setMapControlPosition}
-        hiddenPluginIds={hiddenPluginIds}
-      />
+      {isMenuVisible(uiProfile, "addData") && (
+        <AddDataMenu
+          chrome={chrome}
+          addLayer={addLayer}
+          osmPbfBusy={osmPbf.busy}
+          onSetAddDataKind={setAddDataKind}
+          onAddGltfModel={() => {
+            setAddDataDeckVizKind("scenegraph");
+            setAddDataKind("deckgl-viz");
+          }}
+          onOpenOsmPbfDialog={() => osmPbf.setDialogOpen(true)}
+        />
+      )}
+      {isMenuVisible(uiProfile, "processing") && (
+        <ProcessingMenu
+          chrome={chrome}
+          earthEnginePanel={panels.earthEngine}
+          onOpenNetworkTool={consent.openNetworkTool}
+          onOpenPlanetaryComputer={handleOpenPlanetaryComputer}
+          onOpenGeoreferencer={() => setGeoreferencerOpen(true)}
+        />
+      )}
+      {isMenuVisible(uiProfile, "controls") && (
+        <ControlsMenu
+          chrome={chrome}
+          controlsVisible={controlsVisible}
+          panels={panels}
+          effectsActive={isActive(EFFECTS_PLUGIN_ID)}
+          directionsActive={isActive(DIRECTIONS_PLUGIN_ID)}
+          reverseGeocodeActive={isActive(REVERSE_GEOCODE_PLUGIN_ID)}
+          onToggleMapControl={toggleMapControl}
+          onToggleEffects={() => toggle(EFFECTS_PLUGIN_ID, appApi)}
+          getEffectsSettings={getEffectsSettings}
+          onPreviewEffectsSettings={previewEffectsSettings}
+          onCommitEffectsSettings={commitEffectsSettings}
+          onToggleDirections={consent.handleToggleDirections}
+          onToggleReverseGeocode={consent.handleToggleReverseGeocode}
+          onOpenFieldCollection={() => setFieldCollectionOpen(true)}
+        />
+      )}
+      {isMenuVisible(uiProfile, "plugins") && (
+        <PluginsMenu
+          chrome={chrome}
+          appApi={appApi}
+          plugins={plugins}
+          isActive={isActive}
+          toggle={toggle}
+          getMapControlPosition={getMapControlPosition}
+          setMapControlPosition={setMapControlPosition}
+          hiddenPluginIds={hiddenPluginIds}
+        />
+      )}
       <SettingsDialog
         buttonClassName={toolbarButtonClass}
         buttonSize={toolbarButtonSize}
@@ -886,18 +896,20 @@ export function TopToolbar({
           api={collaboration}
         />
       )}
-      <HelpMenu
-        chrome={chrome}
-        diagnosticsErrorCount={diagnosticsErrorCount}
-        onOpenCommandPalette={() => setCommandPaletteOpen(true)}
-        onOpenShortcuts={() => setShortcutsOpen(true)}
-        onOpenDiagnostics={onOpenDiagnostics}
-        onCheckForUpdates={() => {
-          setAboutOpen(true);
-          setCheckForUpdatesRequest((value) => value + 1);
-        }}
-        onAbout={() => setAboutOpen(true)}
-      />
+      {isMenuVisible(uiProfile, "help") && (
+        <HelpMenu
+          chrome={chrome}
+          diagnosticsErrorCount={diagnosticsErrorCount}
+          onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+          onOpenShortcuts={() => setShortcutsOpen(true)}
+          onOpenDiagnostics={onOpenDiagnostics}
+          onCheckForUpdates={() => {
+            setAboutOpen(true);
+            setCheckForUpdatesRequest((value) => value + 1);
+          }}
+          onAbout={() => setAboutOpen(true)}
+        />
+      )}
       <AddDataDialog
         kind={addDataKind}
         mapControllerRef={mapControllerRef}

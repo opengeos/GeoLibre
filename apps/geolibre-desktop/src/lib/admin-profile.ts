@@ -26,6 +26,8 @@ interface AdminProfileFile {
   /** Explicit hidden ids (override the preset when present). */
   hiddenDataSources?: string[];
   hiddenPlugins?: string[];
+  hiddenMenus?: string[];
+  hiddenMenuItems?: string[];
   /** When true, the user cannot change the profile from Settings. */
   lock?: boolean;
 }
@@ -91,12 +93,13 @@ export function resolveAdminProfile(
 
   // A level seeds the hidden lists; explicit lists override per dimension.
   const preset = level ? presetHiddenSets(level, pluginIds) : null;
-  const hiddenDataSources = Array.isArray(file.hiddenDataSources)
-    ? normalizeStringList(file.hiddenDataSources)
-    : (preset?.hiddenDataSources ?? []);
-  const hiddenPlugins = Array.isArray(file.hiddenPlugins)
-    ? normalizeStringList(file.hiddenPlugins)
-    : (preset?.hiddenPlugins ?? []);
+  const resolveList = (
+    explicit: string[] | undefined,
+    fromPreset: string[] | undefined,
+  ): string[] =>
+    Array.isArray(explicit)
+      ? normalizeStringList(explicit)
+      : (fromPreset ?? []);
 
   return {
     // An admin file enables filtering unless it explicitly opts out.
@@ -105,7 +108,12 @@ export function resolveAdminProfile(
     locked: file.lock === true,
     // An admin-managed profile should not also prompt the onboarding wizard.
     onboarded: true,
-    hiddenDataSources,
-    hiddenPlugins,
+    hiddenDataSources: resolveList(
+      file.hiddenDataSources,
+      preset?.hiddenDataSources,
+    ),
+    hiddenPlugins: resolveList(file.hiddenPlugins, preset?.hiddenPlugins),
+    hiddenMenus: resolveList(file.hiddenMenus, preset?.hiddenMenus),
+    hiddenMenuItems: resolveList(file.hiddenMenuItems, preset?.hiddenMenuItems),
   };
 }

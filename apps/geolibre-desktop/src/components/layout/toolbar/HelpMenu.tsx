@@ -17,6 +17,8 @@ import {
   Search,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
+import { isMenuItemVisible } from "../../../lib/ui-profile";
 import { FEEDBACK_URL, openExternalLink, type ToolbarChrome } from "./constants";
 
 interface HelpMenuProps {
@@ -40,6 +42,8 @@ export function HelpMenu({
   onAbout,
 }: HelpMenuProps) {
   const { t } = useTranslation();
+  const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
+  const show = (id: string) => isMenuItemVisible(uiProfile, id);
 
   return (
     <DropdownMenu>
@@ -57,36 +61,48 @@ export function HelpMenu({
       <DropdownMenuContent align="start">
         <DropdownMenuLabel>{t("toolbar.menu.help")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={onOpenCommandPalette}>
-          <Search className="mr-2 h-3.5 w-3.5" />
-          {t("toolbar.item.commandPalette")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={onOpenShortcuts}>
-          <Keyboard className="mr-2 h-3.5 w-3.5" />
-          {t("toolbar.command.keyboardShortcuts")}
-        </DropdownMenuItem>
+        {show("help.commandPalette") && (
+          <DropdownMenuItem onSelect={onOpenCommandPalette}>
+            <Search className="mr-2 h-3.5 w-3.5" />
+            {t("toolbar.item.commandPalette")}
+          </DropdownMenuItem>
+        )}
+        {show("help.keyboardShortcuts") && (
+          <DropdownMenuItem onSelect={onOpenShortcuts}>
+            <Keyboard className="mr-2 h-3.5 w-3.5" />
+            {t("toolbar.command.keyboardShortcuts")}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={onOpenDiagnostics}>
-          <Bug className="mr-2 h-3.5 w-3.5" />
-          {t("toolbar.command.diagnostics")}
-          {diagnosticsErrorCount > 0 ? (
-            <span className="ml-2 rounded bg-destructive px-1.5 py-0.5 text-[10px] leading-none text-destructive-foreground">
-              {diagnosticsErrorCount}
-            </span>
-          ) : null}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => void openExternalLink(FEEDBACK_URL)}>
-          <MessageSquare className="mr-2 h-3.5 w-3.5" />
-          {t("toolbar.command.giveFeedback")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={onCheckForUpdates}>
-          <RefreshCw className="mr-2 h-3.5 w-3.5" />
-          {t("toolbar.command.checkForUpdates")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={onAbout}>
-          <Info className="mr-2 h-3.5 w-3.5" />
-          {t("toolbar.command.about")}
-        </DropdownMenuItem>
+        {show("help.diagnostics") && (
+          <DropdownMenuItem onSelect={onOpenDiagnostics}>
+            <Bug className="mr-2 h-3.5 w-3.5" />
+            {t("toolbar.command.diagnostics")}
+            {diagnosticsErrorCount > 0 ? (
+              <span className="ml-2 rounded bg-destructive px-1.5 py-0.5 text-[10px] leading-none text-destructive-foreground">
+                {diagnosticsErrorCount}
+              </span>
+            ) : null}
+          </DropdownMenuItem>
+        )}
+        {show("help.feedback") && (
+          <DropdownMenuItem onSelect={() => void openExternalLink(FEEDBACK_URL)}>
+            <MessageSquare className="mr-2 h-3.5 w-3.5" />
+            {t("toolbar.command.giveFeedback")}
+          </DropdownMenuItem>
+        )}
+        {show("help.checkForUpdates") && (
+          <DropdownMenuItem onSelect={onCheckForUpdates}>
+            <RefreshCw className="mr-2 h-3.5 w-3.5" />
+            {t("toolbar.command.checkForUpdates")}
+          </DropdownMenuItem>
+        )}
+        {show("help.about") && (
+          <DropdownMenuItem onSelect={onAbout}>
+            <Info className="mr-2 h-3.5 w-3.5" />
+            {t("toolbar.command.about")}
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
