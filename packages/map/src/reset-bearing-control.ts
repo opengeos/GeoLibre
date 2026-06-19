@@ -46,9 +46,11 @@ export class ResetBearingControl implements maplibregl.IControl {
   private button: HTMLButtonElement | null = null;
   private needle: SVGSVGElement | null = null;
   private label = "Reset pitch & bearing";
+  private northLabel = "N";
 
-  constructor(options: { label?: string } = {}) {
+  constructor(options: { label?: string; northLabel?: string } = {}) {
     if (options.label !== undefined) this.label = options.label;
+    if (options.northLabel !== undefined) this.northLabel = options.northLabel;
   }
 
   /** Tracks the live camera so the needle and active state stay in sync. */
@@ -81,11 +83,19 @@ export class ResetBearingControl implements maplibregl.IControl {
     // the control reads unambiguously as "north" at a glance (issue #537). The
     // solid north needle is what turns red when the view is rotated; the south
     // tail stays light and slim so the arrow keeps one clear destination point
-    // instead of two mirrored triangles of equal weight.
+    // instead of two mirrored triangles of equal weight. The apex sits at y=9
+    // (just below the "N" baseline at y=8) so the glyph never crowds the tip
+    // even on fonts with taller cap metrics.
     needle.innerHTML =
-      '<text class="geolibre-reset-bearing-needle-label" x="12" y="8" text-anchor="middle">N</text>' +
-      '<polygon class="geolibre-reset-bearing-needle-north" points="12,8.5 9,19 12,16 15,19" />' +
+      '<text class="geolibre-reset-bearing-needle-label" x="12" y="8" text-anchor="middle"></text>' +
+      '<polygon class="geolibre-reset-bearing-needle-north" points="12,9 9,19 12,16 15,19" />' +
       '<polygon class="geolibre-reset-bearing-needle-south" points="12,22.5 9.6,19 14.4,19" />';
+    // Set the cardinal letter via textContent (not interpolated into innerHTML)
+    // so a caller-supplied northLabel can't inject markup into the SVG.
+    const labelEl = needle.querySelector(
+      ".geolibre-reset-bearing-needle-label",
+    );
+    if (labelEl) labelEl.textContent = this.northLabel;
     button.appendChild(needle);
 
     container.appendChild(button);
