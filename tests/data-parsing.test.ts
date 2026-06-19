@@ -120,6 +120,11 @@ describe("delimited text auto-detection", () => {
     assert.equal(detectDelimitedTextDelimiter("a;b;c\n1;2;3"), ";");
     assert.equal(detectDelimitedTextDelimiter("a\tb\tc\n1\t2\t3"), "\t");
     assert.equal(detectDelimitedTextDelimiter("a,b,c\n1,2,3"), ",");
+    assert.equal(detectDelimitedTextDelimiter("a|b|c\n1|2|3"), "|");
+  });
+
+  it("falls back to a comma for single-column files", () => {
+    assert.equal(detectDelimitedTextDelimiter("name\nAlice\nBob"), ",");
   });
 
   it("matches common longitude/latitude column names", () => {
