@@ -199,7 +199,11 @@ interface RasterTileJson {
  *     before warming starts).
  *
  * Returns:
- *   A de-duplicated list of absolute URLs to fetch.
+ *   `urls` — every de-duplicated absolute URL to fetch (tiles + shared assets).
+ *   `tileUrls` — the region-specific raster/vector tile URLs only. Shared assets
+ *   (style, sprite, glyphs) are excluded here because they are common to every
+ *   region and must never be deleted when one region is removed; the offline
+ *   manifest stores this subset so it can size and delete a region safely.
  */
 export async function collectOfflineUrls(
   map: MapLibreMap,
@@ -207,10 +211,11 @@ export async function collectOfflineUrls(
   minZoom: number,
   maxZoom: number,
   options: { glyphRanges?: string[]; signal?: AbortSignal } = {},
-): Promise<string[]> {
+): Promise<{ urls: string[]; tileUrls: string[] }> {
   const { glyphRanges = ["0-255", "256-511"], signal } = options;
   const style = map.getStyle();
   const urls = new Set<string>();
+  const tileUrls = new Set<string>();
 
   // Tile sources.
   for (const source of Object.values(style.sources ?? {})) {
@@ -238,7 +243,9 @@ export async function collectOfflineUrls(
 
     const template = templates[0];
     for (const tile of enumerateTiles(bbox, minZoom, maxZoom)) {
-      urls.add(absolute(expandTileUrl(template, tile, spec.subdomains)));
+      const url = absolute(expandTileUrl(template, tile, spec.subdomains));
+      urls.add(url);
+      tileUrls.add(url);
     }
   }
 
@@ -285,7 +292,7 @@ export async function collectOfflineUrls(
     }
   }
 
-  return [...urls];
+  return { urls: [...urls], tileUrls: [...tileUrls] };
 }
 
 export interface WarmProgress {

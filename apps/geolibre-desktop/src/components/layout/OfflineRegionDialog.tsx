@@ -21,6 +21,13 @@ import {
   warmUrls,
   type WarmProgress,
 } from "../../lib/offline-tiles";
+import {
+  describeBboxCenter,
+  type OfflineRegion,
+  regionId,
+  upsertOfflineRegion,
+  urlHosts,
+} from "../../lib/offline-regions";
 
 interface OfflineRegionDialogProps {
   open: boolean;
@@ -153,16 +160,44 @@ export function OfflineRegionDialog({
     setPhase("running");
     setProgress({ done: 0, total: 0, failed: 0, failedUrls: [] });
     try {
-      const urls = await collectOfflineUrls(map, bbox, baseZoom, maxZoom, {
-        signal: controller.signal,
-      });
+      const { urls, tileUrls } = await collectOfflineUrls(
+        map,
+        bbox,
+        baseZoom,
+        maxZoom,
+        { signal: controller.signal },
+      );
       setProgress({ done: 0, total: urls.length, failed: 0, failedUrls: [] });
       const result = await warmUrls(urls, {
         signal: controller.signal,
         onProgress: setProgress,
       });
       setProgress(result);
-      if (!controller.signal.aborted) setPhase("done");
+      if (!controller.signal.aborted) {
+        setPhase("done");
+        // Record the download in the offline manifest so the Offline Manager can
+        // list, re-warm, and delete it later. Skip if every tile failed — there
+        // is nothing cached to manage.
+        if (result.done - result.failed > 0) {
+          const tileSet = new Set(tileUrls);
+          const assetUrls = urls.filter((u) => !tileSet.has(u));
+          const now = Date.now();
+          const region: OfflineRegion = {
+            id: regionId(bbox, baseZoom, maxZoom),
+            name: describeBboxCenter(bbox),
+            bbox,
+            minZoom: baseZoom,
+            maxZoom,
+            tileUrls,
+            assetUrls,
+            tileCount: tileUrls.length,
+            hosts: urlHosts(tileUrls),
+            createdAt: now,
+            updatedAt: now,
+          };
+          upsertOfflineRegion(region);
+        }
+      }
     } catch {
       // collectOfflineUrls swallows TileJSON errors, but guard the rare throw
       // (e.g. getStyle failing) so the UI doesn't show a false "done" state.

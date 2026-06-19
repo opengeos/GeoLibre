@@ -18,6 +18,7 @@ import {
   FileText,
   Folder,
   FolderOpen,
+  HardDrive,
   HardDriveDownload,
   History,
   LayoutTemplate,
@@ -48,6 +49,7 @@ interface ProjectMenuProps {
   onCollaborate: () => void;
   onPrintLayout: () => void;
   onDownloadOffline: () => void;
+  onManageOffline: () => void;
 }
 
 /** The Project menu: new/open/save/share, recent projects, print, and storymap. */
@@ -65,6 +67,7 @@ export function ProjectMenu({
   onCollaborate,
   onPrintLayout,
   onDownloadOffline,
+  onManageOffline,
 }: ProjectMenuProps) {
   const { t } = useTranslation();
   const projectPath = useAppStore((s) => s.projectPath);
@@ -84,7 +87,8 @@ export function ProjectMenu({
   const showPrintGroup =
     show("project.print") ||
     show("project.printLayout") ||
-    show("project.offlineRegion");
+    show("project.offlineRegion") ||
+    show("project.offlineManager");
 
   return (
     <DropdownMenu>
@@ -240,6 +244,12 @@ export function ProjectMenu({
           <DropdownMenuItem onSelect={onDownloadOffline}>
             <HardDriveDownload className="mr-2 h-3.5 w-3.5" />
             {t("toolbar.item.offlineRegionEllipsis")}
+          </DropdownMenuItem>
+        )}
+        {show("project.offlineManager") && (
+          <DropdownMenuItem onSelect={onManageOffline}>
+            <HardDrive className="mr-2 h-3.5 w-3.5" />
+            {t("toolbar.item.offlineManagerEllipsis")}
           </DropdownMenuItem>
         )}
         {show("project.storymap") && (

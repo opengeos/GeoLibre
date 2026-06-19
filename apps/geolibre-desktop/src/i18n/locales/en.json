@@ -324,6 +324,24 @@
     "retryFailed_one": "Retry {{count}} failed tile",
     "retryFailed_other": "Retry {{count}} failed tiles"
   },
+  "offlineManager": {
+    "title": "Manage Offline Areas",
+    "description": "Review the basemap areas you've downloaded for offline use, refresh them, or delete them to reclaim storage.",
+    "noServiceWorker": "Offline caching needs the installed web app. Refreshing areas won't save tiles for offline use in this build.",
+    "empty": "No offline areas yet. Use \"Download Offline Area\" to save the current map view for offline use.",
+    "zoomRange": "Zoom {{min}}–{{max}}",
+    "tilesCount_one": "{{count}} tile",
+    "tilesCount_other": "{{count}} tiles",
+    "savedOn": "Saved {{date}}",
+    "update": "Refresh this area",
+    "delete": "Delete this area",
+    "confirmDelete": "Delete",
+    "updateAll": "Refresh all",
+    "updating": "Refreshing {{done}} / {{total}}…",
+    "totalFootprint_one": "{{size}} across {{count}} area",
+    "totalFootprint_other": "{{size}} across {{count}} areas",
+    "deviceUsage": "{{usage}} of {{quota}} used"
+  },
   "fieldCollection": {
     "title": "Field Collection",
     "description": "Capture point, line, or polygon observations against a custom form, placing geometry by GPS or by drawing on the map.",
@@ -926,6 +944,7 @@
       "printEllipsis": "Print...",
       "printLayoutEllipsis": "Print Layout...",
       "offlineRegionEllipsis": "Download Offline Area...",
+      "offlineManagerEllipsis": "Manage Offline Areas...",
       "undo": "Undo",
       "redo": "Redo",
       "previousView": "Previous View",
