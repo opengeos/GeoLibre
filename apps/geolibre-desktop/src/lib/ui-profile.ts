@@ -137,7 +137,10 @@ export const TOP_LEVEL_MENUS: readonly TopLevelMenuEntry[] = [
   { id: "addData", labelKey: "toolbar.menu.addData", tier: "basic" },
   { id: "processing", labelKey: "toolbar.menu.processing", tier: "basic" },
   { id: "controls", labelKey: "toolbar.menu.controls", tier: "basic" },
-  { id: "plugins", labelKey: "toolbar.menu.plugins", tier: "intermediate" },
+  // The Layer Control and Basemap plugins are active by default, so the Plugins
+  // menu must stay reachable at every level to toggle them; the advanced plugins
+  // inside are still hidden per their own tier.
+  { id: "plugins", labelKey: "toolbar.menu.plugins", tier: "basic" },
   { id: "help", labelKey: "toolbar.menu.help", tier: "basic" },
 ];
 
@@ -192,9 +195,11 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   { id: "controls.mapControl.navigation", menuId: "controls", labelKey: "toolbar.mapControl.navigation", tier: "basic" },
   { id: "controls.mapControl.fullscreen", menuId: "controls", labelKey: "toolbar.mapControl.fullscreen", tier: "basic" },
   { id: "controls.mapControl.geolocate", menuId: "controls", labelKey: "toolbar.mapControl.geolocate", tier: "intermediate" },
-  { id: "controls.mapControl.globe", menuId: "controls", labelKey: "toolbar.mapControl.globe", tier: "intermediate" },
+  // Globe and Scale are shown on the map by default, so they must be toggleable
+  // at every level (otherwise a beginner sees them with no way to turn them off).
+  { id: "controls.mapControl.globe", menuId: "controls", labelKey: "toolbar.mapControl.globe", tier: "basic" },
   { id: "controls.mapControl.terrain", menuId: "controls", labelKey: "toolbar.mapControl.terrain", tier: "intermediate" },
-  { id: "controls.mapControl.scale", menuId: "controls", labelKey: "toolbar.mapControl.scale", tier: "intermediate" },
+  { id: "controls.mapControl.scale", menuId: "controls", labelKey: "toolbar.mapControl.scale", tier: "basic" },
   { id: "controls.mapControl.attribution", menuId: "controls", labelKey: "toolbar.mapControl.attribution", tier: "advanced" },
   { id: "controls.mapControl.logo", menuId: "controls", labelKey: "toolbar.mapControl.logo", tier: "advanced" },
   // Controls — overlays and panels
@@ -213,7 +218,9 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   // Settings (the Settings menu and its Language/Layout/Interface entries always show)
   { id: "settings.mapPreferences", menuId: "settings", labelKey: "settings.menu.mapPreferences", tier: "intermediate" },
   { id: "settings.geocoding", menuId: "settings", labelKey: "settings.menu.geocoding", tier: "advanced" },
-  { id: "settings.environment", menuId: "settings", labelKey: "settings.menu.environmentVariables", tier: "advanced" },
+  // The AI Assistant (basic) reads its API key from environment variables, so
+  // keep this reachable at the beginner level too.
+  { id: "settings.environment", menuId: "settings", labelKey: "settings.menu.environmentVariables", tier: "basic" },
   { id: "settings.projectSettings", menuId: "settings", labelKey: "settings.menu.projectSettings", tier: "intermediate" },
   { id: "settings.managePlugins", menuId: "settings", labelKey: "settings.menu.managePlugins", tier: "intermediate" },
   // Help

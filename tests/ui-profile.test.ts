@@ -85,17 +85,20 @@ describe("menu presets and predicates", () => {
     assert.deepEqual(sets.hiddenMenuItems, []);
   });
 
-  it("beginner hides the intermediate plugins menu and advanced items", () => {
+  it("beginner keeps all top-level menus but hides advanced items", () => {
     const sets = presetHiddenSets("beginner", []);
-    // The Plugins top-level menu is intermediate-tier → hidden for beginners.
-    assert.ok(sets.hiddenMenus.includes("plugins"));
-    // A basic menu like Project stays.
-    assert.ok(!sets.hiddenMenus.includes("project"));
+    // Every top-level menu is basic-tier (decluttering happens at the item
+    // level), so no whole menu is hidden by the beginner preset.
+    assert.deepEqual(sets.hiddenMenus, []);
     // Advanced items are hidden; basic ones are not.
     assert.ok(sets.hiddenMenuItems.includes("processing.raster"));
     assert.ok(sets.hiddenMenuItems.includes("help.diagnostics"));
     assert.ok(!sets.hiddenMenuItems.includes("project.save"));
     assert.ok(!sets.hiddenMenuItems.includes("edit.undo"));
+    // Default-on controls and the Assistant's API-key settings stay reachable.
+    assert.ok(!sets.hiddenMenuItems.includes("controls.mapControl.globe"));
+    assert.ok(!sets.hiddenMenuItems.includes("controls.mapControl.scale"));
+    assert.ok(!sets.hiddenMenuItems.includes("settings.environment"));
   });
 
   it("never hides the Settings menu (excluded from TOP_LEVEL_MENUS)", () => {
