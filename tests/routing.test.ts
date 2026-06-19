@@ -195,6 +195,14 @@ describe("decodePolyline", () => {
   it("returns an empty array for an empty string", () => {
     assert.deepEqual(decodePolyline(""), []);
   });
+
+  it("drops a truncated trailing chunk instead of emitting a garbage coord", () => {
+    // The full string above with its last coordinate cut off mid-chunk.
+    assert.deepEqual(decodePolyline("_o`diA~gw}qC_pR_pR_p"), [
+      [-77.05, 38.88],
+      [-77.04, 38.89],
+    ]);
+  });
 });
 
 describe("routeResponseToFeatures", () => {

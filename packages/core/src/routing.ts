@@ -281,15 +281,19 @@ export function decodePolyline(
   precision = 6,
 ): [number, number][] {
   const factor = 10 ** precision;
+  const len = encoded.length;
   const coordinates: [number, number][] = [];
   let index = 0;
   let lat = 0;
   let lon = 0;
-  while (index < encoded.length) {
+  while (index < len) {
     let shift = 0;
     let result = 0;
     let byte: number;
     do {
+      // Truncated input: stop cleanly rather than reading NaN past the end and
+      // pushing a garbage coordinate.
+      if (index >= len) return coordinates;
       byte = encoded.charCodeAt(index++) - 63;
       result |= (byte & 0x1f) << shift;
       shift += 5;
@@ -299,6 +303,7 @@ export function decodePolyline(
     shift = 0;
     result = 0;
     do {
+      if (index >= len) return coordinates;
       byte = encoded.charCodeAt(index++) - 63;
       result |= (byte & 0x1f) << shift;
       shift += 5;
@@ -417,6 +422,21 @@ function toComparableNumber(value: unknown): number | null {
   return null;
 }
 
+/**
+ * Error thrown when a Valhalla request returns a non-2xx response. Carries the
+ * HTTP status so callers can branch on it (e.g. a 4xx rejection) without
+ * pattern-matching the message string.
+ */
+export class RoutingRequestError extends Error {
+  readonly status: number;
+
+  constructor(status: number, statusText: string) {
+    super(`Routing request failed (${status} ${statusText})`);
+    this.name = "RoutingRequestError";
+    this.status = status;
+  }
+}
+
 async function postJson(
   url: string,
   body: unknown,
@@ -429,9 +449,7 @@ async function postJson(
     signal,
   });
   if (!response.ok) {
-    throw new Error(
-      `Routing request failed (${response.status} ${response.statusText})`,
-    );
+    throw new RoutingRequestError(response.status, response.statusText);
   }
   return response.json();
 }
