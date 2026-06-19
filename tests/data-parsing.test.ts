@@ -103,6 +103,11 @@ describe("parseCoordinate", () => {
     assert.equal(parseCoordinate("1,234.56"), 1234.56);
   });
 
+  it("treats a lone separator as the decimal point", () => {
+    assert.equal(parseCoordinate("1,234"), 1.234);
+    assert.equal(parseCoordinate("1.234"), 1.234);
+  });
+
   it("returns NaN for empty or unparsable values", () => {
     assert.ok(Number.isNaN(parseCoordinate("")));
     assert.ok(Number.isNaN(parseCoordinate(undefined)));

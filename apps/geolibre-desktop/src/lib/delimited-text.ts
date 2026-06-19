@@ -223,6 +223,9 @@ function findFieldIndex(fields: string[], fieldName: string): number {
  *
  * When both `,` and `.` appear, the right-most one is treated as the decimal
  * separator and the other as a thousands grouping separator (which is removed).
+ * When only one appears, it is treated as the decimal separator (so `"1,234"`
+ * parses to `1.234`); this is unambiguous for WGS84 coordinates, where a
+ * thousands grouping never occurs within the valid +/-180 range.
  *
  * @param value - The raw coordinate field (may include surrounding whitespace).
  * @returns The parsed number, or `NaN` when the value is empty or unparsable.
