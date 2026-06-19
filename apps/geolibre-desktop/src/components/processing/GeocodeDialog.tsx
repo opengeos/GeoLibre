@@ -346,7 +346,7 @@ export function GeocodeDialog({
                 </option>
               ))}
             </Select>
-            {geocoderNeedsApiKey(config) ? (
+            {geocoderNeedsApiKey(config) && !!config.apiKey ? (
               <p className="text-xs text-muted-foreground">
                 {t("geocode.providerHint")}
               </p>
