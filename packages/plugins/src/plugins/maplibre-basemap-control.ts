@@ -119,6 +119,10 @@ function getBasemapControlOptions(
       const count = replacedBasemapIds.length;
       // Nothing stacked to lose: never prompt (and avoids a "remove 0" message).
       if (count === 0) return true;
+      // Native dialog, matching the existing window.confirm usage in the shell.
+      // In a sandboxed cross-origin iframe (e.g. the Jupyter embed) confirm is
+      // suppressed and returns false, so the switch is simply blocked there.
+      // That fails safe: the stacked basemaps are kept and nothing is lost.
       return window.confirm(labels.confirmStyleReplace(basemap.name, count));
     },
   };
