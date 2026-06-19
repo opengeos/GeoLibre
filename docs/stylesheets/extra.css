@@ -127,17 +127,18 @@
   border-top-color: rgba(255, 255, 255, 0.12);
 }
 
-/* Tighten the left sidebar navigation. The default Material/Zensical link
-   margin/padding leaves a lot of vertical air between items; trim it. Section
-   headers keep their own (higher-specificity) spacing rule above. */
+/* Tighten the left sidebar navigation. The vertical gap between items comes
+   from the theme's default link `margin-top` (~0.625em); override that to trim
+   the air while keeping symmetric, touch-friendly padding. Section headers keep
+   their own (higher-specificity) spacing rule above. */
 .md-nav--primary .md-nav__item {
-  margin-top: 0.1rem;
+  margin-top: 0;
 }
 
 .md-nav--primary .md-nav__link {
-  margin-top: 0.1rem;
-  padding-bottom: 0.2rem;
-  padding-top: 0.2rem;
+  margin-top: 0.2rem;
+  padding-bottom: 0.35rem;
+  padding-top: 0.35rem;
 }
 
 .feature-grid {
