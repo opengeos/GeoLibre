@@ -50,6 +50,10 @@ const MODEL_STORAGE_KEY = "geolibre.assistant.model";
  * environment variable that activates it. Shown only until a provider is
  * configured, so the onboarding card stays scannable instead of dumping every
  * supported credential at once.
+ *
+ * Ordered by setup style for the reader (hosted API-key providers first, then
+ * self-hosted Ollama and custom endpoints), which is intentionally independent
+ * of the auto-selection ranking in `ASSISTANT_PROVIDER_IDS`.
  */
 const SETUP_PROVIDERS: ReadonlyArray<{
   id: AssistantProviderId;

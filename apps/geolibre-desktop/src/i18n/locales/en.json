@@ -1205,7 +1205,7 @@
     "placeholder": "Ask about your data, e.g. \"show countries with population over 50 million\" · Ctrl/Cmd+Enter to send",
     "intro": "Chat with your data. I can run Spatial SQL, add or remove layers, restyle them, and move the map — every change is undoable. Try \"color the countries by population with a graduated red ramp\".",
     "setupTitle": "Set up the AI Assistant",
-    "setupStatus": "The assistant needs an AI provider to do the thinking. Add credentials for any one provider below, then return to start chatting.",
+    "setupStatus": "The assistant needs an AI provider to do the thinking. Add credentials for any one provider below and the panel switches to chat mode as soon as you save.",
     "setupProviders": "Add credentials for any one provider",
     "setupOpenSettings": "Open Settings → Environment Variables",
     "thinking": "Working…",
