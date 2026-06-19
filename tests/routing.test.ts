@@ -183,6 +183,15 @@ describe("decodePolyline", () => {
     ]);
   });
 
+  it("decodes a Valhalla precision-6 polyline at the default precision", () => {
+    // Encodes [[-77.05, 38.88], [-77.04, 38.89], [-77.02, 38.9]] at precision 6.
+    assert.deepEqual(decodePolyline("_o`diA~gw}qC_pR_pR_pR_af@"), [
+      [-77.05, 38.88],
+      [-77.04, 38.89],
+      [-77.02, 38.9],
+    ]);
+  });
+
   it("returns an empty array for an empty string", () => {
     assert.deepEqual(decodePolyline(""), []);
   });
@@ -248,6 +257,11 @@ describe("compareSequenceValues", () => {
     const values = ["zeta", "", "2", "10"];
     const sorted = [...values].sort(compareSequenceValues);
     assert.deepEqual(sorted, ["2", "10", "zeta", ""]);
+  });
+
+  it("treats hex strings as text, not their Number() value", () => {
+    // "0x1A" must not sort as 26; it is text, so it trails the numeric 5.
+    assert.ok(compareSequenceValues("0x1A", 5) > 0);
   });
 });
 

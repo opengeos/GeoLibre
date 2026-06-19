@@ -376,7 +376,7 @@ export const sequentialRouteTool: ProcessingAlgorithm = {
     const used = points.slice(0, MAX_ROUTE_POINTS);
     if (points.length > used.length) {
       ctx.log(
-        `Using the first ${used.length} of ${points.length} points (server-load cap).`,
+        `Using the first ${used.length} of ${points.length} points (server limit: ${MAX_ROUTE_POINTS} locations per request).`,
       );
     }
     const mode = (ctx.parameters.mode as RoutingMode) || "auto";
@@ -406,10 +406,12 @@ export const sequentialRouteTool: ProcessingAlgorithm = {
     } catch (error) {
       if (ctx.signal?.aborted) return;
       const message = error instanceof Error ? error.message : String(error);
-      // A 4xx usually means the public server rejected the request (most often
-      // "Exceeded max locations"); point the user at the actionable fix.
-      const hint = /\b4\d\d\b/.test(message)
-        ? " The routing server may have rejected the request — reduce the number of points or use your own server (Settings → Environment Variables, VITE_ROUTING_ENDPOINT)."
+      // A 4xx from postJson ("Routing request failed (4xx …)") means the server
+      // rejected the request (most often "Exceeded max locations"); point the
+      // user at the actionable fix. Matching the request-failed prefix avoids
+      // false-positiving on a stray number in a network-level error message.
+      const hint = /request failed \(4\d\d/.test(message)
+        ? " The routing server rejected the request — reduce the number of points or use your own server (Settings → Environment Variables, VITE_ROUTING_ENDPOINT)."
         : "";
       ctx.log(`Routing failed: ${message}.${hint}`);
     }

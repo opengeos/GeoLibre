@@ -405,8 +405,12 @@ function toComparableNumber(value: unknown): number | null {
   if (typeof value === "string") {
     const trimmed = value.trim();
     if (trimmed === "") return null;
-    const num = Number(trimmed);
-    if (Number.isFinite(num)) return num;
+    // Only treat plain decimal/scientific notation as numeric, so hex ("0x1A")
+    // and other Number()-coercible forms sort as text rather than by their
+    // surprising numeric value.
+    if (/^[+-]?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(trimmed)) {
+      return Number(trimmed);
+    }
     const parsed = Date.parse(trimmed);
     if (Number.isFinite(parsed)) return parsed;
   }
