@@ -842,6 +842,22 @@ export class MapController {
   }
 
   /**
+   * Animate the map back to north-up (bearing 0), leaving the center, zoom, and
+   * pitch untouched. Mirrors MapLibre's compass-control click.
+   */
+  resetNorth(): void {
+    this.map?.resetNorth();
+  }
+
+  /**
+   * Animate the map back to north-up and flat (bearing 0 and pitch 0), leaving
+   * the center and zoom untouched.
+   */
+  resetNorthPitch(): void {
+    this.map?.resetNorthPitch();
+  }
+
+  /**
    * Query rendered features at a geographic point, for the scripting API's
    * "identify" command. Mirrors the in-app Identify tool: it queries the same
    * candidate style layers MapLibre renders for each layer

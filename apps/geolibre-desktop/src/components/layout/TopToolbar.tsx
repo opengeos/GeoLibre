@@ -33,8 +33,10 @@ import {
   ArrowLeft,
   ArrowRight,
   Bug,
+  Compass,
   Database,
   FilePen,
+  Mountain,
   Share2,
   Users,
   FilePlus2,
@@ -662,6 +664,22 @@ export function TopToolbar({
       run: viewportHistory.goForward,
     },
     {
+      id: "view.reset-north",
+      title: t("toolbar.command.resetNorth"),
+      group: t("toolbar.commandGroup.view"),
+      keywords: "north bearing rotation rotate compass orientation",
+      icon: Compass,
+      run: () => mapControllerRef.current?.resetNorth(),
+    },
+    {
+      id: "view.reset-pitch-bearing",
+      title: t("toolbar.command.resetPitchBearing"),
+      group: t("toolbar.commandGroup.view"),
+      keywords: "pitch bearing tilt rotation north flat level 3d",
+      icon: Mountain,
+      run: () => mapControllerRef.current?.resetNorthPitch(),
+    },
+    {
       id: "view.theme",
       title:
         themeMode === "dark"
@@ -803,7 +821,14 @@ export function TopToolbar({
       )}
       {isMenuVisible(uiProfile, "edit") && <EditMenu chrome={chrome} />}
       {isMenuVisible(uiProfile, "view") && (
-        <ViewMenu chrome={chrome} history={viewportHistory} />
+        <ViewMenu
+          chrome={chrome}
+          history={viewportHistory}
+          onResetNorth={() => mapControllerRef.current?.resetNorth()}
+          onResetPitchBearing={() =>
+            mapControllerRef.current?.resetNorthPitch()
+          }
+        />
       )}
       <NewProjectDialog
         open={newProjectDialogOpen}
