@@ -64,7 +64,10 @@ export function OfflineRegionDialog({
   mapControllerRef,
 }: OfflineRegionDialogProps) {
   const { t } = useTranslation();
-  const [extraLevels, setExtraLevels] = useState(2);
+  // Off by default so opening the dialog prepares only the current view's zoom
+  // level; `extraLevels` is the relative depth (+1, +2, …) applied once enabled.
+  const [includeExtra, setIncludeExtra] = useState(false);
+  const [extraLevels, setExtraLevels] = useState(1);
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState<WarmProgress>({
     done: 0,
@@ -81,7 +84,8 @@ export function OfflineRegionDialog({
   }, [open, mapControllerRef]);
 
   const baseZoom = view ? Math.floor(view.zoom) : 0;
-  const maxZoom = Math.min(22, baseZoom + extraLevels);
+  const effectiveExtra = includeExtra ? extraLevels : 0;
+  const maxZoom = Math.min(22, baseZoom + effectiveExtra);
   const bbox = (view?.bbox ?? null) as Bbox | null;
 
   const tileCount = useMemo(
@@ -89,11 +93,14 @@ export function OfflineRegionDialog({
     [bbox, baseZoom, maxZoom],
   );
 
-  // Surface basemaps whose tiles won't persist (no matching SW cache rule).
-  const uncacheableHosts = useMemo(() => {
+  // Split the active basemap sources into those whose tiles persist offline
+  // (matching SW cache rule) and those that won't, so the dialog can both warn
+  // about what will be missing and confirm what will be saved.
+  const { cacheableHosts, uncacheableHosts } = useMemo(() => {
     const map = mapControllerRef.current?.getMap();
-    if (!open || !map) return [];
-    const hosts = new Set<string>();
+    if (!open || !map) return { cacheableHosts: [], uncacheableHosts: [] };
+    const cacheable = new Set<string>();
+    const uncacheable = new Set<string>();
     const style = map.getStyle();
     for (const source of Object.values(style.sources ?? {})) {
       const spec = source as { type?: string; tiles?: string[]; url?: string };
@@ -102,12 +109,15 @@ export function OfflineRegionDialog({
       if (!ref) continue;
       try {
         const host = new URL(ref, window.location.href).hostname;
-        if (!CACHED_TILE_HOST.test(host)) hosts.add(host);
+        (CACHED_TILE_HOST.test(host) ? cacheable : uncacheable).add(host);
       } catch {
         // Ignore unparseable source refs.
       }
     }
-    return [...hosts];
+    return {
+      cacheableHosts: [...cacheable],
+      uncacheableHosts: [...uncacheable],
+    };
   }, [open, mapControllerRef]);
 
   const swActive = useMemo(
@@ -122,6 +132,8 @@ export function OfflineRegionDialog({
     if (open) {
       setPhase("idle");
       setProgress({ done: 0, total: 0, failed: 0 });
+      setIncludeExtra(false);
+      setExtraLevels(1);
     } else {
       abortRef.current?.abort();
     }
@@ -183,27 +195,56 @@ export function OfflineRegionDialog({
         )}
 
         {uncacheableHosts.length > 0 && (
-          <p className="rounded-md bg-amber-500/10 p-2 text-sm text-amber-700 dark:text-amber-400">
-            {t("offline.uncacheable", { hosts: uncacheableHosts.join(", ") })}
-          </p>
+          <>
+            <p className="rounded-md bg-amber-500/10 p-2 text-sm text-amber-700 dark:text-amber-400">
+              {t("offline.uncacheable", { hosts: uncacheableHosts.join(", ") })}
+            </p>
+            {cacheableHosts.length > 0 && (
+              <p className="rounded-md bg-emerald-500/10 p-2 text-sm text-emerald-700 dark:text-emerald-400">
+                {t("offline.cacheable", { hosts: cacheableHosts.join(", ") })}
+              </p>
+            )}
+          </>
         )}
 
         <div className="space-y-4 py-2">
-          <div className="flex items-center justify-between">
-            <Label>{t("offline.detailLevels")}</Label>
-            <span className="text-sm tabular-nums text-muted-foreground">
-              {t("offline.zoomRange", { min: baseZoom, max: maxZoom })}
-            </span>
-          </div>
-          <Slider
-            aria-label={t("offline.detailLevels")}
-            min={0}
-            max={MAX_EXTRA_LEVELS}
-            step={1}
-            value={[extraLevels]}
-            onValueChange={(value: number[]) => setExtraLevels(value[0])}
-            disabled={phase === "running"}
-          />
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={includeExtra}
+              disabled={phase === "running"}
+              onChange={(event) => setIncludeExtra(event.target.checked)}
+            />
+            {t("offline.includeExtra")}
+          </label>
+
+          {includeExtra ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Label>{t("offline.detailLevels")}</Label>
+                <span className="text-sm tabular-nums text-muted-foreground">
+                  {t("offline.relativeLevels", {
+                    count: extraLevels,
+                    min: baseZoom,
+                    max: maxZoom,
+                  })}
+                </span>
+              </div>
+              <Slider
+                aria-label={t("offline.detailLevels")}
+                min={1}
+                max={MAX_EXTRA_LEVELS}
+                step={1}
+                value={[extraLevels]}
+                onValueChange={(value: number[]) => setExtraLevels(value[0])}
+                disabled={phase === "running"}
+              />
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {t("offline.currentViewOnly", { zoom: baseZoom })}
+            </p>
+          )}
 
           <Separator />
 
