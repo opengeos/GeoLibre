@@ -77,11 +77,15 @@ export class ResetBearingControl implements maplibregl.IControl {
     needle.setAttribute("viewBox", "0 0 24 24");
     needle.setAttribute("aria-hidden", "true");
     needle.classList.add("geolibre-reset-bearing-needle");
-    // The north half is what turns red when the view is rotated; the south half
-    // stays muted so the needle reads as a compass rather than a solid arrow.
+    // A classic north arrow: an "N" cap over a single dominant upward needle so
+    // the control reads unambiguously as "north" at a glance (issue #537). The
+    // solid north needle is what turns red when the view is rotated; the south
+    // tail stays light and slim so the arrow keeps one clear destination point
+    // instead of two mirrored triangles of equal weight.
     needle.innerHTML =
-      '<polygon class="geolibre-reset-bearing-needle-north" points="12,2 6.5,14 12,11.5 17.5,14" />' +
-      '<polygon class="geolibre-reset-bearing-needle-south" points="12,22 6.5,10 12,12.5 17.5,10" />';
+      '<text class="geolibre-reset-bearing-needle-label" x="12" y="5.6" text-anchor="middle">N</text>' +
+      '<polygon class="geolibre-reset-bearing-needle-north" points="12,7 9,19 12,16 15,19" />' +
+      '<polygon class="geolibre-reset-bearing-needle-south" points="12,22.5 9.6,19 12,17 14.4,19" />';
     button.appendChild(needle);
 
     container.appendChild(button);

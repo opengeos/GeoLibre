@@ -1520,16 +1520,28 @@ body,
   width: 24px;
 }
 
-.geolibre-reset-bearing-needle-north {
-  fill: #334155;
+.geolibre-reset-bearing-needle-label {
+  fill: #1e293b;
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 8px;
+  font-weight: 700;
   transition: fill 150ms ease;
 }
 
-.geolibre-reset-bearing-needle-south {
-  fill: #64748b;
+.geolibre-reset-bearing-needle-north {
+  fill: #1e293b;
+  transition: fill 150ms ease;
 }
 
-.geolibre-reset-bearing-button--active .geolibre-reset-bearing-needle-north {
+/* Light, slim south tail so the upward north needle stays the single dominant
+   pointer (issue #537) — the two halves must not read as equal triangles. */
+.geolibre-reset-bearing-needle-south {
+  fill: #cbd5e1;
+}
+
+.geolibre-reset-bearing-button--active .geolibre-reset-bearing-needle-north,
+.geolibre-reset-bearing-button--active .geolibre-reset-bearing-needle-label {
   fill: hsl(var(--destructive));
 }
 
