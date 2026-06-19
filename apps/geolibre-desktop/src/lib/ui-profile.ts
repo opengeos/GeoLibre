@@ -245,7 +245,9 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   { id: "controls.mapControl.attribution", menuId: "controls", labelKey: "toolbar.mapControl.attribution", tier: "basic" },
   { id: "controls.mapControl.logo", menuId: "controls", labelKey: "toolbar.mapControl.logo", tier: "advanced" },
   // Controls — overlays and panels
-  { id: "controls.atmosphereEffects", menuId: "controls", labelKey: "toolbar.item.atmosphereEffects", tier: "advanced" },
+  // Basic so Beginners keep the toggle: Atmosphere Effects is activeByDefault,
+  // so hiding it would leave the effect on with no way to turn it off.
+  { id: "controls.atmosphereEffects", menuId: "controls", labelKey: "toolbar.item.atmosphereEffects", tier: "basic" },
   { id: "controls.directions", menuId: "controls", labelKey: "toolbar.item.directions", tier: "intermediate" },
   { id: "controls.reverseGeocode", menuId: "controls", labelKey: "toolbar.item.reverseGeocode", tier: "intermediate" },
   { id: "controls.search", menuId: "controls", labelKey: "toolbar.item.search", tier: "basic" },
