@@ -56,6 +56,10 @@ function restoreProjection(): void {
 // itself takes over.
 const DEP_INDEX_LAYER_ID = "usgs-lidar-3dep-index";
 const DEP_INDEX_SOURCE_ID = "usgs-lidar-3dep-index-source";
+// LAYERS=23 is the 3DEP LiDAR (point-cloud) coverage footprint layer in the
+// USGS 3DEPElevationIndex WMS. If USGS re-orders the service this silently shows
+// the wrong coverage; verify the index against the service's GetCapabilities:
+// https://index.nationalmap.gov/arcgis/services/3DEPElevationIndex/MapServer/WMSServer?SERVICE=WMS&REQUEST=GetCapabilities
 const DEP_INDEX_TILE_URL =
   "https://index.nationalmap.gov/arcgis/services/3DEPElevationIndex/MapServer/WMSServer?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&FORMAT=image/png&TRANSPARENT=true&LAYERS=23&SRS=EPSG:3857&STYLES=&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}";
 
@@ -130,22 +134,41 @@ const mountUsgsLidarControl = (app: GeoLibreAppAPI): boolean => {
 export const maplibreUsgsLidarPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-usgs-lidar",
   name: "USGS LiDAR",
-  version: "0.9.0",
+  version: "0.10.0",
   activate: (app: GeoLibreAppAPI) => {
     pluginActive = true;
+
+    // Synchronous re-activation path: apply the side effects only after the
+    // control actually mounts. Otherwise a failed mount (e.g. map not ready)
+    // leaves the plugin marked inactive while the projection is stuck in
+    // Mercator and the coverage layer is orphaned with no cleanup path.
+    if (usgsLidarControl) {
+      if (!mountUsgsLidarControl(app)) {
+        pluginActive = false;
+        return false;
+      }
+      forceMercatorProjection();
+      addDepIndexLayer();
+      return;
+    }
+
+    // First activation: the plugin manager marks it active as soon as activate
+    // returns (undefined), so deactivate is always reachable to undo these even
+    // if the async control load below fails — apply them up front.
     forceMercatorProjection();
     addDepIndexLayer();
-    if (usgsLidarControl) return mountUsgsLidarControl(app);
 
     // Defer the heavy deck.gl/loaders.gl dependency tree until the user first
     // enables the viewer, so it stays out of the startup bundle.
-    void import("maplibre-gl-usgs-lidar").then(
-      ({ UsgsLidarControl: UsgsLidarControlClass }) => {
+    void import("maplibre-gl-usgs-lidar")
+      .then(({ UsgsLidarControl: UsgsLidarControlClass }) => {
         if (!pluginActive || usgsLidarControl) return;
         usgsLidarControl = new UsgsLidarControlClass(getUsgsLidarOptions());
         mountUsgsLidarControl(app);
-      },
-    );
+      })
+      .catch((error: unknown) => {
+        console.error("[maplibre-usgs-lidar] failed to load control:", error);
+      });
   },
   deactivate: (app: GeoLibreAppAPI) => {
     pluginActive = false;

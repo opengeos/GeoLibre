@@ -1,10 +1,14 @@
-// maplibre-gl-usgs-lidar@0.9.0 ships complete declarations at dist/index.d.ts,
+// maplibre-gl-usgs-lidar@0.10.0 ships complete declarations at dist/index.d.ts,
 // but its package.json "types"/"exports" point to a nonexistent dist/types/
 // path, so TypeScript resolves the module as `any`. This shim declares the
 // subset of the API the USGS LiDAR plugin uses until the upstream pointer is
 // fixed.
 declare module "maplibre-gl-usgs-lidar" {
   import type { IControl, Map as MapLibreMap } from "maplibre-gl";
+  // `maplibre-gl-usgs-lidar`'s own types re-export `lidarControlOptions` typed
+  // as `Partial<LidarControlOptions>` from `maplibre-gl-lidar`, so that package
+  // must stay a direct dependency of @geolibre/plugins for this shim (the only
+  // remaining consumer after the old LiDAR viewer was removed) to resolve.
   import type { LidarControlOptions } from "maplibre-gl-lidar";
 
   export interface UsgsLidarControlOptions {
