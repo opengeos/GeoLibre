@@ -407,6 +407,11 @@ export function PrintLayoutDialog({
       }
       const newZoom = map.getZoom() + Math.log2(currentRatio / targetRatio);
       map.setZoom(Math.max(0, Math.min(24, newZoom)));
+      // Drop a still-pending idle handler from a prior applyScale before
+      // registering a new one, so two quick scale changes don't both fire.
+      if (idleRecaptureRef.current) {
+        map.off("idle", idleRecaptureRef.current);
+      }
       // Recapture once the map is idle, so tiles for the new zoom have finished
       // loading and the snapshot is not blurry/blank mid-fetch. applyScale only
       // runs in viewport mode, so pin the recapture to a null clip. The handler
@@ -752,7 +757,7 @@ export function PrintLayoutDialog({
                     }}
                   />
                   <Select
-                    aria-label={t("printLayout.scalePresets")}
+                    aria-label={t("printLayout.scalePresetsAria")}
                     value=""
                     disabled={!scaleEditable}
                     onChange={(e) => {

@@ -527,6 +527,7 @@
     "scaleLabel": "Scale (1:N)",
     "scalePlaceholder": "e.g. 25000",
     "scalePresets": "Presets…",
+    "scalePresetsAria": "Scale preset",
     "extent": {
       "label": "Print extent",
       "draw": "Draw extent on map",

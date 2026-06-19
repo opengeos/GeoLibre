@@ -225,7 +225,10 @@ export function drawPrintExtent(
     const commit = (raw: { x: number; y: number }, shiftKey: boolean) => {
       if (!start) return finish(null);
       const end = settlePoint(raw, shiftKey);
-      // Treat a near-zero drag as a cancelled click rather than a sliver box.
+      // Cancel a click-with-no-drag *or* a sliver thinner than 4px on either
+      // axis: a near-degenerate extent crops to a useless strip once cover-
+      // scaled onto the page, so reject it (OR, not AND) and let the user
+      // redraw rather than export a distorted band.
       if (Math.abs(end.x - start.x) < 4 || Math.abs(end.y - start.y) < 4) {
         return finish(null);
       }

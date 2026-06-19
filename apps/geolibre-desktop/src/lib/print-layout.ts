@@ -554,6 +554,10 @@ export function drawLayout(
   const scaleRatio = computeScaleRatio(opts);
 
   // --- Info block (cartographic title block / "stempel", bottom-right) ----
+  // Rendered only when the toggle is on AND there is at least one row to show
+  // (a metadata field or an available scale). With the toggle on but every
+  // field empty and no scale (e.g. a screen-size page), nothing is drawn rather
+  // than an empty box; the dialog still shows the input fields to fill in.
   const infoLines = buildInfoLines(opts, scaleRatio);
   const hasInfoBlock = (opts.showInfoBlock ?? false) && infoLines.length > 0;
   if (hasInfoBlock) {

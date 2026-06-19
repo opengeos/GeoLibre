@@ -191,7 +191,10 @@ export function captureMapImage(map: MapLike, clip?: CaptureClip | null): Captur
   if (rectCss) {
     const cropped = cropCaptureToClip(out, rectCss, dpr);
     if (!cropped) {
-      throw new Error("Print extent is outside the current map view");
+      // null = the extent is off-screen, or a 2D context could not be acquired.
+      throw new Error(
+        "Could not crop to the print extent (it may be outside the map view, or a canvas context was unavailable)",
+      );
     }
     image = cropped;
   }
