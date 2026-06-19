@@ -85,7 +85,7 @@ export class ResetBearingControl implements maplibregl.IControl {
     needle.innerHTML =
       '<text class="geolibre-reset-bearing-needle-label" x="12" y="8" text-anchor="middle">N</text>' +
       '<polygon class="geolibre-reset-bearing-needle-north" points="12,8.5 9,19 12,16 15,19" />' +
-      '<polygon class="geolibre-reset-bearing-needle-south" points="12,22.5 9.6,19 12,17 14.4,19" />';
+      '<polygon class="geolibre-reset-bearing-needle-south" points="12,22.5 9.6,19 12,19 14.4,19" />';
     button.appendChild(needle);
 
     container.appendChild(button);
