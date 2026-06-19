@@ -31,8 +31,10 @@ import {
 } from "../../lib/offline-tiles";
 import {
   describeBboxCenter,
+  formatBytes,
   type OfflineRegion,
   regionId,
+  touchOfflineRegion,
   upsertOfflineRegion,
   urlHosts,
 } from "../../lib/offline-regions";
@@ -65,14 +67,6 @@ const MAX_TIMEOUT_SEC = 120;
 const MAX_CACHE_ENTRIES = 8000;
 
 type Phase = "idle" | "running" | "done";
-
-function formatBytes(bytes: number): string {
-  if (bytes >= 1024 * 1024 * 1024) {
-    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-  }
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
-  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-}
 
 /**
  * Lets the user pre-download the current map area (across a zoom range) into the
@@ -211,6 +205,12 @@ export function OfflineRegionDialog({
         if (result.done - result.failed > 0) {
           const tileSet = new Set(tileUrls);
           const assetUrls = urls.filter((u) => !tileSet.has(u));
+          // tileCount reflects tiles actually cached, not attempted, so a
+          // partial download's count matches what the manager can measure.
+          const failedSet = new Set(result.failedUrls);
+          const cachedTileCount = tileUrls.filter(
+            (u) => !failedSet.has(u),
+          ).length;
           const now = Date.now();
           const region: OfflineRegion = {
             id: regionId(bbox, baseZoom, maxZoom),
@@ -220,12 +220,17 @@ export function OfflineRegionDialog({
             maxZoom,
             tileUrls,
             assetUrls,
-            tileCount: tileUrls.length,
+            tileCount: cachedTileCount,
             hosts: urlHosts(tileUrls),
             createdAt: now,
             updatedAt: now,
           };
-          upsertOfflineRegion(region);
+          const { persisted } = upsertOfflineRegion(region);
+          if (!persisted) {
+            console.warn(
+              "[GeoLibre] offline region manifest could not be saved (storage full?)",
+            );
+          }
         }
       }
     } catch {
@@ -264,13 +269,21 @@ export function OfflineRegionDialog({
         onProgress: setProgress,
       });
       setProgress(result);
-      if (!controller.signal.aborted) setPhase("done");
+      if (!controller.signal.aborted) {
+        setPhase("done");
+        // Bump the manifest's updatedAt so the Offline Manager reflects this
+        // recovery instead of the original (partial) download's date. The stored
+        // URL list already covers every tile, so no other field changes.
+        if (bbox && result.done - result.failed > 0) {
+          touchOfflineRegion(regionId(bbox, baseZoom, maxZoom), Date.now());
+        }
+      }
     } catch {
       if (!controller.signal.aborted) setPhase("idle");
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
     }
-  }, [concurrency, timeoutSec]);
+  }, [concurrency, timeoutSec, bbox, baseZoom, maxZoom]);
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort();

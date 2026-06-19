@@ -113,13 +113,27 @@ function getStorage(storage?: Storage): Storage | null {
 function isOfflineRegion(value: unknown): value is OfflineRegion {
   if (!value || typeof value !== "object") return false;
   const r = value as Record<string, unknown>;
+  const isNum = (v: unknown) => typeof v === "number" && Number.isFinite(v);
+  const isStrArray = (v: unknown) =>
+    Array.isArray(v) && v.every((x) => typeof x === "string");
+  // Validate every field, including numeric and array-element invariants: a
+  // tampered or older record that slips through here is cast to a trusted
+  // OfflineRegion and would surface as a corrupt id (`regionId` → "NaN…"),
+  // bad sort order, or a crash on `region.hosts.length` in the manager.
   return (
     typeof r.id === "string" &&
     typeof r.name === "string" &&
     Array.isArray(r.bbox) &&
     r.bbox.length === 4 &&
-    Array.isArray(r.tileUrls) &&
-    Array.isArray(r.assetUrls)
+    r.bbox.every(isNum) &&
+    isNum(r.minZoom) &&
+    isNum(r.maxZoom) &&
+    isStrArray(r.tileUrls) &&
+    isStrArray(r.assetUrls) &&
+    isNum(r.tileCount) &&
+    isStrArray(r.hosts) &&
+    isNum(r.createdAt) &&
+    isNum(r.updatedAt)
   );
 }
 
@@ -202,6 +216,23 @@ export function renameOfflineRegion(
   return regions;
 }
 
+/**
+ * Bump a region's `updatedAt` to `updatedAt` (epoch ms), e.g. after a successful
+ * partial retry re-warms its failed tiles. No-ops if the region isn't found.
+ */
+export function touchOfflineRegion(
+  id: string,
+  updatedAt: number,
+  storage?: Storage,
+): void {
+  const existing = loadOfflineRegions(storage);
+  if (!existing.some((r) => r.id === id)) return;
+  const regions = existing
+    .map((r) => (r.id === id ? { ...r, updatedAt } : r))
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+  persistOfflineRegions(regions, storage);
+}
+
 /** Open the basemap cache, or null if the Cache Storage API is unavailable. */
 async function openBasemapCache(): Promise<Cache | null> {
   if (typeof caches === "undefined") return null;
@@ -221,30 +252,48 @@ async function openBasemapCache(): Promise<Cache | null> {
 export async function measureRegionBytes(region: OfflineRegion): Promise<number> {
   const cache = await openBasemapCache();
   if (!cache) return 0;
-  let bytes = 0;
-  for (const url of region.tileUrls) {
-    try {
-      const res = await cache.match(url);
-      if (res) bytes += (await res.blob()).size;
-    } catch {
-      // Skip unreadable entries.
-    }
-  }
-  return bytes;
+  // Look tiles up concurrently; a large region can hold hundreds of entries and
+  // a sequential loop would block the dialog noticeably on open. Prefer the
+  // cheap Content-Length header and fall back to reading the body only when it
+  // is absent (e.g. opaque responses), so we never deserialize megabytes of
+  // tile data just to total their size.
+  const sizes = await Promise.all(
+    region.tileUrls.map(async (url) => {
+      try {
+        const res = await cache.match(url);
+        if (!res) return 0;
+        const length = res.headers.get("content-length");
+        if (length !== null) {
+          const parsed = Number.parseInt(length, 10);
+          if (Number.isFinite(parsed) && parsed > 0) return parsed;
+        }
+        return (await res.blob()).size;
+      } catch {
+        return 0;
+      }
+    }),
+  );
+  return sizes.reduce((sum, n) => sum + n, 0);
 }
 
 /**
  * Delete a region from the manifest and evict its exclusive tiles from the
- * cache (tiles no other retained region references). Returns the remaining
- * regions and how many cache entries were removed.
+ * cache (tiles no other retained region references). Persists the manifest
+ * *before* touching the cache so a failed write can't leave the manifest still
+ * listing a region whose tiles are already gone. Returns the remaining regions,
+ * how many cache entries were removed, and whether the manifest persisted.
  */
 export async function deleteOfflineRegion(
   id: string,
   storage?: Storage,
-): Promise<{ regions: OfflineRegion[]; deleted: number }> {
+): Promise<{ regions: OfflineRegion[]; deleted: number; persisted: boolean }> {
   const existing = loadOfflineRegions(storage);
   const target = existing.find((r) => r.id === id);
   const remaining = existing.filter((r) => r.id !== id);
+  const persisted = persistOfflineRegions(remaining, storage);
+  // Bail before evicting if the manifest couldn't be updated, otherwise the
+  // cache and the manifest would diverge (tiles gone but region still listed).
+  if (!persisted) return { regions: existing, deleted: 0, persisted: false };
   let deleted = 0;
   if (target) {
     const cache = await openBasemapCache();
@@ -258,8 +307,7 @@ export async function deleteOfflineRegion(
       }
     }
   }
-  persistOfflineRegions(remaining, storage);
-  return { regions: remaining, deleted };
+  return { regions: remaining, deleted, persisted: true };
 }
 
 /**
@@ -284,11 +332,11 @@ export async function getStorageEstimate(): Promise<{
 
 /** Human-readable byte size (KB/MB/GB) for footprint displays. */
 export function formatBytes(bytes: number): string {
+  if (bytes <= 0) return "0 KB";
   if (bytes >= 1024 * 1024 * 1024) {
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
   }
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
-  if (bytes <= 0) return "0 KB";
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 

@@ -343,7 +343,13 @@ export async function warmUrls(
   const requestSignal = (): AbortSignal | undefined => {
     if (!timeoutMs || timeoutMs <= 0) return signal;
     const timeout = AbortSignal.timeout(timeoutMs);
-    return signal ? AbortSignal.any([signal, timeout]) : timeout;
+    if (!signal) return timeout;
+    // AbortSignal.any shipped in Chrome 116 / Firefox 124 / Safari 17.4. On
+    // older engines fall back to the timeout alone so the request still times
+    // out (it just won't also abort on the parent cancel signal).
+    return typeof AbortSignal.any === "function"
+      ? AbortSignal.any([signal, timeout])
+      : timeout;
   };
   const progress: WarmProgress = {
     done: 0,

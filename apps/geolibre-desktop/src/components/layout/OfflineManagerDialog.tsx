@@ -76,6 +76,11 @@ export function OfflineManagerDialog({
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [swActive, setSwActive] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  // Mirror `regions` in a ref so the async `update` finally block re-measures
+  // against the current list rather than the one captured when it started
+  // (which may be stale if a delete landed while the update was in flight).
+  const regionsRef = useRef(regions);
+  regionsRef.current = regions;
 
   // Measure each region's cache footprint (async) and refresh the storage
   // estimate. Called on open and after any update/delete.
@@ -90,11 +95,20 @@ export function OfflineManagerDialog({
   // Load the manifest whenever the dialog opens.
   useEffect(() => {
     if (!open) {
+      // Abort any in-flight update and clear busy state — the `update` finally
+      // block skips `setBusyId(null)` when aborted, so without this a refresh
+      // interrupted by closing the dialog would leave every button disabled on
+      // reopen.
       abortRef.current?.abort();
+      abortRef.current = null;
+      setBusyId(null);
+      setProgress({ done: 0, total: 0 });
       return;
     }
     setSwActive(hasActiveServiceWorker());
     setConfirmId(null);
+    setBusyId(null);
+    setProgress({ done: 0, total: 0 });
     const list = loadOfflineRegions();
     setRegions(list);
     void refreshSizes(list);
@@ -123,11 +137,11 @@ export function OfflineManagerDialog({
         if (abortRef.current === controller) abortRef.current = null;
         if (!controller.signal.aborted) {
           setBusyId(null);
-          await refreshSizes(regions);
+          await refreshSizes(regionsRef.current);
         }
       }
     },
-    [regions, refreshSizes],
+    [refreshSizes],
   );
 
   const handleDelete = useCallback(

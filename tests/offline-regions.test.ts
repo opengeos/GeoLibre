@@ -10,6 +10,7 @@ import {
   regionAllUrls,
   regionId,
   renameOfflineRegion,
+  touchOfflineRegion,
   upsertOfflineRegion,
   urlHosts,
 } from "../apps/geolibre-desktop/src/lib/offline-regions";
@@ -178,6 +179,44 @@ describe("persistence round-trip", () => {
       loaded.map((r) => r.id),
       ["ok"],
     );
+  });
+
+  it("drops records with non-numeric bbox or missing numeric fields", () => {
+    storage.setItem(
+      "geolibre.offlineRegions.v1",
+      JSON.stringify([
+        makeRegion({ id: "bad-bbox", bbox: [null, "a", {}, 1] as never }),
+        { ...makeRegion({ id: "no-hosts" }), hosts: undefined },
+        { ...makeRegion({ id: "no-updated" }), updatedAt: undefined },
+        makeRegion({ id: "good" }),
+      ]),
+    );
+    assert.deepEqual(
+      loadOfflineRegions(storage).map((r) => r.id),
+      ["good"],
+    );
+  });
+});
+
+describe("touchOfflineRegion", () => {
+  it("bumps updatedAt and reorders newest-first", () => {
+    const storage = fakeStorage();
+    upsertOfflineRegion(makeRegion({ id: "a", updatedAt: 1 }), storage);
+    upsertOfflineRegion(makeRegion({ id: "b", updatedAt: 2 }), storage);
+    touchOfflineRegion("a", 100, storage);
+    const loaded = loadOfflineRegions(storage);
+    assert.deepEqual(
+      loaded.map((r) => r.id),
+      ["a", "b"],
+    );
+    assert.equal(loaded[0].updatedAt, 100);
+  });
+
+  it("no-ops for an unknown id", () => {
+    const storage = fakeStorage();
+    upsertOfflineRegion(makeRegion({ id: "a", updatedAt: 1 }), storage);
+    touchOfflineRegion("missing", 100, storage);
+    assert.equal(loadOfflineRegions(storage)[0].updatedAt, 1);
   });
 });
 
