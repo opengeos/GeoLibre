@@ -20,6 +20,11 @@ const SOURCE_ID = "geolibre-print-extent";
 const FILL_LAYER_ID = "geolibre-print-extent-fill";
 const LINE_LAYER_ID = "geolibre-print-extent-line";
 
+/** Wrap a longitude into the [-180, 180) range. */
+function normalizeLng(lng: number): number {
+  return (((lng % 360) + 540) % 360) - 180;
+}
+
 function extentToFeature(extent: PrintExtent): GeoJSON.Feature<GeoJSON.Polygon> {
   const [w, s, e, n] = extent;
   return {
@@ -180,10 +185,15 @@ export function drawPrintExtent(
     ): PrintExtent => {
       const p1 = map.unproject([a.x, a.y]);
       const p2 = map.unproject([b.x, b.y]);
+      // Normalize to [-180, 180): map.unproject can return out-of-range
+      // longitudes on world-copy maps (e.g. centred near the antimeridian),
+      // which would otherwise make Math.min/max yield a near-world-wide bbox.
+      const lng1 = normalizeLng(p1.lng);
+      const lng2 = normalizeLng(p2.lng);
       return [
-        Math.min(p1.lng, p2.lng),
+        Math.min(lng1, lng2),
         Math.min(p1.lat, p2.lat),
-        Math.max(p1.lng, p2.lng),
+        Math.max(lng1, lng2),
         Math.max(p1.lat, p2.lat),
       ];
     };

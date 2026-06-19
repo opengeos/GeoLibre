@@ -161,12 +161,18 @@ export function captureMapImage(map: MapLike, clip?: CaptureClip | null): Captur
   const dpr = cssWidth > 0 ? out.width / cssWidth : 1;
 
   // Measure the ground resolution at the centre of the region that will end up
-  // in the output: the clip's centre when cropping, otherwise the viewport
-  // centre. Sampling at the viewport centre would misreport the scale for an
-  // extent drawn in a corner (the metres-per-pixel varies with latitude). GH #571.
+  // in the output. When cropping, that is the clip rect *clamped to the
+  // viewport* (the exported image is the visible part), not the full geographic
+  // extent: sampling at the full-extent centre would misreport the scale for an
+  // extent that is off-centre or partially off-screen. Otherwise use the
+  // viewport centre.
   const rectCss = clip ? projectClipRectCss(map, clip) : null;
-  const centerX = rectCss ? (rectCss.minX + rectCss.maxX) / 2 : cssWidth / 2;
-  const centerY = rectCss ? (rectCss.minY + rectCss.maxY) / 2 : cssHeight / 2;
+  let centerX = cssWidth / 2;
+  let centerY = cssHeight / 2;
+  if (rectCss) {
+    centerX = (Math.max(0, rectCss.minX) + Math.min(cssWidth, rectCss.maxX)) / 2;
+    centerY = (Math.max(0, rectCss.minY) + Math.min(cssHeight, rectCss.maxY)) / 2;
+  }
   const span = Math.min(100, cssWidth / 2);
   const left = map.unproject([centerX - span / 2, centerY]);
   const right = map.unproject([centerX + span / 2, centerY]);
