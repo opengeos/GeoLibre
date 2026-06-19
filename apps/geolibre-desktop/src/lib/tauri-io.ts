@@ -270,6 +270,9 @@ function parseDelimitedTextFile(text: string, path: string): FeatureCollection {
   // parseDelimitedTextLayer re-reads the header internally, so parsing the
   // whole file here just to recover the column names would double the work.
   const headerLine = text.replace(/^\uFEFF/, "").split(/\r?\n/, 1)[0] ?? "";
+  if (!headerLine.trim()) {
+    throw new Error(`${name} appears to be empty. ${pickColumns}`);
+  }
   const fields = parseDelimitedTextFields(headerLine, delimiter);
   const coordinateFields = detectCoordinateFields(fields);
   if (!coordinateFields) {
