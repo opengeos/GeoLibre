@@ -183,6 +183,12 @@ describe("activeInterfaceProfile", () => {
       ),
       "custom",
     );
+    // Even with all hidden lists empty, level=null means the user has hand-edited
+    // their way back to "show everything": still Custom, not Advanced.
+    assert.equal(
+      activeInterfaceProfile(profile({ enabled: true, level: null })),
+      "custom",
+    );
   });
 });
 

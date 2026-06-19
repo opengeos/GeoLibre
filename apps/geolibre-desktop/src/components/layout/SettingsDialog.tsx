@@ -1187,10 +1187,12 @@ export function SettingsDialog({
                             variant={active ? "secondary" : "outline"}
                             // "custom" activates automatically when an item is
                             // toggled below, so it is a status rather than a
-                            // button to click. The three presets apply at once.
+                            // button to click: always disabled (matching the
+                            // dropdown), highlighted only when it is the active
+                            // state. The three presets apply at once.
                             disabled={
                               draftDesktopSettings.uiProfile.locked ||
-                              (option === "custom" && !active)
+                              option === "custom"
                             }
                             onClick={
                               option === "custom"
