@@ -57,7 +57,19 @@ async function readAdminProfileFile(): Promise<AdminProfileFile | null> {
       // (even if it is null because the file is malformed) rather than silently
       // letting the web file override an admin-managed deployment. A null result
       // means no desktop file, so fall through to the web file below.
-      if (contents !== null) return parseAdminProfile(contents);
+      if (contents !== null) {
+        const parsed = parseAdminProfile(contents);
+        // The desktop file is expected to be valid JSON; surface a parse failure
+        // in development so an admin can spot a malformed file. (The web fetch
+        // below legitimately returns non-JSON when no file exists, so parse
+        // warnings live here rather than inside parseAdminProfile.)
+        if (parsed === null && import.meta.env.DEV) {
+          console.warn(
+            "[admin-profile] desktop admin-profile.json is not valid JSON; ignoring.",
+          );
+        }
+        return parsed;
+      }
     } catch (error) {
       // The command failed (not registered, permission denied, …). Fall back to
       // the bundled web file, but surface the error in development so a

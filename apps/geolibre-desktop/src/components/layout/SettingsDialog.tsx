@@ -809,9 +809,14 @@ export function SettingsDialog({
               </DropdownMenuLabel>
               <DropdownMenuRadioGroup
                 value={desktopSettings.uiProfile.level ?? ""}
-                onValueChange={(value: string) =>
-                  applySavedExperiencePreset(value as ExperienceLevel)
-                }
+                onValueChange={(value: string) => {
+                  // Guard the cast: the group's value is `level ?? ""`, and no
+                  // radio item carries an empty value, but make the invariant
+                  // explicit so a stray value can't reach presetHiddenSets.
+                  if ((EXPERIENCE_LEVELS as readonly string[]).includes(value)) {
+                    applySavedExperiencePreset(value as ExperienceLevel);
+                  }
+                }}
               >
                 {EXPERIENCE_LEVELS.map((level) => (
                   <DropdownMenuRadioItem
