@@ -27,8 +27,11 @@ export const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     bodyClassName?: string;
+    /** Optional node rendered as a sibling of the body (e.g. a resize grip),
+     * positioned by the caller relative to the content box. */
+    resizeHandle?: React.ReactNode;
   }
->(({ className, bodyClassName, children, ...props }, ref) => (
+>(({ className, bodyClassName, resizeHandle, children, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -51,6 +54,7 @@ export const DialogContent = React.forwardRef<
         <X className="h-4 w-4" />
         <span className="sr-only">Close</span>
       </DialogPrimitive.Close>
+      {resizeHandle}
     </DialogPrimitive.Content>
   </DialogPortal>
 ));

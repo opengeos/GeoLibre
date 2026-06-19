@@ -205,6 +205,12 @@ export interface LayoutOptions {
   pageBorderColor?: string;
   /** Page border thickness on a 1–10 scale (relative to page size). */
   pageBorderWidth?: number;
+  /**
+   * Fill colour drawn behind the map image. Shows through wherever the capture
+   * is transparent (most visibly the area around the sphere in globe
+   * projection). Defaults to a light grey.
+   */
+  mapBackground?: string;
   legend: LegendEntry[];
   /** Heading drawn above the legend entries. */
   legendTitle: string;
@@ -467,7 +473,7 @@ export function drawLayout(
   ctx.beginPath();
   ctx.rect(bodyX, bodyY, bodyW, bodyH);
   ctx.clip();
-  ctx.fillStyle = "#e5e7eb";
+  ctx.fillStyle = opts.mapBackground ?? "#e5e7eb";
   ctx.fillRect(bodyX, bodyY, bodyW, bodyH);
 
   // Draw the map image with "cover" scaling (fill the body, crop overflow).

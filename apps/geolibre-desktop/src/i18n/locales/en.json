@@ -473,6 +473,7 @@
     "description": "Compose a print-ready map with a title, legend, scale bar, and north arrow, then export it to PNG or PDF.",
     "preview": "Preview",
     "resizeControls": "Resize controls panel",
+    "resizeDialog": "Resize dialog",
     "recapture": "Recapture map",
     "exportPng": "Export PNG",
     "exportPdf": "Export PDF",
@@ -525,6 +526,7 @@
       "narrow": "Narrow",
       "none": "None (borderless)"
     },
+    "mapBackground": "Map background",
     "scaleLabel": "Scale (1:N)",
     "scalePlaceholder": "e.g. 25000",
     "scalePresets": "Presets…",

@@ -152,6 +152,7 @@ export function PrintLayoutDialog({
   const [showPageBorder, setShowPageBorder] = useState(false);
   const [pageBorderColor, setPageBorderColor] = useState("#111827");
   const [pageBorderWidth, setPageBorderWidth] = useState(2);
+  const [mapBackground, setMapBackground] = useState("#e5e7eb");
   // Cartographic title block ("stempel") fields (GH #522).
   const [showInfoBlock, setShowInfoBlock] = useState(false);
   const [author, setAuthor] = useState("");
@@ -186,6 +187,68 @@ export function PrintLayoutDialog({
   const [scaleDraft, setScaleDraft] = useState("");
   // Width of the left controls column; dragged via the splitter handle.
   const [controlsWidth, setControlsWidth] = useState(CONTROLS_DEFAULT_WIDTH);
+  // Explicit dialog size once the user drags the corner grip (null = the
+  // default responsive size). The dialog element, for reading its live size.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const [dialogSize, setDialogSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+
+  // Resize the whole dialog from its bottom-right grip. The dialog is centred
+  // via a -50% transform, so the right/bottom edges move by half the size
+  // change; growing by 2x the pointer delta keeps the grip under the cursor.
+  const startDialogResize = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      const el = dialogRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const startW = rect.width;
+      const startH = rect.height;
+      let next = { width: startW, height: startH };
+      let frame: number | null = null;
+      const prevCursor = document.body.style.cursor;
+      const prevSelect = document.body.style.userSelect;
+      document.body.style.cursor = "nwse-resize";
+      document.body.style.userSelect = "none";
+
+      const onMove = (e: PointerEvent) => {
+        next = {
+          width: Math.max(
+            480,
+            Math.min(window.innerWidth - 16, startW + (e.clientX - startX) * 2),
+          ),
+          height: Math.max(
+            360,
+            Math.min(window.innerHeight - 16, startH + (e.clientY - startY) * 2),
+          ),
+        };
+        if (frame !== null) return;
+        frame = window.requestAnimationFrame(() => {
+          frame = null;
+          setDialogSize(next);
+        });
+      };
+      const onUp = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+        if (frame !== null) window.cancelAnimationFrame(frame);
+        setDialogSize(next);
+        document.body.style.cursor = prevCursor;
+        document.body.style.userSelect = prevSelect;
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
+    },
+    [],
+  );
 
   // Drag the splitter between the controls column and the preview. Mirrors the
   // shell's panel-resize idiom: pointer capture so the drag survives leaving the
@@ -379,6 +442,7 @@ export function PrintLayoutDialog({
       showPageBorder,
       pageBorderColor,
       pageBorderWidth,
+      mapBackground,
       showInfoBlock,
       author,
       projectNumber,
@@ -423,6 +487,7 @@ export function PrintLayoutDialog({
       showPageBorder,
       pageBorderColor,
       pageBorderWidth,
+      mapBackground,
       showInfoBlock,
       author,
       projectNumber,
@@ -597,14 +662,51 @@ export function PrintLayoutDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl">
+      <DialogContent
+        ref={dialogRef}
+        className="max-w-5xl"
+        style={
+          dialogSize
+            ? {
+                width: dialogSize.width,
+                height: dialogSize.height,
+                maxWidth: "none",
+              }
+            : undefined
+        }
+        bodyClassName={
+          dialogSize
+            ? "flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 sm:p-6"
+            : undefined
+        }
+        resizeHandle={
+          <div
+            role="separator"
+            aria-label={t("printLayout.resizeDialog")}
+            onPointerDown={startDialogResize}
+            className="absolute bottom-0 right-0 z-10 hidden h-5 w-5 cursor-nwse-resize touch-none select-none text-muted-foreground hover:text-foreground md:block"
+            title={t("printLayout.resizeDialog")}
+          >
+            <svg viewBox="0 0 16 16" className="h-full w-full" aria-hidden="true">
+              <path
+                d="M11 15L15 11M6 15L15 6"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+          </div>
+        }
+      >
         <DialogHeader>
           <DialogTitle>{t("printLayout.title")}</DialogTitle>
           <DialogDescription>{t("printLayout.description")}</DialogDescription>
         </DialogHeader>
 
         <div
-          className="grid grid-cols-1 gap-6 md:gap-2 md:[grid-template-columns:var(--pl-cols)]"
+          className={`grid min-h-0 grid-cols-1 gap-6 md:gap-2 md:[grid-template-columns:var(--pl-cols)] ${
+            dialogSize ? "flex-1" : ""
+          }`}
           style={
             {
               "--pl-cols": `${controlsWidth}px 10px minmax(0,1fr)`,
@@ -612,7 +714,11 @@ export function PrintLayoutDialog({
           }
         >
           {/* Controls */}
-          <div className="max-h-[60vh] min-w-0 space-y-4 overflow-y-auto pr-1">
+          <div
+            className={`min-w-0 space-y-4 overflow-y-auto pr-1 ${
+              dialogSize ? "h-full" : "max-h-[60vh]"
+            }`}
+          >
             <div className="space-y-1.5">
               <Label htmlFor="layout-title">{t("printLayout.titleLabel")}</Label>
               <Input
@@ -786,6 +892,34 @@ export function PrintLayoutDialog({
                   {t("printLayout.marginOption.none")}
                 </option>
               </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="layout-map-bg">
+                {t("printLayout.mapBackground")}
+              </Label>
+              <div className="flex items-center gap-2">
+                <input
+                  id="layout-map-bg"
+                  type="color"
+                  className="h-9 w-12 shrink-0 cursor-pointer rounded-md border border-input bg-background"
+                  value={mapBackground}
+                  onChange={(e) => setMapBackground(e.target.value)}
+                />
+                <Input
+                  aria-label={t("printLayout.mapBackground")}
+                  className="flex-1"
+                  value={mapBackground}
+                  onChange={(e) => setMapBackground(e.target.value)}
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setMapBackground("#e5e7eb")}
+                >
+                  {t("common.reset")}
+                </Button>
+              </div>
             </div>
 
             {isMmPage && (
@@ -1226,7 +1360,11 @@ export function PrintLayoutDialog({
           </div>
 
           {/* Preview */}
-          <div className="flex min-w-0 flex-col items-center justify-start gap-3">
+          <div
+            className={`flex min-w-0 flex-col items-center justify-start gap-3 ${
+              dialogSize ? "h-full min-h-0" : ""
+            }`}
+          >
             <div className="flex w-full items-center justify-between">
               <span className="text-sm text-muted-foreground">
                 {t("printLayout.preview")}
@@ -1244,7 +1382,7 @@ export function PrintLayoutDialog({
                 className="shadow-md"
                 style={{
                   maxWidth: "100%",
-                  maxHeight: "min(60vh, 460px)",
+                  maxHeight: dialogSize ? "100%" : "min(60vh, 460px)",
                   width: "auto",
                   height: "auto",
                   imageRendering: "auto",
