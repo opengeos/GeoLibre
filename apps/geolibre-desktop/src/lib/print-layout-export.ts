@@ -143,6 +143,12 @@ export function captureMapImage(map: MapLike, clip?: CaptureClip | null): Captur
   }
   const canvases = map.getContainer().querySelectorAll("canvas");
   canvases.forEach((c) => {
+    // Skip the decorative effects overlay (the effects plugin's space /
+    // starfield / atmosphere canvases). They are full-viewport but sit *behind*
+    // the map by z-index, so compositing them in DOM order would draw them over
+    // the map and blank it out -- which is exactly what happened to the globe
+    // in the print preview. They are a screen aesthetic, not map content.
+    if (c.classList.contains("geolibre-effects-canvas")) return;
     // Composite only the full-viewport render surfaces (the MapLibre base
     // canvas and any deck.gl overlay). Map controls also add canvases to the
     // container -- the raster colorbar/colormap previews, the lidar profile
