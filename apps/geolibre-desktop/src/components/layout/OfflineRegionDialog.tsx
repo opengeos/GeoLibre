@@ -24,7 +24,7 @@ import {
 import {
   type Bbox,
   collectOfflineUrls,
-  countTiles,
+  countOfflineTiles,
   hasActiveServiceWorker,
   warmUrls,
   type WarmProgress,
@@ -115,10 +115,33 @@ export function OfflineRegionDialog({
   const maxZoom = Math.min(22, baseZoom + effectiveExtra);
   const bbox = (view?.bbox ?? null) as Bbox | null;
 
-  const tileCount = useMemo(
-    () => (bbox ? countTiles(bbox, baseZoom, maxZoom) : 0),
-    [bbox, baseZoom, maxZoom],
-  );
+  // Tile count is resolved asynchronously: it clamps each source to its own
+  // maxzoom (the vector source's bound lives in a TileJSON we have to fetch), so
+  // the estimate matches what actually downloads instead of counting tiles past
+  // a source's maxzoom that would 404.
+  const [tileCount, setTileCount] = useState(0);
+  useEffect(() => {
+    const map = mapControllerRef.current?.getMap();
+    if (!open || !bbox || !map) {
+      setTileCount(0);
+      return;
+    }
+    const controller = new AbortController();
+    let active = true;
+    countOfflineTiles(map, bbox, baseZoom, maxZoom, {
+      signal: controller.signal,
+    })
+      .then((count) => {
+        if (active) setTileCount(count);
+      })
+      .catch(() => {
+        // Discovery failed (e.g. aborted); leave the last known count.
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [open, bbox, baseZoom, maxZoom, mapControllerRef]);
 
   const { cacheableHosts, uncacheableHosts } = useMemo(() => {
     const map = mapControllerRef.current?.getMap();
@@ -481,7 +504,7 @@ export function OfflineRegionDialog({
           )}
         </div>
 
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           {phase === "running" ? (
             <Button variant="outline" onClick={handleCancel}>
               {t("offline.cancel")}

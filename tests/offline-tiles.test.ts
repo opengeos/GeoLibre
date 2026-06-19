@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import {
+  clampZoomRange,
   countTiles,
   enumerateTiles,
   expandTileUrl,
@@ -128,6 +129,33 @@ describe("tileToQuadkey", () => {
 
   it("produces a key of length z", () => {
     assert.equal(tileToQuadkey({ z: 7, x: 10, y: 20 }).length, 7);
+  });
+});
+
+describe("clampZoomRange", () => {
+  it("returns the full range when the source has no bounds", () => {
+    assert.deepEqual(clampZoomRange(2, 10), { minZoom: 2, maxZoom: 10 });
+  });
+
+  it("clamps the upper bound to the source maxzoom", () => {
+    // OpenFreeMap vector tiles stop at z14: a z2–18 request warms z2–14.
+    assert.deepEqual(clampZoomRange(2, 18, undefined, 14), {
+      minZoom: 2,
+      maxZoom: 14,
+    });
+  });
+
+  it("warms only the deepest level when over-zoomed past the source", () => {
+    // ne2_shaded raster stops at z6; a z10–15 request warms just z6 (overzoom).
+    assert.deepEqual(clampZoomRange(10, 15, 0, 6), { minZoom: 6, maxZoom: 6 });
+  });
+
+  it("raises the lower bound to the source minzoom", () => {
+    assert.deepEqual(clampZoomRange(2, 10, 5, 14), { minZoom: 5, maxZoom: 10 });
+  });
+
+  it("returns null when the request is entirely below coverage", () => {
+    assert.equal(clampZoomRange(2, 4, 6, 14), null);
   });
 });
 

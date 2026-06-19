@@ -176,6 +176,120 @@ function absolute(url: string): string {
 
 interface RasterTileJson {
   tiles?: string[];
+  minzoom?: number;
+  maxzoom?: number;
+}
+
+interface ResolvedTileSource {
+  template: string;
+  subdomains?: string[];
+  /** Source coverage bounds; undefined when the source/TileJSON omits them. */
+  minzoom?: number;
+  maxzoom?: number;
+}
+
+/**
+ * Clamp a requested `[minZoom, maxZoom]` range to a source's coverage
+ * `[srcMin, srcMax]`, returning the zoom range to actually warm — or `null` when
+ * there is nothing to warm.
+ *
+ * The point is to never request a tile **beyond the source's maxzoom**: those
+ * 404 (e.g. OpenFreeMap's `ne2_shaded` raster stops at z6 and its vector tiles
+ * at z14), which is what made over-zoomed offline downloads fail wholesale.
+ * When the *entire* requested range sits above the source maxzoom (the user is
+ * zoomed past it), we warm just the deepest available level — MapLibre overzooms
+ * those tiles to render the higher zooms, so they still work offline.
+ */
+export function clampZoomRange(
+  minZoom: number,
+  maxZoom: number,
+  srcMin?: number,
+  srcMax?: number,
+): { minZoom: number; maxZoom: number } | null {
+  const lo = typeof srcMin === "number" ? srcMin : 0;
+  const hi = typeof srcMax === "number" ? srcMax : maxZoom;
+  // Requested range is entirely below where this source has data.
+  if (maxZoom < lo) return null;
+  // Over-zoomed past the source: warm only its deepest level for overzoom.
+  if (minZoom > hi) return { minZoom: hi, maxZoom: hi };
+  const z0 = Math.max(minZoom, lo);
+  const z1 = Math.min(maxZoom, hi);
+  if (z1 < z0) return null;
+  return { minZoom: z0, maxZoom: z1 };
+}
+
+/**
+ * Resolve every vector/raster source in the active style to a single tile-URL
+ * template plus its coverage bounds, fetching the TileJSON for sources that
+ * declare their tiles via a `url` (e.g. OpenFreeMap's vector source). Sources
+ * with no usable template are dropped.
+ */
+async function resolveTileSources(
+  map: MapLibreMap,
+  signal?: AbortSignal,
+): Promise<ResolvedTileSource[]> {
+  const style = map.getStyle();
+  const resolved: ResolvedTileSource[] = [];
+  for (const source of Object.values(style.sources ?? {})) {
+    const spec = source as {
+      type?: string;
+      tiles?: string[];
+      url?: string;
+      subdomains?: string[];
+      minzoom?: number;
+      maxzoom?: number;
+    };
+    if (spec.type !== "vector" && spec.type !== "raster") continue;
+
+    let templates = spec.tiles;
+    let minzoom = spec.minzoom;
+    let maxzoom = spec.maxzoom;
+    if ((!templates || templates.length === 0) && spec.url) {
+      try {
+        const res = await fetch(absolute(spec.url), { signal });
+        if (res.ok) {
+          const tilejson = (await res.json()) as RasterTileJson;
+          templates = tilejson.tiles;
+          // The style spec wins; fall back to the TileJSON's declared bounds.
+          if (minzoom === undefined) minzoom = tilejson.minzoom;
+          if (maxzoom === undefined) maxzoom = tilejson.maxzoom;
+        }
+      } catch {
+        // Unreachable TileJSON: skip this source rather than abort the whole run.
+      }
+    }
+    if (!templates || templates.length === 0) continue;
+    resolved.push({
+      template: templates[0],
+      subdomains: spec.subdomains,
+      minzoom,
+      maxzoom,
+    });
+  }
+  return resolved;
+}
+
+/**
+ * Count the tiles an offline download would actually warm for `bbox` across
+ * `[minZoom, maxZoom]`, per source and clamped to each source's coverage. This
+ * is the preview-accurate count: it matches the tiles `collectOfflineUrls`
+ * produces (so the dialog's estimate agrees with the final "Saved N of N"),
+ * unlike a naive `countTiles` that ignores source maxzoom and over-counts.
+ */
+export async function countOfflineTiles(
+  map: MapLibreMap,
+  bbox: Bbox,
+  minZoom: number,
+  maxZoom: number,
+  options: { signal?: AbortSignal } = {},
+): Promise<number> {
+  let total = 0;
+  for (const src of await resolveTileSources(map, options.signal)) {
+    const range = clampZoomRange(minZoom, maxZoom, src.minzoom, src.maxzoom);
+    if (!range) continue;
+    total += countTiles(bbox, range.minZoom, range.maxZoom);
+  }
+  return total;
 }
 
 /**
@@ -217,33 +331,14 @@ export async function collectOfflineUrls(
   const urls = new Set<string>();
   const tileUrls = new Set<string>();
 
-  // Tile sources.
-  for (const source of Object.values(style.sources ?? {})) {
-    const spec = source as {
-      type?: string;
-      tiles?: string[];
-      url?: string;
-      subdomains?: string[];
-    };
-    if (spec.type !== "vector" && spec.type !== "raster") continue;
-
-    let templates = spec.tiles;
-    if ((!templates || templates.length === 0) && spec.url) {
-      try {
-        const res = await fetch(absolute(spec.url), { signal });
-        if (res.ok) {
-          const tilejson = (await res.json()) as RasterTileJson;
-          templates = tilejson.tiles;
-        }
-      } catch {
-        // Unreachable TileJSON: skip this source rather than abort the whole run.
-      }
-    }
-    if (!templates || templates.length === 0) continue;
-
-    const template = templates[0];
-    for (const tile of enumerateTiles(bbox, minZoom, maxZoom)) {
-      const url = absolute(expandTileUrl(template, tile, spec.subdomains));
+  // Tile sources: enumerate each one only within its own coverage so we never
+  // request tiles past a source's maxzoom (those 404 and would fail the whole
+  // download — see clampZoomRange).
+  for (const src of await resolveTileSources(map, signal)) {
+    const range = clampZoomRange(minZoom, maxZoom, src.minzoom, src.maxzoom);
+    if (!range) continue;
+    for (const tile of enumerateTiles(bbox, range.minZoom, range.maxZoom)) {
+      const url = absolute(expandTileUrl(src.template, tile, src.subdomains));
       urls.add(url);
       tileUrls.add(url);
     }
