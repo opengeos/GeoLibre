@@ -140,20 +140,27 @@ function withTimeFilter(
   ] as unknown as maplibregl.FilterSpecification;
 }
 
-// Base (control-owned) filters of external-native vector layers, captured the
-// first time a time window is applied so the window can be combined without
-// nesting and fully restored when the binding is removed. Keyed first by the
-// map instance (a WeakMap, so entries are garbage-collected when a map is
-// destroyed and a fresh map never inherits stale base filters) then by native
-// MapLibre layer id.
+// Tracked filter state for external-native vector layers whose Time Slider
+// window GeoLibre applies. `base` is the control's own filter, captured the
+// first time a window is applied so the window can be combined without nesting
+// and fully restored when the binding is removed; `appliedKey` is the JSON of
+// the combined filter we last pushed, compared against the next combined filter
+// (both built here, so they round-trip) to avoid calling `setFilter` on every
+// sync tick. Keyed first by the map instance (a WeakMap, so entries are
+// garbage-collected when a map is destroyed and a fresh map never inherits
+// stale base filters) then by native MapLibre layer id.
+interface NativeFilterState {
+  base: maplibregl.FilterSpecification | null;
+  appliedKey: string;
+}
 const externalNativeBaseFilters = new WeakMap<
   maplibregl.Map,
-  Map<string, maplibregl.FilterSpecification | null>
+  Map<string, NativeFilterState>
 >();
 
-function baseFiltersForMap(
+function nativeFilterStatesFor(
   map: maplibregl.Map,
-): Map<string, maplibregl.FilterSpecification | null> {
+): Map<string, NativeFilterState> {
   let perLayer = externalNativeBaseFilters.get(map);
   if (!perLayer) {
     perLayer = new Map();
@@ -196,38 +203,37 @@ function applyExternalNativeTimeFilter(
   timeFilter: unknown[] | undefined,
 ): void {
   if (!map.getLayer(nativeLayerId)) return;
-  const baseFilters = baseFiltersForMap(map);
+  const states = nativeFilterStatesFor(map);
   const hasTimeFilter = Array.isArray(timeFilter) && timeFilter.length > 0;
 
   if (!hasTimeFilter) {
-    // No window: restore the control's own filter (if we previously replaced
-    // it) and stop tracking this layer.
-    if (baseFilters.has(nativeLayerId)) {
-      const base = baseFilters.get(nativeLayerId) ?? null;
-      const current = map.getFilter(nativeLayerId);
-      if (JSON.stringify(current ?? null) !== JSON.stringify(base)) {
-        map.setFilter(nativeLayerId, base ?? undefined);
-      }
-      baseFilters.delete(nativeLayerId);
+    // No window: restore the control's own filter (once) and stop tracking.
+    const state = states.get(nativeLayerId);
+    if (state) {
+      map.setFilter(nativeLayerId, state.base ?? undefined);
+      states.delete(nativeLayerId);
     }
     return;
   }
 
   // Window active: capture the control's base filter the first time, then keep
   // reusing it so repeated ticks combine rather than nest.
-  let base: maplibregl.FilterSpecification | null;
-  if (baseFilters.has(nativeLayerId)) {
-    base = baseFilters.get(nativeLayerId) ?? null;
-  } else {
-    base = (map.getFilter(nativeLayerId) as maplibregl.FilterSpecification) ?? null;
-    baseFilters.set(nativeLayerId, base);
+  let state = states.get(nativeLayerId);
+  if (!state) {
+    const base =
+      (map.getFilter(nativeLayerId) as maplibregl.FilterSpecification) ?? null;
+    state = { base, appliedKey: "" };
+    states.set(nativeLayerId, state);
   }
   const combined = (
-    base ? ["all", base, timeFilter] : timeFilter
+    state.base ? ["all", state.base, timeFilter] : timeFilter
   ) as unknown as maplibregl.FilterSpecification;
-  const current = map.getFilter(nativeLayerId);
-  if (JSON.stringify(current ?? null) !== JSON.stringify(combined)) {
+  // Compare against the last filter we applied (not `getFilter`, which MapLibre
+  // may have normalized) so an unchanged window does not re-push on every tick.
+  const combinedKey = JSON.stringify(combined);
+  if (state.appliedKey !== combinedKey) {
     map.setFilter(nativeLayerId, combined);
+    state.appliedKey = combinedKey;
   }
 }
 

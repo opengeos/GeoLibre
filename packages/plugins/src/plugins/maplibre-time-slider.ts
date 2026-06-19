@@ -345,6 +345,14 @@ function attachStoreSync(control: TimeSliderControl): void {
 // Last range pushed to the control, so an unrelated store change does not
 // re-snap the marker by calling setRange again with identical bounds.
 let lastBoundRangeKey: string | null = null;
+// The control's range from just before the first binding overrode it, restored
+// when the last binding is removed so any pre-existing temporal sources keep
+// their own range across a bind/unbind cycle.
+let preBindingRange: {
+  start: string;
+  end: string;
+  granularity: TimeBinding["granularity"];
+} | null = null;
 // Guards our own timeFilter writes from re-entering the store subscription.
 let applyingBoundFilters = false;
 
@@ -441,10 +449,31 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
     }
     const rangeKey = `${min}|${max}|${granularity}`;
     if (rangeKey !== lastBoundRangeKey) {
+      // Capture the range the control had before any binding overrode it, so it
+      // can be restored when every binding is later removed.
+      if (lastBoundRangeKey === null) {
+        const config = control.getConfig();
+        preBindingRange = {
+          start: config.startDate,
+          end: config.endDate,
+          granularity: config.granularity,
+        };
+      }
       lastBoundRangeKey = rangeKey;
       control.setRange(new Date(min), new Date(max), undefined, granularity);
     }
   } else {
+    // The last binding was removed: restore the pre-binding range so any other
+    // temporal sources are not stranded at the bound layer's range.
+    if (lastBoundRangeKey !== null && preBindingRange) {
+      control.setRange(
+        preBindingRange.start,
+        preBindingRange.end,
+        undefined,
+        preBindingRange.granularity,
+      );
+    }
+    preBindingRange = null;
     lastBoundRangeKey = null;
   }
   applyBoundFilters(control, bound);
@@ -460,6 +489,7 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
  */
 function attachBindingSync(control: TimeSliderControl): () => void {
   lastBoundRangeKey = null;
+  preBindingRange = null;
   // `statechange` fires on every date change (scrub and each playback tick) plus
   // range/granularity changes, which is exactly when bound filters must update.
   const onStateChange = () => applyBoundFilters(control, getBoundLayers());
@@ -489,6 +519,7 @@ function attachBindingSync(control: TimeSliderControl): () => void {
     unsubscribe();
     clearBoundFilters(getBoundLayers().map((entry) => entry.id));
     lastBoundRangeKey = null;
+    preBindingRange = null;
   };
 }
 

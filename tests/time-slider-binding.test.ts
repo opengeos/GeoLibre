@@ -44,6 +44,30 @@ describe("parseTimeValue", () => {
     assert.equal(parseTimeValue(""), null);
     assert.equal(parseTimeValue(null), null);
   });
+
+  it("rejects bare years and small integers instead of reading them as 1970", () => {
+    assert.equal(parseTimeValue(2015), null);
+    assert.equal(parseTimeValue("2016"), null);
+    assert.equal(parseTimeValue(42), null);
+  });
+});
+
+describe("detectTimeProperties", () => {
+  it("does not offer a bare-year integer column as a timestamp", () => {
+    const fc = pointFeatures([
+      { date: "2015-06-01", label: "a" },
+      { date: "2016-06-01", label: "b" },
+    ]).features.map((f, i) => ({
+      ...f,
+      properties: { ...f.properties, year: 2015 + i },
+    }));
+    const candidates = detectTimeProperties({
+      type: "FeatureCollection",
+      features: fc,
+    });
+    assert.ok(!candidates.some((c) => c.property === "year"));
+    assert.ok(candidates.some((c) => c.property === "date"));
+  });
 });
 
 describe("detectValueKind", () => {

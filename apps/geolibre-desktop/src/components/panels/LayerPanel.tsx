@@ -600,6 +600,13 @@ export function LayerPanel({
     [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear],
   );
 
+  // Close the bind dialog and invalidate any in-flight scan/confirm so a late
+  // async result cannot reopen it, write stale candidates, or bind after cancel.
+  const closeBindTimeSliderDialog = useCallback(() => {
+    bindRequestRef.current = null;
+    setBindTimeSliderLayerId(null);
+  }, []);
+
   // Open the bind dialog: inspect the layer's features for timestamp columns and
   // preselect the best-covered one. `candidates` stays null until detection
   // finishes so the dialog can show a "scanning" state for large layers.
@@ -638,6 +645,7 @@ export function LayerPanel({
   const confirmBindTimeSlider = useCallback(async () => {
     const layer = bindTimeSliderLayer;
     if (!layer || !bindProperty) return;
+    const requestId = layer.id;
     // Reuse the feature collection resolved when the dialog opened so large
     // layers are not scanned twice.
     const geojson =
@@ -646,9 +654,12 @@ export function LayerPanel({
         layer,
         mapControllerRef.current?.getMap() ?? undefined,
       ));
+    // If the dialog was cancelled (or reopened for another layer) while the
+    // fallback scan was in flight, abandon this commit.
+    if (bindRequestRef.current !== requestId) return;
     const binding = buildTimeBinding(geojson ?? undefined, bindProperty);
     if (!binding) {
-      setBindTimeSliderLayerId(null);
+      closeBindTimeSliderDialog();
       return;
     }
     const timeWindow =
@@ -664,7 +675,7 @@ export function LayerPanel({
     if (!isPluginActive(TIME_SLIDER_PLUGIN_ID)) {
       togglePlugin(TIME_SLIDER_PLUGIN_ID, createAppAPI(mapControllerRef));
     }
-    setBindTimeSliderLayerId(null);
+    closeBindTimeSliderDialog();
   }, [
     bindTimeSliderLayer,
     bindLayerGeojson,
@@ -674,6 +685,7 @@ export function LayerPanel({
     updateLayer,
     isPluginActive,
     togglePlugin,
+    closeBindTimeSliderDialog,
   ]);
 
   // Remove a layer's binding and clear its transient time filter so it shows
@@ -742,6 +754,7 @@ export function LayerPanel({
       bindTimeSliderLayerId &&
       !layers.some((layer) => layer.id === bindTimeSliderLayerId)
     ) {
+      bindRequestRef.current = null;
       setBindTimeSliderLayerId(null);
     }
 
@@ -1890,7 +1903,7 @@ export function LayerPanel({
       <Dialog
         open={!!bindTimeSliderLayerId}
         onOpenChange={(open: boolean) => {
-          if (!open) setBindTimeSliderLayerId(null);
+          if (!open) closeBindTimeSliderDialog();
         }}
       >
         <DialogContent>
@@ -1953,7 +1966,7 @@ export function LayerPanel({
             <Button
               type="button"
               variant="ghost"
-              onClick={() => setBindTimeSliderLayerId(null)}
+              onClick={closeBindTimeSliderDialog}
             >
               {t("layers.bindCancel")}
             </Button>

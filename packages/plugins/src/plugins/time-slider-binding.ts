@@ -62,6 +62,12 @@ export interface TimePropertyCandidate {
 
 /** At/above this magnitude a numeric timestamp is read as milliseconds, else seconds. */
 const EPOCH_MS_THRESHOLD = 1e11;
+/**
+ * Smallest magnitude accepted as an epoch-second timestamp (~1973-03). Numbers
+ * below this are not treated as timestamps, so bare-year columns (2015, 2016,
+ * ...) and small counts are not misclassified as epoch seconds near 1970.
+ */
+const EPOCH_SECONDS_MIN = 1e8;
 /** How many features to inspect when detecting candidate columns / value kind. */
 const SAMPLE_LIMIT = 500;
 const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
@@ -72,7 +78,8 @@ const NUMERIC_STRING = /^-?\d+(\.\d+)?$/;
  *
  * Numbers (and all-numeric strings) are treated as epoch seconds or
  * milliseconds by magnitude; other strings are parsed as dates (ISO and any
- * format `Date.parse` accepts).
+ * format `Date.parse` accepts). Numbers too small to be a plausible epoch (a
+ * bare year or a count) are rejected rather than read as seconds near 1970.
  *
  * @param value - A raw feature-property value.
  * @returns Epoch milliseconds, or `null` when the value is not a timestamp.
@@ -80,7 +87,10 @@ const NUMERIC_STRING = /^-?\d+(\.\d+)?$/;
 export function parseTimeValue(value: unknown): number | null {
   if (typeof value === "number") {
     if (!Number.isFinite(value)) return null;
-    return Math.abs(value) >= EPOCH_MS_THRESHOLD ? value : value * 1000;
+    const magnitude = Math.abs(value);
+    if (magnitude >= EPOCH_MS_THRESHOLD) return value;
+    if (magnitude >= EPOCH_SECONDS_MIN) return value * 1000;
+    return null;
   }
   if (typeof value === "string") {
     const trimmed = value.trim();
