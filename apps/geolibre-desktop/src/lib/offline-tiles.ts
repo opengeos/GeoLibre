@@ -351,7 +351,11 @@ export async function warmUrls(
         // that actually settled — not ones interrupted by an abort.
         if (!signal?.aborted) {
           progress.done++;
-          onProgress?.({ ...progress });
+          // Copy `failedUrls` so each snapshot is independent — a shallow
+          // `{ ...progress }` would share the one array reference across every
+          // emitted snapshot, and later `push()`es would mutate state React
+          // already holds (unsafe under Strict Mode / concurrent rendering).
+          onProgress?.({ ...progress, failedUrls: [...progress.failedUrls] });
         }
       }
     }
