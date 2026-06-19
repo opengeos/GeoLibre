@@ -30,6 +30,8 @@ import {
 } from "@geolibre/plugins";
 import { Button, cn, Input } from "@geolibre/ui";
 import {
+  ArrowLeft,
+  ArrowRight,
   Bug,
   Database,
   FilePen,
@@ -77,6 +79,7 @@ import {
 import { CommandPalette } from "../command/CommandPalette";
 import { KeyboardShortcutsDialog } from "../command/KeyboardShortcutsDialog";
 import { useGlobalShortcuts } from "../../hooks/useGlobalShortcuts";
+import { useViewportHistory } from "../../hooks/useViewportHistory";
 import type { Command } from "../../lib/commands";
 import { AddDataDialog, type AddDataKind } from "./AddDataDialog";
 import { AddNetcdfDialog } from "./AddNetcdfDialog";
@@ -95,6 +98,7 @@ import { AddDataMenu } from "./toolbar/AddDataMenu";
 import { ConsentNoticeDialogs } from "./toolbar/ConsentNoticeDialogs";
 import { ControlsMenu } from "./toolbar/ControlsMenu";
 import { EditMenu } from "./toolbar/EditMenu";
+import { ViewMenu } from "./toolbar/ViewMenu";
 import { HelpMenu } from "./toolbar/HelpMenu";
 import { OsmPbfDialogs } from "./toolbar/OsmPbfDialogs";
 import { PluginsMenu } from "./toolbar/PluginsMenu";
@@ -121,6 +125,7 @@ interface TopToolbarProps {
   compact?: boolean;
   diagnosticsErrorCount: number;
   mapControllerRef: React.RefObject<MapController | null>;
+  mapReadyGeneration: number;
   showLabels?: boolean;
   showProjectInfo?: boolean;
   themeMode: ThemeMode;
@@ -132,6 +137,7 @@ export function TopToolbar({
   compact = false,
   diagnosticsErrorCount,
   mapControllerRef,
+  mapReadyGeneration,
   showLabels = true,
   showProjectInfo = true,
   themeMode,
@@ -210,6 +216,10 @@ export function TopToolbar({
   const osmPbf = useOsmPbfLoader(appApi, projectFiles.setActionError);
   const consent = useConsentGatedActions({ appApi, isActive, toggle });
   const collaboration = useCollaboration(mapControllerRef);
+  const viewportHistory = useViewportHistory(
+    mapControllerRef,
+    mapReadyGeneration,
+  );
 
   // When opened via a `?collab=<code>` share link, auto-open the Collaborate
   // dialog (which prefills the code) so the recipient only picks a name and
@@ -636,6 +646,22 @@ export function TopToolbar({
     },
     // View
     {
+      id: "view.previous",
+      title: t("toolbar.command.previousView"),
+      group: t("toolbar.commandGroup.view"),
+      keywords: "back history viewport extent previous undo pan zoom",
+      icon: ArrowLeft,
+      run: viewportHistory.goBack,
+    },
+    {
+      id: "view.next",
+      title: t("toolbar.command.nextView"),
+      group: t("toolbar.commandGroup.view"),
+      keywords: "forward history viewport extent next redo pan zoom",
+      icon: ArrowRight,
+      run: viewportHistory.goForward,
+    },
+    {
       id: "view.theme",
       title:
         themeMode === "dark"
@@ -776,6 +802,9 @@ export function TopToolbar({
         />
       )}
       {isMenuVisible(uiProfile, "edit") && <EditMenu chrome={chrome} />}
+      {isMenuVisible(uiProfile, "view") && (
+        <ViewMenu chrome={chrome} history={viewportHistory} />
+      )}
       <NewProjectDialog
         open={newProjectDialogOpen}
         onOpenChange={setNewProjectDialogOpen}

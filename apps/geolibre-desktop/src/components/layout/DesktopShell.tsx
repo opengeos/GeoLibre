@@ -1219,6 +1219,7 @@ export function DesktopShell({
             compact={layoutOptions.compact}
             diagnosticsErrorCount={diagnostics.errorCount}
             mapControllerRef={mapControllerRef}
+            mapReadyGeneration={mapReadyGeneration}
             showLabels={layoutOptions.toolbarLabels}
             showProjectInfo={layoutOptions.showProjectInfo}
             themeMode={themeMode}

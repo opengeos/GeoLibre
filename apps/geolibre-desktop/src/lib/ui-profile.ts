@@ -143,6 +143,7 @@ export const PLUGIN_TIERS: Record<string, ComplexityTier> = {
 export type TopLevelMenuId =
   | "project"
   | "edit"
+  | "view"
   | "addData"
   | "processing"
   | "controls"
@@ -159,6 +160,7 @@ export interface TopLevelMenuEntry {
 export const TOP_LEVEL_MENUS: readonly TopLevelMenuEntry[] = [
   { id: "project", labelKey: "toolbar.menu.project", tier: "basic" },
   { id: "edit", labelKey: "toolbar.menu.edit", tier: "basic" },
+  { id: "view", labelKey: "toolbar.menu.view", tier: "basic" },
   { id: "addData", labelKey: "toolbar.menu.addData", tier: "basic" },
   // Processing exposes analysis tools aimed at intermediate+ users; hide the
   // whole menu for beginners.
@@ -205,6 +207,9 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   // Edit
   { id: "edit.undo", menuId: "edit", labelKey: "toolbar.item.undo", tier: "basic" },
   { id: "edit.redo", menuId: "edit", labelKey: "toolbar.item.redo", tier: "basic" },
+  // View
+  { id: "view.previousView", menuId: "view", labelKey: "toolbar.item.previousView", tier: "basic" },
+  { id: "view.nextView", menuId: "view", labelKey: "toolbar.item.nextView", tier: "basic" },
   // Processing
   { id: "processing.assistant", menuId: "processing", labelKey: "toolbar.command.assistant", tier: "intermediate" },
   { id: "processing.whitebox", menuId: "processing", labelKey: "toolbar.item.whitebox", tier: "advanced" },
@@ -270,6 +275,7 @@ export const MENU_ITEM_GROUPS: ReadonlyArray<{
 }> = [
   { menuId: "project", labelKey: "toolbar.menu.project" },
   { menuId: "edit", labelKey: "toolbar.menu.edit" },
+  { menuId: "view", labelKey: "toolbar.menu.view" },
   { menuId: "processing", labelKey: "toolbar.menu.processing" },
   { menuId: "controls", labelKey: "toolbar.menu.controls" },
   { menuId: "settings", labelKey: "settings.title" },
