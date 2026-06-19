@@ -346,14 +346,7 @@ export function GeocodeDialog({
                 </option>
               ))}
             </Select>
-            {/*
-              Only a key-requiring provider gets this hint, so keyless
-              defaults like Nominatim are not pushed toward Settings they do
-              not need. The extra `config.apiKey` check avoids doubling up with
-              the amber `missingApiKey` warning below (which already points the
-              user to Settings when the key is absent); once a key is set, this
-              softer line just notes where credentials live.
-            */}
+            {/* `config.apiKey` check avoids doubling up with the amber missing-key warning below */}
             {geocoderNeedsApiKey(config) && !!config.apiKey ? (
               <p className="text-xs text-muted-foreground">
                 {t("geocode.providerHint")}
