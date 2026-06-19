@@ -554,14 +554,14 @@
     },
     "interface": {
       "title": "Interface profile",
-      "description": "Hide data sources and plugins to simplify the interface. Nothing is removed — re-enable items here at any time.",
-      "enable": "Simplify the interface",
+      "description": "Choose an experience level to simplify the interface. Nothing is removed, so you can switch levels or re-enable items here at any time.",
       "presets": "Experience level",
-      "presetsHint": "Pick a level to show items suited to that experience, then fine-tune below.",
+      "presetsHint": "Beginner, Intermediate, and Advanced apply a curated layout instantly. Editing any item below switches to Custom.",
       "level": {
         "beginner": "Beginner",
         "intermediate": "Intermediate",
-        "advanced": "Advanced"
+        "advanced": "Advanced",
+        "custom": "Custom"
       },
       "dataSources": "Data sources",
       "plugins": "Plugins",

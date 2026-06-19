@@ -10,6 +10,7 @@ import {
   DATA_SOURCE_CATALOG,
   MENU_ITEM_CATALOG,
   TOP_LEVEL_MENUS,
+  activeInterfaceProfile,
   isDataSourceVisible,
   isMenuItemVisible,
   isMenuVisible,
@@ -147,6 +148,41 @@ describe("visibility predicates", () => {
     assert.equal(isDataSourceVisible(enabled, "vector"), true);
     assert.equal(isPluginVisible(enabled, "maplibre-gl-geoagent"), false);
     assert.equal(isPluginVisible(enabled, "maplibre-layer-control"), true);
+  });
+});
+
+describe("activeInterfaceProfile", () => {
+  it("reads the legacy/default disabled profile as Advanced", () => {
+    // Everything is visible when disabled, which matches the Advanced preset.
+    assert.equal(activeInterfaceProfile(profile({ enabled: false })), "advanced");
+    assert.equal(
+      activeInterfaceProfile(profile({ enabled: false, level: "beginner" })),
+      "advanced",
+    );
+  });
+
+  it("reports the active preset level when enabled", () => {
+    assert.equal(
+      activeInterfaceProfile(profile({ enabled: true, level: "beginner" })),
+      "beginner",
+    );
+    assert.equal(
+      activeInterfaceProfile(profile({ enabled: true, level: "intermediate" })),
+      "intermediate",
+    );
+    assert.equal(
+      activeInterfaceProfile(profile({ enabled: true, level: "advanced" })),
+      "advanced",
+    );
+  });
+
+  it("reports Custom when enabled with a hand-edited (null-level) profile", () => {
+    assert.equal(
+      activeInterfaceProfile(
+        profile({ enabled: true, level: null, hiddenMenus: ["help"] }),
+      ),
+      "custom",
+    );
   });
 });
 

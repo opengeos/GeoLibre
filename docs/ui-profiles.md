@@ -22,16 +22,22 @@ only once; you can revisit the choice later in **Settings → Interface**.
 
 ### Settings → Interface
 
+The interface is controlled by a single four-state selector:
+
+- **Beginner** / **Intermediate** / **Advanced** are developer-curated presets.
+  Selecting one applies its layout immediately. **Advanced** reveals everything,
+  so it is the full, unrestricted interface.
+- **Custom** activates automatically the moment you hand-edit any item below; it
+  is a status, not a button you click.
+
 Open **Settings → Interface** to:
 
-- Toggle **Simplify the interface** on or off. When off, everything is visible
-  regardless of the lists below.
-- Apply an **experience-level** preset (Beginner / Intermediate / Advanced),
-  which fills the checklists from each item's complexity.
+- Pick an **experience level**, which fills the checklists from each item's
+  complexity and takes effect at once.
 - Check or uncheck individual **data sources**, **plugins**, whole **menus**
   (Project, Edit, Add Data, Processing, Controls, Plugins, Help), and the items
   within the Project, Edit, Processing, Controls, Settings, and Help menus.
-  Editing an item makes the selection *custom* (no preset highlighted).
+  Editing any item switches the selector to **Custom**.
 
 The **Settings** menu itself, and its Language / Layout / Interface entries, are
 always shown so the profile UI can never be hidden away.
