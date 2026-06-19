@@ -9,7 +9,7 @@
  */
 
 import { Button, Input, Label, Select } from "@geolibre/ui";
-import { Bookmark, Download, Save, Trash2, Upload, X } from "lucide-react";
+import { Bookmark, Download, Save, Trash2, Upload } from "lucide-react";
 import { type KeyboardEvent, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { saveTextFileWithFallback } from "../../../lib/tauri-io";
@@ -245,6 +245,10 @@ export function ServiceLibrarySection({
             <Save className="mr-1.5 h-3.5 w-3.5" />
             {t("addData.serviceLibrary.saveCurrent")}
           </Button>
+          {/* Separate the per-service "Save current" action from the
+              whole-library import/export icons so the group does not read as a
+              single ambiguous control (issue #530). */}
+          <span aria-hidden className="mx-0.5 h-5 w-px bg-border" />
           <Button
             type="button"
             size="icon"
@@ -357,7 +361,6 @@ export function ServiceLibrarySection({
               variant="ghost"
               onClick={() => setIsSaving(false)}
             >
-              <X className="mr-1.5 h-3.5 w-3.5" />
               {t("common.cancel")}
             </Button>
             <Button type="button" size="sm" onClick={handleSave}>

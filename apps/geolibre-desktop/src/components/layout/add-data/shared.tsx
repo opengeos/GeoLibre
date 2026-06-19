@@ -146,17 +146,15 @@ export function InsertBeforeField({
         )}
       </Select>
       {basemapStyleLayerIds.length > 0 && !valueIsBasemapLayer && (
-        <button
-          type="button"
-          aria-expanded={showBasemapLayers}
-          aria-controls="add-data-before-id"
-          className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-          onClick={() => setShowBasemapLayers((prev) => !prev)}
-        >
-          {showBasemapLayers
-            ? t("addData.shared.hideBasemapLayers")
-            : t("addData.shared.showBasemapLayers")}
-        </button>
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            aria-controls="add-data-before-id"
+            checked={showBasemapLayers}
+            onChange={(event) => setShowBasemapLayers(event.target.checked)}
+          />
+          {t("addData.shared.showBasemapLayers")}
+        </label>
       )}
     </div>
   );
