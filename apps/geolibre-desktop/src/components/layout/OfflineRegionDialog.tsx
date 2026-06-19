@@ -64,8 +64,7 @@ export function OfflineRegionDialog({
   mapControllerRef,
 }: OfflineRegionDialogProps) {
   const { t } = useTranslation();
-  // Off by default so opening the dialog prepares only the current view's zoom
-  // level; `extraLevels` is the relative depth (+1, +2, …) applied once enabled.
+  // Default off, so the dialog starts scoped to the current view's zoom only.
   const [includeExtra, setIncludeExtra] = useState(false);
   const [extraLevels, setExtraLevels] = useState(1);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -93,9 +92,6 @@ export function OfflineRegionDialog({
     [bbox, baseZoom, maxZoom],
   );
 
-  // Split the active basemap sources into those whose tiles persist offline
-  // (matching SW cache rule) and those that won't, so the dialog can both warn
-  // about what will be missing and confirm what will be saved.
   const { cacheableHosts, uncacheableHosts } = useMemo(() => {
     const map = mapControllerRef.current?.getMap();
     if (!open || !map) return { cacheableHosts: [], uncacheableHosts: [] };
@@ -210,6 +206,7 @@ export function OfflineRegionDialog({
         <div className="space-y-4 py-2">
           <label className="flex items-center gap-2 text-sm font-medium">
             <input
+              className="h-4 w-4"
               type="checkbox"
               checked={includeExtra}
               disabled={phase === "running"}
