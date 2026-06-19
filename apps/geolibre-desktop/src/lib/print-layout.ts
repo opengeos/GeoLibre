@@ -8,43 +8,122 @@
  * (PNG / PDF), so the preview is faithful to the output.
  */
 
-export type PaperSizeId = "a4" | "a3" | "letter" | "legal" | "tabloid";
+export type PaperSizeId =
+  | "a4"
+  | "a3"
+  | "letter"
+  | "legal"
+  | "tabloid"
+  | "fullhd"
+  | "hd"
+  | "uhd4k"
+  | "square"
+  | "custom";
 export type Orientation = "portrait" | "landscape";
+/** How a size's width/height are expressed: physical millimetres or screen pixels. */
+export type SizeUnit = "mm" | "px";
 
 export interface PaperSize {
   id: PaperSizeId;
   label: string;
-  /** Width in millimetres in portrait orientation. */
-  widthMm: number;
-  /** Height in millimetres in portrait orientation. */
-  heightMm: number;
+  /** Width in {@link unit}, in portrait orientation (width ≤ height). */
+  width: number;
+  /** Height in {@link unit}, in portrait orientation. */
+  height: number;
+  unit: SizeUnit;
+  /** Grouping used by the size dropdown: physical paper vs digital screen. */
+  group: "paper" | "screen";
 }
 
-/** Standard paper sizes, expressed in their portrait dimensions. */
+/**
+ * Selectable output sizes. Physical paper formats are expressed in their
+ * portrait millimetre dimensions; digital/screen presets are expressed in
+ * pixels, also stored portrait-first so the shared orientation swap applies.
+ * The "Custom…" entry is a placeholder whose real dimensions come from
+ * {@link LayoutOptions.customSize}.
+ */
 export const PAPER_SIZES: PaperSize[] = [
-  { id: "a4", label: "A4 (210 × 297 mm)", widthMm: 210, heightMm: 297 },
-  { id: "a3", label: "A3 (297 × 420 mm)", widthMm: 297, heightMm: 420 },
-  { id: "letter", label: "Letter (8.5 × 11 in)", widthMm: 215.9, heightMm: 279.4 },
-  { id: "legal", label: "Legal (8.5 × 14 in)", widthMm: 215.9, heightMm: 355.6 },
-  { id: "tabloid", label: "Tabloid (11 × 17 in)", widthMm: 279.4, heightMm: 431.8 },
+  { id: "a4", label: "A4 (210 × 297 mm)", width: 210, height: 297, unit: "mm", group: "paper" },
+  { id: "a3", label: "A3 (297 × 420 mm)", width: 297, height: 420, unit: "mm", group: "paper" },
+  { id: "letter", label: "Letter (8.5 × 11 in)", width: 215.9, height: 279.4, unit: "mm", group: "paper" },
+  { id: "legal", label: "Legal (8.5 × 14 in)", width: 215.9, height: 355.6, unit: "mm", group: "paper" },
+  { id: "tabloid", label: "Tabloid (11 × 17 in)", width: 279.4, height: 431.8, unit: "mm", group: "paper" },
+  { id: "fullhd", label: "Full HD (1920 × 1080 px)", width: 1080, height: 1920, unit: "px", group: "screen" },
+  { id: "hd", label: "HD (1280 × 720 px)", width: 720, height: 1280, unit: "px", group: "screen" },
+  { id: "uhd4k", label: "4K UHD (3840 × 2160 px)", width: 2160, height: 3840, unit: "px", group: "screen" },
+  { id: "square", label: "Square (1080 × 1080 px)", width: 1080, height: 1080, unit: "px", group: "screen" },
+  { id: "custom", label: "Custom…", width: 1280, height: 720, unit: "px", group: "screen" },
 ];
 
 export function getPaperSize(id: PaperSizeId): PaperSize {
   return PAPER_SIZES.find((p) => p.id === id) ?? PAPER_SIZES[0];
 }
 
+/** A page size already resolved for a specific orientation. */
+export interface ResolvedPageSize {
+  width: number;
+  height: number;
+  unit: SizeUnit;
+}
+
+/** Custom user-defined dimensions, used when {@link LayoutOptions.paperSize} is "custom". */
+export interface CustomSize {
+  width: number;
+  height: number;
+  unit: SizeUnit;
+}
+
+/** CSS reference pixels per millimetre (96 dpi), used to bridge px ↔ mm sizes. */
+const PX_PER_MM_96 = 96 / 25.4;
+
 /**
- * Page dimensions in millimetres for a paper size and orientation, with the
- * width/height swapped for landscape.
+ * Resolve the effective page dimensions for a layout, applying the orientation
+ * swap to preset sizes. Custom sizes are taken verbatim (the dialog disables the
+ * orientation control for them) so the numbers the user typed are honoured.
  */
-export function pageDimensionsMm(
-  id: PaperSizeId,
-  orientation: Orientation,
-): { widthMm: number; heightMm: number } {
-  const paper = getPaperSize(id);
-  return orientation === "landscape"
-    ? { widthMm: paper.heightMm, heightMm: paper.widthMm }
-    : { widthMm: paper.widthMm, heightMm: paper.heightMm };
+export function resolvePageSize(opts: {
+  paperSize: PaperSizeId;
+  orientation: Orientation;
+  customSize?: CustomSize | null;
+}): ResolvedPageSize {
+  if (opts.paperSize === "custom") {
+    const c = opts.customSize;
+    if (c && c.width > 0 && c.height > 0) {
+      return { width: c.width, height: c.height, unit: c.unit };
+    }
+    return { width: 1280, height: 720, unit: "px" };
+  }
+  const paper = getPaperSize(opts.paperSize);
+  return opts.orientation === "landscape"
+    ? { width: paper.height, height: paper.width, unit: paper.unit }
+    : { width: paper.width, height: paper.height, unit: paper.unit };
+}
+
+/** Convert a resolved page size to millimetres (screen px treated as 96 dpi). */
+export function pageMm(size: ResolvedPageSize): {
+  widthMm: number;
+  heightMm: number;
+} {
+  if (size.unit === "mm") return { widthMm: size.width, heightMm: size.height };
+  return { widthMm: size.width / PX_PER_MM_96, heightMm: size.height / PX_PER_MM_96 };
+}
+
+/**
+ * Convert a resolved page size to output pixels at the given dpi. Pixel-unit
+ * sizes are exact (dpi is ignored); millimetre sizes scale by dpi/25.4.
+ */
+export function pagePx(
+  size: ResolvedPageSize,
+  dpi: number,
+): { width: number; height: number } {
+  if (size.unit === "px") {
+    return { width: Math.round(size.width), height: Math.round(size.height) };
+  }
+  const pxPerMm = dpi / 25.4;
+  return {
+    width: Math.round(size.width * pxPerMm),
+    height: Math.round(size.height * pxPerMm),
+  };
 }
 
 /** A single swatch in a legend entry (one color, with an optional label). */
@@ -65,12 +144,41 @@ export interface LayoutOptions {
   subtitle: string;
   paperSize: PaperSizeId;
   orientation: Orientation;
+  /** Explicit dimensions used when {@link paperSize} is "custom". */
+  customSize?: CustomSize | null;
   showTitle: boolean;
+  /** Whether the subtitle line is drawn (independent of {@link showTitle}). */
+  showSubtitle?: boolean;
+  /** Where the title/subtitle render: above the map (default) or overlaid inside it. */
+  titlePlacement?: "outside" | "inside";
+  /** Horizontal alignment of the title/subtitle text. */
+  titleAlign?: "left" | "center" | "right";
   showLegend: boolean;
   showScaleBar: boolean;
   showNorthArrow: boolean;
+  /**
+   * Group the north arrow directly above the scale bar in the lower-right
+   * corner (the cartographic "navigation duo"). When false they fall back to
+   * isolated anchors: north arrow top-right, scale bar bottom-right.
+   */
+  navigationGrouped?: boolean;
   showFooter: boolean;
   footerText: string;
+  /** Draw the production date (right side of the footer row). */
+  showDate?: boolean;
+  /** The formatted date string drawn when {@link showDate} is true. */
+  dateText?: string;
+  /** Draw the "Created with GeoLibre" attribution (left side of the footer row). */
+  showAttribution?: boolean;
+  /** Attribution text; defaults to "Created with GeoLibre" when omitted. */
+  attributionText?: string;
+  /** Outer page padding preset: full margins, narrow, or borderless. */
+  pageMargin?: "normal" | "narrow" | "none";
+  /** Draw a customizable border around the whole page (useful for PNG export). */
+  showPageBorder?: boolean;
+  pageBorderColor?: string;
+  /** Page border thickness on a 1–10 scale (relative to page size). */
+  pageBorderWidth?: number;
   legend: LegendEntry[];
   /** Heading drawn above the legend entries. */
   legendTitle: string;
@@ -117,7 +225,23 @@ export function drawLayout(
   // Scale furniture relative to the page's shorter side so output looks the
   // same at any resolution / paper size.
   const unit = Math.min(W, H) / 100;
-  const margin = unit * 5;
+  const marginScale =
+    opts.pageMargin === "none" ? 0 : opts.pageMargin === "narrow" ? 0.5 : 1;
+  const margin = unit * 5 * marginScale;
+
+  const titleAlign = opts.titleAlign ?? "center";
+  const titleInside = opts.titlePlacement === "inside";
+  const showSubtitle = opts.showSubtitle ?? true;
+  const hasTitleText = opts.showTitle && opts.title.trim().length > 0;
+  const hasSubtitleText = showSubtitle && opts.subtitle.trim().length > 0;
+  const hasTitleBlock = hasTitleText || hasSubtitleText;
+
+  // Footer row slots: attribution (left), footer text (centre), date (right).
+  const attributionText =
+    opts.showAttribution !== false && (opts.attributionText ?? "Created with GeoLibre").trim();
+  const footerText = opts.showFooter && opts.footerText.trim();
+  const dateText = opts.showDate && (opts.dateText ?? "").trim();
+  const hasFooterRow = Boolean(attributionText || footerText || dateText);
 
   ctx.save();
   ctx.fillStyle = PAGE_BACKGROUND;
@@ -126,42 +250,53 @@ export function drawLayout(
   let bodyTop = margin;
   let bodyBottom = H - margin;
 
-  // --- Title block -------------------------------------------------------
-  if (opts.showTitle && (opts.title.trim() || opts.subtitle.trim())) {
+  // X anchor + canvas textAlign for the chosen title alignment.
+  const titleX =
+    titleAlign === "left" ? margin : titleAlign === "right" ? W - margin : W / 2;
+
+  // --- Title block (outside the map) -------------------------------------
+  if (hasTitleBlock && !titleInside) {
     const titleSize = unit * 4.5;
     const subtitleSize = unit * 2.4;
     let y = margin + titleSize;
-    if (opts.title.trim()) {
+    if (hasTitleText) {
       ctx.fillStyle = INK;
       ctx.font = `600 ${titleSize}px system-ui, -apple-system, sans-serif`;
-      ctx.textAlign = "center";
+      ctx.textAlign = titleAlign;
       ctx.textBaseline = "alphabetic";
-      ctx.fillText(opts.title.trim(), W / 2, y, W - margin * 2);
+      ctx.fillText(opts.title.trim(), titleX, y, W - margin * 2);
     }
-    if (opts.subtitle.trim()) {
+    if (hasSubtitleText) {
       y += subtitleSize * 1.4;
       ctx.fillStyle = MUTED;
       ctx.font = `400 ${subtitleSize}px system-ui, -apple-system, sans-serif`;
-      ctx.textAlign = "center";
-      ctx.fillText(opts.subtitle.trim(), W / 2, y, W - margin * 2);
+      ctx.textAlign = titleAlign;
+      ctx.fillText(opts.subtitle.trim(), titleX, y, W - margin * 2);
     }
     bodyTop = y + unit * 3;
   }
 
-  // --- Footer ------------------------------------------------------------
-  if (opts.showFooter && opts.footerText.trim()) {
+  // --- Footer row --------------------------------------------------------
+  if (hasFooterRow) {
     const footSize = unit * 2.2;
     bodyBottom = H - margin - footSize * 1.8;
+    const baselineY = H - margin - footSize * 0.6;
     ctx.fillStyle = MUTED;
     ctx.font = `400 ${footSize}px system-ui, -apple-system, sans-serif`;
-    ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(
-      opts.footerText.trim(),
-      W / 2,
-      H - margin - footSize * 0.6,
-      W - margin * 2,
-    );
+    const slotMax = W - margin * 2;
+    if (attributionText) {
+      ctx.textAlign = "left";
+      ctx.fillText(attributionText, margin, baselineY, slotMax);
+    }
+    if (footerText) {
+      ctx.textAlign = "center";
+      ctx.fillText(footerText, W / 2, baselineY, slotMax);
+    }
+    if (dateText) {
+      ctx.textAlign = "right";
+      ctx.fillText(dateText, W - margin, baselineY, slotMax);
+    }
   }
 
   // --- Map body ----------------------------------------------------------
@@ -181,6 +316,9 @@ export function drawLayout(
   ctx.fillRect(bodyX, bodyY, bodyW, bodyH);
 
   // Draw the map image with "cover" scaling (fill the body, crop overflow).
+  // Guard the draw: a tainted/broken capture must not abort the whole layout,
+  // otherwise a single bad basemap (e.g. cross-origin OpenTopo tiles) would wipe
+  // out every cartographic element too, not just the map image.
   let coverScale = 1;
   if (opts.mapImage && opts.mapImageWidth > 0 && opts.mapImageHeight > 0) {
     coverScale = Math.max(
@@ -191,7 +329,11 @@ export function drawLayout(
     const drawH = opts.mapImageHeight * coverScale;
     const dx = bodyX + (bodyW - drawW) / 2;
     const dy = bodyY + (bodyH - drawH) / 2;
-    ctx.drawImage(opts.mapImage, dx, dy, drawW, drawH);
+    try {
+      ctx.drawImage(opts.mapImage, dx, dy, drawW, drawH);
+    } catch {
+      // Leave the grey placeholder; the rest of the layout still renders.
+    }
   }
   ctx.restore();
 
@@ -200,38 +342,99 @@ export function drawLayout(
   ctx.lineWidth = Math.max(1, unit * 0.2);
   ctx.strokeRect(bodyX, bodyY, bodyW, bodyH);
 
+  // --- Title block (inside the map) --------------------------------------
+  // Overlaid at the top of the map body with a translucent backing for legibility.
+  if (hasTitleBlock && titleInside) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(bodyX, bodyY, bodyW, bodyH);
+    ctx.clip();
+    const titleSize = unit * 4;
+    const subtitleSize = unit * 2.2;
+    const padY = unit * 2;
+    let y = bodyY + padY + titleSize;
+    const insetX = unit * 2;
+    const tx =
+      titleAlign === "left"
+        ? bodyX + insetX
+        : titleAlign === "right"
+          ? bodyX + bodyW - insetX
+          : bodyX + bodyW / 2;
+    const blockH =
+      padY * 2 + (hasTitleText ? titleSize : 0) + (hasSubtitleText ? subtitleSize * 1.6 : 0);
+    ctx.fillStyle = "rgba(255,255,255,0.7)";
+    ctx.fillRect(bodyX, bodyY, bodyW, blockH);
+    if (hasTitleText) {
+      ctx.fillStyle = INK;
+      ctx.font = `600 ${titleSize}px system-ui, -apple-system, sans-serif`;
+      ctx.textAlign = titleAlign;
+      ctx.textBaseline = "alphabetic";
+      ctx.fillText(opts.title.trim(), tx, y, bodyW - insetX * 2);
+    }
+    if (hasSubtitleText) {
+      y += subtitleSize * 1.4;
+      ctx.fillStyle = MUTED;
+      ctx.font = `400 ${subtitleSize}px system-ui, -apple-system, sans-serif`;
+      ctx.textAlign = titleAlign;
+      ctx.fillText(opts.subtitle.trim(), tx, y, bodyW - insetX * 2);
+    }
+    ctx.restore();
+  }
+
   const inset = unit * 2;
   // Metres per pixel in the *output* image after cover scaling.
   const outputMpp = opts.metersPerPixel / (coverScale || 1);
-
-  // --- North arrow (top-right inside the map) ---------------------------
-  if (opts.showNorthArrow) {
-    const arrowRadius = unit * 2.6;
-    const discRadius = arrowRadius * 1.5;
-    // The "N" label extends above the arrow tip, so the disc is not the top
-    // extent; account for both so nothing is clipped by the map edge.
-    const topExtent = arrowRadius + unit * 2.4;
-    const arrowMargin = unit * 3;
-    drawNorthArrow(
-      ctx,
-      bodyX + bodyW - arrowMargin - discRadius,
-      bodyY + arrowMargin + topExtent,
-      arrowRadius,
-      opts.bearingDeg,
-      unit,
-    );
+  const hasScale =
+    opts.showScaleBar && outputMpp > 0 && Number.isFinite(outputMpp);
+  // Representative fraction (1:N), only meaningful for physical paper sizes.
+  const page = resolvePageSize(opts);
+  let scaleRatio = 0;
+  if (hasScale && page.unit === "mm" && W > 0) {
+    const mmPerPx = pageMm(page).widthMm / W;
+    if (mmPerPx > 0) scaleRatio = (outputMpp * 1000) / mmPerPx;
   }
+  const navGrouped = opts.navigationGrouped ?? true;
+  const groupNav = navGrouped && opts.showNorthArrow && hasScale;
 
-  // --- Scale bar (bottom-right inside the map) --------------------------
-  if (opts.showScaleBar && outputMpp > 0 && Number.isFinite(outputMpp)) {
-    drawScaleBar(
+  // --- Scale bar + north arrow ------------------------------------------
+  let scaleTopY = bodyY + bodyH - inset;
+  if (hasScale) {
+    scaleTopY = drawScaleBar(
       ctx,
       bodyX + bodyW - inset,
       bodyY + bodyH - inset,
       bodyW * 0.28,
       outputMpp,
       unit,
+      scaleRatio,
     );
+  }
+  if (opts.showNorthArrow) {
+    const arrowRadius = unit * 2.6;
+    const discRadius = arrowRadius * 1.5;
+    if (groupNav) {
+      // Stack the north arrow directly above the scale bar (the "navigation duo").
+      drawNorthArrow(
+        ctx,
+        bodyX + bodyW - inset - discRadius,
+        scaleTopY - unit * 1.4 - discRadius,
+        arrowRadius,
+        opts.bearingDeg,
+        unit,
+      );
+    } else {
+      // Isolated fallback: top-right corner inside the map.
+      const topExtent = arrowRadius + unit * 2.4;
+      const arrowMargin = unit * 3;
+      drawNorthArrow(
+        ctx,
+        bodyX + bodyW - arrowMargin - discRadius,
+        bodyY + arrowMargin + topExtent,
+        arrowRadius,
+        opts.bearingDeg,
+        unit,
+      );
+    }
   }
 
   // --- Legend (bottom-left inside the map) ------------------------------
@@ -247,6 +450,15 @@ export function drawLayout(
       groupByLayer: opts.legendGroupByLayer,
     });
     ctx.restore();
+  }
+
+  // --- Page border -------------------------------------------------------
+  if (opts.showPageBorder) {
+    const widthScale = Math.max(1, Math.min(10, opts.pageBorderWidth ?? 2));
+    const lw = Math.max(1, unit * 0.2 * widthScale);
+    ctx.strokeStyle = opts.pageBorderColor ?? INK;
+    ctx.lineWidth = lw;
+    ctx.strokeRect(lw / 2, lw / 2, W - lw, H - lw);
   }
 
   ctx.restore();
@@ -320,7 +532,14 @@ function formatDistance(meters: number): string {
   return `${Math.round(meters * 100)} cm`;
 }
 
-/** Draw a scale bar anchored at its bottom-right corner. */
+/**
+ * Draw a scale bar anchored at its bottom-right corner. When `scaleRatio` is a
+ * positive value, a representative-fraction label (e.g. "1:25,000") is drawn
+ * above the distance label.
+ *
+ * @returns The top Y of the scale bar's backing box, so a caller can stack the
+ *   north arrow directly above it without overlapping.
+ */
 function drawScaleBar(
   ctx: CanvasRenderingContext2D,
   rightX: number,
@@ -328,7 +547,8 @@ function drawScaleBar(
   maxWidthPx: number,
   metersPerPixel: number,
   unit: number,
-): void {
+  scaleRatio = 0,
+): number {
   const maxMeters = maxWidthPx * metersPerPixel;
   const distance = niceDistance(maxMeters);
   const barWidth = distance / metersPerPixel;
@@ -336,15 +556,27 @@ function drawScaleBar(
   const x0 = rightX - barWidth;
   const y0 = bottomY - barHeight;
 
+  const hasRatio = scaleRatio > 0 && Number.isFinite(scaleRatio);
+  const ratioGap = hasRatio ? unit * 2.2 : 0;
+  const backingTop = y0 - unit * 2.4 - ratioGap;
+
   ctx.save();
   // Backing for legibility.
   ctx.fillStyle = "rgba(255,255,255,0.78)";
   ctx.fillRect(
     x0 - unit * 0.8,
-    y0 - unit * 2.4,
+    backingTop,
     barWidth + unit * 1.6,
-    barHeight + unit * 3.2,
+    bottomY - backingTop + unit * 0.8,
   );
+
+  if (hasRatio) {
+    ctx.fillStyle = INK;
+    ctx.font = `600 ${unit * 1.7}px system-ui, sans-serif`;
+    ctx.textAlign = "right";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(formatScaleRatio(scaleRatio), rightX, y0 - unit * 2.4);
+  }
 
   // Two-tone bar.
   const half = barWidth / 2;
@@ -362,6 +594,13 @@ function drawScaleBar(
   ctx.textBaseline = "bottom";
   ctx.fillText(formatDistance(distance), rightX, y0 - unit * 0.5);
   ctx.restore();
+  return backingTop;
+}
+
+/** Format a representative fraction as "1:N" with thousands separators. */
+function formatScaleRatio(ratio: number): string {
+  const rounded = Math.round(ratio);
+  return `1:${rounded.toLocaleString("en-US")}`;
 }
 
 /** Draw a legend box anchored at its top-left corner. */

@@ -9,7 +9,9 @@ import jsPDF from "jspdf";
 import { isFullViewportMapCanvas } from "./print-capture";
 import {
   drawLayout,
-  pageDimensionsMm,
+  pageMm,
+  pagePx,
+  resolvePageSize,
   type LayoutOptions,
 } from "./print-layout";
 import { saveBinaryFileWithFallback } from "./tauri-io";
@@ -38,6 +40,8 @@ interface MapLike {
   getContainer(): HTMLElement;
   getBearing(): number;
   unproject(point: [number, number]): { lng: number; lat: number };
+  /** Force a synchronous redraw so the preserved drawing buffer is current. */
+  redraw?(): void;
 }
 
 /**
@@ -50,6 +54,17 @@ interface MapLike {
  *   render a scale bar and north arrow.
  */
 export function captureMapImage(map: MapLike): CapturedMap {
+  // Force a synchronous render first. MapLibre only paints on demand, so when
+  // the Print Layout modal opens without any recent camera movement the
+  // preserved drawing buffer can be stale or cleared -- which surfaced as a
+  // blank map (only the cartographic furniture rendered). redraw() guarantees
+  // the latest frame, including all active layers, is in the buffer we read.
+  try {
+    map.redraw?.();
+  } catch {
+    // A redraw failure (e.g. a transient GL state issue) must not block the
+    // capture; fall through and read whatever is in the buffer.
+  }
   const base = map.getCanvas();
   const out = document.createElement("canvas");
   out.width = base.width;
@@ -114,16 +129,16 @@ function haversineMeters(
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-/** Rasterize a layout to an offscreen canvas at the given DPI. */
+/**
+ * Rasterize a layout to an offscreen canvas. Millimetre paper sizes render at
+ * the given DPI; pixel/screen sizes render at their exact pixel dimensions.
+ */
 function renderToCanvas(opts: LayoutOptions, dpi: number): HTMLCanvasElement {
-  const { widthMm, heightMm } = pageDimensionsMm(
-    opts.paperSize,
-    opts.orientation,
-  );
-  const pxPerMm = dpi / 25.4;
+  const size = resolvePageSize(opts);
+  const { width, height } = pagePx(size, dpi);
   const canvas = document.createElement("canvas");
-  canvas.width = Math.round(widthMm * pxPerMm);
-  canvas.height = Math.round(heightMm * pxPerMm);
+  canvas.width = width;
+  canvas.height = height;
   drawLayout(canvas, opts);
   return canvas;
 }
@@ -174,16 +189,16 @@ export async function exportLayoutPdf(
   filename: string,
   dpi = 150,
 ): Promise<string | null> {
-  const { widthMm, heightMm } = pageDimensionsMm(
-    opts.paperSize,
-    opts.orientation,
-  );
+  const size = resolvePageSize(opts);
+  const { widthMm, heightMm } = pageMm(size);
   const canvas = renderToCanvas(opts, dpi);
-  // Pass the orientation explicitly: jsPDF normalizes the format array to match
-  // the orientation (portrait forces width <= height), so an oriented format
-  // alone would be rotated back to portrait.
+  // Derive the orientation from the resolved dimensions rather than opts: custom
+  // sizes ignore the orientation toggle, and pixel presets are stored portrait-
+  // first, so the toggle alone can disagree with the actual page shape. jsPDF
+  // normalizes the format array to match the orientation (portrait forces
+  // width <= height), so the two must be consistent or the page gets rotated.
   const pdf = new jsPDF({
-    orientation: opts.orientation,
+    orientation: widthMm >= heightMm ? "landscape" : "portrait",
     unit: "mm",
     format: [widthMm, heightMm],
   });

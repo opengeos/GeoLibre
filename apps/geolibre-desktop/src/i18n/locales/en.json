@@ -466,6 +466,67 @@
     "description": "Choose the language used for the interface."
   },
   "printLayout": {
+    "title": "Print Layout",
+    "description": "Compose a print-ready map with a title, legend, scale bar, and north arrow, then export it to PNG or PDF.",
+    "preview": "Preview",
+    "recapture": "Recapture map",
+    "exportPng": "Export PNG",
+    "exportPdf": "Export PDF",
+    "titleLabel": "Title",
+    "titlePlaceholder": "Map title",
+    "subtitleLabel": "Subtitle",
+    "subtitlePlaceholder": "Optional subtitle",
+    "size": "Size",
+    "sizeGroup": {
+      "paper": "Paper",
+      "screen": "Screen / digital"
+    },
+    "sizeCustom": "Custom…",
+    "orientation": "Orientation",
+    "portrait": "Portrait",
+    "landscape": "Landscape",
+    "width": "Width",
+    "height": "Height",
+    "titlePlacement": "Title placement",
+    "placement": {
+      "outside": "Outside map frame",
+      "inside": "Inside map frame"
+    },
+    "alignment": "Alignment",
+    "align": {
+      "left": "Left",
+      "center": "Center",
+      "right": "Right"
+    },
+    "mapElements": "Map elements",
+    "element": {
+      "title": "Title",
+      "subtitle": "Subtitle",
+      "legend": "Legend",
+      "scaleBar": "Scale bar",
+      "northArrow": "North arrow",
+      "groupNavigation": "Group north arrow & scale bar",
+      "footer": "Footer text",
+      "date": "Date",
+      "attribution": "Include GeoLibre attribution",
+      "pageBorder": "Page border"
+    },
+    "footerTextLabel": "Footer text",
+    "footerPlaceholder": "Custom footer text",
+    "margin": "Margin",
+    "marginOption": {
+      "normal": "Normal",
+      "narrow": "Narrow",
+      "none": "None (borderless)"
+    },
+    "borderColor": "Border color",
+    "borderWidth": "Border width",
+    "errors": {
+      "mapNotReady": "Map is not ready yet. Try again in a moment.",
+      "captureFailed": "Could not capture the map image.",
+      "captureFirst": "Capture the map before exporting.",
+      "exportFailed": "Failed to export {{format}}."
+    },
     "legend": {
       "section": "Legend",
       "titleLabel": "Legend title",

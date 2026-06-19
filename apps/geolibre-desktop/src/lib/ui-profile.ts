@@ -201,7 +201,9 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   { id: "project.share", menuId: "project", labelKey: "toolbar.item.shareEllipsis", tier: "intermediate" },
   { id: "project.collaborate", menuId: "project", labelKey: "toolbar.item.collaborateEllipsis", tier: "advanced" },
   { id: "project.print", menuId: "project", labelKey: "toolbar.item.printEllipsis", tier: "intermediate" },
-  { id: "project.printLayout", menuId: "project", labelKey: "toolbar.item.printLayoutEllipsis", tier: "advanced" },
+  // Print Layout is the primary way any user turns a map into a shareable PDF/PNG
+  // deliverable, so it stays visible for every profile (GH #529).
+  { id: "project.printLayout", menuId: "project", labelKey: "toolbar.item.printLayoutEllipsis", tier: "basic" },
   { id: "project.offlineRegion", menuId: "project", labelKey: "toolbar.item.offlineRegionEllipsis", tier: "advanced" },
   { id: "project.storymap", menuId: "project", labelKey: "toolbar.item.storymapEllipsis", tier: "advanced" },
   // Edit

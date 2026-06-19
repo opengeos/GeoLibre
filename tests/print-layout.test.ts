@@ -2,6 +2,9 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   drawLayout,
+  pageMm,
+  pagePx,
+  resolvePageSize,
   type LayoutOptions,
   type LegendEntry,
 } from "../apps/geolibre-desktop/src/lib/print-layout";
@@ -134,5 +137,133 @@ describe("drawLayout legend rendering", () => {
     const label = fills.find((f) => f.text === "Roads");
     assert.ok(label, "expected the legend row label to be drawn");
     assert.equal(label.textAlign, "left");
+  });
+});
+
+describe("resolvePageSize", () => {
+  it("swaps width/height for landscape preset paper", () => {
+    const portrait = resolvePageSize({ paperSize: "a4", orientation: "portrait" });
+    assert.deepEqual(portrait, { width: 210, height: 297, unit: "mm" });
+    const landscape = resolvePageSize({ paperSize: "a4", orientation: "landscape" });
+    assert.deepEqual(landscape, { width: 297, height: 210, unit: "mm" });
+  });
+
+  it("resolves a pixel screen preset to its oriented pixel dimensions", () => {
+    const landscape = resolvePageSize({ paperSize: "fullhd", orientation: "landscape" });
+    assert.deepEqual(landscape, { width: 1920, height: 1080, unit: "px" });
+  });
+
+  it("takes custom dimensions verbatim, ignoring orientation", () => {
+    const size = resolvePageSize({
+      paperSize: "custom",
+      orientation: "landscape",
+      customSize: { width: 800, height: 600, unit: "px" },
+    });
+    assert.deepEqual(size, { width: 800, height: 600, unit: "px" });
+  });
+
+  it("falls back to a sane default for an incomplete custom size", () => {
+    const size = resolvePageSize({
+      paperSize: "custom",
+      orientation: "portrait",
+      customSize: { width: 0, height: 0, unit: "px" },
+    });
+    assert.deepEqual(size, { width: 1280, height: 720, unit: "px" });
+  });
+});
+
+describe("pageMm / pagePx", () => {
+  it("passes millimetre sizes through and scales by dpi for pixels", () => {
+    assert.deepEqual(pageMm({ width: 210, height: 297, unit: "mm" }), {
+      widthMm: 210,
+      heightMm: 297,
+    });
+    assert.deepEqual(pagePx({ width: 1920, height: 1080, unit: "px" }, 150), {
+      width: 1920,
+      height: 1080,
+    });
+    // A4 portrait at 150 dpi: 210 mm * 150 / 25.4 ≈ 1240 px.
+    assert.deepEqual(pagePx({ width: 210, height: 297, unit: "mm" }, 150), {
+      width: 1240,
+      height: 1754,
+    });
+  });
+
+  it("treats screen pixels as 96-dpi millimetres", () => {
+    const { widthMm } = pageMm({ width: 96, height: 96, unit: "px" });
+    assert.ok(Math.abs(widthMm - 25.4) < 1e-6, "96 px at 96 dpi is one inch");
+  });
+});
+
+describe("drawLayout cartographic furniture", () => {
+  it("right-aligns the title when titleAlign is right", () => {
+    const { canvas, fills } = recordingCanvas();
+    drawLayout(canvas, baseOptions({ title: "Atlas", titleAlign: "right" }));
+    const title = fills.find((f) => f.text === "Atlas");
+    assert.ok(title, "expected the title to be drawn");
+    assert.equal(title.textAlign, "right");
+  });
+
+  it("draws the attribution and date in the footer row independently", () => {
+    const { canvas, fills } = recordingCanvas();
+    drawLayout(
+      canvas,
+      baseOptions({
+        showAttribution: true,
+        showDate: true,
+        dateText: "2026-06-19",
+        showFooter: true,
+        footerText: "My Org",
+      }),
+    );
+    const attribution = fills.find((f) => f.text === "Created with GeoLibre");
+    assert.ok(attribution, "expected the attribution to be drawn");
+    assert.equal(attribution.textAlign, "left");
+    const date = fills.find((f) => f.text === "2026-06-19");
+    assert.ok(date, "expected the date to be drawn");
+    assert.equal(date.textAlign, "right");
+    const footer = fills.find((f) => f.text === "My Org");
+    assert.ok(footer, "expected the custom footer text to be drawn");
+    assert.equal(footer.textAlign, "center");
+  });
+
+  it("omits the attribution when showAttribution is false", () => {
+    const { canvas, fills } = recordingCanvas();
+    drawLayout(canvas, baseOptions({ showAttribution: false }));
+    assert.ok(!fills.some((f) => f.text === "Created with GeoLibre"));
+  });
+
+  it("draws a 1:N scale ratio for a millimetre paper size", () => {
+    const { canvas, fills } = recordingCanvas();
+    drawLayout(
+      canvas,
+      baseOptions({
+        showScaleBar: true,
+        metersPerPixel: 10,
+        mapImage: {} as CanvasImageSource,
+        mapImageWidth: 400,
+        mapImageHeight: 400,
+      }),
+    );
+    assert.ok(
+      fills.some((f) => /^1:/.test(f.text)),
+      "expected a representative-fraction label",
+    );
+  });
+
+  it("does not draw a scale ratio for a pixel screen size", () => {
+    const { canvas, fills } = recordingCanvas();
+    drawLayout(
+      canvas,
+      baseOptions({
+        paperSize: "fullhd",
+        showScaleBar: true,
+        metersPerPixel: 10,
+        mapImage: {} as CanvasImageSource,
+        mapImageWidth: 400,
+        mapImageHeight: 400,
+      }),
+    );
+    assert.ok(!fills.some((f) => /^1:/.test(f.text)));
   });
 });

@@ -26,11 +26,13 @@ import {
 } from "lucide-react";
 import {
   drawLayout,
-  pageDimensionsMm,
   PAPER_SIZES,
+  resolvePageSize,
+  type CustomSize,
   type LayoutOptions,
   type Orientation,
   type PaperSizeId,
+  type SizeUnit,
 } from "../../lib/print-layout";
 import {
   applyLegendConfig,
@@ -89,7 +91,7 @@ function ToggleField({ id, label, checked, onChange }: ToggleFieldProps) {
 /**
  * Print Layout composer dialog: captures the current map view and composes it
  * with a title, legend, scale bar, north arrow, and footer onto a chosen paper
- * size, then exports the result to PNG or PDF.
+ * or screen size, then exports the result to PNG or PDF.
  */
 export function PrintLayoutDialog({
   open,
@@ -104,19 +106,49 @@ export function PrintLayoutDialog({
 
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
+  const [titlePlacement, setTitlePlacement] = useState<"outside" | "inside">(
+    "outside",
+  );
+  const [titleAlign, setTitleAlign] = useState<"left" | "center" | "right">(
+    "center",
+  );
   const [paperSize, setPaperSize] = useState<PaperSizeId>("a4");
   const [orientation, setOrientation] = useState<Orientation>("landscape");
+  const [customWidth, setCustomWidth] = useState(1280);
+  const [customHeight, setCustomHeight] = useState(720);
+  const [customUnit, setCustomUnit] = useState<SizeUnit>("px");
   const [showTitle, setShowTitle] = useState(true);
+  const [showSubtitle, setShowSubtitle] = useState(true);
   const [showLegend, setShowLegend] = useState(true);
   const [showScaleBar, setShowScaleBar] = useState(true);
   const [showNorthArrow, setShowNorthArrow] = useState(true);
-  const [showFooter, setShowFooter] = useState(true);
+  const [navigationGrouped, setNavigationGrouped] = useState(true);
+  const [showFooter, setShowFooter] = useState(false);
   const [footerText, setFooterText] = useState("");
+  const [showDate, setShowDate] = useState(true);
+  const [dateText, setDateText] = useState("");
+  const [showAttribution, setShowAttribution] = useState(true);
+  const [pageMargin, setPageMargin] = useState<"normal" | "narrow" | "none">(
+    "normal",
+  );
+  const [showPageBorder, setShowPageBorder] = useState(false);
+  const [pageBorderColor, setPageBorderColor] = useState("#111827");
+  const [pageBorderWidth, setPageBorderWidth] = useState(2);
   const [captured, setCaptured] = useState<CapturedMap | null>(null);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const previewRef = useRef<HTMLCanvasElement | null>(null);
   const wasOpenRef = useRef(false);
+
+  const isCustom = paperSize === "custom";
+  const paperOptions = useMemo(
+    () => PAPER_SIZES.filter((p) => p.group === "paper"),
+    [],
+  );
+  const screenOptions = useMemo(
+    () => PAPER_SIZES.filter((p) => p.group === "screen" && p.id !== "custom"),
+    [],
+  );
 
   const baseLegend = useMemo(() => buildLegend(layers), [layers]);
   const legend = useMemo(
@@ -145,7 +177,7 @@ export function PrintLayoutDialog({
   const recapture = useCallback(() => {
     const map = mapControllerRef.current?.getMap();
     if (!map) {
-      setError("Map is not ready yet. Try again in a moment.");
+      setError(t("printLayout.errors.mapNotReady"));
       setCaptured(null);
       return;
     }
@@ -153,10 +185,10 @@ export function PrintLayoutDialog({
       setCaptured(captureMapImage(map));
       setError(null);
     } catch {
-      setError("Could not capture the map image.");
+      setError(t("printLayout.errors.captureFailed"));
       setCaptured(null);
     }
-  }, [mapControllerRef]);
+  }, [mapControllerRef, t]);
 
   // Capture the map and seed defaults only on the closed -> open transition, so
   // a background project-name change while the dialog is open does not replace
@@ -165,14 +197,19 @@ export function PrintLayoutDialog({
     if (open && !wasOpenRef.current) {
       setError(null);
       setTitle((prev) => prev || (projectName ?? "").trim());
-      setFooterText(
-        (prev) =>
-          prev || `Created with GeoLibre · ${new Date().toLocaleDateString()}`,
-      );
+      setDateText((prev) => prev || new Date().toLocaleDateString());
       recapture();
     }
     wasOpenRef.current = open;
   }, [open, projectName, recapture]);
+
+  const customSize = useMemo<CustomSize | null>(
+    () =>
+      isCustom
+        ? { width: customWidth, height: customHeight, unit: customUnit }
+        : null,
+    [isCustom, customWidth, customHeight, customUnit],
+  );
 
   const options = useMemo<LayoutOptions>(
     () => ({
@@ -180,12 +217,24 @@ export function PrintLayoutDialog({
       subtitle,
       paperSize,
       orientation,
+      customSize,
       showTitle,
+      showSubtitle,
+      titlePlacement,
+      titleAlign,
       showLegend,
       showScaleBar,
       showNorthArrow,
+      navigationGrouped,
       showFooter,
       footerText,
+      showDate,
+      dateText,
+      showAttribution,
+      pageMargin,
+      showPageBorder,
+      pageBorderColor,
+      pageBorderWidth,
       legend,
       legendTitle: legendConfig.title,
       legendGroupByLayer: legendConfig.groupByLayer,
@@ -200,38 +249,61 @@ export function PrintLayoutDialog({
       subtitle,
       paperSize,
       orientation,
+      customSize,
       showTitle,
+      showSubtitle,
+      titlePlacement,
+      titleAlign,
       showLegend,
       showScaleBar,
       showNorthArrow,
+      navigationGrouped,
       showFooter,
       footerText,
+      showDate,
+      dateText,
+      showAttribution,
+      pageMargin,
+      showPageBorder,
+      pageBorderColor,
+      pageBorderWidth,
       legend,
       legendConfig,
       captured,
     ],
   );
 
-  // Redraw the preview whenever the layout options change.
+  // Redraw the preview whenever the layout options change. Drawing is scheduled
+  // on an animation frame and retries until the canvas exists: the dialog mounts
+  // its content in a portal, so on the open transition the first effect pass can
+  // run before the canvas is committed -- without the retry the preview stayed
+  // blank until the user clicked "Recapture map" (GH #521).
   useEffect(() => {
     if (!open) return;
-    const canvas = previewRef.current;
-    if (!canvas) return;
-    const { widthMm, heightMm } = pageDimensionsMm(
-      options.paperSize,
-      options.orientation,
-    );
-    const aspect = widthMm / heightMm;
-    const pw = aspect >= 1 ? PREVIEW_LONG_EDGE : Math.round(PREVIEW_LONG_EDGE * aspect);
-    const ph = aspect >= 1 ? Math.round(PREVIEW_LONG_EDGE / aspect) : PREVIEW_LONG_EDGE;
-    canvas.width = pw;
-    canvas.height = ph;
-    drawLayout(canvas, options);
+    let raf = 0;
+    const draw = () => {
+      const canvas = previewRef.current;
+      if (!canvas) {
+        raf = requestAnimationFrame(draw);
+        return;
+      }
+      const size = resolvePageSize(options);
+      const aspect = size.width / size.height;
+      const pw =
+        aspect >= 1 ? PREVIEW_LONG_EDGE : Math.round(PREVIEW_LONG_EDGE * aspect);
+      const ph =
+        aspect >= 1 ? Math.round(PREVIEW_LONG_EDGE / aspect) : PREVIEW_LONG_EDGE;
+      canvas.width = pw;
+      canvas.height = ph;
+      drawLayout(canvas, options);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
   }, [open, options]);
 
   const handleExport = async (kind: "png" | "pdf") => {
     if (!captured) {
-      setError("Capture the map before exporting.");
+      setError(t("printLayout.errors.captureFirst"));
       return;
     }
     setExporting(true);
@@ -244,7 +316,7 @@ export function PrintLayoutDialog({
         await exportLayoutPdf(options, `${base}.pdf`);
       }
     } catch {
-      setError(`Failed to export ${kind.toUpperCase()}.`);
+      setError(t("printLayout.errors.exportFailed", { format: kind.toUpperCase() }));
     } finally {
       setExporting(false);
     }
@@ -254,109 +326,297 @@ export function PrintLayoutDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl">
         <DialogHeader>
-          <DialogTitle>Print Layout</DialogTitle>
-          <DialogDescription>
-            Compose a print-ready map with a title, legend, scale bar, and north
-            arrow, then export it to PNG or PDF.
-          </DialogDescription>
+          <DialogTitle>{t("printLayout.title")}</DialogTitle>
+          <DialogDescription>{t("printLayout.description")}</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-6 md:grid-cols-[320px_1fr]">
           {/* Controls */}
-          <div className="space-y-4">
+          <div className="max-h-[60vh] space-y-4 overflow-y-auto pr-1">
             <div className="space-y-1.5">
-              <Label htmlFor="layout-title">Title</Label>
+              <Label htmlFor="layout-title">{t("printLayout.titleLabel")}</Label>
               <Input
                 id="layout-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Map title"
+                placeholder={t("printLayout.titlePlaceholder")}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="layout-subtitle">Subtitle</Label>
+              <Label htmlFor="layout-subtitle">
+                {t("printLayout.subtitleLabel")}
+              </Label>
               <Input
                 id="layout-subtitle"
                 value={subtitle}
                 onChange={(e) => setSubtitle(e.target.value)}
-                placeholder="Optional subtitle"
+                placeholder={t("printLayout.subtitlePlaceholder")}
               />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="layout-paper">Paper size</Label>
+                <Label htmlFor="layout-title-placement">
+                  {t("printLayout.titlePlacement")}
+                </Label>
                 <Select
-                  id="layout-paper"
-                  value={paperSize}
-                  onChange={(e) => setPaperSize(e.target.value as PaperSizeId)}
+                  id="layout-title-placement"
+                  value={titlePlacement}
+                  onChange={(e) =>
+                    setTitlePlacement(e.target.value as "outside" | "inside")
+                  }
                 >
-                  {PAPER_SIZES.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label}
-                    </option>
-                  ))}
+                  <option value="outside">
+                    {t("printLayout.placement.outside")}
+                  </option>
+                  <option value="inside">
+                    {t("printLayout.placement.inside")}
+                  </option>
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="layout-orientation">Orientation</Label>
+                <Label htmlFor="layout-title-align">
+                  {t("printLayout.alignment")}
+                </Label>
                 <Select
-                  id="layout-orientation"
-                  value={orientation}
+                  id="layout-title-align"
+                  value={titleAlign}
                   onChange={(e) =>
-                    setOrientation(e.target.value as Orientation)
+                    setTitleAlign(e.target.value as "left" | "center" | "right")
                   }
                 >
-                  <option value="portrait">Portrait</option>
-                  <option value="landscape">Landscape</option>
+                  <option value="left">{t("printLayout.align.left")}</option>
+                  <option value="center">{t("printLayout.align.center")}</option>
+                  <option value="right">{t("printLayout.align.right")}</option>
                 </Select>
               </div>
             </div>
 
             <Separator />
 
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="layout-paper">{t("printLayout.size")}</Label>
+                <Select
+                  id="layout-paper"
+                  value={paperSize}
+                  onChange={(e) => setPaperSize(e.target.value as PaperSizeId)}
+                >
+                  <optgroup label={t("printLayout.sizeGroup.paper")}>
+                    {paperOptions.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label={t("printLayout.sizeGroup.screen")}>
+                    {screenOptions.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <option value="custom">{t("printLayout.sizeCustom")}</option>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="layout-orientation">
+                  {t("printLayout.orientation")}
+                </Label>
+                <Select
+                  id="layout-orientation"
+                  value={orientation}
+                  disabled={isCustom}
+                  onChange={(e) =>
+                    setOrientation(e.target.value as Orientation)
+                  }
+                >
+                  <option value="portrait">{t("printLayout.portrait")}</option>
+                  <option value="landscape">{t("printLayout.landscape")}</option>
+                </Select>
+              </div>
+            </div>
+
+            {isCustom && (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="layout-custom-w">
+                    {t("printLayout.width")}
+                  </Label>
+                  <Input
+                    id="layout-custom-w"
+                    type="number"
+                    min={1}
+                    value={customWidth}
+                    onChange={(e) =>
+                      setCustomWidth(Math.max(1, Number(e.target.value) || 0))
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="layout-custom-h">
+                    {t("printLayout.height")}
+                  </Label>
+                  <Input
+                    id="layout-custom-h"
+                    type="number"
+                    min={1}
+                    value={customHeight}
+                    onChange={(e) =>
+                      setCustomHeight(Math.max(1, Number(e.target.value) || 0))
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="layout-custom-unit">&nbsp;</Label>
+                  <Select
+                    id="layout-custom-unit"
+                    value={customUnit}
+                    onChange={(e) => setCustomUnit(e.target.value as SizeUnit)}
+                  >
+                    <option value="px">px</option>
+                    <option value="mm">mm</option>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label htmlFor="layout-margin">{t("printLayout.margin")}</Label>
+              <Select
+                id="layout-margin"
+                value={pageMargin}
+                onChange={(e) =>
+                  setPageMargin(e.target.value as "normal" | "narrow" | "none")
+                }
+              >
+                <option value="normal">
+                  {t("printLayout.marginOption.normal")}
+                </option>
+                <option value="narrow">
+                  {t("printLayout.marginOption.narrow")}
+                </option>
+                <option value="none">
+                  {t("printLayout.marginOption.none")}
+                </option>
+              </Select>
+            </div>
+
+            <Separator />
+
             <div className="space-y-2">
-              <p className="text-sm font-medium">Map elements</p>
+              <p className="text-sm font-medium">
+                {t("printLayout.mapElements")}
+              </p>
               <ToggleField
                 id="el-title"
-                label="Title block"
+                label={t("printLayout.element.title")}
                 checked={showTitle}
                 onChange={setShowTitle}
               />
               <ToggleField
+                id="el-subtitle"
+                label={t("printLayout.element.subtitle")}
+                checked={showSubtitle}
+                onChange={setShowSubtitle}
+              />
+              <ToggleField
                 id="el-legend"
-                label="Legend"
+                label={t("printLayout.element.legend")}
                 checked={showLegend}
                 onChange={setShowLegend}
               />
               <ToggleField
                 id="el-scale"
-                label="Scale bar"
+                label={t("printLayout.element.scaleBar")}
                 checked={showScaleBar}
                 onChange={setShowScaleBar}
               />
               <ToggleField
                 id="el-north"
-                label="North arrow"
+                label={t("printLayout.element.northArrow")}
                 checked={showNorthArrow}
                 onChange={setShowNorthArrow}
               />
+              {showScaleBar && showNorthArrow && (
+                <ToggleField
+                  id="el-nav-group"
+                  label={t("printLayout.element.groupNavigation")}
+                  checked={navigationGrouped}
+                  onChange={setNavigationGrouped}
+                />
+              )}
+              <ToggleField
+                id="el-date"
+                label={t("printLayout.element.date")}
+                checked={showDate}
+                onChange={setShowDate}
+              />
+              <ToggleField
+                id="el-attribution"
+                label={t("printLayout.element.attribution")}
+                checked={showAttribution}
+                onChange={setShowAttribution}
+              />
               <ToggleField
                 id="el-footer"
-                label="Footer"
+                label={t("printLayout.element.footer")}
                 checked={showFooter}
                 onChange={setShowFooter}
+              />
+              <ToggleField
+                id="el-border"
+                label={t("printLayout.element.pageBorder")}
+                checked={showPageBorder}
+                onChange={setShowPageBorder}
               />
             </div>
 
             {showFooter && (
               <div className="space-y-1.5">
-                <Label htmlFor="layout-footer">Footer text</Label>
+                <Label htmlFor="layout-footer">
+                  {t("printLayout.footerTextLabel")}
+                </Label>
                 <Input
                   id="layout-footer"
                   value={footerText}
+                  placeholder={t("printLayout.footerPlaceholder")}
                   onChange={(e) => setFooterText(e.target.value)}
                 />
+              </div>
+            )}
+
+            {showPageBorder && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="layout-border-color">
+                    {t("printLayout.borderColor")}
+                  </Label>
+                  <input
+                    id="layout-border-color"
+                    type="color"
+                    className="h-9 w-full cursor-pointer rounded-md border border-input bg-background"
+                    value={pageBorderColor}
+                    onChange={(e) => setPageBorderColor(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="layout-border-width">
+                    {t("printLayout.borderWidth")}
+                  </Label>
+                  <Input
+                    id="layout-border-width"
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={pageBorderWidth}
+                    onChange={(e) =>
+                      setPageBorderWidth(
+                        Math.max(1, Math.min(10, Number(e.target.value) || 1)),
+                      )
+                    }
+                  />
+                </div>
               </div>
             )}
 
@@ -504,17 +764,27 @@ export function PrintLayoutDialog({
           {/* Preview */}
           <div className="flex flex-col items-center justify-start gap-3">
             <div className="flex w-full items-center justify-between">
-              <span className="text-sm text-muted-foreground">Preview</span>
+              <span className="text-sm text-muted-foreground">
+                {t("printLayout.preview")}
+              </span>
               <Button variant="ghost" size="sm" onClick={recapture}>
                 <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                Recapture map
+                {t("printLayout.recapture")}
               </Button>
             </div>
-            <div className="flex max-h-[420px] w-full items-center justify-center overflow-auto rounded-md border bg-muted/30 p-3">
+            {/* Fit the whole page in view: the canvas scales down to honour both
+                max constraints without ever showing a scrollbar (GH #520). */}
+            <div className="flex w-full flex-1 items-center justify-center rounded-md border bg-muted/30 p-3">
               <canvas
                 ref={previewRef}
-                className="max-w-full shadow-md"
-                style={{ imageRendering: "auto" }}
+                className="shadow-md"
+                style={{
+                  maxWidth: "100%",
+                  maxHeight: "min(60vh, 460px)",
+                  width: "auto",
+                  height: "auto",
+                  imageRendering: "auto",
+                }}
               />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
@@ -523,22 +793,25 @@ export function PrintLayoutDialog({
 
         <div className="flex items-center justify-end gap-2 pt-2">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Close
+            {t("common.close")}
           </Button>
+          {/* Equal-weight export buttons: neither format is the "primary" one
+              (GH #520). */}
           <Button
             variant="outline"
             disabled={exporting || !captured}
             onClick={() => void handleExport("png")}
           >
             <FileImage className="mr-2 h-4 w-4" />
-            Export PNG
+            {t("printLayout.exportPng")}
           </Button>
           <Button
+            variant="outline"
             disabled={exporting || !captured}
             onClick={() => void handleExport("pdf")}
           >
             <FileText className="mr-2 h-4 w-4" />
-            Export PDF
+            {t("printLayout.exportPdf")}
           </Button>
         </div>
       </DialogContent>
