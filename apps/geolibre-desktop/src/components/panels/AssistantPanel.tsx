@@ -46,28 +46,27 @@ const PROVIDER_STORAGE_KEY = "geolibre.assistant.provider";
 const MODEL_STORAGE_KEY = "geolibre.assistant.model";
 
 /**
- * Providers listed in the no-key setup card, each paired with the primary
- * environment variable that activates it. Shown only until a provider is
- * configured, so the onboarding card stays scannable instead of dumping every
- * supported credential at once.
+ * Providers listed in the no-key setup card, each paired with the environment
+ * variable(s) that activate it. Shown only until a provider is configured, so
+ * the onboarding card stays scannable instead of dumping every supported
+ * credential at once. Ordered to mirror `ASSISTANT_PROVIDER_IDS` so the two
+ * lists are easy to cross-reference.
  *
- * Ordered by setup style for the reader (hosted API-key providers first, then
- * self-hosted Ollama and custom endpoints), which is intentionally independent
- * of the auto-selection ranking in `ASSISTANT_PROVIDER_IDS`.
+ * Bedrock and custom each need two variables before configForProvider()
+ * resolves them; both are listed (and rendered as separate chips) so following
+ * the card never leaves the user stuck on this screen with no hint of what is
+ * missing.
  */
 const SETUP_PROVIDERS: ReadonlyArray<{
   id: AssistantProviderId;
-  env: string;
+  envs: readonly string[];
 }> = [
-  { id: "google", env: "GEMINI_API_KEY" },
-  { id: "anthropic", env: "ANTHROPIC_API_KEY" },
-  { id: "openai", env: "OPENAI_API_KEY" },
-  // Bedrock and custom need two variables each before configForProvider()
-  // resolves them; list both so following the card never leaves the user stuck
-  // on this screen with no hint about what is missing.
-  { id: "bedrock", env: "AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY" },
-  { id: "ollama", env: "OLLAMA_BASE_URL" },
-  { id: "custom", env: "OPENAI_COMPATIBLE_BASE_URL + OPENAI_COMPATIBLE_MODEL" },
+  { id: "google", envs: ["GEMINI_API_KEY"] },
+  { id: "anthropic", envs: ["ANTHROPIC_API_KEY"] },
+  { id: "openai", envs: ["OPENAI_API_KEY"] },
+  { id: "ollama", envs: ["OLLAMA_BASE_URL"] },
+  { id: "bedrock", envs: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"] },
+  { id: "custom", envs: ["OPENAI_COMPATIBLE_BASE_URL", "OPENAI_COMPATIBLE_MODEL"] },
 ];
 
 /** Read a persisted string setting, ignoring storage failures. */
@@ -500,7 +499,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
                 {t("assistant.setupProviders")}
               </p>
               <ul className="space-y-1">
-                {SETUP_PROVIDERS.map(({ id, env }) => (
+                {SETUP_PROVIDERS.map(({ id, envs }) => (
                   <li
                     key={id}
                     className="flex items-start justify-between gap-3 text-xs"
@@ -508,9 +507,20 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
                     <span className="shrink-0 text-foreground">
                       {PROVIDER_LABELS[id]}
                     </span>
-                    <code className="break-words text-right font-mono text-[11px] text-muted-foreground">
-                      {env}
-                    </code>
+                    {/* One chip per variable so a multi-credential provider
+                        never reads as a single oddly-named env var. */}
+                    <span className="flex flex-wrap justify-end gap-x-1 gap-y-0.5 text-right font-mono text-[11px] text-muted-foreground">
+                      {envs.map((name, index) => (
+                        <span key={name} className="whitespace-nowrap">
+                          {index > 0 ? (
+                            <span className="mr-1 text-muted-foreground/60">
+                              +
+                            </span>
+                          ) : null}
+                          <code>{name}</code>
+                        </span>
+                      ))}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -604,6 +614,9 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
             placeholder={t("assistant.placeholder")}
             spellCheck
             rows={2}
+            // Stays disabled if the key is removed mid-run; the Stop button is a
+            // separate control, so it remains reachable until the run ends.
+            disabled={!hasKey}
             className="min-h-[2.5rem] flex-1 resize-none text-sm"
           />
           {running ? (
