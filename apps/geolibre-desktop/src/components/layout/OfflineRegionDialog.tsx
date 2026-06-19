@@ -271,11 +271,16 @@ export function OfflineRegionDialog({
               </div>
               <p className="text-xs text-muted-foreground tabular-nums">
                 {phase === "done"
-                  ? t("offline.complete", {
-                      done: progress.done - progress.failed,
-                      total: progress.total,
-                      failed: progress.failed,
-                    })
+                  ? t(
+                      progress.failed > 0
+                        ? "offline.completeWithFailures"
+                        : "offline.complete",
+                      {
+                        done: progress.done - progress.failed,
+                        total: progress.total,
+                        failed: progress.failed,
+                      },
+                    )
                   : t("offline.progress", {
                       done: progress.done,
                       total: progress.total,

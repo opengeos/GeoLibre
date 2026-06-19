@@ -319,7 +319,8 @@
     "download": "Download",
     "cancel": "Cancel",
     "progress": "Downloading {{done}} / {{total}}…",
-    "complete": "Saved {{done}} of {{total}} tiles ({{failed}} failed)."
+    "complete": "Saved {{done}} of {{total}} tiles.",
+    "completeWithFailures": "Saved {{done}} of {{total}} tiles ({{failed}} failed)."
   },
   "fieldCollection": {
     "title": "Field Collection",
