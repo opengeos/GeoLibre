@@ -59,9 +59,12 @@ export function useViewportHistory(
 ): ViewportHistory {
   const historyRef = useRef<MapViewState[]>([]);
   const indexRef = useRef(-1);
-  // Set while we drive the camera ourselves so the resulting `moveend` is not
-  // recorded as a new history entry.
-  const restoringRef = useRef(false);
+  // Counts camera moves we drive ourselves whose `moveend` is still pending, so
+  // those events are not recorded as new history entries. A counter (not a
+  // boolean) is needed because rapid back/forward clicks cancel each in-flight
+  // `easeTo`, firing one `moveend` per call — a boolean would be cleared by the
+  // first and let a later cancelled-midway position leak into the stack.
+  const restoringCountRef = useRef(0);
   // The project the current stack belongs to, so a project switch resets it.
   const projectGenerationRef = useRef(projectGeneration);
   const [nav, setNav] = useState({ canGoBack: false, canGoForward: false });
@@ -117,23 +120,23 @@ export function useViewportHistory(
     };
 
     const onMoveEnd = () => {
-      if (restoringRef.current) {
-        restoringRef.current = false;
+      if (restoringCountRef.current > 0) {
+        restoringCountRef.current--;
         return;
       }
       record();
     };
 
     map.on("moveend", onMoveEnd);
-    // Clear any flag left stuck by a restore that was in flight when a prior map
-    // was torn down (its `moveend` never fired), so this map starts clean.
-    restoringRef.current = false;
+    // Clear any pending count left by a restore that was in flight when a prior
+    // map was torn down (its `moveend` never fired), so this map starts clean.
+    restoringCountRef.current = 0;
     // Seed from the current camera right away (no-op if already seeded).
     record();
 
     return () => {
       map.off("moveend", onMoveEnd);
-      restoringRef.current = false;
+      restoringCountRef.current = 0;
     };
   }, [mapControllerRef, mapReadyGeneration, projectGeneration, syncNav]);
 
@@ -146,7 +149,7 @@ export function useViewportHistory(
       // would stay `true` (no `moveend` to clear it) and swallow the next pan.
       if (!controller) return;
       indexRef.current = nextIndex;
-      restoringRef.current = true;
+      restoringCountRef.current++;
       // Animate (easeTo) rather than jump, matching the browser-style framing.
       controller.easeToView(view);
       syncNav();

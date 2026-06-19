@@ -76,9 +76,13 @@ export function SetViewDialog({
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    const longitude = Number(fields.longitude);
-    const latitude = Number(fields.latitude);
-    const zoom = Number(fields.zoom);
+    // A blank required field must be rejected, not coerced: Number("") is 0, so
+    // an empty zoom would otherwise fly to the whole-earth view and an empty
+    // longitude/latitude would land on null island.
+    const num = (value: string) => (value.trim() === "" ? NaN : Number(value));
+    const longitude = num(fields.longitude);
+    const latitude = num(fields.latitude);
+    const zoom = num(fields.zoom);
     // Pitch and bearing default to 0 (north-up, flat) when left blank.
     const pitch = fields.pitch.trim() === "" ? 0 : Number(fields.pitch);
     const bearing = fields.bearing.trim() === "" ? 0 : Number(fields.bearing);
