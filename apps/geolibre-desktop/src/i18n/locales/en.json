@@ -616,7 +616,6 @@
     "project": {
       "title": "Project",
       "description": "These preferences are stored inside the project. Saving here applies them to the current session; use Project > Save to write them to the .geolibre.json file on disk.",
-      "name": "Name",
       "file": "Project file",
       "notSaved": "Not saved",
       "format": "Project format"

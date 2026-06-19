@@ -84,7 +84,6 @@
     "project": {
       "title": "Progetto",
       "description": "Le impostazioni vengono salvate con il progetto `.geolibre.json`.",
-      "name": "Nome",
       "file": "File di progetto",
       "notSaved": "Non salvato",
       "format": "Formato progetto"

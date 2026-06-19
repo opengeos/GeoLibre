@@ -185,8 +185,7 @@ export function LayerPanel({
   onOpenRasterStylePanel,
 }: LayerPanelProps) {
   const { t } = useTranslation();
-  // Developer-facing footer is hidden under the curated Beginner/Intermediate
-  // presets (issue #531).
+  // Gates the developer-facing "Advanced formats" footer below.
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   const layers = useAppStore((s) => s.layers);
   const layerGroups = useAppStore((s) => s.layerGroups);

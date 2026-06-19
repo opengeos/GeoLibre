@@ -126,10 +126,9 @@ const SECTION_ITEMS: Array<{
   { id: "project", labelKey: "settings.section.project", icon: FolderCog },
 ];
 
-// The menu-item id that gates each Settings section, mirroring the dropdown
-// entries. Sections without an entry (Layout, Interface) always show so the
-// profile UI itself stays reachable. Keeps the in-dialog nav consistent with the
-// Settings dropdown for the Beginner/Intermediate presets (issues #535, #536).
+// The menu-item id that gates each Settings section, mirroring the dropdown.
+// Sections without an entry (Layout, Interface) always show so the profile UI
+// stays reachable.
 const SECTION_GATE: Partial<Record<SettingsSection, string>> = {
   map: "settings.mapPreferences",
   geocoding: "settings.geocoding",
