@@ -47,6 +47,7 @@ import {
   applyLegendConfig,
   buildLegend,
   captureMapImage,
+  compositeMapOverlays,
   exportLayoutPdf,
   exportLayoutPng,
   legendEditorRows,
@@ -176,6 +177,9 @@ export function PrintLayoutDialog({
   // A pending "recapture once the map is idle" handler (from applyScale), kept
   // so any newer capture can cancel it before it overwrites a fresh result.
   const idleRecaptureRef = useRef<(() => void) | null>(null);
+  // Monotonic capture id: overlay compositing is async, so a slower capture
+  // must not overwrite a newer one (the result of the latest call wins).
+  const captureGenRef = useRef(0);
   // True while the scale input has focus, so two-way sync does not overwrite
   // what the user is typing.
   const scaleFocusedRef = useRef(false);
@@ -261,13 +265,14 @@ export function PrintLayoutDialog({
   );
 
   const recapture = useCallback(
-    (clipOverride?: PrintExtent | null) => {
+    async (clipOverride?: PrintExtent | null) => {
       const map = mapControllerRef.current?.getMap();
       if (!map) {
         setError(t("printLayout.errors.mapNotReady"));
         setCaptured(null);
         return;
       }
+      const gen = ++captureGenRef.current;
       // Cancel any pending post-zoom idle capture: this fresh capture supersedes
       // it, so it must not fire later and overwrite the result (e.g. a viewport
       // recapture clobbering an extent the user drew while tiles were loading).
@@ -287,9 +292,15 @@ export function PrintLayoutDialog({
       // never baked into the captured image.
       setPrintExtentVisible(map, false);
       try {
-        setCaptured(captureMapImage(map, clip));
+        const cap = captureMapImage(map, clip);
+        // Paint on-map colorbar/legend overlays (async: html2canvas).
+        await compositeMapOverlays(cap, map, clip);
+        // Drop the result if a newer capture started while overlays rasterized.
+        if (captureGenRef.current !== gen) return;
+        setCaptured(cap);
         setError(null);
       } catch {
+        if (captureGenRef.current !== gen) return;
         setError(t("printLayout.errors.captureFailed"));
         setCaptured(null);
       } finally {
