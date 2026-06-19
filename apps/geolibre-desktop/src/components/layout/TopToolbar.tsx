@@ -761,7 +761,7 @@ export function TopToolbar({
       icon: Info,
       run: () => setAboutOpen(true),
     },
-    // Plugins — one toggle per registered plugin. Atmosphere Effects,
+    // Plugins — one toggle per registered plugin. Atmospheric Effects,
     // Directions, Reverse Geocode, and the deck.gl viz renderer are excluded
     // here because they are surfaced under Controls / Add Data instead
     // (matching the menus).

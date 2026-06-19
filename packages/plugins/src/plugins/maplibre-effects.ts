@@ -941,7 +941,7 @@ export function restoreEffects(
 
 export const maplibreEffectsPlugin: GeoLibrePlugin = {
   id: EFFECTS_PLUGIN_ID,
-  name: "Atmosphere Effects",
+  name: "Atmospheric Effects",
   version: "1.0.0",
   activeByDefault: true,
   activate: (app: GeoLibreAppAPI) => attachEngine(app),

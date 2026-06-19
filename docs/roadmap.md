@@ -135,7 +135,7 @@
 - [x] Open attribute table and Export actions added to the layer actions menu
 - [x] Manual and automatic (timed) refresh extended to Add Vector Layer URL layers
 - [x] Attribute table column management: rename, delete, hide/show, and reorder fields, persisted with the project
-- [x] Atmosphere Effects plugin: deep-space backdrop, parallax starfield, comets, and a globe atmosphere halo at low zoom (toggled from the Controls menu)
+- [x] Atmospheric Effects plugin: deep-space backdrop, parallax starfield, comets, and a globe atmosphere halo at low zoom (toggled from the Controls menu)
 - [x] conda-forge install instructions and a video tutorial in the documentation
 - [x] MIT license
 - [x] CSP allowance for `cdn.jsdelivr.net` so DuckDB-WASM loads its bundles in the browser build

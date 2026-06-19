@@ -48,7 +48,7 @@ many transitive dependencies they rely on).
 - [Radix UI](https://www.radix-ui.com/), [shadcn/ui](https://ui.shadcn.com/), [Tailwind CSS](https://tailwindcss.com/), and [Lucide](https://lucide.dev/) — UI primitives and icons.
 - [react-i18next](https://react.i18next.com/) — internationalization.
 
-The **Atmosphere Effects** plugin (deep-space backdrop, parallax starfield,
+The **Atmospheric Effects** plugin (deep-space backdrop, parallax starfield,
 comets, and the globe atmosphere halo) adapts the technique and visual design
 from [Leonel Dias](https://leoneljdias.github.io/)'s article
 [*Globe atmosphere, halo, and comets*](https://leoneljdias.github.io/posts/globe-atmosphere-halo-comets/) —
