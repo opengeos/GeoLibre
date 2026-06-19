@@ -80,7 +80,7 @@ import {
   showsAdvancedNotices,
 } from "../../lib/ui-profile";
 
-type SettingsSection =
+export type SettingsSection =
   | "map"
   | "layout"
   | "interface"
