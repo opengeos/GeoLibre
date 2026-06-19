@@ -166,6 +166,8 @@ export function PrintLayoutDialog({
   // Set while the dialog is hidden to let the user draw on the map, so the
   // close handler does not tear down the in-progress extent box.
   const drawingRef = useRef(false);
+  // Aborts an in-progress draw when the dialog unmounts mid-drag.
+  const drawAbortRef = useRef<AbortController | null>(null);
   // True while the scale input has focus, so two-way sync does not overwrite
   // what the user is typing.
   const scaleFocusedRef = useRef(false);
@@ -256,9 +258,12 @@ export function PrintLayoutDialog({
     wasOpenRef.current = open;
   }, [open, projectName, recapture, mapControllerRef, extentBbox]);
 
-  // Clean up the on-map extent box if the dialog unmounts.
+  // Clean up if the dialog unmounts: abort an in-progress draw (so its window
+  // listeners are torn down and it does not setState on an unmounted component)
+  // and take the extent box off the map.
   useEffect(
     () => () => {
+      drawAbortRef.current?.abort();
       const map = mapControllerRef.current?.getMap();
       if (map) clearPrintExtent(map);
     },
@@ -388,20 +393,30 @@ export function PrintLayoutDialog({
     if (!map) return;
     const page = resolvePageSize(options);
     const aspect = page.width / page.height;
+    const controller = new AbortController();
+    drawAbortRef.current = controller;
     drawingRef.current = true;
     setDrawingExtent(true);
     onOpenChange(false);
     try {
-      const extent = await drawPrintExtent(map, { aspect });
+      const extent = await drawPrintExtent(map, {
+        aspect,
+        signal: controller.signal,
+      });
+      // Aborted means the dialog unmounted mid-draw: do not touch state.
+      if (controller.signal.aborted) return;
       if (extent) {
         setExtentBbox(extent);
         setCaptureMode("extent");
         recapture(extent);
       }
     } finally {
-      drawingRef.current = false;
-      setDrawingExtent(false);
-      onOpenChange(true);
+      if (drawAbortRef.current === controller) drawAbortRef.current = null;
+      if (!controller.signal.aborted) {
+        drawingRef.current = false;
+        setDrawingExtent(false);
+        onOpenChange(true);
+      }
     }
   }, [mapControllerRef, options, onOpenChange, recapture]);
 

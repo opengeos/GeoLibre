@@ -46,6 +46,10 @@ export function showPrintExtent(map: MapLibreMap, extent: PrintExtent): void {
   const existing = map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
   if (existing) {
     existing.setData(data);
+    // Keep the function idempotent w.r.t. visibility: the layers may have been
+    // hidden by setPrintExtentVisible (e.g. during a capture), so re-showing
+    // the extent must make them visible again rather than silently no-op.
+    setPrintExtentVisible(map, true);
     return;
   }
   map.addSource(SOURCE_ID, { type: "geojson", data });
@@ -115,6 +119,8 @@ function snapToAspect(
 export interface DrawPrintExtentOptions {
   /** Paper aspect ratio (width / height) used for Shift-to-snap. */
   aspect?: number;
+  /** Aborts the interaction (resolves with `null`) e.g. on dialog unmount. */
+  signal?: AbortSignal;
 }
 
 /**
@@ -130,11 +136,21 @@ export function drawPrintExtent(
   options: DrawPrintExtentOptions = {},
 ): Promise<PrintExtent | null> {
   return new Promise((resolve) => {
+    // Already-aborted signal: resolve immediately without touching the map.
+    if (options.signal?.aborted) return resolve(null);
+
     const canvas = map.getCanvas();
     const prevCursor = canvas.style.cursor;
     canvas.style.cursor = "crosshair";
+    // Suspend the map gestures that would fight the draw: panning moves the map
+    // under the box, and wheel / double-click zoom would change the projection
+    // mid-draw so the previewed box no longer matches the captured extent.
     const panWasEnabled = map.dragPan.isEnabled();
+    const scrollWasEnabled = map.scrollZoom.isEnabled();
+    const dblClickWasEnabled = map.doubleClickZoom.isEnabled();
     map.dragPan.disable();
+    map.scrollZoom.disable();
+    map.doubleClickZoom.disable();
 
     let start: { x: number; y: number } | null = null;
     let settled = false;
@@ -143,15 +159,18 @@ export function drawPrintExtent(
       if (settled) return;
       settled = true;
       map.off("mousedown", onDown);
-      map.off("mousemove", onMove);
       map.off("mouseup", onUp);
       window.removeEventListener("mousemove", onWindowMove);
       window.removeEventListener("mouseup", onWindowUp);
       window.removeEventListener("keydown", onKey);
+      options.signal?.removeEventListener("abort", onAbort);
       canvas.style.cursor = prevCursor;
       if (panWasEnabled) map.dragPan.enable();
+      if (scrollWasEnabled) map.scrollZoom.enable();
+      if (dblClickWasEnabled) map.doubleClickZoom.enable();
       resolve(result);
     };
+    const onAbort = () => finish(null);
 
     const extentFromPixels = (
       a: { x: number; y: number },
@@ -205,13 +224,12 @@ export function drawPrintExtent(
       if (e.originalEvent.button !== 0) return;
       start = { x: e.point.x, y: e.point.y };
     };
-    const onMove = (e: MapMouseEvent) =>
-      preview({ x: e.point.x, y: e.point.y }, e.originalEvent.shiftKey);
     const onUp = (e: MapMouseEvent) =>
       commit({ x: e.point.x, y: e.point.y }, e.originalEvent.shiftKey);
-    // Window-level fallbacks: MapLibre's mouse events only fire while the
-    // pointer is over the canvas, so a release (or drag) outside it would
-    // otherwise leave the interaction stuck forever.
+    // Window-level handlers: MapLibre's own mouse events only fire while the
+    // pointer is over the canvas, so a drag/release outside it would otherwise
+    // leave the interaction stuck. Move is handled here only (not also via
+    // map.on("mousemove")) to avoid drawing the box twice per frame.
     const onWindowMove = (e: MouseEvent) =>
       preview(pointFromClient(e.clientX, e.clientY), e.shiftKey);
     const onWindowUp = (e: MouseEvent) => {
@@ -223,10 +241,10 @@ export function drawPrintExtent(
     };
 
     map.on("mousedown", onDown);
-    map.on("mousemove", onMove);
     map.on("mouseup", onUp);
     window.addEventListener("mousemove", onWindowMove);
     window.addEventListener("mouseup", onWindowUp);
     window.addEventListener("keydown", onKey);
+    options.signal?.addEventListener("abort", onAbort);
   });
 }

@@ -868,10 +868,12 @@ function drawInfoBlock(
     cy += rowH;
     ctx.fillStyle = MUTED;
     ctx.font = `600 ${labelSize}px system-ui, sans-serif`;
-    ctx.fillText(l.label, x + pad, cy);
+    // Cap each cell to its measured column width so a measureText rounding
+    // error can never push a glyph past the box border.
+    ctx.fillText(l.label, x + pad, cy, labelW);
     ctx.fillStyle = INK;
     ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
-    ctx.fillText(l.value, x + pad + labelW + gap, cy);
+    ctx.fillText(l.value, x + pad + labelW + gap, cy, valueW);
   }
   ctx.restore();
   return y;
