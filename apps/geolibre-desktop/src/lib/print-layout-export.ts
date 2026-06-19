@@ -174,6 +174,10 @@ export function captureMapImage(map: MapLike, clip?: CaptureClip | null): Captur
   let centerX = cssWidth / 2;
   let centerY = cssHeight / 2;
   if (rectCss) {
+    // For a clip partially panned off-screen, this clamped centre lands toward
+    // the viewport edge rather than the drawn extent's true centre, so the
+    // reported scale can be marginally off (it varies only with latitude in Web
+    // Mercator, so the error is small). Acceptable for this preview/export use.
     centerX = (Math.max(0, rectCss.minX) + Math.min(cssWidth, rectCss.maxX)) / 2;
     centerY = (Math.max(0, rectCss.minY) + Math.min(cssHeight, rectCss.maxY)) / 2;
   }

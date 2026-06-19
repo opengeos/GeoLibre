@@ -260,11 +260,9 @@ export function drawPrintExtent(
       if (!moveRaf) {
         moveRaf = requestAnimationFrame(() => {
           moveRaf = 0;
-          if (pendingMove)
-            preview(
-              pointFromClient(pendingMove.x, pendingMove.y),
-              pendingMove.shiftKey,
-            );
+          const move = pendingMove;
+          pendingMove = null;
+          if (move) preview(pointFromClient(move.x, move.y), move.shiftKey);
         });
       }
     };

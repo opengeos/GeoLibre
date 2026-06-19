@@ -813,6 +813,9 @@ function buildInfoLines(opts: LayoutOptions, scaleRatio: number): InfoLine[] {
     const v = (value ?? "").trim();
     if (v) lines.push({ label: label ?? fallback, value: v });
   };
+  // Row order follows the cartographic title-block convention (reference number
+  // first as the primary identifier), which intentionally differs from the
+  // dialog form's field order; keep it stable rather than matching the form.
   push(labels.project, "Project", opts.projectNumber);
   push(labels.author, "Author", opts.author);
   push(labels.crs, "CRS", opts.crs);
