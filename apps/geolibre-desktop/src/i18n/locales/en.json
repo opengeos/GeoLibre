@@ -1320,10 +1320,13 @@
     "promptPlaceholder": "e.g. trees, buildings, water",
     "confidenceLabel": "Confidence threshold",
     "segment": "Segment",
+    "status": {
+      "checking": "Checking the AI segmentation service…",
+      "unavailable": "The AI segmentation service is not running yet. Start the GeoLibre server with segment-geospatial enabled to use it."
+    },
     "error": {
       "chooseImage": "Choose an image (GeoTIFF) to segment.",
       "enterPrompt": "Enter a text prompt, e.g. “trees” or “buildings”.",
-      "sidecarUnreachable": "Could not reach the GeoLibre sidecar.",
       "startServer": "Could not start GeoLibre sidecar.",
       "failed": "Segmentation failed."
     },
