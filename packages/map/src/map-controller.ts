@@ -571,6 +571,15 @@ export class MapController {
     this.map.jumpTo(constrainMapView(view, this.mapPreferences, this.map));
   }
 
+  /**
+   * Like {@link applyView} but animates the camera (MapLibre `easeTo`) instead
+   * of jumping, for browser-style back/forward viewport navigation.
+   */
+  easeToView(view: MapViewState): void {
+    if (!this.map) return;
+    this.map.easeTo(constrainMapView(view, this.mapPreferences, this.map));
+  }
+
   applyMapPreferences(preferences: MapPreferences): void {
     if (!this.map) return;
     this.mapPreferences = preferences;

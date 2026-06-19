@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
  */
 const MAX_HISTORY = 50;
 
-/** True when two viewports are close enough to treat as the same map state. */
+/** True when two viewports are identical (exact equality on all camera fields). */
 function viewsEqual(a: MapViewState, b: MapViewState): boolean {
   return (
     a.center[0] === b.center[0] &&
@@ -45,6 +45,9 @@ export interface ViewportHistory {
  *     mapControllerRef: Ref to the live MapController.
  *     mapReadyGeneration: Counter that increments when the map (re)initialises,
  *         used to (re)attach the `moveend` listener once a map exists.
+ *     projectGeneration: Counter that increments when a different project is
+ *         loaded; the stack is cleared so "Previous View" can't jump back into
+ *         the previous project's extents.
  *
  * Returns:
  *     The current navigability flags and the back/forward actions.
@@ -52,12 +55,15 @@ export interface ViewportHistory {
 export function useViewportHistory(
   mapControllerRef: React.RefObject<MapController | null>,
   mapReadyGeneration: number,
+  projectGeneration: number,
 ): ViewportHistory {
   const historyRef = useRef<MapViewState[]>([]);
   const indexRef = useRef(-1);
   // Set while we drive the camera ourselves so the resulting `moveend` is not
   // recorded as a new history entry.
   const restoringRef = useRef(false);
+  // The project the current stack belongs to, so a project switch resets it.
+  const projectGenerationRef = useRef(projectGeneration);
   const [nav, setNav] = useState({ canGoBack: false, canGoForward: false });
 
   const syncNav = useCallback(() => {
@@ -76,6 +82,16 @@ export function useViewportHistory(
     const map = mapControllerRef.current?.getMap() ?? null;
     if (!map) return;
     const controller = mapControllerRef.current;
+
+    // Loading a different project clears the stack so navigation can't cross
+    // project boundaries. A basemap change (which only bumps mapReadyGeneration)
+    // keeps the history, since the viewport is unchanged.
+    if (projectGenerationRef.current !== projectGeneration) {
+      projectGenerationRef.current = projectGeneration;
+      historyRef.current = [];
+      indexRef.current = -1;
+      syncNav();
+    }
 
     const record = () => {
       const view = controller?.readView();
@@ -109,21 +125,30 @@ export function useViewportHistory(
     };
 
     map.on("moveend", onMoveEnd);
+    // Clear any flag left stuck by a restore that was in flight when a prior map
+    // was torn down (its `moveend` never fired), so this map starts clean.
+    restoringRef.current = false;
     // Seed from the current camera right away (no-op if already seeded).
     record();
 
     return () => {
       map.off("moveend", onMoveEnd);
+      restoringRef.current = false;
     };
-  }, [mapControllerRef, mapReadyGeneration, syncNav]);
+  }, [mapControllerRef, mapReadyGeneration, projectGeneration, syncNav]);
 
   const restore = useCallback(
     (nextIndex: number) => {
       const view = historyRef.current[nextIndex];
       if (!view) return;
+      const controller = mapControllerRef.current;
+      // Bail before touching the flag if there's no map to drive — otherwise it
+      // would stay `true` (no `moveend` to clear it) and swallow the next pan.
+      if (!controller) return;
       indexRef.current = nextIndex;
       restoringRef.current = true;
-      mapControllerRef.current?.applyView(view);
+      // Animate (easeTo) rather than jump, matching the browser-style framing.
+      controller.easeToView(view);
       syncNav();
     },
     [mapControllerRef, syncNav],

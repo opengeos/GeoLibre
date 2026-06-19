@@ -175,6 +175,7 @@ export function TopToolbar({
   const setAssistantOpen = useAppStore((s) => s.setAssistantOpen);
   const projectName = useAppStore((s) => s.projectName);
   const projectPath = useAppStore((s) => s.projectPath);
+  const projectGeneration = useAppStore((s) => s.projectGeneration);
   const setProjectName = useAppStore((s) => s.setProjectName);
 
   const {
@@ -225,6 +226,7 @@ export function TopToolbar({
   const viewportHistory = useViewportHistory(
     mapControllerRef,
     mapReadyGeneration,
+    projectGeneration,
   );
 
   // When opened via a `?collab=<code>` share link, auto-open the Collaborate

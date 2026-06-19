@@ -61,6 +61,9 @@ export function ViewMenu({
     show("view.previousView") || show("view.nextView");
   const showReset = show("view.resetNorth") || show("view.resetPitchBearing");
   const showSetView = show("view.setView");
+  // A custom profile could hide every item while leaving the menu itself
+  // visible; skip the heading/separator so the dropdown isn't an empty shell.
+  const hasAnyItem = showZoom || showNavigation || showReset || showSetView;
 
   return (
     <DropdownMenu>
@@ -76,8 +79,12 @@ export function ViewMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-56">
-        <DropdownMenuLabel>{t("toolbar.menu.view")}</DropdownMenuLabel>
-        <DropdownMenuSeparator />
+        {hasAnyItem && (
+          <>
+            <DropdownMenuLabel>{t("toolbar.menu.view")}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+          </>
+        )}
         {show("view.zoomIn") && (
           <DropdownMenuItem onSelect={onZoomIn}>
             <ZoomIn className="mr-2 h-3.5 w-3.5 shrink-0" />
