@@ -76,12 +76,16 @@ export function SegmentationDialog({
     setStatus(null);
     try {
       setStatus(await fetchMlStatus());
-    } catch {
+    } catch (err) {
       // A failed probe (sidecar not started, or no segmentation backend behind
       // the proxy) is an expected "not set up yet" state, not a system failure.
       // Show neutral guidance instead of surfacing the raw HTTP/connection
       // error, so a freshly opened, blank dialog never greets the user with
-      // something like "HTTP 404" (issue #545).
+      // something like "HTTP 404" (issue #545). Surface anything unexpected
+      // (e.g. a malformed 200 payload) to the dev console so it isn't lost.
+      if (import.meta.env.DEV) {
+        console.warn("SegmentationDialog: ML status probe failed", err);
+      }
       setStatus({
         available: false,
         message: t("segmentation.status.unavailable"),
