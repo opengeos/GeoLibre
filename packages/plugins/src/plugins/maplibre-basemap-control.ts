@@ -33,7 +33,7 @@ export interface BasemapControlLabels {
 let labels: BasemapControlLabels = {
   confirmStyleReplace: (basemapName, count) =>
     count === 1
-      ? `Switching to "${basemapName}" replaces the whole map style and will remove the 1 stacked basemap you added. Continue?`
+      ? `Switching to "${basemapName}" replaces the whole map style and will remove the stacked basemap you added. Continue?`
       : `Switching to "${basemapName}" replaces the whole map style and will remove the ${count} stacked basemaps you added. Continue?`,
 };
 
