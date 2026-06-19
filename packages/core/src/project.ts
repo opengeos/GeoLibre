@@ -841,6 +841,16 @@ function hasRestorableSourceUrl(layer: GeoLibreLayer): boolean {
 }
 
 function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
+  // The live time filter is derived from the Time Slider's current date, so it
+  // is transient: strip it before saving so a reopened project never starts
+  // with a stale time-window filter hiding most of a layer's features. The
+  // binding config in `metadata.timeBinding` persists, and the Time Slider
+  // re-applies the filter the next time it activates.
+  if (layer.timeFilter !== undefined) {
+    const { timeFilter: _timeFilter, ...rest } = layer;
+    layer = rest;
+  }
+
   // External native layers that restore their features from a source URL keep
   // a `geojson` copy on the map only for the attribute table; it is redundant
   // in a saved project and would only bloat it, so strip it. Layers without a

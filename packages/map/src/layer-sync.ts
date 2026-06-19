@@ -109,6 +109,114 @@ function unclusteredPointFilter(
   ] as maplibregl.FilterSpecification;
 }
 
+/**
+ * Combine a sub-layer's geometry filter with the layer's transient
+ * {@link GeoLibreLayer.timeFilter}, when set, so a Time-Slider-bound vector
+ * layer only renders features inside the current timeline window. Returns the
+ * geometry filter unchanged when no time filter is set, so the common (unbound)
+ * path produces an identical spec and `ensureLayer` performs no filter update.
+ *
+ * Aggregate cluster layers (the bubble and its count) intentionally do not pass
+ * through here: a cluster feature carries no time property, so an `["all", ...]`
+ * wrap would drop every cluster whenever a window is active. Per-feature layers
+ * (fill, line, point, heatmap, text) filter correctly.
+ *
+ * @param layer - The store layer being synced.
+ * @param geometryFilter - The sub-layer's own geometry-type filter.
+ * @returns The combined filter, or the original when no time filter applies.
+ */
+function withTimeFilter(
+  layer: GeoLibreLayer,
+  geometryFilter: maplibregl.FilterSpecification,
+): maplibregl.FilterSpecification {
+  const timeFilter = layer.timeFilter;
+  if (!Array.isArray(timeFilter) || timeFilter.length === 0) {
+    return geometryFilter;
+  }
+  return [
+    "all",
+    geometryFilter,
+    timeFilter,
+  ] as unknown as maplibregl.FilterSpecification;
+}
+
+// Base (control-owned) filters of external-native vector layers, captured the
+// first time a time window is applied so the window can be combined without
+// nesting and fully restored when the binding is removed. Keyed by native
+// MapLibre layer id.
+const externalNativeBaseFilters = new Map<
+  string,
+  maplibregl.FilterSpecification | null
+>();
+
+/**
+ * Apply (or clear) a Time-Slider window on an external-native vector layer that
+ * a control owns and paints itself (e.g. the Add Vector Layer control). The
+ * control segregates geometry across its own native layers with a base filter
+ * such as `["==", ["geometry-type"], "Point"]`; this combines that base filter
+ * with the layer's transient {@link GeoLibreLayer.timeFilter} via `["all", ...]`
+ * so the window narrows the visible features without disturbing the control's
+ * paint. The control's base filter is captured once and restored on unbind.
+ *
+ * @param map - The MapLibre map.
+ * @param nativeLayerId - A control-owned native layer id.
+ * @param timeFilter - The layer's current time filter, or undefined when none.
+ */
+/**
+ * Whether a MapLibre layer type accepts a `filter`. Raster/hillshade/background
+ * layers do not, so a time window is never pushed onto them.
+ */
+function nativeLayerSupportsFilter(type: string): boolean {
+  return (
+    type === "circle" ||
+    type === "fill" ||
+    type === "line" ||
+    type === "symbol" ||
+    type === "fill-extrusion" ||
+    type === "heatmap"
+  );
+}
+
+function applyExternalNativeTimeFilter(
+  map: maplibregl.Map,
+  nativeLayerId: string,
+  timeFilter: unknown[] | undefined,
+): void {
+  if (!map.getLayer(nativeLayerId)) return;
+  const hasTimeFilter = Array.isArray(timeFilter) && timeFilter.length > 0;
+
+  if (!hasTimeFilter) {
+    // No window: restore the control's own filter (if we previously replaced
+    // it) and stop tracking this layer.
+    if (externalNativeBaseFilters.has(nativeLayerId)) {
+      const base = externalNativeBaseFilters.get(nativeLayerId) ?? null;
+      const current = map.getFilter(nativeLayerId);
+      if (JSON.stringify(current ?? null) !== JSON.stringify(base)) {
+        map.setFilter(nativeLayerId, base ?? undefined);
+      }
+      externalNativeBaseFilters.delete(nativeLayerId);
+    }
+    return;
+  }
+
+  // Window active: capture the control's base filter the first time, then keep
+  // reusing it so repeated ticks combine rather than nest.
+  let base: maplibregl.FilterSpecification | null;
+  if (externalNativeBaseFilters.has(nativeLayerId)) {
+    base = externalNativeBaseFilters.get(nativeLayerId) ?? null;
+  } else {
+    base = (map.getFilter(nativeLayerId) as maplibregl.FilterSpecification) ?? null;
+    externalNativeBaseFilters.set(nativeLayerId, base);
+  }
+  const combined = (
+    base ? ["all", base, timeFilter] : timeFilter
+  ) as unknown as maplibregl.FilterSpecification;
+  const current = map.getFilter(nativeLayerId);
+  if (JSON.stringify(current ?? null) !== JSON.stringify(combined)) {
+    map.setFilter(nativeLayerId, combined);
+  }
+}
+
 // Native layer ids whose zoom range GeoLibre has taken over. A pristine external
 // layer keeps its source-declared range, but once the user sets a non-default
 // range we keep applying the style range on every sync, including a later reset
@@ -229,6 +337,14 @@ function syncExternalNativeLayer(
   if (isExternalCustomLayer(layer)) {
     for (const nativeLayerId of nativeLayerIds) {
       moveLayer(map, nativeLayerId, beforeId);
+      // Control-painted vector layers (e.g. Add Vector Layer's circle/fill/line
+      // layers) still honor a Time Slider window: filtering is independent of
+      // the paint the control owns. Native layers without a filter (deck.gl /
+      // 3D Tiles custom layers) are skipped by the type guard.
+      const nativeLayer = map.getLayer(nativeLayerId);
+      if (nativeLayer && nativeLayerSupportsFilter(nativeLayer.type)) {
+        applyExternalNativeTimeFilter(map, nativeLayerId, layer.timeFilter);
+      }
     }
     // A deck.gl raster has no real MapLibre style layer to move (it renders in a
     // `deck-layer-group-*` keyed by its beforeId prop), so forward the computed
@@ -316,6 +432,13 @@ function syncExternalNativeLayer(
       nativeLayerId,
       layer.visible ? "visible" : "none",
     );
+
+    // Narrow the control-painted features to the Time Slider window (if the
+    // layer is bound). Filtering is independent of paint, so this applies even
+    // when the control owns the paint.
+    if (nativeLayerSupportsFilter(nativeLayer.type)) {
+      applyExternalNativeTimeFilter(map, nativeLayerId, layer.timeFilter);
+    }
 
     if (!controlOwnsPaint(layer)) {
       setExternalNativeLayerPaint(map, nativeLayerId, nativeLayer.type, layer);
@@ -1269,13 +1392,13 @@ function applyVectorDataRenderLayers(
           type: "fill-extrusion",
           ...sourceSpec,
           ...styleLayerZoomRange(layer.style),
-          filter: [
+          filter: withTimeFilter(layer, [
             "match",
             ["geometry-type"],
             ["Polygon", "MultiPolygon"],
             true,
             false,
-          ],
+          ]),
           paint: fillExtrusionPaint(layer.style, opacity),
           layout: { visibility },
         },
@@ -1291,13 +1414,13 @@ function applyVectorDataRenderLayers(
           type: "fill",
           ...sourceSpec,
           ...styleLayerZoomRange(layer.style),
-          filter: [
+          filter: withTimeFilter(layer, [
             "match",
             ["geometry-type"],
             ["Polygon", "MultiPolygon"],
             true,
             false,
-          ],
+          ]),
           paint: fillPaint(layer.style, opacity),
           layout: { visibility },
         },
@@ -1321,13 +1444,13 @@ function applyVectorDataRenderLayers(
         type: "line",
         ...sourceSpec,
         ...styleLayerZoomRange(layer.style),
-        filter: [
+        filter: withTimeFilter(layer, [
           "match",
           ["geometry-type"],
           ["LineString", "MultiLineString", "Polygon", "MultiPolygon"],
           true,
           false,
-        ],
+        ]),
         paint: linePaint(layer.style, opacity),
         layout: { visibility },
       },
@@ -1352,7 +1475,10 @@ function applyVectorDataRenderLayers(
         ...styleLayerZoomRange(layer.style),
         // Keep text-marker points out of the density, mirroring single mode;
         // they still render through the text symbol layer below.
-        filter: hasTextMarkers ? nonTextMarkerPointFilter : pointGeometryFilter,
+        filter: withTimeFilter(
+          layer,
+          hasTextMarkers ? nonTextMarkerPointFilter : pointGeometryFilter,
+        ),
         paint: heatmapPaint(layer.style, opacity),
         layout: { visibility },
       },
@@ -1415,7 +1541,7 @@ function applyVectorDataRenderLayers(
         ...styleLayerZoomRange(layer.style),
         // Unclustered points, excluding text markers (which the symbol layer
         // renders) so they don't also appear as plain circles.
-        filter: unclusteredPointFilter(hasTextMarkers),
+        filter: withTimeFilter(layer, unclusteredPointFilter(hasTextMarkers)),
         paint: circlePaint(layer.style, opacity),
         layout: { visibility },
       },
@@ -1434,7 +1560,10 @@ function applyVectorDataRenderLayers(
         type: "circle",
         ...sourceSpec,
         ...styleLayerZoomRange(layer.style),
-        filter: hasTextMarkers ? nonTextMarkerPointFilter : pointGeometryFilter,
+        filter: withTimeFilter(
+          layer,
+          hasTextMarkers ? nonTextMarkerPointFilter : pointGeometryFilter,
+        ),
         paint: circlePaint(layer.style, opacity),
         layout: { visibility },
       },
@@ -1456,7 +1585,7 @@ function applyVectorDataRenderLayers(
         type: "symbol",
         ...sourceSpec,
         ...styleLayerZoomRange(layer.style),
-        filter: textMarkerFilter,
+        filter: withTimeFilter(layer, textMarkerFilter),
         layout: {
           "text-allow-overlap": true,
           "text-font": textFontForMapStyle(map),

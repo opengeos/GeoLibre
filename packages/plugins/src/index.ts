@@ -210,5 +210,19 @@ export { maplibreNationalMapPlugin } from "./plugins/maplibre-national-map";
 export { maplibreOvertureMapsPlugin } from "./plugins/maplibre-overture-maps";
 export { maplibreStreetViewPlugin } from "./plugins/maplibre-streetview";
 export { maplibreSwipePlugin } from "./plugins/maplibre-swipe";
-export { maplibreTimeSliderPlugin } from "./plugins/maplibre-time-slider";
+export {
+  maplibreTimeSliderPlugin,
+  TIME_SLIDER_PLUGIN_ID,
+  getLayerTimeBinding,
+} from "./plugins/maplibre-time-slider";
+export {
+  buildTimeBinding,
+  buildTimeFilter,
+  detectTimeProperties,
+  type TimeBinding,
+  type TimeGranularity,
+  type TimePropertyCandidate,
+  type TimeValueKind,
+  type TimeWindow,
+} from "./plugins/time-slider-binding";
 export { WEB_SERVICE_PLUGIN_IDS } from "./plugins/web-service-sync";

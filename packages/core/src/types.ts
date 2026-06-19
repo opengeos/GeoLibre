@@ -254,6 +254,17 @@ export interface GeoLibreLayer {
   metadata: Record<string, unknown>;
   beforeId?: string;
   geojson?: FeatureCollection;
+  /**
+   * Transient MapLibre filter expression applied on top of every rendered
+   * sub-layer's geometry filter. The Time Slider plugin sets this on a bound
+   * vector layer so scrubbing the timeline narrows the visible features to the
+   * current time window, while the layer's own styling and opacity stay
+   * untouched. It is derived from the slider's current date, so it is NOT
+   * persisted (stripped by `prepareLayerForSave`); the binding config lives in
+   * `metadata.timeBinding` and the filter is recomputed live on the next
+   * activation. `undefined` means no time filter is applied.
+   */
+  timeFilter?: unknown[];
   sourcePath?: string;
   /**
    * Id of the {@link LayerGroup} this layer belongs to, or `undefined` when the
