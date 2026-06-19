@@ -237,6 +237,10 @@ export function drawLayout(
   const hasTitleBlock = hasTitleText || hasSubtitleText;
 
   // Footer row slots: attribution (left), footer text (centre), date (right).
+  // Attribution is opt-out (on unless explicitly disabled), deliberately unlike
+  // the other new booleans: GH #526 wants a pre-checked "Created with GeoLibre"
+  // credit so it survives a user replacing the footer text. Callers that omit
+  // the field therefore get the branding by design.
   const attributionText =
     opts.showAttribution !== false && (opts.attributionText ?? "Created with GeoLibre").trim();
   const footerText = opts.showFooter && opts.footerText.trim();
@@ -284,7 +288,9 @@ export function drawLayout(
     ctx.fillStyle = MUTED;
     ctx.font = `400 ${footSize}px system-ui, -apple-system, sans-serif`;
     ctx.textBaseline = "middle";
-    const slotMax = W - margin * 2;
+    // Give each of the three slots a third of the printable width so a long
+    // left attribution cannot visually bleed into the centred footer text.
+    const slotMax = (W - margin * 2) / 3;
     if (attributionText) {
       ctx.textAlign = "left";
       ctx.fillText(attributionText, margin, baselineY, slotMax);
@@ -352,7 +358,10 @@ export function drawLayout(
     const titleSize = unit * 4;
     const subtitleSize = unit * 2.2;
     const padY = unit * 2;
-    let y = bodyY + padY + titleSize;
+    // Seed the baseline at the first line that is actually drawn: when the title
+    // is hidden, the subtitle takes the top slot rather than being pushed a full
+    // title-height down (which dropped it below the backing rect). GH #526.
+    let y = bodyY + padY + (hasTitleText ? titleSize : subtitleSize);
     const insetX = unit * 2;
     const tx =
       titleAlign === "left"
@@ -361,7 +370,9 @@ export function drawLayout(
           ? bodyX + bodyW - insetX
           : bodyX + bodyW / 2;
     const blockH =
-      padY * 2 + (hasTitleText ? titleSize : 0) + (hasSubtitleText ? subtitleSize * 1.6 : 0);
+      padY * 2 +
+      (hasTitleText ? titleSize : 0) +
+      (hasSubtitleText ? (hasTitleText ? subtitleSize * 1.6 : subtitleSize * 1.2) : 0);
     ctx.fillStyle = "rgba(255,255,255,0.7)";
     ctx.fillRect(bodyX, bodyY, bodyW, blockH);
     if (hasTitleText) {
@@ -372,7 +383,8 @@ export function drawLayout(
       ctx.fillText(opts.title.trim(), tx, y, bodyW - insetX * 2);
     }
     if (hasSubtitleText) {
-      y += subtitleSize * 1.4;
+      // Only advance past the title line when one was drawn.
+      if (hasTitleText) y += subtitleSize * 1.4;
       ctx.fillStyle = MUTED;
       ctx.font = `400 ${subtitleSize}px system-ui, -apple-system, sans-serif`;
       ctx.textAlign = titleAlign;
@@ -600,7 +612,10 @@ function drawScaleBar(
 /** Format a representative fraction as "1:N" with thousands separators. */
 function formatScaleRatio(ratio: number): string {
   const rounded = Math.round(ratio);
-  return `1:${rounded.toLocaleString("en-US")}`;
+  // No explicit locale tag: a 1:N scale prints on the exported artefact, so it
+  // should follow the host environment's thousands separator (e.g. dots/spaces
+  // for de/fr) rather than being pinned to US commas.
+  return `1:${rounded.toLocaleString()}`;
 }
 
 /** Draw a legend box anchored at its top-left corner. */

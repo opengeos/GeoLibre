@@ -281,10 +281,13 @@ export function PrintLayoutDialog({
   useEffect(() => {
     if (!open) return;
     let raf = 0;
+    // Cap the retries so a canvas that never attaches (e.g. a portal render
+    // error) cannot spin the loop at ~60 fps until the next state change.
+    let retries = 0;
     const draw = () => {
       const canvas = previewRef.current;
       if (!canvas) {
-        raf = requestAnimationFrame(draw);
+        if (retries++ < 20) raf = requestAnimationFrame(draw);
         return;
       }
       const size = resolvePageSize(options);
@@ -468,9 +471,15 @@ export function PrintLayoutDialog({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="layout-custom-unit">&nbsp;</Label>
+                  <Label htmlFor="layout-custom-unit" className="sr-only">
+                    {t("printLayout.unit")}
+                  </Label>
+                  <span aria-hidden="true" className="block h-5">
+                    &nbsp;
+                  </span>
                   <Select
                     id="layout-custom-unit"
+                    aria-label={t("printLayout.unit")}
                     value={customUnit}
                     onChange={(e) => setCustomUnit(e.target.value as SizeUnit)}
                   >

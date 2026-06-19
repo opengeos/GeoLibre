@@ -487,6 +487,7 @@
     "landscape": "Landscape",
     "width": "Width",
     "height": "Height",
+    "unit": "Unit",
     "titlePlacement": "Title placement",
     "placement": {
       "outside": "Outside map frame",
