@@ -265,7 +265,11 @@ function parseDelimitedTextFile(text: string, path: string): FeatureCollection {
   const name = browserSafeFileName(path);
   const pickColumns = `Use Add Data → Delimited Text to choose the coordinate columns for ${name}.`;
   const delimiter = detectDelimitedTextDelimiter(text);
-  const fields = parseDelimitedTextFields(text, delimiter);
+  // Detect the coordinate columns from the header slice only;
+  // parseDelimitedTextLayer re-reads the header internally, so parsing the
+  // whole file here just to recover the column names would double the work.
+  const headerLine = text.replace(/^\uFEFF/, "").split(/\r?\n/, 1)[0] ?? "";
+  const fields = parseDelimitedTextFields(headerLine, delimiter);
   const coordinateFields = detectCoordinateFields(fields);
   if (!coordinateFields) {
     throw new Error(
