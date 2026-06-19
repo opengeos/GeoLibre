@@ -127,18 +127,17 @@
   border-top-color: rgba(255, 255, 255, 0.12);
 }
 
-/* Tighten the left sidebar navigation. The vertical gap between items comes
-   from the theme's default link `margin-top` (~0.625em) plus generous padding;
-   zero the margin and trim the padding so items sit close together. Section
-   headers keep their own (higher-specificity) spacing rule above. */
-.md-nav--primary .md-nav__item {
-  margin-top: 0;
-}
+/* Tighten the desktop sidebar nav only; the mobile drawer keeps its default touch targets. */
+@media screen and (min-width: 76.25em) {
+  .md-nav--primary .md-nav__item:not(.md-nav__item--section) {
+    margin-top: 0;
+  }
 
-.md-nav--primary .md-nav__link {
-  margin-top: 0;
-  padding-bottom: 0.2rem;
-  padding-top: 0.2rem;
+  .md-nav--primary .md-nav__link {
+    margin-top: 0;
+    padding-bottom: 0.2rem;
+    padding-top: 0.2rem;
+  }
 }
 
 .feature-grid {
