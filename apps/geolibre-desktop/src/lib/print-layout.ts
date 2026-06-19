@@ -548,15 +548,10 @@ export function drawLayout(
   const outputMpp = opts.metersPerPixel / (coverScale || 1);
   const hasScale =
     opts.showScaleBar && outputMpp > 0 && Number.isFinite(outputMpp);
-  // Representative fraction (1:N), only meaningful for physical paper sizes.
-  // Computed independent of the scale-bar toggle so the info block can print the
-  // scale even when the bar itself is hidden.
-  const page = resolvePageSize(opts);
-  let scaleRatio = 0;
-  if (outputMpp > 0 && Number.isFinite(outputMpp) && page.unit === "mm" && W > 0) {
-    const mmPerPx = pageMm(page).widthMm / W;
-    if (mmPerPx > 0) scaleRatio = (outputMpp * 1000) / mmPerPx;
-  }
+  // Representative fraction (1:N) from the shared, resolution-independent helper
+  // so the scale bar, the info block, and the dialog's scale input all agree.
+  // It is only non-zero for physical paper sizes with a captured map.
+  const scaleRatio = computeScaleRatio(opts);
 
   // --- Info block (cartographic title block / "stempel", bottom-right) ----
   const infoLines = buildInfoLines(opts, scaleRatio);

@@ -145,6 +145,8 @@ export function drawPrintExtent(
       map.off("mousedown", onDown);
       map.off("mousemove", onMove);
       map.off("mouseup", onUp);
+      window.removeEventListener("mousemove", onWindowMove);
+      window.removeEventListener("mouseup", onWindowUp);
       window.removeEventListener("keydown", onKey);
       canvas.style.cursor = prevCursor;
       if (panWasEnabled) map.dragPan.enable();
@@ -165,23 +167,29 @@ export function drawPrintExtent(
       ];
     };
 
-    const endPoint = (e: MapMouseEvent): { x: number; y: number } => {
-      const raw = { x: e.point.x, y: e.point.y };
-      return start && e.originalEvent.shiftKey && options.aspect
-        ? snapToAspect(start, raw, options.aspect)
-        : raw;
+    // Canvas-relative point from a native event, so releases/moves outside the
+    // map container are still handled (window listeners below).
+    const pointFromClient = (clientX: number, clientY: number) => {
+      const rect = canvas.getBoundingClientRect();
+      return { x: clientX - rect.left, y: clientY - rect.top };
     };
 
-    const onDown = (e: MapMouseEvent) => {
-      start = { x: e.point.x, y: e.point.y };
-    };
-    const onMove = (e: MapMouseEvent) => {
+    const settlePoint = (
+      raw: { x: number; y: number },
+      shiftKey: boolean,
+    ): { x: number; y: number } =>
+      start && shiftKey && options.aspect
+        ? snapToAspect(start, raw, options.aspect)
+        : raw;
+
+    const preview = (raw: { x: number; y: number }, shiftKey: boolean) => {
       if (!start) return;
-      showPrintExtent(map, extentFromPixels(start, endPoint(e)));
+      showPrintExtent(map, extentFromPixels(start, settlePoint(raw, shiftKey)));
     };
-    const onUp = (e: MapMouseEvent) => {
+
+    const commit = (raw: { x: number; y: number }, shiftKey: boolean) => {
       if (!start) return finish(null);
-      const end = endPoint(e);
+      const end = settlePoint(raw, shiftKey);
       // Treat a near-zero drag as a cancelled click rather than a sliver box.
       if (Math.abs(end.x - start.x) < 4 || Math.abs(end.y - start.y) < 4) {
         return finish(null);
@@ -190,6 +198,26 @@ export function drawPrintExtent(
       showPrintExtent(map, extent);
       finish(extent);
     };
+
+    const onDown = (e: MapMouseEvent) => {
+      // Primary button only: a right-click would open the context menu and
+      // leave the drag half-started.
+      if (e.originalEvent.button !== 0) return;
+      start = { x: e.point.x, y: e.point.y };
+    };
+    const onMove = (e: MapMouseEvent) =>
+      preview({ x: e.point.x, y: e.point.y }, e.originalEvent.shiftKey);
+    const onUp = (e: MapMouseEvent) =>
+      commit({ x: e.point.x, y: e.point.y }, e.originalEvent.shiftKey);
+    // Window-level fallbacks: MapLibre's mouse events only fire while the
+    // pointer is over the canvas, so a release (or drag) outside it would
+    // otherwise leave the interaction stuck forever.
+    const onWindowMove = (e: MouseEvent) =>
+      preview(pointFromClient(e.clientX, e.clientY), e.shiftKey);
+    const onWindowUp = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      commit(pointFromClient(e.clientX, e.clientY), e.shiftKey);
+    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") finish(null);
     };
@@ -197,6 +225,8 @@ export function drawPrintExtent(
     map.on("mousedown", onDown);
     map.on("mousemove", onMove);
     map.on("mouseup", onUp);
+    window.addEventListener("mousemove", onWindowMove);
+    window.addEventListener("mouseup", onWindowUp);
     window.addEventListener("keydown", onKey);
   });
 }

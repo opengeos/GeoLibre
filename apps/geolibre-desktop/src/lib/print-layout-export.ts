@@ -48,22 +48,14 @@ interface MapLike {
 /** A geographic crop box as `[west, south, east, north]`. */
 export type CaptureClip = [number, number, number, number];
 
-/**
- * Crop a composited capture to the screen rectangle covered by a geographic
- * extent. The four extent corners are projected to canvas pixels and the
- * axis-aligned bounding rect of those points (in device pixels) is cut out, so
- * a north-up box crops exactly and a rotated box crops its bounding rectangle.
- * Returns the original canvas unchanged when the projected rect is degenerate
- * or falls entirely outside the viewport.
- */
-function cropCaptureToClip(
+/** Axis-aligned bounding rect (in CSS pixels) of a geographic extent's four
+ * projected corners. A north-up box maps to an exact rect; a rotated box maps
+ * to its bounding rectangle. */
+function projectClipRectCss(
   map: MapLike,
-  source: HTMLCanvasElement,
-  cssWidth: number,
   clip: CaptureClip,
-): HTMLCanvasElement {
+): { minX: number; minY: number; maxX: number; maxY: number } {
   const [w, s, e, n] = clip;
-  const dpr = cssWidth > 0 ? source.width / cssWidth : 1;
   const corners: [number, number][] = [
     [w, n],
     [e, n],
@@ -81,11 +73,24 @@ function cropCaptureToClip(
     maxX = Math.max(maxX, p.x);
     maxY = Math.max(maxY, p.y);
   }
+  return { minX, minY, maxX, maxY };
+}
+
+/**
+ * Crop a composited capture to the CSS-pixel rectangle of a geographic extent.
+ * Returns the original canvas unchanged when the projected rect is degenerate
+ * or falls entirely outside the viewport.
+ */
+function cropCaptureToClip(
+  source: HTMLCanvasElement,
+  rectCss: { minX: number; minY: number; maxX: number; maxY: number },
+  dpr: number,
+): HTMLCanvasElement {
   // CSS px -> device px, clamped to the captured buffer.
-  const x0 = Math.max(0, Math.floor(minX * dpr));
-  const y0 = Math.max(0, Math.floor(minY * dpr));
-  const x1 = Math.min(source.width, Math.ceil(maxX * dpr));
-  const y1 = Math.min(source.height, Math.ceil(maxY * dpr));
+  const x0 = Math.max(0, Math.floor(rectCss.minX * dpr));
+  const y0 = Math.max(0, Math.floor(rectCss.minY * dpr));
+  const x1 = Math.min(source.width, Math.ceil(rectCss.maxX * dpr));
+  const y1 = Math.min(source.height, Math.ceil(rectCss.maxY * dpr));
   const cw = x1 - x0;
   const ch = y1 - y0;
   if (cw < 1 || ch < 1) return source;
@@ -152,17 +157,24 @@ export function captureMapImage(map: MapLike, clip?: CaptureClip | null): Captur
 
   const cssWidth = base.clientWidth || base.width;
   const cssHeight = base.clientHeight || base.height;
-  const midY = cssHeight / 2;
-  const span = Math.min(100, cssWidth / 2);
-  const left = map.unproject([cssWidth / 2 - span / 2, midY]);
-  const right = map.unproject([cssWidth / 2 + span / 2, midY]);
-  const metersPerCssPx = haversineMeters(left, right) / span;
   const dpr = cssWidth > 0 ? out.width / cssWidth : 1;
+
+  // Measure the ground resolution at the centre of the region that will end up
+  // in the output: the clip's centre when cropping, otherwise the viewport
+  // centre. Sampling at the viewport centre would misreport the scale for an
+  // extent drawn in a corner (the metres-per-pixel varies with latitude). GH #571.
+  const rectCss = clip ? projectClipRectCss(map, clip) : null;
+  const centerX = rectCss ? (rectCss.minX + rectCss.maxX) / 2 : cssWidth / 2;
+  const centerY = rectCss ? (rectCss.minY + rectCss.maxY) / 2 : cssHeight / 2;
+  const span = Math.min(100, cssWidth / 2);
+  const left = map.unproject([centerX - span / 2, centerY]);
+  const right = map.unproject([centerX + span / 2, centerY]);
+  const metersPerCssPx = haversineMeters(left, right) / span;
   const metersPerPixel = dpr > 0 ? metersPerCssPx / dpr : metersPerCssPx;
 
   // Cropping changes the image dimensions but not the per-device-pixel ground
   // resolution, so metersPerPixel carries through unchanged.
-  const image = clip ? cropCaptureToClip(map, out, cssWidth, clip) : out;
+  const image = rectCss ? cropCaptureToClip(out, rectCss, dpr) : out;
 
   return {
     image,
