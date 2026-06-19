@@ -12,7 +12,7 @@ import {
   Separator,
   Slider,
 } from "@geolibre/ui";
-import { Download, Loader2, WifiOff } from "lucide-react";
+import { Download, Loader2, RotateCw, WifiOff } from "lucide-react";
 import {
   type Bbox,
   collectOfflineUrls,
@@ -72,6 +72,7 @@ export function OfflineRegionDialog({
     done: 0,
     total: 0,
     failed: 0,
+    failedUrls: [],
   });
   const abortRef = useRef<AbortController | null>(null);
 
@@ -127,7 +128,7 @@ export function OfflineRegionDialog({
   useEffect(() => {
     if (open) {
       setPhase("idle");
-      setProgress({ done: 0, total: 0, failed: 0 });
+      setProgress({ done: 0, total: 0, failed: 0, failedUrls: [] });
       setIncludeExtra(false);
       setExtraLevels(1);
     } else {
@@ -144,12 +145,12 @@ export function OfflineRegionDialog({
     const controller = new AbortController();
     abortRef.current = controller;
     setPhase("running");
-    setProgress({ done: 0, total: 0, failed: 0 });
+    setProgress({ done: 0, total: 0, failed: 0, failedUrls: [] });
     try {
       const urls = await collectOfflineUrls(map, bbox, baseZoom, maxZoom, {
         signal: controller.signal,
       });
-      setProgress({ done: 0, total: urls.length, failed: 0 });
+      setProgress({ done: 0, total: urls.length, failed: 0, failedUrls: [] });
       const result = await warmUrls(urls, {
         signal: controller.signal,
         onProgress: setProgress,
@@ -166,6 +167,35 @@ export function OfflineRegionDialog({
       if (abortRef.current === controller) abortRef.current = null;
     }
   }, [mapControllerRef, bbox, baseZoom, maxZoom]);
+
+  // Re-warm only the URLs that failed, so the user can recover a partial
+  // download (e.g. after a transient network blip) without re-fetching the
+  // whole region. The failure message then reflects this retry batch.
+  const handleRetry = useCallback(async () => {
+    const failedUrls = progress.failedUrls;
+    if (failedUrls.length === 0) return;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setPhase("running");
+    setProgress({
+      done: 0,
+      total: failedUrls.length,
+      failed: 0,
+      failedUrls: [],
+    });
+    try {
+      const result = await warmUrls(failedUrls, {
+        signal: controller.signal,
+        onProgress: setProgress,
+      });
+      setProgress(result);
+      if (!controller.signal.aborted) setPhase("done");
+    } catch {
+      if (!controller.signal.aborted) setPhase("idle");
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null;
+    }
+  }, [progress.failedUrls]);
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort();
@@ -298,6 +328,12 @@ export function OfflineRegionDialog({
           ) : (
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               {t("common.close")}
+            </Button>
+          )}
+          {phase === "done" && progress.failed > 0 && (
+            <Button variant="outline" onClick={handleRetry}>
+              <RotateCw className="mr-2 h-4 w-4" />
+              {t("offline.retryFailed", { count: progress.failed })}
             </Button>
           )}
           <Button

@@ -292,6 +292,11 @@ export interface WarmProgress {
   done: number;
   total: number;
   failed: number;
+  /**
+   * URLs that failed to warm (non-OK response or network error). Lets callers
+   * offer a "retry failed tiles" action without re-fetching the whole region.
+   */
+  failedUrls: string[];
 }
 
 /**
@@ -317,7 +322,12 @@ export async function warmUrls(
   } = {},
 ): Promise<WarmProgress> {
   const { concurrency = 6, signal, onProgress } = options;
-  const progress: WarmProgress = { done: 0, total: urls.length, failed: 0 };
+  const progress: WarmProgress = {
+    done: 0,
+    total: urls.length,
+    failed: 0,
+    failedUrls: [],
+  };
   let cursor = 0;
 
   async function worker(): Promise<void> {
@@ -328,10 +338,14 @@ export async function warmUrls(
         // CacheFirst means already-cached URLs return instantly; new ones hit
         // the network and are stored by the SW. We discard the body.
         const res = await fetch(url, { signal, cache: "no-cache" });
-        if (!res.ok) progress.failed++;
+        if (!res.ok) {
+          progress.failed++;
+          progress.failedUrls.push(url);
+        }
       } catch {
         if (signal?.aborted) return;
         progress.failed++;
+        progress.failedUrls.push(url);
       } finally {
         // `finally` runs even after the `return` above, so only count requests
         // that actually settled — not ones interrupted by an abort.
