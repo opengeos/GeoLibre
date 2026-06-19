@@ -2367,6 +2367,7 @@ async function openStandaloneLidarControl(
     showLidarControl(lidarControl);
     lidarControl?.expand();
     seedLidarDefaultUrl(lidarControl);
+    fitLidarPanelToViewport();
   }, 0);
   return true;
 }
@@ -2492,6 +2493,12 @@ function createLidarControl(
   const control = new LidarControlClass(LIDAR_OPTIONS);
   lidarLayerAdapter = new LidarLayerAdapterClass(control);
   control.on("collapse", () => hideLidarControl(control));
+  // Keep the panel filling the viewport as the window resizes (no-ops while the
+  // panel is collapsed/hidden). The control is a singleton, so this is added
+  // once for its lifetime.
+  if (typeof window !== "undefined") {
+    window.addEventListener("resize", fitLidarPanelToViewport);
+  }
   control.on("load", createLidarLoadHandler());
   control.on("unload", createLidarUnloadHandler());
   lidarStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
@@ -4908,6 +4915,24 @@ function seedLidarDefaultUrl(control: LidarControl | null): void {
   const input = panel?.querySelector<HTMLInputElement>(".lidar-control-input");
   if (!input || input.value.trim()) return;
   input.value = LIDAR_SAMPLE_URL;
+}
+
+/**
+ * Override the "Add LiDAR Layer" panel's max-height to the space actually
+ * available beneath it so it uses the full viewport height instead of the fixed
+ * LIDAR_OPTIONS.maxHeight cap (which left empty space below a long panel on tall
+ * screens). Content still scrolls once it exceeds the available height.
+ */
+function fitLidarPanelToViewport(): void {
+  requestAnimationFrame(() => {
+    const panel = findLidarPanel(lidarControl);
+    if (!panel) return;
+    const rect = panel.getBoundingClientRect();
+    const available = Math.floor(
+      window.innerHeight - rect.top - GUI_PANEL_VIEWPORT_MARGIN,
+    );
+    if (available > 160) panel.style.maxHeight = `${available}px`;
+  });
 }
 
 function hideLidarControl(control: LidarControl | null): void {
