@@ -46,16 +46,10 @@ const PROVIDER_STORAGE_KEY = "geolibre.assistant.provider";
 const MODEL_STORAGE_KEY = "geolibre.assistant.model";
 
 /**
- * Providers listed in the no-key setup card, each paired with the environment
- * variable(s) that activate it. Shown only until a provider is configured, so
- * the onboarding card stays scannable instead of dumping every supported
- * credential at once. Ordered to mirror `ASSISTANT_PROVIDER_IDS` so the two
- * lists are easy to cross-reference.
- *
- * Bedrock and custom each need two variables before configForProvider()
- * resolves them; both are listed (and rendered as separate chips) so following
- * the card never leaves the user stuck on this screen with no hint of what is
- * missing.
+ * Providers shown in the no-key setup card, each with the env var(s) that
+ * activate it, ordered to mirror `ASSISTANT_PROVIDER_IDS`. Bedrock and custom
+ * need all listed vars before configForProvider() resolves them, so both are
+ * listed (and rendered as separate chips) rather than leaving the user stuck.
  */
 const SETUP_PROVIDERS: ReadonlyArray<{
   id: AssistantProviderId;

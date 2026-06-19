@@ -88,11 +88,7 @@ export type SettingsSection =
   | "environment"
   | "project";
 
-/**
- * Window event that opens the Settings dialog at a given section. Dispatched by
- * other panels (e.g. the AI Assistant onboarding card) so they can deep-link
- * users straight to the relevant settings without prop-drilling the open state.
- */
+/** Window event letting any panel open Settings at a given section (no prop-drilling). */
 export const OPEN_SETTINGS_EVENT = "geolibre:open-settings";
 
 /** Open the Settings dialog at `section` from anywhere in the app. */
