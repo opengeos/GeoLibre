@@ -65,7 +65,7 @@ const TAURI_IPC_FALLBACK_WARNING =
 // inertia of a rotate/tilt gesture, double-click zoom, etc.) while the globe
 // projection is active — globe simply ignores the around-point and the camera
 // still moves correctly. It is harmless but fires on routine interaction, so it
-// is dropped from diagnostics entirely rather than echoed on every gesture.
+// is kept out of the diagnostics panel (still echoed to the console for devs).
 const BENIGN_CONSOLE_WARNINGS = [
   "Easing around a point is not supported under globe projection.",
 ];
@@ -450,9 +450,13 @@ export function installDiagnosticsCapture(): () => void {
 
   console.warn = (...args: unknown[]) => {
     // Known-benign third-party warnings (e.g. MapLibre's globe easing notice on
-    // every rotate/tilt gesture) are dropped entirely — neither recorded nor
-    // echoed — so they do not clutter diagnostics or the console.
-    if (isBenignConsoleWarning(args)) return;
+    // every rotate/tilt gesture) are echoed to the console so a contributor
+    // debugging map animations still sees them, but kept out of the diagnostics
+    // panel, where they would clutter the log on routine interaction.
+    if (isBenignConsoleWarning(args)) {
+      originalConsoleWarn(...args);
+      return;
+    }
     const isTauriIpcFallback =
       inStartupWindow() &&
       typeof args[0] === "string" &&
