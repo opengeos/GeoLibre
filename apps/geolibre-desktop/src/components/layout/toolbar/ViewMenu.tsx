@@ -7,7 +7,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@geolibre/ui";
-import { ArrowLeft, ArrowRight, Compass, Eye, Mountain } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Compass,
+  Crosshair,
+  Eye,
+  Mountain,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import type { ViewportHistory } from "../../../hooks/useViewportHistory";
@@ -21,6 +30,12 @@ interface ViewMenuProps {
   onResetNorth: () => void;
   /** Animate the map back to north-up and flat (bearing 0, pitch 0). */
   onResetPitchBearing: () => void;
+  /** Open the dialog for typing an exact camera (center/zoom/pitch/bearing). */
+  onSetView: () => void;
+  /** Animate the map in by one zoom level. */
+  onZoomIn: () => void;
+  /** Animate the map out by one zoom level. */
+  onZoomOut: () => void;
 }
 
 /**
@@ -34,13 +49,18 @@ export function ViewMenu({
   history,
   onResetNorth,
   onResetPitchBearing,
+  onSetView,
+  onZoomIn,
+  onZoomOut,
 }: ViewMenuProps) {
   const { t } = useTranslation();
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   const show = (id: string) => isMenuItemVisible(uiProfile, id);
+  const showZoom = show("view.zoomIn") || show("view.zoomOut");
   const showNavigation =
     show("view.previousView") || show("view.nextView");
   const showReset = show("view.resetNorth") || show("view.resetPitchBearing");
+  const showSetView = show("view.setView");
 
   return (
     <DropdownMenu>
@@ -58,6 +78,23 @@ export function ViewMenu({
       <DropdownMenuContent align="start" className="min-w-56">
         <DropdownMenuLabel>{t("toolbar.menu.view")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {show("view.zoomIn") && (
+          <DropdownMenuItem onSelect={onZoomIn}>
+            <ZoomIn className="mr-2 h-3.5 w-3.5 shrink-0" />
+            <span className="whitespace-nowrap">
+              {t("toolbar.item.zoomIn")}
+            </span>
+          </DropdownMenuItem>
+        )}
+        {show("view.zoomOut") && (
+          <DropdownMenuItem onSelect={onZoomOut}>
+            <ZoomOut className="mr-2 h-3.5 w-3.5 shrink-0" />
+            <span className="whitespace-nowrap">
+              {t("toolbar.item.zoomOut")}
+            </span>
+          </DropdownMenuItem>
+        )}
+        {showZoom && showNavigation && <DropdownMenuSeparator />}
         {show("view.previousView") && (
           <DropdownMenuItem
             disabled={!history.canGoBack}
@@ -80,7 +117,9 @@ export function ViewMenu({
             </span>
           </DropdownMenuItem>
         )}
-        {showNavigation && showReset && <DropdownMenuSeparator />}
+        {(showZoom || showNavigation) && showReset && (
+          <DropdownMenuSeparator />
+        )}
         {show("view.resetNorth") && (
           <DropdownMenuItem onSelect={onResetNorth}>
             <Compass className="mr-2 h-3.5 w-3.5 shrink-0" />
@@ -94,6 +133,17 @@ export function ViewMenu({
             <Mountain className="mr-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">
               {t("toolbar.item.resetPitchBearing")}
+            </span>
+          </DropdownMenuItem>
+        )}
+        {(showZoom || showNavigation || showReset) && showSetView && (
+          <DropdownMenuSeparator />
+        )}
+        {showSetView && (
+          <DropdownMenuItem onSelect={onSetView}>
+            <Crosshair className="mr-2 h-3.5 w-3.5 shrink-0" />
+            <span className="whitespace-nowrap">
+              {t("toolbar.item.setView")}
             </span>
           </DropdownMenuItem>
         )}

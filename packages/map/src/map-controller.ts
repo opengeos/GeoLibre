@@ -841,6 +841,16 @@ export class MapController {
     });
   }
 
+  /** Animate the map in by one zoom level, mirroring the navigation control. */
+  zoomIn(): void {
+    this.map?.zoomIn();
+  }
+
+  /** Animate the map out by one zoom level, mirroring the navigation control. */
+  zoomOut(): void {
+    this.map?.zoomOut();
+  }
+
   /**
    * Animate the map back to north-up (bearing 0), leaving the center, zoom, and
    * pitch untouched. Mirrors MapLibre's compass-control click.

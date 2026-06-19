@@ -642,6 +642,17 @@
       "spaceColor": "Space color",
       "reset": "Reset to defaults"
     },
+    "setView": {
+      "title": "Set View",
+      "description": "Move the map to an exact camera. Pitch and bearing default to 0 if left blank.",
+      "longitude": "Longitude",
+      "latitude": "Latitude",
+      "zoom": "Zoom",
+      "pitch": "Pitch",
+      "bearing": "Bearing",
+      "go": "Go",
+      "invalid": "Enter a valid longitude (−180 to 180), latitude (−90 to 90), and zoom."
+    },
     "commandGroup": {
       "project": "Project",
       "addData": "Add Data",
@@ -701,6 +712,9 @@
       "nextView": "Next View",
       "resetNorth": "Reset North",
       "resetPitchBearing": "Reset Pitch & Bearing",
+      "setView": "Set View",
+      "zoomIn": "Zoom In",
+      "zoomOut": "Zoom Out",
       "switchToLight": "Switch to Light Mode",
       "switchToDark": "Switch to Dark Mode",
       "keyboardShortcuts": "Keyboard Shortcuts",
@@ -850,6 +864,9 @@
       "nextView": "Next View",
       "resetNorth": "Reset North",
       "resetPitchBearing": "Reset Pitch & Bearing",
+      "setView": "Set View…",
+      "zoomIn": "Zoom In",
+      "zoomOut": "Zoom Out",
       "sectionFiles": "Files",
       "sectionWebServices": "Web services",
       "sectionCloudFormats": "Cloud formats",

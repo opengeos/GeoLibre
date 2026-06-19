@@ -34,6 +34,7 @@ import {
   ArrowRight,
   Bug,
   Compass,
+  Crosshair,
   Database,
   FilePen,
   Mountain,
@@ -58,6 +59,8 @@ import {
   Sun,
   Workflow,
   Wrench,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -92,6 +95,7 @@ import { ShareProjectDialog } from "./ShareProjectDialog";
 import { CollaborateDialog } from "./CollaborateDialog";
 import { useCollaboration } from "../../hooks/useCollaboration";
 import { SettingsDialog } from "./SettingsDialog";
+import { SetViewDialog } from "./SetViewDialog";
 import { PrintLayoutDialog } from "./PrintLayoutDialog";
 import { FieldCollectionDialog } from "./FieldCollectionDialog";
 import { GeoreferencerDialog } from "./GeoreferencerDialog";
@@ -264,6 +268,7 @@ export function TopToolbar({
   const [offlineRegionOpen, setOfflineRegionOpen] = useState(false);
   const [fieldCollectionOpen, setFieldCollectionOpen] = useState(false);
   const [georeferencerOpen, setGeoreferencerOpen] = useState(false);
+  const [setViewOpen, setSetViewOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [checkForUpdatesRequest, setCheckForUpdatesRequest] = useState(0);
@@ -648,6 +653,22 @@ export function TopToolbar({
     },
     // View
     {
+      id: "view.zoom-in",
+      title: t("toolbar.command.zoomIn"),
+      group: t("toolbar.commandGroup.view"),
+      keywords: "zoom in closer magnify scale",
+      icon: ZoomIn,
+      run: () => mapControllerRef.current?.zoomIn(),
+    },
+    {
+      id: "view.zoom-out",
+      title: t("toolbar.command.zoomOut"),
+      group: t("toolbar.commandGroup.view"),
+      keywords: "zoom out farther wider scale",
+      icon: ZoomOut,
+      run: () => mapControllerRef.current?.zoomOut(),
+    },
+    {
       id: "view.previous",
       title: t("toolbar.command.previousView"),
       group: t("toolbar.commandGroup.view"),
@@ -678,6 +699,14 @@ export function TopToolbar({
       keywords: "pitch bearing tilt rotation north flat level 3d",
       icon: Mountain,
       run: () => mapControllerRef.current?.resetNorthPitch(),
+    },
+    {
+      id: "view.set-view",
+      title: t("toolbar.command.setView"),
+      group: t("toolbar.commandGroup.view"),
+      keywords: "set view go to coordinates center zoom pitch bearing camera location longitude latitude",
+      icon: Crosshair,
+      run: () => setSetViewOpen(true),
     },
     {
       id: "view.theme",
@@ -828,6 +857,9 @@ export function TopToolbar({
           onResetPitchBearing={() =>
             mapControllerRef.current?.resetNorthPitch()
           }
+          onSetView={() => setSetViewOpen(true)}
+          onZoomIn={() => mapControllerRef.current?.zoomIn()}
+          onZoomOut={() => mapControllerRef.current?.zoomOut()}
         />
       )}
       <NewProjectDialog
@@ -920,6 +952,11 @@ export function TopToolbar({
       <GeoreferencerDialog
         open={georeferencerOpen}
         onOpenChange={setGeoreferencerOpen}
+        mapControllerRef={mapControllerRef}
+      />
+      <SetViewDialog
+        open={setViewOpen}
+        onOpenChange={setSetViewOpen}
         mapControllerRef={mapControllerRef}
       />
       <ShareProjectDialog

@@ -208,10 +208,13 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   { id: "edit.undo", menuId: "edit", labelKey: "toolbar.item.undo", tier: "basic" },
   { id: "edit.redo", menuId: "edit", labelKey: "toolbar.item.redo", tier: "basic" },
   // View
+  { id: "view.zoomIn", menuId: "view", labelKey: "toolbar.item.zoomIn", tier: "basic" },
+  { id: "view.zoomOut", menuId: "view", labelKey: "toolbar.item.zoomOut", tier: "basic" },
   { id: "view.previousView", menuId: "view", labelKey: "toolbar.item.previousView", tier: "basic" },
   { id: "view.nextView", menuId: "view", labelKey: "toolbar.item.nextView", tier: "basic" },
   { id: "view.resetNorth", menuId: "view", labelKey: "toolbar.item.resetNorth", tier: "basic" },
   { id: "view.resetPitchBearing", menuId: "view", labelKey: "toolbar.item.resetPitchBearing", tier: "basic" },
+  { id: "view.setView", menuId: "view", labelKey: "toolbar.item.setView", tier: "intermediate" },
   // Processing
   { id: "processing.assistant", menuId: "processing", labelKey: "toolbar.command.assistant", tier: "intermediate" },
   { id: "processing.whitebox", menuId: "processing", labelKey: "toolbar.item.whitebox", tier: "advanced" },
