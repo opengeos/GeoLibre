@@ -109,6 +109,10 @@ const USGS_LIDAR_OPTIONS = {
     pointSize: 2,
     colorScheme: "elevation",
     copcLoadingMode: "dynamic",
+    // Match the deleted standalone plugin and the Components LidarControl: keep
+    // the point cloud non-pickable so deck.gl doesn't register hover/click
+    // handlers on every tile (avoids interaction jank and stray tooltips).
+    pickable: false,
   },
 } satisfies Omit<UsgsLidarControlOptions, "position">;
 
@@ -138,10 +142,11 @@ export const maplibreUsgsLidarPlugin: GeoLibrePlugin = {
   activate: (app: GeoLibreAppAPI) => {
     pluginActive = true;
 
-    // Synchronous re-activation path: apply the side effects only after the
-    // control actually mounts. Otherwise a failed mount (e.g. map not ready)
-    // leaves the plugin marked inactive while the projection is stuck in
-    // Mercator and the coverage layer is orphaned with no cleanup path.
+    // Defensive re-activation path for callers that invoke the plugin API
+    // directly (the PluginManager guards against double-activate, so it does not
+    // reach this — deactivate always nulls the control first). If a control
+    // instance somehow still exists, apply the side effects only after it
+    // re-mounts so a failed mount can't strand the projection.
     if (usgsLidarControl) {
       if (!mountUsgsLidarControl(app)) {
         pluginActive = false;
@@ -164,10 +169,22 @@ export const maplibreUsgsLidarPlugin: GeoLibrePlugin = {
       .then(({ UsgsLidarControl: UsgsLidarControlClass }) => {
         if (!pluginActive || usgsLidarControl) return;
         usgsLidarControl = new UsgsLidarControlClass(getUsgsLidarOptions());
-        mountUsgsLidarControl(app);
+        if (!mountUsgsLidarControl(app)) {
+          console.warn(
+            "[maplibre-usgs-lidar] control failed to mount; deactivate the plugin to restore the projection.",
+          );
+        }
       })
       .catch((error: unknown) => {
         console.error("[maplibre-usgs-lidar] failed to load control:", error);
+        // Roll back the side effects applied before the import so a failed load
+        // (chunk/network error) doesn't strand the map in Mercator with an
+        // orphaned coverage layer and no control to interact with.
+        if (pluginActive) {
+          pluginActive = false;
+          restoreProjection();
+          removeDepIndexLayer();
+        }
       });
   },
   deactivate: (app: GeoLibreAppAPI) => {
@@ -187,7 +204,13 @@ export const maplibreUsgsLidarPlugin: GeoLibrePlugin = {
     if (!usgsLidarControl) return;
     app.removeMapControl(usgsLidarControl);
     const added = app.addMapControl(usgsLidarControl, usgsLidarPosition);
-    if (!added) return false;
+    if (!added) {
+      // The control is now detached; drop the stale reference so a later
+      // deactivate doesn't call removeMapControl on an already-removed control
+      // (matches mountUsgsLidarControl's failure handling).
+      usgsLidarControl = null;
+      return false;
+    }
     setTimeout(() => usgsLidarControl?.expand(), 0);
   },
 };

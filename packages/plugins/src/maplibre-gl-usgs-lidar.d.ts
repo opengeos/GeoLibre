@@ -1,8 +1,11 @@
-// maplibre-gl-usgs-lidar@0.10.0 ships complete declarations at dist/index.d.ts,
+// maplibre-gl-usgs-lidar@0.11.0 ships complete declarations at dist/index.d.ts,
 // but its package.json "types"/"exports" point to a nonexistent dist/types/
 // path, so TypeScript resolves the module as `any`. This shim declares the
 // subset of the API the USGS LiDAR plugin uses until the upstream pointer is
 // fixed.
+// TODO: delete this shim (and the maplibre-gl-lidar type-only dependency it
+// pulls in below) once maplibre-gl-usgs-lidar ships a correct "types"/"exports"
+// field — verify by removing it and running the type check.
 declare module "maplibre-gl-usgs-lidar" {
   import type { IControl, Map as MapLibreMap } from "maplibre-gl";
   // `maplibre-gl-usgs-lidar`'s own types re-export `lidarControlOptions` typed
