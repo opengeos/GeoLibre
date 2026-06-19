@@ -818,7 +818,7 @@ function buildInfoLines(opts: LayoutOptions, scaleRatio: number): InfoLine[] {
       value: formatScaleRatio(scaleRatio),
     });
   }
-  push(labels.revision, "Rev", opts.revision);
+  push(labels.revision, "Revision", opts.revision);
   return lines;
 }
 

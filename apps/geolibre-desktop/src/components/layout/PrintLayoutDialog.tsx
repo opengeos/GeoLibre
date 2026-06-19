@@ -374,16 +374,27 @@ export function PrintLayoutDialog({
   // Drive the live map to a target 1:N scale, then recapture. The reported
   // scale is linear in metres-per-pixel, which halves per zoom level, so the
   // zoom delta is log2(currentScale / targetScale).
+  // A drawn extent fixes the ground area, so zooming would not reach the
+  // requested denominator (it changes the crop size inversely); only allow
+  // manual scale entry in viewport mode.
+  const scaleEditable = Boolean(captured) && captureMode !== "extent";
   const applyScale = useCallback(
     (targetRatio: number) => {
       const map = mapControllerRef.current?.getMap();
-      if (!map || !(targetRatio > 0) || !(currentRatio > 0)) return;
+      if (
+        captureMode === "extent" ||
+        !map ||
+        !(targetRatio > 0) ||
+        !(currentRatio > 0)
+      ) {
+        return;
+      }
       const newZoom = map.getZoom() + Math.log2(currentRatio / targetRatio);
       map.setZoom(Math.max(0, Math.min(24, newZoom)));
       // Let the camera settle, then recapture so the scale label updates.
       requestAnimationFrame(() => recapture());
     },
-    [mapControllerRef, currentRatio, recapture],
+    [mapControllerRef, captureMode, currentRatio, recapture],
   );
 
   // Hide the dialog so the map is interactive, let the user drag an extent box,
@@ -409,6 +420,11 @@ export function PrintLayoutDialog({
         setExtentBbox(extent);
         setCaptureMode("extent");
         recapture(extent);
+      } else if (extentBbox) {
+        // Cancelled drag: drop the half-drawn preview back to the prior extent.
+        showPrintExtent(map, extentBbox);
+      } else {
+        clearPrintExtent(map);
       }
     } finally {
       if (drawAbortRef.current === controller) drawAbortRef.current = null;
@@ -418,7 +434,7 @@ export function PrintLayoutDialog({
         onOpenChange(true);
       }
     }
-  }, [mapControllerRef, options, onOpenChange, recapture]);
+  }, [mapControllerRef, options, onOpenChange, recapture, extentBbox]);
 
   const handleClearExtent = useCallback(() => {
     const map = mapControllerRef.current?.getMap();
@@ -686,7 +702,7 @@ export function PrintLayoutDialog({
                     inputMode="numeric"
                     className="flex-1"
                     value={scaleDraft}
-                    disabled={!captured}
+                    disabled={!scaleEditable}
                     placeholder={t("printLayout.scalePlaceholder")}
                     onFocus={() => {
                       scaleFocusedRef.current = true;
@@ -713,7 +729,7 @@ export function PrintLayoutDialog({
                   <Select
                     aria-label={t("printLayout.scalePresets")}
                     value=""
-                    disabled={!captured}
+                    disabled={!scaleEditable}
                     onChange={(e) => {
                       const n = Number(e.target.value);
                       if (n > 0) applyScale(n);

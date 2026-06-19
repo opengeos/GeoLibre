@@ -78,14 +78,15 @@ function projectClipRectCss(
 
 /**
  * Crop a composited capture to the CSS-pixel rectangle of a geographic extent.
- * Returns the original canvas unchanged when the projected rect is degenerate
- * or falls entirely outside the viewport.
+ * Returns `null` when the projected rect is degenerate or falls entirely
+ * outside the viewport, so the caller can fail rather than silently export the
+ * full viewport at a scale measured for the (off-screen) clip centre.
  */
 function cropCaptureToClip(
   source: HTMLCanvasElement,
   rectCss: { minX: number; minY: number; maxX: number; maxY: number },
   dpr: number,
-): HTMLCanvasElement {
+): HTMLCanvasElement | null {
   // CSS px -> device px, clamped to the captured buffer.
   const x0 = Math.max(0, Math.floor(rectCss.minX * dpr));
   const y0 = Math.max(0, Math.floor(rectCss.minY * dpr));
@@ -93,12 +94,12 @@ function cropCaptureToClip(
   const y1 = Math.min(source.height, Math.ceil(rectCss.maxY * dpr));
   const cw = x1 - x0;
   const ch = y1 - y0;
-  if (cw < 1 || ch < 1) return source;
+  if (cw < 1 || ch < 1) return null;
   const cropped = document.createElement("canvas");
   cropped.width = cw;
   cropped.height = ch;
   const cctx = cropped.getContext("2d");
-  if (!cctx) return source;
+  if (!cctx) return null;
   cctx.drawImage(source, x0, y0, cw, ch, 0, 0, cw, ch);
   return cropped;
 }
@@ -173,8 +174,17 @@ export function captureMapImage(map: MapLike, clip?: CaptureClip | null): Captur
   const metersPerPixel = dpr > 0 ? metersPerCssPx / dpr : metersPerCssPx;
 
   // Cropping changes the image dimensions but not the per-device-pixel ground
-  // resolution, so metersPerPixel carries through unchanged.
-  const image = rectCss ? cropCaptureToClip(out, rectCss, dpr) : out;
+  // resolution, so metersPerPixel carries through unchanged. A null crop means
+  // the extent is entirely off-screen: throw so the dialog reports a capture
+  // error instead of silently exporting the wrong (full-viewport) area.
+  let image = out;
+  if (rectCss) {
+    const cropped = cropCaptureToClip(out, rectCss, dpr);
+    if (!cropped) {
+      throw new Error("Print extent is outside the current map view");
+    }
+    image = cropped;
+  }
 
   return {
     image,

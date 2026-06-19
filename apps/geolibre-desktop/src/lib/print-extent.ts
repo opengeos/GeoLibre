@@ -111,8 +111,8 @@ function snapToAspect(
   const w = Math.max(Math.abs(dx), Math.abs(dy) * aspect);
   const h = w / aspect;
   return {
-    x: start.x + Math.sign(dx || 1) * w,
-    y: start.y + Math.sign(dy || 1) * h,
+    x: start.x + (Math.sign(dx) || 1) * w,
+    y: start.y + (Math.sign(dy) || 1) * h,
   };
 }
 
@@ -154,12 +154,14 @@ export function drawPrintExtent(
 
     let start: { x: number; y: number } | null = null;
     let settled = false;
+    let moveRaf = 0;
+    let pendingMove: { x: number; y: number; shiftKey: boolean } | null = null;
 
     const finish = (result: PrintExtent | null) => {
       if (settled) return;
       settled = true;
+      if (moveRaf) cancelAnimationFrame(moveRaf);
       map.off("mousedown", onDown);
-      map.off("mouseup", onUp);
       window.removeEventListener("mousemove", onWindowMove);
       window.removeEventListener("mouseup", onWindowUp);
       window.removeEventListener("keydown", onKey);
@@ -218,20 +220,32 @@ export function drawPrintExtent(
       finish(extent);
     };
 
+    // Only a mousedown that lands on the map canvas starts a draw; everything
+    // after is tracked on the window so a drag/release outside the canvas still
+    // works. All points are derived via pointFromClient so start and end share
+    // the same (canvas-relative) coordinate space even if the canvas is inset
+    // within its container.
     const onDown = (e: MapMouseEvent) => {
       // Primary button only: a right-click would open the context menu and
       // leave the drag half-started.
       if (e.originalEvent.button !== 0) return;
-      start = { x: e.point.x, y: e.point.y };
+      start = pointFromClient(e.originalEvent.clientX, e.originalEvent.clientY);
     };
-    const onUp = (e: MapMouseEvent) =>
-      commit({ x: e.point.x, y: e.point.y }, e.originalEvent.shiftKey);
-    // Window-level handlers: MapLibre's own mouse events only fire while the
-    // pointer is over the canvas, so a drag/release outside it would otherwise
-    // leave the interaction stuck. Move is handled here only (not also via
-    // map.on("mousemove")) to avoid drawing the box twice per frame.
-    const onWindowMove = (e: MouseEvent) =>
-      preview(pointFromClient(e.clientX, e.clientY), e.shiftKey);
+    const onWindowMove = (e: MouseEvent) => {
+      // Coalesce to one redraw per frame: setData re-parses the GeoJSON and
+      // schedules a repaint, which is wasteful on fast pointer motion.
+      pendingMove = { x: e.clientX, y: e.clientY, shiftKey: e.shiftKey };
+      if (!moveRaf) {
+        moveRaf = requestAnimationFrame(() => {
+          moveRaf = 0;
+          if (pendingMove)
+            preview(
+              pointFromClient(pendingMove.x, pendingMove.y),
+              pendingMove.shiftKey,
+            );
+        });
+      }
+    };
     const onWindowUp = (e: MouseEvent) => {
       if (e.button !== 0) return;
       commit(pointFromClient(e.clientX, e.clientY), e.shiftKey);
@@ -241,7 +255,6 @@ export function drawPrintExtent(
     };
 
     map.on("mousedown", onDown);
-    map.on("mouseup", onUp);
     window.addEventListener("mousemove", onWindowMove);
     window.addEventListener("mouseup", onWindowUp);
     window.addEventListener("keydown", onKey);
