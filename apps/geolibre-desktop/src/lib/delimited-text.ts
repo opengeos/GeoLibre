@@ -244,12 +244,17 @@ export function parseCoordinate(value: string | undefined): number {
   return Number(normalized);
 }
 
-/** Header names that, case-insensitively, identify a longitude column. */
+/**
+ * Header names that, case-insensitively, identify a longitude column when
+ * auto-detecting coordinates. `"long"` is deliberately excluded here: it is a
+ * common non-geographic column name (e.g. a length field), and a false match
+ * would silently build wrong points. The Add Data dialog still offers it as a
+ * manual option where the user confirms the column.
+ */
 export const LONGITUDE_FIELD_CANDIDATES = [
   "longitude",
   "lon",
   "lng",
-  "long",
   "x",
   "xcoord",
   "x_coord",

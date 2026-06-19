@@ -287,11 +287,15 @@ function parseDelimitedTextFile(text: string, path: string): FeatureCollection {
       latitudeField: coordinateFields.latitudeField,
     }).data;
   } catch (error) {
-    // The columns matched a coordinate name but held no valid lon/lat values
-    // (e.g. projected x/y). Point the user at the dialog instead of surfacing
-    // the lower-level "no valid coordinates" message.
     const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(`${detail} ${pickColumns}`);
+    // Only the "no valid coordinates" failure points to the wrong columns
+    // (e.g. the auto-detected columns are actually projected x/y); append the
+    // column-picker hint just for that case. Other errors (e.g. a header with
+    // no data rows) are already self-explanatory, so surface them unchanged.
+    const isCoordinateError = detail.includes(
+      "No rows contained valid longitude and latitude",
+    );
+    throw new Error(isCoordinateError ? `${detail} ${pickColumns}` : detail);
   }
 }
 
