@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  detectCoordinateFields,
+  detectDelimitedTextDelimiter,
+  parseCoordinate,
   parseDelimitedTextFields,
   parseDelimitedTextLayer,
 } from "../apps/geolibre-desktop/src/lib/delimited-text";
@@ -72,6 +75,78 @@ describe("delimited text parsing", () => {
         }),
       /No rows contained valid longitude and latitude values/,
     );
+  });
+
+  it("accepts comma decimal separators for coordinates", () => {
+    const result = parseDelimitedTextLayer(
+      ["name;longitude;latitude", "Amsterdam;4,90;52,37"].join("\n"),
+      {
+        delimiter: ";",
+        longitudeField: "longitude",
+        latitudeField: "latitude",
+      },
+    );
+
+    assert.equal(result.data.features.length, 1);
+    assert.deepEqual(result.data.features[0].geometry.coordinates, [4.9, 52.37]);
+  });
+});
+
+describe("parseCoordinate", () => {
+  it("parses dot and comma decimals identically", () => {
+    assert.equal(parseCoordinate("-78.638"), -78.638);
+    assert.equal(parseCoordinate("-78,638"), -78.638);
+  });
+
+  it("treats the right-most separator as the decimal point", () => {
+    assert.equal(parseCoordinate("1.234,56"), 1234.56);
+    assert.equal(parseCoordinate("1,234.56"), 1234.56);
+  });
+
+  it("treats a lone separator as the decimal point", () => {
+    assert.equal(parseCoordinate("1,234"), 1.234);
+    assert.equal(parseCoordinate("1.234"), 1.234);
+  });
+
+  it("returns NaN for empty or unparsable values", () => {
+    assert.ok(Number.isNaN(parseCoordinate("")));
+    assert.ok(Number.isNaN(parseCoordinate(undefined)));
+    assert.ok(Number.isNaN(parseCoordinate("not-a-number")));
+  });
+});
+
+describe("delimited text auto-detection", () => {
+  it("detects the delimiter that yields the most columns", () => {
+    assert.equal(detectDelimitedTextDelimiter("a;b;c\n1;2;3"), ";");
+    assert.equal(detectDelimitedTextDelimiter("a\tb\tc\n1\t2\t3"), "\t");
+    assert.equal(detectDelimitedTextDelimiter("a,b,c\n1,2,3"), ",");
+    assert.equal(detectDelimitedTextDelimiter("a|b|c\n1|2|3"), "|");
+  });
+
+  it("falls back to a comma for single-column files", () => {
+    assert.equal(detectDelimitedTextDelimiter("name\nAlice\nBob"), ",");
+  });
+
+  it("matches common longitude/latitude column names", () => {
+    assert.deepEqual(detectCoordinateFields(["name", "Lon", "Lat"]), {
+      longitudeField: "Lon",
+      latitudeField: "Lat",
+    });
+    assert.deepEqual(detectCoordinateFields(["X", "Y", "value"]), {
+      longitudeField: "X",
+      latitudeField: "Y",
+    });
+  });
+
+  it("prefers a specific name over a generic one regardless of order", () => {
+    assert.deepEqual(detectCoordinateFields(["x", "y", "longitude", "latitude"]), {
+      longitudeField: "longitude",
+      latitudeField: "latitude",
+    });
+  });
+
+  it("returns null when coordinate columns are missing", () => {
+    assert.equal(detectCoordinateFields(["name", "value", "category"]), null);
   });
 });
 

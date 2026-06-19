@@ -83,8 +83,6 @@
     },
     "project": {
       "title": "Project",
-      "description": "Instellingen worden opgeslagen met het `.geolibre.json`-project.",
-      "name": "Naam",
       "file": "Projectbestand",
       "notSaved": "Niet opgeslagen",
       "format": "Projectformaat"

@@ -346,9 +346,12 @@ export function GeocodeDialog({
                 </option>
               ))}
             </Select>
-            <p className="text-xs text-muted-foreground">
-              {t("geocode.providerHint")}
-            </p>
+            {/* `config.apiKey` check avoids doubling up with the amber missing-key warning below */}
+            {geocoderNeedsApiKey(config) && !!config.apiKey ? (
+              <p className="text-xs text-muted-foreground">
+                {t("geocode.providerHint")}
+              </p>
+            ) : null}
           </div>
 
           {missingApiKey ? (

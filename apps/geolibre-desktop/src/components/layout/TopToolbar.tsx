@@ -22,6 +22,7 @@ import {
   openThreeDTilesLayerPanel,
   openVectorLayerPanel,
   openZarrLayerPanel,
+  setBasemapControlLabels,
   setReverseGeocodeLabels,
   DECK_VIZ_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
@@ -159,6 +160,10 @@ export function TopToolbar({
       noAddress: t("geocode.reverseNoAddress"),
       copyAddress: t("geocode.reverseCopyAddress"),
       failed: t("geocode.reverseFailed"),
+    });
+    setBasemapControlLabels({
+      confirmStyleReplace: (name, count) =>
+        t("basemaps.confirmStyleReplace", { name, count }),
     });
   }, [t]);
 

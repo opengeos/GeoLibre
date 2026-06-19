@@ -12,6 +12,14 @@ export interface DelimitedTextLayerResult {
   totalRows: number;
 }
 
+/**
+ * Thrown by {@link parseDelimitedTextLayer} when the chosen columns parse but no
+ * row holds a valid WGS84 coordinate. Exported so callers can recognize this
+ * specific failure without matching a duplicated literal string.
+ */
+export const NO_VALID_COORDINATES_MESSAGE =
+  "No rows contained valid longitude and latitude values.";
+
 export function parseDelimitedTextFields(
   text: string,
   delimiter: string,
@@ -63,8 +71,8 @@ export function parseDelimitedTextLayer(
   const features: Feature<Point, GeoJsonProperties>[] = [];
 
   for (const row of rows.slice(1)) {
-    const latitude = Number(row[latitudeIndex]);
-    const longitude = Number(row[longitudeIndex]);
+    const latitude = parseCoordinate(row[latitudeIndex]);
+    const longitude = parseCoordinate(row[longitudeIndex]);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       skippedRows += 1;
       continue;
@@ -90,7 +98,7 @@ export function parseDelimitedTextLayer(
   }
 
   if (features.length === 0) {
-    throw new Error("No rows contained valid longitude and latitude values.");
+    throw new Error(NO_VALID_COORDINATES_MESSAGE);
   }
 
   return {
@@ -213,4 +221,119 @@ function findFieldIndex(fields: string[], fieldName: string): number {
   return fields.findIndex(
     (field) => field.trim().toLowerCase() === normalizedFieldName,
   );
+}
+
+/**
+ * Parses a coordinate string to a number, accepting a comma as the decimal
+ * separator in addition to a dot. Many locales (e.g. most of Europe) write
+ * `4,35` for `4.35`, and JavaScript's `Number()` returns `NaN` for those, so
+ * delimited files exported under such locales would otherwise drop every row.
+ *
+ * When both `,` and `.` appear, the right-most one is treated as the decimal
+ * separator and the other as a thousands grouping separator (which is removed).
+ * When only one appears, it is treated as the decimal separator (so `"1,234"`
+ * parses to `1.234`); this is unambiguous for WGS84 coordinates, where a
+ * thousands grouping never occurs within the valid +/-180 range.
+ *
+ * @param value - The raw coordinate field (may include surrounding whitespace).
+ * @returns The parsed number, or `NaN` when the value is empty or unparsable.
+ */
+export function parseCoordinate(value: string | undefined): number {
+  const trimmed = (value ?? "").trim();
+  if (!trimmed) return Number.NaN;
+
+  const lastComma = trimmed.lastIndexOf(",");
+  const lastDot = trimmed.lastIndexOf(".");
+  if (lastComma < 0 && lastDot < 0) return Number(trimmed);
+
+  const decimalSeparator = lastComma > lastDot ? "," : ".";
+  const groupingSeparator = decimalSeparator === "," ? "." : ",";
+  const normalized = trimmed
+    .split(groupingSeparator)
+    .join("")
+    .replaceAll(decimalSeparator, ".");
+  return Number(normalized);
+}
+
+/**
+ * Header names that, case-insensitively, identify a longitude column when
+ * auto-detecting coordinates. `"long"` is deliberately excluded here: it is a
+ * common non-geographic column name (e.g. a length field), and a false match
+ * would silently build wrong points. The Add Data dialog still offers it as a
+ * manual option where the user confirms the column.
+ */
+export const LONGITUDE_FIELD_CANDIDATES = [
+  "longitude",
+  "lon",
+  "lng",
+  "x",
+  "xcoord",
+  "x_coord",
+];
+
+/** Header names that, case-insensitively, identify a latitude column. */
+export const LATITUDE_FIELD_CANDIDATES = [
+  "latitude",
+  "lat",
+  "y",
+  "ycoord",
+  "y_coord",
+];
+
+/** Delimiters tried, in order, when auto-detecting a delimited file's format. */
+export const DELIMITER_CANDIDATES = [",", "\t", ";", "|"];
+
+/**
+ * Guesses the field delimiter of a delimited text file by parsing its header
+ * row with each candidate delimiter and keeping the one that yields the most
+ * columns. Quoting is respected, so a quoted field containing a delimiter does
+ * not skew the guess.
+ *
+ * @param text - The delimited text, optionally starting with a BOM.
+ * @returns The detected delimiter; defaults to a comma when none stands out.
+ */
+export function detectDelimitedTextDelimiter(text: string): string {
+  const header = text.replace(/^\uFEFF/, "").split(/\r?\n/, 1)[0] ?? "";
+  let best = ",";
+  let bestCount = 0;
+  for (const delimiter of DELIMITER_CANDIDATES) {
+    try {
+      const fields = parseDelimitedTextFields(header, delimiter).filter(
+        (field) => field.trim().length > 0,
+      );
+      if (fields.length > bestCount) {
+        bestCount = fields.length;
+        best = delimiter;
+      }
+    } catch {
+      // No usable header for this delimiter; try the next candidate.
+    }
+  }
+  return best;
+}
+
+/**
+ * Picks the longitude and latitude columns from a list of header names using
+ * the well-known coordinate column names. Returns `null` when either cannot be
+ * found, so callers can fall back to asking the user instead of guessing.
+ *
+ * @param fields - The header column names.
+ * @returns The matched longitude/latitude field names, or `null`.
+ */
+export function detectCoordinateFields(
+  fields: string[],
+): { longitudeField: string; latitudeField: string } | null {
+  // Match in candidate-priority order so a more specific name (e.g.
+  // "longitude") wins over a generic one (e.g. "x") regardless of column order.
+  const match = (candidates: string[]) => {
+    for (const candidate of candidates) {
+      const field = fields.find((f) => f.trim().toLowerCase() === candidate);
+      if (field) return field;
+    }
+    return undefined;
+  };
+  const longitudeField = match(LONGITUDE_FIELD_CANDIDATES);
+  const latitudeField = match(LATITUDE_FIELD_CANDIDATES);
+  if (!longitudeField || !latitudeField) return null;
+  return { longitudeField, latitudeField };
 }

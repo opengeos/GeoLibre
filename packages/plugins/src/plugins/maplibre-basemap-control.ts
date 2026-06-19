@@ -15,6 +15,35 @@ import type {
 
 let basemapControlPosition: GeoLibreMapControlPosition = "top-left";
 
+/**
+ * User-facing strings the panel cannot translate itself. Defaults are English;
+ * the desktop shell pushes translated values via {@link setBasemapControlLabels}
+ * since this package is framework-agnostic and has no direct access to
+ * react-i18next.
+ */
+export interface BasemapControlLabels {
+  /**
+   * Builds the confirmation shown before a style basemap replaces the stacked
+   * raster basemaps, given the style basemap name and how many will be removed
+   * (always at least one).
+   */
+  confirmStyleReplace: (basemapName: string, count: number) => string;
+}
+
+let labels: BasemapControlLabels = {
+  confirmStyleReplace: (basemapName, count) =>
+    count === 1
+      ? `Switching to "${basemapName}" replaces the whole map style and will remove the stacked basemap you added. Continue?`
+      : `Switching to "${basemapName}" replaces the whole map style and will remove the ${count} stacked basemaps you added. Continue?`,
+};
+
+/** Override the panel strings (called from the app layer with translated text). */
+export function setBasemapControlLabels(
+  next: Partial<BasemapControlLabels>,
+): void {
+  labels = { ...labels, ...next };
+}
+
 let basemapControl: BasemapControl | null = null;
 // GeoLibre layer ids of registered raster basemaps, keyed by basemap id. In
 // multiple mode several raster basemaps can be registered at once.
@@ -82,6 +111,20 @@ function getBasemapControlOptions(
     collapsed: false,
     position: basemapControlPosition,
     title: "Basemaps",
+    // A style basemap (e.g. OpenFreeMap 3D) swaps the whole map style and so
+    // discards every stacked raster basemap. In stack mode that silently wiped
+    // a carefully assembled stack, so confirm before the rasters are lost. See
+    // issue #551.
+    confirmStyleReplace: ({ basemap, replacedBasemapIds }) => {
+      const count = replacedBasemapIds.length;
+      // Nothing stacked to lose: never prompt (and avoids a "remove 0" message).
+      if (count === 0) return true;
+      // Native dialog, matching the existing window.confirm usage in the shell.
+      // In a sandboxed cross-origin iframe (e.g. the Jupyter embed) confirm is
+      // suppressed and returns false, so the switch is simply blocked there.
+      // That fails safe: the stacked basemaps are kept and nothing is lost.
+      return window.confirm(labels.confirmStyleReplace(basemap.name, count));
+    },
   };
 }
 

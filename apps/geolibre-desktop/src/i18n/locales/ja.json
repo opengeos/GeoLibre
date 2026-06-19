@@ -82,8 +82,6 @@
     },
     "project": {
       "title": "プロジェクト",
-      "description": "設定は `.geolibre.json` プロジェクトとともに保存されます。",
-      "name": "名前",
       "file": "プロジェクトファイル",
       "notSaved": "未保存",
       "format": "プロジェクト形式"

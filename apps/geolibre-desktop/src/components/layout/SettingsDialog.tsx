@@ -79,6 +79,7 @@ import {
   activeInterfaceProfile,
   isMenuItemVisible,
   presetHiddenSets,
+  showsAdvancedNotices,
 } from "../../lib/ui-profile";
 
 type SettingsSection =
@@ -126,6 +127,16 @@ const SECTION_ITEMS: Array<{
   },
   { id: "project", labelKey: "settings.section.project", icon: FolderCog },
 ];
+
+// The menu-item id that gates each Settings section, mirroring the dropdown.
+// Sections without an entry (Layout, Interface) always show so the profile UI
+// stays reachable.
+const SECTION_GATE: Partial<Record<SettingsSection, string>> = {
+  map: "settings.mapPreferences",
+  geocoding: "settings.geocoding",
+  environment: "settings.environment",
+  project: "settings.projectSettings",
+};
 
 const VARIABLE_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -299,17 +310,25 @@ export function SettingsDialog({
   // reachable.
   const showSettingsItem = (id: string) =>
     isMenuItemVisible(desktopSettings.uiProfile, id);
-  const projectName = useAppStore((s) => s.projectName);
   const projectPath = useAppStore((s) => s.projectPath);
-  const setProjectName = useAppStore((s) => s.setProjectName);
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<SettingsSection>("map");
+  // A gated section is dropped from the nav, but `section` can still point at one
+  // (its initial value is "map"), so render the first visible section instead to
+  // never expose gated content to a restricted profile.
+  const isSectionVisible = (id: SettingsSection) => {
+    const gate = SECTION_GATE[id];
+    return gate ? showSettingsItem(gate) : true;
+  };
+  const effectiveSection: SettingsSection = isSectionVisible(section)
+    ? section
+    : // "interface" has no gate, so it is always a valid, visible fallback.
+      (SECTION_ITEMS.find((item) => isSectionVisible(item.id))?.id ?? "interface");
   const [draftPreferences, setDraftPreferences] = useState<DraftPreferences>(
     () => clonePreferences(preferences),
   );
   const [draftDesktopSettings, setDraftDesktopSettings] =
     useState<DraftDesktopSettings>(() => cloneDesktopSettings(desktopSettings));
-  const [draftProjectName, setDraftProjectName] = useState(projectName);
   const [error, setError] = useState<string | null>(null);
   // Live map projection, captured when the dialog opens. The Globe projection
   // lets the map drift slightly past restricted bounds, so we warn users to
@@ -331,8 +350,8 @@ export function SettingsDialog({
   );
 
   // Seed the draft from the store only when the dialog opens. Depending on
-  // preferences/projectName would reset in-progress edits if the store changed
-  // while the dialog is open (e.g. a slow ?url= project finishes loading).
+  // preferences would reset in-progress edits if the store changed while the
+  // dialog is open (e.g. a slow ?url= project finishes loading).
   useEffect(() => {
     if (!open) {
       // Clear so the stale projection can't flash the Globe hint for a frame
@@ -344,7 +363,6 @@ export function SettingsDialog({
     setDraftDesktopSettings(
       cloneDesktopSettings(useDesktopSettingsStore.getState().desktopSettings),
     );
-    setDraftProjectName(useAppStore.getState().projectName);
     setRevealedValueIds(new Set());
     setError(null);
     setLiveProjection(mapControllerRef.current?.readProjection() ?? null);
@@ -631,8 +649,6 @@ export function SettingsDialog({
       return;
     }
 
-    const nextProjectName = draftProjectName.trim() || "Untitled Project";
-    if (nextProjectName !== projectName) setProjectName(nextProjectName);
     setPreferences(normalized);
     // When a level preset is still active, recompute its hidden lists from the
     // current plugin registry at save time. The draft was snapshotted when the
@@ -669,7 +685,7 @@ export function SettingsDialog({
         className="justify-start"
         size="sm"
         type="button"
-        variant={section === item.id ? "secondary" : "ghost"}
+        variant={effectiveSection === item.id ? "secondary" : "ghost"}
         onClick={() => {
           setSection(item.id);
           setError(null);
@@ -897,10 +913,12 @@ export function SettingsDialog({
           </DialogHeader>
           <div className="grid min-h-0 grid-cols-1 md:grid-cols-[12rem_1fr]">
             <nav className="flex gap-1 border-b p-3 md:flex-col md:border-b-0 md:border-r">
-              {SECTION_ITEMS.map(renderSectionButton)}
+              {SECTION_ITEMS.filter((item) => isSectionVisible(item.id)).map(
+                renderSectionButton,
+              )}
             </nav>
             <div className="min-h-0 overflow-y-auto p-6">
-              {section === "map" ? (
+              {effectiveSection === "map" ? (
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -1050,7 +1068,7 @@ export function SettingsDialog({
                   </label>
                 </div>
               ) : null}
-              {section === "layout" ? (
+              {effectiveSection === "layout" ? (
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -1137,12 +1155,14 @@ export function SettingsDialog({
                       <span>{t("settings.layout.showStylePanel")}</span>
                     </label>
                   </div>
-                  <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
-                    {t("settings.layout.urlParamsNote")}
-                  </div>
+                  {showsAdvancedNotices(desktopSettings.uiProfile) ? (
+                    <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+                      {t("settings.layout.urlParamsNote")}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
-              {section === "interface" ? (
+              {effectiveSection === "interface" ? (
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -1349,7 +1369,7 @@ export function SettingsDialog({
                   ))}
                 </div>
               ) : null}
-              {section === "geocoding" ? (
+              {effectiveSection === "geocoding" ? (
                 <div className="space-y-5">
                   <div className="space-y-1">
                     <h3 className="text-sm font-semibold">
@@ -1511,7 +1531,7 @@ export function SettingsDialog({
                   })()}
                 </div>
               ) : null}
-              {section === "environment" ? (
+              {effectiveSection === "environment" ? (
                 <div className="space-y-5">
                   <div className="space-y-2">
                     <h3 className="text-sm font-semibold">
@@ -1666,7 +1686,7 @@ export function SettingsDialog({
                   )}
                 </div>
               ) : null}
-              {section === "project" ? (
+              {effectiveSection === "project" ? (
                 <div className="space-y-5">
                   <div>
                     <h3 className="text-sm font-semibold">
@@ -1675,18 +1695,6 @@ export function SettingsDialog({
                     <p className="text-xs text-muted-foreground">
                       {t("settings.project.description")}
                     </p>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="settings-project-name">
-                      {t("settings.project.name")}
-                    </Label>
-                    <Input
-                      id="settings-project-name"
-                      value={draftProjectName}
-                      onChange={(event) =>
-                        setDraftProjectName(event.target.value)
-                      }
-                    />
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1.5">

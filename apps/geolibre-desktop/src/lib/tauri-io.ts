@@ -11,7 +11,14 @@ import {
 import { unzip } from "fflate";
 import type { FeatureCollection } from "geojson";
 import shp from "shpjs";
-import { parseDelimitedTextFields } from "./delimited-text";
+import {
+  DELIMITER_CANDIDATES,
+  NO_VALID_COORDINATES_MESSAGE,
+  detectCoordinateFields,
+  detectDelimitedTextDelimiter,
+  parseDelimitedTextFields,
+  parseDelimitedTextLayer,
+} from "./delimited-text";
 import type { DuckDbVectorFile } from "./duckdb-vector-loader";
 import type { DuckDbVectorLoadOptions } from "./duckdb-vector-guard";
 import { parseGpxLayer } from "./gpx";
@@ -240,6 +247,58 @@ function parseGpxTextLayers(text: string, path: string): LoadedVectorLayer[] {
     }));
 }
 
+/** Delimited text formats the drag-and-drop / open path loads as points. */
+const DELIMITED_TEXT_DROP_EXTENSIONS = ["csv", "tsv"];
+
+/** Whether a filename looks like a delimited text table (CSV/TSV). */
+function isDelimitedTextFileName(path: string): boolean {
+  return DELIMITED_TEXT_DROP_EXTENSIONS.includes(fileExtension(path));
+}
+
+/**
+ * Parses dropped/opened delimited text into a point FeatureCollection by
+ * auto-detecting the delimiter and the longitude/latitude columns.
+ *
+ * Returns `null` when no longitude/latitude columns can be identified, so the
+ * caller can fall back to the DuckDB path and still load spatial CSV variants
+ * (e.g. a CSV with a WKT geometry column). Throws a helpful error (pointing at
+ * the Add Data dialog) when the file is empty or the auto-detected columns hold
+ * no usable WGS84 coordinates (e.g. a CSV whose `x`/`y` columns are projected).
+ */
+function parseDelimitedTextFile(
+  text: string,
+  path: string,
+): FeatureCollection | null {
+  const name = browserSafeFileName(path);
+  const pickColumns = `Use Add Data → Delimited Text to choose the coordinate columns for ${name}.`;
+  const delimiter = detectDelimitedTextDelimiter(text);
+  // Detect the coordinate columns from the header slice only;
+  // parseDelimitedTextLayer re-reads the header internally, so parsing the
+  // whole file here just to recover the column names would double the work.
+  const headerLine = text.replace(/^\uFEFF/, "").split(/\r?\n/, 1)[0] ?? "";
+  if (!headerLine.trim()) {
+    throw new Error(`${name} appears to be empty. ${pickColumns}`);
+  }
+  const fields = parseDelimitedTextFields(headerLine, delimiter);
+  const coordinateFields = detectCoordinateFields(fields);
+  if (!coordinateFields) return null;
+  try {
+    return parseDelimitedTextLayer(text, {
+      delimiter,
+      longitudeField: coordinateFields.longitudeField,
+      latitudeField: coordinateFields.latitudeField,
+    }).data;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    // Only the "no valid coordinates" failure points to the wrong columns
+    // (e.g. the auto-detected columns are actually projected x/y); append the
+    // column-picker hint just for that case. Other errors (e.g. a header with
+    // no data rows) are already self-explanatory, so surface them unchanged.
+    const isCoordinateError = detail === NO_VALID_COORDINATES_MESSAGE;
+    throw new Error(isCoordinateError ? `${detail} ${pickColumns}` : detail);
+  }
+}
+
 async function parseShapefileZip(
   data: ArrayBuffer | Uint8Array,
 ): Promise<FeatureCollection> {
@@ -424,6 +483,15 @@ async function loadBrowserVectorFile(
     };
   }
 
+  if (isDelimitedTextFileName(file.name)) {
+    const points = parseDelimitedTextFile(await file.text(), file.name);
+    // No lon/lat columns: fall through to DuckDB so spatial CSV variants
+    // (e.g. a WKT geometry column) still load.
+    if (points) {
+      return { data: points, path: file.name };
+    }
+  }
+
   return {
     data: await loadDuckDbVector(
       {
@@ -541,6 +609,15 @@ async function loadTauriVectorFile(
     } catch (error) {
       const detail = error instanceof Error ? error.message : "Unknown error";
       throw new Error(`Could not read this GPX file. ${detail}`);
+    }
+  }
+
+  if (isDelimitedTextFileName(path)) {
+    const points = parseDelimitedTextFile(await readTextFile(path), path);
+    // No lon/lat columns: fall through to DuckDB so spatial CSV variants
+    // (e.g. a WKT geometry column) still load.
+    if (points) {
+      return { data: points, path };
     }
   }
 
@@ -1230,11 +1307,13 @@ export function parseCsvHeaderLine(line: string): string[] {
   const header = line.replace(/^﻿/, "").replace(/[\r\n]+$/, "");
   if (!header) return [];
   // Reuse the project's quote-aware delimited-text parser for each candidate
-  // delimiter (comma, tab, semicolon) and keep the one that yields the most
-  // columns. Quoting is respected, so a quoted field containing the delimiter
-  // (e.g. "city,state") neither skews detection nor splits the header.
+  // delimiter and keep the one that yields the most columns. The candidate set
+  // is shared with the drag-and-drop loader so both detect the same formats
+  // (comma, tab, semicolon, pipe). Quoting is respected, so a quoted field
+  // containing the delimiter (e.g. "city,state") neither skews detection nor
+  // splits the header.
   let best: string[] = [];
-  for (const delimiter of [",", "\t", ";"]) {
+  for (const delimiter of DELIMITER_CANDIDATES) {
     try {
       const fields = parseDelimitedTextFields(header, delimiter).filter(
         (name) => name.trim().length > 0,
