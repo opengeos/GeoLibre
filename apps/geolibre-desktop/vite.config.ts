@@ -792,9 +792,12 @@ export default defineConfig({
       "@electric-sql/pglite",
       "@electric-sql/pglite-postgis",
       "@cereusdb/standard",
-      // whitebox-wasm/tools loads its bundled whitebox-cli.wasm via
-      // `new URL("./whitebox-cli.wasm", import.meta.url)`; esbuild pre-bundling
-      // mangles that asset reference, so serve it as-is.
+      // geolibre-wasm/tools loads its bundled geolibre-cli.wasm via
+      // `new URL("./geolibre-cli.wasm", import.meta.url)`; esbuild pre-bundling
+      // mangles that asset reference, so serve it as-is. whitebox-wasm is still
+      // pulled in transitively (cog-tiler-wasm's peer dependency) and loads its
+      // wasm-bindgen asset the same way, so keep it excluded too.
+      "geolibre-wasm",
       "whitebox-wasm",
       // cog-tiler-wasm (the lazy CPU/WASM raster tiler) loads its
       // cog_tiler_wasm_bg.wasm the same wasm-bindgen way; esbuild pre-bundling
