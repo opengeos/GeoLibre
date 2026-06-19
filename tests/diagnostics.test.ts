@@ -302,4 +302,25 @@ describe("diagnostics startup transient suppression", () => {
       setCaptureNetworkInfo(false);
     }
   });
+
+  it("treats init.headers as replacing a Request's optional marker", async () => {
+    win.fetch = (() =>
+      Promise.resolve(
+        new Response(null, { status: 404, statusText: "Not Found" }),
+      )) as unknown as typeof fetch;
+    install();
+    // The Request carries the optional marker, but init.headers replaces the
+    // Request's headers entirely (fetch spec), dropping it — so the 404 is a
+    // real error.
+    await (win.fetch as typeof fetch)(
+      new Request("http://localhost/admin-profile.json", {
+        headers: { [OPTIONAL_RESOURCE_HEADER]: "1" },
+      }),
+      { headers: {} },
+    );
+    const [record] = getDiagnosticsSnapshot().records;
+    assert.equal(record.category, "network");
+    assert.equal(record.level, "error");
+    assert.equal(getDiagnosticsSnapshot().errorCount, 1);
+  });
 });

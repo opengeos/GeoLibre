@@ -90,7 +90,13 @@ function isOptionalResourceRequest(
   input: Parameters<typeof fetch>[0],
   init: Parameters<typeof fetch>[1],
 ): boolean {
-  if (readHeader(init?.headers, OPTIONAL_RESOURCE_HEADER) != null) return true;
+  // Per the fetch spec, when init.headers is provided it replaces a Request
+  // input's headers entirely, so only fall back to the Request's own headers
+  // when init omits them — otherwise an init that drops the marker would still
+  // be treated as optional.
+  if (init?.headers !== undefined) {
+    return readHeader(init.headers, OPTIONAL_RESOURCE_HEADER) != null;
+  }
   return (
     input instanceof Request &&
     input.headers.get(OPTIONAL_RESOURCE_HEADER) != null

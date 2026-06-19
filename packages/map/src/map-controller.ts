@@ -1589,6 +1589,14 @@ export class MapController {
       this.fullscreenControl,
       this.controlPositions.fullscreen,
     );
+    // Re-stack the reset control immediately after fullscreen so it stays
+    // directly below it when fullscreen is repositioned (MapLibre orders
+    // controls by insertion within a corner). Skipped on first init, when the
+    // reset control has not been created yet (it is added just after).
+    if (this.resetBearingControl) {
+      this.removeResetBearingControl();
+      this.addResetBearingControl();
+    }
     return true;
   }
 
@@ -1603,8 +1611,12 @@ export class MapController {
     this.resetBearingControl = new ResetBearingControl({
       label: this.resetBearingLabel,
     });
-    // Always top-right so it sits with (and just under) the fullscreen toggle.
-    this.map.addControl(this.resetBearingControl, "top-right");
+    // Share the fullscreen control's corner so it sits just under the toggle,
+    // tracking it if fullscreen is repositioned.
+    this.map.addControl(
+      this.resetBearingControl,
+      this.controlPositions.fullscreen,
+    );
     return true;
   }
 
