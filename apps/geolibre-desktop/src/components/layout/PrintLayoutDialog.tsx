@@ -392,8 +392,10 @@ export function PrintLayoutDialog({
       const newZoom = map.getZoom() + Math.log2(currentRatio / targetRatio);
       map.setZoom(Math.max(0, Math.min(24, newZoom)));
       // Recapture once the map is idle, so tiles for the new zoom have finished
-      // loading and the snapshot is not blurry/blank mid-fetch.
-      map.once("idle", () => recapture());
+      // loading and the snapshot is not blurry/blank mid-fetch. applyScale only
+      // runs in viewport mode, so pin the recapture to a null clip rather than
+      // reading the (possibly changed) mode if the user toggles while tiles load.
+      map.once("idle", () => recapture(null));
     },
     [mapControllerRef, captureMode, currentRatio, recapture],
   );
@@ -763,26 +765,31 @@ export function PrintLayoutDialog({
               </Button>
               {extentBbox && (
                 <div className="space-y-1.5 pt-1">
-                  <label className="flex cursor-pointer items-center gap-2 text-sm">
-                    <input
-                      type="radio"
-                      name="capture-mode"
-                      className="h-4 w-4 accent-primary"
-                      checked={captureMode === "viewport"}
-                      onChange={() => setMode("viewport")}
-                    />
-                    {t("printLayout.extent.useViewport")}
-                  </label>
-                  <label className="flex cursor-pointer items-center gap-2 text-sm">
-                    <input
-                      type="radio"
-                      name="capture-mode"
-                      className="h-4 w-4 accent-primary"
-                      checked={captureMode === "extent"}
-                      onChange={() => setMode("extent")}
-                    />
-                    {t("printLayout.extent.useCustom")}
-                  </label>
+                  <fieldset className="m-0 space-y-1.5 border-0 p-0">
+                    <legend className="sr-only">
+                      {t("printLayout.extent.label")}
+                    </legend>
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
+                      <input
+                        type="radio"
+                        name="capture-mode"
+                        className="h-4 w-4 accent-primary"
+                        checked={captureMode === "viewport"}
+                        onChange={() => setMode("viewport")}
+                      />
+                      {t("printLayout.extent.useViewport")}
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
+                      <input
+                        type="radio"
+                        name="capture-mode"
+                        className="h-4 w-4 accent-primary"
+                        checked={captureMode === "extent"}
+                        onChange={() => setMode("extent")}
+                      />
+                      {t("printLayout.extent.useCustom")}
+                    </label>
+                  </fieldset>
                   <Button
                     variant="ghost"
                     size="sm"

@@ -188,6 +188,10 @@ export function drawPrintExtent(
       // Normalize to [-180, 180): map.unproject can return out-of-range
       // longitudes on world-copy maps (e.g. centred near the antimeridian),
       // which would otherwise make Math.min/max yield a near-world-wide bbox.
+      // Note: a box that itself *crosses* the antimeridian is not supported (an
+      // axis-aligned [w,s,e,n] can't express the wrap); such a drag yields a
+      // wide bbox. Acceptable for now given how niche printing across the date
+      // line is.
       const lng1 = normalizeLng(p1.lng);
       const lng2 = normalizeLng(p2.lng);
       return [
@@ -240,6 +244,11 @@ export function drawPrintExtent(
       // leave the drag half-started.
       if (e.originalEvent.button !== 0) return;
       start = pointFromClient(e.originalEvent.clientX, e.originalEvent.clientY);
+      // Attach the move/up tracking only now, on a confirmed press on the map.
+      // Registering them up front would let an ambient mouseup elsewhere in the
+      // window (with start still null) cancel the draw before it begins.
+      window.addEventListener("mousemove", onWindowMove);
+      window.addEventListener("mouseup", onWindowUp);
     };
     const onWindowMove = (e: MouseEvent) => {
       // Coalesce to one redraw per frame: setData re-parses the GeoJSON and
@@ -266,9 +275,8 @@ export function drawPrintExtent(
 
     // TODO: mouse-only for now (the print workflow is desktop-centric). Add a
     // touch / pointer-event path for tablets and touchscreens as a follow-up.
+    // The window move/up listeners are attached lazily in onDown.
     map.on("mousedown", onDown);
-    window.addEventListener("mousemove", onWindowMove);
-    window.addEventListener("mouseup", onWindowUp);
     window.addEventListener("keydown", onKey);
     options.signal?.addEventListener("abort", onAbort);
   });
