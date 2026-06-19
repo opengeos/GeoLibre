@@ -127,6 +127,19 @@
   border-top-color: rgba(255, 255, 255, 0.12);
 }
 
+/* Tighten the left sidebar navigation. The default Material/Zensical link
+   margin/padding leaves a lot of vertical air between items; trim it. Section
+   headers keep their own (higher-specificity) spacing rule above. */
+.md-nav--primary .md-nav__item {
+  margin-top: 0.1rem;
+}
+
+.md-nav--primary .md-nav__link {
+  margin-top: 0.1rem;
+  padding-bottom: 0.2rem;
+  padding-top: 0.2rem;
+}
+
 .feature-grid {
   display: grid;
   gap: 1rem;
