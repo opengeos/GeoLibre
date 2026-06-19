@@ -82,6 +82,18 @@ function getBasemapControlOptions(
     collapsed: false,
     position: basemapControlPosition,
     title: "Basemaps",
+    // A style basemap (e.g. OpenFreeMap 3D) swaps the whole map style and so
+    // discards every stacked raster basemap. In stack mode that silently wiped
+    // a carefully assembled stack, so confirm before the rasters are lost. See
+    // issue #551.
+    confirmStyleReplace: ({ basemap, replacedBasemapIds }) => {
+      const count = replacedBasemapIds.length;
+      const message =
+        count === 1
+          ? `Switching to "${basemap.name}" replaces the whole map style and will remove the 1 stacked basemap you added. Continue?`
+          : `Switching to "${basemap.name}" replaces the whole map style and will remove the ${count} stacked basemaps you added. Continue?`;
+      return window.confirm(message);
+    },
   };
 }
 
