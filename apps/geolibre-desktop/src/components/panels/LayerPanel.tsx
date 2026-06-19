@@ -185,7 +185,6 @@ export function LayerPanel({
   onOpenRasterStylePanel,
 }: LayerPanelProps) {
   const { t } = useTranslation();
-  // Gates the developer-facing "Advanced formats" footer below.
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   const layers = useAppStore((s) => s.layers);
   const layerGroups = useAppStore((s) => s.layerGroups);

@@ -320,7 +320,8 @@ export function SettingsDialog({
   };
   const effectiveSection: SettingsSection = isSectionVisible(section)
     ? section
-    : (SECTION_ITEMS.find((item) => isSectionVisible(item.id))?.id ?? section);
+    : // "interface" has no gate, so it is always a valid, visible fallback.
+      (SECTION_ITEMS.find((item) => isSectionVisible(item.id))?.id ?? "interface");
   const [draftPreferences, setDraftPreferences] = useState<DraftPreferences>(
     () => clonePreferences(preferences),
   );

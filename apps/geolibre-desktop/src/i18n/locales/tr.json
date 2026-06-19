@@ -83,7 +83,6 @@
     },
     "project": {
       "title": "Proje",
-      "description": "Ayarlar `.geolibre.json` projesiyle kaydedilir.",
       "file": "Proje dosyası",
       "notSaved": "Kaydedilmedi",
       "format": "Proje biçimi"

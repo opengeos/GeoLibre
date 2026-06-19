@@ -83,7 +83,6 @@
     },
     "project": {
       "title": "Proyecto",
-      "description": "Los ajustes se guardan con el proyecto `.geolibre.json`.",
       "file": "Archivo del proyecto",
       "notSaved": "Sin guardar",
       "format": "Formato del proyecto"

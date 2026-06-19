@@ -82,7 +82,6 @@
     },
     "project": {
       "title": "Proyek",
-      "description": "Pengaturan disimpan bersama proyek `.geolibre.json`.",
       "file": "Berkas proyek",
       "notSaved": "Belum disimpan",
       "format": "Format proyek"

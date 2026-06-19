@@ -83,7 +83,6 @@
     },
     "project": {
       "title": "Projet",
-      "description": "Les paramètres sont enregistrés avec le projet `.geolibre.json`.",
       "file": "Fichier de projet",
       "notSaved": "Non enregistré",
       "format": "Format du projet"
