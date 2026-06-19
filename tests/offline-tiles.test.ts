@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
 import {
   countTiles,
   enumerateTiles,
@@ -7,6 +7,7 @@ import {
   lngLatToTile,
   tileRangeForBbox,
   tileToQuadkey,
+  warmUrls,
   type Bbox,
 } from "../apps/geolibre-desktop/src/lib/offline-tiles";
 
@@ -127,5 +128,64 @@ describe("tileToQuadkey", () => {
 
   it("produces a key of length z", () => {
     assert.equal(tileToQuadkey({ z: 7, x: 10, y: 20 }).length, 7);
+  });
+});
+
+describe("warmUrls", () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  /** A fetch that resolves after `delayMs`, but rejects early if aborted. */
+  function deferredFetch(delayMs: number): typeof fetch {
+    return ((_url: string, init?: { signal?: AbortSignal }) =>
+      new Promise<Response>((resolve, reject) => {
+        const signal = init?.signal;
+        const timer = setTimeout(
+          () => resolve(new Response("ok", { status: 200 })),
+          delayMs,
+        );
+        const onAbort = () => {
+          clearTimeout(timer);
+          reject(new DOMException("aborted", "AbortError"));
+        };
+        if (signal?.aborted) onAbort();
+        else signal?.addEventListener("abort", onAbort);
+      })) as typeof fetch;
+  }
+
+  it("warms every URL when requests succeed", async () => {
+    globalThis.fetch = deferredFetch(0);
+    const result = await warmUrls(["a", "b", "c"], { concurrency: 2 });
+    assert.equal(result.done, 3);
+    assert.equal(result.failed, 0);
+    assert.deepEqual(result.failedUrls, []);
+  });
+
+  it("counts a request exceeding timeoutMs as failed, not a cancel", async () => {
+    // Requests take 1s but the timeout is 10ms, so every one times out.
+    globalThis.fetch = deferredFetch(1000);
+    const result = await warmUrls(["a", "b"], {
+      concurrency: 2,
+      timeoutMs: 10,
+    });
+    assert.equal(result.done, 2);
+    assert.equal(result.failed, 2);
+    assert.deepEqual(result.failedUrls.sort(), ["a", "b"]);
+  });
+
+  it("stops settling new work once the parent signal is aborted", async () => {
+    globalThis.fetch = deferredFetch(1000);
+    const controller = new AbortController();
+    const promise = warmUrls(["a", "b", "c"], {
+      concurrency: 1,
+      signal: controller.signal,
+    });
+    controller.abort();
+    const result = await promise;
+    // An abort short-circuits counting, so nothing is recorded as done/failed.
+    assert.equal(result.done, 0);
+    assert.equal(result.failed, 0);
   });
 });

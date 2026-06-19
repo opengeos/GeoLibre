@@ -8,11 +8,19 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  Input,
   Label,
   Separator,
   Slider,
 } from "@geolibre/ui";
-import { Download, Loader2, RotateCw, WifiOff } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Download,
+  Loader2,
+  RotateCw,
+  WifiOff,
+} from "lucide-react";
 import {
   type Bbox,
   collectOfflineUrls,
@@ -42,6 +50,12 @@ const CACHED_TILE_HOST = /(?:^|\.)(?:openfreemap\.org|cartocdn\.com)$/;
 const AVG_TILE_BYTES = 30 * 1024;
 
 const MAX_EXTRA_LEVELS = 5;
+
+/** Default and bounds for the advanced concurrency control. */
+const DEFAULT_CONCURRENCY = 6;
+const MAX_CONCURRENCY = 8;
+/** Bounds (seconds) for the advanced per-request timeout; 0 means no timeout. */
+const MAX_TIMEOUT_SEC = 120;
 
 /**
  * The basemap service-worker cache cap (geolibre-basemaps maxEntries in
@@ -74,6 +88,12 @@ export function OfflineRegionDialog({
   // Default off, so the dialog starts scoped to the current view's zoom only.
   const [includeExtra, setIncludeExtra] = useState(false);
   const [extraLevels, setExtraLevels] = useState(1);
+  // Advanced network controls (collapsed by default): power users can lower
+  // concurrency to slip past server rate limiting, or raise the per-request
+  // timeout for slow links. See #564.
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [concurrency, setConcurrency] = useState(DEFAULT_CONCURRENCY);
+  const [timeoutSec, setTimeoutSec] = useState(0);
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState<WarmProgress>({
     done: 0,
@@ -144,6 +164,9 @@ export function OfflineRegionDialog({
       setProgress({ done: 0, total: 0, failed: 0, failedUrls: [] });
       setIncludeExtra(false);
       setExtraLevels(1);
+      setShowAdvanced(false);
+      setConcurrency(DEFAULT_CONCURRENCY);
+      setTimeoutSec(0);
     } else {
       abortRef.current?.abort();
     }
@@ -152,11 +175,16 @@ export function OfflineRegionDialog({
   // Abort any in-flight download if the dialog unmounts.
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  // Full (re-)download of the whole region — also serves as "Retry all tiles".
   const handleDownload = useCallback(async () => {
     const map = mapControllerRef.current?.getMap();
     if (!map || !bbox) return;
+    // Abort any in-flight run first so a "Retry all" issued while a previous
+    // batch is settling can't leave two concurrent warmUrls runs racing.
+    abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
+    const timeoutMs = timeoutSec > 0 ? timeoutSec * 1000 : undefined;
     setPhase("running");
     setProgress({ done: 0, total: 0, failed: 0, failedUrls: [] });
     try {
@@ -169,6 +197,8 @@ export function OfflineRegionDialog({
       );
       setProgress({ done: 0, total: urls.length, failed: 0, failedUrls: [] });
       const result = await warmUrls(urls, {
+        concurrency,
+        timeoutMs,
         signal: controller.signal,
         onProgress: setProgress,
       });
@@ -207,7 +237,7 @@ export function OfflineRegionDialog({
       // cancel-then-redownload may have already installed a newer controller.
       if (abortRef.current === controller) abortRef.current = null;
     }
-  }, [mapControllerRef, bbox, baseZoom, maxZoom]);
+  }, [mapControllerRef, bbox, baseZoom, maxZoom, concurrency, timeoutSec]);
 
   // Re-warm only the URLs that failed, so the user can recover a partial
   // download (e.g. after a transient network blip) without re-fetching the
@@ -215,8 +245,10 @@ export function OfflineRegionDialog({
   const handleRetry = useCallback(async () => {
     const failedUrls = progressRef.current.failedUrls;
     if (failedUrls.length === 0) return;
+    abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
+    const timeoutMs = timeoutSec > 0 ? timeoutSec * 1000 : undefined;
     setPhase("running");
     setProgress({
       done: 0,
@@ -226,6 +258,8 @@ export function OfflineRegionDialog({
     });
     try {
       const result = await warmUrls(failedUrls, {
+        concurrency,
+        timeoutMs,
         signal: controller.signal,
         onProgress: setProgress,
       });
@@ -236,7 +270,7 @@ export function OfflineRegionDialog({
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
     }
-  }, []);
+  }, [concurrency, timeoutSec]);
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort();
@@ -245,6 +279,9 @@ export function OfflineRegionDialog({
 
   const percent =
     progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
+  // After a partial download the primary action becomes "Retry all tiles" (a
+  // full re-warm from scratch), shown alongside the targeted "Retry failed".
+  const hasFailures = phase === "done" && progress.failed > 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -314,6 +351,76 @@ export function OfflineRegionDialog({
             </p>
           )}
 
+          <div className="space-y-3">
+            <button
+              type="button"
+              className="flex items-center gap-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+              aria-expanded={showAdvanced}
+              onClick={() => setShowAdvanced((value) => !value)}
+            >
+              {showAdvanced ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+              {t("offline.advanced")}
+            </button>
+
+            {showAdvanced && (
+              <div className="space-y-4 rounded-md border border-border p-3">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>{t("offline.concurrency")}</Label>
+                    <span className="text-sm tabular-nums text-muted-foreground">
+                      {concurrency}
+                    </span>
+                  </div>
+                  <Slider
+                    aria-label={t("offline.concurrency")}
+                    min={1}
+                    max={MAX_CONCURRENCY}
+                    step={1}
+                    value={[concurrency]}
+                    onValueChange={(value: number[]) =>
+                      setConcurrency(value[0])
+                    }
+                    disabled={phase === "running"}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("offline.concurrencyHint")}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="offline-timeout">
+                    {t("offline.timeout")}
+                  </Label>
+                  <Input
+                    id="offline-timeout"
+                    type="number"
+                    min={0}
+                    max={MAX_TIMEOUT_SEC}
+                    value={timeoutSec}
+                    disabled={phase === "running"}
+                    onChange={(event) => {
+                      const next = Math.round(Number(event.target.value));
+                      setTimeoutSec(
+                        Number.isFinite(next)
+                          ? Math.min(MAX_TIMEOUT_SEC, Math.max(0, next))
+                          : 0,
+                      );
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {timeoutSec > 0
+                      ? t("offline.timeoutHint", { seconds: timeoutSec })
+                      : t("offline.timeoutDisabled")}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
           <Separator />
 
           <div className="flex justify-between text-sm">
@@ -371,32 +478,27 @@ export function OfflineRegionDialog({
               {t("common.close")}
             </Button>
           )}
-          {phase === "done" && progress.failed > 0 && (
+          {hasFailures && (
             <Button variant="outline" onClick={handleRetry}>
               <RotateCw className="mr-2 h-4 w-4" />
               {t("offline.retryFailed", { count: progress.failed })}
             </Button>
           )}
           <Button
+            // "Retry all" and "Download" share this handler (a full re-warm);
+            // handleDownload aborts any in-flight run first, so it is safe to
+            // keep enabled even while failures are outstanding.
             onClick={handleDownload}
-            // Disabled while failures are outstanding so the user resolves them
-            // via Retry first. This also removes the race where clicking Retry
-            // then Download in quick succession (before phase flips to
-            // "running") would start two concurrent warmUrls runs and clobber
-            // abortRef. Retry clears the count, re-enabling a full re-download.
-            disabled={
-              phase === "running" ||
-              tileCount === 0 ||
-              !swActive ||
-              (phase === "done" && progress.failed > 0)
-            }
+            disabled={phase === "running" || tileCount === 0 || !swActive}
           >
             {phase === "running" ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : hasFailures ? (
+              <RotateCw className="mr-2 h-4 w-4" />
             ) : (
               <Download className="mr-2 h-4 w-4" />
             )}
-            {t("offline.download")}
+            {hasFailures ? t("offline.retryAll") : t("offline.download")}
           </Button>
         </div>
       </DialogContent>

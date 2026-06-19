@@ -322,7 +322,14 @@
     "complete": "Saved {{done}} of {{total}} tiles.",
     "completeWithFailures": "Saved {{done}} of {{total}} tiles ({{failed}} failed).",
     "retryFailed_one": "Retry {{count}} failed tile",
-    "retryFailed_other": "Retry {{count}} failed tiles"
+    "retryFailed_other": "Retry {{count}} failed tiles",
+    "retryAll": "Retry all tiles",
+    "advanced": "Advanced options",
+    "concurrency": "Concurrent requests",
+    "concurrencyHint": "Lower this to ease off servers that rate-limit rapid tile requests.",
+    "timeout": "Request timeout (seconds)",
+    "timeoutHint": "Each tile request is given up to {{seconds}}s before it counts as failed.",
+    "timeoutDisabled": "No timeout — requests use the browser default. Raise it for slow connections."
   },
   "offlineManager": {
     "title": "Manage Offline Areas",

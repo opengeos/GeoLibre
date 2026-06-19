@@ -313,7 +313,13 @@ export interface WarmProgress {
  *
  * Args:
  *   urls: Absolute URLs to warm.
- *   options.concurrency: Max simultaneous requests (default 6).
+ *   options.concurrency: Max simultaneous requests (default 6). Lowering this
+ *     reduces the network footprint, which can get past aggressive server-side
+ *     rate limiting that otherwise causes tiles to fail.
+ *   options.timeoutMs: Per-request timeout in ms. A request that exceeds it is
+ *     aborted and counted as a failure (so it lands in `failedUrls` and can be
+ *     retried), without cancelling the rest of the run. 0 / undefined disables
+ *     it (the browser default applies). Raising it helps slow connections.
  *   options.signal: Abort signal to cancel in-flight and pending fetches.
  *   options.onProgress: Called after each request settles.
  *
@@ -324,11 +330,21 @@ export async function warmUrls(
   urls: string[],
   options: {
     concurrency?: number;
+    timeoutMs?: number;
     signal?: AbortSignal;
     onProgress?: (progress: WarmProgress) => void;
   } = {},
 ): Promise<WarmProgress> {
-  const { concurrency = 6, signal, onProgress } = options;
+  const { concurrency = 6, timeoutMs, signal, onProgress } = options;
+
+  // Per-request signal: the parent cancel signal combined with a fresh timeout
+  // (one timer per request). A timeout abort leaves the parent signal
+  // un-aborted, so the catch below counts it as a failure rather than a cancel.
+  const requestSignal = (): AbortSignal | undefined => {
+    if (!timeoutMs || timeoutMs <= 0) return signal;
+    const timeout = AbortSignal.timeout(timeoutMs);
+    return signal ? AbortSignal.any([signal, timeout]) : timeout;
+  };
   const progress: WarmProgress = {
     done: 0,
     total: urls.length,
@@ -344,7 +360,10 @@ export async function warmUrls(
       try {
         // CacheFirst means already-cached URLs return instantly; new ones hit
         // the network and are stored by the SW. We discard the body.
-        const res = await fetch(url, { signal, cache: "no-cache" });
+        const res = await fetch(url, {
+          signal: requestSignal(),
+          cache: "no-cache",
+        });
         if (!res.ok) {
           progress.failed++;
           progress.failedUrls.push(url);
