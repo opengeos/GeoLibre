@@ -13,7 +13,11 @@ export {
   type ModelStepResult,
   type RunModelOptions,
 } from "./runner";
-export { NETWORK_TOOLS, getNetworkTool } from "./network-tools";
+export {
+  NETWORK_TOOLS,
+  getNetworkTool,
+  layerToSequencedPoints,
+} from "./network-tools";
 export {
   STATISTICS_TOOLS,
   getStatisticsTool,

@@ -298,7 +298,9 @@ export function decodePolyline(
       result |= (byte & 0x1f) << shift;
       shift += 5;
     } while (byte >= 0x20);
-    lat += result & 1 ? ~(result >> 1) : result >> 1;
+    // Unsigned shift (>>>) so the zigzag decode is correct even if the
+    // accumulator's bit 31 is set, rather than sign-extending.
+    lat += result & 1 ? ~(result >>> 1) : result >>> 1;
 
     shift = 0;
     result = 0;
@@ -308,7 +310,7 @@ export function decodePolyline(
       result |= (byte & 0x1f) << shift;
       shift += 5;
     } while (byte >= 0x20);
-    lon += result & 1 ? ~(result >> 1) : result >> 1;
+    lon += result & 1 ? ~(result >>> 1) : result >>> 1;
 
     coordinates.push([lon / factor, lat / factor]);
   }

@@ -93,7 +93,7 @@ function layerToRoutingPoints(layer: GeoLibreLayer | undefined): RoutingPoint[] 
  * {@link compareSequenceValues}), keeping feature order as a stable tiebreaker.
  * Non-point geometries are skipped.
  */
-function layerToSequencedPoints(
+export function layerToSequencedPoints(
   layer: GeoLibreLayer | undefined,
   orderField: string,
 ): RoutingPoint[] {
