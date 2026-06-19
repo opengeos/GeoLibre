@@ -1726,6 +1726,7 @@ export function closeMaplibreComponentControls(app: GeoLibreAppAPI): void {
   teardownPMTilesControl(app);
   teardownPrintControl(app);
   teardownSearchControl(app);
+  teardownSpinGlobeControl(app);
   teardownMeasureControl(app);
   teardownBookmarkControl(app);
   teardownMinimapControl(app);
@@ -2061,9 +2062,13 @@ async function openStandaloneSpinGlobeControl(
   }
 
   setTimeout(() => {
+    // Bail if a teardown ran between mounting and this deferred tick, so a
+    // quick open→close can't flip the menu checkmark back on after the control
+    // was removed (matches the guard in openStandaloneMinimapControl).
+    if (!spinGlobeControl) return;
     // Expand the settings panel so the speed slider and spin toggle are visible
     // immediately, mirroring how the other Controls-menu panels open expanded.
-    spinGlobeControl?.expand();
+    spinGlobeControl.expand();
     setSpinGlobePanelVisible(true);
   }, 0);
   return true;
