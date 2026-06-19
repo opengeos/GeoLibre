@@ -311,6 +311,16 @@ export function SettingsDialog({
   const projectPath = useAppStore((s) => s.projectPath);
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<SettingsSection>("map");
+  // A gated section is dropped from the nav, but `section` can still point at one
+  // (its initial value is "map"), so render the first visible section instead to
+  // never expose gated content to a restricted profile.
+  const isSectionVisible = (id: SettingsSection) => {
+    const gate = SECTION_GATE[id];
+    return gate ? showSettingsItem(gate) : true;
+  };
+  const effectiveSection: SettingsSection = isSectionVisible(section)
+    ? section
+    : (SECTION_ITEMS.find((item) => isSectionVisible(item.id))?.id ?? section);
   const [draftPreferences, setDraftPreferences] = useState<DraftPreferences>(
     () => clonePreferences(preferences),
   );
@@ -662,7 +672,7 @@ export function SettingsDialog({
         className="justify-start"
         size="sm"
         type="button"
-        variant={section === item.id ? "secondary" : "ghost"}
+        variant={effectiveSection === item.id ? "secondary" : "ghost"}
         onClick={() => {
           setSection(item.id);
           setError(null);
@@ -900,13 +910,12 @@ export function SettingsDialog({
           </DialogHeader>
           <div className="grid min-h-0 grid-cols-1 md:grid-cols-[12rem_1fr]">
             <nav className="flex gap-1 border-b p-3 md:flex-col md:border-b-0 md:border-r">
-              {SECTION_ITEMS.filter((item) => {
-                const gate = SECTION_GATE[item.id];
-                return gate ? showSettingsItem(gate) : true;
-              }).map(renderSectionButton)}
+              {SECTION_ITEMS.filter((item) => isSectionVisible(item.id)).map(
+                renderSectionButton,
+              )}
             </nav>
             <div className="min-h-0 overflow-y-auto p-6">
-              {section === "map" ? (
+              {effectiveSection === "map" ? (
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -1056,7 +1065,7 @@ export function SettingsDialog({
                   </label>
                 </div>
               ) : null}
-              {section === "layout" ? (
+              {effectiveSection === "layout" ? (
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -1150,7 +1159,7 @@ export function SettingsDialog({
                   ) : null}
                 </div>
               ) : null}
-              {section === "interface" ? (
+              {effectiveSection === "interface" ? (
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -1363,7 +1372,7 @@ export function SettingsDialog({
                   ))}
                 </div>
               ) : null}
-              {section === "geocoding" ? (
+              {effectiveSection === "geocoding" ? (
                 <div className="space-y-5">
                   <div className="space-y-1">
                     <h3 className="text-sm font-semibold">
@@ -1525,7 +1534,7 @@ export function SettingsDialog({
                   })()}
                 </div>
               ) : null}
-              {section === "environment" ? (
+              {effectiveSection === "environment" ? (
                 <div className="space-y-5">
                   <div className="space-y-2">
                     <h3 className="text-sm font-semibold">
@@ -1680,7 +1689,7 @@ export function SettingsDialog({
                   )}
                 </div>
               ) : null}
-              {section === "project" ? (
+              {effectiveSection === "project" ? (
                 <div className="space-y-5">
                   <div>
                     <h3 className="text-sm font-semibold">
