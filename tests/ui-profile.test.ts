@@ -95,10 +95,14 @@ describe("menu presets and predicates", () => {
     assert.ok(sets.hiddenMenuItems.includes("help.diagnostics"));
     assert.ok(!sets.hiddenMenuItems.includes("project.save"));
     assert.ok(!sets.hiddenMenuItems.includes("edit.undo"));
-    // Default-on controls and the Assistant's API-key settings stay reachable.
+    // Default-on controls stay reachable for beginners.
     assert.ok(!sets.hiddenMenuItems.includes("controls.mapControl.globe"));
     assert.ok(!sets.hiddenMenuItems.includes("controls.mapControl.scale"));
-    assert.ok(!sets.hiddenMenuItems.includes("settings.environment"));
+    // Items intentionally kept out of the beginner set.
+    assert.ok(sets.hiddenMenuItems.includes("processing.assistant"));
+    assert.ok(sets.hiddenMenuItems.includes("controls.legend"));
+    assert.ok(sets.hiddenMenuItems.includes("settings.environment"));
+    assert.ok(sets.hiddenDataSources.includes("duckdb"));
   });
 
   it("never hides the Settings menu (excluded from TOP_LEVEL_MENUS)", () => {

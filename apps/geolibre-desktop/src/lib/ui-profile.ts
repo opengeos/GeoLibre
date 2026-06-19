@@ -85,7 +85,7 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
   { id: "3d-tiles", section: "threeD", labelKey: "toolbar.item.threeDTilesLayer", tier: "advanced" },
   { id: "gltf-model", section: "threeD", labelKey: "toolbar.layerType.gltfModel", tier: "advanced" },
   // Databases
-  { id: "duckdb", section: "databases", labelKey: "toolbar.item.duckdbLayer", tier: "basic" },
+  { id: "duckdb", section: "databases", labelKey: "toolbar.item.duckdbLayer", tier: "intermediate" },
   { id: "postgres", section: "databases", labelKey: "toolbar.layerType.postgres", tier: "advanced" },
 ];
 
@@ -175,7 +175,7 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   { id: "edit.undo", menuId: "edit", labelKey: "toolbar.item.undo", tier: "basic" },
   { id: "edit.redo", menuId: "edit", labelKey: "toolbar.item.redo", tier: "basic" },
   // Processing
-  { id: "processing.assistant", menuId: "processing", labelKey: "toolbar.command.assistant", tier: "basic" },
+  { id: "processing.assistant", menuId: "processing", labelKey: "toolbar.command.assistant", tier: "intermediate" },
   { id: "processing.whitebox", menuId: "processing", labelKey: "toolbar.item.whitebox", tier: "advanced" },
   { id: "processing.sqlWorkspace", menuId: "processing", labelKey: "toolbar.command.sqlWorkspace", tier: "intermediate" },
   { id: "processing.pythonConsole", menuId: "processing", labelKey: "toolbar.command.pythonConsole", tier: "advanced" },
@@ -208,7 +208,7 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   { id: "controls.reverseGeocode", menuId: "controls", labelKey: "toolbar.item.reverseGeocode", tier: "intermediate" },
   { id: "controls.search", menuId: "controls", labelKey: "toolbar.item.search", tier: "basic" },
   { id: "controls.colorbar", menuId: "controls", labelKey: "toolbar.item.colorbar", tier: "intermediate" },
-  { id: "controls.legend", menuId: "controls", labelKey: "toolbar.item.legend", tier: "basic" },
+  { id: "controls.legend", menuId: "controls", labelKey: "toolbar.item.legend", tier: "intermediate" },
   { id: "controls.html", menuId: "controls", labelKey: "toolbar.item.html", tier: "advanced" },
   { id: "controls.measure", menuId: "controls", labelKey: "toolbar.item.measure", tier: "intermediate" },
   { id: "controls.bookmark", menuId: "controls", labelKey: "toolbar.item.bookmark", tier: "intermediate" },
@@ -218,9 +218,8 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   // Settings (the Settings menu and its Language/Layout/Interface entries always show)
   { id: "settings.mapPreferences", menuId: "settings", labelKey: "settings.menu.mapPreferences", tier: "intermediate" },
   { id: "settings.geocoding", menuId: "settings", labelKey: "settings.menu.geocoding", tier: "advanced" },
-  // The AI Assistant (basic) reads its API key from environment variables, so
-  // keep this reachable at the beginner level too.
-  { id: "settings.environment", menuId: "settings", labelKey: "settings.menu.environmentVariables", tier: "basic" },
+  // Kept in step with the AI Assistant (which reads its API key from here).
+  { id: "settings.environment", menuId: "settings", labelKey: "settings.menu.environmentVariables", tier: "intermediate" },
   { id: "settings.projectSettings", menuId: "settings", labelKey: "settings.menu.projectSettings", tier: "intermediate" },
   { id: "settings.managePlugins", menuId: "settings", labelKey: "settings.menu.managePlugins", tier: "intermediate" },
   // Help
