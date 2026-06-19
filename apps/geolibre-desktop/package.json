@@ -62,7 +62,7 @@
     "maplibre-gl-duckdb": "^0.2.0",
     "maplibre-gl-earth-engine": "^0.4.2",
     "maplibre-gl-enviroatlas": "^0.1.1",
-    "maplibre-gl-esri-wayback": "^0.2.0",
+    "maplibre-gl-esri-wayback": "^0.2.1",
     "maplibre-gl-fema-wms": "^0.1.2",
     "maplibre-gl-geo-editor": "^0.9.1",
     "maplibre-gl-geoagent": "^0.4.3",
