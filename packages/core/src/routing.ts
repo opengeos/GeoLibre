@@ -372,6 +372,12 @@ export function routeResponseToFeatures(
  * free-form text, which falls back to a locale string comparison. Empty/missing
  * values sort last so unlabeled points trail the ordered ones.
  *
+ * Numeric parsing is tried before date parsing, so a single column is expected
+ * to use one convention: a column mixing plain integers with ISO timestamps
+ * would compare them on the same numeric axis (epoch millis dwarf small
+ * integers), which is not a meaningful ordering. Real sequence/time columns use
+ * one convention, so this is acceptable in practice.
+ *
  * @param a - The first value.
  * @param b - The second value.
  * @returns A negative, zero, or positive number for ascending order.

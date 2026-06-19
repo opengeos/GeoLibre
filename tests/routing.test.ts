@@ -193,13 +193,14 @@ describe("routeResponseToFeatures", () => {
     { id: "p0", lon: 0, lat: 0 },
     { id: "p1", lon: 1, lat: 1 },
   ];
+  // A real Valhalla precision-6 polyline encoding the three [lon, lat] points
+  // [[-77.05, 38.88], [-77.04, 38.89], [-77.02, 38.9]], so the test asserts the
+  // decode runs at precision 6 (not Google's 5) and yields the right values.
   const response = {
     trip: {
       legs: [
         {
-          // precision-5 shape decoded here only to exercise the parser shape;
-          // length/time carry the leg cost.
-          shape: "_p~iF~ps|U_ulLnnqC",
+          shape: "_o`diA~gw}qC_pR_pR_pR_af@",
           summary: { time: 540, length: 8.2 },
         },
       ],
@@ -211,7 +212,11 @@ describe("routeResponseToFeatures", () => {
     assert.equal(features.length, 1);
     const [feature] = features;
     assert.equal(feature.geometry.type, "LineString");
-    assert.equal(feature.geometry.coordinates.length, 2);
+    assert.deepEqual(feature.geometry.coordinates, [
+      [-77.05, 38.88],
+      [-77.04, 38.89],
+      [-77.02, 38.9],
+    ]);
     assert.deepEqual(feature.properties, {
       leg_index: 0,
       from_id: "p0",

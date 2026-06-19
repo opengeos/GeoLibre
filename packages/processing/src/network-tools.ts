@@ -33,9 +33,10 @@ const MAX_ISOCHRONE_POINTS = 25;
 const MAX_ISOCHRONE_CONTOURS = 4;
 /** Cap on OD matrix cells (origins × destinations) per run. */
 const MAX_MATRIX_CELLS = 2500;
-/** Cap on waypoints per sequential route, to stay within the public server's
- *  per-request location limit and avoid overloading it. */
-const MAX_ROUTE_POINTS = 50;
+/** Cap on waypoints per sequential route. The public FOSSGIS server enforces
+ *  `max_locations: 20` on `/route` (error_code 150), so requests above this are
+ *  rejected outright; keep the cap at that limit and truncate with a log line. */
+const MAX_ROUTE_POINTS = 20;
 
 const MODE_OPTIONS = [
   { value: "auto", label: "Driving" },
@@ -395,7 +396,7 @@ export const sequentialRouteTool: ProcessingAlgorithm = {
         return;
       }
       const totalKm = features.reduce(
-        (sum, feature) => sum + (feature.properties.distance_km || 0),
+        (sum, feature) => sum + feature.properties.distance_km,
         0,
       );
       ctx.log(
@@ -404,11 +405,13 @@ export const sequentialRouteTool: ProcessingAlgorithm = {
       ctx.addResultLayer?.("Route", featureCollection(features));
     } catch (error) {
       if (ctx.signal?.aborted) return;
-      ctx.log(
-        `Routing failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
+      const message = error instanceof Error ? error.message : String(error);
+      // A 4xx usually means the public server rejected the request (most often
+      // "Exceeded max locations"); point the user at the actionable fix.
+      const hint = /\b4\d\d\b/.test(message)
+        ? " The routing server may have rejected the request — reduce the number of points or use your own server (Settings → Environment Variables, VITE_ROUTING_ENDPOINT)."
+        : "";
+      ctx.log(`Routing failed: ${message}.${hint}`);
     }
   },
 };
