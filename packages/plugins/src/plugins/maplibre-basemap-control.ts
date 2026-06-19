@@ -15,6 +15,35 @@ import type {
 
 let basemapControlPosition: GeoLibreMapControlPosition = "top-left";
 
+/**
+ * User-facing strings the panel cannot translate itself. Defaults are English;
+ * the desktop shell pushes translated values via {@link setBasemapControlLabels}
+ * since this package is framework-agnostic and has no direct access to
+ * react-i18next.
+ */
+export interface BasemapControlLabels {
+  /**
+   * Builds the confirmation shown before a style basemap replaces the stacked
+   * raster basemaps, given the style basemap name and how many will be removed
+   * (always at least one).
+   */
+  confirmStyleReplace: (basemapName: string, count: number) => string;
+}
+
+let labels: BasemapControlLabels = {
+  confirmStyleReplace: (basemapName, count) =>
+    count === 1
+      ? `Switching to "${basemapName}" replaces the whole map style and will remove the 1 stacked basemap you added. Continue?`
+      : `Switching to "${basemapName}" replaces the whole map style and will remove the ${count} stacked basemaps you added. Continue?`,
+};
+
+/** Override the panel strings (called from the app layer with translated text). */
+export function setBasemapControlLabels(
+  next: Partial<BasemapControlLabels>,
+): void {
+  labels = { ...labels, ...next };
+}
+
 let basemapControl: BasemapControl | null = null;
 // GeoLibre layer ids of registered raster basemaps, keyed by basemap id. In
 // multiple mode several raster basemaps can be registered at once.
@@ -88,11 +117,9 @@ function getBasemapControlOptions(
     // issue #551.
     confirmStyleReplace: ({ basemap, replacedBasemapIds }) => {
       const count = replacedBasemapIds.length;
-      const message =
-        count === 1
-          ? `Switching to "${basemap.name}" replaces the whole map style and will remove the 1 stacked basemap you added. Continue?`
-          : `Switching to "${basemap.name}" replaces the whole map style and will remove the ${count} stacked basemaps you added. Continue?`;
-      return window.confirm(message);
+      // Nothing stacked to lose: never prompt (and avoids a "remove 0" message).
+      if (count === 0) return true;
+      return window.confirm(labels.confirmStyleReplace(basemap.name, count));
     },
   };
 }

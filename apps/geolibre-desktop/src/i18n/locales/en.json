@@ -1027,6 +1027,10 @@
     "reverseCopyAddress": "Copy address",
     "reverseFailed": "Reverse geocoding failed."
   },
+  "basemaps": {
+    "confirmStyleReplace_one": "Switching to \"{{name}}\" replaces the whole map style and will remove the {{count}} stacked basemap you added. Continue?",
+    "confirmStyleReplace_other": "Switching to \"{{name}}\" replaces the whole map style and will remove the {{count}} stacked basemaps you added. Continue?"
+  },
   "pythonConsole": {
     "title": "Python Console",
     "resize": "Resize Python console",
