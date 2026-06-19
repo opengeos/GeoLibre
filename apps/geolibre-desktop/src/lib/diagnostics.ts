@@ -122,6 +122,35 @@ function isOptionalResourceRequest(
   );
 }
 
+/**
+ * Remove the optional-resource marker before the request leaves the app. It is a
+ * client-side diagnostics hint with no meaning to any server; forwarding it
+ * would, on a cross-origin request, turn it into a non-simple header that forces
+ * a CORS preflight the server would have to allow.
+ */
+function stripOptionalResourceHeader(
+  input: Parameters<typeof fetch>[0],
+  init: Parameters<typeof fetch>[1],
+): { input: Parameters<typeof fetch>[0]; init: Parameters<typeof fetch>[1] } {
+  // init.headers, when present, is what actually gets sent (it replaces a
+  // Request input's headers), so strip it there.
+  if (init?.headers !== undefined) {
+    if (readHeader(init.headers, OPTIONAL_RESOURCE_HEADER) == null) {
+      return { input, init };
+    }
+    const headers = new Headers(init.headers);
+    headers.delete(OPTIONAL_RESOURCE_HEADER);
+    return { input, init: { ...init, headers } };
+  }
+  // Otherwise a Request input may carry it; rebuild without the marker.
+  if (input instanceof Request && input.headers.has(OPTIONAL_RESOURCE_HEADER)) {
+    const headers = new Headers(input.headers);
+    headers.delete(OPTIONAL_RESOURCE_HEADER);
+    return { input: new Request(input, { headers }), init };
+  }
+  return { input, init };
+}
+
 function looksLikeFetchFailure(reason: unknown): boolean {
   const message =
     reason instanceof Error
@@ -373,11 +402,13 @@ export function installDiagnosticsCapture(): () => void {
 
     // A request may declare that a failure (a non-ok response such as a 404, or
     // a thrown network error) is expected — e.g. an optional config file that
-    // may be absent — so it is logged as info rather than flagged an error.
+    // may be absent — so it is logged as info rather than flagged an error. The
+    // marker is read here, then stripped so it never reaches the server.
     const optional = isOptionalResourceRequest(input, init);
+    const forwarded = stripOptionalResourceHeader(input, init);
 
     try {
-      const response = await originalFetch(input, init);
+      const response = await originalFetch(forwarded.input, forwarded.init);
       appendDiagnostic({
         category: "network",
         level: response.ok || optional ? "info" : "error",

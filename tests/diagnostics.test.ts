@@ -294,6 +294,7 @@ describe("diagnostics startup transient suppression", () => {
     const [record] = getDiagnosticsSnapshot().records;
     assert.equal(record.category, "network");
     assert.equal(record.level, "error");
+    assert.equal(getDiagnosticsSnapshot().errorCount, 1);
   });
 
   it("downgrades a non-ok response on an optional-resource request", async () => {
@@ -336,5 +337,24 @@ describe("diagnostics startup transient suppression", () => {
     assert.equal(record.category, "network");
     assert.equal(record.level, "error");
     assert.equal(getDiagnosticsSnapshot().errorCount, 1);
+  });
+
+  it("downgrades a thrown network error on an optional-resource request", async () => {
+    setCaptureNetworkInfo(true);
+    try {
+      win.fetch = (() =>
+        Promise.reject(new TypeError("Failed to fetch"))) as unknown as typeof fetch;
+      install();
+      await (win.fetch as typeof fetch)("/admin-profile.json", {
+        headers: { [OPTIONAL_RESOURCE_HEADER]: "1" },
+      }).catch(() => {});
+      const [record] = getDiagnosticsSnapshot().records;
+      assert.equal(record.category, "network");
+      // Optional, so even a thrown failure is informational rather than an error.
+      assert.equal(record.level, "info");
+      assert.equal(getDiagnosticsSnapshot().errorCount, 0);
+    } finally {
+      setCaptureNetworkInfo(false);
+    }
   });
 });

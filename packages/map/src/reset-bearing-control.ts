@@ -48,7 +48,7 @@ export class ResetBearingControl implements maplibregl.IControl {
   private label = "Reset pitch & bearing";
 
   constructor(options: { label?: string } = {}) {
-    if (options.label) this.label = options.label;
+    if (options.label !== undefined) this.label = options.label;
   }
 
   /** Tracks the live camera so the needle and active state stay in sync. */
