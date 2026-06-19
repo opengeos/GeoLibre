@@ -221,7 +221,7 @@ export function OfflineRegionDialog({
                 <Label>{t("offline.detailLevels")}</Label>
                 <span className="text-sm tabular-nums text-muted-foreground">
                   {t("offline.relativeLevels", {
-                    count: extraLevels,
+                    count: maxZoom - baseZoom,
                     min: baseZoom,
                     max: maxZoom,
                   })}
