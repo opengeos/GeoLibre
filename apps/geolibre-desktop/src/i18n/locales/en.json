@@ -1004,7 +1004,7 @@
     "noFile": "No CSV file selected.",
     "fileLoaded": "{{name}} ({{count}} rows)",
     "provider": "Geocoding provider",
-    "providerHint": "Configure provider API keys and endpoints in Settings.",
+    "providerHint": "API keys and endpoints are managed in Settings.",
     "apiKeyRequired": "{{provider}} needs an API key. Add one in Settings to get results.",
     "corsNote": "Google does not officially allow browser requests to its Geocoding API; requests may be blocked unless served through a same-origin proxy.",
     "addressColumn": "Address column",
