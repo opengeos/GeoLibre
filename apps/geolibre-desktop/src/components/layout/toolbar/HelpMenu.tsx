@@ -73,7 +73,9 @@ export function HelpMenu({
             {t("toolbar.command.keyboardShortcuts")}
           </DropdownMenuItem>
         )}
-        <DropdownMenuSeparator />
+        {(show("help.commandPalette") || show("help.keyboardShortcuts")) && (
+          <DropdownMenuSeparator />
+        )}
         {show("help.diagnostics") && (
           <DropdownMenuItem onSelect={onOpenDiagnostics}>
             <Bug className="mr-2 h-3.5 w-3.5" />

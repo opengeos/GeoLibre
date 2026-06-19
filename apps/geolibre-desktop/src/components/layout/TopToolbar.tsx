@@ -69,7 +69,11 @@ import { useToolbarPanels } from "../../hooks/useToolbarPanels";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import { isTauri } from "../../lib/tauri-io";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
-import { isMenuVisible, isPluginVisible } from "../../lib/ui-profile";
+import {
+  MENU_MANAGED_PLUGIN_IDS,
+  isMenuVisible,
+  isPluginVisible,
+} from "../../lib/ui-profile";
 import { CommandPalette } from "../command/CommandPalette";
 import { KeyboardShortcutsDialog } from "../command/KeyboardShortcutsDialog";
 import { useGlobalShortcuts } from "../../hooks/useGlobalShortcuts";
@@ -192,13 +196,7 @@ export function TopToolbar({
   const profilePlugins = useMemo(
     () =>
       plugins
-        .filter(
-          (plugin) =>
-            plugin.id !== EFFECTS_PLUGIN_ID &&
-            plugin.id !== DIRECTIONS_PLUGIN_ID &&
-            plugin.id !== REVERSE_GEOCODE_PLUGIN_ID &&
-            plugin.id !== DECK_VIZ_PLUGIN_ID,
-        )
+        .filter((plugin) => !MENU_MANAGED_PLUGIN_IDS.has(plugin.id))
         .map((plugin) => ({ id: plugin.id, name: plugin.name })),
     [plugins],
   );

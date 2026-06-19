@@ -1,7 +1,7 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { create } from "zustand";
 import { loadAdminProfile } from "../lib/admin-profile";
-import { presetHiddenSets } from "../lib/ui-profile";
+import { presetHiddenSets, toggleablePluginIds } from "../lib/ui-profile";
 import { usePluginRegistry } from "./usePlugins";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
 
@@ -52,10 +52,12 @@ export function useUiProfileBootstrap(): {
     if (bootstrapStarted) return;
     bootstrapStarted = true;
 
-    const pluginIds = plugins.map((plugin) => plugin.id);
+    const pluginIds = toggleablePluginIds(plugins);
     void (async () => {
       try {
         const patch = await loadAdminProfile(pluginIds);
+        // Re-read the latest store state after the await so a concurrent update
+        // is not clobbered.
         const current = useDesktopSettingsStore.getState().desktopSettings;
         if (patch) {
           useDesktopSettingsStore.getState().setDesktopSettings({
@@ -93,7 +95,7 @@ export function useUiProfileBootstrap(): {
 
     const { hiddenPlugins } = presetHiddenSets(
       profile.level,
-      plugins.map((plugin) => plugin.id),
+      toggleablePluginIds(plugins),
     );
     const missing = hiddenPlugins.filter(
       (id) => !profile.hiddenPlugins.includes(id),
@@ -115,14 +117,17 @@ export function useUiProfileBootstrap(): {
   const showOnboarding =
     adminChecked && !uiProfile.onboarded && !uiProfile.locked;
 
-  const dismissOnboarding = () => {
+  // Marks onboarding complete when the wizard is dismissed without a choice
+  // (Escape/overlay). The wizard's own buttons set `onboarded` first, so this is
+  // a defensive backstop. Memoised so it stays referentially stable for callers.
+  const dismissOnboarding = useCallback(() => {
     const current = useDesktopSettingsStore.getState().desktopSettings;
     if (current.uiProfile.onboarded) return;
     useDesktopSettingsStore.getState().setDesktopSettings({
       ...current,
       uiProfile: { ...current.uiProfile, onboarded: true },
     });
-  };
+  }, []);
 
   return { showOnboarding, dismissOnboarding };
 }

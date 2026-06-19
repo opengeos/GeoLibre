@@ -154,8 +154,10 @@ export function PluginsMenu({
           if (!WEB_SERVICE_PLUGIN_ID_SET.has(p.id)) {
             return renderPluginMenuItem(p);
           }
-          // All web service plugins hidden ⇒ skip the grouped submenu entirely.
-          if (webServicePlugins.length === 0) return null;
+          // Reaching here means `p` is a visible web service plugin, so the
+          // submenu has at least one entry. When all web service plugins are
+          // hidden no plugin reaches this branch and the submenu simply never
+          // renders.
           if (webServicesRendered) return null;
           webServicesRendered = true;
           return (

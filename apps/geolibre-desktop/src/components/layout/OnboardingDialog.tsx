@@ -12,7 +12,7 @@ import {
   type ExperienceLevel,
 } from "../../hooks/useDesktopSettings";
 import { usePluginRegistry } from "../../hooks/usePlugins";
-import { presetHiddenSets } from "../../lib/ui-profile";
+import { presetHiddenSets, toggleablePluginIds } from "../../lib/ui-profile";
 
 interface OnboardingDialogProps {
   open: boolean;
@@ -37,10 +37,7 @@ export function OnboardingDialog({ open, onClose }: OnboardingDialogProps) {
     const current = useDesktopSettingsStore.getState().desktopSettings;
     const sets =
       level !== null
-        ? presetHiddenSets(
-            level,
-            plugins.map((plugin) => plugin.id),
-          )
+        ? presetHiddenSets(level, toggleablePluginIds(plugins))
         : {
             hiddenDataSources: [],
             hiddenPlugins: [],

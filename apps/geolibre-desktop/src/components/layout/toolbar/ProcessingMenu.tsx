@@ -77,11 +77,13 @@ export function ProcessingMenu({
         <DropdownMenuLabel>{t("toolbar.menu.processing")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {show("processing.assistant") && (
-          <DropdownMenuItem onSelect={() => setAssistantOpen(true)}>
-            {t("toolbar.command.assistant")}
-          </DropdownMenuItem>
+          <>
+            <DropdownMenuItem onSelect={() => setAssistantOpen(true)}>
+              {t("toolbar.command.assistant")}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
         )}
-        <DropdownMenuSeparator />
         {!mobile && show("processing.whitebox") && (
           <DropdownMenuItem onSelect={() => setProcessingOpen(true)}>
             {t("toolbar.item.whitebox")}

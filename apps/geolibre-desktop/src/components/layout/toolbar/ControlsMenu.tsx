@@ -69,6 +69,15 @@ export function ControlsMenu({
   const { t } = useTranslation();
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   const show = (id: string) => isMenuItemVisible(uiProfile, id);
+  // Whether the first group (built-in controls + atmosphere/routing toggles) has
+  // any visible item, so the separator below it isn't left orphaned.
+  const anyTopControls =
+    MAP_CONTROL_ITEMS.some((control) =>
+      show(`controls.mapControl.${control.id}`),
+    ) ||
+    show("controls.atmosphereEffects") ||
+    show("controls.directions") ||
+    show("controls.reverseGeocode");
 
   return (
     <DropdownMenu>
@@ -124,7 +133,7 @@ export function ControlsMenu({
             {reverseGeocodeActive ? " ✓" : ""}
           </DropdownMenuItem>
         )}
-        <DropdownMenuSeparator />
+        {anyTopControls && <DropdownMenuSeparator />}
         {show("controls.search") && (
           <DropdownMenuItem onSelect={panels.searchPlaces.toggle}>
             {t("toolbar.item.search")}

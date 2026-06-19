@@ -70,6 +70,8 @@ export function AddDataMenu({
     stac: { onSelect: addLayer.stac },
     video: { onSelect: () => onSetAddDataKind("video") },
     "deckgl-viz": { onSelect: () => onSetAddDataKind("deckgl-viz") },
+    // GeoParquet loads through the same vector file picker as "vector"; keep
+    // both pointing at addLayer.vector if that handler ever changes.
     geoparquet: { onSelect: addLayer.vector },
     flatgeobuf: { onSelect: addLayer.flatGeobuf },
     pmtiles: { onSelect: addLayer.pmtiles },

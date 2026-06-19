@@ -599,6 +599,8 @@ export function SettingsDialog({
       level: DEFAULT_UI_PROFILE_SETTINGS.level,
       hiddenDataSources: [],
       hiddenPlugins: [],
+      hiddenMenus: [],
+      hiddenMenuItems: [],
     });
   };
 
@@ -620,13 +622,29 @@ export function SettingsDialog({
     const nextProjectName = draftProjectName.trim() || "Untitled Project";
     if (nextProjectName !== projectName) setProjectName(nextProjectName);
     setPreferences(normalized);
+    // When a level preset is still active, recompute its hidden lists from the
+    // current plugin registry at save time. The draft was snapshotted when the
+    // dialog opened, so this picks up any external plugins that loaded since
+    // (and keeps the result identical to applying the preset). A custom profile
+    // (level === null) carries the user's explicit toggles through unchanged.
+    const draftProfile = draftDesktopSettings.uiProfile;
+    const committedUiProfile =
+      draftProfile.level !== null
+        ? {
+            ...draftProfile,
+            ...presetHiddenSets(
+              draftProfile.level,
+              profilePlugins.map((plugin) => plugin.id),
+            ),
+          }
+        : draftProfile;
     // Plugin sources are managed live in the Manage Plugins dialog; preserve the
     // current store values and only update the layout from this dialog.
     setDesktopSettings({
       ...useDesktopSettingsStore.getState().desktopSettings,
       layout: draftDesktopSettings.layout,
       shareToken: draftDesktopSettings.shareToken,
-      uiProfile: draftDesktopSettings.uiProfile,
+      uiProfile: committedUiProfile,
     });
     setOpen(false);
   };
@@ -707,7 +725,7 @@ export function SettingsDialog({
           )}
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
-              <LayoutPanelTop className="mr-2 h-3.5 w-3.5" />
+              <LayoutPanelTop className="h-3.5 w-3.5" />
               {t("settings.section.layout")}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="geolibre-layout-submenu w-40 sm:w-72">
@@ -771,7 +789,7 @@ export function SettingsDialog({
           </DropdownMenuSub>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
-              <SlidersHorizontal className="mr-2 h-3.5 w-3.5" />
+              <SlidersHorizontal className="h-3.5 w-3.5" />
               {t("settings.section.interface")}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="w-56">

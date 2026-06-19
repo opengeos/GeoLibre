@@ -14,6 +14,31 @@ import type {
 
 export type ComplexityTier = "basic" | "intermediate" | "advanced";
 
+/**
+ * Plugins toggled from other menus (Effects/Directions/Reverse Geocode via the
+ * Controls menu, deck.gl viz via Add Data), so they are excluded from the
+ * Plugins menu and from the UI-profile plugin lists. Keep in sync with
+ * `PluginsMenu`'s skip list. Literal ids (mirroring `EFFECTS_PLUGIN_ID` etc.
+ * from `@geolibre/plugins`) so this module stays free of the heavy plugin
+ * barrel and can be unit-tested in Node.
+ */
+export const MENU_MANAGED_PLUGIN_IDS = new Set<string>([
+  "maplibre-atmosphere-effects", // EFFECTS_PLUGIN_ID
+  "maplibre-gl-directions", // DIRECTIONS_PLUGIN_ID
+  "maplibre-reverse-geocode", // REVERSE_GEOCODE_PLUGIN_ID
+  "maplibre-deckgl-viz", // DECK_VIZ_PLUGIN_ID
+]);
+
+/** The plugin ids that participate in the UI profile (excludes the menu-managed
+ * plugins above), used when computing presets. */
+export function toggleablePluginIds(
+  plugins: ReadonlyArray<{ id: string }>,
+): string[] {
+  return plugins
+    .filter((plugin) => !MENU_MANAGED_PLUGIN_IDS.has(plugin.id))
+    .map((plugin) => plugin.id);
+}
+
 /** Section groupings shared with the Add Data menu and the Settings checklist. */
 export type DataSourceSection =
   | "files"
@@ -146,10 +171,14 @@ export const TOP_LEVEL_MENUS: readonly TopLevelMenuEntry[] = [
   { id: "help", labelKey: "toolbar.menu.help", tier: "basic" },
 ];
 
+/** The menu a catalog item belongs to: a hideable top-level menu, or Settings
+ * (whose dropdown items are toggleable even though the menu itself always shows). */
+export type MenuOwnerId = TopLevelMenuId | "settings";
+
 export interface MenuItemCatalogEntry {
   id: string;
   /** Owning menu id, used to group the Settings checklist. */
-  menuId: string;
+  menuId: MenuOwnerId;
   labelKey: ParseKeys;
   tier: ComplexityTier;
 }
@@ -235,7 +264,10 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
 ];
 
 /** Group order + header label key for the per-menu item checklists in Settings. */
-export const MENU_ITEM_GROUPS: ReadonlyArray<{ menuId: string; labelKey: ParseKeys }> = [
+export const MENU_ITEM_GROUPS: ReadonlyArray<{
+  menuId: MenuOwnerId;
+  labelKey: ParseKeys;
+}> = [
   { menuId: "project", labelKey: "toolbar.menu.project" },
   { menuId: "edit", labelKey: "toolbar.menu.edit" },
   { menuId: "processing", labelKey: "toolbar.menu.processing" },

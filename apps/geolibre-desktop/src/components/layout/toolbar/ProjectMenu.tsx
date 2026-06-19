@@ -74,6 +74,17 @@ export function ProjectMenu({
   const setStorymapPanelOpen = useAppStore((s) => s.setStorymapPanelOpen);
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   const show = (id: string) => isMenuItemVisible(uiProfile, id);
+  // Group-visibility flags so the separators between groups aren't left orphaned
+  // when a whole group is hidden by the active profile.
+  const showSaveGroup =
+    show("project.save") ||
+    show("project.saveAs") ||
+    show("project.share") ||
+    (collaborationEnabled && show("project.collaborate"));
+  const showPrintGroup =
+    show("project.print") ||
+    show("project.printLayout") ||
+    show("project.offlineRegion");
 
   return (
     <DropdownMenu>
@@ -186,7 +197,7 @@ export function ProjectMenu({
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         )}
-        <DropdownMenuSeparator />
+        {showSaveGroup && <DropdownMenuSeparator />}
         {show("project.save") && (
           <DropdownMenuItem onSelect={onSave}>
             <Save className="mr-2 h-3.5 w-3.5" />
@@ -211,7 +222,7 @@ export function ProjectMenu({
             {t("toolbar.item.collaborateEllipsis")}
           </DropdownMenuItem>
         )}
-        <DropdownMenuSeparator />
+        {showPrintGroup && <DropdownMenuSeparator />}
         {show("project.print") && (
           <DropdownMenuItem onSelect={printPanel.toggle}>
             <Printer className="mr-2 h-3.5 w-3.5" />

@@ -48,15 +48,23 @@ export async function loadAdminProfile(
 }
 
 async function readAdminProfileFile(): Promise<AdminProfileFile | null> {
-  // On desktop the OS config-dir file is authoritative; fall back to the bundled
-  // file only if the command yields nothing.
+  // On desktop the OS config-dir file is authoritative; only fall back to the
+  // bundled web file when that file is absent (or the command itself fails).
   if (isTauri()) {
     try {
       const contents = await invoke<string | null>("read_admin_profile");
-      const parsed = parseAdminProfile(contents);
-      if (parsed) return parsed;
-    } catch {
-      // Ignore and try the bundled file below.
+      // A non-null result means the desktop file exists, so use its parse result
+      // (even if it is null because the file is malformed) rather than silently
+      // letting the web file override an admin-managed deployment. A null result
+      // means no desktop file, so fall through to the web file below.
+      if (contents !== null) return parseAdminProfile(contents);
+    } catch (error) {
+      // The command failed (not registered, permission denied, …). Fall back to
+      // the bundled web file, but surface the error in development so a
+      // misconfiguration is not invisible.
+      if (import.meta.env.DEV) {
+        console.warn("[admin-profile] read_admin_profile failed:", error);
+      }
     }
   }
 
