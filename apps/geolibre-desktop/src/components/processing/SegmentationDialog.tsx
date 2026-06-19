@@ -88,7 +88,12 @@ export function SegmentationDialog({
       }
       setStatus({
         available: false,
-        message: t("segmentation.status.unavailable"),
+        // Desktop users get the "Start server" button below, so point them at
+        // it; web users have no such button, so tell them the feature needs the
+        // desktop app rather than an action they cannot take.
+        message: isTauri()
+          ? t("segmentation.status.unavailableDesktop")
+          : t("segmentation.status.unavailableWeb"),
       });
     } finally {
       setChecking(false);

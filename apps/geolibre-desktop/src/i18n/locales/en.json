@@ -1322,7 +1322,8 @@
     "segment": "Segment",
     "status": {
       "checking": "Checking the AI segmentation service…",
-      "unavailable": "The AI segmentation service is not running yet. On the desktop app, start the GeoLibre server with segment-geospatial enabled to use it."
+      "unavailableDesktop": "The AI segmentation service is not running yet. Start the GeoLibre server with segment-geospatial enabled to use it.",
+      "unavailableWeb": "AI segmentation isn't available in the browser. Use the GeoLibre desktop app to run it."
     },
     "error": {
       "chooseImage": "Choose an image (GeoTIFF) to segment.",
