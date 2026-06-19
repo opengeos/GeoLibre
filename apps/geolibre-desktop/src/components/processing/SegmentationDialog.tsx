@@ -27,7 +27,13 @@ import {
   Server,
 } from "lucide-react";
 import type { FeatureCollection } from "geojson";
-import { useCallback, useEffect, useState, type ReactElement } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { isTauri, openLocalDataFileWithFallback } from "../../lib/tauri-io";
 import { reprojectFeatureCollectionToWgs84 } from "../../lib/duckdb-vector-loader";
@@ -71,32 +77,40 @@ export function SegmentationDialog({
   const [resultMessage, setResultMessage] = useState<string | null>(null);
   const [startingServer, setStartingServer] = useState(false);
 
+  // Monotonic token so a stale probe (e.g. the dialog reopened, or the
+  // post-boot probe in startServer) cannot clobber a newer probe's result or
+  // drop the spinner out from under it.
+  const checkGenRef = useRef(0);
+
   const checkStatus = useCallback(async () => {
+    const gen = ++checkGenRef.current;
     setChecking(true);
     setStatus(null);
     try {
-      setStatus(await fetchMlStatus());
+      const next = await fetchMlStatus();
+      if (gen === checkGenRef.current) setStatus(next);
     } catch (err) {
       // A failed probe (sidecar not started, or no segmentation backend behind
       // the proxy) is an expected "not set up yet" state, not a system failure.
       // Show neutral guidance instead of surfacing the raw HTTP/connection
       // error, so a freshly opened, blank dialog never greets the user with
-      // something like "HTTP 404" (issue #545). Surface anything unexpected
-      // (e.g. a malformed 200 payload) to the dev console so it isn't lost.
-      if (import.meta.env.DEV) {
-        console.warn("SegmentationDialog: ML status probe failed", err);
+      // something like "HTTP 404" (issue #545). Log at debug (matching
+      // sidecarConnectionError) so an unexpected failure stays discoverable in
+      // production without warning-spam for the routine not-set-up case.
+      console.debug("SegmentationDialog: ML status probe failed", err);
+      if (gen === checkGenRef.current) {
+        setStatus({
+          available: false,
+          // Desktop users get the "Start server" button below, so point them at
+          // it; web users have no such button, so tell them the feature needs
+          // the desktop app rather than an action they cannot take.
+          message: isTauri()
+            ? t("segmentation.status.unavailableDesktop")
+            : t("segmentation.status.unavailableWeb"),
+        });
       }
-      setStatus({
-        available: false,
-        // Desktop users get the "Start server" button below, so point them at
-        // it; web users have no such button, so tell them the feature needs the
-        // desktop app rather than an action they cannot take.
-        message: isTauri()
-          ? t("segmentation.status.unavailableDesktop")
-          : t("segmentation.status.unavailableWeb"),
-      });
     } finally {
-      setChecking(false);
+      if (gen === checkGenRef.current) setChecking(false);
     }
   }, [t]);
 
