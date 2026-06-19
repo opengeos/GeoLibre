@@ -66,7 +66,7 @@
     "maplibre-gl-fema-wms": "^0.1.2",
     "maplibre-gl-geo-editor": "^0.9.1",
     "maplibre-gl-geoagent": "^0.4.3",
-    "maplibre-gl-lidar": "^0.15.0",
+    "maplibre-gl-lidar": "^0.16.0",
     "maplibre-gl-nasa-earthdata": "^0.1.2",
     "maplibre-gl-national-map": "^0.1.1",
     "maplibre-gl-planetary-computer": "^0.3.0",

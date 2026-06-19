@@ -1,5 +1,10 @@
 /// <reference path="../maplibre-gl-usgs-lidar.d.ts" />
-import { type MapProjection, useAppStore } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  type GeoLibreLayer,
+  type MapProjection,
+  useAppStore,
+} from "@geolibre/core";
 import type {
   UsgsLidarControl,
   UsgsLidarControlOptions,
@@ -45,6 +50,48 @@ function restoreProjection(): void {
   });
 }
 
+// USGS 3DEP Elevation Index (WMS) showing where 3DEP LiDAR point clouds exist,
+// added as a store layer alongside the control so users can see coverage before
+// searching. Hidden once zoomed past the survey overview, where the point cloud
+// itself takes over.
+const DEP_INDEX_LAYER_ID = "usgs-lidar-3dep-index";
+const DEP_INDEX_SOURCE_ID = "usgs-lidar-3dep-index-source";
+const DEP_INDEX_TILE_URL =
+  "https://index.nationalmap.gov/arcgis/services/3DEPElevationIndex/MapServer/WMSServer?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&FORMAT=image/png&TRANSPARENT=true&LAYERS=23&SRS=EPSG:3857&STYLES=&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}";
+
+function addDepIndexLayer(): void {
+  const store = useAppStore.getState();
+  if (store.layers.some((layer) => layer.id === DEP_INDEX_LAYER_ID)) return;
+  const layer: GeoLibreLayer = {
+    id: DEP_INDEX_LAYER_ID,
+    name: "3DEP LiDAR Coverage",
+    type: "raster",
+    source: {
+      type: "raster",
+      sourceId: DEP_INDEX_SOURCE_ID,
+      tiles: [DEP_INDEX_TILE_URL],
+      tileSize: 256,
+    },
+    visible: true,
+    opacity: 0.7,
+    style: { ...DEFAULT_LAYER_STYLE, maxZoom: 10 },
+    metadata: {
+      externalNativeLayer: true,
+      identifiable: false,
+      nativeLayerIds: [DEP_INDEX_LAYER_ID],
+      sourceId: DEP_INDEX_SOURCE_ID,
+      sourceIds: [DEP_INDEX_SOURCE_ID],
+      tileUrl: DEP_INDEX_TILE_URL,
+    },
+    sourcePath: DEP_INDEX_TILE_URL,
+  };
+  store.addLayer(layer);
+}
+
+function removeDepIndexLayer(): void {
+  useAppStore.getState().removeLayer(DEP_INDEX_LAYER_ID);
+}
+
 const USGS_LIDAR_OPTIONS = {
   title: "USGS LiDAR",
   collapsed: false,
@@ -87,6 +134,7 @@ export const maplibreUsgsLidarPlugin: GeoLibrePlugin = {
   activate: (app: GeoLibreAppAPI) => {
     pluginActive = true;
     forceMercatorProjection();
+    addDepIndexLayer();
     if (usgsLidarControl) return mountUsgsLidarControl(app);
 
     // Defer the heavy deck.gl/loaders.gl dependency tree until the user first
@@ -102,6 +150,7 @@ export const maplibreUsgsLidarPlugin: GeoLibrePlugin = {
   deactivate: (app: GeoLibreAppAPI) => {
     pluginActive = false;
     restoreProjection();
+    removeDepIndexLayer();
     if (!usgsLidarControl) return;
     app.removeMapControl(usgsLidarControl);
     usgsLidarControl = null;
