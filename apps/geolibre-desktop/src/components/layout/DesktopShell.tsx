@@ -660,6 +660,15 @@ export function DesktopShell({
     setMapReadyGeneration((generation) => generation + 1);
   }, []);
 
+  // Keep the on-map reset-pitch/bearing control's tooltip translated. Re-runs
+  // when the controller (re)initialises (mapReadyGeneration) and on language
+  // change (t identity changes), since that native control lives outside React.
+  useEffect(() => {
+    mapControllerRef.current?.setResetBearingLabel(
+      t("toolbar.item.resetPitchBearing"),
+    );
+  }, [t, mapReadyGeneration]);
+
   const handleMapDiagnosticEvent = useCallback((event: MapDiagnosticEvent) => {
     appendDiagnostic({
       category: "map",

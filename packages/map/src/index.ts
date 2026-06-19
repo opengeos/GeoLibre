@@ -17,5 +17,6 @@ export {
   lineLayerId,
   circleLayerId,
 } from "./geojson-loader";
+export { ResetBearingControl } from "./reset-bearing-control";
 export { isPlaceholderLayer, placeholderMessage } from "./placeholders";
 export { setExternalDeckLayerOrderHandler } from "./layer-sync";

@@ -13,6 +13,7 @@ import {
   type ExperienceLevel,
   type UiProfileSettings,
 } from "../hooks/useDesktopSettings";
+import { OPTIONAL_RESOURCE_HEADER } from "./diagnostics";
 import { isTauri } from "./is-tauri";
 import { normalizeStringList } from "./string-lists";
 import { presetHiddenSets } from "./ui-profile";
@@ -81,7 +82,12 @@ async function readAdminProfileFile(): Promise<AdminProfileFile | null> {
   }
 
   try {
-    const response = await fetch(`${import.meta.env.BASE_URL}admin-profile.json`);
+    // The admin file is optional; a 404 here is the normal "no admin profile"
+    // case, so flag the request benign to keep it out of the error diagnostics.
+    const response = await fetch(
+      `${import.meta.env.BASE_URL}admin-profile.json`,
+      { headers: { [OPTIONAL_RESOURCE_HEADER]: "1" } },
+    );
     if (!response.ok) return null;
     return parseAdminProfile(await response.text());
   } catch {

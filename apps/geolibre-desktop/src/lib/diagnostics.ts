@@ -61,6 +61,42 @@ const FETCH_FAILURE_MESSAGES = ["Failed to fetch", "Load failed"];
 const TAURI_IPC_FALLBACK_WARNING =
   "IPC custom protocol failed, Tauri will now use the postMessage interface instead";
 
+// Request header that flags a fetch whose failure (typically a 404) is expected
+// and harmless — e.g. an optional config file that may simply be absent. A
+// non-ok response to such a request is recorded at info level instead of error,
+// so it does not surface as a problem in the diagnostics panel (issue follow-up
+// to #500: the optional admin-profile.json 404 on every load).
+export const OPTIONAL_RESOURCE_HEADER = "x-geolibre-optional-resource";
+
+/** Read a single header value across the Headers/array/record init shapes. */
+function readHeader(headers: HeadersInit | undefined, name: string): string | null {
+  if (!headers) return null;
+  const target = name.toLowerCase();
+  if (headers instanceof Headers) return headers.get(name);
+  if (Array.isArray(headers)) {
+    for (const [key, value] of headers) {
+      if (key.toLowerCase() === target) return value;
+    }
+    return null;
+  }
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === target) return value;
+  }
+  return null;
+}
+
+/** Whether a request opted out of error-level logging for benign failures. */
+function isOptionalResourceRequest(
+  input: Parameters<typeof fetch>[0],
+  init: Parameters<typeof fetch>[1],
+): boolean {
+  if (readHeader(init?.headers, OPTIONAL_RESOURCE_HEADER) != null) return true;
+  return (
+    input instanceof Request &&
+    input.headers.get(OPTIONAL_RESOURCE_HEADER) != null
+  );
+}
+
 function looksLikeFetchFailure(reason: unknown): boolean {
   const message =
     reason instanceof Error
@@ -310,11 +346,15 @@ export function installDiagnosticsCapture(): () => void {
     const method = requestMethod(input, init);
     const url = requestUrl(input);
 
+    // A request may declare that a non-ok response (e.g. a 404 for an optional
+    // file) is expected, so it is logged as info rather than flagged an error.
+    const optional = isOptionalResourceRequest(input, init);
+
     try {
       const response = await originalFetch(input, init);
       appendDiagnostic({
         category: "network",
-        level: response.ok ? "info" : "error",
+        level: response.ok || optional ? "info" : "error",
         message: `${method} ${response.status} ${response.statusText}`.trim(),
         durationMs: Math.round(performance.now() - startedAt),
         method,

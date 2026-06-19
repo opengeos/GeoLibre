@@ -38,6 +38,7 @@ import {
   syncLayer,
   vectorTileStyleLayerIds,
 } from "./layer-sync";
+import { ResetBearingControl } from "./reset-bearing-control";
 
 const DEFAULT_PROJECTION: maplibregl.ProjectionSpecification = {
   type: "globe",
@@ -201,6 +202,8 @@ export class MapController {
   private map: maplibregl.Map | null = null;
   private navigationControl: maplibregl.NavigationControl | null = null;
   private fullscreenControl: maplibregl.FullscreenControl | null = null;
+  private resetBearingControl: ResetBearingControl | null = null;
+  private resetBearingLabel = "Reset pitch & bearing";
   private geolocateControl: maplibregl.GeolocateControl | null = null;
   private globeControl: maplibregl.GlobeControl | null = null;
   private terrainControl: maplibregl.TerrainControl | null = null;
@@ -282,6 +285,9 @@ export class MapController {
     // control cluster, matching the universal placement users expect (issue
     // #512). MapLibre stacks controls in insertion order within a corner.
     this.addFullscreenControl();
+    // Stacks directly below the fullscreen toggle, the placement requested in
+    // issue #508. MapLibre orders controls by insertion within a corner.
+    this.addResetBearingControl();
     this.addNavigationControl();
     this.addGeolocateControl();
     this.addGlobeControl();
@@ -537,6 +543,7 @@ export class MapController {
   destroy(): void {
     this.removeNavigationControl();
     this.removeFullscreenControl();
+    this.removeResetBearingControl();
     this.removeGeolocateControl();
     this.removeGlobeControl();
     this.removeTerrainControl();
@@ -1589,6 +1596,32 @@ export class MapController {
     if (!this.fullscreenControl) return;
     this.removeControl(this.fullscreenControl);
     this.fullscreenControl = null;
+  }
+
+  private addResetBearingControl(): boolean {
+    if (!this.map || this.resetBearingControl) return false;
+    this.resetBearingControl = new ResetBearingControl({
+      label: this.resetBearingLabel,
+    });
+    // Always top-right so it sits with (and just under) the fullscreen toggle.
+    this.map.addControl(this.resetBearingControl, "top-right");
+    return true;
+  }
+
+  private removeResetBearingControl(): void {
+    if (!this.resetBearingControl) return;
+    this.removeControl(this.resetBearingControl);
+    this.resetBearingControl = null;
+  }
+
+  /**
+   * Update the reset-bearing control's tooltip/aria label, e.g. after a UI
+   * language change. The label is stored so a control recreated later (style
+   * reload) picks up the latest translation.
+   */
+  setResetBearingLabel(label: string): void {
+    this.resetBearingLabel = label;
+    this.resetBearingControl?.setLabel(label);
   }
 
   private addGeolocateControl(): boolean {

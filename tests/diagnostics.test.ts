@@ -14,6 +14,11 @@ const storage = new Map<string, string>();
       storage.delete(key);
     },
   },
+  // Stubs so installDiagnosticsCapture (which patches window.fetch and adds
+  // window error listeners) can run under node --test.
+  fetch: (() => Promise.resolve(new Response())) as typeof fetch,
+  addEventListener: () => {},
+  removeEventListener: () => {},
 };
 
 type DiagnosticsModule =
@@ -22,6 +27,8 @@ let appendDiagnostic: DiagnosticsModule["appendDiagnostic"];
 let clearDiagnostics: DiagnosticsModule["clearDiagnostics"];
 let getDiagnosticsSnapshot: DiagnosticsModule["getDiagnosticsSnapshot"];
 let setCaptureNetworkInfo: DiagnosticsModule["setCaptureNetworkInfo"];
+let installDiagnosticsCapture: DiagnosticsModule["installDiagnosticsCapture"];
+let OPTIONAL_RESOURCE_HEADER: DiagnosticsModule["OPTIONAL_RESOURCE_HEADER"];
 
 before(async () => {
   ({
@@ -29,6 +36,8 @@ before(async () => {
     clearDiagnostics,
     getDiagnosticsSnapshot,
     setCaptureNetworkInfo,
+    installDiagnosticsCapture,
+    OPTIONAL_RESOURCE_HEADER,
   } = await import("../apps/geolibre-desktop/src/lib/diagnostics"));
 });
 
@@ -259,5 +268,38 @@ describe("diagnostics startup transient suppression", () => {
     install();
     console.warn("a normal warning");
     assert.deepEqual(echoed, ["a normal warning"]);
+  });
+
+  it("flags an unmarked non-ok response as an error", async () => {
+    win.fetch = (() =>
+      Promise.resolve(
+        new Response(null, { status: 404, statusText: "Not Found" }),
+      )) as unknown as typeof fetch;
+    install();
+    await (win.fetch as typeof fetch)("/missing.json");
+    const [record] = getDiagnosticsSnapshot().records;
+    assert.equal(record.category, "network");
+    assert.equal(record.level, "error");
+  });
+
+  it("downgrades a non-ok response on an optional-resource request", async () => {
+    setCaptureNetworkInfo(true);
+    try {
+      win.fetch = (() =>
+        Promise.resolve(
+          new Response(null, { status: 404, statusText: "Not Found" }),
+        )) as unknown as typeof fetch;
+      install();
+      await (win.fetch as typeof fetch)("/admin-profile.json", {
+        headers: { [OPTIONAL_RESOURCE_HEADER]: "1" },
+      });
+      const [record] = getDiagnosticsSnapshot().records;
+      assert.equal(record.category, "network");
+      // Marked optional, so the 404 is informational rather than an error.
+      assert.equal(record.level, "info");
+      assert.equal(getDiagnosticsSnapshot().errorCount, 0);
+    } finally {
+      setCaptureNetworkInfo(false);
+    }
   });
 });
