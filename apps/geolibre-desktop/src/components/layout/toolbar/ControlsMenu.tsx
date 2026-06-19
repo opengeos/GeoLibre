@@ -76,6 +76,7 @@ export function ControlsMenu({
       show(`controls.mapControl.${control.id}`),
     ) ||
     show("controls.atmosphereEffects") ||
+    show("controls.spinGlobe") ||
     show("controls.directions") ||
     show("controls.reverseGeocode");
 
@@ -114,6 +115,12 @@ export function ControlsMenu({
             onPreview={onPreviewEffectsSettings}
             onCommit={onCommitEffectsSettings}
           />
+        )}
+        {show("controls.spinGlobe") && (
+          <DropdownMenuItem onSelect={panels.spinGlobe.toggle}>
+            {t("toolbar.item.spinGlobe")}
+            {panels.spinGlobe.visible ? " ✓" : ""}
+          </DropdownMenuItem>
         )}
         {show("controls.directions") && (
           <DropdownMenuItem

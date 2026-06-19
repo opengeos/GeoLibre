@@ -909,6 +909,7 @@
       "fieldCollection": "Field Collection...",
       "atmosphereEffects": "Atmospheric Effects",
       "atmosphereEnabled": "Enabled",
+      "spinGlobe": "Spinning Globe",
       "directions": "Directions",
       "directionsTooltip": "Routing sends your waypoints to the public OSRM demo server (router.project-osrm.org).",
       "search": "Search",

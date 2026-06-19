@@ -273,6 +273,44 @@ body,
   display: none !important;
 }
 
+/* SpinGlobeControl (maplibre-gl-components) renders an inline-styled, light-only
+   panel positioned flush against its toolbar button. Re-theme it to the app
+   popover so it reads in dark mode, and add a small gap so the panel does not
+   touch the control icon. */
+.spin-globe-panel {
+  right: calc(100% + 8px) !important;
+  background: hsl(var(--popover)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.25) !important;
+  color: hsl(var(--popover-foreground)) !important;
+}
+
+/* The control hardcodes color:#000 inline on the title, close button, speed
+   label, and units, so recolor every descendant to the popover foreground. */
+.spin-globe-panel * {
+  color: hsl(var(--popover-foreground)) !important;
+}
+
+/* The Start/Stop toggle is the panel's only direct-child button (the close "×"
+   is nested in the header), so this leaves the close button transparent. */
+.spin-globe-panel > button {
+  background: hsl(var(--secondary)) !important;
+  border-color: hsl(var(--border)) !important;
+}
+
+.spin-globe-panel > button:hover {
+  background: hsl(var(--accent)) !important;
+}
+
+/* The control's toolbar button stays white like the other map controls in both
+   themes, but its icon uses stroke="currentColor"; without a fixed color it
+   inherits the dark-mode text color and goes white-on-white over the white
+   button. Pin it to the same dark color the other control icons use (see
+   .maplibregl-ctrl-layer-control below). */
+.maplibre-gl-spin-globe-control button {
+  color: #1f2a37;
+}
+
 .geolibre-duckdb-control {
   background-color: transparent !important;
   box-shadow: none !important;

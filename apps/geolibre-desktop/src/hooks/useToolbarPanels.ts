@@ -7,6 +7,7 @@ import {
   closeMinimapPanel,
   closePrintPanel,
   closeSearchPlacesPanel,
+  closeSpinGlobePanel,
   closeViewStatePanel,
   isBookmarkPanelVisible,
   isColorbarPanelVisible,
@@ -17,6 +18,7 @@ import {
   isMinimapPanelVisible,
   isPrintPanelVisible,
   isSearchPlacesPanelVisible,
+  isSpinGlobePanelVisible,
   isViewStatePanelVisible,
   openBookmarkPanel,
   openColorbarPanel,
@@ -26,6 +28,7 @@ import {
   openMinimapPanel,
   openPrintPanel,
   openSearchPlacesPanel,
+  openSpinGlobePanel,
   openViewStatePanel,
   subscribeBookmarkPanel,
   subscribeColorbarPanel,
@@ -36,6 +39,7 @@ import {
   subscribeMinimapPanel,
   subscribePrintPanel,
   subscribeSearchPlacesPanel,
+  subscribeSpinGlobePanel,
   subscribeViewStatePanel,
   toggleEarthEnginePanel,
 } from "@geolibre/plugins";
@@ -51,6 +55,7 @@ export interface ToolbarPanel {
 /** Visibility + toggle state for every panel surfaced in the toolbar menus. */
 export interface ToolbarPanels {
   searchPlaces: ToolbarPanel;
+  spinGlobe: ToolbarPanel;
   print: ToolbarPanel;
   colorbar: ToolbarPanel;
   legend: ToolbarPanel;
@@ -75,6 +80,11 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
     subscribeSearchPlacesPanel,
     isSearchPlacesPanelVisible,
     isSearchPlacesPanelVisible,
+  );
+  const spinGlobeVisible = useSyncExternalStore(
+    subscribeSpinGlobePanel,
+    isSpinGlobePanelVisible,
+    isSpinGlobePanelVisible,
   );
   const printVisible = useSyncExternalStore(
     subscribePrintPanel,
@@ -131,6 +141,16 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
           return;
         }
         openSearchPlacesPanel(appApi);
+      },
+    },
+    spinGlobe: {
+      visible: spinGlobeVisible,
+      toggle: () => {
+        if (spinGlobeVisible) {
+          closeSpinGlobePanel(appApi);
+          return;
+        }
+        openSpinGlobePanel(appApi);
       },
     },
     print: {

@@ -50,6 +50,8 @@ import type {
   PrintTheme,
   SearchControl,
   SearchControlOptions,
+  SpinGlobeControl,
+  SpinGlobeControlOptions,
   StacSearchControl,
   StacSearchControlOptions,
   StacSearchEventHandler,
@@ -99,6 +101,8 @@ type PrintControlConstructor =
   (typeof import("maplibre-gl-components"))["PrintControl"];
 type SearchControlConstructor =
   (typeof import("maplibre-gl-components"))["SearchControl"];
+type SpinGlobeControlConstructor =
+  (typeof import("maplibre-gl-components"))["SpinGlobeControl"];
 type StacSearchControlConstructor =
   (typeof import("maplibre-gl-components"))["StacSearchControl"];
 type ZarrLayerControlConstructor =
@@ -141,6 +145,7 @@ interface ComponentsConstructors {
   PMTilesLayerControl: PMTilesLayerControlConstructor;
   PrintControl: PrintControlConstructor;
   SearchControl: SearchControlConstructor;
+  SpinGlobeControl: SpinGlobeControlConstructor;
   StacSearchControl: StacSearchControlConstructor;
   ViewStateControl: ViewStateControlConstructor;
   ZarrLayerControl: ZarrLayerControlConstructor;
@@ -151,6 +156,7 @@ const cogRasterControlPosition: GeoLibreMapControlPosition = "top-left";
 const flatGeobufControlPosition: GeoLibreMapControlPosition = "top-left";
 const pmtilesControlPosition: GeoLibreMapControlPosition = "top-left";
 const searchControlPosition: GeoLibreMapControlPosition = "top-right";
+const spinGlobeControlPosition: GeoLibreMapControlPosition = "top-right";
 const measureControlPosition: GeoLibreMapControlPosition = "top-left";
 const bookmarkControlPosition: GeoLibreMapControlPosition = "top-left";
 const minimapControlPosition: GeoLibreMapControlPosition = "bottom-left";
@@ -272,6 +278,14 @@ const SEARCH_OPTIONS = {
   placeholder: "Search places...",
   width: 320,
 } satisfies SearchControlOptions;
+
+const SPIN_GLOBE_OPTIONS = {
+  // Start expanded so opening the panel from the Controls menu immediately
+  // reveals the speed slider and spin toggle rather than a collapsed icon.
+  collapsed: false,
+  pauseOnInteraction: true,
+  speed: 10,
+} satisfies SpinGlobeControlOptions;
 
 const MEASURE_OPTIONS = {
   backgroundColor: "hsl(var(--popover))",
@@ -623,6 +637,7 @@ let flatGeobufControl: AddVectorControl | null = null;
 let pmtilesControl: PMTilesLayerControl | null = null;
 let printControl: PrintControl | null = null;
 let searchControl: SearchControl | null = null;
+let spinGlobeControl: SpinGlobeControl | null = null;
 let measureControl: MeasureControl | null = null;
 let bookmarkControl: BookmarkControl | null = null;
 let minimapControl: MinimapControl | null = null;
@@ -643,6 +658,7 @@ let geoTiffRasterOverlayMounted = false;
 let pmtilesControlMounted = false;
 let printControlMounted = false;
 let searchControlMounted = false;
+let spinGlobeControlMounted = false;
 let measureControlMounted = false;
 let bookmarkControlMounted = false;
 let minimapControlMounted = false;
@@ -669,6 +685,8 @@ let componentsConstructorsPromise: Promise<ComponentsConstructors> | null =
   null;
 let searchPlacesPanelVisible = false;
 const searchPlacesPanelListeners = new Set<() => void>();
+let spinGlobePanelVisible = false;
+const spinGlobePanelListeners = new Set<() => void>();
 let measurePanelVisible = false;
 const measurePanelListeners = new Set<() => void>();
 let bookmarkPanelVisible = false;
@@ -1054,6 +1072,7 @@ const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
       PMTilesLayerControl: PMTilesLayerControlClass,
       PrintControl: PrintControlClass,
       SearchControl: SearchControlClass,
+      SpinGlobeControl: SpinGlobeControlClass,
       StacSearchControl: StacSearchControlClass,
       ViewStateControl: ViewStateControlClass,
       ZarrLayerControl: ZarrLayerControlClass,
@@ -1074,6 +1093,7 @@ const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
       PMTilesLayerControl: PMTilesLayerControlClass,
       PrintControl: PrintControlClass,
       SearchControl: SearchControlClass,
+      SpinGlobeControl: SpinGlobeControlClass,
       StacSearchControl: StacSearchControlClass,
       ViewStateControl: ViewStateControlClass,
       ZarrLayerControl: ZarrLayerControlClass,
@@ -1135,6 +1155,7 @@ export const maplibreComponentsPlugin: GeoLibrePlugin = {
     teardownPMTilesControl(app);
     teardownPrintControl(app);
     teardownSearchControl(app);
+    teardownSpinGlobeControl(app);
     teardownMeasureControl(app);
     teardownBookmarkControl(app);
     teardownMinimapControl(app);
@@ -1539,6 +1560,26 @@ export function isSearchPlacesPanelVisible(): boolean {
 export function subscribeSearchPlacesPanel(listener: () => void): () => void {
   searchPlacesPanelListeners.add(listener);
   return () => searchPlacesPanelListeners.delete(listener);
+}
+
+// Standalone Spinning Globe control, toggled from the Controls menu. It mirrors
+// the spinGlobe sub-control of the Components plugin's ControlGrid, but lives on
+// its own so it can be opened independently from the Controls menu.
+export function openSpinGlobePanel(app: GeoLibreAppAPI): void {
+  void openStandaloneSpinGlobeControl(app);
+}
+
+export function closeSpinGlobePanel(app: GeoLibreAppAPI): void {
+  teardownSpinGlobeControl(app);
+}
+
+export function isSpinGlobePanelVisible(): boolean {
+  return spinGlobePanelVisible;
+}
+
+export function subscribeSpinGlobePanel(listener: () => void): () => void {
+  spinGlobePanelListeners.add(listener);
+  return () => spinGlobePanelListeners.delete(listener);
 }
 
 // Standalone Measure panel, opened on demand from the Controls menu.
@@ -2000,6 +2041,58 @@ async function openStandaloneBookmarkControl(
     setBookmarkPanelVisible(true);
   }, 0);
   return true;
+}
+
+async function openStandaloneSpinGlobeControl(
+  app: GeoLibreAppAPI,
+): Promise<boolean> {
+  const { SpinGlobeControl: SpinGlobeControlClass } =
+    await getComponentsConstructors();
+
+  spinGlobeControl ??= createSpinGlobeControl(SpinGlobeControlClass);
+
+  if (!spinGlobeControlMounted) {
+    const added = app.addMapControl(spinGlobeControl, spinGlobeControlPosition);
+    if (!added) {
+      spinGlobeControl = null;
+      return false;
+    }
+    spinGlobeControlMounted = true;
+  }
+
+  setTimeout(() => {
+    // Expand the settings panel so the speed slider and spin toggle are visible
+    // immediately, mirroring how the other Controls-menu panels open expanded.
+    spinGlobeControl?.expand();
+    setSpinGlobePanelVisible(true);
+  }, 0);
+  return true;
+}
+
+function createSpinGlobeControl(
+  SpinGlobeControlClass: SpinGlobeControlConstructor,
+): SpinGlobeControl {
+  return new SpinGlobeControlClass(SPIN_GLOBE_OPTIONS);
+}
+
+function teardownSpinGlobeControl(app: GeoLibreAppAPI): void {
+  if (spinGlobeControl && spinGlobeControlMounted) {
+    // Stop the rotation before removing so a torn-down control can't keep
+    // drifting the map center via a still-running animation frame.
+    spinGlobeControl.stopSpin();
+    app.removeMapControl(spinGlobeControl);
+  }
+  spinGlobeControl = null;
+  spinGlobeControlMounted = false;
+  setSpinGlobePanelVisible(false);
+}
+
+function setSpinGlobePanelVisible(visible: boolean): void {
+  if (spinGlobePanelVisible === visible) return;
+  spinGlobePanelVisible = visible;
+  for (const listener of spinGlobePanelListeners) {
+    listener();
+  }
 }
 
 async function openStandaloneMinimapControl(
