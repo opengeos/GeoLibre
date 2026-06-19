@@ -67,6 +67,11 @@ const PREVIEW_LONG_EDGE = 560;
 /** Common industry scale denominators offered as quick presets (GH #522). */
 const SCALE_PRESETS = [500, 1000, 2500, 5000, 10000, 25000, 50000, 100000];
 
+/** Bounds (px) for the draggable controls column inside the dialog. */
+const CONTROLS_MIN_WIDTH = 260;
+const CONTROLS_MAX_WIDTH = 560;
+const CONTROLS_DEFAULT_WIDTH = 320;
+
 function sanitizeFilename(name: string): string {
   // Keep letters and digits from any script (\p{L}\p{N}) so non-Latin project
   // names are not stripped to the fallback.
@@ -175,6 +180,51 @@ export function PrintLayoutDialog({
   // what the user is typing.
   const scaleFocusedRef = useRef(false);
   const [scaleDraft, setScaleDraft] = useState("");
+  // Width of the left controls column; dragged via the splitter handle.
+  const [controlsWidth, setControlsWidth] = useState(CONTROLS_DEFAULT_WIDTH);
+
+  // Drag the splitter between the controls column and the preview. Mirrors the
+  // shell's panel-resize idiom: pointer capture so the drag survives leaving the
+  // handle, RAF-throttled width updates, and a col-resize body cursor.
+  const startSplitterResize = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      const startX = event.clientX;
+      const startWidth = controlsWidth;
+      let nextWidth = startWidth;
+      let frame: number | null = null;
+      const prevCursor = document.body.style.cursor;
+      const prevSelect = document.body.style.userSelect;
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+
+      const onMove = (e: PointerEvent) => {
+        nextWidth = Math.max(
+          CONTROLS_MIN_WIDTH,
+          Math.min(CONTROLS_MAX_WIDTH, startWidth + e.clientX - startX),
+        );
+        if (frame !== null) return;
+        frame = window.requestAnimationFrame(() => {
+          frame = null;
+          setControlsWidth(nextWidth);
+        });
+      };
+      const onUp = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+        if (frame !== null) window.cancelAnimationFrame(frame);
+        setControlsWidth(nextWidth);
+        document.body.style.cursor = prevCursor;
+        document.body.style.userSelect = prevSelect;
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
+    },
+    [controlsWidth],
+  );
 
   const isCustom = paperSize === "custom";
   const paperOptions = useMemo(
@@ -542,9 +592,16 @@ export function PrintLayoutDialog({
           <DialogDescription>{t("printLayout.description")}</DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-6 md:grid-cols-[320px_1fr]">
+        <div
+          className="grid grid-cols-1 gap-6 md:gap-2 md:[grid-template-columns:var(--pl-cols)]"
+          style={
+            {
+              "--pl-cols": `${controlsWidth}px 10px minmax(0,1fr)`,
+            } as React.CSSProperties
+          }
+        >
           {/* Controls */}
-          <div className="max-h-[60vh] space-y-4 overflow-y-auto pr-1">
+          <div className="max-h-[60vh] min-w-0 space-y-4 overflow-y-auto pr-1">
             <div className="space-y-1.5">
               <Label htmlFor="layout-title">{t("printLayout.titleLabel")}</Label>
               <Input
@@ -1146,8 +1203,19 @@ export function PrintLayoutDialog({
             )}
           </div>
 
+          {/* Splitter between the controls and the preview */}
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={t("printLayout.resizeControls")}
+            className="group relative hidden cursor-col-resize touch-none select-none md:block"
+            onPointerDown={startSplitterResize}
+          >
+            <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors group-hover:bg-primary" />
+          </div>
+
           {/* Preview */}
-          <div className="flex flex-col items-center justify-start gap-3">
+          <div className="flex min-w-0 flex-col items-center justify-start gap-3">
             <div className="flex w-full items-center justify-between">
               <span className="text-sm text-muted-foreground">
                 {t("printLayout.preview")}
