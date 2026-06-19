@@ -7,15 +7,19 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  Input,
   ScrollArea,
   Separator,
 } from "@geolibre/ui";
 import {
+  Check,
   HardDrive,
   Loader2,
+  Pencil,
   RefreshCw,
   Trash2,
   WifiOff,
+  X,
 } from "lucide-react";
 import { hasActiveServiceWorker, warmUrls } from "../../lib/offline-tiles";
 import {
@@ -26,6 +30,7 @@ import {
   measureRegionBytes,
   type OfflineRegion,
   regionAllUrls,
+  renameOfflineRegion,
 } from "../../lib/offline-regions";
 
 interface OfflineManagerDialogProps {
@@ -74,6 +79,9 @@ export function OfflineManagerDialog({
   });
   // Two-step inline delete confirmation: first click arms, second deletes.
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  // Inline rename: the region id being edited and its draft name.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftName, setDraftName] = useState("");
   const [swActive, setSwActive] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   // Mirror `regions` in a ref so the async `update` finally block re-measures
@@ -107,6 +115,7 @@ export function OfflineManagerDialog({
     }
     setSwActive(hasActiveServiceWorker());
     setConfirmId(null);
+    setEditingId(null);
     setBusyId(null);
     setProgress({ done: 0, total: 0 });
     const list = loadOfflineRegions();
@@ -154,6 +163,23 @@ export function OfflineManagerDialog({
     [refreshSizes],
   );
 
+  const startRename = useCallback((region: OfflineRegion) => {
+    setConfirmId(null);
+    setEditingId(region.id);
+    setDraftName(region.name);
+  }, []);
+
+  const cancelRename = useCallback(() => setEditingId(null), []);
+
+  // Persist the trimmed draft as the region's name. An empty draft just cancels
+  // (a region always keeps a non-empty label).
+  const commitRename = useCallback(() => {
+    if (editingId === null) return;
+    const name = draftName.trim();
+    if (name) setRegions(renameOfflineRegion(editingId, name));
+    setEditingId(null);
+  }, [editingId, draftName]);
+
   const totalBytes = Object.values(sizes).reduce((sum, b) => sum + b, 0);
   const busy = busyId !== null;
 
@@ -189,10 +215,26 @@ export function OfflineManagerDialog({
                     className="rounded-md border border-border p-3"
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">
-                          {region.name}
-                        </p>
+                      <div className="min-w-0 flex-1">
+                        {editingId === region.id ? (
+                          <Input
+                            autoFocus
+                            value={draftName}
+                            aria-label={t("offlineManager.nameLabel")}
+                            className="mb-1 h-7 text-sm"
+                            onChange={(event) =>
+                              setDraftName(event.target.value)
+                            }
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") commitRename();
+                              else if (event.key === "Escape") cancelRename();
+                            }}
+                          />
+                        ) : (
+                          <p className="truncate text-sm font-medium">
+                            {region.name}
+                          </p>
+                        )}
                         <p className="text-xs text-muted-foreground">
                           {t("offlineManager.zoomRange", {
                             min: region.minZoom,
@@ -214,7 +256,26 @@ export function OfflineManagerDialog({
                         </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
-                        {confirmId === region.id ? (
+                        {editingId === region.id ? (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title={t("common.save")}
+                              onClick={commitRename}
+                            >
+                              <Check className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title={t("common.cancel")}
+                              onClick={cancelRename}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </>
+                        ) : confirmId === region.id ? (
                           <>
                             <Button
                               variant="ghost"
@@ -233,6 +294,15 @@ export function OfflineManagerDialog({
                           </>
                         ) : (
                           <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title={t("offlineManager.rename")}
+                              disabled={busy}
+                              onClick={() => startRename(region)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
                             <Button
                               variant="ghost"
                               size="icon"

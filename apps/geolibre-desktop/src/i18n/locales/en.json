@@ -340,6 +340,8 @@
     "tilesCount_one": "{{count}} tile",
     "tilesCount_other": "{{count}} tiles",
     "savedOn": "Saved {{date}}",
+    "rename": "Rename this area",
+    "nameLabel": "Area name",
     "update": "Refresh this area",
     "delete": "Delete this area",
     "confirmDelete": "Delete",
