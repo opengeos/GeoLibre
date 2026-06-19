@@ -235,6 +235,9 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   // Controls — built-in map controls
   { id: "controls.mapControl.navigation", menuId: "controls", labelKey: "toolbar.mapControl.navigation", tier: "basic" },
   { id: "controls.mapControl.fullscreen", menuId: "controls", labelKey: "toolbar.mapControl.fullscreen", tier: "basic" },
+  // Shown on the map by default, so toggleable at every level (a beginner must
+  // be able to turn it off).
+  { id: "controls.mapControl.compass", menuId: "controls", labelKey: "toolbar.mapControl.compass", tier: "basic" },
   { id: "controls.mapControl.geolocate", menuId: "controls", labelKey: "toolbar.mapControl.geolocate", tier: "intermediate" },
   // Globe, Scale, and Attribution are shown on the map by default, so they must
   // be toggleable at every level (otherwise a beginner sees them with no way to

@@ -830,6 +830,7 @@
     "mapControl": {
       "navigation": "Navigation",
       "fullscreen": "Fullscreen",
+      "compass": "Compass",
       "geolocate": "Geolocate",
       "globe": "Globe",
       "terrain": "Terrain",

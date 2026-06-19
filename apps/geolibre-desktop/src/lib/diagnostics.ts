@@ -61,6 +61,25 @@ const FETCH_FAILURE_MESSAGES = ["Failed to fetch", "Load failed"];
 const TAURI_IPC_FALLBACK_WARNING =
   "IPC custom protocol failed, Tauri will now use the postMessage interface instead";
 
+// MapLibre warns this every time a camera animation eases around a point (the
+// inertia of a rotate/tilt gesture, double-click zoom, etc.) while the globe
+// projection is active — globe simply ignores the around-point and the camera
+// still moves correctly. It is harmless but fires on routine interaction, so it
+// is dropped from diagnostics entirely rather than echoed on every gesture.
+const BENIGN_CONSOLE_WARNINGS = [
+  "Easing around a point is not supported under globe projection.",
+];
+
+/** Whether a console.warn message is a known-benign warning to drop entirely. */
+function isBenignConsoleWarning(args: unknown[]): boolean {
+  return (
+    typeof args[0] === "string" &&
+    BENIGN_CONSOLE_WARNINGS.some((needle) =>
+      (args[0] as string).includes(needle),
+    )
+  );
+}
+
 // Request header that flags a fetch whose failure (typically a 404) is expected
 // and harmless — e.g. an optional config file that may simply be absent. A
 // non-ok response to such a request is recorded at info level instead of error,
@@ -399,6 +418,10 @@ export function installDiagnosticsCapture(): () => void {
   };
 
   console.warn = (...args: unknown[]) => {
+    // Known-benign third-party warnings (e.g. MapLibre's globe easing notice on
+    // every rotate/tilt gesture) are dropped entirely — neither recorded nor
+    // echoed — so they do not clutter diagnostics or the console.
+    if (isBenignConsoleWarning(args)) return;
     const isTauriIpcFallback =
       inStartupWindow() &&
       typeof args[0] === "string" &&

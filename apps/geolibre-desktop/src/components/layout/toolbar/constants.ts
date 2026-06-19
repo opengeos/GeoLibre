@@ -56,6 +56,7 @@ export const MAP_CONTROL_ITEMS: Array<{
 }> = [
   { id: "navigation", labelKey: "toolbar.mapControl.navigation" },
   { id: "fullscreen", labelKey: "toolbar.mapControl.fullscreen" },
+  { id: "compass", labelKey: "toolbar.mapControl.compass" },
   { id: "geolocate", labelKey: "toolbar.mapControl.geolocate" },
   { id: "globe", labelKey: "toolbar.mapControl.globe" },
   { id: "terrain", labelKey: "toolbar.mapControl.terrain" },
@@ -67,6 +68,7 @@ export const MAP_CONTROL_ITEMS: Array<{
 export const NEW_PROJECT_VISIBLE_BUILT_IN_CONTROLS = new Set<BuiltInMapControl>([
   "navigation",
   "fullscreen",
+  "compass",
   "globe",
   "layer-control",
 ]);

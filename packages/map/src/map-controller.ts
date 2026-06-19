@@ -160,6 +160,7 @@ interface GeoLibreLayerLabelWindow extends Window {
 export type BuiltInMapControl =
   | "navigation"
   | "fullscreen"
+  | "compass"
   | "geolocate"
   | "globe"
   | "terrain"
@@ -174,6 +175,7 @@ export const DEFAULT_BUILT_IN_CONTROL_VISIBILITY: Record<
 > = {
   navigation: false,
   fullscreen: true,
+  compass: true,
   geolocate: false,
   globe: true,
   terrain: false,
@@ -189,6 +191,7 @@ export const DEFAULT_BUILT_IN_CONTROL_POSITIONS: Record<
 > = {
   navigation: "top-right",
   fullscreen: "top-right",
+  compass: "top-right",
   geolocate: "top-right",
   globe: "top-right",
   terrain: "top-right",
@@ -202,8 +205,8 @@ export class MapController {
   private map: maplibregl.Map | null = null;
   private navigationControl: maplibregl.NavigationControl | null = null;
   private fullscreenControl: maplibregl.FullscreenControl | null = null;
-  private resetBearingControl: ResetBearingControl | null = null;
-  private resetBearingLabel = "Reset pitch & bearing";
+  private compassControl: ResetBearingControl | null = null;
+  private compassLabel = "Reset pitch & bearing";
   private geolocateControl: maplibregl.GeolocateControl | null = null;
   private globeControl: maplibregl.GlobeControl | null = null;
   private terrainControl: maplibregl.TerrainControl | null = null;
@@ -285,9 +288,11 @@ export class MapController {
     // control cluster, matching the universal placement users expect (issue
     // #512). MapLibre stacks controls in insertion order within a corner.
     this.addFullscreenControl();
-    // Stacks directly below the fullscreen toggle, the placement requested in
-    // issue #508. MapLibre orders controls by insertion within a corner.
-    this.addResetBearingControl();
+    // Added right after fullscreen so, with both at their default top-right
+    // position, the compass stacks directly below the fullscreen toggle (the
+    // placement requested in issue #508). MapLibre orders controls by insertion
+    // within a corner.
+    this.addCompassControl();
     this.addNavigationControl();
     this.addGeolocateControl();
     this.addGlobeControl();
@@ -502,6 +507,7 @@ export class MapController {
     if (visible) {
       if (control === "navigation") return this.addNavigationControl();
       if (control === "fullscreen") return this.addFullscreenControl();
+      if (control === "compass") return this.addCompassControl();
       if (control === "geolocate") return this.addGeolocateControl();
       if (control === "globe") return this.addGlobeControl();
       if (control === "terrain") return this.addTerrainControl();
@@ -513,6 +519,7 @@ export class MapController {
 
     if (control === "navigation") this.removeNavigationControl();
     else if (control === "fullscreen") this.removeFullscreenControl();
+    else if (control === "compass") this.removeCompassControl();
     else if (control === "geolocate") this.removeGeolocateControl();
     else if (control === "globe") this.removeGlobeControl();
     else if (control === "terrain") this.removeTerrainControl();
@@ -543,7 +550,7 @@ export class MapController {
   destroy(): void {
     this.removeNavigationControl();
     this.removeFullscreenControl();
-    this.removeResetBearingControl();
+    this.removeCompassControl();
     this.removeGeolocateControl();
     this.removeGlobeControl();
     this.removeTerrainControl();
@@ -1589,14 +1596,6 @@ export class MapController {
       this.fullscreenControl,
       this.controlPositions.fullscreen,
     );
-    // Re-stack the reset control immediately after fullscreen so it stays
-    // directly below it when fullscreen is repositioned (MapLibre orders
-    // controls by insertion within a corner). Skipped on first init, when the
-    // reset control has not been created yet (it is added just after).
-    if (this.resetBearingControl) {
-      this.removeResetBearingControl();
-      this.addResetBearingControl();
-    }
     return true;
   }
 
@@ -1606,34 +1605,31 @@ export class MapController {
     this.fullscreenControl = null;
   }
 
-  private addResetBearingControl(): boolean {
-    if (!this.map || this.resetBearingControl) return false;
-    this.resetBearingControl = new ResetBearingControl({
-      label: this.resetBearingLabel,
+  private addCompassControl(): boolean {
+    if (!this.map || this.compassControl || !this.controlVisibility.compass) {
+      return false;
+    }
+    this.compassControl = new ResetBearingControl({
+      label: this.compassLabel,
     });
-    // Share the fullscreen control's corner so it sits just under the toggle,
-    // tracking it if fullscreen is repositioned.
-    this.map.addControl(
-      this.resetBearingControl,
-      this.controlPositions.fullscreen,
-    );
+    this.map.addControl(this.compassControl, this.controlPositions.compass);
     return true;
   }
 
-  private removeResetBearingControl(): void {
-    if (!this.resetBearingControl) return;
-    this.removeControl(this.resetBearingControl);
-    this.resetBearingControl = null;
+  private removeCompassControl(): void {
+    if (!this.compassControl) return;
+    this.removeControl(this.compassControl);
+    this.compassControl = null;
   }
 
   /**
-   * Update the reset-bearing control's tooltip/aria label, e.g. after a UI
-   * language change. The label is cached so a control re-added after a full
-   * map reinitialisation picks up the latest translation without an extra call.
+   * Update the compass control's tooltip/aria label, e.g. after a UI language
+   * change. The label is cached so a control re-added after a full map
+   * reinitialisation picks up the latest translation without an extra call.
    */
-  setResetBearingLabel(label: string): void {
-    this.resetBearingLabel = label;
-    this.resetBearingControl?.setLabel(label);
+  setCompassLabel(label: string): void {
+    this.compassLabel = label;
+    this.compassControl?.setLabel(label);
   }
 
   private addGeolocateControl(): boolean {
@@ -1754,6 +1750,7 @@ export class MapController {
   private addBuiltInControl(control: BuiltInMapControl): boolean {
     if (control === "navigation") return this.addNavigationControl();
     if (control === "fullscreen") return this.addFullscreenControl();
+    if (control === "compass") return this.addCompassControl();
     if (control === "geolocate") return this.addGeolocateControl();
     if (control === "globe") return this.addGlobeControl();
     if (control === "terrain") return this.addTerrainControl();
@@ -1766,6 +1763,7 @@ export class MapController {
   private removeBuiltInControl(control: BuiltInMapControl): void {
     if (control === "navigation") this.removeNavigationControl();
     else if (control === "fullscreen") this.removeFullscreenControl();
+    else if (control === "compass") this.removeCompassControl();
     else if (control === "geolocate") this.removeGeolocateControl();
     else if (control === "globe") this.removeGlobeControl();
     else if (control === "terrain") this.removeTerrainControl();

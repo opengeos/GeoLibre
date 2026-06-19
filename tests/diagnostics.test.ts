@@ -270,6 +270,20 @@ describe("diagnostics startup transient suppression", () => {
     assert.deepEqual(echoed, ["a normal warning"]);
   });
 
+  it("drops the benign globe easing warning entirely", () => {
+    let echoed: unknown[] | null = null;
+    console.warn = (...args: unknown[]) => {
+      echoed = args;
+    };
+    install();
+    console.warn(
+      "Easing around a point is not supported under globe projection.",
+    );
+    // Neither echoed to the console nor recorded in diagnostics.
+    assert.equal(echoed, null);
+    assert.equal(getDiagnosticsSnapshot().totalCount, 0);
+  });
+
   it("flags an unmarked non-ok response as an error", async () => {
     win.fetch = (() =>
       Promise.resolve(
