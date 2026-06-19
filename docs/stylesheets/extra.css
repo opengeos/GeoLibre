@@ -127,6 +127,19 @@
   border-top-color: rgba(255, 255, 255, 0.12);
 }
 
+/* Tighten the desktop sidebar nav only; the mobile drawer keeps its default touch targets. */
+@media screen and (min-width: 76.25em) {
+  .md-nav--primary .md-nav__item:not(.md-nav__item--section) {
+    margin-top: 0;
+  }
+
+  .md-nav--primary .md-nav__link {
+    margin-top: 0;
+    padding-bottom: 0.2rem;
+    padding-top: 0.2rem;
+  }
+}
+
 .feature-grid {
   display: grid;
   gap: 1rem;
