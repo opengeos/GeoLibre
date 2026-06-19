@@ -395,6 +395,14 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   // streams means a key removed mid-run can't strand an unstoppable request.
   const showSetup = !hasKey && !running;
 
+  // When the panel leaves the setup card for the chat input (e.g. the user just
+  // added their first provider key), focus the input so they can type at once.
+  const prevShowSetupRef = useRef(showSetup);
+  useEffect(() => {
+    if (prevShowSetupRef.current && !showSetup) inputRef.current?.focus();
+    prevShowSetupRef.current = showSetup;
+  }, [showSetup]);
+
   return (
     <section
       ref={sectionRef}
