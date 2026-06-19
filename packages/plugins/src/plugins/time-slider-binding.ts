@@ -207,7 +207,6 @@ export function buildTimeBinding(
   let min = Number.POSITIVE_INFINITY;
   let max = Number.NEGATIVE_INFINITY;
   const rawSamples: unknown[] = [];
-  const inspected = Math.min(features.length, SAMPLE_LIMIT);
 
   for (let i = 0; i < features.length; i += 1) {
     const value = features[i]?.properties?.[property];
@@ -216,7 +215,9 @@ export function buildTimeBinding(
     if (ms === null) continue;
     if (ms < min) min = ms;
     if (ms > max) max = ms;
-    if (i < inspected) rawSamples.push(value);
+    // Sample the first SAMPLE_LIMIT *parseable* values (not the first indices),
+    // so value-kind detection is never starved when invalid rows lead the data.
+    if (rawSamples.length < SAMPLE_LIMIT) rawSamples.push(value);
   }
 
   if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
@@ -237,7 +238,9 @@ export function buildTimeBinding(
 /**
  * Advance a date by `amount` units of `unit`. Hour/day use millisecond math;
  * month/year use UTC calendar components so month lengths and leap years are
- * respected and the result aligns with `toISOString` bounds.
+ * respected and the result aligns with `toISOString` bounds. The day of month
+ * is clamped to the target month's length so a shift from a month-end date does
+ * not roll over (e.g. Jan 31 + 1 month is Feb 28, not Mar 3).
  *
  * @param date - The base date.
  * @param unit - The granularity unit.
@@ -257,8 +260,15 @@ export function addGranularityUnits(
   const h = date.getUTCHours();
   const min = date.getUTCMinutes();
   const s = date.getUTCSeconds();
-  if (unit === "month") return new Date(Date.UTC(y, m + amount, d, h, min, s));
-  return new Date(Date.UTC(y + amount, m, d, h, min, s));
+  // Resolve the target year/month, folding any month overflow into the year.
+  const rawMonth = unit === "month" ? m + amount : m;
+  const targetYear =
+    (unit === "year" ? y + amount : y) + Math.floor(rawMonth / 12);
+  const targetMonth = ((rawMonth % 12) + 12) % 12;
+  // Day 0 of the next month is the last day of the target month.
+  const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+  const day = Math.min(d, lastDay);
+  return new Date(Date.UTC(targetYear, targetMonth, day, h, min, s));
 }
 
 /**

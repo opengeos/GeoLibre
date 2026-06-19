@@ -101,6 +101,19 @@ describe("buildTimeBinding", () => {
     const fc = pointFeatures([{ date: "x" }, { date: "y" }]);
     assert.equal(buildTimeBinding(fc, "date"), null);
   });
+
+  it("detects the value kind when invalid rows lead the data", () => {
+    const fc = pointFeatures([
+      { date: "n/a" },
+      { date: "" },
+      { date: "2015-06-01" },
+      { date: "2016-06-01" },
+    ]);
+    const binding = buildTimeBinding(fc, "date");
+    // The leading invalid rows must not starve value-kind detection.
+    assert.equal(binding?.valueKind, "isoDate");
+    assert.equal(binding?.min, Date.parse("2015-06-01"));
+  });
 });
 
 describe("addGranularityUnits", () => {
@@ -117,6 +130,25 @@ describe("addGranularityUnits", () => {
     assert.equal(
       addGranularityUnits(base, "day", -1).toISOString(),
       "2015-06-14T00:00:00.000Z",
+    );
+  });
+
+  it("clamps the day at month-end boundaries instead of rolling over", () => {
+    assert.equal(
+      addGranularityUnits(new Date("2015-01-31T00:00:00Z"), "month", 1)
+        .toISOString(),
+      "2015-02-28T00:00:00.000Z",
+    );
+    assert.equal(
+      addGranularityUnits(new Date("2024-02-29T00:00:00Z"), "year", 1)
+        .toISOString(),
+      "2025-02-28T00:00:00.000Z",
+    );
+    // Month overflow folds into the year.
+    assert.equal(
+      addGranularityUnits(new Date("2015-12-15T00:00:00Z"), "month", 2)
+        .toISOString(),
+      "2016-02-15T00:00:00.000Z",
     );
   });
 });

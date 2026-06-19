@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { isDuckDBQueryLayer, useAppStore } from "@geolibre/core";
 import type { GeoLibreLayer, LayerGroup } from "@geolibre/core";
+import type { FeatureCollection } from "geojson";
 import {
   buildTimeBinding,
   canEditLayerGeometry,
@@ -248,6 +249,13 @@ export function LayerPanel({
   const [bindWindowMode, setBindWindowMode] = useState<
     "step" | "wide" | "wider"
   >("step");
+  // Feature collection resolved when the bind dialog opens, reused on confirm so
+  // a large layer is scanned only once.
+  const [bindLayerGeojson, setBindLayerGeojson] =
+    useState<FeatureCollection | null>(null);
+  // Latest bind-dialog request id, so a stale async scan cannot populate a
+  // dialog that has since been closed or reopened for another layer.
+  const bindRequestRef = useRef<string | null>(null);
   const { isActive: isPluginActive, toggle: togglePlugin } =
     usePluginRegistry();
   const [isCollapsed, setIsCollapsed] = useState(getIsMobileViewport);
@@ -597,19 +605,27 @@ export function LayerPanel({
   // finishes so the dialog can show a "scanning" state for large layers.
   const openBindTimeSliderDialog = useCallback(
     async (layer: GeoLibreLayer) => {
+      // Tag this request so a stale async scan (open A -> close -> open B)
+      // cannot populate the dialog now showing a different layer.
+      const requestId = layer.id;
+      bindRequestRef.current = requestId;
       setBindTimeSliderLayerId(layer.id);
       setBindCandidates(null);
       setBindProperty("");
       setBindWindowMode("step");
+      setBindLayerGeojson(null);
       try {
         const geojson = await resolveLayerGeojson(
           layer,
           mapControllerRef.current?.getMap() ?? undefined,
         );
+        if (bindRequestRef.current !== requestId) return;
         const candidates = detectTimeProperties(geojson ?? undefined);
+        setBindLayerGeojson(geojson ?? null);
         setBindCandidates(candidates);
         if (candidates.length > 0) setBindProperty(candidates[0].property);
       } catch {
+        if (bindRequestRef.current !== requestId) return;
         setBindCandidates([]);
       }
     },
@@ -622,10 +638,14 @@ export function LayerPanel({
   const confirmBindTimeSlider = useCallback(async () => {
     const layer = bindTimeSliderLayer;
     if (!layer || !bindProperty) return;
-    const geojson = await resolveLayerGeojson(
-      layer,
-      mapControllerRef.current?.getMap() ?? undefined,
-    );
+    // Reuse the feature collection resolved when the dialog opened so large
+    // layers are not scanned twice.
+    const geojson =
+      bindLayerGeojson ??
+      (await resolveLayerGeojson(
+        layer,
+        mapControllerRef.current?.getMap() ?? undefined,
+      ));
     const binding = buildTimeBinding(geojson ?? undefined, bindProperty);
     if (!binding) {
       setBindTimeSliderLayerId(null);
@@ -647,6 +667,7 @@ export function LayerPanel({
     setBindTimeSliderLayerId(null);
   }, [
     bindTimeSliderLayer,
+    bindLayerGeojson,
     bindProperty,
     bindWindowMode,
     mapControllerRef,

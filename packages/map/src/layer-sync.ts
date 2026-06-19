@@ -142,26 +142,26 @@ function withTimeFilter(
 
 // Base (control-owned) filters of external-native vector layers, captured the
 // first time a time window is applied so the window can be combined without
-// nesting and fully restored when the binding is removed. Keyed by native
+// nesting and fully restored when the binding is removed. Keyed first by the
+// map instance (a WeakMap, so entries are garbage-collected when a map is
+// destroyed and a fresh map never inherits stale base filters) then by native
 // MapLibre layer id.
-const externalNativeBaseFilters = new Map<
-  string,
-  maplibregl.FilterSpecification | null
+const externalNativeBaseFilters = new WeakMap<
+  maplibregl.Map,
+  Map<string, maplibregl.FilterSpecification | null>
 >();
 
-/**
- * Apply (or clear) a Time-Slider window on an external-native vector layer that
- * a control owns and paints itself (e.g. the Add Vector Layer control). The
- * control segregates geometry across its own native layers with a base filter
- * such as `["==", ["geometry-type"], "Point"]`; this combines that base filter
- * with the layer's transient {@link GeoLibreLayer.timeFilter} via `["all", ...]`
- * so the window narrows the visible features without disturbing the control's
- * paint. The control's base filter is captured once and restored on unbind.
- *
- * @param map - The MapLibre map.
- * @param nativeLayerId - A control-owned native layer id.
- * @param timeFilter - The layer's current time filter, or undefined when none.
- */
+function baseFiltersForMap(
+  map: maplibregl.Map,
+): Map<string, maplibregl.FilterSpecification | null> {
+  let perLayer = externalNativeBaseFilters.get(map);
+  if (!perLayer) {
+    perLayer = new Map();
+    externalNativeBaseFilters.set(map, perLayer);
+  }
+  return perLayer;
+}
+
 /**
  * Whether a MapLibre layer type accepts a `filter`. Raster/hillshade/background
  * layers do not, so a time window is never pushed onto them.
@@ -177,24 +177,38 @@ function nativeLayerSupportsFilter(type: string): boolean {
   );
 }
 
+/**
+ * Apply (or clear) a Time-Slider window on an external-native vector layer that
+ * a control owns and paints itself (e.g. the Add Vector Layer control). The
+ * control segregates geometry across its own native layers with a base filter
+ * such as `["==", ["geometry-type"], "Point"]`; this combines that base filter
+ * with the layer's transient {@link GeoLibreLayer.timeFilter} via `["all", ...]`
+ * so the window narrows the visible features without disturbing the control's
+ * paint. The control's base filter is captured once and restored on unbind.
+ *
+ * @param map - The MapLibre map.
+ * @param nativeLayerId - A control-owned native layer id.
+ * @param timeFilter - The layer's current time filter, or undefined when none.
+ */
 function applyExternalNativeTimeFilter(
   map: maplibregl.Map,
   nativeLayerId: string,
   timeFilter: unknown[] | undefined,
 ): void {
   if (!map.getLayer(nativeLayerId)) return;
+  const baseFilters = baseFiltersForMap(map);
   const hasTimeFilter = Array.isArray(timeFilter) && timeFilter.length > 0;
 
   if (!hasTimeFilter) {
     // No window: restore the control's own filter (if we previously replaced
     // it) and stop tracking this layer.
-    if (externalNativeBaseFilters.has(nativeLayerId)) {
-      const base = externalNativeBaseFilters.get(nativeLayerId) ?? null;
+    if (baseFilters.has(nativeLayerId)) {
+      const base = baseFilters.get(nativeLayerId) ?? null;
       const current = map.getFilter(nativeLayerId);
       if (JSON.stringify(current ?? null) !== JSON.stringify(base)) {
         map.setFilter(nativeLayerId, base ?? undefined);
       }
-      externalNativeBaseFilters.delete(nativeLayerId);
+      baseFilters.delete(nativeLayerId);
     }
     return;
   }
@@ -202,11 +216,11 @@ function applyExternalNativeTimeFilter(
   // Window active: capture the control's base filter the first time, then keep
   // reusing it so repeated ticks combine rather than nest.
   let base: maplibregl.FilterSpecification | null;
-  if (externalNativeBaseFilters.has(nativeLayerId)) {
-    base = externalNativeBaseFilters.get(nativeLayerId) ?? null;
+  if (baseFilters.has(nativeLayerId)) {
+    base = baseFilters.get(nativeLayerId) ?? null;
   } else {
     base = (map.getFilter(nativeLayerId) as maplibregl.FilterSpecification) ?? null;
-    externalNativeBaseFilters.set(nativeLayerId, base);
+    baseFilters.set(nativeLayerId, base);
   }
   const combined = (
     base ? ["all", base, timeFilter] : timeFilter
