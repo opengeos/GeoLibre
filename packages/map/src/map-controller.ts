@@ -171,7 +171,7 @@ export const DEFAULT_BUILT_IN_CONTROL_VISIBILITY: Record<
   BuiltInMapControl,
   boolean
 > = {
-  navigation: true,
+  navigation: false,
   fullscreen: true,
   geolocate: false,
   globe: true,
@@ -278,8 +278,11 @@ export class MapController {
     this.map.on("style.load", handleStyleReady);
     this.map.once("load", handleStyleReady);
     this.map.once("idle", () => this.enforceProjection());
-    this.addNavigationControl();
+    // Add the fullscreen toggle first so it anchors the top of the top-right
+    // control cluster, matching the universal placement users expect (issue
+    // #512). MapLibre stacks controls in insertion order within a corner.
     this.addFullscreenControl();
+    this.addNavigationControl();
     this.addGeolocateControl();
     this.addGlobeControl();
     this.addTerrainControl();
