@@ -135,7 +135,9 @@ export const TOP_LEVEL_MENUS: readonly TopLevelMenuEntry[] = [
   { id: "project", labelKey: "toolbar.menu.project", tier: "basic" },
   { id: "edit", labelKey: "toolbar.menu.edit", tier: "basic" },
   { id: "addData", labelKey: "toolbar.menu.addData", tier: "basic" },
-  { id: "processing", labelKey: "toolbar.menu.processing", tier: "basic" },
+  // Processing exposes analysis tools aimed at intermediate+ users; hide the
+  // whole menu for beginners.
+  { id: "processing", labelKey: "toolbar.menu.processing", tier: "intermediate" },
   { id: "controls", labelKey: "toolbar.menu.controls", tier: "basic" },
   // The Layer Control and Basemap plugins are active by default, so the Plugins
   // menu must stay reachable at every level to toggle them; the advanced plugins
@@ -195,12 +197,13 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   { id: "controls.mapControl.navigation", menuId: "controls", labelKey: "toolbar.mapControl.navigation", tier: "basic" },
   { id: "controls.mapControl.fullscreen", menuId: "controls", labelKey: "toolbar.mapControl.fullscreen", tier: "basic" },
   { id: "controls.mapControl.geolocate", menuId: "controls", labelKey: "toolbar.mapControl.geolocate", tier: "intermediate" },
-  // Globe and Scale are shown on the map by default, so they must be toggleable
-  // at every level (otherwise a beginner sees them with no way to turn them off).
+  // Globe, Scale, and Attribution are shown on the map by default, so they must
+  // be toggleable at every level (otherwise a beginner sees them with no way to
+  // turn them off).
   { id: "controls.mapControl.globe", menuId: "controls", labelKey: "toolbar.mapControl.globe", tier: "basic" },
   { id: "controls.mapControl.terrain", menuId: "controls", labelKey: "toolbar.mapControl.terrain", tier: "intermediate" },
   { id: "controls.mapControl.scale", menuId: "controls", labelKey: "toolbar.mapControl.scale", tier: "basic" },
-  { id: "controls.mapControl.attribution", menuId: "controls", labelKey: "toolbar.mapControl.attribution", tier: "advanced" },
+  { id: "controls.mapControl.attribution", menuId: "controls", labelKey: "toolbar.mapControl.attribution", tier: "basic" },
   { id: "controls.mapControl.logo", menuId: "controls", labelKey: "toolbar.mapControl.logo", tier: "advanced" },
   // Controls — overlays and panels
   { id: "controls.atmosphereEffects", menuId: "controls", labelKey: "toolbar.item.atmosphereEffects", tier: "advanced" },

@@ -85,11 +85,11 @@ describe("menu presets and predicates", () => {
     assert.deepEqual(sets.hiddenMenuItems, []);
   });
 
-  it("beginner keeps all top-level menus but hides advanced items", () => {
+  it("beginner hides the Processing menu and advanced items", () => {
     const sets = presetHiddenSets("beginner", []);
-    // Every top-level menu is basic-tier (decluttering happens at the item
-    // level), so no whole menu is hidden by the beginner preset.
-    assert.deepEqual(sets.hiddenMenus, []);
+    // The Processing menu is intermediate-tier, so beginners don't see it.
+    assert.deepEqual(sets.hiddenMenus, ["processing"]);
+    assert.ok(!sets.hiddenMenus.includes("project"));
     // Advanced items are hidden; basic ones are not.
     assert.ok(sets.hiddenMenuItems.includes("processing.raster"));
     assert.ok(sets.hiddenMenuItems.includes("help.diagnostics"));
@@ -98,6 +98,7 @@ describe("menu presets and predicates", () => {
     // Default-on controls stay reachable for beginners.
     assert.ok(!sets.hiddenMenuItems.includes("controls.mapControl.globe"));
     assert.ok(!sets.hiddenMenuItems.includes("controls.mapControl.scale"));
+    assert.ok(!sets.hiddenMenuItems.includes("controls.mapControl.attribution"));
     // Items intentionally kept out of the beginner set.
     assert.ok(sets.hiddenMenuItems.includes("processing.assistant"));
     assert.ok(sets.hiddenMenuItems.includes("controls.legend"));
