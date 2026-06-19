@@ -548,7 +548,7 @@ export function SettingsDialog({
 
   // Toggling a single item switches the profile to "custom" (level = null) and
   // enables filtering so the edit takes effect even when starting from the
-  // legacy "show everything" state (issue #540).
+  // legacy "show everything" state.
   const toggleDataSourceHidden = (id: string, visible: boolean) => {
     setDraftDesktopSettings((current) => {
       const hidden = new Set(current.uiProfile.hiddenDataSources);
@@ -828,8 +828,10 @@ export function SettingsDialog({
                 value={activeInterfaceProfile(desktopSettings.uiProfile)}
                 onValueChange={(value: string) => {
                   // Only the three presets are selectable; "custom" is a derived
-                  // status. Guard the cast so a stray value can't reach
-                  // presetHiddenSets.
+                  // status. EXPERIENCE_LEVELS excludes "custom", so this guard
+                  // keeps it (and any stray value) from reaching presetHiddenSets.
+                  // Keep EXPERIENCE_LEVELS in sync with the selectable entries of
+                  // INTERFACE_PROFILES.
                   if ((EXPERIENCE_LEVELS as readonly string[]).includes(value)) {
                     applySavedExperiencePreset(value as ExperienceLevel);
                   }
@@ -1214,6 +1216,10 @@ export function SettingsDialog({
                               draftDesktopSettings.uiProfile.locked ||
                               option === "custom"
                             }
+                            // Mark the active state for assistive tech: the
+                            // "custom" button is inert (disabled), so without this
+                            // a screen reader would never announce it as current.
+                            aria-current={active ? true : undefined}
                             onClick={
                               option === "custom"
                                 ? undefined

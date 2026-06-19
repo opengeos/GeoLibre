@@ -388,7 +388,7 @@ export function isMenuItemVisible(
 }
 
 /**
- * The four interface-profile states surfaced in the UI (issue #540). The three
+ * The four interface-profile states surfaced in the UI. The three
  * experience levels are developer-curated presets; `"custom"` is entered
  * automatically when the user toggles an individual item away from a preset.
  */
@@ -403,7 +403,7 @@ export const INTERFACE_PROFILES: readonly InterfaceProfile[] = [
 ];
 
 /**
- * Derive the active interface profile from the stored settings (issue #540).
+ * Derive the active interface profile from the stored settings.
  * A disabled profile (the legacy/default "show everything" state) reads as
  * Advanced, since the Advanced preset also reveals every item. An enabled
  * profile reports its preset level, or `"custom"` once the user has hand-edited
