@@ -131,7 +131,7 @@ export const PLUGIN_TIERS: Record<string, ComplexityTier> = {
   "maplibre-gl-national-map": "advanced",
   "maplibre-gl-esri-wayback": "advanced",
   "maplibre-gl-geoagent": "advanced",
-  "maplibre-gl-lidar": "advanced",
+  "maplibre-gl-usgs-lidar": "advanced",
   "maplibre-gl-overture-maps": "advanced",
   "maplibre-gl-time-slider": "advanced",
   "maplibre-gl-components": "advanced",

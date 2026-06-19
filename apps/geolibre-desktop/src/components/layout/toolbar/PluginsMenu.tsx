@@ -1,4 +1,5 @@
 import {
+  COMPONENTS_PLUGIN_ID,
   DECK_VIZ_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
   type GeoLibreMapControlPosition,
@@ -138,12 +139,15 @@ export function PluginsMenu({
           // from the Controls menu instead, so they are omitted here to avoid a
           // duplicate toggle. The deck.gl viz overlay is an internal renderer
           // driven by the Add Data → "Deck.gl Layer" dialog, not a user-facing
-          // toggle, so it is hidden here too.
+          // toggle, so it is hidden here too. The Components plugin stays
+          // registered for in-app use, but its catch-all grid is hidden from the
+          // menu now that its panels are reachable through dedicated plugins.
           if (
             p.id === EFFECTS_PLUGIN_ID ||
             p.id === DIRECTIONS_PLUGIN_ID ||
             p.id === REVERSE_GEOCODE_PLUGIN_ID ||
-            p.id === DECK_VIZ_PLUGIN_ID
+            p.id === DECK_VIZ_PLUGIN_ID ||
+            p.id === COMPONENTS_PLUGIN_ID
           ) {
             return null;
           }

@@ -18,7 +18,6 @@ import {
   maplibreGeoAgentPlugin,
   maplibreGeoEditorPlugin,
   maplibreLayerControlPlugin,
-  maplibreLidarPlugin,
   maplibreNasaEarthdataPlugin,
   maplibreNationalMapPlugin,
   maplibreOvertureMapsPlugin,
@@ -26,6 +25,7 @@ import {
   maplibreStreetViewPlugin,
   maplibreSwipePlugin,
   maplibreTimeSliderPlugin,
+  maplibreUsgsLidarPlugin,
   PluginManager,
 } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
@@ -97,6 +97,7 @@ interface TauriRuntimeWindow extends Window {
 const manager = new PluginManager();
 manager.registerAll([
   maplibreLayerControlPlugin,
+  maplibreGeoEditorPlugin,
   maplibreBasemapControlPlugin,
   // The four web service plugins are grouped into the "Web Services"
   // submenu, rendered where the first of them appears in this order.
@@ -108,8 +109,7 @@ manager.registerAll([
   maplibreTimeSliderPlugin,
   maplibreOvertureMapsPlugin,
   maplibreGeoAgentPlugin,
-  maplibreGeoEditorPlugin,
-  maplibreLidarPlugin,
+  maplibreUsgsLidarPlugin,
   maplibreStreetViewPlugin,
   maplibreSwipePlugin,
   maplibreEffectsPlugin,

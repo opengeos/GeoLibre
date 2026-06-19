@@ -33,6 +33,7 @@ export {
   isSearchPlacesPanelVisible,
   isSpinGlobePanelVisible,
   isViewStatePanelVisible,
+  COMPONENTS_PLUGIN_ID,
   maplibreComponentsPlugin,
   openBookmarkPanel,
   openFlatGeobufAddVectorLayerPanel,
@@ -199,7 +200,7 @@ export {
   subscribeGeometryEdit,
 } from "./plugins/maplibre-geo-editor";
 export { maplibreGeoAgentPlugin } from "./plugins/maplibre-geoagent";
-export { maplibreLidarPlugin } from "./plugins/maplibre-lidar";
+export { maplibreUsgsLidarPlugin } from "./plugins/maplibre-usgs-lidar";
 export { maplibreNasaEarthdataPlugin } from "./plugins/maplibre-nasa-earthdata";
 export { maplibreNationalMapPlugin } from "./plugins/maplibre-national-map";
 export { maplibreOvertureMapsPlugin } from "./plugins/maplibre-overture-maps";

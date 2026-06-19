@@ -1137,8 +1137,11 @@ const mountComponentsControl = (app: GeoLibreAppAPI): boolean => {
   return true;
 };
 
+/** Stable id of the Components plugin. */
+export const COMPONENTS_PLUGIN_ID = "maplibre-gl-components";
+
 export const maplibreComponentsPlugin: GeoLibrePlugin = {
-  id: "maplibre-gl-components",
+  id: COMPONENTS_PLUGIN_ID,
   name: "Components",
   version: "0.18.2",
   activate: (app: GeoLibreAppAPI) => {
