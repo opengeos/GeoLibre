@@ -167,6 +167,8 @@ export function drawPrintExtent(
       settled = true;
       if (moveRaf) cancelAnimationFrame(moveRaf);
       map.off("mousedown", onDown);
+      map.off("mousemove", onMapMove);
+      map.off("mouseup", onMapUp);
       window.removeEventListener("mousemove", onWindowMove);
       window.removeEventListener("mouseup", onWindowUp);
       window.removeEventListener("keydown", onKey);
@@ -223,7 +225,10 @@ export function drawPrintExtent(
     };
 
     const commit = (raw: { x: number; y: number }, shiftKey: boolean) => {
-      if (!start) return finish(null);
+      // Ignore a stray mouseup before a press on the map (start still null):
+      // it must not cancel the not-yet-started draw. A real click (start set,
+      // no drag) still cancels via the near-zero check below.
+      if (settled || !start) return;
       const end = settlePoint(raw, shiftKey);
       // Cancel a click-with-no-drag *or* a sliver thinner than 4px on either
       // axis: a near-degenerate extent crops to a useless strip once cover-
@@ -237,26 +242,12 @@ export function drawPrintExtent(
       finish(extent);
     };
 
-    // Only a mousedown that lands on the map canvas starts a draw; everything
-    // after is tracked on the window so a drag/release outside the canvas still
-    // works. All points are derived via pointFromClient so start and end share
-    // the same (canvas-relative) coordinate space even if the canvas is inset
-    // within its container.
-    const onDown = (e: MapMouseEvent) => {
-      // Primary button only: a right-click would open the context menu and
-      // leave the drag half-started.
-      if (e.originalEvent.button !== 0) return;
-      start = pointFromClient(e.originalEvent.clientX, e.originalEvent.clientY);
-      // Attach the move/up tracking only now, on a confirmed press on the map.
-      // Registering them up front would let an ambient mouseup elsewhere in the
-      // window (with start still null) cancel the draw before it begins.
-      window.addEventListener("mousemove", onWindowMove);
-      window.addEventListener("mouseup", onWindowUp);
-    };
-    const onWindowMove = (e: MouseEvent) => {
-      // Coalesce to one redraw per frame: setData re-parses the GeoJSON and
-      // schedules a repaint, which is wasteful on fast pointer motion.
-      pendingMove = { x: e.clientX, y: e.clientY, shiftKey: e.shiftKey };
+    // Schedule a single preview per animation frame from the latest pointer
+    // position (both the map and window move handlers feed this, so over-canvas
+    // motion that fires both is still drawn only once per frame).
+    const queueMove = (clientX: number, clientY: number, shiftKey: boolean) => {
+      if (!start) return;
+      pendingMove = { x: clientX, y: clientY, shiftKey };
       if (!moveRaf) {
         moveRaf = requestAnimationFrame(() => {
           moveRaf = 0;
@@ -265,6 +256,33 @@ export function drawPrintExtent(
           if (move) preview(pointFromClient(move.x, move.y), move.shiftKey);
         });
       }
+    };
+
+    // A mousedown on the map canvas starts the draw. The live rubber band is
+    // driven by MapLibre's own mousemove (reliable across the desktop and
+    // embedded webviews), while the window listeners extend tracking to a
+    // drag/release that leaves the canvas. All points come from pointFromClient
+    // so start and end share one canvas-relative coordinate space.
+    const onDown = (e: MapMouseEvent) => {
+      // Primary button only: a right-click would open the context menu and
+      // leave the drag half-started.
+      if (e.originalEvent.button !== 0) return;
+      start = pointFromClient(e.originalEvent.clientX, e.originalEvent.clientY);
+    };
+    const onMapMove = (e: MapMouseEvent) =>
+      queueMove(
+        e.originalEvent.clientX,
+        e.originalEvent.clientY,
+        e.originalEvent.shiftKey,
+      );
+    const onWindowMove = (e: MouseEvent) =>
+      queueMove(e.clientX, e.clientY, e.shiftKey);
+    const onMapUp = (e: MapMouseEvent) => {
+      if (e.originalEvent.button !== 0) return;
+      commit(
+        pointFromClient(e.originalEvent.clientX, e.originalEvent.clientY),
+        e.originalEvent.shiftKey,
+      );
     };
     const onWindowUp = (e: MouseEvent) => {
       if (e.button !== 0) return;
@@ -276,8 +294,11 @@ export function drawPrintExtent(
 
     // TODO: mouse-only for now (the print workflow is desktop-centric). Add a
     // touch / pointer-event path for tablets and touchscreens as a follow-up.
-    // The window move/up listeners are attached lazily in onDown.
     map.on("mousedown", onDown);
+    map.on("mousemove", onMapMove);
+    map.on("mouseup", onMapUp);
+    window.addEventListener("mousemove", onWindowMove);
+    window.addEventListener("mouseup", onWindowUp);
     window.addEventListener("keydown", onKey);
     options.signal?.addEventListener("abort", onAbort);
   });
