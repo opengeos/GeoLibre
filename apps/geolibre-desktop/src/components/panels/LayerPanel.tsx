@@ -22,6 +22,8 @@ import {
 import type { MapController } from "@geolibre/map";
 import { isPlaceholderLayer, placeholderMessage } from "@geolibre/map";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
+import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
+import { showsAdvancedNotices } from "../../lib/ui-profile";
 import {
   Button,
   Dialog,
@@ -183,6 +185,9 @@ export function LayerPanel({
   onOpenRasterStylePanel,
 }: LayerPanelProps) {
   const { t } = useTranslation();
+  // Developer-facing footer is hidden under the curated Beginner/Intermediate
+  // presets (issue #531).
+  const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   const layers = useAppStore((s) => s.layers);
   const layerGroups = useAppStore((s) => s.layerGroups);
   const addLayerGroup = useAppStore((s) => s.addLayerGroup);
@@ -1723,9 +1728,11 @@ export function LayerPanel({
         </div>
       </ScrollArea>
       <Separator />
-      <p className="p-2 text-[10px] text-muted-foreground">
-        Advanced formats: see docs/roadmap.md
-      </p>
+      {showsAdvancedNotices(uiProfile) ? (
+        <p className="p-2 text-[10px] text-muted-foreground">
+          {t("layers.advancedFormatsNote")}
+        </p>
+      ) : null}
       <Dialog
         open={!!refreshSettingsLayerId}
         onOpenChange={(open: boolean) => {

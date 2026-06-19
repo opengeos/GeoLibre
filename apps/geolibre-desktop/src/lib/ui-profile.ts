@@ -386,3 +386,17 @@ export function isMenuItemVisible(
 ): boolean {
   return !profile.enabled || !profile.hiddenMenuItems.includes(itemId);
 }
+
+/**
+ * Whether advanced, developer-facing informational notices should be shown.
+ * These are hints that reference internal docs, URL/query parameters, and other
+ * power-user concepts (the layer-panel "Advanced formats" footer, the Layout
+ * tab's URL-params note). They only clutter and confuse the curated Beginner and
+ * Intermediate presets, so they are hidden there and shown otherwise: when the
+ * profile is off, when the Advanced preset is active, or for a custom profile
+ * (the user has opted into managing their own visibility). See issues #531/#532.
+ */
+export function showsAdvancedNotices(profile: UiProfileSettings): boolean {
+  if (!profile.enabled) return true;
+  return profile.level === null || profile.level === "advanced";
+}

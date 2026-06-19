@@ -17,6 +17,7 @@ import {
   levelAllowsTier,
   pluginTier,
   presetHiddenSets,
+  showsAdvancedNotices,
 } from "../apps/geolibre-desktop/src/lib/ui-profile";
 
 function profile(patch: Partial<UiProfileSettings>): UiProfileSettings {
@@ -37,6 +38,37 @@ describe("ui-profile tiers", () => {
     assert.equal(pluginTier("some-unknown-plugin"), "intermediate");
     assert.equal(pluginTier("maplibre-layer-control"), "basic");
     assert.equal(pluginTier("maplibre-gl-geoagent"), "advanced");
+  });
+});
+
+describe("showsAdvancedNotices", () => {
+  it("shows when the profile is disabled", () => {
+    assert.equal(
+      showsAdvancedNotices(profile({ enabled: false, level: "beginner" })),
+      true,
+    );
+  });
+
+  it("hides for the Beginner and Intermediate presets", () => {
+    assert.equal(
+      showsAdvancedNotices(profile({ enabled: true, level: "beginner" })),
+      false,
+    );
+    assert.equal(
+      showsAdvancedNotices(profile({ enabled: true, level: "intermediate" })),
+      false,
+    );
+  });
+
+  it("shows for the Advanced preset and for a custom profile", () => {
+    assert.equal(
+      showsAdvancedNotices(profile({ enabled: true, level: "advanced" })),
+      true,
+    );
+    assert.equal(
+      showsAdvancedNotices(profile({ enabled: true, level: null })),
+      true,
+    );
   });
 });
 

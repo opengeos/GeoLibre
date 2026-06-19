@@ -571,7 +571,7 @@
     },
     "env": {
       "tokenTitle": "Share.GeoLibre API token",
-      "tokenDescription": "Used by Project > Share to upload projects to share.geolibre.app. Create one under Settings > API tokens at <tokenLink>share.geolibre.app/settings</tokenLink>.",
+      "tokenDescription": "Project > Share uses this token to upload your maps to share.geolibre.app. Open <tokenLink>share.geolibre.app/settings</tokenLink>, create a token under Settings > API tokens, then paste it into the field below.",
       "tokenStorageNote": "Stored locally on this device and sent only to share.geolibre.app to authenticate uploads. On the web build it shares the same browser storage as other site data, so revoke it on share.geolibre.app if your machine is compromised.",
       "tokenPlaceholder": "glb_…",
       "variablesTitle": "Environment variables",
@@ -615,7 +615,7 @@
     },
     "project": {
       "title": "Project",
-      "description": "Settings are saved with the `.geolibre.json` project.",
+      "description": "These preferences are stored inside the project. Saving here applies them to the current session; use Project > Save to write them to the .geolibre.json file on disk.",
       "name": "Name",
       "file": "Project file",
       "notSaved": "Not saved",
@@ -1270,6 +1270,7 @@
     "exportRasterSuccess": "Raster exported.",
     "exportRasterError": "Could not export this raster.",
     "typeBasemap": "basemap",
+    "advancedFormatsNote": "Advanced formats: see docs/roadmap.md",
     "background": "Background",
     "backgroundCannotReorder": "Background cannot be reordered",
     "hideBackground": "Hide background",
