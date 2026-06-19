@@ -88,6 +88,21 @@ type SettingsSection =
   | "environment"
   | "project";
 
+/**
+ * Window event that opens the Settings dialog at a given section. Dispatched by
+ * other panels (e.g. the AI Assistant onboarding card) so they can deep-link
+ * users straight to the relevant settings without prop-drilling the open state.
+ */
+export const OPEN_SETTINGS_EVENT = "geolibre:open-settings";
+
+/** Open the Settings dialog at `section` from anywhere in the app. */
+export function openSettingsSection(section: SettingsSection): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(OPEN_SETTINGS_EVENT, { detail: { section } }),
+  );
+}
+
 /** A plugin offered as a visibility toggle in the Interface section. */
 export interface ProfilePlugin {
   id: string;
@@ -365,6 +380,19 @@ export function SettingsDialog({
     setError(null);
     setLiveProjection(mapControllerRef.current?.readProjection() ?? null);
   }, [open, mapControllerRef]);
+
+  // Let other panels deep-link into a specific Settings section (e.g. the AI
+  // Assistant onboarding card opens Environment Variables to add a provider key).
+  useEffect(() => {
+    const onOpenSettings = (event: Event) => {
+      const detail = (event as CustomEvent<{ section?: SettingsSection }>)
+        .detail;
+      if (detail?.section) setSection(detail.section);
+      setOpen(true);
+    };
+    window.addEventListener(OPEN_SETTINGS_EVENT, onOpenSettings);
+    return () => window.removeEventListener(OPEN_SETTINGS_EVENT, onOpenSettings);
+  }, []);
 
   const toggleValueVisibility = (id: string) => {
     setRevealedValueIds((current) => {
