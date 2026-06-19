@@ -119,7 +119,12 @@ export function useViewportHistory(
       syncNav();
     };
 
-    const onMoveEnd = () => {
+    const onMoveEnd = (event: { storyCameraToken?: number }) => {
+      // Story presenter / chapter-preview camera moves carry a storyCameraToken
+      // in their event data. Those are scripted playback, not user navigation,
+      // so don't record them (checked before the restore counter so a story
+      // move never consumes a pending restore's slot).
+      if (event?.storyCameraToken !== undefined) return;
       if (restoringCountRef.current > 0) {
         restoringCountRef.current--;
         return;

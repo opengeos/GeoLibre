@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { DESKTOP_SETTINGS_STORAGE_KEY } from "./apps/geolibre-desktop/src/lib/storage-keys";
 
 const PORT = 4173;
 const BASE_URL = `http://localhost:${PORT}`;
@@ -23,9 +24,7 @@ export default defineConfig({
     // Seed the first-launch UI-profile onboarding (issue #500) as already
     // completed. Otherwise its modal wizard opens on every fresh context and its
     // overlay intercepts pointer events, timing out any spec that clicks through
-    // the UI. Key mirrors DESKTOP_SETTINGS_STORAGE_KEY in
-    // apps/geolibre-desktop/src/lib/storage-keys.ts; the partial blob is merged
-    // with defaults by the settings loader.
+    // the UI. The partial blob is merged with defaults by the settings loader.
     storageState: {
       cookies: [],
       origins: [
@@ -33,7 +32,7 @@ export default defineConfig({
           origin: BASE_URL,
           localStorage: [
             {
-              name: "geolibre.desktopSettings",
+              name: DESKTOP_SETTINGS_STORAGE_KEY,
               value: JSON.stringify({ uiProfile: { onboarded: true } }),
             },
           ],

@@ -452,12 +452,17 @@ export class MapController {
    * @param location Target camera (center, zoom, pitch, bearing).
    */
   flyToView(location: StoryChapterLocation): void {
-    this.map?.flyTo({
-      center: location.center,
-      zoom: location.zoom,
-      pitch: location.pitch,
-      bearing: location.bearing,
-    });
+    this.map?.flyTo(
+      {
+        center: location.center,
+        zoom: location.zoom,
+        pitch: location.pitch,
+        bearing: location.bearing,
+      },
+      // Tag as a story camera move (like applyStoryChapterCamera) so viewport
+      // history skips this scripted preview rather than recording it.
+      { storyCameraToken: this.storyCameraToken },
+    );
   }
 
   private isStyleReady(): boolean {

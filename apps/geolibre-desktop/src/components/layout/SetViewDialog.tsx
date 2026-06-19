@@ -88,6 +88,9 @@ export function SetViewDialog({
     const bearing = fields.bearing.trim() === "" ? 0 : Number(fields.bearing);
 
     const finite = (value: number) => Number.isFinite(value);
+    // Reject negative zoom/pitch (always invalid: MapLibre's minZoom/minPitch
+    // are >= 0) with feedback rather than a silent clamp. Upper bounds are left
+    // to MapLibre, since maxZoom/maxPitch are configurable per project.
     if (
       !finite(longitude) ||
       longitude < -180 ||
@@ -96,7 +99,9 @@ export function SetViewDialog({
       latitude < -90 ||
       latitude > 90 ||
       !finite(zoom) ||
+      zoom < 0 ||
       !finite(pitch) ||
+      pitch < 0 ||
       !finite(bearing)
     ) {
       setError(t("toolbar.setView.invalid"));
@@ -113,7 +118,12 @@ export function SetViewDialog({
     onOpenChange(false);
   };
 
-  const field = (key: keyof ViewFields, labelKey: ParseKeys, step: string) => (
+  const field = (
+    key: keyof ViewFields,
+    labelKey: ParseKeys,
+    step: string,
+    bounds?: { min?: number; max?: number },
+  ) => (
     <div className="space-y-1.5">
       <Label htmlFor={`set-view-${key}`}>{t(labelKey)}</Label>
       <Input
@@ -121,6 +131,8 @@ export function SetViewDialog({
         type="number"
         inputMode="decimal"
         step={step}
+        min={bounds?.min}
+        max={bounds?.max}
         value={fields[key]}
         onChange={(event) => update(key)(event.target.value)}
       />
@@ -139,10 +151,16 @@ export function SetViewDialog({
 
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div className="grid grid-cols-2 gap-3">
-            {field("longitude", "toolbar.setView.longitude", "any")}
-            {field("latitude", "toolbar.setView.latitude", "any")}
-            {field("zoom", "toolbar.setView.zoom", "0.1")}
-            {field("pitch", "toolbar.setView.pitch", "1")}
+            {field("longitude", "toolbar.setView.longitude", "any", {
+              min: -180,
+              max: 180,
+            })}
+            {field("latitude", "toolbar.setView.latitude", "any", {
+              min: -90,
+              max: 90,
+            })}
+            {field("zoom", "toolbar.setView.zoom", "0.1", { min: 0 })}
+            {field("pitch", "toolbar.setView.pitch", "1", { min: 0 })}
             {field("bearing", "toolbar.setView.bearing", "1")}
           </div>
 
