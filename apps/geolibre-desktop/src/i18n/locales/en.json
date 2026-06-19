@@ -513,7 +513,8 @@
       "footer": "Footer text",
       "date": "Date",
       "attribution": "Include GeoLibre attribution",
-      "pageBorder": "Page border"
+      "pageBorder": "Page border",
+      "infoBlock": "Info block (title block)"
     },
     "footerTextLabel": "Footer text",
     "footerPlaceholder": "Custom footer text",
@@ -522,6 +523,29 @@
       "normal": "Normal",
       "narrow": "Narrow",
       "none": "None (borderless)"
+    },
+    "scaleLabel": "Scale (1:N)",
+    "scalePlaceholder": "e.g. 25000",
+    "scalePresets": "Presets…",
+    "extent": {
+      "label": "Print extent",
+      "draw": "Draw extent on map",
+      "redraw": "Redraw extent on map",
+      "useViewport": "Use active viewport",
+      "useCustom": "Clip to custom extent",
+      "clear": "Clear extent",
+      "hint": "Drag a box on the map to set the exact print area. Hold Shift to match the page proportions."
+    },
+    "info": {
+      "author": "Author",
+      "authorPlaceholder": "Author or organization",
+      "project": "Project No.",
+      "projectPlaceholder": "Reference number",
+      "crs": "CRS",
+      "crsPlaceholder": "e.g. EPSG:4326",
+      "scale": "Scale",
+      "revision": "Revision",
+      "revisionPlaceholder": "e.g. Rev 01"
     },
     "borderColor": "Border color",
     "borderWidth": "Border width",

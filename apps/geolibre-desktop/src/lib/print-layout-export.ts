@@ -40,8 +40,62 @@ interface MapLike {
   getContainer(): HTMLElement;
   getBearing(): number;
   unproject(point: [number, number]): { lng: number; lat: number };
+  project(lngLat: [number, number]): { x: number; y: number };
   /** Force a synchronous redraw so the preserved drawing buffer is current. */
   redraw?(): void;
+}
+
+/** A geographic crop box as `[west, south, east, north]`. */
+export type CaptureClip = [number, number, number, number];
+
+/**
+ * Crop a composited capture to the screen rectangle covered by a geographic
+ * extent. The four extent corners are projected to canvas pixels and the
+ * axis-aligned bounding rect of those points (in device pixels) is cut out, so
+ * a north-up box crops exactly and a rotated box crops its bounding rectangle.
+ * Returns the original canvas unchanged when the projected rect is degenerate
+ * or falls entirely outside the viewport.
+ */
+function cropCaptureToClip(
+  map: MapLike,
+  source: HTMLCanvasElement,
+  cssWidth: number,
+  clip: CaptureClip,
+): HTMLCanvasElement {
+  const [w, s, e, n] = clip;
+  const dpr = cssWidth > 0 ? source.width / cssWidth : 1;
+  const corners: [number, number][] = [
+    [w, n],
+    [e, n],
+    [e, s],
+    [w, s],
+  ];
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const corner of corners) {
+    const p = map.project(corner);
+    minX = Math.min(minX, p.x);
+    minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x);
+    maxY = Math.max(maxY, p.y);
+  }
+  // CSS px -> device px, clamped to the captured buffer.
+  const x0 = Math.max(0, Math.floor(minX * dpr));
+  const y0 = Math.max(0, Math.floor(minY * dpr));
+  const x1 = Math.min(source.width, Math.ceil(maxX * dpr));
+  const y1 = Math.min(source.height, Math.ceil(maxY * dpr));
+  const cw = x1 - x0;
+  const ch = y1 - y0;
+  if (cw < 1 || ch < 1) return source;
+  const cropped = document.createElement("canvas");
+  cropped.width = cw;
+  cropped.height = ch;
+  const cctx = cropped.getContext("2d");
+  if (!cctx) return source;
+  cctx.drawImage(source, x0, y0, cw, ch, 0, 0, cw, ch);
+  return cropped;
 }
 
 /**
@@ -50,10 +104,12 @@ interface MapLike {
  * overlay) are drawn in DOM order so the snapshot matches what is on screen.
  *
  * @param map - The MapLibre map instance.
+ * @param clip - Optional geographic extent to crop the snapshot to (GH #523);
+ *   when omitted the full viewport is captured.
  * @returns The composited image plus the ground scale and bearing needed to
  *   render a scale bar and north arrow.
  */
-export function captureMapImage(map: MapLike): CapturedMap {
+export function captureMapImage(map: MapLike, clip?: CaptureClip | null): CapturedMap {
   // Force a synchronous render first. MapLibre only paints on demand, so when
   // the Print Layout modal opens without any recent camera movement the
   // preserved drawing buffer can be stale or cleared -- which surfaced as a
@@ -104,10 +160,14 @@ export function captureMapImage(map: MapLike): CapturedMap {
   const dpr = cssWidth > 0 ? out.width / cssWidth : 1;
   const metersPerPixel = dpr > 0 ? metersPerCssPx / dpr : metersPerCssPx;
 
+  // Cropping changes the image dimensions but not the per-device-pixel ground
+  // resolution, so metersPerPixel carries through unchanged.
+  const image = clip ? cropCaptureToClip(map, out, cssWidth, clip) : out;
+
   return {
-    image: out,
-    width: out.width,
-    height: out.height,
+    image,
+    width: image.width,
+    height: image.height,
     metersPerPixel,
     bearingDeg: map.getBearing(),
   };

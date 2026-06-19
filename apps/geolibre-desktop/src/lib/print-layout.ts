@@ -162,6 +162,32 @@ export interface LayoutOptions {
    * isolated anchors: north arrow top-right, scale bar bottom-right.
    */
   navigationGrouped?: boolean;
+  /**
+   * Cartographic "title block" (stempel) drawn as a bordered panel in the
+   * bottom-right corner. When present, the scale bar + north arrow relocate to
+   * the bottom-left so they never sit under the block. GH #522.
+   */
+  showInfoBlock?: boolean;
+  /** Map author or organization line of the info block. */
+  author?: string;
+  /** Project / reference number line of the info block. */
+  projectNumber?: string;
+  /** Coordinate reference system line of the info block (e.g. "EPSG:4326"). */
+  crs?: string;
+  /** Revision / version status line of the info block (e.g. "Rev 01"). */
+  revision?: string;
+  /**
+   * Row labels for the info block. Supplied (translated) by the dialog; English
+   * fallbacks are used when omitted so the framework-free drawing code stays
+   * i18n-agnostic, like the legend title and north "N".
+   */
+  infoLabels?: {
+    author?: string;
+    project?: string;
+    crs?: string;
+    scale?: string;
+    revision?: string;
+  };
   showFooter: boolean;
   footerText: string;
   /** Draw the production date (right side of the footer row). */
@@ -204,6 +230,143 @@ const INK = "#111827";
 const MUTED = "#6b7280";
 const BORDER = "#9ca3af";
 
+/** Resolved presence of the optional title/footer content, shared by the body
+ * geometry computation and the drawing pass so they never disagree. */
+interface ContentFlags {
+  showSubtitle: boolean;
+  hasTitleText: boolean;
+  hasSubtitleText: boolean;
+  hasTitleBlock: boolean;
+  titleInside: boolean;
+  attributionText: string | false;
+  footerText: string | false;
+  dateText: string | false;
+  hasFooterRow: boolean;
+}
+
+function resolveContentFlags(opts: LayoutOptions): ContentFlags {
+  const titleInside = opts.titlePlacement === "inside";
+  const showSubtitle = opts.showSubtitle ?? true;
+  const hasTitleText = opts.showTitle && opts.title.trim().length > 0;
+  const hasSubtitleText = showSubtitle && opts.subtitle.trim().length > 0;
+  // Attribution is opt-out (on unless explicitly disabled), deliberately unlike
+  // the other new booleans: GH #526 wants a pre-checked "Created with GeoLibre"
+  // credit so it survives a user replacing the footer text.
+  const attributionText =
+    opts.showAttribution !== false &&
+    (opts.attributionText ?? "Created with GeoLibre").trim();
+  const footerText = opts.showFooter && opts.footerText.trim();
+  const dateText = (opts.showDate && (opts.dateText ?? "").trim()) || false;
+  return {
+    showSubtitle,
+    hasTitleText,
+    hasSubtitleText,
+    hasTitleBlock: hasTitleText || hasSubtitleText,
+    titleInside,
+    attributionText,
+    footerText,
+    dateText,
+    hasFooterRow: Boolean(attributionText || footerText || dateText),
+  };
+}
+
+/** Geometry of the map body and the furniture scale unit for a given page. */
+interface BodyRect {
+  unit: number;
+  margin: number;
+  bodyX: number;
+  bodyY: number;
+  bodyW: number;
+  bodyH: number;
+}
+
+/**
+ * Compute the map body rectangle for a page of {@link W}×{@link H} pixels,
+ * reserving room for an outside title block (top) and the footer row (bottom).
+ * Shared by {@link drawLayout} and {@link computeScaleRatio} so the preview, the
+ * export, and the reported 1:N scale are all derived from the same geometry.
+ */
+function computeBodyRect(opts: LayoutOptions, W: number, H: number): BodyRect {
+  const unit = Math.min(W, H) / 100;
+  const marginScale =
+    opts.pageMargin === "none" ? 0 : opts.pageMargin === "narrow" ? 0.5 : 1;
+  const margin = unit * 5 * marginScale;
+  const f = resolveContentFlags(opts);
+
+  let bodyTop = margin;
+  if (f.hasTitleBlock && !f.titleInside) {
+    const titleSize = unit * 4.5;
+    const subtitleSize = unit * 2.4;
+    let y = margin + titleSize;
+    if (f.hasSubtitleText) y += subtitleSize * 1.4;
+    bodyTop = y + unit * 3;
+  }
+
+  let bodyBottom = H - margin;
+  if (f.hasFooterRow) {
+    const footSize = unit * 2.2;
+    bodyBottom = H - margin - footSize * 1.8;
+  }
+
+  bodyTop = Math.min(bodyTop, bodyBottom - unit * 10);
+  return {
+    unit,
+    margin,
+    bodyX: margin,
+    bodyY: bodyTop,
+    bodyW: W - margin * 2,
+    bodyH: Math.max(unit * 10, bodyBottom - bodyTop),
+  };
+}
+
+/**
+ * Cover-scale of a captured map image into the body rectangle: the factor that
+ * fills the body (cropping overflow), matching the draw in {@link drawLayout}.
+ */
+function coverScaleFor(
+  rect: BodyRect,
+  imgW: number,
+  imgH: number,
+): number {
+  if (imgW <= 0 || imgH <= 0) return 1;
+  return Math.max(rect.bodyW / imgW, rect.bodyH / imgH);
+}
+
+/**
+ * The representative fraction (the N in "1:N") the layout currently renders at:
+ * how many ground millimetres each paper millimetre spans. Returns 0 when the
+ * scale is not meaningful (a pixel/screen size, or no captured map), so callers
+ * can hide the scale control.
+ *
+ * The value is independent of the resolution the page is rasterized at (the
+ * body and cover scale grow together with the canvas), so a nominal reference
+ * canvas is used here.
+ */
+export function computeScaleRatio(opts: LayoutOptions): number {
+  const page = resolvePageSize(opts);
+  if (page.unit !== "mm") return 0;
+  if (
+    !opts.mapImage ||
+    opts.mapImageWidth <= 0 ||
+    opts.mapImageHeight <= 0 ||
+    !(opts.metersPerPixel > 0) ||
+    !Number.isFinite(opts.metersPerPixel)
+  ) {
+    return 0;
+  }
+  const aspect = page.width / page.height;
+  const refLong = 1000;
+  const W = aspect >= 1 ? refLong : refLong * aspect;
+  const H = aspect >= 1 ? refLong / aspect : refLong;
+  const rect = computeBodyRect(opts, W, H);
+  const coverScale = coverScaleFor(rect, opts.mapImageWidth, opts.mapImageHeight);
+  const outputMpp = opts.metersPerPixel / (coverScale || 1);
+  const mmPerPx = pageMm(page).widthMm / W;
+  if (!(mmPerPx > 0)) return 0;
+  const ratio = (outputMpp * 1000) / mmPerPx;
+  return Number.isFinite(ratio) && ratio > 0 ? ratio : 0;
+}
+
 /**
  * Draw the full page layout onto a canvas. The canvas pixel dimensions define
  * the render resolution; all furniture is scaled relative to the page so the
@@ -223,36 +386,29 @@ export function drawLayout(
   const W = canvas.width;
   const H = canvas.height;
   // Scale furniture relative to the page's shorter side so output looks the
-  // same at any resolution / paper size.
-  const unit = Math.min(W, H) / 100;
-  const marginScale =
-    opts.pageMargin === "none" ? 0 : opts.pageMargin === "narrow" ? 0.5 : 1;
-  const margin = unit * 5 * marginScale;
+  // same at any resolution / paper size. The body rectangle and unit come from
+  // the shared geometry helper so the on-screen scale matches the export.
+  const { unit, margin, bodyX, bodyY, bodyW, bodyH } = computeBodyRect(
+    opts,
+    W,
+    H,
+  );
+  const {
+    hasTitleText,
+    hasSubtitleText,
+    hasTitleBlock,
+    titleInside,
+    attributionText,
+    footerText,
+    dateText,
+    hasFooterRow,
+  } = resolveContentFlags(opts);
 
   const titleAlign = opts.titleAlign ?? "center";
-  const titleInside = opts.titlePlacement === "inside";
-  const showSubtitle = opts.showSubtitle ?? true;
-  const hasTitleText = opts.showTitle && opts.title.trim().length > 0;
-  const hasSubtitleText = showSubtitle && opts.subtitle.trim().length > 0;
-  const hasTitleBlock = hasTitleText || hasSubtitleText;
-
-  // Footer row slots: attribution (left), footer text (centre), date (right).
-  // Attribution is opt-out (on unless explicitly disabled), deliberately unlike
-  // the other new booleans: GH #526 wants a pre-checked "Created with GeoLibre"
-  // credit so it survives a user replacing the footer text. Callers that omit
-  // the field therefore get the branding by design.
-  const attributionText =
-    opts.showAttribution !== false && (opts.attributionText ?? "Created with GeoLibre").trim();
-  const footerText = opts.showFooter && opts.footerText.trim();
-  const dateText = opts.showDate && (opts.dateText ?? "").trim();
-  const hasFooterRow = Boolean(attributionText || footerText || dateText);
 
   ctx.save();
   ctx.fillStyle = PAGE_BACKGROUND;
   ctx.fillRect(0, 0, W, H);
-
-  let bodyTop = margin;
-  let bodyBottom = H - margin;
 
   // X anchor + canvas textAlign for the chosen title alignment.
   const titleX =
@@ -277,13 +433,11 @@ export function drawLayout(
       ctx.textAlign = titleAlign;
       ctx.fillText(opts.subtitle.trim(), titleX, y, W - margin * 2);
     }
-    bodyTop = y + unit * 3;
   }
 
   // --- Footer row --------------------------------------------------------
   if (hasFooterRow) {
     const footSize = unit * 2.2;
-    bodyBottom = H - margin - footSize * 1.8;
     const baselineY = H - margin - footSize * 0.6;
     ctx.fillStyle = MUTED;
     ctx.font = `400 ${footSize}px system-ui, -apple-system, sans-serif`;
@@ -306,14 +460,9 @@ export function drawLayout(
   }
 
   // --- Map body ----------------------------------------------------------
-  // Clamp the top so a tall title block plus footer on a very small page can
-  // never push the map area below the footer (which would overflow the page).
-  bodyTop = Math.min(bodyTop, bodyBottom - unit * 10);
-  const bodyX = margin;
-  const bodyY = bodyTop;
-  const bodyW = W - margin * 2;
-  const bodyH = Math.max(unit * 10, bodyBottom - bodyTop);
-
+  // The body rectangle is computed by computeBodyRect (which already clamps the
+  // top so a tall title block plus footer on a very small page can never push
+  // the map area below the footer).
   ctx.save();
   ctx.beginPath();
   ctx.rect(bodyX, bodyY, bodyW, bodyH);
@@ -327,9 +476,10 @@ export function drawLayout(
   // out every cartographic element too, not just the map image.
   let coverScale = 1;
   if (opts.mapImage && opts.mapImageWidth > 0 && opts.mapImageHeight > 0) {
-    coverScale = Math.max(
-      bodyW / opts.mapImageWidth,
-      bodyH / opts.mapImageHeight,
+    coverScale = coverScaleFor(
+      { unit, margin, bodyX, bodyY, bodyW, bodyH },
+      opts.mapImageWidth,
+      opts.mapImageHeight,
     );
     const drawW = opts.mapImageWidth * coverScale;
     const drawH = opts.mapImageHeight * coverScale;
@@ -399,21 +549,48 @@ export function drawLayout(
   const hasScale =
     opts.showScaleBar && outputMpp > 0 && Number.isFinite(outputMpp);
   // Representative fraction (1:N), only meaningful for physical paper sizes.
+  // Computed independent of the scale-bar toggle so the info block can print the
+  // scale even when the bar itself is hidden.
   const page = resolvePageSize(opts);
   let scaleRatio = 0;
-  if (hasScale && page.unit === "mm" && W > 0) {
+  if (outputMpp > 0 && Number.isFinite(outputMpp) && page.unit === "mm" && W > 0) {
     const mmPerPx = pageMm(page).widthMm / W;
     if (mmPerPx > 0) scaleRatio = (outputMpp * 1000) / mmPerPx;
   }
+
+  // --- Info block (cartographic title block / "stempel", bottom-right) ----
+  const infoLines = buildInfoLines(opts, scaleRatio);
+  const hasInfoBlock = (opts.showInfoBlock ?? false) && infoLines.length > 0;
+  if (hasInfoBlock) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(bodyX, bodyY, bodyW, bodyH);
+    ctx.clip();
+    drawInfoBlock(
+      ctx,
+      bodyX + bodyW - inset,
+      bodyY + bodyH - inset,
+      infoLines,
+      unit,
+    );
+    ctx.restore();
+  }
+
   const navGrouped = opts.navigationGrouped ?? true;
   const groupNav = navGrouped && opts.showNorthArrow && hasScale;
+  // When the info block occupies the bottom-right corner, move the scale bar +
+  // north arrow to the bottom-left so they never sit under the block.
+  const navOnLeft = hasInfoBlock;
+  const navRightX = navOnLeft
+    ? bodyX + inset + bodyW * 0.28
+    : bodyX + bodyW - inset;
 
   // --- Scale bar + north arrow ------------------------------------------
   let scaleTopY = bodyY + bodyH - inset;
   if (hasScale) {
     scaleTopY = drawScaleBar(
       ctx,
-      bodyX + bodyW - inset,
+      navRightX,
       bodyY + bodyH - inset,
       bodyW * 0.28,
       outputMpp,
@@ -428,7 +605,7 @@ export function drawLayout(
       // Stack the north arrow directly above the scale bar (the "navigation duo").
       drawNorthArrow(
         ctx,
-        bodyX + bodyW - inset - discRadius,
+        navRightX - discRadius,
         scaleTopY - unit * 1.4 - discRadius,
         arrowRadius,
         opts.bearingDeg,
@@ -616,6 +793,93 @@ function formatScaleRatio(ratio: number): string {
   // should follow the host environment's thousands separator (e.g. dots/spaces
   // for de/fr) rather than being pinned to US commas.
   return `1:${rounded.toLocaleString()}`;
+}
+
+/** One "Label: value" row of the cartographic info block. */
+interface InfoLine {
+  label: string;
+  value: string;
+}
+
+/**
+ * Build the rows of the info block (title block / "stempel") from the layout
+ * options, in conventional top-to-bottom order: project reference, author,
+ * CRS, scale, then revision. Empty fields are skipped, and the scale row is
+ * auto-populated from {@link scaleRatio} when a physical scale is available.
+ */
+function buildInfoLines(opts: LayoutOptions, scaleRatio: number): InfoLine[] {
+  const labels = opts.infoLabels ?? {};
+  const lines: InfoLine[] = [];
+  const push = (label: string | undefined, fallback: string, value?: string) => {
+    const v = (value ?? "").trim();
+    if (v) lines.push({ label: label ?? fallback, value: v });
+  };
+  push(labels.project, "Project", opts.projectNumber);
+  push(labels.author, "Author", opts.author);
+  push(labels.crs, "CRS", opts.crs);
+  if (scaleRatio > 0 && Number.isFinite(scaleRatio)) {
+    lines.push({
+      label: labels.scale ?? "Scale",
+      value: formatScaleRatio(scaleRatio),
+    });
+  }
+  push(labels.revision, "Rev", opts.revision);
+  return lines;
+}
+
+/**
+ * Draw the info block as a bordered panel anchored at its bottom-right corner,
+ * with one "Label: value" row per entry. Mirrors {@link drawLegend}'s boxed
+ * style so the two panels read as a set.
+ *
+ * @returns The top Y of the drawn box.
+ */
+function drawInfoBlock(
+  ctx: CanvasRenderingContext2D,
+  rightX: number,
+  bottomY: number,
+  lines: InfoLine[],
+  unit: number,
+): number {
+  const pad = unit * 1.4;
+  const rowH = unit * 2.4;
+  const labelSize = unit * 1.7;
+  const gap = unit * 1.2;
+
+  ctx.save();
+  ctx.font = `600 ${labelSize}px system-ui, sans-serif`;
+  let labelW = 0;
+  for (const l of lines) labelW = Math.max(labelW, ctx.measureText(`${l.label}`).width);
+  ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
+  let valueW = 0;
+  for (const l of lines) valueW = Math.max(valueW, ctx.measureText(l.value).width);
+
+  const boxW = pad * 2 + labelW + gap + valueW;
+  const boxH = pad * 2 + lines.length * rowH;
+  const x = rightX - boxW;
+  const y = bottomY - boxH;
+
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  ctx.strokeStyle = BORDER;
+  ctx.lineWidth = Math.max(1, unit * 0.15);
+  roundRect(ctx, x, y, boxW, boxH, unit);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  let cy = y + pad;
+  for (const l of lines) {
+    cy += rowH;
+    ctx.fillStyle = MUTED;
+    ctx.font = `600 ${labelSize}px system-ui, sans-serif`;
+    ctx.fillText(l.label, x + pad, cy);
+    ctx.fillStyle = INK;
+    ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
+    ctx.fillText(l.value, x + pad + labelW + gap, cy);
+  }
+  ctx.restore();
+  return y;
 }
 
 /** Draw a legend box anchored at its top-left corner. */

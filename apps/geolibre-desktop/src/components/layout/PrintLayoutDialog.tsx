@@ -17,6 +17,7 @@ import {
 import {
   ArrowDown,
   ArrowUp,
+  Crop,
   Eye,
   EyeOff,
   FileImage,
@@ -25,6 +26,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import {
+  computeScaleRatio,
   drawLayout,
   PAPER_SIZES,
   resolvePageSize,
@@ -34,6 +36,13 @@ import {
   type PaperSizeId,
   type SizeUnit,
 } from "../../lib/print-layout";
+import {
+  clearPrintExtent,
+  drawPrintExtent,
+  setPrintExtentVisible,
+  showPrintExtent,
+  type PrintExtent,
+} from "../../lib/print-extent";
 import {
   applyLegendConfig,
   buildLegend,
@@ -54,6 +63,9 @@ interface PrintLayoutDialogProps {
 }
 
 const PREVIEW_LONG_EDGE = 560;
+
+/** Common industry scale denominators offered as quick presets (GH #522). */
+const SCALE_PRESETS = [500, 1000, 2500, 5000, 10000, 25000, 50000, 100000];
 
 function sanitizeFilename(name: string): string {
   // Keep letters and digits from any script (\p{L}\p{N}) so non-Latin project
@@ -134,11 +146,30 @@ export function PrintLayoutDialog({
   const [showPageBorder, setShowPageBorder] = useState(false);
   const [pageBorderColor, setPageBorderColor] = useState("#111827");
   const [pageBorderWidth, setPageBorderWidth] = useState(2);
+  // Cartographic title block ("stempel") fields (GH #522).
+  const [showInfoBlock, setShowInfoBlock] = useState(false);
+  const [author, setAuthor] = useState("");
+  const [projectNumber, setProjectNumber] = useState("");
+  const [crs, setCrs] = useState("");
+  const [revision, setRevision] = useState("");
+  // Custom print extent drawn on the map (GH #523).
+  const [captureMode, setCaptureMode] = useState<"viewport" | "extent">(
+    "viewport",
+  );
+  const [extentBbox, setExtentBbox] = useState<PrintExtent | null>(null);
+  const [drawingExtent, setDrawingExtent] = useState(false);
   const [captured, setCaptured] = useState<CapturedMap | null>(null);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const previewRef = useRef<HTMLCanvasElement | null>(null);
   const wasOpenRef = useRef(false);
+  // Set while the dialog is hidden to let the user draw on the map, so the
+  // close handler does not tear down the in-progress extent box.
+  const drawingRef = useRef(false);
+  // True while the scale input has focus, so two-way sync does not overwrite
+  // what the user is typing.
+  const scaleFocusedRef = useRef(false);
+  const [scaleDraft, setScaleDraft] = useState("");
 
   const isCustom = paperSize === "custom";
   const paperOptions = useMemo(
@@ -174,34 +205,65 @@ export function PrintLayoutDialog({
     [legendConfig, entryIdsInOrder, setLegendConfig],
   );
 
-  const recapture = useCallback(() => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map) {
-      setError(t("printLayout.errors.mapNotReady"));
-      setCaptured(null);
-      return;
-    }
-    try {
-      setCaptured(captureMapImage(map));
-      setError(null);
-    } catch {
-      setError(t("printLayout.errors.captureFailed"));
-      setCaptured(null);
-    }
-  }, [mapControllerRef, t]);
+  const recapture = useCallback(
+    (clipOverride?: PrintExtent | null) => {
+      const map = mapControllerRef.current?.getMap();
+      if (!map) {
+        setError(t("printLayout.errors.mapNotReady"));
+        setCaptured(null);
+        return;
+      }
+      // An explicit override wins (used right after drawing, before state has
+      // settled); otherwise clip to the stored extent only in extent mode.
+      const clip =
+        clipOverride !== undefined
+          ? clipOverride
+          : captureMode === "extent"
+            ? extentBbox
+            : null;
+      // Hide the extent box while reading the drawing buffer so its outline is
+      // never baked into the captured image.
+      setPrintExtentVisible(map, false);
+      try {
+        setCaptured(captureMapImage(map, clip));
+        setError(null);
+      } catch {
+        setError(t("printLayout.errors.captureFailed"));
+        setCaptured(null);
+      } finally {
+        setPrintExtentVisible(map, true);
+      }
+    },
+    [mapControllerRef, t, captureMode, extentBbox],
+  );
 
   // Capture the map and seed defaults only on the closed -> open transition, so
   // a background project-name change while the dialog is open does not replace
   // the snapshot the user is composing.
   useEffect(() => {
+    const map = mapControllerRef.current?.getMap();
     if (open && !wasOpenRef.current) {
       setError(null);
       setTitle((prev) => prev || (projectName ?? "").trim());
       setDateText((prev) => prev || new Date().toLocaleDateString());
+      // Re-show a previously drawn extent box while composing.
+      if (map && extentBbox) showPrintExtent(map, extentBbox);
       recapture();
+    } else if (!open && wasOpenRef.current && !drawingRef.current) {
+      // Closing for good (not to draw): take the extent box off the map.
+      if (map) clearPrintExtent(map);
     }
     wasOpenRef.current = open;
-  }, [open, projectName, recapture]);
+  }, [open, projectName, recapture, mapControllerRef, extentBbox]);
+
+  // Clean up the on-map extent box if the dialog unmounts.
+  useEffect(
+    () => () => {
+      const map = mapControllerRef.current?.getMap();
+      if (map) clearPrintExtent(map);
+    },
+    [mapControllerRef],
+  );
 
   const customSize = useMemo<CustomSize | null>(
     () =>
@@ -235,6 +297,18 @@ export function PrintLayoutDialog({
       showPageBorder,
       pageBorderColor,
       pageBorderWidth,
+      showInfoBlock,
+      author,
+      projectNumber,
+      crs,
+      revision,
+      infoLabels: {
+        author: t("printLayout.info.author"),
+        project: t("printLayout.info.project"),
+        crs: t("printLayout.info.crs"),
+        scale: t("printLayout.info.scale"),
+        revision: t("printLayout.info.revision"),
+      },
       legend,
       legendTitle: legendConfig.title,
       legendGroupByLayer: legendConfig.groupByLayer,
@@ -267,10 +341,84 @@ export function PrintLayoutDialog({
       showPageBorder,
       pageBorderColor,
       pageBorderWidth,
+      showInfoBlock,
+      author,
+      projectNumber,
+      crs,
+      revision,
       legend,
       legendConfig,
       captured,
+      t,
     ],
+  );
+
+  // Current representative fraction (1:N), and whether scale is meaningful for
+  // the chosen page (only physical paper carries a true cartographic scale).
+  const isMmPage = resolvePageSize(options).unit === "mm";
+  const currentRatio = useMemo(() => computeScaleRatio(options), [options]);
+
+  // Two-way scale sync: reflect the captured view's scale into the input unless
+  // the user is actively editing it.
+  useEffect(() => {
+    if (!scaleFocusedRef.current) {
+      setScaleDraft(currentRatio > 0 ? String(Math.round(currentRatio)) : "");
+    }
+  }, [currentRatio]);
+
+  // Drive the live map to a target 1:N scale, then recapture. The reported
+  // scale is linear in metres-per-pixel, which halves per zoom level, so the
+  // zoom delta is log2(currentScale / targetScale).
+  const applyScale = useCallback(
+    (targetRatio: number) => {
+      const map = mapControllerRef.current?.getMap();
+      if (!map || !(targetRatio > 0) || !(currentRatio > 0)) return;
+      const newZoom = map.getZoom() + Math.log2(currentRatio / targetRatio);
+      map.setZoom(Math.max(0, Math.min(24, newZoom)));
+      // Let the camera settle, then recapture so the scale label updates.
+      requestAnimationFrame(() => recapture());
+    },
+    [mapControllerRef, currentRatio, recapture],
+  );
+
+  // Hide the dialog so the map is interactive, let the user drag an extent box,
+  // then reopen with the new extent active.
+  const handleDrawExtent = useCallback(async () => {
+    const map = mapControllerRef.current?.getMap();
+    if (!map) return;
+    const page = resolvePageSize(options);
+    const aspect = page.width / page.height;
+    drawingRef.current = true;
+    setDrawingExtent(true);
+    onOpenChange(false);
+    try {
+      const extent = await drawPrintExtent(map, { aspect });
+      if (extent) {
+        setExtentBbox(extent);
+        setCaptureMode("extent");
+        recapture(extent);
+      }
+    } finally {
+      drawingRef.current = false;
+      setDrawingExtent(false);
+      onOpenChange(true);
+    }
+  }, [mapControllerRef, options, onOpenChange, recapture]);
+
+  const handleClearExtent = useCallback(() => {
+    const map = mapControllerRef.current?.getMap();
+    if (map) clearPrintExtent(map);
+    setExtentBbox(null);
+    setCaptureMode("viewport");
+    recapture(null);
+  }, [mapControllerRef, recapture]);
+
+  const setMode = useCallback(
+    (mode: "viewport" | "extent") => {
+      setCaptureMode(mode);
+      recapture(mode === "extent" ? extentBbox : null);
+    },
+    [recapture, extentBbox],
   );
 
   // Redraw the preview whenever the layout options change. Drawing is scheduled
@@ -511,6 +659,113 @@ export function PrintLayoutDialog({
               </Select>
             </div>
 
+            {isMmPage && (
+              <div className="space-y-1.5">
+                <Label htmlFor="layout-scale">
+                  {t("printLayout.scaleLabel")}
+                </Label>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">1:</span>
+                  <Input
+                    id="layout-scale"
+                    inputMode="numeric"
+                    className="flex-1"
+                    value={scaleDraft}
+                    disabled={!captured}
+                    placeholder={t("printLayout.scalePlaceholder")}
+                    onFocus={() => {
+                      scaleFocusedRef.current = true;
+                    }}
+                    onChange={(e) =>
+                      setScaleDraft(e.target.value.replace(/[^0-9]/g, ""))
+                    }
+                    onBlur={() => {
+                      scaleFocusedRef.current = false;
+                      const n = Number(scaleDraft);
+                      if (n > 0) applyScale(n);
+                      else
+                        setScaleDraft(
+                          currentRatio > 0
+                            ? String(Math.round(currentRatio))
+                            : "",
+                        );
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter")
+                        (e.target as HTMLInputElement).blur();
+                    }}
+                  />
+                  <Select
+                    aria-label={t("printLayout.scalePresets")}
+                    value=""
+                    disabled={!captured}
+                    onChange={(e) => {
+                      const n = Number(e.target.value);
+                      if (n > 0) applyScale(n);
+                    }}
+                  >
+                    <option value="">{t("printLayout.scalePresets")}</option>
+                    {SCALE_PRESETS.map((n) => (
+                      <option key={n} value={n}>
+                        1:{n.toLocaleString()}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label>{t("printLayout.extent.label")}</Label>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                disabled={drawingExtent}
+                onClick={() => void handleDrawExtent()}
+              >
+                <Crop className="mr-2 h-4 w-4" />
+                {extentBbox
+                  ? t("printLayout.extent.redraw")
+                  : t("printLayout.extent.draw")}
+              </Button>
+              {extentBbox && (
+                <div className="space-y-1.5 pt-1">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="capture-mode"
+                      className="h-4 w-4 accent-primary"
+                      checked={captureMode === "viewport"}
+                      onChange={() => setMode("viewport")}
+                    />
+                    {t("printLayout.extent.useViewport")}
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="capture-mode"
+                      className="h-4 w-4 accent-primary"
+                      checked={captureMode === "extent"}
+                      onChange={() => setMode("extent")}
+                    />
+                    {t("printLayout.extent.useCustom")}
+                  </label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleClearExtent}
+                  >
+                    <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                    {t("printLayout.extent.clear")}
+                  </Button>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {t("printLayout.extent.hint")}
+              </p>
+            </div>
+
             <Separator />
 
             <div className="space-y-2">
@@ -579,6 +834,12 @@ export function PrintLayoutDialog({
                 checked={showPageBorder}
                 onChange={setShowPageBorder}
               />
+              <ToggleField
+                id="el-info-block"
+                label={t("printLayout.element.infoBlock")}
+                checked={showInfoBlock}
+                onChange={setShowInfoBlock}
+              />
             </div>
 
             {showFooter && (
@@ -624,6 +885,55 @@ export function PrintLayoutDialog({
                         Math.max(1, Math.min(10, Number(e.target.value) || 1)),
                       )
                     }
+                  />
+                </div>
+              </div>
+            )}
+
+            {showInfoBlock && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="layout-author">
+                    {t("printLayout.info.author")}
+                  </Label>
+                  <Input
+                    id="layout-author"
+                    value={author}
+                    placeholder={t("printLayout.info.authorPlaceholder")}
+                    onChange={(e) => setAuthor(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="layout-project">
+                    {t("printLayout.info.project")}
+                  </Label>
+                  <Input
+                    id="layout-project"
+                    value={projectNumber}
+                    placeholder={t("printLayout.info.projectPlaceholder")}
+                    onChange={(e) => setProjectNumber(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="layout-crs">
+                    {t("printLayout.info.crs")}
+                  </Label>
+                  <Input
+                    id="layout-crs"
+                    value={crs}
+                    placeholder={t("printLayout.info.crsPlaceholder")}
+                    onChange={(e) => setCrs(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="layout-revision">
+                    {t("printLayout.info.revision")}
+                  </Label>
+                  <Input
+                    id="layout-revision"
+                    value={revision}
+                    placeholder={t("printLayout.info.revisionPlaceholder")}
+                    onChange={(e) => setRevision(e.target.value)}
                   />
                 </div>
               </div>
@@ -776,7 +1086,7 @@ export function PrintLayoutDialog({
               <span className="text-sm text-muted-foreground">
                 {t("printLayout.preview")}
               </span>
-              <Button variant="ghost" size="sm" onClick={recapture}>
+              <Button variant="ghost" size="sm" onClick={() => recapture()}>
                 <RefreshCw className="mr-2 h-3.5 w-3.5" />
                 {t("printLayout.recapture")}
               </Button>

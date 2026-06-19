@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  computeScaleRatio,
   drawLayout,
   pageMm,
   pagePx,
@@ -265,5 +266,67 @@ describe("drawLayout cartographic furniture", () => {
       }),
     );
     assert.ok(!fills.some((f) => /^1:/.test(f.text)));
+  });
+
+  it("draws the info block rows when showInfoBlock and fields are set", () => {
+    const { canvas, fills } = recordingCanvas();
+    drawLayout(
+      canvas,
+      baseOptions({
+        showInfoBlock: true,
+        author: "Jane Cartographer",
+        projectNumber: "PRJ-42",
+        crs: "EPSG:28992",
+        revision: "Rev 01",
+        infoLabels: { author: "Author", project: "Project", crs: "CRS", revision: "Rev" },
+      }),
+    );
+    for (const v of ["Jane Cartographer", "PRJ-42", "EPSG:28992", "Rev 01"]) {
+      assert.ok(
+        fills.some((f) => f.text === v),
+        `expected the info block to draw "${v}"`,
+      );
+    }
+  });
+
+  it("omits the info block when showInfoBlock is false", () => {
+    const { canvas, fills } = recordingCanvas();
+    drawLayout(canvas, baseOptions({ author: "Hidden Author" }));
+    assert.ok(!fills.some((f) => f.text === "Hidden Author"));
+  });
+});
+
+describe("computeScaleRatio", () => {
+  const withMap = (overrides: Partial<LayoutOptions> = {}): LayoutOptions =>
+    baseOptions({
+      metersPerPixel: 10,
+      mapImage: {} as CanvasImageSource,
+      mapImageWidth: 400,
+      mapImageHeight: 400,
+      ...overrides,
+    });
+
+  it("returns 0 for a pixel/screen page (no physical scale)", () => {
+    assert.equal(computeScaleRatio(withMap({ paperSize: "fullhd" })), 0);
+  });
+
+  it("returns 0 when there is no captured map", () => {
+    assert.equal(
+      computeScaleRatio(baseOptions({ metersPerPixel: 10, mapImage: null })),
+      0,
+    );
+  });
+
+  it("returns a positive representative fraction for a millimetre page", () => {
+    const ratio = computeScaleRatio(withMap());
+    assert.ok(ratio > 0 && Number.isFinite(ratio));
+  });
+
+  it("scales linearly with metres-per-pixel (the basis of the zoom math)", () => {
+    // The scale denominator is linear in metres-per-pixel, which halves per zoom
+    // level, so applyScale derives its zoom delta as log2(current / target).
+    const a = computeScaleRatio(withMap({ metersPerPixel: 10 }));
+    const b = computeScaleRatio(withMap({ metersPerPixel: 20 }));
+    assert.ok(Math.abs(b / a - 2) < 1e-9, "doubling mpp doubles the ratio");
   });
 });
