@@ -45,7 +45,6 @@ import {
   FolderOpen,
   Info,
   Keyboard,
-  Layers,
   Link2,
   Map,
   MapPin,
@@ -1061,7 +1060,6 @@ export function TopToolbar({
         </Button>
         {showProjectInfo ? (
           <>
-            <Layers className="mr-1 hidden h-3 w-3 md:inline" />
             <Input
               aria-label={t("toolbar.item.projectName")}
               className="hidden h-7 w-44 border-transparent px-2 text-xs shadow-none focus-visible:border-input md:block"
