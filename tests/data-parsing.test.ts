@@ -128,6 +128,13 @@ describe("delimited text auto-detection", () => {
     });
   });
 
+  it("prefers a specific name over a generic one regardless of order", () => {
+    assert.deepEqual(detectCoordinateFields(["x", "y", "longitude", "latitude"]), {
+      longitudeField: "longitude",
+      latitudeField: "latitude",
+    });
+  });
+
   it("returns null when coordinate columns are missing", () => {
     assert.equal(detectCoordinateFields(["name", "value", "category"]), null);
   });

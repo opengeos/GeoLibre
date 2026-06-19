@@ -307,8 +307,15 @@ export function detectDelimitedTextDelimiter(text: string): string {
 export function detectCoordinateFields(
   fields: string[],
 ): { longitudeField: string; latitudeField: string } | null {
-  const match = (candidates: string[]) =>
-    fields.find((field) => candidates.includes(field.trim().toLowerCase()));
+  // Match in candidate-priority order so a more specific name (e.g.
+  // "longitude") wins over a generic one (e.g. "x") regardless of column order.
+  const match = (candidates: string[]) => {
+    for (const candidate of candidates) {
+      const field = fields.find((f) => f.trim().toLowerCase() === candidate);
+      if (field) return field;
+    }
+    return undefined;
+  };
   const longitudeField = match(LONGITUDE_FIELD_CANDIDATES);
   const latitudeField = match(LATITUDE_FIELD_CANDIDATES);
   if (!longitudeField || !latitudeField) return null;
