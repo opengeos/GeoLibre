@@ -168,6 +168,9 @@ export function PrintLayoutDialog({
   const drawingRef = useRef(false);
   // Aborts an in-progress draw when the dialog unmounts mid-drag.
   const drawAbortRef = useRef<AbortController | null>(null);
+  // A pending "recapture once the map is idle" handler (from applyScale), kept
+  // so any newer capture can cancel it before it overwrites a fresh result.
+  const idleRecaptureRef = useRef<(() => void) | null>(null);
   // True while the scale input has focus, so two-way sync does not overwrite
   // what the user is typing.
   const scaleFocusedRef = useRef(false);
@@ -214,6 +217,13 @@ export function PrintLayoutDialog({
         setError(t("printLayout.errors.mapNotReady"));
         setCaptured(null);
         return;
+      }
+      // Cancel any pending post-zoom idle capture: this fresh capture supersedes
+      // it, so it must not fire later and overwrite the result (e.g. a viewport
+      // recapture clobbering an extent the user drew while tiles were loading).
+      if (idleRecaptureRef.current) {
+        map.off("idle", idleRecaptureRef.current);
+        idleRecaptureRef.current = null;
       }
       // An explicit override wins (used right after drawing, before state has
       // settled); otherwise clip to the stored extent only in extent mode.
@@ -265,7 +275,13 @@ export function PrintLayoutDialog({
     () => () => {
       drawAbortRef.current?.abort();
       const map = mapControllerRef.current?.getMap();
-      if (map) clearPrintExtent(map);
+      if (map) {
+        if (idleRecaptureRef.current) {
+          map.off("idle", idleRecaptureRef.current);
+          idleRecaptureRef.current = null;
+        }
+        clearPrintExtent(map);
+      }
     },
     [mapControllerRef],
   );
@@ -393,9 +409,15 @@ export function PrintLayoutDialog({
       map.setZoom(Math.max(0, Math.min(24, newZoom)));
       // Recapture once the map is idle, so tiles for the new zoom have finished
       // loading and the snapshot is not blurry/blank mid-fetch. applyScale only
-      // runs in viewport mode, so pin the recapture to a null clip rather than
-      // reading the (possibly changed) mode if the user toggles while tiles load.
-      map.once("idle", () => recapture(null));
+      // runs in viewport mode, so pin the recapture to a null clip. The handler
+      // is tracked in a ref so a capture that happens first (e.g. the user draws
+      // an extent while tiles load) cancels it via recapture().
+      const handler = () => {
+        idleRecaptureRef.current = null;
+        recapture(null);
+      };
+      idleRecaptureRef.current = handler;
+      map.once("idle", handler);
     },
     [mapControllerRef, captureMode, currentRatio, recapture],
   );

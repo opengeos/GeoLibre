@@ -14,6 +14,7 @@ import {
   resolvePageSize,
   type LayoutOptions,
 } from "./print-layout";
+import type { PrintExtent } from "./print-extent";
 import { saveBinaryFileWithFallback } from "./tauri-io";
 
 export {
@@ -45,8 +46,11 @@ interface MapLike {
   redraw?(): void;
 }
 
-/** A geographic crop box as `[west, south, east, north]`. */
-export type CaptureClip = [number, number, number, number];
+/**
+ * A geographic crop box as `[west, south, east, north]`. Aliased to
+ * {@link PrintExtent} (the draw tool's type) so the two stay a single concept.
+ */
+export type CaptureClip = PrintExtent;
 
 /** Axis-aligned bounding rect (in CSS pixels) of a geographic extent's four
  * projected corners. A north-up box maps to an exact rect; a rotated box maps
