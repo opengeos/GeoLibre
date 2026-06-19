@@ -3,6 +3,7 @@ import { detectGeometryProfile, type MapController } from "@geolibre/map";
 import {
   NETWORK_TOOLS,
   getNetworkTool,
+  type AlgorithmParameter,
   type GeometryFamily,
   type ProcessingContext,
 } from "@geolibre/processing";
@@ -112,6 +113,36 @@ export function NetworkToolsDialog({
     [layers],
   );
 
+  // Attribute-field names per layer, memoized on the layer set (and the dialog
+  // being open). GeoJSON is schemaless, so sample the first FIELD_SCAN_SAMPLE
+  // features rather than scanning a whole large layer on the React commit path.
+  const fieldsByLayer = useMemo(() => {
+    const FIELD_SCAN_SAMPLE = 1000;
+    const map = new Map<string, string[]>();
+    if (!open) return map;
+    for (const layer of layers) {
+      if (layer.type !== "geojson" || !layer.geojson) continue;
+      const keys = new Set<string>();
+      for (const feature of layer.geojson.features.slice(0, FIELD_SCAN_SAMPLE)) {
+        for (const key of Object.keys(feature.properties ?? {})) keys.add(key);
+      }
+      map.set(layer.id, [...keys]);
+    }
+    return map;
+  }, [layers, open]);
+
+  // Attribute-field options for a `type: "field"` parameter, read from the layer
+  // chosen in its `fieldSource` parameter (default "layer").
+  const fieldOptions = useCallback(
+    (param: AlgorithmParameter): string[] => {
+      const sourceId = params[param.fieldSource ?? "layer"] as
+        | string
+        | undefined;
+      return (sourceId && fieldsByLayer.get(sourceId)) || [];
+    },
+    [fieldsByLayer, params],
+  );
+
   const addResultLayer = useCallback(
     (name: string, fc: FeatureCollection) => {
       if (!fc.features.length) {
@@ -127,9 +158,23 @@ export function NetworkToolsDialog({
     [addGeoJsonLayer, appendLog, mapControllerRef],
   );
 
-  const handleParamChange = useCallback((id: string, value: unknown) => {
-    setParams((prev) => ({ ...prev, [id]: value }));
-  }, []);
+  // Update a parameter. When a layer parameter changes, also clear any
+  // `type: "field"` parameter that draws its options from it, so the field
+  // dropdown never keeps a value from the previous layer.
+  const handleParamChange = useCallback(
+    (id: string, value: unknown) => {
+      setParams((prev) => {
+        const next = { ...prev, [id]: value };
+        for (const param of tool.parameters) {
+          if (param.type === "field" && (param.fieldSource ?? "layer") === id) {
+            next[param.id] = undefined;
+          }
+        }
+        return next;
+      });
+    },
+    [tool],
+  );
 
   const handleRun = useCallback(async () => {
     setLog([]);
@@ -225,6 +270,9 @@ export function NetworkToolsDialog({
                   param={param}
                   value={params[param.id]}
                   layerOptions={layerOptions(param.geometryFilter)}
+                  fieldOptions={
+                    param.type === "field" ? fieldOptions(param) : undefined
+                  }
                   onChange={(value) => handleParamChange(param.id, value)}
                 />
               ))}

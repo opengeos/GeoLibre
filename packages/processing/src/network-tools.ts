@@ -7,12 +7,16 @@ import {
   type RoutingPoint,
   buildIsochroneRequest,
   buildMatrixRequest,
+  buildRouteRequest,
+  compareSequenceValues,
   getRoutingConfig,
   isochroneResponseToFeatures,
   matrixResponseToFeatures,
   parseContours,
   requestIsochrone,
   requestMatrix,
+  requestRoute,
+  routeResponseToFeatures,
 } from "@geolibre/core";
 import type { ProcessingAlgorithm, ProcessingContext } from "./types";
 
@@ -29,6 +33,9 @@ const MAX_ISOCHRONE_POINTS = 25;
 const MAX_ISOCHRONE_CONTOURS = 4;
 /** Cap on OD matrix cells (origins × destinations) per run. */
 const MAX_MATRIX_CELLS = 2500;
+/** Cap on waypoints per sequential route, to stay within the public server's
+ *  per-request location limit and avoid overloading it. */
+const MAX_ROUTE_POINTS = 50;
 
 const MODE_OPTIONS = [
   { value: "auto", label: "Driving" },
@@ -44,6 +51,22 @@ function getLayer(
   return ctx.layers.find((layer) => layer.id === layerId);
 }
 
+/** Derives a stable point id from the feature id, an `id`/`name` property, or
+ *  the feature index. */
+function pointId(
+  feature: Feature,
+  index: number,
+): string | number {
+  const props = feature.properties ?? {};
+  return (
+    (feature.id as string | number | undefined) ??
+    (props.id as string | number | undefined) ??
+    (props.ID as string | number | undefined) ??
+    (props.name as string | undefined) ??
+    index
+  );
+}
+
 /**
  * Extracts routing points from a layer's Point features, deriving a stable id
  * from the feature id, an `id`/`name` property, or the feature index. Non-point
@@ -56,16 +79,42 @@ function layerToRoutingPoints(layer: GeoLibreLayer | undefined): RoutingPoint[] 
     if (feature.geometry?.type !== "Point") return;
     const [lon, lat] = (feature.geometry as Point).coordinates;
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
-    const props = feature.properties ?? {};
-    const id =
-      (feature.id as string | number | undefined) ??
-      (props.id as string | number | undefined) ??
-      (props.ID as string | number | undefined) ??
-      (props.name as string | undefined) ??
-      index;
-    points.push({ id, lon, lat });
+    points.push({ id: pointId(feature, index), lon, lat });
   });
   return points;
+}
+
+/**
+ * Extracts routing points in visiting order. With no `orderField`, points keep
+ * the layer's feature order. With an `orderField`, points are sorted by that
+ * attribute (numbers or timestamps sort chronologically; see
+ * {@link compareSequenceValues}), keeping feature order as a stable tiebreaker.
+ * Non-point geometries are skipped.
+ */
+function layerToSequencedPoints(
+  layer: GeoLibreLayer | undefined,
+  orderField: string,
+): RoutingPoint[] {
+  const features = layer?.geojson?.features ?? [];
+  const entries: { point: RoutingPoint; order: unknown; index: number }[] = [];
+  features.forEach((feature, index) => {
+    if (feature.geometry?.type !== "Point") return;
+    const [lon, lat] = (feature.geometry as Point).coordinates;
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+    const props = feature.properties ?? {};
+    entries.push({
+      point: { id: pointId(feature, index), lon, lat },
+      order: orderField ? props[orderField] : index,
+      index,
+    });
+  });
+  if (orderField) {
+    entries.sort((a, b) => {
+      const cmp = compareSequenceValues(a.order, b.order);
+      return cmp !== 0 ? cmp : a.index - b.index;
+    });
+  }
+  return entries.map((entry) => entry.point);
 }
 
 function resolveEndpoint(ctx: ProcessingContext): string {
@@ -276,7 +325,99 @@ export const odMatrixTool: ProcessingAlgorithm = {
   },
 };
 
-export const NETWORK_TOOLS: ProcessingAlgorithm[] = [isochroneTool, odMatrixTool];
+export const sequentialRouteTool: ProcessingAlgorithm = {
+  id: "sequential-route",
+  name: "Sequential route (directions)",
+  description:
+    "Connect points in sequence along the road network into a route. Each point is snapped to the nearest road, so off-road coordinates (cell sites, sensors) still route. Order follows the chosen field (e.g. a timestamp) or the layer's feature order.",
+  group: "Network",
+  parameters: [
+    {
+      id: "layer",
+      label: "Input points",
+      type: "layer",
+      required: true,
+      geometryFilter: ["point"],
+    },
+    {
+      id: "order_field",
+      label: "Order by field (optional)",
+      type: "field",
+      fieldSource: "layer",
+      description:
+        "Sort points by this field (numbers or timestamps) before routing. Leave empty to use the layer's feature order.",
+    },
+    {
+      id: "mode",
+      label: "Travel mode",
+      type: "select",
+      default: "auto",
+      options: MODE_OPTIONS,
+    },
+    {
+      id: "endpoint",
+      label: "Routing server (Valhalla)",
+      type: "string",
+      // Left empty so the live routing config is resolved when the tool runs
+      // (or seeded by the dialog), not baked in at module-import time. See
+      // resolveEndpoint, which falls back to getRoutingConfig().endpoint.
+      default: "",
+    },
+  ],
+  run: async (ctx) => {
+    const orderField =
+      (ctx.parameters.order_field as string | undefined)?.trim() || "";
+    const points = layerToSequencedPoints(getLayer(ctx, "layer"), orderField);
+    if (points.length < 2) {
+      ctx.log("Error: at least two point features are required to build a route");
+      return;
+    }
+    const used = points.slice(0, MAX_ROUTE_POINTS);
+    if (points.length > used.length) {
+      ctx.log(
+        `Using the first ${used.length} of ${points.length} points (server-load cap).`,
+      );
+    }
+    const mode = (ctx.parameters.mode as RoutingMode) || "auto";
+    const endpoint = resolveEndpoint(ctx);
+
+    try {
+      const response = await requestRoute(
+        endpoint,
+        buildRouteRequest(used, mode),
+        ctx.signal,
+      );
+      const features = routeResponseToFeatures(response, used, { mode });
+      if (!features.length) {
+        ctx.log(
+          "No route was returned. The points may be unroutable for this travel mode.",
+        );
+        return;
+      }
+      const totalKm = features.reduce(
+        (sum, feature) => sum + (feature.properties.distance_km || 0),
+        0,
+      );
+      ctx.log(
+        `Built a route through ${used.length} point(s): ${features.length} leg(s), ${totalKm.toFixed(2)} km total.`,
+      );
+      ctx.addResultLayer?.("Route", featureCollection(features));
+    } catch (error) {
+      if (ctx.signal?.aborted) return;
+      ctx.log(
+        `Routing failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  },
+};
+
+export const NETWORK_TOOLS: ProcessingAlgorithm[] = [
+  isochroneTool,
+  odMatrixTool,
+  sequentialRouteTool,
+];
 
 export function getNetworkTool(id: string): ProcessingAlgorithm | undefined {
   return NETWORK_TOOLS.find((tool) => tool.id === id);

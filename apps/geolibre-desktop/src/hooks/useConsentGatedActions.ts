@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { type NetworkToolKind, useAppStore } from "@geolibre/core";
 import {
   DIRECTIONS_PLUGIN_ID,
   REVERSE_GEOCODE_PLUGIN_ID,
@@ -34,9 +34,8 @@ export function useConsentGatedActions({
   const [reverseGeocodeNoticeOpen, setReverseGeocodeNoticeOpen] =
     useState(false);
   const [routingNoticeOpen, setRoutingNoticeOpen] = useState(false);
-  const [pendingNetworkTool, setPendingNetworkTool] = useState<
-    "isochrone" | "od-matrix" | null
-  >(null);
+  const [pendingNetworkTool, setPendingNetworkTool] =
+    useState<NetworkToolKind | null>(null);
 
   // Show a one-time consent notice the first time routing is enabled, since it
   // sends the user's waypoints to a public third-party server.
@@ -86,7 +85,7 @@ export function useConsentGatedActions({
   // Network analysis tools send the coordinates of the input points to a public
   // Valhalla routing server, so they show the same one-time consent notice as
   // Directions before opening, gated on every activation path (each menu item).
-  const openNetworkTool = (kind: "isochrone" | "od-matrix") => {
+  const openNetworkTool = (kind: NetworkToolKind) => {
     if (hasRoutingConsent()) {
       setNetworkToolOpen(kind);
       return;

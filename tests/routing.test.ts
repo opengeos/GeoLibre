@@ -4,10 +4,14 @@ import {
   DEFAULT_ROUTING_ENDPOINT,
   buildIsochroneRequest,
   buildMatrixRequest,
+  buildRouteRequest,
+  compareSequenceValues,
+  decodePolyline,
   getRoutingConfig,
   isochroneResponseToFeatures,
   matrixResponseToFeatures,
   parseContours,
+  routeResponseToFeatures,
   type RoutingPoint,
 } from "../packages/core/src/routing";
 
@@ -147,6 +151,98 @@ describe("matrixResponseToFeatures", () => {
       matrixResponseToFeatures({}, origins, targets, { mode: "auto" }),
       [],
     );
+  });
+});
+
+describe("buildRouteRequest", () => {
+  it("maps ordered points to Valhalla locations with km units", () => {
+    const points: RoutingPoint[] = [
+      { id: "a", lon: -83, lat: 40 },
+      { id: "b", lon: -82, lat: 41 },
+    ];
+    assert.deepEqual(buildRouteRequest(points, "pedestrian"), {
+      locations: [
+        { lon: -83, lat: 40 },
+        { lon: -82, lat: 41 },
+      ],
+      costing: "pedestrian",
+      directions_options: { units: "kilometers" },
+    });
+  });
+});
+
+describe("decodePolyline", () => {
+  it("decodes the canonical Google precision-5 example to [lon, lat] pairs", () => {
+    // Canonical example from Google's encoded-polyline algorithm docs:
+    // (38.5, -120.2), (40.7, -120.95), (43.252, -126.453).
+    const coords = decodePolyline("_p~iF~ps|U_ulLnnqC_mqNvxq`@", 5);
+    assert.deepEqual(coords, [
+      [-120.2, 38.5],
+      [-120.95, 40.7],
+      [-126.453, 43.252],
+    ]);
+  });
+
+  it("returns an empty array for an empty string", () => {
+    assert.deepEqual(decodePolyline(""), []);
+  });
+});
+
+describe("routeResponseToFeatures", () => {
+  const points: RoutingPoint[] = [
+    { id: "p0", lon: 0, lat: 0 },
+    { id: "p1", lon: 1, lat: 1 },
+  ];
+  const response = {
+    trip: {
+      legs: [
+        {
+          // precision-5 shape decoded here only to exercise the parser shape;
+          // length/time carry the leg cost.
+          shape: "_p~iF~ps|U_ulLnnqC",
+          summary: { time: 540, length: 8.2 },
+        },
+      ],
+    },
+  };
+
+  it("emits one LineString per leg with from/to ids and cost", () => {
+    const features = routeResponseToFeatures(response, points, { mode: "auto" });
+    assert.equal(features.length, 1);
+    const [feature] = features;
+    assert.equal(feature.geometry.type, "LineString");
+    assert.equal(feature.geometry.coordinates.length, 2);
+    assert.deepEqual(feature.properties, {
+      leg_index: 0,
+      from_id: "p0",
+      to_id: "p1",
+      time_s: 540,
+      distance_km: 8.2,
+      mode: "auto",
+    });
+  });
+
+  it("returns an empty array for a malformed response", () => {
+    assert.deepEqual(routeResponseToFeatures({}, points, { mode: "auto" }), []);
+  });
+});
+
+describe("compareSequenceValues", () => {
+  it("orders numeric and numeric-string values ascending", () => {
+    assert.ok(compareSequenceValues(1, 2) < 0);
+    assert.ok(compareSequenceValues("10", "2") > 0);
+  });
+
+  it("orders ISO timestamps chronologically", () => {
+    assert.ok(
+      compareSequenceValues("2026-01-02T00:00:00Z", "2026-01-01T00:00:00Z") > 0,
+    );
+  });
+
+  it("sorts parseable values before free-form text and empties last", () => {
+    const values = ["zeta", "", "2", "10"];
+    const sorted = [...values].sort(compareSequenceValues);
+    assert.deepEqual(sorted, ["2", "10", "zeta", ""]);
   });
 });
 

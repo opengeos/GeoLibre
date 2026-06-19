@@ -241,6 +241,172 @@ export function matrixResponseToFeatures(
   return out;
 }
 
+export interface RouteRequestBody {
+  locations: { lon: number; lat: number }[];
+  costing: RoutingMode;
+  directions_options: { units: "kilometers" };
+}
+
+/**
+ * Builds a Valhalla `/route` request body that visits the points in the given
+ * order. Valhalla snaps each location to the nearest routable edge, so points
+ * that are off the road network (cell sites, sensors) still route cleanly.
+ *
+ * @param points - The waypoints in visiting order (at least two).
+ * @param mode - The travel mode (costing model).
+ * @returns The request body.
+ */
+export function buildRouteRequest(
+  points: RoutingPoint[],
+  mode: RoutingMode,
+): RouteRequestBody {
+  return {
+    locations: points.map((p) => ({ lon: p.lon, lat: p.lat })),
+    costing: mode,
+    directions_options: { units: "kilometers" },
+  };
+}
+
+/**
+ * Decodes an encoded-polyline string into `[lon, lat]` coordinate pairs.
+ * Valhalla encodes route geometry with 6 digits of precision (factor 1e6),
+ * unlike Google's 5-digit polylines, so `precision` defaults to 6.
+ *
+ * @param encoded - The encoded polyline string.
+ * @param precision - Number of decimal digits the encoder used (6 for Valhalla).
+ * @returns The decoded `[lon, lat]` coordinates in order.
+ */
+export function decodePolyline(
+  encoded: string,
+  precision = 6,
+): [number, number][] {
+  const factor = 10 ** precision;
+  const coordinates: [number, number][] = [];
+  let index = 0;
+  let lat = 0;
+  let lon = 0;
+  while (index < encoded.length) {
+    let shift = 0;
+    let result = 0;
+    let byte: number;
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+    lat += result & 1 ? ~(result >> 1) : result >> 1;
+
+    shift = 0;
+    result = 0;
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+    lon += result & 1 ? ~(result >> 1) : result >> 1;
+
+    coordinates.push([lon / factor, lat / factor]);
+  }
+  return coordinates;
+}
+
+type RouteLeg = {
+  shape?: string;
+  summary?: { time?: number; length?: number };
+};
+
+type RouteFeatureProps = {
+  leg_index: number;
+  from_id: string | number;
+  to_id: string | number;
+  time_s: number;
+  distance_km: number;
+  mode: RoutingMode;
+};
+
+/**
+ * Converts a Valhalla `/route` response into one LineString per leg (the road
+ * path between two consecutive waypoints), carrying the leg's travel time and
+ * distance. Legs without a decodable shape are dropped.
+ *
+ * @param response - The Valhalla `/route` response.
+ * @param points - The waypoints passed to the request, indexing the legs.
+ * @param ctx - The travel mode to tag onto each leg.
+ * @returns One LineString feature per routed leg.
+ */
+export function routeResponseToFeatures(
+  response: unknown,
+  points: RoutingPoint[],
+  ctx: { mode: RoutingMode },
+): Feature<LineString, RouteFeatureProps>[] {
+  const legs = (response as { trip?: { legs?: RouteLeg[] } } | null)?.trip?.legs;
+  if (!Array.isArray(legs)) return [];
+  const out: Feature<LineString, RouteFeatureProps>[] = [];
+  legs.forEach((leg, index) => {
+    if (typeof leg?.shape !== "string") return;
+    const coordinates = decodePolyline(leg.shape);
+    if (coordinates.length < 2) return;
+    const from = points[index];
+    const to = points[index + 1];
+    out.push({
+      type: "Feature",
+      geometry: { type: "LineString", coordinates },
+      properties: {
+        leg_index: index,
+        from_id: from?.id ?? index,
+        to_id: to?.id ?? index + 1,
+        time_s: typeof leg.summary?.time === "number" ? leg.summary.time : 0,
+        distance_km:
+          typeof leg.summary?.length === "number" ? leg.summary.length : 0,
+        mode: ctx.mode,
+      },
+    });
+  });
+  return out;
+}
+
+/**
+ * Comparator for ordering route waypoints by a chosen attribute value. Numeric
+ * strings and timestamps (anything `Date.parse` understands, e.g. ISO 8601)
+ * sort chronologically/numerically; values that parse this way sort before
+ * free-form text, which falls back to a locale string comparison. Empty/missing
+ * values sort last so unlabeled points trail the ordered ones.
+ *
+ * @param a - The first value.
+ * @param b - The second value.
+ * @returns A negative, zero, or positive number for ascending order.
+ */
+export function compareSequenceValues(a: unknown, b: unknown): number {
+  const aMissing = isMissingValue(a);
+  const bMissing = isMissingValue(b);
+  if (aMissing && bMissing) return 0;
+  if (aMissing) return 1;
+  if (bMissing) return -1;
+  const an = toComparableNumber(a);
+  const bn = toComparableNumber(b);
+  if (an !== null && bn !== null) return an - bn;
+  if (an !== null) return -1;
+  if (bn !== null) return 1;
+  return String(a).localeCompare(String(b));
+}
+
+function isMissingValue(value: unknown): boolean {
+  return value == null || (typeof value === "string" && value.trim() === "");
+}
+
+function toComparableNumber(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed === "") return null;
+    const num = Number(trimmed);
+    if (Number.isFinite(num)) return num;
+    const parsed = Date.parse(trimmed);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
 async function postJson(
   url: string,
   body: unknown,
@@ -294,4 +460,20 @@ export function requestMatrix(
     body,
     signal,
   );
+}
+
+/**
+ * Requests a route through ordered waypoints from the Valhalla server.
+ *
+ * @param endpoint - The Valhalla base URL.
+ * @param body - The request body from {@link buildRouteRequest}.
+ * @param signal - Optional abort signal.
+ * @returns The Valhalla `/route` response.
+ */
+export function requestRoute(
+  endpoint: string,
+  body: RouteRequestBody,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  return postJson(`${stripTrailingSlash(endpoint)}/route`, body, signal);
 }

@@ -838,7 +838,8 @@
     },
     "networkTool": {
       "isochrone": "Isochrone / service area",
-      "odMatrix": "OD cost matrix"
+      "odMatrix": "OD cost matrix",
+      "sequentialRoute": "Sequential route (directions)"
     },
     "statisticsTool": {
       "globalMoransI": "Global Moran's I",
@@ -1009,7 +1010,7 @@
       "reverseGeocodeNoticeTitle": "Reverse Geocode uses an external service",
       "reverseGeocodeNoticeDesc": "Turning on Reverse Geocode sends the coordinates of each point you click to the configured geocoding provider (the public Nominatim service by default) to resolve an address — your coordinates leave your device for those requests. You can choose a different provider in Settings → Geocoding.",
       "networkNoticeTitle": "Network analysis uses a public routing server",
-      "networkNoticeDesc": "Running a Network analysis tool sends the coordinates of your input points to the public Valhalla routing server (valhalla1.openstreetmap.de) to compute isochrones and cost matrices — your coordinates leave your device for those requests. The public server is rate-limited; point it at your own server (Settings → Environment Variables, VITE_ROUTING_ENDPOINT) for heavy use.",
+      "networkNoticeDesc": "Running a Network analysis tool sends the coordinates of your input points to the public Valhalla routing server (valhalla1.openstreetmap.de) to compute isochrones, cost matrices, and routes. Your coordinates leave your device for those requests. The public server is rate-limited; point it at your own server (Settings → Environment Variables, VITE_ROUTING_ENDPOINT) for heavy use.",
       "continue": "Continue",
       "largeOsmPbfTitle": "Large OSM PBF file",
       "largeOsmPbfDesc": "This file is about {{sizeMb}} MB. Parsing it converts every feature to GeoJSON in memory, which can be slow and may use a lot of memory in the browser. Continue?",
