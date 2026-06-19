@@ -391,8 +391,9 @@ export function PrintLayoutDialog({
       }
       const newZoom = map.getZoom() + Math.log2(currentRatio / targetRatio);
       map.setZoom(Math.max(0, Math.min(24, newZoom)));
-      // Let the camera settle, then recapture so the scale label updates.
-      requestAnimationFrame(() => recapture());
+      // Recapture once the map is idle, so tiles for the new zoom have finished
+      // loading and the snapshot is not blurry/blank mid-fetch.
+      map.once("idle", () => recapture());
     },
     [mapControllerRef, captureMode, currentRatio, recapture],
   );

@@ -264,6 +264,8 @@ export function drawPrintExtent(
       if (e.key === "Escape") finish(null);
     };
 
+    // TODO: mouse-only for now (the print workflow is desktop-centric). Add a
+    // touch / pointer-event path for tablets and touchscreens as a follow-up.
     map.on("mousedown", onDown);
     window.addEventListener("mousemove", onWindowMove);
     window.addEventListener("mouseup", onWindowUp);

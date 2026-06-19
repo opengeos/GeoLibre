@@ -844,7 +844,7 @@ function drawInfoBlock(
   ctx.save();
   ctx.font = `600 ${labelSize}px system-ui, sans-serif`;
   let labelW = 0;
-  for (const l of lines) labelW = Math.max(labelW, ctx.measureText(`${l.label}`).width);
+  for (const l of lines) labelW = Math.max(labelW, ctx.measureText(l.label).width);
   ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
   let valueW = 0;
   for (const l of lines) valueW = Math.max(valueW, ctx.measureText(l.value).width);
