@@ -265,7 +265,7 @@ export const LATITUDE_FIELD_CANDIDATES = [
 ];
 
 /** Delimiters tried, in order, when auto-detecting a delimited file's format. */
-const DELIMITER_CANDIDATES = [",", "\t", ";", "|"];
+export const DELIMITER_CANDIDATES = [",", "\t", ";", "|"];
 
 /**
  * Guesses the field delimiter of a delimited text file by parsing its header

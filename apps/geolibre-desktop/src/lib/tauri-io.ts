@@ -12,6 +12,7 @@ import { unzip } from "fflate";
 import type { FeatureCollection } from "geojson";
 import shp from "shpjs";
 import {
+  DELIMITER_CANDIDATES,
   detectCoordinateFields,
   detectDelimitedTextDelimiter,
   parseDelimitedTextFields,
@@ -1295,11 +1296,13 @@ export function parseCsvHeaderLine(line: string): string[] {
   const header = line.replace(/^﻿/, "").replace(/[\r\n]+$/, "");
   if (!header) return [];
   // Reuse the project's quote-aware delimited-text parser for each candidate
-  // delimiter (comma, tab, semicolon) and keep the one that yields the most
-  // columns. Quoting is respected, so a quoted field containing the delimiter
-  // (e.g. "city,state") neither skews detection nor splits the header.
+  // delimiter and keep the one that yields the most columns. The candidate set
+  // is shared with the drag-and-drop loader so both detect the same formats
+  // (comma, tab, semicolon, pipe). Quoting is respected, so a quoted field
+  // containing the delimiter (e.g. "city,state") neither skews detection nor
+  // splits the header.
   let best: string[] = [];
-  for (const delimiter of [",", "\t", ";"]) {
+  for (const delimiter of DELIMITER_CANDIDATES) {
     try {
       const fields = parseDelimitedTextFields(header, delimiter).filter(
         (name) => name.trim().length > 0,
