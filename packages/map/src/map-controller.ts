@@ -171,7 +171,7 @@ export const DEFAULT_BUILT_IN_CONTROL_VISIBILITY: Record<
   BuiltInMapControl,
   boolean
 > = {
-  navigation: true,
+  navigation: false,
   fullscreen: true,
   geolocate: false,
   globe: true,
