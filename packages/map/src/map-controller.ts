@@ -1616,8 +1616,8 @@ export class MapController {
 
   /**
    * Update the reset-bearing control's tooltip/aria label, e.g. after a UI
-   * language change. The label is stored so a control recreated later (style
-   * reload) picks up the latest translation.
+   * language change. The label is cached so a control re-added after a full
+   * map reinitialisation picks up the latest translation without an extra call.
    */
   setResetBearingLabel(label: string): void {
     this.resetBearingLabel = label;

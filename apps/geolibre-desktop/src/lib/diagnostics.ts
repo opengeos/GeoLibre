@@ -72,7 +72,7 @@ export const OPTIONAL_RESOURCE_HEADER = "x-geolibre-optional-resource";
 function readHeader(headers: HeadersInit | undefined, name: string): string | null {
   if (!headers) return null;
   const target = name.toLowerCase();
-  if (headers instanceof Headers) return headers.get(name);
+  if (headers instanceof Headers) return headers.get(target);
   if (Array.isArray(headers)) {
     for (const [key, value] of headers) {
       if (key.toLowerCase() === target) return value;
@@ -346,8 +346,9 @@ export function installDiagnosticsCapture(): () => void {
     const method = requestMethod(input, init);
     const url = requestUrl(input);
 
-    // A request may declare that a non-ok response (e.g. a 404 for an optional
-    // file) is expected, so it is logged as info rather than flagged an error.
+    // A request may declare that a failure (a non-ok response such as a 404, or
+    // a thrown network error) is expected — e.g. an optional config file that
+    // may be absent — so it is logged as info rather than flagged an error.
     const optional = isOptionalResourceRequest(input, init);
 
     try {
@@ -368,7 +369,7 @@ export function installDiagnosticsCapture(): () => void {
         error.name === "AbortError";
       appendDiagnostic({
         category: "network",
-        level: isAbort ? "info" : "error",
+        level: isAbort || optional ? "info" : "error",
         message: isAbort ? `${method} aborted` : `${method} request failed`,
         detail: isAbort ? undefined : formatUnknown(error),
         durationMs: Math.round(performance.now() - startedAt),
