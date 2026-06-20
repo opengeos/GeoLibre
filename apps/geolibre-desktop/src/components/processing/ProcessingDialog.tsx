@@ -888,11 +888,17 @@ export function ProcessingDialog({
               <Select
                 value={source}
                 onChange={(e) => setSource(e.target.value)}
-                aria-label="Filter by source"
+                aria-label={t("processing.whitebox.filterBySource")}
               >
-                <option value="All">All sources</option>
-                <option value="geolibre">GeoLibre tools</option>
-                <option value="whitebox">Whitebox tools</option>
+                <option value="All">
+                  {t("processing.whitebox.allSources")}
+                </option>
+                <option value="geolibre">
+                  {t("processing.whitebox.geolibreTools")}
+                </option>
+                <option value="whitebox">
+                  {t("processing.whitebox.whiteboxTools")}
+                </option>
               </Select>
             )}
 

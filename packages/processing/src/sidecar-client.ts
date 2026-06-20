@@ -99,8 +99,8 @@ export interface WhiteboxTool {
   locked_reason?: string | null;
   params?: WhiteboxToolParameter[];
   return_type?: string;
-  /** Tool provenance: "geolibre" for GeoLibre-authored WASM tools, else Whitebox. */
-  source?: string;
+  /** Tool provenance: "geolibre" for GeoLibre-authored WASM tools, else unset (Whitebox). */
+  source?: "geolibre";
 }
 
 export interface WhiteboxStatus {

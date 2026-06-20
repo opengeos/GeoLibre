@@ -1395,7 +1395,11 @@
     "whitebox": {
       "runLocal": "Run locally (WASM)",
       "runLocalHint": "Run locally in WebAssembly (no Python sidecar)",
-      "runningLocally": "Running locally with WebAssembly. No sidecar required."
+      "runningLocally": "Running locally with WebAssembly. No sidecar required.",
+      "filterBySource": "Filter by source",
+      "allSources": "All sources",
+      "geolibreTools": "GeoLibre tools",
+      "whiteboxTools": "Whitebox tools"
     }
   },
   "segmentation": {
