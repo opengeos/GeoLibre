@@ -3,6 +3,12 @@ import { AlertTriangle, ChevronDown, ChevronRight, Zap } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+// The local loopback address the Python sidecar listens on. Kept out of the
+// translatable strings (injected via interpolation) so translators can't garble
+// it and a future change to the address only touches one place.
+const SIDECAR_URL = "http://127.0.0.1:8765";
+const SIDECAR_PORT = "8765";
+
 interface SidecarHelpBannerProps {
   /**
    * Whether the app runs under Tauri (the desktop build). The processing
@@ -44,6 +50,7 @@ export function SidecarHelpBanner({
         type="button"
         className="flex w-full items-start gap-2 px-3 py-2 text-left"
         aria-expanded={expanded}
+        aria-controls="sidecar-help-details"
         onClick={() => setExpanded((value) => !value)}
       >
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
@@ -70,9 +77,12 @@ export function SidecarHelpBanner({
       </button>
 
       {expanded && (
-        <div className="grid gap-3 border-t border-amber-500/30 px-3 py-3">
+        <div
+          id="sidecar-help-details"
+          className="grid gap-3 border-t border-amber-500/30 px-3 py-3"
+        >
           <p className="text-xs leading-relaxed text-muted-foreground">
-            {t("processing.sidecar.intro")}
+            {t("processing.sidecar.intro", { sidecarUrl: SIDECAR_URL })}
           </p>
 
           {onRunLocally && (
@@ -107,7 +117,7 @@ export function SidecarHelpBanner({
                   ? t("processing.sidecar.stepStartServerDesktop")
                   : t("processing.sidecar.stepStartServerBrowser")}
               </li>
-              <li>{t("processing.sidecar.stepCheckPort")}</li>
+              <li>{t("processing.sidecar.stepCheckPort", { port: SIDECAR_PORT })}</li>
               <li>{t("processing.sidecar.stepRestart")}</li>
             </ol>
           </div>
