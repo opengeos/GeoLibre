@@ -20,6 +20,15 @@ export interface PresetBasemap {
   styleUrl: string;
 }
 
+/**
+ * The OpenFreeMap "Liberty 3D" preset id. It shares Liberty's style URL but
+ * additionally tilts the camera into a 3D view, so callers special-case it. The
+ * `satisfies` constraint keeps this literal in sync with `OPENFREEMAP_BASEMAPS`:
+ * renaming the id there turns this into a compile error rather than a silently
+ * dead branch.
+ */
+export const LIBERTY_3D_ID = "liberty-3d" satisfies PresetBasemapId;
+
 /** The OpenFreeMap presets, always available (no API key required). */
 export function getOpenFreeMapPresets(): PresetBasemap[] {
   return OPENFREEMAP_BASEMAPS.map((basemap) => ({

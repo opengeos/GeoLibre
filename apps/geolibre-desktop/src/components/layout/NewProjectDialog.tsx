@@ -7,6 +7,7 @@ import {
   type MapViewState,
 } from "@geolibre/core";
 import {
+  LIBERTY_3D_ID,
   resolveProtomapsPresets,
   type PresetBasemap,
 } from "../../lib/basemap-presets";
@@ -166,7 +167,7 @@ export function NewProjectDialog({
       name: projectName.trim() || DEFAULT_PROJECT_NAME,
       basemapStyleUrl,
       mapView:
-        selectedBasemapId === "liberty-3d"
+        selectedBasemapId === LIBERTY_3D_ID
           ? THREE_D_MAP_VIEW
           : createDefaultMapView(),
     });

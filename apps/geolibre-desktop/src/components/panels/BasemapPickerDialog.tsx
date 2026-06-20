@@ -15,14 +15,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   getOpenFreeMapPresets,
+  LIBERTY_3D_ID,
   resolveProtomapsPresets,
   type PresetBasemap,
 } from "../../lib/basemap-presets";
 
-// The id of the OpenFreeMap "Liberty 3D" preset. Picking it applies the Liberty
-// style and tilts the current camera into a 3D perspective in place (matching
-// the New Project dialog, which pairs that preset with a 3D map view).
-const LIBERTY_3D_ID = "liberty-3d";
+// Picking the "Liberty 3D" preset applies the Liberty style and tilts the
+// current camera into a 3D perspective in place (matching the New Project
+// dialog, which pairs that preset with a 3D map view).
 const THREE_D_PITCH = 60;
 
 const BLANK_CHOICE = "__blank__";

@@ -1847,6 +1847,12 @@ export function LayerPanel({
             onDoubleClick={() => setBasemapPickerOpen(true)}
             onKeyDown={(e) => {
               if (e.key === "Enter") selectLayer(BACKGROUND_SELECTION_ID);
+              // Keyboard equivalent of the double-click: Space opens the basemap
+              // picker (preventDefault stops the panel from scrolling).
+              if (e.key === " ") {
+                e.preventDefault();
+                setBasemapPickerOpen(true);
+              }
             }}
             role="button"
             tabIndex={0}
