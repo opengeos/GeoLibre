@@ -52,7 +52,6 @@ import {
   MessageSquare,
   Moon,
   Printer,
-  LayoutTemplate,
   RefreshCw,
   Save,
   Sparkles,
@@ -399,17 +398,10 @@ export function TopToolbar({
         ]
       : []),
     {
-      id: "project.print",
-      title: t("toolbar.command.projectPrint"),
-      group: t("toolbar.commandGroup.project"),
-      icon: Printer,
-      run: panels.print.toggle,
-    },
-    {
       id: "project.print-layout",
       title: t("toolbar.item.printLayoutEllipsis"),
       group: t("toolbar.commandGroup.project"),
-      icon: LayoutTemplate,
+      icon: Printer,
       run: () => setPrintLayoutOpen(true),
     },
     // Add Data
@@ -841,7 +833,6 @@ export function TopToolbar({
         <ProjectMenu
           chrome={chrome}
           collaborationEnabled={collaboration.enabled}
-          printPanel={panels.print}
           onNewProject={() => setNewProjectDialogOpen(true)}
           onOpenFromFile={() => void projectFiles.handleOpenFromFile()}
           onOpenFromUrl={() => projectFiles.setProjectUrlDialogOpen(true)}
