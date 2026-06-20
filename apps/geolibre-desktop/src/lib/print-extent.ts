@@ -307,7 +307,10 @@ export function drawPrintExtent(
     };
     // Cancel if the window loses focus mid-drag (Alt+Tab, a system dialog): the
     // mouseup would never arrive, leaving the interaction armed so the next
-    // unrelated click anywhere would commit a stray extent.
+    // unrelated click anywhere would commit a stray extent. Note: in an embedded
+    // iframe this also fires when the parent frame is clicked; that's fine for
+    // the desktop and top-level web builds, but revisit if the mouse-only path
+    // below is ever extended to a Jupyter/embedded context.
     const onBlur = () => finish(null);
 
     // TODO: mouse-only for now (the print workflow is desktop-centric). Add a

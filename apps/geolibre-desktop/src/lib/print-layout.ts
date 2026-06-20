@@ -994,7 +994,7 @@ function drawColorbar(
   const titleSize = unit * 1.9;
   const tickGap = unit * 0.7;
   const tickLen = unit * 0.7;
-  const inset = unit * 2.4;
+  const inset = unit * 2; // matches the info block/legend corner inset
   const lineW = Math.max(1, unit * 0.12);
   const titleGap = unit * 0.8;
   const title = (cb.label ?? "").trim();
@@ -1158,7 +1158,7 @@ function drawCustomLegend(
   const gap = unit;
   const titleSize = unit * 2;
   const labelSize = unit * 1.7;
-  const inset = unit * 2.4;
+  const inset = unit * 2; // matches the info block/legend corner inset
   const title = (cl.title ?? "").trim();
   const hasTitle = title.length > 0;
 
