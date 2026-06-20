@@ -87,6 +87,41 @@ jobs:
           test -f site/demo/index.html
           test -f site/demo/jupyterlite/lab/index.html
 
+      - name: Offload oversized DuckDB WASM to CDN
+        # Cloudflare Pages rejects any single file > 25 MiB. The bundled DuckDB
+        # WASM modules (duckdb-eh ~35 MiB, duckdb-mvp ~40 MiB) exceed that, so we
+        # drop the local copies and redirect their hashed URLs to jsDelivr at the
+        # exact pinned version (byte-identical to the bundled file). This only
+        # affects the Cloudflare preview; GitHub Pages still serves them locally.
+        # Any OTHER oversized file is a hard error so we never ship a broken site.
+        run: |
+          set -euo pipefail
+          version=$(node -e "console.log(require('./node_modules/@duckdb/duckdb-wasm/package.json').version)")
+          echo "duckdb-wasm version: $version"
+          redirects=site/_redirects
+          touch "$redirects"
+          moved=0
+          # 26214400 bytes = 25 MiB, Cloudflare Pages' exact per-file limit.
+          while IFS= read -r -d '' f; do
+            rel=${f#site}
+            base=$(basename "$f")
+            case "$base" in
+              duckdb-eh-*)  cdn=duckdb-eh.wasm ;;
+              duckdb-mvp-*) cdn=duckdb-mvp.wasm ;;
+              duckdb-coi-*) cdn=duckdb-coi.wasm ;;
+              *)
+                echo "::error::Oversized file not handled by CDN redirect: $rel ($(du -h "$f" | cut -f1)). Cloudflare Pages rejects files > 25 MiB."
+                exit 1 ;;
+            esac
+            echo "$rel https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@${version}/dist/${cdn} 302" >> "$redirects"
+            rm "$f"
+            echo "redirect: $rel -> $cdn"
+            moved=$((moved + 1))
+          done < <(find site -type f -size +26214400c -print0)
+          echo "offloaded $moved oversized file(s)"
+          echo "----- site/_redirects -----"
+          cat "$redirects"
+
       - name: Deploy to Cloudflare Pages
         id: deploy
         uses: cloudflare/wrangler-action@v3
