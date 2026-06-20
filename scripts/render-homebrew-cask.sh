@@ -2,9 +2,9 @@
 #
 # Render the Homebrew cask for the GeoLibre desktop app.
 #
-# The macOS DMGs are ad-hoc signed but not notarized by Apple, so the cask is
-# meant to be installed from a self-hosted tap with `--no-quarantine`. It is not
-# suitable for the official homebrew/cask repository.
+# The macOS DMGs are signed with an Apple Developer ID certificate and notarized
+# by Apple, so they install and launch without a quarantine workaround. The cask
+# is distributed from a self-hosted tap (not the official homebrew/cask repo).
 #
 # Usage:
 #   VERSION=1.2.0 \
@@ -49,16 +49,6 @@ cask "geolibre" do
   homepage "https://geolibre.app/"
 
   app "GeoLibre Desktop.app"
-
-  # The DMGs are ad-hoc signed but not notarized by Apple, so macOS Gatekeeper
-  # blocks them with a "damaged" prompt. Homebrew removed the --no-quarantine
-  # flag in 5.1, so the user must strip the quarantine attribute by hand.
-  caveats <<~EOS
-    GeoLibre Desktop is not notarized by Apple. Before first launch, remove the
-    quarantine attribute (repeat this after every upgrade):
-
-      xattr -dr com.apple.quarantine "/Applications/GeoLibre Desktop.app"
-  EOS
 
   zap trash: [
     "~/Library/Application Support/org.geolibre.desktop",

@@ -91,14 +91,13 @@ install and update with Homebrew:
 brew tap opengeos/geolibre
 brew trust --cask opengeos/geolibre/geolibre
 brew install --cask geolibre
-xattr -dr com.apple.quarantine "/Applications/GeoLibre Desktop.app"
 ```
 
 `brew trust` is a one-time approval for the non-official tap (skip it on
-Homebrew older than 5.1). The `xattr` step is required because the app is ad-hoc
-signed but not notarized by Apple (Homebrew removed the `--no-quarantine` flag in
-5.1). See [Downloads](docs/downloads.md) for details and the manual install
-steps.
+Homebrew older than 5.1). The macOS app is signed with an Apple Developer ID
+certificate and notarized by Apple, so it launches normally with no quarantine
+workaround. See [Downloads](docs/downloads.md) for details and the manual
+install steps.
 
 To build from source instead:
 
