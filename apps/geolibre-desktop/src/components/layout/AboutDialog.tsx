@@ -251,7 +251,7 @@ export function AboutDialog({
             <div className="rounded-md border bg-muted/30 px-3 py-2">
               {updateStatus === "current" ? (
                 <div className="flex items-center gap-2 text-foreground">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                   <span>
                     You are up to date
                     {latestVersion ? ` (${latestVersion}).` : "."}
