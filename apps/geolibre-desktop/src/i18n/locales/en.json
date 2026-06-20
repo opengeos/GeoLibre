@@ -554,6 +554,7 @@
       "title": "Legend title",
       "color": "Color",
       "itemLabel": "Label",
+      "position": "Position",
       "addItem": "Add item",
       "removeItem": "Remove item",
       "importFromDict": "Import from dictionary",

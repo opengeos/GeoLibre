@@ -5,7 +5,6 @@
  * unit tested. {@link captureMapImage} reads the live map's canvases, and the
  * export helpers rasterize {@link drawLayout} at print resolution.
  */
-import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { isFullViewportMapCanvas } from "./print-capture";
 import {
@@ -219,73 +218,6 @@ export function captureMapImage(map: MapLike, clip?: CaptureClip | null): Captur
   };
 }
 
-/** On-map overlay legends (rendered as DOM, not into the WebGL canvas) that the
- * print should include. Colorbars are composed natively in the Print Layout
- * dialog (crisp, positionable), so only the legend control is captured here. */
-const OVERLAY_SELECTORS = [".maplibre-gl-legend"];
-
-interface OverlayMapLike {
-  getCanvas(): HTMLCanvasElement;
-  getContainer(): HTMLElement;
-  project(lngLat: [number, number]): { x: number; y: number };
-}
-
-/**
- * Paint the on-map colorbar/legend overlays onto an already-captured map image.
- *
- * These legends are DOM elements (CSS gradients + text), so they are not part
- * of the WebGL drawing buffer {@link captureMapImage} reads. Each is rasterized
- * with html2canvas and drawn at its position relative to the map canvas, offset
- * by the clip crop so it lands correctly whether or not a custom extent is in
- * effect. Mutates {@link captured}'s image in place; failures per overlay are
- * swallowed so a legend that cannot be rasterized never breaks the capture.
- */
-export async function compositeMapOverlays(
-  captured: CapturedMap,
-  map: OverlayMapLike,
-  clip?: CaptureClip | null,
-): Promise<void> {
-  const ctx = captured.image.getContext("2d");
-  if (!ctx) return;
-  const base = map.getCanvas();
-  const overlays = Array.from(
-    map.getContainer().querySelectorAll<HTMLElement>(OVERLAY_SELECTORS.join(",")),
-  ).filter((el) => {
-    const r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0;
-  });
-  if (overlays.length === 0) return;
-
-  const baseRect = base.getBoundingClientRect();
-  const cssWidth = base.clientWidth || base.width;
-  const dpr = cssWidth > 0 ? base.width / cssWidth : 1;
-  // Device-pixel origin of the crop, matching cropCaptureToClip, so overlay
-  // positions map into the (possibly cropped) captured image.
-  let cropX = 0;
-  let cropY = 0;
-  if (clip) {
-    const rectCss = projectClipRectCss(map, clip);
-    cropX = Math.max(0, Math.floor(Math.max(0, rectCss.minX) * dpr));
-    cropY = Math.max(0, Math.floor(Math.max(0, rectCss.minY) * dpr));
-  }
-
-  for (const el of overlays) {
-    try {
-      const overlay = await html2canvas(el, {
-        backgroundColor: null,
-        scale: dpr,
-        logging: false,
-        useCORS: true,
-      });
-      const r = el.getBoundingClientRect();
-      const x = (r.left - baseRect.left) * dpr - cropX;
-      const y = (r.top - baseRect.top) * dpr - cropY;
-      ctx.drawImage(overlay, x, y);
-    } catch {
-      // A legend that cannot be rasterized must not break the map capture.
-    }
-  }
-}
 
 function haversineMeters(
   a: { lng: number; lat: number },

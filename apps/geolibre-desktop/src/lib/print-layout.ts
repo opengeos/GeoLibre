@@ -358,12 +358,13 @@ function computeBodyRect(opts: LayoutOptions, W: number, H: number): BodyRect {
  * fills the body (cropping overflow), matching the draw in {@link drawLayout}.
  */
 function coverScaleFor(
-  rect: BodyRect,
+  bodyW: number,
+  bodyH: number,
   imgW: number,
   imgH: number,
 ): number {
   if (imgW <= 0 || imgH <= 0) return 1;
-  return Math.max(rect.bodyW / imgW, rect.bodyH / imgH);
+  return Math.max(bodyW / imgW, bodyH / imgH);
 }
 
 /**
@@ -393,7 +394,12 @@ export function computeScaleRatio(opts: LayoutOptions): number {
   const W = aspect >= 1 ? refLong : refLong * aspect;
   const H = aspect >= 1 ? refLong / aspect : refLong;
   const rect = computeBodyRect(opts, W, H);
-  const coverScale = coverScaleFor(rect, opts.mapImageWidth, opts.mapImageHeight);
+  const coverScale = coverScaleFor(
+    rect.bodyW,
+    rect.bodyH,
+    opts.mapImageWidth,
+    opts.mapImageHeight,
+  );
   const outputMpp = opts.metersPerPixel / (coverScale || 1);
   const mmPerPx = pageMm(page).widthMm / W;
   if (!(mmPerPx > 0)) return 0;
@@ -511,7 +517,8 @@ export function drawLayout(
   let coverScale = 1;
   if (opts.mapImage && opts.mapImageWidth > 0 && opts.mapImageHeight > 0) {
     coverScale = coverScaleFor(
-      { unit, margin, bodyX, bodyY, bodyW, bodyH },
+      bodyW,
+      bodyH,
       opts.mapImageWidth,
       opts.mapImageHeight,
     );
@@ -614,7 +621,7 @@ export function drawLayout(
   // When the info block occupies the bottom-right corner, move the scale bar +
   // north arrow to the bottom-left so they never sit under the block.
   const navOnLeft = hasInfoBlock;
-  const navRightX = navOnLeft
+  const navAnchorX = navOnLeft
     ? bodyX + inset + bodyW * 0.28
     : bodyX + bodyW - inset;
 
@@ -623,7 +630,7 @@ export function drawLayout(
   if (hasScale) {
     scaleTopY = drawScaleBar(
       ctx,
-      navRightX,
+      navAnchorX,
       bodyY + bodyH - inset,
       bodyW * 0.28,
       outputMpp,
@@ -638,7 +645,7 @@ export function drawLayout(
       // Stack the north arrow directly above the scale bar (the "navigation duo").
       drawNorthArrow(
         ctx,
-        navRightX - discRadius,
+        navAnchorX - discRadius,
         scaleTopY - unit * 1.4 - discRadius,
         arrowRadius,
         opts.bearingDeg,
@@ -676,11 +683,17 @@ export function drawLayout(
 
   // --- Colorbar (user-chosen corner inside the map) ---------------------
   if (opts.colorbar && opts.colorbar.colors.length >= 2) {
+    // The info block ("stempel") always occupies the bottom-right corner; move a
+    // bottom-right colorbar to the top-right so the two never overlap.
+    const colorbar =
+      hasInfoBlock && opts.colorbar.position === "bottom-right"
+        ? { ...opts.colorbar, position: "top-right" as const }
+        : opts.colorbar;
     ctx.save();
     ctx.beginPath();
     ctx.rect(bodyX, bodyY, bodyW, bodyH);
     ctx.clip();
-    drawColorbar(ctx, opts.colorbar, bodyX, bodyY, bodyW, bodyH, unit);
+    drawColorbar(ctx, colorbar, bodyX, bodyY, bodyW, bodyH, unit);
     ctx.restore();
   }
 
@@ -940,12 +953,17 @@ function drawInfoBlock(
   return y;
 }
 
-/** Format a colorbar tick value compactly (exponential for extremes). */
-function formatColorbarTick(value: number): string {
+/**
+ * Format a colorbar tick value compactly (exponential for extremes). `decimals`
+ * is derived from the tick step so a small range (e.g. 0..0.01) does not collapse
+ * to repeated labels; trailing zeros are trimmed.
+ */
+function formatColorbarTick(value: number, decimals = 2): string {
   if (!Number.isFinite(value)) return String(value);
   const abs = Math.abs(value);
   if (abs !== 0 && (abs >= 100000 || abs < 0.001)) return value.toExponential(1);
-  return String(Math.round(value * 100) / 100);
+  const fixed = value.toFixed(Math.max(0, Math.min(8, decimals)));
+  return fixed.includes(".") ? fixed.replace(/\.?0+$/, "") : fixed;
 }
 
 type ColorbarSpec = NonNullable<LayoutOptions["colorbar"]>;
@@ -982,11 +1000,20 @@ function drawColorbar(
   const title = (cb.label ?? "").trim();
   const hasTitle = title.length > 0;
 
-  const TICKS = 5;
   const span = cb.max - cb.min;
+  // A zero (or non-finite) range would render five identical tick labels; show
+  // a single centred label instead.
+  const TICKS = span > 0 ? 5 : 1;
+  const step = TICKS > 1 ? span / (TICKS - 1) : 0;
+  // Enough decimals to keep adjacent ticks distinct for small ranges (at least
+  // 2, as before, for normal ranges).
+  const decimals =
+    step > 0 && step < 1
+      ? Math.max(2, Math.min(8, Math.ceil(-Math.log10(step)) + 1))
+      : 2;
   const ticks = Array.from({ length: TICKS }, (_, i) => {
-    const t = i / (TICKS - 1);
-    return { t, text: formatColorbarTick(cb.min + span * t) };
+    const t = TICKS === 1 ? 0.5 : i / (TICKS - 1);
+    return { t, text: formatColorbarTick(cb.min + span * t, decimals) };
   });
 
   ctx.save();

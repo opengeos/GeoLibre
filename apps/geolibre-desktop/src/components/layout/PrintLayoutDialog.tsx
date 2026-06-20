@@ -56,7 +56,6 @@ import {
   applyLegendConfig,
   buildLegend,
   captureMapImage,
-  compositeMapOverlays,
   exportLayoutPdf,
   exportLayoutPng,
   legendEditorRows,
@@ -160,6 +159,16 @@ export function PrintLayoutDialog({
   const [pageBorderColor, setPageBorderColor] = useState("#111827");
   const [pageBorderWidth, setPageBorderWidth] = useState(2);
   const [mapBackground, setMapBackground] = useState("#e5e7eb");
+  // Draft for the free-form hex field; only complete #RGB / #RRGGBB values are
+  // committed to mapBackground (which also drives <input type="color"> and the
+  // canvas fillStyle), so a half-typed "#" never corrupts the layout colour.
+  const [mapBackgroundDraft, setMapBackgroundDraft] = useState("#e5e7eb");
+  const commitMapBackground = useCallback((value: string) => {
+    setMapBackgroundDraft(value);
+    if (/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value.trim())) {
+      setMapBackground(value.trim());
+    }
+  }, []);
   // Native colorbar composed in the dialog (GH follow-up).
   const [showColorbar, setShowColorbar] = useState(false);
   const [colorbarRamp, setColorbarRamp] = useState("viridis");
@@ -245,15 +254,20 @@ export function PrintLayoutDialog({
   // A pending "recapture once the map is idle" handler (from applyScale), kept
   // so any newer capture can cancel it before it overwrites a fresh result.
   const idleRecaptureRef = useRef<(() => void) | null>(null);
-  // Monotonic capture id: overlay compositing is async, so a slower capture
-  // must not overwrite a newer one (the result of the latest call wins).
-  const captureGenRef = useRef(0);
+  // Tears down an in-progress dialog/splitter resize drag (removes the window
+  // pointer listeners) if the dialog unmounts mid-drag.
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
   // True while the scale input has focus, so two-way sync does not overwrite
   // what the user is typing.
   const scaleFocusedRef = useRef(false);
   const [scaleDraft, setScaleDraft] = useState("");
   // Width of the left controls column; dragged via the splitter handle.
   const [controlsWidth, setControlsWidth] = useState(CONTROLS_DEFAULT_WIDTH);
+  // Mirror of controlsWidth so the resize handler can read the latest start
+  // width without listing it as a dep (which would recreate the callback every
+  // RAF tick during a drag).
+  const controlsWidthRef = useRef(controlsWidth);
+  controlsWidthRef.current = controlsWidth;
   // Explicit dialog size once the user drags the corner grip (null = the
   // default responsive size). The dialog element, for reading its live size.
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -301,15 +315,20 @@ export function PrintLayoutDialog({
           setDialogSize(next);
         });
       };
-      const onUp = () => {
+      const cleanup = () => {
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
         window.removeEventListener("pointercancel", onUp);
         if (frame !== null) window.cancelAnimationFrame(frame);
-        setDialogSize(next);
         document.body.style.cursor = prevCursor;
         document.body.style.userSelect = prevSelect;
+        resizeCleanupRef.current = null;
       };
+      const onUp = () => {
+        cleanup();
+        setDialogSize(next);
+      };
+      resizeCleanupRef.current = cleanup;
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
       window.addEventListener("pointercancel", onUp);
@@ -325,7 +344,7 @@ export function PrintLayoutDialog({
       event.preventDefault();
       event.currentTarget.setPointerCapture?.(event.pointerId);
       const startX = event.clientX;
-      const startWidth = controlsWidth;
+      const startWidth = controlsWidthRef.current;
       let nextWidth = startWidth;
       let frame: number | null = null;
       const prevCursor = document.body.style.cursor;
@@ -344,20 +363,25 @@ export function PrintLayoutDialog({
           setControlsWidth(nextWidth);
         });
       };
-      const onUp = () => {
+      const cleanup = () => {
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
         window.removeEventListener("pointercancel", onUp);
         if (frame !== null) window.cancelAnimationFrame(frame);
-        setControlsWidth(nextWidth);
         document.body.style.cursor = prevCursor;
         document.body.style.userSelect = prevSelect;
+        resizeCleanupRef.current = null;
       };
+      const onUp = () => {
+        cleanup();
+        setControlsWidth(nextWidth);
+      };
+      resizeCleanupRef.current = cleanup;
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
       window.addEventListener("pointercancel", onUp);
     },
-    [controlsWidth],
+    [],
   );
 
   const isCustom = paperSize === "custom";
@@ -395,14 +419,13 @@ export function PrintLayoutDialog({
   );
 
   const recapture = useCallback(
-    async (clipOverride?: PrintExtent | null) => {
+    (clipOverride?: PrintExtent | null) => {
       const map = mapControllerRef.current?.getMap();
       if (!map) {
         setError(t("printLayout.errors.mapNotReady"));
         setCaptured(null);
         return;
       }
-      const gen = ++captureGenRef.current;
       // Cancel any pending post-zoom idle capture: this fresh capture supersedes
       // it, so it must not fire later and overwrite the result (e.g. a viewport
       // recapture clobbering an extent the user drew while tiles were loading).
@@ -422,15 +445,9 @@ export function PrintLayoutDialog({
       // never baked into the captured image.
       setPrintExtentVisible(map, false);
       try {
-        const cap = captureMapImage(map, clip);
-        // Paint on-map colorbar/legend overlays (async: html2canvas).
-        await compositeMapOverlays(cap, map, clip);
-        // Drop the result if a newer capture started while overlays rasterized.
-        if (captureGenRef.current !== gen) return;
-        setCaptured(cap);
+        setCaptured(captureMapImage(map, clip));
         setError(null);
       } catch {
-        if (captureGenRef.current !== gen) return;
         setError(t("printLayout.errors.captureFailed"));
         setCaptured(null);
       } finally {
@@ -465,6 +482,8 @@ export function PrintLayoutDialog({
   useEffect(
     () => () => {
       drawAbortRef.current?.abort();
+      // Tear down an in-progress resize drag so its window listeners don't leak.
+      resizeCleanupRef.current?.();
       const map = mapControllerRef.current?.getMap();
       if (map) {
         if (idleRecaptureRef.current) {
@@ -513,8 +532,10 @@ export function PrintLayoutDialog({
       colorbar: showColorbar
         ? {
             colors: getVectorColorRamp(colorbarRamp).colors,
-            min: Number(colorbarMin) || 0,
-            max: Number(colorbarMax) || 0,
+            // Treat a blank/invalid field as 0 explicitly (Number("abc") is NaN,
+            // which would otherwise flow into a degenerate gradient).
+            min: Number.isFinite(Number(colorbarMin)) ? Number(colorbarMin) : 0,
+            max: Number.isFinite(Number(colorbarMax)) ? Number(colorbarMax) : 0,
             label: colorbarLabel,
             orientation: colorbarOrientation,
             position: colorbarPosition,
@@ -632,23 +653,34 @@ export function PrintLayoutDialog({
         return;
       }
       const newZoom = map.getZoom() + Math.log2(currentRatio / targetRatio);
-      map.setZoom(Math.max(0, Math.min(24, newZoom)));
+      const clampedZoom = Math.max(0, Math.min(24, newZoom));
       // Drop a still-pending idle handler from a prior applyScale before
       // registering a new one, so two quick scale changes don't both fire.
       if (idleRecaptureRef.current) {
         map.off("idle", idleRecaptureRef.current);
+        idleRecaptureRef.current = null;
       }
+      // No effective zoom change (already at target, or clamped): MapLibre won't
+      // emit an "idle", so recapture directly rather than registering a handler
+      // that would never fire and could later fire on an unrelated render.
+      if (Math.abs(clampedZoom - map.getZoom()) < 1e-6) {
+        recapture(null);
+        return;
+      }
+      map.setZoom(clampedZoom);
       // Recapture once the map is idle, so tiles for the new zoom have finished
       // loading and the snapshot is not blurry/blank mid-fetch. applyScale only
-      // runs in viewport mode, so pin the recapture to a null clip. The handler
-      // is tracked in a ref so a capture that happens first (e.g. the user draws
-      // an extent while tiles load) cancels it via recapture().
+      // runs in viewport mode, so pin the recapture to a null clip. Use map.on
+      // with manual self-removal (not map.once) so cancelling via map.off never
+      // depends on MapLibre's internal once-wrapper. The ref lets a capture that
+      // happens first (e.g. the user draws an extent while tiles load) cancel it.
       const handler = () => {
+        map.off("idle", handler);
         idleRecaptureRef.current = null;
         recapture(null);
       };
       idleRecaptureRef.current = handler;
-      map.once("idle", handler);
+      map.on("idle", handler);
     },
     [mapControllerRef, captureMode, currentRatio, recapture],
   );
@@ -702,10 +734,11 @@ export function PrintLayoutDialog({
 
   const setMode = useCallback(
     (mode: "viewport" | "extent") => {
+      if (mode === captureMode) return;
       setCaptureMode(mode);
       recapture(mode === "extent" ? extentBbox : null);
     },
-    [recapture, extentBbox],
+    [recapture, extentBbox, captureMode],
   );
 
   // Redraw the preview whenever the layout options change, sizing the canvas to
@@ -722,6 +755,7 @@ export function PrintLayoutDialog({
     let retries = 0;
     let observer: ResizeObserver | null = null;
     const render = () => {
+      raf = 0;
       const canvas = previewRef.current;
       const box = previewBoxRef.current;
       if (!canvas || !box) {
@@ -746,7 +780,15 @@ export function PrintLayoutDialog({
       canvas.style.height = `${Math.round(dispH)}px`;
       drawLayout(canvas, options);
       if (!observer) {
-        observer = new ResizeObserver(() => render());
+        // Coalesce resize-driven re-renders to one drawLayout per frame so a
+        // fast splitter/grip drag doesn't run the draw synchronously per event.
+        observer = new ResizeObserver(() => {
+          if (raf) return;
+          raf = requestAnimationFrame(() => {
+            raf = 0;
+            render();
+          });
+        });
         observer.observe(box);
       }
     };
@@ -1022,18 +1064,18 @@ export function PrintLayoutDialog({
                   type="color"
                   className="h-9 w-12 shrink-0 cursor-pointer rounded-md border border-input bg-background"
                   value={mapBackground}
-                  onChange={(e) => setMapBackground(e.target.value)}
+                  onChange={(e) => commitMapBackground(e.target.value)}
                 />
                 <Input
                   aria-label={t("printLayout.mapBackground")}
                   className="flex-1"
-                  value={mapBackground}
-                  onChange={(e) => setMapBackground(e.target.value)}
+                  value={mapBackgroundDraft}
+                  onChange={(e) => commitMapBackground(e.target.value)}
                 />
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setMapBackground("#e5e7eb")}
+                  onClick={() => commitMapBackground("#e5e7eb")}
                 >
                   {t("common.reset")}
                 </Button>
@@ -1319,7 +1361,7 @@ export function PrintLayoutDialog({
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="cl-position">
-                    {t("printLayout.colorbar.position")}
+                    {t("printLayout.customLegend.position")}
                   </Label>
                   <Select
                     id="cl-position"
@@ -1742,8 +1784,22 @@ export function PrintLayoutDialog({
             role="separator"
             aria-orientation="vertical"
             aria-label={t("printLayout.resizeControls")}
-            className="group relative hidden cursor-col-resize touch-none select-none md:block"
+            aria-valuenow={Math.round(controlsWidth)}
+            aria-valuemin={CONTROLS_MIN_WIDTH}
+            aria-valuemax={CONTROLS_MAX_WIDTH}
+            tabIndex={0}
+            className="group relative hidden cursor-col-resize touch-none select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-ring md:block"
             onPointerDown={startSplitterResize}
+            onKeyDown={(e) => {
+              const step = e.shiftKey ? 32 : 8;
+              if (e.key === "ArrowLeft") {
+                e.preventDefault();
+                setControlsWidth((w) => Math.max(CONTROLS_MIN_WIDTH, w - step));
+              } else if (e.key === "ArrowRight") {
+                e.preventDefault();
+                setControlsWidth((w) => Math.min(CONTROLS_MAX_WIDTH, w + step));
+              }
+            }}
           >
             <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors group-hover:bg-primary" />
           </div>

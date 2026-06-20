@@ -20,9 +20,12 @@ const SOURCE_ID = "geolibre-print-extent";
 const FILL_LAYER_ID = "geolibre-print-extent-fill";
 const LINE_LAYER_ID = "geolibre-print-extent-line";
 
-/** Wrap a longitude into the [-180, 180) range. */
+/** Wrap a longitude into the (-180, 180] range. Mapping the wrap point to +180
+ * (not -180) avoids a near-world-wide bbox when a drag endpoint lands exactly on
+ * the antimeridian alongside a positive longitude. */
 function normalizeLng(lng: number): number {
-  return (((lng % 360) + 540) % 360) - 180;
+  const wrapped = (((lng % 360) + 540) % 360) - 180;
+  return wrapped === -180 ? 180 : wrapped;
 }
 
 function extentToFeature(extent: PrintExtent): GeoJSON.Feature<GeoJSON.Polygon> {
@@ -45,35 +48,45 @@ function extentToFeature(extent: PrintExtent): GeoJSON.Feature<GeoJSON.Polygon> 
   };
 }
 
+/** Add the fill/line layers for the extent source if they are not present. */
+function ensurePrintExtentLayers(map: MapLibreMap): void {
+  if (!map.getLayer(FILL_LAYER_ID)) {
+    map.addLayer({
+      id: FILL_LAYER_ID,
+      type: "fill",
+      source: SOURCE_ID,
+      paint: { "fill-color": "#2563eb", "fill-opacity": 0.12 },
+    });
+  }
+  if (!map.getLayer(LINE_LAYER_ID)) {
+    map.addLayer({
+      id: LINE_LAYER_ID,
+      type: "line",
+      source: SOURCE_ID,
+      paint: {
+        "line-color": "#2563eb",
+        "line-width": 2,
+        "line-dasharray": [3, 2],
+      },
+    });
+  }
+}
+
 /** Ensure the extent source + layers exist, then set them to show `extent`. */
 export function showPrintExtent(map: MapLibreMap, extent: PrintExtent): void {
   const data = extentToFeature(extent);
   const existing = map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
   if (existing) {
     existing.setData(data);
-    // Keep the function idempotent w.r.t. visibility: the layers may have been
-    // hidden by setPrintExtentVisible (e.g. during a capture), so re-showing
-    // the extent must make them visible again rather than silently no-op.
+    // Re-add the layers if they were removed externally (e.g. a style mutation)
+    // while the source was left in place, and make them visible again -- they
+    // may have been hidden by setPrintExtentVisible during a capture.
+    ensurePrintExtentLayers(map);
     setPrintExtentVisible(map, true);
     return;
   }
   map.addSource(SOURCE_ID, { type: "geojson", data });
-  map.addLayer({
-    id: FILL_LAYER_ID,
-    type: "fill",
-    source: SOURCE_ID,
-    paint: { "fill-color": "#2563eb", "fill-opacity": 0.12 },
-  });
-  map.addLayer({
-    id: LINE_LAYER_ID,
-    type: "line",
-    source: SOURCE_ID,
-    paint: {
-      "line-color": "#2563eb",
-      "line-width": 2,
-      "line-dasharray": [3, 2],
-    },
-  });
+  ensurePrintExtentLayers(map);
 }
 
 /**
@@ -172,6 +185,7 @@ export function drawPrintExtent(
       window.removeEventListener("mousemove", onWindowMove);
       window.removeEventListener("mouseup", onWindowUp);
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("blur", onBlur);
       options.signal?.removeEventListener("abort", onAbort);
       canvas.style.cursor = prevCursor;
       if (panWasEnabled) map.dragPan.enable();
@@ -291,6 +305,10 @@ export function drawPrintExtent(
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") finish(null);
     };
+    // Cancel if the window loses focus mid-drag (Alt+Tab, a system dialog): the
+    // mouseup would never arrive, leaving the interaction armed so the next
+    // unrelated click anywhere would commit a stray extent.
+    const onBlur = () => finish(null);
 
     // TODO: mouse-only for now (the print workflow is desktop-centric). Add a
     // touch / pointer-event path for tablets and touchscreens as a follow-up.
@@ -300,6 +318,7 @@ export function drawPrintExtent(
     window.addEventListener("mousemove", onWindowMove);
     window.addEventListener("mouseup", onWindowUp);
     window.addEventListener("keydown", onKey);
+    window.addEventListener("blur", onBlur);
     options.signal?.addEventListener("abort", onAbort);
   });
 }
