@@ -1017,6 +1017,7 @@ export function SettingsDialog({
                       type="button"
                       size="sm"
                       variant="outline"
+                      title={t("settings.map.useCurrentViewHint")}
                       onClick={applyCurrentViewBounds}
                     >
                       <Crosshair className="h-3.5 w-3.5" />
@@ -1038,7 +1039,7 @@ export function SettingsDialog({
                           className={
                             draftPreferences.map.restrictBounds
                               ? undefined
-                              : "opacity-50"
+                              : "cursor-not-allowed opacity-50"
                           }
                         >
                           {t(labelKey)}
