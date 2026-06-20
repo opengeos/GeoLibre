@@ -7,6 +7,7 @@ import {
 import {
   hashText,
   registerGeneratedImage,
+  resolveSvgSource,
   type GeneratedImageResult,
 } from "./generated-images";
 
@@ -141,11 +142,8 @@ function loadSvgMarker(
   markup: string,
   size: number,
 ): Promise<GeneratedImageResult | null> {
-  const trimmed = markup.trim();
-  if (!trimmed) return Promise.resolve(null);
-  const src = trimmed.startsWith("<")
-    ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(trimmed)}`
-    : trimmed;
+  const src = resolveSvgSource(markup);
+  if (!src) return Promise.resolve(null);
   const ratio = MARKER_PIXEL_RATIO;
   const px = size * ratio;
   return new Promise((resolve) => {

@@ -14,13 +14,50 @@ import type maplibregl from "maplibre-gl";
  * the image is regenerated.
  */
 
-/** A small stable polynomial hash of arbitrary text, for deriving image ids. */
+/**
+ * A stable 64-bit (cyrb53-style) hash of arbitrary text, returned as a 16-char
+ * hex string. Used to derive a deterministic image id from custom SVG markup;
+ * the wider hash keeps the collision probability negligible even for many
+ * distinct SVGs (a 32-bit hash would collide after ~65k strings, silently
+ * reusing the first SVG's pixels for a colliding one).
+ */
 export function hashText(text: string): string {
-  let hash = 0;
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
   for (let index = 0; index < text.length; index += 1) {
-    hash = (hash * 31 + text.charCodeAt(index)) | 0;
+    const ch = text.charCodeAt(index);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
   }
-  return (hash >>> 0).toString(36);
+  h1 =
+    Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^
+    Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 =
+    Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^
+    Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (
+    (h2 >>> 0).toString(16).padStart(8, "0") +
+    (h1 >>> 0).toString(16).padStart(8, "0")
+  );
+}
+
+/**
+ * Resolve user-supplied SVG input to an `Image.src`: inline markup (starting
+ * with `<`) is encoded as a data URL; otherwise only `data:` and `http(s):`
+ * URLs are accepted. Returns null for empty input or an unsupported scheme
+ * (e.g. `file:`), which the caller treats as "no image" rather than letting an
+ * arbitrary URL be loaded.
+ */
+export function resolveSvgSource(markup: string): string | null {
+  const trimmed = markup.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("<")) {
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(trimmed)}`;
+  }
+  if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith("data:")) {
+    return trimmed;
+  }
+  return null;
 }
 
 /** A bitmap accepted by `map.addImage`. */

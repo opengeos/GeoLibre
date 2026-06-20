@@ -1584,6 +1584,11 @@ export function StylePanel({
   const showProportionalControls =
     hasVectorPaintControls &&
     pointRenderer !== "heatmap" &&
+    // A marker symbol layer uses a baked icon (icon-size 1), so proportional
+    // circle-radius sizing would not apply; hide the controls to avoid a
+    // silent no-op. (Markers only render for point-only layers, so no lines are
+    // hidden here.)
+    !styleValue(style, "markerEnabled") &&
     ((geometryFlags.hasPoint && pointRenderer === "single") ||
       geometryFlags.hasLine);
   const showFillPatternControls =

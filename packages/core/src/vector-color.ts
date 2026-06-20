@@ -143,20 +143,24 @@ export function lineWidthValue(style: LayerStyle): number | unknown[] {
     const property = styleValue(style, "proportionalSizeProperty").trim();
     const minValue = styleValue(style, "proportionalSizeMinValue");
     const maxValue = styleValue(style, "proportionalSizeMaxValue");
+    const minRadius = styleValue(style, "proportionalSizeMinRadius");
+    const maxRadius = styleValue(style, "proportionalSizeMaxRadius");
     if (
       property &&
       Number.isFinite(minValue) &&
       Number.isFinite(maxValue) &&
-      maxValue > minValue
+      maxValue > minValue &&
+      Number.isFinite(minRadius) &&
+      Number.isFinite(maxRadius)
     ) {
       return [
         "interpolate",
         ["linear"],
         ["to-number", ["get", property], minValue],
         minValue,
-        styleValue(style, "proportionalSizeMinRadius"),
+        minRadius,
         maxValue,
-        styleValue(style, "proportionalSizeMaxRadius"),
+        maxRadius,
       ];
     }
   }
@@ -377,6 +381,9 @@ export function circleRadiusValue(style: LayerStyle): number | unknown[] {
   if (maxValue <= minValue) return constant;
   const minRadius = styleValue(style, "proportionalSizeMinRadius");
   const maxRadius = styleValue(style, "proportionalSizeMaxRadius");
+  if (!(Number.isFinite(minRadius) && Number.isFinite(maxRadius))) {
+    return constant;
+  }
   return [
     "interpolate",
     ["linear"],

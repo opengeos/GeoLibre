@@ -7,6 +7,7 @@ import {
 import {
   hashText,
   registerGeneratedImage,
+  resolveSvgSource,
   type GeneratedImageResult,
 } from "./generated-images";
 
@@ -100,11 +101,8 @@ function drawBuiltinPattern(
 }
 
 function loadSvgImage(markup: string): Promise<GeneratedImageResult | null> {
-  const trimmed = markup.trim();
-  if (!trimmed) return Promise.resolve(null);
-  const src = trimmed.startsWith("<")
-    ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(trimmed)}`
-    : trimmed;
+  const src = resolveSvgSource(markup);
+  if (!src) return Promise.resolve(null);
   return new Promise((resolve) => {
     const image = new Image();
     image.decoding = "async";

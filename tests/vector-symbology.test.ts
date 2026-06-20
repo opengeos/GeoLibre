@@ -149,6 +149,22 @@ describe("circleRadiusValue proportional sizing", () => {
     );
     assert.equal(result, 6);
   });
+
+  it("falls back to the constant radius when a radius output is non-finite", () => {
+    // Simulate a hand-edited project with a non-numeric radius.
+    const result = circleRadiusValue(
+      style({
+        circleRadius: 8,
+        proportionalSizeEnabled: true,
+        proportionalSizeProperty: "pop",
+        proportionalSizeMinValue: 0,
+        proportionalSizeMaxValue: 100,
+        proportionalSizeMinRadius: Number.NaN,
+        proportionalSizeMaxRadius: 24,
+      }),
+    );
+    assert.equal(result, 8);
+  });
 });
 
 describe("lineWidthValue proportional sizing", () => {
