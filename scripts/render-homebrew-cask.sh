@@ -4,7 +4,8 @@
 #
 # The macOS DMGs are signed with an Apple Developer ID certificate and notarized
 # by Apple, so they install and launch without a quarantine workaround. The cask
-# is distributed from a self-hosted tap (not the official homebrew/cask repo).
+# is distributed from a self-hosted tap because it has not been submitted to the
+# official homebrew/cask repository.
 #
 # Usage:
 #   VERSION=1.2.0 \

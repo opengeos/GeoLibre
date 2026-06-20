@@ -11,12 +11,20 @@ Release builds are produced for:
 
 - Linux x64: Debian package, RPM package, and AppImage
 - Windows x64: unsigned desktop binary
-- macOS Apple Silicon: Developer ID signed and notarized DMG and app bundle
-- macOS Intel: Developer ID signed and notarized DMG and app bundle
+- macOS Apple Silicon: Developer ID signed and notarized DMG and app bundle (v1.4.1+)
+- macOS Intel: Developer ID signed and notarized DMG and app bundle (v1.4.1+)
 
 The Windows build is unsigned and may require a platform-specific trust prompt. Check each release note for the exact assets and platform guidance.
 
 ## macOS installation
+
+Signing and notarization apply to **v1.4.1 and later**. For v1.4.0 and earlier
+(ad-hoc signed), remove the quarantine attribute after installing, repeating it
+after each upgrade:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/GeoLibre Desktop.app"
+```
 
 ### Homebrew (recommended)
 
@@ -52,7 +60,7 @@ by Apple, so Gatekeeper allows them to open without any extra steps:
 1. Download the DMG for your Mac (`aarch64` for Apple Silicon, `x64` for
    Intel).
 2. Open the DMG and drag **GeoLibre Desktop** into **Applications**.
-3. Launch GeoLibre Desktop from Applications as usual.
+3. Launch GeoLibre Desktop from Applications.
 
 ## Build from source
 
