@@ -161,7 +161,12 @@ export function installStaleChunkReload(options?: {
         level: "warning",
         message:
           "A component could not be loaded because the app was updated. Save your project, then reload the page to finish loading it.",
-        detail: payload instanceof Error ? payload.message : String(payload),
+        detail:
+          payload instanceof Error
+            ? payload.message
+            : payload != null
+              ? String(payload)
+              : undefined,
         source: "stale-chunk-reload",
       });
       event.preventDefault();

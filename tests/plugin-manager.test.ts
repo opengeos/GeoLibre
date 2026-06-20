@@ -533,6 +533,41 @@ describe("PluginManager async activation", () => {
     assert.equal(manager.isActive("ok-plugin"), true);
   });
 
+  it("rolls back a restored project's failed async activation", async () => {
+    const manager = new PluginManager();
+    let resolveMount: (value: boolean) => void = () => {};
+
+    manager.register(
+      testPlugin({
+        id: "restored-plugin",
+        activate: () =>
+          new Promise<boolean>((resolve) => {
+            resolveMount = resolve;
+          }),
+      }),
+    );
+
+    // Re-opening a saved project that had the plugin active goes through
+    // restoreProjectState, not the interactive activate() path.
+    manager.restoreProjectState(
+      {
+        manifestUrls: [],
+        activePluginIds: ["restored-plugin"],
+        mapControlPositions: {},
+        settings: {},
+      },
+      app,
+    );
+    assert.equal(manager.isActive("restored-plugin"), true);
+
+    resolveMount(false);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // The chunk failed to mount, so the menu must not keep showing it active.
+    assert.equal(manager.isActive("restored-plugin"), false);
+  });
+
   it("does not revert when the user deactivates before the mount fails", async () => {
     const manager = new PluginManager();
     let resolveMount: (value: boolean) => void = () => {};

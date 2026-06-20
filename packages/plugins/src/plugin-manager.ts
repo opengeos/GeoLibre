@@ -136,18 +136,32 @@ export class PluginManager {
     if (activated === false) return;
     this.active.add(id);
     this.notify();
+    this.watchAsyncActivation(id, activated, app);
+  }
+
+  /**
+   * Watch an async activation result so the optimistic active state can be
+   * rolled back if the mount ultimately fails (resolves false or rejects). A
+   * synchronous result is a no-op. Shared by {@link activate} and
+   * {@link restoreProjectState}, which both add to `active` before the mount
+   * has finished.
+   */
+  private watchAsyncActivation(
+    id: string,
+    activated: boolean | void | PromiseLike<boolean | void>,
+    app: GeoLibreAppAPI,
+  ): void {
     // An async plugin (e.g. one mounted behind a dynamic import) reports
-    // failure after the fact by resolving false or rejecting. Roll back the
-    // optimistic active state so the Plugins menu does not show a plugin that
-    // never mounted (e.g. when its chunk fails to load after a web redeploy).
-    if (isThenable(activated)) {
-      void Promise.resolve(activated).then(
-        (result) => {
-          if (result === false) this.rollbackFailedActivation(id, app);
-        },
-        (error) => this.rollbackFailedActivation(id, app, error),
-      );
-    }
+    // failure after the fact by resolving false or rejecting. Roll back so the
+    // Plugins menu does not show a plugin that never mounted (e.g. when its
+    // chunk fails to load after a web redeploy).
+    if (!isThenable(activated)) return;
+    void Promise.resolve(activated).then(
+      (result) => {
+        if (result === false) this.rollbackFailedActivation(id, app);
+      },
+      (error) => this.rollbackFailedActivation(id, app, error),
+    );
   }
 
   /**
@@ -162,6 +176,8 @@ export class PluginManager {
     if (!this.active.has(id)) return;
     if (error !== undefined) {
       console.warn(`Plugin '${id}' failed to activate; reverting.`, error);
+    } else {
+      console.warn(`Plugin '${id}' activation resolved false; reverting.`);
     }
     const plugin = this.plugins.get(id);
     this.active.delete(id);
@@ -367,6 +383,10 @@ export class PluginManager {
       if (activated === false) continue;
       this.active.add(id);
       changed = true;
+      // Restoring a saved project re-activates plugins the same way the user
+      // would, so an async mount that later fails (e.g. a stale chunk after a
+      // redeploy) must roll back here too, not just from activate().
+      this.watchAsyncActivation(id, activated, app);
     }
 
     if (changed) this.notify();
