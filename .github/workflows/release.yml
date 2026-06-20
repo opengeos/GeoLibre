@@ -186,3 +186,56 @@ jobs:
           fi
           git commit -m "geolibre ${VERSION}"
           git push "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/opengeos/homebrew-geolibre.git" HEAD:main
+
+  aur:
+    name: Publish AUR package
+    needs: build
+    runs-on: ubuntu-latest
+    # Fully isolated from the asset build and the Homebrew job: it only `needs`
+    # build for the .deb, nothing depends on it, and continue-on-error means a
+    # failed AUR push leaves the release (and its other publish targets) green.
+    continue-on-error: true
+    # Serialise AUR pushes so two close releases can't race on a non-fast-forward.
+    concurrency:
+      group: aur-publish
+      cancel-in-progress: false
+    # Only publish for full releases, not prereleases.
+    if: ${{ !github.event.release.prerelease }}
+    env:
+      # Surfaced as an env var so steps can skip cleanly when the secret is
+      # absent (forks, or before the maintainer configures it).
+      AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Render PKGBUILD from the release .deb
+        if: ${{ env.AUR_SSH_PRIVATE_KEY != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="${TAG#v}"
+          deb="GeoLibre.Desktop_${version}_amd64.deb"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$deb" --dir debs
+          sha="$(sha256sum "debs/$deb" | awk '{print $1}')"
+          mkdir -p aur
+          VERSION="$version" SHA256_AMD64="$sha" REPO="$GITHUB_REPOSITORY" \
+            scripts/render-aur-pkgbuild.sh > aur/PKGBUILD
+          echo "----- rendered PKGBUILD -----"
+          cat aur/PKGBUILD
+
+      - name: Publish to the AUR
+        if: ${{ env.AUR_SSH_PRIVATE_KEY != '' }}
+        uses: KSXGitHub/github-actions-deploy-aur@v4.1.1
+        with:
+          pkgname: geolibre-bin
+          pkgbuild: aur/PKGBUILD
+          commit_username: github-actions[bot]
+          commit_email: github-actions[bot]@users.noreply.github.com
+          ssh_private_key: ${{ env.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Update to ${{ github.event.release.tag_name }}"
+          allow_empty_commits: false
+          updpkgsums: false
