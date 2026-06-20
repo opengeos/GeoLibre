@@ -26,7 +26,7 @@ const DEFAULT_RASTER_URL =
   "https://data.source.coop/giswqs/opengeos/nlcd_2021_land_cover_30m.tif";
 
 // These types mirror undocumented private members of RasterControl from
-// maplibre-gl-raster (verified against v0.5.0). All access is optional (?.)
+// maplibre-gl-raster (re-verified against v0.6.0). All access is optional (?.)
 // so a rename in a future release degrades to a no-op rather than a crash --
 // re-verify these names AND the .mlr-control-close selector in
 // wireRasterCloseButton when bumping the dependency.

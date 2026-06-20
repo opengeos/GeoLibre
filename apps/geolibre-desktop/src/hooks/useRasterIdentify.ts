@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { useAppStore } from "@geolibre/core";
 import { setRasterPixelInspect } from "@geolibre/plugins";
 
@@ -15,14 +15,13 @@ import { setRasterPixelInspect } from "@geolibre/plugins";
  * are open.
  */
 export function useRasterIdentify(): void {
-  const identifyLayerId = useAppStore((s) => s.identifyLayerId);
-  const layers = useAppStore((s) => s.layers);
-
-  const activeCogId = useMemo(() => {
-    if (!identifyLayerId) return null;
-    const layer = layers.find((item) => item.id === identifyLayerId);
+  // One selector returning a primitive: Zustand re-renders only when the
+  // resolved id changes, not on every unrelated layer mutation.
+  const activeCogId = useAppStore((s) => {
+    if (!s.identifyLayerId) return null;
+    const layer = s.layers.find((item) => item.id === s.identifyLayerId);
     return layer?.type === "cog" ? layer.id : null;
-  }, [identifyLayerId, layers]);
+  });
 
   useEffect(() => {
     if (!activeCogId) return;

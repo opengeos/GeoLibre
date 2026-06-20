@@ -1272,6 +1272,16 @@ export function LayerPanel({
             // COGs inspect raw pixel/band values rather than vector features, so
             // the icon's tooltip reflects that distinct action.
             const isPixelIdentify = layer.type === "cog";
+            // Shared by the button's title and aria-label so they can't diverge.
+            const identifyLabel = canIdentify
+              ? identifyActive
+                ? isPixelIdentify
+                  ? "Stop inspecting pixel values"
+                  : "Deactivate identify"
+                : isPixelIdentify
+                  ? "Inspect pixel values"
+                  : "Identify features"
+              : "Identify is only available for vector, WMS, and COG layers";
             const canEditGeometry = canEditLayerGeometry(layer);
             const geometryEditActive = geometryEditLayerId === layer.id;
             const geometryEditElsewhere =
@@ -1526,28 +1536,8 @@ export function LayerPanel({
                         ? "border border-primary bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 hover:text-primary-foreground"
                         : ""
                     }`}
-                    title={
-                      canIdentify
-                        ? identifyActive
-                          ? isPixelIdentify
-                            ? "Stop inspecting pixel values"
-                            : "Deactivate identify"
-                          : isPixelIdentify
-                            ? "Inspect pixel values"
-                            : "Identify features"
-                        : "Identify is only available for vector, WMS, and COG layers"
-                    }
-                    aria-label={
-                      canIdentify
-                        ? identifyActive
-                          ? isPixelIdentify
-                            ? "Stop inspecting pixel values"
-                            : "Deactivate identify"
-                          : isPixelIdentify
-                            ? "Inspect pixel values"
-                            : "Identify features"
-                        : "Identify is only available for vector, WMS, and COG layers"
-                    }
+                    title={identifyLabel}
+                    aria-label={identifyLabel}
                     disabled={!canIdentify || geometryEditActive}
                     onClick={(e) => {
                       e.stopPropagation();
