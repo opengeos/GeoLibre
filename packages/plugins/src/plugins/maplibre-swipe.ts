@@ -104,17 +104,12 @@ function getSwipeControlOptions(
     collapsed: previousState?.collapsed ?? false,
     title: "Layer Swipe",
     panelWidth: 300,
-    // Upper bound only; the control also shrinks the panel to fit the available
-    // map height, so this lets it grow with the layer list instead of clamping
-    // to a small fixed height.
+    // Upper bound only; the control also shrinks the panel to the available map height.
     maxHeight: 900,
     active: previousState?.active ?? true,
     leftLayers: previousState?.leftLayers ?? [],
     rightLayers: previousState?.rightLayers ?? [],
-    // On a fresh activation (no saved state) pre-select every visible layer on
-    // both sides so the panel checkboxes match what is rendered, rather than
-    // showing an empty checklist over a populated map. Restored/persisted state
-    // keeps the user's own selection.
+    // True only on first activation; restoring saved/project state keeps the user's selection.
     selectVisibleByDefault: previousState === undefined,
     basemapStyle: app.getActiveBasemap(),
     excludeLayers: ["gl-draw-*", "measure-*", "geolibre-highlight-*"],
