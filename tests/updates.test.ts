@@ -112,6 +112,15 @@ describe("fetchLatestRelease", () => {
     assert.equal(release.url, UPDATE_URL);
   });
 
+  it("falls back to the downloads page when html_url is absent", async () => {
+    stubFetch(
+      new Response(JSON.stringify({ tag_name: "v1.6.0" }), { status: 200 }),
+    );
+    const release = await fetchLatestRelease();
+    assert.equal(release.url, UPDATE_URL);
+    assert.equal(release.notes, "");
+  });
+
   it("wraps a malformed 200 body as a network error", async () => {
     stubFetch(new Response("{ not json", { status: 200 }));
     await assert.rejects(fetchLatestRelease(), (error: unknown) => {

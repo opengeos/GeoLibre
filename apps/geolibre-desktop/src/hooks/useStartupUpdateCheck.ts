@@ -147,12 +147,12 @@ export function useStartupUpdateCheck() {
   const remindLater = useCallback(() => setPending(null), []);
 
   // Remember the skipped version so the prompt stays hidden until a newer one.
+  // The write lives outside the setPending updater so the updater stays pure
+  // (StrictMode invokes updaters twice).
   const skipVersion = useCallback(() => {
-    setPending((current) => {
-      if (current) writeDismissedVersion(current.release.version);
-      return null;
-    });
-  }, []);
+    if (pending) writeDismissedVersion(pending.release.version);
+    setPending(null);
+  }, [pending]);
 
   return { pending, remindLater, skipVersion };
 }
