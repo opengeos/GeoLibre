@@ -807,11 +807,7 @@ export function DesktopShell({
                           bytes.byteOffset,
                           bytes.byteOffset + bytes.byteLength,
                         ) as ArrayBuffer);
-                  const layers = await loadOsmPbf(buffer, undefined, (p) =>
-                    setDropMessage(
-                      `Parsing ${name}… ${p.processed.toLocaleString()} of ${p.total.toLocaleString()} entities`,
-                    ),
-                  );
+                  const layers = await loadOsmPbf(buffer);
                   const added = addOsmPbfLayers(
                     addGeoJsonLayer,
                     osmPbfBaseName(name),
@@ -942,11 +938,7 @@ export function DesktopShell({
           setDropMessage(`Parsing ${file.name}…`);
           let layers;
           try {
-            layers = await loadOsmPbf(await file.arrayBuffer(), undefined, (p) =>
-              setDropMessage(
-                `Parsing ${file.name}… ${p.processed.toLocaleString()} of ${p.total.toLocaleString()} entities`,
-              ),
-            );
+            layers = await loadOsmPbf(await file.arrayBuffer());
           } catch (err) {
             // Isolate per-file failures so one bad PBF doesn't abandon the rest
             // of the drop (including any co-dropped non-PBF files).

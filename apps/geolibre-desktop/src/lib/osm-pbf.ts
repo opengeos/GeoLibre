@@ -199,9 +199,10 @@ export async function parseOsmPbf(
     if (!hasTags(relation.tags)) continue;
     place(osmEntityToGeoJSONFeature(osm, relation) as Feature | null);
   }
-  // Ensure a final 100% update, but skip it when the last tick already fired one
-  // for processed === total (i.e. total is an exact multiple of the interval).
-  if (total === 0 || total % PROGRESS_INTERVAL !== 0) {
+  // Ensure a final 100% update, but skip it when the last tick already fired
+  // one for processed === total (total an exact multiple of the interval) and
+  // for an empty extract (total 0), where there is nothing to report.
+  if (total > 0 && total % PROGRESS_INTERVAL !== 0) {
     onProgress?.({ processed, total });
   }
 

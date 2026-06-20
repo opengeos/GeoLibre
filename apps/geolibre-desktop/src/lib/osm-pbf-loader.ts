@@ -132,24 +132,25 @@ export function loadOsmPbf(
       "message",
       (event: MessageEvent<OsmPbfWorkerMessage>) => {
         const data = event.data;
-        // Progress messages (the only ones carrying `type`) stream in before
-        // the single terminal message; keep the worker alive and forward them.
-        if (data && "type" in data) {
-          onProgress?.({ processed: data.processed, total: data.total });
+        // The terminal message (success or failure) is the one carrying `ok`;
+        // identify it by that so a future field can't be mistaken for it.
+        if (data && "ok" in data) {
+          finish();
+          if (data.ok) resolve(data.result);
+          else
+            reject(new Error(data.error || "Could not parse the OSM PBF file."));
           return;
         }
-        finish();
-        if (data?.ok) resolve(data.result);
-        else reject(new Error(data?.error || "Could not parse the OSM PBF file."));
+        // Anything else is a progress update streamed before the terminal
+        // message; forward it and keep the worker alive.
+        if (data && "type" in data && data.type === "progress") {
+          onProgress?.({ processed: data.processed, total: data.total });
+        }
       },
     );
     worker.addEventListener("error", (event) => {
       finish();
-      // A worker `error` on a large parse is usually a browser out-of-memory
-      // kill, so surface the same actionable "too large" guidance as a timeout.
-      reject(
-        new OsmPbfTooLargeError(event.message || "The OSM PBF worker failed."),
-      );
+      reject(new Error(event.message || "The OSM PBF worker failed."));
     });
     // `error` does not fire if the worker is OOM-killed or the response message
     // fails to deserialize; messageerror covers the latter and the timeout above
