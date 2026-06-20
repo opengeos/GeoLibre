@@ -20,23 +20,24 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 
 **Video tutorial:** [GeoLibre 1.0: A Free, Open-Source Cloud-Native GIS That Runs Anywhere (Browser, Desktop & Jupyter)](https://youtu.be/87Cm0QagtxI)
 
-## Features (v1.4)
+## Features (v1.5)
 
 - Runs across desktop (Tauri), web (browser), native Android (Tauri v2 mobile), and mobile or small screens, with a responsive, touch-friendly layout that adapts menus, dialogs, and panels (on phones the Layers/Style panels overlay the map as slide-over sheets), plus per-panel visibility through Layout settings
-- MapLibre map workspace with OpenFreeMap basemaps, blank background support, and toggleable navigation, fullscreen, geolocation, globe, terrain, scale, attribution, and logo controls
-- Load local vector layers supported by DuckDB-WASM Spatial, including common formats such as GeoJSON, GeoParquet, GeoPackage, Shapefile, FlatGeobuf, KML/KMZ, GML, delimited text, GPX, and OpenStreetMap PBF extracts (parsed in-browser with osmix)
+- MapLibre map workspace with OpenFreeMap and Protomaps basemaps, stacking of multiple raster basemaps, blank background support, and toggleable navigation, fullscreen, geolocation, globe, terrain, scale, attribution, and logo controls, plus a View menu with viewport history navigation, a reset pitch and bearing control, and a distinct north arrow
+- Load local vector layers supported by DuckDB-WASM Spatial, including common formats such as GeoJSON, GeoParquet, GeoPackage, Shapefile, FlatGeobuf, KML/KMZ (honoring embedded symbology), GML, delimited text, GPX, and OpenStreetMap PBF extracts (parsed in-browser with osmix)
 - Reproject vector layers to EPSG:4326 on load and split dragged GPX files into named waypoint, track, and route layers
 - Large local vector layers render through client-side vector tiling, with a warning before loading very large files
-- Add Data menu for XYZ tiles, WMS, WFS, GeoJSON URLs, vector tiles, COG and GeoTIFF rasters, Cloud-Optimized NetCDF/HDF (via kerchunk references), MBTiles, ArcGIS FeatureServer and VectorTileServer layers, PMTiles, Zarr, LiDAR, 3D Tiles (including authenticated tilesets via custom request headers), Gaussian splats, glTF/GLB 3D models placed at coordinates, and georeferenced video overlays
+- Add Data menu for XYZ tiles, WMS, WFS, GeoJSON URLs, vector tiles, COG and GeoTIFF rasters, Cloud-Optimized NetCDF/HDF (via kerchunk references), MBTiles, ArcGIS FeatureServer and VectorTileServer layers, PMTiles, Zarr, LiDAR, 3D Tiles (including authenticated tilesets via custom request headers), Gaussian splats, glTF/GLB 3D models placed at coordinates, and georeferenced video overlays, with a fully internationalized dialog, comma decimal support, drag-and-dropped CSV coordinate files, and a saved service library for storing and re-adding frequently used web-service endpoints
 - Deck.gl Layer builder for composing deck.gl overlays from uploaded files or remote URLs
 - Cloud data integrations through the Planetary Computer and Earth Engine panels, the Overture Maps plugin, and federal Web Services plugins
 - Manual and automatic refresh for WFS, GeoJSON URL, and Add Vector Layer URL layers
 - Layer panel for visibility, opacity, reordering, rename, zoom-to-layer, identify, labels, open attribute table, export, and remove actions, with collapsible layer groups/folders for organizing the layer stack
 - Live style panel with single, categorized, graduated, and expression symbology (fill, stroke, opacity, circle radius), plus point heatmap and clustering renderers — all including for Add Vector Layer point layers
-- Attribute table with filtering, sorting, resize controls, feature highlighting, optional zoom to selected features, add-field and field-calculator tools, a Charts panel (histogram, scatter, bar, line, box), a field statistics summary panel, column management (rename, delete, hide/show, reorder), virtualized rows for large layers, and export to GeoJSON/GeoParquet/Shapefile/GeoPackage/CSV
+- Attribute table with filtering, sorting, resize controls, feature highlighting, optional zoom to selected features, add-field and field-calculator tools, a Charts panel (histogram, scatter, bar, line, box), a field statistics summary panel, column management (rename, delete, hide/show, reorder) with a column explorer for finding and toggling fields in wide tables, virtualized rows for large layers, and export to GeoJSON/GeoParquet/Shapefile/GeoPackage/CSV
 - SQL Workspace for running DuckDB Spatial SQL against loaded layers, local files, and remote URLs, with sample queries, query history, and adding results to the map or exporting them, plus an in-browser PostGIS SQL engine via PGlite and an Apache Sedona spatial SQL engine
 - Multiple DuckDB SQL query-result layers with identify, selection, and attribute table support
-- Controls menu with Measure, Bookmark, Minimap, and View State tools, a Search panel, and a Print menu with a print layout composer (including a user-editable legend) that exports the map to PNG or PDF
+- Controls menu with Measure, Bookmark, Minimap, and View State tools, a Search panel, a Dashboard panel of configurable chart widgets that summarize the loaded layers, and a Print menu with a print layout composer (user-editable legend, explicit map-scale input, title block with editable title and footer, page-size controls, and a custom print extent) that exports the map to PNG or PDF
+- Bookmarks that capture the active layers alongside the camera, with selectable export, a resizable and reorderable panel, and a save-as name prompt
 - Field Collection tool for capturing point, line, and polygon observations with a per-layer custom form (text/number/date/choice fields and an optional photo), placed by device GPS or by tapping the map, written to a GeoJSON layer that flows into the attribute table, export, and offline use
 - Story map builder with a scroll-driven editor, presenter view, and standalone HTML export
 - Real-time multi-user collaboration (MVP; requires the `VITE_GEOLIBRE_COLLAB_URL` build variable — see [docs/collaboration.md](docs/collaboration.md)) so several people can edit the same project together
@@ -45,24 +46,25 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 - Notebook panel docked beside the map for running Jupyter against the live map: the web build embeds a self-hosted JupyterLite site (in-browser Pyodide kernel) and the desktop build launches a uv-managed JupyterLab server, with notebook cells driving the map through an auto-loaded `geolibre` client. See [Notebook Panel](docs/notebook.md)
 - Command palette (`Ctrl`/`Cmd` + `K`) that searches and runs menu and toolbar actions across Add Data, Processing, Controls, Plugins, and Help, global keyboard shortcuts for New/Open/Save/Save As, and a `?` shortcuts cheat sheet
 - Conversion menu for Vector to GeoParquet/FlatGeobuf/PMTiles, CSV to GeoParquet, and Raster to COG; GeoParquet and CSV conversions run in the browser with DuckDB-WASM, while FlatGeobuf, PMTiles, and COG require the optional Python sidecar
-- Whitebox toolbox with batch tools run against a selected input directory
+- Whitebox toolbox that runs entirely in the browser through a WebAssembly runtime with raster I/O (no Python sidecar required), surfacing both Whitebox tools and GeoLibre's own WASM raster tools, with batch tools run against a selected input directory
 - Vector menu with common geometry tools (buffer, centroids, convex hull, dissolve, bounding box, simplify, clip, intersection, difference, union, spatial join, attribute join, select by value, select by location) that run in the browser with Turf.js, an optional GeoPandas sidecar engine for every tool, and an in-browser GeoPandas engine via Pyodide (no server, same results as the sidecar)
 - Raster menu with common raster tools (hillshade, slope, aspect, reproject, resample, clip by extent, clip by mask layer, polygonize, contour, zonal statistics, raster calculator, reclassify, mosaic, focal statistics) backed by a rasterio Python sidecar, with a client-side fallback so core tools also run in the browser when no sidecar is available
 - Spectral Index toolbox (NDVI, GNDVI, NDWI, NDMI, NDBI, NBR, EVI, SAVI) with Sentinel-2, Landsat 8-9, NAIP, and custom band layouts, evaluated client-side with geotiff.js or on the rasterio sidecar
 - Spatial Statistics toolbox and a Processing batch runner with model/pipeline chaining to run a sequence of tools as one job
 - Raster Georeferencer (Processing → Georeferencing) that pins a non-georeferenced image to the map with ground control points using a least-squares affine fit, reporting per-GCP and RMS residuals
-- Single-band pseudocolor with classification and RGB band combination for styling raster layers
-- Network analysis tools for isochrones, service areas, and origin–destination (OD) cost matrices
+- Single-band pseudocolor with classification, reversed and custom color ramps, the full colormap list, and RGB band combination for styling raster layers, plus COG pixel-value inspection from the Identify icon
+- Network analysis tools for isochrones, service areas, origin–destination (OD) cost matrices, and sequential routes (directions) through an ordered set of waypoints
 - Geocoding tools for forward, batch, and reverse geocoding through a multi-provider abstraction
 - AI Segmentation (SamGeo) that turns imagery into vector features with [segment-geospatial](https://github.com/opengeos/segment-geospatial) and Meta's SAM 3 — text prompts ("trees", "buildings") or automatic segmentation, proxied to a separate `samgeo-api` model server (GPU recommended)
 - H3 tools to create hexagonal grids over an extent and bin point layers into H3 cells
 - Undo/redo for layer and style operations
 - Drag and drop vector and GeoTIFF/COG raster files onto the map to add them as layers
 - Project menu to create, open, save, and Save As `.geolibre.json` projects
-- Desktop diagnostics panel, update check, and MSIX packaging support
-- Plugin system with basemap, layer control, MapLibre components, swipe, street view, Overture Maps, LiDAR, GeoAgent, and GeoEditor integrations, including configurable control positions and external plugin manifests; external plugins can render on the host's shared deck.gl instance via `app.getDeckGL()`
-- Time Slider plugin for animating time series raster and vector data
-- Atmosphere Effects plugin that renders a deep-space backdrop, parallax starfield, comets, and an atmospheric halo around the globe at low zoom (technique adapted from [Leonel Dias](https://leoneljdias.github.io/posts/globe-atmosphere-halo-comets/))
+- Desktop diagnostics panel, update check, and MSIX packaging support, with macOS installers signed with an Apple Developer ID certificate and notarized by Apple so they open without a Gatekeeper workaround
+- Customizable UI profiles that tailor which menus, panels, and data sources are visible, so a deployment can present a focused subset of the app to its users. See [UI Profiles](docs/ui-profiles.md)
+- Plugin system with basemap, layer control, MapLibre components, swipe, street view, Overture Maps, USGS LiDAR, GeoAgent, and GeoEditor integrations, including configurable control positions and external plugin manifests; external plugins can render on the host's shared deck.gl instance via `app.getDeckGL()`
+- Time Slider plugin for animating time series raster and vector data, including binding existing vector layers already on the map to the timeline
+- Atmosphere Effects plugin that renders a deep-space backdrop, parallax starfield, comets, and an atmospheric halo around the globe at low zoom (technique adapted from [Leonel Dias](https://leoneljdias.github.io/posts/globe-atmosphere-halo-comets/)), with a Spinning Globe panel and customizable atmosphere halo and deep-space colors
 - Directions plugin for interactive routing via [maplibre-gl-directions](https://github.com/maplibre/maplibre-gl-directions): click the map to add waypoints, drag to reposition, and click a waypoint to remove it (uses the public OSRM demo server, driving only)
 - External plugin zip loading from the app data plugins directory and local development plugin directories
 - Bundled drop-in plugins under `public/plugins/<id>/` that bake into both the web and desktop builds and load automatically with no manifest URL

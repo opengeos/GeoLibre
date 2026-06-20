@@ -200,7 +200,26 @@
 - [x] Download Offline Area tool that pre-caches the current map view's basemap tiles into the service-worker cache
 - [x] Service-worker caching of the CDN-loaded Pyodide and PGlite/PostGIS engines so browser SQL and Python keep working offline after first use
 
-## v1.4: Jupyter beside the map, spectral indices, georeferencing, and field collection (current)
+## v1.5: Dashboards, in-browser Whitebox, map navigation history, and signed macOS installers (current)
+
+- [x] Dashboard panel of chart widgets that summarizes the loaded layers at a glance, with configurable charts and a collapsible layout that docks alongside the map
+- [x] Whitebox toolbox now runs entirely in the browser through a WebAssembly runtime with raster I/O, so its tools (and GeoLibre's own WASM raster tools, now surfaced in the same toolbox) work with no Python sidecar
+- [x] Print layout composer gained an explicit map-scale input, a title block with editable title and footer, page-size controls, and a custom print extent, with more reliable preview rendering for production-quality PNG and PDF map exports
+- [x] Time Slider can bind existing vector layers already on the map to the timeline, animating their time-series attributes without re-importing the data
+- [x] New View menu with viewport history navigation (step back and forward through previous map extents), a reset pitch and bearing control with a rotation indicator, a distinct north arrow in place of the ambiguous compass, a lock indicator when map bounds are restricted, and a refined default set of top-right map controls
+- [x] Saved service library for web-service layers, so frequently used WMS, WFS, XYZ, and ArcGIS endpoints can be stored once and re-added with a click rather than re-entered each session
+- [x] Add Data dialog is now fully internationalized and accepts comma decimal separators and drag-and-dropped CSV files for coordinate data
+- [x] Inspect COG pixel values directly from the Identify icon, plus reversed and custom raster color ramps, the full colormap list, and a styling panel you can reopen from the layer actions menu
+- [x] Customizable UI profiles that tailor which menus, panels, and data sources are visible, so a deployment can present a focused subset of the app to its users (see [UI Profiles](ui-profiles.md))
+- [x] Bookmarks now capture the active layers alongside the camera, with selectable export, a resizable and reorderable panel, and a save-as name prompt
+- [x] Sequential route (directions) network tool under Processing for computing routes through an ordered set of waypoints
+- [x] Protomaps basemaps in the New map dialog, support for stacking multiple raster basemaps, and basemap element visibility presets in the layer control
+- [x] Spinning Globe panel under Atmospheric Effects and customizable atmosphere halo and deep-space colors for the globe view
+- [x] Notebook panel can split the workspace 50/50 with the map and auto-collapse the Style panel for more room, and the attribute table gains a column explorer for finding and toggling fields in wide tables
+- [x] USGS LiDAR plugin replaces the previous LiDAR Viewer for browsing and loading USGS 3DEP point-cloud data, imported KML and KMZ layers honor their embedded symbology, and vector strokes can be sized in scale-proportional meters
+- [x] macOS desktop installers are now signed with an Apple Developer ID certificate and notarized by Apple, so they open without a Gatekeeper workaround, with a generator for submitting GeoLibre to the official Homebrew cask (see [Downloads](downloads.md))
+
+## v1.4: Jupyter beside the map, spectral indices, georeferencing, and field collection
 
 - [x] Resizable, collapsible Notebook panel docked beside the map: the web build embeds a self-hosted JupyterLite site (in-browser Pyodide kernel) and the desktop build launches a uv-managed JupyterLab server, both seeded with a runnable Welcome tour. Notebook cells drive the live map through the shared scripting bridge via an auto-loaded `geolibre` client, and the JupyterLite theme follows the app theme — see [Notebook Panel](notebook.md)
 - [x] Spectral Index toolbox under Processing → Raster (NDVI, GNDVI, NDWI, NDMI, NDBI, NBR, EVI, and SAVI) with Sentinel-2, Landsat 8-9, NAIP, and custom band layouts and a reflectance-scale knob, evaluated client-side via geotiff.js or on the rasterio sidecar through the existing raster calculator
