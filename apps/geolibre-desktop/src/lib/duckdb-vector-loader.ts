@@ -93,6 +93,23 @@ export async function ensureSpatialExtension(
   beforeLoad?: () => Promise<void>,
 ): Promise<void> {
   spatialExtensionPromise ??= (async () => {
+    // duckdb-wasm 1.33.1-dev45 breaks read_parquet on any connection that runs
+    // LOAD spatial itself before it has read a Parquet file. `beforeLoad` lets
+    // the caller warm up that path (a pre-spatial read) before any LOAD,
+    // including the custom-path branch below, which is the only thing that
+    // initialises it. Runs before the branch split so a custom extension path
+    // (VITE_DUCKDB_SPATIAL_EXTENSION_PATH) gets the same warm-up.
+    if (beforeLoad) {
+      try {
+        await beforeLoad();
+      } catch (error) {
+        // Warm-up is best-effort; a failure here must not block spatial
+        // loading. Logged so a genuinely corrupt/mislabelled file is still
+        // diagnosable in DevTools instead of only surfacing later.
+        console.debug("[GeoLibre] spatial warm-up failed (ignored)", error);
+      }
+    }
+
     const customPath = getSpatialExtensionPath();
     if (customPath) {
       const normalizedPath = customPath.replace(/\\/g, "/");
@@ -100,17 +117,6 @@ export async function ensureSpatialExtension(
       return;
     }
 
-    // duckdb-wasm 1.33.1-dev45 breaks remote read_parquet if the spatial
-    // extension is loaded before the first remote HTTP read on the database.
-    // `beforeLoad` lets the caller warm up that path (a pre-spatial remote read)
-    // before INSTALL/LOAD, which is the only thing that initialises it.
-    if (beforeLoad) {
-      try {
-        await beforeLoad();
-      } catch {
-        // Warm-up is best-effort; a failure here must not block spatial loading.
-      }
-    }
     await connection.query("INSTALL spatial");
     await connection.query("LOAD spatial");
   })();
@@ -600,8 +606,10 @@ export async function convertDuckDbVectorToGeoParquet(
 
   try {
     await registerVectorFileBuffers(db, file);
-    // Warm up the Parquet read path before LOAD spatial (see `parquetWarmUp`);
-    // the CSV branch reads via `read_csv_auto` and is unaffected.
+    // Warm up the Parquet read path before LOAD spatial (see `parquetWarmUp`).
+    // `parquetWarmUp` already returns undefined for non-Parquet extensions; the
+    // `options.csv` guard is an extra short-circuit for the CSV branch, which
+    // reads via `read_csv_auto` and is unaffected by the Parquet bug.
     await ensureSpatialExtension(
       connection,
       options.csv ? undefined : parquetWarmUp(connection, file.extension, file.name),
