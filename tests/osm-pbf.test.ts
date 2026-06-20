@@ -11,9 +11,12 @@ const fixturePath = fileURLToPath(
   new URL("./fixtures/sample.osm.pbf", import.meta.url),
 );
 
-// Both fixtures are produced by scripts/gen-osm-fixture.mjs.
+// These fixtures are produced by scripts/gen-osm-fixture.mjs.
 const untaggedWayFixturePath = fileURLToPath(
   new URL("./fixtures/untagged-way.osm.pbf", import.meta.url),
+);
+const untaggedRelationFixturePath = fileURLToPath(
+  new URL("./fixtures/untagged-relation.osm.pbf", import.meta.url),
 );
 
 describe("OSM PBF parsing", () => {
@@ -70,6 +73,19 @@ describe("OSM PBF parsing", () => {
     assert.equal(result.counts.ways, 2);
     assert.equal(result.lines.features.length, 1);
     assert.equal(result.lines.features[0].properties?.highway, "path");
+  });
+
+  it("skips untagged relations (only tagged ones become features)", async () => {
+    // The fixture has two relations over the same member ways: one tagged
+    // (a bus route -> MultiLineString) and one untagged. Only the tagged one
+    // must become a feature; the untagged one stays in the index but is not
+    // emitted.
+    const bytes = new Uint8Array(readFileSync(untaggedRelationFixturePath));
+    const result = await parseOsmPbf(bytes);
+
+    assert.equal(result.counts.relations, 2);
+    assert.equal(result.lines.features.length, 1);
+    assert.equal(result.lines.features[0].properties?.name, "Tagged Route");
   });
 
   it("reports progress through the classification phase", async () => {

@@ -194,7 +194,11 @@ export async function parseOsmPbf(
     if (!hasTags(relation.tags)) continue;
     place(osmEntityToGeoJSONFeature(osm, relation) as Feature | null);
   }
-  onProgress?.({ processed, total });
+  // Ensure a final 100% update, but skip it when the last tick already fired one
+  // for processed === total (i.e. total is an exact multiple of the interval).
+  if (total === 0 || total % PROGRESS_INTERVAL !== 0) {
+    onProgress?.({ processed, total });
+  }
 
   return {
     points: { type: "FeatureCollection", features: points },

@@ -828,7 +828,7 @@ export function DesktopShell({
                   setDropMessage(null);
                   setDropError(
                     err instanceof OsmPbfTooLargeError
-                      ? `${name} is too large to parse in the browser. Try a smaller region or pre-filter the file first (for example with osmium-tool or QGIS).`
+                      ? `${name}: ${t("toolbar.error.osmPbfTooLarge")}`
                       : `Could not parse ${name}: ${err instanceof Error ? err.message : String(err)}`,
                   );
                 }
@@ -945,7 +945,7 @@ export function DesktopShell({
             setDropMessage(null);
             setDropError(
               err instanceof OsmPbfTooLargeError
-                ? `${file.name} is too large to parse in the browser. Try a smaller region or pre-filter the file first (for example with osmium-tool or QGIS).`
+                ? `${file.name}: ${t("toolbar.error.osmPbfTooLarge")}`
                 : `Could not parse ${file.name}: ${err instanceof Error ? err.message : String(err)}`,
             );
             continue;
