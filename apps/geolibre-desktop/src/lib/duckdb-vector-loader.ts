@@ -104,9 +104,10 @@ export async function ensureSpatialExtension(
         await beforeLoad();
       } catch (error) {
         // Warm-up is best-effort; a failure here must not block spatial
-        // loading. Logged so a genuinely corrupt/mislabelled file is still
-        // diagnosable in DevTools instead of only surfacing later.
-        console.debug("[GeoLibre] spatial warm-up failed (ignored)", error);
+        // loading. Warn (not debug, which DevTools hides by default) so a
+        // genuinely corrupt/mislabelled file surfaces its real cause here
+        // instead of only as a later "stoi: no conversion" on DESCRIBE.
+        console.warn("[GeoLibre] spatial warm-up failed (ignored)", error);
       }
     }
 
@@ -607,9 +608,9 @@ export async function convertDuckDbVectorToGeoParquet(
   try {
     await registerVectorFileBuffers(db, file);
     // Warm up the Parquet read path before LOAD spatial (see `parquetWarmUp`).
-    // `parquetWarmUp` already returns undefined for non-Parquet extensions; the
-    // `options.csv` guard is an extra short-circuit for the CSV branch, which
-    // reads via `read_csv_auto` and is unaffected by the Parquet bug.
+    // CSV input uses `read_csv_auto` and non-Parquet vector files use `ST_Read`,
+    // neither affected by the bug; `parquetWarmUp` returns undefined for both,
+    // and the `options.csv` guard short-circuits the CSV branch before calling it.
     await ensureSpatialExtension(
       connection,
       options.csv ? undefined : parquetWarmUp(connection, file.extension, file.name),
