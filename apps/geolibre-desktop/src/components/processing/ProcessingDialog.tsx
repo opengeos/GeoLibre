@@ -1105,7 +1105,13 @@ export function ProcessingDialog({
                 <SidecarHelpBanner
                   isDesktop={isTauri()}
                   error={error}
-                  onRunLocally={() => setRunLocal(true)}
+                  onRunLocally={() => {
+                    // Clear the stale sidecar error in the same batch as the
+                    // mode switch, so it cannot flash as a plain error line on
+                    // the render before loadWhitebox resets it.
+                    setError(null);
+                    setRunLocal(true);
+                  }}
                 />
               ) : (
                 error && (

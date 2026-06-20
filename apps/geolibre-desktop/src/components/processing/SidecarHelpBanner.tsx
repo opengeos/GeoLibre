@@ -5,9 +5,10 @@ import { useTranslation } from "react-i18next";
 
 // The local loopback address the Python sidecar listens on. Kept out of the
 // translatable strings (injected via interpolation) so translators can't garble
-// it and a future change to the address only touches one place.
+// it and a future change to the address only touches one place. The port is
+// derived from the URL so the two can never drift apart.
 const SIDECAR_URL = "http://127.0.0.1:8765";
-const SIDECAR_PORT = "8765";
+const SIDECAR_PORT = new URL(SIDECAR_URL).port;
 
 interface SidecarHelpBannerProps {
   /**
