@@ -957,6 +957,7 @@ function drawColorbar(
   const tickLen = unit * 0.7;
   const inset = unit * 2.4;
   const lineW = Math.max(1, unit * 0.12);
+  const titleGap = unit * 0.8;
   const title = (cb.label ?? "").trim();
   const hasTitle = title.length > 0;
 
@@ -975,18 +976,20 @@ function drawColorbar(
   }
   ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
   const titleW = hasTitle ? ctx.measureText(title).width : 0;
-  const titleBlock = hasTitle ? titleSize + unit * 0.8 : 0;
+  // Space reserved for the label: a horizontal line above the bar, or a rotated
+  // line beside it (vertical orientation).
+  const titleStrip = hasTitle ? titleSize + titleGap : 0;
 
   // Panel size. Vertical bars reserve half a label above/below so the end ticks
   // (drawn middle-baseline) never clip the panel.
   let panelW: number;
   let panelH: number;
   if (vertical) {
-    panelW = pad * 2 + Math.max(barThick + tickLen + tickGap + maxLabelW, titleW);
-    panelH = pad * 2 + titleBlock + barLen + labelSize;
+    panelW = pad * 2 + titleStrip + barThick + tickLen + tickGap + maxLabelW;
+    panelH = pad * 2 + barLen + labelSize;
   } else {
     panelW = pad * 2 + Math.max(barLen, titleW);
-    panelH = pad * 2 + titleBlock + barThick + tickLen + tickGap + labelSize;
+    panelH = pad * 2 + titleStrip + barThick + tickLen + tickGap + labelSize;
   }
 
   const px = cb.position.endsWith("left")
@@ -1003,26 +1006,28 @@ function drawColorbar(
   ctx.fill();
   ctx.stroke();
 
-  let cursorY = py + pad;
-  if (hasTitle) {
-    ctx.fillStyle = INK;
-    ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    ctx.fillText(title, px + pad, cursorY, panelW - pad * 2);
-    cursorY += titleBlock;
-  }
-
   const addStops = (grad: CanvasGradient) => {
     const n = cb.colors.length - 1;
     cb.colors.forEach((c, i) => grad.addColorStop(n > 0 ? i / n : 0, c));
   };
 
-  ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
   if (vertical) {
-    const barX = px + pad;
-    const barY = cursorY + labelSize / 2;
-    // Bottom = min, top = max.
+    const barX = px + pad + titleStrip;
+    const barY = py + pad + labelSize / 2;
+    // Label: rotated to read bottom-to-top, centred along the bar, in the strip
+    // to the left of it.
+    if (hasTitle) {
+      ctx.save();
+      ctx.translate(px + pad + titleSize / 2, barY + barLen / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillStyle = INK;
+      ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(title, 0, 0, barLen);
+      ctx.restore();
+    }
+    // Bar (bottom = min, top = max).
     const grad = ctx.createLinearGradient(0, barY + barLen, 0, barY);
     addStops(grad);
     ctx.fillStyle = grad;
@@ -1030,6 +1035,7 @@ function drawColorbar(
     ctx.strokeStyle = INK;
     ctx.lineWidth = lineW;
     ctx.strokeRect(barX, barY, barThick, barLen);
+    ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     for (const tk of ticks) {
@@ -1043,7 +1049,18 @@ function drawColorbar(
       ctx.fillText(tk.text, barX + barThick + tickLen + tickGap, ty);
     }
   } else {
-    const barX = px + pad;
+    const centerX = px + panelW / 2;
+    let cursorY = py + pad;
+    // Label: horizontal, centred above the bar.
+    if (hasTitle) {
+      ctx.fillStyle = INK;
+      ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(title, centerX, cursorY, panelW - pad * 2);
+      cursorY += titleStrip;
+    }
+    const barX = centerX - barLen / 2;
     const barY = cursorY;
     // Left = min, right = max.
     const grad = ctx.createLinearGradient(barX, 0, barX + barLen, 0);
@@ -1053,6 +1070,7 @@ function drawColorbar(
     ctx.strokeStyle = INK;
     ctx.lineWidth = lineW;
     ctx.strokeRect(barX, barY, barLen, barThick);
+    ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
     ctx.textBaseline = "top";
     for (const tk of ticks) {
       const tx = barX + tk.t * barLen;
