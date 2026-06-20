@@ -1,11 +1,13 @@
 import { DesktopShell } from "./components/layout/DesktopShell";
 import { OnboardingDialog } from "./components/layout/OnboardingDialog";
+import { UpdateNotificationModal } from "./components/layout/UpdateNotificationModal";
 import { useDesktopSettingsPersistence } from "./hooks/useDesktopSettings";
 import { useLayoutOptions } from "./hooks/useLayoutOptions";
 import { useProjectUrlLoader } from "./hooks/useProjectUrlLoader";
 import { useBeforeUnloadGuard } from "./hooks/useBeforeUnloadGuard";
 import { useRecentProjectsPersistence } from "./hooks/useRecentProjectsPersistence";
 import { useRuntimeEnvironmentVariables } from "./hooks/useRuntimeEnvironmentVariables";
+import { useStartupUpdateCheck } from "./hooks/useStartupUpdateCheck";
 import { useThemeMode } from "./hooks/useThemeMode";
 import { useUiProfileBootstrap } from "./hooks/useUiProfileBootstrap";
 import { useUndoRedoShortcuts } from "./hooks/useUndoRedoShortcuts";
@@ -15,6 +17,11 @@ export default function App() {
   const { themeMode, toggleThemeMode } = useThemeMode();
   const projectUrlLoadState = useProjectUrlLoader();
   const { showOnboarding, dismissOnboarding } = useUiProfileBootstrap();
+  const {
+    pending: pendingUpdate,
+    remindLater,
+    skipVersion,
+  } = useStartupUpdateCheck();
 
   useDesktopSettingsPersistence();
   useRecentProjectsPersistence();
@@ -30,6 +37,11 @@ export default function App() {
         onToggleThemeMode={toggleThemeMode}
       />
       <OnboardingDialog open={showOnboarding} onClose={dismissOnboarding} />
+      <UpdateNotificationModal
+        pending={pendingUpdate}
+        onRemindLater={remindLater}
+        onSkipVersion={skipVersion}
+      />
     </>
   );
 }

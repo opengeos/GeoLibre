@@ -3,6 +3,14 @@ import { useEffect } from "react";
 import { create } from "zustand";
 import { normalizeStringList } from "../lib/string-lists";
 import { DESKTOP_SETTINGS_STORAGE_KEY } from "../lib/storage-keys";
+import type { UpdateNotificationLevel } from "../lib/updates";
+
+/** Notification-granularity options, in order. Single source of truth. */
+export const UPDATE_NOTIFICATION_LEVELS: readonly UpdateNotificationLevel[] = [
+  "all",
+  "minor",
+  "major",
+];
 
 export interface DesktopSettings {
   additionalPluginDirectories: string[];
@@ -31,6 +39,18 @@ export interface DesktopSettings {
    * and an admin lock. See `src/lib/ui-profile.ts` and `docs/ui-profiles.md`.
    */
   uiProfile: UiProfileSettings;
+  /**
+   * Automated software-update preferences. The startup check only runs in the
+   * desktop (Tauri) build; on the web these settings are inert.
+   */
+  updates: UpdateSettings;
+}
+
+export interface UpdateSettings {
+  /** Whether to check for a newer version each time the desktop app starts. */
+  checkOnStartup: boolean;
+  /** Which kinds of releases raise a startup notification. */
+  notificationLevel: UpdateNotificationLevel;
 }
 
 export interface DesktopLayoutSettings {
@@ -98,6 +118,11 @@ export const DEFAULT_UI_PROFILE_SETTINGS: UiProfileSettings = {
   hiddenMenuItems: [],
 };
 
+export const DEFAULT_UPDATE_SETTINGS: UpdateSettings = {
+  checkOnStartup: true,
+  notificationLevel: "all",
+};
+
 const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   additionalPluginDirectories: [],
   language: "",
@@ -105,6 +130,7 @@ const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   pluginManifestUrls: [],
   shareToken: "",
   uiProfile: DEFAULT_UI_PROFILE_SETTINGS,
+  updates: DEFAULT_UPDATE_SETTINGS,
 };
 
 /** The experience-level presets, in order. Single source of truth. */
@@ -135,6 +161,30 @@ function normalizeDesktopSettings(settings: unknown): DesktopSettings {
     shareToken:
       typeof candidate.shareToken === "string" ? candidate.shareToken.trim() : "",
     uiProfile: normalizeUiProfileSettings(candidate.uiProfile),
+    updates: normalizeUpdateSettings(candidate.updates),
+  };
+}
+
+function normalizeUpdateSettings(updates: unknown): UpdateSettings {
+  if (!updates || typeof updates !== "object") {
+    return DEFAULT_UPDATE_SETTINGS;
+  }
+
+  // Require a strict boolean and a known level so tampered localStorage values
+  // cannot smuggle non-boolean / unknown values into the update settings.
+  const candidate = updates as Partial<UpdateSettings>;
+  return {
+    checkOnStartup:
+      typeof candidate.checkOnStartup === "boolean"
+        ? candidate.checkOnStartup
+        : DEFAULT_UPDATE_SETTINGS.checkOnStartup,
+    notificationLevel:
+      typeof candidate.notificationLevel === "string" &&
+      UPDATE_NOTIFICATION_LEVELS.includes(
+        candidate.notificationLevel as UpdateNotificationLevel,
+      )
+        ? (candidate.notificationLevel as UpdateNotificationLevel)
+        : DEFAULT_UPDATE_SETTINGS.notificationLevel,
   };
 }
 

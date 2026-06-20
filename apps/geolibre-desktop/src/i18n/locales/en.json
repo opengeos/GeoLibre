@@ -1,4 +1,55 @@
 {
+  "about": {
+    "trigger": "About",
+    "title": "About GeoLibre",
+    "description": "GeoLibre is a lightweight cloud-native desktop GIS.",
+    "version": "Version",
+    "projectFormat": "Project format",
+    "checkForUpdates": "Check for updates",
+    "checking": "Checking for updates",
+    "upToDate": "You are up to date ({{version}}).",
+    "upToDateNoVersion": "You are up to date.",
+    "homePage": "Home page",
+    "githubRepository": "GitHub repository"
+  },
+  "updates": {
+    "changelogTitle": "What's new",
+    "noChangelog": "Release notes are not available. See the downloads page for details.",
+    "stepsTitle": "How to update",
+    "download": "Download update",
+    "steps": {
+      "download": "Download the installer for your platform from the downloads page.",
+      "install": "Run the installer. Your local projects, settings, and API keys are kept.",
+      "reopen": "Reopen GeoLibre to finish updating."
+    },
+    "severity": {
+      "major": "Major release",
+      "minor": "Feature update",
+      "patch": "Patch update"
+    },
+    "available": {
+      "title": "{{version}} is available",
+      "fallback": "A new version",
+      "summary": "You are running {{current}}."
+    },
+    "error": {
+      "message": "Could not check for updates.",
+      "rateLimit": "GitHub rate limit exceeded. Please try again later.",
+      "http": "GitHub returned {{status}}.",
+      "noTag": "The latest release does not include a version tag.",
+      "network": "Could not reach GitHub. Check your connection and try again.",
+      "viewDownloads": "View downloads"
+    },
+    "startup": {
+      "title": "Update available",
+      "currentVersion": "Your current version",
+      "latestVersion": "Latest available version",
+      "download": "Download update package",
+      "remindLater": "Remind me later",
+      "skipVersion": "Skip this version",
+      "settingsHint": "You can change update checks in Settings → Updates."
+    }
+  },
   "bookmark": {
     "captureStateLabel": "Include visible layers"
   },
@@ -665,7 +716,8 @@
       "layout": "Layout",
       "interface": "Interface",
       "geocoding": "Geocoding",
-      "environment": "Environment"
+      "environment": "Environment",
+      "updates": "Updates"
     },
     "menu": {
       "mapPreferences": "Map Preferences",
@@ -673,8 +725,22 @@
       "interfaceSettings": "Interface Settings",
       "geocoding": "Geocoding",
       "environmentVariables": "Environment Variables",
+      "updates": "Update Settings",
       "managePlugins": "Manage Plugins",
       "urlOverrideNote": "URL layout parameters override saved settings."
+    },
+    "updates": {
+      "title": "Software Updates",
+      "description": "Control how GeoLibre checks for new versions when the desktop app starts.",
+      "checkOnStartup": "Check for updates on startup",
+      "checkOnStartupHint": "When enabled, GeoLibre checks for a newer version each time the app starts. Turn this off for a fully offline workflow.",
+      "notificationLevel": "Notify me about",
+      "notificationLevelHint": "Choose which kinds of releases trigger a startup notification.",
+      "level": {
+        "all": "All releases (major, minor, and patches)",
+        "minor": "Major and minor releases only",
+        "major": "Major releases only"
+      }
     },
     "map": {
       "constraintsTitle": "Map constraints",

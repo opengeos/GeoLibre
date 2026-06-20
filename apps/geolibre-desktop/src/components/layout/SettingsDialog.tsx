@@ -36,6 +36,7 @@ import type { MapController } from "@geolibre/map";
 import {
   Braces,
   Crosshair,
+  DownloadCloud,
   Eye,
   EyeOff,
   FolderCog,
@@ -59,14 +60,19 @@ import { Trans, useTranslation } from "react-i18next";
 import {
   DEFAULT_DESKTOP_LAYOUT_SETTINGS,
   DEFAULT_UI_PROFILE_SETTINGS,
+  DEFAULT_UPDATE_SETTINGS,
   EXPERIENCE_LEVELS,
+  UPDATE_NOTIFICATION_LEVELS,
   useDesktopSettingsStore,
   type DesktopSettings,
   type DesktopLayoutSettings,
   type ExperienceLevel,
   type UiProfileSettings,
+  type UpdateSettings,
 } from "../../hooks/useDesktopSettings";
 import { useLanguage } from "../../hooks/useLanguage";
+import { isTauri } from "../../lib/is-tauri";
+import type { UpdateNotificationLevel } from "../../lib/updates";
 import {
   DATA_SOURCE_CATALOG,
   DATA_SOURCE_SECTION_LABEL_KEYS,
@@ -86,7 +92,8 @@ export type SettingsSection =
   | "layout"
   | "interface"
   | "geocoding"
-  | "environment";
+  | "environment"
+  | "updates";
 
 /** Window event letting any panel open Settings at a given section (no prop-drilling). */
 export const OPEN_SETTINGS_EVENT = "geolibre:open-settings";
@@ -134,6 +141,11 @@ const SECTION_ITEMS: Array<{
     labelKey: "settings.section.environment",
     icon: Braces,
   },
+  {
+    id: "updates",
+    labelKey: "settings.section.updates",
+    icon: DownloadCloud,
+  },
 ];
 
 // The menu-item id that gates each Settings section, mirroring the dropdown.
@@ -164,6 +176,7 @@ interface DraftDesktopSettings {
   layout: DesktopLayoutSettings;
   shareToken: string;
   uiProfile: UiProfileSettings;
+  updates: UpdateSettings;
 }
 
 function createDraftId(): string {
@@ -197,6 +210,7 @@ function cloneDesktopSettings(settings: DesktopSettings): DraftDesktopSettings {
       hiddenMenus: [...settings.uiProfile.hiddenMenus],
       hiddenMenuItems: [...settings.uiProfile.hiddenMenuItems],
     },
+    updates: { ...settings.updates },
   };
 }
 
@@ -323,6 +337,9 @@ export function SettingsDialog({
   // (its initial value is "map"), so render the first visible section instead to
   // never expose gated content to a restricted profile.
   const isSectionVisible = (id: SettingsSection) => {
+    // Automated update checks run in the desktop build only, so the section is
+    // hidden on the web where its controls would be inert.
+    if (id === "updates" && !isTauri()) return false;
     const gate = SECTION_GATE[id];
     return gate ? showSettingsItem(gate) : true;
   };
@@ -533,6 +550,18 @@ export function SettingsDialog({
     updateDraftLayoutSettings(DEFAULT_DESKTOP_LAYOUT_SETTINGS);
   };
 
+  const updateDraftUpdateSettings = (patch: Partial<UpdateSettings>) => {
+    setDraftDesktopSettings((current) => ({
+      ...current,
+      updates: { ...current.updates, ...patch },
+    }));
+    setError(null);
+  };
+
+  const resetUpdateSettings = () => {
+    updateDraftUpdateSettings(DEFAULT_UPDATE_SETTINGS);
+  };
+
   // Live updates from the Settings dropdown's Interface submenu (not the draft,
   // which only the dialog commits on Save). Reads the latest state so rapid
   // toggles do not clobber each other.
@@ -704,6 +733,7 @@ export function SettingsDialog({
       layout: draftDesktopSettings.layout,
       shareToken: draftDesktopSettings.shareToken,
       uiProfile: committedUiProfile,
+      updates: draftDesktopSettings.updates,
     });
     setOpen(false);
   };
@@ -914,6 +944,17 @@ export function SettingsDialog({
             >
               <Braces className="mr-2 h-3.5 w-3.5" />
               {t("settings.menu.environmentVariables")}
+            </DropdownMenuItem>
+          )}
+          {isTauri() && (
+            <DropdownMenuItem
+              onSelect={() => {
+                setSection("updates");
+                setOpen(true);
+              }}
+            >
+              <DownloadCloud className="mr-2 h-3.5 w-3.5" />
+              {t("settings.menu.updates")}
             </DropdownMenuItem>
           )}
           {showSettingsItem("settings.managePlugins") && (
@@ -1710,6 +1751,76 @@ export function SettingsDialog({
                       )}
                     </div>
                   )}
+                </div>
+              ) : null}
+              {effectiveSection === "updates" ? (
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold">
+                        {t("settings.updates.title")}
+                      </h3>
+                      <p className="text-xs text-muted-foreground">
+                        {t("settings.updates.description")}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={resetUpdateSettings}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      {t("common.reset")}
+                    </Button>
+                  </div>
+                  <label className="flex items-start gap-3 rounded-md border p-3 text-sm">
+                    <input
+                      className="mt-0.5 h-4 w-4"
+                      type="checkbox"
+                      checked={draftDesktopSettings.updates.checkOnStartup}
+                      onChange={(event) =>
+                        updateDraftUpdateSettings({
+                          checkOnStartup: event.target.checked,
+                        })
+                      }
+                    />
+                    <span className="space-y-1">
+                      <span className="block">
+                        {t("settings.updates.checkOnStartup")}
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        {t("settings.updates.checkOnStartupHint")}
+                      </span>
+                    </span>
+                  </label>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="settings-update-level">
+                      {t("settings.updates.notificationLevel")}
+                    </Label>
+                    <Select
+                      id="settings-update-level"
+                      value={draftDesktopSettings.updates.notificationLevel}
+                      disabled={
+                        !draftDesktopSettings.updates.checkOnStartup
+                      }
+                      onChange={(event) =>
+                        updateDraftUpdateSettings({
+                          notificationLevel: event.target
+                            .value as UpdateNotificationLevel,
+                        })
+                      }
+                    >
+                      {UPDATE_NOTIFICATION_LEVELS.map((level) => (
+                        <option key={level} value={level}>
+                          {t(`settings.updates.level.${level}`)}
+                        </option>
+                      ))}
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.updates.notificationLevelHint")}
+                    </p>
+                  </div>
                 </div>
               ) : null}
             </div>

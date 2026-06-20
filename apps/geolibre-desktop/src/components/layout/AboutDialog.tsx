@@ -9,31 +9,33 @@ import {
   DialogTrigger,
 } from "@geolibre/ui";
 import { PROJECT_VERSION } from "@geolibre/core";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { CheckCircle2, ExternalLink, Info, Map, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { openExternalLink } from "../../lib/open-external";
+import {
+  APP_VERSION,
+  compareVersions,
+  fetchLatestRelease,
+  formatVersion,
+  UPDATE_URL,
+  UpdateCheckError,
+} from "../../lib/updates";
+import { ReleaseNotes } from "./ReleaseNotes";
+import { UpdateInstructions } from "./UpdateInstructions";
 
 const LINKS = [
   {
-    label: "Home page",
+    labelKey: "about.homePage",
     href: "https://geolibre.app",
   },
   {
-    label: "GitHub repository",
+    labelKey: "about.githubRepository",
     href: "https://github.com/opengeos/GeoLibre",
   },
-];
-
-const UPDATE_URL = "https://geolibre.app/downloads/";
-const LATEST_RELEASE_URL =
-  "https://api.github.com/repos/opengeos/GeoLibre/releases/latest";
-const APP_VERSION = __GEOLIBRE_VERSION__;
+] as const;
 
 type UpdateStatus = "idle" | "checking" | "current" | "available" | "error";
-
-interface GitHubRelease {
-  tag_name?: unknown;
-}
 
 interface AboutDialogProps {
   checkForUpdatesRequest?: number;
@@ -46,42 +48,6 @@ interface AboutDialogProps {
   showLabels?: boolean;
 }
 
-function isTauri(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
-
-async function openExternalLink(url: string) {
-  if (isTauri()) {
-    await openUrl(url);
-    return;
-  }
-  window.open(url, "_blank", "noopener,noreferrer");
-}
-
-function parseVersion(version: string): [number, number, number] | null {
-  const match = version.trim().match(/^v?(\d+)\.(\d+)\.(\d+)$/);
-  if (!match) return null;
-
-  return [Number(match[1]), Number(match[2]), Number(match[3])];
-}
-
-function compareVersions(currentVersion: string, latestVersion: string): number {
-  const current = parseVersion(currentVersion);
-  const latest = parseVersion(latestVersion);
-  if (!current || !latest) return 0;
-
-  for (let index = 0; index < current.length; index += 1) {
-    if (current[index] !== latest[index]) return current[index] - latest[index];
-  }
-
-  return 0;
-}
-
-function formatVersion(version: string): string {
-  const trimmedVersion = version.trim();
-  return trimmedVersion.startsWith("v") ? trimmedVersion : `v${trimmedVersion}`;
-}
-
 export function AboutDialog({
   checkForUpdatesRequest = 0,
   open,
@@ -92,9 +58,12 @@ export function AboutDialog({
   iconClassName,
   showLabels = true,
 }: AboutDialogProps) {
+  const { t } = useTranslation();
   const [internalOpen, setInternalOpen] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>("idle");
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
+  const [latestNotes, setLatestNotes] = useState<string>("");
+  const [latestUrl, setLatestUrl] = useState<string>(UPDATE_URL);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const handledCheckForUpdatesRequestRef = useRef(0);
@@ -106,8 +75,29 @@ export function AboutDialog({
   const resetUpdateState = useCallback(() => {
     setUpdateStatus("idle");
     setLatestVersion(null);
+    setLatestNotes("");
+    setLatestUrl(UPDATE_URL);
     setUpdateError(null);
   }, []);
+
+  const describeUpdateError = useCallback(
+    (error: unknown): string => {
+      if (error instanceof UpdateCheckError) {
+        switch (error.code) {
+          case "rateLimit":
+            return t("updates.error.rateLimit");
+          case "http":
+            return t("updates.error.http", { status: error.status });
+          case "noTag":
+            return t("updates.error.noTag");
+          default:
+            return t("updates.error.network");
+        }
+      }
+      return t("updates.error.message");
+    },
+    [t],
+  );
 
   const handleCheckForUpdates = async () => {
     abortRef.current?.abort();
@@ -115,39 +105,17 @@ export function AboutDialog({
     abortRef.current = controller;
     setUpdateStatus("checking");
     setLatestVersion(null);
+    setLatestNotes("");
+    setLatestUrl(UPDATE_URL);
     setUpdateError(null);
 
     try {
-      const response = await fetch(LATEST_RELEASE_URL, {
-        headers: {
-          Accept: "application/vnd.github+json",
-          "X-GitHub-Api-Version": "2022-11-28",
-        },
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        if (
-          response.status === 403 &&
-          response.headers.get("X-RateLimit-Remaining") === "0"
-        ) {
-          throw new Error(
-            "GitHub rate limit exceeded. Please try again later.",
-          );
-        }
-        throw new Error(`GitHub returned ${response.status}.`);
-      }
-
-      const release = (await response.json()) as GitHubRelease;
-      if (typeof release.tag_name !== "string" || !release.tag_name.trim()) {
-        throw new Error("The latest release does not include a version tag.");
-      }
-
-      const nextLatestVersion = formatVersion(release.tag_name);
-
-      setLatestVersion(nextLatestVersion);
+      const release = await fetchLatestRelease(controller.signal);
+      setLatestVersion(release.version);
+      setLatestNotes(release.notes);
+      setLatestUrl(release.url);
       setUpdateStatus(
-        compareVersions(APP_VERSION, nextLatestVersion) < 0
+        compareVersions(APP_VERSION, release.version) < 0
           ? "available"
           : "current",
       );
@@ -155,11 +123,7 @@ export function AboutDialog({
       if (error instanceof Error && error.name === "AbortError") return;
       console.error("Failed to check for updates", error);
       setUpdateStatus("error");
-      setUpdateError(
-        error instanceof Error
-          ? error.message
-          : "Could not check for updates.",
-      );
+      setUpdateError(describeUpdateError(error));
     }
   };
 
@@ -201,11 +165,11 @@ export function AboutDialog({
             className={buttonClassName}
             variant="ghost"
             size={buttonSize}
-            aria-label="About"
+            aria-label={t("about.trigger")}
           >
             <Info className={iconClassName ?? "h-3.5 w-3.5 sm:mr-1"} />
             {showLabels ? (
-              <span className="hidden sm:inline">About</span>
+              <span className="hidden sm:inline">{t("about.trigger")}</span>
             ) : null}
           </Button>
         </DialogTrigger>
@@ -214,19 +178,19 @@ export function AboutDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Map className="h-5 w-5 text-primary" />
-            About GeoLibre
+            {t("about.title")}
           </DialogTitle>
-          <DialogDescription>
-            GeoLibre is a lightweight cloud-native desktop GIS.
-          </DialogDescription>
+          <DialogDescription>{t("about.description")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-3 text-sm">
           <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
-            <span className="text-muted-foreground">Version</span>
+            <span className="text-muted-foreground">{t("about.version")}</span>
             <span className="font-mono text-foreground">v{APP_VERSION}</span>
           </div>
           <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
-            <span className="text-muted-foreground">Project format</span>
+            <span className="text-muted-foreground">
+              {t("about.projectFormat")}
+            </span>
             <span className="font-mono text-foreground">{PROJECT_VERSION}</span>
           </div>
           <Button
@@ -243,8 +207,8 @@ export function AboutDialog({
                 }`}
               />
               {updateStatus === "checking"
-                ? "Checking for updates"
-                : "Check for updates"}
+                ? t("about.checking")
+                : t("about.checkForUpdates")}
             </span>
           </Button>
           {updateStatus !== "idle" && updateStatus !== "checking" ? (
@@ -253,24 +217,43 @@ export function AboutDialog({
                 <div className="flex items-center gap-2 text-foreground">
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                   <span>
-                    You are up to date
-                    {latestVersion ? ` (${latestVersion}).` : "."}
+                    {latestVersion
+                      ? t("about.upToDate", { version: latestVersion })
+                      : t("about.upToDateNoVersion")}
                   </span>
                 </div>
               ) : null}
               {updateStatus === "available" ? (
-                <div className="space-y-2">
-                  <div className="text-foreground">
-                    {latestVersion ?? "A new version"} is available. You are
-                    running {`v${APP_VERSION}`}.
+                <div className="space-y-3">
+                  <div className="font-medium text-foreground">
+                    {t("updates.available.title", {
+                      version: latestVersion ?? t("updates.available.fallback"),
+                    })}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {t("updates.available.summary", {
+                      current: `v${APP_VERSION}`,
+                    })}
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {t("updates.changelogTitle")}
+                    </div>
+                    <ReleaseNotes notes={latestNotes} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {t("updates.stepsTitle")}
+                    </div>
+                    <UpdateInstructions />
                   </div>
                   <Button
                     className="w-full justify-between"
-                    onClick={() => void openExternalLink(UPDATE_URL)}
+                    onClick={() => void openExternalLink(latestUrl)}
                     type="button"
                     variant="default"
                   >
-                    <span>Download update</span>
+                    <span>{t("updates.download")}</span>
                     <ExternalLink className="h-3.5 w-3.5" />
                   </Button>
                 </div>
@@ -278,7 +261,7 @@ export function AboutDialog({
               {updateStatus === "error" ? (
                 <div className="space-y-2">
                   <div className="text-foreground">
-                    Could not check for updates.
+                    {t("updates.error.message")}
                   </div>
                   {updateError ? (
                     <div className="text-xs text-muted-foreground">
@@ -291,7 +274,7 @@ export function AboutDialog({
                     type="button"
                     variant="outline"
                   >
-                    <span>View downloads</span>
+                    <span>{t("updates.error.viewDownloads")}</span>
                     <ExternalLink className="h-3.5 w-3.5" />
                   </Button>
                 </div>
@@ -310,7 +293,7 @@ export function AboutDialog({
               rel="noreferrer"
               target="_blank"
             >
-              <span>{link.label}</span>
+              <span>{t(link.labelKey)}</span>
               <span className="inline-flex items-center gap-2 text-muted-foreground">
                 {link.href.replace(/^https?:\/\//, "")}
                 <ExternalLink className="h-3.5 w-3.5" />
