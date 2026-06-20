@@ -12,6 +12,7 @@ import { PROJECT_VERSION } from "@geolibre/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { CheckCircle2, ExternalLink, Info, Map, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 const LINKS = [
   {
@@ -92,6 +93,7 @@ export function AboutDialog({
   iconClassName,
   showLabels = true,
 }: AboutDialogProps) {
+  const { t } = useTranslation();
   const [internalOpen, setInternalOpen] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>("idle");
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
@@ -226,7 +228,9 @@ export function AboutDialog({
             <span className="font-mono text-foreground">v{APP_VERSION}</span>
           </div>
           <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
-            <span className="text-muted-foreground">Project format</span>
+            <span className="text-muted-foreground">
+              {t("about.projectFormat")}
+            </span>
             <span className="font-mono text-foreground">{PROJECT_VERSION}</span>
           </div>
           <Button
