@@ -25,7 +25,9 @@ import {
   DEFAULT_DASHBOARD_COLUMNS,
   DEFAULT_LAYER_STYLE,
   DEFAULT_LEGEND_CONFIG,
+  DEFAULT_MAP_GRID_LAYOUT,
   DEFAULT_PROJECT_PREFERENCES,
+  MAX_MAP_GRID_DIM,
   DEFAULT_STORY_MAP,
   MAX_DASHBOARD_COLUMNS,
   MIN_DASHBOARD_COLUMNS,
@@ -38,8 +40,10 @@ import {
   type LayerGroup,
   type LayerStyle,
   type LegendConfig,
+  type MapGridLayout,
   type MapViewState,
   type ProcessingModel,
+  type SecondaryMapView,
   type ProjectPluginState,
   type ProjectPreferences,
   type RecentProjectEntry,
@@ -141,6 +145,17 @@ export interface AppState {
   widgets: DashboardWidget[];
   /** Number of columns in the Dashboard widget grid. */
   dashboardColumns: number;
+  /**
+   * Multi-map grid layout (issue: split/grid view). A 1x1 grid is the normal
+   * single-map workspace. `rows * cols` panes are shown; pane 0 is the primary
+   * map driven by `mapView` / `basemap*`, panes 1.. are `secondaryMapViews`.
+   */
+  mapLayout: MapGridLayout;
+  /**
+   * Secondary map panes (everything past the primary pane). The store keeps
+   * exactly `rows * cols - 1` entries in sync with `mapLayout`.
+   */
+  secondaryMapViews: SecondaryMapView[];
   selectedLayerId: string | null;
   selectedFeatureId: string | null;
   identifyLayerId: string | null;
@@ -181,6 +196,32 @@ export interface AppState {
   ) => void;
   resetCollaboration: () => void;
   setMapView: (view: Partial<MapViewState>, markDirty?: boolean) => void;
+  /**
+   * Resize the map grid. Clamps `rows`/`cols` into range and grows/shrinks
+   * `secondaryMapViews` so it always holds `rows * cols - 1` panes; new panes
+   * clone the primary map's current camera and basemap.
+   */
+  setMapGrid: (rows: number, cols: number) => void;
+  /** Toggle synchronized camera across all panes. */
+  setSyncView: (syncView: boolean) => void;
+  /** Patch one secondary pane's camera by id (no-op if the id is unknown). */
+  setSecondaryMapView: (
+    id: string,
+    view: Partial<MapViewState>,
+    markDirty?: boolean
+  ) => void;
+  /** Patch one secondary pane's basemap by id (no-op if the id is unknown). */
+  setSecondaryBasemap: (
+    id: string,
+    patch: Partial<
+      Pick<
+        SecondaryMapView,
+        "basemapStyleUrl" | "basemapVisible" | "basemapOpacity"
+      >
+    >
+  ) => void;
+  /** Remove one secondary pane and collapse the grid back toward 1x1. */
+  removeSecondaryMapView: (id: string) => void;
   setBasemapStyleUrl: (url: string) => void;
   setBasemapVisible: (visible: boolean) => void;
   setBasemapOpacity: (opacity: number) => void;
@@ -374,6 +415,36 @@ function layerGroupsEqualForHistory(
   return true;
 }
 
+/** Clamp a requested grid row/column count into the supported [1, MAX] range. */
+function clampGridDim(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.max(1, Math.min(MAX_MAP_GRID_DIM, Math.floor(value)));
+}
+
+/**
+ * Pick a gap-free grid that holds exactly `total` panes, preferring a column
+ * count close to (and, on ties, no smaller than) `preferredCols` so removing a
+ * pane keeps the layout's orientation without leaving an empty cell. Used when
+ * collapsing the grid after a pane is removed.
+ */
+function fitGrid(
+  total: number,
+  preferredCols: number,
+): { rows: number; cols: number } {
+  if (total <= 1) return { rows: 1, cols: 1 };
+  let best = { rows: total, cols: 1, score: Number.POSITIVE_INFINITY };
+  for (let cols = 1; cols <= total; cols++) {
+    if (total % cols !== 0) continue;
+    const score = Math.abs(cols - preferredCols);
+    // `<=` lets a larger, equally-close column count win ties, favoring wider
+    // (side-by-side) layouts over tall ones.
+    if (score <= best.score) {
+      best = { rows: total / cols, cols, score };
+    }
+  }
+  return { rows: best.rows, cols: best.cols };
+}
+
 /** Cancels the active history coalesce window (assigned by zundo's handleSet). */
 let cancelHistoryCoalesce: () => void = () => {};
 
@@ -413,6 +484,8 @@ export const useAppStore = create<AppState>()(
       models: [],
       widgets: [],
       dashboardColumns: DEFAULT_DASHBOARD_COLUMNS,
+      mapLayout: { ...DEFAULT_MAP_GRID_LAYOUT },
+      secondaryMapViews: [],
       selectedLayerId: null,
       selectedFeatureId: null,
       identifyLayerId: null,
@@ -465,6 +538,87 @@ export const useAppStore = create<AppState>()(
           mapView: { ...s.mapView, ...view },
           isDirty: markDirty || s.isDirty,
         })),
+      setMapGrid: (rows, cols) =>
+        set((s) => {
+          const clampedRows = clampGridDim(rows);
+          const clampedCols = clampGridDim(cols);
+          const desiredSecondary = clampedRows * clampedCols - 1;
+          let secondaryMapViews = s.secondaryMapViews;
+          if (desiredSecondary < secondaryMapViews.length) {
+            secondaryMapViews = secondaryMapViews.slice(0, desiredSecondary);
+          } else if (desiredSecondary > secondaryMapViews.length) {
+            const additions: SecondaryMapView[] = [];
+            for (let i = secondaryMapViews.length; i < desiredSecondary; i++) {
+              // New panes start as a clone of the primary map so the comparison
+              // begins from the same camera and basemap the user is looking at.
+              additions.push({
+                id: uuidv4(),
+                view: { ...s.mapView },
+                basemapStyleUrl: s.basemapStyleUrl,
+                basemapVisible: s.basemapVisible,
+                basemapOpacity: s.basemapOpacity,
+              });
+            }
+            secondaryMapViews = [...secondaryMapViews, ...additions];
+          }
+          return {
+            mapLayout: {
+              ...s.mapLayout,
+              rows: clampedRows,
+              cols: clampedCols,
+            },
+            secondaryMapViews,
+            isDirty: true,
+          };
+        }),
+      setSyncView: (syncView) =>
+        set((s) => ({
+          mapLayout: { ...s.mapLayout, syncView },
+          isDirty: true,
+        })),
+      setSecondaryMapView: (id, view, markDirty = false) =>
+        set((s) => {
+          let changed = false;
+          const secondaryMapViews = s.secondaryMapViews.map((pane) => {
+            if (pane.id !== id) return pane;
+            changed = true;
+            return { ...pane, view: { ...pane.view, ...view } };
+          });
+          if (!changed) return s;
+          return {
+            secondaryMapViews,
+            isDirty: markDirty || s.isDirty,
+          };
+        }),
+      setSecondaryBasemap: (id, patch) =>
+        set((s) => {
+          let changed = false;
+          const secondaryMapViews = s.secondaryMapViews.map((pane) => {
+            if (pane.id !== id) return pane;
+            changed = true;
+            return { ...pane, ...patch };
+          });
+          if (!changed) return s;
+          return { secondaryMapViews, isDirty: true };
+        }),
+      removeSecondaryMapView: (id) =>
+        set((s) => {
+          const secondaryMapViews = s.secondaryMapViews.filter(
+            (pane) => pane.id !== id
+          );
+          if (secondaryMapViews.length === s.secondaryMapViews.length) {
+            return s;
+          }
+          // Collapse to a gap-free grid that fits the remaining panes, keeping
+          // the layout's orientation as close as possible to the current one.
+          const total = secondaryMapViews.length + 1;
+          const { rows, cols } = fitGrid(total, s.mapLayout.cols);
+          return {
+            secondaryMapViews,
+            mapLayout: { ...s.mapLayout, rows, cols },
+            isDirty: true,
+          };
+        }),
       setBasemapStyleUrl: (url) => set({ basemapStyleUrl: url, isDirty: true }),
       setBasemapVisible: (visible) =>
         set({ basemapVisible: visible, isDirty: true }),

@@ -4,6 +4,10 @@ export {
   type MapDiagnosticEvent,
 } from "./MapCanvas";
 export {
+  SecondaryMapCanvas,
+  type SecondaryMapCanvasProps,
+} from "./SecondaryMapCanvas";
+export {
   MapController,
   createMapController,
   type BuiltInMapControl,

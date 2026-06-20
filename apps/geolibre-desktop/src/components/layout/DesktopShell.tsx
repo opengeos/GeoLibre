@@ -64,6 +64,7 @@ import { registerXyzTileProtocol } from "../../lib/xyz-url";
 import { useEmbedBridge } from "../../hooks/useEmbedBridge";
 import { useRasterIdentify } from "../../hooks/useRasterIdentify";
 import { BoundsRestrictionIndicator } from "./BoundsRestrictionIndicator";
+import { MapGrid } from "./MapGrid";
 import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
 import { useCommandBridge } from "../../hooks/useCommandBridge";
 import {
@@ -1271,13 +1272,15 @@ export function DesktopShell({
               is not flagged as content outside a landmark. */}
           <h1 className="sr-only">GeoLibre map workspace</h1>
           <SectionErrorBoundary label="Map" fallbackClassName="h-full w-full">
-            <MapCanvas
-              controllerRef={mapControllerRef}
-              onMapDiagnosticEvent={handleMapDiagnosticEvent}
-              onControllerReady={handleMapControllerReady}
-            />
-            <RemoteCursorsOverlay mapControllerRef={mapControllerRef} />
-            <BoundsRestrictionIndicator />
+            <MapGrid>
+              <MapCanvas
+                controllerRef={mapControllerRef}
+                onMapDiagnosticEvent={handleMapDiagnosticEvent}
+                onControllerReady={handleMapControllerReady}
+              />
+              <RemoteCursorsOverlay mapControllerRef={mapControllerRef} />
+              <BoundsRestrictionIndicator />
+            </MapGrid>
           </SectionErrorBoundary>
         </main>
         {/* The notebook claims the workspace's right half, so the Style panel

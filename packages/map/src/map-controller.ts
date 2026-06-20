@@ -239,9 +239,22 @@ export class MapController {
       styleUrl?: string;
       mapView?: MapViewState;
       mapPreferences?: MapPreferences;
+      /**
+       * Override built-in control visibility before the controls are added.
+       * Secondary (split/grid) map panes pass `{ "layer-control": false }` so
+       * they don't mount a second layer control that would write the shared
+       * layer/basemap state back to the global store.
+       */
+      controlVisibility?: Partial<Record<BuiltInMapControl, boolean>>;
     },
   ): maplibregl.Map {
     const view = options.mapView;
+    if (options.controlVisibility) {
+      this.controlVisibility = {
+        ...this.controlVisibility,
+        ...options.controlVisibility,
+      };
+    }
     const mapPreferences = options.mapPreferences ?? this.mapPreferences;
     const minZoom = clampNumber(mapPreferences.minZoom, 0, 24);
     const maxZoom = Math.max(minZoom, clampNumber(mapPreferences.maxZoom, 0, 24));

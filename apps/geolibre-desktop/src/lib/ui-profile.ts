@@ -218,6 +218,7 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   { id: "view.resetNorth", menuId: "view", labelKey: "toolbar.item.resetNorth", tier: "basic" },
   { id: "view.resetPitchBearing", menuId: "view", labelKey: "toolbar.item.resetPitchBearing", tier: "basic" },
   { id: "view.setView", menuId: "view", labelKey: "toolbar.item.setView", tier: "intermediate" },
+  { id: "view.splitView", menuId: "view", labelKey: "toolbar.item.splitView", tier: "intermediate" },
   // Processing
   { id: "processing.assistant", menuId: "processing", labelKey: "toolbar.command.assistant", tier: "intermediate" },
   { id: "processing.whitebox", menuId: "processing", labelKey: "toolbar.item.whitebox", tier: "advanced" },

@@ -324,6 +324,120 @@ describe("project parsing", () => {
   });
 });
 
+describe("multi-map grid persistence", () => {
+  it("omits the grid keys for a default single-map project", () => {
+    const project = projectFromStore({
+      projectName: "Single",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [],
+      preferences: createEmptyProject().preferences,
+      metadata: {},
+    });
+    assert.equal(project.mapLayout, undefined);
+    assert.equal(project.secondaryMapViews, undefined);
+  });
+
+  it("round-trips a 2x2 grid with per-pane basemaps", () => {
+    const secondaryMapViews = [
+      {
+        id: "pane-1",
+        view: { center: [10, 20], zoom: 5, bearing: 0, pitch: 0 },
+        basemapStyleUrl: "https://tiles.openfreemap.org/styles/dark",
+        basemapVisible: true,
+        basemapOpacity: 0.8,
+      },
+      {
+        id: "pane-2",
+        view: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+        basemapStyleUrl: "https://tiles.openfreemap.org/styles/positron",
+        basemapVisible: false,
+        basemapOpacity: 1,
+      },
+      {
+        id: "pane-3",
+        view: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+        basemapStyleUrl: DEFAULT_BASEMAP,
+        basemapVisible: true,
+        basemapOpacity: 1,
+      },
+    ];
+    const project = projectFromStore({
+      projectName: "Grid",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [],
+      preferences: createEmptyProject().preferences,
+      mapLayout: { rows: 2, cols: 2, syncView: false },
+      secondaryMapViews,
+      metadata: {},
+    });
+    assert.deepEqual(project.mapLayout, { rows: 2, cols: 2, syncView: false });
+    assert.deepEqual(project.secondaryMapViews, secondaryMapViews);
+    const reparsed = parseProject(serializeProject(project));
+    assert.deepEqual(reparsed.mapLayout, { rows: 2, cols: 2, syncView: false });
+    assert.deepEqual(reparsed.secondaryMapViews, secondaryMapViews);
+  });
+
+  it("reconciles surplus secondary panes down to rows * cols - 1", () => {
+    const reparsed = parseProject(
+      JSON.stringify({
+        version: "0.2.0",
+        name: "Too many",
+        mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+        mapLayout: { rows: 1, cols: 2, syncView: true },
+        secondaryMapViews: [
+          { id: "a", view: { center: [1, 1], zoom: 3, bearing: 0, pitch: 0 } },
+          { id: "b", view: { center: [2, 2], zoom: 4, bearing: 0, pitch: 0 } },
+          { id: "c", view: { center: [3, 3], zoom: 5, bearing: 0, pitch: 0 } },
+        ],
+      }),
+    );
+    // A 1x2 grid has exactly one secondary pane; surplus entries are dropped.
+    assert.equal(reparsed.secondaryMapViews?.length, 1);
+    assert.equal(reparsed.secondaryMapViews?.[0].id, "a");
+  });
+
+  it("fills missing secondary panes by cloning the primary map", () => {
+    const reparsed = parseProject(
+      JSON.stringify({
+        version: "0.2.0",
+        name: "Too few",
+        mapView: { center: [7, 8], zoom: 6, bearing: 0, pitch: 0 },
+        basemapStyleUrl: "https://tiles.openfreemap.org/styles/dark",
+        mapLayout: { rows: 2, cols: 2, syncView: true },
+        secondaryMapViews: [
+          { id: "a", view: { center: [1, 1], zoom: 3, bearing: 0, pitch: 0 } },
+        ],
+      }),
+    );
+    // A 2x2 grid needs three secondary panes; the two missing ones clone primary.
+    assert.equal(reparsed.secondaryMapViews?.length, 3);
+    assert.deepEqual(reparsed.secondaryMapViews?.[1].view.center, [7, 8]);
+    assert.equal(
+      reparsed.secondaryMapViews?.[1].basemapStyleUrl,
+      "https://tiles.openfreemap.org/styles/dark",
+    );
+  });
+
+  it("ignores a 1x1 grid so single-map files stay clean", () => {
+    const reparsed = parseProject(
+      JSON.stringify({
+        version: "0.2.0",
+        name: "One pane",
+        mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+        mapLayout: { rows: 1, cols: 1, syncView: true },
+      }),
+    );
+    assert.equal(reparsed.mapLayout, undefined);
+    assert.equal(reparsed.secondaryMapViews, undefined);
+  });
+});
+
 describe("app store", () => {
   beforeEach(() => {
     useAppStore.getState().newProject({ name: "Test Project" });
@@ -676,5 +790,71 @@ describe("story map import/export", () => {
     // Missing ids are generated.
     assert.ok(restored.chapters[0].id);
     assert.notEqual(restored.chapters[0].id, restored.chapters[1].id);
+  });
+
+  it("grows and shrinks the secondary panes when the grid resizes", () => {
+    const store = useAppStore.getState();
+    assert.equal(store.secondaryMapViews.length, 0);
+
+    store.setMapGrid(2, 2);
+    // A 2x2 grid keeps three secondary panes (pane 0 is the primary map).
+    assert.equal(useAppStore.getState().secondaryMapViews.length, 3);
+    assert.deepEqual(useAppStore.getState().mapLayout, {
+      rows: 2,
+      cols: 2,
+      syncView: true,
+    });
+
+    useAppStore.getState().setMapGrid(1, 2);
+    assert.equal(useAppStore.getState().secondaryMapViews.length, 1);
+
+    useAppStore.getState().setMapGrid(1, 1);
+    assert.equal(useAppStore.getState().secondaryMapViews.length, 0);
+  });
+
+  it("clamps grid dimensions into the supported range", () => {
+    useAppStore.getState().setMapGrid(99, 0);
+    const { mapLayout } = useAppStore.getState();
+    assert.equal(mapLayout.rows, 4);
+    assert.equal(mapLayout.cols, 1);
+  });
+
+  it("toggles synchronized views", () => {
+    useAppStore.getState().setSyncView(false);
+    assert.equal(useAppStore.getState().mapLayout.syncView, false);
+    useAppStore.getState().setSyncView(true);
+    assert.equal(useAppStore.getState().mapLayout.syncView, true);
+  });
+
+  it("patches a secondary pane's camera and basemap by id", () => {
+    useAppStore.getState().setMapGrid(1, 2);
+    const paneId = useAppStore.getState().secondaryMapViews[0].id;
+
+    useAppStore
+      .getState()
+      .setSecondaryMapView(paneId, { zoom: 9, center: [5, 6] });
+    useAppStore
+      .getState()
+      .setSecondaryBasemap(paneId, { basemapStyleUrl: "https://example/dark" });
+
+    const pane = useAppStore
+      .getState()
+      .secondaryMapViews.find((p) => p.id === paneId);
+    assert.equal(pane?.view.zoom, 9);
+    assert.deepEqual(pane?.view.center, [5, 6]);
+    assert.equal(pane?.basemapStyleUrl, "https://example/dark");
+  });
+
+  it("removes a secondary pane and collapses the grid", () => {
+    useAppStore.getState().setMapGrid(2, 2);
+    const target = useAppStore.getState().secondaryMapViews[1].id;
+
+    useAppStore.getState().removeSecondaryMapView(target);
+
+    const state = useAppStore.getState();
+    assert.equal(state.secondaryMapViews.length, 2);
+    assert.ok(!state.secondaryMapViews.some((p) => p.id === target));
+    // Three panes total now (primary + 2 secondary); the grid shrank to fit.
+    assert.equal(state.mapLayout.rows * state.mapLayout.cols, 3);
   });
 });

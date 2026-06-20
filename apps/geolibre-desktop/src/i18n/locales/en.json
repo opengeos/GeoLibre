@@ -637,6 +637,11 @@
     "boundsRestricted": "Bounds locked",
     "boundsRestrictedTooltip": "Map bounds are restricted. You can change this in Settings."
   },
+  "mapGrid": {
+    "basemapLabel": "Basemap for map {{number}}",
+    "basemapBlank": "Blank",
+    "removePane": "Remove map {{number}}"
+  },
   "onboarding": {
     "title": "Welcome to GeoLibre",
     "description": "Choose your experience level to tailor the interface. You can change this any time in Settings → Interface.",
@@ -1021,6 +1026,14 @@
       "resetNorth": "Reset North",
       "resetPitchBearing": "Reset Pitch & Bearing",
       "setView": "Set View…",
+      "splitView": "Split View",
+      "splitViewSingle": "Single map",
+      "splitViewTwoColumns": "Two columns",
+      "splitViewTwoRows": "Two rows",
+      "splitViewGrid2x2": "2 × 2 grid",
+      "splitViewGrid2x3": "2 × 3 grid",
+      "splitViewGrid3x3": "3 × 3 grid",
+      "splitViewSync": "Sync views",
       "zoomIn": "Zoom In",
       "zoomOut": "Zoom Out",
       "sectionFiles": "Files",
