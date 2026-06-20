@@ -23,7 +23,10 @@ set -euo pipefail
 # Validate formats so a truncated hash or stray metacharacter can't silently
 # produce a malformed PKGBUILD that only fails at install time.
 [[ "$SHA256_AMD64" =~ ^[0-9a-f]{64}$ ]] || { echo "SHA256_AMD64 is not a 64-char sha256 hex string" >&2; exit 1; }
-[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]] || { echo "VERSION does not look like a semver string" >&2; exit 1; }
+# Anchored at both ends: a suffix like 1.2.3-rc1 must NOT pass, because AUR
+# pkgver forbids hyphens (the pkgver/pkgrel separator), so makepkg would reject
+# the resulting PKGBUILD.
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "VERSION does not look like a semver string" >&2; exit 1; }
 
 REPO="${REPO:-opengeos/GeoLibre}"
 
@@ -58,6 +61,10 @@ package() {
 	# it) straight into the package root, preserving the binary, the .desktop
 	# entry, and the icons the .deb already ships.
 	bsdtar -xf "\${pkgname}-\${pkgver}.deb"
-	bsdtar -xpf data.tar.* -C "\${pkgdir}/"
+	# Capture the glob so a corrupt .deb with no data member fails loudly here
+	# instead of bsdtar choking on the literal string "data.tar.*".
+	local data_tar=(data.tar.*)
+	[[ -f \${data_tar[0]} ]] || { echo "no data.tar.* member in the .deb" >&2; return 1; }
+	bsdtar -xpf "\${data_tar[0]}" -C "\${pkgdir}/"
 }
 PKGBUILD

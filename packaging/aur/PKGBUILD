@@ -26,5 +26,9 @@ package() {
 	# it) straight into the package root, preserving the binary, the .desktop
 	# entry, and the icons the .deb already ships.
 	bsdtar -xf "${pkgname}-${pkgver}.deb"
-	bsdtar -xpf data.tar.* -C "${pkgdir}/"
+	# Capture the glob so a corrupt .deb with no data member fails loudly here
+	# instead of bsdtar choking on the literal string "data.tar.*".
+	local data_tar=(data.tar.*)
+	[[ -f ${data_tar[0]} ]] || { echo "no data.tar.* member in the .deb" >&2; return 1; }
+	bsdtar -xpf "${data_tar[0]}" -C "${pkgdir}/"
 }
