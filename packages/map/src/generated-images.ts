@@ -41,12 +41,22 @@ export function hashText(text: string): string {
   );
 }
 
+// Remote SVG sources we have already warned about, so the console message below
+// fires once per distinct URL instead of on every image regeneration.
+const warnedRemoteSvgSources = new Set<string>();
+
 /**
  * Resolve user-supplied SVG input to an `Image.src`: inline markup (starting
  * with `<`) is encoded as a data URL; otherwise only `data:` and `http(s):`
  * URLs are accepted. Returns null for empty input or an unsupported scheme
  * (e.g. `file:`), which the caller treats as "no image" rather than letting an
  * arbitrary URL be loaded.
+ *
+ * Remote `http(s):` URLs are supported intentionally (custom marker/pattern
+ * SVGs) but trigger a cross-origin request when rendered. Because a shared
+ * `.geolibre.json` can carry such a URL, we log a one-time warning so the
+ * outbound request is visible; prefer inline `<svg>` or `data:` in shared
+ * projects.
  */
 export function resolveSvgSource(markup: string): string | null {
   const trimmed = markup.trim();
@@ -54,7 +64,18 @@ export function resolveSvgSource(markup: string): string | null {
   if (trimmed.startsWith("<")) {
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(trimmed)}`;
   }
-  if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith("data:")) {
+  if (/^https?:\/\//i.test(trimmed)) {
+    if (!warnedRemoteSvgSources.has(trimmed)) {
+      warnedRemoteSvgSources.add(trimmed);
+      console.warn(
+        `[geolibre] Loading a custom SVG from a remote URL triggers a ` +
+          `cross-origin request: ${trimmed}. Prefer inline <svg> markup or a ` +
+          `data: URL in shared projects.`,
+      );
+    }
+    return trimmed;
+  }
+  if (trimmed.startsWith("data:")) {
     return trimmed;
   }
   return null;
@@ -80,16 +101,28 @@ export type GeneratedImageFactory = () =>
 const factories = new Map<string, GeneratedImageFactory>();
 const wiredMaps = new WeakSet<maplibregl.Map>();
 
+// Bound the registry so a long session of custom-SVG editing (each distinct
+// markup hashes to a new id) can't grow it without limit. Built-in shapes and
+// patterns have low cardinality and stay well under this.
+const MAX_GENERATED_IMAGE_FACTORIES = 512;
+
 /**
  * Register the factory that generates the image for `id`. Idempotent: re-running
  * with the same id keeps the existing factory (the id fully determines the
- * pixels, so any factory for it is equivalent).
+ * pixels, so any factory for it is equivalent). Evicts the oldest entry when the
+ * cap is reached — safe because layer sync re-registers any id still in use, and
+ * `styleimagemissing` re-fires if MapLibre later needs an evicted image.
  */
 export function registerGeneratedImage(
   id: string,
   factory: GeneratedImageFactory,
 ): void {
-  if (!factories.has(id)) factories.set(id, factory);
+  if (factories.has(id)) return;
+  if (factories.size >= MAX_GENERATED_IMAGE_FACTORIES) {
+    const oldest = factories.keys().next().value;
+    if (oldest !== undefined) factories.delete(oldest);
+  }
+  factories.set(id, factory);
 }
 
 function addGeneratedImage(map: maplibregl.Map, id: string): void {

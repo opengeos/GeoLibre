@@ -30,6 +30,7 @@ import {
 } from "@geolibre/ui";
 import { RASTER_SOURCE_KIND, SKETCHES_SOURCE_KIND } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
+import type { ParseKeys } from "i18next";
 import { useTranslation } from "react-i18next";
 import { RasterSymbologySection } from "./RasterSymbologySection";
 import {
@@ -201,16 +202,16 @@ function getGeometryFlags(layer: {
 
 const MARKER_SHAPE_OPTIONS: ReadonlyArray<{
   value: MarkerShape;
-  label: string;
+  labelKey: ParseKeys;
 }> = [
-  { value: "circle", label: "Circle" },
-  { value: "square", label: "Square" },
-  { value: "triangle", label: "Triangle" },
-  { value: "diamond", label: "Diamond" },
-  { value: "star", label: "Star" },
-  { value: "cross", label: "Cross" },
-  { value: "pin", label: "Pin" },
-  { value: "custom", label: "Custom SVG" },
+  { value: "circle", labelKey: "style.symbology.markerShapes.circle" },
+  { value: "square", labelKey: "style.symbology.markerShapes.square" },
+  { value: "triangle", labelKey: "style.symbology.markerShapes.triangle" },
+  { value: "diamond", labelKey: "style.symbology.markerShapes.diamond" },
+  { value: "star", labelKey: "style.symbology.markerShapes.star" },
+  { value: "cross", labelKey: "style.symbology.markerShapes.cross" },
+  { value: "pin", labelKey: "style.symbology.markerShapes.pin" },
+  { value: "custom", labelKey: "style.symbology.markerShapes.custom" },
 ];
 
 // Glyphs for the marker gallery preview only; they render in the chosen marker
@@ -228,15 +229,15 @@ const MARKER_GLYPHS: Record<MarkerShape, string> = {
 
 const FILL_PATTERN_OPTIONS: ReadonlyArray<{
   value: FillPattern;
-  label: string;
+  labelKey: ParseKeys;
 }> = [
-  { value: "none", label: "None (solid fill)" },
-  { value: "hatch", label: "Hatch" },
-  { value: "cross-hatch", label: "Cross-hatch" },
-  { value: "horizontal", label: "Horizontal lines" },
-  { value: "vertical", label: "Vertical lines" },
-  { value: "dots", label: "Dots" },
-  { value: "svg", label: "Custom SVG" },
+  { value: "none", labelKey: "style.symbology.fillPatterns.none" },
+  { value: "hatch", labelKey: "style.symbology.fillPatterns.hatch" },
+  { value: "cross-hatch", labelKey: "style.symbology.fillPatterns.crossHatch" },
+  { value: "horizontal", labelKey: "style.symbology.fillPatterns.horizontal" },
+  { value: "vertical", labelKey: "style.symbology.fillPatterns.vertical" },
+  { value: "dots", labelKey: "style.symbology.fillPatterns.dots" },
+  { value: "svg", labelKey: "style.symbology.fillPatterns.svg" },
 ];
 
 /** Create a blank rule-based filter rule with a unique id. */
@@ -670,6 +671,12 @@ function validateExpressionJson(value: string, label: string): string | null {
     const parsed = JSON.parse(removeTrailingJsonCommas(trimmed));
     if (!Array.isArray(parsed)) {
       return `${label} must be a JSON array expression.`;
+    }
+    // Every MapLibre expression starts with a string operator. Reject e.g.
+    // `["to-number", …]` used as a filter or a bare value array, which parses as
+    // JSON but compiles to an expression MapLibre rejects at runtime.
+    if (typeof parsed[0] !== "string") {
+      return `${label} must start with an operator, e.g. ["==", ["get", "field"], value].`;
     }
     return null;
   } catch (error) {
@@ -1597,7 +1604,7 @@ export function StylePanel({
       updateVectorRule(elseRule.id, { color });
       return;
     }
-    setVectorRules([...currentRules, { ...createVectorRule(true, color) }]);
+    setVectorRules([...currentRules, createVectorRule(true, color)]);
   };
 
   // --- Geometry-gated sections (proportional size, fill pattern, markers) ---
@@ -1606,11 +1613,14 @@ export function StylePanel({
     hasVectorPaintControls &&
     pointRenderer !== "heatmap" &&
     // A marker symbol layer uses a baked icon (icon-size 1), so proportional
-    // circle-radius sizing would not apply; hide the controls to avoid a
-    // silent no-op. (Markers only render for point-only layers, so no lines are
-    // hidden here.)
-    !styleValue(style, "markerEnabled") &&
-    ((geometryFlags.hasPoint && pointRenderer === "single") ||
+    // circle-radius sizing would not apply; hide it for points to avoid a silent
+    // no-op. The marker gate stays inside the point branch so that proportional
+    // line-width controls remain available on layers that carry lines (markers
+    // never affect line rendering, even if markerEnabled is set on a mixed
+    // point+line layer via a hand-edited project file).
+    ((geometryFlags.hasPoint &&
+      pointRenderer === "single" &&
+      !styleValue(style, "markerEnabled")) ||
       geometryFlags.hasLine);
   const showFillPatternControls =
     hasVectorPaintControls && !extrusionEnabled && geometryFlags.hasPolygon;
@@ -1628,7 +1638,9 @@ export function StylePanel({
   // A small graduated-size legend: evenly spaced sample values mapped onto the
   // interpolated radius range, mirroring what the map renders.
   const proportionalLegend =
-    proportionalEnabled && proportionalMaxValue > proportionalMinValue
+    proportionalEnabled &&
+    proportionalMaxValue > proportionalMinValue &&
+    proportionalMinRadius <= proportionalMaxRadius
       ? Array.from({ length: 5 }, (_, index) => {
           const ratio = index / 4;
           return {
@@ -1657,11 +1669,17 @@ export function StylePanel({
             updateDraftVectorStyleMode(event.target.value as VectorStyleMode)
           }
         >
-          <option value="single">Single symbology</option>
-          <option value="graduated">Graduated</option>
-          <option value="categorized">Categorized</option>
-          <option value="rule-based">Rule-based</option>
-          <option value="expression">Advanced expression</option>
+          <option value="single">{t("style.symbology.modeSingle")}</option>
+          <option value="graduated">{t("style.symbology.modeGraduated")}</option>
+          <option value="categorized">
+            {t("style.symbology.modeCategorized")}
+          </option>
+          <option value="rule-based">
+            {t("style.symbology.modeRuleBased")}
+          </option>
+          <option value="expression">
+            {t("style.symbology.modeExpression")}
+          </option>
         </Select>
       </div>
       {usesAttributeSymbology && (
@@ -1831,14 +1849,14 @@ export function StylePanel({
       {draftVectorStyleMode === "rule-based" && (
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <Label>Rules</Label>
+            <Label>{t("style.symbology.rules")}</Label>
             <Button
               type="button"
               variant="outline"
               size="icon"
               className="h-7 w-7"
-              title="Add rule"
-              aria-label="Add rule"
+              title={t("style.symbology.addRule")}
+              aria-label={t("style.symbology.addRule")}
               onClick={addVectorRule}
             >
               <Plus className="h-3.5 w-3.5" />
@@ -1846,9 +1864,9 @@ export function StylePanel({
           </div>
           {concreteRules.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              No rules yet. Add a rule and give it a MapLibre filter expression
-              (e.g. <code>{'["==", ["get", "TYPE"], "park"]'}</code>). The first
-              matching rule wins; the Else rule colors everything else.
+              {t("style.symbology.noRulesPrefix")}
+              <code>{'["==", ["get", "TYPE"], "park"]'}</code>
+              {t("style.symbology.noRulesSuffix")}
             </p>
           ) : null}
           {concreteRules.map((rule, index) => (
@@ -1859,16 +1877,22 @@ export function StylePanel({
               <div className="grid grid-cols-[auto_1fr_2rem] items-center gap-2">
                 <ColorField
                   fill={false}
-                  aria-label={`Rule ${index + 1} color`}
-                  eyedropperLabel={`Pick rule ${index + 1} color from the screen`}
+                  aria-label={t("style.symbology.ruleColor", {
+                    index: index + 1,
+                  })}
+                  eyedropperLabel={t("style.symbology.ruleColorPick", {
+                    index: index + 1,
+                  })}
                   className="h-9 w-9 p-1"
                   buttonClassName="h-9 w-9"
                   value={rule.color}
                   onChange={(color) => updateVectorRule(rule.id, { color })}
                 />
                 <Input
-                  aria-label={`Rule ${index + 1} label`}
-                  placeholder="Label (optional)"
+                  aria-label={t("style.symbology.ruleLabel", {
+                    index: index + 1,
+                  })}
+                  placeholder={t("style.symbology.labelPlaceholder")}
                   value={rule.label}
                   onChange={(event) =>
                     updateVectorRule(rule.id, { label: event.target.value })
@@ -1879,15 +1903,17 @@ export function StylePanel({
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8"
-                  title="Remove rule"
-                  aria-label="Remove rule"
+                  title={t("style.symbology.removeRule")}
+                  aria-label={t("style.symbology.removeRule")}
                   onClick={() => removeVectorRule(rule.id)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </div>
               <textarea
-                aria-label={`Rule ${index + 1} filter`}
+                aria-label={t("style.symbology.ruleFilter", {
+                  index: index + 1,
+                })}
                 className="min-h-16 w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
                 placeholder='["==", ["get", "TYPE"], "park"]'
                 value={rule.filter}
@@ -1897,8 +1923,7 @@ export function StylePanel({
               />
               {rule.filter.trim() && !parseJsonExpression(rule.filter) ? (
                 <p className="text-xs text-destructive">
-                  Invalid filter — must be a JSON array expression. This rule is
-                  skipped until fixed.
+                  {t("style.symbology.filterInvalid")}
                 </p>
               ) : null}
             </div>
@@ -1906,15 +1931,15 @@ export function StylePanel({
           <div className="grid grid-cols-[auto_1fr] items-center gap-2 rounded-md border border-dashed border-input p-2">
             <ColorField
               fill={false}
-              aria-label="Else rule color"
-              eyedropperLabel="Pick the else rule color from the screen"
+              aria-label={t("style.symbology.elseRuleColor")}
+              eyedropperLabel={t("style.symbology.elseRuleColorPick")}
               className="h-9 w-9 p-1"
               buttonClassName="h-9 w-9"
               value={elseRule?.color ?? style.fillColor}
               onChange={setElseRuleColor}
             />
             <span className="text-xs text-muted-foreground">
-              Else (all other features)
+              {t("style.symbology.elseAllOtherFeatures")}
             </span>
           </div>
         </div>
@@ -1931,7 +1956,7 @@ export function StylePanel({
       {draftVectorStyleMode === "rule-based" &&
         draftVectorStyleMode !== styleValue(style, "vectorStyleMode") && (
           <p className="text-xs text-muted-foreground">
-            Click Apply to activate rule-based rendering.
+            {t("style.symbology.applyHint")}
           </p>
         )}
       {vectorStyleError && (
@@ -1942,7 +1967,9 @@ export function StylePanel({
   const proportionalSizeControls = (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <Label htmlFor="proportionalSizeEnabled">Proportional size</Label>
+        <Label htmlFor="proportionalSizeEnabled">
+          {t("style.symbology.proportionalSize")}
+        </Label>
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
           <input
             id="proportionalSizeEnabled"
@@ -1954,13 +1981,15 @@ export function StylePanel({
               })
             }
           />
-          Size by value
+          {t("style.symbology.sizeByValue")}
         </label>
       </div>
       {proportionalEnabled && (
         <>
           <div className="space-y-2">
-            <Label htmlFor="proportionalSizeProperty">Size field</Label>
+            <Label htmlFor="proportionalSizeProperty">
+              {t("style.symbology.sizeField")}
+            </Label>
             <Select
               id="proportionalSizeProperty"
               value={proportionalProperty}
@@ -1972,10 +2001,10 @@ export function StylePanel({
               disabled={vectorStylePropertyOptions.length === 0}
             >
               {vectorStylePropertyOptions.length === 0 ? (
-                <option value="">No attributes found</option>
+                <option value="">{t("style.labels.noAttributes")}</option>
               ) : (
                 <>
-                  <option value="">Choose a field…</option>
+                  <option value="">{t("style.symbology.chooseField")}</option>
                   {vectorStylePropertyOptions.map((property) => (
                     <option key={property} value={property}>
                       {property}
@@ -1988,7 +2017,7 @@ export function StylePanel({
           <div className="grid grid-cols-2 gap-3">
             <NumericStyleInput
               id="proportionalSizeMinValue"
-              label="Min value"
+              label={t("style.symbology.minValue")}
               min={-1_000_000_000}
               max={1_000_000_000}
               step={1}
@@ -1999,7 +2028,7 @@ export function StylePanel({
             />
             <NumericStyleInput
               id="proportionalSizeMaxValue"
-              label="Max value"
+              label={t("style.symbology.maxValue")}
               min={-1_000_000_000}
               max={1_000_000_000}
               step={1}
@@ -2012,7 +2041,7 @@ export function StylePanel({
           <div className="grid grid-cols-2 gap-3">
             <NumericStyleInput
               id="proportionalSizeMinRadius"
-              label="Min size (px)"
+              label={t("style.symbology.minSize")}
               min={0}
               max={100}
               step={1}
@@ -2023,7 +2052,7 @@ export function StylePanel({
             />
             <NumericStyleInput
               id="proportionalSizeMaxRadius"
-              label="Max size (px)"
+              label={t("style.symbology.maxSize")}
               min={0}
               max={100}
               step={1}
@@ -2035,7 +2064,7 @@ export function StylePanel({
           </div>
           {proportionalLegend.length > 0 && proportionalProperty ? (
             <div className="space-y-1">
-              <Label>Size legend</Label>
+              <Label>{t("style.symbology.sizeLegend")}</Label>
               <div className="flex items-end justify-between gap-2 rounded-md border border-input p-3">
                 {proportionalLegend.map((entry, index) => (
                   <div
@@ -2067,7 +2096,7 @@ export function StylePanel({
   const fillPatternControls = (
     <div className="space-y-3">
       <div className="space-y-2">
-        <Label htmlFor="fillPattern">Fill pattern</Label>
+        <Label htmlFor="fillPattern">{t("style.symbology.fillPattern")}</Label>
         <Select
           id="fillPattern"
           value={fillPattern}
@@ -2079,14 +2108,16 @@ export function StylePanel({
         >
           {FILL_PATTERN_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
-              {option.label}
+              {t(option.labelKey)}
             </option>
           ))}
         </Select>
       </div>
       {fillPattern !== "none" && fillPattern !== "svg" ? (
         <div className="space-y-2">
-          <Label htmlFor="fillPatternColor">Pattern color</Label>
+          <Label htmlFor="fillPatternColor">
+            {t("style.symbology.patternColor")}
+          </Label>
           <ColorField
             id="fillPatternColor"
             value={styleValue(style, "fillPatternColor")}
@@ -2098,11 +2129,13 @@ export function StylePanel({
       ) : null}
       {fillPattern === "svg" ? (
         <div className="space-y-2">
-          <Label htmlFor="fillPatternSvg">Pattern SVG</Label>
+          <Label htmlFor="fillPatternSvg">
+            {t("style.symbology.patternSvg")}
+          </Label>
           <textarea
             id="fillPatternSvg"
             className="min-h-20 w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
-            placeholder="<svg xmlns='http://www.w3.org/2000/svg' ...>…</svg> or a data/https URL"
+            placeholder={t("style.symbology.svgPlaceholder")}
             value={styleValue(style, "fillPatternSvg")}
             onChange={(event) =>
               setLayerStyle(layer.id, { fillPatternSvg: event.target.value })
@@ -2115,7 +2148,7 @@ export function StylePanel({
   const markerControls = (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <Label htmlFor="markerEnabled">Marker</Label>
+        <Label htmlFor="markerEnabled">{t("style.symbology.marker")}</Label>
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
           <input
             id="markerEnabled"
@@ -2125,20 +2158,20 @@ export function StylePanel({
               setLayerStyle(layer.id, { markerEnabled: event.target.checked })
             }
           />
-          Use marker icon
+          {t("style.symbology.useMarkerIcon")}
         </label>
       </div>
       {markerEnabled && (
         <>
           <div className="space-y-2">
-            <Label>Marker shape</Label>
+            <Label>{t("style.symbology.markerShape")}</Label>
             <div className="grid grid-cols-4 gap-2">
               {MARKER_SHAPE_OPTIONS.map((option) => (
                 <button
                   key={option.value}
                   type="button"
-                  title={option.label}
-                  aria-label={option.label}
+                  title={t(option.labelKey)}
+                  aria-label={t(option.labelKey)}
                   aria-pressed={markerShape === option.value}
                   onClick={() =>
                     setLayerStyle(layer.id, { markerShape: option.value })
@@ -2161,14 +2194,16 @@ export function StylePanel({
                   >
                     {MARKER_GLYPHS[option.value]}
                   </span>
-                  <span className="truncate">{option.label}</span>
+                  <span className="truncate">{t(option.labelKey)}</span>
                 </button>
               ))}
             </div>
           </div>
           {markerShape !== "custom" ? (
             <div className="space-y-2">
-              <Label htmlFor="markerColor">Marker color</Label>
+              <Label htmlFor="markerColor">
+                {t("style.symbology.markerColor")}
+              </Label>
               <ColorField
                 id="markerColor"
                 value={styleValue(style, "markerColor")}
@@ -2180,7 +2215,7 @@ export function StylePanel({
           ) : null}
           <NumericStyleInput
             id="markerSize"
-            label="Marker size (px)"
+            label={t("style.symbology.markerSize")}
             min={6}
             max={96}
             step={1}
@@ -2191,11 +2226,13 @@ export function StylePanel({
           />
           {markerShape === "custom" ? (
             <div className="space-y-2">
-              <Label htmlFor="markerSvg">Marker SVG</Label>
+              <Label htmlFor="markerSvg">
+                {t("style.symbology.markerSvg")}
+              </Label>
               <textarea
                 id="markerSvg"
                 className="min-h-20 w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
-                placeholder="<svg xmlns='http://www.w3.org/2000/svg' ...>…</svg> or a data/https URL"
+                placeholder={t("style.symbology.svgPlaceholder")}
                 value={styleValue(style, "markerSvg")}
                 onChange={(event) =>
                   setLayerStyle(layer.id, { markerSvg: event.target.value })

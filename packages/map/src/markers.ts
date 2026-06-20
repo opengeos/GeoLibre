@@ -149,6 +149,8 @@ function loadSvgMarker(
   return new Promise((resolve) => {
     const image = new Image();
     image.decoding = "async";
+    // Request CORS-clean pixels so a cross-origin SVG can be read back below.
+    image.crossOrigin = "anonymous";
     image.onload = () => {
       // Rasterize onto a canvas at the requested size. Assigning image.width /
       // height would not work: addImage reads the SVG's intrinsic
@@ -161,9 +163,15 @@ function loadSvgMarker(
         resolve(null);
         return;
       }
-      ctx.clearRect(0, 0, px, px);
-      ctx.drawImage(image, 0, 0, px, px);
-      resolve({ image: ctx.getImageData(0, 0, px, px), pixelRatio: ratio });
+      try {
+        ctx.clearRect(0, 0, px, px);
+        ctx.drawImage(image, 0, 0, px, px);
+        resolve({ image: ctx.getImageData(0, 0, px, px), pixelRatio: ratio });
+      } catch {
+        // A cross-origin source without CORS headers taints the canvas, so
+        // getImageData throws SecurityError; resolve null instead of hanging.
+        resolve(null);
+      }
     };
     image.onerror = () => resolve(null);
     image.src = src;

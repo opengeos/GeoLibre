@@ -352,7 +352,10 @@ export function ruleBasedColorExpression(
   for (const rule of rules) {
     if (rule.isElse || !isColor(rule.color)) continue;
     const filter = parseJsonExpression(rule.filter);
-    if (!filter) continue;
+    // A MapLibre filter is an expression that must start with a string operator;
+    // skip non-operator arrays (e.g. a bare value) so the compiled `case` never
+    // carries a non-boolean condition that MapLibre would reject at runtime.
+    if (!filter || typeof filter[0] !== "string") continue;
     branches.push(filter, rule.color);
   }
   if (branches.length === 0) return elseColor;
