@@ -326,19 +326,28 @@ export function ManagePluginsDialog({
       [entry.name, entry.id, entry.description, ...(entry.categories ?? [])]
         .filter((field): field is string => Boolean(field))
         .some((field) => field.toLowerCase().includes(term));
-    return entries.filter((entry) => {
-      if (!matches(entry)) return false;
-      switch (section) {
-        case "installed":
-          return isInstalled(entry);
-        case "not-installed":
-          return !isInstalled(entry);
-        case "upgradeable":
-          return isUpgradeable(entry);
-        default:
-          return true;
-      }
-    });
+    return entries
+      .filter((entry) => {
+        if (!matches(entry)) return false;
+        switch (section) {
+          case "installed":
+            return isInstalled(entry);
+          case "not-installed":
+            return !isInstalled(entry);
+          case "upgradeable":
+            return isUpgradeable(entry);
+          default:
+            return true;
+        }
+      })
+      // Present the list alphabetically by display name so it stays predictable
+      // and scannable as the registry grows, regardless of registry file order.
+      // Case-insensitive, locale-aware; falls back to id on a name tie.
+      .sort(
+        (a, b) =>
+          a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) ||
+          a.id.localeCompare(b.id),
+      );
   }, [entries, isInstalled, isUpgradeable, query, section]);
 
   return (
