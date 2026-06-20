@@ -228,6 +228,17 @@ export interface LayoutOptions {
      * (vertical). Defaults to 34. */
     lengthPct?: number;
   } | null;
+  /**
+   * A user-defined legend composed in the Print Layout (independent of the
+   * layer-derived {@link legend}), drawn as a bordered panel at the chosen
+   * corner -- the equivalent of a Controls -> Legend control, but native to the
+   * layout so it stays crisp.
+   */
+  customLegend?: {
+    title?: string;
+    entries: { label: string; color: string }[];
+    position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  } | null;
   legend: LegendEntry[];
   /** Heading drawn above the legend entries. */
   legendTitle: string;
@@ -673,6 +684,16 @@ export function drawLayout(
     ctx.restore();
   }
 
+  // --- Custom legend (user-chosen corner inside the map) ----------------
+  if (opts.customLegend && opts.customLegend.entries.length > 0) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(bodyX, bodyY, bodyW, bodyH);
+    ctx.clip();
+    drawCustomLegend(ctx, opts.customLegend, bodyX, bodyY, bodyW, bodyH, unit);
+    ctx.restore();
+  }
+
   // --- Page border -------------------------------------------------------
   if (opts.showPageBorder) {
     const widthScale = Math.max(1, Math.min(10, opts.pageBorderWidth ?? 2));
@@ -1084,6 +1105,82 @@ function drawColorbar(
       ctx.fillStyle = INK;
       ctx.fillText(tk.text, tx, barY + barThick + tickLen + tickGap);
     }
+  }
+  ctx.restore();
+}
+
+type CustomLegendSpec = NonNullable<LayoutOptions["customLegend"]>;
+
+/**
+ * Draw a user-defined legend (title + colour/label rows) as a bordered panel
+ * anchored at one of the four body corners. Crisp at export resolution, the
+ * native equivalent of a Controls -> Legend control.
+ */
+function drawCustomLegend(
+  ctx: CanvasRenderingContext2D,
+  cl: CustomLegendSpec,
+  bodyX: number,
+  bodyY: number,
+  bodyW: number,
+  bodyH: number,
+  unit: number,
+): void {
+  const pad = unit * 1.4;
+  const rowH = unit * 2.6;
+  const swatch = unit * 2;
+  const gap = unit;
+  const titleSize = unit * 2;
+  const labelSize = unit * 1.7;
+  const inset = unit * 2.4;
+  const title = (cl.title ?? "").trim();
+  const hasTitle = title.length > 0;
+
+  ctx.save();
+  ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
+  let maxText = hasTitle ? ctx.measureText(title).width : 0;
+  ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
+  for (const e of cl.entries) {
+    const w = swatch + gap + ctx.measureText(e.label).width;
+    if (w > maxText) maxText = w;
+  }
+
+  const titleBlock = hasTitle ? titleSize + unit : 0;
+  const boxW = pad * 2 + maxText;
+  const boxH = pad * 2 + titleBlock + cl.entries.length * rowH;
+  const x = cl.position.endsWith("left")
+    ? bodyX + inset
+    : bodyX + bodyW - inset - boxW;
+  const y = cl.position.startsWith("top")
+    ? bodyY + inset
+    : bodyY + bodyH - inset - boxH;
+
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  ctx.strokeStyle = BORDER;
+  ctx.lineWidth = Math.max(1, unit * 0.15);
+  roundRect(ctx, x, y, boxW, boxH, unit);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  let cy = y + pad;
+  if (hasTitle) {
+    cy += titleSize;
+    ctx.fillStyle = INK;
+    ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
+    ctx.fillText(title, x + pad, cy, boxW - pad * 2);
+    cy += unit;
+  }
+  ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
+  for (const e of cl.entries) {
+    cy += rowH;
+    ctx.fillStyle = e.color;
+    ctx.fillRect(x + pad, cy - swatch * 0.85, swatch, swatch);
+    ctx.strokeStyle = BORDER;
+    ctx.lineWidth = Math.max(1, unit * 0.15);
+    ctx.strokeRect(x + pad, cy - swatch * 0.85, swatch, swatch);
+    ctx.fillStyle = INK;
+    ctx.fillText(e.label, x + pad + swatch + gap, cy, boxW - pad * 2 - swatch - gap);
   }
   ctx.restore();
 }

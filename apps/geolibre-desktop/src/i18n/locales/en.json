@@ -517,7 +517,15 @@
       "attribution": "Include GeoLibre attribution",
       "pageBorder": "Page border",
       "infoBlock": "Info block (title block)",
-      "colorbar": "Colorbar"
+      "colorbar": "Colorbar",
+      "customLegend": "Custom legend"
+    },
+    "customLegend": {
+      "title": "Legend title",
+      "color": "Color",
+      "itemLabel": "Label",
+      "addItem": "Add item",
+      "removeItem": "Remove item"
     },
     "colorbar": {
       "colormap": "Colormap",

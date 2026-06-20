@@ -28,8 +28,10 @@ import {
   EyeOff,
   FileImage,
   FileText,
+  Plus,
   RefreshCw,
   RotateCcw,
+  Trash2,
 } from "lucide-react";
 import {
   computeScaleRatio,
@@ -168,6 +170,19 @@ export function PrintLayoutDialog({
   >("vertical");
   // Bar length as a percentage of the body width/height.
   const [colorbarLength, setColorbarLength] = useState(34);
+  // User-defined legend composed in the dialog (like Controls -> Legend).
+  const [showCustomLegend, setShowCustomLegend] = useState(false);
+  const [customLegendTitle, setCustomLegendTitle] = useState("Legend");
+  const [customLegendEntries, setCustomLegendEntries] = useState<
+    { id: string; label: string; color: string }[]
+  >([
+    { id: "cl-1", label: "Class 1", color: "#2563eb" },
+    { id: "cl-2", label: "Class 2", color: "#16a34a" },
+  ]);
+  const [customLegendPosition, setCustomLegendPosition] = useState<
+    "top-left" | "top-right" | "bottom-left" | "bottom-right"
+  >("top-left");
+  const customLegendId = useRef(2);
   // Default away from the bottom-right nav duo and top-left legend.
   const [colorbarPosition, setColorbarPosition] = useState<
     "top-left" | "top-right" | "bottom-left" | "bottom-right"
@@ -474,6 +489,16 @@ export function PrintLayoutDialog({
             lengthPct: colorbarLength,
           }
         : null,
+      customLegend: showCustomLegend
+        ? {
+            title: customLegendTitle,
+            entries: customLegendEntries.map((e) => ({
+              label: e.label,
+              color: e.color,
+            })),
+            position: customLegendPosition,
+          }
+        : null,
       showInfoBlock,
       author,
       projectNumber,
@@ -527,6 +552,10 @@ export function PrintLayoutDialog({
       colorbarOrientation,
       colorbarPosition,
       colorbarLength,
+      showCustomLegend,
+      customLegendTitle,
+      customLegendEntries,
+      customLegendPosition,
       showInfoBlock,
       author,
       projectNumber,
@@ -1171,7 +1200,120 @@ export function PrintLayoutDialog({
                 checked={showColorbar}
                 onChange={setShowColorbar}
               />
+              <ToggleField
+                id="el-custom-legend"
+                label={t("printLayout.element.customLegend")}
+                checked={showCustomLegend}
+                onChange={setShowCustomLegend}
+              />
             </div>
+
+            {showCustomLegend && (
+              <div className="space-y-3 rounded-md border p-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="cl-title">
+                    {t("printLayout.customLegend.title")}
+                  </Label>
+                  <Input
+                    id="cl-title"
+                    value={customLegendTitle}
+                    placeholder={t("printLayout.legend.defaultTitle")}
+                    onChange={(e) => setCustomLegendTitle(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  {customLegendEntries.map((entry) => (
+                    <div key={entry.id} className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        aria-label={t("printLayout.customLegend.color")}
+                        className="h-8 w-9 shrink-0 cursor-pointer rounded-md border border-input bg-background"
+                        value={entry.color}
+                        onChange={(e) =>
+                          setCustomLegendEntries((prev) =>
+                            prev.map((x) =>
+                              x.id === entry.id
+                                ? { ...x, color: e.target.value }
+                                : x,
+                            ),
+                          )
+                        }
+                      />
+                      <Input
+                        className="h-8 flex-1 text-sm"
+                        value={entry.label}
+                        placeholder={t("printLayout.customLegend.itemLabel")}
+                        onChange={(e) =>
+                          setCustomLegendEntries((prev) =>
+                            prev.map((x) =>
+                              x.id === entry.id
+                                ? { ...x, label: e.target.value }
+                                : x,
+                            ),
+                          )
+                        }
+                      />
+                      <button
+                        type="button"
+                        aria-label={t("printLayout.customLegend.removeItem")}
+                        className="shrink-0 text-muted-foreground hover:text-foreground"
+                        onClick={() =>
+                          setCustomLegendEntries((prev) =>
+                            prev.filter((x) => x.id !== entry.id),
+                          )
+                        }
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      setCustomLegendEntries((prev) => [
+                        ...prev,
+                        {
+                          id: `cl-${++customLegendId.current}`,
+                          label: "",
+                          color: "#888888",
+                        },
+                      ])
+                    }
+                  >
+                    <Plus className="mr-1.5 h-3.5 w-3.5" />
+                    {t("printLayout.customLegend.addItem")}
+                  </Button>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="cl-position">
+                    {t("printLayout.colorbar.position")}
+                  </Label>
+                  <Select
+                    id="cl-position"
+                    value={customLegendPosition}
+                    onChange={(e) =>
+                      setCustomLegendPosition(
+                        e.target.value as typeof customLegendPosition,
+                      )
+                    }
+                  >
+                    <option value="top-left">
+                      {t("printLayout.position.topLeft")}
+                    </option>
+                    <option value="top-right">
+                      {t("printLayout.position.topRight")}
+                    </option>
+                    <option value="bottom-left">
+                      {t("printLayout.position.bottomLeft")}
+                    </option>
+                    <option value="bottom-right">
+                      {t("printLayout.position.bottomRight")}
+                    </option>
+                  </Select>
+                </div>
+              </div>
+            )}
 
             {showColorbar && (
               <div className="space-y-3 rounded-md border p-3">
