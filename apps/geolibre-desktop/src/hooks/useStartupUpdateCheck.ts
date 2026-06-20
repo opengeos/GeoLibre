@@ -9,6 +9,7 @@ import {
   fetchLatestRelease,
   meetsNotificationLevel,
   releaseSeverity,
+  UpdateCheckError,
   type LatestRelease,
   type ReleaseSeverity,
 } from "../lib/updates";
@@ -94,10 +95,11 @@ export function useStartupUpdateCheck() {
     if (!settings.checkOnStartup) return;
 
     // Throttle the network call so frequent relaunches don't burn the GitHub
-    // rate limit. Stamp the time up front so a failed/rate-limited attempt also
-    // counts, preventing repeated hammering within the window.
+    // rate limit. Stamp the time up front so even a server response that fails
+    // (rate limit, HTTP error) counts toward the window and prevents hammering.
     const now = Date.now();
-    if (now - readLastCheck() < CHECK_THROTTLE_MS) return;
+    const previousLastCheck = readLastCheck();
+    if (now - previousLastCheck < CHECK_THROTTLE_MS) return;
     writeLastCheck(now);
 
     const controller = new AbortController();
@@ -116,8 +118,19 @@ export function useStartupUpdateCheck() {
         if (readDismissedVersion() === release.version) return;
 
         setPending({ release, severity });
-      } catch {
-        // Never let a background update check interrupt startup.
+      } catch (error) {
+        // Never let a background update check interrupt startup. If GitHub was
+        // never reached (a transient network failure, e.g. the device was still
+        // coming online), roll the timestamp back so the next launch retries
+        // instead of staying silent for the full window. Server responses
+        // (rate limit, HTTP errors) keep the stamp.
+        if (
+          error instanceof UpdateCheckError &&
+          error.code === "network" &&
+          !cancelled
+        ) {
+          writeLastCheck(previousLastCheck);
+        }
       }
     })();
 

@@ -171,9 +171,12 @@ export async function fetchLatestRelease(
   }
 
   if (!response.ok) {
+    // GitHub signals its primary rate limit with 403 + exhausted remaining, and
+    // its secondary rate limit with 429; map both to the actionable message.
     if (
-      response.status === 403 &&
-      response.headers.get("X-RateLimit-Remaining") === "0"
+      (response.status === 403 &&
+        response.headers.get("X-RateLimit-Remaining") === "0") ||
+      response.status === 429
     ) {
       throw new UpdateCheckError("rateLimit", response.status);
     }

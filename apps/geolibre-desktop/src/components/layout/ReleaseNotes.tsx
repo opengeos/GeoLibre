@@ -34,8 +34,9 @@ export function ReleaseNotes({ notes }: ReleaseNotesProps) {
         .replace(/^\d+\.\s+/, "")
         // Collapse inline link syntax to its label: [text](url) -> text.
         .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-        // Strip bold/italic emphasis markers, keeping the wrapped text.
-        .replace(/(\*{1,2}|_{1,2})(.+?)\1/g, "$2")
+        // Strip bold/italic emphasis markers, keeping the wrapped text. The
+        // 1-3 range covers ***bold italic*** without leaving a stray marker.
+        .replace(/(\*{1,3}|_{1,3})(.+?)\1/g, "$2")
         .trim(),
     )
     .filter((line) => line.length > 0);

@@ -135,6 +135,15 @@ describe("fetchLatestRelease", () => {
     });
   });
 
+  it("treats a 429 secondary rate limit as a rate limit error", async () => {
+    stubFetch(new Response("", { status: 429 }));
+    await assert.rejects(fetchLatestRelease(), (error: unknown) => {
+      assert.ok(error instanceof UpdateCheckError);
+      assert.equal(error.code, "rateLimit");
+      return true;
+    });
+  });
+
   it("flags a missing version tag", async () => {
     stubFetch(new Response(JSON.stringify({ body: "no tag" }), { status: 200 }));
     await assert.rejects(fetchLatestRelease(), (error: unknown) => {
