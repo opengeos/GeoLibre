@@ -51,6 +51,8 @@ type MapboxOverlayConstructor = new (
   props: Record<string, unknown>,
 ) => OverlayLike;
 type RasterLayerManagerInternals = {
+  /** The currently selected raster id (read to restore it after inspect). */
+  selectedId?: string | null;
   _deps?: {
     createOverlay?: (
       map: MapControlHost,
@@ -213,23 +215,37 @@ export function closeRasterLayerPanel(app: GeoLibreAppAPI): void {
   rasterControlMounted = false;
 }
 
+// The panel selection in effect before inspect stole focus, so it can be
+// restored when inspect stops (see setRasterPixelInspect).
+let rasterInspectPriorSelection: string | null = null;
+
 /**
  * Drives the raster control's pixel-inspect mode for a raster/COG layer so the
  * Layers-panel Identify action can read source band values on map click — the
  * same behavior as the raster panel's Inspect button. Selects the target raster
- * before enabling so the inspector reads the right layer. No-ops when the
- * control isn't mounted (no raster layer exists yet).
+ * before enabling so the inspector reads the right layer, then restores the
+ * panel's prior selection when inspect stops so it doesn't silently steal focus
+ * from a raster the user had selected for editing. No-ops when the control
+ * isn't mounted (no raster layer exists yet).
  *
  * @param layerId - The raster/COG layer id to inspect.
  * @param enabled - True to start inspecting, false to stop.
  */
 export function setRasterPixelInspect(layerId: string, enabled: boolean): void {
   if (!rasterControl) return;
+  const manager = (rasterControl as unknown as RasterControlInternals)
+    ._layerManager;
   if (enabled) {
+    rasterInspectPriorSelection = manager?.selectedId ?? null;
     rasterControl.selectRaster(layerId);
     rasterControl.setInspect(true);
   } else {
     rasterControl.setInspect(false);
+    // Restore the prior selection only if inspect actually changed it.
+    if (rasterInspectPriorSelection !== layerId) {
+      rasterControl.selectRaster(rasterInspectPriorSelection);
+    }
+    rasterInspectPriorSelection = null;
   }
 }
 

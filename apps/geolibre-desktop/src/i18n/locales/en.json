@@ -1370,6 +1370,11 @@
     "layerNameDefault": "Segmentation"
   },
   "layers": {
+    "identifyFeatures": "Identify features",
+    "identifyDeactivate": "Deactivate identify",
+    "identifyInspectPixels": "Inspect pixel values",
+    "identifyStopInspectPixels": "Stop inspecting pixel values",
+    "identifyUnavailable": "Identify is only available for vector, WMS, and COG layers",
     "exportGeoTiff": "GeoTIFF (COG)",
     "bindToTimeSlider": "Bind to Time Slider…",
     "unbindFromTimeSlider": "Unbind from Time Slider",

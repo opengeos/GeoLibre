@@ -1276,12 +1276,12 @@ export function LayerPanel({
             const identifyLabel = canIdentify
               ? identifyActive
                 ? isPixelIdentify
-                  ? "Stop inspecting pixel values"
-                  : "Deactivate identify"
+                  ? t("layers.identifyStopInspectPixels")
+                  : t("layers.identifyDeactivate")
                 : isPixelIdentify
-                  ? "Inspect pixel values"
-                  : "Identify features"
-              : "Identify is only available for vector, WMS, and COG layers";
+                  ? t("layers.identifyInspectPixels")
+                  : t("layers.identifyFeatures")
+              : t("layers.identifyUnavailable");
             const canEditGeometry = canEditLayerGeometry(layer);
             const geometryEditActive = geometryEditLayerId === layer.id;
             const geometryEditElsewhere =
