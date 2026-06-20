@@ -26,6 +26,7 @@ import {
 } from "@geolibre/ui";
 import { RASTER_SOURCE_KIND, SKETCHES_SOURCE_KIND } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
+import { useTranslation } from "react-i18next";
 import { RasterSymbologySection } from "./RasterSymbologySection";
 import {
   ChevronDown,
@@ -814,6 +815,7 @@ export function StylePanel({
   onResizeStart,
   autoCollapse = false,
 }: StylePanelProps) {
+  const { t } = useTranslation();
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const layers = useAppStore((s) => s.layers);
   const setLayerOpacity = useAppStore((s) => s.setLayerOpacity);
@@ -1659,12 +1661,12 @@ export function StylePanel({
           checked={labels.enabled}
           onChange={(event) => updateLabels({ enabled: event.target.checked })}
         />
-        Show labels
+        {t("style.labels.show")}
       </label>
       {labels.enabled ? (
         <>
           <div className="space-y-2">
-            <Label htmlFor="labelField">Label field</Label>
+            <Label htmlFor="labelField">{t("style.labels.field")}</Label>
             <Select
               id="labelField"
               value={labels.field}
@@ -1672,10 +1674,10 @@ export function StylePanel({
               onChange={(event) => updateLabels({ field: event.target.value })}
             >
               {vectorStylePropertyOptions.length === 0 ? (
-                <option value="">No attributes found</option>
+                <option value="">{t("style.labels.noAttributes")}</option>
               ) : (
                 <>
-                  <option value="">Select a field…</option>
+                  <option value="">{t("style.labels.selectField")}</option>
                   {vectorStylePropertyOptions.map((property) => (
                     <option key={property} value={property}>
                       {property}
@@ -1686,7 +1688,9 @@ export function StylePanel({
             </Select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="labelPlacement">Placement</Label>
+            <Label htmlFor="labelPlacement">
+              {t("style.labels.placement")}
+            </Label>
             <Select
               id="labelPlacement"
               value={labels.placement}
@@ -1696,14 +1700,14 @@ export function StylePanel({
                 })
               }
             >
-              <option value="point">Centroid / point</option>
-              <option value="line">Along line</option>
+              <option value="point">{t("style.labels.placementPoint")}</option>
+              <option value="line">{t("style.labels.placementLine")}</option>
             </Select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <NumericStyleInput
               id="labelSize"
-              label="Text size"
+              label={t("style.labels.textSize")}
               min={6}
               max={48}
               step={1}
@@ -1712,7 +1716,7 @@ export function StylePanel({
             />
             <NumericStyleInput
               id="labelHaloWidth"
-              label="Halo width"
+              label={t("style.labels.haloWidth")}
               min={0}
               max={8}
               step={0.5}
@@ -1722,7 +1726,9 @@ export function StylePanel({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="labelColor">Text color</Label>
+              <Label htmlFor="labelColor">
+                {t("style.labels.textColor")}
+              </Label>
               <ColorField
                 id="labelColor"
                 value={labels.color}
@@ -1730,7 +1736,9 @@ export function StylePanel({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="labelHaloColor">Halo color</Label>
+              <Label htmlFor="labelHaloColor">
+                {t("style.labels.haloColor")}
+              </Label>
               <ColorField
                 id="labelHaloColor"
                 value={labels.haloColor}
@@ -1741,21 +1749,25 @@ export function StylePanel({
           <div className="grid grid-cols-2 gap-3">
             <NumericStyleInput
               id="labelMinZoom"
-              label="Min zoom"
+              label={t("style.labels.minZoom")}
               min={0}
-              max={24}
+              max={labels.maxZoom}
               step={1}
               value={labels.minZoom}
-              onChange={(minZoom) => updateLabels({ minZoom })}
+              onChange={(minZoom) =>
+                updateLabels({ minZoom: Math.min(minZoom, labels.maxZoom) })
+              }
             />
             <NumericStyleInput
               id="labelMaxZoom"
-              label="Max zoom"
-              min={0}
+              label={t("style.labels.maxZoom")}
+              min={labels.minZoom}
               max={24}
               step={1}
               value={labels.maxZoom}
-              onChange={(maxZoom) => updateLabels({ maxZoom })}
+              onChange={(maxZoom) =>
+                updateLabels({ maxZoom: Math.max(maxZoom, labels.minZoom) })
+              }
             />
           </div>
           <label
@@ -1770,10 +1782,12 @@ export function StylePanel({
                 updateLabels({ allowOverlap: event.target.checked })
               }
             />
-            Allow labels to overlap
+            {t("style.labels.allowOverlap")}
           </label>
           <div className="space-y-2">
-            <Label htmlFor="labelExpression">Expression (optional)</Label>
+            <Label htmlFor="labelExpression">
+              {t("style.labels.expression")}
+            </Label>
             <textarea
               id="labelExpression"
               className="min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
@@ -1784,7 +1798,7 @@ export function StylePanel({
               }
             />
             <p className="text-xs text-muted-foreground">
-              A MapLibre expression (JSON). Overrides the field when set.
+              {t("style.labels.expressionHint")}
             </p>
           </div>
         </>
@@ -2295,7 +2309,9 @@ export function StylePanel({
           {!extrusionEnabled && pointRenderer !== "heatmap" ? (
             <>
               <Separator />
-              <p className="text-sm font-semibold">Labels</p>
+              <p className="text-sm font-semibold">
+                {t("style.labels.heading")}
+              </p>
               {labelControls}
             </>
           ) : null}

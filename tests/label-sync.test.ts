@@ -147,6 +147,21 @@ describe("label sync", () => {
     ]);
   });
 
+  it("falls back to the field when the expression is valid JSON but not an array", () => {
+    const { map, layers } = makeMap();
+    // `42` / `{"k":1}` parse cleanly but are not MapLibre expressions.
+    syncLayer(
+      map as never,
+      labeledLayer({ enabled: true, field: "name", expression: '{"k":1}' }),
+    );
+
+    const label = layers.get(LABEL_ID) as { layout: Record<string, unknown> };
+    assert.deepEqual(label.layout["text-field"], [
+      "to-string",
+      ["coalesce", ["get", "name"], ""],
+    ]);
+  });
+
   it("places labels along the line when placement is line", () => {
     const { map, layers } = makeMap();
     syncLayer(

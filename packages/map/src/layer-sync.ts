@@ -1652,17 +1652,26 @@ function applyVectorDataRenderLayers(
     labels.enabled &&
     (labels.expression.trim() || labels.field)
   ) {
+    const fieldTextField = (
+      labels.field
+        ? ["to-string", ["coalesce", ["get", labels.field], ""]]
+        : ""
+    ) as unknown as maplibregl.ExpressionSpecification | string;
     let textField: maplibregl.ExpressionSpecification | string;
     try {
-      textField = labels.expression.trim()
-        ? (JSON.parse(labels.expression) as maplibregl.ExpressionSpecification)
-        : (["to-string", ["coalesce", ["get", labels.field], ""]] as unknown as maplibregl.ExpressionSpecification);
+      if (labels.expression.trim()) {
+        const parsed = JSON.parse(labels.expression);
+        // JSON.parse accepts non-expressions (numbers, objects, null); only an
+        // array is a usable MapLibre expression, so reject anything else and
+        // fall back to the field.
+        if (!Array.isArray(parsed)) throw new Error("not an expression");
+        textField = parsed as maplibregl.ExpressionSpecification;
+      } else {
+        textField = fieldTextField;
+      }
     } catch {
-      // A typo'd expression must not break the whole layer sync: fall back to
-      // the field (or empty text) instead.
-      textField = labels.field
-        ? (["to-string", ["coalesce", ["get", labels.field], ""]] as unknown as maplibregl.ExpressionSpecification)
-        : "";
+      // A typo'd or non-expression value must not break the whole layer sync.
+      textField = fieldTextField;
     }
     const labelZoom = intersectZoomRange(
       {
@@ -1671,12 +1680,11 @@ function applyVectorDataRenderLayers(
       },
       layer.style,
     );
-    // Skip geoman text-marker points (they carry their own annotation text);
-    // the coalesce defaults to "" for normal features so they all pass.
+    // Skip geoman text-marker points (they carry their own annotation text),
+    // reusing the same two-property predicate the circle/text layers use.
     const nonMarkerFilter = [
-      "!=",
-      ["coalesce", ["get", GEOMAN_SHAPE_PROPERTY], ["get", "shape"], ""],
-      TEXT_MARKER_SHAPE,
+      "!",
+      textMarkerShapeFilter,
     ] as unknown as maplibregl.FilterSpecification;
     ensureLayer(
       map,

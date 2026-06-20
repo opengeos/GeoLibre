@@ -1432,6 +1432,27 @@
     "layerName": "Segmentation: {{prompt}}",
     "layerNameDefault": "Segmentation"
   },
+  "style": {
+    "labels": {
+      "heading": "Labels",
+      "show": "Show labels",
+      "field": "Label field",
+      "noAttributes": "No attributes found",
+      "selectField": "Select a field…",
+      "placement": "Placement",
+      "placementPoint": "Centroid / point",
+      "placementLine": "Along line",
+      "textSize": "Text size",
+      "haloWidth": "Halo width",
+      "textColor": "Text color",
+      "haloColor": "Halo color",
+      "minZoom": "Min zoom",
+      "maxZoom": "Max zoom",
+      "allowOverlap": "Allow labels to overlap",
+      "expression": "Expression (optional)",
+      "expressionHint": "A MapLibre expression (JSON). Overrides the field when set."
+    }
+  },
   "layers": {
     "identifyFeatures": "Identify features",
     "identifyDeactivate": "Deactivate identify",
