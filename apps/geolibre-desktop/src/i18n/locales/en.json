@@ -1480,8 +1480,5 @@
     "customColors": "Custom colors",
     "customColorsValid": "{{count}} colors, low to high. Use Reverse to flip.",
     "customColorsHint": "Enter at least two hex codes, separated by commas or spaces."
-  },
-  "about": {
-    "projectFormat": "Project format"
   }
 }
