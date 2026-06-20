@@ -340,9 +340,12 @@ export function ManagePluginsDialog({
             return true;
         }
       })
-      // Present the list alphabetically by display name so it stays predictable
-      // and scannable as the registry grows, regardless of registry file order.
-      // Case-insensitive, locale-aware; falls back to id on a name tie.
+      // Locale-aware, case-insensitive sort; plugin id breaks name ties.
+      .sort(
+        (a, b) =>
+          a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) ||
+          a.id.localeCompare(b.id),
+      );
       .sort(
         (a, b) =>
           a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) ||
