@@ -30,14 +30,23 @@ export function NoServiceWorkerBanner({ message }: NoServiceWorkerBannerProps) {
       <WifiOff className="mt-0.5 h-4 w-4 shrink-0" />
       <div className="space-y-1">
         <p>{message}</p>
-        <button
-          type="button"
+        {/* A real anchor so assistive tech announces a link (not a button) and
+            the browser offers open-in-new-tab; the onClick routes through
+            openExternalLink because the Tauri webview ignores target="_blank"
+            and needs the opener plugin. */}
+        <a
+          href={OFFLINE_WEB_APP_URL}
+          target="_blank"
+          rel="noopener noreferrer"
           className="inline-flex items-center gap-1 rounded font-medium underline underline-offset-2 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          onClick={() => void openExternalLink(OFFLINE_WEB_APP_URL)}
+          onClick={(event) => {
+            event.preventDefault();
+            void openExternalLink(OFFLINE_WEB_APP_URL);
+          }}
         >
           {t("common.openWebApp")}
           <ExternalLink className="h-3.5 w-3.5" />
-        </button>
+        </a>
       </div>
     </div>
   );

@@ -520,6 +520,10 @@ export function OfflineRegionDialog({
             <Button
               variant="outline"
               onClick={handleRetry}
+              // Mirrors the primary button's guard for consistency. In practice
+              // only the `phase === "running"` half bites here (this button
+              // renders only when phase is "done"), but reusing controlsDisabled
+              // keeps the gate correct if either condition later changes.
               disabled={controlsDisabled}
             >
               <RotateCw className="mr-2 h-4 w-4" />

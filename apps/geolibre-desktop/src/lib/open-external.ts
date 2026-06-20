@@ -24,5 +24,11 @@ export async function openExternalLink(url: string): Promise<void> {
     }
     return;
   }
-  window.open(url, "_blank", "noopener,noreferrer");
+  // window.open from this click (a user gesture) is normally allowed, but a
+  // strict popup blocker can still return null; log it so the dead click is
+  // debuggable rather than silent.
+  const opened = window.open(url, "_blank", "noopener,noreferrer");
+  if (!opened) {
+    console.warn("[GeoLibre] failed to open external link (popup blocked?)", url);
+  }
 }
