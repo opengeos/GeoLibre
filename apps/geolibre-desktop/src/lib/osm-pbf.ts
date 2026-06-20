@@ -30,9 +30,14 @@ export interface OsmPbfLayers {
 
 /** Progress through the synchronous classification phase of a parse. */
 export interface OsmPbfProgress {
-  /** Entities classified into layers so far. */
+  /**
+   * Entities visited so far. Counts every entity the loop touches, including
+   * untagged nodes/ways that are skipped without becoming features (most of a
+   * real extract), so it reaches `total` at the end and tracks parse progress
+   * rather than the emitted-feature count.
+   */
   processed: number;
-  /** Total entities to classify (nodes + ways + relations). */
+  /** Total entities to visit (nodes + ways + relations). */
   total: number;
 }
 

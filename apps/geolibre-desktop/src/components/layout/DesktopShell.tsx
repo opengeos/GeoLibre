@@ -807,7 +807,11 @@ export function DesktopShell({
                           bytes.byteOffset,
                           bytes.byteOffset + bytes.byteLength,
                         ) as ArrayBuffer);
-                  const layers = await loadOsmPbf(buffer);
+                  const layers = await loadOsmPbf(buffer, undefined, (p) =>
+                    setDropMessage(
+                      `Parsing ${name}… ${p.processed.toLocaleString()} of ${p.total.toLocaleString()} entities`,
+                    ),
+                  );
                   const added = addOsmPbfLayers(
                     addGeoJsonLayer,
                     osmPbfBaseName(name),
@@ -828,7 +832,7 @@ export function DesktopShell({
                   setDropMessage(null);
                   setDropError(
                     err instanceof OsmPbfTooLargeError
-                      ? `${name}: ${t("toolbar.error.osmPbfTooLarge")}`
+                      ? t("toolbar.error.osmPbfTooLarge")
                       : `Could not parse ${name}: ${err instanceof Error ? err.message : String(err)}`,
                   );
                 }
@@ -938,14 +942,18 @@ export function DesktopShell({
           setDropMessage(`Parsing ${file.name}…`);
           let layers;
           try {
-            layers = await loadOsmPbf(await file.arrayBuffer());
+            layers = await loadOsmPbf(await file.arrayBuffer(), undefined, (p) =>
+              setDropMessage(
+                `Parsing ${file.name}… ${p.processed.toLocaleString()} of ${p.total.toLocaleString()} entities`,
+              ),
+            );
           } catch (err) {
             // Isolate per-file failures so one bad PBF doesn't abandon the rest
             // of the drop (including any co-dropped non-PBF files).
             setDropMessage(null);
             setDropError(
               err instanceof OsmPbfTooLargeError
-                ? `${file.name}: ${t("toolbar.error.osmPbfTooLarge")}`
+                ? t("toolbar.error.osmPbfTooLarge")
                 : `Could not parse ${file.name}: ${err instanceof Error ? err.message : String(err)}`,
             );
             continue;

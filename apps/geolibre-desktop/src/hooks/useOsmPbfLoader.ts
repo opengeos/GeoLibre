@@ -6,8 +6,8 @@ import {
   osmPbfBaseName,
   OsmPbfTooLargeError,
   OSM_PBF_SIZE_WARN_BYTES,
+  type OsmPbfProgress,
 } from "../lib/osm-pbf-loader";
-import type { OsmPbfProgress } from "../lib/osm-pbf-loader";
 import { isHttpUrl, openLocalDataFileWithFallback } from "../lib/tauri-io";
 import {
   type AppApi,
