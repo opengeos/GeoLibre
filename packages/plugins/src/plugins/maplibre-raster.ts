@@ -214,6 +214,26 @@ export function closeRasterLayerPanel(app: GeoLibreAppAPI): void {
 }
 
 /**
+ * Drives the raster control's pixel-inspect mode for a raster/COG layer so the
+ * Layers-panel Identify action can read source band values on map click — the
+ * same behavior as the raster panel's Inspect button. Selects the target raster
+ * before enabling so the inspector reads the right layer. No-ops when the
+ * control isn't mounted (no raster layer exists yet).
+ *
+ * @param layerId - The raster/COG layer id to inspect.
+ * @param enabled - True to start inspecting, false to stop.
+ */
+export function setRasterPixelInspect(layerId: string, enabled: boolean): void {
+  if (!rasterControl) return;
+  if (enabled) {
+    rasterControl.selectRaster(layerId);
+    rasterControl.setInspect(true);
+  } else {
+    rasterControl.setInspect(false);
+  }
+}
+
+/**
  * Replays URL-backed rasters from the loaded project into the control and
  * drops control rasters the project does not contain. Called by the desktop
  * shell whenever a project is loaded or the map is reinitialised, mirroring

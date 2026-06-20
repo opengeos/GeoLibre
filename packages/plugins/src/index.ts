@@ -111,6 +111,7 @@ export {
   closeRasterLayerPanel,
   openRasterLayerPanel,
   restoreRasterLayers,
+  setRasterPixelInspect,
 } from "./plugins/maplibre-raster";
 export {
   RASTER_MAX_CLASSES,

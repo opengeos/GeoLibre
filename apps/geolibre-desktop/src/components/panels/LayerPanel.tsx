@@ -1264,8 +1264,14 @@ export function LayerPanel({
               layer.type === "vector-tiles" ||
               (layer.type === "mbtiles" &&
                 layer.metadata.tileType === "vector") ||
+              // COG layers identify pixel values via the raster control's pixel
+              // inspector (see useRasterIdentify), not the vector feature query.
+              layer.type === "cog" ||
               hasNativeIdentifyLayers(layer);
             const identifyActive = identifyLayerId === layer.id;
+            // COGs inspect raw pixel/band values rather than vector features, so
+            // the icon's tooltip reflects that distinct action.
+            const isPixelIdentify = layer.type === "cog";
             const canEditGeometry = canEditLayerGeometry(layer);
             const geometryEditActive = geometryEditLayerId === layer.id;
             const geometryEditElsewhere =
@@ -1523,16 +1529,24 @@ export function LayerPanel({
                     title={
                       canIdentify
                         ? identifyActive
-                          ? "Deactivate identify"
-                          : "Identify features"
-                        : "Identify is only available for vector and WMS layers"
+                          ? isPixelIdentify
+                            ? "Stop inspecting pixel values"
+                            : "Deactivate identify"
+                          : isPixelIdentify
+                            ? "Inspect pixel values"
+                            : "Identify features"
+                        : "Identify is only available for vector, WMS, and COG layers"
                     }
                     aria-label={
                       canIdentify
                         ? identifyActive
-                          ? "Deactivate identify"
-                          : "Identify features"
-                        : "Identify is only available for vector and WMS layers"
+                          ? isPixelIdentify
+                            ? "Stop inspecting pixel values"
+                            : "Deactivate identify"
+                          : isPixelIdentify
+                            ? "Inspect pixel values"
+                            : "Identify features"
+                        : "Identify is only available for vector, WMS, and COG layers"
                     }
                     disabled={!canIdentify || geometryEditActive}
                     onClick={(e) => {

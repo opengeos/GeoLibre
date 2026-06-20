@@ -62,6 +62,7 @@ import { registerMbtilesProtocol } from "../../lib/mbtiles";
 import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
 import { registerXyzTileProtocol } from "../../lib/xyz-url";
 import { useEmbedBridge } from "../../hooks/useEmbedBridge";
+import { useRasterIdentify } from "../../hooks/useRasterIdentify";
 import { BoundsRestrictionIndicator } from "./BoundsRestrictionIndicator";
 import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
 import { useCommandBridge } from "../../hooks/useCommandBridge";
@@ -391,6 +392,9 @@ export function DesktopShell({
   // Request/reply + event channel backing the Python scripting API (live
   // queries, processing, map events). Also inert when not embedded.
   useCommandBridge(mapControllerRef);
+  // Routes the Layers-panel Identify action to the raster pixel inspector for
+  // COG layers (read band values on click). Inert until a COG is identified.
+  useRasterIdentify();
   const [layerPanelWidth, setLayerPanelWidth] = useState(
     DEFAULT_SIDE_PANEL_WIDTH,
   );
