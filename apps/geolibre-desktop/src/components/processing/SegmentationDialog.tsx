@@ -393,15 +393,18 @@ export function SegmentationDialog({
               intro={t("segmentation.sidecar.intro", {
                 sidecarUrl: SIDECAR_URL,
               })}
+              troubleshootingTitle={t(
+                "segmentation.sidecar.troubleshootingTitle",
+              )}
+              // The banner only renders after a failed "Start server", which is
+              // desktop-only, so the start step is always the desktop one.
               // Install first: a missing segment-geospatial backend is the most
-              // likely reason "Start server" failed, so leading with it (rather
-              // than re-clicking Start, which would fail the same way) keeps the
-              // path self-consistent.
+              // likely reason it failed, so leading with it (rather than
+              // re-clicking Start, which would fail the same way) keeps the path
+              // self-consistent.
               steps={[
                 t("segmentation.sidecar.stepInstall"),
-                isTauri()
-                  ? t("segmentation.sidecar.stepStartServerDesktop")
-                  : t("segmentation.sidecar.stepStartServerBrowser"),
+                t("segmentation.sidecar.stepStartServerDesktop"),
                 t("processing.sidecar.stepCheckPort", { port: SIDECAR_PORT }),
                 t("processing.sidecar.stepRestart"),
               ]}

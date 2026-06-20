@@ -49,6 +49,13 @@ interface SidecarHelpBannerProps {
    * {@link SIDECAR_PORT} as needed.
    */
   steps?: string[];
+  /**
+   * Override the heading above the troubleshooting steps. Defaults to "Still
+   * want to use the server?", which fits tools that have a WASM fallback. Tools
+   * where the server is mandatory (e.g. AI segmentation) should pass copy that
+   * doesn't imply the server is optional.
+   */
+  troubleshootingTitle?: string;
 }
 
 /**
@@ -65,6 +72,7 @@ export function SidecarHelpBanner({
   title,
   intro,
   steps,
+  troubleshootingTitle,
 }: SidecarHelpBannerProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
@@ -165,7 +173,8 @@ export function SidecarHelpBanner({
 
           <div className="grid gap-1.5">
             <p className="text-xs font-medium text-foreground">
-              {t("processing.sidecar.troubleshootingTitle")}
+              {troubleshootingTitle ??
+                t("processing.sidecar.troubleshootingTitle")}
             </p>
             <ol className="grid list-decimal gap-1 pl-5 text-xs text-muted-foreground">
               {resolvedSteps.map((step, index) => (
