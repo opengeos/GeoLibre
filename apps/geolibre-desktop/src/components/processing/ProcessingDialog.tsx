@@ -130,7 +130,12 @@ function isOutputParameter(param: WhiteboxToolParameter): boolean {
   return parameterKind(param).endsWith("_out");
 }
 
-/** Best-effort extension for a `file_out` blob, sniffed from its magic bytes. */
+/**
+ * Best-effort extension for a `file_out` blob, sniffed from its magic bytes.
+ * Covers the formats GeoLibre `file_out` tools emit today (GeoParquet, PNG,
+ * PMTiles); a genuinely opaque output falls back to `.bin`. Extend the sniff
+ * here if a future tool writes a recognizable text format.
+ */
 function fileOutputExtension(bytes: Uint8Array): string {
   const matches = (sig: number[]) => sig.every((b, i) => bytes[i] === b);
   if (matches([0x50, 0x41, 0x52, 0x31])) return "parquet"; // "PAR1"
@@ -142,6 +147,8 @@ function fileOutputExtension(bytes: Uint8Array): string {
 
 /** Save bytes to the user's downloads via a transient object URL. */
 function downloadBytes(bytes: Uint8Array, filename: string): void {
+  // Cast required: TS types Uint8Array as Uint8Array<ArrayBufferLike>, which is
+  // not directly assignable to BlobPart under this lib (mirrors DesktopShell).
   const url = URL.createObjectURL(new Blob([bytes as BlobPart]));
   const anchor = document.createElement("a");
   anchor.href = url;
