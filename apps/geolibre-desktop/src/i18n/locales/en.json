@@ -1493,7 +1493,10 @@
     "importCsv": "Import CSV…",
     "exportData": "Export",
     "exportJson": "Export JSON",
-    "exportCsv": "Export CSV"
+    "exportCsv": "Export CSV",
+    "reset": "Reset",
+    "resetTitle": "Clear the story and start over",
+    "resetConfirm": "Clear this story map? All chapters and settings will be removed so you can start your own."
   },
   "network": {
     "title": "Network analysis",
