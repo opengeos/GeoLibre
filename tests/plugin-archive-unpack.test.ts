@@ -33,6 +33,29 @@ describe("bundleFromZipBytes", () => {
     assert.equal(bundle.styleSource, ".demo {}");
   });
 
+  it("unpacks an archive wrapped in a single folder", async () => {
+    const zip = makeZip({
+      "my-plugin/plugin.json": JSON.stringify(VALID_MANIFEST),
+      "my-plugin/dist/plugin.js": "export default {};",
+      "my-plugin/dist/plugin.css": ".demo {}",
+    });
+    const bundle = await bundleFromZipBytes("my-plugin.zip", zip);
+    assert.equal(bundle.manifest.id, "demo-plugin");
+    assert.equal(bundle.entrySource, "export default {};");
+    assert.equal(bundle.styleSource, ".demo {}");
+  });
+
+  it("ignores the __MACOSX metadata folder and prefers a root plugin.json", async () => {
+    const zip = makeZip({
+      "__MACOSX/._plugin.json": "junk",
+      "plugin.json": JSON.stringify({ ...VALID_MANIFEST, style: undefined }),
+      "dist/plugin.js": "export default {};",
+    });
+    const bundle = await bundleFromZipBytes("demo.zip", zip);
+    assert.equal(bundle.manifest.id, "demo-plugin");
+    assert.equal(bundle.entrySource, "export default {};");
+  });
+
   it("returns a null style when the manifest omits one", async () => {
     const { style: _style, ...manifest } = VALID_MANIFEST;
     const zip = makeZip({
@@ -43,9 +66,9 @@ describe("bundleFromZipBytes", () => {
     assert.equal(bundle.styleSource, null);
   });
 
-  it("rejects an archive without a root plugin.json", async () => {
+  it("rejects an archive without any plugin.json", async () => {
     const zip = makeZip({ "dist/plugin.js": "export default {};" });
-    await assert.rejects(bundleFromZipBytes("demo.zip", zip), /missing a root plugin\.json/);
+    await assert.rejects(bundleFromZipBytes("demo.zip", zip), /missing a plugin\.json/);
   });
 
   it("rejects an invalid manifest (entry not a .js/.mjs file)", async () => {

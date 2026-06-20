@@ -26,10 +26,13 @@ const ENTRY_SOURCE = `const plugin = {
 export default plugin;
 `;
 
+// Wrap the plugin in a top-level folder (as produced by zipping a plugin
+// directory) so this exercises the wrapping-folder path, not just a root
+// plugin.json.
 function buildPluginZip(): Buffer {
   const archive = zipSync({
-    "plugin.json": strToU8(JSON.stringify(MANIFEST)),
-    "plugin.js": strToU8(ENTRY_SOURCE),
+    "e2e-sample-plugin/plugin.json": strToU8(JSON.stringify(MANIFEST)),
+    "e2e-sample-plugin/plugin.js": strToU8(ENTRY_SOURCE),
   });
   return Buffer.from(archive);
 }

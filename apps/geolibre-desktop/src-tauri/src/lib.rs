@@ -517,14 +517,31 @@ fn load_external_plugin_archive(
     let file = File::open(path).map_err(|error| format!("Could not open zip: {error}"))?;
     let mut archive =
         zip::ZipArchive::new(file).map_err(|error| format!("Could not read zip: {error}"))?;
-    let manifest_text = read_zip_text_entry(&mut archive, "plugin.json", "plugin manifest")?;
+    // Tolerate a wrapping folder (`my-plugin/plugin.json`) as produced by zipping
+    // a plugin directory, not just a root `plugin.json`. The entry/style paths
+    // then resolve against the manifest's own directory.
+    let manifest_path = find_zip_manifest_path(&archive)
+        .ok_or_else(|| "Plugin archive is missing a plugin.json".to_string())?;
+    let prefix = manifest_path
+        .strip_suffix("plugin.json")
+        .unwrap_or("")
+        .to_string();
+    let manifest_text = read_zip_text_entry(&mut archive, &manifest_path, "plugin manifest")?;
     let manifest: ExternalPluginManifest = serde_json::from_str(&manifest_text)
         .map_err(|error| format!("Could not parse plugin.json: {error}"))?;
     validate_external_plugin_manifest(&manifest)?;
 
-    let entry_source = read_zip_text_entry(&mut archive, &manifest.entry, "plugin entry")?;
+    let entry_source = read_zip_text_entry(
+        &mut archive,
+        &format!("{prefix}{}", manifest.entry),
+        "plugin entry",
+    )?;
     let style_source = match manifest.style.as_deref() {
-        Some(style) => Some(read_zip_text_entry(&mut archive, style, "plugin style")?),
+        Some(style) => Some(read_zip_text_entry(
+            &mut archive,
+            &format!("{prefix}{style}"),
+            "plugin style",
+        )?),
         None => None,
     };
 
@@ -534,6 +551,32 @@ fn load_external_plugin_archive(
         entry_source,
         style_source,
     })
+}
+
+/// Find plugin.json inside a zip, tolerating a single wrapping folder. Prefers a
+/// root `plugin.json`, otherwise returns the shallowest `*/plugin.json`, ignoring
+/// the `__MACOSX/` metadata folder macOS adds to archives. Returns the manifest's
+/// full path within the archive, or None when no plugin.json is present.
+fn find_zip_manifest_path<R: Read + std::io::Seek>(
+    archive: &zip::ZipArchive<R>,
+) -> Option<String> {
+    let names: Vec<&str> = archive.file_names().collect();
+    if names.iter().any(|name| *name == "plugin.json") {
+        return Some("plugin.json".to_string());
+    }
+    let mut best: Option<&str> = None;
+    let mut best_depth = usize::MAX;
+    for name in names {
+        if name.starts_with("__MACOSX/") || !name.ends_with("/plugin.json") {
+            continue;
+        }
+        let depth = name.matches('/').count();
+        if depth < best_depth || (depth == best_depth && best.is_none_or(|b| name < b)) {
+            best = Some(name);
+            best_depth = depth;
+        }
+    }
+    best.map(str::to_string)
 }
 
 fn load_external_plugin_directory(
@@ -2269,7 +2312,60 @@ fn configure_linux_webkit() {}
 
 #[cfg(test)]
 mod tests {
-    use super::plugin_archive_file_name;
+    use super::{find_zip_manifest_path, plugin_archive_file_name};
+    use std::io::{Cursor, Write};
+
+    fn zip_with_names(names: &[&str]) -> Vec<u8> {
+        let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        let options =
+            zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        for name in names {
+            writer.start_file(*name, options).unwrap();
+            writer.write_all(b"x").unwrap();
+        }
+        writer.finish().unwrap().into_inner()
+    }
+
+    fn manifest_path(names: &[&str]) -> Option<String> {
+        let bytes = zip_with_names(names);
+        let archive = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
+        find_zip_manifest_path(&archive)
+    }
+
+    #[test]
+    fn finds_root_manifest() {
+        assert_eq!(
+            manifest_path(&["plugin.json", "dist/plugin.js"]).as_deref(),
+            Some("plugin.json")
+        );
+    }
+
+    #[test]
+    fn finds_manifest_inside_a_wrapping_folder() {
+        assert_eq!(
+            manifest_path(&["my-plugin/plugin.json", "my-plugin/dist/plugin.js"]).as_deref(),
+            Some("my-plugin/plugin.json")
+        );
+    }
+
+    #[test]
+    fn prefers_root_and_ignores_macosx_metadata() {
+        // A root manifest wins over a deeper one.
+        assert_eq!(
+            manifest_path(&["wrap/plugin.json", "plugin.json"]).as_deref(),
+            Some("plugin.json")
+        );
+        // The __MACOSX folder is skipped, so the real wrapped manifest is found.
+        assert_eq!(
+            manifest_path(&["__MACOSX/wrap/._plugin.json", "wrap/plugin.json"]).as_deref(),
+            Some("wrap/plugin.json")
+        );
+    }
+
+    #[test]
+    fn returns_none_without_a_manifest() {
+        assert_eq!(manifest_path(&["dist/plugin.js"]), None);
+    }
 
     #[test]
     fn keeps_safe_plugin_ids() {

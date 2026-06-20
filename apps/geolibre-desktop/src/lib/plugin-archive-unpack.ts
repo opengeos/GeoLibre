@@ -76,25 +76,53 @@ function assertSafeArchivePath(field: string, value: string): void {
   }
 }
 
+// Locate plugin.json inside the archive, tolerating a wrapping folder: zipping a
+// plugin directory commonly yields `my-plugin/plugin.json` rather than a root
+// `plugin.json`. Prefer a root manifest, otherwise pick the shallowest
+// `*/plugin.json`, ignoring the `__MACOSX/` metadata folder macOS adds. Returns
+// the manifest's full key, or null when no plugin.json is present. The entry and
+// style paths in the manifest resolve against the manifest's own directory.
+function findManifestPath(
+  files: Record<string, Uint8Array>,
+): string | null {
+  if (files["plugin.json"]) return "plugin.json";
+  let best: string | null = null;
+  let bestDepth = Number.POSITIVE_INFINITY;
+  for (const key of Object.keys(files)) {
+    if (key.startsWith("__MACOSX/")) continue;
+    if (!key.endsWith("/plugin.json")) continue;
+    const depth = key.split("/").length;
+    if (depth < bestDepth || (depth === bestDepth && (best === null || key < best))) {
+      best = key;
+      bestDepth = depth;
+    }
+  }
+  return best;
+}
+
 /**
  * Unzip an uploaded plugin archive in the browser and validate it into an
- * ExternalPluginBundle: reads the root plugin.json, enforces the manifest rules
- * and safe relative paths, and pulls the entry (and optional style) out of the
- * archive. Does NOT execute the entry; the caller imports and registers it.
+ * ExternalPluginBundle: locates plugin.json (at the root or inside a single
+ * wrapping folder), enforces the manifest rules and safe relative paths, and
+ * pulls the entry (and optional style) out of the archive relative to the
+ * manifest's directory. Does NOT execute the entry; the caller imports it.
  */
 export async function bundleFromZipBytes(
   archiveName: string,
   bytes: Uint8Array,
 ): Promise<ExternalPluginBundle> {
   const files = await unzipToRecord(bytes);
-  const manifestBytes = files["plugin.json"];
-  if (!manifestBytes) {
-    throw new Error("Plugin archive is missing a root plugin.json.");
+  const manifestPath = findManifestPath(files);
+  if (!manifestPath) {
+    throw new Error("Plugin archive is missing a plugin.json.");
   }
+  // The directory that contains plugin.json ("" at the root, or "my-plugin/"
+  // for a wrapped archive); entry/style resolve against it.
+  const prefix = manifestPath.slice(0, manifestPath.length - "plugin.json".length);
 
   let manifest: unknown;
   try {
-    manifest = JSON.parse(decodePluginText(manifestBytes, "plugin manifest"));
+    manifest = JSON.parse(decodePluginText(files[manifestPath], "plugin manifest"));
   } catch {
     throw new Error("Could not parse plugin.json.");
   }
@@ -103,7 +131,7 @@ export async function bundleFromZipBytes(
   }
 
   assertSafeArchivePath("entry", manifest.entry);
-  const entryBytes = files[manifest.entry];
+  const entryBytes = files[prefix + manifest.entry];
   if (!entryBytes) {
     throw new Error(
       `Plugin entry '${manifest.entry}' is missing from the archive.`,
@@ -114,7 +142,7 @@ export async function bundleFromZipBytes(
   let styleSource: string | null = null;
   if (manifest.style) {
     assertSafeArchivePath("style", manifest.style);
-    const styleBytes = files[manifest.style];
+    const styleBytes = files[prefix + manifest.style];
     if (!styleBytes) {
       throw new Error(
         `Plugin style '${manifest.style}' is missing from the archive.`,
