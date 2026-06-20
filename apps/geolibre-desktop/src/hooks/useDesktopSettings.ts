@@ -204,8 +204,10 @@ function normalizeThemeSettings(theme: unknown): ThemeSettings {
     scheme: isThemeScheme(candidate.scheme)
       ? candidate.scheme
       : DEFAULT_THEME_SETTINGS.scheme,
+    // Normalize so the value bound to `<input type="color">` is exactly
+    // `#rrggbb` lowercase (isHexColor already requires the leading `#`).
     customColor: isHexColor(candidate.customColor)
-      ? candidate.customColor
+      ? candidate.customColor.trim().toLowerCase()
       : DEFAULT_THEME_SETTINGS.customColor,
   };
 }

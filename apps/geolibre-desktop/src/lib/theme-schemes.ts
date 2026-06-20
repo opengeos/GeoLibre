@@ -10,32 +10,41 @@
  * (which override the stylesheet in both light and dark mode). This module is the
  * single source of truth for the valid scheme ids and the picker UI.
  */
-export type ThemeScheme =
-  | "blue"
-  | "violet"
-  | "emerald"
-  | "rose"
-  | "amber"
-  | "custom";
+/**
+ * Preset scheme ids, the single source of truth. Each one has a matching
+ * `[data-theme="<id>"]` block in `globals.css` and an entry in `THEME_SCHEMES`.
+ * Deriving the type from this array keeps the three in sync: adding an id here
+ * without a `THEME_SCHEMES` entry is a compile error (the array is typed against
+ * the derived id), so persisted values can't silently fall back to the default.
+ */
+const PRESET_SCHEME_IDS = [
+  "blue",
+  "violet",
+  "emerald",
+  "rose",
+  "amber",
+] as const;
+
+type PresetScheme = (typeof PRESET_SCHEME_IDS)[number];
+
+/** A preset scheme, or "custom" (a user-picked hex color applied inline). */
+export type ThemeScheme = PresetScheme | "custom";
 
 /**
  * The default scheme matches the base `:root` / `.dark` tokens already shipped in
- * `globals.css`, so no `data-theme` attribute is set for it.
+ * `globals.css`, so no `data-theme` attribute is set for it. Invariant: if this
+ * ever changes to another preset, add a `[data-theme="<old default>"]` block in
+ * `globals.css` for the now-non-default scheme (see `applyThemeScheme`).
  */
-export const DEFAULT_THEME_SCHEME: ThemeScheme = "blue";
+export const DEFAULT_THEME_SCHEME: PresetScheme = "blue";
 
 /** Seed color for the custom picker before the user changes it (a teal-cyan). */
 export const DEFAULT_CUSTOM_COLOR = "#0ea5e9";
 
 export interface ThemeSchemeOption {
-  id: ThemeScheme;
+  id: PresetScheme;
   /** i18n key for the display label (typed so `t()` accepts it directly). */
-  labelKey:
-    | "settings.appearance.scheme.blue"
-    | "settings.appearance.scheme.violet"
-    | "settings.appearance.scheme.emerald"
-    | "settings.appearance.scheme.rose"
-    | "settings.appearance.scheme.amber";
+  labelKey: `settings.appearance.scheme.${PresetScheme}`;
   /** Representative swatch color (`hsl()`) shown as the picker dot. */
   swatch: string;
 }
@@ -72,18 +81,19 @@ export const THEME_SCHEMES: readonly ThemeSchemeOption[] = [
   },
 ];
 
-const HEX_COLOR = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i;
+// Requires a leading `#`: the stored value is bound to `<input type="color">`,
+// which only accepts exact `#rrggbb`/`#rgb` and resets to black otherwise.
+const HEX_COLOR = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 
 /** Type guard for persisted/tampered scheme values. */
 export function isThemeScheme(value: unknown): value is ThemeScheme {
   return (
     value === "custom" ||
-    (typeof value === "string" &&
-      THEME_SCHEMES.some((scheme) => scheme.id === value))
+    (PRESET_SCHEME_IDS as readonly string[]).includes(value as string)
   );
 }
 
-/** Whether `value` is a 3- or 6-digit hex color (with or without a leading #). */
+/** Whether `value` is a 3- or 6-digit hex color with a leading `#`. */
 export function isHexColor(value: unknown): value is string {
   return typeof value === "string" && HEX_COLOR.test(value.trim());
 }
@@ -104,7 +114,7 @@ function expandHex(hex: string): string {
  * Convert a hex color to the bare HSL channels (`"H S% L%"`) the design tokens
  * expect. Returns null for invalid input.
  *
- * @param hex - A 3- or 6-digit hex color, with or without a leading `#`.
+ * @param hex - A 3- or 6-digit hex color with a leading `#`.
  */
 export function hexToHslChannels(hex: string): string | null {
   const digits = expandHex(hex);
@@ -151,7 +161,7 @@ export function foregroundForHex(hex: string): string {
 
   const linearize = (value: number) => {
     const channel = value / 255;
-    return channel <= 0.03928
+    return channel <= 0.04045
       ? channel / 12.92
       : ((channel + 0.055) / 1.055) ** 2.4;
   };
@@ -200,20 +210,22 @@ export function applyThemeScheme(
   }
 
   if (scheme === "custom") {
-    const channels = customColor ? hexToHslChannels(customColor) : null;
     root.removeAttribute("data-theme");
-    if (channels) {
+    // Guard on `customColor` (not just the parsed channels) so TypeScript knows
+    // it is a string when computing the foreground, no cast needed.
+    const channels = customColor ? hexToHslChannels(customColor) : null;
+    if (customColor && channels) {
       root.style.setProperty("--primary", channels);
-      root.style.setProperty(
-        "--primary-foreground",
-        foregroundForHex(customColor as string),
-      );
+      root.style.setProperty("--primary-foreground", foregroundForHex(customColor));
       root.style.setProperty("--ring", channels);
     }
     // An invalid/empty custom color leaves the base tokens in place.
     return;
   }
 
+  // The default scheme has no `[data-theme]` block — its tokens equal the base
+  // `:root` / `.dark` rules, so clearing the attribute applies them (see the
+  // invariant on DEFAULT_THEME_SCHEME). Every other preset has a matching block.
   if (scheme === DEFAULT_THEME_SCHEME) {
     root.removeAttribute("data-theme");
   } else {
