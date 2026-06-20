@@ -32,8 +32,9 @@ export function ReleaseNotes({ notes }: ReleaseNotesProps) {
         .replace(/^[-*+]\s+/, "")
         // Strip leading ordered-list markers (e.g. "1. ", "42. ").
         .replace(/^\d+\.\s+/, "")
-        // Collapse inline link syntax to its label: [text](url) -> text.
-        .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+        // Collapse inline link syntax to its label: [text](url) -> text, and
+        // drop the leading "!" of an image link (![alt](url) -> alt).
+        .replace(/!?\[([^\]]+)\]\([^)]+\)/g, "$1")
         // Strip bold/italic emphasis markers, keeping the wrapped text. The
         // 1-3 range covers ***bold italic*** without leaving a stray marker.
         .replace(/(\*{1,3}|_{1,3})(.+?)\1/g, "$2")

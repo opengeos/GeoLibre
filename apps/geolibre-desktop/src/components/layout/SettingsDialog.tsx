@@ -1806,8 +1806,14 @@ export function SettingsDialog({
                       }
                       onChange={(event) =>
                         updateDraftUpdateSettings({
-                          notificationLevel: event.target
-                            .value as UpdateNotificationLevel,
+                          // The options are generated from
+                          // UPDATE_NOTIFICATION_LEVELS, but guard the cast so an
+                          // unexpected value can't slip through if they drift.
+                          notificationLevel: UPDATE_NOTIFICATION_LEVELS.includes(
+                            event.target.value as UpdateNotificationLevel,
+                          )
+                            ? (event.target.value as UpdateNotificationLevel)
+                            : DEFAULT_UPDATE_SETTINGS.notificationLevel,
                         })
                       }
                     >

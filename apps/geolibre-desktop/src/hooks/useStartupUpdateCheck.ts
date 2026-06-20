@@ -95,12 +95,11 @@ export function useStartupUpdateCheck() {
     if (!settings.checkOnStartup) return;
 
     // Throttle the network call so frequent relaunches don't burn the GitHub
-    // rate limit. Stamp the time up front so even a server response that fails
-    // (rate limit, HTTP error) counts toward the window and prevents hammering.
+    // rate limit. The timestamp is stamped only after a definitive response,
+    // never up front: an up-front stamp makes React StrictMode's double-invoked
+    // effect early-return on its second run and silently skip the check.
     const now = Date.now();
-    const previousLastCheck = readLastCheck();
-    if (now - previousLastCheck < CHECK_THROTTLE_MS) return;
-    writeLastCheck(now);
+    if (now - readLastCheck() < CHECK_THROTTLE_MS) return;
 
     const controller = new AbortController();
     let cancelled = false;
@@ -109,6 +108,8 @@ export function useStartupUpdateCheck() {
       try {
         const release = await fetchLatestRelease(controller.signal);
         if (cancelled) return;
+        // GitHub was reached and parsed: throttle the next launches.
+        writeLastCheck(now);
 
         const severity = releaseSeverity(APP_VERSION, release.version);
         if (!severity) return;
@@ -119,17 +120,16 @@ export function useStartupUpdateCheck() {
 
         setPending({ release, severity });
       } catch (error) {
-        // Never let a background update check interrupt startup. If GitHub was
-        // never reached (a transient network failure, e.g. the device was still
-        // coming online), roll the timestamp back so the next launch retries
-        // instead of staying silent for the full window. Server responses
-        // (rate limit, HTTP errors) keep the stamp.
+        // Never let a background update check interrupt startup. A server
+        // response that failed (rate limit, HTTP error) still counts toward the
+        // throttle window; an abort or a transient network failure does not, so
+        // the next launch retries instead of staying silent for the full window.
         if (
+          !cancelled &&
           error instanceof UpdateCheckError &&
-          error.code === "network" &&
-          !cancelled
+          error.code !== "network"
         ) {
-          writeLastCheck(previousLastCheck);
+          writeLastCheck(now);
         }
       }
     })();
