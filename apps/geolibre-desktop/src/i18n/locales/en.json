@@ -1475,6 +1475,20 @@
       "allSources": "All sources",
       "geolibreTools": "GeoLibre tools",
       "whiteboxTools": "Whitebox tools"
+    },
+    "sidecar": {
+      "unavailableTitle": "The processing server isn't available.",
+      "showHelp": "Show what this means and how to fix it",
+      "hideHelp": "Hide details",
+      "intro": "The processing server is an optional local helper (http://127.0.0.1:8765) that runs heavier Python-backed tools in the background, separate from the app. Most Whitebox tools don't need it: they can run entirely in your browser with WebAssembly.",
+      "wasmTipTitle": "Run without the server",
+      "wasmTip": "Enable \"Run locally (WASM)\" to run Whitebox tools in your browser. No server, install, or setup required.",
+      "runLocallyButton": "Run locally (WASM)",
+      "troubleshootingTitle": "Still want to use the server?",
+      "stepStartServerDesktop": "Click \"Start server\" above to launch it, then wait a few seconds for it to come online.",
+      "stepStartServerBrowser": "The server can only be started from the GeoLibre desktop app. In the browser, keep \"Run locally (WASM)\" enabled instead.",
+      "stepCheckPort": "Make sure a firewall, antivirus, or network policy isn't blocking local port 8765.",
+      "stepRestart": "If the server stopped unexpectedly, restart the app and reopen this dialog."
     }
   },
   "segmentation": {

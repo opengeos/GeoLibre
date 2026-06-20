@@ -61,6 +61,7 @@ import {
 } from "../../lib/tauri-io";
 import { fetchableUrl } from "../../lib/url-utils";
 import { startGeoLibreSidecar, stopGeoLibreSidecar } from "../../lib/sidecar";
+import { SidecarHelpBanner } from "./SidecarHelpBanner";
 
 interface ProcessingDialogProps {
   mapControllerRef: React.RefObject<MapController | null>;
@@ -1096,11 +1097,23 @@ export function ProcessingDialog({
             </ScrollArea>
 
             <div className="grid gap-2 border-t pt-3">
-              {error && (
-                <p className="flex items-center gap-2 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  {error}
-                </p>
+              {/* Sidecar mode but the server is unreachable: show interactive
+                  troubleshooting with a one-click switch to the WASM runner.
+                  Otherwise fall back to a plain error line (e.g. a parameter or
+                  tool-run error that has nothing to do with the sidecar). */}
+              {!runLocal && runtimeAvailable === false ? (
+                <SidecarHelpBanner
+                  isDesktop={isTauri()}
+                  error={error}
+                  onRunLocally={() => setRunLocal(true)}
+                />
+              ) : (
+                error && (
+                  <p className="flex items-center gap-2 text-sm text-destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    {error}
+                  </p>
+                )
               )}
               {job && (
                 <JobOutputPanel job={job} />
