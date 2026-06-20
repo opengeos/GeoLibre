@@ -426,7 +426,10 @@ export function SettingsDialog({
       // another tab. The profile is read fresh (not via the effect's closure) so
       // a profile change after mount is respected.
       const requested = detail?.section;
-      let sectionShown = true;
+      // Stays false unless a requested section is actually navigated to, so a
+      // focus request without a (shown) section can't strand on whatever tab
+      // happens to be active.
+      let sectionShown = false;
       if (requested) {
         const gate = SECTION_GATE[requested];
         const profile =
