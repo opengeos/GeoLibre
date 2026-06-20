@@ -19,6 +19,7 @@ import {
   Select,
   Separator,
   Slider,
+  Textarea,
 } from "@geolibre/ui";
 import {
   ArrowDown,
@@ -183,6 +184,37 @@ export function PrintLayoutDialog({
     "top-left" | "top-right" | "bottom-left" | "bottom-right"
   >("top-left");
   const customLegendId = useRef(2);
+  const [legendDict, setLegendDict] = useState("");
+  const [legendDictError, setLegendDictError] = useState<string | null>(null);
+
+  // Replace the legend items from a `{ label: color }` dictionary, matching the
+  // Controls -> Legend "Import from Dictionary" format.
+  const importLegendDict = useCallback(() => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(legendDict);
+    } catch {
+      setLegendDictError(t("printLayout.customLegend.importError"));
+      return;
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      setLegendDictError(t("printLayout.customLegend.importError"));
+      return;
+    }
+    const entries = Object.entries(parsed as Record<string, unknown>).map(
+      ([label, color]) => ({
+        id: `cl-${++customLegendId.current}`,
+        label,
+        color: String(color),
+      }),
+    );
+    if (entries.length === 0) {
+      setLegendDictError(t("printLayout.customLegend.importError"));
+      return;
+    }
+    setCustomLegendEntries(entries);
+    setLegendDictError(null);
+  }, [legendDict, t]);
   // Default away from the bottom-right nav duo and top-left legend.
   const [colorbarPosition, setColorbarPosition] = useState<
     "top-left" | "top-right" | "bottom-left" | "bottom-right"
@@ -1311,6 +1343,33 @@ export function PrintLayoutDialog({
                       {t("printLayout.position.bottomRight")}
                     </option>
                   </Select>
+                </div>
+                <Separator />
+                <div className="space-y-1.5">
+                  <Label htmlFor="cl-dict">
+                    {t("printLayout.customLegend.importFromDict")}
+                  </Label>
+                  <Textarea
+                    id="cl-dict"
+                    rows={3}
+                    className="font-mono text-xs"
+                    value={legendDict}
+                    placeholder={'{"Label A": "#ff6b6b", "Label B": "#4ecdc4"}'}
+                    onChange={(e) => setLegendDict(e.target.value)}
+                  />
+                  {legendDictError && (
+                    <p className="text-xs text-destructive">
+                      {legendDictError}
+                    </p>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!legendDict.trim()}
+                    onClick={importLegendDict}
+                  >
+                    {t("printLayout.customLegend.import")}
+                  </Button>
                 </div>
               </div>
             )}

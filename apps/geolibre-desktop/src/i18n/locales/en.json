@@ -525,7 +525,10 @@
       "color": "Color",
       "itemLabel": "Label",
       "addItem": "Add item",
-      "removeItem": "Remove item"
+      "removeItem": "Remove item",
+      "importFromDict": "Import from dictionary",
+      "import": "Import",
+      "importError": "Enter a valid {\"label\": \"color\"} dictionary."
     },
     "colorbar": {
       "colormap": "Colormap",
