@@ -11,11 +11,6 @@ import "maplibre-gl/dist/maplibre-gl.css";
 export interface SecondaryMapCanvasProps {
   /** Id of the `secondaryMapViews` entry this pane renders. */
   viewId: string;
-  /**
-   * Optional ref handed back the live controller, so the surrounding grid can
-   * reach the map (e.g. to resize it when the layout changes).
-   */
-  controllerRef?: React.MutableRefObject<MapController | null>;
 }
 
 /**
@@ -37,7 +32,6 @@ export interface SecondaryMapCanvasProps {
  */
 export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
   viewId,
-  controllerRef,
 }: SecondaryMapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const controller = useRef<MapController | null>(null);
@@ -98,36 +92,39 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
       controlVisibility: { "layer-control": false },
     });
     controller.current = mc;
-    if (controllerRef) controllerRef.current = mc;
+
+    const sameCamera = (a: MapViewState, b: MapViewState) =>
+      a.center[0] === b.center[0] &&
+      a.center[1] === b.center[1] &&
+      a.zoom === b.zoom &&
+      a.bearing === b.bearing &&
+      a.pitch === b.pitch;
 
     const updateView = (event?: { originalEvent?: unknown }) => {
       const view = mc.readView();
       const userDriven = Boolean(event?.originalEvent);
       const live = useAppStore.getState();
-      if (live.mapLayout.syncView) {
+      // A programmatic `applyView` (camera sync / initial load) fires "moveend"
+      // with the same camera it was just given. Skip the global write when the
+      // value is unchanged so a synced pane's echo doesn't cascade back through
+      // every sibling pane's sync effect.
+      if (live.mapLayout.syncView && !sameCamera(view, live.mapView)) {
         // The shared camera lives in the global mapView; mirror this pane's move
         // there so the primary and sibling panes follow.
         live.setMapView(view, userDriven);
       }
       // Always keep this pane's own saved camera current so turning sync off (or
-      // saving the project) preserves where the pane is looking.
+      // saving the project) preserves where the pane is looking. The store skips
+      // value-identical writes, so a programmatic echo here is a no-op.
       live.setSecondaryMapView(viewIdRef.current, view, userDriven);
     };
     map.on("moveend", updateView);
 
+    // Only the basemap visibility/opacity needs to wait for the style here; the
+    // layer-sync effect below already defers its own work to the style load, so
+    // syncing layers here too would just duplicate that pass.
     map.on("load", () => {
       const live = useAppStore.getState();
-      const pane = live.secondaryMapViews.find(
-        (p) => p.id === viewIdRef.current,
-      );
-      const visibility = pane?.layerVisibility ?? {};
-      const withOverrides = live.layers.map((layer) => {
-        const override = visibility[layer.id];
-        return override === undefined || override === layer.visible
-          ? layer
-          : { ...layer, visible: override };
-      });
-      mc.waitAndSyncLayers(applyGroupEffects(withOverrides, live.layerGroups));
       mc.setBasemapVisible(live.basemapVisible);
       mc.setBasemapOpacity(live.basemapOpacity);
     });
@@ -148,7 +145,6 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
       if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
       mc.destroy();
       controller.current = null;
-      if (controllerRef) controllerRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -175,6 +171,13 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
   useEffect(() => {
     controller.current?.setBasemapOpacity(basemapOpacity);
   }, [basemapOpacity]);
+
+  // Map preferences (projection, zoom/pitch limits, bounds) are shared with the
+  // primary map; re-apply them when they change so a pane doesn't keep the
+  // values captured at mount.
+  useEffect(() => {
+    controller.current?.applyMapPreferences(mapPreferences);
+  }, [mapPreferences]);
 
   // Synced: follow the global (shared) camera. Depend on primitives so an
   // equal-valued mapView object does not re-apply.

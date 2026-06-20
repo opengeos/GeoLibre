@@ -193,7 +193,7 @@ export function ViewMenu({
         {showSplitView && (
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
-              <LayoutGrid className="mr-2 h-3.5 w-3.5 shrink-0" />
+              <LayoutGrid className="h-3.5 w-3.5 shrink-0" />
               <span className="whitespace-nowrap">
                 {t("toolbar.item.splitView")}
               </span>
@@ -216,6 +216,18 @@ export function ViewMenu({
                     </span>
                   </DropdownMenuRadioItem>
                 ))}
+                {/* A grid loaded from a hand-edited project file (e.g. 4x4) may
+                    not match any preset; surface it so the radio group still
+                    shows the active layout as selected rather than blank. */}
+                {!SPLIT_VIEW_PRESETS.some(
+                  (preset) => `${preset.rows}x${preset.cols}` === gridKey,
+                ) && (
+                  <DropdownMenuRadioItem value={gridKey}>
+                    <span className="whitespace-nowrap">
+                      {`${mapLayout.rows} × ${mapLayout.cols}`}
+                    </span>
+                  </DropdownMenuRadioItem>
+                )}
               </DropdownMenuRadioGroup>
               <DropdownMenuSeparator />
               <DropdownMenuCheckboxItem

@@ -421,6 +421,17 @@ function layerGroupsEqualForHistory(
   return true;
 }
 
+/** True when two camera states have identical center/zoom/bearing/pitch. */
+function sameCamera(a: MapViewState, b: MapViewState): boolean {
+  return (
+    a.center[0] === b.center[0] &&
+    a.center[1] === b.center[1] &&
+    a.zoom === b.zoom &&
+    a.bearing === b.bearing &&
+    a.pitch === b.pitch
+  );
+}
+
 /** Clamp a requested grid row/column count into the supported [1, MAX] range. */
 function clampGridDim(value: number): number {
   if (!Number.isFinite(value)) return 1;
@@ -428,27 +439,44 @@ function clampGridDim(value: number): number {
 }
 
 /**
- * Pick a gap-free grid that holds exactly `total` panes, preferring a column
- * count close to (and, on ties, no smaller than) `preferredCols` so removing a
- * pane keeps the layout's orientation without leaving an empty cell. Used when
+ * Pick a grid that holds at least `total` panes within the supported
+ * `MAX_MAP_GRID_DIM x MAX_MAP_GRID_DIM` bound, minimizing empty cells first and
+ * then preferring a column count close to (and, on ties, no smaller than)
+ * `preferredCols` so removing a pane keeps the layout's orientation. Used when
  * collapsing the grid after a pane is removed.
+ *
+ * Bounding both dimensions matters: a prime `total` (e.g. 5 panes left after
+ * removing one from a 2x3 grid) has no gap-free factor pair inside the bound, so
+ * the only gap-free options (1x5 / 5x1) would exceed `MAX_MAP_GRID_DIM`. In that
+ * case we accept the smallest bounded grid with one empty trailing cell (2x3)
+ * rather than returning an out-of-range dimension.
  */
 function fitGrid(
   total: number,
   preferredCols: number,
 ): { rows: number; cols: number } {
   if (total <= 1) return { rows: 1, cols: 1 };
-  let best = { rows: total, cols: 1, score: Number.POSITIVE_INFINITY };
-  for (let cols = 1; cols <= total; cols++) {
-    if (total % cols !== 0) continue;
-    const score = Math.abs(cols - preferredCols);
-    // `<=` lets a larger, equally-close column count win ties, favoring wider
-    // (side-by-side) layouts over tall ones.
-    if (score <= best.score) {
-      best = { rows: total / cols, cols, score };
+  let best: { rows: number; cols: number; empty: number; score: number } | null =
+    null;
+  for (let rows = 1; rows <= MAX_MAP_GRID_DIM; rows++) {
+    for (let cols = 1; cols <= MAX_MAP_GRID_DIM; cols++) {
+      const capacity = rows * cols;
+      if (capacity < total) continue;
+      const empty = capacity - total;
+      const score = Math.abs(cols - preferredCols);
+      // Fewest empty cells wins; then the column count closest to
+      // preferredCols; then, on a tie, the larger column count (favoring wider,
+      // side-by-side layouts over tall ones).
+      const better =
+        best === null ||
+        empty < best.empty ||
+        (empty === best.empty &&
+          (score < best.score ||
+            (score === best.score && cols > best.cols)));
+      if (better) best = { rows, cols, empty, score };
     }
   }
-  return { rows: best.rows, cols: best.cols };
+  return best ? { rows: best.rows, cols: best.cols } : { rows: 1, cols: 1 };
 }
 
 /** Cancels the active history coalesce window (assigned by zundo's handleSet). */
@@ -587,8 +615,14 @@ export const useAppStore = create<AppState>()(
           let changed = false;
           const secondaryMapViews = s.secondaryMapViews.map((pane) => {
             if (pane.id !== id) return pane;
+            const merged = { ...pane.view, ...view };
+            // Skip value-identical writes: a programmatic `applyView` (camera
+            // sync, initial load) fires "moveend" too, so without this guard
+            // each pane re-stores the same camera it was just given, churning a
+            // new `secondaryMapViews` array and re-rendering every subscriber.
+            if (sameCamera(pane.view, merged)) return pane;
             changed = true;
-            return { ...pane, view: { ...pane.view, ...view } };
+            return { ...pane, view: merged };
           });
           if (!changed) return s;
           return {
@@ -865,6 +899,13 @@ export const useAppStore = create<AppState>()(
       removeLayer: (id) =>
         set((s) => ({
           layers: s.layers.filter((l) => l.id !== id),
+          // Drop any per-pane visibility override for the removed layer so stale
+          // ids don't accumulate (and serialize) in secondary panes over time.
+          secondaryMapViews: s.secondaryMapViews.map((pane) => {
+            if (!(id in pane.layerVisibility)) return pane;
+            const { [id]: _removed, ...rest } = pane.layerVisibility;
+            return { ...pane, layerVisibility: rest };
+          }),
           selectedLayerId:
             s.selectedLayerId === id
               ? s.layers.find((l) => l.id !== id)?.id ?? null

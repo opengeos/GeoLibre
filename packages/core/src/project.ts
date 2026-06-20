@@ -436,14 +436,19 @@ export function normalizeMapViewState(value: unknown): MapViewState {
   const center = Array.isArray(candidate.center)
     ? candidate.center
     : fallback.center;
+  // Clamp to MapLibre's valid ranges (matching normalizeStoryChapter) so a
+  // hand-edited project file can't store an out-of-range camera that jumpTo
+  // would silently clamp or reject, leaving the saved state inconsistent with
+  // what lands on screen. Bearing wraps into [0, 360).
   const view: MapViewState = {
     center: [
-      normalizeNumber(center[0], fallback.center[0]),
-      normalizeNumber(center[1], fallback.center[1]),
+      clampCoordinate(normalizeNumber(center[0], fallback.center[0]), -180, 180),
+      clampCoordinate(normalizeNumber(center[1], fallback.center[1]), -90, 90),
     ],
-    zoom: normalizeNumber(candidate.zoom, fallback.zoom),
-    bearing: normalizeNumber(candidate.bearing, fallback.bearing),
-    pitch: normalizeNumber(candidate.pitch, fallback.pitch),
+    zoom: clamp(normalizeNumber(candidate.zoom, fallback.zoom), 0, 24),
+    bearing:
+      ((normalizeNumber(candidate.bearing, fallback.bearing) % 360) + 360) % 360,
+    pitch: clamp(normalizeNumber(candidate.pitch, fallback.pitch), 0, 85),
   };
   if (
     Array.isArray(candidate.bbox) &&
@@ -547,7 +552,10 @@ export function resolveMapGrid(
     const additions: SecondaryMapView[] = [];
     for (let i = views.length; i < desired; i++) {
       let id = `secondary-${i}`;
-      while (seen.has(id)) id = `${id}-x`;
+      // Append a counter (rather than growing the string) so a crafted file
+      // with colliding ids resolves in O(1) per attempt instead of O(n).
+      let suffix = 0;
+      while (seen.has(id)) id = `secondary-${i}-${++suffix}`;
       seen.add(id);
       additions.push({
         id,
