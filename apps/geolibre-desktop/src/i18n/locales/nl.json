@@ -30,7 +30,6 @@
     },
     "map": {
       "constraintsTitle": "Kaartbeperkingen",
-      "constraintsDescription": "Limieten gelden zolang het project open is.",
       "restrictBounds": "Kaartgrenzen beperken",
       "west": "West",
       "south": "Zuid",

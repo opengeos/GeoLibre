@@ -30,7 +30,6 @@
     },
     "map": {
       "constraintsTitle": "Vincoli mappa",
-      "constraintsDescription": "I limiti si applicano mentre il progetto è aperto.",
       "restrictBounds": "Limita l'estensione della mappa",
       "west": "Ovest",
       "south": "Sud",

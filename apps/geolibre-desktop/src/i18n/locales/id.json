@@ -30,7 +30,6 @@
     },
     "map": {
       "constraintsTitle": "Batasan peta",
-      "constraintsDescription": "Batasan berlaku saat proyek dibuka.",
       "restrictBounds": "Batasi batas peta",
       "west": "Barat",
       "south": "Selatan",

@@ -30,7 +30,6 @@
     },
     "map": {
       "constraintsTitle": "지도 제약 조건",
-      "constraintsDescription": "프로젝트가 열려 있는 동안 제한이 적용됩니다.",
       "restrictBounds": "지도 범위 제한",
       "west": "서쪽",
       "south": "남쪽",

@@ -30,7 +30,6 @@
     },
     "map": {
       "constraintsTitle": "マップ制約",
-      "constraintsDescription": "制限はプロジェクトが開いている間のみ適用されます。",
       "restrictBounds": "マップ範囲を制限する",
       "west": "西",
       "south": "南",

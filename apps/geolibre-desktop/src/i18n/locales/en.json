@@ -752,7 +752,6 @@
     },
     "map": {
       "constraintsTitle": "Map constraints",
-      "constraintsDescription": "Limits apply while the project is open.",
       "restrictBounds": "Restrict map bounds",
       "west": "West",
       "south": "South",

@@ -30,7 +30,6 @@
     },
     "map": {
       "constraintsTitle": "Ограничения карты",
-      "constraintsDescription": "Ограничения применяются, пока проект открыт.",
       "restrictBounds": "Ограничить область карты",
       "west": "Запад",
       "south": "Юг",

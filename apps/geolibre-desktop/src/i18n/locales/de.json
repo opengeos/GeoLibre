@@ -30,7 +30,6 @@
     },
     "map": {
       "constraintsTitle": "Kartenbeschränkungen",
-      "constraintsDescription": "Einschränkungen gelten, solange das Projekt geöffnet ist.",
       "restrictBounds": "Kartenausschnitt einschränken",
       "west": "West",
       "south": "Süd",

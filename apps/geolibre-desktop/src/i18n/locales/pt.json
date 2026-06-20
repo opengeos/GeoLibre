@@ -30,7 +30,6 @@
     },
     "map": {
       "constraintsTitle": "Restrições do mapa",
-      "constraintsDescription": "Os limites aplicam-se enquanto o projeto estiver aberto.",
       "restrictBounds": "Restringir limites do mapa",
       "west": "Oeste",
       "south": "Sul",

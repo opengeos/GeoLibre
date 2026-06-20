@@ -988,9 +988,6 @@ export function SettingsDialog({
                       <h3 className="text-sm font-semibold">
                         {t("settings.map.constraintsTitle")}
                       </h3>
-                      <p className="text-xs text-muted-foreground">
-                        {t("settings.map.constraintsDescription")}
-                      </p>
                     </div>
                     <Button
                       type="button"
@@ -1002,19 +999,30 @@ export function SettingsDialog({
                       {t("common.reset")}
                     </Button>
                   </div>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      className="h-4 w-4"
-                      type="checkbox"
-                      checked={draftPreferences.map.restrictBounds}
-                      onChange={(event) =>
-                        updateMapPreferences({
-                          restrictBounds: event.target.checked,
-                        })
-                      }
-                    />
-                    {t("settings.map.restrictBounds")}
-                  </label>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        className="h-4 w-4"
+                        type="checkbox"
+                        checked={draftPreferences.map.restrictBounds}
+                        onChange={(event) =>
+                          updateMapPreferences({
+                            restrictBounds: event.target.checked,
+                          })
+                        }
+                      />
+                      {t("settings.map.restrictBounds")}
+                    </label>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={applyCurrentViewBounds}
+                    >
+                      <Crosshair className="h-3.5 w-3.5" />
+                      {t("settings.map.useCurrentView")}
+                    </Button>
+                  </div>
                   <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                     {(
                       [
@@ -1025,7 +1033,14 @@ export function SettingsDialog({
                       ] as const
                     ).map(([labelKey, index, min, max]) => (
                       <div key={labelKey} className="space-y-1.5">
-                        <Label htmlFor={`settings-bounds-${index}`}>
+                        <Label
+                          htmlFor={`settings-bounds-${index}`}
+                          className={
+                            draftPreferences.map.restrictBounds
+                              ? undefined
+                              : "opacity-50"
+                          }
+                        >
                           {t(labelKey)}
                         </Label>
                         <Input
@@ -1034,6 +1049,7 @@ export function SettingsDialog({
                           min={min}
                           max={max}
                           step="0.000001"
+                          disabled={!draftPreferences.map.restrictBounds}
                           value={draftPreferences.map.bounds[index as number]}
                           onChange={(event) =>
                             updateBoundsValue(
@@ -1045,15 +1061,6 @@ export function SettingsDialog({
                       </div>
                     ))}
                   </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={applyCurrentViewBounds}
-                  >
-                    <Crosshair className="h-3.5 w-3.5" />
-                    {t("settings.map.useCurrentView")}
-                  </Button>
                   {liveProjection === "globe" ? (
                     <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
                       <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />

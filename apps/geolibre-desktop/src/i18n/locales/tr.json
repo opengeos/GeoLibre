@@ -30,7 +30,6 @@
     },
     "map": {
       "constraintsTitle": "Harita kısıtlamaları",
-      "constraintsDescription": "Kısıtlamalar proje açıkken geçerlidir.",
       "restrictBounds": "Harita sınırlarını kısıtla",
       "west": "Batı",
       "south": "Güney",

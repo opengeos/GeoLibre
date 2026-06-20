@@ -30,7 +30,6 @@
     },
     "map": {
       "constraintsTitle": "地图约束",
-      "constraintsDescription": "约束在项目打开时生效。",
       "restrictBounds": "限制地图范围",
       "west": "西",
       "south": "南",

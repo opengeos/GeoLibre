@@ -30,7 +30,6 @@
     },
     "map": {
       "constraintsTitle": "मानचित्र सीमाएं",
-      "constraintsDescription": "प्रोजेक्ट खुला रहने के दौरान सीमाएं लागू होती हैं।",
       "restrictBounds": "मानचित्र सीमा प्रतिबंधित करें",
       "west": "पश्चिम",
       "south": "दक्षिण",
