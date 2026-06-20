@@ -76,7 +76,7 @@ function SecondaryMapPane({ viewId, index }: SecondaryMapPaneProps) {
       </div>
       <button
         type="button"
-        className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-md border border-input bg-background/90 text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground"
+        className="absolute bottom-2 left-2 z-10 flex h-7 w-7 items-center justify-center rounded-md border border-input bg-background/90 text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground"
         aria-label={t("mapGrid.removePane", { number: index + 2 })}
         onClick={() => removeSecondaryMapView(viewId)}
       >
