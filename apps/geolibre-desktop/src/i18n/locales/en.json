@@ -66,6 +66,11 @@
     "sectionOther": "Other",
     "customUrlButton": "Custom URL"
   },
+  "basemapPicker": {
+    "title": "Change basemap",
+    "applyCustom": "Apply",
+    "invalidUrl": "Enter a valid HTTP or HTTPS style URL."
+  },
   "common": {
     "pickColorFromScreen": "Pick a color from the screen",
     "save": "Save",
@@ -1675,6 +1680,7 @@
     "groupOpacity": "Opacity",
     "groupOpacityAria": "{{name}} group opacity",
     "doubleClickToRename": "Double-click to rename",
+    "doubleClickToChangeBasemap": "Double-click to change the basemap",
     "renameNamed": "Rename {{name}}",
     "newGroupFromLayer": "New group from layer",
     "moveToGroup": "Move to group",
