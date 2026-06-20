@@ -1599,11 +1599,15 @@ export class MapController {
     // i.e. the Tauri desktop webview) does not, leaving the panels painted on top of
     // and overlapping the maximized map (opengeos/GeoLibre#611). Targeting an ancestor
     // that contains the panels lets flexbox lay everything out with no overlap on
-    // every engine. The shell marks itself with `data-fullscreen-root`; fall back to
-    // the map container when no such ancestor exists (e.g. a bare embed).
+    // every engine. The shell marks itself with `data-geolibre-fullscreen-root`;
+    // fall back to the map container when no such ancestor exists (e.g. a bare
+    // embed). The attribute is namespaced so a plugin rendering DOM between the
+    // map container and the shell can't accidentally match and short-circuit
+    // `closest()` to the wrong ancestor.
     const mapContainer = this.map.getContainer();
     const fullscreenContainer =
-      mapContainer.closest<HTMLElement>("[data-fullscreen-root]") ?? mapContainer;
+      mapContainer.closest<HTMLElement>("[data-geolibre-fullscreen-root]") ??
+      mapContainer;
     this.fullscreenControl = new maplibregl.FullscreenControl({
       container: fullscreenContainer,
     });
