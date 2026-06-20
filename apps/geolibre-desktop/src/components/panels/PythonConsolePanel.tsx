@@ -36,10 +36,13 @@ const MAX_CONSOLE_HEIGHT = 560;
 const DEFAULT_EDITOR_HEIGHT = 200;
 const MIN_EDITOR_HEIGHT = 120;
 // Room reserved for the terminal (plus header and divider chrome) when the
-// advanced editor grows via the splitter or the panel-grow on toggle. At very
-// small panel heights the MIN_EDITOR_HEIGHT floor wins, so this bounds rather
-// than eliminates how far the terminal can be squeezed.
+// advanced editor grows via the splitter or the panel-grow on toggle. In
+// advanced mode the outer panel's minimum height is raised to
+// MIN_EDITOR_HEIGHT + this, so the terminal keeps this much room and never
+// collapses to zero (see startResize).
 const EDITOR_RESIZE_RESERVE = 150;
+// Keyboard step for the editor splitter (ArrowUp/ArrowDown).
+const EDITOR_RESIZE_STEP = 24;
 const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
 const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
 
@@ -286,13 +289,19 @@ export function PythonConsolePanel({
     document.body.style.cursor = "row-resize";
     document.body.style.userSelect = "none";
     window.dispatchEvent(new Event(PANEL_RESIZE_START_EVENT));
+    // In advanced mode keep the panel tall enough that the fixed-height editor
+    // can't push the terminal to zero: MIN_CONSOLE_HEIGHT on its own is shorter
+    // than the editor's minimum plus the terminal's reserve.
+    const minPanelHeight = advancedMode
+      ? Math.min(MIN_EDITOR_HEIGHT + EDITOR_RESIZE_RESERVE, MAX_CONSOLE_HEIGHT)
+      : MIN_CONSOLE_HEIGHT;
 
     const onMove = (moveEvent: MouseEvent) => {
-      const available = Math.max(MIN_CONSOLE_HEIGHT, window.innerHeight - 180);
+      const available = Math.max(minPanelHeight, window.innerHeight - 180);
       const maxHeight = Math.min(MAX_CONSOLE_HEIGHT, available);
       nextHeight = Math.min(
         maxHeight,
-        Math.max(MIN_CONSOLE_HEIGHT, startHeight + startY - moveEvent.clientY),
+        Math.max(minPanelHeight, startHeight + startY - moveEvent.clientY),
       );
       if (frame !== null) return;
       frame = window.requestAnimationFrame(() => {
@@ -379,6 +388,24 @@ export function PythonConsolePanel({
       document.body.style.cursor = prevCursor;
       document.body.style.userSelect = prevSelect;
     };
+  };
+
+  // Keyboard resize for the editor splitter: ArrowUp grows the editor (matching
+  // a drag up), ArrowDown shrinks it, clamped the same way as the pointer drag.
+  const onEditorResizeKeyDown = (
+    event: ReactKeyboardEvent<HTMLDivElement>,
+  ) => {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault();
+    const panelHeight = sectionRef.current?.clientHeight ?? height;
+    const maxHeight = Math.max(
+      MIN_EDITOR_HEIGHT,
+      panelHeight - EDITOR_RESIZE_RESERVE,
+    );
+    const delta = event.key === "ArrowUp" ? EDITOR_RESIZE_STEP : -EDITOR_RESIZE_STEP;
+    setEditorHeight((h) =>
+      Math.min(maxHeight, Math.max(MIN_EDITOR_HEIGHT, h + delta)),
+    );
   };
 
   // On unmount, tear down any in-flight drag listeners (either axis).
@@ -488,8 +515,13 @@ export function PythonConsolePanel({
               role="separator"
               aria-orientation="horizontal"
               aria-label={t("pythonConsole.resizeEditor")}
-              className="h-1 shrink-0 cursor-row-resize select-none bg-border hover:bg-primary"
+              aria-valuenow={editorHeight}
+              aria-valuemin={MIN_EDITOR_HEIGHT}
+              aria-valuemax={MAX_CONSOLE_HEIGHT}
+              tabIndex={0}
+              className="h-1 shrink-0 cursor-row-resize select-none bg-border hover:bg-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
               onMouseDown={startEditorResize}
+              onKeyDown={onEditorResizeKeyDown}
             />
             <div
               ref={editorRegionRef}
