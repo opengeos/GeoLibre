@@ -171,6 +171,7 @@ export function SegmentationDialog({
 
   const handleRun = useCallback(async () => {
     setError(null);
+    setServerError(null);
     setResultMessage(null);
     if (!imageBytes) {
       setError(t("segmentation.error.chooseImage"));
@@ -392,11 +393,15 @@ export function SegmentationDialog({
               intro={t("segmentation.sidecar.intro", {
                 sidecarUrl: SIDECAR_URL,
               })}
+              // Install first: a missing segment-geospatial backend is the most
+              // likely reason "Start server" failed, so leading with it (rather
+              // than re-clicking Start, which would fail the same way) keeps the
+              // path self-consistent.
               steps={[
+                t("segmentation.sidecar.stepInstall"),
                 isTauri()
                   ? t("segmentation.sidecar.stepStartServerDesktop")
                   : t("segmentation.sidecar.stepStartServerBrowser"),
-                t("segmentation.sidecar.stepInstall"),
                 t("processing.sidecar.stepCheckPort", { port: SIDECAR_PORT }),
                 t("processing.sidecar.stepRestart"),
               ]}
@@ -409,7 +414,7 @@ export function SegmentationDialog({
               </p>
             )
           )}
-          {resultMessage && !error && (
+          {resultMessage && !error && !serverError && (
             <p className="flex items-center gap-2 text-sm text-emerald-700">
               <CheckCircle2 className="h-4 w-4" />
               {resultMessage}

@@ -169,9 +169,7 @@ export function SidecarHelpBanner({
             </p>
             <ol className="grid list-decimal gap-1 pl-5 text-xs text-muted-foreground">
               {resolvedSteps.map((step, index) => (
-                // Steps are a fixed, ordered list authored by the caller (or the
-                // defaults above); their order is stable, so the index is a safe
-                // key here.
+                // index is a safe key: caller-authored fixed list, never reordered
                 <li key={index}>{step}</li>
               ))}
             </ol>
