@@ -480,7 +480,15 @@ export function PythonConsolePanel({
             <div
               ref={editorRegionRef}
               className="flex min-h-0 shrink-0 flex-col"
-              style={{ height: editorHeight }}
+              // Clamp at render time so shrinking the outer panel can't let the
+              // fixed-height editor crush the terminal; the stored editorHeight
+              // is kept intact, so growing the panel back restores it.
+              style={{
+                height: Math.min(
+                  editorHeight,
+                  Math.max(MIN_EDITOR_HEIGHT, height - EDITOR_RESIZE_RESERVE),
+                ),
+              }}
             >
               <PythonEditorPane
                 deps={deps}
