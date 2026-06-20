@@ -1113,6 +1113,7 @@
       "loadFromUrl": "Load from URL",
       "loadingOsmPbf": "Loading OSM PBF…",
       "loadingOsmPbfDesc": "Parsing the file and converting features to GeoJSON. This runs in the background and may take a moment for large extracts.",
+      "loadingOsmPbfProgress": "Converting features to GeoJSON… {{processed}} of {{total}} OSM entities processed.",
       "projectName": "Project name",
       "storymapEllipsis": "Story Map..."
     },
@@ -1126,6 +1127,7 @@
       "osmPbfNoFeatures": "No point, line, or polygon features were found in this OSM PBF file.",
       "couldNotLoadOsmPbf": "Could not load the OSM PBF file.",
       "osmPbfLoadFailedWithHint": "{{message}} If this is a Mapbox Vector Tile (.pbf), it cannot be loaded as an OSM extract.",
+      "osmPbfTooLarge": "This OSM extract is too large to parse in the browser and ran out of memory or time. Try a smaller region, or pre-filter the file first (for example with osmium-tool or QGIS) before loading it.",
       "couldNotOpenOsmPbf": "Could not open the OSM PBF file.",
       "invalidOsmPbfUrl": "Enter a valid http(s) URL to an .osm.pbf file.",
       "couldNotDownloadOsmPbf": "Could not download the OSM PBF file.",

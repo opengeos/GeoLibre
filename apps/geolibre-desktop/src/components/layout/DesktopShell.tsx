@@ -51,6 +51,7 @@ import {
   isOsmPbfFileName,
   loadOsmPbf,
   osmPbfBaseName,
+  OsmPbfTooLargeError,
   OSM_PBF_SIZE_WARN_BYTES,
 } from "../../lib/osm-pbf-loader";
 import {
@@ -826,7 +827,9 @@ export function DesktopShell({
                   // rest of the drop.
                   setDropMessage(null);
                   setDropError(
-                    `Could not parse ${name}: ${err instanceof Error ? err.message : String(err)}`,
+                    err instanceof OsmPbfTooLargeError
+                      ? `${name} is too large to parse in the browser. Try a smaller region or pre-filter the file first (for example with osmium-tool or QGIS).`
+                      : `Could not parse ${name}: ${err instanceof Error ? err.message : String(err)}`,
                   );
                 }
               }
@@ -941,7 +944,9 @@ export function DesktopShell({
             // of the drop (including any co-dropped non-PBF files).
             setDropMessage(null);
             setDropError(
-              `Could not parse ${file.name}: ${err instanceof Error ? err.message : String(err)}`,
+              err instanceof OsmPbfTooLargeError
+                ? `${file.name} is too large to parse in the browser. Try a smaller region or pre-filter the file first (for example with osmium-tool or QGIS).`
+                : `Could not parse ${file.name}: ${err instanceof Error ? err.message : String(err)}`,
             );
             continue;
           }

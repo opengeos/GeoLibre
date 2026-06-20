@@ -4,8 +4,10 @@ import {
   addOsmPbfLayers,
   loadOsmPbf,
   osmPbfBaseName,
+  OsmPbfTooLargeError,
   OSM_PBF_SIZE_WARN_BYTES,
 } from "../lib/osm-pbf-loader";
+import type { OsmPbfProgress } from "../lib/osm-pbf-loader";
 import { isHttpUrl, openLocalDataFileWithFallback } from "../lib/tauri-io";
 import {
   type AppApi,
@@ -34,6 +36,7 @@ export function useOsmPbfLoader(
 ) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState<OsmPbfProgress | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [url, setUrl] = useState(DEFAULT_OSM_PBF_URL);
   const [confirm, setConfirm] = useState<OsmPbfConfirm | null>(null);
@@ -54,8 +57,9 @@ export function useOsmPbfLoader(
       return;
     }
     setLoading(true);
+    setProgress(null);
     try {
-      const layers = await loadOsmPbf(data, controller.signal);
+      const layers = await loadOsmPbf(data, controller.signal, setProgress);
       const added = addOsmPbfLayers(
         appApi.addGeoJsonLayer,
         baseName,
@@ -70,6 +74,12 @@ export function useOsmPbfLoader(
     } catch (err) {
       // A user cancel (abort) is not an error.
       if (err instanceof DOMException && err.name === "AbortError") return;
+      // A timeout or worker OOM means the extract is too big for the browser;
+      // point the user at pre-filtering instead of the generic parse hint.
+      if (err instanceof OsmPbfTooLargeError) {
+        setActionError(t("toolbar.error.osmPbfTooLarge"));
+        return;
+      }
       const base =
         err instanceof Error
           ? err.message
@@ -82,6 +92,7 @@ export function useOsmPbfLoader(
       );
     } finally {
       setLoading(false);
+      setProgress(null);
       if (abortRef.current === controller) abortRef.current = null;
     }
   };
@@ -90,6 +101,7 @@ export function useOsmPbfLoader(
     abortRef.current?.abort();
     abortRef.current = null;
     setLoading(false);
+    setProgress(null);
   };
 
   // Large extracts can exhaust browser memory; confirm before parsing.
@@ -185,6 +197,7 @@ export function useOsmPbfLoader(
 
   return {
     loading,
+    progress,
     dialogOpen,
     setDialogOpen,
     url,

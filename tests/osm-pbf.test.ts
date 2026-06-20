@@ -2,10 +2,18 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
-import { parseOsmPbf } from "../apps/geolibre-desktop/src/lib/osm-pbf";
+import {
+  type OsmPbfProgress,
+  parseOsmPbf,
+} from "../apps/geolibre-desktop/src/lib/osm-pbf";
 
 const fixturePath = fileURLToPath(
   new URL("./fixtures/sample.osm.pbf", import.meta.url),
+);
+
+// Both fixtures are produced by scripts/gen-osm-fixture.mjs.
+const untaggedWayFixturePath = fileURLToPath(
+  new URL("./fixtures/untagged-way.osm.pbf", import.meta.url),
 );
 
 describe("OSM PBF parsing", () => {
@@ -48,5 +56,32 @@ describe("OSM PBF parsing", () => {
     // vertices and must not appear as standalone points.
     assert.equal(result.counts.nodes, 6);
     assert.equal(result.counts.points, 1);
+  });
+
+  it("skips untagged ways (relation-member geometry, not features)", async () => {
+    // The fixture has two line ways, one tagged (highway=path) and one
+    // untagged. The untagged way is the kind of geometry that exists only to
+    // build relations on a real extract and would otherwise flood the lines
+    // layer and balloon memory, so it must not become a standalone feature.
+    const bytes = new Uint8Array(readFileSync(untaggedWayFixturePath));
+    const result = await parseOsmPbf(bytes);
+
+    // Both ways are in the index, but only the tagged one becomes a feature.
+    assert.equal(result.counts.ways, 2);
+    assert.equal(result.lines.features.length, 1);
+    assert.equal(result.lines.features[0].properties?.highway, "path");
+  });
+
+  it("reports progress through the classification phase", async () => {
+    const bytes = new Uint8Array(readFileSync(fixturePath));
+    const updates: OsmPbfProgress[] = [];
+    await parseOsmPbf(bytes, (progress) => updates.push(progress));
+
+    // A final update always fires; its processed count equals the total number
+    // of entities (nodes + ways + relations) and never exceeds the total.
+    assert.ok(updates.length >= 1);
+    const last = updates[updates.length - 1];
+    assert.equal(last.processed, last.total);
+    assert.ok(updates.every((u) => u.processed <= u.total));
   });
 });

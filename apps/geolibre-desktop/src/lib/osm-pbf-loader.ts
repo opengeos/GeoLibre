@@ -1,6 +1,19 @@
-import type { OsmPbfLayers } from "./osm-pbf";
+import type { OsmPbfLayers, OsmPbfProgress } from "./osm-pbf";
 
-export type { OsmPbfLayers } from "./osm-pbf";
+export type { OsmPbfLayers, OsmPbfProgress } from "./osm-pbf";
+
+/**
+ * Thrown when a parse exceeds {@link OSM_PBF_PARSE_TIMEOUT_MS} or the worker
+ * dies (typically a silent out-of-memory kill on a whole-country extract). The
+ * UI maps this to an actionable "the extract is too large" message rather than
+ * the generic parse-failure hint.
+ */
+export class OsmPbfTooLargeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "OsmPbfTooLargeError";
+  }
+}
 
 /**
  * Files at or above this size prompt a confirmation before parsing: a
@@ -72,15 +85,25 @@ interface OsmPbfWorkerFailure {
   ok: false;
   error: string;
 }
-type OsmPbfWorkerMessage = OsmPbfWorkerSuccess | OsmPbfWorkerFailure;
+interface OsmPbfWorkerProgress extends OsmPbfProgress {
+  type: "progress";
+}
+type OsmPbfWorkerMessage =
+  | OsmPbfWorkerSuccess
+  | OsmPbfWorkerFailure
+  | OsmPbfWorkerProgress;
 
 /**
  * Parse OSM PBF bytes into split GeoJSON layers on a Web Worker. The buffer is
  * transferred (not copied) to the worker; do not reuse it after calling.
+ *
+ * @param onProgress - Called as the worker classifies entities, so the UI can
+ *   show that a large extract is still progressing rather than appearing frozen.
  */
 export function loadOsmPbf(
   bytes: ArrayBuffer,
   signal?: AbortSignal,
+  onProgress?: (progress: OsmPbfProgress) => void,
 ): Promise<OsmPbfLayers> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
@@ -93,7 +116,7 @@ export function loadOsmPbf(
     );
     const timeout = setTimeout(() => {
       worker.terminate();
-      reject(new Error("OSM PBF parsing timed out."));
+      reject(new OsmPbfTooLargeError("OSM PBF parsing timed out."));
     }, OSM_PBF_PARSE_TIMEOUT_MS);
     const onAbort = () => {
       finish();
@@ -108,15 +131,25 @@ export function loadOsmPbf(
     worker.addEventListener(
       "message",
       (event: MessageEvent<OsmPbfWorkerMessage>) => {
-        finish();
         const data = event.data;
+        // Progress messages (the only ones carrying `type`) stream in before
+        // the single terminal message; keep the worker alive and forward them.
+        if (data && "type" in data) {
+          onProgress?.({ processed: data.processed, total: data.total });
+          return;
+        }
+        finish();
         if (data?.ok) resolve(data.result);
         else reject(new Error(data?.error || "Could not parse the OSM PBF file."));
       },
     );
     worker.addEventListener("error", (event) => {
       finish();
-      reject(new Error(event.message || "The OSM PBF worker failed."));
+      // A worker `error` on a large parse is usually a browser out-of-memory
+      // kill, so surface the same actionable "too large" guidance as a timeout.
+      reject(
+        new OsmPbfTooLargeError(event.message || "The OSM PBF worker failed."),
+      );
     });
     // `error` does not fire if the worker is OOM-killed or the response message
     // fails to deserialize; messageerror covers the latter and the timeout above

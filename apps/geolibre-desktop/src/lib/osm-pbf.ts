@@ -28,6 +28,21 @@ export interface OsmPbfLayers {
   };
 }
 
+/** Progress through the synchronous classification phase of a parse. */
+export interface OsmPbfProgress {
+  /** Entities classified into layers so far. */
+  processed: number;
+  /** Total entities to classify (nodes + ways + relations). */
+  total: number;
+}
+
+/**
+ * Post a progress update roughly every this many classified entities. Frequent
+ * enough that the loading dialog moves on a large extract, sparse enough that
+ * the postMessage traffic never rivals the parse cost.
+ */
+const PROGRESS_INTERVAL = 50_000;
+
 type MutableBounds = [number, number, number, number];
 
 function extendBounds(bounds: MutableBounds, geometry: Geometry | null): void {
@@ -113,15 +128,25 @@ function geometryBucket(
 /**
  * Parse OSM PBF bytes into GeoJSON layers split by geometry type.
  *
- * Only tagged nodes become point features — the vast majority of OSM nodes are
- * untagged geometry vertices for ways and would otherwise flood the points
- * layer. Ways and relations are always converted (they are meaningful features).
+ * Only *tagged* entities become features. The vast majority of OSM nodes and
+ * ways are untagged geometry: nodes are way vertices, and ways are the member
+ * rings/segments of multipolygon and other relations. They stay in the index
+ * (relation geometry assembly still needs them) but are not emitted as
+ * standalone features — emitting them floods the layers with meaningless
+ * geometry and, on a whole-country extract, multiplies the number of in-memory
+ * GeoJSON objects enough to exhaust browser memory. Real features (roads,
+ * buildings, areas, routes) carry tags, so this keeps them while cutting both
+ * RAM and the feature count MapLibre has to render. Mirrors osmtogeojson.
  *
  * The entity-classification loop runs without yielding and can be heavy for
  * large extracts (the PBF read above is async, but this part is not), so call
- * it from a worker.
+ * it from a worker. `onProgress`, when given, is called periodically with the
+ * count classified so far so that worker can surface progress to the UI.
  */
-export async function parseOsmPbf(bytes: Uint8Array): Promise<OsmPbfLayers> {
+export async function parseOsmPbf(
+  bytes: Uint8Array,
+  onProgress?: (progress: OsmPbfProgress) => void,
+): Promise<OsmPbfLayers> {
   const osm = await buildOsmFromPbf(bytes);
 
   const points: Feature[] = [];
@@ -145,16 +170,31 @@ export async function parseOsmPbf(bytes: Uint8Array): Promise<OsmPbfLayers> {
     extendBounds(bounds, feature.geometry);
   };
 
+  const total = osm.nodes.size + osm.ways.size + osm.relations.size;
+  let processed = 0;
+  const tick = () => {
+    processed += 1;
+    if (onProgress && processed % PROGRESS_INTERVAL === 0) {
+      onProgress({ processed, total });
+    }
+  };
+
   for (const node of osm.nodes) {
+    tick();
     if (!hasTags(node.tags)) continue;
     place(osmEntityToGeoJSONFeature(osm, node) as Feature | null);
   }
   for (const way of osm.ways) {
+    tick();
+    if (!hasTags(way.tags)) continue;
     place(osmEntityToGeoJSONFeature(osm, way) as Feature | null);
   }
   for (const relation of osm.relations) {
+    tick();
+    if (!hasTags(relation.tags)) continue;
     place(osmEntityToGeoJSONFeature(osm, relation) as Feature | null);
   }
+  onProgress?.({ processed, total });
 
   return {
     points: { type: "FeatureCollection", features: points },

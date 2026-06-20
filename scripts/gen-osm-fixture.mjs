@@ -33,3 +33,22 @@ const bytes = await toPbfBuffer(osm);
 mkdirSync("tests/fixtures", { recursive: true });
 writeFileSync("tests/fixtures/sample.osm.pbf", bytes);
 console.log(`Wrote tests/fixtures/sample.osm.pbf (${bytes.length} bytes)`);
+
+// A second fixture with one tagged and one untagged way, to verify untagged
+// ways (relation-member geometry on real extracts) are not emitted as features.
+const untagged = new Osm({ id: "fixture-untagged" });
+untagged.nodes.addNode({ id: 1, lon: 0, lat: 0, tags: { amenity: "cafe" } });
+untagged.nodes.addNode({ id: 2, lon: 1, lat: 1 });
+untagged.nodes.addNode({ id: 3, lon: 2, lat: 1 });
+untagged.nodes.addNode({ id: 4, lon: 3, lat: 1 });
+untagged.nodes.addNode({ id: 5, lon: 4, lat: 1 });
+untagged.nodes.buildIndex();
+untagged.ways.addWay({ id: 10, refs: [2, 3], tags: { highway: "path" } });
+untagged.ways.addWay({ id: 11, refs: [4, 5] }); // untagged -> must be skipped
+untagged.buildIndexes();
+
+const untaggedBytes = await toPbfBuffer(untagged);
+writeFileSync("tests/fixtures/untagged-way.osm.pbf", untaggedBytes);
+console.log(
+  `Wrote tests/fixtures/untagged-way.osm.pbf (${untaggedBytes.length} bytes)`,
+);

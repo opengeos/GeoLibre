@@ -103,7 +103,12 @@ export function OsmPbfDialogs({ osmPbf }: OsmPbfDialogsProps) {
           <DialogHeader>
             <DialogTitle>{t("toolbar.item.loadingOsmPbf")}</DialogTitle>
             <DialogDescription>
-              {t("toolbar.item.loadingOsmPbfDesc")}
+              {osmPbf.progress
+                ? t("toolbar.item.loadingOsmPbfProgress", {
+                    processed: osmPbf.progress.processed.toLocaleString(),
+                    total: osmPbf.progress.total.toLocaleString(),
+                  })
+                : t("toolbar.item.loadingOsmPbfDesc")}
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end">
