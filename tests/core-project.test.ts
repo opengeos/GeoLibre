@@ -170,6 +170,55 @@ describe("project parsing", () => {
     assert.deepEqual(reparsed.legend, legend);
   });
 
+  it("round-trips vector symbology style fields through projectFromStore", () => {
+    const layer = geojsonLayer({
+      style: {
+        ...DEFAULT_LAYER_STYLE,
+        vectorStyleMode: "rule-based",
+        vectorRules: [
+          {
+            id: "1",
+            label: "Parks",
+            filter: '["==", ["get", "TYPE"], "park"]',
+            color: "#00ff00",
+            isElse: false,
+          },
+          { id: "e", label: "Else", filter: "", color: "#cccccc", isElse: true },
+        ],
+        proportionalSizeEnabled: true,
+        proportionalSizeProperty: "pop",
+        proportionalSizeMaxValue: 5000,
+        fillPattern: "hatch",
+        fillPatternColor: "#112233",
+        markerEnabled: true,
+        markerShape: "star",
+        markerColor: "#ff8800",
+        markerSize: 24,
+      },
+    });
+    const project = projectFromStore({
+      projectName: "Symbology",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [layer],
+      preferences: createEmptyProject().preferences,
+      metadata: {},
+    });
+    const reparsed = parseProject(serializeProject(project));
+    const style = reparsed.styles[layer.id];
+    assert.equal(style.vectorStyleMode, "rule-based");
+    assert.equal(style.vectorRules.length, 2);
+    assert.equal(style.vectorRules[0].color, "#00ff00");
+    assert.equal(style.proportionalSizeEnabled, true);
+    assert.equal(style.proportionalSizeProperty, "pop");
+    assert.equal(style.fillPattern, "hatch");
+    assert.equal(style.markerShape, "star");
+    assert.equal(style.markerColor, "#ff8800");
+    assert.equal(style.markerSize, 24);
+  });
+
   it("round-trips saved processing models through projectFromStore", () => {
     const models = [
       {

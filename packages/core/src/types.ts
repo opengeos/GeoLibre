@@ -80,7 +80,61 @@ export type VectorStyleMode =
   | "single"
   | "graduated"
   | "categorized"
+  | "rule-based"
   | "expression";
+
+/**
+ * One entry in a {@link LayerStyle.vectorRules} rule-based renderer. Each rule
+ * pairs a MapLibre filter expression (a boolean expression array, serialized as
+ * JSON) with a symbol color. Rules are evaluated top to bottom; the first whose
+ * filter matches wins. The catch-all rule (`isElse`) has no filter and supplies
+ * the color for features no other rule matched. Mirrors the QGIS/ArcGIS
+ * rule-based renderer.
+ */
+export interface VectorRule {
+  id: string;
+  /** Human-readable label shown in the editor and the legend. */
+  label: string;
+  /**
+   * A MapLibre boolean filter expression serialized as JSON, e.g.
+   * `["==", ["get", "TYPE"], "park"]`. Ignored when {@link isElse} is set or
+   * the JSON is invalid.
+   */
+  filter: string;
+  /** The symbol fill/circle color for features this rule matches (6-digit hex). */
+  color: string;
+  /** When true this is the catch-all "else" rule and {@link filter} is unused. */
+  isElse: boolean;
+}
+
+/**
+ * The fill pattern applied to polygon layers. `"none"` keeps a flat fill; the
+ * named patterns are generated as recolorable sprite tiles; `"svg"` rasterizes
+ * the user-supplied markup in {@link LayerStyle.fillPatternSvg}.
+ */
+export type FillPattern =
+  | "none"
+  | "hatch"
+  | "cross-hatch"
+  | "horizontal"
+  | "vertical"
+  | "dots"
+  | "svg";
+
+/**
+ * The built-in marker shape for a point layer, or `"custom"` to rasterize the
+ * user-supplied SVG in {@link LayerStyle.markerSvg}. Built-in shapes are drawn
+ * on a sprite tile and recolored via {@link LayerStyle.markerColor}.
+ */
+export type MarkerShape =
+  | "circle"
+  | "square"
+  | "triangle"
+  | "diamond"
+  | "star"
+  | "cross"
+  | "pin"
+  | "custom";
 
 /**
  * How a point layer is rendered: as individual markers, a density heatmap, or
@@ -141,6 +195,45 @@ export interface LayerStyle {
   vectorStyleStops: VectorStyleStop[];
   vectorStyleExpression: string;
   /**
+   * Ordered rules for the `"rule-based"` {@link vectorStyleMode}. Compiled to a
+   * MapLibre `case` color expression (first matching filter wins, catch-all
+   * last). See {@link VectorRule}.
+   */
+  vectorRules: VectorRule[];
+  /**
+   * When true, the point circle radius (or line width) is sized by a numeric
+   * field via an `interpolate` between {@link proportionalSizeMinValue} ..
+   * {@link proportionalSizeMaxValue} mapped onto {@link proportionalSizeMinRadius}
+   * .. {@link proportionalSizeMaxRadius} (QGIS "graduated → size" / proportional
+   * symbols). Orthogonal to the color {@link vectorStyleMode}.
+   */
+  proportionalSizeEnabled: boolean;
+  proportionalSizeProperty: string;
+  proportionalSizeMinValue: number;
+  proportionalSizeMaxValue: number;
+  proportionalSizeMinRadius: number;
+  proportionalSizeMaxRadius: number;
+  /**
+   * Polygon fill pattern. `"none"` keeps the flat fill; other values render a
+   * recolorable sprite tile ({@link fillPatternColor}); `"svg"` rasterizes
+   * {@link fillPatternSvg}. See {@link FillPattern}.
+   */
+  fillPattern: FillPattern;
+  fillPatternColor: string;
+  /** Raw SVG markup (or a data URL) used when {@link fillPattern} is `"svg"`. */
+  fillPatternSvg: string;
+  /**
+   * When true, point features render as a marker icon ({@link markerShape})
+   * instead of a plain circle. Built-in shapes are recolored via
+   * {@link markerColor}; `"custom"` rasterizes {@link markerSvg}.
+   */
+  markerEnabled: boolean;
+  markerShape: MarkerShape;
+  markerColor: string;
+  markerSize: number;
+  /** Raw SVG markup (or a data URL) used when {@link markerShape} is `"custom"`. */
+  markerSvg: string;
+  /**
    * When true, per-feature [simplestyle-spec](https://github.com/mapbox/simplestyle-spec)
    * properties (`fill`, `fill-opacity`, `stroke`, `stroke-width`,
    * `stroke-opacity`, `marker-color`) override the flat layer style on a
@@ -193,6 +286,21 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
     { value: 1, color: "#2563eb" },
   ],
   vectorStyleExpression: "",
+  vectorRules: [],
+  proportionalSizeEnabled: false,
+  proportionalSizeProperty: "",
+  proportionalSizeMinValue: 0,
+  proportionalSizeMaxValue: 100,
+  proportionalSizeMinRadius: 4,
+  proportionalSizeMaxRadius: 24,
+  fillPattern: "none",
+  fillPatternColor: "#1e40af",
+  fillPatternSvg: "",
+  markerEnabled: false,
+  markerShape: "circle",
+  markerColor: "#3b82f6",
+  markerSize: 18,
+  markerSvg: "",
   simpleStyleEnabled: false,
   pointRenderer: "single",
   heatmapRadius: 30,

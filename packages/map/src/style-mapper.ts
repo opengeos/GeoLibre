@@ -1,5 +1,6 @@
 import {
   DEFAULT_LAYER_STYLE,
+  circleRadiusValue,
   lineWidthValue,
   parseJsonExpression,
   simpleStyleNumberValue,
@@ -114,7 +115,9 @@ export function circlePaint(style: LayerStyle, opacity: number) {
     "circle-color": vectorCircleColorValue(
       style,
     ) as PropertyValueSpecification<string>,
-    "circle-radius": styleValue(style, "circleRadius"),
+    "circle-radius": circleRadiusValue(
+      style,
+    ) as PropertyValueSpecification<number>,
     "circle-opacity": scaleByOpacity(
       simpleStyleNumberValue(style, "marker-opacity", styleValue(style, "fillOpacity")),
       opacity,

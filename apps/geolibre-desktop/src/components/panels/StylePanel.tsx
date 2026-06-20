@@ -1,9 +1,12 @@
 import {
   DEFAULT_LAYER_STYLE,
+  type FillPattern,
   type LayerType,
+  type MarkerShape,
   type PointRenderer,
   type StrokeWidthUnit,
   VECTOR_COLOR_RAMPS,
+  type VectorRule,
   type VectorStyleMode,
   type VectorStyleStop,
   createEqualIntervalBreaks,
@@ -156,6 +159,96 @@ function isPointOnlyGeoJsonLayer(layer: {
     const type = feature.geometry?.type;
     return type === "Point" || type === "MultiPoint";
   });
+}
+
+interface GeometryFlags {
+  hasPoint: boolean;
+  hasLine: boolean;
+  hasPolygon: boolean;
+}
+
+// Sample the layer's geometry so the proportional-size, fill-pattern, and marker
+// sections only appear where they apply. When the layer has no in-memory GeoJSON
+// (tile/external layers whose geometry is unknown here) every flag is true so the
+// controls stay available rather than being hidden incorrectly.
+function getGeometryFlags(layer: {
+  geojson?: { features?: Array<{ geometry?: { type?: string } | null }> };
+}): GeometryFlags {
+  const features = layer.geojson?.features;
+  if (!features || features.length === 0) {
+    return { hasPoint: true, hasLine: true, hasPolygon: true };
+  }
+  const flags: GeometryFlags = {
+    hasPoint: false,
+    hasLine: false,
+    hasPolygon: false,
+  };
+  const limit = Math.min(features.length, 2000);
+  for (let index = 0; index < limit; index += 1) {
+    const type = features[index]?.geometry?.type;
+    if (type === "Point" || type === "MultiPoint") flags.hasPoint = true;
+    else if (type === "LineString" || type === "MultiLineString")
+      flags.hasLine = true;
+    else if (type === "Polygon" || type === "MultiPolygon")
+      flags.hasPolygon = true;
+    if (flags.hasPoint && flags.hasLine && flags.hasPolygon) break;
+  }
+  return flags;
+}
+
+const MARKER_SHAPE_OPTIONS: ReadonlyArray<{
+  value: MarkerShape;
+  label: string;
+}> = [
+  { value: "circle", label: "Circle" },
+  { value: "square", label: "Square" },
+  { value: "triangle", label: "Triangle" },
+  { value: "diamond", label: "Diamond" },
+  { value: "star", label: "Star" },
+  { value: "cross", label: "Cross" },
+  { value: "pin", label: "Pin" },
+  { value: "custom", label: "Custom SVG" },
+];
+
+// Glyphs for the marker gallery preview only; they render in the chosen marker
+// color (currentColor). The map renders the precise canvas-drawn shapes.
+const MARKER_GLYPHS: Record<MarkerShape, string> = {
+  circle: "●",
+  square: "■",
+  triangle: "▲",
+  diamond: "◆",
+  star: "★",
+  cross: "✚",
+  pin: "⦿",
+  custom: "⬢",
+};
+
+const FILL_PATTERN_OPTIONS: ReadonlyArray<{
+  value: FillPattern;
+  label: string;
+}> = [
+  { value: "none", label: "None (solid fill)" },
+  { value: "hatch", label: "Hatch" },
+  { value: "cross-hatch", label: "Cross-hatch" },
+  { value: "horizontal", label: "Horizontal lines" },
+  { value: "vertical", label: "Vertical lines" },
+  { value: "dots", label: "Dots" },
+  { value: "svg", label: "Custom SVG" },
+];
+
+/** Create a blank rule-based filter rule with a unique id. */
+function createVectorRule(isElse: boolean, color: string): VectorRule {
+  const id =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `rule-${Math.random().toString(36).slice(2)}`;
+  return {
+    id,
+    label: isElse ? "Else" : "",
+    filter: "",
+    color,
+    isElse,
+  };
 }
 
 function getMetadataFieldNames(metadata: Record<string, unknown>): string[] {
@@ -1445,6 +1538,77 @@ export function StylePanel({
   );
   const colorRampPreview =
     getVectorColorRamp(draftVectorStyleColorRamp).colors;
+
+  // --- Rule-based renderer (immediate writes to style.vectorRules) ---
+  const currentRules = styleValue(style, "vectorRules");
+  const concreteRules = currentRules.filter((rule) => !rule.isElse);
+  const elseRule = currentRules.find((rule) => rule.isElse) ?? null;
+  const setVectorRules = (rules: VectorRule[]) =>
+    setLayerStyle(layer.id, { vectorRules: rules });
+  const updateVectorRule = (id: string, patch: Partial<VectorRule>) =>
+    setVectorRules(
+      currentRules.map((rule) =>
+        rule.id === id ? { ...rule, ...patch } : rule,
+      ),
+    );
+  const addVectorRule = () => {
+    const next = createVectorRule(false, nextStopColor(concreteRules.length));
+    // Keep the catch-all else rule last so it reads as the fallback.
+    setVectorRules(
+      elseRule ? [...concreteRules, next, elseRule] : [...concreteRules, next],
+    );
+  };
+  const removeVectorRule = (id: string) =>
+    setVectorRules(currentRules.filter((rule) => rule.id !== id));
+  const setElseRuleColor = (color: string) => {
+    if (elseRule) {
+      updateVectorRule(elseRule.id, { color });
+      return;
+    }
+    setVectorRules([...currentRules, { ...createVectorRule(true, color) }]);
+  };
+
+  // --- Geometry-gated sections (proportional size, fill pattern, markers) ---
+  const geometryFlags = getGeometryFlags(layer);
+  const showProportionalControls =
+    hasVectorPaintControls &&
+    pointRenderer !== "heatmap" &&
+    ((geometryFlags.hasPoint && pointRenderer === "single") ||
+      geometryFlags.hasLine);
+  const showFillPatternControls =
+    hasVectorPaintControls && !extrusionEnabled && geometryFlags.hasPolygon;
+  const showMarkerControls =
+    hasVectorPaintControls &&
+    supportsPointRenderer &&
+    pointRenderer === "single";
+
+  const proportionalEnabled = styleValue(style, "proportionalSizeEnabled");
+  const proportionalProperty = styleValue(style, "proportionalSizeProperty");
+  const proportionalMinValue = styleValue(style, "proportionalSizeMinValue");
+  const proportionalMaxValue = styleValue(style, "proportionalSizeMaxValue");
+  const proportionalMinRadius = styleValue(style, "proportionalSizeMinRadius");
+  const proportionalMaxRadius = styleValue(style, "proportionalSizeMaxRadius");
+  // A small graduated-size legend: evenly spaced sample values mapped onto the
+  // interpolated radius range, mirroring what the map renders.
+  const proportionalLegend =
+    proportionalEnabled && proportionalMaxValue > proportionalMinValue
+      ? Array.from({ length: 5 }, (_, index) => {
+          const ratio = index / 4;
+          return {
+            value:
+              proportionalMinValue +
+              ratio * (proportionalMaxValue - proportionalMinValue),
+            radius:
+              proportionalMinRadius +
+              ratio * (proportionalMaxRadius - proportionalMinRadius),
+          };
+        })
+      : [];
+
+  const fillPattern = styleValue(style, "fillPattern");
+  const markerEnabled = styleValue(style, "markerEnabled");
+  const markerShape = styleValue(style, "markerShape");
+
   const vectorSymbologyControls = (
     <div className="space-y-3">
       <div className="space-y-2">
@@ -1459,6 +1623,7 @@ export function StylePanel({
           <option value="single">Single symbology</option>
           <option value="graduated">Graduated</option>
           <option value="categorized">Categorized</option>
+          <option value="rule-based">Rule-based</option>
           <option value="expression">Advanced expression</option>
         </Select>
       </div>
@@ -1626,6 +1791,91 @@ export function StylePanel({
           />
         </div>
       )}
+      {draftVectorStyleMode === "rule-based" && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <Label>Rules</Label>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-7 w-7"
+              title="Add rule"
+              aria-label="Add rule"
+              onClick={addVectorRule}
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          {concreteRules.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              No rules yet. Add a rule and give it a MapLibre filter expression
+              (e.g. <code>{'["==", ["get", "TYPE"], "park"]'}</code>). The first
+              matching rule wins; the Else rule colors everything else.
+            </p>
+          ) : null}
+          {concreteRules.map((rule, index) => (
+            <div
+              key={rule.id}
+              className="space-y-2 rounded-md border border-input p-2"
+            >
+              <div className="grid grid-cols-[auto_1fr_2rem] items-center gap-2">
+                <ColorField
+                  fill={false}
+                  aria-label={`Rule ${index + 1} color`}
+                  eyedropperLabel={`Pick rule ${index + 1} color from the screen`}
+                  className="h-9 w-9 p-1"
+                  buttonClassName="h-9 w-9"
+                  value={rule.color}
+                  onChange={(color) => updateVectorRule(rule.id, { color })}
+                />
+                <Input
+                  aria-label={`Rule ${index + 1} label`}
+                  placeholder="Label (optional)"
+                  value={rule.label}
+                  onChange={(event) =>
+                    updateVectorRule(rule.id, { label: event.target.value })
+                  }
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  title="Remove rule"
+                  aria-label="Remove rule"
+                  onClick={() => removeVectorRule(rule.id)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <textarea
+                aria-label={`Rule ${index + 1} filter`}
+                className="min-h-16 w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
+                placeholder='["==", ["get", "TYPE"], "park"]'
+                value={rule.filter}
+                onChange={(event) =>
+                  updateVectorRule(rule.id, { filter: event.target.value })
+                }
+              />
+            </div>
+          ))}
+          <div className="grid grid-cols-[auto_1fr] items-center gap-2 rounded-md border border-dashed border-input p-2">
+            <ColorField
+              fill={false}
+              aria-label="Else rule color"
+              eyedropperLabel="Pick the else rule color from the screen"
+              className="h-9 w-9 p-1"
+              buttonClassName="h-9 w-9"
+              value={elseRule?.color ?? style.fillColor}
+              onChange={setElseRuleColor}
+            />
+            <span className="text-xs text-muted-foreground">
+              Else (all other features)
+            </span>
+          </div>
+        </div>
+      )}
       <Button
         type="button"
         size="sm"
@@ -1635,8 +1885,282 @@ export function StylePanel({
       >
         Apply style type
       </Button>
+      {draftVectorStyleMode === "rule-based" &&
+        draftVectorStyleMode !== styleValue(style, "vectorStyleMode") && (
+          <p className="text-xs text-muted-foreground">
+            Click Apply to activate rule-based rendering.
+          </p>
+        )}
       {vectorStyleError && (
         <p className="text-xs text-destructive">{vectorStyleError}</p>
+      )}
+    </div>
+  );
+  const proportionalSizeControls = (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <Label htmlFor="proportionalSizeEnabled">Proportional size</Label>
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <input
+            id="proportionalSizeEnabled"
+            type="checkbox"
+            checked={proportionalEnabled}
+            onChange={(event) =>
+              setLayerStyle(layer.id, {
+                proportionalSizeEnabled: event.target.checked,
+              })
+            }
+          />
+          Size by value
+        </label>
+      </div>
+      {proportionalEnabled && (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="proportionalSizeProperty">Size field</Label>
+            <Select
+              id="proportionalSizeProperty"
+              value={proportionalProperty}
+              onChange={(event) =>
+                setLayerStyle(layer.id, {
+                  proportionalSizeProperty: event.target.value,
+                })
+              }
+              disabled={vectorStylePropertyOptions.length === 0}
+            >
+              {vectorStylePropertyOptions.length === 0 ? (
+                <option value="">No attributes found</option>
+              ) : (
+                <>
+                  <option value="">Choose a field…</option>
+                  {vectorStylePropertyOptions.map((property) => (
+                    <option key={property} value={property}>
+                      {property}
+                    </option>
+                  ))}
+                </>
+              )}
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <NumericStyleInput
+              id="proportionalSizeMinValue"
+              label="Min value"
+              min={-1_000_000_000}
+              max={1_000_000_000}
+              step={1}
+              value={proportionalMinValue}
+              onChange={(proportionalSizeMinValue) =>
+                setLayerStyle(layer.id, { proportionalSizeMinValue })
+              }
+            />
+            <NumericStyleInput
+              id="proportionalSizeMaxValue"
+              label="Max value"
+              min={-1_000_000_000}
+              max={1_000_000_000}
+              step={1}
+              value={proportionalMaxValue}
+              onChange={(proportionalSizeMaxValue) =>
+                setLayerStyle(layer.id, { proportionalSizeMaxValue })
+              }
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <NumericStyleInput
+              id="proportionalSizeMinRadius"
+              label="Min size (px)"
+              min={0}
+              max={100}
+              step={1}
+              value={proportionalMinRadius}
+              onChange={(proportionalSizeMinRadius) =>
+                setLayerStyle(layer.id, { proportionalSizeMinRadius })
+              }
+            />
+            <NumericStyleInput
+              id="proportionalSizeMaxRadius"
+              label="Max size (px)"
+              min={0}
+              max={100}
+              step={1}
+              value={proportionalMaxRadius}
+              onChange={(proportionalSizeMaxRadius) =>
+                setLayerStyle(layer.id, { proportionalSizeMaxRadius })
+              }
+            />
+          </div>
+          {proportionalLegend.length > 0 && proportionalProperty ? (
+            <div className="space-y-1">
+              <Label>Size legend</Label>
+              <div className="flex items-end justify-between gap-2 rounded-md border border-input p-3">
+                {proportionalLegend.map((entry, index) => (
+                  <div
+                    key={index}
+                    className="flex flex-col items-center gap-1"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="rounded-full bg-primary/70"
+                      style={{
+                        width: entry.radius * 2,
+                        height: entry.radius * 2,
+                      }}
+                    />
+                    <span className="text-[10px] text-muted-foreground">
+                      {entry.value.toLocaleString(undefined, {
+                        maximumFractionDigits: 1,
+                      })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+  const fillPatternControls = (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <Label htmlFor="fillPattern">Fill pattern</Label>
+        <Select
+          id="fillPattern"
+          value={fillPattern}
+          onChange={(event) =>
+            setLayerStyle(layer.id, {
+              fillPattern: event.target.value as FillPattern,
+            })
+          }
+        >
+          {FILL_PATTERN_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+      </div>
+      {fillPattern !== "none" && fillPattern !== "svg" ? (
+        <div className="space-y-2">
+          <Label htmlFor="fillPatternColor">Pattern color</Label>
+          <ColorField
+            id="fillPatternColor"
+            value={styleValue(style, "fillPatternColor")}
+            onChange={(fillPatternColor) =>
+              setLayerStyle(layer.id, { fillPatternColor })
+            }
+          />
+        </div>
+      ) : null}
+      {fillPattern === "svg" ? (
+        <div className="space-y-2">
+          <Label htmlFor="fillPatternSvg">Pattern SVG</Label>
+          <textarea
+            id="fillPatternSvg"
+            className="min-h-20 w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
+            placeholder="<svg xmlns='http://www.w3.org/2000/svg' ...>…</svg> or a data/https URL"
+            value={styleValue(style, "fillPatternSvg")}
+            onChange={(event) =>
+              setLayerStyle(layer.id, { fillPatternSvg: event.target.value })
+            }
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+  const markerControls = (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <Label htmlFor="markerEnabled">Marker</Label>
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <input
+            id="markerEnabled"
+            type="checkbox"
+            checked={markerEnabled}
+            onChange={(event) =>
+              setLayerStyle(layer.id, { markerEnabled: event.target.checked })
+            }
+          />
+          Use marker icon
+        </label>
+      </div>
+      {markerEnabled && (
+        <>
+          <div className="space-y-2">
+            <Label>Marker shape</Label>
+            <div className="grid grid-cols-4 gap-2">
+              {MARKER_SHAPE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  title={option.label}
+                  aria-label={option.label}
+                  aria-pressed={markerShape === option.value}
+                  onClick={() =>
+                    setLayerStyle(layer.id, { markerShape: option.value })
+                  }
+                  className={`flex h-12 flex-col items-center justify-center gap-0.5 rounded-md border text-[9px] ${
+                    markerShape === option.value
+                      ? "border-primary ring-1 ring-primary"
+                      : "border-input hover:border-primary/50"
+                  }`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className="text-base leading-none"
+                    style={{
+                      color:
+                        option.value === "custom"
+                          ? undefined
+                          : styleValue(style, "markerColor"),
+                    }}
+                  >
+                    {MARKER_GLYPHS[option.value]}
+                  </span>
+                  <span className="truncate">{option.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          {markerShape !== "custom" ? (
+            <div className="space-y-2">
+              <Label htmlFor="markerColor">Marker color</Label>
+              <ColorField
+                id="markerColor"
+                value={styleValue(style, "markerColor")}
+                onChange={(markerColor) =>
+                  setLayerStyle(layer.id, { markerColor })
+                }
+              />
+            </div>
+          ) : null}
+          <NumericStyleInput
+            id="markerSize"
+            label="Marker size (px)"
+            min={6}
+            max={96}
+            step={1}
+            value={styleValue(style, "markerSize")}
+            onChange={(markerSize) =>
+              setLayerStyle(layer.id, { markerSize })
+            }
+          />
+          {markerShape === "custom" ? (
+            <div className="space-y-2">
+              <Label htmlFor="markerSvg">Marker SVG</Label>
+              <textarea
+                id="markerSvg"
+                className="min-h-20 w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
+                placeholder="<svg xmlns='http://www.w3.org/2000/svg' ...>…</svg> or a data/https URL"
+                value={styleValue(style, "markerSvg")}
+                onChange={(event) =>
+                  setLayerStyle(layer.id, { markerSvg: event.target.value })
+                }
+              />
+            </div>
+          ) : null}
+        </>
       )}
     </div>
   );
@@ -2138,6 +2662,28 @@ export function StylePanel({
             twoDimensionalControls
           ) : (
             extrusionControls
+          )}
+          {(!hasExtrusionControls || !extrusionEnabled) && (
+            <>
+              {showProportionalControls && (
+                <>
+                  <Separator />
+                  {proportionalSizeControls}
+                </>
+              )}
+              {showFillPatternControls && (
+                <>
+                  <Separator />
+                  {fillPatternControls}
+                </>
+              )}
+              {showMarkerControls && (
+                <>
+                  <Separator />
+                  {markerControls}
+                </>
+              )}
+            </>
           )}
         </div>
       </ScrollArea>

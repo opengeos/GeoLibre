@@ -137,6 +137,29 @@ export function metersWidthExpression(meters: number): unknown[] {
  * @returns A number (constant pixels) or a MapLibre expression array.
  */
 export function lineWidthValue(style: LayerStyle): number | unknown[] {
+  // Proportional (graduated) sizing takes precedence: width is driven by a
+  // numeric field, reusing the circle-radius output range as the width range.
+  if (styleValue(style, "proportionalSizeEnabled")) {
+    const property = styleValue(style, "proportionalSizeProperty").trim();
+    const minValue = styleValue(style, "proportionalSizeMinValue");
+    const maxValue = styleValue(style, "proportionalSizeMaxValue");
+    if (
+      property &&
+      Number.isFinite(minValue) &&
+      Number.isFinite(maxValue) &&
+      maxValue > minValue
+    ) {
+      return [
+        "interpolate",
+        ["linear"],
+        ["to-number", ["get", property], minValue],
+        minValue,
+        styleValue(style, "proportionalSizeMinRadius"),
+        maxValue,
+        styleValue(style, "proportionalSizeMaxRadius"),
+      ];
+    }
+  }
   if (styleValue(style, "strokeWidthUnit") === "meters") {
     return metersWidthExpression(styleValue(style, "strokeWidth"));
   }
@@ -258,6 +281,10 @@ export function vectorColorExpression(
     );
   }
 
+  if (mode === "rule-based") {
+    return ruleBasedColorExpression(style, fallbackColor);
+  }
+
   const property = styleValue(style, "vectorStyleProperty").trim();
   if (!property) return fallbackColor;
 
@@ -292,6 +319,72 @@ export function vectorColorExpression(
     ["linear"],
     ["to-number", ["get", property], stops[0].value],
     ...stops.flatMap((stop) => [stop.value, stop.color]),
+  ];
+}
+
+/**
+ * Compiles the `"rule-based"` renderer's ordered rules into a MapLibre `case`
+ * color expression: `["case", filter1, color1, filter2, color2, …, elseColor]`.
+ * Rules are evaluated top to bottom; the first matching filter wins. Rules with
+ * an invalid filter JSON or a non-hex color are skipped. The catch-all
+ * (`isElse`) rule supplies the trailing fallback; when absent or invalid the
+ * layer `fallbackColor` is used. With no usable rules the flat fallback color
+ * is returned.
+ *
+ * @param style - The layer style (reads {@link LayerStyle.vectorRules}).
+ * @param fallbackColor - The color used when no else rule defines one.
+ * @returns A MapLibre `case` expression, or a flat color when no rule applies.
+ */
+export function ruleBasedColorExpression(
+  style: LayerStyle,
+  fallbackColor: string,
+): VectorColorValue {
+  const rules = styleValue(style, "vectorRules");
+  const elseRule = rules.find((rule) => rule.isElse);
+  const elseColor =
+    elseRule && isColor(elseRule.color) ? elseRule.color : fallbackColor;
+
+  const branches: unknown[] = [];
+  for (const rule of rules) {
+    if (rule.isElse || !isColor(rule.color)) continue;
+    const filter = parseJsonExpression(rule.filter);
+    if (!filter) continue;
+    branches.push(filter, rule.color);
+  }
+  if (branches.length === 0) return elseColor;
+  return ["case", ...branches, elseColor];
+}
+
+/**
+ * Builds the `circle-radius` paint value, honoring proportional (graduated)
+ * symbol sizing. When {@link LayerStyle.proportionalSizeEnabled} is set with a
+ * chosen numeric field and a valid value range, returns an `interpolate` that
+ * maps `proportionalSizeMinValue..proportionalSizeMaxValue` onto
+ * `proportionalSizeMinRadius..proportionalSizeMaxRadius`; otherwise the constant
+ * {@link LayerStyle.circleRadius}.
+ *
+ * @param style - The layer style.
+ * @returns A constant radius (pixels) or a MapLibre `interpolate` expression.
+ */
+export function circleRadiusValue(style: LayerStyle): number | unknown[] {
+  const constant = styleValue(style, "circleRadius");
+  if (!styleValue(style, "proportionalSizeEnabled")) return constant;
+  const property = styleValue(style, "proportionalSizeProperty").trim();
+  if (!property) return constant;
+  const minValue = styleValue(style, "proportionalSizeMinValue");
+  const maxValue = styleValue(style, "proportionalSizeMaxValue");
+  if (!(Number.isFinite(minValue) && Number.isFinite(maxValue))) return constant;
+  if (maxValue <= minValue) return constant;
+  const minRadius = styleValue(style, "proportionalSizeMinRadius");
+  const maxRadius = styleValue(style, "proportionalSizeMaxRadius");
+  return [
+    "interpolate",
+    ["linear"],
+    ["to-number", ["get", property], minValue],
+    minValue,
+    minRadius,
+    maxValue,
+    maxRadius,
   ];
 }
 

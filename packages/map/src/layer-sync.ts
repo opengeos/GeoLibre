@@ -26,9 +26,13 @@ import {
   fillLayerId,
   heatmapLayerId,
   lineLayerId,
+  markerLayerId,
   sourceId,
   textLayerId,
 } from "./geojson-loader";
+import { ensureGeneratedImageHandler } from "./generated-images";
+import { prepareFillPattern } from "./fill-patterns";
+import { prepareMarker } from "./markers";
 import { isPlaceholderLayer } from "./placeholders";
 import {
   circlePaint,
@@ -1400,6 +1404,12 @@ function applyVectorDataRenderLayers(
   const visibility = layer.visible ? "visible" : "none";
   const opacity = layer.opacity;
   const hasTextMarkers = hasTextMarkerFeatures(layer.geojson!);
+  // Lazy sprite generation for fill patterns and marker icons relies on the
+  // map's styleimagemissing handler being installed before any layer references
+  // a generated image id.
+  ensureGeneratedImageHandler(map);
+  const fillPatternId = prepareFillPattern(layer.style);
+  const markerImageId = prepareMarker(layer.style);
 
   if (profile.hasPolygon) {
     if (layer.style.extrusionEnabled) {
@@ -1441,7 +1451,12 @@ function applyVectorDataRenderLayers(
             true,
             false,
           ]),
-          paint: fillPaint(layer.style, opacity),
+          paint: {
+            ...fillPaint(layer.style, opacity),
+            // A set fill-pattern replaces fill-color with the recolorable
+            // sprite tile; undefined clears any previously applied pattern.
+            "fill-pattern": fillPatternId ?? undefined,
+          },
           layout: { visibility },
         },
         beforeId,
@@ -1481,8 +1496,9 @@ function applyVectorDataRenderLayers(
   }
 
   if (!layer.style.extrusionEnabled && profile.hasPoint && renderer === "heatmap") {
-    // Heatmap renderer: one density layer, no circle/cluster layers.
+    // Heatmap renderer: one density layer, no circle/cluster/marker layers.
     removeIfExists(map, circleLayerId(layer.id));
+    removeIfExists(map, markerLayerId(layer.id));
     removeIfExists(map, clusterLayerId(layer.id));
     removeIfExists(map, clusterCountLayerId(layer.id));
     ensureLayer(
@@ -1513,6 +1529,7 @@ function applyVectorDataRenderLayers(
     // for the individual (unclustered) points. The source carries clusters
     // (geojson source-level clustering, or supercluster tiles on the tiled path).
     removeIfExists(map, heatmapLayerId(layer.id));
+    removeIfExists(map, markerLayerId(layer.id));
     ensureLayer(
       map,
       clusterLayerId(layer.id),
@@ -1568,29 +1585,58 @@ function applyVectorDataRenderLayers(
       beforeId,
     );
   } else if (!layer.style.extrusionEnabled && profile.hasPoint) {
-    // Single (default) renderer: one circle per point.
+    // Single (default) renderer: a marker icon per point when a marker is
+    // configured, otherwise one circle per point.
     removeIfExists(map, heatmapLayerId(layer.id));
     removeIfExists(map, clusterLayerId(layer.id));
     removeIfExists(map, clusterCountLayerId(layer.id));
-    ensureLayer(
-      map,
-      circleLayerId(layer.id),
-      {
-        id: circleLayerId(layer.id),
-        type: "circle",
-        ...sourceSpec,
-        ...styleLayerZoomRange(layer.style),
-        filter: withTimeFilter(
-          layer,
-          hasTextMarkers ? nonTextMarkerPointFilter : pointGeometryFilter,
-        ),
-        paint: circlePaint(layer.style, opacity),
-        layout: { visibility },
-      },
-      beforeId,
+    const pointFilter = withTimeFilter(
+      layer,
+      hasTextMarkers ? nonTextMarkerPointFilter : pointGeometryFilter,
     );
+    if (markerImageId) {
+      removeIfExists(map, circleLayerId(layer.id));
+      ensureLayer(
+        map,
+        markerLayerId(layer.id),
+        {
+          id: markerLayerId(layer.id),
+          type: "symbol",
+          ...sourceSpec,
+          ...styleLayerZoomRange(layer.style),
+          filter: pointFilter,
+          layout: {
+            "icon-image": markerImageId,
+            // The sprite is baked at its display size, so keep icon-size at 1.
+            "icon-size": 1,
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+            visibility,
+          },
+          paint: { "icon-opacity": opacity },
+        },
+        beforeId,
+      );
+    } else {
+      removeIfExists(map, markerLayerId(layer.id));
+      ensureLayer(
+        map,
+        circleLayerId(layer.id),
+        {
+          id: circleLayerId(layer.id),
+          type: "circle",
+          ...sourceSpec,
+          ...styleLayerZoomRange(layer.style),
+          filter: pointFilter,
+          paint: circlePaint(layer.style, opacity),
+          layout: { visibility },
+        },
+        beforeId,
+      );
+    }
   } else {
     removeIfExists(map, circleLayerId(layer.id));
+    removeIfExists(map, markerLayerId(layer.id));
     removeIfExists(map, heatmapLayerId(layer.id));
     removeIfExists(map, clusterLayerId(layer.id));
     removeIfExists(map, clusterCountLayerId(layer.id));
@@ -2464,6 +2510,7 @@ function removeGeoJsonRenderLayers(map: maplibregl.Map, layerId: string): void {
     clusterLayerId(layerId),
     clusterCountLayerId(layerId),
     textLayerId(layerId),
+    markerLayerId(layerId),
   ]) {
     removeIfExists(map, id);
   }
@@ -2500,6 +2547,7 @@ export function removeLayerFromMap(
     clusterLayerId(layerId),
     clusterCountLayerId(layerId),
     textLayerId(layerId),
+    markerLayerId(layerId),
     `layer-${layerId}-raster`,
     `layer-${layerId}-video`,
     `layer-${layerId}-image`,
