@@ -1,7 +1,15 @@
 import { useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import { Button, Textarea } from "@geolibre/ui";
-import { Code2, Eraser, Loader2, Play, Terminal, X } from "lucide-react";
+import {
+  Eraser,
+  Loader2,
+  PanelBottomClose,
+  PanelBottomOpen,
+  Play,
+  Terminal,
+  X,
+} from "lucide-react";
 import {
   type ChangeEvent as ReactChangeEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -420,7 +428,11 @@ export function PythonConsolePanel({
             aria-pressed={advancedMode}
             onClick={toggleAdvanced}
           >
-            <Code2 className="h-4 w-4" />
+            {advancedMode ? (
+              <PanelBottomClose className="h-4 w-4" />
+            ) : (
+              <PanelBottomOpen className="h-4 w-4" />
+            )}
           </Button>
           <Button
             variant="ghost"
@@ -443,7 +455,7 @@ export function PythonConsolePanel({
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div
           ref={outputRef}
           className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-xs leading-relaxed"
