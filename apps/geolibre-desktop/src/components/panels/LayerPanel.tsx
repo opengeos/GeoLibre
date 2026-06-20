@@ -277,8 +277,10 @@ export function LayerPanel({
   // off. Both act only on the transition so the user can still toggle the panel
   // manually while `autoCollapse` stays on. `isCollapsed` is in the deps only to
   // keep the captured value fresh; the guards make pure `isCollapsed` changes a
-  // no-op while `autoCollapse` is stable. Mirrors StylePanel's behavior.
-  const prevAutoCollapse = useRef(autoCollapse);
+  // no-op while `autoCollapse` is stable. Mirrors StylePanel's behavior. The
+  // ref starts as null (not `autoCollapse`) so a mount with `autoCollapse`
+  // already true reads as a null→true transition and still collapses.
+  const prevAutoCollapse = useRef<boolean | null>(null);
   const collapsedBeforeAuto = useRef(isCollapsed);
   useEffect(() => {
     const wasAuto = prevAutoCollapse.current;
