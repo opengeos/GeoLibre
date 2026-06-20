@@ -6,6 +6,7 @@ import {
   Eraser,
   Loader2,
   Send,
+  Settings,
   Sparkles,
   Square,
   Wrench,
@@ -23,6 +24,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { AssistantSession } from "../../lib/assistant/agent";
 import { renderAssistantMarkdown } from "../../lib/assistant/markdown";
+import { openSettingsSection } from "../layout/SettingsDialog";
 import {
   ASSISTANT_PROVIDER_IDS,
   availableProviders,
@@ -42,6 +44,27 @@ const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
 const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
 const PROVIDER_STORAGE_KEY = "geolibre.assistant.provider";
 const MODEL_STORAGE_KEY = "geolibre.assistant.model";
+
+/**
+ * Providers shown in the no-key setup card, each with the env var(s) that
+ * activate it, ordered to mirror `ASSISTANT_PROVIDER_IDS`. Bedrock and custom
+ * need all listed vars before configForProvider() resolves them, so both are
+ * listed (and rendered as separate chips) rather than leaving the user stuck.
+ */
+const SETUP_PROVIDERS: ReadonlyArray<{
+  id: AssistantProviderId;
+  envs: readonly string[];
+}> = [
+  // Within a row the listed vars are all required (not alternatives), so Google
+  // shows only its primary name; GOOGLE_API_KEY / GOOGLE_GENAI_API_KEY also work
+  // but listing them as extra chips would wrongly read as "all three required".
+  { id: "google", envs: ["GEMINI_API_KEY"] },
+  { id: "anthropic", envs: ["ANTHROPIC_API_KEY"] },
+  { id: "openai", envs: ["OPENAI_API_KEY"] },
+  { id: "ollama", envs: ["OLLAMA_BASE_URL"] },
+  { id: "bedrock", envs: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"] },
+  { id: "custom", envs: ["OPENAI_COMPATIBLE_BASE_URL", "OPENAI_COMPATIBLE_MODEL"] },
+];
 
 /** Read a persisted string setting, ignoring storage failures. */
 function loadStored(key: string): string | null {
@@ -194,8 +217,11 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     session.setSelection({ provider, model: effectiveModel });
   }, [provider, model, session]);
 
-  // Keep the latest turn in view.
+  // Keep the latest turn in view. Skip when there is no conversation (e.g. the
+  // no-key setup card) so its heading stays pinned to the top instead of being
+  // scrolled out of view.
   useEffect(() => {
+    if (turns.length === 0) return;
     const el = outputRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [turns]);
@@ -361,6 +387,21 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     resizeCleanupRef.current = finish;
   };
 
+  // Show the onboarding setup card only when no provider is configured, no run
+  // is in flight, and there is no conversation to preserve. Gating on `running`
+  // keeps the Stop button reachable if a key is removed mid-run; gating on
+  // `turns.length` keeps a finished conversation visible afterwards instead of
+  // hiding it behind the setup card (it returns when the user clears the chat).
+  const showSetup = !hasKey && !running && turns.length === 0;
+
+  // When the panel leaves the setup card for the chat input (e.g. the user just
+  // added their first provider key), focus the input so they can type at once.
+  const prevShowSetupRef = useRef(showSetup);
+  useEffect(() => {
+    if (prevShowSetupRef.current && !showSetup) inputRef.current?.focus();
+    prevShowSetupRef.current = showSetup;
+  }, [showSetup]);
+
   return (
     <section
       ref={sectionRef}
@@ -446,7 +487,53 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
         ref={outputRef}
         className="flex-1 space-y-2 overflow-auto px-3 py-2 text-sm leading-relaxed"
       >
-        {turns.length === 0 ? (
+        {showSetup ? (
+          // No provider yet: show only the setup card. The capability blurb and
+          // input box stay hidden until a provider is configured, so we never
+          // invite a prompt the assistant can't run (issue #547). The action
+          // button lives in the footer below so it stays visible if the list
+          // grows past the panel height.
+          <div className="mx-auto flex max-w-md flex-col gap-2.5">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+              <p className="font-medium text-foreground">
+                {t("assistant.setupTitle")}
+              </p>
+            </div>
+            <p className="text-muted-foreground">{t("assistant.setupStatus")}</p>
+            <div className="rounded-md border bg-muted/40 p-2">
+              <p className="mb-1.5 text-xs font-medium text-foreground">
+                {t("assistant.setupProviders")}
+              </p>
+              <ul aria-label={t("assistant.setupProviders")} className="space-y-1">
+                {SETUP_PROVIDERS.map(({ id, envs }) => (
+                  <li
+                    key={id}
+                    className="flex items-start justify-between gap-3 text-xs"
+                  >
+                    <span className="shrink-0 text-foreground">
+                      {PROVIDER_LABELS[id]}
+                    </span>
+                    {/* One chip per variable so a multi-credential provider
+                        never reads as a single oddly-named env var. */}
+                    <span className="flex flex-wrap justify-end gap-x-1 gap-y-0.5 text-right font-mono text-[11px] text-muted-foreground">
+                      {envs.map((name, index) => (
+                        <span key={name} className="whitespace-nowrap">
+                          {index > 0 ? (
+                            <span className="mr-1 text-muted-foreground/60">
+                              +
+                            </span>
+                          ) : null}
+                          <code>{name}</code>
+                        </span>
+                      ))}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        ) : turns.length === 0 ? (
           <p className="text-muted-foreground">{t("assistant.intro")}</p>
         ) : (
           turns.map((turn) => {
@@ -511,45 +598,57 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
         )}
       </div>
 
-      {!hasKey ? (
-        <div className="space-y-1 border-t bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-          <p className="font-medium text-foreground">
-            {t("assistant.needsKeyTitle")}
-          </p>
-          <p>{t("assistant.needsKeyStatus")}</p>
-          <p>{t("assistant.needsKeyAction")}</p>
-        </div>
-      ) : null}
-
-      <div className="flex items-end gap-2 border-t px-3 py-2">
-        <Textarea
-          ref={inputRef}
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder={t("assistant.placeholder")}
-          spellCheck
-          rows={2}
-          disabled={!hasKey}
-          className="min-h-[2.5rem] flex-1 resize-none text-sm"
-        />
-        {running ? (
-          <Button size="sm" variant="outline" onClick={stop} title={t("assistant.stop")}>
-            <Square className="mr-1 h-4 w-4" />
-            {t("assistant.stop")}
-          </Button>
-        ) : (
+      {showSetup ? (
+        // Keep the call to action pinned to the bottom so it is reachable even
+        // when the provider list scrolls.
+        <div className="border-t px-3 py-2">
           <Button
             size="sm"
-            onClick={() => void send()}
-            disabled={!hasKey || !input.trim()}
-            title={t("assistant.sendHint")}
+            className="w-full"
+            onClick={() => openSettingsSection("environment")}
           >
-            <Send className="mr-1 h-4 w-4" />
-            {t("assistant.send")}
+            <Settings className="mr-1 h-4 w-4" />
+            {t("assistant.setupOpenSettings")}
           </Button>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="flex items-end gap-2 border-t px-3 py-2">
+          <Textarea
+            ref={inputRef}
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder={t("assistant.placeholder")}
+            spellCheck
+            rows={2}
+            // Stays disabled if the key is removed mid-run; the Stop button is a
+            // separate control, so it remains reachable until the run ends.
+            disabled={!hasKey}
+            className="min-h-[2.5rem] flex-1 resize-none text-sm"
+          />
+          {running ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={stop}
+              title={t("assistant.stop")}
+            >
+              <Square className="mr-1 h-4 w-4" />
+              {t("assistant.stop")}
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              onClick={() => void send()}
+              disabled={!hasKey || !input.trim()}
+              title={t("assistant.sendHint")}
+            >
+              <Send className="mr-1 h-4 w-4" />
+              {t("assistant.send")}
+            </Button>
+          )}
+        </div>
+      )}
     </section>
   );
 }

@@ -14,6 +14,7 @@ import type {
   GeoLibreMapControlPosition,
   GeoLibrePlugin,
 } from "../types";
+import { buildTimeFilter, type TimeBinding } from "./time-slider-binding";
 
 /**
  * Marker placed on every GeoLibre store layer that mirrors a time-slider
@@ -117,6 +118,9 @@ let savedConfig: TimeSliderConfig | null = null;
 // Detaches the active control's store-sync listeners; set by attachStoreSync,
 // cleared when invoked. Bound to a specific control so handlers cannot leak.
 let detachStoreSync: (() => void) | null = null;
+
+/** Stable id of this plugin, exported so the UI can activate/query it. */
+export const TIME_SLIDER_PLUGIN_ID = "maplibre-gl-time-slider";
 
 export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-time-slider",
@@ -318,14 +322,238 @@ function attachStoreSync(control: TimeSliderControl): void {
   // Force the dock theme to follow the in-app light/dark toggle for as long as
   // this control is attached.
   startThemeSync(control);
+  const detachBindingSync = attachBindingSync(control);
   // Bind the detacher to this specific control and its own handler closures so
   // a second attach can never orphan the previous control's listeners.
   detachStoreSync = () => {
     control.off("sourceadd", onSourceAdd);
     control.off("sourceremove", onSourceRemove);
+    detachBindingSync();
     stopThemeSync();
     detachStoreSync = null;
   };
+}
+
+// ----- Bound GeoLibre layers ------------------------------------------------
+// The Time Slider can drive vector layers added through GeoLibre's own Add Data
+// menu: a "Bind to Time Slider" action stores a `timeBinding` on the layer's
+// metadata, and while the dock is active the timeline's current date is turned
+// into a MapLibre filter written to the layer's transient `timeFilter`. The
+// layer's styling and opacity stay under the Layers panel's control; only the
+// visible feature set narrows. See `time-slider-binding.ts`.
+
+// Last range pushed to the control, so an unrelated store change does not
+// re-snap the marker by calling setRange again with identical bounds.
+let lastBoundRangeKey: string | null = null;
+// The control's range from just before the first binding overrode it, restored
+// when the last binding is removed so any pre-existing temporal sources keep
+// their own range across a bind/unbind cycle.
+let preBindingRange: {
+  start: string;
+  end: string;
+  granularity: TimeBinding["granularity"];
+} | null = null;
+// Guards our own timeFilter writes from re-entering the store subscription.
+let applyingBoundFilters = false;
+// JSON of the last time filter pushed to each bound layer, so a playback tick
+// that lands in the same window does not re-serialize the stored filter and
+// re-write the store. Cleared when a layer is unbound or the dock detaches.
+const appliedFilterKeys = new Map<string, string>();
+
+interface BoundLayer {
+  id: string;
+  binding: TimeBinding;
+}
+
+/**
+ * Collect the store layers that carry a {@link TimeBinding} on their metadata.
+ */
+function getBoundLayers(): BoundLayer[] {
+  const bound: BoundLayer[] = [];
+  for (const layer of useAppStore.getState().layers) {
+    const binding = layer.metadata?.timeBinding as TimeBinding | undefined;
+    if (binding && typeof binding.property === "string") {
+      bound.push({ id: layer.id, binding });
+    }
+  }
+  return bound;
+}
+
+/**
+ * Recompute and write each bound layer's time filter for the control's current
+ * date. Writes are diffed so a no-op date tick does not churn the store, and a
+ * re-entrancy guard keeps these writes from retriggering the store sync.
+ */
+function applyBoundFilters(
+  control: TimeSliderControl,
+  bound: BoundLayer[],
+): void {
+  if (bound.length === 0) return;
+  const date = new Date(control.getConfig().currentDate);
+  const store = useAppStore.getState();
+  applyingBoundFilters = true;
+  try {
+    for (const { id, binding } of bound) {
+      const layer = store.layers.find((item) => item.id === id);
+      if (!layer) continue;
+      const filter = buildTimeFilter(binding, date);
+      const key = JSON.stringify(filter);
+      // Compare against the last filter we applied (one serialization) rather
+      // than re-serializing the stored filter on every tick.
+      if (appliedFilterKeys.get(id) !== key) {
+        store.updateLayer(id, { timeFilter: filter });
+        appliedFilterKeys.set(id, key);
+      }
+    }
+  } finally {
+    applyingBoundFilters = false;
+  }
+}
+
+/**
+ * Drop the transient time filter from layers that are no longer bound (or from
+ * every layer, when the dock is torn down) so they show their full feature set
+ * again.
+ */
+function clearBoundFilters(ids: string[]): void {
+  if (ids.length === 0) return;
+  const store = useAppStore.getState();
+  applyingBoundFilters = true;
+  try {
+    for (const id of ids) {
+      appliedFilterKeys.delete(id);
+      const layer = store.layers.find((item) => item.id === id);
+      if (layer && layer.timeFilter !== undefined) {
+        store.updateLayer(id, { timeFilter: undefined });
+      }
+    }
+  } finally {
+    applyingBoundFilters = false;
+  }
+}
+
+/**
+ * Reconcile the timeline range with the union of every bound layer's extent and
+ * refresh their filters. Called on activation and whenever the set of bound
+ * layers (or their bindings) changes.
+ */
+function reconcileBoundLayers(control: TimeSliderControl): void {
+  const bound = getBoundLayers();
+  if (bound.length > 0) {
+    let min = Number.POSITIVE_INFINITY;
+    let max = Number.NEGATIVE_INFINITY;
+    let granularity = bound[0].binding.granularity;
+    let widestSpan = -1;
+    for (const { binding } of bound) {
+      if (binding.min < min) min = binding.min;
+      if (binding.max > max) max = binding.max;
+      const span = binding.max - binding.min;
+      // The widest dataset sets the stepping granularity for the shared track.
+      if (span > widestSpan) {
+        widestSpan = span;
+        granularity = binding.granularity;
+      }
+    }
+    const rangeKey = `${min}|${max}|${granularity}`;
+    if (rangeKey !== lastBoundRangeKey) {
+      // Capture the range the control had before any binding overrode it, so it
+      // can be restored when every binding is later removed.
+      if (lastBoundRangeKey === null) {
+        const config = control.getConfig();
+        preBindingRange = {
+          start: config.startDate,
+          end: config.endDate,
+          granularity: config.granularity,
+        };
+      }
+      lastBoundRangeKey = rangeKey;
+      control.setRange(new Date(min), new Date(max), undefined, granularity);
+    }
+  } else {
+    // The last binding was removed: restore the pre-binding range so any other
+    // temporal sources are not stranded at the bound layer's range.
+    if (lastBoundRangeKey !== null && preBindingRange) {
+      control.setRange(
+        preBindingRange.start,
+        preBindingRange.end,
+        undefined,
+        preBindingRange.granularity,
+      );
+    }
+    preBindingRange = null;
+    lastBoundRangeKey = null;
+  }
+  applyBoundFilters(control, bound);
+}
+
+/**
+ * Wire the control's date changes and the GeoLibre store together so bound
+ * layers track the timeline. Returns a detacher that also clears every applied
+ * time filter, so deactivating the dock restores full feature visibility.
+ *
+ * @param control - The active time-slider control.
+ * @returns A teardown function.
+ */
+function attachBindingSync(control: TimeSliderControl): () => void {
+  lastBoundRangeKey = null;
+  preBindingRange = null;
+  appliedFilterKeys.clear();
+  // `statechange` fires on every date change (scrub and each playback tick) plus
+  // range/granularity changes, which is exactly when bound filters must update.
+  const onStateChange = () => applyBoundFilters(control, getBoundLayers());
+  control.on("statechange", onStateChange);
+
+  // Track the set of bound layers so a store change only re-snaps the range when
+  // a binding was actually added, removed, or edited (not on every opacity drag).
+  let boundSignature = bindingSignature();
+  let boundIds = getBoundLayers().map((entry) => entry.id);
+  const unsubscribe = useAppStore.subscribe(() => {
+    if (applyingBoundFilters) return;
+    const nextSignature = bindingSignature();
+    if (nextSignature === boundSignature) return;
+    const nextIds = getBoundLayers().map((entry) => entry.id);
+    const removed = boundIds.filter((id) => !nextIds.includes(id));
+    boundSignature = nextSignature;
+    boundIds = nextIds;
+    if (removed.length > 0) clearBoundFilters(removed);
+    reconcileBoundLayers(control);
+  });
+
+  // Apply once now so a binding made before activation takes effect immediately.
+  reconcileBoundLayers(control);
+
+  return () => {
+    control.off("statechange", onStateChange);
+    unsubscribe();
+    clearBoundFilters(getBoundLayers().map((entry) => entry.id));
+    appliedFilterKeys.clear();
+    lastBoundRangeKey = null;
+    preBindingRange = null;
+  };
+}
+
+/**
+ * A compact signature of the current bindings (ids + configs) used to detect
+ * binding changes without reacting to unrelated store updates.
+ */
+function bindingSignature(): string {
+  return JSON.stringify(
+    getBoundLayers().map(({ id, binding }) => [id, binding]),
+  );
+}
+
+/**
+ * Read the {@link TimeBinding} stored on a layer's metadata, if any. Used by the
+ * Layers panel to decide between the Bind and Unbind actions.
+ *
+ * @param layer - A store layer.
+ * @returns The binding, or `undefined` when the layer is not time-bound.
+ */
+export function getLayerTimeBinding(layer: {
+  metadata?: Record<string, unknown>;
+}): TimeBinding | undefined {
+  const binding = layer.metadata?.timeBinding as TimeBinding | undefined;
+  return binding && typeof binding.property === "string" ? binding : undefined;
 }
 
 /**

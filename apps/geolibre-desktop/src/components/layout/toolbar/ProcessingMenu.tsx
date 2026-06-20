@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { type NetworkToolKind, useAppStore } from "@geolibre/core";
 import {
   Button,
   DropdownMenu,
@@ -23,7 +23,7 @@ import type { ToolbarChrome } from "./constants";
 interface ProcessingMenuProps {
   chrome: ToolbarChrome;
   earthEnginePanel: ToolbarPanel;
-  onOpenNetworkTool: (kind: "isochrone" | "od-matrix") => void;
+  onOpenNetworkTool: (kind: NetworkToolKind) => void;
   onOpenPlanetaryComputer: () => void;
   onOpenGeoreferencer: () => void;
 }
@@ -278,6 +278,11 @@ export function ProcessingMenu({
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => onOpenNetworkTool("od-matrix")}>
               {t("toolbar.networkTool.odMatrix")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => onOpenNetworkTool("sequential-route")}
+            >
+              {t("toolbar.networkTool.sequentialRoute")}
             </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>

@@ -788,6 +788,22 @@ body,
 }
 
 /*
+ * The Effects plugin (the default starfield) raises the map canvas to
+ * `z-index: 4` and bumps `.maplibregl-control-container` to 5 so normal map
+ * controls keep painting above the canvas. The Time Slider dock relocates
+ * itself out of the control container into its own reserve-space layout
+ * wrapper, so it keeps the upstream library's `z-index: 2` and its
+ * upward-floating "Add data" popover is drawn under the z-4 canvas (the panel
+ * ends up "behind the map"). Lift the dock above the effects canvas so the
+ * popover renders on top. Harmless when effects are off and the canvas sits at
+ * its default auto z-index. See GeoLibre issue #570.
+ */
+.maplibregl-time-slider-dock,
+.maplibregl-time-slider-dock.ts-docked {
+  z-index: 6;
+}
+
+/*
  * The Measure, Bookmark and View State controls theme themselves purely via
  * `@media (prefers-color-scheme)`, so they follow the OS preference instead of
  * GeoLibre's in-app light/dark toggle (the `.dark` class on <html>). When the

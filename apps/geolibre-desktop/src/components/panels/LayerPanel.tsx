@@ -14,15 +14,22 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { isDuckDBQueryLayer, useAppStore } from "@geolibre/core";
 import type { GeoLibreLayer, LayerGroup } from "@geolibre/core";
+import type { FeatureCollection } from "geojson";
 import {
+  buildTimeBinding,
   canEditLayerGeometry,
+  detectTimeProperties,
+  getLayerTimeBinding,
   RASTER_SOURCE_KIND,
   reloadVectorControlLayer,
+  TIME_SLIDER_PLUGIN_ID,
+  type TimePropertyCandidate,
 } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
 import { isPlaceholderLayer, placeholderMessage } from "@geolibre/map";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
+import { createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
 import { showsAdvancedNotices } from "../../lib/ui-profile";
 import {
   Button,
@@ -47,6 +54,7 @@ import {
   Slider,
 } from "@geolibre/ui";
 import {
+  CalendarClock,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -228,6 +236,32 @@ export function LayerPanel({
   >({});
   const [refreshIntervalChoice, setRefreshIntervalChoice] = useState("0");
   const [customRefreshSeconds, setCustomRefreshSeconds] = useState("");
+  // Time Slider binding dialog: the target layer, the detected timestamp
+  // columns, the chosen property, and the window width. `candidates` is null
+  // while the layer's features are still being inspected.
+  const [bindTimeSliderLayerId, setBindTimeSliderLayerId] = useState<
+    string | null
+  >(null);
+  const [bindCandidates, setBindCandidates] = useState<
+    TimePropertyCandidate[] | null
+  >(null);
+  const [bindProperty, setBindProperty] = useState("");
+  const [bindWindowMode, setBindWindowMode] = useState<
+    "step" | "wide" | "wider"
+  >("step");
+  // Feature collection resolved when the bind dialog opens, reused on confirm so
+  // a large layer is scanned only once.
+  const [bindLayerGeojson, setBindLayerGeojson] =
+    useState<FeatureCollection | null>(null);
+  // Shown in the dialog when binding fails (e.g. the chosen property has no
+  // parseable timestamps) instead of closing the dialog with no feedback.
+  const [bindError, setBindError] = useState<string | null>(null);
+  // Monotonic token for the active bind request. Each open/close bumps it, so a
+  // stale async scan or confirm (even for the same layer reopened) is dropped
+  // when it no longer matches the latest token.
+  const bindRequestRef = useRef(0);
+  const { isActive: isPluginActive, toggle: togglePlugin } =
+    usePluginRegistry();
   const [isCollapsed, setIsCollapsed] = useState(getIsMobileViewport);
   const [draggedLayerId, setDraggedLayerId] = useState<string | null>(null);
   const [dropTargetLayerId, setDropTargetLayerId] = useState<string | null>(
@@ -277,6 +311,9 @@ export function LayerPanel({
   );
   const refreshSettingsLayer = refreshSettingsLayerId
     ? (layers.find((layer) => layer.id === refreshSettingsLayerId) ?? null)
+    : null;
+  const bindTimeSliderLayer = bindTimeSliderLayerId
+    ? (layers.find((layer) => layer.id === bindTimeSliderLayerId) ?? null)
     : null;
   const refreshSettingsConfig = refreshSettingsLayer
     ? getLayerRefreshConfig(refreshSettingsLayer)
@@ -567,6 +604,109 @@ export function LayerPanel({
     [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear],
   );
 
+  // Close the bind dialog and invalidate any in-flight scan/confirm so a late
+  // async result cannot reopen it, write stale candidates, or bind after cancel.
+  const closeBindTimeSliderDialog = useCallback(() => {
+    bindRequestRef.current += 1;
+    setBindTimeSliderLayerId(null);
+  }, []);
+
+  // Open the bind dialog: inspect the layer's features for timestamp columns and
+  // preselect the best-covered one. `candidates` stays null until detection
+  // finishes so the dialog can show a "scanning" state for large layers.
+  const openBindTimeSliderDialog = useCallback(
+    async (layer: GeoLibreLayer) => {
+      // Tag this request with a fresh token so a stale async scan (open ->
+      // close/reopen, even for the same layer) cannot populate this dialog.
+      const token = (bindRequestRef.current += 1);
+      setBindTimeSliderLayerId(layer.id);
+      setBindCandidates(null);
+      setBindProperty("");
+      setBindWindowMode("step");
+      setBindLayerGeojson(null);
+      setBindError(null);
+      try {
+        const geojson = await resolveLayerGeojson(
+          layer,
+          mapControllerRef.current?.getMap() ?? undefined,
+        );
+        if (bindRequestRef.current !== token) return;
+        const candidates = detectTimeProperties(geojson ?? undefined);
+        setBindLayerGeojson(geojson ?? null);
+        setBindCandidates(candidates);
+        if (candidates.length > 0) setBindProperty(candidates[0].property);
+      } catch {
+        if (bindRequestRef.current !== token) return;
+        setBindCandidates([]);
+      }
+    },
+    [mapControllerRef],
+  );
+
+  // Commit a binding: persist it on the layer metadata and activate the Time
+  // Slider so it adopts the binding and drives the filter. Styling/opacity are
+  // untouched; only the visible feature set narrows as the timeline moves.
+  const confirmBindTimeSlider = useCallback(async () => {
+    const layer = bindTimeSliderLayer;
+    if (!layer || !bindProperty) return;
+    const token = bindRequestRef.current;
+    // Reuse the feature collection resolved when the dialog opened so large
+    // layers are not scanned twice.
+    const geojson =
+      bindLayerGeojson ??
+      (await resolveLayerGeojson(
+        layer,
+        mapControllerRef.current?.getMap() ?? undefined,
+      ));
+    // If the dialog was cancelled (or reopened for another layer) while the
+    // fallback scan was in flight, abandon this commit.
+    if (bindRequestRef.current !== token) return;
+    const binding = buildTimeBinding(geojson ?? undefined, bindProperty);
+    if (!binding) {
+      // Keep the dialog open and explain why, rather than closing silently.
+      setBindError(t("layers.bindNoTimestamps"));
+      return;
+    }
+    const timeWindow =
+      bindWindowMode === "wider"
+        ? { unit: binding.granularity, before: 3, after: 3 }
+        : bindWindowMode === "wide"
+          ? { unit: binding.granularity, before: 1, after: 1 }
+          : { unit: binding.granularity, before: 0, after: 1 };
+    updateLayer(layer.id, {
+      metadata: { ...layer.metadata, timeBinding: { ...binding, window: timeWindow } },
+      timeFilter: undefined,
+    });
+    if (!isPluginActive(TIME_SLIDER_PLUGIN_ID)) {
+      togglePlugin(TIME_SLIDER_PLUGIN_ID, createAppAPI(mapControllerRef));
+    }
+    closeBindTimeSliderDialog();
+  }, [
+    bindTimeSliderLayer,
+    bindLayerGeojson,
+    bindProperty,
+    bindWindowMode,
+    mapControllerRef,
+    updateLayer,
+    isPluginActive,
+    togglePlugin,
+    closeBindTimeSliderDialog,
+    t,
+  ]);
+
+  // Remove a layer's binding and clear its transient time filter so it shows
+  // every feature again. The Time Slider stays active for any other bindings.
+  const handleUnbindTimeSlider = useCallback(
+    (layer: GeoLibreLayer) => {
+      const { timeBinding: _removed, ...metadata } = layer.metadata as Record<
+        string,
+        unknown
+      >;
+      updateLayer(layer.id, { metadata, timeFilter: undefined });
+    },
+    [updateLayer],
+  );
+
   const handleExportRasterLayer = useCallback(
     async (layer: GeoLibreLayer) => {
       clearRefreshStatusTimer(layer.id);
@@ -617,6 +757,14 @@ export function LayerPanel({
     }
 
     if (
+      bindTimeSliderLayerId &&
+      !layers.some((layer) => layer.id === bindTimeSliderLayerId)
+    ) {
+      bindRequestRef.current += 1;
+      setBindTimeSliderLayerId(null);
+    }
+
+    if (
       editingLayerId &&
       !layers.some((layer) => layer.id === editingLayerId)
     ) {
@@ -639,7 +787,13 @@ export function LayerPanel({
       }
       return changed ? next : current;
     });
-  }, [clearRefreshStatusTimer, editingLayerId, layers, refreshSettingsLayerId]);
+  }, [
+    bindTimeSliderLayerId,
+    clearRefreshStatusTimer,
+    editingLayerId,
+    layers,
+    refreshSettingsLayerId,
+  ]);
 
   useEffect(() => {
     if (refreshSettingsIntervalMs === null) {
@@ -1126,6 +1280,10 @@ export function LayerPanel({
             // Export writes the layer's GeoJSON features to disk; only
             // geojson-backed vector layers carry those features.
             const canExportLayer = layer.type === "geojson";
+            // Vector layers with a date/timestamp property can be driven by the
+            // Time Slider; the binding (if any) lives on the layer metadata.
+            const canBindTimeSlider = layer.type === "geojson";
+            const timeBinding = getLayerTimeBinding(layer);
             // Raster/COG layers backed by a downloadable file (a retained
             // local-bytes blob URL or a source URL) export to GeoTIFF.
             const canExportRaster = canExportRasterLayer(layer);
@@ -1506,6 +1664,23 @@ export function LayerPanel({
                           Open attribute table
                         </DropdownMenuItem>
                       )}
+                      {canBindTimeSlider && (
+                        <DropdownMenuItem
+                          onSelect={(e: Event) => {
+                            e.preventDefault();
+                            if (timeBinding) {
+                              handleUnbindTimeSlider(layer);
+                            } else {
+                              void openBindTimeSliderDialog(layer);
+                            }
+                          }}
+                        >
+                          <CalendarClock className="mr-2 h-3.5 w-3.5" />
+                          {timeBinding
+                            ? t("layers.unbindFromTimeSlider")
+                            : t("layers.bindToTimeSlider")}
+                        </DropdownMenuItem>
+                      )}
                       {canExportLayer && (
                         <DropdownMenuSub>
                           <DropdownMenuSubTrigger>
@@ -1731,6 +1906,92 @@ export function LayerPanel({
           {t("layers.advancedFormatsNote")}
         </p>
       ) : null}
+      <Dialog
+        open={!!bindTimeSliderLayerId}
+        onOpenChange={(open: boolean) => {
+          if (!open) closeBindTimeSliderDialog();
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("layers.bindToTimeSlider")}</DialogTitle>
+            <DialogDescription>
+              {t("layers.bindDialogDescription")}
+            </DialogDescription>
+          </DialogHeader>
+          {bindCandidates === null ? (
+            <p className="text-sm text-muted-foreground">
+              {t("layers.bindScanning")}
+            </p>
+          ) : bindCandidates.length === 0 ? (
+            <p className="text-sm text-destructive">
+              {t("layers.bindNoProperty")}
+            </p>
+          ) : (
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="time-slider-property">
+                  {t("layers.bindProperty")}
+                </Label>
+                <Select
+                  id="time-slider-property"
+                  value={bindProperty}
+                  onChange={(event) => {
+                    setBindProperty(event.target.value);
+                    setBindError(null);
+                  }}
+                >
+                  {bindCandidates.map((candidate) => (
+                    <option key={candidate.property} value={candidate.property}>
+                      {candidate.property}
+                      {candidate.coverage < 1
+                        ? ` (${Math.round(candidate.coverage * 100)}%)`
+                        : ""}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="time-slider-window">
+                  {t("layers.bindWindow")}
+                </Label>
+                <Select
+                  id="time-slider-window"
+                  value={bindWindowMode}
+                  onChange={(event) =>
+                    setBindWindowMode(
+                      event.target.value as "step" | "wide" | "wider",
+                    )
+                  }
+                >
+                  <option value="step">{t("layers.bindWindowStep")}</option>
+                  <option value="wide">{t("layers.bindWindowWide")}</option>
+                  <option value="wider">{t("layers.bindWindowWider")}</option>
+                </Select>
+              </div>
+              {bindError && (
+                <p className="text-sm text-destructive">{bindError}</p>
+              )}
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={closeBindTimeSliderDialog}
+            >
+              {t("layers.bindCancel")}
+            </Button>
+            <Button
+              type="button"
+              disabled={!bindProperty}
+              onClick={() => void confirmBindTimeSlider()}
+            >
+              {t("layers.bindConfirm")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog
         open={!!refreshSettingsLayerId}
         onOpenChange={(open: boolean) => {

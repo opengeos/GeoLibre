@@ -1,9 +1,10 @@
-// Run WhiteboxTools entirely in the browser via WebAssembly - a drop-in
-// alternative to the Python sidecar for the OSS tool set. `whitebox-wasm/tools`
-// executes the same `wbtools_oss` engine (compiled to a WASI binary) through an
-// in-memory WASI filesystem, so no server, no Python, and no native install is
-// required. Same algorithms and outputs as the sidecar; bounded by WASM's ~4 GiB
-// memory and single-threaded execution (use the sidecar for very large data).
+// Run the OSS geospatial tools entirely in the browser via WebAssembly - a
+// drop-in alternative to the Python sidecar. `geolibre-wasm/tools` is a superset
+// of `whitebox-wasm/tools`: the same `wbtools_oss` engine (compiled to a WASI
+// binary) plus GeoLibre-authored tools, run through an in-memory WASI
+// filesystem, so no server, no Python, and no native install is required. Same
+// algorithms and outputs as the sidecar; bounded by WASM's ~4 GiB memory and
+// single-threaded execution (use the sidecar for very large data).
 import type { FeatureCollection } from "geojson";
 import type { RunWhiteboxToolRequest, WhiteboxJob, WhiteboxToolParameter } from "./sidecar-client";
 
@@ -29,7 +30,7 @@ function loadToolsModule(): Promise<ToolsModule> {
   // the next call retries instead of being stuck with a permanently rejected
   // promise for the rest of the session.
   toolsModulePromise ??= (
-    import("whitebox-wasm/tools") as unknown as Promise<ToolsModule>
+    import("geolibre-wasm/tools") as unknown as Promise<ToolsModule>
   ).catch((error) => {
     toolsModulePromise = null;
     throw error;

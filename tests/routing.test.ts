@@ -4,10 +4,14 @@ import {
   DEFAULT_ROUTING_ENDPOINT,
   buildIsochroneRequest,
   buildMatrixRequest,
+  buildRouteRequest,
+  compareSequenceValues,
+  decodePolyline,
   getRoutingConfig,
   isochroneResponseToFeatures,
   matrixResponseToFeatures,
   parseContours,
+  routeResponseToFeatures,
   type RoutingPoint,
 } from "../packages/core/src/routing";
 
@@ -147,6 +151,125 @@ describe("matrixResponseToFeatures", () => {
       matrixResponseToFeatures({}, origins, targets, { mode: "auto" }),
       [],
     );
+  });
+});
+
+describe("buildRouteRequest", () => {
+  it("maps ordered points to Valhalla locations with km units", () => {
+    const points: RoutingPoint[] = [
+      { id: "a", lon: -83, lat: 40 },
+      { id: "b", lon: -82, lat: 41 },
+    ];
+    assert.deepEqual(buildRouteRequest(points, "pedestrian"), {
+      locations: [
+        { lon: -83, lat: 40 },
+        { lon: -82, lat: 41 },
+      ],
+      costing: "pedestrian",
+      directions_options: { units: "kilometers" },
+    });
+  });
+});
+
+describe("decodePolyline", () => {
+  it("decodes the canonical Google precision-5 example to [lon, lat] pairs", () => {
+    // Canonical example from Google's encoded-polyline algorithm docs:
+    // (38.5, -120.2), (40.7, -120.95), (43.252, -126.453).
+    const coords = decodePolyline("_p~iF~ps|U_ulLnnqC_mqNvxq`@", 5);
+    assert.deepEqual(coords, [
+      [-120.2, 38.5],
+      [-120.95, 40.7],
+      [-126.453, 43.252],
+    ]);
+  });
+
+  it("decodes a Valhalla precision-6 polyline at the default precision", () => {
+    // Encodes [[-77.05, 38.88], [-77.04, 38.89], [-77.02, 38.9]] at precision 6.
+    assert.deepEqual(decodePolyline("_o`diA~gw}qC_pR_pR_pR_af@"), [
+      [-77.05, 38.88],
+      [-77.04, 38.89],
+      [-77.02, 38.9],
+    ]);
+  });
+
+  it("returns an empty array for an empty string", () => {
+    assert.deepEqual(decodePolyline(""), []);
+  });
+
+  it("drops a truncated trailing chunk instead of emitting a garbage coord", () => {
+    // The full string above with its last coordinate cut off mid-chunk.
+    assert.deepEqual(decodePolyline("_o`diA~gw}qC_pR_pR_p"), [
+      [-77.05, 38.88],
+      [-77.04, 38.89],
+    ]);
+  });
+});
+
+describe("routeResponseToFeatures", () => {
+  const points: RoutingPoint[] = [
+    { id: "p0", lon: 0, lat: 0 },
+    { id: "p1", lon: 1, lat: 1 },
+  ];
+  // A real Valhalla precision-6 polyline encoding the three [lon, lat] points
+  // [[-77.05, 38.88], [-77.04, 38.89], [-77.02, 38.9]], so the test asserts the
+  // decode runs at precision 6 (not Google's 5) and yields the right values.
+  const response = {
+    trip: {
+      legs: [
+        {
+          shape: "_o`diA~gw}qC_pR_pR_pR_af@",
+          summary: { time: 540, length: 8.2 },
+        },
+      ],
+    },
+  };
+
+  it("emits one LineString per leg with from/to ids and cost", () => {
+    const features = routeResponseToFeatures(response, points, { mode: "auto" });
+    assert.equal(features.length, 1);
+    const [feature] = features;
+    assert.equal(feature.geometry.type, "LineString");
+    assert.deepEqual(feature.geometry.coordinates, [
+      [-77.05, 38.88],
+      [-77.04, 38.89],
+      [-77.02, 38.9],
+    ]);
+    assert.deepEqual(feature.properties, {
+      leg_index: 0,
+      from_id: "p0",
+      to_id: "p1",
+      time_s: 540,
+      distance_km: 8.2,
+      mode: "auto",
+    });
+  });
+
+  it("returns an empty array for a malformed response", () => {
+    assert.deepEqual(routeResponseToFeatures({}, points, { mode: "auto" }), []);
+  });
+});
+
+describe("compareSequenceValues", () => {
+  it("orders numeric and numeric-string values ascending", () => {
+    assert.ok(compareSequenceValues(1, 2) < 0);
+    assert.ok(compareSequenceValues("10", "2") > 0);
+  });
+
+  it("orders ISO timestamps chronologically", () => {
+    assert.ok(
+      compareSequenceValues("2026-01-02T00:00:00Z", "2026-01-01T00:00:00Z") > 0,
+    );
+  });
+
+  it("sorts parseable values before free-form text and empties last", () => {
+    const values = ["zeta", "", "2", "10"];
+    const sorted = [...values].sort(compareSequenceValues);
+    assert.deepEqual(sorted, ["2", "10", "zeta", ""]);
+  });
+
+  it("treats hex strings as text, not their Number() value", () => {
+    // "0x1A" must not sort as 26; it is text, so it trails the numeric 5.
+    assert.ok(compareSequenceValues("0x1A", 5) > 0);
   });
 });
 

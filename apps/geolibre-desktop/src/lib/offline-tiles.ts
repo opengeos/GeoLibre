@@ -176,6 +176,120 @@ function absolute(url: string): string {
 
 interface RasterTileJson {
   tiles?: string[];
+  minzoom?: number;
+  maxzoom?: number;
+}
+
+interface ResolvedTileSource {
+  template: string;
+  subdomains?: string[];
+  /** Source coverage bounds; undefined when the source/TileJSON omits them. */
+  minzoom?: number;
+  maxzoom?: number;
+}
+
+/**
+ * Clamp a requested `[minZoom, maxZoom]` range to a source's coverage
+ * `[srcMin, srcMax]`, returning the zoom range to actually warm — or `null` when
+ * there is nothing to warm.
+ *
+ * The point is to never request a tile **beyond the source's maxzoom**: those
+ * 404 (e.g. OpenFreeMap's `ne2_shaded` raster stops at z6 and its vector tiles
+ * at z14), which is what made over-zoomed offline downloads fail wholesale.
+ * When the *entire* requested range sits above the source maxzoom (the user is
+ * zoomed past it), we warm just the deepest available level — MapLibre overzooms
+ * those tiles to render the higher zooms, so they still work offline.
+ */
+export function clampZoomRange(
+  minZoom: number,
+  maxZoom: number,
+  srcMin?: number,
+  srcMax?: number,
+): { minZoom: number; maxZoom: number } | null {
+  const lo = typeof srcMin === "number" ? srcMin : 0;
+  const hi = typeof srcMax === "number" ? srcMax : maxZoom;
+  // Requested range is entirely below where this source has data.
+  if (maxZoom < lo) return null;
+  // Over-zoomed past the source: warm only its deepest level for overzoom.
+  if (minZoom > hi) return { minZoom: hi, maxZoom: hi };
+  const z0 = Math.max(minZoom, lo);
+  const z1 = Math.min(maxZoom, hi);
+  if (z1 < z0) return null;
+  return { minZoom: z0, maxZoom: z1 };
+}
+
+/**
+ * Resolve every vector/raster source in the active style to a single tile-URL
+ * template plus its coverage bounds, fetching the TileJSON for sources that
+ * declare their tiles via a `url` (e.g. OpenFreeMap's vector source). Sources
+ * with no usable template are dropped.
+ */
+async function resolveTileSources(
+  map: MapLibreMap,
+  signal?: AbortSignal,
+): Promise<ResolvedTileSource[]> {
+  const style = map.getStyle();
+  const resolved: ResolvedTileSource[] = [];
+  for (const source of Object.values(style.sources ?? {})) {
+    const spec = source as {
+      type?: string;
+      tiles?: string[];
+      url?: string;
+      subdomains?: string[];
+      minzoom?: number;
+      maxzoom?: number;
+    };
+    if (spec.type !== "vector" && spec.type !== "raster") continue;
+
+    let templates = spec.tiles;
+    let minzoom = spec.minzoom;
+    let maxzoom = spec.maxzoom;
+    if ((!templates || templates.length === 0) && spec.url) {
+      try {
+        const res = await fetch(absolute(spec.url), { signal });
+        if (res.ok) {
+          const tilejson = (await res.json()) as RasterTileJson;
+          templates = tilejson.tiles;
+          // The style spec wins; fall back to the TileJSON's declared bounds.
+          if (minzoom === undefined) minzoom = tilejson.minzoom;
+          if (maxzoom === undefined) maxzoom = tilejson.maxzoom;
+        }
+      } catch {
+        // Unreachable TileJSON: skip this source rather than abort the whole run.
+      }
+    }
+    if (!templates || templates.length === 0) continue;
+    resolved.push({
+      template: templates[0],
+      subdomains: spec.subdomains,
+      minzoom,
+      maxzoom,
+    });
+  }
+  return resolved;
+}
+
+/**
+ * Count the tiles an offline download would actually warm for `bbox` across
+ * `[minZoom, maxZoom]`, per source and clamped to each source's coverage. This
+ * is the preview-accurate count: it matches the tiles `collectOfflineUrls`
+ * produces (so the dialog's estimate agrees with the final "Saved N of N"),
+ * unlike a naive `countTiles` that ignores source maxzoom and over-counts.
+ */
+export async function countOfflineTiles(
+  map: MapLibreMap,
+  bbox: Bbox,
+  minZoom: number,
+  maxZoom: number,
+  options: { signal?: AbortSignal } = {},
+): Promise<number> {
+  let total = 0;
+  for (const src of await resolveTileSources(map, options.signal)) {
+    const range = clampZoomRange(minZoom, maxZoom, src.minzoom, src.maxzoom);
+    if (!range) continue;
+    total += countTiles(bbox, range.minZoom, range.maxZoom);
+  }
+  return total;
 }
 
 /**
@@ -199,7 +313,11 @@ interface RasterTileJson {
  *     before warming starts).
  *
  * Returns:
- *   A de-duplicated list of absolute URLs to fetch.
+ *   `urls` — every de-duplicated absolute URL to fetch (tiles + shared assets).
+ *   `tileUrls` — the region-specific raster/vector tile URLs only. Shared assets
+ *   (style, sprite, glyphs) are excluded here because they are common to every
+ *   region and must never be deleted when one region is removed; the offline
+ *   manifest stores this subset so it can size and delete a region safely.
  */
 export async function collectOfflineUrls(
   map: MapLibreMap,
@@ -207,38 +325,22 @@ export async function collectOfflineUrls(
   minZoom: number,
   maxZoom: number,
   options: { glyphRanges?: string[]; signal?: AbortSignal } = {},
-): Promise<string[]> {
+): Promise<{ urls: string[]; tileUrls: string[] }> {
   const { glyphRanges = ["0-255", "256-511"], signal } = options;
   const style = map.getStyle();
   const urls = new Set<string>();
+  const tileUrls = new Set<string>();
 
-  // Tile sources.
-  for (const source of Object.values(style.sources ?? {})) {
-    const spec = source as {
-      type?: string;
-      tiles?: string[];
-      url?: string;
-      subdomains?: string[];
-    };
-    if (spec.type !== "vector" && spec.type !== "raster") continue;
-
-    let templates = spec.tiles;
-    if ((!templates || templates.length === 0) && spec.url) {
-      try {
-        const res = await fetch(absolute(spec.url), { signal });
-        if (res.ok) {
-          const tilejson = (await res.json()) as RasterTileJson;
-          templates = tilejson.tiles;
-        }
-      } catch {
-        // Unreachable TileJSON: skip this source rather than abort the whole run.
-      }
-    }
-    if (!templates || templates.length === 0) continue;
-
-    const template = templates[0];
-    for (const tile of enumerateTiles(bbox, minZoom, maxZoom)) {
-      urls.add(absolute(expandTileUrl(template, tile, spec.subdomains)));
+  // Tile sources: enumerate each one only within its own coverage so we never
+  // request tiles past a source's maxzoom (those 404 and would fail the whole
+  // download — see clampZoomRange).
+  for (const src of await resolveTileSources(map, signal)) {
+    const range = clampZoomRange(minZoom, maxZoom, src.minzoom, src.maxzoom);
+    if (!range) continue;
+    for (const tile of enumerateTiles(bbox, range.minZoom, range.maxZoom)) {
+      const url = absolute(expandTileUrl(src.template, tile, src.subdomains));
+      urls.add(url);
+      tileUrls.add(url);
     }
   }
 
@@ -285,13 +387,18 @@ export async function collectOfflineUrls(
     }
   }
 
-  return [...urls];
+  return { urls: [...urls], tileUrls: [...tileUrls] };
 }
 
 export interface WarmProgress {
   done: number;
   total: number;
   failed: number;
+  /**
+   * URLs that failed to warm (non-OK response or network error). Lets callers
+   * offer a "retry failed tiles" action without re-fetching the whole region.
+   */
+  failedUrls: string[];
 }
 
 /**
@@ -301,7 +408,13 @@ export interface WarmProgress {
  *
  * Args:
  *   urls: Absolute URLs to warm.
- *   options.concurrency: Max simultaneous requests (default 6).
+ *   options.concurrency: Max simultaneous requests (default 6). Lowering this
+ *     reduces the network footprint, which can get past aggressive server-side
+ *     rate limiting that otherwise causes tiles to fail.
+ *   options.timeoutMs: Per-request timeout in ms. A request that exceeds it is
+ *     aborted and counted as a failure (so it lands in `failedUrls` and can be
+ *     retried), without cancelling the rest of the run. 0 / undefined disables
+ *     it (the browser default applies). Raising it helps slow connections.
  *   options.signal: Abort signal to cancel in-flight and pending fetches.
  *   options.onProgress: Called after each request settles.
  *
@@ -312,12 +425,33 @@ export async function warmUrls(
   urls: string[],
   options: {
     concurrency?: number;
+    timeoutMs?: number;
     signal?: AbortSignal;
     onProgress?: (progress: WarmProgress) => void;
   } = {},
 ): Promise<WarmProgress> {
-  const { concurrency = 6, signal, onProgress } = options;
-  const progress: WarmProgress = { done: 0, total: urls.length, failed: 0 };
+  const { concurrency = 6, timeoutMs, signal, onProgress } = options;
+
+  // Per-request signal: the parent cancel signal combined with a fresh timeout
+  // (one timer per request). A timeout abort leaves the parent signal
+  // un-aborted, so the catch below counts it as a failure rather than a cancel.
+  const requestSignal = (): AbortSignal | undefined => {
+    if (!timeoutMs || timeoutMs <= 0) return signal;
+    const timeout = AbortSignal.timeout(timeoutMs);
+    if (!signal) return timeout;
+    // AbortSignal.any shipped in Chrome 116 / Firefox 124 / Safari 17.4. On
+    // older engines fall back to the timeout alone so the request still times
+    // out (it just won't also abort on the parent cancel signal).
+    return typeof AbortSignal.any === "function"
+      ? AbortSignal.any([signal, timeout])
+      : timeout;
+  };
+  const progress: WarmProgress = {
+    done: 0,
+    total: urls.length,
+    failed: 0,
+    failedUrls: [],
+  };
   let cursor = 0;
 
   async function worker(): Promise<void> {
@@ -327,17 +461,28 @@ export async function warmUrls(
       try {
         // CacheFirst means already-cached URLs return instantly; new ones hit
         // the network and are stored by the SW. We discard the body.
-        const res = await fetch(url, { signal, cache: "no-cache" });
-        if (!res.ok) progress.failed++;
+        const res = await fetch(url, {
+          signal: requestSignal(),
+          cache: "no-cache",
+        });
+        if (!res.ok) {
+          progress.failed++;
+          progress.failedUrls.push(url);
+        }
       } catch {
         if (signal?.aborted) return;
         progress.failed++;
+        progress.failedUrls.push(url);
       } finally {
         // `finally` runs even after the `return` above, so only count requests
         // that actually settled — not ones interrupted by an abort.
         if (!signal?.aborted) {
           progress.done++;
-          onProgress?.({ ...progress });
+          // Copy `failedUrls` so each snapshot is independent — a shallow
+          // `{ ...progress }` would share the one array reference across every
+          // emitted snapshot, and later `push()`es would mutate state React
+          // already holds (unsafe under Strict Mode / concurrent rendering).
+          onProgress?.({ ...progress, failedUrls: [...progress.failedUrls] });
         }
       }
     }

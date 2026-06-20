@@ -8,19 +8,36 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  Input,
   Label,
   Separator,
   Slider,
 } from "@geolibre/ui";
-import { Download, Loader2, WifiOff } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Download,
+  Loader2,
+  RotateCw,
+  WifiOff,
+} from "lucide-react";
 import {
   type Bbox,
   collectOfflineUrls,
-  countTiles,
+  countOfflineTiles,
   hasActiveServiceWorker,
   warmUrls,
   type WarmProgress,
 } from "../../lib/offline-tiles";
+import {
+  describeBboxCenter,
+  formatBytes,
+  type OfflineRegion,
+  regionId,
+  touchOfflineRegion,
+  upsertOfflineRegion,
+  urlHosts,
+} from "../../lib/offline-regions";
 
 interface OfflineRegionDialogProps {
   open: boolean;
@@ -36,6 +53,12 @@ const AVG_TILE_BYTES = 30 * 1024;
 
 const MAX_EXTRA_LEVELS = 5;
 
+/** Default and bounds for the advanced concurrency control. */
+const DEFAULT_CONCURRENCY = 6;
+const MAX_CONCURRENCY = 8;
+/** Bounds (seconds) for the advanced per-request timeout; 0 means no timeout. */
+const MAX_TIMEOUT_SEC = 120;
+
 /**
  * The basemap service-worker cache cap (geolibre-basemaps maxEntries in
  * vite.config.ts). Beyond this, Workbox evicts the oldest tiles as new ones
@@ -44,14 +67,6 @@ const MAX_EXTRA_LEVELS = 5;
 const MAX_CACHE_ENTRIES = 8000;
 
 type Phase = "idle" | "running" | "done";
-
-function formatBytes(bytes: number): string {
-  if (bytes >= 1024 * 1024 * 1024) {
-    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-  }
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
-  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-}
 
 /**
  * Lets the user pre-download the current map area (across a zoom range) into the
@@ -67,13 +82,26 @@ export function OfflineRegionDialog({
   // Default off, so the dialog starts scoped to the current view's zoom only.
   const [includeExtra, setIncludeExtra] = useState(false);
   const [extraLevels, setExtraLevels] = useState(1);
+  // Advanced network controls (collapsed by default): power users can lower
+  // concurrency to slip past server rate limiting, or raise the per-request
+  // timeout for slow links. See #564.
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [concurrency, setConcurrency] = useState(DEFAULT_CONCURRENCY);
+  const [timeoutSec, setTimeoutSec] = useState(0);
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState<WarmProgress>({
     done: 0,
     total: 0,
     failed: 0,
+    failedUrls: [],
   });
   const abortRef = useRef<AbortController | null>(null);
+  // Mirror `progress` in a ref so `handleRetry` can read the latest failed URLs
+  // without listing `progress` as a dependency — otherwise the callback would be
+  // recreated on every settled tile, since each `onProgress` emits a fresh
+  // `failedUrls` array.
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
 
   // Snapshot the view when the dialog opens; re-reading live would let the
   // estimate drift while the user is interacting with the dialog.
@@ -87,10 +115,33 @@ export function OfflineRegionDialog({
   const maxZoom = Math.min(22, baseZoom + effectiveExtra);
   const bbox = (view?.bbox ?? null) as Bbox | null;
 
-  const tileCount = useMemo(
-    () => (bbox ? countTiles(bbox, baseZoom, maxZoom) : 0),
-    [bbox, baseZoom, maxZoom],
-  );
+  // Tile count is resolved asynchronously: it clamps each source to its own
+  // maxzoom (the vector source's bound lives in a TileJSON we have to fetch), so
+  // the estimate matches what actually downloads instead of counting tiles past
+  // a source's maxzoom that would 404.
+  const [tileCount, setTileCount] = useState(0);
+  useEffect(() => {
+    const map = mapControllerRef.current?.getMap();
+    if (!open || !bbox || !map) {
+      setTileCount(0);
+      return;
+    }
+    const controller = new AbortController();
+    let active = true;
+    countOfflineTiles(map, bbox, baseZoom, maxZoom, {
+      signal: controller.signal,
+    })
+      .then((count) => {
+        if (active) setTileCount(count);
+      })
+      .catch(() => {
+        // Discovery failed (e.g. aborted); leave the last known count.
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [open, bbox, baseZoom, maxZoom, mapControllerRef]);
 
   const { cacheableHosts, uncacheableHosts } = useMemo(() => {
     const map = mapControllerRef.current?.getMap();
@@ -127,9 +178,12 @@ export function OfflineRegionDialog({
   useEffect(() => {
     if (open) {
       setPhase("idle");
-      setProgress({ done: 0, total: 0, failed: 0 });
+      setProgress({ done: 0, total: 0, failed: 0, failedUrls: [] });
       setIncludeExtra(false);
       setExtraLevels(1);
+      setShowAdvanced(false);
+      setConcurrency(DEFAULT_CONCURRENCY);
+      setTimeoutSec(0);
     } else {
       abortRef.current?.abort();
     }
@@ -138,24 +192,70 @@ export function OfflineRegionDialog({
   // Abort any in-flight download if the dialog unmounts.
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  // Full (re-)download of the whole region — also serves as "Retry all tiles".
   const handleDownload = useCallback(async () => {
     const map = mapControllerRef.current?.getMap();
     if (!map || !bbox) return;
+    // Abort any in-flight run first so a "Retry all" issued while a previous
+    // batch is settling can't leave two concurrent warmUrls runs racing.
+    abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
+    const timeoutMs = timeoutSec > 0 ? timeoutSec * 1000 : undefined;
     setPhase("running");
-    setProgress({ done: 0, total: 0, failed: 0 });
+    setProgress({ done: 0, total: 0, failed: 0, failedUrls: [] });
     try {
-      const urls = await collectOfflineUrls(map, bbox, baseZoom, maxZoom, {
-        signal: controller.signal,
-      });
-      setProgress({ done: 0, total: urls.length, failed: 0 });
+      const { urls, tileUrls } = await collectOfflineUrls(
+        map,
+        bbox,
+        baseZoom,
+        maxZoom,
+        { signal: controller.signal },
+      );
+      setProgress({ done: 0, total: urls.length, failed: 0, failedUrls: [] });
       const result = await warmUrls(urls, {
+        concurrency,
+        timeoutMs,
         signal: controller.signal,
         onProgress: setProgress,
       });
       setProgress(result);
-      if (!controller.signal.aborted) setPhase("done");
+      if (!controller.signal.aborted) {
+        setPhase("done");
+        // Record the download in the offline manifest so the Offline Manager can
+        // list, re-warm, and delete it later. Skip if every tile failed — there
+        // is nothing cached to manage.
+        if (result.done - result.failed > 0) {
+          const tileSet = new Set(tileUrls);
+          const assetUrls = urls.filter((u) => !tileSet.has(u));
+          // tileCount reflects tiles actually cached, not attempted, so a
+          // partial download's count matches what the manager can measure.
+          const failedSet = new Set(result.failedUrls);
+          const cachedTileCount = tileUrls.filter(
+            (u) => !failedSet.has(u),
+          ).length;
+          const now = Date.now();
+          const region: OfflineRegion = {
+            id: regionId(bbox, baseZoom, maxZoom),
+            name: describeBboxCenter(bbox),
+            bbox,
+            minZoom: baseZoom,
+            maxZoom,
+            tileUrls,
+            assetUrls,
+            tileCount: cachedTileCount,
+            hosts: urlHosts(tileUrls),
+            createdAt: now,
+            updatedAt: now,
+          };
+          const { persisted } = upsertOfflineRegion(region);
+          if (!persisted) {
+            console.warn(
+              "[GeoLibre] offline region manifest could not be saved (storage full?)",
+            );
+          }
+        }
+      }
     } catch {
       // collectOfflineUrls swallows TileJSON errors, but guard the rare throw
       // (e.g. getStyle failing) so the UI doesn't show a false "done" state.
@@ -165,7 +265,48 @@ export function OfflineRegionDialog({
       // cancel-then-redownload may have already installed a newer controller.
       if (abortRef.current === controller) abortRef.current = null;
     }
-  }, [mapControllerRef, bbox, baseZoom, maxZoom]);
+  }, [mapControllerRef, bbox, baseZoom, maxZoom, concurrency, timeoutSec]);
+
+  // Re-warm only the URLs that failed, so the user can recover a partial
+  // download (e.g. after a transient network blip) without re-fetching the
+  // whole region. The failure message then reflects this retry batch.
+  const handleRetry = useCallback(async () => {
+    const failedUrls = progressRef.current.failedUrls;
+    if (failedUrls.length === 0) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const timeoutMs = timeoutSec > 0 ? timeoutSec * 1000 : undefined;
+    setPhase("running");
+    setProgress({
+      done: 0,
+      total: failedUrls.length,
+      failed: 0,
+      failedUrls: [],
+    });
+    try {
+      const result = await warmUrls(failedUrls, {
+        concurrency,
+        timeoutMs,
+        signal: controller.signal,
+        onProgress: setProgress,
+      });
+      setProgress(result);
+      if (!controller.signal.aborted) {
+        setPhase("done");
+        // Bump the manifest's updatedAt so the Offline Manager reflects this
+        // recovery instead of the original (partial) download's date. The stored
+        // URL list already covers every tile, so no other field changes.
+        if (bbox && result.done - result.failed > 0) {
+          touchOfflineRegion(regionId(bbox, baseZoom, maxZoom), Date.now());
+        }
+      }
+    } catch {
+      if (!controller.signal.aborted) setPhase("idle");
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null;
+    }
+  }, [concurrency, timeoutSec, bbox, baseZoom, maxZoom]);
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort();
@@ -174,6 +315,9 @@ export function OfflineRegionDialog({
 
   const percent =
     progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
+  // After a partial download the primary action becomes "Retry all tiles" (a
+  // full re-warm from scratch), shown alongside the targeted "Retry failed".
+  const hasFailures = phase === "done" && progress.failed > 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -243,6 +387,76 @@ export function OfflineRegionDialog({
             </p>
           )}
 
+          <div className="space-y-3">
+            <button
+              type="button"
+              className="flex items-center gap-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+              aria-expanded={showAdvanced}
+              onClick={() => setShowAdvanced((value) => !value)}
+            >
+              {showAdvanced ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+              {t("offline.advanced")}
+            </button>
+
+            {showAdvanced && (
+              <div className="space-y-4 rounded-md border border-border p-3">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>{t("offline.concurrency")}</Label>
+                    <span className="text-sm tabular-nums text-muted-foreground">
+                      {concurrency}
+                    </span>
+                  </div>
+                  <Slider
+                    aria-label={t("offline.concurrency")}
+                    min={1}
+                    max={MAX_CONCURRENCY}
+                    step={1}
+                    value={[concurrency]}
+                    onValueChange={(value: number[]) =>
+                      setConcurrency(value[0])
+                    }
+                    disabled={phase === "running"}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("offline.concurrencyHint")}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="offline-timeout">
+                    {t("offline.timeout")}
+                  </Label>
+                  <Input
+                    id="offline-timeout"
+                    type="number"
+                    min={0}
+                    max={MAX_TIMEOUT_SEC}
+                    value={timeoutSec}
+                    disabled={phase === "running"}
+                    onChange={(event) => {
+                      const next = Math.round(Number(event.target.value));
+                      setTimeoutSec(
+                        Number.isFinite(next)
+                          ? Math.min(MAX_TIMEOUT_SEC, Math.max(0, next))
+                          : 0,
+                      );
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {timeoutSec > 0
+                      ? t("offline.timeoutHint", { seconds: timeoutSec })
+                      : t("offline.timeoutDisabled")}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
           <Separator />
 
           <div className="flex justify-between text-sm">
@@ -271,11 +485,16 @@ export function OfflineRegionDialog({
               </div>
               <p className="text-xs text-muted-foreground tabular-nums">
                 {phase === "done"
-                  ? t("offline.complete", {
-                      done: progress.done - progress.failed,
-                      total: progress.total,
-                      failed: progress.failed,
-                    })
+                  ? t(
+                      progress.failed > 0
+                        ? "offline.completeWithFailures"
+                        : "offline.complete",
+                      {
+                        done: progress.done - progress.failed,
+                        total: progress.total,
+                        failed: progress.failed,
+                      },
+                    )
                   : t("offline.progress", {
                       done: progress.done,
                       total: progress.total,
@@ -285,7 +504,7 @@ export function OfflineRegionDialog({
           )}
         </div>
 
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           {phase === "running" ? (
             <Button variant="outline" onClick={handleCancel}>
               {t("offline.cancel")}
@@ -295,16 +514,27 @@ export function OfflineRegionDialog({
               {t("common.close")}
             </Button>
           )}
+          {hasFailures && (
+            <Button variant="outline" onClick={handleRetry}>
+              <RotateCw className="mr-2 h-4 w-4" />
+              {t("offline.retryFailed", { count: progress.failed })}
+            </Button>
+          )}
           <Button
+            // "Retry all" and "Download" share this handler (a full re-warm);
+            // handleDownload aborts any in-flight run first, so it is safe to
+            // keep enabled even while failures are outstanding.
             onClick={handleDownload}
             disabled={phase === "running" || tileCount === 0 || !swActive}
           >
             {phase === "running" ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : hasFailures ? (
+              <RotateCw className="mr-2 h-4 w-4" />
             ) : (
               <Download className="mr-2 h-4 w-4" />
             )}
-            {t("offline.download")}
+            {hasFailures ? t("offline.retryAll") : t("offline.download")}
           </Button>
         </div>
       </DialogContent>

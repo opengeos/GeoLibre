@@ -205,6 +205,7 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   // deliverable, so it stays visible for every profile (GH #529).
   { id: "project.printLayout", menuId: "project", labelKey: "toolbar.item.printLayoutEllipsis", tier: "basic" },
   { id: "project.offlineRegion", menuId: "project", labelKey: "toolbar.item.offlineRegionEllipsis", tier: "advanced" },
+  { id: "project.offlineManager", menuId: "project", labelKey: "toolbar.item.offlineManagerEllipsis", tier: "advanced" },
   { id: "project.storymap", menuId: "project", labelKey: "toolbar.item.storymapEllipsis", tier: "advanced" },
   // Edit
   { id: "edit.undo", menuId: "edit", labelKey: "toolbar.item.undo", tier: "basic" },
@@ -387,6 +388,38 @@ export function isMenuItemVisible(
   itemId: string,
 ): boolean {
   return !profile.enabled || !profile.hiddenMenuItems.includes(itemId);
+}
+
+/**
+ * The four interface-profile states surfaced in the UI. The three
+ * experience levels are developer-curated presets; `"custom"` is entered
+ * automatically when the user toggles an individual item away from a preset.
+ */
+export type InterfaceProfile = ExperienceLevel | "custom";
+
+/** Interface-profile options in display order (the three presets, then custom). */
+export const INTERFACE_PROFILES: readonly InterfaceProfile[] = [
+  "beginner",
+  "intermediate",
+  "advanced",
+  "custom",
+];
+
+/**
+ * Derive the active interface profile from the stored settings.
+ * A disabled profile (the legacy/default "show everything" state) reads as
+ * Advanced, since the Advanced preset also reveals every item. An enabled
+ * profile reports its preset level, or `"custom"` once the user has hand-edited
+ * the hidden lists.
+ *
+ * @param profile - The stored UI-profile settings.
+ * @returns The active interface profile to highlight in the UI.
+ */
+export function activeInterfaceProfile(
+  profile: UiProfileSettings,
+): InterfaceProfile {
+  if (!profile.enabled) return "advanced";
+  return profile.level ?? "custom";
 }
 
 /**

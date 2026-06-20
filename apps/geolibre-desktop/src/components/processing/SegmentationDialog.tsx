@@ -21,12 +21,19 @@ import {
   AlertCircle,
   CheckCircle2,
   FolderOpen,
+  Info,
   Loader2,
   Play,
   Server,
 } from "lucide-react";
 import type { FeatureCollection } from "geojson";
-import { useCallback, useEffect, useState, type ReactElement } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { isTauri, openLocalDataFileWithFallback } from "../../lib/tauri-io";
 import { reprojectFeatureCollectionToWgs84 } from "../../lib/duckdb-vector-loader";
@@ -64,23 +71,46 @@ export function SegmentationDialog({
   const [imageBytes, setImageBytes] = useState<ArrayBuffer | null>(null);
   const [imageName, setImageName] = useState("");
   const [status, setStatus] = useState<MlStatus | null>(null);
+  const [checking, setChecking] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultMessage, setResultMessage] = useState<string | null>(null);
   const [startingServer, setStartingServer] = useState(false);
 
+  // Monotonic token so a stale probe (e.g. the dialog reopened, or the
+  // post-boot probe in startServer) cannot clobber a newer probe's result or
+  // drop the spinner out from under it.
+  const checkGenRef = useRef(0);
+
   const checkStatus = useCallback(async () => {
+    const gen = ++checkGenRef.current;
+    setChecking(true);
     setStatus(null);
     try {
-      setStatus(await fetchMlStatus());
+      const next = await fetchMlStatus();
+      if (gen === checkGenRef.current) setStatus(next);
     } catch (err) {
-      setStatus({
-        available: false,
-        message:
-          err instanceof Error
-            ? err.message
-            : t("segmentation.error.sidecarUnreachable"),
-      });
+      // A failed probe (sidecar not started, or no segmentation backend behind
+      // the proxy) is an expected "not set up yet" state, not a system failure.
+      // Show neutral guidance instead of surfacing the raw HTTP/connection
+      // error, so a freshly opened, blank dialog never greets the user with
+      // something like "HTTP 404" (issue #545). Log at debug (matching
+      // sidecarConnectionError) so an unexpected failure stays discoverable in
+      // production without warning-spam for the routine not-set-up case.
+      console.debug("SegmentationDialog: ML status probe failed", err);
+      if (gen === checkGenRef.current) {
+        setStatus({
+          available: false,
+          // Desktop users get the "Start server" button below, so point them at
+          // it; web users have no such button, so tell them the feature needs
+          // the desktop app rather than an action they cannot take.
+          message: isTauri()
+            ? t("segmentation.status.unavailableDesktop")
+            : t("segmentation.status.unavailableWeb"),
+        });
+      }
+    } finally {
+      if (gen === checkGenRef.current) setChecking(false);
     }
   }, [t]);
 
@@ -202,10 +232,17 @@ export function SegmentationDialog({
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
-          {status && !available && (
-            <div className="grid gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3">
-              <p className="flex items-start gap-2 text-sm text-destructive">
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          {checking && (
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {t("segmentation.status.checking")}
+            </p>
+          )}
+
+          {!checking && status && !available && (
+            <div className="grid gap-2 rounded-md border border-border bg-muted/40 p-3">
+              <p className="flex items-start gap-2 text-sm text-muted-foreground">
+                <Info className="mt-0.5 h-4 w-4 shrink-0" />
                 {status.message}
               </p>
               {/* Launching the sidecar is a desktop-only (Tauri) capability;

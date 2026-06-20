@@ -99,6 +99,7 @@ import { PrintLayoutDialog } from "./PrintLayoutDialog";
 import { FieldCollectionDialog } from "./FieldCollectionDialog";
 import { GeoreferencerDialog } from "./GeoreferencerDialog";
 import { OfflineRegionDialog } from "./OfflineRegionDialog";
+import { OfflineManagerDialog } from "./OfflineManagerDialog";
 import { AddDataMenu } from "./toolbar/AddDataMenu";
 import { ConsentNoticeDialogs } from "./toolbar/ConsentNoticeDialogs";
 import { ControlsMenu } from "./toolbar/ControlsMenu";
@@ -271,6 +272,7 @@ export function TopToolbar({
   const [aboutOpen, setAboutOpen] = useState(false);
   const [printLayoutOpen, setPrintLayoutOpen] = useState(false);
   const [offlineRegionOpen, setOfflineRegionOpen] = useState(false);
+  const [offlineManagerOpen, setOfflineManagerOpen] = useState(false);
   const [fieldCollectionOpen, setFieldCollectionOpen] = useState(false);
   const [georeferencerOpen, setGeoreferencerOpen] = useState(false);
   const [setViewOpen, setSetViewOpen] = useState(false);
@@ -843,6 +845,7 @@ export function TopToolbar({
           onCollaborate={() => setCollaborateDialogOpen(true)}
           onPrintLayout={() => setPrintLayoutOpen(true)}
           onDownloadOffline={() => setOfflineRegionOpen(true)}
+          onManageOffline={() => setOfflineManagerOpen(true)}
         />
       )}
       {isMenuVisible(uiProfile, "edit") && <EditMenu chrome={chrome} />}
@@ -940,6 +943,10 @@ export function TopToolbar({
         open={offlineRegionOpen}
         onOpenChange={setOfflineRegionOpen}
         mapControllerRef={mapControllerRef}
+      />
+      <OfflineManagerDialog
+        open={offlineManagerOpen}
+        onOpenChange={setOfflineManagerOpen}
       />
       <FieldCollectionDialog
         open={fieldCollectionOpen}
