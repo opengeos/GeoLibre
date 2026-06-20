@@ -24,6 +24,26 @@ interface DiagnosticsDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+// "network" is a category-scoped filter, not a level, so the filter union is
+// wider than DiagnosticLevel. It mirrors the network badge: every network
+// record when request logging is on, only network errors when it is off.
+type DiagnosticFilter = DiagnosticLevel | "all" | "network";
+
+function matchesFilter(
+  record: DiagnosticRecord,
+  filter: DiagnosticFilter,
+  captureNetworkInfo: boolean,
+): boolean {
+  if (filter === "all") return true;
+  if (filter === "network") {
+    return (
+      record.category === "network" &&
+      (captureNetworkInfo || record.level === "error")
+    );
+  }
+  return record.level === filter;
+}
+
 function formatTime(timestamp: string): string {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return timestamp;
@@ -57,17 +77,23 @@ export function DiagnosticsDialog({
 }: DiagnosticsDialogProps) {
   const [copyState, setCopyState] = useState<"copied" | "idle">("idle");
   const copyResetTimerRef = useRef<number | null>(null);
-  const [levelFilter, setLevelFilter] = useState<DiagnosticLevel | "all">(
-    "all",
-  );
+  const [activeFilter, setActiveFilter] = useState<DiagnosticFilter>("all");
   const filteredRecords = useMemo(
     () =>
-      levelFilter === "all"
+      activeFilter === "all"
         ? diagnostics.records
-        : diagnostics.records.filter((record) => record.level === levelFilter),
-    [diagnostics.records, levelFilter],
+        : diagnostics.records.filter((record) =>
+            matchesFilter(record, activeFilter, diagnostics.captureNetworkInfo),
+          ),
+    [diagnostics.records, activeFilter, diagnostics.captureNetworkInfo],
   );
-  const listIsFiltered = levelFilter !== "all";
+  const listIsFiltered = activeFilter !== "all";
+  // The network filter's label tracks the badge: plain "network" while request
+  // logging is on, "network error" while it is off.
+  const filterLabel =
+    activeFilter === "network" && !diagnostics.captureNetworkInfo
+      ? "network error"
+      : activeFilter;
   // Derived here rather than assumed from networkCount so the badge label
   // and count cannot diverge if non-error network levels are introduced.
   const networkErrorCount = useMemo(
@@ -124,45 +150,56 @@ export function DiagnosticsDialog({
           <div className="flex flex-wrap gap-2 text-xs">
             <button
               type="button"
-              aria-pressed={levelFilter === "all"}
+              aria-pressed={activeFilter === "all"}
               className={cn(
                 "rounded border px-2 py-1 hover:bg-accent hover:text-accent-foreground",
-                levelFilter === "all" && "bg-accent text-accent-foreground",
+                activeFilter === "all" && "bg-accent text-accent-foreground",
               )}
-              onClick={() => setLevelFilter("all")}
+              onClick={() => setActiveFilter("all")}
             >
               {diagnostics.totalCount} total
             </button>
             <button
               type="button"
-              aria-pressed={levelFilter === "error"}
+              aria-pressed={activeFilter === "error"}
               className={cn(
                 "rounded border px-2 py-1 hover:bg-destructive/10 hover:text-destructive dark:hover:text-red-200",
                 diagnostics.errorCount > 0 &&
                   "border-destructive/50 text-destructive dark:border-red-400/60 dark:text-red-300",
-                levelFilter === "error" &&
+                activeFilter === "error" &&
                   "border-destructive bg-destructive text-destructive-foreground hover:bg-destructive hover:text-destructive-foreground dark:border-red-500 dark:bg-red-600 dark:text-white dark:hover:bg-red-600 dark:hover:text-white",
               )}
-              onClick={() => setLevelFilter("error")}
+              onClick={() => setActiveFilter("error")}
             >
               {diagnostics.errorCount} errors
             </button>
             <button
               type="button"
-              aria-pressed={levelFilter === "warning"}
+              aria-pressed={activeFilter === "warning"}
               className={cn(
-                "rounded border px-2 py-1 hover:bg-accent hover:text-accent-foreground",
-                levelFilter === "warning" && "bg-accent text-accent-foreground",
+                "rounded border px-2 py-1 hover:bg-amber-500/10 hover:text-amber-700 dark:hover:text-amber-200",
+                diagnostics.warningCount > 0 &&
+                  "border-amber-500/50 text-amber-700 dark:border-amber-400/60 dark:text-amber-300",
+                activeFilter === "warning" &&
+                  "border-amber-500 bg-amber-500 text-white hover:bg-amber-500 hover:text-white dark:border-amber-500 dark:bg-amber-500 dark:text-white dark:hover:bg-amber-500 dark:hover:text-white",
               )}
-              onClick={() => setLevelFilter("warning")}
+              onClick={() => setActiveFilter("warning")}
             >
               {diagnostics.warningCount} warnings
             </button>
-            <span className="rounded bg-muted px-2 py-1 text-muted-foreground">
+            <button
+              type="button"
+              aria-pressed={activeFilter === "network"}
+              className={cn(
+                "rounded border px-2 py-1 hover:bg-accent hover:text-accent-foreground",
+                activeFilter === "network" && "bg-accent text-accent-foreground",
+              )}
+              onClick={() => setActiveFilter("network")}
+            >
               {diagnostics.captureNetworkInfo
                 ? `${diagnostics.networkCount} network`
                 : `${networkErrorCount} network errors`}
-            </span>
+            </button>
             <label
               className="flex items-center gap-1.5 rounded border px-2 py-1 text-muted-foreground"
               title="Record successful and aborted network requests from now on; requests made while logging was off are not backfilled. Off by default because logging every request slows the app down."
@@ -195,7 +232,7 @@ export function DiagnosticsDialog({
               size="sm"
               disabled={diagnostics.records.length === 0}
               onClick={() => {
-                setLevelFilter("all");
+                setActiveFilter("all");
                 clearDiagnostics();
               }}
             >
@@ -208,7 +245,7 @@ export function DiagnosticsDialog({
           {filteredRecords.length === 0 ? (
             <div className="flex min-h-48 items-center justify-center px-6 py-12 text-sm text-muted-foreground">
               {listIsFiltered
-                ? `No ${levelFilter} diagnostics captured.`
+                ? `No ${filterLabel} diagnostics captured.`
                 : "No diagnostics captured."}
             </div>
           ) : (
