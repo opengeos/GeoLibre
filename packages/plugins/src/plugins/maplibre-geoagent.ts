@@ -122,7 +122,12 @@ export const maplibreGeoAgentPlugin: GeoLibrePlugin = {
   ) => {
     geoAgentPosition = position;
     if (!geoAgentControl) {
-      if (geoAgentActive) {
+      // Only kick off a mount if one is not already in flight. A mount started
+      // by activate() reads the updated geoAgentPosition when it adds the
+      // control, so starting a second (generation-bumping) mount here would
+      // needlessly invalidate that in-flight attempt and make its host-side
+      // rollback tear the freshly added control back down.
+      if (geoAgentActive && !geoAgentControlPromise) {
         void mountGeoAgentControl(app, ++geoAgentActivationGeneration);
       }
       return;

@@ -17,8 +17,12 @@
  */
 
 import { useAppStore } from "@geolibre/core";
-import { appendDiagnostic } from "./diagnostics";
+import { appendDiagnostic, getDiagnosticsSnapshot } from "./diagnostics";
 import { isTauri } from "./is-tauri";
+
+const DEFERRED_RELOAD_MESSAGE =
+  "A component could not be loaded because the app was updated. Save your project, then reload the page to finish loading it.";
+const STALE_CHUNK_DIAGNOSTIC_SOURCE = "stale-chunk-reload";
 
 const RELOAD_TIMESTAMP_KEY = "geolibre:stale-chunk-reload-at";
 
@@ -155,20 +159,28 @@ export function installStaleChunkReload(options?: {
       // Reloading would discard unsaved work (and raise the "Leave site?"
       // prompt), so the feature is left unloaded. Record an actionable notice
       // instead of letting the raw preload error surface, and suppress Vite's
-      // rethrow so it does not read as an unhandled crash.
-      appendDiagnostic({
-        category: "runtime",
-        level: "warning",
-        message:
-          "A component could not be loaded because the app was updated. Save your project, then reload the page to finish loading it.",
-        detail:
-          payload instanceof Error
-            ? payload.message
-            : payload != null
-              ? String(payload)
-              : undefined,
-        source: "stale-chunk-reload",
-      });
+      // rethrow so it does not read as an unhandled crash. Skip the append when
+      // the same notice is already present so repeated retries (each firing a
+      // fresh preload error) do not stack identical entries in the panel.
+      const alreadyRecorded = getDiagnosticsSnapshot().records.some(
+        (record) =>
+          record.source === STALE_CHUNK_DIAGNOSTIC_SOURCE &&
+          record.message === DEFERRED_RELOAD_MESSAGE,
+      );
+      if (!alreadyRecorded) {
+        appendDiagnostic({
+          category: "runtime",
+          level: "warning",
+          message: DEFERRED_RELOAD_MESSAGE,
+          detail:
+            payload instanceof Error
+              ? payload.message
+              : payload != null
+                ? String(payload)
+                : undefined,
+          source: STALE_CHUNK_DIAGNOSTIC_SOURCE,
+        });
+      }
       event.preventDefault();
     }
   };
