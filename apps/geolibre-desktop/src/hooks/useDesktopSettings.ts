@@ -4,7 +4,9 @@ import { create } from "zustand";
 import { normalizeStringList } from "../lib/string-lists";
 import { DESKTOP_SETTINGS_STORAGE_KEY } from "../lib/storage-keys";
 import {
+  DEFAULT_CUSTOM_COLOR,
   DEFAULT_THEME_SCHEME,
+  isHexColor,
   isThemeScheme,
   type ThemeScheme,
 } from "../lib/theme-schemes";
@@ -57,8 +59,10 @@ export interface DesktopSettings {
 }
 
 export interface ThemeSettings {
-  /** Accent color scheme applied via a `data-theme` attribute on <html>. */
+  /** Accent color scheme. Presets set a `data-theme` attribute on <html>. */
   scheme: ThemeScheme;
+  /** Hex color backing the "custom" scheme (ignored by the presets). */
+  customColor: string;
 }
 
 export interface UpdateSettings {
@@ -140,6 +144,7 @@ export const DEFAULT_UPDATE_SETTINGS: UpdateSettings = {
 
 export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
   scheme: DEFAULT_THEME_SCHEME,
+  customColor: DEFAULT_CUSTOM_COLOR,
 };
 
 const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
@@ -191,13 +196,17 @@ function normalizeThemeSettings(theme: unknown): ThemeSettings {
     return DEFAULT_THEME_SETTINGS;
   }
 
-  // Require a known scheme id so tampered localStorage values cannot smuggle an
-  // unknown scheme into the `data-theme` attribute.
+  // Require a known scheme id and a valid hex color so tampered localStorage
+  // values cannot smuggle an unknown scheme into the `data-theme` attribute or an
+  // arbitrary string into the inline custom-color tokens.
   const candidate = theme as Partial<ThemeSettings>;
   return {
     scheme: isThemeScheme(candidate.scheme)
       ? candidate.scheme
       : DEFAULT_THEME_SETTINGS.scheme,
+    customColor: isHexColor(candidate.customColor)
+      ? candidate.customColor
+      : DEFAULT_THEME_SETTINGS.customColor,
   };
 }
 

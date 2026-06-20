@@ -617,6 +617,16 @@ export function SettingsDialog({
     setDesktopSettings({ ...current, theme: { ...current.theme, scheme } });
   };
 
+  // Picking a custom color both stores the color and activates the custom scheme,
+  // so editing the swatch immediately previews it.
+  const updateSavedThemeCustomColor = (customColor: string) => {
+    const current = useDesktopSettingsStore.getState().desktopSettings;
+    setDesktopSettings({
+      ...current,
+      theme: { ...current.theme, scheme: "custom", customColor },
+    });
+  };
+
   const updateDraftUpdateSettings = (patch: Partial<UpdateSettings>) => {
     setDraftDesktopSettings((current) => ({
       ...current,
@@ -986,6 +996,17 @@ export function SettingsDialog({
                     {t(scheme.labelKey)}
                   </DropdownMenuRadioItem>
                 ))}
+                <DropdownMenuRadioItem
+                  value="custom"
+                  onSelect={(event: Event) => event.preventDefault()}
+                >
+                  <span
+                    aria-hidden
+                    className="mr-2 h-3.5 w-3.5 shrink-0 rounded-full border"
+                    style={{ backgroundColor: desktopSettings.theme.customColor }}
+                  />
+                  {t("settings.appearance.custom")}
+                </DropdownMenuRadioItem>
               </DropdownMenuRadioGroup>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -1399,7 +1420,49 @@ export function SettingsDialog({
                           </button>
                         );
                       })}
+                      <button
+                        type="button"
+                        aria-pressed={
+                          desktopSettings.theme.scheme === "custom"
+                        }
+                        onClick={() => updateSavedThemeScheme("custom")}
+                        className={cn(
+                          "flex items-center gap-2.5 rounded-md border p-3 text-sm transition-colors",
+                          desktopSettings.theme.scheme === "custom"
+                            ? "border-primary ring-2 ring-ring"
+                            : "hover:bg-accent",
+                        )}
+                      >
+                        <span
+                          aria-hidden
+                          className="h-5 w-5 shrink-0 rounded-full border"
+                          style={{
+                            backgroundColor: desktopSettings.theme.customColor,
+                          }}
+                        />
+                        <span>{t("settings.appearance.custom")}</span>
+                        {desktopSettings.theme.scheme === "custom" ? (
+                          <Check className="ml-auto h-4 w-4 text-primary" />
+                        ) : null}
+                      </button>
                     </div>
+                    {desktopSettings.theme.scheme === "custom" ? (
+                      <label className="flex items-center gap-3 rounded-md border p-3 text-sm">
+                        <input
+                          type="color"
+                          className="h-8 w-12 shrink-0 cursor-pointer rounded border bg-transparent p-0.5"
+                          value={desktopSettings.theme.customColor}
+                          onChange={(event) =>
+                            updateSavedThemeCustomColor(event.target.value)
+                          }
+                          aria-label={t("settings.appearance.customColor")}
+                        />
+                        <span>{t("settings.appearance.customColor")}</span>
+                        <code className="ml-auto text-xs uppercase text-muted-foreground">
+                          {desktopSettings.theme.customColor}
+                        </code>
+                      </label>
+                    ) : null}
                     <p className="text-xs text-muted-foreground">
                       {t("settings.appearance.modeNote")}
                     </p>

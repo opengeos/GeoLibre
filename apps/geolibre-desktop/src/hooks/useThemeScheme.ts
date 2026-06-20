@@ -11,8 +11,11 @@ export function useThemeScheme(): void {
   const scheme = useDesktopSettingsStore(
     (state) => state.desktopSettings.theme.scheme,
   );
+  const customColor = useDesktopSettingsStore(
+    (state) => state.desktopSettings.theme.customColor,
+  );
 
   useLayoutEffect(() => {
-    applyThemeScheme(scheme);
-  }, [scheme]);
+    applyThemeScheme(scheme, customColor);
+  }, [scheme, customColor]);
 }
