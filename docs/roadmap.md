@@ -200,6 +200,14 @@
 - [x] Download Offline Area tool that pre-caches the current map view's basemap tiles into the service-worker cache
 - [x] Service-worker caching of the CDN-loaded Pyodide and PGlite/PostGIS engines so browser SQL and Python keep working offline after first use
 
+## v1.4: Jupyter beside the map, spectral indices, georeferencing, and field collection
+
+- [x] Resizable, collapsible Notebook panel docked beside the map: the web build embeds a self-hosted JupyterLite site (in-browser Pyodide kernel) and the desktop build launches a uv-managed JupyterLab server, both seeded with a runnable Welcome tour. Notebook cells drive the live map through the shared scripting bridge via an auto-loaded `geolibre` client, and the JupyterLite theme follows the app theme — see [Notebook Panel](notebook.md)
+- [x] Spectral Index toolbox under Processing → Raster (NDVI, GNDVI, NDWI, NDMI, NDBI, NBR, EVI, and SAVI) with Sentinel-2, Landsat 8-9, NAIP, and custom band layouts and a reflectance-scale knob, evaluated client-side via geotiff.js or on the rasterio sidecar through the existing raster calculator
+- [x] Raster Georeferencer (Processing → Georeferencing): pin a non-georeferenced image to the map with ground control points, using a least-squares affine fit and per-GCP and RMS residuals, added as a corner-pinned overlay that persists in the project and works offline
+- [x] Field Collection tool (Controls menu) for capturing point, line, and polygon observations with a per-layer custom form (text/number/date/choice fields and an optional inline photo), placed by device GPS or by tapping the map, with a floating quick-open control; captures are written to a tagged GeoJSON layer that flows into the attribute table, export, and offline use
+- [x] Runtime overrides for `VITE_PYODIDE_INDEX_URL` and `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` through the existing runtime-environment system, so air-gapped or corporate deployments can point Pyodide and the DuckDB Spatial extension at internal mirrors without rebuilding the app
+
 ## v1.5: Dashboards, in-browser Whitebox, map navigation history, and signed macOS installers (current)
 
 - [x] Dashboard panel of chart widgets that summarizes the loaded layers at a glance, with configurable charts and a collapsible layout that docks alongside the map
@@ -218,14 +226,6 @@
 - [x] Notebook panel can split the workspace 50/50 with the map and auto-collapse the Style panel for more room, and the attribute table gains a column explorer for finding and toggling fields in wide tables
 - [x] USGS LiDAR plugin replaces the previous LiDAR Viewer for browsing and loading USGS 3DEP point-cloud data, imported KML and KMZ layers honor their embedded symbology, and vector strokes can be sized in scale-proportional meters
 - [x] macOS desktop installers are now signed with an Apple Developer ID certificate and notarized by Apple, so they open without a Gatekeeper workaround, with a generator for submitting GeoLibre to the official Homebrew cask (see [Downloads](downloads.md))
-
-## v1.4: Jupyter beside the map, spectral indices, georeferencing, and field collection
-
-- [x] Resizable, collapsible Notebook panel docked beside the map: the web build embeds a self-hosted JupyterLite site (in-browser Pyodide kernel) and the desktop build launches a uv-managed JupyterLab server, both seeded with a runnable Welcome tour. Notebook cells drive the live map through the shared scripting bridge via an auto-loaded `geolibre` client, and the JupyterLite theme follows the app theme — see [Notebook Panel](notebook.md)
-- [x] Spectral Index toolbox under Processing → Raster (NDVI, GNDVI, NDWI, NDMI, NDBI, NBR, EVI, and SAVI) with Sentinel-2, Landsat 8-9, NAIP, and custom band layouts and a reflectance-scale knob, evaluated client-side via geotiff.js or on the rasterio sidecar through the existing raster calculator
-- [x] Raster Georeferencer (Processing → Georeferencing): pin a non-georeferenced image to the map with ground control points, using a least-squares affine fit and per-GCP and RMS residuals, added as a corner-pinned overlay that persists in the project and works offline
-- [x] Field Collection tool (Controls menu) for capturing point, line, and polygon observations with a per-layer custom form (text/number/date/choice fields and an optional inline photo), placed by device GPS or by tapping the map, with a floating quick-open control; captures are written to a tagged GeoJSON layer that flows into the attribute table, export, and offline use
-- [x] Runtime overrides for `VITE_PYODIDE_INDEX_URL` and `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` through the existing runtime-environment system, so air-gapped or corporate deployments can point Pyodide and the DuckDB Spatial extension at internal mirrors without rebuilding the app
 
 ## Plugin marketplace and registry (design)
 
