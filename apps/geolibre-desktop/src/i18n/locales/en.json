@@ -638,8 +638,9 @@
     "boundsRestrictedTooltip": "Map bounds are restricted. You can change this in Settings."
   },
   "mapGrid": {
-    "basemapLabel": "Basemap for map {{number}}",
-    "basemapBlank": "Blank",
+    "layers": "Layers",
+    "layersLabel": "Layer visibility for map {{number}}",
+    "noLayers": "No layers yet",
     "removePane": "Remove map {{number}}"
   },
   "onboarding": {

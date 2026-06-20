@@ -210,15 +210,15 @@ export interface AppState {
     view: Partial<MapViewState>,
     markDirty?: boolean
   ) => void;
-  /** Patch one secondary pane's basemap by id (no-op if the id is unknown). */
-  setSecondaryBasemap: (
+  /**
+   * Override a layer's visibility in one secondary pane (no-op if the pane id is
+   * unknown). The override forces the layer visible/hidden in that pane only,
+   * independent of the primary map's visibility.
+   */
+  setSecondaryLayerVisibility: (
     id: string,
-    patch: Partial<
-      Pick<
-        SecondaryMapView,
-        "basemapStyleUrl" | "basemapVisible" | "basemapOpacity"
-      >
-    >
+    layerId: string,
+    visible: boolean
   ) => void;
   /** Remove one secondary pane and collapse the grid back toward 1x1. */
   removeSecondaryMapView: (id: string) => void;
@@ -549,14 +549,13 @@ export const useAppStore = create<AppState>()(
           } else if (desiredSecondary > secondaryMapViews.length) {
             const additions: SecondaryMapView[] = [];
             for (let i = secondaryMapViews.length; i < desiredSecondary; i++) {
-              // New panes start as a clone of the primary map so the comparison
-              // begins from the same camera and basemap the user is looking at.
+              // New panes start as a clone of the primary map's camera and (by
+              // having no overrides) inherit its layer visibility, so the
+              // comparison begins from the same view the user is looking at.
               additions.push({
                 id: uuidv4(),
                 view: { ...s.mapView },
-                basemapStyleUrl: s.basemapStyleUrl,
-                basemapVisible: s.basemapVisible,
-                basemapOpacity: s.basemapOpacity,
+                layerVisibility: {},
               });
             }
             secondaryMapViews = [...secondaryMapViews, ...additions];
@@ -590,13 +589,16 @@ export const useAppStore = create<AppState>()(
             isDirty: markDirty || s.isDirty,
           };
         }),
-      setSecondaryBasemap: (id, patch) =>
+      setSecondaryLayerVisibility: (id, layerId, visible) =>
         set((s) => {
           let changed = false;
           const secondaryMapViews = s.secondaryMapViews.map((pane) => {
             if (pane.id !== id) return pane;
             changed = true;
-            return { ...pane, ...patch };
+            return {
+              ...pane,
+              layerVisibility: { ...pane.layerVisibility, [layerId]: visible },
+            };
           });
           if (!changed) return s;
           return { secondaryMapViews, isDirty: true };

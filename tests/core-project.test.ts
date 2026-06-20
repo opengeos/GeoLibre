@@ -340,28 +340,22 @@ describe("multi-map grid persistence", () => {
     assert.equal(project.secondaryMapViews, undefined);
   });
 
-  it("round-trips a 2x2 grid with per-pane basemaps", () => {
+  it("round-trips a 2x2 grid with per-pane layer visibility", () => {
     const secondaryMapViews = [
       {
         id: "pane-1",
         view: { center: [10, 20], zoom: 5, bearing: 0, pitch: 0 },
-        basemapStyleUrl: "https://tiles.openfreemap.org/styles/dark",
-        basemapVisible: true,
-        basemapOpacity: 0.8,
+        layerVisibility: { "layer-a": false, "layer-b": true },
       },
       {
         id: "pane-2",
         view: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
-        basemapStyleUrl: "https://tiles.openfreemap.org/styles/positron",
-        basemapVisible: false,
-        basemapOpacity: 1,
+        layerVisibility: { "layer-a": true },
       },
       {
         id: "pane-3",
         view: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
-        basemapStyleUrl: DEFAULT_BASEMAP,
-        basemapVisible: true,
-        basemapOpacity: 1,
+        layerVisibility: {},
       },
     ];
     const project = projectFromStore({
@@ -418,10 +412,8 @@ describe("multi-map grid persistence", () => {
     // A 2x2 grid needs three secondary panes; the two missing ones clone primary.
     assert.equal(reparsed.secondaryMapViews?.length, 3);
     assert.deepEqual(reparsed.secondaryMapViews?.[1].view.center, [7, 8]);
-    assert.equal(
-      reparsed.secondaryMapViews?.[1].basemapStyleUrl,
-      "https://tiles.openfreemap.org/styles/dark",
-    );
+    // Cloned panes start with no visibility overrides (they inherit the primary).
+    assert.deepEqual(reparsed.secondaryMapViews?.[1].layerVisibility, {});
   });
 
   it("ignores a 1x1 grid so single-map files stay clean", () => {
@@ -826,7 +818,7 @@ describe("story map import/export", () => {
     assert.equal(useAppStore.getState().mapLayout.syncView, true);
   });
 
-  it("patches a secondary pane's camera and basemap by id", () => {
+  it("patches a secondary pane's camera and per-layer visibility by id", () => {
     useAppStore.getState().setMapGrid(1, 2);
     const paneId = useAppStore.getState().secondaryMapViews[0].id;
 
@@ -835,14 +827,18 @@ describe("story map import/export", () => {
       .setSecondaryMapView(paneId, { zoom: 9, center: [5, 6] });
     useAppStore
       .getState()
-      .setSecondaryBasemap(paneId, { basemapStyleUrl: "https://example/dark" });
+      .setSecondaryLayerVisibility(paneId, "layer-a", false);
+    useAppStore.getState().setSecondaryLayerVisibility(paneId, "layer-b", true);
 
     const pane = useAppStore
       .getState()
       .secondaryMapViews.find((p) => p.id === paneId);
     assert.equal(pane?.view.zoom, 9);
     assert.deepEqual(pane?.view.center, [5, 6]);
-    assert.equal(pane?.basemapStyleUrl, "https://example/dark");
+    assert.deepEqual(pane?.layerVisibility, {
+      "layer-a": false,
+      "layer-b": true,
+    });
   });
 
   it("removes a secondary pane and collapses the grid", () => {

@@ -1,12 +1,16 @@
-import {
-  BLANK_BASEMAP,
-  OPENFREEMAP_BASEMAPS,
-  useAppStore,
-} from "@geolibre/core";
+import { useAppStore } from "@geolibre/core";
 import { SecondaryMapCanvas } from "@geolibre/map";
-import { Select } from "@geolibre/ui";
-import { X } from "lucide-react";
-import { type ReactNode, useMemo } from "react";
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@geolibre/ui";
+import { Layers, X } from "lucide-react";
+import { type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 interface MapGridProps {
@@ -20,9 +24,11 @@ interface MapGridProps {
  * With a single pane (the default) it renders the primary map untouched, so the
  * normal single-map DOM and behavior are unchanged. With a larger grid it tiles
  * the primary map plus one {@link SecondaryMapCanvas} per `secondaryMapViews`
- * entry into a CSS grid, each secondary pane carrying its own basemap picker and
- * a button to drop it. Camera sync between panes is handled inside the canvases
- * (via the shared global `mapView`); this component only owns layout and chrome.
+ * entry into a CSS grid. Every pane shares the primary's basemap and layers;
+ * each secondary pane carries a layer-visibility toggle so it can show a
+ * different subset of the shared layers, plus a button to drop the pane. Camera
+ * sync between panes is handled inside the canvases (via the shared global
+ * `mapView`); this component only owns layout and chrome.
  */
 export function MapGrid({ children }: MapGridProps) {
   const rows = useAppStore((s) => s.mapLayout.rows);
@@ -60,44 +66,13 @@ interface SecondaryMapPaneProps {
 
 function SecondaryMapPane({ viewId, index }: SecondaryMapPaneProps) {
   const { t } = useTranslation();
-  const setSecondaryBasemap = useAppStore((s) => s.setSecondaryBasemap);
   const removeSecondaryMapView = useAppStore((s) => s.removeSecondaryMapView);
-  const basemapStyleUrl = useAppStore(
-    (s) => s.secondaryMapViews.find((p) => p.id === viewId)?.basemapStyleUrl,
-  );
-
-  // Dedupe basemaps by style URL: two presets can share a style (e.g. Liberty
-  // and Liberty 3D), and duplicate <option> values would be indistinguishable.
-  const basemapOptions = useMemo(() => {
-    const seen = new Set<string>();
-    const options: { value: string; name: string }[] = [];
-    for (const basemap of OPENFREEMAP_BASEMAPS) {
-      if (seen.has(basemap.styleUrl)) continue;
-      seen.add(basemap.styleUrl);
-      options.push({ value: basemap.styleUrl, name: basemap.name });
-    }
-    return options;
-  }, []);
 
   return (
     <div className="relative isolate min-h-0 min-w-0 overflow-hidden bg-background">
       <SecondaryMapCanvas viewId={viewId} />
-      <div className="pointer-events-none absolute left-2 top-2 z-10 flex items-center gap-1.5">
-        <Select
-          className="pointer-events-auto w-36 shadow-sm"
-          aria-label={t("mapGrid.basemapLabel", { number: index + 2 })}
-          value={basemapStyleUrl ?? ""}
-          onChange={(event) =>
-            setSecondaryBasemap(viewId, { basemapStyleUrl: event.target.value })
-          }
-        >
-          {basemapOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.name}
-            </option>
-          ))}
-          <option value={BLANK_BASEMAP}>{t("mapGrid.basemapBlank")}</option>
-        </Select>
+      <div className="absolute left-2 top-2 z-10">
+        <PaneLayerToggle viewId={viewId} index={index} />
       </div>
       <button
         type="button"
@@ -108,5 +83,69 @@ function SecondaryMapPane({ viewId, index }: SecondaryMapPaneProps) {
         <X className="h-4 w-4" />
       </button>
     </div>
+  );
+}
+
+interface PaneLayerToggleProps {
+  viewId: string;
+  index: number;
+}
+
+/**
+ * A dropdown of the shared layers with a checkbox each, controlling which layers
+ * are visible in this pane. A layer's checkbox reflects its effective visibility
+ * (the pane's override, or the primary map's visibility when not overridden).
+ */
+function PaneLayerToggle({ viewId, index }: PaneLayerToggleProps) {
+  const { t } = useTranslation();
+  const layers = useAppStore((s) => s.layers);
+  const layerVisibility = useAppStore(
+    (s) => s.secondaryMapViews.find((p) => p.id === viewId)?.layerVisibility,
+  );
+  const setSecondaryLayerVisibility = useAppStore(
+    (s) => s.setSecondaryLayerVisibility,
+  );
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 bg-background/90 px-2 shadow-sm"
+          aria-label={t("mapGrid.layersLabel", { number: index + 2 })}
+        >
+          <Layers className="h-3.5 w-3.5" />
+          {t("mapGrid.layers")}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="max-h-80 w-56 overflow-auto">
+        <DropdownMenuLabel>{t("mapGrid.layers")}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {layers.length === 0 ? (
+          <div className="px-2 py-1.5 text-sm text-muted-foreground">
+            {t("mapGrid.noLayers")}
+          </div>
+        ) : (
+          layers.map((layer) => {
+            const override = layerVisibility?.[layer.id];
+            const visible = override === undefined ? layer.visible : override;
+            return (
+              <DropdownMenuCheckboxItem
+                key={layer.id}
+                checked={visible}
+                onCheckedChange={(checked: boolean) =>
+                  setSecondaryLayerVisibility(viewId, layer.id, checked)
+                }
+                // Keep the menu open so several layers can be toggled at once.
+                onSelect={(event: Event) => event.preventDefault()}
+              >
+                <span className="truncate">{layer.name}</span>
+              </DropdownMenuCheckboxItem>
+            );
+          })
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

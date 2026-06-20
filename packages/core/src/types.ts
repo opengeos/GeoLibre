@@ -322,9 +322,10 @@ export interface MapViewState {
  * `rows x cols` grid. Pane 0 is always the *primary* map: it keeps the existing
  * single-map wiring (the global `mapView` + `basemap*` fields, the layer/style
  * panels, plugins, deck.gl). Panes 1..N are *secondary* maps described by
- * `SecondaryMapView` records: they render the same shared `layers` but each owns
- * its basemap and camera. When `syncView` is on, panning/zooming any pane mirrors
- * the camera to every other pane.
+ * `SecondaryMapView` records: every pane shares the same basemap and the same
+ * `layers`, but each secondary pane may override which layers are visible so
+ * different panes can show different layers. When `syncView` is on,
+ * panning/zooming any pane mirrors the camera to every other pane.
  */
 export interface MapGridLayout {
   /** Grid rows (>= 1). */
@@ -335,14 +336,20 @@ export interface MapGridLayout {
   syncView: boolean;
 }
 
-/** A non-primary map pane: shared layers, its own basemap and camera. */
+/**
+ * A non-primary map pane: shares the primary map's basemap and layers, with its
+ * own camera and per-layer visibility overrides.
+ */
 export interface SecondaryMapView {
   /** Stable id, used as the React key and the sync-group registration id. */
   id: string;
   view: MapViewState;
-  basemapStyleUrl: string;
-  basemapVisible: boolean;
-  basemapOpacity: number;
+  /**
+   * Per-layer visibility overrides keyed by layer id. A layer absent from this
+   * map inherits the primary map's visibility (`layer.visible`); an entry forces
+   * the layer visible (`true`) or hidden (`false`) in this pane only.
+   */
+  layerVisibility: Record<string, boolean>;
 }
 
 /** The default single-map grid (one pane, sync enabled so it turns on cleanly). */

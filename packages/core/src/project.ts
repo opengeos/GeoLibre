@@ -101,7 +101,7 @@ export function parseProject(json: string): GeoLibreProject {
   const { mapLayout, secondaryMapViews } = resolveMapGrid(
     normalizeMapLayout(data.mapLayout),
     normalizeSecondaryMapViews(data.secondaryMapViews),
-    { mapView: data.mapView, basemapStyleUrl, basemapVisible, basemapOpacity },
+    { mapView: data.mapView },
   );
   return {
     version: data.version,
@@ -500,12 +500,20 @@ export function normalizeSecondaryMapViews(
     views.push({
       id,
       view: normalizeMapViewState(candidate.view),
-      basemapStyleUrl: normalizeString(candidate.basemapStyleUrl) || DEFAULT_BASEMAP,
-      basemapVisible: normalizeBoolean(candidate.basemapVisible, true),
-      basemapOpacity: clamp(normalizeNumber(candidate.basemapOpacity, 1), 0, 1),
+      layerVisibility: normalizeLayerVisibility(candidate.layerVisibility),
     });
   }
   return views.length > 0 ? views : null;
+}
+
+/** Coerce an untrusted per-layer visibility map into `Record<string, boolean>`. */
+function normalizeLayerVisibility(value: unknown): Record<string, boolean> {
+  if (!value || typeof value !== "object") return {};
+  const result: Record<string, boolean> = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof raw === "boolean") result[key] = raw;
+  }
+  return result;
 }
 
 /**
@@ -517,12 +525,7 @@ export function normalizeSecondaryMapViews(
 export function resolveMapGrid(
   layout: MapGridLayout | null,
   secondaryViews: SecondaryMapView[] | null,
-  primary: {
-    mapView: MapViewState;
-    basemapStyleUrl: string;
-    basemapVisible: boolean;
-    basemapOpacity: number;
-  },
+  primary: { mapView: MapViewState },
 ): { mapLayout: MapGridLayout; secondaryMapViews: SecondaryMapView[] } {
   if (!layout) {
     return { mapLayout: { ...DEFAULT_MAP_GRID_LAYOUT }, secondaryMapViews: [] };
@@ -541,9 +544,7 @@ export function resolveMapGrid(
       additions.push({
         id,
         view: { ...primary.mapView },
-        basemapStyleUrl: primary.basemapStyleUrl,
-        basemapVisible: primary.basemapVisible,
-        basemapOpacity: primary.basemapOpacity,
+        layerVisibility: {},
       });
     }
     views = [...views, ...additions];
@@ -961,12 +962,7 @@ export function projectFromStore(state: {
   const { mapLayout, secondaryMapViews } = resolveMapGrid(
     normalizeMapLayout(state.mapLayout),
     normalizeSecondaryMapViews(state.secondaryMapViews),
-    {
-      mapView: state.mapView,
-      basemapStyleUrl: state.basemapStyleUrl,
-      basemapVisible: state.basemapVisible,
-      basemapOpacity: state.basemapOpacity,
-    },
+    { mapView: state.mapView },
   );
   const persistGrid = mapLayout.rows * mapLayout.cols > 1;
   return {
@@ -1107,7 +1103,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
   const { mapLayout, secondaryMapViews } = resolveMapGrid(
     normalizeMapLayout(project.mapLayout),
     normalizeSecondaryMapViews(project.secondaryMapViews),
-    { mapView: project.mapView, basemapStyleUrl, basemapVisible, basemapOpacity },
+    { mapView: project.mapView },
   );
   return {
     projectName: project.name,

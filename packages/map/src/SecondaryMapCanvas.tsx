@@ -1,9 +1,10 @@
 import {
   applyGroupEffects,
   useAppStore,
+  type GeoLibreLayer,
   type MapViewState,
 } from "@geolibre/core";
-import { memo, useEffect, useRef } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import { createMapController, type MapController } from "./map-controller";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -19,10 +20,15 @@ export interface SecondaryMapCanvasProps {
 
 /**
  * A non-primary map pane in the multi-map grid. It renders the *shared* store
- * layers with its own basemap and camera, deliberately omitting the heavy
+ * layers on the *shared* (global) basemap, deliberately omitting the heavy
  * single-map wiring (identify, highlight, draw, deck.gl, the layer control) that
  * lives on the primary {@link MapCanvas}. The layer control is suppressed so the
  * pane never writes the shared layer/basemap state back to the global store.
+ *
+ * Each pane may override which layers are visible: a layer's effective
+ * visibility here is `secondaryMapViews[i].layerVisibility[layerId]` when set,
+ * otherwise the primary map's `layer.visible`. This lets different panes show
+ * different layers over the same data.
  *
  * Camera synchronization is intentionally routed through the global `mapView`:
  * when `mapLayout.syncView` is on, this pane mirrors the global camera (which the
@@ -48,13 +54,27 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
   const layers = useAppStore((s) => s.layers);
   const layerGroups = useAppStore((s) => s.layerGroups);
 
+  // The basemap is shared with the primary map (the global store fields).
+  const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
+  const basemapVisible = useAppStore((s) => s.basemapVisible);
+  const basemapOpacity = useAppStore((s) => s.basemapOpacity);
+
   // Camera primitives, split out so the apply effects depend on values rather
   // than object identity (a new `mapView` object with equal values is a no-op).
   const globalView = useAppStore((s) => s.mapView);
   const entryView = entry?.view;
-  const basemapStyleUrl = entry?.basemapStyleUrl;
-  const basemapVisible = entry?.basemapVisible ?? true;
-  const basemapOpacity = entry?.basemapOpacity ?? 1;
+  const layerVisibility = entry?.layerVisibility;
+
+  // The shared layers with this pane's per-layer visibility overrides applied.
+  const paneLayers = useMemo<GeoLibreLayer[]>(() => {
+    if (!layerVisibility) return layers;
+    return layers.map((layer) => {
+      const override = layerVisibility[layer.id];
+      return override === undefined || override === layer.visible
+        ? layer
+        : { ...layer, visible: override };
+    });
+  }, [layers, layerVisibility]);
 
   // Create the map exactly once. The deps are intentionally empty; everything
   // it reads is captured from the latest store state at mount time.
@@ -70,7 +90,7 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
 
     const mc = createMapController();
     const map = mc.init(containerRef.current, {
-      styleUrl: pane?.basemapStyleUrl,
+      styleUrl: state.basemapStyleUrl,
       mapView: initialView,
       mapPreferences: state.preferences.map,
       // No layer control: the shared layers/basemap are owned by the primary
@@ -97,12 +117,19 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
 
     map.on("load", () => {
       const live = useAppStore.getState();
-      mc.waitAndSyncLayers(applyGroupEffects(live.layers, live.layerGroups));
-      const current = live.secondaryMapViews.find(
+      const pane = live.secondaryMapViews.find(
         (p) => p.id === viewIdRef.current,
       );
-      mc.setBasemapVisible(current?.basemapVisible ?? true);
-      mc.setBasemapOpacity(current?.basemapOpacity ?? 1);
+      const visibility = pane?.layerVisibility ?? {};
+      const withOverrides = live.layers.map((layer) => {
+        const override = visibility[layer.id];
+        return override === undefined || override === layer.visible
+          ? layer
+          : { ...layer, visible: override };
+      });
+      mc.waitAndSyncLayers(applyGroupEffects(withOverrides, live.layerGroups));
+      mc.setBasemapVisible(live.basemapVisible);
+      mc.setBasemapOpacity(live.basemapOpacity);
     });
 
     let resizeFrame: number | null = null;
@@ -126,17 +153,17 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reconcile the shared layers onto this pane whenever they change.
+  // Reconcile the shared layers (with this pane's overrides) whenever they or
+  // the overrides change.
   useEffect(() => {
     controller.current?.waitAndSyncLayers(
-      applyGroupEffects(layers, layerGroups),
+      applyGroupEffects(paneLayers, layerGroups),
     );
-  }, [layers, layerGroups]);
+  }, [paneLayers, layerGroups]);
 
-  // Per-pane basemap.
+  // Basemap is shared with the primary map; follow the global store fields.
   const prevBasemap = useRef(basemapStyleUrl);
   useEffect(() => {
-    if (basemapStyleUrl === undefined) return;
     if (prevBasemap.current !== basemapStyleUrl) {
       prevBasemap.current = basemapStyleUrl;
       controller.current?.setStyle(basemapStyleUrl);
