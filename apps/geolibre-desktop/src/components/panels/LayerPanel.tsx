@@ -117,6 +117,12 @@ interface LayerPanelProps {
   onMaterializeDuckDBLayer: (layer: GeoLibreLayer) => void;
   /** Open the floating Add Raster Layer panel for advanced raster styling. */
   onOpenRasterStylePanel: () => void;
+  /**
+   * When this flips to `true` the panel collapses to its thin rail (it is not
+   * unmounted). Used to clear room for a story map presentation; the user can
+   * still expand it again, and the prior state is restored when it flips off.
+   */
+  autoCollapse?: boolean;
 }
 
 const BACKGROUND_SELECTION_ID = "__geolibre-background__";
@@ -192,6 +198,7 @@ export function LayerPanel({
   onCancelGeometryEdit,
   onMaterializeDuckDBLayer,
   onOpenRasterStylePanel,
+  autoCollapse = false,
 }: LayerPanelProps) {
   const { t } = useTranslation();
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
@@ -265,6 +272,24 @@ export function LayerPanel({
   const { isActive: isPluginActive, toggle: togglePlugin } =
     usePluginRegistry();
   const [isCollapsed, setIsCollapsed] = useState(getIsMobileViewport);
+  // Collapse to the rail when `autoCollapse` flips on (a story map starts
+  // presenting), and restore the prior expand/collapse state when it flips back
+  // off. Both act only on the transition so the user can still toggle the panel
+  // manually while `autoCollapse` stays on. `isCollapsed` is in the deps only to
+  // keep the captured value fresh; the guards make pure `isCollapsed` changes a
+  // no-op while `autoCollapse` is stable. Mirrors StylePanel's behavior.
+  const prevAutoCollapse = useRef(autoCollapse);
+  const collapsedBeforeAuto = useRef(isCollapsed);
+  useEffect(() => {
+    const wasAuto = prevAutoCollapse.current;
+    prevAutoCollapse.current = autoCollapse;
+    if (autoCollapse && !wasAuto) {
+      collapsedBeforeAuto.current = isCollapsed;
+      setIsCollapsed(true);
+    } else if (!autoCollapse && wasAuto) {
+      setIsCollapsed(collapsedBeforeAuto.current);
+    }
+  }, [autoCollapse, isCollapsed]);
   const [draggedLayerId, setDraggedLayerId] = useState<string | null>(null);
   const [dropTargetLayerId, setDropTargetLayerId] = useState<string | null>(
     null,

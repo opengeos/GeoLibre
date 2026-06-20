@@ -87,7 +87,7 @@ export function createSampleStoryMap(): StoryMap {
         image: `${SAMPLE_ASSET_BASE}/sydney.jpg`,
         description:
           "Sydney, capital of New South Wales and one of Australia's largest cities, is best known for its harbourfront Sydney Opera House, with a distinctive sail-like design. <br><br>Massive Darling Harbour and the smaller Circular Quay port are hubs of waterside life, with the arched Harbour Bridge and esteemed Royal Botanic Garden nearby.",
-        alignment: "center",
+        alignment: "right",
         hidden: false,
         location: {
           center: [151.2093, -33.8688],
@@ -106,7 +106,7 @@ export function createSampleStoryMap(): StoryMap {
         image: `${SAMPLE_ASSET_BASE}/cape-town.jpg`,
         description:
           "Cape Town is a port city on South Africa's southwest coast, on a peninsula beneath the imposing Table Mountain. Slowly rotating cable cars climb to the mountain's flat top, from which there are sweeping views of the city, the busy harbor and boats headed for Robben Island, the infamous prison that once held Nelson Mandela. <br><br>You can add as many chapters as you need to tell your story.",
-        alignment: "full",
+        alignment: "left",
         hidden: false,
         location: {
           center: [18.4241, -33.9249],

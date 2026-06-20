@@ -1,5 +1,3 @@
-import { useMemo } from "react";
-import { useAppStore } from "@geolibre/core";
 import { DesktopShell } from "./components/layout/DesktopShell";
 import { OnboardingDialog } from "./components/layout/OnboardingDialog";
 import { UpdateNotificationModal } from "./components/layout/UpdateNotificationModal";
@@ -16,23 +14,7 @@ import { useUiProfileBootstrap } from "./hooks/useUiProfileBootstrap";
 import { useUndoRedoShortcuts } from "./hooks/useUndoRedoShortcuts";
 
 export default function App() {
-  const baseLayoutOptions = useLayoutOptions();
-  // While a story map is presenting, collapse the Layers and Style side panels
-  // so the presentation has the full map canvas to itself. This is a derived
-  // override (not a persisted setting), so exiting the presentation restores the
-  // user's panel layout automatically.
-  const storymapPresenting = useAppStore((s) => s.ui.storymapPresenting);
-  const layoutOptions = useMemo(
-    () =>
-      storymapPresenting
-        ? {
-            ...baseLayoutOptions,
-            layerPanelVisible: false,
-            stylePanelVisible: false,
-          }
-        : baseLayoutOptions,
-    [baseLayoutOptions, storymapPresenting],
-  );
+  const layoutOptions = useLayoutOptions();
   const { themeMode, toggleThemeMode } = useThemeMode();
   const projectUrlLoadState = useProjectUrlLoader();
   const { showOnboarding, dismissOnboarding } = useUiProfileBootstrap();

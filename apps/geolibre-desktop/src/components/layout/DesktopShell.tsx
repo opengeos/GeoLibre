@@ -402,6 +402,7 @@ export function DesktopShell({
   const projectGeneration = useAppStore((s) => s.projectGeneration);
   const pythonConsoleOpen = useAppStore((s) => s.ui.pythonConsoleOpen);
   const notebookOpen = useAppStore((s) => s.ui.notebookOpen);
+  const storymapPresenting = useAppStore((s) => s.ui.storymapPresenting);
   const assistantOpen = useAppStore((s) => s.ui.assistantOpen);
   const dashboardOpen = useAppStore((s) => s.ui.dashboardOpen);
   const geometryEditLayerId = useSyncExternalStore(
@@ -1291,6 +1292,7 @@ export function DesktopShell({
               onOpenRasterStylePanel={() =>
                 openRasterLayerPanel(createAppAPI(mapControllerRef))
               }
+              autoCollapse={storymapPresenting}
             />
           </SectionErrorBoundary>
         ) : null}
@@ -1320,13 +1322,14 @@ export function DesktopShell({
         </main>
         {/* The notebook claims the workspace's right half, so the Style panel
             collapses to its rail while the notebook is open (Processing →
-            Jupyter Notebook) rather than unmounting; the user can re-expand it. */}
+            Jupyter Notebook) rather than unmounting; the user can re-expand it.
+            A story map presentation collapses it for the same reason. */}
         {layoutOptions.stylePanelVisible ? (
           <SectionErrorBoundary label="Style panel">
             <StylePanel
               mapControllerRef={mapControllerRef}
               onResizeStart={startStylePanelResize}
-              autoCollapse={notebookOpen}
+              autoCollapse={notebookOpen || storymapPresenting}
             />
           </SectionErrorBoundary>
         ) : null}
