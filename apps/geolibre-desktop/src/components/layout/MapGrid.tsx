@@ -71,17 +71,17 @@ function SecondaryMapPane({ viewId, index }: SecondaryMapPaneProps) {
   return (
     <div className="relative isolate min-h-0 min-w-0 overflow-hidden bg-background">
       <SecondaryMapCanvas viewId={viewId} />
-      <div className="absolute left-2 top-2 z-10">
+      <div className="absolute left-2 top-2 z-10 flex items-center gap-1.5">
         <PaneLayerToggle viewId={viewId} index={index} />
+        <button
+          type="button"
+          className="flex h-7 w-7 items-center justify-center rounded-md border border-input bg-background/90 text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground"
+          aria-label={t("mapGrid.removePane", { number: index + 2 })}
+          onClick={() => removeSecondaryMapView(viewId)}
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
-      <button
-        type="button"
-        className="absolute bottom-2 left-2 z-10 flex h-7 w-7 items-center justify-center rounded-md border border-input bg-background/90 text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground"
-        aria-label={t("mapGrid.removePane", { number: index + 2 })}
-        onClick={() => removeSecondaryMapView(viewId)}
-      >
-        <X className="h-4 w-4" />
-      </button>
     </div>
   );
 }
