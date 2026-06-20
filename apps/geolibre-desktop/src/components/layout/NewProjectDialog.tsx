@@ -326,7 +326,7 @@ export function NewProjectDialog({
                     />
                     <BasemapButton
                       id={CUSTOM_BASEMAP_ID}
-                      name="Custom URL"
+                      name={t("newProject.customUrlButton")}
                       selected={isCustomSelected}
                       onSelect={setSelectedBasemapId}
                     />
