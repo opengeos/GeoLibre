@@ -1549,7 +1549,7 @@
     "layerNameDefault": "Segmentation",
     "sidecar": {
       "title": "Couldn't start the AI segmentation server.",
-      "intro": "AI segmentation runs in an optional local server ({{sidecarUrl}}) that hosts the SAM3 model from segment-geospatial. It runs Python in the background, separate from the app, and isn't part of the browser build.",
+      "intro": "AI segmentation runs in a local helper server ({{sidecarUrl}}) that hosts the SAM3 model from segment-geospatial. It runs Python in the background, separate from the app, and isn't part of the browser build.",
       "troubleshootingTitle": "How to get the server running",
       "stepInstall": "Make sure the GeoLibre server is installed with the segment-geospatial backend enabled, so the segmentation model is available.",
       "stepStartServerDesktop": "Click \"Start server\" above to launch it, then wait a few seconds for the model to come online."

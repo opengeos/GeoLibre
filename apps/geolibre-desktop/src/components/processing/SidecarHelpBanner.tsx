@@ -93,6 +93,8 @@ export function SidecarHelpBanner({
     t("processing.sidecar.stepCheckPort", { port: SIDECAR_PORT }),
     t("processing.sidecar.stepRestart"),
   ];
+  const resolvedTroubleshootingTitle =
+    troubleshootingTitle ?? t("processing.sidecar.troubleshootingTitle");
 
   return (
     <div className="rounded-md border border-amber-500/40 bg-amber-500/10 text-sm">
@@ -173,8 +175,7 @@ export function SidecarHelpBanner({
 
           <div className="grid gap-1.5">
             <p className="text-xs font-medium text-foreground">
-              {troubleshootingTitle ??
-                t("processing.sidecar.troubleshootingTitle")}
+              {resolvedTroubleshootingTitle}
             </p>
             <ol className="grid list-decimal gap-1 pl-5 text-xs text-muted-foreground">
               {resolvedSteps.map((step, index) => (

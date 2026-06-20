@@ -171,6 +171,8 @@ export function SegmentationDialog({
 
   const handleRun = useCallback(async () => {
     setError(null);
+    // Defensive: serverError is normally null by the time Segment is enabled;
+    // clearing it keeps the success path from coexisting with a stale banner.
     setServerError(null);
     setResultMessage(null);
     if (!imageBytes) {
