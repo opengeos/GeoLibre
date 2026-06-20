@@ -269,7 +269,7 @@ export function normalizeStoryMap(storymap: unknown): StoryMap | null {
 }
 
 /** Whether a story map carries chapters or any non-default setting. */
-function storyMapHasContent(story: StoryMap): boolean {
+export function storyMapHasContent(story: StoryMap): boolean {
   if (story.chapters.length > 0) return true;
   return (
     story.title.trim() !== "" ||

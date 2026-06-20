@@ -8,6 +8,7 @@ import {
   parseStoryMapJson,
   serializeStoryMapCsv,
   serializeStoryMapJson,
+  storyMapHasContent,
   useAppStore,
   type StoryChapter,
   type StoryChapterAlignment,
@@ -94,13 +95,13 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
 
   const story: StoryMap = storymap ?? DEFAULT_STORY_MAP;
   const chapters = story.chapters;
-  // Reset has something to clear when there are chapters or any story metadata
-  // set, so it stays disabled in the empty state (where "Load sample story" is
-  // the relevant action) even if a stale `storymap` object lingers after the
-  // last chapter was deleted manually.
-  const hasStoryContent =
-    chapters.length > 0 ||
-    Boolean(story.title || story.subtitle || story.byline || story.footer);
+  // Reset has something to clear when the story carries chapters or any
+  // non-default setting, so it stays disabled in the empty state (where "Load
+  // sample story" is the relevant action) even if a stale `storymap` object
+  // lingers after the last chapter was deleted manually. Reuse the canonical
+  // check from @geolibre/core so this stays in sync with how the project layer
+  // decides a story is worth persisting.
+  const hasStoryContent = storyMapHasContent(story);
 
   const handleAddChapter = useCallback(() => {
     const view = mapControllerRef.current?.readView();
