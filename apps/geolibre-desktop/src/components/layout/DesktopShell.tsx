@@ -1225,6 +1225,11 @@ export function DesktopShell({
   return (
     <div
       ref={shellRef}
+      // The map's Fullscreen control maximizes this whole workspace (toolbar +
+      // panels + map) rather than just the map container, so the side panels lay
+      // out instead of overlapping the map on WebKit. See map-controller's
+      // addFullscreenControl and opengeos/GeoLibre#611.
+      data-fullscreen-root=""
       className="relative flex h-full min-w-0 flex-col overflow-hidden bg-background"
       style={shellStyle}
       onDragEnter={handleDragEnter}

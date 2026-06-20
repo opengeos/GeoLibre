@@ -1591,7 +1591,22 @@ export class MapController {
     ) {
       return false;
     }
-    this.fullscreenControl = new maplibregl.FullscreenControl();
+    // Fullscreen the whole workspace shell (toolbar + side panels + map), not
+    // just the map container. MapLibre's default container is `map.getContainer()`,
+    // a div nested inside `<main>`; the Layers/Style panels are `<aside>` siblings
+    // of `<main>`. Chromium promotes the fullscreen element to the top layer so the
+    // sibling panels are hidden, but WebKit (WKWebView on macOS, WebKitGTK on Linux,
+    // i.e. the Tauri desktop webview) does not, leaving the panels painted on top of
+    // and overlapping the maximized map (opengeos/GeoLibre#611). Targeting an ancestor
+    // that contains the panels lets flexbox lay everything out with no overlap on
+    // every engine. The shell marks itself with `data-fullscreen-root`; fall back to
+    // the map container when no such ancestor exists (e.g. a bare embed).
+    const mapContainer = this.map.getContainer();
+    const fullscreenContainer =
+      mapContainer.closest<HTMLElement>("[data-fullscreen-root]") ?? mapContainer;
+    this.fullscreenControl = new maplibregl.FullscreenControl({
+      container: fullscreenContainer,
+    });
     this.map.addControl(
       this.fullscreenControl,
       this.controlPositions.fullscreen,
