@@ -1,15 +1,7 @@
 import { useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import { Button, Textarea } from "@geolibre/ui";
-import {
-  Eraser,
-  Loader2,
-  PanelLeft,
-  PanelLeftClose,
-  Play,
-  Terminal,
-  X,
-} from "lucide-react";
+import { Code2, Eraser, Loader2, Play, Terminal, X } from "lucide-react";
 import {
   type ChangeEvent as ReactChangeEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -33,9 +25,11 @@ import { PythonEditorPane } from "./PythonEditorPane";
 const DEFAULT_CONSOLE_HEIGHT = 240;
 const MIN_CONSOLE_HEIGHT = 120;
 const MAX_CONSOLE_HEIGHT = 560;
-const DEFAULT_EDITOR_WIDTH = 360;
-const MIN_EDITOR_WIDTH = 220;
-const MAX_EDITOR_WIDTH = 900;
+const DEFAULT_EDITOR_HEIGHT = 200;
+const MIN_EDITOR_HEIGHT = 120;
+// Space the terminal (plus header and divider chrome) must keep when the
+// advanced editor grows, so the output never collapses to nothing.
+const EDITOR_RESIZE_RESERVE = 150;
 const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
 const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
 
@@ -52,8 +46,10 @@ interface PythonConsolePanelProps {
 /**
  * The in-app Python Console: a bottom-docked, resizable panel that runs Python
  * via main-thread Pyodide and exposes a `geolibre` object that drives the live
- * app. A "Show Editor" toggle splits in a script editor (left) that shares the
- * same interpreter, à la QGIS. Rendered only while open.
+ * app. A single input region sits below the output terminal and toggles between
+ * two modes that share the one interpreter: Basic (a single-line REPL) and
+ * Advanced (a full-width, QGIS-style script editor that grows upward and adds
+ * New/Open/Save tools). Rendered only while open.
  *
  * @param mapControllerRef - Ref to the live map controller, read lazily by the
  *   Pyodide `geolibre` facade so Python can drive the current map.
@@ -67,12 +63,12 @@ export function PythonConsolePanel({
   const sectionRef = useRef<HTMLElement>(null);
   const outputRef = useRef<HTMLDivElement>(null);
   const consoleInputRef = useRef<HTMLTextAreaElement>(null);
-  const editorPaneRef = useRef<HTMLDivElement>(null);
+  const editorRegionRef = useRef<HTMLDivElement>(null);
   // Tear down an in-flight drag's window listeners; set while dragging so an
   // unmount mid-drag (e.g. closing the panel) doesn't leak them. One per drag
   // axis so a second drag can't overwrite the other's cleanup.
   const verticalResizeCleanupRef = useRef<(() => void) | null>(null);
-  const horizontalResizeCleanupRef = useRef<(() => void) | null>(null);
+  const editorResizeCleanupRef = useRef<(() => void) | null>(null);
   // Caret to apply after a programmatic console-input change (history recall).
   const historyCaretRef = useRef<number | null>(null);
   // Submitted commands (newest last) for up/down recall, plus the cursor into
@@ -81,8 +77,8 @@ export function PythonConsolePanel({
   const historyIndexRef = useRef<number | null>(null);
   const historyDraftRef = useRef("");
   const [height, setHeight] = useState(DEFAULT_CONSOLE_HEIGHT);
-  const [editorVisible, setEditorVisible] = useState(false);
-  const [editorWidth, setEditorWidth] = useState(DEFAULT_EDITOR_WIDTH);
+  const [advancedMode, setAdvancedMode] = useState(false);
+  const [editorHeight, setEditorHeight] = useState(DEFAULT_EDITOR_HEIGHT);
   const [code, setCode] = useState("");
   const [history, setHistory] = useState<Entry[]>([]);
   const [running, setRunning] = useState(false);
@@ -251,6 +247,23 @@ export function PythonConsolePanel({
     completion.close();
   };
 
+  // Toggle the single input region between the basic REPL and the advanced
+  // editor. Entering advanced grows the panel so the editor gets its room
+  // without crushing the output terminal to a sliver.
+  const toggleAdvanced = () => {
+    setAdvancedMode((advanced) => {
+      if (!advanced) {
+        setHeight((h) =>
+          Math.min(
+            MAX_CONSOLE_HEIGHT,
+            Math.max(h, editorHeight + EDITOR_RESIZE_RESERVE),
+          ),
+        );
+      }
+      return !advanced;
+    });
+  };
+
   const startResize = (event: ReactMouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -305,45 +318,51 @@ export function PythonConsolePanel({
     };
   };
 
-  // Horizontal splitter between the editor (left) and the console (right).
+  // Splitter between the output terminal (top) and the advanced editor (bottom);
+  // dragging up grows the editor, clamped so the terminal keeps a usable height.
   const startEditorResize = (event: ReactMouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    const startX = event.clientX;
-    const startWidth = editorWidth;
-    let nextWidth = startWidth;
+    const startY = event.clientY;
+    const startHeight = editorHeight;
+    let nextHeight = startHeight;
     let frame: number | null = null;
     const prevCursor = document.body.style.cursor;
     const prevSelect = document.body.style.userSelect;
-    document.body.style.cursor = "col-resize";
+    document.body.style.cursor = "row-resize";
     document.body.style.userSelect = "none";
 
     const onMove = (moveEvent: MouseEvent) => {
-      nextWidth = Math.min(
-        MAX_EDITOR_WIDTH,
-        Math.max(MIN_EDITOR_WIDTH, startWidth + moveEvent.clientX - startX),
+      const panelHeight = sectionRef.current?.clientHeight ?? height;
+      const maxHeight = Math.max(
+        MIN_EDITOR_HEIGHT,
+        panelHeight - EDITOR_RESIZE_RESERVE,
+      );
+      nextHeight = Math.min(
+        maxHeight,
+        Math.max(MIN_EDITOR_HEIGHT, startHeight + startY - moveEvent.clientY),
       );
       // Throttle to one DOM write per frame; commit to state only on mouseup.
       if (frame !== null) return;
       frame = window.requestAnimationFrame(() => {
         frame = null;
-        if (editorPaneRef.current) {
-          editorPaneRef.current.style.width = `${nextWidth}px`;
+        if (editorRegionRef.current) {
+          editorRegionRef.current.style.height = `${nextHeight}px`;
         }
       });
     };
     const onUp = () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
-      horizontalResizeCleanupRef.current = null;
+      editorResizeCleanupRef.current = null;
       if (frame !== null) window.cancelAnimationFrame(frame);
-      setEditorWidth(nextWidth);
+      setEditorHeight(nextHeight);
       document.body.style.cursor = prevCursor;
       document.body.style.userSelect = prevSelect;
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
-    horizontalResizeCleanupRef.current = () => {
+    editorResizeCleanupRef.current = () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
       if (frame !== null) window.cancelAnimationFrame(frame);
@@ -356,7 +375,7 @@ export function PythonConsolePanel({
   useEffect(
     () => () => {
       verticalResizeCleanupRef.current?.();
-      horizontalResizeCleanupRef.current?.();
+      editorResizeCleanupRef.current?.();
     },
     [],
   );
@@ -388,22 +407,18 @@ export function PythonConsolePanel({
         ) : null}
         <div className="ml-auto flex items-center gap-1">
           <Button
-            variant={editorVisible ? "secondary" : "ghost"}
+            variant={advancedMode ? "secondary" : "ghost"}
             size="icon"
             className="h-8 w-8"
             title={
-              editorVisible
-                ? t("pythonConsole.hideEditor")
-                : t("pythonConsole.showEditor")
+              advancedMode
+                ? t("pythonConsole.basicMode")
+                : t("pythonConsole.advancedMode")
             }
-            aria-pressed={editorVisible}
-            onClick={() => setEditorVisible((v) => !v)}
+            aria-pressed={advancedMode}
+            onClick={toggleAdvanced}
           >
-            {editorVisible ? (
-              <PanelLeftClose className="h-4 w-4" />
-            ) : (
-              <PanelLeft className="h-4 w-4" />
-            )}
+            <Code2 className="h-4 w-4" />
           </Button>
           <Button
             variant="ghost"
@@ -426,13 +441,46 @@ export function PythonConsolePanel({
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1">
-        {editorVisible ? (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div
+          ref={outputRef}
+          className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-xs leading-relaxed"
+        >
+          {history.length === 0 ? (
+            <p className="text-muted-foreground">{t("pythonConsole.intro")}</p>
+          ) : (
+            history.map((entry, index) => (
+              <div
+                key={index}
+                className={
+                  entry.kind === "input"
+                    ? "text-primary"
+                    : entry.kind === "error"
+                      ? "text-destructive"
+                      : entry.kind === "marker"
+                        ? "text-muted-foreground"
+                        : "text-foreground"
+                }
+              >
+                {entry.kind === "input" ? `>>> ${entry.text}` : entry.text}
+              </div>
+            ))
+          )}
+        </div>
+
+        {advancedMode ? (
           <>
             <div
-              ref={editorPaneRef}
-              className="flex min-w-0 flex-col border-r"
-              style={{ width: editorWidth }}
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label={t("pythonConsole.resizeEditor")}
+              className="h-1 shrink-0 cursor-row-resize select-none bg-border hover:bg-primary"
+              onMouseDown={startEditorResize}
+            />
+            <div
+              ref={editorRegionRef}
+              className="flex min-h-0 shrink-0 flex-col"
+              style={{ height: editorHeight }}
             >
               <PythonEditorPane
                 deps={deps}
@@ -442,43 +490,8 @@ export function PythonConsolePanel({
                 completionLabel={t("pythonConsole.completions")}
               />
             </div>
-            <div
-              role="separator"
-              aria-orientation="vertical"
-              aria-label={t("pythonConsole.resizeEditor")}
-              className="w-1 shrink-0 cursor-col-resize select-none bg-border hover:bg-primary"
-              onMouseDown={startEditorResize}
-            />
           </>
-        ) : null}
-
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div
-            ref={outputRef}
-            className="flex-1 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-xs leading-relaxed"
-          >
-            {history.length === 0 ? (
-              <p className="text-muted-foreground">{t("pythonConsole.intro")}</p>
-            ) : (
-              history.map((entry, index) => (
-                <div
-                  key={index}
-                  className={
-                    entry.kind === "input"
-                      ? "text-primary"
-                      : entry.kind === "error"
-                        ? "text-destructive"
-                        : entry.kind === "marker"
-                          ? "text-muted-foreground"
-                          : "text-foreground"
-                  }
-                >
-                  {entry.kind === "input" ? `>>> ${entry.text}` : entry.text}
-                </div>
-              ))
-            )}
-          </div>
-
+        ) : (
           <div className="relative flex items-end gap-2 border-t px-3 py-2">
             {completion.dropdown}
             <Textarea
@@ -505,7 +518,7 @@ export function PythonConsolePanel({
               {t("pythonConsole.run")}
             </Button>
           </div>
-        </div>
+        )}
       </div>
     </section>
   );
