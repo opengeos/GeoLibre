@@ -55,7 +55,7 @@ import {
   TriangleAlert,
   Puzzle,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import {
   DEFAULT_DESKTOP_LAYOUT_SETTINGS,
@@ -95,14 +95,26 @@ export type SettingsSection =
   | "environment"
   | "updates";
 
+/** A field a deep-link can ask Settings to focus once the section renders. */
+export type SettingsFocusTarget = "shareToken";
+
 /** Window event letting any panel open Settings at a given section (no prop-drilling). */
 export const OPEN_SETTINGS_EVENT = "geolibre:open-settings";
 
-/** Open the Settings dialog at `section` from anywhere in the app. */
-export function openSettingsSection(section: SettingsSection): void {
+/**
+ * Open the Settings dialog at `section` from anywhere in the app, optionally
+ * focusing a specific field once that section renders (e.g. the Share dialog
+ * deep-links into Environment Variables and focuses the share token input).
+ */
+export function openSettingsSection(
+  section: SettingsSection,
+  options?: { focus?: SettingsFocusTarget },
+): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
-    new CustomEvent(OPEN_SETTINGS_EVENT, { detail: { section } }),
+    new CustomEvent(OPEN_SETTINGS_EVENT, {
+      detail: { section, focus: options?.focus },
+    }),
   );
 }
 
@@ -333,6 +345,12 @@ export function SettingsDialog({
     isMenuItemVisible(desktopSettings.uiProfile, id);
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<SettingsSection>("map");
+  // A field a deep-link asked us to focus once its section renders; cleared
+  // after the focus lands so a later open without a focus request stays put.
+  const [pendingFocus, setPendingFocus] = useState<SettingsFocusTarget | null>(
+    null,
+  );
+  const shareTokenInputRef = useRef<HTMLInputElement>(null);
   // A gated section is dropped from the nav, but `section` can still point at one
   // (its initial value is "map"), so render the first visible section instead to
   // never expose gated content to a restricted profile.
@@ -395,8 +413,12 @@ export function SettingsDialog({
   // Assistant onboarding card opens Environment Variables to add a provider key).
   useEffect(() => {
     const onOpenSettings = (event: Event) => {
-      const detail = (event as CustomEvent<{ section?: SettingsSection }>)
-        .detail;
+      const detail = (
+        event as CustomEvent<{
+          section?: SettingsSection;
+          focus?: SettingsFocusTarget;
+        }>
+      ).detail;
       // setSection before setOpen so the section is already in state when React
       // renders the open dialog (effectiveSection derives from it at render
       // time). Only honor the request when the active UI profile actually shows
@@ -404,17 +426,36 @@ export function SettingsDialog({
       // another tab. The profile is read fresh (not via the effect's closure) so
       // a profile change after mount is respected.
       const requested = detail?.section;
+      let sectionShown = true;
       if (requested) {
         const gate = SECTION_GATE[requested];
         const profile =
           useDesktopSettingsStore.getState().desktopSettings.uiProfile;
-        if (!gate || isMenuItemVisible(profile, gate)) setSection(requested);
+        sectionShown = !gate || isMenuItemVisible(profile, gate);
+        if (sectionShown) setSection(requested);
       }
+      // Only queue the focus when its target section is actually shown, so the
+      // request can't strand on a tab the profile hid.
+      setPendingFocus(detail?.focus && sectionShown ? detail.focus : null);
       setOpen(true);
     };
     window.addEventListener(OPEN_SETTINGS_EVENT, onOpenSettings);
     return () => window.removeEventListener(OPEN_SETTINGS_EVENT, onOpenSettings);
   }, []);
+
+  // Focus a deep-linked field once its section has rendered. The token input
+  // only mounts when the Environment section is active, so this waits for the
+  // section to settle rather than focusing on open.
+  useEffect(() => {
+    if (!open || pendingFocus !== "shareToken") return;
+    if (effectiveSection !== "environment") return;
+    const id = window.requestAnimationFrame(() => {
+      shareTokenInputRef.current?.focus();
+      shareTokenInputRef.current?.select();
+      setPendingFocus(null);
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [open, pendingFocus, effectiveSection]);
 
   const toggleValueVisibility = (id: string) => {
     setRevealedValueIds((current) => {
@@ -1620,6 +1661,7 @@ export function SettingsDialog({
                       />
                     </p>
                     <Input
+                      ref={shareTokenInputRef}
                       aria-label={t("settings.env.tokenTitle")}
                       type="password"
                       autoComplete="new-password"

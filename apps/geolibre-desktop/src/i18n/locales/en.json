@@ -545,6 +545,31 @@
     "nameRequired": "Enter your name to continue.",
     "codeRequired": "Enter a session code to join."
   },
+  "share": {
+    "title": "Share project",
+    "description": "Upload the current project to share.geolibre.app and get a shareable link.",
+    "setupIntro": "Connect your share.geolibre.app account before uploading.",
+    "step1Title": "1. Get an API token",
+    "step1Description": "Sign in to share.geolibre.app, then create a token under Settings → API tokens.",
+    "getToken": "Get API token",
+    "step2Title": "2. Add the token to GeoLibre",
+    "step2Description": "Paste the token into Settings → Environment Variables on this device.",
+    "configureToken": "Configure local token",
+    "liveAt": "Your project is live at:",
+    "copyLink": "Copy link",
+    "open": "Open",
+    "done": "Done",
+    "projectTitle": "Project title",
+    "titlePlaceholder": "Name your project",
+    "titleRequired": "Enter a project title before sharing.",
+    "visibility": "Visibility",
+    "visibilityUnlisted": "Unlisted (anyone with the link)",
+    "visibilityPublic": "Public (listed in the gallery)",
+    "visibilityPrivate": "Private (only you)",
+    "shareButton": "Share",
+    "sharing": "Sharing…",
+    "errorFallback": "Could not share the project."
+  },
   "language": {
     "label": "Language",
     "description": "Choose the language used for the interface."

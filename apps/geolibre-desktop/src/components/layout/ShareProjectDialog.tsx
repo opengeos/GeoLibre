@@ -9,8 +9,9 @@ import {
   Label,
   Select,
 } from "@geolibre/ui";
-import { Check, Copy, ExternalLink, Loader2, Share2 } from "lucide-react";
+import { Check, Copy, ExternalLink, KeyRound, Loader2, Share2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
 import { openExternalLink } from "../../lib/open-external";
 import {
@@ -21,6 +22,7 @@ import {
   type ShareUploadResult,
   type ShareVisibility,
 } from "../../lib/share-geolibre";
+import { openSettingsSection } from "./SettingsDialog";
 
 interface ShareProjectDialogProps {
   open: boolean;
@@ -42,6 +44,7 @@ export function ShareProjectDialog({
   currentTitle,
   getProject,
 }: ShareProjectDialogProps) {
+  const { t } = useTranslation();
   const shareToken = useDesktopSettingsStore((s) => s.desktopSettings.shareToken);
   const [title, setTitle] = useState("");
   const [visibility, setVisibility] = useState<ShareVisibility>("unlisted");
@@ -103,7 +106,7 @@ export function ShareProjectDialog({
       setResult(uploaded);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
-      setError(err instanceof Error ? err.message : "Could not share the project.");
+      setError(err instanceof Error ? err.message : t("share.errorFallback"));
     } finally {
       // Only the controller that is still current clears state, so an aborted
       // (superseded) request never flips a newer one back to idle.
@@ -112,6 +115,13 @@ export function ShareProjectDialog({
         setStatus("idle");
       }
     }
+  };
+
+  // Close this dialog and deep-link into Settings → Environment Variables with
+  // the share token field focused, so the user can paste the token right away.
+  const handleConfigureToken = () => {
+    onOpenChange(false);
+    openSettingsSection("environment", { focus: "shareToken" });
   };
 
   const handleCopy = () => {
@@ -139,41 +149,50 @@ export function ShareProjectDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Share2 className="h-4 w-4" />
-            Share project
+            {t("share.title")}
           </DialogTitle>
-          <DialogDescription>
-            Upload the current project to share.geolibre.app and get a shareable
-            link.
-          </DialogDescription>
+          <DialogDescription>{t("share.description")}</DialogDescription>
         </DialogHeader>
 
         {!hasToken ? (
-          <div className="space-y-3 text-sm">
-            <p className="text-muted-foreground">
-              Add a share.geolibre.app API token in Settings → Environment
-              Variables before sharing. Create one under Settings → API tokens
-              on the website.
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void openExternalLink(SETTINGS_TOKEN_URL)}
-            >
-              <ExternalLink className="mr-2 h-3.5 w-3.5" />
-              Open share.geolibre.app settings
-            </Button>
+          <div className="space-y-4 text-sm">
+            <p className="text-muted-foreground">{t("share.setupIntro")}</p>
+            <ol className="space-y-3">
+              <li className="space-y-2 rounded-md border p-3">
+                <p className="font-medium">{t("share.step1Title")}</p>
+                <p className="text-muted-foreground">
+                  {t("share.step1Description")}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void openExternalLink(SETTINGS_TOKEN_URL)}
+                >
+                  <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                  {t("share.getToken")}
+                </Button>
+              </li>
+              <li className="space-y-2 rounded-md border p-3">
+                <p className="font-medium">{t("share.step2Title")}</p>
+                <p className="text-muted-foreground">
+                  {t("share.step2Description")}
+                </p>
+                <Button type="button" onClick={handleConfigureToken}>
+                  <KeyRound className="mr-2 h-3.5 w-3.5" />
+                  {t("share.configureToken")}
+                </Button>
+              </li>
+            </ol>
           </div>
         ) : result ? (
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Your project is live at:
-            </p>
+            <p className="text-sm text-muted-foreground">{t("share.liveAt")}</p>
             <div className="flex gap-2">
               <Input readOnly value={result.projectUrl} className="text-xs" />
               <Button
                 type="button"
                 variant="secondary"
-                aria-label="Copy link"
+                aria-label={t("share.copyLink")}
                 onClick={handleCopy}
               >
                 {copied ? (
@@ -190,34 +209,34 @@ export function ShareProjectDialog({
                 onClick={() => void openExternalLink(result.projectUrl)}
               >
                 <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                Open
+                {t("share.open")}
               </Button>
               <Button type="button" onClick={() => onOpenChange(false)}>
-                Done
+                {t("share.done")}
               </Button>
             </div>
           </div>
         ) : (
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="share-title">Project title</Label>
+              <Label htmlFor="share-title">{t("share.projectTitle")}</Label>
               <Input
                 id="share-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Name your project"
+                placeholder={t("share.titlePlaceholder")}
                 maxLength={MAX_PROJECT_TITLE_LENGTH}
                 disabled={status === "uploading"}
                 autoFocus={!titleValid}
               />
               {!titleValid && (
                 <p className="text-xs text-muted-foreground">
-                  Enter a project title before sharing.
+                  {t("share.titleRequired")}
                 </p>
               )}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="share-visibility">Visibility</Label>
+              <Label htmlFor="share-visibility">{t("share.visibility")}</Label>
               <Select
                 id="share-visibility"
                 value={visibility}
@@ -226,9 +245,9 @@ export function ShareProjectDialog({
                 }
                 disabled={status === "uploading"}
               >
-                <option value="unlisted">Unlisted (anyone with the link)</option>
-                <option value="public">Public (listed in the gallery)</option>
-                <option value="private">Private (only you)</option>
+                <option value="unlisted">{t("share.visibilityUnlisted")}</option>
+                <option value="public">{t("share.visibilityPublic")}</option>
+                <option value="private">{t("share.visibilityPrivate")}</option>
               </Select>
             </div>
 
@@ -246,7 +265,7 @@ export function ShareProjectDialog({
                 variant="outline"
                 onClick={() => onOpenChange(false)}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button
                 type="button"
@@ -256,12 +275,12 @@ export function ShareProjectDialog({
                 {status === "uploading" ? (
                   <>
                     <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                    Sharing…
+                    {t("share.sharing")}
                   </>
                 ) : (
                   <>
                     <Share2 className="mr-2 h-3.5 w-3.5" />
-                    Share
+                    {t("share.shareButton")}
                   </>
                 )}
               </Button>
