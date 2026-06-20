@@ -115,9 +115,13 @@ export async function listGeolibreWasmTools(): Promise<WhiteboxTool[]> {
           schema: param.schema,
         };
         if (param.schema?.kind === "enum" && Array.isArray(param.schema.options)) {
+          // Coerce to strings (not filter to strings): an enum with numeric or
+          // boolean values would otherwise drop to an empty list and render as a
+          // plain text input instead of a dropdown.
           mapped.options = param.schema.options
             .map((option) => option?.value)
-            .filter((value): value is string => typeof value === "string");
+            .filter((value) => value != null)
+            .map(String);
         }
         return mapped;
       }),
