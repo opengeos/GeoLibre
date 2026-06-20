@@ -122,6 +122,8 @@ cask "geolibre" do
     strategy :github_latest
   end
 
+  depends_on :macos
+
   app "GeoLibre Desktop.app"
 
   zap trash: [

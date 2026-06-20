@@ -8,6 +8,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@geolibre/ui";
+import { PROJECT_VERSION } from "@geolibre/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { CheckCircle2, ExternalLink, Info, Map, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -223,6 +224,10 @@ export function AboutDialog({
           <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
             <span className="text-muted-foreground">Version</span>
             <span className="font-mono text-foreground">v{APP_VERSION}</span>
+          </div>
+          <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+            <span className="text-muted-foreground">Project format</span>
+            <span className="font-mono text-foreground">{PROJECT_VERSION}</span>
           </div>
           <Button
             className="w-full justify-between"

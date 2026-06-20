@@ -3,7 +3,6 @@ import {
   GEOCODING_PROVIDERS,
   getGeocodingProvider,
   normalizeGeocodingProviderId,
-  PROJECT_VERSION,
   useAppStore,
   type MapPreferences,
   type MapProjection,
@@ -87,8 +86,7 @@ export type SettingsSection =
   | "layout"
   | "interface"
   | "geocoding"
-  | "environment"
-  | "project";
+  | "environment";
 
 /** Window event letting any panel open Settings at a given section (no prop-drilling). */
 export const OPEN_SETTINGS_EVENT = "geolibre:open-settings";
@@ -136,7 +134,6 @@ const SECTION_ITEMS: Array<{
     labelKey: "settings.section.environment",
     icon: Braces,
   },
-  { id: "project", labelKey: "settings.section.project", icon: FolderCog },
 ];
 
 // The menu-item id that gates each Settings section, mirroring the dropdown.
@@ -146,7 +143,6 @@ const SECTION_GATE: Partial<Record<SettingsSection, string>> = {
   map: "settings.mapPreferences",
   geocoding: "settings.geocoding",
   environment: "settings.environment",
-  project: "settings.projectSettings",
 };
 
 const VARIABLE_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -321,7 +317,6 @@ export function SettingsDialog({
   // reachable.
   const showSettingsItem = (id: string) =>
     isMenuItemVisible(desktopSettings.uiProfile, id);
-  const projectPath = useAppStore((s) => s.projectPath);
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<SettingsSection>("map");
   // A gated section is dropped from the nav, but `section` can still point at one
@@ -919,17 +914,6 @@ export function SettingsDialog({
             >
               <Braces className="mr-2 h-3.5 w-3.5" />
               {t("settings.menu.environmentVariables")}
-            </DropdownMenuItem>
-          )}
-          {showSettingsItem("settings.projectSettings") && (
-            <DropdownMenuItem
-              onSelect={() => {
-                setSection("project");
-                setOpen(true);
-              }}
-            >
-              <FolderCog className="mr-2 h-3.5 w-3.5" />
-              {t("settings.menu.projectSettings")}
             </DropdownMenuItem>
           )}
           {showSettingsItem("settings.managePlugins") && (
@@ -1726,32 +1710,6 @@ export function SettingsDialog({
                       )}
                     </div>
                   )}
-                </div>
-              ) : null}
-              {effectiveSection === "project" ? (
-                <div className="space-y-5">
-                  <div>
-                    <h3 className="text-sm font-semibold">
-                      {t("settings.project.title")}
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                      {t("settings.project.description")}
-                    </p>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <Label>{t("settings.project.file")}</Label>
-                      <div className="min-h-9 truncate rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground">
-                        {projectPath ?? t("settings.project.notSaved")}
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>{t("settings.project.format")}</Label>
-                      <div className="min-h-9 rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground">
-                        {PROJECT_VERSION}
-                      </div>
-                    </div>
-                  </div>
                 </div>
               ) : null}
             </div>

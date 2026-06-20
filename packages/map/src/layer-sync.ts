@@ -25,6 +25,7 @@ import {
   fillExtrusionLayerId,
   fillLayerId,
   heatmapLayerId,
+  labelLayerId,
   lineLayerId,
   markerLayerId,
   sourceId,
@@ -1685,6 +1686,91 @@ function applyVectorDataRenderLayers(
   } else {
     removeIfExists(map, textLayerId(layer.id));
   }
+
+  // Attribute-driven labels: a symbol layer that renders the configured field
+  // (or expression) for every feature. Distinct from the geoman text-marker
+  // layer above, which only renders annotation features.
+  const labels = {
+    ...DEFAULT_LAYER_STYLE.labels,
+    ...styleValue(layer.style, "labels"),
+  };
+  if (
+    !layer.style.extrusionEnabled &&
+    renderer !== "heatmap" &&
+    labels.enabled &&
+    (labels.expression.trim() || labels.field)
+  ) {
+    const fieldTextField = (
+      labels.field
+        ? ["to-string", ["coalesce", ["get", labels.field], ""]]
+        : ""
+    ) as unknown as maplibregl.ExpressionSpecification | string;
+    let textField: maplibregl.ExpressionSpecification | string;
+    try {
+      if (labels.expression.trim()) {
+        const parsed = JSON.parse(labels.expression);
+        // JSON.parse accepts non-expressions (numbers, objects, null); only an
+        // array is a usable MapLibre expression, so reject anything else and
+        // fall back to the field.
+        if (!Array.isArray(parsed)) throw new Error("not an expression");
+        textField = parsed as maplibregl.ExpressionSpecification;
+      } else {
+        textField = fieldTextField;
+      }
+    } catch {
+      // A typo'd or non-expression value must not break the whole layer sync.
+      textField = fieldTextField;
+    }
+    if (textField === "") {
+      // An invalid expression with no field falls back to an empty text-field,
+      // which would create an invisible label layer that still consumes
+      // renderer resources. Remove it instead of adding an empty one.
+      removeIfExists(map, labelLayerId(layer.id));
+    } else {
+      const labelZoom = intersectZoomRange(
+        {
+          minzoom: clampLayerZoom(labels.minZoom, MIN_LAYER_ZOOM),
+          maxzoom: clampLayerZoom(labels.maxZoom, MAX_LAYER_ZOOM),
+        },
+        layer.style,
+      );
+      // Skip geoman text-marker points (they carry their own annotation text),
+      // reusing the same two-property predicate the circle/text layers use.
+      const nonMarkerFilter = [
+        "!",
+        textMarkerShapeFilter,
+      ] as unknown as maplibregl.FilterSpecification;
+      ensureLayer(
+        map,
+        labelLayerId(layer.id),
+        {
+          id: labelLayerId(layer.id),
+          type: "symbol",
+          ...sourceSpec,
+          ...labelZoom,
+          filter: withTimeFilter(layer, nonMarkerFilter),
+          layout: {
+            "text-field": textField,
+            "text-font": textFontForMapStyle(map),
+            "text-size": Math.max(1, labels.size),
+            "symbol-placement": labels.placement === "line" ? "line" : "point",
+            "text-allow-overlap": labels.allowOverlap,
+            "text-ignore-placement": labels.allowOverlap,
+            visibility,
+          },
+          paint: {
+            "text-color": labels.color,
+            "text-halo-color": labels.haloColor,
+            "text-halo-width": Math.max(0, labels.haloWidth),
+            "text-opacity": opacity,
+          },
+        },
+        beforeId,
+      );
+    }
+  } else {
+    removeIfExists(map, labelLayerId(layer.id));
+  }
 }
 
 // syncs can fire rapidly (e.g. dragging an opacity slider), and this is an O(n)
@@ -2513,6 +2599,7 @@ function removeGeoJsonRenderLayers(map: maplibregl.Map, layerId: string): void {
     clusterCountLayerId(layerId),
     textLayerId(layerId),
     markerLayerId(layerId),
+    labelLayerId(layerId),
   ]) {
     removeIfExists(map, id);
   }
@@ -2550,6 +2637,7 @@ export function removeLayerFromMap(
     clusterCountLayerId(layerId),
     textLayerId(layerId),
     markerLayerId(layerId),
+    labelLayerId(layerId),
     `layer-${layerId}-raster`,
     `layer-${layerId}-video`,
     `layer-${layerId}-image`,

@@ -93,6 +93,10 @@ export function markerLayerId(layerId: string): string {
   return `layer-${layerId}-marker`;
 }
 
+export function labelLayerId(layerId: string): string {
+  return `layer-${layerId}-label`;
+}
+
 export function highlightSourceId(): string {
   return "geolibre-highlight-source";
 }

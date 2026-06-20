@@ -19,14 +19,12 @@
     "section": {
       "map": "Kaart",
       "layout": "Indeling",
-      "environment": "Omgeving",
-      "project": "Project"
+      "environment": "Omgeving"
     },
     "menu": {
       "mapPreferences": "Kaartvoorkeuren",
       "layoutSettings": "Indelingsinstellingen",
       "environmentVariables": "Omgevingsvariabelen",
-      "projectSettings": "Projectinstellingen",
       "managePlugins": "Plug-ins beheren",
       "urlOverrideNote": "URL-indelingsparameters overschrijven opgeslagen instellingen."
     },
@@ -80,12 +78,6 @@
       "removeAria": "{{name}} verwijderen",
       "errorNamePattern": "Namen van omgevingsvariabelen moeten beginnen met een letter of onderstrepingsteken en mogen alleen letters, cijfers en onderstrepingstekens bevatten.",
       "errorDuplicate": "Omgevingsvariabele \"{{name}}\" is gedupliceerd."
-    },
-    "project": {
-      "title": "Project",
-      "file": "Projectbestand",
-      "notSaved": "Niet opgeslagen",
-      "format": "Projectformaat"
     }
   },
   "toolbar": {

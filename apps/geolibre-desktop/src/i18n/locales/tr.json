@@ -19,14 +19,12 @@
     "section": {
       "map": "Harita",
       "layout": "Düzen",
-      "environment": "Ortam",
-      "project": "Proje"
+      "environment": "Ortam"
     },
     "menu": {
       "mapPreferences": "Harita Tercihleri",
       "layoutSettings": "Düzen Ayarları",
       "environmentVariables": "Ortam Değişkenleri",
-      "projectSettings": "Proje Ayarları",
       "managePlugins": "Eklentileri Yönet",
       "urlOverrideNote": "URL düzen parametreleri kayıtlı ayarları geçersiz kılar."
     },
@@ -80,12 +78,6 @@
       "removeAria": "{{name}} öğesini kaldır",
       "errorNamePattern": "Ortam değişkeni adları bir harf veya alt çizgi ile başlamalı; yalnızca harf, rakam ve alt çizgi içermelidir.",
       "errorDuplicate": "\"{{name}}\" ortam değişkeni yinelendi."
-    },
-    "project": {
-      "title": "Proje",
-      "file": "Proje dosyası",
-      "notSaved": "Kaydedilmedi",
-      "format": "Proje biçimi"
     }
   },
   "toolbar": {

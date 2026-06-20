@@ -155,6 +155,34 @@ export interface VectorStyleStop {
   label?: string;
 }
 
+/** Attribute-driven labeling for a vector layer (rendered as a MapLibre symbol layer). */
+export interface LabelStyle {
+  /** Whether labels are shown for the layer. */
+  enabled: boolean;
+  /** Attribute field whose value becomes the label text. */
+  field: string;
+  /**
+   * Optional MapLibre expression (JSON string) for the label text, which
+   * overrides {@link field} when non-empty (e.g. concatenating several fields).
+   */
+  expression: string;
+  /** `"point"` labels at the feature/centroid; `"line"` places them along lines. */
+  placement: "point" | "line";
+  /** Label text size in pixels. */
+  size: number;
+  /** CSS color string for the label text. */
+  color: string;
+  /** CSS color string for the text halo drawn behind the label. */
+  haloColor: string;
+  /** Width of the text halo in pixels. */
+  haloWidth: number;
+  /** Scale range for labels; `0` / `24` inherit the layer's own zoom range. */
+  minZoom: number;
+  maxZoom: number;
+  /** Let labels overlap instead of hiding colliding ones. */
+  allowOverlap: boolean;
+}
+
 export interface LayerStyle {
   minZoom: number;
   maxZoom: number;
@@ -178,6 +206,7 @@ export interface LayerStyle {
   textHaloColor: string;
   textHaloWidth: number;
   textSize: number;
+  labels: LabelStyle;
   extrusionEnabled: boolean;
   extrusionColor: string;
   extrusionOpacity: number;
@@ -267,6 +296,19 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
   textHaloColor: "#ffffff",
   textHaloWidth: 2,
   textSize: 16,
+  labels: {
+    enabled: false,
+    field: "",
+    expression: "",
+    placement: "point",
+    size: 13,
+    color: "#111827",
+    haloColor: "#ffffff",
+    haloWidth: 1.5,
+    minZoom: 0,
+    maxZoom: 24,
+    allowOverlap: false,
+  },
   extrusionEnabled: false,
   extrusionColor: "#3b82f6",
   extrusionOpacity: 0.8,

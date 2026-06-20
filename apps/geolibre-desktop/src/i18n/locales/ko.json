@@ -19,14 +19,12 @@
     "section": {
       "map": "지도",
       "layout": "레이아웃",
-      "environment": "환경",
-      "project": "프로젝트"
+      "environment": "환경"
     },
     "menu": {
       "mapPreferences": "지도 기본 설정",
       "layoutSettings": "레이아웃 설정",
       "environmentVariables": "환경 변수",
-      "projectSettings": "프로젝트 설정",
       "managePlugins": "플러그인 관리",
       "urlOverrideNote": "URL 레이아웃 매개변수는 저장된 설정보다 우선합니다."
     },
@@ -79,12 +77,6 @@
       "removeAria": "{{name}} 제거",
       "errorNamePattern": "환경 변수 이름은 문자 또는 밑줄로 시작해야 하며 문자, 숫자, 밑줄만 포함해야 합니다.",
       "errorDuplicate": "환경 변수 \"{{name}}\"이(가) 중복되었습니다."
-    },
-    "project": {
-      "title": "프로젝트",
-      "file": "프로젝트 파일",
-      "notSaved": "저장되지 않음",
-      "format": "프로젝트 형식"
     }
   },
   "toolbar": {

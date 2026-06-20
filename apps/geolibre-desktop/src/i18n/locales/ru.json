@@ -19,14 +19,12 @@
     "section": {
       "map": "Карта",
       "layout": "Макет",
-      "environment": "Среда",
-      "project": "Проект"
+      "environment": "Среда"
     },
     "menu": {
       "mapPreferences": "Параметры карты",
       "layoutSettings": "Параметры макета",
       "environmentVariables": "Переменные среды",
-      "projectSettings": "Параметры проекта",
       "managePlugins": "Управление плагинами",
       "urlOverrideNote": "Параметры макета URL переопределяют сохранённые настройки."
     },
@@ -82,12 +80,6 @@
       "removeAria": "Удалить {{name}}",
       "errorNamePattern": "Имена переменных среды должны начинаться с буквы или символа подчёркивания и содержать только буквы, цифры и символы подчёркивания.",
       "errorDuplicate": "Переменная среды «{{name}}» продублирована."
-    },
-    "project": {
-      "title": "Проект",
-      "file": "Файл проекта",
-      "notSaved": "Не сохранён",
-      "format": "Формат проекта"
     }
   },
   "toolbar": {

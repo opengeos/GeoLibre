@@ -19,14 +19,12 @@
     "section": {
       "map": "マップ",
       "layout": "レイアウト",
-      "environment": "環境",
-      "project": "プロジェクト"
+      "environment": "環境"
     },
     "menu": {
       "mapPreferences": "マップ設定",
       "layoutSettings": "レイアウト設定",
       "environmentVariables": "環境変数",
-      "projectSettings": "プロジェクト設定",
       "managePlugins": "プラグイン管理",
       "urlOverrideNote": "URL のレイアウトパラメーターは保存済みの設定より優先されます。"
     },
@@ -79,12 +77,6 @@
       "removeAria": "{{name}} を削除する",
       "errorNamePattern": "環境変数名は文字またはアンダースコアで始まり、文字・数字・アンダースコアのみを含める必要があります。",
       "errorDuplicate": "環境変数 \"{{name}}\" が重複しています。"
-    },
-    "project": {
-      "title": "プロジェクト",
-      "file": "プロジェクトファイル",
-      "notSaved": "未保存",
-      "format": "プロジェクト形式"
     }
   },
   "toolbar": {

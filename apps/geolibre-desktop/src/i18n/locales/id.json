@@ -19,14 +19,12 @@
     "section": {
       "map": "Peta",
       "layout": "Tata Letak",
-      "environment": "Lingkungan",
-      "project": "Proyek"
+      "environment": "Lingkungan"
     },
     "menu": {
       "mapPreferences": "Preferensi Peta",
       "layoutSettings": "Pengaturan Tata Letak",
       "environmentVariables": "Variabel Lingkungan",
-      "projectSettings": "Pengaturan Proyek",
       "managePlugins": "Kelola Plugin",
       "urlOverrideNote": "Parameter tata letak URL menimpa pengaturan yang tersimpan."
     },
@@ -79,12 +77,6 @@
       "removeAria": "Hapus {{name}}",
       "errorNamePattern": "Nama variabel lingkungan harus diawali huruf atau garis bawah dan hanya boleh mengandung huruf, angka, dan garis bawah.",
       "errorDuplicate": "Variabel lingkungan \"{{name}}\" terduplikasi."
-    },
-    "project": {
-      "title": "Proyek",
-      "file": "Berkas proyek",
-      "notSaved": "Belum disimpan",
-      "format": "Format proyek"
     }
   },
   "toolbar": {

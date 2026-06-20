@@ -56,3 +56,7 @@ python/examples/my-map.geolibre.json
 
 # Cloudflare Workers local dev state (wrangler dev / miniflare)
 .wrangler/
+
+# Rendered Homebrew cask, emitted to the working dir by scripts/render-*-cask.sh
+# for submission to a tap / homebrew-cask; not committed to this repo.
+/geolibre.rb
