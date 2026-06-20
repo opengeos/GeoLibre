@@ -581,6 +581,12 @@ export function SettingsDialog({
     updateSavedUiProfile({ enabled: true, level, ...sets });
   };
 
+  // "Custom" counterpart for the Settings dropdown: opt into custom mode while
+  // preserving the existing hidden lists (issue #592).
+  const applySavedCustomProfile = () => {
+    updateSavedUiProfile({ enabled: true, level: null });
+  };
+
   const updateShareToken = (value: string) => {
     // Kept in the draft and only committed on Save, so editing the token and
     // then closing the dialog without saving discards the change (a secret
@@ -604,6 +610,14 @@ export function SettingsDialog({
       profilePlugins.map((plugin) => plugin.id),
     );
     updateUiProfile({ enabled: true, level, ...sets });
+  };
+
+  // Selecting "Custom" enables filtering and clears the preset level without
+  // touching the hidden lists, so the current checkbox configuration is carried
+  // through verbatim (issue #592). From the legacy "show everything" state this
+  // simply opts into custom mode with everything still visible.
+  const applyCustomProfile = () => {
+    updateUiProfile({ enabled: true, level: null });
   };
 
   // Toggling a single item switches the profile to "custom" (level = null) and
@@ -888,13 +902,15 @@ export function SettingsDialog({
               <DropdownMenuRadioGroup
                 value={activeInterfaceProfile(desktopSettings.uiProfile)}
                 onValueChange={(value: string) => {
-                  // Only the three presets are selectable; "custom" is a derived
-                  // status. EXPERIENCE_LEVELS excludes "custom", so this guard
-                  // keeps it (and any stray value) from reaching presetHiddenSets.
-                  // Keep EXPERIENCE_LEVELS in sync with the selectable entries of
-                  // INTERFACE_PROFILES.
+                  // The three presets recompute hidden lists; "custom" opts into
+                  // custom mode while keeping the current lists. EXPERIENCE_LEVELS
+                  // excludes "custom", so this guard keeps any stray value from
+                  // reaching presetHiddenSets. Keep EXPERIENCE_LEVELS in sync with
+                  // the selectable preset entries of INTERFACE_PROFILES.
                   if ((EXPERIENCE_LEVELS as readonly string[]).includes(value)) {
                     applySavedExperiencePreset(value as ExperienceLevel);
+                  } else if (value === "custom") {
+                    applySavedCustomProfile();
                   }
                 }}
               >
@@ -903,10 +919,9 @@ export function SettingsDialog({
                     key={option}
                     value={option}
                     // "custom" lights up automatically when the user hand-edits
-                    // an item, but is never directly selectable.
-                    disabled={
-                      desktopSettings.uiProfile.locked || option === "custom"
-                    }
+                    // an item, and is also directly selectable to keep the current
+                    // configuration while switching into custom mode.
+                    disabled={desktopSettings.uiProfile.locked}
                     onSelect={(event: Event) => event.preventDefault()}
                   >
                     {t(`settings.interface.level.${option}`)}
@@ -1275,23 +1290,20 @@ export function SettingsDialog({
                             key={option}
                             type="button"
                             size="sm"
-                            variant={active ? "secondary" : "outline"}
+                            // The active profile gets the solid primary fill so it
+                            // reads clearly as the running state, including
+                            // "custom" (issue #592). Inactive choices stay
+                            // outlined.
+                            variant={active ? "default" : "outline"}
                             // "custom" activates automatically when an item is
-                            // toggled below, so it is a status rather than a
-                            // button to click: always disabled (matching the
-                            // dropdown), highlighted only when it is the active
-                            // state. The three presets apply at once.
-                            disabled={
-                              draftDesktopSettings.uiProfile.locked ||
-                              option === "custom"
-                            }
-                            // Mark the active state for assistive tech: the
-                            // "custom" button is inert (disabled), so without this
-                            // a screen reader would never announce it as current.
+                            // toggled below, but it is also directly clickable so
+                            // the user can opt into custom mode while keeping the
+                            // current configuration intact.
+                            disabled={draftDesktopSettings.uiProfile.locked}
                             aria-current={active ? true : undefined}
                             onClick={
                               option === "custom"
-                                ? undefined
+                                ? applyCustomProfile
                                 : () => applyExperiencePreset(option)
                             }
                           >

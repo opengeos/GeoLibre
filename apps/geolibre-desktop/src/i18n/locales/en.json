@@ -785,7 +785,7 @@
       "title": "Interface profile",
       "description": "Choose an experience level to simplify the interface. Nothing is removed, so you can switch levels or re-enable items here at any time.",
       "presets": "Experience level",
-      "presetsHint": "Beginner, Intermediate, and Advanced apply a curated layout instantly. Editing any item below switches to Custom.",
+      "presetsHint": "Beginner, Intermediate, and Advanced apply a curated layout instantly. Editing any item below switches to Custom, or click Custom to keep the current setup in custom mode.",
       "level": {
         "beginner": "Beginner",
         "intermediate": "Intermediate",
