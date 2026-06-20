@@ -433,6 +433,14 @@ export function ProcessingDialog({
     [source, hasGeolibreTools],
   );
 
+  // Total tool count per source, for the source-filter labels.
+  const sourceCounts = useMemo(() => {
+    const geolibre = tools.filter(
+      (tool) => tool.source === "geolibre",
+    ).length;
+    return { all: tools.length, geolibre, whitebox: tools.length - geolibre };
+  }, [tools]);
+
   // Category options labelled with the number of tools in each (within the
   // active source filter), e.g. "Conversion (37)".
   const categories = useMemo(() => {
@@ -940,17 +948,24 @@ export function ProcessingDialog({
             {hasGeolibreTools && (
               <Select
                 value={source}
-                onChange={(e) => setSource(e.target.value)}
+                // Reset the category too: a category with no tools in the newly
+                // chosen source would otherwise leave the list empty.
+                onChange={(e) => {
+                  setSource(e.target.value);
+                  setCategory("All");
+                }}
                 aria-label={t("processing.whitebox.filterBySource")}
               >
                 <option value="All">
-                  {t("processing.whitebox.allSources")}
+                  {t("processing.whitebox.allSources")} ({sourceCounts.all})
                 </option>
                 <option value="geolibre">
-                  {t("processing.whitebox.geolibreTools")}
+                  {t("processing.whitebox.geolibreTools")} (
+                  {sourceCounts.geolibre})
                 </option>
                 <option value="whitebox">
-                  {t("processing.whitebox.whiteboxTools")}
+                  {t("processing.whitebox.whiteboxTools")} (
+                  {sourceCounts.whitebox})
                 </option>
               </Select>
             )}
