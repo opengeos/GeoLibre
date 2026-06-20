@@ -1511,117 +1511,117 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       */}
       {!collapsed ? (
         <ScrollArea
-        type="always"
-        viewportRef={scrollViewportRef}
-        className="flex-1 [&_[data-orientation=vertical]]:!top-11 [&_[data-orientation=vertical]]:!h-[calc(100%-3.625rem)]"
-      >
-        {!hasAttributeSource ? (
-          <p className="p-4 text-xs text-muted-foreground">
-            {loadingVectorGeojson
-              ? "Loading layer attributes…"
-              : "Attribute table requires a vector or DuckDB query layer."}
-          </p>
-        ) : (
-          <table
-            data-testid="attribute-table"
-            className="table-fixed caption-bottom text-sm"
-            style={{ minWidth: "100%", width: tableWidth }}
-          >
-            <colgroup>
-              {tableColumns.map((col) => (
-                <col key={col} style={{ width: columnWidth(col) }} />
-              ))}
-            </colgroup>
-            <TableHeader className="sticky top-0 z-10 bg-card shadow-xs">
-              <TableRow>
-                <TableHead className="bg-card">
-                  {sortableHeader("__featureId", "#")}
-                </TableHead>
-                {columns.map((col, index) => (
-                  <TableHead key={col} className="bg-card">
-                    {attributeColumnHeader(col, index)}
-                  </TableHead>
+          type="always"
+          viewportRef={scrollViewportRef}
+          className="flex-1 [&_[data-orientation=vertical]]:!top-11 [&_[data-orientation=vertical]]:!h-[calc(100%-3.625rem)]"
+        >
+          {!hasAttributeSource ? (
+            <p className="p-4 text-xs text-muted-foreground">
+              {loadingVectorGeojson
+                ? "Loading layer attributes…"
+                : "Attribute table requires a vector or DuckDB query layer."}
+            </p>
+          ) : (
+            <table
+              data-testid="attribute-table"
+              className="table-fixed caption-bottom text-sm"
+              style={{ minWidth: "100%", width: tableWidth }}
+            >
+              <colgroup>
+                {tableColumns.map((col) => (
+                  <col key={col} style={{ width: columnWidth(col) }} />
                 ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paddingTop > 0 ? (
-                <tr aria-hidden="true">
-                  <td colSpan={tableColumns.length} style={{ height: paddingTop }} />
-                </tr>
-              ) : null}
-              {virtualRows.map((virtualRow) => {
-                const { featureId, properties } = sorted[virtualRow.index];
-                const selected = selectedFeatureId === featureId;
-                return (
-                  <TableRow
-                    key={featureId}
-                    data-index={virtualRow.index}
-                    ref={rowVirtualizer.measureElement}
-                    data-state={selected ? "selected" : undefined}
-                    className="cursor-pointer"
-                    onClick={() => {
-                      selectFeature(featureId);
-                    }}
-                  >
-                    <TableCell>{featureId}</TableCell>
-                    {columns.map((col) => {
-                      const value = properties[col];
-                      const draft = drafts[featureId]?.[col];
-                      const changed = draft !== undefined;
-                      const invalid =
-                        draft !== undefined &&
-                        isInvalidObjectDraft(draft, value);
-                      const inputClassName = invalid
-                        ? "h-7 min-w-0 border-destructive bg-destructive/10 px-2 text-xs"
-                        : changed
-                          ? "h-7 min-w-0 border-primary/60 bg-primary/10 px-2 text-xs"
-                          : "h-7 min-w-0 px-2 text-xs";
-                      return (
-                        <TableCell
-                          key={col}
-                          data-state={changed ? "edited" : undefined}
-                          className="data-[state=edited]:bg-primary/10 data-[state=edited]:shadow-[inset_3px_0_0_hsl(var(--primary))]"
-                        >
-                          {isEditing ? (
-                            <Input
-                              className={inputClassName}
-                              aria-invalid={invalid || undefined}
-                              title={
-                                invalid ? "Invalid JSON" : undefined
-                              }
-                              aria-label={`Edit ${col} for feature ${featureId}`}
-                              value={draft ?? formatAttributeValue(value)}
-                              onClick={(event) => event.stopPropagation()}
-                              onChange={(event) =>
-                                updateCellDraft(
-                                  featureId,
-                                  col,
-                                  event.target.value,
-                                  value,
-                                )
-                              }
-                            />
-                          ) : (
-                            formatAttributeValue(value)
-                          )}
-                        </TableCell>
-                      );
-                    })}
-                  </TableRow>
-                );
-              })}
-              {paddingBottom > 0 ? (
-                <tr aria-hidden="true">
-                  <td
-                    colSpan={tableColumns.length}
-                    style={{ height: paddingBottom }}
-                  />
-                </tr>
-              ) : null}
-            </TableBody>
-          </table>
-        )}
+              </colgroup>
+              <TableHeader className="sticky top-0 z-10 bg-card shadow-xs">
+                <TableRow>
+                  <TableHead className="bg-card">
+                    {sortableHeader("__featureId", "#")}
+                  </TableHead>
+                  {columns.map((col, index) => (
+                    <TableHead key={col} className="bg-card">
+                      {attributeColumnHeader(col, index)}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paddingTop > 0 ? (
+                  <tr aria-hidden="true">
+                    <td colSpan={tableColumns.length} style={{ height: paddingTop }} />
+                  </tr>
+                ) : null}
+                {virtualRows.map((virtualRow) => {
+                  const { featureId, properties } = sorted[virtualRow.index];
+                  const selected = selectedFeatureId === featureId;
+                  return (
+                    <TableRow
+                      key={featureId}
+                      data-index={virtualRow.index}
+                      ref={rowVirtualizer.measureElement}
+                      data-state={selected ? "selected" : undefined}
+                      className="cursor-pointer"
+                      onClick={() => {
+                        selectFeature(featureId);
+                      }}
+                    >
+                      <TableCell>{featureId}</TableCell>
+                      {columns.map((col) => {
+                        const value = properties[col];
+                        const draft = drafts[featureId]?.[col];
+                        const changed = draft !== undefined;
+                        const invalid =
+                          draft !== undefined &&
+                          isInvalidObjectDraft(draft, value);
+                        const inputClassName = invalid
+                          ? "h-7 min-w-0 border-destructive bg-destructive/10 px-2 text-xs"
+                          : changed
+                            ? "h-7 min-w-0 border-primary/60 bg-primary/10 px-2 text-xs"
+                            : "h-7 min-w-0 px-2 text-xs";
+                        return (
+                          <TableCell
+                            key={col}
+                            data-state={changed ? "edited" : undefined}
+                            className="data-[state=edited]:bg-primary/10 data-[state=edited]:shadow-[inset_3px_0_0_hsl(var(--primary))]"
+                          >
+                            {isEditing ? (
+                              <Input
+                                className={inputClassName}
+                                aria-invalid={invalid || undefined}
+                                title={
+                                  invalid ? "Invalid JSON" : undefined
+                                }
+                                aria-label={`Edit ${col} for feature ${featureId}`}
+                                value={draft ?? formatAttributeValue(value)}
+                                onClick={(event) => event.stopPropagation()}
+                                onChange={(event) =>
+                                  updateCellDraft(
+                                    featureId,
+                                    col,
+                                    event.target.value,
+                                    value,
+                                  )
+                                }
+                              />
+                            ) : (
+                              formatAttributeValue(value)
+                            )}
+                          </TableCell>
+                        );
+                      })}
+                    </TableRow>
+                  );
+                })}
+                {paddingBottom > 0 ? (
+                  <tr aria-hidden="true">
+                    <td
+                      colSpan={tableColumns.length}
+                      style={{ height: paddingBottom }}
+                    />
+                  </tr>
+                ) : null}
+              </TableBody>
+            </table>
+          )}
         </ScrollArea>
       ) : null}
       <Dialog
