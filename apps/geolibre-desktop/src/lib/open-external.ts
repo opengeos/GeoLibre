@@ -14,7 +14,14 @@ export async function openExternalLink(url: string): Promise<void> {
     return;
   }
   if (isTauri()) {
-    await openUrl(url);
+    // openUrl is async and can reject (e.g. the OS has no registered browser).
+    // Call sites fire-and-forget with `void`, so log here rather than let the
+    // rejection surface as an unhandled promise.
+    try {
+      await openUrl(url);
+    } catch (error) {
+      console.warn("[GeoLibre] failed to open external link", url, error);
+    }
     return;
   }
   window.open(url, "_blank", "noopener,noreferrer");
