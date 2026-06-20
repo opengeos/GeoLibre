@@ -1183,7 +1183,7 @@
       "webServices": "Web Services",
       "commandPalette": "Command Palette",
       "openProjectFromUrl": "Open project from URL",
-      "openProjectFromUrlDesc": "Load a public `.geolibre.json` project and add it to recent projects.",
+      "openProjectFromUrlDesc": "Load a `.geolibre.json` project and add it to recent projects.",
       "projectUrl": "Project URL",
       "opening": "Opening...",
       "open": "Open",

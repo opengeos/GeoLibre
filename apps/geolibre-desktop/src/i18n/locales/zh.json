@@ -275,7 +275,7 @@
       "webServices": "网络服务",
       "commandPalette": "命令面板",
       "openProjectFromUrl": "从 URL 打开项目",
-      "openProjectFromUrlDesc": "加载公开的 `.geolibre.json` 项目并将其添加到最近项目。",
+      "openProjectFromUrlDesc": "加载 `.geolibre.json` 项目并将其添加到最近项目。",
       "projectUrl": "项目 URL",
       "opening": "正在打开...",
       "open": "打开",

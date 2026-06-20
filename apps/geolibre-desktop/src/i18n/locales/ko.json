@@ -275,7 +275,7 @@
       "webServices": "웹 서비스",
       "commandPalette": "명령 팔레트",
       "openProjectFromUrl": "URL에서 프로젝트 열기",
-      "openProjectFromUrlDesc": "공개 `.geolibre.json` 프로젝트를 로드하고 최근 프로젝트에 추가합니다.",
+      "openProjectFromUrlDesc": "`.geolibre.json` 프로젝트를 로드하고 최근 프로젝트에 추가합니다.",
       "projectUrl": "프로젝트 URL",
       "opening": "여는 중...",
       "open": "열기",

@@ -275,7 +275,7 @@
       "webServices": "Layanan Web",
       "commandPalette": "Palet Perintah",
       "openProjectFromUrl": "Buka proyek dari URL",
-      "openProjectFromUrlDesc": "Muat proyek `.geolibre.json` publik dan tambahkan ke proyek terbaru.",
+      "openProjectFromUrlDesc": "Muat proyek `.geolibre.json` dan tambahkan ke proyek terbaru.",
       "projectUrl": "URL Proyek",
       "opening": "Membuka...",
       "open": "Buka",

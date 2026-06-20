@@ -276,7 +276,7 @@
       "webServices": "Webdienste",
       "commandPalette": "Befehlspalette",
       "openProjectFromUrl": "Projekt aus URL öffnen",
-      "openProjectFromUrlDesc": "Ein öffentliches `.geolibre.json`-Projekt laden und zu zuletzt geöffneten Projekten hinzufügen.",
+      "openProjectFromUrlDesc": "Ein `.geolibre.json`-Projekt laden und zu zuletzt geöffneten Projekten hinzufügen.",
       "projectUrl": "Projekt-URL",
       "opening": "Wird geöffnet...",
       "open": "Öffnen",

@@ -276,7 +276,7 @@
       "webServices": "Webservices",
       "commandPalette": "Opdrachtpalet",
       "openProjectFromUrl": "Project openen vanuit URL",
-      "openProjectFromUrlDesc": "Laad een openbaar `.geolibre.json`-project en voeg het toe aan recente projecten.",
+      "openProjectFromUrlDesc": "Laad een `.geolibre.json`-project en voeg het toe aan recente projecten.",
       "projectUrl": "Project-URL",
       "opening": "Openen...",
       "open": "Openen",

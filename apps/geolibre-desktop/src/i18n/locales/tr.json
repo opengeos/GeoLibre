@@ -276,7 +276,7 @@
       "webServices": "Web Servisleri",
       "commandPalette": "Komut Paleti",
       "openProjectFromUrl": "URL'den proje aç",
-      "openProjectFromUrlDesc": "Genel bir `.geolibre.json` projesini yükleyin ve son projelere ekleyin.",
+      "openProjectFromUrlDesc": "Bir `.geolibre.json` projesini yükleyin ve son projelere ekleyin.",
       "projectUrl": "Proje URL'si",
       "opening": "Açılıyor...",
       "open": "Aç",

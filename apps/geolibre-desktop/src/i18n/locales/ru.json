@@ -278,7 +278,7 @@
       "webServices": "Веб-сервисы",
       "commandPalette": "Палитра команд",
       "openProjectFromUrl": "Открыть проект по URL",
-      "openProjectFromUrlDesc": "Загрузить публичный проект `.geolibre.json` и добавить его в недавние проекты.",
+      "openProjectFromUrlDesc": "Загрузить проект `.geolibre.json` и добавить его в недавние проекты.",
       "projectUrl": "URL проекта",
       "opening": "Открытие...",
       "open": "Открыть",

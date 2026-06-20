@@ -275,7 +275,7 @@
       "webServices": "ウェブサービス",
       "commandPalette": "コマンドパレット",
       "openProjectFromUrl": "URL からプロジェクトを開く",
-      "openProjectFromUrlDesc": "公開されている `.geolibre.json` プロジェクトを読み込み、最近のプロジェクトに追加します。",
+      "openProjectFromUrlDesc": "`.geolibre.json` プロジェクトを読み込み、最近のプロジェクトに追加します。",
       "projectUrl": "プロジェクト URL",
       "opening": "開いています...",
       "open": "開く",

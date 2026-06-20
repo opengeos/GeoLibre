@@ -276,7 +276,7 @@
       "webServices": "वेब सेवाएं",
       "commandPalette": "कमांड पैलेट",
       "openProjectFromUrl": "URL से प्रोजेक्ट खोलें",
-      "openProjectFromUrlDesc": "एक सार्वजनिक `.geolibre.json` प्रोजेक्ट लोड करें और इसे हालिया प्रोजेक्ट में जोड़ें।",
+      "openProjectFromUrlDesc": "एक `.geolibre.json` प्रोजेक्ट लोड करें और इसे हालिया प्रोजेक्ट में जोड़ें।",
       "projectUrl": "प्रोजेक्ट URL",
       "opening": "खुल रहा है...",
       "open": "खोलें",

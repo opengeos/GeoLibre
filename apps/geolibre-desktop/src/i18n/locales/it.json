@@ -276,7 +276,7 @@
       "webServices": "Servizi web",
       "commandPalette": "Riquadro comandi",
       "openProjectFromUrl": "Apri progetto da URL",
-      "openProjectFromUrlDesc": "Carica un progetto pubblico `.geolibre.json` e aggiungilo ai progetti recenti.",
+      "openProjectFromUrlDesc": "Carica un progetto `.geolibre.json` e aggiungilo ai progetti recenti.",
       "projectUrl": "URL progetto",
       "opening": "Apertura in corso...",
       "open": "Apri",
