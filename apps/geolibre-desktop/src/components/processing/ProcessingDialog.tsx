@@ -491,9 +491,13 @@ export function ProcessingDialog({
               ...geolibreTools.filter((tool) => !seen.has(tool.id)),
             ];
           });
+          // Select the first GeoLibre tool if the snapshot was empty (otherwise
+          // applyRemoteCatalogSnapshot already picked a selection).
+          setSelectedToolId((current) => current || geolibreTools[0].id);
         }
-      } catch {
+      } catch (err) {
         // Non-fatal: the catalog tools still load if the WASM enumeration fails.
+        console.warn("[GeoLibre] Could not enumerate WASM GeoLibre tools:", err);
       }
       setLoadingTools(false);
       return;

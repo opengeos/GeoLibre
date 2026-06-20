@@ -98,7 +98,7 @@ export async function listGeolibreWasmTools(): Promise<WhiteboxTool[]> {
   const { listManifests } = await loadToolsModule();
   const manifests = await listManifests();
   return manifests
-    .filter((manifest) => manifest.source === "geolibre")
+    .filter((manifest) => manifest.source?.toLowerCase() === "geolibre")
     .map((manifest) => ({
       id: manifest.id,
       display_name: manifest.display_name,
