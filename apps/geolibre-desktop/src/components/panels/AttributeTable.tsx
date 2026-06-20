@@ -47,8 +47,10 @@ import {
   EyeOff,
   LayoutDashboard,
   MoreHorizontal,
+  MousePointerSquareDashed,
   Pencil,
   PanelBottomClose,
+  PanelBottomOpen,
   Plus,
   RotateCcw,
   Save,
@@ -282,6 +284,9 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   });
   const [columnWidths, setColumnWidths] = useState<ColumnWidths>({});
   const [tableHeight, setTableHeight] = useState(DEFAULT_TABLE_HEIGHT);
+  // Collapsed shows only the toolbar header, hiding the table body, while the
+  // panel stays open. Distinct from closing the panel entirely (the X button).
+  const [collapsed, setCollapsed] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [drafts, setDrafts] = useState<AttributeDrafts>({});
   const [exportError, setExportError] = useState<string | null>(null);
@@ -434,6 +439,12 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   useEffect(() => {
     if (!selectedFeatureId) setCalcSelectedOnly(false);
   }, [selectedFeatureId]);
+
+  // Always reopen the table expanded: a panel left collapsed before it was
+  // closed should not reappear collapsed the next time it is opened.
+  useEffect(() => {
+    if (!attributeTableOpen) setCollapsed(false);
+  }, [attributeTableOpen]);
 
   const filterLower = attributeFilter.toLowerCase();
   const filtered = attributeRows.filter(({ properties, featureId }) => {
@@ -1166,15 +1177,17 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       ref={tableSectionRef}
       aria-label="Attribute table"
       className="relative flex shrink-0 flex-col border-t bg-card"
-      style={{ height: tableHeight }}
+      style={{ height: collapsed ? undefined : tableHeight }}
     >
-      <div
-        role="separator"
-        aria-orientation="horizontal"
-        aria-label="Resize attribute table"
-        className="absolute -top-1 left-0 right-0 z-20 h-2 cursor-row-resize select-none border-t border-transparent hover:border-primary"
-        onMouseDown={startTableResize}
-      />
+      {!collapsed ? (
+        <div
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize attribute table"
+          className="absolute -top-1 left-0 right-0 z-20 h-2 cursor-row-resize select-none border-t border-transparent hover:border-primary"
+          onMouseDown={startTableResize}
+        />
+      ) : null}
       <div
         ref={tableResizeGuideRef}
         className="pointer-events-none fixed left-0 right-0 z-50 hidden h-px bg-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.25)]"
@@ -1184,11 +1197,17 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           variant="ghost"
           size="icon"
           className="h-8 w-8"
-          title="Collapse attribute table"
-          aria-label="Collapse attribute table"
-          onClick={() => setAttributeTableOpen(false)}
+          title={collapsed ? "Expand attribute table" : "Collapse attribute table"}
+          aria-label={
+            collapsed ? "Expand attribute table" : "Collapse attribute table"
+          }
+          onClick={() => setCollapsed((value) => !value)}
         >
-          <PanelBottomClose className="h-4 w-4" />
+          {collapsed ? (
+            <PanelBottomOpen className="h-4 w-4" />
+          ) : (
+            <PanelBottomClose className="h-4 w-4" />
+          )}
         </Button>
         <TableProperties className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-semibold">Attribute table</span>
@@ -1464,13 +1483,23 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           Zoom to selection
         </label>
         <Button
-          variant="ghost"
+          variant="outline"
           size="icon"
           className="h-7 w-7"
           title="Clear selected feature"
           aria-label="Clear selected feature"
           disabled={!selectedFeatureId}
           onClick={() => selectFeature(null)}
+        >
+          <MousePointerSquareDashed className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          title="Close attribute table"
+          aria-label="Close attribute table"
+          onClick={() => setAttributeTableOpen(false)}
         >
           <X className="h-4 w-4" />
         </Button>
@@ -1480,7 +1509,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
         header (top-11) plus 0.875rem for the horizontal scrollbar (h-3.5),
         so the two scrollbars do not overlap.
       */}
-      <ScrollArea
+      {!collapsed ? (
+        <ScrollArea
         type="always"
         viewportRef={scrollViewportRef}
         className="flex-1 [&_[data-orientation=vertical]]:!top-11 [&_[data-orientation=vertical]]:!h-[calc(100%-3.625rem)]"
@@ -1592,7 +1622,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             </TableBody>
           </table>
         )}
-      </ScrollArea>
+        </ScrollArea>
+      ) : null}
       <Dialog
         open={columnPendingDelete !== null}
         onOpenChange={(open: boolean) => {
