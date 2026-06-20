@@ -6,9 +6,11 @@ import { useTranslation } from "react-i18next";
 // The local loopback address the Python sidecar listens on. Kept out of the
 // translatable strings (injected via interpolation) so translators can't garble
 // it and a future change to the address only touches one place. The port is
-// derived from the URL so the two can never drift apart.
-const SIDECAR_URL = "http://127.0.0.1:8765";
-const SIDECAR_PORT = new URL(SIDECAR_URL).port;
+// derived from the URL so the two can never drift apart. Exported so callers
+// that supply their own intro/steps copy can interpolate the same values
+// instead of duplicating the address.
+export const SIDECAR_URL = "http://127.0.0.1:8765";
+export const SIDECAR_PORT = new URL(SIDECAR_URL).port;
 
 interface SidecarHelpBannerProps {
   /**
@@ -28,6 +30,25 @@ interface SidecarHelpBannerProps {
    * set (Whitebox), in which case the banner offers a one-click switch.
    */
   onRunLocally?: () => void;
+  /**
+   * Override the banner title. Defaults to the generic "processing server isn't
+   * available" line. Tools whose server failure is more specific (e.g. AI
+   * segmentation) can supply their own.
+   */
+  title?: string;
+  /**
+   * Override the descriptive intro paragraph. Defaults to the Whitebox-flavored
+   * copy that mentions the WebAssembly fallback. Tools without a WASM runner
+   * should pass their own so the banner doesn't promise a fallback that doesn't
+   * exist. Interpolate {@link SIDECAR_URL} as needed.
+   */
+  intro?: string;
+  /**
+   * Override the ordered troubleshooting steps. Defaults to the generic
+   * start-server / check-port / restart sequence. Interpolate
+   * {@link SIDECAR_PORT} as needed.
+   */
+  steps?: string[];
 }
 
 /**
@@ -41,12 +62,29 @@ export function SidecarHelpBanner({
   isDesktop,
   error,
   onRunLocally,
+  title,
+  intro,
+  steps,
 }: SidecarHelpBannerProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   // A unique id keeps the aria-controls association valid even if two banners
   // are ever rendered on the same page (a hardcoded id would collide).
   const helpId = useId();
+
+  const resolvedTitle = title ?? t("processing.sidecar.unavailableTitle");
+  const resolvedIntro =
+    intro ?? t("processing.sidecar.intro", { sidecarUrl: SIDECAR_URL });
+  // Default to the generic start-server / check-port / restart sequence. The
+  // first step branches on desktop vs. browser because only the desktop build
+  // can launch the server.
+  const resolvedSteps = steps ?? [
+    isDesktop
+      ? t("processing.sidecar.stepStartServerDesktop")
+      : t("processing.sidecar.stepStartServerBrowser"),
+    t("processing.sidecar.stepCheckPort", { port: SIDECAR_PORT }),
+    t("processing.sidecar.stepRestart"),
+  ];
 
   return (
     <div className="rounded-md border border-amber-500/40 bg-amber-500/10 text-sm">
@@ -65,7 +103,7 @@ export function SidecarHelpBanner({
         />
         <span className="min-w-0 flex-1">
           <span className="block font-medium text-foreground">
-            {t("processing.sidecar.unavailableTitle")}
+            {resolvedTitle}
           </span>
           {error && (
             <span className="mt-0.5 block break-words text-xs text-destructive">
@@ -97,7 +135,7 @@ export function SidecarHelpBanner({
           className="grid gap-3 border-t border-amber-500/30 px-3 py-3"
         >
           <p className="text-xs leading-relaxed text-muted-foreground">
-            {t("processing.sidecar.intro", { sidecarUrl: SIDECAR_URL })}
+            {resolvedIntro}
           </p>
 
           {onRunLocally && (
@@ -130,13 +168,12 @@ export function SidecarHelpBanner({
               {t("processing.sidecar.troubleshootingTitle")}
             </p>
             <ol className="grid list-decimal gap-1 pl-5 text-xs text-muted-foreground">
-              <li>
-                {isDesktop
-                  ? t("processing.sidecar.stepStartServerDesktop")
-                  : t("processing.sidecar.stepStartServerBrowser")}
-              </li>
-              <li>{t("processing.sidecar.stepCheckPort", { port: SIDECAR_PORT })}</li>
-              <li>{t("processing.sidecar.stepRestart")}</li>
+              {resolvedSteps.map((step, index) => (
+                // Steps are a fixed, ordered list authored by the caller (or the
+                // defaults above); their order is stable, so the index is a safe
+                // key here.
+                <li key={index}>{step}</li>
+              ))}
             </ol>
           </div>
         </div>
