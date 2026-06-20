@@ -19,7 +19,7 @@ import {
   Label,
 } from "@geolibre/ui";
 import type { FormEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 const DEFAULT_BASEMAP_ID = "liberty";
@@ -110,6 +110,7 @@ export function NewProjectDialog({
   const [customUrl, setCustomUrl] = useState("");
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const customUrlRef = useRef<HTMLInputElement>(null);
 
   const customStyleUrl = customUrl.trim();
   const isCustomSelected = selectedBasemapId === CUSTOM_BASEMAP_ID;
@@ -129,6 +130,11 @@ export function NewProjectDialog({
     return () =>
       window.removeEventListener("geolibre:runtime-env-change", refresh);
   }, [open]);
+  // Move focus into the custom URL field the moment the user selects the
+  // "Custom URL" basemap, so the now-unlocked input is ready to type into.
+  useEffect(() => {
+    if (isCustomSelected) customUrlRef.current?.focus();
+  }, [isCustomSelected]);
   const selectedPreset = useMemo<PresetBasemap | undefined>(
     () =>
       [...OPENFREEMAP_BASEMAPS, ...protomapsPresets].find(
@@ -218,7 +224,7 @@ export function NewProjectDialog({
               <DialogTitle>Save current project?</DialogTitle>
               <DialogDescription>
                 The current project has unsaved changes. Save them before
-                creating a new map?
+                creating a new project?
               </DialogDescription>
             </DialogHeader>
             <div className="flex justify-end gap-2">
@@ -250,9 +256,11 @@ export function NewProjectDialog({
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle>New map</DialogTitle>
+              <DialogTitle>New project</DialogTitle>
               <DialogDescription>
-                {t("newProject.basemapDescription")}
+                {protomapsPresets.length > 0
+                  ? t("newProject.basemapDescription")
+                  : t("newProject.basemapDescriptionNoProtomaps")}
               </DialogDescription>
             </DialogHeader>
             <form className="space-y-5" onSubmit={handleCreate}>
@@ -316,22 +324,30 @@ export function NewProjectDialog({
                       selected={selectedBasemapId === BLANK_BASEMAP_ID}
                       onSelect={setSelectedBasemapId}
                     />
+                    <BasemapButton
+                      id={CUSTOM_BASEMAP_ID}
+                      name="Custom URL"
+                      selected={isCustomSelected}
+                      onSelect={setSelectedBasemapId}
+                    />
                   </div>
                 </div>
               </div>
 
+              {/* The custom URL is a mutually exclusive basemap choice: the
+                  field unlocks only when "Custom URL" is selected above, so it
+                  can never compete with a highlighted preset button. */}
               <div className="space-y-2">
                 <Label htmlFor="custom-basemap-url">Custom URL</Label>
                 <Input
                   id="custom-basemap-url"
+                  ref={customUrlRef}
                   type="url"
                   inputMode="url"
                   placeholder="https://example.com/style.json"
                   value={customUrl}
-                  onChange={(event) => {
-                    setCustomUrl(event.target.value);
-                    setSelectedBasemapId(CUSTOM_BASEMAP_ID);
-                  }}
+                  disabled={!isCustomSelected}
+                  onChange={(event) => setCustomUrl(event.target.value)}
                 />
                 {isCustomSelected && customStyleUrl && !isCustomUrlValid ? (
                   <p className="text-xs text-destructive">
