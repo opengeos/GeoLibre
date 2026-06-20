@@ -136,6 +136,48 @@ export class PluginManager {
     if (activated === false) return;
     this.active.add(id);
     this.notify();
+    // An async plugin (e.g. one mounted behind a dynamic import) reports
+    // failure after the fact by resolving false or rejecting. Roll back the
+    // optimistic active state so the Plugins menu does not show a plugin that
+    // never mounted (e.g. when its chunk fails to load after a web redeploy).
+    if (isThenable(activated)) {
+      void Promise.resolve(activated).then(
+        (result) => {
+          if (result === false) this.rollbackFailedActivation(id, app);
+        },
+        (error) => this.rollbackFailedActivation(id, app, error),
+      );
+    }
+  }
+
+  /**
+   * Undo an activation whose async mount ultimately failed. No-op when the
+   * plugin is no longer active (e.g. the user deactivated it in the meantime).
+   */
+  private rollbackFailedActivation(
+    id: string,
+    app: GeoLibreAppAPI,
+    error?: unknown,
+  ): void {
+    if (!this.active.has(id)) return;
+    if (error !== undefined) {
+      console.warn(`Plugin '${id}' failed to activate; reverting.`, error);
+    }
+    const plugin = this.plugins.get(id);
+    this.active.delete(id);
+    if (plugin) {
+      try {
+        // Tear down any partial mount. Plugin teardown is written to be safe to
+        // run even when nothing was mounted.
+        plugin.deactivate(app);
+      } catch (deactivateError) {
+        console.warn(
+          `Plugin '${id}' threw while reverting a failed activation.`,
+          deactivateError,
+        );
+      }
+    }
+    this.notify();
   }
 
   deactivate(id: string, app: GeoLibreAppAPI): void {
@@ -339,6 +381,14 @@ export class PluginManager {
 // Retaining several recent contexts (rather than only the latest) keeps dedup
 // intact when fire-and-forget calls with different context keys overlap.
 const MAX_HANDLED_URL_CONTEXTS = 8;
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { then?: unknown }).then === "function"
+  );
+}
 
 function normalizeUrlParameterNames(names: string[] | undefined): string[] {
   if (!names) return [];

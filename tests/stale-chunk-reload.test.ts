@@ -5,10 +5,15 @@ import {
   STALE_CHUNK_RELOAD_COOLDOWN_MS,
 } from "../apps/geolibre-desktop/src/lib/stale-chunk-reload";
 
-function makeDeps(initial: { now: number; lastReloadAt: number | null }) {
+function makeDeps(initial: {
+  now: number;
+  lastReloadAt: number | null;
+  dirty?: boolean;
+}) {
   const state = {
     now: initial.now,
     lastReloadAt: initial.lastReloadAt,
+    dirty: initial.dirty ?? false,
     reloads: 0,
   };
   return {
@@ -22,6 +27,7 @@ function makeDeps(initial: { now: number; lastReloadAt: number | null }) {
       reload: () => {
         state.reloads += 1;
       },
+      hasUnsavedChanges: () => state.dirty,
     },
   };
 }
@@ -30,7 +36,7 @@ describe("reloadForStaleChunk", () => {
   it("reloads on the first stale-chunk error and records the timestamp", () => {
     const { state, deps } = makeDeps({ now: 1000, lastReloadAt: null });
 
-    assert.equal(reloadForStaleChunk(deps), true);
+    assert.equal(reloadForStaleChunk(deps), "reloaded");
     assert.equal(state.reloads, 1);
     assert.equal(state.lastReloadAt, 1000);
   });
@@ -38,26 +44,53 @@ describe("reloadForStaleChunk", () => {
   it("suppresses a reload that fires within the cooldown", () => {
     const { state, deps } = makeDeps({ now: 5000, lastReloadAt: null });
 
-    assert.equal(reloadForStaleChunk(deps), true);
+    assert.equal(reloadForStaleChunk(deps), "reloaded");
     state.now += STALE_CHUNK_RELOAD_COOLDOWN_MS - 1;
 
     // A second error right after the reload means the build is broken, not
     // merely stale, so it must not loop.
-    assert.equal(reloadForStaleChunk(deps), false);
+    assert.equal(reloadForStaleChunk(deps), "suppressed-cooldown");
     assert.equal(state.reloads, 1);
   });
 
   it("reloads again once the cooldown has elapsed", () => {
     const { state, deps } = makeDeps({ now: 0, lastReloadAt: null });
 
-    assert.equal(reloadForStaleChunk(deps), true);
+    assert.equal(reloadForStaleChunk(deps), "reloaded");
     // The guard is strict `< cooldown`, so a diff of exactly the cooldown is
     // already past it (the just-expired edge) and reloads again.
     state.now += STALE_CHUNK_RELOAD_COOLDOWN_MS;
 
     // A later redeploy in a long-lived session should recover too.
-    assert.equal(reloadForStaleChunk(deps), true);
+    assert.equal(reloadForStaleChunk(deps), "reloaded");
     assert.equal(state.reloads, 2);
     assert.equal(state.lastReloadAt, STALE_CHUNK_RELOAD_COOLDOWN_MS);
+  });
+
+  it("defers the reload when the project has unsaved changes", () => {
+    const { state, deps } = makeDeps({
+      now: 1000,
+      lastReloadAt: null,
+      dirty: true,
+    });
+
+    // Reloading would discard the user's map and raise the beforeunload prompt,
+    // so recovery is withheld and nothing is reloaded or timestamped.
+    assert.equal(reloadForStaleChunk(deps), "deferred-unsaved");
+    assert.equal(state.reloads, 0);
+    assert.equal(state.lastReloadAt, null);
+  });
+
+  it("prioritizes unsaved work over the cooldown guard", () => {
+    const { state, deps } = makeDeps({
+      now: STALE_CHUNK_RELOAD_COOLDOWN_MS * 10,
+      lastReloadAt: null,
+      dirty: true,
+    });
+
+    // Even well past the cooldown, a dirty project must never be reloaded out
+    // from under the user.
+    assert.equal(reloadForStaleChunk(deps), "deferred-unsaved");
+    assert.equal(state.reloads, 0);
   });
 });

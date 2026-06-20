@@ -466,3 +466,95 @@ describe("PluginManager URL parameters", () => {
     assert.deepEqual(calls, ["handled"]);
   });
 });
+
+describe("PluginManager async activation", () => {
+  it("rolls back the active state when an async mount resolves false", async () => {
+    const deactivations: string[] = [];
+    const manager = new PluginManager();
+    let resolveMount: (value: boolean) => void = () => {};
+
+    manager.register(
+      testPlugin({
+        id: "async-plugin",
+        activate: () =>
+          new Promise<boolean>((resolve) => {
+            resolveMount = resolve;
+          }),
+        deactivate: () => {
+          deactivations.push("async-plugin");
+        },
+      }),
+    );
+
+    manager.activate("async-plugin", app);
+    // Optimistically active while the mount is in flight.
+    assert.equal(manager.isActive("async-plugin"), true);
+
+    resolveMount(false);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // A failed mount reverts the menu and tears down the partial activation.
+    assert.equal(manager.isActive("async-plugin"), false);
+    assert.deepEqual(deactivations, ["async-plugin"]);
+  });
+
+  it("rolls back the active state when an async mount rejects", async () => {
+    const manager = new PluginManager();
+
+    manager.register(
+      testPlugin({
+        id: "rejecting-plugin",
+        activate: () => Promise.reject(new Error("chunk failed to load")),
+      }),
+    );
+
+    manager.activate("rejecting-plugin", app);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    assert.equal(manager.isActive("rejecting-plugin"), false);
+  });
+
+  it("keeps the plugin active when the async mount succeeds", async () => {
+    const manager = new PluginManager();
+
+    manager.register(
+      testPlugin({
+        id: "ok-plugin",
+        activate: () => Promise.resolve(true),
+      }),
+    );
+
+    manager.activate("ok-plugin", app);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    assert.equal(manager.isActive("ok-plugin"), true);
+  });
+
+  it("does not revert when the user deactivates before the mount fails", async () => {
+    const manager = new PluginManager();
+    let resolveMount: (value: boolean) => void = () => {};
+
+    manager.register(
+      testPlugin({
+        id: "race-plugin",
+        activate: () =>
+          new Promise<boolean>((resolve) => {
+            resolveMount = resolve;
+          }),
+      }),
+    );
+
+    manager.activate("race-plugin", app);
+    manager.deactivate("race-plugin", app);
+    assert.equal(manager.isActive("race-plugin"), false);
+
+    // A late failure for an already-inactive plugin must be a no-op.
+    resolveMount(false);
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(manager.isActive("race-plugin"), false);
+  });
+});

@@ -94,7 +94,11 @@ export const maplibreGeoAgentPlugin: GeoLibrePlugin = {
   version: "0.4.2",
   activate: (app: GeoLibreAppAPI) => {
     geoAgentActive = true;
-    void mountGeoAgentControl(app);
+    // Return the mount promise so the host can roll back the Plugins menu when
+    // the GeoAgent chunk fails to load (e.g. a stale chunk after a web
+    // redeploy). It resolves false when the control never mounts, instead of
+    // leaving GeoAgent marked active with no visible panel.
+    return mountGeoAgentControl(app);
   },
   deactivate: (app: GeoLibreAppAPI) => {
     geoAgentActive = false;
@@ -132,19 +136,32 @@ export const maplibreGeoAgentPlugin: GeoLibrePlugin = {
   },
 };
 
-async function mountGeoAgentControl(app: GeoLibreAppAPI): Promise<void> {
-  const control = await loadGeoAgentControl();
-  if (!geoAgentActive) return;
+async function mountGeoAgentControl(app: GeoLibreAppAPI): Promise<boolean> {
+  let control: GeoAgentControl;
+  try {
+    control = await loadGeoAgentControl();
+  } catch (error) {
+    // The dynamic import failed (offline, or a chunk orphaned by a web
+    // redeploy). Clear the active flag and report the failure so the host can
+    // revert the Plugins menu rather than leaving GeoAgent stuck on "active"
+    // with no panel. The stale-chunk recovery (host side) decides whether to
+    // reload; here we only need to surface that the mount did not happen.
+    geoAgentActive = false;
+    console.error("GeoAgent failed to load.", error);
+    return false;
+  }
+  if (!geoAgentActive) return false;
 
   const added = app.addMapControl(control, geoAgentPosition);
   if (!added) {
     if (geoAgentControl === control) geoAgentControl = null;
-    return;
+    return false;
   }
   patchGeoAgentToolRunner(control);
   setTimeout(() => geoAgentControl?.expand(), 0);
   setTimeout(enhanceEarthEngineSignIn, 0);
   preloadEarthEngineAuthLibrary();
+  return true;
 }
 
 async function loadGeoAgentControl(): Promise<GeoAgentControl> {

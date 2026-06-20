@@ -16,6 +16,8 @@
  * rather than a stale chunk.
  */
 
+import { useAppStore } from "@geolibre/core";
+import { appendDiagnostic } from "./diagnostics";
 import { isTauri } from "./is-tauri";
 
 const RELOAD_TIMESTAMP_KEY = "geolibre:stale-chunk-reload-at";
@@ -36,25 +38,56 @@ export interface StaleChunkReloadDeps {
   setLastReloadAt: (value: number) => void;
   /** Reload the page. */
   reload: () => void;
+  /** Whether the project has unsaved changes that a reload would discard. */
+  hasUnsavedChanges: () => boolean;
 }
 
 /**
- * Reloads the page to recover from a stale chunk, unless a reload happened
- * within the cooldown (in which case the failure is treated as a broken build
- * and left to surface).
+ * The outcome of a stale-chunk recovery attempt.
  *
- * @param deps - Injected clock, persistence, and reload, for testability.
- * @returns True when a reload was triggered, false when suppressed.
+ * - `reloaded` - the page was reloaded to fetch the current build's chunks.
+ * - `deferred-unsaved` - a reload was withheld to protect unsaved work; the
+ *   stale feature stays unloaded and the user is asked to save and reload.
+ * - `suppressed-cooldown` - a reload happened too recently, so the failure is
+ *   treated as a broken build and left to surface.
  */
-export function reloadForStaleChunk(deps: StaleChunkReloadDeps): boolean {
+export type StaleChunkReloadOutcome =
+  | "reloaded"
+  | "deferred-unsaved"
+  | "suppressed-cooldown";
+
+/**
+ * Decides how to recover from a stale chunk. Reloads the page unless that would
+ * discard the user's work (unsaved changes) or a reload happened within the
+ * cooldown.
+ *
+ * A forced reload here re-evaluates the current build's import graph so the
+ * lazy import resolves. But reloading throws away the in-memory project, and
+ * when there are unsaved changes the {@link useBeforeUnloadGuard} also raises
+ * the browser's "Leave site?" prompt, so an accidental reload becomes data
+ * loss. In that case recovery is deferred: the failed feature simply does not
+ * load, and the caller tells the user to save and reload deliberately. When
+ * the project is clean there is nothing to lose, so the reload runs as before.
+ *
+ * @param deps - Injected clock, persistence, reload, and dirty check, for testability.
+ * @returns Which recovery path was taken.
+ */
+export function reloadForStaleChunk(
+  deps: StaleChunkReloadDeps,
+): StaleChunkReloadOutcome {
+  // Never reload out from under unsaved work: it trips the beforeunload guard
+  // and risks losing the user's map. This takes precedence over the cooldown.
+  if (deps.hasUnsavedChanges()) {
+    return "deferred-unsaved";
+  }
   const last = deps.getLastReloadAt();
   const current = deps.now();
   if (last !== null && current - last < STALE_CHUNK_RELOAD_COOLDOWN_MS) {
-    return false;
+    return "suppressed-cooldown";
   }
   deps.setLastReloadAt(current);
   deps.reload();
-  return true;
+  return "reloaded";
 }
 
 /**
@@ -86,9 +119,9 @@ export function installStaleChunkReload(options?: {
     // Vite dispatches a plain Event with the underlying error on `.payload`
     // (not a CustomEvent `.detail`); surface it so a recovery is visible.
     const payload = (event as Event & { payload?: unknown }).payload;
-    let reloaded = false;
+    let outcome: StaleChunkReloadOutcome = "suppressed-cooldown";
     try {
-      reloaded = reloadForStaleChunk({
+      outcome = reloadForStaleChunk({
         now: () => Date.now(),
         getLastReloadAt: () => {
           const raw = window.sessionStorage.getItem(RELOAD_TIMESTAMP_KEY);
@@ -99,6 +132,7 @@ export function installStaleChunkReload(options?: {
         setLastReloadAt: (value) =>
           window.sessionStorage.setItem(RELOAD_TIMESTAMP_KEY, String(value)),
         reload: () => window.location.reload(),
+        hasUnsavedChanges: () => useAppStore.getState().isDirty,
       });
     } catch {
       // sessionStorage can throw when storage is blocked (private modes,
@@ -110,11 +144,26 @@ export function installStaleChunkReload(options?: {
         "[GeoLibre] Stale-chunk reload guard unavailable (storage blocked); leaving the preload error to surface.",
         payload,
       );
+      return;
     }
-    if (reloaded) {
+    if (outcome === "reloaded") {
       // Only suppress Vite's rethrow when we are recovering by reloading; a
       // cooldown-suppressed (broken-build) error should still surface.
       console.warn("[GeoLibre] Reloading to recover from a stale chunk.", payload);
+      event.preventDefault();
+    } else if (outcome === "deferred-unsaved") {
+      // Reloading would discard unsaved work (and raise the "Leave site?"
+      // prompt), so the feature is left unloaded. Record an actionable notice
+      // instead of letting the raw preload error surface, and suppress Vite's
+      // rethrow so it does not read as an unhandled crash.
+      appendDiagnostic({
+        category: "runtime",
+        level: "warning",
+        message:
+          "A component could not be loaded because the app was updated. Save your project, then reload the page to finish loading it.",
+        detail: payload instanceof Error ? payload.message : String(payload),
+        source: "stale-chunk-reload",
+      });
       event.preventDefault();
     }
   };

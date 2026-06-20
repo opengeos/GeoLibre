@@ -170,7 +170,14 @@ export interface GeoLibrePlugin {
   activeByDefault?: boolean;
   /** At least one name is required for handleUrlParameters to be called. */
   urlParameterNames?: string[];
-  activate: (app: GeoLibreAppAPI) => boolean | void;
+  /**
+   * Activate the plugin. Return `false` to refuse activation. A plugin that
+   * mounts asynchronously (e.g. behind a dynamic import) may return a Promise
+   * that resolves to `false` (or rejects) when the mount ultimately fails; the
+   * host then rolls back the optimistic active state so the Plugins menu does
+   * not show a plugin that never came up.
+   */
+  activate: (app: GeoLibreAppAPI) => boolean | void | Promise<boolean | void>;
   deactivate: (app: GeoLibreAppAPI) => void;
   /**
    * Called once per URL context after the map and plugins are ready.
