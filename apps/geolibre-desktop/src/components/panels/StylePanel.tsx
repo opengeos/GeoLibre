@@ -1,5 +1,6 @@
 import {
   DEFAULT_LAYER_STYLE,
+  type LabelStyle,
   type LayerType,
   type PointRenderer,
   type StrokeWidthUnit,
@@ -1100,6 +1101,12 @@ export function StylePanel({
   const extrusionEnabled = styleValue(style, "extrusionEnabled");
   const extrusionHeightPropertyOptions = getAttributePropertyNames(layer);
   const vectorStylePropertyOptions = extrusionHeightPropertyOptions;
+  const labels: LabelStyle = {
+    ...DEFAULT_LAYER_STYLE.labels,
+    ...styleValue(style, "labels"),
+  };
+  const updateLabels = (patch: Partial<LabelStyle>) =>
+    setLayerStyle(layer.id, { labels: { ...labels, ...patch } });
   const extrusionHeightProperties = extrusionHeightPropertyOptions.includes(
     draftExtrusionHeightProperty,
   )
@@ -1640,6 +1647,150 @@ export function StylePanel({
       )}
     </div>
   );
+  const labelControls = (
+    <div className="space-y-3">
+      <label
+        htmlFor="labelsEnabled"
+        className="flex items-center gap-2 text-sm font-medium"
+      >
+        <input
+          id="labelsEnabled"
+          type="checkbox"
+          checked={labels.enabled}
+          onChange={(event) => updateLabels({ enabled: event.target.checked })}
+        />
+        Show labels
+      </label>
+      {labels.enabled ? (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="labelField">Label field</Label>
+            <Select
+              id="labelField"
+              value={labels.field}
+              disabled={vectorStylePropertyOptions.length === 0}
+              onChange={(event) => updateLabels({ field: event.target.value })}
+            >
+              {vectorStylePropertyOptions.length === 0 ? (
+                <option value="">No attributes found</option>
+              ) : (
+                <>
+                  <option value="">Select a field…</option>
+                  {vectorStylePropertyOptions.map((property) => (
+                    <option key={property} value={property}>
+                      {property}
+                    </option>
+                  ))}
+                </>
+              )}
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="labelPlacement">Placement</Label>
+            <Select
+              id="labelPlacement"
+              value={labels.placement}
+              onChange={(event) =>
+                updateLabels({
+                  placement: event.target.value as "point" | "line",
+                })
+              }
+            >
+              <option value="point">Centroid / point</option>
+              <option value="line">Along line</option>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <NumericStyleInput
+              id="labelSize"
+              label="Text size"
+              min={6}
+              max={48}
+              step={1}
+              value={labels.size}
+              onChange={(size) => updateLabels({ size })}
+            />
+            <NumericStyleInput
+              id="labelHaloWidth"
+              label="Halo width"
+              min={0}
+              max={8}
+              step={0.5}
+              value={labels.haloWidth}
+              onChange={(haloWidth) => updateLabels({ haloWidth })}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="labelColor">Text color</Label>
+              <ColorField
+                id="labelColor"
+                value={labels.color}
+                onChange={(color) => updateLabels({ color })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="labelHaloColor">Halo color</Label>
+              <ColorField
+                id="labelHaloColor"
+                value={labels.haloColor}
+                onChange={(haloColor) => updateLabels({ haloColor })}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <NumericStyleInput
+              id="labelMinZoom"
+              label="Min zoom"
+              min={0}
+              max={24}
+              step={1}
+              value={labels.minZoom}
+              onChange={(minZoom) => updateLabels({ minZoom })}
+            />
+            <NumericStyleInput
+              id="labelMaxZoom"
+              label="Max zoom"
+              min={0}
+              max={24}
+              step={1}
+              value={labels.maxZoom}
+              onChange={(maxZoom) => updateLabels({ maxZoom })}
+            />
+          </div>
+          <label
+            htmlFor="labelAllowOverlap"
+            className="flex items-center gap-2 text-sm font-medium"
+          >
+            <input
+              id="labelAllowOverlap"
+              type="checkbox"
+              checked={labels.allowOverlap}
+              onChange={(event) =>
+                updateLabels({ allowOverlap: event.target.checked })
+              }
+            />
+            Allow labels to overlap
+          </label>
+          <div className="space-y-2">
+            <Label htmlFor="labelExpression">Expression (optional)</Label>
+            <textarea
+              id="labelExpression"
+              className="min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
+              placeholder={'["concat", ["get", "name"], " (", ["get", "pop"], ")"]'}
+              value={labels.expression}
+              onChange={(event) =>
+                updateLabels({ expression: event.target.value })
+              }
+            />
+            <p className="text-xs text-muted-foreground">
+              A MapLibre expression (JSON). Overrides the field when set.
+            </p>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
   const twoDimensionalControls = (
     <>
       {supportsPointRenderer ? (
@@ -2139,6 +2290,15 @@ export function StylePanel({
           ) : (
             extrusionControls
           )}
+          {/* Attribute labels apply to vector features, not the heatmap density
+              surface or the 3D extrusion render. */}
+          {!extrusionEnabled && pointRenderer !== "heatmap" ? (
+            <>
+              <Separator />
+              <p className="text-sm font-semibold">Labels</p>
+              {labelControls}
+            </>
+          ) : null}
         </div>
       </ScrollArea>
       <Separator />

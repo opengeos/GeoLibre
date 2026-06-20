@@ -25,6 +25,7 @@ import {
   fillExtrusionLayerId,
   fillLayerId,
   heatmapLayerId,
+  labelLayerId,
   lineLayerId,
   sourceId,
   textLayerId,
@@ -1637,6 +1638,76 @@ function applyVectorDataRenderLayers(
   } else {
     removeIfExists(map, textLayerId(layer.id));
   }
+
+  // Attribute-driven labels: a symbol layer that renders the configured field
+  // (or expression) for every feature. Distinct from the geoman text-marker
+  // layer above, which only renders annotation features.
+  const labels = {
+    ...DEFAULT_LAYER_STYLE.labels,
+    ...styleValue(layer.style, "labels"),
+  };
+  if (
+    !layer.style.extrusionEnabled &&
+    renderer !== "heatmap" &&
+    labels.enabled &&
+    (labels.expression.trim() || labels.field)
+  ) {
+    let textField: maplibregl.ExpressionSpecification | string;
+    try {
+      textField = labels.expression.trim()
+        ? (JSON.parse(labels.expression) as maplibregl.ExpressionSpecification)
+        : (["to-string", ["coalesce", ["get", labels.field], ""]] as unknown as maplibregl.ExpressionSpecification);
+    } catch {
+      // A typo'd expression must not break the whole layer sync: fall back to
+      // the field (or empty text) instead.
+      textField = labels.field
+        ? (["to-string", ["coalesce", ["get", labels.field], ""]] as unknown as maplibregl.ExpressionSpecification)
+        : "";
+    }
+    const labelZoom = intersectZoomRange(
+      {
+        minzoom: clampLayerZoom(labels.minZoom, MIN_LAYER_ZOOM),
+        maxzoom: clampLayerZoom(labels.maxZoom, MAX_LAYER_ZOOM),
+      },
+      layer.style,
+    );
+    // Skip geoman text-marker points (they carry their own annotation text);
+    // the coalesce defaults to "" for normal features so they all pass.
+    const nonMarkerFilter = [
+      "!=",
+      ["coalesce", ["get", GEOMAN_SHAPE_PROPERTY], ["get", "shape"], ""],
+      TEXT_MARKER_SHAPE,
+    ] as unknown as maplibregl.FilterSpecification;
+    ensureLayer(
+      map,
+      labelLayerId(layer.id),
+      {
+        id: labelLayerId(layer.id),
+        type: "symbol",
+        ...sourceSpec,
+        ...labelZoom,
+        filter: withTimeFilter(layer, nonMarkerFilter),
+        layout: {
+          "text-field": textField,
+          "text-font": textFontForMapStyle(map),
+          "text-size": Math.max(1, labels.size),
+          "symbol-placement": labels.placement === "line" ? "line" : "point",
+          "text-allow-overlap": labels.allowOverlap,
+          "text-ignore-placement": labels.allowOverlap,
+          visibility,
+        },
+        paint: {
+          "text-color": labels.color,
+          "text-halo-color": labels.haloColor,
+          "text-halo-width": Math.max(0, labels.haloWidth),
+          "text-opacity": opacity,
+        },
+      },
+      beforeId,
+    );
+  } else {
+    removeIfExists(map, labelLayerId(layer.id));
+  }
 }
 
 // syncs can fire rapidly (e.g. dragging an opacity slider), and this is an O(n)
@@ -2464,6 +2535,7 @@ function removeGeoJsonRenderLayers(map: maplibregl.Map, layerId: string): void {
     clusterLayerId(layerId),
     clusterCountLayerId(layerId),
     textLayerId(layerId),
+    labelLayerId(layerId),
   ]) {
     removeIfExists(map, id);
   }
@@ -2500,6 +2572,7 @@ export function removeLayerFromMap(
     clusterLayerId(layerId),
     clusterCountLayerId(layerId),
     textLayerId(layerId),
+    labelLayerId(layerId),
     `layer-${layerId}-raster`,
     `layer-${layerId}-video`,
     `layer-${layerId}-image`,
