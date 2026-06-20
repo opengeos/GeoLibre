@@ -1488,7 +1488,7 @@
       "stepStartServerDesktop": "Click \"Start server\" in the tool list panel to launch it, then wait a few seconds for it to come online.",
       "stepStartServerBrowser": "The server can only be started from the GeoLibre desktop app. In the browser, keep \"Run locally (WASM)\" enabled instead.",
       "stepCheckPort": "Make sure a firewall, antivirus, or network policy isn't blocking local port {{port}}.",
-      "stepRestart": "If the server stopped unexpectedly, restart the app and reopen this dialog."
+      "stepRestart": "If the server stopped unexpectedly, restart the GeoLibre desktop app and reopen this dialog."
     }
   },
   "segmentation": {

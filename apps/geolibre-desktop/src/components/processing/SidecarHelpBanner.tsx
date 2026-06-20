@@ -54,7 +54,9 @@ export function SidecarHelpBanner({
         type="button"
         className="flex w-full items-start gap-2 px-3 py-2 text-left"
         aria-expanded={expanded}
-        aria-controls={helpId}
+        // Only reference the panel while it is in the DOM; the collapsed banner
+        // doesn't render it, and aria-controls must point at an existing node.
+        aria-controls={expanded ? helpId : undefined}
         onClick={() => setExpanded((value) => !value)}
       >
         <AlertTriangle
@@ -101,7 +103,10 @@ export function SidecarHelpBanner({
           {onRunLocally && (
             <div className="grid gap-2 rounded-md border border-border bg-background/60 p-2.5">
               <p className="flex items-center gap-1.5 text-xs font-medium text-foreground">
-                <Zap className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                <Zap
+                  aria-hidden="true"
+                  className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400"
+                />
                 {t("processing.sidecar.wasmTipTitle")}
               </p>
               <p className="text-xs text-muted-foreground">
@@ -114,7 +119,7 @@ export function SidecarHelpBanner({
                 className="justify-self-start"
                 onClick={onRunLocally}
               >
-                <Zap className="h-3.5 w-3.5" />
+                <Zap aria-hidden="true" className="h-3.5 w-3.5" />
                 {t("processing.sidecar.runLocallyButton")}
               </Button>
             </div>
