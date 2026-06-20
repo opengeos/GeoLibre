@@ -108,7 +108,10 @@ export function useStartupUpdateCheck() {
       try {
         const release = await fetchLatestRelease(controller.signal);
         if (cancelled) return;
-        // GitHub was reached and parsed: throttle the next launches.
+        // GitHub was reached and parsed, so throttle the next launches
+        // regardless of the outcome below (up to date, below the chosen level,
+        // or a dismissed version). Bounded staleness is intentional: there is
+        // no benefit to re-querying within the window once we have an answer.
         writeLastCheck(now);
 
         const severity = releaseSeverity(APP_VERSION, release.version);

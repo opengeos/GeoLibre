@@ -199,7 +199,12 @@ export async function fetchLatestRelease(
     typeof release.html_url === "string" ? release.html_url.trim() : "";
   return {
     version: formatVersion(release.tag_name),
-    notes: typeof release.body === "string" ? release.body.trim() : "",
+    // Cap the notes length; GitHub enforces no size limit on release bodies and
+    // 50k is generous for any real changelog while ruling out pathological blobs.
+    notes:
+      typeof release.body === "string"
+        ? release.body.trim().slice(0, 50_000)
+        : "",
     // Only trust a GitHub release URL; fall back to the downloads page so a
     // tampered API response can't redirect the download action to another
     // origin (openExternalLink already blocks non-http(s) schemes).

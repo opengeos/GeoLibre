@@ -35,6 +35,9 @@ export function ReleaseNotes({ notes }: ReleaseNotesProps) {
         // Collapse inline link syntax to its label: [text](url) -> text, and
         // drop the leading "!" of an image link (![alt](url) -> alt).
         .replace(/!?\[([^\]]+)\]\([^)]+\)/g, "$1")
+        // Collapse inline code spans first so backtick-fenced asterisks aren't
+        // misread as emphasis markers by the next pass.
+        .replace(/`([^`]+)`/g, "$1")
         // Strip bold/italic emphasis markers, keeping the wrapped text. The
         // 1-3 range covers ***bold italic*** without leaving a stray marker.
         .replace(/(\*{1,3}|_{1,3})(.+?)\1/g, "$2")

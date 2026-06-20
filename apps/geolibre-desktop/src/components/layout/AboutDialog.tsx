@@ -17,7 +17,6 @@ import {
   APP_VERSION,
   compareVersions,
   fetchLatestRelease,
-  formatVersion,
   UPDATE_URL,
   UpdateCheckError,
 } from "../../lib/updates";
