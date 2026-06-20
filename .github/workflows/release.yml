@@ -88,16 +88,18 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_OPTIONS: --max-old-space-size=4096
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
-          # macOS Developer ID signing + notarization. These are read only by
-          # the macOS runners; other platforms ignore them. When the signing
-          # vars are empty (e.g. on a fork without secrets), tauri-action falls
-          # back to ad-hoc signing instead of failing the build.
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # macOS Developer ID signing + notarization. The secrets only resolve
+          # to real values on macOS runners; Linux/Windows get empty strings so
+          # the credentials are never placed in their process environment.
+          # APPLE_SIGNING_IDENTITY defaults to "-" when the secret is absent
+          # (e.g. a fork without secrets) so macOS still ad-hoc signs rather
+          # than failing the build now that tauri.conf.json no longer pins it.
+          APPLE_CERTIFICATE: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_SIGNING_IDENTITY: ${{ runner.os == 'macOS' && (secrets.APPLE_SIGNING_IDENTITY || '-') || '' }}
+          APPLE_ID: ${{ runner.os == 'macOS' && secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ runner.os == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
         with:
           projectPath: apps/geolibre-desktop
           releaseId: ${{ github.event.release.id }}
