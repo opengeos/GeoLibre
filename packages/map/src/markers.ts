@@ -5,6 +5,7 @@ import {
   type MarkerShape,
 } from "@geolibre/core";
 import {
+  hashText,
   registerGeneratedImage,
   type GeneratedImageResult,
 } from "./generated-images";
@@ -24,17 +25,6 @@ const BUILTIN_SHAPES: ReadonlySet<MarkerShape> = new Set([
   "cross",
   "pin",
 ]);
-
-const MAX_SVG_ENTRIES = 64;
-const svgMarkupById = new Map<string, string>();
-
-function hashText(text: string): string {
-  let hash = 0;
-  for (let index = 0; index < text.length; index += 1) {
-    hash = (hash * 31 + text.charCodeAt(index)) | 0;
-  }
-  return (hash >>> 0).toString(36);
-}
 
 function markerColor(style: LayerStyle): string {
   return normalizeHexColor(styleValue(style, "markerColor")) ?? "#3b82f6";
@@ -156,12 +146,27 @@ function loadSvgMarker(
   const src = trimmed.startsWith("<")
     ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(trimmed)}`
     : trimmed;
+  const ratio = MARKER_PIXEL_RATIO;
+  const px = size * ratio;
   return new Promise((resolve) => {
     const image = new Image();
     image.decoding = "async";
-    image.width = size;
-    image.height = size;
-    image.onload = () => resolve({ image, pixelRatio: 1 });
+    image.onload = () => {
+      // Rasterize onto a canvas at the requested size. Assigning image.width /
+      // height would not work: addImage reads the SVG's intrinsic
+      // naturalWidth/naturalHeight, so the marker size would be ignored.
+      const canvas = document.createElement("canvas");
+      canvas.width = px;
+      canvas.height = px;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(null);
+        return;
+      }
+      ctx.clearRect(0, 0, px, px);
+      ctx.drawImage(image, 0, 0, px, px);
+      resolve({ image: ctx.getImageData(0, 0, px, px), pixelRatio: ratio });
+    };
     image.onerror = () => resolve(null);
     image.src = src;
   });
@@ -189,16 +194,9 @@ export function prepareMarker(style: LayerStyle): string | null {
     const markup = styleValue(style, "markerSvg").trim();
     if (!markup) return null;
     const id = `geolibre-marker-svg-${hashText(markup)}-${size}`;
-    if (!svgMarkupById.has(id)) {
-      if (svgMarkupById.size >= MAX_SVG_ENTRIES) {
-        const oldest = svgMarkupById.keys().next().value;
-        if (oldest) svgMarkupById.delete(oldest);
-      }
-      svgMarkupById.set(id, markup);
-    }
-    registerGeneratedImage(id, () =>
-      loadSvgMarker(svgMarkupById.get(id) ?? "", size),
-    );
+    // Capture the markup in the factory closure so the lazy generator never
+    // depends on a separate, evictable cache (which could blank the marker).
+    registerGeneratedImage(id, () => loadSvgMarker(markup, size));
     return id;
   }
 

@@ -1454,7 +1454,9 @@ function applyVectorDataRenderLayers(
           paint: {
             ...fillPaint(layer.style, opacity),
             // A set fill-pattern replaces fill-color with the recolorable
-            // sprite tile; undefined clears any previously applied pattern.
+            // sprite tile; undefined clears it (MapLibre's FillLayerSpecification
+            // type permits undefined, not null) and resets the property on the
+            // setPaintProperty update path in ensureLayer.
             "fill-pattern": fillPatternId ?? undefined,
           },
           layout: { visibility },

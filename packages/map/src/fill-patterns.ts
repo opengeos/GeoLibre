@@ -5,6 +5,7 @@ import {
   type LayerStyle,
 } from "@geolibre/core";
 import {
+  hashText,
   registerGeneratedImage,
   type GeneratedImageResult,
 } from "./generated-images";
@@ -22,21 +23,6 @@ const BUILTIN_PATTERNS: ReadonlySet<FillPattern> = new Set([
   "vertical",
   "dots",
 ]);
-
-// Bounds an in-memory cache of distinct SVG markup keyed by image id so the
-// lazy factory can rasterize it later. Bounded so a project that hand-edits many
-// SVGs cannot grow it without limit.
-const MAX_SVG_ENTRIES = 64;
-const svgMarkupById = new Map<string, string>();
-
-/** A small stable hash of arbitrary text, for deriving an SVG image id. */
-function hashText(text: string): string {
-  let hash = 0;
-  for (let index = 0; index < text.length; index += 1) {
-    hash = (hash * 31 + text.charCodeAt(index)) | 0;
-  }
-  return (hash >>> 0).toString(36);
-}
 
 function patternColor(style: LayerStyle): string {
   return (
@@ -148,14 +134,9 @@ export function prepareFillPattern(style: LayerStyle): string | null {
     const markup = styleValue(style, "fillPatternSvg").trim();
     if (!markup) return null;
     const id = `geolibre-pattern-svg-${hashText(markup)}`;
-    if (!svgMarkupById.has(id)) {
-      if (svgMarkupById.size >= MAX_SVG_ENTRIES) {
-        const oldest = svgMarkupById.keys().next().value;
-        if (oldest) svgMarkupById.delete(oldest);
-      }
-      svgMarkupById.set(id, markup);
-    }
-    registerGeneratedImage(id, () => loadSvgImage(svgMarkupById.get(id) ?? ""));
+    // Capture the markup in the factory closure so the lazy generator never
+    // depends on a separate, evictable cache (which could blank the pattern).
+    registerGeneratedImage(id, () => loadSvgImage(markup));
     return id;
   }
 

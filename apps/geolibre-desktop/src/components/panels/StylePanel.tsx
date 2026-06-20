@@ -13,6 +13,7 @@ import {
   createQuantileBreaks,
   getVectorColorRamp,
   interpolateRampColors,
+  parseJsonExpression,
   styleValue,
   useAppStore,
 } from "@geolibre/core";
@@ -1080,6 +1081,16 @@ export function StylePanel({
     () => (layer ? isPointOnlyGeoJsonLayer(layer) : false),
     [layer],
   );
+  // Memoized so the per-feature geometry scan (up to 2000 features) does not
+  // re-run on every render, e.g. while typing in a rule filter textarea. Kept
+  // before the early returns below so the hook order stays stable.
+  const geometryFlags = useMemo(
+    () =>
+      layer
+        ? getGeometryFlags(layer)
+        : { hasPoint: true, hasLine: true, hasPolygon: true },
+    [layer],
+  );
 
   const resizeHandle = (
     <div
@@ -1569,7 +1580,7 @@ export function StylePanel({
   };
 
   // --- Geometry-gated sections (proportional size, fill pattern, markers) ---
-  const geometryFlags = getGeometryFlags(layer);
+  // geometryFlags is memoized above the early returns.
   const showProportionalControls =
     hasVectorPaintControls &&
     pointRenderer !== "heatmap" &&
@@ -1858,6 +1869,12 @@ export function StylePanel({
                   updateVectorRule(rule.id, { filter: event.target.value })
                 }
               />
+              {rule.filter.trim() && !parseJsonExpression(rule.filter) ? (
+                <p className="text-xs text-destructive">
+                  Invalid filter — must be a JSON array expression. This rule is
+                  skipped until fixed.
+                </p>
+              ) : null}
             </div>
           ))}
           <div className="grid grid-cols-[auto_1fr] items-center gap-2 rounded-md border border-dashed border-input p-2">

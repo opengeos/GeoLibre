@@ -14,6 +14,15 @@ import type maplibregl from "maplibre-gl";
  * the image is regenerated.
  */
 
+/** A small stable polynomial hash of arbitrary text, for deriving image ids. */
+export function hashText(text: string): string {
+  let hash = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    hash = (hash * 31 + text.charCodeAt(index)) | 0;
+  }
+  return (hash >>> 0).toString(36);
+}
+
 /** A bitmap accepted by `map.addImage`. */
 export type GeneratedImage = Parameters<maplibregl.Map["addImage"]>[1];
 

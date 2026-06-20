@@ -210,10 +210,17 @@ describe("project parsing", () => {
     const style = reparsed.styles[layer.id];
     assert.equal(style.vectorStyleMode, "rule-based");
     assert.equal(style.vectorRules.length, 2);
+    assert.equal(style.vectorRules[0].label, "Parks");
+    assert.equal(style.vectorRules[0].filter, '["==", ["get", "TYPE"], "park"]');
     assert.equal(style.vectorRules[0].color, "#00ff00");
+    assert.equal(style.vectorRules[0].isElse, false);
+    assert.equal(style.vectorRules[1].isElse, true);
     assert.equal(style.proportionalSizeEnabled, true);
     assert.equal(style.proportionalSizeProperty, "pop");
+    assert.equal(style.proportionalSizeMaxValue, 5000);
     assert.equal(style.fillPattern, "hatch");
+    assert.equal(style.fillPatternColor, "#112233");
+    assert.equal(style.markerEnabled, true);
     assert.equal(style.markerShape, "star");
     assert.equal(style.markerColor, "#ff8800");
     assert.equal(style.markerSize, 24);
