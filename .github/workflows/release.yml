@@ -29,9 +29,10 @@ jobs:
             args: --no-sign
             rust-targets: ""
 
-          # macOS bundles are ad-hoc signed (bundle > macOS > signingIdentity
-          # in tauri.conf.json); users must still remove the quarantine attribute
-          # to bypass Gatekeeper. Do not pass --no-sign here.
+          # macOS bundles are Developer ID signed and notarized via the
+          # APPLE_* secrets wired into the tauri-action step below, so users can
+          # open the DMG without stripping the quarantine attribute. Do not pass
+          # --no-sign here.
           - name: macOS Apple Silicon
             os: macos-latest
             args: --target aarch64-apple-darwin
@@ -87,6 +88,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_OPTIONS: --max-old-space-size=4096
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
+          # macOS Developer ID signing + notarization. These are read only by
+          # the macOS runners; other platforms ignore them. When the signing
+          # vars are empty (e.g. on a fork without secrets), tauri-action falls
+          # back to ad-hoc signing instead of failing the build.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           projectPath: apps/geolibre-desktop
           releaseId: ${{ github.event.release.id }}
