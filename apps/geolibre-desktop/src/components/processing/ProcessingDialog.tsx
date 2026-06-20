@@ -7,6 +7,7 @@ import {
   fetchRemoteWhiteboxCatalogSnapshot,
   fetchWhiteboxStatus,
   fetchWhiteboxTools,
+  listGeolibreWasmTools,
   runWhiteboxTool,
   runWhiteboxToolWasm,
   type WhiteboxJob,
@@ -460,6 +461,24 @@ export function ProcessingDialog({
         t("processing.whitebox.runningLocally"),
         false,
       );
+      // The GeoLibre-authored tools (write_geoparquet, delineate_depressions, …)
+      // aren't in the Whitebox catalog snapshot, so append them from the WASM
+      // binary's own manifests. WASM-only: they have no Python sidecar
+      // equivalent, hence only in the runLocal branch.
+      try {
+        const geolibreTools = await listGeolibreWasmTools();
+        if (geolibreTools.length > 0) {
+          setTools((current) => {
+            const seen = new Set(current.map((tool) => tool.id));
+            return [
+              ...current,
+              ...geolibreTools.filter((tool) => !seen.has(tool.id)),
+            ];
+          });
+        }
+      } catch {
+        // Non-fatal: the catalog tools still load if the WASM enumeration fails.
+      }
       setLoadingTools(false);
       return;
     }

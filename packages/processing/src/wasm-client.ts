@@ -6,7 +6,12 @@
 // algorithms and outputs as the sidecar; bounded by WASM's ~4 GiB memory and
 // single-threaded execution (use the sidecar for very large data).
 import type { FeatureCollection } from "geojson";
-import type { RunWhiteboxToolRequest, WhiteboxJob, WhiteboxToolParameter } from "./sidecar-client";
+import type {
+  RunWhiteboxToolRequest,
+  WhiteboxJob,
+  WhiteboxTool,
+  WhiteboxToolParameter,
+} from "./sidecar-client";
 
 interface ToolRunResult {
   exitCode: number;
@@ -14,8 +19,32 @@ interface ToolRunResult {
   files: Record<string, Uint8Array>;
 }
 
+/** One tool's manifest as emitted by `geolibre manifests` (geolibre-wasm). */
+interface ToolManifest {
+  id: string;
+  display_name?: string;
+  summary?: string;
+  category?: string;
+  license_tier?: string;
+  /** "geolibre" for GeoLibre-authored tools, "whitebox" otherwise. */
+  source?: string;
+  params?: Array<{
+    name: string;
+    description?: string;
+    required?: boolean;
+    io_role?: string;
+    data_kind?: string;
+    schema?: {
+      kind?: string;
+      options?: Array<{ value?: unknown }>;
+      [key: string]: unknown;
+    };
+  }>;
+}
+
 interface ToolsModule {
   listTools: () => Promise<string[]>;
+  listManifests: () => Promise<ToolManifest[]>;
   runTool: (
     tool: string,
     opts: { args?: string[]; input?: Record<string, Uint8Array> },
@@ -52,6 +81,47 @@ export async function whiteboxWasmAvailable(): Promise<boolean> {
 export async function listWhiteboxWasmTools(): Promise<string[]> {
   const { listTools } = await loadToolsModule();
   return listTools();
+}
+
+/**
+ * The GeoLibre-authored tools (`source: "geolibre"`) the WASM runner adds on top
+ * of the Whitebox suite — e.g. `write_geoparquet`, `delineate_depressions` —
+ * mapped to {@link WhiteboxTool} so the Processing toolbox can list and run them
+ * alongside the catalog tools. These aren't in the Whitebox catalog snapshot, so
+ * the toolbox can only discover them from the binary's own manifests.
+ *
+ * Each manifest param already carries `io_role`/`data_kind`/`schema`, which the
+ * dialog's `parameterKind` reads directly; we additionally flatten an enum
+ * schema's choices to `options` so the param renders as a dropdown.
+ */
+export async function listGeolibreWasmTools(): Promise<WhiteboxTool[]> {
+  const { listManifests } = await loadToolsModule();
+  const manifests = await listManifests();
+  return manifests
+    .filter((manifest) => manifest.source === "geolibre")
+    .map((manifest) => ({
+      id: manifest.id,
+      display_name: manifest.display_name,
+      summary: manifest.summary,
+      category: manifest.category,
+      license_tier: manifest.license_tier,
+      params: (manifest.params ?? []).map((param) => {
+        const mapped: WhiteboxToolParameter = {
+          name: param.name,
+          description: param.description,
+          required: param.required,
+          io_role: param.io_role,
+          data_kind: param.data_kind,
+          schema: param.schema,
+        };
+        if (param.schema?.kind === "enum" && Array.isArray(param.schema.options)) {
+          mapped.options = param.schema.options
+            .map((option) => option?.value)
+            .filter((value): value is string => typeof value === "string");
+        }
+        return mapped;
+      }),
+    }));
 }
 
 function datasetParameterKind(dataKind: string, suffix: "in" | "out"): string {
