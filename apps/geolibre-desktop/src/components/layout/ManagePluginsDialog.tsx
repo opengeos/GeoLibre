@@ -346,11 +346,6 @@ export function ManagePluginsDialog({
           a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) ||
           a.id.localeCompare(b.id),
       );
-      .sort(
-        (a, b) =>
-          a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) ||
-          a.id.localeCompare(b.id),
-      );
   }, [entries, isInstalled, isUpgradeable, query, section]);
 
   return (
