@@ -1,0 +1,121 @@
+name: Cloudflare preview
+
+# Builds the docs site + web demo for every pull request and uploads it to a
+# Cloudflare Pages project as a *preview* deployment, then comments the URL on
+# the PR. This replaces the old Netlify Deploy Previews.
+#
+# The build mirrors .github/workflows/pages.yml (the GitHub Pages production
+# deploy) so previews match what ships:
+#   docs deps -> jupyterlite deps -> npm ci -> web demo build -> docs build ->
+#   bundle demo into site/demo.
+#
+# NOTE on fork PRs: the `pull_request` event does NOT expose repository secrets
+# to PRs opened from forks, so previews only run for branches pushed to this
+# repo (maintainers and collaborators). External fork PRs are skipped — the job
+# guard below short-circuits them instead of failing with a missing token.
+#
+# Required repository secrets (already present for the Workers deploys):
+#   CLOUDFLARE_API_TOKEN   - needs the "Cloudflare Pages: Edit" permission
+#   CLOUDFLARE_ACCOUNT_ID
+# Optional (baked into the client bundle, same as pages.yml):
+#   VITE_GEE_OAUTH_CLIENT_ID, VITE_PROTOMAPS_API_KEY
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: cf-preview-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    name: Build and deploy preview
+    runs-on: ubuntu-latest
+    # Skip fork PRs: secrets are unavailable there, so the deploy would fail.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements-docs.txt
+            apps/geolibre-desktop/jupyterlite/requirements.txt
+
+      - name: Install documentation dependencies
+        run: python -m pip install -r requirements-docs.txt
+
+      - name: Install JupyterLite build dependencies
+        run: python -m pip install -r apps/geolibre-desktop/jupyterlite/requirements.txt
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build web demo
+        run: npm run build -w geolibre-desktop
+        env:
+          GEOLIBRE_APP_BASE: ./
+          NODE_OPTIONS: --max-old-space-size=4096
+          VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
+          VITE_PROTOMAPS_API_KEY: ${{ secrets.VITE_PROTOMAPS_API_KEY }}
+          VITE_GEOLIBRE_COLLAB_URL: wss://collab.geolibre.app
+
+      - name: Build documentation
+        run: zensical build --strict
+
+      - name: Add web demo to site
+        run: |
+          mkdir -p site/demo
+          cp -R apps/geolibre-desktop/dist/. site/demo/
+          test -f site/demo/index.html
+          test -f site/demo/jupyterlite/lab/index.html
+
+      - name: Deploy to Cloudflare Pages
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # --branch is anything other than the project's production branch, so
+          # every run here is a preview deployment with its own URL.
+          command: >-
+            pages deploy site
+            --project-name=geolibre-preview
+            --branch=${{ github.head_ref || github.ref_name }}
+            --commit-dirty=true
+
+      - name: Comment preview URL on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = ${{ toJSON(steps.deploy.outputs.deployment-url) }};
+            if (!url) return;
+            const marker = '<!-- cloudflare-preview -->';
+            const body = `${marker}\n### ⚡ Cloudflare Pages preview\n\n| Item | Value |\n| --- | --- |\n| Preview | ${url} |\n| Demo app | ${url}/demo/ |\n| Commit | \`${context.sha.slice(0, 7)}\` |`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
