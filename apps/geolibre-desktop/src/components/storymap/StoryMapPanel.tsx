@@ -94,6 +94,13 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
 
   const story: StoryMap = storymap ?? DEFAULT_STORY_MAP;
   const chapters = story.chapters;
+  // Reset has something to clear when there are chapters or any story metadata
+  // set, so it stays disabled in the empty state (where "Load sample story" is
+  // the relevant action) even if a stale `storymap` object lingers after the
+  // last chapter was deleted manually.
+  const hasStoryContent =
+    chapters.length > 0 ||
+    Boolean(story.title || story.subtitle || story.byline || story.footer);
 
   const handleAddChapter = useCallback(() => {
     const view = mapControllerRef.current?.readView();
@@ -333,7 +340,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
               <Button
                 size="sm"
                 variant="outline"
-                disabled={!storymap}
+                disabled={!hasStoryContent}
                 title={t("storymap.resetTitle")}
                 onClick={handleReset}
               >
