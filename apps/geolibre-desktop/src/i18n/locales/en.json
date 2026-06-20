@@ -641,6 +641,8 @@
     "layers": "Layers",
     "layersLabel": "Layer visibility for map {{number}}",
     "noLayers": "No layers yet",
+    "labelPlaceholder": "Label",
+    "labelLabel": "Label for map {{number}}",
     "removePane": "Remove map {{number}}"
   },
   "onboarding": {

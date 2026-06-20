@@ -156,6 +156,8 @@ export interface AppState {
    * exactly `rows * cols - 1` entries in sync with `mapLayout`.
    */
   secondaryMapViews: SecondaryMapView[];
+  /** User-entered label for the primary pane (shown only in multi-map mode). */
+  primaryMapLabel: string;
   selectedLayerId: string | null;
   selectedFeatureId: string | null;
   identifyLayerId: string | null;
@@ -220,6 +222,10 @@ export interface AppState {
     layerId: string,
     visible: boolean
   ) => void;
+  /** Set the primary pane's custom label. */
+  setPrimaryMapLabel: (label: string) => void;
+  /** Set one secondary pane's custom label (no-op if the id is unknown). */
+  setSecondaryMapLabel: (id: string, label: string) => void;
   /** Remove one secondary pane and collapse the grid back toward 1x1. */
   removeSecondaryMapView: (id: string) => void;
   setBasemapStyleUrl: (url: string) => void;
@@ -486,6 +492,7 @@ export const useAppStore = create<AppState>()(
       dashboardColumns: DEFAULT_DASHBOARD_COLUMNS,
       mapLayout: { ...DEFAULT_MAP_GRID_LAYOUT },
       secondaryMapViews: [],
+      primaryMapLabel: "",
       selectedLayerId: null,
       selectedFeatureId: null,
       identifyLayerId: null,
@@ -599,6 +606,19 @@ export const useAppStore = create<AppState>()(
               ...pane,
               layerVisibility: { ...pane.layerVisibility, [layerId]: visible },
             };
+          });
+          if (!changed) return s;
+          return { secondaryMapViews, isDirty: true };
+        }),
+      setPrimaryMapLabel: (label) =>
+        set({ primaryMapLabel: label, isDirty: true }),
+      setSecondaryMapLabel: (id, label) =>
+        set((s) => {
+          let changed = false;
+          const secondaryMapViews = s.secondaryMapViews.map((pane) => {
+            if (pane.id !== id) return pane;
+            changed = true;
+            return { ...pane, label };
           });
           if (!changed) return s;
           return { secondaryMapViews, isDirty: true };

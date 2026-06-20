@@ -340,11 +340,12 @@ describe("multi-map grid persistence", () => {
     assert.equal(project.secondaryMapViews, undefined);
   });
 
-  it("round-trips a 2x2 grid with per-pane layer visibility", () => {
+  it("round-trips a 2x2 grid with per-pane layer visibility and labels", () => {
     const secondaryMapViews = [
       {
         id: "pane-1",
         view: { center: [10, 20], zoom: 5, bearing: 0, pitch: 0 },
+        label: "2024",
         layerVisibility: { "layer-a": false, "layer-b": true },
       },
       {
@@ -368,13 +369,16 @@ describe("multi-map grid persistence", () => {
       preferences: createEmptyProject().preferences,
       mapLayout: { rows: 2, cols: 2, syncView: false },
       secondaryMapViews,
+      primaryMapLabel: "2020",
       metadata: {},
     });
     assert.deepEqual(project.mapLayout, { rows: 2, cols: 2, syncView: false });
     assert.deepEqual(project.secondaryMapViews, secondaryMapViews);
+    assert.equal(project.primaryMapLabel, "2020");
     const reparsed = parseProject(serializeProject(project));
     assert.deepEqual(reparsed.mapLayout, { rows: 2, cols: 2, syncView: false });
     assert.deepEqual(reparsed.secondaryMapViews, secondaryMapViews);
+    assert.equal(reparsed.primaryMapLabel, "2020");
   });
 
   it("reconciles surplus secondary panes down to rows * cols - 1", () => {
@@ -839,6 +843,20 @@ describe("story map import/export", () => {
       "layer-a": false,
       "layer-b": true,
     });
+  });
+
+  it("sets the primary and secondary pane labels", () => {
+    useAppStore.getState().setMapGrid(1, 2);
+    const paneId = useAppStore.getState().secondaryMapViews[0].id;
+
+    useAppStore.getState().setPrimaryMapLabel("Before");
+    useAppStore.getState().setSecondaryMapLabel(paneId, "After");
+
+    assert.equal(useAppStore.getState().primaryMapLabel, "Before");
+    assert.equal(
+      useAppStore.getState().secondaryMapViews[0].label,
+      "After",
+    );
   });
 
   it("removes a secondary pane and collapses the grid", () => {

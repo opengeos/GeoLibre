@@ -344,6 +344,8 @@ export interface SecondaryMapView {
   /** Stable id, used as the React key and the sync-group registration id. */
   id: string;
   view: MapViewState;
+  /** Optional user-entered label shown on the pane (e.g. a date or scenario). */
+  label?: string;
   /**
    * Per-layer visibility overrides keyed by layer id. A layer absent from this
    * map inherits the primary map's visibility (`layer.visible`); an entry forces
@@ -731,6 +733,8 @@ export interface GeoLibreProject {
    * `basemap*` fields.
    */
   secondaryMapViews?: SecondaryMapView[];
+  /** User-entered label for the primary pane; omitted when empty. */
+  primaryMapLabel?: string;
   metadata: Record<string, unknown>;
 }
 

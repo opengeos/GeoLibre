@@ -13,6 +13,37 @@ import { Layers, X } from "lucide-react";
 import { type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+/**
+ * An editable label shown centered at the top of a map pane. Empty by default;
+ * users type a custom name (e.g. a date or scenario) to tell panes apart.
+ */
+function PaneLabel({
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  ariaLabel: string;
+}) {
+  const { t } = useTranslation();
+  return (
+    // The wrapper is click-through so it never blocks map interaction; only the
+    // centered field itself is interactive. `max-w` keeps it clear of the
+    // top-left and top-right control clusters.
+    <div className="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center">
+      <input
+        type="text"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        aria-label={ariaLabel}
+        placeholder={t("mapGrid.labelPlaceholder")}
+        className="pointer-events-auto h-7 w-32 max-w-[40%] rounded-md border border-input bg-background/90 px-2 text-center text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-none"
+      />
+    </div>
+  );
+}
+
 interface MapGridProps {
   /** The primary map pane (MapCanvas plus its overlays), rendered in cell 0. */
   children: ReactNode;
@@ -31,9 +62,12 @@ interface MapGridProps {
  * `mapView`); this component only owns layout and chrome.
  */
 export function MapGrid({ children }: MapGridProps) {
+  const { t } = useTranslation();
   const rows = useAppStore((s) => s.mapLayout.rows);
   const cols = useAppStore((s) => s.mapLayout.cols);
   const secondaryMapViews = useAppStore((s) => s.secondaryMapViews);
+  const primaryMapLabel = useAppStore((s) => s.primaryMapLabel);
+  const setPrimaryMapLabel = useAppStore((s) => s.setPrimaryMapLabel);
 
   if (rows * cols <= 1) {
     return <>{children}</>;
@@ -50,6 +84,11 @@ export function MapGrid({ children }: MapGridProps) {
     >
       <div className="relative isolate min-h-0 min-w-0 overflow-hidden bg-background">
         {children}
+        <PaneLabel
+          value={primaryMapLabel}
+          onChange={setPrimaryMapLabel}
+          ariaLabel={t("mapGrid.labelLabel", { number: 1 })}
+        />
       </div>
       {secondaryMapViews.map((pane, index) => (
         <SecondaryMapPane key={pane.id} viewId={pane.id} index={index} />
@@ -67,10 +106,19 @@ interface SecondaryMapPaneProps {
 function SecondaryMapPane({ viewId, index }: SecondaryMapPaneProps) {
   const { t } = useTranslation();
   const removeSecondaryMapView = useAppStore((s) => s.removeSecondaryMapView);
+  const setSecondaryMapLabel = useAppStore((s) => s.setSecondaryMapLabel);
+  const label = useAppStore(
+    (s) => s.secondaryMapViews.find((p) => p.id === viewId)?.label ?? "",
+  );
 
   return (
     <div className="relative isolate min-h-0 min-w-0 overflow-hidden bg-background">
       <SecondaryMapCanvas viewId={viewId} />
+      <PaneLabel
+        value={label}
+        onChange={(value) => setSecondaryMapLabel(viewId, value)}
+        ariaLabel={t("mapGrid.labelLabel", { number: index + 2 })}
+      />
       <div className="absolute left-2 top-2 z-10 flex items-center gap-1.5">
         <PaneLayerToggle viewId={viewId} index={index} />
         <button

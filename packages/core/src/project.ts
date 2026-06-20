@@ -125,7 +125,13 @@ export function parseProject(json: string): GeoLibreProject {
     // Only persist the grid when it is larger than a single pane, so default
     // single-map projects serialize byte-identically to before this feature.
     ...(mapLayout.rows * mapLayout.cols > 1
-      ? { mapLayout, secondaryMapViews }
+      ? {
+          mapLayout,
+          secondaryMapViews,
+          ...(normalizeString(data.primaryMapLabel)
+            ? { primaryMapLabel: normalizeString(data.primaryMapLabel) }
+            : {}),
+        }
       : {}),
     metadata: data.metadata ?? {},
   };
@@ -497,9 +503,11 @@ export function normalizeSecondaryMapViews(
     const id = normalizeString(candidate.id).trim();
     if (!id || seen.has(id)) continue;
     seen.add(id);
+    const label = normalizeString(candidate.label);
     views.push({
       id,
       view: normalizeMapViewState(candidate.view),
+      ...(label ? { label } : {}),
       layerVisibility: normalizeLayerVisibility(candidate.layerVisibility),
     });
   }
@@ -935,6 +943,7 @@ export function projectFromStore(state: {
   dashboardColumns?: number;
   mapLayout?: MapGridLayout;
   secondaryMapViews?: SecondaryMapView[];
+  primaryMapLabel?: string;
   metadata: Record<string, unknown>;
 }): GeoLibreProject {
   const styles: Record<string, LayerStyle> = {};
@@ -982,7 +991,15 @@ export function projectFromStore(state: {
     ...(models ? { models } : {}),
     ...(widgets ? { widgets } : {}),
     ...(dashboardColumns !== DEFAULT_DASHBOARD_COLUMNS ? { dashboardColumns } : {}),
-    ...(persistGrid ? { mapLayout, secondaryMapViews } : {}),
+    ...(persistGrid
+      ? {
+          mapLayout,
+          secondaryMapViews,
+          ...(normalizeString(state.primaryMapLabel)
+            ? { primaryMapLabel: normalizeString(state.primaryMapLabel) }
+            : {}),
+        }
+      : {}),
     metadata: state.metadata,
   };
 }
@@ -1070,6 +1087,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
   dashboardColumns: number;
   mapLayout: MapGridLayout;
   secondaryMapViews: SecondaryMapView[];
+  primaryMapLabel: string;
   metadata: Record<string, unknown>;
 } {
   const layers = project.layers.map((layer) => ({
@@ -1122,6 +1140,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
     dashboardColumns: normalizeDashboardColumns(project.dashboardColumns),
     mapLayout,
     secondaryMapViews,
+    primaryMapLabel: normalizeString(project.primaryMapLabel),
     metadata: project.metadata,
   };
 }

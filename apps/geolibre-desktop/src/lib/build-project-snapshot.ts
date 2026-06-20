@@ -44,6 +44,7 @@ export function buildProjectSnapshot(
     dashboardColumns: state.dashboardColumns,
     mapLayout: state.mapLayout,
     secondaryMapViews: state.secondaryMapViews,
+    primaryMapLabel: state.primaryMapLabel,
     metadata: state.metadata,
   });
 }
