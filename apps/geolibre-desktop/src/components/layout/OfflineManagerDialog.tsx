@@ -13,6 +13,7 @@ import {
 } from "@geolibre/ui";
 import {
   Check,
+  ExternalLink,
   HardDrive,
   Loader2,
   Pencil,
@@ -21,7 +22,12 @@ import {
   WifiOff,
   X,
 } from "lucide-react";
-import { hasActiveServiceWorker, warmUrls } from "../../lib/offline-tiles";
+import {
+  hasActiveServiceWorker,
+  OFFLINE_WEB_APP_URL,
+  warmUrls,
+} from "../../lib/offline-tiles";
+import { openExternalLink } from "../../lib/open-external";
 import {
   deleteOfflineRegion,
   formatBytes,
@@ -194,10 +200,20 @@ export function OfflineManagerDialog({
         </DialogHeader>
 
         {!swActive && (
-          <p className="flex items-start gap-2 rounded-md bg-amber-500/10 p-2 text-sm text-amber-700 dark:text-amber-400">
+          <div className="flex items-start gap-2 rounded-md bg-amber-500/10 p-2 text-sm text-amber-700 dark:text-amber-400">
             <WifiOff className="mt-0.5 h-4 w-4 shrink-0" />
-            {t("offlineManager.noServiceWorker")}
-          </p>
+            <div className="space-y-1">
+              <p>{t("offlineManager.noServiceWorker")}</p>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 font-medium underline underline-offset-2 hover:no-underline"
+                onClick={() => void openExternalLink(OFFLINE_WEB_APP_URL)}
+              >
+                {t("offlineManager.noServiceWorkerCta")}
+                <ExternalLink className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
         )}
 
         {regions.length === 0 ? (
