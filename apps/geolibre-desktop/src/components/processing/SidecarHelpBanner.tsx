@@ -1,6 +1,6 @@
 import { Button } from "@geolibre/ui";
 import { AlertTriangle, ChevronDown, ChevronRight, Zap } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 // The local loopback address the Python sidecar listens on. Kept out of the
@@ -44,6 +44,9 @@ export function SidecarHelpBanner({
 }: SidecarHelpBannerProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
+  // A unique id keeps the aria-controls association valid even if two banners
+  // are ever rendered on the same page (a hardcoded id would collide).
+  const helpId = useId();
 
   return (
     <div className="rounded-md border border-amber-500/40 bg-amber-500/10 text-sm">
@@ -51,10 +54,13 @@ export function SidecarHelpBanner({
         type="button"
         className="flex w-full items-start gap-2 px-3 py-2 text-left"
         aria-expanded={expanded}
-        aria-controls="sidecar-help-details"
+        aria-controls={helpId}
         onClick={() => setExpanded((value) => !value)}
       >
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+        <AlertTriangle
+          aria-hidden="true"
+          className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400"
+        />
         <span className="min-w-0 flex-1">
           <span className="block font-medium text-foreground">
             {t("processing.sidecar.unavailableTitle")}
@@ -71,15 +77,21 @@ export function SidecarHelpBanner({
           </span>
         </span>
         {expanded ? (
-          <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+          <ChevronDown
+            aria-hidden="true"
+            className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
+          />
         ) : (
-          <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+          <ChevronRight
+            aria-hidden="true"
+            className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
+          />
         )}
       </button>
 
       {expanded && (
         <div
-          id="sidecar-help-details"
+          id={helpId}
           className="grid gap-3 border-t border-amber-500/30 px-3 py-3"
         >
           <p className="text-xs leading-relaxed text-muted-foreground">
