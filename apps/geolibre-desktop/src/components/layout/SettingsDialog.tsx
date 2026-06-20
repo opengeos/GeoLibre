@@ -31,10 +31,12 @@ import {
   Input,
   Label,
   Select,
+  cn,
 } from "@geolibre/ui";
 import type { MapController } from "@geolibre/map";
 import {
   Braces,
+  Check,
   Crosshair,
   DownloadCloud,
   Eye,
@@ -44,6 +46,7 @@ import {
   Locate,
   MapPinned,
   LayoutPanelTop,
+  Palette,
   PanelLeft,
   PanelRight,
   Plus,
@@ -72,6 +75,7 @@ import {
 } from "../../hooks/useDesktopSettings";
 import { useLanguage } from "../../hooks/useLanguage";
 import { isTauri } from "../../lib/is-tauri";
+import { THEME_SCHEMES, type ThemeScheme } from "../../lib/theme-schemes";
 import type { UpdateNotificationLevel } from "../../lib/updates";
 import {
   DATA_SOURCE_CATALOG,
@@ -90,6 +94,7 @@ import {
 export type SettingsSection =
   | "map"
   | "layout"
+  | "appearance"
   | "interface"
   | "geocoding"
   | "environment"
@@ -142,6 +147,11 @@ const SECTION_ITEMS: Array<{
 }> = [
   { id: "map", labelKey: "settings.section.map", icon: MapPinned },
   { id: "layout", labelKey: "settings.section.layout", icon: LayoutPanelTop },
+  {
+    id: "appearance",
+    labelKey: "settings.section.appearance",
+    icon: Palette,
+  },
   {
     id: "interface",
     labelKey: "settings.section.interface",
@@ -598,6 +608,15 @@ export function SettingsDialog({
     updateDraftLayoutSettings(DEFAULT_DESKTOP_LAYOUT_SETTINGS);
   };
 
+  // The accent scheme applies live (instant preview) rather than waiting for
+  // Save, mirroring the Interface profile toggles. Reads the latest state so a
+  // rapid click after another live change does not clobber it with a stale
+  // render-closure snapshot.
+  const updateSavedThemeScheme = (scheme: ThemeScheme) => {
+    const current = useDesktopSettingsStore.getState().desktopSettings;
+    setDesktopSettings({ ...current, theme: { ...current.theme, scheme } });
+  };
+
   const updateDraftUpdateSettings = (patch: Partial<UpdateSettings>) => {
     setDraftDesktopSettings((current) => ({
       ...current,
@@ -936,6 +955,47 @@ export function SettingsDialog({
               <DropdownMenuLabel className="px-2 py-1 text-xs font-normal text-muted-foreground">
                 {t("settings.menu.urlOverrideNote")}
               </DropdownMenuLabel>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Palette className="h-3.5 w-3.5" />
+              {t("settings.section.appearance")}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-56">
+              <DropdownMenuLabel className="px-2 py-1 text-xs font-normal text-muted-foreground">
+                {t("settings.appearance.accentColor")}
+              </DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={desktopSettings.theme.scheme}
+                onValueChange={(value: string) =>
+                  updateSavedThemeScheme(value as ThemeScheme)
+                }
+              >
+                {THEME_SCHEMES.map((scheme) => (
+                  <DropdownMenuRadioItem
+                    key={scheme.id}
+                    value={scheme.id}
+                    onSelect={(event: Event) => event.preventDefault()}
+                  >
+                    <span
+                      aria-hidden
+                      className="mr-2 h-3.5 w-3.5 shrink-0 rounded-full border"
+                      style={{ backgroundColor: scheme.swatch }}
+                    />
+                    {t(scheme.labelKey)}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => {
+                  setSection("appearance");
+                  setOpen(true);
+                }}
+              >
+                {t("settings.menu.appearanceSettings")}
+              </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
           <DropdownMenuSub>
@@ -1294,6 +1354,56 @@ export function SettingsDialog({
                       {t("settings.layout.urlParamsNote")}
                     </div>
                   ) : null}
+                </div>
+              ) : null}
+              {effectiveSection === "appearance" ? (
+                <div className="space-y-5">
+                  <div>
+                    <h3 className="text-sm font-semibold">
+                      {t("settings.appearance.title")}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.appearance.description")}
+                    </p>
+                  </div>
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {t("settings.appearance.accentColor")}
+                    </h4>
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      {THEME_SCHEMES.map((scheme) => {
+                        const active =
+                          desktopSettings.theme.scheme === scheme.id;
+                        return (
+                          <button
+                            key={scheme.id}
+                            type="button"
+                            aria-pressed={active}
+                            onClick={() => updateSavedThemeScheme(scheme.id)}
+                            className={cn(
+                              "flex items-center gap-2.5 rounded-md border p-3 text-sm transition-colors",
+                              active
+                                ? "border-primary ring-2 ring-ring"
+                                : "hover:bg-accent",
+                            )}
+                          >
+                            <span
+                              aria-hidden
+                              className="h-5 w-5 shrink-0 rounded-full border"
+                              style={{ backgroundColor: scheme.swatch }}
+                            />
+                            <span>{t(scheme.labelKey)}</span>
+                            {active ? (
+                              <Check className="ml-auto h-4 w-4 text-primary" />
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.appearance.modeNote")}
+                    </p>
+                  </div>
                 </div>
               ) : null}
               {effectiveSection === "interface" ? (

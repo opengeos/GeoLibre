@@ -9,6 +9,7 @@ import { useRecentProjectsPersistence } from "./hooks/useRecentProjectsPersisten
 import { useRuntimeEnvironmentVariables } from "./hooks/useRuntimeEnvironmentVariables";
 import { useStartupUpdateCheck } from "./hooks/useStartupUpdateCheck";
 import { useThemeMode } from "./hooks/useThemeMode";
+import { useThemeScheme } from "./hooks/useThemeScheme";
 import { useUiProfileBootstrap } from "./hooks/useUiProfileBootstrap";
 import { useUndoRedoShortcuts } from "./hooks/useUndoRedoShortcuts";
 
@@ -24,6 +25,7 @@ export default function App() {
   } = useStartupUpdateCheck();
 
   useDesktopSettingsPersistence();
+  useThemeScheme();
   useRecentProjectsPersistence();
   useRuntimeEnvironmentVariables();
   useUndoRedoShortcuts();

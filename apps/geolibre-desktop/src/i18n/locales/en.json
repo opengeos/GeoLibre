@@ -749,6 +749,7 @@
     "section": {
       "map": "Map",
       "layout": "Layout",
+      "appearance": "Appearance",
       "interface": "Interface",
       "geocoding": "Geocoding",
       "environment": "Environment",
@@ -757,6 +758,7 @@
     "menu": {
       "mapPreferences": "Map Preferences",
       "layoutSettings": "Layout Settings",
+      "appearanceSettings": "Appearance Settings",
       "interfaceSettings": "Interface Settings",
       "geocoding": "Geocoding",
       "environmentVariables": "Environment Variables",
@@ -805,6 +807,19 @@
       "showStylePanel": "Show Style panel",
       "showAttributePanel": "Show Attribute panel",
       "urlParamsNote": "URL layout parameters still apply when present in shared viewer links."
+    },
+    "appearance": {
+      "title": "Appearance",
+      "description": "Choose an accent color. It applies on top of the light or dark mode, which you can toggle from the toolbar.",
+      "accentColor": "Accent color",
+      "modeNote": "Use the Sun/Moon button in the toolbar to switch between light and dark mode.",
+      "scheme": {
+        "blue": "Blue",
+        "violet": "Violet",
+        "emerald": "Emerald",
+        "rose": "Rose",
+        "amber": "Amber"
+      }
     },
     "interface": {
       "title": "Interface profile",
