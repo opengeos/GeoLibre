@@ -206,7 +206,7 @@ export function OfflineManagerDialog({
               <p>{t("offlineManager.noServiceWorker")}</p>
               <button
                 type="button"
-                className="inline-flex items-center gap-1 font-medium underline underline-offset-2 hover:no-underline"
+                className="inline-flex items-center gap-1 rounded font-medium underline underline-offset-2 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={() => void openExternalLink(OFFLINE_WEB_APP_URL)}
               >
                 {t("offlineManager.noServiceWorkerCta")}

@@ -341,7 +341,7 @@ export function OfflineRegionDialog({
               <p>{t("offline.noServiceWorker")}</p>
               <button
                 type="button"
-                className="inline-flex items-center gap-1 font-medium underline underline-offset-2 hover:no-underline"
+                className="inline-flex items-center gap-1 rounded font-medium underline underline-offset-2 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={() => void openExternalLink(OFFLINE_WEB_APP_URL)}
               >
                 {t("offline.noServiceWorkerCta")}
@@ -409,7 +409,7 @@ export function OfflineRegionDialog({
               type="button"
               className="flex items-center gap-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-muted-foreground"
               aria-expanded={showAdvanced}
-              disabled={!swActive}
+              disabled={controlsDisabled}
               onClick={() => setShowAdvanced((value) => !value)}
             >
               {showAdvanced ? (
