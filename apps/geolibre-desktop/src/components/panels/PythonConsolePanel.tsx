@@ -27,8 +27,10 @@ const MIN_CONSOLE_HEIGHT = 120;
 const MAX_CONSOLE_HEIGHT = 560;
 const DEFAULT_EDITOR_HEIGHT = 200;
 const MIN_EDITOR_HEIGHT = 120;
-// Space the terminal (plus header and divider chrome) must keep when the
-// advanced editor grows, so the output never collapses to nothing.
+// Room reserved for the terminal (plus header and divider chrome) when the
+// advanced editor grows via the splitter or the panel-grow on toggle. At very
+// small panel heights the MIN_EDITOR_HEIGHT floor wins, so this bounds rather
+// than eliminates how far the terminal can be squeezed.
 const EDITOR_RESIZE_RESERVE = 150;
 const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
 const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
@@ -249,19 +251,19 @@ export function PythonConsolePanel({
 
   // Toggle the single input region between the basic REPL and the advanced
   // editor. Entering advanced grows the panel so the editor gets its room
-  // without crushing the output terminal to a sliver.
+  // without crushing the output terminal to a sliver. Both setState calls stay
+  // at the top level (no side effect inside an updater); reading advancedMode
+  // from the closure is safe in an event handler.
   const toggleAdvanced = () => {
-    setAdvancedMode((advanced) => {
-      if (!advanced) {
-        setHeight((h) =>
-          Math.min(
-            MAX_CONSOLE_HEIGHT,
-            Math.max(h, editorHeight + EDITOR_RESIZE_RESERVE),
-          ),
-        );
-      }
-      return !advanced;
-    });
+    if (!advancedMode) {
+      setHeight((h) =>
+        Math.min(
+          MAX_CONSOLE_HEIGHT,
+          Math.max(h, editorHeight + EDITOR_RESIZE_RESERVE),
+        ),
+      );
+    }
+    setAdvancedMode((prev) => !prev);
   };
 
   const startResize = (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -412,8 +414,8 @@ export function PythonConsolePanel({
             className="h-8 w-8"
             title={
               advancedMode
-                ? t("pythonConsole.basicMode")
-                : t("pythonConsole.advancedMode")
+                ? t("pythonConsole.switchToBasic")
+                : t("pythonConsole.switchToAdvanced")
             }
             aria-pressed={advancedMode}
             onClick={toggleAdvanced}
