@@ -105,6 +105,7 @@ export async function listGeolibreWasmTools(): Promise<WhiteboxTool[]> {
       summary: manifest.summary,
       category: manifest.category,
       license_tier: manifest.license_tier,
+      source: "geolibre",
       params: (manifest.params ?? []).map((param) => {
         const mapped: WhiteboxToolParameter = {
           name: param.name,

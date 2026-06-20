@@ -362,6 +362,9 @@ export function ProcessingDialog({
   const [values, setValues] = useState<ParameterValues>({});
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
+  // Tool provenance filter: "All" | "geolibre" | "whitebox". Only meaningful in
+  // WASM mode, where GeoLibre-authored tools are mixed into the catalog.
+  const [source, setSource] = useState("All");
   const [loadingTools, setLoadingTools] = useState(false);
   const [runtimeMessage, setRuntimeMessage] = useState("");
   const [runtimeAvailable, setRuntimeAvailable] = useState<boolean | null>(null);
@@ -399,11 +402,24 @@ export function ProcessingDialog({
     return ["All", ...unique];
   }, [tools]);
 
+  // Whether any GeoLibre-authored tools are present (WASM mode), gating the
+  // source filter — pointless when every tool is from Whitebox.
+  const hasGeolibreTools = useMemo(
+    () => tools.some((tool) => tool.source === "geolibre"),
+    [tools],
+  );
+
   const filteredTools = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return tools.filter((tool) => {
       if (category !== "All" && (tool.category || "General") !== category) {
         return false;
+      }
+      // Ignore the source filter when no GeoLibre tools are present (e.g. sidecar
+      // mode), so a stale "geolibre" selection can't empty the whole list.
+      if (source !== "All" && hasGeolibreTools) {
+        const toolSource = tool.source === "geolibre" ? "geolibre" : "whitebox";
+        if (toolSource !== source) return false;
       }
       if (!normalizedQuery) return true;
       return [
@@ -416,7 +432,7 @@ export function ProcessingDialog({
         .toLowerCase()
         .includes(normalizedQuery);
     });
-  }, [category, query, tools]);
+  }, [category, source, hasGeolibreTools, query, tools]);
 
   const loadWhitebox = useCallback(async () => {
     setLoadingTools(true);
@@ -863,6 +879,18 @@ export function ProcessingDialog({
                 </option>
               ))}
             </Select>
+
+            {hasGeolibreTools && (
+              <Select
+                value={source}
+                onChange={(e) => setSource(e.target.value)}
+                aria-label="Filter by source"
+              >
+                <option value="All">All sources</option>
+                <option value="geolibre">GeoLibre tools</option>
+                <option value="whitebox">Whitebox tools</option>
+              </Select>
+            )}
 
             <ScrollArea className="min-h-0 flex-1 rounded-md border">
               <div className="divide-y">
