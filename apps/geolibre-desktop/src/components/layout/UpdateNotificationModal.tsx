@@ -39,8 +39,10 @@ export function UpdateNotificationModal({
     <Dialog
       open={pending !== null}
       onOpenChange={(open: boolean) => {
-        // Closing via the overlay, Escape, or the X is "remind me later".
-        if (!open) onRemindLater();
+        // Closing via the overlay, Escape, or the X is "remind me later". The
+        // explicit buttons clear `pending` themselves, so guard on it here to
+        // avoid a redundant onRemindLater after a Skip/Remind click.
+        if (!open && pending !== null) onRemindLater();
       }}
     >
       <DialogContent className="max-w-md">
