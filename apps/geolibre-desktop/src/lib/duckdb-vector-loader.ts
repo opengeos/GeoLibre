@@ -205,6 +205,34 @@ function sourceSql(fileName: string, extension: string): string {
   return `SELECT * FROM ST_Read(${quotedName})`;
 }
 
+/**
+ * Build a {@link ensureSpatialExtension} `beforeLoad` warm-up that reads the
+ * Parquet file once before the spatial extension is loaded, or `undefined` for
+ * non-Parquet inputs.
+ *
+ * duckdb-wasm 1.33.1-dev45 breaks `read_parquet` on any connection that runs
+ * `LOAD spatial` itself unless that connection has already read the file at
+ * least once: the read then throws `Invalid Error: stoi: no conversion`. A
+ * Parquet dropped as the first vector file is exactly that case, because its
+ * connection is the one that triggers the singleton `LOAD spatial`. Reading the
+ * file before the load primes the connection so the later `DESCRIBE`/`SELECT`
+ * succeed. Later Parquet loads reuse the already-loaded extension, so their
+ * connections never run `LOAD` and need no warm-up. This mirrors the remote
+ * warm-up in `sql-workspace.ts`.
+ */
+function parquetWarmUp(
+  connection: duckdb.AsyncDuckDBConnection,
+  extension: string,
+  fileName: string,
+): (() => Promise<void>) | undefined {
+  if (!isParquetExtension(extension)) return undefined;
+  return async () => {
+    await connection.query(
+      `SELECT 1 FROM read_parquet(${quoteSqlString(fileName)}) LIMIT 0`,
+    );
+  };
+}
+
 function crsSql(fileName: string): string {
   return `
     SELECT
@@ -368,7 +396,10 @@ export async function loadDuckDbVectorFile(
 
   try {
     await registerVectorFileBuffers(db, file);
-    await ensureSpatialExtension(connection);
+    await ensureSpatialExtension(
+      connection,
+      parquetWarmUp(connection, file.extension, file.name),
+    );
 
     const sql = sourceSql(file.name, file.extension);
     const description = rowsFromResult(
@@ -569,7 +600,12 @@ export async function convertDuckDbVectorToGeoParquet(
 
   try {
     await registerVectorFileBuffers(db, file);
-    await ensureSpatialExtension(connection);
+    // Warm up the Parquet read path before LOAD spatial (see `parquetWarmUp`);
+    // the CSV branch reads via `read_csv_auto` and is unaffected.
+    await ensureSpatialExtension(
+      connection,
+      options.csv ? undefined : parquetWarmUp(connection, file.extension, file.name),
+    );
 
     let geometryColumn: string;
     let source: string;
