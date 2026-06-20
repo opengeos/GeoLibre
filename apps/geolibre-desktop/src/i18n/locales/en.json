@@ -516,7 +516,25 @@
       "date": "Date",
       "attribution": "Include GeoLibre attribution",
       "pageBorder": "Page border",
-      "infoBlock": "Info block (title block)"
+      "infoBlock": "Info block (title block)",
+      "colorbar": "Colorbar"
+    },
+    "colorbar": {
+      "colormap": "Colormap",
+      "min": "Min value",
+      "max": "Max value",
+      "label": "Label",
+      "labelPlaceholder": "e.g. Elevation (m)",
+      "orientation": "Orientation",
+      "vertical": "Vertical",
+      "horizontal": "Horizontal",
+      "position": "Position"
+    },
+    "position": {
+      "topLeft": "Top left",
+      "topRight": "Top right",
+      "bottomLeft": "Bottom left",
+      "bottomRight": "Bottom right"
     },
     "footerTextLabel": "Footer text",
     "footerPlaceholder": "Custom footer text",

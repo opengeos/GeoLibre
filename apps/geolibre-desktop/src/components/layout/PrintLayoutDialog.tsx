@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { DEFAULT_LEGEND_CONFIG, useAppStore } from "@geolibre/core";
+import {
+  DEFAULT_LEGEND_CONFIG,
+  getVectorColorRamp,
+  useAppStore,
+  VECTOR_COLOR_RAMPS,
+} from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import {
   Button,
@@ -62,8 +67,6 @@ interface PrintLayoutDialogProps {
   onOpenChange: (open: boolean) => void;
   mapControllerRef: React.RefObject<MapController | null>;
 }
-
-const PREVIEW_LONG_EDGE = 560;
 
 /** Common industry scale denominators offered as quick presets (GH #522). */
 const SCALE_PRESETS = [500, 1000, 2500, 5000, 10000, 25000, 50000, 100000];
@@ -153,6 +156,19 @@ export function PrintLayoutDialog({
   const [pageBorderColor, setPageBorderColor] = useState("#111827");
   const [pageBorderWidth, setPageBorderWidth] = useState(2);
   const [mapBackground, setMapBackground] = useState("#e5e7eb");
+  // Native colorbar composed in the dialog (GH follow-up).
+  const [showColorbar, setShowColorbar] = useState(false);
+  const [colorbarRamp, setColorbarRamp] = useState("viridis");
+  const [colorbarMin, setColorbarMin] = useState("0");
+  const [colorbarMax, setColorbarMax] = useState("100");
+  const [colorbarLabel, setColorbarLabel] = useState("");
+  const [colorbarOrientation, setColorbarOrientation] = useState<
+    "vertical" | "horizontal"
+  >("vertical");
+  // Default away from the bottom-right nav duo and top-left legend.
+  const [colorbarPosition, setColorbarPosition] = useState<
+    "top-left" | "top-right" | "bottom-left" | "bottom-right"
+  >("top-right");
   // Cartographic title block ("stempel") fields (GH #522).
   const [showInfoBlock, setShowInfoBlock] = useState(false);
   const [author, setAuthor] = useState("");
@@ -169,6 +185,7 @@ export function PrintLayoutDialog({
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const previewRef = useRef<HTMLCanvasElement | null>(null);
+  const previewBoxRef = useRef<HTMLDivElement | null>(null);
   const wasOpenRef = useRef(false);
   // Set while the dialog is hidden to let the user draw on the map, so the
   // close handler does not tear down the in-progress extent box.
@@ -443,6 +460,16 @@ export function PrintLayoutDialog({
       pageBorderColor,
       pageBorderWidth,
       mapBackground,
+      colorbar: showColorbar
+        ? {
+            colors: getVectorColorRamp(colorbarRamp).colors,
+            min: Number(colorbarMin) || 0,
+            max: Number(colorbarMax) || 0,
+            label: colorbarLabel,
+            orientation: colorbarOrientation,
+            position: colorbarPosition,
+          }
+        : null,
       showInfoBlock,
       author,
       projectNumber,
@@ -488,6 +515,13 @@ export function PrintLayoutDialog({
       pageBorderColor,
       pageBorderWidth,
       mapBackground,
+      showColorbar,
+      colorbarRamp,
+      colorbarMin,
+      colorbarMax,
+      colorbarLabel,
+      colorbarOrientation,
+      colorbarPosition,
       showInfoBlock,
       author,
       projectNumber,
@@ -608,35 +642,53 @@ export function PrintLayoutDialog({
     [recapture, extentBbox],
   );
 
-  // Redraw the preview whenever the layout options change. Drawing is scheduled
-  // on an animation frame and retries until the canvas exists: the dialog mounts
-  // its content in a portal, so on the open transition the first effect pass can
-  // run before the canvas is committed -- without the retry the preview stayed
-  // blank until the user clicked "Recapture map" (GH #521).
+  // Redraw the preview whenever the layout options change, sizing the canvas to
+  // fill the preview pane (so it grows when the dialog is resized) while keeping
+  // the page aspect ratio. Drawing is scheduled on an animation frame and
+  // retries until the canvas exists: the dialog mounts its content in a portal,
+  // so the first effect pass can run before the canvas is committed -- without
+  // the retry the preview stayed blank until "Recapture map" (GH #521). A
+  // ResizeObserver re-renders when the pane resizes (e.g. dragging the splitter
+  // or the dialog grip).
   useEffect(() => {
     if (!open) return;
     let raf = 0;
-    // Cap the retries so a canvas that never attaches (e.g. a portal render
-    // error) cannot spin the loop at ~60 fps until the next state change.
     let retries = 0;
-    const draw = () => {
+    let observer: ResizeObserver | null = null;
+    const render = () => {
       const canvas = previewRef.current;
-      if (!canvas) {
-        if (retries++ < 20) raf = requestAnimationFrame(draw);
+      const box = previewBoxRef.current;
+      if (!canvas || !box) {
+        if (retries++ < 20) raf = requestAnimationFrame(render);
         return;
       }
       const size = resolvePageSize(options);
       const aspect = size.width / size.height;
-      const pw =
-        aspect >= 1 ? PREVIEW_LONG_EDGE : Math.round(PREVIEW_LONG_EDGE * aspect);
-      const ph =
-        aspect >= 1 ? Math.round(PREVIEW_LONG_EDGE / aspect) : PREVIEW_LONG_EDGE;
-      canvas.width = pw;
-      canvas.height = ph;
+      // Available space inside the pane (p-3 padding = 12px each side).
+      const availW = Math.max(1, box.clientWidth - 24);
+      const availH = Math.max(1, box.clientHeight - 24);
+      let dispW = availW;
+      let dispH = availW / aspect;
+      if (dispH > availH) {
+        dispH = availH;
+        dispW = availH * aspect;
+      }
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, Math.round(dispW * dpr));
+      canvas.height = Math.max(1, Math.round(dispH * dpr));
+      canvas.style.width = `${Math.round(dispW)}px`;
+      canvas.style.height = `${Math.round(dispH)}px`;
       drawLayout(canvas, options);
+      if (!observer) {
+        observer = new ResizeObserver(() => render());
+        observer.observe(box);
+      }
     };
-    raf = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(render);
+    return () => {
+      cancelAnimationFrame(raf);
+      observer?.disconnect();
+    };
   }, [open, options]);
 
   const handleExport = async (kind: "png" | "pdf") => {
@@ -1108,7 +1160,119 @@ export function PrintLayoutDialog({
                 checked={showInfoBlock}
                 onChange={setShowInfoBlock}
               />
+              <ToggleField
+                id="el-colorbar"
+                label={t("printLayout.element.colorbar")}
+                checked={showColorbar}
+                onChange={setShowColorbar}
+              />
             </div>
+
+            {showColorbar && (
+              <div className="space-y-3 rounded-md border p-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="cb-ramp">
+                    {t("printLayout.colorbar.colormap")}
+                  </Label>
+                  <Select
+                    id="cb-ramp"
+                    value={colorbarRamp}
+                    onChange={(e) => setColorbarRamp(e.target.value)}
+                  >
+                    {VECTOR_COLOR_RAMPS.map((r) => (
+                      <option key={r.value} value={r.value}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cb-min">
+                      {t("printLayout.colorbar.min")}
+                    </Label>
+                    <Input
+                      id="cb-min"
+                      type="number"
+                      value={colorbarMin}
+                      onChange={(e) => setColorbarMin(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cb-max">
+                      {t("printLayout.colorbar.max")}
+                    </Label>
+                    <Input
+                      id="cb-max"
+                      type="number"
+                      value={colorbarMax}
+                      onChange={(e) => setColorbarMax(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="cb-label">
+                    {t("printLayout.colorbar.label")}
+                  </Label>
+                  <Input
+                    id="cb-label"
+                    value={colorbarLabel}
+                    placeholder={t("printLayout.colorbar.labelPlaceholder")}
+                    onChange={(e) => setColorbarLabel(e.target.value)}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cb-orientation">
+                      {t("printLayout.colorbar.orientation")}
+                    </Label>
+                    <Select
+                      id="cb-orientation"
+                      value={colorbarOrientation}
+                      onChange={(e) =>
+                        setColorbarOrientation(
+                          e.target.value as "vertical" | "horizontal",
+                        )
+                      }
+                    >
+                      <option value="vertical">
+                        {t("printLayout.colorbar.vertical")}
+                      </option>
+                      <option value="horizontal">
+                        {t("printLayout.colorbar.horizontal")}
+                      </option>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cb-position">
+                      {t("printLayout.colorbar.position")}
+                    </Label>
+                    <Select
+                      id="cb-position"
+                      value={colorbarPosition}
+                      onChange={(e) =>
+                        setColorbarPosition(
+                          e.target.value as typeof colorbarPosition,
+                        )
+                      }
+                    >
+                      <option value="top-left">
+                        {t("printLayout.position.topLeft")}
+                      </option>
+                      <option value="top-right">
+                        {t("printLayout.position.topRight")}
+                      </option>
+                      <option value="bottom-left">
+                        {t("printLayout.position.bottomLeft")}
+                      </option>
+                      <option value="bottom-right">
+                        {t("printLayout.position.bottomRight")}
+                      </option>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {showFooter && (
               <div className="space-y-1.5">
@@ -1376,17 +1540,18 @@ export function PrintLayoutDialog({
             </div>
             {/* Fit the whole page in view: the canvas scales down to honour both
                 max constraints without ever showing a scrollbar (GH #520). */}
-            <div className="flex w-full flex-1 items-center justify-center rounded-md border bg-muted/30 p-3">
+            <div
+              ref={previewBoxRef}
+              className={`flex w-full items-center justify-center overflow-hidden rounded-md border bg-muted/30 p-3 ${
+                dialogSize ? "min-h-0 flex-1" : "h-[min(60vh,460px)]"
+              }`}
+            >
+              {/* The canvas width/height (backing + CSS) are set imperatively in
+                  the draw effect to fit this pane, so it scales with the dialog. */}
               <canvas
                 ref={previewRef}
                 className="shadow-md"
-                style={{
-                  maxWidth: "100%",
-                  maxHeight: dialogSize ? "100%" : "min(60vh, 460px)",
-                  width: "auto",
-                  height: "auto",
-                  imageRendering: "auto",
-                }}
+                style={{ imageRendering: "auto" }}
               />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}

@@ -211,6 +211,20 @@ export interface LayoutOptions {
    * projection). Defaults to a light grey.
    */
   mapBackground?: string;
+  /**
+   * An optional colorbar composed in the Print Layout (independent of any on-map
+   * colorbar control), drawn crisply at export resolution at the chosen corner.
+   * `colors` are the gradient stops (low value first), resolved from a named
+   * ramp by the dialog so this drawing code stays data-only.
+   */
+  colorbar?: {
+    colors: readonly string[];
+    min: number;
+    max: number;
+    label?: string;
+    orientation: "horizontal" | "vertical";
+    position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  } | null;
   legend: LegendEntry[];
   /** Heading drawn above the legend entries. */
   legendTitle: string;
@@ -646,6 +660,16 @@ export function drawLayout(
     ctx.restore();
   }
 
+  // --- Colorbar (user-chosen corner inside the map) ---------------------
+  if (opts.colorbar && opts.colorbar.colors.length >= 2) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(bodyX, bodyY, bodyW, bodyH);
+    ctx.clip();
+    drawColorbar(ctx, opts.colorbar, bodyX, bodyY, bodyW, bodyH, unit);
+    ctx.restore();
+  }
+
   // --- Page border -------------------------------------------------------
   if (opts.showPageBorder) {
     const widthScale = Math.max(1, Math.min(10, opts.pageBorderWidth ?? 2));
@@ -890,6 +914,154 @@ function drawInfoBlock(
   }
   ctx.restore();
   return y;
+}
+
+/** Format a colorbar tick value compactly (exponential for extremes). */
+function formatColorbarTick(value: number): string {
+  if (!Number.isFinite(value)) return String(value);
+  const abs = Math.abs(value);
+  if (abs !== 0 && (abs >= 100000 || abs < 0.001)) return value.toExponential(1);
+  return String(Math.round(value * 100) / 100);
+}
+
+type ColorbarSpec = NonNullable<LayoutOptions["colorbar"]>;
+
+/**
+ * Draw a colorbar (gradient ramp + value ticks + optional label) as a bordered
+ * panel anchored at one of the four body corners. Rendered with the canvas at
+ * full output resolution, so it stays crisp in the export (unlike a rasterized
+ * on-map control).
+ */
+function drawColorbar(
+  ctx: CanvasRenderingContext2D,
+  cb: ColorbarSpec,
+  bodyX: number,
+  bodyY: number,
+  bodyW: number,
+  bodyH: number,
+  unit: number,
+): void {
+  const vertical = cb.orientation === "vertical";
+  const pad = unit * 1.4;
+  const barThick = unit * 2.2;
+  const barLen = (vertical ? bodyH : bodyW) * 0.34;
+  const labelSize = unit * 1.7;
+  const titleSize = unit * 1.9;
+  const tickGap = unit * 0.7;
+  const tickLen = unit * 0.7;
+  const inset = unit * 2.4;
+  const lineW = Math.max(1, unit * 0.12);
+  const title = (cb.label ?? "").trim();
+  const hasTitle = title.length > 0;
+
+  const TICKS = 5;
+  const span = cb.max - cb.min;
+  const ticks = Array.from({ length: TICKS }, (_, i) => {
+    const t = i / (TICKS - 1);
+    return { t, text: formatColorbarTick(cb.min + span * t) };
+  });
+
+  ctx.save();
+  ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
+  let maxLabelW = 0;
+  for (const tk of ticks) {
+    maxLabelW = Math.max(maxLabelW, ctx.measureText(tk.text).width);
+  }
+  ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
+  const titleW = hasTitle ? ctx.measureText(title).width : 0;
+  const titleBlock = hasTitle ? titleSize + unit * 0.8 : 0;
+
+  // Panel size. Vertical bars reserve half a label above/below so the end ticks
+  // (drawn middle-baseline) never clip the panel.
+  let panelW: number;
+  let panelH: number;
+  if (vertical) {
+    panelW = pad * 2 + Math.max(barThick + tickLen + tickGap + maxLabelW, titleW);
+    panelH = pad * 2 + titleBlock + barLen + labelSize;
+  } else {
+    panelW = pad * 2 + Math.max(barLen, titleW);
+    panelH = pad * 2 + titleBlock + barThick + tickLen + tickGap + labelSize;
+  }
+
+  const px = cb.position.endsWith("left")
+    ? bodyX + inset
+    : bodyX + bodyW - inset - panelW;
+  const py = cb.position.startsWith("top")
+    ? bodyY + inset
+    : bodyY + bodyH - inset - panelH;
+
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  ctx.strokeStyle = BORDER;
+  ctx.lineWidth = Math.max(1, unit * 0.15);
+  roundRect(ctx, px, py, panelW, panelH, unit);
+  ctx.fill();
+  ctx.stroke();
+
+  let cursorY = py + pad;
+  if (hasTitle) {
+    ctx.fillStyle = INK;
+    ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText(title, px + pad, cursorY, panelW - pad * 2);
+    cursorY += titleBlock;
+  }
+
+  const addStops = (grad: CanvasGradient) => {
+    const n = cb.colors.length - 1;
+    cb.colors.forEach((c, i) => grad.addColorStop(n > 0 ? i / n : 0, c));
+  };
+
+  ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
+  if (vertical) {
+    const barX = px + pad;
+    const barY = cursorY + labelSize / 2;
+    // Bottom = min, top = max.
+    const grad = ctx.createLinearGradient(0, barY + barLen, 0, barY);
+    addStops(grad);
+    ctx.fillStyle = grad;
+    ctx.fillRect(barX, barY, barThick, barLen);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = lineW;
+    ctx.strokeRect(barX, barY, barThick, barLen);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    for (const tk of ticks) {
+      const ty = barY + barLen - tk.t * barLen;
+      ctx.strokeStyle = INK;
+      ctx.beginPath();
+      ctx.moveTo(barX + barThick, ty);
+      ctx.lineTo(barX + barThick + tickLen, ty);
+      ctx.stroke();
+      ctx.fillStyle = INK;
+      ctx.fillText(tk.text, barX + barThick + tickLen + tickGap, ty);
+    }
+  } else {
+    const barX = px + pad;
+    const barY = cursorY;
+    // Left = min, right = max.
+    const grad = ctx.createLinearGradient(barX, 0, barX + barLen, 0);
+    addStops(grad);
+    ctx.fillStyle = grad;
+    ctx.fillRect(barX, barY, barLen, barThick);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = lineW;
+    ctx.strokeRect(barX, barY, barLen, barThick);
+    ctx.textBaseline = "top";
+    for (const tk of ticks) {
+      const tx = barX + tk.t * barLen;
+      ctx.strokeStyle = INK;
+      ctx.beginPath();
+      ctx.moveTo(tx, barY + barThick);
+      ctx.lineTo(tx, barY + barThick + tickLen);
+      ctx.stroke();
+      // Keep the end labels inside the panel.
+      ctx.textAlign = tk.t === 0 ? "left" : tk.t === 1 ? "right" : "center";
+      ctx.fillStyle = INK;
+      ctx.fillText(tk.text, tx, barY + barThick + tickLen + tickGap);
+    }
+  }
+  ctx.restore();
 }
 
 /** Draw a legend box anchored at its top-left corner. */

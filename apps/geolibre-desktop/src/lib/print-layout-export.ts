@@ -220,9 +220,9 @@ export function captureMapImage(map: MapLike, clip?: CaptureClip | null): Captur
 }
 
 /** On-map overlay legends (rendered as DOM, not into the WebGL canvas) that the
- * print should include. Colorbars created via Controls -> Colorbar render as a
- * `.maplibre-gl-colorbar` element; legends render as `.maplibre-gl-legend`. */
-const OVERLAY_SELECTORS = [".maplibre-gl-colorbar", ".maplibre-gl-legend"];
+ * print should include. Colorbars are composed natively in the Print Layout
+ * dialog (crisp, positionable), so only the legend control is captured here. */
+const OVERLAY_SELECTORS = [".maplibre-gl-legend"];
 
 interface OverlayMapLike {
   getCanvas(): HTMLCanvasElement;
