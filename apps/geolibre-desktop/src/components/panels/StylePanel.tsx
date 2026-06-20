@@ -1109,6 +1109,18 @@ export function StylePanel({
   };
   const updateLabels = (patch: Partial<LabelStyle>) =>
     setLayerStyle(layer.id, { labels: { ...labels, ...patch } });
+  // The label expression must be a JSON array (a MapLibre expression). Flag a
+  // non-empty value that does not round-trip as an array so the user sees that
+  // it is ignored (layer-sync falls back to the field / no label) instead of
+  // silently producing nothing.
+  const labelExpressionInvalid = (() => {
+    if (!labels.expression.trim()) return false;
+    try {
+      return !Array.isArray(JSON.parse(labels.expression));
+    } catch {
+      return true;
+    }
+  })();
   const extrusionHeightProperties = extrusionHeightPropertyOptions.includes(
     draftExtrusionHeightProperty,
   )
@@ -1790,15 +1802,28 @@ export function StylePanel({
             </Label>
             <textarea
               id="labelExpression"
-              className="min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
+              aria-invalid={labelExpressionInvalid}
+              className={[
+                "min-h-16 w-full rounded-md border bg-background px-3 py-2 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0",
+                labelExpressionInvalid ? "border-destructive" : "border-input",
+              ].join(" ")}
               placeholder={'["concat", ["get", "name"], " (", ["get", "pop"], ")"]'}
               value={labels.expression}
               onChange={(event) =>
                 updateLabels({ expression: event.target.value })
               }
             />
-            <p className="text-xs text-muted-foreground">
-              {t("style.labels.expressionHint")}
+            <p
+              className={[
+                "text-xs",
+                labelExpressionInvalid
+                  ? "text-destructive"
+                  : "text-muted-foreground",
+              ].join(" ")}
+            >
+              {labelExpressionInvalid
+                ? t("style.labels.expressionInvalid")
+                : t("style.labels.expressionHint")}
             </p>
           </div>
         </>

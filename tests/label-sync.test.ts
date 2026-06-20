@@ -162,6 +162,29 @@ describe("label sync", () => {
     ]);
   });
 
+  it("does not create a label layer when the expression is invalid and no field is set", () => {
+    const { map, layers } = makeMap();
+    // Invalid expression + empty field would fall back to an empty text-field;
+    // the layer must be skipped rather than added with invisible text.
+    syncLayer(
+      map as never,
+      labeledLayer({ enabled: true, field: "", expression: "{not json" }),
+    );
+    assert.ok(!layers.has(LABEL_ID));
+  });
+
+  it("removes an existing label layer when the expression becomes invalid with no field", () => {
+    const { map, layers } = makeMap();
+    syncLayer(map as never, labeledLayer({ enabled: true, field: "name" }));
+    assert.ok(layers.has(LABEL_ID));
+
+    syncLayer(
+      map as never,
+      labeledLayer({ enabled: true, field: "", expression: "{not json" }),
+    );
+    assert.ok(!layers.has(LABEL_ID));
+  });
+
   it("places labels along the line when placement is line", () => {
     const { map, layers } = makeMap();
     syncLayer(

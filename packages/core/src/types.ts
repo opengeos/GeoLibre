@@ -114,9 +114,13 @@ export interface LabelStyle {
   expression: string;
   /** `"point"` labels at the feature/centroid; `"line"` places them along lines. */
   placement: "point" | "line";
+  /** Label text size in pixels. */
   size: number;
+  /** CSS color string for the label text. */
   color: string;
+  /** CSS color string for the text halo drawn behind the label. */
   haloColor: string;
+  /** Width of the text halo in pixels. */
   haloWidth: number;
   /** Scale range for labels; `0` / `24` inherit the layer's own zoom range. */
   minZoom: number;

@@ -1673,46 +1673,53 @@ function applyVectorDataRenderLayers(
       // A typo'd or non-expression value must not break the whole layer sync.
       textField = fieldTextField;
     }
-    const labelZoom = intersectZoomRange(
-      {
-        minzoom: clampLayerZoom(labels.minZoom, MIN_LAYER_ZOOM),
-        maxzoom: clampLayerZoom(labels.maxZoom, MAX_LAYER_ZOOM),
-      },
-      layer.style,
-    );
-    // Skip geoman text-marker points (they carry their own annotation text),
-    // reusing the same two-property predicate the circle/text layers use.
-    const nonMarkerFilter = [
-      "!",
-      textMarkerShapeFilter,
-    ] as unknown as maplibregl.FilterSpecification;
-    ensureLayer(
-      map,
-      labelLayerId(layer.id),
-      {
-        id: labelLayerId(layer.id),
-        type: "symbol",
-        ...sourceSpec,
-        ...labelZoom,
-        filter: withTimeFilter(layer, nonMarkerFilter),
-        layout: {
-          "text-field": textField,
-          "text-font": textFontForMapStyle(map),
-          "text-size": Math.max(1, labels.size),
-          "symbol-placement": labels.placement === "line" ? "line" : "point",
-          "text-allow-overlap": labels.allowOverlap,
-          "text-ignore-placement": labels.allowOverlap,
-          visibility,
+    if (textField === "") {
+      // An invalid expression with no field falls back to an empty text-field,
+      // which would create an invisible label layer that still consumes
+      // renderer resources. Remove it instead of adding an empty one.
+      removeIfExists(map, labelLayerId(layer.id));
+    } else {
+      const labelZoom = intersectZoomRange(
+        {
+          minzoom: clampLayerZoom(labels.minZoom, MIN_LAYER_ZOOM),
+          maxzoom: clampLayerZoom(labels.maxZoom, MAX_LAYER_ZOOM),
         },
-        paint: {
-          "text-color": labels.color,
-          "text-halo-color": labels.haloColor,
-          "text-halo-width": Math.max(0, labels.haloWidth),
-          "text-opacity": opacity,
+        layer.style,
+      );
+      // Skip geoman text-marker points (they carry their own annotation text),
+      // reusing the same two-property predicate the circle/text layers use.
+      const nonMarkerFilter = [
+        "!",
+        textMarkerShapeFilter,
+      ] as unknown as maplibregl.FilterSpecification;
+      ensureLayer(
+        map,
+        labelLayerId(layer.id),
+        {
+          id: labelLayerId(layer.id),
+          type: "symbol",
+          ...sourceSpec,
+          ...labelZoom,
+          filter: withTimeFilter(layer, nonMarkerFilter),
+          layout: {
+            "text-field": textField,
+            "text-font": textFontForMapStyle(map),
+            "text-size": Math.max(1, labels.size),
+            "symbol-placement": labels.placement === "line" ? "line" : "point",
+            "text-allow-overlap": labels.allowOverlap,
+            "text-ignore-placement": labels.allowOverlap,
+            visibility,
+          },
+          paint: {
+            "text-color": labels.color,
+            "text-halo-color": labels.haloColor,
+            "text-halo-width": Math.max(0, labels.haloWidth),
+            "text-opacity": opacity,
+          },
         },
-      },
-      beforeId,
-    );
+        beforeId,
+      );
+    }
   } else {
     removeIfExists(map, labelLayerId(layer.id));
   }
