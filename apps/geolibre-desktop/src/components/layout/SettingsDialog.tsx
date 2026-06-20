@@ -398,6 +398,10 @@ export function SettingsDialog({
       // Clear so the stale projection can't flash the Globe hint for a frame
       // on the next open before this effect re-reads it.
       setLiveProjection(null);
+      // Drop any pending focus request too: if the dialog closes before the
+      // focus RAF fires, a leftover target would otherwise fire on a later
+      // open that never asked for it.
+      setPendingFocus(null);
       return;
     }
     setDraftPreferences(clonePreferences(useAppStore.getState().preferences));
