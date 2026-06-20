@@ -36,8 +36,11 @@ if [[ -z "${VERSION:-}" ]]; then
   tag="$(gh release view --repo "$REPO" --json tagName --jq .tagName)"
   VERSION="${tag#v}"
 fi
-[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]] || {
-  echo "VERSION does not look like a semver string: '$VERSION'" >&2
+# Anchor both ends: the official tap takes only final X.Y.Z releases, so a
+# prerelease tag (1.2.3-rc.1) or any trailing junk must be rejected, not just
+# matched as a prefix.
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+  echo "VERSION does not look like a final X.Y.Z release: '$VERSION'" >&2
   exit 1
 }
 
@@ -48,8 +51,12 @@ intel_dmg="GeoLibre.Desktop_${VERSION}_x64.dmg"
 if [[ -z "${SHA256_ARM:-}" || -z "${SHA256_INTEL:-}" ]]; then
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' EXIT
-  gh release download "v${VERSION}" --repo "$REPO" \
-    --pattern "$arm_dmg" --pattern "$intel_dmg" --dir "$tmp"
+  # Fetch only the DMG(s) whose hash is still unknown, so supplying one hash
+  # does not pull the other ~100 MB file needlessly.
+  [[ -n "${SHA256_ARM:-}" ]] || gh release download "v${VERSION}" --repo "$REPO" \
+    --pattern "$arm_dmg" --dir "$tmp"
+  [[ -n "${SHA256_INTEL:-}" ]] || gh release download "v${VERSION}" --repo "$REPO" \
+    --pattern "$intel_dmg" --dir "$tmp"
 
   sha256_of() {
     if command -v sha256sum >/dev/null 2>&1; then
@@ -61,6 +68,13 @@ if [[ -z "${SHA256_ARM:-}" || -z "${SHA256_INTEL:-}" ]]; then
   SHA256_ARM="${SHA256_ARM:-$(sha256_of "$tmp/$arm_dmg")}"
   SHA256_INTEL="${SHA256_INTEL:-$(sha256_of "$tmp/$intel_dmg")}"
 fi
+
+# Normalise to lowercase so a hash pasted from a tool that emits uppercase (e.g.
+# `openssl dgst -sha256`) still validates; sha256sum/shasum already emit
+# lowercase. `tr` keeps this working on macOS's default Bash 3.2, where the
+# `${var,,}` lowercase expansion is unavailable.
+SHA256_ARM="$(printf '%s' "$SHA256_ARM" | tr '[:upper:]' '[:lower:]')"
+SHA256_INTEL="$(printf '%s' "$SHA256_INTEL" | tr '[:upper:]' '[:lower:]')"
 
 # Validate the hashes so a truncated value can't produce a cask that only fails
 # at `brew install` time.
