@@ -82,15 +82,16 @@ describe("reloadForStaleChunk", () => {
   });
 
   it("prioritizes unsaved work over the cooldown guard", () => {
-    const { state, deps } = makeDeps({
-      now: STALE_CHUNK_RELOAD_COOLDOWN_MS * 10,
-      lastReloadAt: null,
-      dirty: true,
-    });
+    const now = STALE_CHUNK_RELOAD_COOLDOWN_MS * 10;
+    // Seed a prior reload inside the cooldown window so the test would report
+    // "suppressed-cooldown" if the dirty check did not run first.
+    const lastReloadAt = now - STALE_CHUNK_RELOAD_COOLDOWN_MS + 1;
+    const { state, deps } = makeDeps({ now, lastReloadAt, dirty: true });
 
-    // Even well past the cooldown, a dirty project must never be reloaded out
-    // from under the user.
+    // A dirty project must defer rather than reload, even though the cooldown
+    // would otherwise be the deciding branch.
     assert.equal(reloadForStaleChunk(deps), "deferred-unsaved");
     assert.equal(state.reloads, 0);
+    assert.equal(state.lastReloadAt, lastReloadAt);
   });
 });

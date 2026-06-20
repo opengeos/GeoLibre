@@ -491,6 +491,9 @@ describe("PluginManager async activation", () => {
     assert.equal(manager.isActive("async-plugin"), true);
 
     resolveMount(false);
+    // watchAsyncActivation wraps the plugin promise in Promise.resolve().then(),
+    // so two microtask ticks are needed: one for the wrapper, one for the
+    // callback. (The other async tests below flush twice for the same reason.)
     await Promise.resolve();
     await Promise.resolve();
 
@@ -591,5 +594,40 @@ describe("PluginManager async activation", () => {
     await Promise.resolve();
     await Promise.resolve();
     assert.equal(manager.isActive("race-plugin"), false);
+  });
+
+  it("does not let a stale failure revert a newer reactivation", async () => {
+    const manager = new PluginManager();
+    const resolvers: Array<(value: boolean) => void> = [];
+
+    manager.register(
+      testPlugin({
+        id: "reactivated-plugin",
+        activate: () =>
+          new Promise<boolean>((resolve) => {
+            resolvers.push(resolve);
+          }),
+      }),
+    );
+
+    // First activation (its mount is still pending).
+    manager.activate("reactivated-plugin", app);
+    // User deactivates, then reactivates before the first mount settles.
+    manager.deactivate("reactivated-plugin", app);
+    manager.activate("reactivated-plugin", app);
+    assert.equal(manager.isActive("reactivated-plugin"), true);
+
+    // The first (now superseded) activation fails. It must not roll back the
+    // newer activation that is still mounting.
+    resolvers[0](false);
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(manager.isActive("reactivated-plugin"), true);
+
+    // The newer activation then succeeds and stays active.
+    resolvers[1](true);
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(manager.isActive("reactivated-plugin"), true);
   });
 });

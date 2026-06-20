@@ -17,6 +17,7 @@ export class PluginManager {
   private inFlightUrlContexts = new Map<string, number>();
   private urlParameterNamesById = new Map<string, string[]>();
   private listeners = new Set<() => void>();
+  private activationGenerations = new Map<string, number>();
   private version = 0;
 
   register(plugin: GeoLibrePlugin): void {
@@ -79,6 +80,7 @@ export class PluginManager {
     this.defaultActive.delete(id);
     this.defaultMapControlPositions.delete(id);
     this.urlParameterNamesById.delete(id);
+    this.activationGenerations.delete(id);
     for (const handled of this.handledUrlParametersByContext.values()) {
       handled.delete(id);
     }
@@ -134,9 +136,10 @@ export class PluginManager {
     if (!plugin || this.active.has(id)) return;
     const activated = plugin.activate(app);
     if (activated === false) return;
+    const generation = this.nextActivationGeneration(id);
     this.active.add(id);
     this.notify();
-    this.watchAsyncActivation(id, activated, app);
+    this.watchAsyncActivation(id, activated, app, generation);
   }
 
   /**
@@ -145,11 +148,16 @@ export class PluginManager {
    * synchronous result is a no-op. Shared by {@link activate} and
    * {@link restoreProjectState}, which both add to `active` before the mount
    * has finished.
+   *
+   * `generation` ties the rollback to this specific activation attempt so a
+   * stale promise from an earlier activate/deactivate cycle cannot revert a
+   * newer activation of the same plugin.
    */
   private watchAsyncActivation(
     id: string,
     activated: boolean | void | PromiseLike<boolean | void>,
     app: GeoLibreAppAPI,
+    generation: number,
   ): void {
     // An async plugin (e.g. one mounted behind a dynamic import) reports
     // failure after the fact by resolving false or rejecting. Roll back so the
@@ -158,22 +166,31 @@ export class PluginManager {
     if (!isThenable(activated)) return;
     void Promise.resolve(activated).then(
       (result) => {
-        if (result === false) this.rollbackFailedActivation(id, app);
+        if (result === false) {
+          this.rollbackFailedActivation(id, app, generation);
+        }
       },
-      (error) => this.rollbackFailedActivation(id, app, error),
+      (error) => this.rollbackFailedActivation(id, app, generation, error),
     );
   }
 
   /**
    * Undo an activation whose async mount ultimately failed. No-op when the
-   * plugin is no longer active (e.g. the user deactivated it in the meantime).
+   * plugin is no longer active, or when a newer activation has superseded this
+   * one (the user deactivated and reactivated while the mount was pending).
    */
   private rollbackFailedActivation(
     id: string,
     app: GeoLibreAppAPI,
+    generation: number,
     error?: unknown,
   ): void {
-    if (!this.active.has(id)) return;
+    if (
+      !this.active.has(id) ||
+      this.activationGenerations.get(id) !== generation
+    ) {
+      return;
+    }
     if (error !== undefined) {
       console.warn(`Plugin '${id}' failed to activate; reverting.`, error);
     } else {
@@ -381,12 +398,13 @@ export class PluginManager {
       if (!plugin) continue;
       const activated = plugin.activate(app);
       if (activated === false) continue;
+      const generation = this.nextActivationGeneration(id);
       this.active.add(id);
       changed = true;
       // Restoring a saved project re-activates plugins the same way the user
       // would, so an async mount that later fails (e.g. a stale chunk after a
       // redeploy) must roll back here too, not just from activate().
-      this.watchAsyncActivation(id, activated, app);
+      this.watchAsyncActivation(id, activated, app, generation);
     }
 
     if (changed) this.notify();
@@ -395,6 +413,17 @@ export class PluginManager {
   private notify(): void {
     this.version += 1;
     for (const listener of this.listeners) listener();
+  }
+
+  /**
+   * Allocate the next activation generation for a plugin. Each activate (or
+   * restore) attempt gets a unique, increasing id so a late async failure can
+   * be matched to the attempt that started it and ignored if superseded.
+   */
+  private nextActivationGeneration(id: string): number {
+    const next = (this.activationGenerations.get(id) ?? 0) + 1;
+    this.activationGenerations.set(id, next);
+    return next;
   }
 }
 
