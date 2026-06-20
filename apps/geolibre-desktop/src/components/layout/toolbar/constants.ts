@@ -66,7 +66,6 @@ export const MAP_CONTROL_ITEMS: Array<{
 ];
 
 export const NEW_PROJECT_VISIBLE_BUILT_IN_CONTROLS = new Set<BuiltInMapControl>([
-  "navigation",
   "fullscreen",
   "compass",
   "globe",
