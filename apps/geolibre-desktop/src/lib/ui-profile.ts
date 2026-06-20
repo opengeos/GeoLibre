@@ -271,7 +271,6 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   { id: "settings.geocoding", menuId: "settings", labelKey: "settings.menu.geocoding", tier: "advanced" },
   // Kept in step with the AI Assistant (which reads its API key from here).
   { id: "settings.environment", menuId: "settings", labelKey: "settings.menu.environmentVariables", tier: "intermediate" },
-  { id: "settings.projectSettings", menuId: "settings", labelKey: "settings.menu.projectSettings", tier: "intermediate" },
   { id: "settings.managePlugins", menuId: "settings", labelKey: "settings.menu.managePlugins", tier: "intermediate" },
   // Help
   { id: "help.commandPalette", menuId: "help", labelKey: "toolbar.item.commandPalette", tier: "basic" },

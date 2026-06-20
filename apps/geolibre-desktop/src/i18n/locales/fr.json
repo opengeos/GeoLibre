@@ -19,14 +19,12 @@
     "section": {
       "map": "Carte",
       "layout": "Disposition",
-      "environment": "Environnement",
-      "project": "Projet"
+      "environment": "Environnement"
     },
     "menu": {
       "mapPreferences": "Préférences de carte",
       "layoutSettings": "Paramètres de disposition",
       "environmentVariables": "Variables d'environnement",
-      "projectSettings": "Paramètres du projet",
       "managePlugins": "Gérer les extensions",
       "urlOverrideNote": "Les paramètres de disposition dans l'URL remplacent les paramètres enregistrés."
     },
@@ -80,12 +78,6 @@
       "removeAria": "Supprimer {{name}}",
       "errorNamePattern": "Les noms de variables d'environnement doivent commencer par une lettre ou un tiret bas et ne contenir que des lettres, des chiffres et des tirets bas.",
       "errorDuplicate": "La variable d'environnement \"{{name}}\" est dupliquée."
-    },
-    "project": {
-      "title": "Projet",
-      "file": "Fichier de projet",
-      "notSaved": "Non enregistré",
-      "format": "Format du projet"
     }
   },
   "toolbar": {

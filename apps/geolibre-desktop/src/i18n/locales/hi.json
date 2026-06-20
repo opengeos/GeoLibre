@@ -19,14 +19,12 @@
     "section": {
       "map": "मानचित्र",
       "layout": "लेआउट",
-      "environment": "परिवेश",
-      "project": "प्रोजेक्ट"
+      "environment": "परिवेश"
     },
     "menu": {
       "mapPreferences": "मानचित्र प्राथमिकताएं",
       "layoutSettings": "लेआउट सेटिंग्स",
       "environmentVariables": "परिवेश चर",
-      "projectSettings": "प्रोजेक्ट सेटिंग्स",
       "managePlugins": "प्लगइन प्रबंधित करें",
       "urlOverrideNote": "URL लेआउट पैरामीटर सहेजी गई सेटिंग्स को ओवरराइड करते हैं।"
     },
@@ -80,12 +78,6 @@
       "removeAria": "{{name}} हटाएं",
       "errorNamePattern": "परिवेश चर के नाम किसी अक्षर या अंडरस्कोर से शुरू होने चाहिए और केवल अक्षर, संख्याएं और अंडरस्कोर हो सकते हैं।",
       "errorDuplicate": "परिवेश चर \"{{name}}\" दोहराया गया है।"
-    },
-    "project": {
-      "title": "प्रोजेक्ट",
-      "file": "प्रोजेक्ट फ़ाइल",
-      "notSaved": "सहेजा नहीं गया",
-      "format": "प्रोजेक्ट प्रारूप"
     }
   },
   "toolbar": {

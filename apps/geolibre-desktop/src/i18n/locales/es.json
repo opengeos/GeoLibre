@@ -19,14 +19,12 @@
     "section": {
       "map": "Mapa",
       "layout": "Disposición",
-      "environment": "Entorno",
-      "project": "Proyecto"
+      "environment": "Entorno"
     },
     "menu": {
       "mapPreferences": "Preferencias del mapa",
       "layoutSettings": "Ajustes de disposición",
       "environmentVariables": "Variables de entorno",
-      "projectSettings": "Ajustes del proyecto",
       "managePlugins": "Gestionar complementos",
       "urlOverrideNote": "Los parámetros de disposición de la URL anulan los ajustes guardados."
     },
@@ -80,12 +78,6 @@
       "removeAria": "Quitar {{name}}",
       "errorNamePattern": "Los nombres de las variables de entorno deben empezar por una letra o un guion bajo y contener solo letras, números y guiones bajos.",
       "errorDuplicate": "La variable de entorno «{{name}}» está duplicada."
-    },
-    "project": {
-      "title": "Proyecto",
-      "file": "Archivo del proyecto",
-      "notSaved": "Sin guardar",
-      "format": "Formato del proyecto"
     }
   },
   "toolbar": {

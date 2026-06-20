@@ -19,14 +19,12 @@
     "section": {
       "map": "地图",
       "layout": "布局",
-      "environment": "环境",
-      "project": "项目"
+      "environment": "环境"
     },
     "menu": {
       "mapPreferences": "地图首选项",
       "layoutSettings": "布局设置",
       "environmentVariables": "环境变量",
-      "projectSettings": "项目设置",
       "managePlugins": "管理插件",
       "urlOverrideNote": "URL 布局参数会覆盖已保存的设置。"
     },
@@ -79,12 +77,6 @@
       "removeAria": "移除 {{name}}",
       "errorNamePattern": "环境变量名称必须以字母或下划线开头，且只能包含字母、数字和下划线。",
       "errorDuplicate": "环境变量“{{name}}”重复。"
-    },
-    "project": {
-      "title": "项目",
-      "file": "项目文件",
-      "notSaved": "未保存",
-      "format": "项目格式"
     }
   },
   "toolbar": {

@@ -665,8 +665,7 @@
       "layout": "Layout",
       "interface": "Interface",
       "geocoding": "Geocoding",
-      "environment": "Environment",
-      "project": "Project"
+      "environment": "Environment"
     },
     "menu": {
       "mapPreferences": "Map Preferences",
@@ -674,7 +673,6 @@
       "interfaceSettings": "Interface Settings",
       "geocoding": "Geocoding",
       "environmentVariables": "Environment Variables",
-      "projectSettings": "Project Settings",
       "managePlugins": "Manage Plugins",
       "urlOverrideNote": "URL layout parameters override saved settings."
     },
@@ -766,13 +764,6 @@
       "emailHint": "Sent to identify the client to Nominatim, per its usage policy.",
       "secretsWarning": "Keys are stored in plain text in the project file and may be exposed when the project is shared. They are also sent as query parameters, so they appear in geocoding request URLs visible in browser DevTools and any proxy logs.",
       "corsNote": "Google does not officially allow browser requests to its Geocoding API, so requests may be blocked unless served through a same-origin proxy."
-    },
-    "project": {
-      "title": "Project",
-      "description": "These preferences are stored inside the project. Saving here applies them to the current session; use Project > Save to write them to the .geolibre.json file on disk.",
-      "file": "Project file",
-      "notSaved": "Not saved",
-      "format": "Project format"
     }
   },
   "toolbar": {

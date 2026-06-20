@@ -19,14 +19,12 @@
     "section": {
       "map": "Karte",
       "layout": "Layout",
-      "environment": "Umgebung",
-      "project": "Projekt"
+      "environment": "Umgebung"
     },
     "menu": {
       "mapPreferences": "Karteneinstellungen",
       "layoutSettings": "Layout-Einstellungen",
       "environmentVariables": "Umgebungsvariablen",
-      "projectSettings": "Projekteinstellungen",
       "managePlugins": "Plugins verwalten",
       "urlOverrideNote": "URL-Layout-Parameter überschreiben gespeicherte Einstellungen."
     },
@@ -80,12 +78,6 @@
       "removeAria": "{{name}} entfernen",
       "errorNamePattern": "Namen von Umgebungsvariablen müssen mit einem Buchstaben oder Unterstrich beginnen und dürfen nur Buchstaben, Zahlen und Unterstriche enthalten.",
       "errorDuplicate": "Die Umgebungsvariable \"{{name}}\" ist doppelt vorhanden."
-    },
-    "project": {
-      "title": "Projekt",
-      "file": "Projektdatei",
-      "notSaved": "Nicht gespeichert",
-      "format": "Projektformat"
     }
   },
   "toolbar": {
