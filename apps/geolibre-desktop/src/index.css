@@ -2249,3 +2249,25 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
 .dark .overture-popup-content.overture-popup-content.overture-popup-content {
   color-scheme: dark;
 }
+
+/* Map-only fullscreen (opengeos/GeoLibre#611).
+ *
+ * The map Fullscreen control maximizes the map canvas (requestFullscreen on the
+ * map container). Chromium pulls that element into the browser top layer, so the
+ * workspace chrome is hidden automatically. WebKit (the Tauri desktop webview)
+ * does not, leaving the toolbar and side panels painted around and on top of the
+ * map. DesktopShell mirrors the fullscreen state onto the shell as
+ * `data-map-fullscreen`; collapse everything except the map so the canvas owns
+ * the whole window on every engine.
+ *
+ * The shell is `flex flex-col`: its direct children are the toolbar, the
+ * workspace row (Layers + map + Style), the attribute table, and the status bar.
+ * Hide all of them except the row, then within the row hide everything except
+ * the `<main>` map landmark, which flexes to fill. */
+[data-map-fullscreen] > *:not([data-workspace-row]) {
+  display: none !important;
+}
+
+[data-map-fullscreen] [data-workspace-row] > *:not(main) {
+  display: none !important;
+}

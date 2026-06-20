@@ -1591,26 +1591,14 @@ export class MapController {
     ) {
       return false;
     }
-    // Fullscreen the whole workspace shell (toolbar + side panels + map), not
-    // just the map container. MapLibre's default container is `map.getContainer()`,
-    // a div nested inside `<main>`; the Layers/Style panels are `<aside>` siblings
-    // of `<main>`. Chromium promotes the fullscreen element to the top layer so the
-    // sibling panels are hidden, but WebKit (WKWebView on macOS, WebKitGTK on Linux,
-    // i.e. the Tauri desktop webview) does not, leaving the panels painted on top of
-    // and overlapping the maximized map (opengeos/GeoLibre#611). Targeting an ancestor
-    // that contains the panels lets flexbox lay everything out with no overlap on
-    // every engine. The shell marks itself with `data-geolibre-fullscreen-root`;
-    // fall back to the map container when no such ancestor exists (e.g. a bare
-    // embed). The attribute is namespaced so a plugin rendering DOM between the
-    // map container and the shell can't accidentally match and short-circuit
-    // `closest()` to the wrong ancestor.
-    const mapContainer = this.map.getContainer();
-    const fullscreenContainer =
-      mapContainer.closest<HTMLElement>("[data-geolibre-fullscreen-root]") ??
-      mapContainer;
-    this.fullscreenControl = new maplibregl.FullscreenControl({
-      container: fullscreenContainer,
-    });
+    // Fullscreen the map container so only the map canvas (and its floating
+    // controls) fills the screen. MapLibre defaults to `map.getContainer()`,
+    // which is what we want here. The surrounding workspace chrome (toolbar and
+    // side panels) is hidden by the app while fullscreen is active: Chromium
+    // promotes the fullscreen element to the top layer so the chrome is hidden
+    // automatically, but WebKit (the Tauri desktop webview) leaves it painted
+    // around the map, so the app hides it via CSS. See opengeos/GeoLibre#611.
+    this.fullscreenControl = new maplibregl.FullscreenControl();
     this.map.addControl(
       this.fullscreenControl,
       this.controlPositions.fullscreen,
