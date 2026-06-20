@@ -28,10 +28,17 @@
 set -euo pipefail
 
 REPO="${REPO:-opengeos/GeoLibre}"
+# REPO is interpolated verbatim into the generated cask's url/verified lines, so
+# guard its shape (the default is safe; this only matters on a fork override).
+[[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || {
+  echo "REPO must be in owner/repo format (e.g. opengeos/GeoLibre): '$REPO'" >&2
+  exit 1
+}
 
-# Resolve the version: an explicit VERSION wins, otherwise use the latest
-# published release tag (gh excludes drafts; it includes prereleases, so pin
-# VERSION when the latest tag is a prerelease).
+# Resolve the version: an explicit VERSION wins, otherwise use the latest full
+# release. `gh release view` with no tag calls GitHub's /releases/latest, which
+# already excludes prereleases and drafts; pin VERSION only to target an older
+# tag. (The X.Y.Z check below is a belt-and-suspenders guard regardless.)
 if [[ -z "${VERSION:-}" ]]; then
   tag="$(gh release view --repo "$REPO" --json tagName --jq .tagName)"
   VERSION="${tag#v}"
@@ -58,15 +65,24 @@ if [[ -z "${SHA256_ARM:-}" || -z "${SHA256_INTEL:-}" ]]; then
   [[ -n "${SHA256_INTEL:-}" ]] || gh release download "v${VERSION}" --repo "$REPO" \
     --pattern "$intel_dmg" --dir "$tmp"
 
+  # Fail loudly if the expected DMG is missing (e.g. a partial download): the
+  # awk pipe alone would mask the hash binary's failure and yield an empty
+  # string, surfacing only as a cryptic format error further down.
   sha256_of() {
+    [[ -f "$1" ]] || {
+      echo "expected DMG not found (download failed?): $1" >&2
+      return 1
+    }
     if command -v sha256sum >/dev/null 2>&1; then
       sha256sum "$1" | awk '{print $1}'
     else
       shasum -a 256 "$1" | awk '{print $1}'
     fi
   }
-  SHA256_ARM="${SHA256_ARM:-$(sha256_of "$tmp/$arm_dmg")}"
-  SHA256_INTEL="${SHA256_INTEL:-$(sha256_of "$tmp/$intel_dmg")}"
+  # Plain `||` assignments (not a ${:-} default) so a hashing failure aborts the
+  # script under `set -e` instead of silently producing an empty hash.
+  [[ -n "${SHA256_ARM:-}" ]] || SHA256_ARM="$(sha256_of "$tmp/$arm_dmg")"
+  [[ -n "${SHA256_INTEL:-}" ]] || SHA256_INTEL="$(sha256_of "$tmp/$intel_dmg")"
 fi
 
 # Normalise to lowercase so a hash pasted from a tool that emits uppercase (e.g.
