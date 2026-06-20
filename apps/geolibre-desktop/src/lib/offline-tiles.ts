@@ -499,13 +499,6 @@ export async function warmUrls(
   return progress;
 }
 
-/**
- * The hosted GeoLibre web app, where the offline-caching service worker is
- * active. Offered as a remediation link when the current build (desktop, or the
- * dev server) has no controlling service worker so downloads can't be retained.
- */
-export const OFFLINE_WEB_APP_URL = "https://viewer.geolibre.app";
-
 /** Whether a service worker currently controls the page (offline caching works). */
 export function hasActiveServiceWorker(): boolean {
   return (
