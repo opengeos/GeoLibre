@@ -178,6 +178,7 @@ pub fn run() {
             close_oauth_popups,
             ensure_martin_binary,
             fetch_url_bytes,
+            install_external_plugin_archive,
             load_external_plugin_bundles,
             read_admin_profile,
             read_project_file,
@@ -275,6 +276,93 @@ fn fetch_url_bytes_blocking(url: String) -> Result<Vec<u8>, String> {
         .bytes()
         .map(|bytes| bytes.to_vec())
         .map_err(|error| format!("Could not read response body: {error}"))
+}
+
+/// Install a packaged plugin from a local `.zip` archive into GeoLibre's
+/// app-data `plugins/` directory so it persists across restarts and is picked up
+/// by the regular plugin scan. The archive is validated first (parsing
+/// `plugin.json`, enforcing the manifest rules, and confirming the entry and
+/// optional style are present and within the size limit), so only a loadable
+/// plugin lands in the plugins directory. Returns the installed plugin id.
+#[tauri::command]
+async fn install_external_plugin_archive(
+    app: tauri::AppHandle,
+    source_path: String,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        install_external_plugin_archive_blocking(&app, source_path)
+    })
+    .await
+    .map_err(|error| format!("Plugin install task failed: {error}"))?
+}
+
+fn install_external_plugin_archive_blocking(
+    app: &tauri::AppHandle,
+    source_path: String,
+) -> Result<String, String> {
+    let source = PathBuf::from(&source_path);
+    if !is_zip_path(&source) {
+        return Err("Plugin file must be a .zip archive".to_string());
+    }
+
+    // Validate the archive up front by loading it the same way the startup scan
+    // does; this rejects a malformed manifest, a missing/oversized entry, or an
+    // unsafe asset path before any file is written.
+    let bundle = load_external_plugin_archive(&source, &source_path)?;
+    let plugin_id = bundle.manifest.id;
+
+    let plugins_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Could not resolve app data directory: {error}"))?
+        .join("plugins");
+    fs::create_dir_all(&plugins_dir)
+        .map_err(|error| format!("Could not create plugins directory: {error}"))?;
+
+    let destination = plugins_dir.join(plugin_archive_file_name(&plugin_id));
+
+    // Reinstalling from a file already inside the plugins directory (e.g. the
+    // user re-selects the installed copy) would otherwise truncate the source
+    // mid-copy. Treat the no-op copy as a successful install.
+    let same_file = source
+        .canonicalize()
+        .ok()
+        .zip(destination.canonicalize().ok())
+        .map(|(from, to)| from == to)
+        .unwrap_or(false);
+    if !same_file {
+        fs::copy(&source, &destination)
+            .map_err(|error| format!("Could not install plugin archive: {error}"))?;
+    }
+
+    Ok(plugin_id)
+}
+
+/// Build a filesystem-safe `<id>.zip` name for an installed plugin archive.
+///
+/// The manifest `id` is validated for emptiness and whitespace but not for
+/// filesystem safety, so any character outside `[A-Za-z0-9._-]` is replaced with
+/// `_` and leading dots are stripped to keep the name from escaping the plugins
+/// directory or producing a hidden file. Using the id as the file name gives a
+/// reinstall natural overwrite semantics.
+fn plugin_archive_file_name(id: &str) -> String {
+    let sanitized: String = id
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric()
+                || character == '-'
+                || character == '_'
+                || character == '.'
+            {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let trimmed = sanitized.trim_start_matches('.');
+    let safe = if trimmed.is_empty() { "plugin" } else { trimmed };
+    format!("{safe}.zip")
 }
 
 #[tauri::command]
@@ -2178,3 +2266,26 @@ fn configure_linux_webkit() {
 
 #[cfg(not(target_os = "linux"))]
 fn configure_linux_webkit() {}
+
+#[cfg(test)]
+mod tests {
+    use super::plugin_archive_file_name;
+
+    #[test]
+    fn keeps_safe_plugin_ids() {
+        assert_eq!(plugin_archive_file_name("maplibre-foo"), "maplibre-foo.zip");
+        assert_eq!(plugin_archive_file_name("foo.bar_2"), "foo.bar_2.zip");
+    }
+
+    #[test]
+    fn sanitizes_unsafe_characters_and_traversal() {
+        // Path separators and other characters cannot escape the plugins dir;
+        // leading dots are then stripped, so "../evil" collapses to "_evil".
+        assert_eq!(plugin_archive_file_name("../evil"), "_evil.zip");
+        assert_eq!(plugin_archive_file_name("a/b"), "a_b.zip");
+        // Leading dots are stripped so the archive is never hidden.
+        assert_eq!(plugin_archive_file_name("..hidden"), "hidden.zip");
+        // A name that sanitizes away entirely falls back to a fixed stem.
+        assert_eq!(plugin_archive_file_name("..."), "plugin.zip");
+    }
+}

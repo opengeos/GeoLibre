@@ -42,10 +42,15 @@ import type { RefObject } from "react";
 import { useEffect, useSyncExternalStore } from "react";
 import { bundledPluginManifestPaths } from "virtual:bundled-plugins";
 import {
+  installWebPluginArchive,
+  listInstalledWebPlugins,
   loadExternalPlugins,
   reloadExternalUrlPlugin,
   resolvePluginAssetUrlForLoadedPlugin,
+  uninstallWebPlugin,
+  unloadFilesystemPlugin,
   unloadRemovedUrlPlugins,
+  type InstalledWebPlugin,
 } from "../lib/external-plugins";
 import { appendDiagnostic } from "../lib/diagnostics";
 import { mergeStringLists } from "../lib/string-lists";
@@ -181,6 +186,72 @@ export async function upgradeExternalPlugin(
     manifestUrl,
     createAppAPI(mapControllerRef),
   );
+}
+
+// Install a plugin from a local `.zip` archive (desktop only). The Rust backend
+// validates the archive and copies it into GeoLibre's app-data plugins
+// directory so it persists across restarts; the plugins directory is then
+// re-scanned so the new plugin loads without a reload. A reinstall of an
+// already-loaded plugin id is unloaded first so the updated archive replaces it
+// instead of being skipped by the loaded-source dedup. Returns the installed
+// plugin id.
+export async function installPluginArchive(
+  sourcePath: string,
+  mapControllerRef: RefObject<MapController | null>,
+): Promise<string> {
+  if (!isTauriRuntime()) {
+    throw new Error("Installing plugin archives requires the desktop app.");
+  }
+  const pluginId = await invoke<string>("install_external_plugin_archive", {
+    sourcePath,
+  });
+  const app = createAppAPI(mapControllerRef);
+  // The archive was overwritten in place for a reinstall; drop the loaded copy
+  // so the forced re-scan re-registers the updated version under the same id.
+  unloadFilesystemPlugin(manager, pluginId, app);
+  const desktopSettings = useDesktopSettingsStore.getState().desktopSettings;
+  const projectManifestUrls =
+    useAppStore.getState().projectPlugins?.manifestUrls ??
+    EMPTY_PLUGIN_MANIFEST_URLS;
+  await ensureExternalPluginsLoadedWithSettings(
+    desktopSettings,
+    projectManifestUrls,
+    app,
+    { force: true },
+  );
+  return pluginId;
+}
+
+// Install a plugin from an uploaded `.zip` in the browser (web build). The
+// archive is unpacked and validated client-side, registered immediately, and
+// persisted in IndexedDB so it reloads on the next visit. On desktop, use
+// installPluginArchive instead (it copies the zip onto disk via the backend).
+// Returns the installed plugin id.
+export async function installPluginArchiveFromFile(
+  fileName: string,
+  bytes: Uint8Array,
+  mapControllerRef: RefObject<MapController | null>,
+): Promise<string> {
+  return installWebPluginArchive(
+    manager,
+    fileName,
+    bytes,
+    createAppAPI(mapControllerRef),
+  );
+}
+
+// Uninstall a plugin that was installed from a file in the browser.
+export async function uninstallPluginArchiveFromFile(
+  pluginId: string,
+  mapControllerRef: RefObject<MapController | null>,
+): Promise<void> {
+  await uninstallWebPlugin(manager, pluginId, createAppAPI(mapControllerRef));
+}
+
+// List plugins installed from a file (browser IndexedDB), for the Manage
+// Plugins UI. Returns an empty list on desktop and where IndexedDB is absent.
+export function listPluginArchivesFromFile(): Promise<InstalledWebPlugin[]> {
+  return listInstalledWebPlugins();
 }
 
 export function usePluginRegistry() {
@@ -325,6 +396,7 @@ function ensureExternalPluginsLoadedWithSettings(
   >["desktopSettings"],
   projectPluginManifestUrls: string[],
   app: ReturnType<typeof createAppAPI>,
+  options?: { force?: boolean },
 ): Promise<void> {
   const pluginManifestUrls = mergeStringLists(
     bundledPluginManifestUrls(),
@@ -335,10 +407,18 @@ function ensureExternalPluginsLoadedWithSettings(
     additionalPluginDirectories: desktopSettings.additionalPluginDirectories,
     pluginManifestUrls,
   });
-  if (externalPluginsLoaded && externalPluginsLoadKey === loadKey) {
+  // `force` re-scans even when the merged settings are unchanged. Installing a
+  // zip writes a new archive into the app-data plugins directory without
+  // touching the settings that make up loadKey, so the cache-key short-circuits
+  // below would otherwise skip loading the freshly installed plugin.
+  if (!options?.force && externalPluginsLoaded && externalPluginsLoadKey === loadKey) {
     return Promise.resolve();
   }
-  if (externalPluginsLoadPromise && externalPluginsLoadKey === loadKey) {
+  if (
+    !options?.force &&
+    externalPluginsLoadPromise &&
+    externalPluginsLoadKey === loadKey
+  ) {
     return externalPluginsLoadPromise;
   }
 
@@ -389,7 +469,12 @@ function ensureExternalPluginsLoadedWithSettings(
       // A settings change can start a new load while this one is in flight.
       // Only the load that still owns the current key may mark plugins ready.
       if (externalPluginsLoadKey !== loadKey) return;
-      externalPluginsLoadPromise = null;
+      // A forced re-scan (install) chains a second load onto this one under the
+      // SAME key, so guard the clear by identity: only null the slot when it
+      // still points at this promise, never at the newer in-flight load.
+      if (externalPluginsLoadPromise === loadPromise) {
+        externalPluginsLoadPromise = null;
+      }
       setExternalPluginsLoaded(true);
     });
 

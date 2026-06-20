@@ -6,18 +6,23 @@ import type {
 } from "@geolibre/plugins";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  deletePluginArchive,
+  getAllPluginArchives,
+  putPluginArchive,
+  type StoredPluginArchive,
+} from "./plugin-archive-store";
+import {
+  bundleFromZipBytes,
+  type ExternalPluginBundle,
+  isExternalPluginManifest,
+  MAX_PLUGIN_ASSET_BYTES,
+} from "./plugin-archive-unpack";
+import {
   isManagedUrlSource,
   pluginAssetUrlFromSource,
   resolvePluginAssetUrl,
 } from "./plugin-asset-url";
 import { isTauri } from "./tauri-io";
-
-interface ExternalPluginBundle {
-  archiveName: string;
-  manifest: GeoLibreExternalPluginManifest;
-  entrySource: string;
-  styleSource?: string | null;
-}
 
 interface ExternalPluginBundleError {
   archiveName: string;
@@ -63,9 +68,12 @@ export async function loadExternalPlugins(
   pluginManifestUrls: string[] = [],
 ): Promise<ExternalPluginLoadResult> {
   const issues: ExternalPluginLoadIssue[] = [];
-  // The filesystem scan (Tauri IPC + disk) and the manifest URL fetches
-  // (network) are independent, so overlap them.
-  const [filesystemResult, urlBundles] = await Promise.all([
+  // The filesystem scan (Tauri IPC + disk), the manifest URL fetches (network),
+  // and the IndexedDB read (web-installed archives) are independent, so overlap
+  // them. Web-installed archives are the browser counterpart of the desktop
+  // filesystem scan: the desktop build copies an installed zip onto disk and
+  // re-scans it, while the web build replays the unpacked bundle stored here.
+  const [filesystemResult, urlBundles, webBundles] = await Promise.all([
     isTauri()
       ? loadFilesystemPluginBundles(additionalPluginDirectories)
       : Promise.resolve<ExternalPluginBundleLoadResult>({
@@ -74,6 +82,7 @@ export async function loadExternalPlugins(
           errors: [],
         }),
     loadPluginUrlBundles(pluginManifestUrls, issues),
+    loadWebInstalledPluginBundles(),
   ]);
   for (const error of filesystemResult.errors) {
     issues.push({
@@ -86,7 +95,11 @@ export async function loadExternalPlugins(
     manager.list().map((plugin) => plugin.id),
   );
 
-  for (const bundle of [...filesystemResult.bundles, ...urlBundles]) {
+  for (const bundle of [
+    ...filesystemResult.bundles,
+    ...urlBundles,
+    ...webBundles,
+  ]) {
     try {
       const loadedFrom = externallyLoadedPluginSources.get(bundle.manifest.id);
       if (loadedFrom !== undefined) {
@@ -212,10 +225,6 @@ async function loadPluginUrlBundle(
   };
 }
 
-// Mirrors MAX_PLUGIN_ENTRY_BYTES in the Rust filesystem loader so URL-loaded
-// plugin assets cannot buffer an unbounded response into memory.
-const MAX_PLUGIN_ASSET_BYTES = 50 * 1024 * 1024;
-
 async function fetchPluginText(
   url: string,
   label: string,
@@ -266,32 +275,6 @@ async function fetchPluginText(
     offset += chunk.byteLength;
   }
   return new TextDecoder().decode(merged);
-}
-
-// Matches the Rust validate_required_manifest_string: non-empty with no
-// leading or trailing whitespace.
-function isRequiredManifestString(value: unknown): value is string {
-  return (
-    typeof value === "string" && value.length > 0 && value.trim() === value
-  );
-}
-
-function isExternalPluginManifest(
-  value: unknown,
-): value is GeoLibreExternalPluginManifest {
-  if (!value || typeof value !== "object") return false;
-  const manifest = value as Partial<GeoLibreExternalPluginManifest>;
-  return (
-    isRequiredManifestString(manifest.id) &&
-    isRequiredManifestString(manifest.name) &&
-    isRequiredManifestString(manifest.version) &&
-    isRequiredManifestString(manifest.entry) &&
-    (manifest.entry.endsWith(".js") || manifest.entry.endsWith(".mjs")) &&
-    (manifest.description === undefined ||
-      typeof manifest.description === "string") &&
-    (manifest.style === undefined ||
-      (typeof manifest.style === "string" && manifest.style.endsWith(".css")))
-  );
 }
 
 async function importExternalPlugin(
@@ -369,6 +352,140 @@ function removeExternalPluginStyle(pluginId: string): void {
     ?.remove();
 }
 
+// ---------------------------------------------------------------------------
+// Web "install from file": unpack an uploaded .zip in the browser, register the
+// plugin, and persist the unpacked bundle in IndexedDB so it reloads on the next
+// visit. This is the web counterpart of the desktop Tauri install command, which
+// copies the zip onto disk for the startup filesystem scan instead.
+// ---------------------------------------------------------------------------
+
+export interface InstalledWebPlugin {
+  id: string;
+  name: string;
+  version: string;
+  archiveName: string;
+}
+
+// Synthetic source recorded in externallyLoadedPluginSources for an
+// IndexedDB-installed plugin. It is intentionally not an http(s)/tauri URL so
+// unloadRemovedUrlPlugins (which only touches managed URL sources) leaves it
+// alone, and it is stable per id so a re-scan dedupes the same plugin.
+function webPluginSource(pluginId: string): string {
+  return `indexeddb:${pluginId}`;
+}
+
+async function loadWebInstalledPluginBundles(): Promise<ExternalPluginBundle[]> {
+  let records: StoredPluginArchive[];
+  try {
+    records = await getAllPluginArchives();
+  } catch {
+    // IndexedDB unavailable (private mode, blocked storage); the scan continues
+    // with the other sources rather than failing entirely.
+    return [];
+  }
+  return records.map((record) => ({
+    archiveName: webPluginSource(record.id),
+    manifest: record.manifest,
+    entrySource: record.entrySource,
+    styleSource: record.styleSource,
+  }));
+}
+
+/**
+ * Install a plugin from an uploaded `.zip` in the browser: validate it, persist
+ * the unpacked bundle in IndexedDB, and register it immediately (no re-scan).
+ * Reinstalling the same id overwrites the stored copy and reloads the plugin,
+ * preserving its active state. A collision with a built-in or otherwise already
+ * registered plugin id is rejected. Returns the installed plugin id.
+ */
+export async function installWebPluginArchive(
+  manager: PluginManager,
+  fileName: string,
+  bytes: Uint8Array,
+  app: GeoLibreAppAPI,
+): Promise<string> {
+  const bundle = await bundleFromZipBytes(fileName, bytes);
+  // importExternalPlugin validates the exported plugin, that it matches the
+  // manifest id/name/version, and rejects activeByDefault.
+  const plugin = await importExternalPlugin(bundle);
+
+  const existingSource = externallyLoadedPluginSources.get(plugin.id);
+  if (existingSource === undefined) {
+    // No record of loading this id from any external source; a clash with a
+    // built-in (or a not-yet-tracked plugin) must not be silently overwritten.
+    if (manager.list().some((registered) => registered.id === plugin.id)) {
+      throw new Error(`Plugin id '${plugin.id}' is already registered.`);
+    }
+  }
+
+  await putPluginArchive({
+    id: plugin.id,
+    archiveName: fileName,
+    manifest: bundle.manifest,
+    entrySource: bundle.entrySource,
+    styleSource: bundle.styleSource ?? null,
+    installedAt: pluginInstallTimestamp(),
+  });
+
+  const wasActive =
+    existingSource !== undefined && manager.isActive(plugin.id);
+  if (existingSource !== undefined) {
+    manager.unregister(plugin.id, app);
+    removeExternalPluginStyle(plugin.id);
+    externallyLoadedPluginSources.delete(plugin.id);
+  }
+
+  manager.register(plugin);
+  externallyLoadedPluginSources.set(plugin.id, webPluginSource(plugin.id));
+  if (bundle.styleSource) {
+    injectExternalPluginStyle(plugin.id, bundle.styleSource);
+  }
+  if (wasActive) manager.activate(plugin.id, app);
+
+  return plugin.id;
+}
+
+/**
+ * Uninstall a web-installed plugin: remove it from IndexedDB, unregister it
+ * (tearing down any map control), and drop its injected style. A no-op for ids
+ * that were not installed from a file.
+ */
+export async function uninstallWebPlugin(
+  manager: PluginManager,
+  pluginId: string,
+  app: GeoLibreAppAPI,
+): Promise<void> {
+  await deletePluginArchive(pluginId);
+  const source = externallyLoadedPluginSources.get(pluginId);
+  if (source === webPluginSource(pluginId)) {
+    manager.unregister(pluginId, app);
+    removeExternalPluginStyle(pluginId);
+    externallyLoadedPluginSources.delete(pluginId);
+  }
+}
+
+/** List plugins installed from a file (for the Manage Plugins UI). */
+export async function listInstalledWebPlugins(): Promise<InstalledWebPlugin[]> {
+  let records: StoredPluginArchive[];
+  try {
+    records = await getAllPluginArchives();
+  } catch {
+    return [];
+  }
+  return records.map((record) => ({
+    id: record.id,
+    name: record.manifest.name,
+    version: record.manifest.version,
+    archiveName: record.archiveName,
+  }));
+}
+
+// new Date()/Date.now() are awkward to stub in tests; isolate the one timestamp
+// read so the install flow stays deterministic if a test needs to override it.
+function pluginInstallTimestamp(): number {
+  return Date.now();
+}
+
 /**
  * Resolve a fetchable URL for an asset shipped alongside a loaded plugin's
  * manifest (e.g. sample data bundled in the plugin folder). The plugin's
@@ -416,6 +533,29 @@ export function unloadRemovedUrlPlugins(
     externallyLoadedPluginSources.delete(pluginId);
   }
   return toRemove;
+}
+
+/**
+ * Forget a plugin previously loaded from the desktop filesystem so the next scan
+ * re-registers it from its (possibly updated) archive. Used when a plugin is
+ * reinstalled from a zip: the archive is overwritten in place under the same id,
+ * so without dropping the loaded-source record the re-scan would treat the id as
+ * already loaded and skip it. Managed URL and bundled plugins are left untouched
+ * (their lifecycle runs through unloadRemovedUrlPlugins / reloadExternalUrlPlugin).
+ * Deactivates the plugin (removing any map control) and drops its injected style.
+ * Returns true when a filesystem plugin was unloaded.
+ */
+export function unloadFilesystemPlugin(
+  manager: PluginManager,
+  pluginId: string,
+  app: GeoLibreAppAPI,
+): boolean {
+  const source = externallyLoadedPluginSources.get(pluginId);
+  if (source === undefined || isManagedUrlSource(source)) return false;
+  manager.unregister(pluginId, app);
+  removeExternalPluginStyle(pluginId);
+  externallyLoadedPluginSources.delete(pluginId);
+  return true;
 }
 
 /**

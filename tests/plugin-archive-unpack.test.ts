@@ -1,0 +1,73 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { strToU8, zipSync } from "fflate";
+import { bundleFromZipBytes } from "../apps/geolibre-desktop/src/lib/plugin-archive-unpack";
+
+const VALID_MANIFEST = {
+  id: "demo-plugin",
+  name: "Demo Plugin",
+  version: "1.0.0",
+  entry: "dist/plugin.js",
+  style: "dist/plugin.css",
+};
+
+function makeZip(files: Record<string, string>): Uint8Array {
+  const entries: Record<string, Uint8Array> = {};
+  for (const [name, contents] of Object.entries(files)) {
+    entries[name] = strToU8(contents);
+  }
+  return zipSync(entries);
+}
+
+describe("bundleFromZipBytes", () => {
+  it("unpacks a valid archive with entry and style", async () => {
+    const zip = makeZip({
+      "plugin.json": JSON.stringify(VALID_MANIFEST),
+      "dist/plugin.js": "export default {};",
+      "dist/plugin.css": ".demo {}",
+    });
+    const bundle = await bundleFromZipBytes("demo.zip", zip);
+    assert.equal(bundle.archiveName, "demo.zip");
+    assert.equal(bundle.manifest.id, "demo-plugin");
+    assert.equal(bundle.entrySource, "export default {};");
+    assert.equal(bundle.styleSource, ".demo {}");
+  });
+
+  it("returns a null style when the manifest omits one", async () => {
+    const { style: _style, ...manifest } = VALID_MANIFEST;
+    const zip = makeZip({
+      "plugin.json": JSON.stringify(manifest),
+      "dist/plugin.js": "export default {};",
+    });
+    const bundle = await bundleFromZipBytes("demo.zip", zip);
+    assert.equal(bundle.styleSource, null);
+  });
+
+  it("rejects an archive without a root plugin.json", async () => {
+    const zip = makeZip({ "dist/plugin.js": "export default {};" });
+    await assert.rejects(bundleFromZipBytes("demo.zip", zip), /missing a root plugin\.json/);
+  });
+
+  it("rejects an invalid manifest (entry not a .js/.mjs file)", async () => {
+    const zip = makeZip({
+      "plugin.json": JSON.stringify({ ...VALID_MANIFEST, entry: "dist/plugin.txt", style: undefined }),
+      "dist/plugin.txt": "nope",
+    });
+    await assert.rejects(bundleFromZipBytes("demo.zip", zip), /manifest is invalid/);
+  });
+
+  it("rejects an entry path that escapes the archive", async () => {
+    const zip = makeZip({
+      "plugin.json": JSON.stringify({ ...VALID_MANIFEST, entry: "../evil.js", style: undefined }),
+      "../evil.js": "export default {};",
+    });
+    await assert.rejects(bundleFromZipBytes("demo.zip", zip), /must be a relative safe path/);
+  });
+
+  it("rejects when the manifest entry is missing from the archive", async () => {
+    const zip = makeZip({
+      "plugin.json": JSON.stringify({ ...VALID_MANIFEST, style: undefined }),
+    });
+    await assert.rejects(bundleFromZipBytes("demo.zip", zip), /entry 'dist\/plugin\.js' is missing/);
+  });
+});

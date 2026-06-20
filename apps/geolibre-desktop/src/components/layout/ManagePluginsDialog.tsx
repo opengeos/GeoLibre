@@ -22,6 +22,7 @@ import {
   RefreshCw,
   Search,
   Trash2,
+  Upload,
 } from "lucide-react";
 import {
   useCallback,
@@ -32,7 +33,15 @@ import {
   type RefObject,
 } from "react";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
-import { getPluginManager, upgradeExternalPlugin } from "../../hooks/usePlugins";
+import {
+  getPluginManager,
+  installPluginArchive,
+  installPluginArchiveFromFile,
+  listPluginArchivesFromFile,
+  uninstallPluginArchiveFromFile,
+  upgradeExternalPlugin,
+} from "../../hooks/usePlugins";
+import type { InstalledWebPlugin } from "../../lib/external-plugins";
 import {
   fetchPluginRegistry,
   isNewerVersion,
@@ -40,7 +49,11 @@ import {
   type PluginRegistryEntry,
 } from "../../lib/plugin-registry";
 import { mergeStringLists } from "../../lib/string-lists";
-import { pickLocalPathWithFallback } from "../../lib/tauri-io";
+import {
+  isTauri,
+  openLocalDataFileWithFallback,
+  pickLocalPathWithFallback,
+} from "../../lib/tauri-io";
 import { openExternalLink } from "../../lib/open-external";
 
 type ManageSection =
@@ -98,6 +111,27 @@ export function ManagePluginsDialog({
   const [newDirectory, setNewDirectory] = useState("");
   const [newManifestUrl, setNewManifestUrl] = useState("");
   const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [installing, setInstalling] = useState(false);
+  const [installError, setInstallError] = useState<string | null>(null);
+  const [installNotice, setInstallNotice] = useState<string | null>(null);
+  const [webPlugins, setWebPlugins] = useState<InstalledWebPlugin[]>([]);
+
+  // Plugins installed from a file on the web build live in IndexedDB, so the
+  // dialog tracks them separately from the registry-driven list. Desktop file
+  // installs persist on disk and are not listed here.
+  const refreshWebPlugins = useCallback(async () => {
+    if (isTauri()) return;
+    try {
+      setWebPlugins(await listPluginArchivesFromFile());
+    } catch {
+      setWebPlugins([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    void refreshWebPlugins();
+  }, [open, refreshWebPlugins]);
 
   useEffect(() => {
     if (!open) return;
@@ -105,6 +139,8 @@ export function ManagePluginsDialog({
     const abortController = new AbortController();
     setRegistry({ status: "loading" });
     setConfirmRemoveId(null);
+    setInstallError(null);
+    setInstallNotice(null);
     // Don't reset busyId here: an in-flight upgrade's finally block owns it.
     // Clearing it on Refresh would re-enable the Update button mid-flight and
     // could start a second concurrent upgrade for the same manifest URL.
@@ -283,6 +319,65 @@ export function ManagePluginsDialog({
     }
   }, [addDirectory]);
 
+  const installFromFile = useCallback(async () => {
+    setInstallError(null);
+    setInstallNotice(null);
+    try {
+      if (isTauri()) {
+        // Desktop: pick a path and let the backend validate and copy the zip
+        // into the app-data plugins directory (persisted via the startup scan).
+        const path = await pickLocalPathWithFallback({
+          filters: [{ name: "GeoLibre plugin", extensions: ["zip"] }],
+        });
+        if (!path) return;
+        setInstalling(true);
+        const id = await installPluginArchive(path, mapControllerRef);
+        setInstallNotice(`Installed plugin "${id}".`);
+      } else {
+        // Web: read the uploaded bytes, unpack and register client-side, and
+        // persist the bundle in IndexedDB so it reloads on the next visit.
+        const picked = await openLocalDataFileWithFallback({
+          accept: ".zip",
+          filters: [{ name: "GeoLibre plugin", extensions: ["zip"] }],
+          readBinary: true,
+        });
+        if (!picked?.data) return;
+        setInstalling(true);
+        const id = await installPluginArchiveFromFile(
+          picked.path,
+          new Uint8Array(picked.data),
+          mapControllerRef,
+        );
+        setInstallNotice(`Installed plugin "${id}".`);
+        await refreshWebPlugins();
+      }
+    } catch (error) {
+      setInstallError(
+        error instanceof Error ? error.message : "Could not install the plugin.",
+      );
+    } finally {
+      setInstalling(false);
+    }
+  }, [mapControllerRef, refreshWebPlugins]);
+
+  const removeWebPlugin = useCallback(
+    async (id: string) => {
+      setInstallError(null);
+      setInstallNotice(null);
+      try {
+        await uninstallPluginArchiveFromFile(id, mapControllerRef);
+        await refreshWebPlugins();
+      } catch (error) {
+        setInstallError(
+          error instanceof Error
+            ? error.message
+            : "Could not uninstall the plugin.",
+        );
+      }
+    },
+    [mapControllerRef, refreshWebPlugins],
+  );
+
   const addManifestUrl = useCallback(() => {
     const trimmed = newManifestUrl.trim();
     if (!trimmed) return;
@@ -395,6 +490,12 @@ export function ManagePluginsDialog({
                 newDirectory={newDirectory}
                 newManifestUrl={newManifestUrl}
                 error={settingsError}
+                installing={installing}
+                installError={installError}
+                installNotice={installNotice}
+                installedFromFile={webPlugins}
+                onInstallFromFile={() => void installFromFile()}
+                onUninstallFromFile={(id) => void removeWebPlugin(id)}
                 onNewDirectoryChange={setNewDirectory}
                 onNewManifestUrlChange={(value) => {
                   setNewManifestUrl(value);
@@ -649,6 +750,12 @@ interface SettingsTabProps {
   newDirectory: string;
   newManifestUrl: string;
   error: string | null;
+  installing: boolean;
+  installError: string | null;
+  installNotice: string | null;
+  installedFromFile: InstalledWebPlugin[];
+  onInstallFromFile: () => void;
+  onUninstallFromFile: (id: string) => void;
   onNewDirectoryChange: (value: string) => void;
   onNewManifestUrlChange: (value: string) => void;
   onAddDirectory: () => void;
@@ -664,6 +771,12 @@ function SettingsTab({
   newDirectory,
   newManifestUrl,
   error,
+  installing,
+  installError,
+  installNotice,
+  installedFromFile,
+  onInstallFromFile,
+  onUninstallFromFile,
   onNewDirectoryChange,
   onNewManifestUrlChange,
   onAddDirectory,
@@ -675,9 +788,80 @@ function SettingsTab({
   return (
     <div className="space-y-5">
       <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
-        GeoLibre always scans its app data plugins directory. Additional local
-        directories are desktop-only. Manifest URLs (including marketplace
-        installs) are loaded over the network; changes here apply immediately.
+        GeoLibre always scans its app data plugins directory. Install a packaged
+        plugin (.zip) from a file, or add additional local directories
+        (desktop-only). Manifest URLs (including marketplace installs) are loaded
+        over the network; changes here apply immediately.
+      </div>
+
+      <div className="space-y-3">
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Install from file
+        </h4>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="shrink-0"
+            disabled={installing}
+            onClick={onInstallFromFile}
+          >
+            {installing ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Upload className="h-3.5 w-3.5" />
+            )}
+            Choose .zip…
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            {isTauri()
+              ? "Copy a packaged plugin archive into GeoLibre's plugins directory."
+              : "Load a packaged plugin archive; it is stored in your browser and reloads on your next visit."}
+          </p>
+        </div>
+        {installError ? (
+          <p className="text-xs text-destructive">{installError}</p>
+        ) : null}
+        {installNotice ? (
+          <p className="text-xs text-emerald-600 dark:text-emerald-400">
+            {installNotice}
+          </p>
+        ) : null}
+        {installedFromFile.length > 0 ? (
+          <div className="space-y-2">
+            {installedFromFile.map((plugin) => (
+              <div
+                key={plugin.id}
+                className="flex items-center gap-2 rounded-md border p-2"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-xs font-medium">
+                      {plugin.name}
+                    </span>
+                    <span className="shrink-0 text-[11px] text-muted-foreground">
+                      v{plugin.version}
+                    </span>
+                  </div>
+                  <span className="truncate text-[11px] text-muted-foreground">
+                    {plugin.archiveName}
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0"
+                  aria-label={`Uninstall ${plugin.name}`}
+                  onClick={() => onUninstallFromFile(plugin.id)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <div className="space-y-3">
