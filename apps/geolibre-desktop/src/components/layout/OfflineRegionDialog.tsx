@@ -344,7 +344,7 @@ export function OfflineRegionDialog({
                 className="inline-flex items-center gap-1 rounded font-medium underline underline-offset-2 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={() => void openExternalLink(OFFLINE_WEB_APP_URL)}
               >
-                {t("offline.noServiceWorkerCta")}
+                {t("common.openWebApp")}
                 <ExternalLink className="h-3.5 w-3.5" />
               </button>
             </div>
@@ -543,7 +543,7 @@ export function OfflineRegionDialog({
             // handleDownload aborts any in-flight run first, so it is safe to
             // keep enabled even while failures are outstanding.
             onClick={handleDownload}
-            disabled={phase === "running" || tileCount === 0 || !swActive}
+            disabled={controlsDisabled || tileCount === 0}
           >
             {phase === "running" ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
