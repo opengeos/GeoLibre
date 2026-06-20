@@ -528,7 +528,8 @@
       "orientation": "Orientation",
       "vertical": "Vertical",
       "horizontal": "Horizontal",
-      "position": "Position"
+      "position": "Position",
+      "length": "Length"
     },
     "position": {
       "topLeft": "Top left",

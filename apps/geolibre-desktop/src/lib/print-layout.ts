@@ -224,6 +224,9 @@ export interface LayoutOptions {
     label?: string;
     orientation: "horizontal" | "vertical";
     position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+    /** Bar length as a percentage of the body's width (horizontal) or height
+     * (vertical). Defaults to 34. */
+    lengthPct?: number;
   } | null;
   legend: LegendEntry[];
   /** Heading drawn above the legend entries. */
@@ -944,7 +947,10 @@ function drawColorbar(
   const vertical = cb.orientation === "vertical";
   const pad = unit * 1.4;
   const barThick = unit * 2.2;
-  const barLen = (vertical ? bodyH : bodyW) * 0.34;
+  // Clamp the requested length to a sane band so the bar can't vanish or run off
+  // the body, then take that fraction of the relevant body dimension.
+  const lengthFrac = Math.max(5, Math.min(95, cb.lengthPct ?? 34)) / 100;
+  const barLen = (vertical ? bodyH : bodyW) * lengthFrac;
   const labelSize = unit * 1.7;
   const titleSize = unit * 1.9;
   const tickGap = unit * 0.7;

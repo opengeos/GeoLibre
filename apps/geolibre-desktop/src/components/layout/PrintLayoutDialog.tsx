@@ -18,6 +18,7 @@ import {
   Label,
   Select,
   Separator,
+  Slider,
 } from "@geolibre/ui";
 import {
   ArrowDown,
@@ -165,6 +166,8 @@ export function PrintLayoutDialog({
   const [colorbarOrientation, setColorbarOrientation] = useState<
     "vertical" | "horizontal"
   >("vertical");
+  // Bar length as a percentage of the body width/height.
+  const [colorbarLength, setColorbarLength] = useState(34);
   // Default away from the bottom-right nav duo and top-left legend.
   const [colorbarPosition, setColorbarPosition] = useState<
     "top-left" | "top-right" | "bottom-left" | "bottom-right"
@@ -468,6 +471,7 @@ export function PrintLayoutDialog({
             label: colorbarLabel,
             orientation: colorbarOrientation,
             position: colorbarPosition,
+            lengthPct: colorbarLength,
           }
         : null,
       showInfoBlock,
@@ -522,6 +526,7 @@ export function PrintLayoutDialog({
       colorbarLabel,
       colorbarOrientation,
       colorbarPosition,
+      colorbarLength,
       showInfoBlock,
       author,
       projectNumber,
@@ -1270,6 +1275,25 @@ export function PrintLayoutDialog({
                       </option>
                     </Select>
                   </div>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="cb-length">
+                      {t("printLayout.colorbar.length")}
+                    </Label>
+                    <span className="text-sm tabular-nums text-muted-foreground">
+                      {colorbarLength}%
+                    </span>
+                  </div>
+                  <Slider
+                    id="cb-length"
+                    aria-label={t("printLayout.colorbar.length")}
+                    min={5}
+                    max={95}
+                    step={1}
+                    value={[colorbarLength]}
+                    onValueChange={(v: number[]) => setColorbarLength(v[0])}
+                  />
                 </div>
               </div>
             )}
