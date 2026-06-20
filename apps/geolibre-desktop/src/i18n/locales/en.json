@@ -1274,6 +1274,7 @@
     "placeholder": "Python here · Ctrl/Cmd+Enter to run · Tab to autocomplete · ↑/↓ for history",
     "intro": "Python console ready. Use the `geolibre` object to script the map, e.g. geolibre.get_center(). Tab autocompletes, ↑/↓ recall previous commands, and `await geolibre.load_package(\"numpy\")` adds packages.",
     "loadFailed": "Failed to load the Python runtime.",
+    "advancedLabel": "Advanced",
     "switchToAdvanced": "Switch to Advanced editor",
     "switchToBasic": "Switch to Basic console",
     "resizeEditor": "Resize editor",

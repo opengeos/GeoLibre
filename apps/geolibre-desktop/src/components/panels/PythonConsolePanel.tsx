@@ -1,15 +1,7 @@
 import { useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import { Button, Textarea } from "@geolibre/ui";
-import {
-  Eraser,
-  Loader2,
-  PanelBottomClose,
-  PanelBottomOpen,
-  Play,
-  Terminal,
-  X,
-} from "lucide-react";
+import { Code2, Eraser, Loader2, Play, Terminal, X } from "lucide-react";
 import {
   type ChangeEvent as ReactChangeEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -273,6 +265,10 @@ export function PythonConsolePanel({
           Math.max(h, editorHeight + EDITOR_RESIZE_RESERVE),
         ),
       );
+    } else {
+      // Leaving advanced unmounts the editor; move focus to the REPL input that
+      // replaces it (deferred until after it renders).
+      requestAnimationFrame(() => consoleInputRef.current?.focus());
     }
     setAdvancedMode((prev) => !prev);
   };
@@ -343,7 +339,9 @@ export function PythonConsolePanel({
     event.preventDefault();
     event.stopPropagation();
     const startY = event.clientY;
-    const startHeight = editorHeight;
+    // Seed from the actual rendered height (the render-time clamp may hold it
+    // below editorHeight when the panel is short) so the drag has no dead-zone.
+    const startHeight = editorRegionRef.current?.clientHeight ?? editorHeight;
     let nextHeight = startHeight;
     let frame: number | null = null;
     const prevCursor = document.body.style.cursor;
@@ -444,9 +442,9 @@ export function PythonConsolePanel({
         ) : null}
         <div className="ml-auto flex items-center gap-1">
           <Button
-            variant={advancedMode ? "secondary" : "ghost"}
-            size="icon"
-            className="h-8 w-8"
+            variant={advancedMode ? "secondary" : "outline"}
+            size="sm"
+            className="h-8 gap-1.5"
             title={
               advancedMode
                 ? t("pythonConsole.switchToBasic")
@@ -455,11 +453,8 @@ export function PythonConsolePanel({
             aria-pressed={advancedMode}
             onClick={toggleAdvanced}
           >
-            {advancedMode ? (
-              <PanelBottomClose className="h-4 w-4" />
-            ) : (
-              <PanelBottomOpen className="h-4 w-4" />
-            )}
+            <Code2 className="h-4 w-4" />
+            {t("pythonConsole.advancedLabel")}
           </Button>
           <Button
             variant="ghost"
@@ -517,7 +512,10 @@ export function PythonConsolePanel({
               aria-label={t("pythonConsole.resizeEditor")}
               aria-valuenow={editorHeight}
               aria-valuemin={MIN_EDITOR_HEIGHT}
-              aria-valuemax={MAX_CONSOLE_HEIGHT}
+              aria-valuemax={Math.max(
+                MIN_EDITOR_HEIGHT,
+                height - EDITOR_RESIZE_RESERVE,
+              )}
               tabIndex={0}
               className="h-1 shrink-0 cursor-row-resize select-none bg-border hover:bg-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
               onMouseDown={startEditorResize}
