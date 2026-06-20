@@ -23,11 +23,19 @@ export function ReleaseNotes({ notes }: ReleaseNotesProps) {
     .filter((line) => line.length > 0)
     // Drop the auto-generated footer GitHub appends to generated notes.
     .filter((line) => !/^\*\*full changelog\*\*/i.test(line))
+    // Drop bare horizontal-rule dividers (e.g. "---" between sections).
+    .filter((line) => !/^-{3,}$/.test(line))
     .map((line) =>
       line
         // Strip leading Markdown heading hashes and list markers.
         .replace(/^#{1,6}\s+/, "")
         .replace(/^[-*+]\s+/, "")
+        // Strip leading ordered-list markers (e.g. "1. ", "42. ").
+        .replace(/^\d+\.\s+/, "")
+        // Collapse inline link syntax to its label: [text](url) -> text.
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+        // Strip bold/italic emphasis markers, keeping the wrapped text.
+        .replace(/(\*{1,2}|_{1,2})(.+?)\1/g, "$2")
         .trim(),
     )
     .filter((line) => line.length > 0);

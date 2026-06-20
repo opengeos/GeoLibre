@@ -15,3 +15,10 @@ export const DESKTOP_SETTINGS_STORAGE_KEY = "geolibre.desktopSettings";
  */
 export const UPDATE_DISMISSED_VERSION_STORAGE_KEY =
   "geolibre.updateDismissedVersion";
+
+/**
+ * Epoch-millisecond timestamp of the last automated startup update check.
+ * Throttles the unauthenticated GitHub API call so frequent relaunches do not
+ * exhaust the per-IP rate limit (desktop only).
+ */
+export const UPDATE_LAST_CHECK_STORAGE_KEY = "geolibre.lastUpdateCheck";

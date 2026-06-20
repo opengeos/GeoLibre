@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
 import {
   compareVersions,
+  fetchLatestRelease,
   formatVersion,
   meetsNotificationLevel,
   parseVersion,
   releaseSeverity,
+  UPDATE_URL,
+  UpdateCheckError,
 } from "../apps/geolibre-desktop/src/lib/updates";
 
 describe("update version helpers", () => {
@@ -64,5 +67,80 @@ describe("meetsNotificationLevel", () => {
     assert.equal(meetsNotificationLevel("patch", "major"), false);
     assert.equal(meetsNotificationLevel("minor", "major"), false);
     assert.equal(meetsNotificationLevel("major", "major"), true);
+  });
+});
+
+describe("fetchLatestRelease", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const stubFetch = (response: Response) => {
+    globalThis.fetch = (async () => response) as typeof fetch;
+  };
+
+  it("normalizes a valid release and keeps a GitHub html_url", async () => {
+    stubFetch(
+      new Response(
+        JSON.stringify({
+          tag_name: "1.6.0",
+          body: "  notes  ",
+          html_url: "https://github.com/opengeos/GeoLibre/releases/tag/v1.6.0",
+        }),
+        { status: 200 },
+      ),
+    );
+    const release = await fetchLatestRelease();
+    assert.equal(release.version, "v1.6.0");
+    assert.equal(release.notes, "notes");
+    assert.equal(
+      release.url,
+      "https://github.com/opengeos/GeoLibre/releases/tag/v1.6.0",
+    );
+  });
+
+  it("falls back to the downloads page for a non-GitHub html_url", async () => {
+    stubFetch(
+      new Response(
+        JSON.stringify({ tag_name: "v1.6.0", html_url: "http://evil.example" }),
+        { status: 200 },
+      ),
+    );
+    const release = await fetchLatestRelease();
+    assert.equal(release.url, UPDATE_URL);
+  });
+
+  it("wraps a malformed 200 body as a network error", async () => {
+    stubFetch(new Response("{ not json", { status: 200 }));
+    await assert.rejects(fetchLatestRelease(), (error: unknown) => {
+      assert.ok(error instanceof UpdateCheckError);
+      assert.equal(error.code, "network");
+      return true;
+    });
+  });
+
+  it("reports an exhausted rate limit", async () => {
+    stubFetch(
+      new Response("", {
+        status: 403,
+        headers: { "X-RateLimit-Remaining": "0" },
+      }),
+    );
+    await assert.rejects(fetchLatestRelease(), (error: unknown) => {
+      assert.ok(error instanceof UpdateCheckError);
+      assert.equal(error.code, "rateLimit");
+      return true;
+    });
+  });
+
+  it("flags a missing version tag", async () => {
+    stubFetch(new Response(JSON.stringify({ body: "no tag" }), { status: 200 }));
+    await assert.rejects(fetchLatestRelease(), (error: unknown) => {
+      assert.ok(error instanceof UpdateCheckError);
+      assert.equal(error.code, "noTag");
+      return true;
+    });
   });
 });

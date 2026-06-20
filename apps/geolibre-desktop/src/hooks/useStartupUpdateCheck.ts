@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { isTauri } from "../lib/is-tauri";
-import { UPDATE_DISMISSED_VERSION_STORAGE_KEY } from "../lib/storage-keys";
+import {
+  UPDATE_DISMISSED_VERSION_STORAGE_KEY,
+  UPDATE_LAST_CHECK_STORAGE_KEY,
+} from "../lib/storage-keys";
 import {
   APP_VERSION,
   fetchLatestRelease,
@@ -15,6 +18,36 @@ import { useDesktopSettingsStore } from "./useDesktopSettings";
 export interface PendingUpdate {
   release: LatestRelease;
   severity: ReleaseSeverity;
+}
+
+/**
+ * Minimum gap between automated startup checks. The unauthenticated GitHub API
+ * allows 60 requests/hour per IP; throttling to a few per day keeps frequent
+ * relaunches from exhausting that quota.
+ */
+const CHECK_THROTTLE_MS = 6 * 60 * 60 * 1000;
+
+function readLastCheck(): number {
+  if (typeof window === "undefined") return 0;
+  try {
+    return Number(
+      window.localStorage.getItem(UPDATE_LAST_CHECK_STORAGE_KEY) ?? 0,
+    );
+  } catch {
+    return 0;
+  }
+}
+
+function writeLastCheck(timestamp: number): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      UPDATE_LAST_CHECK_STORAGE_KEY,
+      String(timestamp),
+    );
+  } catch {
+    // Best-effort: ignore quota or disabled-storage errors.
+  }
 }
 
 function readDismissedVersion(): string | null {
@@ -59,6 +92,13 @@ export function useStartupUpdateCheck() {
     const settings =
       useDesktopSettingsStore.getState().desktopSettings.updates;
     if (!settings.checkOnStartup) return;
+
+    // Throttle the network call so frequent relaunches don't burn the GitHub
+    // rate limit. Stamp the time up front so a failed/rate-limited attempt also
+    // counts, preventing repeated hammering within the window.
+    const now = Date.now();
+    if (now - readLastCheck() < CHECK_THROTTLE_MS) return;
+    writeLastCheck(now);
 
     const controller = new AbortController();
     let cancelled = false;

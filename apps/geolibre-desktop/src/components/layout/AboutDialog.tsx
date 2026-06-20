@@ -90,11 +90,14 @@ export function AboutDialog({
             return t("updates.error.http", { status: error.status });
           case "noTag":
             return t("updates.error.noTag");
+          case "network":
           default:
             return t("updates.error.network");
         }
       }
-      return t("updates.error.message");
+      // Non-UpdateCheckError (an unexpected failure): reuse the network message
+      // rather than duplicating the generic header string shown above it.
+      return t("updates.error.network");
     },
     [t],
   );

@@ -180,17 +180,26 @@ export async function fetchLatestRelease(
     throw new UpdateCheckError("http", response.status);
   }
 
-  const release = (await response.json()) as GitHubRelease;
+  let release: GitHubRelease;
+  try {
+    release = (await response.json()) as GitHubRelease;
+  } catch {
+    // A malformed 200 body would otherwise throw a plain SyntaxError that
+    // bypasses UpdateCheckError; treat it like any other failed fetch.
+    throw new UpdateCheckError("network");
+  }
   if (typeof release.tag_name !== "string" || !release.tag_name.trim()) {
     throw new UpdateCheckError("noTag");
   }
 
+  const htmlUrl =
+    typeof release.html_url === "string" ? release.html_url.trim() : "";
   return {
     version: formatVersion(release.tag_name),
     notes: typeof release.body === "string" ? release.body.trim() : "",
-    url:
-      typeof release.html_url === "string" && release.html_url.trim()
-        ? release.html_url
-        : UPDATE_URL,
+    // Only trust a GitHub release URL; fall back to the downloads page so a
+    // tampered API response can't redirect the download action to another
+    // origin (openExternalLink already blocks non-http(s) schemes).
+    url: /^https:\/\/github\.com\//i.test(htmlUrl) ? htmlUrl : UPDATE_URL,
   };
 }
