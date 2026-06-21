@@ -1247,7 +1247,7 @@
     },
     "fileDrop": {
       "overlayTitle": "Drop vector or raster files here to add layers",
-      "overlaySubtext": "Your data is added instantly as a new layer in the Layers panel.",
+      "overlaySubtext": "Your data is added instantly to the Layers panel.",
       "addedLayer": "Added \"{{name}}\" to the Layers panel.",
       "addedVectorLayers_one": "Added {{count}} vector layer to the Layers panel.",
       "addedVectorLayers_other": "Added {{count}} vector layers to the Layers panel.",
