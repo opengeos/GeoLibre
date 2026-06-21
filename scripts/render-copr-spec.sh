@@ -19,7 +19,8 @@ set -euo pipefail
 
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "VERSION does not look like a semver string" >&2; exit 1; }
 [[ "$DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "DATE must be YYYY-MM-DD" >&2; exit 1; }
-# Reject syntactically valid but impossible dates (e.g. 2026-13-40).
+# Reject syntactically valid but impossible dates (e.g. 2026-13-40). `date -d`
+# is GNU coreutils; these scripts run on Linux/CI (on macOS, use coreutils).
 date -u -d "$DATE" +%F >/dev/null 2>&1 || { echo "DATE is not a valid calendar date" >&2; exit 1; }
 
 REPO="${REPO:-opengeos/GeoLibre}"
@@ -54,6 +55,8 @@ ExclusiveArch:  x86_64
 # Repackage the official release RPM rather than rebuilding from source.
 Source0:        https://github.com/${REPO}/releases/download/v%{version}/GeoLibre.Desktop-%{version}-1.x86_64.rpm
 Source1:        %{appid}.metainfo.xml
+# The upstream bundle ships no license file, so carry the project LICENSE here.
+Source2:        LICENSE
 
 Provides:       geolibre-desktop = %{version}-%{release}
 
@@ -82,9 +85,11 @@ rpm2cpio %{SOURCE0} | cpio -idmv
 
 # Rename the .desktop to the AppStream app-id (software centers and the metainfo
 # launchable expect this), add the Categories the upstream bundle leaves empty,
-# and give it a clean Comment.
-mv "%{buildroot}%{_datadir}/applications/GeoLibre Desktop.desktop" \\
-   "%{buildroot}%{_datadir}/applications/%{appid}.desktop"
+# and give it a clean Comment. Find the source file rather than hardcoding its
+# name, so an upstream rename fails loudly instead of silently dropping it.
+_desktop_src="\$(find "%{buildroot}%{_datadir}/applications/" -name '*.desktop' | head -1)"
+test -n "\$_desktop_src" || { echo "no .desktop file in the upstream RPM payload" >&2; exit 1; }
+mv "\$_desktop_src" "%{buildroot}%{_datadir}/applications/%{appid}.desktop"
 desktop-file-edit \\
   --set-key=Categories --set-value="Science;Geoscience;Geography;" \\
   --set-key=Comment --set-value="Lightweight, cloud-native GIS platform" \\
@@ -93,11 +98,15 @@ desktop-file-edit \\
 # Install the AppStream metainfo.
 install -Dm0644 %{SOURCE1} "%{buildroot}%{_metainfodir}/%{appid}.metainfo.xml"
 
+# Ship the license text (the upstream bundle omits it).
+install -Dm0644 %{SOURCE2} "%{buildroot}%{_licensedir}/%{name}/LICENSE"
+
 %check
 desktop-file-validate "%{buildroot}%{_datadir}/applications/%{appid}.desktop"
 appstreamcli validate --no-net "%{buildroot}%{_metainfodir}/%{appid}.metainfo.xml"
 
 %files
+%license %{_licensedir}/%{name}/LICENSE
 %{_bindir}/geolibre-desktop
 # The Tauri bundle hardcodes the /usr/lib path (lib, not lib64); quote it
 # because of the space in the directory name.

@@ -100,6 +100,7 @@ sudo apt install ./GeoLibre.Desktop_<version>_amd64.deb
 ### Other distributions (.rpm / AppImage)
 
 - RPM-based distros: `sudo dnf install ./GeoLibre.Desktop-<version>-1.x86_64.rpm`
+  (use `yum` on older RHEL/CentOS, or `sudo zypper install --allow-unsigned-rpm ./...rpm` on openSUSE)
 - AppImage (any distro): download it, mark it executable, and run it:
 
   ```bash

@@ -19,7 +19,8 @@ set -euo pipefail
 
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "VERSION does not look like a semver string" >&2; exit 1; }
 [[ "$DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "DATE must be YYYY-MM-DD" >&2; exit 1; }
-# Reject syntactically valid but impossible dates (e.g. 2026-13-40).
+# Reject syntactically valid but impossible dates (e.g. 2026-13-40). `date -d`
+# is GNU coreutils; these scripts run on Linux/CI (on macOS, use coreutils).
 date -u -d "$DATE" +%F >/dev/null 2>&1 || { echo "DATE is not a valid calendar date" >&2; exit 1; }
 
 cat <<XML

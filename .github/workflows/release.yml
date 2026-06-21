@@ -271,7 +271,7 @@ jobs:
         run: |
           version="${TAG#v}"
           # Release date (YYYY-MM-DD) for the metainfo <release> and %changelog.
-          date="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+          release_date="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
             --json publishedAt --jq '.publishedAt' | cut -dT -f1)"
 
           sudo apt-get update -qq
@@ -280,16 +280,18 @@ jobs:
           # copr-cli imports `rich` but does not always declare it as a dependency.
           pipx inject copr-cli rich
 
-          # COPR API token config from the secret.
+          # COPR API token config from the secret. Create it with restrictive
+          # permissions atomically (umask), not chmod-after-write.
           mkdir -p ~/.config
-          printf '%s\n' "$COPR_API_TOKEN" > ~/.config/copr
-          chmod 600 ~/.config/copr
+          (umask 177; printf '%s\n' "$COPR_API_TOKEN" > ~/.config/copr)
 
           mkdir -p ~/rpmbuild/SPECS ~/rpmbuild/SOURCES
-          VERSION="$version" DATE="$date" \
+          VERSION="$version" DATE="$release_date" \
             scripts/render-linux-metainfo.sh > ~/rpmbuild/SOURCES/org.geolibre.desktop.metainfo.xml
-          VERSION="$version" DATE="$date" REPO="$GITHUB_REPOSITORY" \
+          VERSION="$version" DATE="$release_date" REPO="$GITHUB_REPOSITORY" \
             scripts/render-copr-spec.sh > ~/rpmbuild/SPECS/geolibre.spec
+          # The spec ships the project license as Source2.
+          cp LICENSE ~/rpmbuild/SOURCES/
 
           # Validate the metainfo in CI, independently of COPR's mock build.
           appstreamcli validate --no-net ~/rpmbuild/SOURCES/org.geolibre.desktop.metainfo.xml
@@ -298,8 +300,12 @@ jobs:
           # SRPM (it does not fetch URLs).
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
             --pattern "GeoLibre.Desktop-${version}-1.x86_64.rpm" --dir ~/rpmbuild/SOURCES
+          # Log the checksum of the repackaged RPM for auditability.
+          sha256sum ~/rpmbuild/SOURCES/"GeoLibre.Desktop-${version}-1.x86_64.rpm" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
 
           srpm="$(rpmbuild -bs ~/rpmbuild/SPECS/geolibre.spec \
             --define "_topdir $HOME/rpmbuild" | sed -n 's/^Wrote: //p')"
+          [[ -n "$srpm" ]] || { echo "::error::rpmbuild produced no SRPM path"; exit 1; }
           echo "Built SRPM: $srpm"
           copr-cli build --nowait "$COPR_PROJECT" "$srpm"
