@@ -103,8 +103,9 @@ export function SampleDataSelect<T>({
         id={selectId}
         value=""
         onChange={(event) => {
-          // Guard the placeholder's "" value: Number("") is 0, which would
-          // otherwise pick the first sample on a programmatic change event.
+          // Safety net: the disabled placeholder ("") should never reach here
+          // through real interaction, but ignore an empty value anyway so it
+          // can't coerce (Number("") === 0) to the first sample.
           const raw = event.target.value;
           if (!raw) return;
           const sample = samples[Number(raw)];
@@ -115,7 +116,7 @@ export function SampleDataSelect<T>({
           {t("addData.shared.loadSampleData")}
         </option>
         {samples.map((sample, index) => (
-          <option key={index} value={index}>
+          <option key={sample.label} value={String(index)}>
             {sample.label}
           </option>
         ))}

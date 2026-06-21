@@ -262,6 +262,10 @@ export function DelimitedTextSource() {
             setDelimitedTextMode("url");
             setSelectedDelimitedText(null);
             resetDelimitedTextColumns();
+            // The sample is a comma-delimited CSV, so reset the delimiter too;
+            // otherwise a previously chosen delimiter would misparse it.
+            setDelimitedTextDelimiter("comma");
+            setDelimitedTextCustomDelimiter("");
             setDelimitedTextUrl(url);
           }}
         />
