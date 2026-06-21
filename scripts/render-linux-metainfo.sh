@@ -10,6 +10,7 @@
 #
 # Usage:
 #   VERSION=1.5.0 DATE=2026-06-20 scripts/render-linux-metainfo.sh > org.geolibre.desktop.metainfo.xml
+#   VERSION=1.5.0 DATE=2026-06-20 APPID=app.geolibre.GeoLibre scripts/render-linux-metainfo.sh > packaging/flatpak/app.geolibre.GeoLibre.metainfo.xml
 #
 # DATE is the release date (YYYY-MM-DD); both VERSION and DATE are required.
 # APPID overrides the component id and launchable (default org.geolibre.desktop,
@@ -26,6 +27,9 @@ set -euo pipefail
 date -u -d "$DATE" +%F >/dev/null 2>&1 || { echo "DATE is not a valid calendar date" >&2; exit 1; }
 
 APPID="${APPID:-org.geolibre.desktop}"
+# APPID is injected raw into the XML, so reject anything that isn't a plain
+# reverse-domain app-id (no <, >, or " that would break the document).
+[[ "$APPID" =~ ^[a-zA-Z][a-zA-Z0-9._-]*$ ]] || { echo "APPID must be a reverse-domain app-id (e.g. app.geolibre.GeoLibre)" >&2; exit 1; }
 
 cat <<XML
 <?xml version="1.0" encoding="UTF-8"?>

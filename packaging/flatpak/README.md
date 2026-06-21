@@ -84,6 +84,10 @@ bugs:
 
 - **Per release:** update the `.deb` `url` and `sha256` in the manifest, and
   regenerate the metainfo (`VERSION`/`DATE`, `APPID=app.geolibre.GeoLibre`).
+- **Metainfo is generated** by `scripts/render-linux-metainfo.sh`; if you change
+  the shared template (description, keywords, screenshot), re-run it for this
+  file too. `tests/metainfo-generated.test.ts` fails in CI if the committed copy
+  drifts from the template.
 - **Runtime:** keep `runtime-version` on a supported GNOME runtime that still
   ships `libwebkit2gtk-4.1` (50 is verified; older runtimes go end-of-life and
   Flathub rejects them).

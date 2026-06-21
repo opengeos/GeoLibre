@@ -30,8 +30,12 @@ modules:
     buildsystem: simple
     build-commands:
       # A .deb is an `ar` archive of control/data tarballs; unpack the data tree.
+      # Guard the glob (POSIX sh; no arrays) so a corrupt .deb fails clearly.
       - ar x geolibre.deb
-      - tar -xf data.tar.*
+      - |
+        for data_tar in data.tar.*; do break; done
+        [ -f "$data_tar" ] || { echo "no data.tar.* member in the .deb" >&2; exit 1; }
+        tar -xf "$data_tar"
       - install -Dm755 "usr/bin/geolibre-desktop" "/app/bin/geolibre-desktop"
       # Keep the Tauri resource dir beside the binary (../lib/<product>) so the
       # app resolves its bundled resources under /app exactly as under /usr.
