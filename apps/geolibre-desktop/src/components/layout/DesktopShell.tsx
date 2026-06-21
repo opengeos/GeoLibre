@@ -340,6 +340,21 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+// Seed width for the Layers/Style side panels. On narrow desktop windows the
+// full default would let two open panels crowd out the map (two 320px panels
+// leave only 128px at the 768px `md` breakpoint), so cap the initial width at
+// ~30% of the viewport there. On wider screens this is a no-op and the full
+// default applies; users can still drag up to MAX_SIDE_PANEL_WIDTH either way.
+function initialSidePanelWidth(): number {
+  if (typeof window === "undefined") return DEFAULT_SIDE_PANEL_WIDTH;
+  const cap = Math.round(window.innerWidth * 0.3);
+  return clamp(
+    Math.min(DEFAULT_SIDE_PANEL_WIDTH, cap),
+    MIN_SIDE_PANEL_WIDTH,
+    DEFAULT_SIDE_PANEL_WIDTH,
+  );
+}
+
 type ShellStyle = CSSProperties &
   Record<
     "--layer-panel-width" | "--style-panel-width" | "--notebook-panel-width",
@@ -425,12 +440,8 @@ export function DesktopShell({
   // Routes the Layers-panel Identify action to the raster pixel inspector for
   // COG layers (read band values on click). Inert until a COG is identified.
   useRasterIdentify();
-  const [layerPanelWidth, setLayerPanelWidth] = useState(
-    DEFAULT_SIDE_PANEL_WIDTH,
-  );
-  const [stylePanelWidth, setStylePanelWidth] = useState(
-    DEFAULT_SIDE_PANEL_WIDTH,
-  );
+  const [layerPanelWidth, setLayerPanelWidth] = useState(initialSidePanelWidth);
+  const [stylePanelWidth, setStylePanelWidth] = useState(initialSidePanelWidth);
   const [notebookPanelWidth, setNotebookPanelWidth] = useState(
     DEFAULT_NOTEBOOK_PANEL_WIDTH,
   );
