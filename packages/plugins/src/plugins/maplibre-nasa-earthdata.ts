@@ -173,7 +173,7 @@ const nasaEarthdataStoreSync = createWebServiceStoreSync(nasaEarthdataAdapter);
 export const maplibreNasaEarthdataPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-nasa-earthdata",
   name: "NASA Earthdata",
-  version: "0.1.2",
+  version: "0.1.4",
   activate: (app: GeoLibreAppAPI) => {
     if (!nasaEarthdataControl) {
       nasaEarthdataControl = new NasaEarthdataControl(
