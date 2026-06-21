@@ -340,10 +340,6 @@ body,
   top: 10px !important;
 }
 
-.duckdb-control-content {
-  max-height: min(560px, calc(100vh - 220px));
-}
-
 .duckdb-control-header {
   background-color: hsl(var(--card)) !important;
   border-bottom-color: hsl(var(--border)) !important;
@@ -1661,12 +1657,6 @@ body,
     left: 10px !important;
     right: auto !important;
     width: calc(100vw - 20px) !important;
-  }
-
-  .duckdb-control-content {
-    /* 170px = the 96px panel offset above plus the panel header height */
-    max-height: calc(100vh - 170px);
-    max-height: calc(100dvh - 170px);
   }
 
   .geolibre-identify-popup .maplibregl-popup-content {
