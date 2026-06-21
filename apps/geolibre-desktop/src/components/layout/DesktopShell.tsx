@@ -766,21 +766,19 @@ export function DesktopShell({
         );
         return;
       }
-      const parts: string[] = [];
-      if (importedLayers.length) {
-        parts.push(
-          t("toolbar.fileDrop.vectorLayers", { count: importedLayers.length }),
-        );
-      }
-      if (rasterCount) {
-        parts.push(
-          t("toolbar.fileDrop.rasterLayers", { count: rasterCount }),
-        );
-      }
+      // Full-sentence keys (rather than a JS-assembled summary) keep word
+      // order and pluralization inside the translation catalog.
       setDropMessage(
-        t("toolbar.fileDrop.added", {
-          summary: parts.join(` ${t("toolbar.fileDrop.and")} `),
-        }),
+        importedLayers.length && rasterCount
+          ? t("toolbar.fileDrop.addedBoth", {
+              vectorCount: importedLayers.length,
+              rasterCount,
+            })
+          : importedLayers.length
+            ? t("toolbar.fileDrop.addedVectorLayers", {
+                count: importedLayers.length,
+              })
+            : t("toolbar.fileDrop.addedRasterLayers", { count: rasterCount }),
       );
     },
     [addImportedVectorLayers, t],
