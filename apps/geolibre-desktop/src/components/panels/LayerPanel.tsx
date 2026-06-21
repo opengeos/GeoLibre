@@ -1612,9 +1612,12 @@ export function LayerPanel({
                         Rename
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
+                      {/* Let the menu close on its own after creating the
+                          group — there is no rename input to autofocus here, so
+                          no preventDefault is needed (and keeping it would leave
+                          the menu pinned open). */}
                       <DropdownMenuItem
-                        onSelect={(e: Event) => {
-                          e.preventDefault();
+                        onSelect={() => {
                           addLayerGroup(undefined, [layer.id]);
                         }}
                       >
