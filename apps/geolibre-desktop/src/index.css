@@ -2307,7 +2307,7 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   .maplibre-gl-sample-trigger,
   .splat-sample-trigger,
   .lidar-sample-trigger
-):is(:hover, .open, :focus-visible) {
+):is(:hover, .open, :focus-visible, :active) {
   border-color: hsl(var(--ring)) !important;
 }
 
@@ -2338,6 +2338,6 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   .maplibre-gl-sample-option,
   .splat-sample-option,
   .lidar-sample-option
-):is(:hover, :focus-visible) {
+):is(:hover, :focus-visible, :active) {
   background-color: hsl(var(--accent)) !important;
 }
