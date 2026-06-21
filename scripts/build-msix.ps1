@@ -4,7 +4,13 @@ param(
   [ValidateSet("x64", "x86", "arm64", "arm", "neutral")]
   [string] $Architecture = "x64",
   [string] $Publisher = "CN=GeoLibre",
-  [string] $PublisherDisplayName = "GeoLibre"
+  [string] $PublisherDisplayName = "GeoLibre",
+  # Identity Name. Defaults to the Tauri identifier; override with the reserved
+  # package name from Partner Center (Product Identity) for a Microsoft Store
+  # submission.
+  [string] $Name = "",
+  # Default package language. Required by the Store; every MSIX must declare one.
+  [string] $Language = "en-us"
 )
 
 $ErrorActionPreference = "Stop"
@@ -59,6 +65,7 @@ $iconsDir = Join-Path $tauriDir "icons"
 $config = Get-Content -Raw $configPath | ConvertFrom-Json
 $productName = [string] $config.productName
 $identifier = [string] $config.identifier
+if (-not $Name) { $Name = $identifier }
 $version = ConvertTo-MsixVersion ([string] $config.version)
 
 $cargo = Get-Content -Raw $cargoPath
@@ -106,7 +113,7 @@ $manifest = @"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
   IgnorableNamespaces="uap rescap">
   <Identity
-    Name="$(ConvertTo-XmlText $identifier)"
+    Name="$(ConvertTo-XmlText $Name)"
     Publisher="$(ConvertTo-XmlText $Publisher)"
     Version="$(ConvertTo-XmlText $version)"
     ProcessorArchitecture="$(ConvertTo-XmlText $Architecture)" />
@@ -115,6 +122,9 @@ $manifest = @"
     <PublisherDisplayName>$(ConvertTo-XmlText $PublisherDisplayName)</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
+  <Resources>
+    <Resource Language="$(ConvertTo-XmlText $Language)" />
+  </Resources>
   <Dependencies>
     <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
   </Dependencies>
