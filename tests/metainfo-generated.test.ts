@@ -16,19 +16,10 @@ const repoRoot = path.resolve(
 );
 const script = path.join(repoRoot, "scripts", "render-linux-metainfo.sh");
 
-const cases = [
-  {
-    appid: "org.geolibre.desktop",
-    file: "packaging/linux/org.geolibre.desktop.metainfo.xml",
-  },
-  {
-    appid: "app.geolibre.GeoLibre",
-    file: "packaging/flatpak/app.geolibre.GeoLibre.metainfo.xml",
-  },
-];
+const files = ["packaging/linux/org.geolibre.desktop.metainfo.xml"];
 
 describe("render-linux-metainfo.sh committed copies", () => {
-  for (const { appid, file } of cases) {
+  for (const file of files) {
     it(`${file} is in sync with the template`, () => {
       const committed = readFileSync(path.join(repoRoot, file), "utf8");
       const release = committed.match(
@@ -37,7 +28,7 @@ describe("render-linux-metainfo.sh committed copies", () => {
       assert.ok(release, `no <release> element found in ${file}`);
       const [, version, date] = release;
       const rendered = execFileSync("bash", [script], {
-        env: { ...process.env, VERSION: version, DATE: date, APPID: appid },
+        env: { ...process.env, VERSION: version, DATE: date },
         encoding: "utf8",
       });
       assert.equal(

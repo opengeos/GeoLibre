@@ -1,9 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=GeoLibre Desktop
-Comment=Lightweight, cloud-native GIS platform
-Exec=geolibre-desktop
-Icon=app.geolibre.GeoLibre
-Terminal=false
-Categories=Science;Geoscience;Geography;
-StartupWMClass=geolibre-desktop

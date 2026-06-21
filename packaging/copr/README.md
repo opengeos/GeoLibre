@@ -14,8 +14,7 @@ source), adds an AppStream `metainfo.xml`, and renames the desktop entry to the
   (the source of truth); do not hand-edit it, CI overwrites it.
 - The AppStream metainfo is rendered by
   [`scripts/render-linux-metainfo.sh`](../../scripts/render-linux-metainfo.sh)
-  into [`packaging/linux/org.geolibre.desktop.metainfo.xml`](../linux/org.geolibre.desktop.metainfo.xml)
-  (shared with the future Flathub/Snap channels).
+  into [`packaging/linux/org.geolibre.desktop.metainfo.xml`](../linux/org.geolibre.desktop.metainfo.xml).
 - The `copr` job in [`.github/workflows/release.yml`](../../.github/workflows/release.yml)
   builds the SRPM and submits it to COPR on each non-prerelease release.
 
