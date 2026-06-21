@@ -57,6 +57,7 @@ import { mergeStringLists } from "../lib/string-lists";
 import {
   browserSaveFallsBackToDownload,
   openLocalDataFileWithFallback,
+  pickVectorFilesWithSidecars,
   saveTextFileWithFallback,
 } from "../lib/tauri-io";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
@@ -509,6 +510,12 @@ export function createAppAPI(
       mapControllerRef?.current?.fitBounds(bounds),
     getMap: () => mapControllerRef?.current?.getMap() ?? null,
     pickLocalDirectoryFiles,
+    // Present only on desktop (filesystem access); the Vector panel keys off its
+    // presence to auto-discover shapefile sidecars instead of forcing the user
+    // to select every component.
+    pickVectorFilesWithSidecars: isTauriRuntime()
+      ? pickVectorFilesWithSidecars
+      : undefined,
     exportTextFile: (
       filename: string,
       content: string,

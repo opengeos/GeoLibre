@@ -77,6 +77,21 @@ export interface GeoLibreDeckGL {
   mapbox: typeof import("@deck.gl/mapbox");
 }
 
+/**
+ * A vector file picked through {@link GeoLibreAppAPI.pickVectorFilesWithSidecars},
+ * with any shapefile sidecars the host found alongside it.
+ */
+export interface GeoLibrePickedVectorFile {
+  /** The main vector file (the `.shp` for a shapefile). */
+  file: File;
+  /**
+   * Shapefile sidecar files (`.shx`, `.dbf`, `.prj`, `.cpg`) discovered next to
+   * a `.shp`; empty for any other format. Pass these to a vector control's
+   * `addData(file, { companionFiles })` so a loose `.shp` loads as one layer.
+   */
+  companionFiles: File[];
+}
+
 export interface GeoLibreAppAPI {
   setBasemap: (styleUrl: string) => void;
   addGeoJsonLayer: (
@@ -106,6 +121,16 @@ export interface GeoLibreAppAPI {
   fitBounds?: (bounds: [number, number, number, number]) => void;
   getMap?: () => MapLibreMap | null;
   pickLocalDirectoryFiles?: () => Promise<File[] | null>;
+  /**
+   * Prompt the user (desktop only) to pick one or more vector files via the
+   * native dialog, returning each with any shapefile sidecars discovered in the
+   * same directory. This lets a host with filesystem access load a loose `.shp`
+   * without the user selecting every component (`.shx`, `.dbf`, ...). Present
+   * only on hosts with filesystem access (the desktop build); absent on the web
+   * (browsers cannot read sibling files), so its presence doubles as a desktop
+   * capability check. Resolves to an empty array when the dialog is cancelled.
+   */
+  pickVectorFilesWithSidecars?: () => Promise<GeoLibrePickedVectorFile[] | null>;
   /**
    * Save text content to a file chosen by the user. The host handles the
    * platform specifics (a native save dialog under Tauri, a browser download

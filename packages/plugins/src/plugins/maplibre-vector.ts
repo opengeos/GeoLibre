@@ -5,7 +5,11 @@ import type {
   VectorLayerInfo,
   VectorSampleDataset,
 } from "maplibre-gl-vector";
-import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
+import type {
+  GeoLibreAppAPI,
+  GeoLibreMapControlPosition,
+  GeoLibrePickedVectorFile,
+} from "../types";
 import {
   isVectorControlStoreLayer,
   resetVectorStoreSyncSuspension,
@@ -97,6 +101,7 @@ export function openVectorLayerPanel(app: GeoLibreAppAPI): void {
         // upstream release builds the panel DOM lazily on first expand.
         wireVectorCloseButton(control);
         applyVectorPanelClass(control);
+        wireDesktopFilePicker(control, app);
       } catch (error) {
         console.error(
           "[GeoLibre] Failed to open the vector layer panel",
@@ -289,6 +294,7 @@ async function ensureVectorControl(
     hideVectorControl(vectorControl);
     wireVectorCloseButton(vectorControl);
     applyVectorPanelClass(vectorControl);
+    wireDesktopFilePicker(vectorControl, app);
   }
 
   return vectorControl;
@@ -478,4 +484,69 @@ function wireVectorCloseButton(control: VectorControl): void {
   }
   closeButton.dataset.geolibreCloseWired = "true";
   closeButton.addEventListener("click", () => hideVectorControl(control));
+}
+
+// On desktop the host can read a chosen `.shp`'s sidecar files from the same
+// directory, so a loose `.shp` loads without the user selecting every component
+// (.shx, .dbf, .prj, ...). The upstream panel's file input yields sandboxed File
+// objects with no filesystem path, so intercept its click and route through the
+// host's native picker (which returns the sidecars via companionFiles), then
+// hand the result back to the panel so the layer stays panel-managed. No-op on
+// the web, where `pickVectorFilesWithSidecars` is absent and the native input is
+// the only way to read files. The selector mirrors the upstream panel's file
+// input (verified against v0.5.1) -- re-verify when bumping the dependency.
+function wireDesktopFilePicker(
+  control: VectorControl,
+  app: GeoLibreAppAPI,
+): void {
+  const pickFiles = app.pickVectorFilesWithSidecars;
+  if (!pickFiles) return;
+  const panel = (control as unknown as VectorControlInternals)._panel;
+  const fileInput = panel?.querySelector<HTMLInputElement>(
+    'input[type="file"]',
+  );
+  if (!fileInput || fileInput.dataset.geolibreDesktopPickerWired === "true") {
+    return;
+  }
+  fileInput.dataset.geolibreDesktopPickerWired = "true";
+  fileInput.addEventListener("click", (event) => {
+    // Suppress the sandboxed picker (no path) in favor of the host dialog. Also
+    // covers the "click to browse" drop zone, which delegates to this input.
+    event.preventDefault();
+    void (async () => {
+      try {
+        await addPickedVectorFiles(control, await pickFiles());
+      } catch (error) {
+        console.error(
+          "[GeoLibre] Failed to load vector files from the desktop picker",
+          error,
+        );
+      }
+    })();
+  });
+}
+
+/** The subset of VectorControl used to load picked files (eases testing). */
+export type VectorDataSink = Pick<VectorControl, "addData">;
+
+/**
+ * Loads files picked through {@link GeoLibreAppAPI.pickVectorFilesWithSidecars}
+ * into a vector control, passing a shapefile's sidecars as `companionFiles` so a
+ * loose `.shp` loads as a single layer. Each file is added independently; a
+ * `null` pick (cancelled dialog) loads nothing.
+ *
+ * @param control - The vector control (or anything with `addData`).
+ * @param picked - The picked files, or null when the dialog was cancelled.
+ */
+export async function addPickedVectorFiles(
+  control: VectorDataSink,
+  picked: GeoLibrePickedVectorFile[] | null,
+): Promise<void> {
+  if (!picked) return;
+  for (const { file, companionFiles } of picked) {
+    await control.addData(
+      file,
+      companionFiles.length > 0 ? { companionFiles } : {},
+    );
+  }
 }
