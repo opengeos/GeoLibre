@@ -59,8 +59,10 @@ export function WmtsSource() {
     >
       <div className="space-y-3">
         <SampleDataSelect
-          samples={[{ label: t("addData.wmts.sampleLabel"), value: DEFAULT_WMTS_URL }]}
-          onSelect={setWmtsUrl}
+          samples={[
+            { label: t("addData.wmts.sampleLabel"), value: { url: DEFAULT_WMTS_URL } },
+          ]}
+          onSelect={applyFields}
         />
         <ServiceLibrarySection
           kind="wmts"

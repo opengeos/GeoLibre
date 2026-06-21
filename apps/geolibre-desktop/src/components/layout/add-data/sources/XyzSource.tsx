@@ -73,8 +73,10 @@ export function XyzSource() {
     >
       <div className="space-y-3">
         <SampleDataSelect
-          samples={[{ label: t("addData.xyz.sampleLabel"), value: DEFAULT_XYZ_URL }]}
-          onSelect={setXyzUrl}
+          samples={[
+            { label: t("addData.xyz.sampleLabel"), value: { url: DEFAULT_XYZ_URL } },
+          ]}
+          onSelect={applyFields}
         />
         <ServiceLibrarySection
           kind="xyz"

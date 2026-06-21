@@ -103,7 +103,11 @@ export function SampleDataSelect<T>({
         id={selectId}
         value=""
         onChange={(event) => {
-          const sample = samples[Number(event.target.value)];
+          // Guard the placeholder's "" value: Number("") is 0, which would
+          // otherwise pick the first sample on a programmatic change event.
+          const raw = event.target.value;
+          if (!raw) return;
+          const sample = samples[Number(raw)];
           if (sample) onSelect(sample.value);
         }}
       >

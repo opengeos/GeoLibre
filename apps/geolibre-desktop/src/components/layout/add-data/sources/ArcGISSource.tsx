@@ -97,23 +97,21 @@ export function ArcGISSource() {
             {
               label: t("addData.arcgis.sampleFeatureLabel"),
               value: {
-                layerType: "feature" as ArcGISLayerType,
+                layerType: "feature",
+                sourceType: "url",
                 url: DEFAULT_ARCGIS_URLS.feature,
               },
             },
             {
               label: t("addData.arcgis.sampleVectorTileLabel"),
               value: {
-                layerType: "vector-tile" as ArcGISLayerType,
+                layerType: "vector-tile",
+                sourceType: "url",
                 url: DEFAULT_ARCGIS_URLS["vector-tile"],
               },
             },
           ]}
-          onSelect={(sample) => {
-            setArcgisLayerType(sample.layerType);
-            setArcgisSourceType("url");
-            setArcgisUrl(sample.url);
-          }}
+          onSelect={applyFields}
         />
         <ServiceLibrarySection
           kind="arcgis"

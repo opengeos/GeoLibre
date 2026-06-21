@@ -115,10 +115,7 @@ export function WfsSource() {
               value: { endpoint: DEFAULT_WFS_ENDPOINT, typeName: DEFAULT_WFS_TYPE_NAME },
             },
           ]}
-          onSelect={(sample) => {
-            setWfsEndpoint(sample.endpoint);
-            setWfsTypeName(sample.typeName);
-          }}
+          onSelect={applyFields}
         />
         <ServiceLibrarySection
           kind="wfs"

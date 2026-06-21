@@ -92,10 +92,7 @@ export function WmsSource() {
               value: { endpoint: DEFAULT_WMS_ENDPOINT, layers: DEFAULT_WMS_LAYERS },
             },
           ]}
-          onSelect={(sample) => {
-            setWmsEndpoint(sample.endpoint);
-            setWmsLayers(sample.layers);
-          }}
+          onSelect={applyFields}
         />
         <ServiceLibrarySection
           kind="wms"
