@@ -697,25 +697,21 @@ async function loadTauriVectorFile(
 async function readShapefileSiblings(
   path: string,
 ): Promise<DuckDbVectorFile[]> {
-  const basePath = pathWithoutExtension(path);
-  const siblings = await Promise.all(
-    SHAPEFILE_SIDECAR_EXTENSIONS.map(async (extension) => {
-      const siblingPath = `${basePath}.${extension}`;
-      try {
-        return {
-          name: browserSafeFileName(siblingPath),
-          extension,
-          data: await readFile(siblingPath),
-        };
-      } catch {
-        return null;
-      }
-    }),
+  // Read the sidecars through a Tauri command rather than the JS `fs` plugin:
+  // `fs` can only read paths the user explicitly picked or dropped, so a sidecar
+  // that was not selected (the whole point of auto-discovery) is forbidden. The
+  // command reads them directly and case-insensitively, returning each under the
+  // `.shp`'s base name with a lowercased extension. Returns [] off the desktop.
+  if (!isTauri()) return [];
+  const siblings = await invoke<Array<{ name: string; data: number[] }>>(
+    "read_shapefile_siblings",
+    { path },
   );
-
-  return siblings.filter(
-    (sibling): sibling is DuckDbVectorFile => sibling !== null,
-  );
+  return siblings.map((sibling) => ({
+    name: sibling.name,
+    extension: fileExtension(sibling.name),
+    data: new Uint8Array(sibling.data),
+  }));
 }
 
 async function openProjectFileBrowser(): Promise<{

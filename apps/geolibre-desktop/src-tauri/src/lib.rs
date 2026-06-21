@@ -182,6 +182,7 @@ pub fn run() {
             load_external_plugin_bundles,
             read_admin_profile,
             read_project_file,
+            read_shapefile_siblings,
             resolve_url_redirect,
             read_mbtiles_metadata,
             read_mbtiles_tile,
@@ -205,6 +206,75 @@ pub fn run() {
 #[tauri::command]
 fn read_project_file(path: String) -> Result<String, String> {
     fs::read_to_string(&path).map_err(|error| format!("Could not read project file: {error}"))
+}
+
+/// Shapefile sidecar extensions read alongside a `.shp` (lowercased, no dot).
+const SHAPEFILE_SIDECAR_EXTENSIONS: [&str; 16] = [
+    "shx", "dbf", "prj", "cpg", "sbn", "sbx", "qix", "qpj", "cst", "aih", "ain", "atx", "ixs",
+    "mxs", "fbn", "fbx",
+];
+
+#[derive(Serialize)]
+struct ShapefileSibling {
+    /// `<shp base>.<lowercased sidecar extension>`, matching the `.shp` base name
+    /// so GDAL resolves the sidecar when reading the `.shp` directly.
+    name: String,
+    data: Vec<u8>,
+}
+
+/// Read a shapefile's sidecar files (`.shx`, `.dbf`, `.prj`, `.cpg`, ...) sitting
+/// next to the given `.shp`, so a loose `.shp` can be loaded without the user
+/// selecting every component.
+///
+/// The JS `fs` plugin can only read paths the user explicitly picked or dropped,
+/// so it cannot reach a sidecar that was not selected; this reads them directly.
+/// It is scoped to shapefile sidecar extensions, so it cannot read arbitrary
+/// files. The directory is matched case-insensitively (handling `.SHX`/`.DBF` and
+/// mixed-case base names), and each sidecar is returned under the `.shp`'s base
+/// name with a lowercased extension so the registered names line up. Missing
+/// siblings are skipped; an unreadable directory yields an empty list.
+#[tauri::command]
+fn read_shapefile_siblings(path: String) -> Result<Vec<ShapefileSibling>, String> {
+    let shp = Path::new(&path);
+    let Some(parent) = shp.parent() else {
+        return Ok(Vec::new());
+    };
+    let Some(stem) = shp.file_stem().and_then(|stem| stem.to_str()) else {
+        return Ok(Vec::new());
+    };
+    let entries = match fs::read_dir(parent) {
+        Ok(entries) => entries,
+        Err(_) => return Ok(Vec::new()),
+    };
+    let mut siblings = Vec::new();
+    for entry in entries.flatten() {
+        let entry_path = entry.path();
+        if !entry_path.is_file() {
+            continue;
+        }
+        let (Some(entry_stem), Some(extension)) = (
+            entry_path.file_stem().and_then(|stem| stem.to_str()),
+            entry_path
+                .extension()
+                .and_then(|extension| extension.to_str()),
+        ) else {
+            continue;
+        };
+        if !entry_stem.eq_ignore_ascii_case(stem) {
+            continue;
+        }
+        let extension = extension.to_ascii_lowercase();
+        if !SHAPEFILE_SIDECAR_EXTENSIONS.contains(&extension.as_str()) {
+            continue;
+        }
+        if let Ok(data) = fs::read(&entry_path) {
+            siblings.push(ShapefileSibling {
+                name: format!("{stem}.{extension}"),
+                data,
+            });
+        }
+    }
+    Ok(siblings)
 }
 
 /// Read the optional admin UI-profile file (`<app_config_dir>/admin-profile.json`).
