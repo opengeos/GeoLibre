@@ -29,7 +29,7 @@ parameters; the Store-required fields differ from the defaults:
 ```powershell
 pwsh ./packaging/msix/build-msix.ps1 `
   -Name "OpenGeospatialSolutions.GeoLibre" `        # Package/Identity/Name
-  -Publisher "CN=E6AE8172-DC4F-4F79-844B-9D84204BF95A" `  # Package/Identity/Publisher
+  -Publisher "CN=XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX" `  # Package/Identity/Publisher (your seller GUID)
   -PublisherDisplayName "Open Geospatial Solutions" `     # your publisher display name
   -DisplayName "GeoLibre"                            # a name reserved in Partner Center
 ```

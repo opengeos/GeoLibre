@@ -14,7 +14,7 @@ param(
   # in Partner Center (e.g. "GeoLibre"), which may differ from the product name.
   [string] $DisplayName = "",
   # Default package language. Required by the Store; every MSIX must declare one.
-  [ValidatePattern('^[a-zA-Z]{2,8}(-[a-zA-Z0-9]{1,8})*$')]
+  [ValidatePattern('^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{1,8})*$')]
   [string] $Language = "en-us"
 )
 
