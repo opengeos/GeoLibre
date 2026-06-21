@@ -1,5 +1,6 @@
 import {
   Button,
+  cn,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -7,17 +8,26 @@ import {
   DialogTitle,
   Input,
   Label,
+  Select,
 } from "@geolibre/ui";
 import type { MapController } from "@geolibre/map";
 import type { ParseKeys } from "i18next";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import {
+  type DmsAxis,
+  decimalToDmsAxis,
+  dmsAxisToDecimal,
+} from "../../lib/dms";
 
 interface SetViewDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mapControllerRef: React.RefObject<MapController | null>;
 }
+
+/** How the center coordinate is entered: decimal degrees or degrees/min/sec. */
+type CoordFormat = "dd" | "dms";
 
 /** The five editable camera fields, kept as strings so inputs can be cleared. */
 interface ViewFields {
@@ -28,12 +38,23 @@ interface ViewFields {
   bearing: string;
 }
 
+/** The center coordinate as DMS parts, the editable counterpart of lon/lat. */
+interface DmsFields {
+  lon: DmsAxis;
+  lat: DmsAxis;
+}
+
 const EMPTY_FIELDS: ViewFields = {
   longitude: "",
   latitude: "",
   zoom: "",
   pitch: "",
   bearing: "",
+};
+
+const EMPTY_DMS: DmsFields = {
+  lon: { deg: "", min: "", sec: "", dir: "E" },
+  lat: { deg: "", min: "", sec: "", dir: "N" },
 };
 
 /** Round a value for display so prefilled fields aren't 15-digit floats. */
@@ -43,9 +64,10 @@ function round(value: number, digits: number): string {
 
 /**
  * Lets the user jump the map to an exact camera by typing the center longitude/
- * latitude, zoom, pitch, and bearing — the editable counterpart to the View
- * State readout. Prefilled with the live camera each time it opens; submitting
- * animates the map there via the controller's `flyTo`.
+ * latitude (as decimal degrees or degrees/minutes/seconds), zoom, pitch, and
+ * bearing — the editable counterpart to the View State readout. Prefilled with
+ * the live camera each time it opens; submitting animates the map there via the
+ * controller's `flyTo`.
  */
 export function SetViewDialog({
   open,
@@ -54,19 +76,27 @@ export function SetViewDialog({
 }: SetViewDialogProps) {
   const { t } = useTranslation();
   const [fields, setFields] = useState<ViewFields>(EMPTY_FIELDS);
+  const [dms, setDms] = useState<DmsFields>(EMPTY_DMS);
+  const [format, setFormat] = useState<CoordFormat>("dd");
   const [error, setError] = useState<string | null>(null);
 
-  // Seed the inputs from the live camera whenever the dialog opens.
+  // Seed both coordinate representations from the live camera whenever the
+  // dialog opens, so switching DD<->DMS shows the same point either way.
   useEffect(() => {
     if (!open) return;
     const view = mapControllerRef.current?.readView();
     if (!view) return;
+    const [longitude, latitude] = view.center;
     setFields({
-      longitude: round(view.center[0], 6),
-      latitude: round(view.center[1], 6),
+      longitude: round(longitude, 6),
+      latitude: round(latitude, 6),
       zoom: round(view.zoom, 3),
       pitch: round(view.pitch, 1),
       bearing: round(view.bearing, 1),
+    });
+    setDms({
+      lon: decimalToDmsAxis(longitude, "lon"),
+      lat: decimalToDmsAxis(latitude, "lat"),
     });
     setError(null);
   }, [open, mapControllerRef]);
@@ -74,14 +104,47 @@ export function SetViewDialog({
   const update = (key: keyof ViewFields) => (value: string) =>
     setFields((current) => ({ ...current, [key]: value }));
 
+  const updateDms =
+    (axis: keyof DmsFields, part: keyof DmsAxis) => (value: string) =>
+      setDms((current) => ({
+        ...current,
+        [axis]: { ...current[axis], [part]: value },
+      }));
+
+  // Switching format converts the current center across so no entry is lost: an
+  // edit made in one format carries into the other instead of resetting.
+  const changeFormat = (next: CoordFormat) => {
+    if (next === format) return;
+    if (next === "dms") {
+      setDms({
+        lon: decimalToDmsAxis(Number(fields.longitude), "lon"),
+        lat: decimalToDmsAxis(Number(fields.latitude), "lat"),
+      });
+    } else {
+      const longitude = dmsAxisToDecimal(dms.lon, "lon");
+      const latitude = dmsAxisToDecimal(dms.lat, "lat");
+      setFields((current) => ({
+        ...current,
+        longitude: Number.isFinite(longitude) ? round(longitude, 6) : "",
+        latitude: Number.isFinite(latitude) ? round(latitude, 6) : "",
+      }));
+    }
+    setError(null);
+    setFormat(next);
+  };
+
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     // A blank required field must be rejected, not coerced: Number("") is 0, so
     // an empty zoom would otherwise fly to the whole-earth view and an empty
     // longitude/latitude would land on null island.
     const num = (value: string) => (value.trim() === "" ? NaN : Number(value));
-    const longitude = num(fields.longitude);
-    const latitude = num(fields.latitude);
+    // Read the center from whichever format is active; dmsAxisToDecimal returns
+    // NaN for out-of-range minutes/seconds, caught by the finite check below.
+    const longitude =
+      format === "dd" ? num(fields.longitude) : dmsAxisToDecimal(dms.lon, "lon");
+    const latitude =
+      format === "dd" ? num(fields.latitude) : dmsAxisToDecimal(dms.lat, "lat");
     const zoom = num(fields.zoom);
     // Pitch and bearing default to 0 (north-up, flat) when left blank.
     const pitch = fields.pitch.trim() === "" ? 0 : Number(fields.pitch);
@@ -118,6 +181,7 @@ export function SetViewDialog({
     onOpenChange(false);
   };
 
+  /** A labeled decimal-number input bound to one of the plain ViewFields. */
   const field = (
     key: keyof ViewFields,
     labelKey: ParseKeys,
@@ -139,6 +203,58 @@ export function SetViewDialog({
     </div>
   );
 
+  /** One DMS axis row: degrees / minutes / seconds inputs plus a hemisphere. */
+  const dmsAxisRow = (
+    axis: keyof DmsFields,
+    labelKey: ParseKeys,
+    degMax: number,
+    hemispheres: readonly [string, string],
+  ) => {
+    const parts = dms[axis];
+    const part = (
+      partKey: keyof DmsAxis,
+      partLabel: ParseKeys,
+      max: number,
+      symbol: string,
+    ) => (
+      <Input
+        id={`set-view-${axis}-${partKey}`}
+        type="number"
+        inputMode="decimal"
+        step="any"
+        min={0}
+        max={max}
+        placeholder={symbol}
+        aria-label={`${t(labelKey)} ${t(partLabel)}`}
+        value={parts[partKey]}
+        onChange={(event) => updateDms(axis, partKey)(event.target.value)}
+      />
+    );
+    return (
+      <div className="space-y-1.5">
+        <Label htmlFor={`set-view-${axis}-deg`}>{t(labelKey)}</Label>
+        <div className="grid grid-cols-[repeat(3,minmax(0,1fr))_auto] gap-2">
+          {part("deg", "toolbar.setView.degrees", degMax, "°")}
+          {part("min", "toolbar.setView.minutes", 59, "′")}
+          {part("sec", "toolbar.setView.seconds", 60, "″")}
+          <Select
+            id={`set-view-${axis}-dir`}
+            className="w-16"
+            aria-label={`${t(labelKey)} ${t("toolbar.setView.hemisphere")}`}
+            value={parts.dir}
+            onChange={(event) => updateDms(axis, "dir")(event.target.value)}
+          >
+            {hemispheres.map((letter) => (
+              <option key={letter} value={letter}>
+                {letter}
+              </option>
+            ))}
+          </Select>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -159,20 +275,77 @@ export function SetViewDialog({
           invalid) before handleSubmit ever runs. We do our own thorough,
           localized validation below, so let that be the single source of
           truth. */}
-        <form className="space-y-4" noValidate onSubmit={handleSubmit}>
-          <div className="grid grid-cols-2 gap-3">
-            {field("longitude", "toolbar.setView.longitude", "any", {
-              min: -180,
-              max: 180,
-            })}
-            {field("latitude", "toolbar.setView.latitude", "any", {
-              min: -90,
-              max: 90,
-            })}
+        <form className="space-y-5" noValidate onSubmit={handleSubmit}>
+          {/* Segment A: coordinates, with a DD/DMS format toggle. */}
+          <section className="space-y-3">
+            <SectionHeading>
+              {t("toolbar.setView.sectionCoordinates")}
+            </SectionHeading>
+            <div
+              role="radiogroup"
+              aria-label={t("toolbar.setView.format")}
+              className="grid grid-cols-2 gap-1 rounded-md border border-input p-1"
+            >
+              {(
+                [
+                  ["dd", "toolbar.setView.formatDdShort", "toolbar.setView.formatDd"],
+                  ["dms", "toolbar.setView.formatDmsShort", "toolbar.setView.formatDms"],
+                ] as const
+              ).map(([value, shortKey, fullKey]) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={format === value}
+                  title={t(fullKey)}
+                  onClick={() => changeFormat(value)}
+                  className={cn(
+                    "rounded-sm px-3 py-1 text-sm font-medium transition-colors",
+                    format === value
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-muted",
+                  )}
+                >
+                  {t(shortKey)}
+                </button>
+              ))}
+            </div>
+
+            {format === "dd" ? (
+              <div className="grid grid-cols-2 gap-3">
+                {field("longitude", "toolbar.setView.longitude", "any", {
+                  min: -180,
+                  max: 180,
+                })}
+                {field("latitude", "toolbar.setView.latitude", "any", {
+                  min: -90,
+                  max: 90,
+                })}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {dmsAxisRow("lon", "toolbar.setView.longitude", 180, ["E", "W"])}
+                {dmsAxisRow("lat", "toolbar.setView.latitude", 90, ["N", "S"])}
+              </div>
+            )}
+          </section>
+
+          {/* Segment B: zoom on its own full-width row. */}
+          <section className="space-y-3">
+            <SectionHeading>{t("toolbar.setView.sectionZoom")}</SectionHeading>
             {field("zoom", "toolbar.setView.zoom", "0.1", { min: 0 })}
-            {field("pitch", "toolbar.setView.pitch", "1", { min: 0 })}
-            {field("bearing", "toolbar.setView.bearing", "1")}
-          </div>
+          </section>
+
+          {/* Segment C: pitch and bearing paired, the camera rotation controls. */}
+          <section className="space-y-3">
+            <SectionHeading>
+              {t("toolbar.setView.sectionOrientation")}
+            </SectionHeading>
+            <div className="grid grid-cols-2 gap-3">
+              {field("pitch", "toolbar.setView.pitch", "1", { min: 0 })}
+              {field("bearing", "toolbar.setView.bearing", "1")}
+            </div>
+          </section>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -189,5 +362,14 @@ export function SetViewDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** A small uppercase label that titles each of the dialog's three segments. */
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      {children}
+    </p>
   );
 }

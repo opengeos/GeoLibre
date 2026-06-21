@@ -86,3 +86,46 @@ test("rejects out-of-range input via the dialog's own validation", async ({
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText(/Enter a valid longitude/)).toBeVisible();
 });
+
+/**
+ * Issue #669 part 2: the center can be entered in degrees/minutes/seconds.
+ * Switching DMS -> DD converts the entry in place (deterministic, no map
+ * animation), and the converted value submits like any other DD coordinate.
+ */
+test("accepts a center entered in degrees/minutes/seconds", async ({ page }) => {
+  await waitForMap(page);
+
+  await page.getByRole("button", { name: "View", exact: true }).click();
+  await page.getByRole("menuitem", { name: /Set View/ }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Set View" });
+  await expect(dialog).toBeVisible();
+
+  await dialog.getByRole("radio", { name: "DMS" }).click();
+
+  // 98°28'8.3"W, 42°8'45"N — the issue's own worked example (≈ -98.468972,
+  // 42.145833).
+  await dialog.locator("#set-view-lon-deg").fill("98");
+  await dialog.locator("#set-view-lon-min").fill("28");
+  await dialog.locator("#set-view-lon-sec").fill("8.3");
+  await dialog.locator("#set-view-lon-dir").selectOption("W");
+  await dialog.locator("#set-view-lat-deg").fill("42");
+  await dialog.locator("#set-view-lat-min").fill("8");
+  await dialog.locator("#set-view-lat-sec").fill("45");
+  await dialog.locator("#set-view-lat-dir").selectOption("N");
+  await dialog.locator("#set-view-zoom").fill("5");
+
+  // Toggling to DD converts the DMS entry synchronously, so we can assert the
+  // decimal without waiting on the map.
+  await dialog.getByRole("radio", { name: "DD" }).click();
+  expect(
+    Number(await dialog.locator("#set-view-longitude").inputValue()),
+  ).toBeCloseTo(-98.468972, 4);
+  expect(
+    Number(await dialog.locator("#set-view-latitude").inputValue()),
+  ).toBeCloseTo(42.145833, 4);
+
+  // The converted coordinate submits like any other DD value.
+  await dialog.getByRole("button", { name: "Go" }).click();
+  await expect(dialog).toBeHidden();
+});
