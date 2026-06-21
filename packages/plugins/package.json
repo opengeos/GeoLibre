@@ -47,7 +47,7 @@
     "maplibre-gl-planetary-computer": "^0.3.0",
     "maplibre-gl-raster": "^0.6.1",
     "maplibre-gl-streetview": "^0.7.0",
-    "maplibre-gl-swipe": "^0.7.1",
+    "maplibre-gl-swipe": "^0.9.1",
     "maplibre-gl-time-slider": "^1.0.3",
     "maplibre-gl-usgs-lidar": "^0.11.0",
     "maplibre-gl-vector": "^0.4.0",
