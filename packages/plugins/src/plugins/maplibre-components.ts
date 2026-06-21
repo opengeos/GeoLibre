@@ -607,10 +607,11 @@ const LIDAR_OPTIONS = {
   collapsed: false,
   className: "geolibre-lidar-layer-control",
   panelWidth: 365,
-  // Omit maxHeight so the panel (maplibre-gl-lidar >= 0.16) expands to use all
-  // available vertical space within the map and exposes its corner resize
-  // handle, matching the upstream default. A fixed cap left empty space below a
-  // long panel on tall screens and suppressed the resize handle.
+  // Omit maxHeight so the panel (maplibre-gl-lidar >= 0.16.2) sizes to its
+  // content, grows up to the available vertical space within the map, and
+  // exposes its two bottom-corner resize handles, matching the upstream
+  // default. A fixed cap left empty space below a long panel on tall screens
+  // and suppressed the resize handles.
   pointSize: 2,
   colorScheme: "elevation",
   pickable: false,
