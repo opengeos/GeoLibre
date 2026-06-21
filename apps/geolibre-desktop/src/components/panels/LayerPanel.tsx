@@ -1110,10 +1110,12 @@ export function LayerPanel({
                 <Pencil className="mr-2 h-3.5 w-3.5" />
                 {t("layers.renameGroup")}
               </DropdownMenuItem>
+              {/* Action items below omit preventDefault so Radix dismisses the
+                  menu on select; only the rename item above keeps it (to avoid
+                  racing its input autofocus). See issue #668. */}
               <DropdownMenuItem
                 disabled={!canReorderGroup}
-                onSelect={(e: Event) => {
-                  e.preventDefault();
+                onSelect={() => {
                   reorderLayerGroup(group.id, "up");
                 }}
               >
@@ -1122,8 +1124,7 @@ export function LayerPanel({
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={!canReorderGroup}
-                onSelect={(e: Event) => {
-                  e.preventDefault();
+                onSelect={() => {
                   reorderLayerGroup(group.id, "down");
                 }}
               >
@@ -1132,8 +1133,7 @@ export function LayerPanel({
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                onSelect={(e: Event) => {
-                  e.preventDefault();
+                onSelect={() => {
                   removeLayerGroup(group.id);
                 }}
               >
@@ -1142,8 +1142,7 @@ export function LayerPanel({
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="text-destructive"
-                onSelect={(e: Event) => {
-                  e.preventDefault();
+                onSelect={() => {
                   removeLayerGroup(group.id, { removeChildren: true });
                 }}
               >
@@ -1612,10 +1611,10 @@ export function LayerPanel({
                         Rename
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      {/* Let the menu close on its own after creating the
-                          group — there is no rename input to autofocus here, so
-                          no preventDefault is needed (and keeping it would leave
-                          the menu pinned open). */}
+                      {/* Action items below intentionally omit preventDefault:
+                          unlike Rename there is nothing to autofocus, so Radix
+                          closes the menu on select instead of leaving it pinned
+                          open (issue #668). */}
                       <DropdownMenuItem
                         onSelect={() => {
                           addLayerGroup(undefined, [layer.id]);
@@ -1635,8 +1634,7 @@ export function LayerPanel({
                               <DropdownMenuItem
                                 key={g.id}
                                 disabled={layer.groupId === g.id}
-                                onSelect={(e: Event) => {
-                                  e.preventDefault();
+                                onSelect={() => {
                                   moveLayerToGroup(layer.id, g.id);
                                 }}
                               >
@@ -1648,8 +1646,7 @@ export function LayerPanel({
                       )}
                       {layer.groupId && (
                         <DropdownMenuItem
-                          onSelect={(e: Event) => {
-                            e.preventDefault();
+                          onSelect={() => {
                             moveLayerToGroup(layer.id, null);
                           }}
                         >
