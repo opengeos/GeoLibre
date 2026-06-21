@@ -184,6 +184,8 @@ export function AddNetcdfDialog({
           <SampleDataSelect
             samples={[{ label: t("addData.netcdf.sampleLabel"), value: SAMPLE_URL }]}
             onSelect={(sampleUrl) => {
+              // Cancel any in-flight variable load for the previous URL.
+              opGen.current += 1;
               setUrl(sampleUrl);
               // Invalidate any variables loaded from a previous URL.
               setVariables([]);
@@ -201,6 +203,8 @@ export function AddNetcdfDialog({
                 placeholder="https://example.com/data.kerchunk.json"
                 value={url}
                 onChange={(event) => {
+                  // Cancel any in-flight variable load for the previous URL.
+                  opGen.current += 1;
                   setUrl(event.target.value);
                   // Invalidate variables loaded from a different URL.
                   setVariables([]);
