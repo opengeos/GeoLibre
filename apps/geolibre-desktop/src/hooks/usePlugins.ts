@@ -704,6 +704,10 @@ async function pickVectorFiles(): Promise<GeoLibreVectorFileSelection[] | null> 
       // embedding its data in the saved project.
       resolve(files.length > 0 ? files.map((file) => ({ file })) : null);
     };
+    // `change` does not fire when the user cancels the OS dialog; without this
+    // the promise (and the panel's whole fileOpener) would hang until reload.
+    // `cancel` is supported in evergreen browsers (Chrome 113+, Firefox).
+    input.oncancel = () => resolve(null);
     input.onerror = () => reject(new Error("Could not open files"));
     input.click();
   });

@@ -23,6 +23,14 @@ import type { FeatureCollection } from "geojson";
 const vectorControlPosition: GeoLibreMapControlPosition = "top-left";
 const VECTOR_PANEL_CLASS = "geolibre-vector-panel";
 
+// Extensions the desktop restore will re-read from a path persisted in a
+// project file. Generous enough for every format the Add Vector Layer panel
+// loads (the spatial extension's GDAL readers), but a guard so a hand-edited
+// project cannot point `sourcePath` at an arbitrary file on disk. Matched
+// case-insensitively against the end of the path.
+const RESTORABLE_VECTOR_PATH =
+  /\.(geojson|json|gpkg|geoparquet|parquet|fgb|flatgeobuf|csv|tsv|kml|kmz|gml|gpx|dxf|tab|shp|zip)$/i;
+
 // Generic, non-loading watermark for the URL input. The real demonstration
 // links live in SAMPLE_VECTOR_DATASETS below, so the input no longer ships
 // prefilled with a live URL (see opengeos/GeoLibre#661).
@@ -229,7 +237,12 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
         const localPath =
           layer.metadata.localFileReloadable === true &&
           typeof layer.sourcePath === "string" &&
-          layer.sourcePath.trim()
+          layer.sourcePath.trim() &&
+          // The path comes from the (possibly hand-edited) project file, so
+          // only re-read recognized vector extensions: a crafted project must
+          // not coax the desktop app into reading an arbitrary file (e.g.
+          // /etc/passwd, ~/.ssh/id_rsa) off disk.
+          RESTORABLE_VECTOR_PATH.test(layer.sourcePath)
             ? layer.sourcePath
             : undefined;
         if (localPath && app.readLocalVectorFile) {
@@ -380,10 +393,19 @@ export async function materializeEmbeddableVectorLayers(
   return result;
 }
 
+// Upper bound on a restored embedded layer's feature count. The data is the
+// user's own (they chose to embed it on save, behind a size warning), and the
+// whole project was already parsed into memory before restore runs, so this is
+// a sanity guard against a hand-crafted project allocating an absurd number of
+// map features, not a tight size cap. Generous: a real embedded dataset stays
+// well under it.
+const MAX_EMBEDDED_FEATURES = 5_000_000;
+
 /**
  * Validates the `embeddedGeoJSON` read from a (possibly hand-edited) project
- * file: a FeatureCollection with a features array. Returns it when well-formed,
- * else null so a malformed value is skipped rather than crashing restore.
+ * file: a FeatureCollection with a features array within {@link
+ * MAX_EMBEDDED_FEATURES}. Returns it when well-formed, else null so a malformed
+ * or pathological value is skipped rather than crashing restore.
  *
  * @param value - The raw `metadata.embeddedGeoJSON` value.
  * @returns The FeatureCollection, or null.
@@ -393,6 +415,12 @@ function readEmbeddedVectorGeoJSON(value: unknown): FeatureCollection | null {
   const candidate = value as { type?: unknown; features?: unknown };
   if (candidate.type !== "FeatureCollection") return null;
   if (!Array.isArray(candidate.features)) return null;
+  if (candidate.features.length > MAX_EMBEDDED_FEATURES) {
+    console.warn(
+      `[GeoLibre] Ignoring embedded vector data with ${candidate.features.length} features (over the ${MAX_EMBEDDED_FEATURES} limit).`,
+    );
+    return null;
+  }
   return value as FeatureCollection;
 }
 

@@ -311,7 +311,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     if (choice === "cancel") return "cancel";
     if (choice === "skip") return {};
 
-    const layers = state.layers.map((layer) => {
+    // Re-read the layers after the modal: the store may have changed while the
+    // prompt was open (layers added/removed/reordered). Embedded layer ids
+    // still present get their data; any that vanished are simply skipped.
+    const layers = useAppStore.getState().layers.map((layer) => {
       const collection = embeddable.get(layer.id);
       return collection
         ? {
