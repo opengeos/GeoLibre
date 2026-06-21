@@ -1562,6 +1562,7 @@
     "description": "Spatial autocorrelation, hotspot analysis, and density measures. Every tool runs client-side on your GeoJSON layers.",
     "heading": "Spatial Statistics",
     "run": "Run",
+    "requiredFieldLegend": "Indicates a required field",
     "outputPlaceholder": "Output will appear here."
   },
   "processing": {

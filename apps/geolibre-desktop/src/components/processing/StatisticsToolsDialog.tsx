@@ -35,6 +35,25 @@ interface StatisticsToolsDialogProps {
 }
 
 /**
+ * Whether a parameter value counts as unset, used both to disable the Run
+ * button and to validate on run. Numbers must be a real (non-NaN) value.
+ *
+ * @param param - Parameter definition (its `type` drives the NaN check).
+ * @param value - Current value held for the parameter.
+ * @returns True when the value is missing or, for numbers, NaN.
+ */
+function isValueEmpty(param: AlgorithmParameter, value: unknown): boolean {
+  return (
+    value === undefined ||
+    value === "" ||
+    value === null ||
+    (param.type === "number" &&
+      typeof value === "number" &&
+      Number.isNaN(value))
+  );
+}
+
+/**
  * Processing → Spatial Statistics dialog: Moran's I (global + local/LISA),
  * Getis-Ord Gi* hotspots, kernel density, and average nearest neighbor. Every
  * tool runs client-side in TypeScript (no sidecar/engine selector), so this is
@@ -177,19 +196,26 @@ export function StatisticsToolsDialog({
     [params],
   );
 
+  // Visible required parameters that are still empty. Drives the disabled Run
+  // button (and the asterisk legend only shows when there is something to mark).
+  const requiredParams = useMemo(
+    () => tool.parameters.filter((param) => param.required),
+    [tool],
+  );
+  const missingRequired = useMemo(
+    () =>
+      requiredParams.some(
+        (param) =>
+          isParamVisible(param) && isValueEmpty(param, params[param.id]),
+      ),
+    [requiredParams, isParamVisible, params],
+  );
+
   const handleRun = useCallback(async () => {
     setLog([]);
     for (const param of tool.parameters) {
       if (!param.required || !isParamVisible(param)) continue;
-      const value = params[param.id];
-      if (
-        value === undefined ||
-        value === "" ||
-        value === null ||
-        (param.type === "number" &&
-          typeof value === "number" &&
-          Number.isNaN(value))
-      ) {
+      if (isValueEmpty(param, params[param.id])) {
         appendLog(`Error: "${param.label}" is required`);
         return;
       }
@@ -282,8 +308,19 @@ export function StatisticsToolsDialog({
               ))}
             </div>
 
+            {requiredParams.length > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                <span className="text-destructive">*</span>{" "}
+                {t("statistics.requiredFieldLegend")}
+              </p>
+            ) : null}
+
             <div>
-              <Button onClick={handleRun} disabled={running} className="gap-2">
+              <Button
+                onClick={handleRun}
+                disabled={running || missingRequired}
+                className="gap-2"
+              >
                 {running ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
