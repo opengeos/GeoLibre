@@ -321,9 +321,9 @@ type ImportedVectorLayer = Awaited<
   ReturnType<typeof loadDroppedVectorFiles>
 >[number];
 
-const DEFAULT_SIDE_PANEL_WIDTH = 256;
+const DEFAULT_SIDE_PANEL_WIDTH = 320;
 const MIN_SIDE_PANEL_WIDTH = 180;
-const MAX_SIDE_PANEL_WIDTH = 460;
+const MAX_SIDE_PANEL_WIDTH = 560;
 // Width of a side panel's collapsed rail (`md:w-11` = 2.75rem). The Style panel
 // stays mounted (collapsed) beside the notebook, so its rail still occupies this
 // much of the row when computing the map/notebook 50/50 split.
