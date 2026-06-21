@@ -8,7 +8,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@geolibre/ui";
-import { PROJECT_VERSION } from "@geolibre/core";
 import { CheckCircle2, ExternalLink, Info, Map, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -189,12 +188,6 @@ export function AboutDialog({
             <span className="text-muted-foreground">{t("about.version")}</span>
             <span className="font-mono text-foreground">v{APP_VERSION}</span>
           </div>
-          <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
-            <span className="text-muted-foreground">
-              {t("about.projectFormat")}
-            </span>
-            <span className="font-mono text-foreground">{PROJECT_VERSION}</span>
-          </div>
           <Button
             className="w-full justify-between"
             disabled={updateStatus === "checking"}
@@ -210,7 +203,9 @@ export function AboutDialog({
               />
               {updateStatus === "checking"
                 ? t("about.checking")
-                : t("about.checkForUpdates")}
+                : updateStatus === "error"
+                  ? t("about.tryAgain")
+                  : t("about.checkForUpdates")}
             </span>
           </Button>
           {updateStatus !== "idle" && updateStatus !== "checking" ? (
@@ -270,38 +265,50 @@ export function AboutDialog({
                       {updateError}
                     </div>
                   ) : null}
-                  <Button
-                    className="w-full justify-between"
-                    onClick={() => void openExternalLink(UPDATE_URL)}
-                    type="button"
-                    variant="outline"
-                  >
-                    <span>{t("updates.error.viewDownloads")}</span>
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </Button>
+                  {/* Group the hint with its button and divide it from the error
+                      message above so the two muted lines do not read as one. */}
+                  <div className="space-y-1.5 border-t pt-2">
+                    <div className="text-xs text-muted-foreground">
+                      {t("updates.error.viewDownloadsHint")}
+                    </div>
+                    <Button
+                      className="w-full justify-between"
+                      onClick={() => void openExternalLink(UPDATE_URL)}
+                      type="button"
+                      variant="outline"
+                    >
+                      <span>{t("updates.error.viewDownloads")}</span>
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
               ) : null}
             </div>
           ) : null}
-          {LINKS.map((link) => (
-            <a
-              key={link.href}
-              className="flex items-center justify-between rounded-md border px-3 py-2 text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-              href={link.href}
-              onClick={(event) => {
-                event.preventDefault();
-                void openExternalLink(link.href);
-              }}
-              rel="noreferrer"
-              target="_blank"
-            >
-              <span>{t(link.labelKey)}</span>
-              <span className="inline-flex items-center gap-2 text-muted-foreground">
-                {link.href.replace(/^https?:\/\//, "")}
-                <ExternalLink className="h-3.5 w-3.5" />
-              </span>
-            </a>
-          ))}
+          <div className="space-y-2 border-t pt-3">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {t("about.generalSectionTitle")}
+            </div>
+            {LINKS.map((link) => (
+              <a
+                key={link.href}
+                className="flex items-center justify-between rounded-md border px-3 py-2 text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                href={link.href}
+                onClick={(event) => {
+                  event.preventDefault();
+                  void openExternalLink(link.href);
+                }}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <span>{t(link.labelKey)}</span>
+                <span className="inline-flex items-center gap-2 text-muted-foreground">
+                  {link.href.replace(/^https?:\/\//, "")}
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </span>
+              </a>
+            ))}
+          </div>
         </div>
       </DialogContent>
     </Dialog>
