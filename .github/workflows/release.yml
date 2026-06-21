@@ -241,3 +241,63 @@ jobs:
           commit_message: "Update to ${{ github.event.release.tag_name }}"
           allow_empty_commits: false
           updpkgsums: false
+
+  copr:
+    name: Publish Fedora COPR package
+    needs: build
+    runs-on: ubuntu-latest
+    # Same isolation as the AUR job: only needs build for the .rpm, nothing
+    # depends on it, continue-on-error keeps a COPR failure from reddening the
+    # release, and it skips itself when the API token is absent (forks).
+    continue-on-error: true
+    concurrency:
+      group: copr-publish
+      cancel-in-progress: false
+    if: ${{ !github.event.release.prerelease }}
+    env:
+      COPR_API_TOKEN: ${{ secrets.COPR_API_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Build SRPM and submit to COPR
+        if: ${{ env.COPR_API_TOKEN != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+          COPR_PROJECT: opengeos/geolibre
+        run: |
+          version="${TAG#v}"
+          # Release date (YYYY-MM-DD) for the metainfo <release> and %changelog.
+          date="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --json publishedAt --jq '.publishedAt' | cut -dT -f1)"
+
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq rpm appstream
+          pipx install copr-cli
+
+          # COPR API token config from the secret.
+          mkdir -p ~/.config
+          printf '%s\n' "$COPR_API_TOKEN" > ~/.config/copr
+          chmod 600 ~/.config/copr
+
+          mkdir -p ~/rpmbuild/SPECS ~/rpmbuild/SOURCES
+          VERSION="$version" DATE="$date" \
+            scripts/render-linux-metainfo.sh > ~/rpmbuild/SOURCES/org.geolibre.desktop.metainfo.xml
+          VERSION="$version" DATE="$date" REPO="$GITHUB_REPOSITORY" \
+            scripts/render-copr-spec.sh > ~/rpmbuild/SPECS/geolibre.spec
+
+          # Validate the metainfo in CI, independently of COPR's mock build.
+          appstreamcli validate --no-net ~/rpmbuild/SOURCES/org.geolibre.desktop.metainfo.xml
+
+          # The upstream RPM is Source0; rpmbuild needs it locally to build the
+          # SRPM (it does not fetch URLs).
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern "GeoLibre.Desktop-${version}-1.x86_64.rpm" --dir ~/rpmbuild/SOURCES
+
+          srpm="$(rpmbuild -bs ~/rpmbuild/SPECS/geolibre.spec \
+            --define "_topdir $HOME/rpmbuild" | sed -n 's/^Wrote: //p')"
+          echo "Built SRPM: $srpm"
+          copr-cli build --nowait "$COPR_PROJECT" "$srpm"

@@ -9,11 +9,11 @@ integration.
 
 ## Files
 
-- [`PKGBUILD`](PKGBUILD) — a generated reference copy, pinned to the latest
+- [`PKGBUILD`](PKGBUILD) is a generated reference copy, pinned to the latest
   release. It is produced by [`scripts/render-aur-pkgbuild.sh`](../../scripts/render-aur-pkgbuild.sh),
   which is the single source of truth. Do not hand-edit `PKGBUILD`; change the
   render script, since CI overwrites it on every release.
-- `scripts/render-aur-pkgbuild.sh` — emits a `PKGBUILD` for a given `VERSION`
+- `scripts/render-aur-pkgbuild.sh` emits a `PKGBUILD` for a given `VERSION`
   and `.deb` checksum.
 - The `aur` job in [`.github/workflows/release.yml`](../../.github/workflows/release.yml)
   renders and republishes the package after each non-prerelease release.

@@ -62,6 +62,55 @@ by Apple, so Gatekeeper allows them to open without any extra steps:
 2. Open the DMG and drag **GeoLibre Desktop** into **Applications**.
 3. Launch GeoLibre Desktop from Applications.
 
+## Linux installation
+
+The native packages (AUR, COPR) auto-update through your system package manager.
+The direct `.deb` / `.rpm` / AppImage downloads are updated by re-downloading the
+new release.
+
+### Arch Linux / Manjaro (AUR)
+
+GeoLibre is on the [AUR](https://aur.archlinux.org/packages/geolibre-bin) as
+`geolibre-bin`, a binary package that repackages the official release (no source
+build needed):
+
+```bash
+yay -S geolibre-bin      # or: paru -S geolibre-bin
+```
+
+### Fedora / RHEL (COPR)
+
+```bash
+sudo dnf copr enable opengeos/geolibre
+sudo dnf install geolibre
+```
+
+On RHEL and derivatives, enable the COPR plugin first with
+`sudo dnf install dnf-plugins-core`.
+
+### Debian / Ubuntu (.deb)
+
+Download the `.deb` from the latest release and install it (apt resolves the
+dependencies):
+
+```bash
+sudo apt install ./GeoLibre.Desktop_<version>_amd64.deb
+```
+
+### Other distributions (.rpm / AppImage)
+
+- RPM-based distros: `sudo dnf install ./GeoLibre.Desktop-<version>-1.x86_64.rpm`
+- AppImage (any distro): download it, mark it executable, and run it:
+
+  ```bash
+  chmod +x GeoLibre.Desktop_<version>_amd64.AppImage
+  ./GeoLibre.Desktop_<version>_amd64.AppImage
+  ```
+
+  AppImages need FUSE. On distros that no longer ship it by default, install
+  `libfuse2` (for example `sudo apt install libfuse2`) or run with
+  `--appimage-extract-and-run`.
+
 ## Build from source
 
 ```bash
