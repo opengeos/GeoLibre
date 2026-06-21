@@ -266,18 +266,22 @@ export function AboutDialog({
                       {updateError}
                     </div>
                   ) : null}
-                  <div className="text-xs text-muted-foreground">
-                    {t("updates.error.viewDownloadsHint")}
+                  {/* Group the hint with its button and divide it from the error
+                      message above so the two muted lines do not read as one. */}
+                  <div className="space-y-1.5 border-t pt-2">
+                    <div className="text-xs text-muted-foreground">
+                      {t("updates.error.viewDownloadsHint")}
+                    </div>
+                    <Button
+                      className="w-full justify-between"
+                      onClick={() => void openExternalLink(UPDATE_URL)}
+                      type="button"
+                      variant="outline"
+                    >
+                      <span>{t("updates.error.viewDownloads")}</span>
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
-                  <Button
-                    className="w-full justify-between"
-                    onClick={() => void openExternalLink(UPDATE_URL)}
-                    type="button"
-                    variant="outline"
-                  >
-                    <span>{t("updates.error.viewDownloads")}</span>
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </Button>
                 </div>
               ) : null}
             </div>
