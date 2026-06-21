@@ -1983,15 +1983,21 @@ function numberField(
 /**
  * Parse a timestamp property to epoch milliseconds. Accepts parseable date
  * strings (ISO-8601 etc.) and numeric times. Numbers are read by magnitude:
- * >= 1e12 are taken as epoch milliseconds, and everything else as seconds
- * (covering both Unix seconds, ~1.7e9, and a relative seconds counter — the
- * usual numeric forms in GPS tracks). Returns null when unparseable.
+ * `>= 1e11` are taken as epoch milliseconds, and everything else as seconds.
+ *
+ * The 1e11 boundary sits in the wide gap between the two realistic numeric
+ * forms: epoch/relative seconds stay well below ~1e10 (1e10 s is the year 2286;
+ * a relative seconds counter is far smaller), while millisecond epochs are
+ * >= 1e11 for any date from 1973 onward. This assumes numeric times are not
+ * millisecond epochs from before 1973 nor relative-millisecond counters — both
+ * unheard of in GPS tracks; use ISO-8601 strings if either is ever needed.
+ * Returns null when unparseable.
  */
 function parseTimestamp(value: unknown): number | null {
   if (value === null || value === undefined) return null;
   if (typeof value === "number") {
     if (!Number.isFinite(value)) return null;
-    return Math.abs(value) >= 1e12 ? value : value * 1000;
+    return Math.abs(value) >= 1e11 ? value : value * 1000;
   }
   if (typeof value === "string") {
     const trimmed = value.trim();
@@ -2206,7 +2212,7 @@ export const trajectorySpeedTool: ProcessingAlgorithm = {
   name: "Trajectory speed",
   description:
     "Order points by time (per target) and connect consecutive fixes into segments carrying distance, duration and speed. Like QGIS TrajecTools.",
-  group: "Movement",
+  group: "Movement & time",
   parameters: [
     {
       id: "layer",
@@ -2297,6 +2303,13 @@ export const trajectorySpeedTool: ProcessingAlgorithm = {
       ctx.log("Error: need at least two timed fixes in a target to build a segment");
       return;
     }
+    // Consecutive fixes with identical timestamps yield a null speed; warn so a
+    // style-by-speed expression downstream isn't silently fed nulls.
+    const nullSpeed = segments.filter((s) => s.properties?.speed === null).length;
+    if (nullSpeed)
+      ctx.log(
+        `Warning: ${nullSpeed} segment(s) have identical timestamps and null speed`,
+      );
     ctx.log(
       `Trajectory speed: built ${segments.length} segment(s) across ${groups.size} target(s)`,
     );
@@ -2304,12 +2317,15 @@ export const trajectorySpeedTool: ProcessingAlgorithm = {
   },
 };
 
+/** Point cap for the O(n²)-per-trajectory stop scan, to keep the UI responsive. */
+const STOPS_MAX_POINTS = 50_000;
+
 export const detectStopsTool: ProcessingAlgorithm = {
   id: "detect-stops",
   name: "Detect stops",
   description:
     "Find places where a target dwells: runs of consecutive fixes that stay within a distance (absorbing GPS scatter) for at least a minimum duration. Outputs one point per stop. Like QGIS TrajecTools.",
-  group: "Movement",
+  group: "Movement & time",
   parameters: [
     {
       id: "layer",
@@ -2373,6 +2389,14 @@ export const detectStopsTool: ProcessingAlgorithm = {
       timeField,
       idField,
     );
+    let totalPoints = 0;
+    for (const pts of groups.values()) totalPoints += pts.length;
+    if (totalPoints > STOPS_MAX_POINTS) {
+      ctx.log(
+        `Error: ${totalPoints.toLocaleString()} timed points exceed the ${STOPS_MAX_POINTS.toLocaleString()} limit for stop detection; filter or split the layer first`,
+      );
+      return;
+    }
     const stops: Feature<Point>[] = [];
     for (const [key, pts] of groups) {
       let i = 0;
@@ -2440,7 +2464,7 @@ export const spaceTimeProximityTool: ProcessingAlgorithm = {
   name: "Space-time proximity",
   description:
     "Find pairs of points close in both space and time — e.g. two targets meeting. Outputs a line connecting each qualifying pair, carrying the distance and time gap.",
-  group: "Movement",
+  group: "Movement & time",
   parameters: [
     {
       id: "layer",
@@ -2559,14 +2583,23 @@ export const spaceTimeProximityTool: ProcessingAlgorithm = {
       });
     }
     const n = timed.length;
-    const worstCasePairs = (n * (n - 1)) / 2;
-    if (worstCasePairs > PROXIMITY_MAX_PAIRS) {
-      // The cap is a pre-work guard against the worst case (all points within
-      // the time window); an id field can make the real pair count far smaller.
+    // Pre-work guard on the number of pairs the loop can actually evaluate. With
+    // an id field only cross-target pairs are kept, so the real bound is
+    // (n² − Σ nᵢ²) / 2 — this lets a layer that is mostly (or entirely) one
+    // target through, instead of rejecting it on the all-pairs worst case.
+    let maxPairs = (n * (n - 1)) / 2;
+    if (idField) {
+      const perId = new Map<string, number>();
+      for (const t of timed) perId.set(t.id!, (perId.get(t.id!) ?? 0) + 1);
+      let sumSquares = 0;
+      for (const count of perId.values()) sumSquares += count * count;
+      maxPairs = (n * n - sumSquares) / 2;
+    }
+    if (maxPairs > PROXIMITY_MAX_PAIRS) {
       ctx.log(
-        `Error: ${n} points could form up to ${worstCasePairs.toLocaleString()} pairs ` +
+        `Error: these points could form up to ${maxPairs.toLocaleString()} pairs ` +
           `(> ${PROXIMITY_MAX_PAIRS.toLocaleString()}); filter or split the layer first` +
-          (idField ? " (a target id field reduces the actual pair count)" : ""),
+          (idField ? " or use more distinct target ids" : ""),
       );
       return;
     }
