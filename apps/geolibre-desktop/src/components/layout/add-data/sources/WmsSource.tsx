@@ -9,13 +9,13 @@ import {
   serviceFieldString,
   type ServiceFields,
 } from "../service-library";
-import { AddDataSourceForm, useAddDataSource } from "../shared";
+import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 
 export function WmsSource() {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.wms.defaultName"));
-  const [wmsEndpoint, setWmsEndpoint] = useState(DEFAULT_WMS_ENDPOINT);
-  const [wmsLayers, setWmsLayers] = useState(DEFAULT_WMS_LAYERS);
+  const [wmsEndpoint, setWmsEndpoint] = useState("");
+  const [wmsLayers, setWmsLayers] = useState("");
   const [wmsStyles, setWmsStyles] = useState("");
   const [wmsFormat, setWmsFormat] = useState("image/png");
   const [wmsTransparent, setWmsTransparent] = useState(true);
@@ -31,8 +31,8 @@ export function WmsSource() {
   });
 
   const applyFields = (fields: ServiceFields) => {
-    setWmsEndpoint(serviceFieldString(fields, "endpoint", DEFAULT_WMS_ENDPOINT));
-    setWmsLayers(serviceFieldString(fields, "layers", DEFAULT_WMS_LAYERS));
+    setWmsEndpoint(serviceFieldString(fields, "endpoint"));
+    setWmsLayers(serviceFieldString(fields, "layers"));
     setWmsStyles(serviceFieldString(fields, "styles"));
     setWmsFormat(serviceFieldString(fields, "format", "image/png"));
     setWmsTransparent(serviceFieldBoolean(fields, "transparent", true));
@@ -85,6 +85,18 @@ export function WmsSource() {
       useServiceIcon
     >
       <div className="space-y-3">
+        <SampleDataSelect
+          samples={[
+            {
+              label: t("addData.wms.sampleLabel"),
+              value: { endpoint: DEFAULT_WMS_ENDPOINT, layers: DEFAULT_WMS_LAYERS },
+            },
+          ]}
+          onSelect={(sample) => {
+            setWmsEndpoint(sample.endpoint);
+            setWmsLayers(sample.layers);
+          }}
+        />
         <ServiceLibrarySection
           kind="wms"
           layerName={source.layerName}

@@ -14,7 +14,7 @@ import {
   layerNameFromPath,
   proxyGpxRequestUrl,
 } from "../helpers";
-import { AddDataSourceForm, useAddDataSource } from "../shared";
+import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 import type { GpxLayerKind, GpxMode } from "../types";
 
 export function GpxSource() {
@@ -24,7 +24,7 @@ export function GpxSource() {
   const [defaultName] = useState(() => t("addData.gpx.defaultName"));
   const source = useAddDataSource(defaultName);
   const [gpxMode, setGpxMode] = useState<GpxMode>("url");
-  const [gpxUrl, setGpxUrl] = useState(DEFAULT_GPX_URL);
+  const [gpxUrl, setGpxUrl] = useState("");
   const [selectedGpx, setSelectedGpx] = useState<{
     path: string;
     text: string;
@@ -44,9 +44,6 @@ export function GpxSource() {
   const handleGpxModeChange = (mode: GpxMode) => {
     setGpxMode(mode);
     setSelectedGpx(null);
-    if (mode === "url" && !gpxUrl.trim()) {
-      setGpxUrl(DEFAULT_GPX_URL);
-    }
   };
 
   const setGpxLayerKindSelected = (
@@ -210,6 +207,14 @@ export function GpxSource() {
       submitDisabled={source.isSubmitting || !hasSelectedGpxLayerKind}
     >
       <div className="space-y-3">
+        <SampleDataSelect
+          samples={[{ label: t("addData.gpx.sampleLabel"), value: DEFAULT_GPX_URL }]}
+          onSelect={(url) => {
+            setGpxMode("url");
+            setSelectedGpx(null);
+            setGpxUrl(url);
+          }}
+        />
         <div className="space-y-1.5">
           <Label htmlFor="gpx-mode">{t("addData.common.sourceType")}</Label>
           <Select

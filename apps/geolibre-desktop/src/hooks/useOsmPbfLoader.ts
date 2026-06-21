@@ -9,10 +9,7 @@ import {
   type OsmPbfProgress,
 } from "../lib/osm-pbf-loader";
 import { isHttpUrl, openLocalDataFileWithFallback } from "../lib/tauri-io";
-import {
-  type AppApi,
-  DEFAULT_OSM_PBF_URL,
-} from "../components/layout/toolbar/constants";
+import { type AppApi } from "../components/layout/toolbar/constants";
 
 /** A pending large-file confirmation before parsing an OSM PBF extract. */
 export interface OsmPbfConfirm {
@@ -38,7 +35,7 @@ export function useOsmPbfLoader(
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<OsmPbfProgress | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [url, setUrl] = useState(DEFAULT_OSM_PBF_URL);
+  const [url, setUrl] = useState("");
   const [confirm, setConfirm] = useState<OsmPbfConfirm | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 

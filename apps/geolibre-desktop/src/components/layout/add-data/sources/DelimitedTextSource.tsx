@@ -20,7 +20,7 @@ import {
   layerNameFromPath,
   resolveDelimitedTextDelimiter,
 } from "../helpers";
-import { AddDataSourceForm, useAddDataSource } from "../shared";
+import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 import type { DelimitedTextDelimiter, DelimitedTextMode } from "../types";
 
 export function DelimitedTextSource() {
@@ -31,9 +31,7 @@ export function DelimitedTextSource() {
   const source = useAddDataSource(defaultName);
   const [delimitedTextMode, setDelimitedTextMode] =
     useState<DelimitedTextMode>("url");
-  const [delimitedTextUrl, setDelimitedTextUrl] = useState(
-    DEFAULT_DELIMITED_TEXT_URL,
-  );
+  const [delimitedTextUrl, setDelimitedTextUrl] = useState("");
   const [delimitedTextDelimiter, setDelimitedTextDelimiter] =
     useState<DelimitedTextDelimiter>("comma");
   const [delimitedTextCustomDelimiter, setDelimitedTextCustomDelimiter] =
@@ -65,9 +63,6 @@ export function DelimitedTextSource() {
     setDelimitedTextMode(mode);
     setSelectedDelimitedText(null);
     resetDelimitedTextColumns();
-    if (mode === "url" && !delimitedTextUrl.trim()) {
-      setDelimitedTextUrl(DEFAULT_DELIMITED_TEXT_URL);
-    }
   };
 
   const readDelimitedTextSource = async (): Promise<{
@@ -259,6 +254,17 @@ export function DelimitedTextSource() {
       }
     >
       <div className="space-y-3">
+        <SampleDataSelect
+          samples={[
+            { label: t("addData.delimitedText.sampleLabel"), value: DEFAULT_DELIMITED_TEXT_URL },
+          ]}
+          onSelect={(url) => {
+            setDelimitedTextMode("url");
+            setSelectedDelimitedText(null);
+            resetDelimitedTextColumns();
+            setDelimitedTextUrl(url);
+          }}
+        />
         <div className="space-y-1.5">
           <Label htmlFor="delimited-text-mode">
             {t("addData.common.sourceType")}

@@ -75,6 +75,51 @@ export function useAddDataSource(defaultLayerName: string) {
   };
 }
 
+/**
+ * A "Load sample data" dropdown for the Add Data sources. Each entry is a
+ * named preset that fills the source's fields, so a source can ship an empty
+ * input (placeholder only) instead of a prefilled sample URL. Renders nothing
+ * when no samples are supplied, and snaps back to the placeholder after a pick
+ * so it reads as an action menu rather than a sticky selection.
+ *
+ * @param samples - The named presets to offer.
+ * @param onSelect - Applies the chosen preset's value to the source's fields.
+ */
+export function SampleDataSelect<T>({
+  samples,
+  onSelect,
+}: {
+  samples: readonly { label: string; value: T }[];
+  onSelect: (value: T) => void;
+}) {
+  const { t } = useTranslation();
+  if (samples.length === 0) return null;
+  const placeholder = t("addData.shared.loadSampleData");
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor="add-data-sample">{t("addData.shared.sampleData")}</Label>
+      <Select
+        id="add-data-sample"
+        aria-label={placeholder}
+        value=""
+        onChange={(event) => {
+          const sample = samples[Number(event.target.value)];
+          if (sample) onSelect(sample.value);
+        }}
+      >
+        <option value="" disabled>
+          {placeholder}
+        </option>
+        {samples.map((sample, index) => (
+          <option key={sample.label} value={index}>
+            {sample.label}
+          </option>
+        ))}
+      </Select>
+    </div>
+  );
+}
+
 export function LayerNameField({
   value,
   onChange,

@@ -7,16 +7,13 @@ import { Input, Label, Select } from "@geolibre/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createAppAPI } from "../../../../hooks/usePlugins";
-import {
-  DEFAULT_ARCGIS_FEATURE_URL,
-  DEFAULT_ARCGIS_URLS,
-} from "../constants";
+import { DEFAULT_ARCGIS_URLS } from "../constants";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
 import {
   serviceFieldString,
   type ServiceFields,
 } from "../service-library";
-import { AddDataSourceForm, useAddDataSource } from "../shared";
+import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 
 export function ArcGISSource() {
   const { t } = useTranslation();
@@ -25,7 +22,7 @@ export function ArcGISSource() {
     useState<ArcGISLayerType>("feature");
   const [arcgisSourceType, setArcgisSourceType] =
     useState<ArcGISSourceType>("url");
-  const [arcgisUrl, setArcgisUrl] = useState(DEFAULT_ARCGIS_FEATURE_URL);
+  const [arcgisUrl, setArcgisUrl] = useState("");
   const [arcgisItemId, setArcgisItemId] = useState("");
   const [arcgisPortalUrl, setArcgisPortalUrl] = useState("");
   const [arcgisAccessToken, setArcgisAccessToken] = useState("");
@@ -51,7 +48,7 @@ export function ArcGISSource() {
         ? "portal-item"
         : "url",
     );
-    setArcgisUrl(serviceFieldString(fields, "url", DEFAULT_ARCGIS_FEATURE_URL));
+    setArcgisUrl(serviceFieldString(fields, "url"));
     setArcgisItemId(serviceFieldString(fields, "itemId"));
     setArcgisPortalUrl(serviceFieldString(fields, "portalUrl"));
     // Tokens are never saved, so clear any token typed for a previous entry to
@@ -62,7 +59,9 @@ export function ArcGISSource() {
   const handleArcgisLayerTypeChange = (nextLayerType: ArcGISLayerType) => {
     const currentUrl = arcgisUrl.trim();
     setArcgisLayerType(nextLayerType);
-    if (!currentUrl || Object.values(DEFAULT_ARCGIS_URLS).includes(currentUrl)) {
+    // Keep a loaded sample URL in sync with the layer type, but leave an
+    // empty input (or the user's own URL) untouched so nothing is prefilled.
+    if (currentUrl && Object.values(DEFAULT_ARCGIS_URLS).includes(currentUrl)) {
       setArcgisUrl(DEFAULT_ARCGIS_URLS[nextLayerType]);
     }
   };
@@ -93,6 +92,29 @@ export function ArcGISSource() {
       submitDisabled={source.isSubmitting}
     >
       <div className="space-y-3">
+        <SampleDataSelect
+          samples={[
+            {
+              label: t("addData.arcgis.sampleFeatureLabel"),
+              value: {
+                layerType: "feature" as ArcGISLayerType,
+                url: DEFAULT_ARCGIS_URLS.feature,
+              },
+            },
+            {
+              label: t("addData.arcgis.sampleVectorTileLabel"),
+              value: {
+                layerType: "vector-tile" as ArcGISLayerType,
+                url: DEFAULT_ARCGIS_URLS["vector-tile"],
+              },
+            },
+          ]}
+          onSelect={(sample) => {
+            setArcgisLayerType(sample.layerType);
+            setArcgisSourceType("url");
+            setArcgisUrl(sample.url);
+          }}
+        />
         <ServiceLibrarySection
           kind="arcgis"
           layerName={source.layerName}

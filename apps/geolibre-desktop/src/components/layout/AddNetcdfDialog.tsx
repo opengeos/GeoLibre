@@ -19,6 +19,7 @@ import {
   Select,
 } from "@geolibre/ui";
 import { Boxes } from "lucide-react";
+import { SampleDataSelect } from "./add-data/shared";
 
 // A real sample: NOAA NCEP/NCAR Reanalysis surface air temperature, stored as a
 // Cloud-Optimized NetCDF and served from Source Cooperative (CORS-enabled,
@@ -44,7 +45,7 @@ export function AddNetcdfDialog({
   appApi,
   onOpenChange,
 }: AddNetcdfDialogProps) {
-  const [url, setUrl] = useState(SAMPLE_URL);
+  const [url, setUrl] = useState("");
   const [variables, setVariables] = useState<KerchunkVariable[]>([]);
   const [variable, setVariable] = useState("");
   // The normalized reference from the last successful load, reused on submit so
@@ -69,7 +70,7 @@ export function AddNetcdfDialog({
 
   const reset = () => {
     opGen.current += 1;
-    setUrl(SAMPLE_URL);
+    setUrl("");
     setVariables([]);
     setVariable("");
     setLoadedRefs(null);
@@ -178,6 +179,18 @@ export function AddNetcdfDialog({
         </DialogHeader>
 
         <form className="space-y-4" onSubmit={handleSubmit}>
+          <SampleDataSelect
+            samples={[{ label: "Air temperature", value: SAMPLE_URL }]}
+            onSelect={(sampleUrl) => {
+              setUrl(sampleUrl);
+              // Invalidate any variables loaded from a previous URL.
+              setVariables([]);
+              setVariable("");
+              setLoadedRefs(null);
+              setStatus(null);
+              setError(null);
+            }}
+          />
           <div className="space-y-1.5">
             <Label htmlFor="netcdf-url">Kerchunk reference URL</Label>
             <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
@@ -205,8 +218,8 @@ export function AddNetcdfDialog({
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Pre-filled with a sample NOAA air-temperature dataset. Click Load
-              variables to try it, or paste your own kerchunk reference URL.
+              Choose a sample dataset above, or paste your own kerchunk
+              reference URL, then click Load variables.
             </p>
           </div>
 

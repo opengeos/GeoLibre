@@ -8,12 +8,12 @@ import {
   serviceFieldString,
   type ServiceFields,
 } from "../service-library";
-import { AddDataSourceForm, useAddDataSource } from "../shared";
+import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 
 export function WmtsSource() {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.wmts.defaultName"));
-  const [wmtsUrl, setWmtsUrl] = useState(DEFAULT_WMTS_URL);
+  const [wmtsUrl, setWmtsUrl] = useState("");
   const [wmtsTileSize, setWmtsTileSize] = useState("256");
 
   const getFields = (): ServiceFields => ({
@@ -22,7 +22,7 @@ export function WmtsSource() {
   });
 
   const applyFields = (fields: ServiceFields) => {
-    setWmtsUrl(serviceFieldString(fields, "url", DEFAULT_WMTS_URL));
+    setWmtsUrl(serviceFieldString(fields, "url"));
     setWmtsTileSize(serviceFieldString(fields, "tileSize", "256"));
   };
 
@@ -58,6 +58,10 @@ export function WmtsSource() {
       useServiceIcon
     >
       <div className="space-y-3">
+        <SampleDataSelect
+          samples={[{ label: t("addData.wmts.sampleLabel"), value: DEFAULT_WMTS_URL }]}
+          onSelect={setWmtsUrl}
+        />
         <ServiceLibrarySection
           kind="wmts"
           layerName={source.layerName}

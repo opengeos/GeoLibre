@@ -12,13 +12,13 @@ import {
   serviceFieldString,
   type ServiceFields,
 } from "../service-library";
-import { AddDataSourceForm, useAddDataSource } from "../shared";
+import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 
 export function WfsSource() {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.wfs.defaultName"));
-  const [wfsEndpoint, setWfsEndpoint] = useState(DEFAULT_WFS_ENDPOINT);
-  const [wfsTypeName, setWfsTypeName] = useState(DEFAULT_WFS_TYPE_NAME);
+  const [wfsEndpoint, setWfsEndpoint] = useState("");
+  const [wfsTypeName, setWfsTypeName] = useState("");
   const [wfsVersion, setWfsVersion] = useState("2.0.0");
   const [wfsOutputFormat, setWfsOutputFormat] = useState("application/json");
   const [wfsSrsName, setWfsSrsName] = useState("EPSG:4326");
@@ -34,8 +34,8 @@ export function WfsSource() {
   });
 
   const applyFields = (fields: ServiceFields) => {
-    setWfsEndpoint(serviceFieldString(fields, "endpoint", DEFAULT_WFS_ENDPOINT));
-    setWfsTypeName(serviceFieldString(fields, "typeName", DEFAULT_WFS_TYPE_NAME));
+    setWfsEndpoint(serviceFieldString(fields, "endpoint"));
+    setWfsTypeName(serviceFieldString(fields, "typeName"));
     setWfsVersion(serviceFieldString(fields, "version", "2.0.0"));
     setWfsOutputFormat(
       serviceFieldString(fields, "outputFormat", "application/json"),
@@ -108,6 +108,18 @@ export function WfsSource() {
       useServiceIcon
     >
       <div className="space-y-3">
+        <SampleDataSelect
+          samples={[
+            {
+              label: t("addData.wfs.sampleLabel"),
+              value: { endpoint: DEFAULT_WFS_ENDPOINT, typeName: DEFAULT_WFS_TYPE_NAME },
+            },
+          ]}
+          onSelect={(sample) => {
+            setWfsEndpoint(sample.endpoint);
+            setWfsTypeName(sample.typeName);
+          }}
+        />
         <ServiceLibrarySection
           kind="wfs"
           layerName={source.layerName}

@@ -10,21 +10,17 @@ import {
   DEFAULT_VIDEO_WEBM_URL,
 } from "../constants";
 import { createBaseLayer } from "../helpers";
-import { AddDataSourceForm, useAddDataSource } from "../shared";
+import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 
 export function VideoSource() {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.video.defaultName"));
-  const [videoMp4Url, setVideoMp4Url] = useState(DEFAULT_VIDEO_MP4_URL);
-  const [videoWebmUrl, setVideoWebmUrl] = useState(DEFAULT_VIDEO_WEBM_URL);
-  const [videoTopLeft, setVideoTopLeft] = useState(DEFAULT_VIDEO_TOP_LEFT);
-  const [videoTopRight, setVideoTopRight] = useState(DEFAULT_VIDEO_TOP_RIGHT);
-  const [videoBottomRight, setVideoBottomRight] = useState(
-    DEFAULT_VIDEO_BOTTOM_RIGHT,
-  );
-  const [videoBottomLeft, setVideoBottomLeft] = useState(
-    DEFAULT_VIDEO_BOTTOM_LEFT,
-  );
+  const [videoMp4Url, setVideoMp4Url] = useState("");
+  const [videoWebmUrl, setVideoWebmUrl] = useState("");
+  const [videoTopLeft, setVideoTopLeft] = useState("");
+  const [videoTopRight, setVideoTopRight] = useState("");
+  const [videoBottomRight, setVideoBottomRight] = useState("");
+  const [videoBottomLeft, setVideoBottomLeft] = useState("");
 
   // Local, translated equivalent of helpers' parseVideoCorner: parses a
   // "longitude, latitude" corner into a [lng, lat] pair and throws localized
@@ -108,6 +104,29 @@ export function VideoSource() {
       submitDisabled={source.isSubmitting}
     >
       <div className="space-y-3">
+        <SampleDataSelect
+          samples={[
+            {
+              label: t("addData.video.sampleLabel"),
+              value: {
+                mp4: DEFAULT_VIDEO_MP4_URL,
+                webm: DEFAULT_VIDEO_WEBM_URL,
+                topLeft: DEFAULT_VIDEO_TOP_LEFT,
+                topRight: DEFAULT_VIDEO_TOP_RIGHT,
+                bottomRight: DEFAULT_VIDEO_BOTTOM_RIGHT,
+                bottomLeft: DEFAULT_VIDEO_BOTTOM_LEFT,
+              },
+            },
+          ]}
+          onSelect={(sample) => {
+            setVideoMp4Url(sample.mp4);
+            setVideoWebmUrl(sample.webm);
+            setVideoTopLeft(sample.topLeft);
+            setVideoTopRight(sample.topRight);
+            setVideoBottomRight(sample.bottomRight);
+            setVideoBottomLeft(sample.bottomLeft);
+          }}
+        />
         <div className="space-y-1.5">
           <Label htmlFor="video-mp4-url">{t("addData.video.primaryUrl")}</Label>
           <Input

@@ -11,6 +11,7 @@ import {
 import type { FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type { useOsmPbfLoader } from "../../../hooks/useOsmPbfLoader";
+import { SampleDataSelect } from "../add-data/shared";
 import { DEFAULT_OSM_PBF_URL } from "./constants";
 
 interface OsmPbfDialogsProps {
@@ -63,12 +64,21 @@ export function OsmPbfDialogs({ osmPbf }: OsmPbfDialogsProps) {
               void osmPbf.handleLoadUrl();
             }}
           >
+            <SampleDataSelect
+              samples={[
+                {
+                  label: t("toolbar.item.osmPbfSampleLabel"),
+                  value: DEFAULT_OSM_PBF_URL,
+                },
+              ]}
+              onSelect={(sampleUrl) => osmPbf.setUrl(sampleUrl)}
+            />
             <div className="space-y-1.5">
               <Label htmlFor="osm-pbf-url">{t("toolbar.item.urlLabel")}</Label>
               <Input
                 id="osm-pbf-url"
                 type="url"
-                placeholder={DEFAULT_OSM_PBF_URL}
+                placeholder={t("toolbar.item.osmPbfUrlPlaceholder")}
                 value={osmPbf.url}
                 onChange={(e) => osmPbf.setUrl(e.target.value)}
               />

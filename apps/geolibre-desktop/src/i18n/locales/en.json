@@ -139,7 +139,9 @@
       "showBasemapLayers": "Show basemap layers (advanced)",
       "addLayer": "Add layer",
       "adding": "Adding…",
-      "addError": "Could not add layer."
+      "addError": "Could not add layer.",
+      "sampleData": "Sample data",
+      "loadSampleData": "Load sample data…"
     },
     "common": {
       "serviceUrl": "Service URL",
@@ -183,6 +185,7 @@
     },
     "xyz": {
       "defaultName": "XYZ Layer",
+      "sampleLabel": "USGS imagery",
       "errorUrl": "Enter an XYZ tile URL template.",
       "urlPlaceholder": "https://example.com/{z}/{x}/{y}.png",
       "shortUrlPlaceholder": "https://go.example.com/layer",
@@ -190,6 +193,7 @@
     },
     "wms": {
       "defaultName": "WMS Layer",
+      "sampleLabel": "USGS NAIP imagery",
       "errorUrl": "Enter a WMS service URL.",
       "errorLayers": "Enter one or more WMS layer names.",
       "urlPlaceholder": "https://example.com/geoserver/wms",
@@ -199,6 +203,7 @@
     },
     "wfs": {
       "defaultName": "WFS Layer",
+      "sampleLabel": "US states (GeoServer)",
       "errorUrl": "Enter a WFS service URL.",
       "errorTypeName": "Enter a WFS feature type name.",
       "errorOutputFormat": "Enter a WFS output format.",
@@ -212,11 +217,14 @@
     },
     "wmts": {
       "defaultName": "WMTS Layer",
+      "sampleLabel": "World imagery (Wayback)",
       "errorUrl": "Enter a WMTS tile URL template.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },
     "arcgis": {
       "defaultName": "ArcGIS Layer",
+      "sampleFeatureLabel": "US major cities (feature)",
+      "sampleVectorTileLabel": "Santa Monica parcels (vector tiles)",
       "featureLayer": "Feature layer",
       "vectorTileLayer": "Vector tile layer",
       "portalItemId": "Portal item ID",
@@ -228,6 +236,7 @@
     },
     "gpx": {
       "defaultName": "GPX Layer",
+      "sampleLabel": "Fells Loop trail",
       "errorFileMissing": "GPX file data is missing.",
       "readError": "Could not read GPX file.",
       "errorChooseFile": "Choose a GPX file.",
@@ -244,6 +253,7 @@
     },
     "delimitedText": {
       "defaultName": "Delimited Text Layer",
+      "sampleLabel": "US cities",
       "errorChooseFile": "Choose a delimited text file.",
       "errorUrl": "Enter a delimited text URL.",
       "errorFileMissing": "Delimited text file data is missing.",
@@ -306,6 +316,7 @@
     },
     "video": {
       "defaultName": "Video Layer",
+      "sampleLabel": "Drone over San Francisco",
       "errorUrl": "Enter a video URL.",
       "errorHttps": "Video URLs must start with https://.",
       "cornerTopLeft": "top-left",
@@ -1236,6 +1247,8 @@
       "addOsmPbfLayerTitle": "Add OSM PBF Layer",
       "addOsmPbfLayerDesc": "Load an OpenStreetMap .osm.pbf file. It is parsed in your browser and split into separate point, line, and polygon layers.",
       "urlLabel": "URL",
+      "osmPbfUrlPlaceholder": "https://example.com/region.osm.pbf",
+      "osmPbfSampleLabel": "Las Vegas",
       "osmPbfUrlHint": "Remote URLs load in the desktop app; in the browser the server must allow cross-origin requests (CORS).",
       "chooseLocalFile": "Choose local file…",
       "loadFromUrl": "Load from URL",

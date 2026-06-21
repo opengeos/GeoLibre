@@ -14,12 +14,12 @@ import {
   serviceFieldString,
   type ServiceFields,
 } from "../service-library";
-import { AddDataSourceForm, useAddDataSource } from "../shared";
+import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 
 export function XyzSource() {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.xyz.defaultName"));
-  const [xyzUrl, setXyzUrl] = useState(DEFAULT_XYZ_URL);
+  const [xyzUrl, setXyzUrl] = useState("");
   const [xyzTileSize, setXyzTileSize] = useState("256");
   const [xyzShortUrl, setXyzShortUrl] = useState(false);
 
@@ -30,7 +30,7 @@ export function XyzSource() {
   });
 
   const applyFields = (fields: ServiceFields) => {
-    setXyzUrl(serviceFieldString(fields, "url", DEFAULT_XYZ_URL));
+    setXyzUrl(serviceFieldString(fields, "url", ""));
     setXyzTileSize(serviceFieldString(fields, "tileSize", "256"));
     setXyzShortUrl(serviceFieldBoolean(fields, "shortUrl", false));
   };
@@ -72,6 +72,10 @@ export function XyzSource() {
       submitDisabled={source.isSubmitting}
     >
       <div className="space-y-3">
+        <SampleDataSelect
+          samples={[{ label: t("addData.xyz.sampleLabel"), value: DEFAULT_XYZ_URL }]}
+          onSelect={setXyzUrl}
+        />
         <ServiceLibrarySection
           kind="xyz"
           layerName={source.layerName}
