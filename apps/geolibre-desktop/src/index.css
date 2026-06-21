@@ -2285,7 +2285,7 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
 }
 
 /* Sample-data dropdowns in the Add Data panels (3D Tiles, LiDAR, DuckDB,
-   FlatGeobuf, PMTiles, Zarr). The upstream packages style these classes with
+   FlatGeobuf, PMTiles, Zarr, Splatting). The upstream packages style these classes with
    their own light / prefers-color-scheme colors, which do not match
    GeoLibre's class-based theming (the app forces color-scheme: light), so map
    them onto the app's design tokens here so the dropdown follows the panel. */
@@ -2301,14 +2301,19 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
 
 .duckdb-sample-trigger:hover,
 .duckdb-sample-trigger.open,
+.duckdb-sample-trigger:focus-visible,
 .three-d-tiles-sample-trigger:hover,
 .three-d-tiles-sample-trigger.open,
+.three-d-tiles-sample-trigger:focus-visible,
 .maplibre-gl-sample-trigger:hover,
 .maplibre-gl-sample-trigger.open,
+.maplibre-gl-sample-trigger:focus-visible,
 .splat-sample-trigger:hover,
 .splat-sample-trigger.open,
+.splat-sample-trigger:focus-visible,
 .lidar-sample-trigger:hover,
-.lidar-sample-trigger.open {
+.lidar-sample-trigger.open,
+.lidar-sample-trigger:focus-visible {
   border-color: hsl(var(--ring)) !important;
 }
 
