@@ -1,4 +1,5 @@
 import { useRef, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import {
   addCloudNetcdfLayer,
   listKerchunkVariables,
@@ -45,6 +46,7 @@ export function AddNetcdfDialog({
   appApi,
   onOpenChange,
 }: AddNetcdfDialogProps) {
+  const { t } = useTranslation();
   const [url, setUrl] = useState("");
   const [variables, setVariables] = useState<KerchunkVariable[]>([]);
   const [variable, setVariable] = useState("");
@@ -180,7 +182,7 @@ export function AddNetcdfDialog({
 
         <form className="space-y-4" onSubmit={handleSubmit}>
           <SampleDataSelect
-            samples={[{ label: "Air temperature", value: SAMPLE_URL }]}
+            samples={[{ label: t("addData.netcdf.sampleLabel"), value: SAMPLE_URL }]}
             onSelect={(sampleUrl) => {
               setUrl(sampleUrl);
               // Invalidate any variables loaded from a previous URL.

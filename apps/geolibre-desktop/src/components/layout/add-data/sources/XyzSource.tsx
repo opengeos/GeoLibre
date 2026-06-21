@@ -30,7 +30,7 @@ export function XyzSource() {
   });
 
   const applyFields = (fields: ServiceFields) => {
-    setXyzUrl(serviceFieldString(fields, "url", ""));
+    setXyzUrl(serviceFieldString(fields, "url"));
     setXyzTileSize(serviceFieldString(fields, "tileSize", "256"));
     setXyzShortUrl(serviceFieldBoolean(fields, "shortUrl", false));
   };

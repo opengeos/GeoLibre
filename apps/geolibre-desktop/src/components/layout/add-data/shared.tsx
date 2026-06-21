@@ -10,6 +10,7 @@ import { Globe2, Map as MapIcon } from "lucide-react";
 import {
   type FormEvent,
   type ReactNode,
+  useId,
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -93,14 +94,13 @@ export function SampleDataSelect<T>({
   onSelect: (value: T) => void;
 }) {
   const { t } = useTranslation();
+  const selectId = useId();
   if (samples.length === 0) return null;
-  const placeholder = t("addData.shared.loadSampleData");
   return (
     <div className="space-y-1.5">
-      <Label htmlFor="add-data-sample">{t("addData.shared.sampleData")}</Label>
+      <Label htmlFor={selectId}>{t("addData.shared.sampleData")}</Label>
       <Select
-        id="add-data-sample"
-        aria-label={placeholder}
+        id={selectId}
         value=""
         onChange={(event) => {
           const sample = samples[Number(event.target.value)];
@@ -108,7 +108,7 @@ export function SampleDataSelect<T>({
         }}
       >
         <option value="" disabled>
-          {placeholder}
+          {t("addData.shared.loadSampleData")}
         </option>
         {samples.map((sample, index) => (
           <option key={sample.label} value={index}>

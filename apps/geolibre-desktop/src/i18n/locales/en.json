@@ -337,6 +337,9 @@
       "bottomLeft": "Bottom-left (lng, lat)",
       "cornersNote": "The four corners georeference the video on the map. The video must be served over HTTPS and the host must allow cross-origin requests (CORS) for the frames to render."
     },
+    "netcdf": {
+      "sampleLabel": "Air temperature"
+    },
     "deckViz": {
       "defaultName": "Deck.gl Layer",
       "errorChooseFile": "Choose a CSV, JSON, or GeoJSON file.",
