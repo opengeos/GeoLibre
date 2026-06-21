@@ -178,7 +178,8 @@ const DUCKDB_OPTIONS = {
   layerName: "DuckDB query",
   panelWidth: 365,
   pickable: true,
-  sampleDatabaseUrl: DUCKDB_SAMPLE_DATABASE_URL,
+  // Empty input; the sample database is the explicit, opt-in way to load one.
+  sampleData: [{ label: "NYC data", url: DUCKDB_SAMPLE_DATABASE_URL }],
   sourceCrs: "EPSG:32618",
   title: "Add DuckDB Layer",
 } satisfies DuckDBControlOptions;

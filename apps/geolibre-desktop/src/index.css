@@ -2283,3 +2283,54 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
 [data-map-fullscreen] [data-workspace-row] > *:not(main) {
   display: none !important;
 }
+
+/* Sample-data dropdowns in the Add Data panels (3D Tiles, LiDAR, DuckDB,
+   FlatGeobuf, PMTiles, Zarr). The upstream packages style these classes with
+   their own light / prefers-color-scheme colors, which do not match
+   GeoLibre's class-based theming (the app forces color-scheme: light), so map
+   them onto the app's design tokens here so the dropdown follows the panel. */
+.duckdb-sample-trigger,
+.three-d-tiles-sample-trigger,
+.maplibre-gl-sample-trigger,
+.lidar-sample-trigger {
+  background-color: hsl(var(--background)) !important;
+  border-color: hsl(var(--input)) !important;
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.duckdb-sample-trigger:hover,
+.duckdb-sample-trigger.open,
+.three-d-tiles-sample-trigger:hover,
+.three-d-tiles-sample-trigger.open,
+.maplibre-gl-sample-trigger:hover,
+.maplibre-gl-sample-trigger.open,
+.lidar-sample-trigger:hover,
+.lidar-sample-trigger.open {
+  border-color: hsl(var(--ring)) !important;
+}
+
+.duckdb-sample-menu,
+.three-d-tiles-sample-menu,
+.maplibre-gl-sample-menu,
+.lidar-sample-menu {
+  background-color: hsl(var(--popover)) !important;
+  border-color: hsl(var(--border)) !important;
+}
+
+.duckdb-sample-option,
+.three-d-tiles-sample-option,
+.maplibre-gl-sample-option,
+.lidar-sample-option {
+  color: hsl(var(--popover-foreground)) !important;
+}
+
+.duckdb-sample-option:hover,
+.duckdb-sample-option:focus-visible,
+.three-d-tiles-sample-option:hover,
+.three-d-tiles-sample-option:focus-visible,
+.maplibre-gl-sample-option:hover,
+.maplibre-gl-sample-option:focus-visible,
+.lidar-sample-option:hover,
+.lidar-sample-option:focus-visible {
+  background-color: hsl(var(--accent)) !important;
+}

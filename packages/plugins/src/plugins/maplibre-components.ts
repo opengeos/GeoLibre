@@ -120,10 +120,6 @@ type GaussianSplatControlConstructor =
 type GaussianSplatLayerAdapterConstructor =
   (typeof import("maplibre-gl-components"))["GaussianSplatLayerAdapter"];
 
-interface LidarControlClickOutsideState {
-  _clickOutsideHandler?: ((event: MouseEvent) => void) | null;
-}
-
 interface SplattingControlVisibilityState {
   _container?: HTMLElement | null;
 }
@@ -238,7 +234,7 @@ const ADD_VECTOR_OPTIONS = {
   collapsed: false,
   defaultFormat: "flatgeobuf",
   defaultPickable: false,
-  defaultUrl: FLATGEOBUF_SAMPLE_URL,
+  sampleData: [{ label: "US counties", url: FLATGEOBUF_SAMPLE_URL }],
   fontColor: "hsl(var(--popover-foreground))",
 } satisfies AddVectorControlOptions;
 
@@ -265,7 +261,7 @@ const PMTILES_OPTIONS = {
   defaultLineColor: DEFAULT_LAYER_STYLE.strokeColor,
   defaultOpacity: 0.8,
   defaultPickable: false,
-  defaultUrl: PMTILES_SAMPLE_URL,
+  sampleData: [{ label: "Overture buildings", url: PMTILES_SAMPLE_URL }],
   fontColor: "hsl(var(--popover-foreground))",
 } satisfies PMTilesLayerControlOptions;
 
@@ -599,7 +595,7 @@ const ZARR_OPTIONS = {
   defaultOpacity: 0.85,
   defaultPickable: false,
   defaultSelector: { band: "prec", month: 1 },
-  defaultUrl: ZARR_SAMPLE_URL,
+  sampleData: [{ label: "Climate (CarbonPlan)", url: ZARR_SAMPLE_URL }],
   defaultVariable: "climate",
   fontColor: "hsl(var(--popover-foreground))",
 } satisfies ZarrLayerControlOptions;
@@ -617,6 +613,12 @@ const LIDAR_OPTIONS = {
   colorScheme: "elevation",
   pickable: false,
   autoZoom: true,
+  // Empty input; the sample point cloud is the explicit, opt-in way to load
+  // one (replaces the former seedLidarDefaultUrl DOM injection).
+  sampleData: [{ label: "Autzen", url: LIDAR_SAMPLE_URL }],
+  // The panel doubles as the Add LiDAR Layer dialog, so it stays open until
+  // the user closes it; clicking the map must not collapse it.
+  closeOnOutsideClick: false,
 } satisfies ConstructorParameters<LidarControlConstructor>[0];
 
 const SPLATTING_OPTIONS = {
@@ -627,6 +629,9 @@ const SPLATTING_OPTIONS = {
   defaultLongitude: 148.9819,
   defaultRotation: [-90, 90, 0],
   defaultScale: 0.03,
+  // TODO: switch to an opt-in sampleData dropdown once maplibre-gl-splat
+  // 0.2.3 (which adds it) can be published to npm; its publish workflow
+  // currently fails on an npm trusted-publisher/token configuration issue.
   defaultUrl: SPLATTING_SAMPLE_URL,
   flyTo: true,
   maxHeight: 520,
@@ -2366,10 +2371,8 @@ async function openStandaloneLidarControl(
   }
 
   setTimeout(() => {
-    disableLidarClickOutsideCollapse(lidarControl);
     showLidarControl(lidarControl);
     lidarControl?.expand();
-    seedLidarDefaultUrl(lidarControl);
   }, 0);
   return true;
 }
@@ -4906,13 +4909,6 @@ function shouldUseGenericGeoTiffRenderer(url: string): boolean {
   }
 }
 
-function seedLidarDefaultUrl(control: LidarControl | null): void {
-  const panel = findLidarPanel(control);
-  const input = panel?.querySelector<HTMLInputElement>(".lidar-control-input");
-  if (!input || input.value.trim()) return;
-  input.value = LIDAR_SAMPLE_URL;
-}
-
 function hideLidarControl(control: LidarControl | null): void {
   const container = control?.getContainer();
   if (container) container.style.display = "none";
@@ -4941,37 +4937,9 @@ function getSplattingControlContainer(
   );
 }
 
-function disableLidarClickOutsideCollapse(control: LidarControl | null): void {
-  const clickOutsideState =
-    control as unknown as LidarControlClickOutsideState | null;
-  const handler = clickOutsideState?._clickOutsideHandler;
-  if (!handler) return;
-  document.removeEventListener("click", handler);
-  clickOutsideState._clickOutsideHandler = null;
-}
-
 function hasLidarPointCloud(id: string): boolean {
   return (
     lidarControl?.getPointClouds().some((pointCloud) => pointCloud.id === id) ??
     false
-  );
-}
-
-function findLidarPanel(control: LidarControl | null): HTMLElement | null {
-  const mapContainer = control?.getMap()?.getContainer();
-  if (!mapContainer) return null;
-
-  const panels = Array.from(
-    mapContainer.querySelectorAll<HTMLElement>(".lidar-control-panel"),
-  );
-
-  return (
-    panels.find(
-      (panel) =>
-        panel.querySelector(".lidar-control-title")?.textContent ===
-        LIDAR_OPTIONS.title,
-    ) ??
-    panels[panels.length - 1] ??
-    null
   );
 }

@@ -30,7 +30,9 @@ const THREE_D_TILES_OPTIONS = {
   layerId: THREE_D_TILES_LAYER_ID,
   panelWidth: 365,
   title: "Add 3D Tiles Layer",
-  tilesetUrl: DEFAULT_TILESET_URL,
+  // Empty input; the sample tileset is the explicit, opt-in way to load one.
+  tilesetUrl: "",
+  sampleData: [{ label: "AGI HQ", url: DEFAULT_TILESET_URL }],
 } satisfies ThreeDTilesControlOptions;
 
 let threeDTilesControl: ThreeDTilesControl | null = null;
