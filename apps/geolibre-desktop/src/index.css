@@ -804,6 +804,18 @@ body,
 }
 
 /*
+ * The Layer Swipe comparison map paints its clipped half at `z-index: 5`
+ * (raised in maplibre-gl-swipe 0.9.1 so it sits above the Effects plugin's z-4
+ * map canvas). That ties with the control container, which the Effects plugin
+ * also pins to `z-index: 5` inline, so the comparison map ends up covering the
+ * top-right controls. Lift the controls above the comparison map. The
+ * `!important` is needed to beat the Effects plugin's inline z-index.
+ */
+.maplibregl-control-container {
+  z-index: 7 !important;
+}
+
+/*
  * The Measure, Bookmark and View State controls theme themselves purely via
  * `@media (prefers-color-scheme)`, so they follow the OS preference instead of
  * GeoLibre's in-app light/dark toggle (the `.dark` class on <html>). When the
