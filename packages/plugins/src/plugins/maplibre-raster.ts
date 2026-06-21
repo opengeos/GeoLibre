@@ -27,7 +27,9 @@ const RASTER_PANEL_CLASS = "geolibre-raster-panel";
 // One-click sample COGs shown in the panel's "Load sample data" dropdown.
 // Edit this list to offer different (or more) demonstration rasters; loading
 // is opt-in, so an empty list simply hides the dropdown. URLs must be
-// CORS-enabled and range-request capable (source.coop is both).
+// CORS-enabled and range-request capable (source.coop is both). Labels are
+// rendered by the upstream control, which exposes no i18n callback, so they
+// stay plain strings (same gap as the vector plugin's sample list).
 const SAMPLE_RASTER_DATASETS: RasterSampleDataset[] = [
   {
     label: "Land cover",
@@ -439,7 +441,8 @@ function createRasterControl(
   const control = new RasterControlClass({
     className: "geolibre-raster-control",
     collapsed: true,
-    // Empty input with a generic placeholder; the sample COGs below are the
+    // No prefilled URL: the input stays empty (the upstream control supplies
+    // a generic COG-URL placeholder), and the sample COGs below are the
     // explicit, opt-in way to load a demonstration raster.
     sampleData: SAMPLE_RASTER_DATASETS,
     // The panel doubles as the Add Raster Layer dialog, so it stays open
