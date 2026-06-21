@@ -11,6 +11,7 @@ import union from "@turf/union";
 import voronoiDiagram from "@turf/voronoi";
 import tin from "@turf/tin";
 import sector from "@turf/sector";
+import circle from "@turf/circle";
 import distance from "@turf/distance";
 import bbox from "@turf/bbox";
 import booleanIntersects from "@turf/boolean-intersects";
@@ -2174,15 +2175,19 @@ export const cellSectorsTool: ProcessingAlgorithm = {
         skipped += 1;
         continue;
       }
-      // turf's sector is undefined for a full turn, so clamp to 360 (which it
-      // renders as a circle) for near-omnidirectional sites.
+      // A full turn is undefined for turf's sector (its two bearings coincide
+      // after normalization), so draw an omnidirectional site as a circle.
       if (angle > 360) angle = 360;
       const full = angle >= 360;
-      const bearing1 = full ? 0 : azimuth - angle / 2;
-      const bearing2 = full ? 360 : azimuth + angle / 2;
-      const wedge = sector(point.geometry.coordinates, radius, bearing1, bearing2, {
-        units: units as LinearUnit,
-      });
+      const wedge = full
+        ? circle(point.geometry.coordinates, radius, { units: units as LinearUnit })
+        : sector(
+            point.geometry.coordinates,
+            radius,
+            azimuth - angle / 2,
+            azimuth + angle / 2,
+            { units: units as LinearUnit },
+          );
       if (!wedge?.geometry) {
         skipped += 1;
         continue;
@@ -2204,10 +2209,14 @@ export const cellSectorsTool: ProcessingAlgorithm = {
   },
 };
 
-/** Multipliers from metres-per-second to each supported speed unit. */
+/**
+ * Multipliers from metres-per-second to each supported speed unit. The keys are
+ * the literal unit strings (e.g. "m/s", not "ms") so the `speed_units` value in
+ * the output GeoJSON is unambiguous to downstream consumers.
+ */
 const SPEED_FACTORS: Record<string, number> = {
-  ms: 1,
-  kmh: 3.6,
+  "m/s": 1,
+  "km/h": 3.6,
   mph: 2.2369362920544,
 };
 
@@ -2246,10 +2255,10 @@ export const trajectorySpeedTool: ProcessingAlgorithm = {
       id: "speedUnits",
       label: "Speed units",
       type: "select",
-      default: "kmh",
+      default: "km/h",
       options: [
-        { value: "kmh", label: "km/h" },
-        { value: "ms", label: "m/s" },
+        { value: "km/h", label: "km/h" },
+        { value: "m/s", label: "m/s" },
         { value: "mph", label: "mph" },
       ],
     },
@@ -2263,7 +2272,7 @@ export const trajectorySpeedTool: ProcessingAlgorithm = {
       return;
     }
     const idField = (ctx.parameters.idField as string)?.trim() || undefined;
-    const speedUnits = (ctx.parameters.speedUnits as string) || "kmh";
+    const speedUnits = (ctx.parameters.speedUnits as string) || "km/h";
     const factor = SPEED_FACTORS[speedUnits];
     if (factor === undefined) {
       ctx.log(`Error: unknown speed units '${speedUnits}'`);
@@ -2401,6 +2410,10 @@ export const detectStopsTool: ProcessingAlgorithm = {
     );
     let totalPoints = 0;
     for (const pts of groups.values()) totalPoints += pts.length;
+    if (totalPoints === 0) {
+      ctx.log("Error: no points with a parseable time; check the time field");
+      return;
+    }
     if (totalPoints > STOPS_MAX_POINTS) {
       ctx.log(
         `Error: ${totalPoints.toLocaleString()} timed points exceed the ${STOPS_MAX_POINTS.toLocaleString()} limit for stop detection; filter or split the layer first`,
@@ -2465,8 +2478,14 @@ export const detectStopsTool: ProcessingAlgorithm = {
   },
 };
 
-/** Worst-case pair cap for the space-time proximity scan. */
-const PROXIMITY_MAX_PAIRS = 5_000_000;
+/**
+ * Worst-case pair cap for the space-time proximity scan. Each pair within the
+ * time window costs one Haversine call on the UI thread, so this bounds the
+ * absolute worst case (all points inside the window) to ~2M calls (~1s). Typical
+ * runs are far cheaper because the time-sorted loop breaks out once the gap is
+ * exceeded; the cap only rejects layers whose worst case would freeze the tab.
+ */
+const PROXIMITY_MAX_PAIRS = 2_000_000;
 /** Multipliers from each supported time unit to milliseconds. */
 const TIME_UNIT_MS: Record<string, number> = {
   seconds: 1000,
@@ -2598,6 +2617,10 @@ export const spaceTimeProximityTool: ProcessingAlgorithm = {
       });
     }
     const n = timed.length;
+    if (n === 0) {
+      ctx.log("Error: no points with a parseable time; check the time field");
+      return;
+    }
     // Pre-work guard on the number of pairs the loop can actually evaluate. With
     // an id field only cross-target pairs are kept, so the real bound is
     // (n² − Σ nᵢ²) / 2 — this lets a layer that is mostly (or entirely) one

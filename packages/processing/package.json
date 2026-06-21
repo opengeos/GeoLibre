@@ -18,6 +18,7 @@
     "@turf/boolean-within": "^7.3.5",
     "@turf/buffer": "^7.3.5",
     "@turf/centroid": "^7.3.5",
+    "@turf/circle": "^7.3.5",
     "@turf/convex": "^7.3.5",
     "@turf/difference": "^7.3.5",
     "@turf/dissolve": "^7.3.5",

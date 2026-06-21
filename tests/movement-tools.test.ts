@@ -138,7 +138,7 @@ describe("trajectory speed", () => {
     const { result } = runTool("trajectory-speed", [track], {
       layer: "track",
       timeField: "t",
-      speedUnits: "kmh",
+      speedUnits: "km/h",
     });
     assert.equal(result!.features.length, 1);
     const seg = result!.features[0];
@@ -159,7 +159,7 @@ describe("trajectory speed", () => {
       layer: "track",
       timeField: "t",
       idField: "id",
-      speedUnits: "ms",
+      speedUnits: "m/s",
     });
     // Two segments (one per target), not three across the id boundary.
     assert.equal(result!.features.length, 2);
