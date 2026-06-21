@@ -132,6 +132,7 @@ export {
 export { colormapColors, warmColormapColors } from "./plugins/colormap-colors";
 export {
   closeVectorLayerPanel,
+  materializeEmbeddableVectorLayers,
   openVectorLayerPanel,
   reloadVectorControlLayer,
   restoreVectorLayers,

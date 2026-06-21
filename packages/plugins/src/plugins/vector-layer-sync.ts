@@ -64,6 +64,30 @@ export function isVectorControlStoreLayer(layer: GeoLibreLayer): boolean {
   );
 }
 
+function hasRestorableVectorUrl(layer: GeoLibreLayer): boolean {
+  return typeof layer.source.url === "string" && layer.source.url.trim() !== "";
+}
+
+/**
+ * Detects an Add Vector Layer layer whose data is local and not otherwise
+ * restorable from a saved project: it has no fetchable URL and no desktop file
+ * path to re-read (so it is not a desktop {@link createVectorStoreLayer}
+ * path-backed layer). Such a layer is lost on reopen unless its data is
+ * embedded in the project, which the web Save flow offers via
+ * `materializeEmbeddableVectorLayers`. Covers both a freshly browser-picked
+ * file and a layer restored from previously embedded GeoJSON.
+ *
+ * @param layer - A store layer.
+ * @returns True when the layer's data should be embedded to survive a reopen.
+ */
+export function isEmbeddableLocalVectorLayer(layer: GeoLibreLayer): boolean {
+  return (
+    isVectorControlStoreLayer(layer) &&
+    !hasRestorableVectorUrl(layer) &&
+    layer.metadata.localFileReloadable !== true
+  );
+}
+
 /**
  * Builds the store layer mirroring a control vector layer snapshot.
  *
@@ -82,8 +106,15 @@ export function createVectorStoreLayer(
   panelCollapsed = true,
 ): GeoLibreLayer {
   const url = info.source.kind === "url" ? info.source.url : undefined;
+  // A desktop host echoes the absolute path a local file was read from, so the
+  // layer can be re-read from disk on reopen; the browser only knows the file
+  // name. Prefer the path, so it (not the bare name) is what gets persisted.
+  const localFilePath =
+    info.source.kind === "file" ? info.source.path : undefined;
   const sourcePath =
-    url ?? (info.source.kind === "file" ? info.source.fileName : undefined);
+    url ??
+    localFilePath ??
+    (info.source.kind === "file" ? info.source.fileName : undefined);
   return {
     id: info.id,
     name: info.name,
@@ -119,6 +150,10 @@ export function createVectorStoreLayer(
       // restoreVectorLayers can replay URL-backed layers when a saved
       // project is reopened.
       vectorSource: info.source.kind,
+      // Marks a local file the host gave an absolute path for (desktop), so
+      // restoreVectorLayers re-reads it from `sourcePath` rather than dropping
+      // it. A browser-picked file has no path and so no flag.
+      ...(localFilePath ? { localFileReloadable: true } : {}),
       vectorState: serializableVectorState(info),
       ...(info.geometryType !== "unknown"
         ? { geometryType: info.geometryType }

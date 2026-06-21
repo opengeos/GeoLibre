@@ -58,6 +58,23 @@ export interface GeoLibreFileDialogOptions {
 }
 
 /**
+ * A file chosen through {@link GeoLibreAppAPI.pickVectorFiles}. Pairs the
+ * loaded `File` with the absolute `sourcePath` it was read from, when the host
+ * can supply one (a desktop file dialog). On the web no path is available, so
+ * `sourcePath` is omitted and the file is restorable only by embedding it.
+ */
+export interface GeoLibreVectorFileSelection {
+  /** The chosen file's contents. */
+  file: File;
+  /**
+   * Absolute filesystem path the file was read from, on a desktop host. The
+   * Add Vector Layer panel persists it so the layer can be re-read from disk
+   * when a saved project reopens. Omitted on the web.
+   */
+  sourcePath?: string;
+}
+
+/**
  * GeoLibre's own deck.gl modules, handed to a plugin via
  * {@link GeoLibreAppAPI.getDeckGL}. Lets an external plugin render deck.gl
  * layers using the host's single deck.gl instance instead of bundling its own.
@@ -106,6 +123,22 @@ export interface GeoLibreAppAPI {
   fitBounds?: (bounds: [number, number, number, number]) => void;
   getMap?: () => MapLibreMap | null;
   pickLocalDirectoryFiles?: () => Promise<File[] | null>;
+  /**
+   * Open a host file picker for vector datasets and return the chosen files.
+   * On a desktop host (Tauri) each selection carries the absolute `sourcePath`
+   * it was read from, so the Add Vector Layer panel can persist it and re-read
+   * the file when a saved project is reopened. On the web no path is available,
+   * so `sourcePath` is omitted. Resolves to null when the picker is unavailable
+   * or the user cancels.
+   */
+  pickVectorFiles?: () => Promise<GeoLibreVectorFileSelection[] | null>;
+  /**
+   * Read a local vector file back into a File from the absolute path persisted
+   * on a layer's `sourcePath`, so the Add Vector Layer restore can reload a
+   * desktop local-file layer when a project reopens. Resolves to null off the
+   * desktop host, or when the file can no longer be read (moved or deleted).
+   */
+  readLocalVectorFile?: (path: string) => Promise<File | null>;
   /**
    * Save text content to a file chosen by the user. The host handles the
    * platform specifics (a native save dialog under Tauri, a browser download

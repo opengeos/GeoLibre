@@ -1,4 +1,5 @@
 import { getSpatialExtensionPath, useAppStore } from "@geolibre/core";
+import type { GeoLibreLayer } from "@geolibre/core";
 import type {
   VectorControl,
   VectorControlEventHandler,
@@ -7,6 +8,7 @@ import type {
 } from "maplibre-gl-vector";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
 import {
+  isEmbeddableLocalVectorLayer,
   isVectorControlStoreLayer,
   resetVectorStoreSyncSuspension,
   resumeVectorStoreSync,
@@ -16,6 +18,7 @@ import {
   unwireVectorStoreSync,
   wireVectorStoreSync,
 } from "./vector-layer-sync";
+import type { FeatureCollection } from "geojson";
 
 const vectorControlPosition: GeoLibreMapControlPosition = "top-left";
 const VECTOR_PANEL_CLASS = "geolibre-vector-panel";
@@ -215,36 +218,68 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
           typeof layer.source.url === "string" && layer.source.url
             ? layer.source.url
             : undefined;
-        if (!url) {
-          // Console-only on purpose for this first pass: the plugin layer
-          // has no toast/notification API today. Surface this through an
-          // in-app notification once one is exposed to plugins.
-          console.info(
-            `[GeoLibre] Vector layer "${layer.name}" came from a local file and cannot be restored from the saved project.`,
-          );
-          // removeLayer fires the store subscriber synchronously; the
-          // suspension guard keeps it from echoing back at the control.
-          useAppStore.getState().removeLayer(layer.id);
+        if (url) {
+          pending.push(replayVectorLayer(control, layer, url));
           continue;
         }
 
-        pending.push(
-          control
-            .addData(url, {
-              ...savedVectorState(layer),
-              fitBounds: false,
-              id: layer.id,
-              name: layer.name,
-              opacity: layer.opacity,
-              visible: layer.visible,
-            })
-            .catch((error) => {
-              console.error(
-                `[GeoLibre] Failed to restore vector layer "${layer.name}"`,
-                error,
-              );
-            }),
+        // A desktop host persisted the absolute path the file was read from, so
+        // re-read it from disk and replay the same render/style state. (A
+        // browser-picked file has no path and so no flag.)
+        const localPath =
+          layer.metadata.localFileReloadable === true &&
+          typeof layer.sourcePath === "string" &&
+          layer.sourcePath.trim()
+            ? layer.sourcePath
+            : undefined;
+        if (localPath && app.readLocalVectorFile) {
+          pending.push(
+            app
+              .readLocalVectorFile(localPath)
+              .then((file) => {
+                if (!file) {
+                  // The file moved or was deleted since the project was saved.
+                  console.info(
+                    `[GeoLibre] Vector layer "${layer.name}" could not be re-read from "${localPath}"; removing it.`,
+                  );
+                  useAppStore.getState().removeLayer(layer.id);
+                  return undefined;
+                }
+                return replayVectorLayer(control, layer, file, localPath);
+              })
+              .catch((error) => {
+                console.error(
+                  `[GeoLibre] Failed to restore vector layer "${layer.name}"`,
+                  error,
+                );
+              }),
+          );
+          continue;
+        }
+
+        // The web Save flow can embed a local file's features in the project.
+        // Replay them directly (re-ingesting tiles when that was the render
+        // mode); the restored layer becomes data-backed and re-embeds on the
+        // next save.
+        const embedded = readEmbeddedVectorGeoJSON(
+          layer.metadata.embeddedGeoJSON,
         );
+        if (embedded) {
+          pending.push(replayVectorLayer(control, layer, embedded));
+          continue;
+        }
+
+        // No URL and no re-readable local path (a browser-picked file, or a
+        // desktop file whose path was not persisted): it cannot be restored.
+        // Console-only on purpose: the plugin layer has no toast/notification
+        // API today. Surface this through an in-app notification once one is
+        // exposed to plugins.
+        console.info(
+          `[GeoLibre] Vector layer "${layer.name}" came from a local file and cannot be restored from the saved project.`,
+        );
+        // removeLayer fires the store subscriber synchronously; the
+        // suspension guard keeps it from echoing back at the control.
+        useAppStore.getState().removeLayer(layer.id);
       }
     } catch (error) {
       resumeOnce();
@@ -269,12 +304,104 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
   });
 }
 
+/**
+ * Replays one saved Add Vector Layer layer into the control, preserving its
+ * id, name, visibility, opacity, and persisted render/style state. The source
+ * is a URL (URL-backed layers) or a File re-read from disk (desktop local-file
+ * layers); `localPath` is forwarded so the restored layer keeps its absolute
+ * path and stays reloadable on the next reopen. Errors are logged, not thrown,
+ * so one failed layer never aborts the others.
+ *
+ * @param control - The vector control to add the layer to.
+ * @param layer - The saved store layer being restored.
+ * @param source - The URL or File to load the data from.
+ * @param localPath - The absolute path a File source was read from, if any.
+ * @returns A promise that settles when the layer has loaded or failed.
+ */
+function replayVectorLayer(
+  control: VectorControl,
+  layer: GeoLibreLayer,
+  source: string | File | FeatureCollection,
+  localPath?: string,
+): Promise<unknown> {
+  return control
+    .addData(source, {
+      ...savedVectorState(layer),
+      ...(localPath ? { sourcePath: localPath } : {}),
+      fitBounds: false,
+      id: layer.id,
+      name: layer.name,
+      opacity: layer.opacity,
+      visible: layer.visible,
+    })
+    .catch((error) => {
+      console.error(
+        `[GeoLibre] Failed to restore vector layer "${layer.name}"`,
+        error,
+      );
+    });
+}
+
+/**
+ * Materializes the features of every embeddable local-file Add Vector Layer
+ * layer as GeoJSON, so the web Save flow can offer to embed them in the saved
+ * project (a browser-picked local file is otherwise lost on reopen, since the
+ * browser exposes no path to re-read). Desktop path-backed and URL-backed
+ * layers are skipped: they restore without embedding. Layers whose data cannot
+ * be read back (e.g. a streamed GeoParquet) are omitted.
+ *
+ * @param layers - The current store layers.
+ * @returns A map from layer id to its features, for layers worth embedding.
+ */
+export async function materializeEmbeddableVectorLayers(
+  layers: GeoLibreLayer[],
+): Promise<Map<string, FeatureCollection>> {
+  const result = new Map<string, FeatureCollection>();
+  const control = vectorControl;
+  if (!control) return result;
+  for (const layer of layers) {
+    if (!isEmbeddableLocalVectorLayer(layer)) continue;
+    try {
+      const collection = await control.getLayerGeoJSON(layer.id);
+      if (
+        collection &&
+        Array.isArray(collection.features) &&
+        collection.features.length > 0
+      ) {
+        result.set(layer.id, collection);
+      }
+    } catch (error) {
+      console.error(
+        `[GeoLibre] Could not read data for vector layer "${layer.name}" to embed it`,
+        error,
+      );
+    }
+  }
+  return result;
+}
+
+/**
+ * Validates the `embeddedGeoJSON` read from a (possibly hand-edited) project
+ * file: a FeatureCollection with a features array. Returns it when well-formed,
+ * else null so a malformed value is skipped rather than crashing restore.
+ *
+ * @param value - The raw `metadata.embeddedGeoJSON` value.
+ * @returns The FeatureCollection, or null.
+ */
+function readEmbeddedVectorGeoJSON(value: unknown): FeatureCollection | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const candidate = value as { type?: unknown; features?: unknown };
+  if (candidate.type !== "FeatureCollection") return null;
+  if (!Array.isArray(candidate.features)) return null;
+  return value as FeatureCollection;
+}
+
 async function ensureVectorControl(
   app: GeoLibreAppAPI,
 ): Promise<VectorControl | null> {
   const VectorControlClass = await getVectorControlClass();
 
-  vectorControl ??= createVectorControl(VectorControlClass);
+  vectorControl ??= createVectorControl(VectorControlClass, app);
 
   if (!vectorControlMounted) {
     const added = app.addMapControl(vectorControl, vectorControlPosition);
@@ -313,7 +440,27 @@ function getVectorControlClass(): Promise<VectorControlConstructor> {
 
 function createVectorControl(
   VectorControlClass: VectorControlConstructor,
+  app: GeoLibreAppAPI,
 ): VectorControl {
+  // Route the panel's "click to browse" through the host picker when one is
+  // available, so a desktop host can return real filesystem paths (echoed on
+  // each layer's source descriptor) that restoreVectorLayers re-reads when a
+  // project reopens. Without a host picker the panel keeps its native file
+  // input, whose local files have no restorable path.
+  const fileOpener = app.pickVectorFiles
+    ? async () => {
+        const selections = await app.pickVectorFiles?.();
+        return (
+          selections?.map((selection) => ({
+            file: selection.file,
+            ...(selection.sourcePath
+              ? { sourcePath: selection.sourcePath }
+              : {}),
+          })) ?? null
+        );
+      }
+    : undefined;
+
   const control = new VectorControlClass({
     className: "geolibre-vector-control",
     collapsed: true,
@@ -331,6 +478,8 @@ function createVectorControl(
     // Skip the remote spatial-extension install in offline/sandboxed
     // environments when a local extension path is configured.
     spatialExtensionPath: getSpatialExtensionPath(),
+    // Capture the absolute path of locally picked files on desktop hosts.
+    ...(fileOpener ? { fileOpener } : {}),
   });
 
   for (const event of ["layeradded", "layerremoved", "layerupdated"] as const) {

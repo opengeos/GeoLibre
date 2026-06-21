@@ -8,6 +8,7 @@ import {
 import type { VectorLayerInfo, VectorLayerStyle } from "maplibre-gl-vector";
 import {
   createVectorStoreLayer,
+  isEmbeddableLocalVectorLayer,
   isVectorControlStoreLayer,
   removeVectorStoreLayers,
   resetVectorStoreSyncSuspension,
@@ -92,6 +93,41 @@ function otherStoreLayer(id = "unrelated"): GeoLibreLayer {
   };
 }
 
+describe("isEmbeddableLocalVectorLayer", () => {
+  it("flags a browser-picked local file (no URL, no reload path)", () => {
+    const layer = createVectorStoreLayer(
+      vectorInfo({ source: { kind: "file", fileName: "local.gpkg" } }),
+    );
+    assert.equal(isEmbeddableLocalVectorLayer(layer), true);
+  });
+
+  it("excludes a URL-backed layer", () => {
+    const layer = createVectorStoreLayer(vectorInfo());
+    assert.equal(isEmbeddableLocalVectorLayer(layer), false);
+  });
+
+  it("excludes a desktop path-backed layer that reloads from disk", () => {
+    const layer = createVectorStoreLayer(
+      vectorInfo({
+        source: {
+          kind: "file",
+          fileName: "countries.gpkg",
+          path: "/home/user/countries.gpkg",
+        },
+      }),
+    );
+    assert.equal(isEmbeddableLocalVectorLayer(layer), false);
+  });
+
+  it("excludes a non-vector-control layer", () => {
+    const layer = createVectorStoreLayer(
+      vectorInfo({ source: { kind: "file", fileName: "local.gpkg" } }),
+    );
+    const plainLayer = { ...layer, metadata: {} };
+    assert.equal(isEmbeddableLocalVectorLayer(plainLayer), false);
+  });
+});
+
 describe("createVectorStoreLayer", () => {
   it("mirrors a URL layer as an external custom layer", () => {
     const layer = createVectorStoreLayer(
@@ -149,8 +185,27 @@ describe("createVectorStoreLayer", () => {
     assert.equal(layer.source.url, undefined);
     assert.equal(layer.sourcePath, "local.gpkg");
     assert.equal(layer.metadata.vectorSource, "file");
+    assert.equal("localFileReloadable" in layer.metadata, false);
     assert.equal("bounds" in layer.metadata, false);
     assert.equal("featureCount" in layer.metadata, false);
+  });
+
+  it("persists a desktop file's absolute path and marks it reloadable", () => {
+    const layer = createVectorStoreLayer(
+      vectorInfo({
+        source: {
+          kind: "file",
+          fileName: "countries.gpkg",
+          path: "/home/user/data/countries.gpkg",
+        },
+      }),
+    );
+
+    // The absolute path (not the bare name) is persisted so restore can
+    // re-read the file from disk, and the flag tells restore it can.
+    assert.equal(layer.sourcePath, "/home/user/data/countries.gpkg");
+    assert.equal(layer.metadata.localFileReloadable, true);
+    assert.equal(layer.metadata.vectorSource, "file");
   });
 
   it("marks tile-rendered layers as vector-tiles", () => {

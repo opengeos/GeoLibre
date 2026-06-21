@@ -168,6 +168,62 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
           </div>
         </DialogContent>
       </Dialog>
+      <Dialog
+        open={projectFiles.embedVectorDataPrompt !== null}
+        onOpenChange={(open: boolean) => {
+          if (!open) projectFiles.resolveEmbedVectorDataPrompt("cancel");
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("toolbar.item.embedVectorTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("toolbar.item.embedVectorDesc", {
+                count: projectFiles.embedVectorDataPrompt?.count ?? 0,
+                size: formatByteSize(
+                  projectFiles.embedVectorDataPrompt?.bytes ?? 0,
+                ),
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() =>
+                projectFiles.resolveEmbedVectorDataPrompt("cancel")
+              }
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => projectFiles.resolveEmbedVectorDataPrompt("skip")}
+            >
+              {t("toolbar.item.embedVectorSkipButton")}
+            </Button>
+            <Button
+              onClick={() => projectFiles.resolveEmbedVectorDataPrompt("embed")}
+            >
+              {t("toolbar.item.embedVectorEmbedButton")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
+}
+
+/**
+ * Formats a byte count as a short, human-readable size (e.g. "3.4 MB") for the
+ * embed-data prompt's size warning.
+ *
+ * @param bytes - The size in bytes.
+ * @returns A localized-ish size string with one decimal for MB and above.
+ */
+function formatByteSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${Math.round(kb)} KB`;
+  const mb = kb / 1024;
+  return `${mb.toFixed(1)} MB`;
 }
