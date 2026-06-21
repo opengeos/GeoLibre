@@ -196,12 +196,12 @@ export function StatisticsToolsDialog({
     [params],
   );
 
-  // Visible required parameters that are still empty. Drives the disabled Run
-  // button (and the asterisk legend only shows when there is something to mark).
+  // All required parameters; used for the asterisk legend condition.
   const requiredParams = useMemo(
     () => tool.parameters.filter((param) => param.required),
     [tool],
   );
+  // Visible required params that are still unset — disables the Run button.
   const missingRequired = useMemo(
     () =>
       requiredParams.some(
@@ -308,7 +308,7 @@ export function StatisticsToolsDialog({
               ))}
             </div>
 
-            {requiredParams.length > 0 ? (
+            {requiredParams.some(isParamVisible) ? (
               <p className="text-xs text-muted-foreground">
                 <span className="text-destructive">*</span>{" "}
                 {t("statistics.requiredFieldLegend")}
