@@ -1253,7 +1253,11 @@
       "addedVectorLayers_other": "Added {{count}} vector layers to the Layers panel.",
       "addedRasterLayers_one": "Added {{count}} raster layer to the Layers panel.",
       "addedRasterLayers_other": "Added {{count}} raster layers to the Layers panel.",
-      "addedBoth": "Added {{vectorCount}} vector and {{rasterCount}} raster layers to the Layers panel."
+      "addedBoth": "Added {{vector}} and {{raster}} to the Layers panel.",
+      "bothVectorLayers_one": "{{count}} vector layer",
+      "bothVectorLayers_other": "{{count}} vector layers",
+      "bothRasterLayers_one": "{{count}} raster layer",
+      "bothRasterLayers_other": "{{count}} raster layers"
     },
     "error": {
       "couldNotOpenProject": "Could not open project.",

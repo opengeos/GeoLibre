@@ -759,20 +759,27 @@ export function DesktopShell({
       // stays open (opengeos/GeoLibre#666).
       if (importedLayers.length === 1 && !rasterCount) {
         const only = importedLayers[0];
+        // `||` (not `??`) so an empty-string name also falls back to the path.
         setDropMessage(
           t("toolbar.fileDrop.addedLayer", {
-            name: only.name ?? layerNameFromPath(only.path),
+            name: only.name || layerNameFromPath(only.path),
           }),
         );
         return;
       }
       // Full-sentence keys (rather than a JS-assembled summary) keep word
-      // order and pluralization inside the translation catalog.
+      // order and the connector inside the translation catalog. The mixed
+      // case composes two independently pluralized noun phrases into its
+      // sentence, since one i18next key can pluralize only a single count.
       setDropMessage(
         importedLayers.length && rasterCount
           ? t("toolbar.fileDrop.addedBoth", {
-              vectorCount: importedLayers.length,
-              rasterCount,
+              vector: t("toolbar.fileDrop.bothVectorLayers", {
+                count: importedLayers.length,
+              }),
+              raster: t("toolbar.fileDrop.bothRasterLayers", {
+                count: rasterCount,
+              }),
             })
           : importedLayers.length
             ? t("toolbar.fileDrop.addedVectorLayers", {
