@@ -151,12 +151,14 @@ export function SetViewDialog({
 
         {/*
           noValidate: the prefilled camera is read straight from the live map,
-          so the zoom is a fractional value like 2.427 that violates the input's
-          step="0.1" constraint. Native HTML5 validation would block submission
-          of an unchanged prefill (and, in comma-decimal locales, reject the
-          comma-formatted display as invalid) before handleSubmit ever runs. We
-          do our own thorough, localized validation below, so let that be the
-          single source of truth. */}
+          so any field whose step doesn't evenly divide its value violates the
+          input's step constraint — most often zoom (e.g. 2.427 against
+          step="0.1"), but pitch (45.3 against step="1") the same way. Native
+          HTML5 validation would block submission of an unchanged prefill (and,
+          in comma-decimal locales, reject the comma-formatted display as
+          invalid) before handleSubmit ever runs. We do our own thorough,
+          localized validation below, so let that be the single source of
+          truth. */}
         <form className="space-y-4" noValidate onSubmit={handleSubmit}>
           <div className="grid grid-cols-2 gap-3">
             {field("longitude", "toolbar.setView.longitude", "any", {
