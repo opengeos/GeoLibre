@@ -128,6 +128,18 @@ Use your own key — create one in the [Protomaps dashboard](https://protomaps.c
 
 - **At runtime, no rebuild** — add an environment variable named `VITE_PROTOMAPS_API_KEY` in **Settings → Environment Variables**. The Protomaps basemaps appear as soon as the key is enabled. See [Settings](user-guide/settings.md#environment-variables).
 
+## Optional traffic overlays
+
+The **Basemaps** control includes a **Traffic** category with real-time traffic overlays that stack on top of any basemap (enable the panel's add/multiple toggle). Each provider authenticates with your own API key, set in **Settings → Environment Variables** (or baked into `apps/geolibre-desktop/.env.local`):
+
+```env
+VITE_GOOGLE_MAPS_API_KEY=your_google_maps_api_key   # Google Traffic (Map Tiles API)
+VITE_TOMTOM_API_KEY=your_tomtom_api_key             # TomTom Traffic Flow
+VITE_HERE_API_KEY=your_here_api_key                 # HERE Traffic Flow
+```
+
+Google Traffic reuses the same `VITE_GOOGLE_MAPS_API_KEY` as Street View; enable the **Map Tiles API** for that key in Google Cloud. A newly entered key takes effect immediately, without reopening the project. Until a provider's key is set, its overlay reports a missing-key error instead of loading tiles.
+
 ## Optional Python sidecar
 
 The optional FastAPI sidecar is reserved for heavier processing workflows and is not required for the desktop UI.

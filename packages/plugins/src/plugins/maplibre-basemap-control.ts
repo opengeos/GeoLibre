@@ -13,7 +13,45 @@ import type {
   GeoLibrePlugin,
 } from "../types";
 
+const basemapEnv = (
+  import.meta as ImportMeta & {
+    env?: Record<string, string | undefined>;
+  }
+).env;
+
+/** Merge build-time and runtime environment variables (runtime wins). */
+function getRuntimeEnvironment(): Record<string, string | undefined> {
+  if (typeof window === "undefined") return basemapEnv ?? {};
+  // __GEOLIBRE_RUNTIME_ENV__ is declared globally in @geolibre/core.
+  return {
+    ...(basemapEnv ?? {}),
+    ...(window.__GEOLIBRE_RUNTIME_ENV__ ?? {}),
+  };
+}
+
+/**
+ * Provider credentials for the traffic overlays added in
+ * maplibre-gl-basemap-control 0.6.0. The keys come from runtime environment
+ * variables (set in Settings → Environment Variables), so users opt in with
+ * their own API keys; Google Traffic reuses the same VITE_GOOGLE_MAPS_API_KEY
+ * that the Street View plugin reads. Returns empty strings when unset, which the
+ * control treats as "no key" (the overlay then surfaces a "Get a … API key"
+ * error rather than loading tiles).
+ */
+function getBasemapCredentials(): Pick<
+  BasemapControlOptions,
+  "googleMapsApiKey" | "tomtomApiKey" | "hereApiKey"
+> {
+  const env = getRuntimeEnvironment();
+  return {
+    googleMapsApiKey: env.VITE_GOOGLE_MAPS_API_KEY?.trim() || "",
+    tomtomApiKey: env.VITE_TOMTOM_API_KEY?.trim() || "",
+    hereApiKey: env.VITE_HERE_API_KEY?.trim() || "",
+  };
+}
+
 let basemapControlPosition: GeoLibreMapControlPosition = "top-left";
+let removeRuntimeEnvListener: (() => void) | null = null;
 
 /**
  * User-facing strings the panel cannot translate itself. Defaults are English;
@@ -52,7 +90,7 @@ const registeredRasterLayers = new Map<string, string>();
 export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-basemap-control",
   name: "Basemaps",
-  version: "0.2.2",
+  version: "0.3.0",
   activate: (app: GeoLibreAppAPI) => {
     if (!basemapControl) {
       basemapControl = new BasemapControl(getBasemapControlOptions(app));
@@ -62,6 +100,7 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
       basemapControl.on("basemapremove", (event) => {
         handleBasemapRemove(app, event);
       });
+      addRuntimeEnvListener();
     }
 
     const added = app.addMapControl(
@@ -83,6 +122,7 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
   },
   deactivate: (app: GeoLibreAppAPI) => {
     if (!basemapControl) return;
+    cleanupRuntimeEnvListener();
     unregisterAllRasterBasemaps(app);
     app.removeMapControl(basemapControl);
     basemapControl = null;
@@ -111,6 +151,10 @@ function getBasemapControlOptions(
     collapsed: false,
     position: basemapControlPosition,
     title: "Basemaps",
+    // Traffic overlays (Google/TomTom/HERE) authenticate with the user's own
+    // API keys, read from runtime env. Unset keys are harmless: the overlay just
+    // reports a missing-key error instead of loading tiles.
+    ...getBasemapCredentials(),
     // A style basemap (e.g. OpenFreeMap 3D) swaps the whole map style and so
     // discards every stacked raster basemap. In stack mode that silently wiped
     // a carefully assembled stack, so confirm before the rasters are lost. See
@@ -126,6 +170,38 @@ function getBasemapControlOptions(
       return window.confirm(labels.confirmStyleReplace(basemap.name, count));
     },
   };
+}
+
+/**
+ * Push updated provider keys into the live control when the user edits their
+ * runtime environment variables, so a newly entered key takes effect without
+ * reopening the project. The control's setters re-resolve tile templates in
+ * place, so the panel state (and any stacked basemaps) is preserved.
+ */
+function addRuntimeEnvListener(): void {
+  if (removeRuntimeEnvListener || typeof window === "undefined") return;
+
+  const handleRuntimeEnvChange = () => {
+    if (!basemapControl) return;
+    const { googleMapsApiKey, tomtomApiKey, hereApiKey } =
+      getBasemapCredentials();
+    basemapControl.setGoogleMapsApiKey(googleMapsApiKey ?? "");
+    basemapControl.setTomTomApiKey(tomtomApiKey ?? "");
+    basemapControl.setHereApiKey(hereApiKey ?? "");
+  };
+
+  window.addEventListener("geolibre:runtime-env-change", handleRuntimeEnvChange);
+  removeRuntimeEnvListener = () => {
+    window.removeEventListener(
+      "geolibre:runtime-env-change",
+      handleRuntimeEnvChange,
+    );
+  };
+}
+
+function cleanupRuntimeEnvListener(): void {
+  removeRuntimeEnvListener?.();
+  removeRuntimeEnvListener = null;
 }
 
 function handleBasemapChange(
