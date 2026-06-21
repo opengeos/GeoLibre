@@ -1260,8 +1260,9 @@
       "networkNoticeDesc": "Running a Network analysis tool sends the coordinates of your input points to a public routing server to compute isochrones, cost matrices, and routes.",
       "networkNoticePrivacyHeading": "Data privacy",
       "networkNoticePrivacy": "Your input coordinates leave this device and are sent to the public Valhalla server at valhalla1.openstreetmap.de. Press Cancel if your project is bound by data privacy or data-sovereignty rules.",
+      "networkNoticePrivacyCustom": "Your input coordinates leave this device and are sent to the configured routing server ({{endpoint}}). Press Cancel if your project is bound by data privacy or data-sovereignty rules.",
       "networkNoticePerformanceHeading": "Performance and limits",
-      "networkNoticePerformance": "The public server is free but rate-limited, so large batches of points may be throttled or fail. For heavy use, run your own Valhalla server and enter its URL in the tool's \"Routing server\" field (or set VITE_ROUTING_ENDPOINT in Settings → Environment Variables to make it the default).",
+      "networkNoticePerformance": "The public server is free but rate-limited, so large batches of points may be throttled or fail. For heavy use, run your own Valhalla server and enter its URL in the tool's \"Routing server (Valhalla)\" field (or set VITE_ROUTING_ENDPOINT in Settings → Environment Variables to make it the default).",
       "continue": "Continue",
       "largeOsmPbfTitle": "Large OSM PBF file",
       "largeOsmPbfDesc": "This file is about {{sizeMb}} MB. Parsing it converts every feature to GeoJSON in memory, which can be slow and may use a lot of memory in the browser. Continue?",
@@ -1559,7 +1560,7 @@
     "heading": "Network",
     "run": "Run",
     "outputPlaceholder": "Output will appear here.",
-    "endpointNotice": "Point coordinates are sent to the routing server ({{endpoint}}). The default is a shared public Valhalla server (FOSSGIS), which is rate-limited. For heavy use, enter your own server's URL in the \"Routing server\" field above."
+    "endpointNotice": "Point coordinates are sent to the routing server ({{endpoint}}). The default is a shared public Valhalla server (FOSSGIS), which is rate-limited. For heavy use, enter your own server's URL in the \"Routing server (Valhalla)\" field above."
   },
   "statistics": {
     "title": "Spatial statistics",
