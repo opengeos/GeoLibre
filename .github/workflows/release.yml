@@ -277,6 +277,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq rpm appstream
           pipx install copr-cli
+          # copr-cli imports `rich` but does not always declare it as a dependency.
+          pipx inject copr-cli rich
 
           # COPR API token config from the secret.
           mkdir -p ~/.config
