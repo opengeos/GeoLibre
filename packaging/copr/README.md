@@ -22,8 +22,9 @@ source), adds an AppStream `metainfo.xml`, and renames the desktop entry to the
 ## One-time setup (maintainer)
 
 1. Sign in at <https://copr.fedorainfracloud.org> (FAS/Fedora account) and create
-   a project named **`geolibre`** under the `opengeos` group (or your user).
-   Enable the `fedora-*-x86_64` chroots you want to target.
+   a project named **`geolibre`** under your user namespace (`giswqs/geolibre`).
+   Enable the `fedora-*-x86_64` chroots you want to target. If you move it to a
+   COPR group later, update `COPR_PROJECT` in `release.yml` to `@group/geolibre`.
 2. Get an API token from <https://copr.fedorainfracloud.org/api/>. The page shows
    a ready-made config block:
 
@@ -48,7 +49,7 @@ On every published, non-prerelease release, the `copr` job:
 2. validates the metainfo with `appstreamcli`,
 3. downloads `GeoLibre.Desktop-<version>-1.x86_64.rpm` from the release into the
    SRPM sources,
-4. builds the SRPM and submits it with `copr-cli build --nowait opengeos/geolibre`.
+4. builds the SRPM and submits it with `copr-cli build --nowait giswqs/geolibre`.
 
 The job runs independently of the asset build and the AUR/Homebrew updates and is
 marked `continue-on-error`, so a COPR hiccup never fails the release.

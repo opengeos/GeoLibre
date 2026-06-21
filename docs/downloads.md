@@ -81,7 +81,7 @@ yay -S geolibre-bin      # or: paru -S geolibre-bin
 ### Fedora / RHEL (COPR)
 
 ```bash
-sudo dnf copr enable opengeos/geolibre
+sudo dnf copr enable giswqs/geolibre
 sudo dnf install geolibre
 ```
 

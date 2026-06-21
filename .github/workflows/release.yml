@@ -267,7 +267,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.event.release.tag_name }}
-          COPR_PROJECT: opengeos/geolibre
+          COPR_PROJECT: giswqs/geolibre
         run: |
           version="${TAG#v}"
           # Release date (YYYY-MM-DD) for the metainfo <release> and %changelog.
