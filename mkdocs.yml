@@ -80,6 +80,7 @@ nav:
       - Roadmap: roadmap.md
       - Contributing: contributing.md
       - Acknowledgements: acknowledgements.md
+      - Privacy Policy: privacy.md
 
 plugins:
   - search
