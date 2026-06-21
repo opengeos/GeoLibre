@@ -39,19 +39,26 @@ modules:
       - install -Dm755 "usr/bin/geolibre-desktop" "/app/bin/geolibre-desktop"
       # Keep the Tauri resource dir beside the binary (../lib/<product>) so the
       # app resolves its bundled resources under /app exactly as under /usr.
-      - install -d "/app/lib"
-      - cp -r "usr/lib/GeoLibre Desktop" "/app/lib/"
+      - |
+        src="usr/lib/GeoLibre Desktop"
+        [ -d "$src" ] || { echo "expected Tauri resource dir '$src' not found in the .deb" >&2; exit 1; }
+        install -d "/app/lib"
+        cp -r "$src" "/app/lib/"
       - install -Dm644 app.geolibre.GeoLibre.desktop
         /app/share/applications/app.geolibre.GeoLibre.desktop
       - install -Dm644 app.geolibre.GeoLibre.metainfo.xml
         /app/share/metainfo/app.geolibre.GeoLibre.metainfo.xml
       # Install the icons under the app-id name (Flathub convention).
       - |
+        found=0
         for png in usr/share/icons/hicolor/*/apps/geolibre-desktop.png; do
+          [ -f "$png" ] || continue
           size="$(basename "$(dirname "$(dirname "$png")")")"
           install -Dm644 "$png" \
             "/app/share/icons/hicolor/$size/apps/app.geolibre.GeoLibre.png"
+          found=$((found + 1))
         done
+        [ "$found" -gt 0 ] || { echo "no PNG icons found in the .deb" >&2; exit 1; }
     sources:
       - type: file
         url: https://github.com/opengeos/GeoLibre/releases/download/v1.5.0/GeoLibre.Desktop_1.5.0_amd64.deb

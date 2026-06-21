@@ -28,8 +28,9 @@ date -u -d "$DATE" +%F >/dev/null 2>&1 || { echo "DATE is not a valid calendar d
 
 APPID="${APPID:-org.geolibre.desktop}"
 # APPID is injected raw into the XML, so reject anything that isn't a plain
-# reverse-domain app-id (no <, >, or " that would break the document).
-[[ "$APPID" =~ ^[a-zA-Z][a-zA-Z0-9._-]*$ ]] || { echo "APPID must be a reverse-domain app-id (e.g. app.geolibre.GeoLibre)" >&2; exit 1; }
+# reverse-domain app-id. Mirror the D-Bus name rules Flatpak enforces: no
+# hyphens within a segment, and at least three dot-separated segments.
+[[ "$APPID" =~ ^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*){2,}$ ]] || { echo "APPID must be a reverse-domain app-id (e.g. app.geolibre.GeoLibre)" >&2; exit 1; }
 
 cat <<XML
 <?xml version="1.0" encoding="UTF-8"?>
