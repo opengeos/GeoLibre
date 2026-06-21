@@ -68,6 +68,37 @@ jobs:
             test-results/
           retention-days: 7
 
+  citation:
+    name: Validate CITATION.cff
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install cffconvert
+        run: python -m pip install cffconvert
+
+      - name: Validate CITATION.cff against the CFF schema
+        run: cffconvert --validate -i CITATION.cff
+
+      - name: Ensure version matches package.json
+        run: |
+          cff_version="$(sed -n 's/^version: *//p' CITATION.cff | tr -d '"' | head -n1)"
+          pkg_version="$(python -c "import json; print(json.load(open('package.json'))['version'])")"
+          echo "CITATION.cff version: $cff_version"
+          echo "package.json version: $pkg_version"
+          if [ "$cff_version" != "$pkg_version" ]; then
+            echo "::error file=CITATION.cff::version ($cff_version) does not match package.json ($pkg_version). Update CITATION.cff version and date-released when bumping the release version."
+            exit 1
+          fi
+
   checks:
     name: Build and test
     runs-on: ubuntu-22.04
