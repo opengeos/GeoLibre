@@ -30,12 +30,16 @@ the request you make, and are governed by their own privacy policies:
   basemap providers (for example OpenFreeMap and CARTO).
 - **Search / geocoding**: the place names or addresses you search are sent to
   the configured geocoding provider.
-- **AI assistant**: if you use it, the prompts you enter are sent to the
-  configured AI/LLM provider.
+- **AI assistant**: if you use it, the prompts you enter, together with metadata
+  about the layers currently loaded in your project (layer names and attribute
+  field names), are sent to the configured AI/LLM provider.
 - **Cloud data catalogs**: if you connect to services such as the Microsoft
   Planetary Computer or Google Earth Engine, your queries are sent to them.
 - **Real-time collaboration**: if you join a shared session, your project data
-  is shared with the other participants in that session.
+  (including any GeoJSON from locally-loaded files) is routed through a relay
+  server operated by the OpenGeos project (currently hosted on Cloudflare) and
+  shared with the other participants. The relay holds the latest project snapshot
+  so that later joiners can load the session, and discards it when the session ends.
 
 GeoLibre does not control these third-party services; please review their privacy
 policies for how they handle data.
@@ -49,7 +53,9 @@ service may log.
 
 ## Children
 
-GeoLibre is a professional GIS tool and is not directed at children.
+GeoLibre is a professional GIS tool intended for users aged 16 and over. It is
+not directed at children, and we do not knowingly collect personal data from
+children.
 
 ## Your choices
 
