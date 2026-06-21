@@ -111,7 +111,7 @@ export function SampleDataSelect<T>({
           {t("addData.shared.loadSampleData")}
         </option>
         {samples.map((sample, index) => (
-          <option key={sample.label} value={index}>
+          <option key={index} value={index}>
             {sample.label}
           </option>
         ))}

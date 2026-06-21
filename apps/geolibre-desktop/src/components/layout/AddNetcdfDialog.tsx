@@ -85,6 +85,25 @@ export function AddNetcdfDialog({
     setAdding(false);
   };
 
+  // Invalidate everything tied to the previously loaded manifest when the URL
+  // changes (sample pick or manual edit), and bump opGen so an in-flight
+  // variable load for the old URL cannot write back into state. Bumping opGen
+  // makes that load's finally skip its own setLoadingVars(false), so the flags
+  // are cleared here too (otherwise Load variables stays disabled).
+  const invalidateLoadedManifest = () => {
+    opGen.current += 1;
+    setVariables([]);
+    setVariable("");
+    setLoadedRefs(null);
+    setDimIndex({});
+    setClimMin("");
+    setClimMax("");
+    setStatus(null);
+    setError(null);
+    setLoadingVars(false);
+    setAdding(false);
+  };
+
   const handleLoadVariables = async () => {
     const gen = opGen.current;
     setError(null);
@@ -184,15 +203,8 @@ export function AddNetcdfDialog({
           <SampleDataSelect
             samples={[{ label: t("addData.netcdf.sampleLabel"), value: SAMPLE_URL }]}
             onSelect={(sampleUrl) => {
-              // Cancel any in-flight variable load for the previous URL.
-              opGen.current += 1;
+              invalidateLoadedManifest();
               setUrl(sampleUrl);
-              // Invalidate any variables loaded from a previous URL.
-              setVariables([]);
-              setVariable("");
-              setLoadedRefs(null);
-              setStatus(null);
-              setError(null);
             }}
           />
           <div className="space-y-1.5">
@@ -203,15 +215,8 @@ export function AddNetcdfDialog({
                 placeholder="https://example.com/data.kerchunk.json"
                 value={url}
                 onChange={(event) => {
-                  // Cancel any in-flight variable load for the previous URL.
-                  opGen.current += 1;
+                  invalidateLoadedManifest();
                   setUrl(event.target.value);
-                  // Invalidate variables loaded from a different URL.
-                  setVariables([]);
-                  setVariable("");
-                  setLoadedRefs(null);
-                  setStatus(null);
-                  setError(null);
                 }}
               />
               <Button
@@ -223,6 +228,9 @@ export function AddNetcdfDialog({
                 {loadingVars ? "Loading..." : "Load variables"}
               </Button>
             </div>
+            {/* This dialog's prose is intentionally left in English for now:
+                it predates the Add Data i18n catalog and is out of scope for
+                this PR (only the new sample label is routed through t()). */}
             <p className="text-xs text-muted-foreground">
               Choose a sample dataset above, or paste your own kerchunk
               reference URL, then click Load variables.
