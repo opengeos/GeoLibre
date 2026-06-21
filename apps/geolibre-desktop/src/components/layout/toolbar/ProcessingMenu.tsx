@@ -210,6 +210,11 @@ export function ProcessingMenu({
             <DropdownMenuItem onSelect={() => setVectorToolOpen("voronoi")}>
               {t("toolbar.vectorTool.voronoi")}
             </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => setVectorToolOpen("cell-sectors")}
+            >
+              {t("toolbar.vectorTool.cellSectors")}
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="text-xs text-muted-foreground">
               {t("toolbar.item.subGroupOverlay")}
@@ -263,6 +268,25 @@ export function ProcessingMenu({
               onSelect={() => setVectorToolOpen("h3-bin-points")}
             >
               {t("toolbar.vectorTool.h3BinPoints")}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs text-muted-foreground">
+              {t("toolbar.item.subGroupMovement")}
+            </DropdownMenuLabel>
+            <DropdownMenuItem
+              onSelect={() => setVectorToolOpen("trajectory-speed")}
+            >
+              {t("toolbar.vectorTool.trajectorySpeed")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => setVectorToolOpen("detect-stops")}
+            >
+              {t("toolbar.vectorTool.detectStops")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => setVectorToolOpen("space-time-proximity")}
+            >
+              {t("toolbar.vectorTool.spaceTimeProximity")}
             </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>

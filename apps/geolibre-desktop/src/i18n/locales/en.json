@@ -1037,8 +1037,12 @@
       "smooth": "Smooth",
       "grid": "Regular grid",
       "voronoi": "Voronoi / Delaunay",
+      "cellSectors": "Cell-site coverage",
       "h3Grid": "Create H3 grid",
-      "h3BinPoints": "Bin points to H3"
+      "h3BinPoints": "Bin points to H3",
+      "trajectorySpeed": "Trajectory speed",
+      "detectStops": "Detect stops",
+      "spaceTimeProximity": "Space-time proximity"
     },
     "networkTool": {
       "isochrone": "Isochrone / service area",
@@ -1178,6 +1182,7 @@
       "subGroupJoin": "Join",
       "subGroupSelect": "Select",
       "subGroupH3": "H3",
+      "subGroupMovement": "Movement & time",
       "subGroupTerrain": "Terrain",
       "subGroupReproject": "Reproject",
       "subGroupClip": "Clip",

@@ -10,6 +10,8 @@ import difference from "@turf/difference";
 import union from "@turf/union";
 import voronoiDiagram from "@turf/voronoi";
 import tin from "@turf/tin";
+import sector from "@turf/sector";
+import distance from "@turf/distance";
 import bbox from "@turf/bbox";
 import booleanIntersects from "@turf/boolean-intersects";
 import booleanContains from "@turf/boolean-contains";
@@ -21,6 +23,7 @@ import type {
   FeatureCollection,
   GeoJsonProperties,
   Geometry,
+  LineString,
   Point,
   Polygon,
   Position,
@@ -1960,6 +1963,605 @@ export const voronoiTool: ProcessingAlgorithm = {
   },
 };
 
+/** Linear/angular units shared by the sector and proximity tools. */
+const LINEAR_UNITS = new Set(["kilometers", "meters", "miles"]);
+type LinearUnit = "kilometers" | "meters" | "miles";
+
+/**
+ * Read a feature property as a finite number, or null when it is missing or
+ * non-numeric. Reuses the aggregate engine's coercion (numbers pass through,
+ * numeric strings parse, booleans map to 1/0).
+ */
+function numberField(
+  props: GeoJsonProperties,
+  field: string | undefined,
+): number | null {
+  if (!field) return null;
+  return toNumeric(props?.[field]);
+}
+
+/**
+ * Parse a timestamp property to epoch milliseconds. Accepts parseable date
+ * strings (ISO-8601 etc.) and numeric times. Numbers are read by magnitude:
+ * >= 1e12 are taken as epoch milliseconds, and everything else as seconds
+ * (covering both Unix seconds, ~1.7e9, and a relative seconds counter — the
+ * usual numeric forms in GPS tracks). Returns null when unparseable.
+ */
+function parseTimestamp(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return null;
+    return Math.abs(value) >= 1e12 ? value : value * 1000;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed === "") return null;
+    // A bare numeric string is an epoch, not a date, so route it through the
+    // numeric branch ("1700000000" → Unix seconds, not "year 1700000000").
+    if (/^[-+]?\d+(?:\.\d+)?$/.test(trimmed)) return parseTimestamp(Number(trimmed));
+    const parsed = Date.parse(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+/** A point with a parsed timestamp, used by the movement tools. */
+interface TimedPoint {
+  coord: Position;
+  time: number;
+  props: GeoJsonProperties;
+}
+
+/**
+ * Collect timed point features grouped by an optional id field (each distinct
+ * value is one target/trajectory), sorted by time within each group. Points
+ * lacking a parseable timestamp are dropped and counted in `skipped`.
+ */
+function collectTimedPoints(
+  fc: FeatureCollection,
+  timeField: string,
+  idField: string | undefined,
+): { groups: Map<string, TimedPoint[]>; skipped: number } {
+  const groups = new Map<string, TimedPoint[]>();
+  let skipped = 0;
+  for (const point of collectPoints(fc)) {
+    const time = parseTimestamp(point.properties?.[timeField]);
+    if (time === null) {
+      skipped += 1;
+      continue;
+    }
+    const key = idField ? String(point.properties?.[idField] ?? "") : "__all__";
+    const entry: TimedPoint = {
+      coord: point.geometry.coordinates,
+      time,
+      props: point.properties ?? {},
+    };
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(entry);
+    else groups.set(key, [entry]);
+  }
+  for (const bucket of groups.values()) bucket.sort((a, b) => a.time - b.time);
+  return { groups, skipped };
+}
+
+export const cellSectorsTool: ProcessingAlgorithm = {
+  id: "cell-sectors",
+  name: "Cell-site coverage",
+  description:
+    "Build antenna sector/wedge polygons from point sites using azimuth, radius and beamwidth (read from attribute fields or fixed values). Useful for cell-tower coverage, like QGIS Shape Tools.",
+  group: "Geometry",
+  parameters: [
+    {
+      id: "layer",
+      label: "Input point layer",
+      type: "layer",
+      required: true,
+      geometryFilter: ["point"],
+    },
+    {
+      id: "azimuthField",
+      label: "Azimuth field (°)",
+      type: "field",
+      fieldSource: "layer",
+      description:
+        "Direction the sector faces, in degrees clockwise from north. Falls back to the fixed azimuth when blank or non-numeric.",
+    },
+    {
+      id: "azimuth",
+      label: "Azimuth (fixed, °)",
+      type: "number",
+      default: 0,
+      step: 1,
+    },
+    {
+      id: "radiusField",
+      label: "Radius field",
+      type: "field",
+      fieldSource: "layer",
+      description:
+        "Coverage radius. Falls back to the fixed radius when blank or non-numeric.",
+    },
+    {
+      id: "radius",
+      label: "Radius (fixed)",
+      type: "number",
+      default: 1,
+      min: 0,
+      step: 0.1,
+    },
+    {
+      id: "angleField",
+      label: "Beamwidth field (°)",
+      type: "field",
+      fieldSource: "layer",
+      description:
+        "Angular width of the sector. Falls back to the fixed beamwidth when blank or non-numeric.",
+    },
+    {
+      id: "angle",
+      label: "Beamwidth (fixed, °)",
+      type: "number",
+      default: 65,
+      min: 0,
+      max: 360,
+      step: 1,
+    },
+    {
+      id: "units",
+      label: "Radius units",
+      type: "select",
+      default: "kilometers",
+      options: [
+        { value: "kilometers", label: "Kilometers" },
+        { value: "meters", label: "Meters" },
+        { value: "miles", label: "Miles" },
+      ],
+    },
+  ],
+  run: (ctx) => {
+    const fc = requireFeatures(ctx);
+    if (!fc) return;
+    const azimuthField =
+      (ctx.parameters.azimuthField as string)?.trim() || undefined;
+    const radiusField =
+      (ctx.parameters.radiusField as string)?.trim() || undefined;
+    const angleField =
+      (ctx.parameters.angleField as string)?.trim() || undefined;
+    const azimuthDefault = numberParam(ctx, "azimuth", 0);
+    const radiusDefault = numberParam(ctx, "radius", 1);
+    const angleDefault = numberParam(ctx, "angle", 65);
+    const units = (ctx.parameters.units as string) || "kilometers";
+    if (!LINEAR_UNITS.has(units)) {
+      ctx.log(`Error: unknown units '${units}'`);
+      return;
+    }
+    const points = collectPoints(fc);
+    if (!points.length) {
+      ctx.log("Error: the input layer has no point features");
+      return;
+    }
+    const sectors: Feature<Polygon | MultiPolygon>[] = [];
+    let skipped = 0;
+    for (const point of points) {
+      const props = point.properties ?? {};
+      const azimuth = numberField(props, azimuthField) ?? azimuthDefault;
+      const radius = numberField(props, radiusField) ?? radiusDefault;
+      let angle = numberField(props, angleField) ?? angleDefault;
+      // A non-positive radius or beamwidth has no coverage to draw; skip it.
+      if (!(radius > 0) || !(angle > 0)) {
+        skipped += 1;
+        continue;
+      }
+      // turf's sector is undefined for a full turn, so clamp to 360 (which it
+      // renders as a circle) for near-omnidirectional sites.
+      if (angle > 360) angle = 360;
+      const full = angle >= 360;
+      const bearing1 = full ? 0 : azimuth - angle / 2;
+      const bearing2 = full ? 360 : azimuth + angle / 2;
+      const wedge = sector(point.geometry.coordinates, radius, bearing1, bearing2, {
+        units: units as LinearUnit,
+      });
+      if (!wedge?.geometry) {
+        skipped += 1;
+        continue;
+      }
+      wedge.properties = { ...props, azimuth, radius, beamwidth: angle };
+      sectors.push(wedge as Feature<Polygon | MultiPolygon>);
+    }
+    if (skipped) {
+      ctx.log(`Skipped ${skipped} site(s) with a non-positive radius or beamwidth`);
+    }
+    ctx.log(
+      `Cell-site coverage: built ${sectors.length} sector(s) from ${points.length} site(s)`,
+    );
+    ctx.addResultLayer?.("Cell-site coverage", featureCollection(sectors));
+  },
+};
+
+/** Multipliers from metres-per-second to each supported speed unit. */
+const SPEED_FACTORS: Record<string, number> = {
+  ms: 1,
+  kmh: 3.6,
+  mph: 2.2369362920544,
+};
+
+export const trajectorySpeedTool: ProcessingAlgorithm = {
+  id: "trajectory-speed",
+  name: "Trajectory speed",
+  description:
+    "Order points by time (per target) and connect consecutive fixes into segments carrying distance, duration and speed. Like QGIS TrajecTools.",
+  group: "Movement",
+  parameters: [
+    {
+      id: "layer",
+      label: "Input point layer",
+      type: "layer",
+      required: true,
+      geometryFilter: ["point"],
+    },
+    {
+      id: "timeField",
+      label: "Time field",
+      type: "field",
+      fieldSource: "layer",
+      required: true,
+      description:
+        "Timestamp per fix: an ISO date/time string or an epoch (seconds or milliseconds).",
+    },
+    {
+      id: "idField",
+      label: "Target id field",
+      type: "field",
+      fieldSource: "layer",
+      description:
+        "Splits the points into separate trajectories. Leave blank to treat all points as one target.",
+    },
+    {
+      id: "speedUnits",
+      label: "Speed units",
+      type: "select",
+      default: "kmh",
+      options: [
+        { value: "kmh", label: "km/h" },
+        { value: "ms", label: "m/s" },
+        { value: "mph", label: "mph" },
+      ],
+    },
+  ],
+  run: (ctx) => {
+    const fc = requireFeatures(ctx);
+    if (!fc) return;
+    const timeField = (ctx.parameters.timeField as string)?.trim();
+    if (!timeField) {
+      ctx.log("Error: a time field is required");
+      return;
+    }
+    const idField = (ctx.parameters.idField as string)?.trim() || undefined;
+    const speedUnits = (ctx.parameters.speedUnits as string) || "kmh";
+    const factor = SPEED_FACTORS[speedUnits];
+    if (factor === undefined) {
+      ctx.log(`Error: unknown speed units '${speedUnits}'`);
+      return;
+    }
+    const { groups, skipped } = collectTimedPoints(fc, timeField, idField);
+    const segments: Feature<LineString>[] = [];
+    for (const [key, pts] of groups) {
+      for (let i = 1; i < pts.length; i += 1) {
+        const a = pts[i - 1];
+        const b = pts[i];
+        const meters = distance(a.coord, b.coord, { units: "meters" });
+        const seconds = (b.time - a.time) / 1000;
+        // Equal timestamps (the only non-positive gap after sorting) give an
+        // undefined speed; emit the segment with null rather than Infinity.
+        const speed =
+          seconds > 0 ? Math.round((meters / seconds) * factor * 1000) / 1000 : null;
+        segments.push({
+          type: "Feature",
+          properties: {
+            ...(idField ? { [idField]: key } : {}),
+            from_time: a.props?.[timeField] ?? null,
+            to_time: b.props?.[timeField] ?? null,
+            duration_s: Math.round(seconds),
+            distance_m: Math.round(meters * 100) / 100,
+            speed,
+            speed_units: speedUnits,
+          },
+          geometry: { type: "LineString", coordinates: [a.coord, b.coord] },
+        });
+      }
+    }
+    if (skipped) ctx.log(`Skipped ${skipped} point(s) with no parseable time`);
+    if (!segments.length) {
+      ctx.log("Error: need at least two timed fixes in a target to build a segment");
+      return;
+    }
+    ctx.log(
+      `Trajectory speed: built ${segments.length} segment(s) across ${groups.size} target(s)`,
+    );
+    ctx.addResultLayer?.("Trajectory speed", featureCollection(segments));
+  },
+};
+
+export const detectStopsTool: ProcessingAlgorithm = {
+  id: "detect-stops",
+  name: "Detect stops",
+  description:
+    "Find places where a target dwells: runs of consecutive fixes that stay within a distance (absorbing GPS scatter) for at least a minimum duration. Outputs one point per stop. Like QGIS TrajecTools.",
+  group: "Movement",
+  parameters: [
+    {
+      id: "layer",
+      label: "Input point layer",
+      type: "layer",
+      required: true,
+      geometryFilter: ["point"],
+    },
+    {
+      id: "timeField",
+      label: "Time field",
+      type: "field",
+      fieldSource: "layer",
+      required: true,
+      description:
+        "Timestamp per fix: an ISO date/time string or an epoch (seconds or milliseconds).",
+    },
+    {
+      id: "idField",
+      label: "Target id field",
+      type: "field",
+      fieldSource: "layer",
+      description:
+        "Detects stops per target. Leave blank to treat all points as one target.",
+    },
+    {
+      id: "maxDistance",
+      label: "Max distance (m)",
+      type: "number",
+      required: true,
+      default: 50,
+      min: 0,
+      step: 1,
+      description:
+        "A fix stays in the current stop while it is within this distance of the stop's first fix. Set it to your GPS scatter radius.",
+    },
+    {
+      id: "minDuration",
+      label: "Min duration (s)",
+      type: "number",
+      required: true,
+      default: 60,
+      min: 0,
+      step: 1,
+      description: "A dwell shorter than this is not reported as a stop.",
+    },
+  ],
+  run: (ctx) => {
+    const fc = requireFeatures(ctx);
+    if (!fc) return;
+    const timeField = (ctx.parameters.timeField as string)?.trim();
+    if (!timeField) {
+      ctx.log("Error: a time field is required");
+      return;
+    }
+    const idField = (ctx.parameters.idField as string)?.trim() || undefined;
+    const maxDistance = numberParam(ctx, "maxDistance", 50);
+    const minDurationMs = numberParam(ctx, "minDuration", 60) * 1000;
+    const { groups, skipped } = collectTimedPoints(fc, timeField, idField);
+    const stops: Feature<Point>[] = [];
+    for (const [key, pts] of groups) {
+      let i = 0;
+      while (i < pts.length) {
+        let j = i + 1;
+        // Extend the run while each later fix stays within maxDistance of the
+        // anchor (the run's first fix), so brief GPS scatter around one spot is
+        // absorbed into a single stop.
+        while (
+          j < pts.length &&
+          distance(pts[i].coord, pts[j].coord, { units: "meters" }) <= maxDistance
+        ) {
+          j += 1;
+        }
+        const run = pts.slice(i, j);
+        const durationMs = run[run.length - 1].time - run[0].time;
+        if (run.length >= 2 && durationMs >= minDurationMs) {
+          let sumLon = 0;
+          let sumLat = 0;
+          for (const p of run) {
+            sumLon += p.coord[0];
+            sumLat += p.coord[1];
+          }
+          stops.push({
+            type: "Feature",
+            properties: {
+              ...(idField ? { [idField]: key } : {}),
+              arrival: run[0].props?.[timeField] ?? null,
+              departure: run[run.length - 1].props?.[timeField] ?? null,
+              duration_s: Math.round(durationMs / 1000),
+              n_points: run.length,
+            },
+            geometry: {
+              type: "Point",
+              coordinates: [sumLon / run.length, sumLat / run.length],
+            },
+          });
+          i = j; // a fix belongs to at most one stop
+        } else {
+          i += 1; // not a stop; advance and retry from the next fix
+        }
+      }
+    }
+    if (skipped) ctx.log(`Skipped ${skipped} point(s) with no parseable time`);
+    ctx.log(
+      `Detect stops: found ${stops.length} stop(s) across ${groups.size} target(s)`,
+    );
+    ctx.addResultLayer?.("Stops", featureCollection(stops));
+  },
+};
+
+/** Worst-case pair cap for the space-time proximity scan. */
+const PROXIMITY_MAX_PAIRS = 5_000_000;
+/** Multipliers from each supported time unit to milliseconds. */
+const TIME_UNIT_MS: Record<string, number> = {
+  seconds: 1000,
+  minutes: 60_000,
+  hours: 3_600_000,
+};
+
+export const spaceTimeProximityTool: ProcessingAlgorithm = {
+  id: "space-time-proximity",
+  name: "Space-time proximity",
+  description:
+    "Find pairs of points close in both space and time — e.g. two targets meeting. Outputs a line connecting each qualifying pair, carrying the distance and time gap.",
+  group: "Movement",
+  parameters: [
+    {
+      id: "layer",
+      label: "Input point layer",
+      type: "layer",
+      required: true,
+      geometryFilter: ["point"],
+    },
+    {
+      id: "timeField",
+      label: "Time field",
+      type: "field",
+      fieldSource: "layer",
+      required: true,
+      description:
+        "Timestamp per point: an ISO date/time string or an epoch (seconds or milliseconds).",
+    },
+    {
+      id: "idField",
+      label: "Target id field",
+      type: "field",
+      fieldSource: "layer",
+      description:
+        "When set, only points with DIFFERENT id values are paired (encounters between distinct targets). Leave blank to consider every pair.",
+    },
+    {
+      id: "maxDistance",
+      label: "Max distance",
+      type: "number",
+      required: true,
+      default: 100,
+      min: 0,
+      step: 1,
+    },
+    {
+      id: "distanceUnits",
+      label: "Distance units",
+      type: "select",
+      default: "meters",
+      options: [
+        { value: "meters", label: "Meters" },
+        { value: "kilometers", label: "Kilometers" },
+        { value: "miles", label: "Miles" },
+      ],
+    },
+    {
+      id: "maxTime",
+      label: "Max time difference",
+      type: "number",
+      required: true,
+      default: 5,
+      min: 0,
+      step: 1,
+    },
+    {
+      id: "timeUnits",
+      label: "Time units",
+      type: "select",
+      default: "minutes",
+      options: [
+        { value: "seconds", label: "Seconds" },
+        { value: "minutes", label: "Minutes" },
+        { value: "hours", label: "Hours" },
+      ],
+    },
+  ],
+  run: (ctx) => {
+    const fc = requireFeatures(ctx);
+    if (!fc) return;
+    const timeField = (ctx.parameters.timeField as string)?.trim();
+    if (!timeField) {
+      ctx.log("Error: a time field is required");
+      return;
+    }
+    const idField = (ctx.parameters.idField as string)?.trim() || undefined;
+    const maxDistance = numberParam(ctx, "maxDistance", 100);
+    const distanceUnits = (ctx.parameters.distanceUnits as string) || "meters";
+    if (!LINEAR_UNITS.has(distanceUnits)) {
+      ctx.log(`Error: unknown distance units '${distanceUnits}'`);
+      return;
+    }
+    const maxTimeValue = numberParam(ctx, "maxTime", 5);
+    const timeUnits = (ctx.parameters.timeUnits as string) || "minutes";
+    const timeFactor = TIME_UNIT_MS[timeUnits];
+    if (timeFactor === undefined) {
+      ctx.log(`Error: unknown time units '${timeUnits}'`);
+      return;
+    }
+    const maxTimeMs = maxTimeValue * timeFactor;
+    const timed: { coord: Position; time: number; id: string | null; props: GeoJsonProperties }[] =
+      [];
+    let skipped = 0;
+    for (const point of collectPoints(fc)) {
+      const time = parseTimestamp(point.properties?.[timeField]);
+      if (time === null) {
+        skipped += 1;
+        continue;
+      }
+      timed.push({
+        coord: point.geometry.coordinates,
+        time,
+        id: idField ? String(point.properties?.[idField] ?? "") : null,
+        props: point.properties ?? {},
+      });
+    }
+    const n = timed.length;
+    if ((n * (n - 1)) / 2 > PROXIMITY_MAX_PAIRS) {
+      ctx.log(
+        `Error: ${n} points form too many pairs (> ${PROXIMITY_MAX_PAIRS.toLocaleString()}); filter or split the layer first`,
+      );
+      return;
+    }
+    // Sort by time so the inner loop can stop once the time gap is exceeded.
+    timed.sort((a, b) => a.time - b.time);
+    const pairs: Feature<LineString>[] = [];
+    for (let i = 0; i < n; i += 1) {
+      for (let j = i + 1; j < n; j += 1) {
+        const dt = timed[j].time - timed[i].time; // >= 0 (sorted)
+        if (dt > maxTimeMs) break; // later j only widens the gap
+        if (idField && timed[i].id === timed[j].id) continue;
+        const dist = distance(timed[i].coord, timed[j].coord, {
+          units: distanceUnits as LinearUnit,
+        });
+        if (dist > maxDistance) continue;
+        pairs.push({
+          type: "Feature",
+          properties: {
+            ...(idField ? { id_a: timed[i].id, id_b: timed[j].id } : {}),
+            time_a: timed[i].props?.[timeField] ?? null,
+            time_b: timed[j].props?.[timeField] ?? null,
+            time_diff_s: Math.round(dt / 1000),
+            distance: Math.round(dist * 1000) / 1000,
+            distance_units: distanceUnits,
+          },
+          geometry: {
+            type: "LineString",
+            coordinates: [timed[i].coord, timed[j].coord],
+          },
+        });
+      }
+    }
+    if (skipped) ctx.log(`Skipped ${skipped} point(s) with no parseable time`);
+    ctx.log(
+      `Space-time proximity: found ${pairs.length} pair(s) within ${maxDistance} ${distanceUnits} and ${maxTimeValue} ${timeUnits}`,
+    );
+    ctx.addResultLayer?.("Space-time proximity", featureCollection(pairs));
+  },
+};
+
 export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   bufferTool,
   centroidsTool,
@@ -1981,6 +2583,10 @@ export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   smoothTool,
   gridTool,
   voronoiTool,
+  cellSectorsTool,
+  trajectorySpeedTool,
+  detectStopsTool,
+  spaceTimeProximityTool,
   createH3GridTool,
   binPointsTool,
 ];

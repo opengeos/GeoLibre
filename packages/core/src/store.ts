@@ -87,8 +87,12 @@ export type VectorToolKind =
   | "smooth"
   | "grid"
   | "voronoi"
+  | "cell-sectors"
   | "h3-grid"
-  | "h3-bin-points";
+  | "h3-bin-points"
+  | "trajectory-speed"
+  | "detect-stops"
+  | "space-time-proximity";
 
 /** Identifiers of the network-analysis tools (`NETWORK_TOOLS` ids). */
 export type NetworkToolKind = "isochrone" | "od-matrix" | "sequential-route";
