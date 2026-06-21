@@ -1245,6 +1245,17 @@
       "projectName": "Project name",
       "storymapEllipsis": "Story Map..."
     },
+    "fileDrop": {
+      "overlayTitle": "Drop vector or raster files here to add layers",
+      "overlaySubtext": "Your data is added instantly as a new layer in the Layers panel on the left.",
+      "addedLayer": "Added \"{{name}}\" to the Layers panel.",
+      "added": "Added {{summary}} to the Layers panel.",
+      "vectorLayers_one": "{{count}} vector layer",
+      "vectorLayers_other": "{{count}} vector layers",
+      "rasterLayers_one": "{{count}} raster layer",
+      "rasterLayers_other": "{{count}} raster layers",
+      "and": "and"
+    },
     "error": {
       "couldNotOpenProject": "Could not open project.",
       "invalidProjectUrl": "Enter a valid HTTP or HTTPS project URL.",

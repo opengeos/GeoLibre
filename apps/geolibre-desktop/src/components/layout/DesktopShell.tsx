@@ -753,20 +753,37 @@ export function DesktopShell({
         throw new Error("Drop a supported vector or raster file.");
       }
       if (importedLayers.length) addImportedVectorLayers(importedLayers);
+      // Name the layer when a single vector file was dropped (the common case)
+      // so the confirmation echoes what the user just added, instead of a bare
+      // count that can read like "nothing happened" while the source panel
+      // stays open (opengeos/GeoLibre#666).
+      if (importedLayers.length === 1 && !rasterCount) {
+        const only = importedLayers[0];
+        setDropMessage(
+          t("toolbar.fileDrop.addedLayer", {
+            name: only.name ?? layerNameFromPath(only.path),
+          }),
+        );
+        return;
+      }
       const parts: string[] = [];
       if (importedLayers.length) {
         parts.push(
-          `${importedLayers.length} vector layer${
-            importedLayers.length === 1 ? "" : "s"
-          }`,
+          t("toolbar.fileDrop.vectorLayers", { count: importedLayers.length }),
         );
       }
       if (rasterCount) {
-        parts.push(`${rasterCount} raster layer${rasterCount === 1 ? "" : "s"}`);
+        parts.push(
+          t("toolbar.fileDrop.rasterLayers", { count: rasterCount }),
+        );
       }
-      setDropMessage(`Added ${parts.join(" and ")}.`);
+      setDropMessage(
+        t("toolbar.fileDrop.added", {
+          summary: parts.join(` ${t("toolbar.fileDrop.and")} `),
+        }),
+      );
     },
-    [addImportedVectorLayers],
+    [addImportedVectorLayers, t],
   );
 
   useEffect(() => {
@@ -1437,8 +1454,13 @@ export function DesktopShell({
       />
       {isDraggingFiles ? (
         <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm">
-          <div className="rounded-md border bg-background px-4 py-3 text-sm font-medium shadow-lg">
-            Drop vector or raster files to add layers
+          <div className="max-w-sm rounded-md border bg-background px-4 py-3 text-center shadow-lg">
+            <p className="text-sm font-medium">
+              {t("toolbar.fileDrop.overlayTitle")}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t("toolbar.fileDrop.overlaySubtext")}
+            </p>
           </div>
         </div>
       ) : null}
