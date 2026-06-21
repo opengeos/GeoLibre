@@ -88,6 +88,44 @@ describe("cell-site coverage", () => {
     assert.equal(result!.features[0].properties?.radius, 2);
     assert.ok(messages.some((m) => m.includes("Skipped 1")));
   });
+
+  it("builds a sector that sweeps through north (negative bearing1)", () => {
+    // azimuth 5, beamwidth 30 -> bearing1 = -10, bearing2 = 20 (crosses north).
+    const sites = pointLayer("sites", [[0, 0, {}]]);
+    const { result } = runTool("cell-sectors", [sites], {
+      layer: "sites",
+      azimuth: 5,
+      radius: 1,
+      angle: 30,
+      units: "kilometers",
+    });
+    assert.equal(result!.features.length, 1);
+    const sector = result!.features[0];
+    assert.equal(sector.geometry?.type, "Polygon");
+    assert.ok(
+      (sector.geometry as { coordinates: number[][][] }).coordinates[0].length >
+        3,
+    );
+    assert.equal(sector.properties?.beamwidth, 30);
+  });
+
+  it("clamps a beamwidth over 360 to a full circle", () => {
+    const sites = pointLayer("sites", [[0, 0, {}]]);
+    const { result } = runTool("cell-sectors", [sites], {
+      layer: "sites",
+      azimuth: 0,
+      radius: 1,
+      angle: 400, // > 360 -> clamped, rendered as a full circle
+      units: "kilometers",
+    });
+    assert.equal(result!.features.length, 1);
+    const sector = result!.features[0];
+    assert.ok(
+      sector.geometry?.type === "Polygon" ||
+        sector.geometry?.type === "MultiPolygon",
+    );
+    assert.equal(sector.properties?.beamwidth, 360);
+  });
 });
 
 describe("trajectory speed", () => {

@@ -2040,6 +2040,10 @@ function collectTimedPoints(
       skipped += 1;
       continue;
     }
+    // The "__all__" sentinel is only used when no id field is set; in that case
+    // the `if (idField)` branch never runs, so a real trajectory whose id value
+    // happens to be "__all__" cannot collide with it (the two paths are mutually
+    // exclusive within a single call).
     let key = "__all__";
     if (idField) {
       const rawId = point.properties?.[idField];
@@ -2317,8 +2321,14 @@ export const trajectorySpeedTool: ProcessingAlgorithm = {
   },
 };
 
-/** Point cap for the O(n²)-per-trajectory stop scan, to keep the UI responsive. */
-const STOPS_MAX_POINTS = 50_000;
+/**
+ * Point cap for the stop scan. The scan re-anchors on every non-stop advance
+ * (see the loop below), so its worst case is O(n²) Haversine calls on the UI
+ * thread. 5,000 points bounds that to ~12.5M calls (~1-2 s) in the degenerate
+ * case; the typical case is far cheaper because a formed stop jumps the anchor.
+ * Larger inputs get a clear "split the layer" error rather than a frozen tab.
+ */
+const STOPS_MAX_POINTS = 5_000;
 
 export const detectStopsTool: ProcessingAlgorithm = {
   id: "detect-stops",
@@ -2401,6 +2411,11 @@ export const detectStopsTool: ProcessingAlgorithm = {
     for (const [key, pts] of groups) {
       let i = 0;
       while (i < pts.length) {
+        // `j` restarts from i+1 every iteration by design: the distance test is
+        // relative to the current anchor pts[i], so when a run is rejected and i
+        // advances by one (below), the next anchor must be re-scanned. This is
+        // the source of the O(n²) worst case bounded by STOPS_MAX_POINTS; do not
+        // "optimize" it into a monotonic pointer, which would change the result.
         let j = i + 1;
         // Extend the run while each later fix stays within maxDistance of the
         // anchor (the run's first fix), so brief GPS scatter around one spot is
@@ -2664,11 +2679,13 @@ export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   gridTool,
   voronoiTool,
   cellSectorsTool,
+  createH3GridTool,
+  binPointsTool,
+  // Movement & time tools come after H3 so the dialog's group order (derived
+  // from this array) matches the Processing → Vector menu order.
   trajectorySpeedTool,
   detectStopsTool,
   spaceTimeProximityTool,
-  createH3GridTool,
-  binPointsTool,
 ];
 
 export function getVectorTool(id: string): ProcessingAlgorithm | undefined {
