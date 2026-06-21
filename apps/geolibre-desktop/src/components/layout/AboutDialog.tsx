@@ -189,12 +189,6 @@ export function AboutDialog({
             <span className="text-muted-foreground">{t("about.version")}</span>
             <span className="font-mono text-foreground">v{APP_VERSION}</span>
           </div>
-          <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
-            <span className="text-muted-foreground">
-              {t("about.projectFormat")}
-            </span>
-            <span className="font-mono text-foreground">{PROJECT_VERSION}</span>
-          </div>
           <Button
             className="w-full justify-between"
             disabled={updateStatus === "checking"}
@@ -210,7 +204,9 @@ export function AboutDialog({
               />
               {updateStatus === "checking"
                 ? t("about.checking")
-                : t("about.checkForUpdates")}
+                : updateStatus === "error"
+                  ? t("about.tryAgain")
+                  : t("about.checkForUpdates")}
             </span>
           </Button>
           {updateStatus !== "idle" && updateStatus !== "checking" ? (
@@ -270,6 +266,9 @@ export function AboutDialog({
                       {updateError}
                     </div>
                   ) : null}
+                  <div className="text-xs text-muted-foreground">
+                    {t("updates.error.viewDownloadsHint")}
+                  </div>
                   <Button
                     className="w-full justify-between"
                     onClick={() => void openExternalLink(UPDATE_URL)}
@@ -283,25 +282,33 @@ export function AboutDialog({
               ) : null}
             </div>
           ) : null}
-          {LINKS.map((link) => (
-            <a
-              key={link.href}
-              className="flex items-center justify-between rounded-md border px-3 py-2 text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-              href={link.href}
-              onClick={(event) => {
-                event.preventDefault();
-                void openExternalLink(link.href);
-              }}
-              rel="noreferrer"
-              target="_blank"
-            >
-              <span>{t(link.labelKey)}</span>
-              <span className="inline-flex items-center gap-2 text-muted-foreground">
-                {link.href.replace(/^https?:\/\//, "")}
-                <ExternalLink className="h-3.5 w-3.5" />
-              </span>
-            </a>
-          ))}
+          <div className="space-y-2 border-t pt-3">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {t("about.generalSectionTitle")}
+            </div>
+            {LINKS.map((link) => (
+              <a
+                key={link.href}
+                className="flex items-center justify-between rounded-md border px-3 py-2 text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                href={link.href}
+                onClick={(event) => {
+                  event.preventDefault();
+                  void openExternalLink(link.href);
+                }}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <span>{t(link.labelKey)}</span>
+                <span className="inline-flex items-center gap-2 text-muted-foreground">
+                  {link.href.replace(/^https?:\/\//, "")}
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </span>
+              </a>
+            ))}
+          </div>
+          <div className="pt-1 text-center text-xs text-muted-foreground">
+            {t("about.projectFormat")} {PROJECT_VERSION}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

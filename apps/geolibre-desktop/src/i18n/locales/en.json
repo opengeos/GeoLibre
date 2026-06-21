@@ -6,9 +6,11 @@
     "version": "Version",
     "projectFormat": "Project format",
     "checkForUpdates": "Check for updates",
+    "tryAgain": "Try again",
     "checking": "Checking for updates",
     "upToDate": "You are up to date ({{version}}).",
     "upToDateNoVersion": "You are up to date.",
+    "generalSectionTitle": "General",
     "homePage": "Home page",
     "githubRepository": "GitHub repository"
   },
@@ -38,7 +40,8 @@
       "http": "GitHub returned {{status}}.",
       "noTag": "The latest release does not include a version tag.",
       "network": "Could not reach GitHub. Check your connection and try again.",
-      "viewDownloads": "View downloads"
+      "viewDownloads": "View downloads",
+      "viewDownloadsHint": "Opens the GeoLibre downloads page in your browser so you can check the latest version manually."
     },
     "startup": {
       "title": "Update available",
