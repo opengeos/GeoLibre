@@ -26,6 +26,9 @@ Source1:        %{appid}.metainfo.xml
 Source2:        LICENSE
 
 Provides:       geolibre-desktop = %{version}-%{release}
+# The upstream release RPM (manually installed) is named geo-libre-desktop and
+# drops the same files; declare the conflict for a clean dnf message.
+Conflicts:      geo-libre-desktop
 
 BuildRequires:  cpio
 BuildRequires:  desktop-file-utils
@@ -54,8 +57,10 @@ rpm2cpio %{SOURCE0} | cpio -idmv
 # launchable expect this), add the Categories the upstream bundle leaves empty,
 # and give it a clean Comment. Find the source file rather than hardcoding its
 # name, so an upstream rename fails loudly instead of silently dropping it.
-_desktop_src="$(find "%{buildroot}%{_datadir}/applications/" -name '*.desktop' | head -1)"
-test -n "$_desktop_src" || { echo "no .desktop file in the upstream RPM payload" >&2; exit 1; }
+_desktop_dir="%{buildroot}%{_datadir}/applications"
+_desktop_count="$(find "$_desktop_dir" -name '*.desktop' | wc -l)"
+[ "$_desktop_count" -eq 1 ] || { echo "expected exactly one .desktop in the upstream RPM payload, found $_desktop_count" >&2; exit 1; }
+_desktop_src="$(find "$_desktop_dir" -name '*.desktop')"
 mv "$_desktop_src" "%{buildroot}%{_datadir}/applications/%{appid}.desktop"
 desktop-file-edit \
   --set-key=Categories --set-value="Science;Geoscience;Geography;" \
