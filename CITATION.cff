@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+title: GeoLibre
+message: "If you use this software, please cite it using the metadata from this file."
+type: software
+abstract: "GeoLibre is a free and open-source, lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data across web browsers, desktop applications, mobile devices, and Jupyter notebooks while keeping data local and private."
+authors:
+  - given-names: Qiusheng
+    family-names: Wu
+    email: giswqs@gmail.com
+    affiliation: "University of Tennessee, Knoxville, USA"
+    orcid: "https://orcid.org/0000-0001-5437-4073"
+version: 1.5.0
+date-released: 2026-06-20
+doi: 10.5281/zenodo.20785400
+repository-code: "https://github.com/opengeos/GeoLibre"
+url: "https://geolibre.app"
+license: MIT
+keywords:
+  - GIS
+  - geospatial
+  - remote sensing
+  - data visualization
+  - MapLibre
+  - Python
