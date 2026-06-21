@@ -1066,36 +1066,48 @@ const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
   // Load the splatting control from maplibre-gl-splat directly: the copy
   // re-exported (and bundled) by maplibre-gl-components lags behind, so its
   // sample-data dropdown would be missing if taken from there.
+  // Load the dedicated splat control separately, but do not let a failure here
+  // take down every other component control. Promise.all rejects the whole
+  // shared promise if any input rejects, so a single failed splat import (a
+  // code-split chunk network hiccup, a missing dev-checkout package) would have
+  // broken BookmarkControl, MeasureControl, etc. for the life of the page. On
+  // failure, fall back to the (older) GaussianSplatControl bundled in
+  // maplibre-gl-components so the rest of the controls still load.
   componentsConstructorsPromise ??= Promise.all([
     import("maplibre-gl-components"),
-    import("maplibre-gl-splat"),
-  ]).then(
-    ([
-      {
-        AddVectorControl: AddVectorControlClass,
-        BookmarkControl: BookmarkControlClass,
-        CogLayerControl: CogLayerControlClass,
-        ColorbarGuiControl: ColorbarGuiControlClass,
-        ControlGrid: ControlGridClass,
-        HtmlGuiControl: HtmlGuiControlClass,
-        LegendGuiControl: LegendGuiControlClass,
-        LidarControl: LidarControlClass,
-        LidarLayerAdapter: LidarLayerAdapterClass,
-        MeasureControl: MeasureControlClass,
-        MinimapControl: MinimapControlClass,
-        PMTilesLayerControl: PMTilesLayerControlClass,
-        PrintControl: PrintControlClass,
-        SearchControl: SearchControlClass,
-        SpinGlobeControl: SpinGlobeControlClass,
-        StacSearchControl: StacSearchControlClass,
-        ViewStateControl: ViewStateControlClass,
-        ZarrLayerControl: ZarrLayerControlClass,
-      },
-      {
-        GaussianSplatControl: GaussianSplatControlClass,
-        GaussianSplatLayerAdapter: GaussianSplatLayerAdapterClass,
-      },
-    ]) => ({
+    import("maplibre-gl-splat").catch((error: unknown) => {
+      console.warn(
+        "maplibre-gl-splat failed to load; falling back to the splat control bundled in maplibre-gl-components",
+        error
+      );
+      return null;
+    }),
+  ]).then(([components, splat]) => {
+    const {
+      AddVectorControl: AddVectorControlClass,
+      BookmarkControl: BookmarkControlClass,
+      CogLayerControl: CogLayerControlClass,
+      ColorbarGuiControl: ColorbarGuiControlClass,
+      ControlGrid: ControlGridClass,
+      HtmlGuiControl: HtmlGuiControlClass,
+      LegendGuiControl: LegendGuiControlClass,
+      LidarControl: LidarControlClass,
+      LidarLayerAdapter: LidarLayerAdapterClass,
+      MeasureControl: MeasureControlClass,
+      MinimapControl: MinimapControlClass,
+      PMTilesLayerControl: PMTilesLayerControlClass,
+      PrintControl: PrintControlClass,
+      SearchControl: SearchControlClass,
+      SpinGlobeControl: SpinGlobeControlClass,
+      StacSearchControl: StacSearchControlClass,
+      ViewStateControl: ViewStateControlClass,
+      ZarrLayerControl: ZarrLayerControlClass,
+    } = components;
+    const GaussianSplatControlClass = (splat?.GaussianSplatControl ??
+      components.GaussianSplatControl) as GaussianSplatControlConstructor;
+    const GaussianSplatLayerAdapterClass = (splat?.GaussianSplatLayerAdapter ??
+      components.GaussianSplatLayerAdapter) as GaussianSplatLayerAdapterConstructor;
+    return {
       AddVectorControl: AddVectorControlClass,
       BookmarkControl: BookmarkControlClass,
       CogLayerControl: CogLayerControlClass,
@@ -1116,8 +1128,8 @@ const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
       StacSearchControl: StacSearchControlClass,
       ViewStateControl: ViewStateControlClass,
       ZarrLayerControl: ZarrLayerControlClass,
-    })
-  );
+    };
+  });
   return componentsConstructorsPromise;
 };
 
