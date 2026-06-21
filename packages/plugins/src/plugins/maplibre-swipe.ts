@@ -18,7 +18,7 @@ let unsubscribeBasemap: (() => void) | null = null;
 export const maplibreSwipePlugin: GeoLibrePlugin = {
   id: "maplibre-gl-swipe",
   name: "Layer Swipe",
-  version: "0.7.1",
+  version: "0.9.1",
   activate: (app: GeoLibreAppAPI) => {
     swipeControl = new SwipeControl(
       getSwipeControlOptions(app, savedSwipeState ?? undefined),
