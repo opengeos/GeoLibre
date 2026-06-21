@@ -4,7 +4,6 @@
     "title": "About GeoLibre",
     "description": "GeoLibre is a lightweight cloud-native desktop GIS.",
     "version": "Version",
-    "projectFormat": "Project format",
     "checkForUpdates": "Check for updates",
     "tryAgain": "Try again",
     "checking": "Checking for updates",

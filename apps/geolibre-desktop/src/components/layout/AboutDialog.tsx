@@ -8,7 +8,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@geolibre/ui";
-import { PROJECT_VERSION } from "@geolibre/core";
 import { CheckCircle2, ExternalLink, Info, Map, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -309,10 +308,6 @@ export function AboutDialog({
                 </span>
               </a>
             ))}
-          </div>
-          <div className="pt-1 text-center text-xs text-muted-foreground">
-            {t("about.projectFormat")}{" "}
-            <span className="font-mono">{PROJECT_VERSION}</span>
           </div>
         </div>
       </DialogContent>
