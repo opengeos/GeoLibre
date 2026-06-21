@@ -19,6 +19,8 @@ set -euo pipefail
 
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "VERSION does not look like a semver string" >&2; exit 1; }
 [[ "$DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "DATE must be YYYY-MM-DD" >&2; exit 1; }
+# Reject syntactically valid but impossible dates (e.g. 2026-13-40).
+date -u -d "$DATE" +%F >/dev/null 2>&1 || { echo "DATE is not a valid calendar date" >&2; exit 1; }
 
 cat <<XML
 <?xml version="1.0" encoding="UTF-8"?>
@@ -56,7 +58,6 @@ cat <<XML
 
   <url type="homepage">https://geolibre.app/</url>
   <url type="bugtracker">https://github.com/opengeos/GeoLibre/issues</url>
-  <url type="help">https://geolibre.app/</url>
   <url type="vcs-browser">https://github.com/opengeos/GeoLibre</url>
 
   <developer id="app.geolibre">

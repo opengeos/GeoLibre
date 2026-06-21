@@ -19,10 +19,13 @@ set -euo pipefail
 
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "VERSION does not look like a semver string" >&2; exit 1; }
 [[ "$DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "DATE must be YYYY-MM-DD" >&2; exit 1; }
+# Reject syntactically valid but impossible dates (e.g. 2026-13-40).
+date -u -d "$DATE" +%F >/dev/null 2>&1 || { echo "DATE is not a valid calendar date" >&2; exit 1; }
 
 REPO="${REPO:-opengeos/GeoLibre}"
-# RPM %changelog wants "Wdy Mon DD YYYY"; derive it from the ISO date.
-CHANGELOG_DATE="$(date -u -d "$DATE" +"%a %b %d %Y")"
+# RPM %changelog wants "Wdy Mon D YYYY" with a space-padded day (%e, not %d), so
+# single-digit days read "Jun  7" rather than "Jun 07" (what rpmlint expects).
+CHANGELOG_DATE="$(date -u -d "$DATE" +"%a %b %e %Y")"
 
 # Shell-expanded: ${VERSION}, ${DATE}, ${REPO}, ${CHANGELOG_DATE}. Everything
 # escaped with \$ or \%{...} stays literal for rpmbuild.

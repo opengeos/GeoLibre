@@ -33,7 +33,6 @@
 
   <url type="homepage">https://geolibre.app/</url>
   <url type="bugtracker">https://github.com/opengeos/GeoLibre/issues</url>
-  <url type="help">https://geolibre.app/</url>
   <url type="vcs-browser">https://github.com/opengeos/GeoLibre</url>
 
   <developer id="app.geolibre">
