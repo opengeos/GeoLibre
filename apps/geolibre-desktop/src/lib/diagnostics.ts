@@ -423,10 +423,23 @@ export function installDiagnosticsCapture(): () => void {
       const isAbort =
         (error instanceof DOMException || error instanceof Error) &&
         error.name === "AbortError";
+      // A "Failed to fetch"/"Load failed" thrown during the desktop startup
+      // window is the Tauri custom-protocol IPC warming up: the call is retried
+      // over postMessage and the app recovers. Record it as a benign warning
+      // rather than a critical network error so it does not surface as an
+      // alarming failure to a user inspecting the panel at launch (issue #657).
+      // It mirrors the unhandled-rejection downgrade below; genuine failures
+      // outside the window are still flagged as errors.
+      const benignStartup = !isAbort && !optional && isBenignStartupFetch(error);
       appendDiagnostic({
         category: "network",
-        level: isAbort || optional ? "info" : "error",
-        message: isAbort ? `${method} aborted` : `${method} request failed`,
+        level:
+          isAbort || optional ? "info" : benignStartup ? "warning" : "error",
+        message: isAbort
+          ? `${method} aborted`
+          : benignStartup
+            ? `${method} request failed (benign Tauri custom-protocol warm-up)`
+            : `${method} request failed`,
         detail: isAbort ? undefined : formatUnknown(error),
         durationMs: Math.round(performance.now() - startedAt),
         method,

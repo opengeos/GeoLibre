@@ -357,4 +357,48 @@ describe("diagnostics startup transient suppression", () => {
       setCaptureNetworkInfo(false);
     }
   });
+
+  it("downgrades a benign startup fetch failure under Tauri to a warning", async () => {
+    win.__TAURI_INTERNALS__ = {};
+    win.fetch = (() =>
+      Promise.reject(new TypeError("Load failed"))) as unknown as typeof fetch;
+    install();
+    await (win.fetch as typeof fetch)("http://ipc.localhost/main").catch(
+      () => {},
+    );
+    const [record] = getDiagnosticsSnapshot().records;
+    assert.equal(record.category, "network");
+    // The Tauri custom-protocol warm-up at launch retries over postMessage, so
+    // it is a benign transient rather than a critical error (issue #657).
+    assert.equal(record.level, "warning");
+    assert.equal(getDiagnosticsSnapshot().errorCount, 0);
+  });
+
+  it("keeps a startup fetch failure outside the Tauri runtime as an error", async () => {
+    win.fetch = (() =>
+      Promise.reject(new TypeError("Failed to fetch"))) as unknown as typeof fetch;
+    install();
+    await (win.fetch as typeof fetch)("https://example.com/data").catch(
+      () => {},
+    );
+    const [record] = getDiagnosticsSnapshot().records;
+    assert.equal(record.category, "network");
+    assert.equal(record.level, "error");
+    assert.equal(getDiagnosticsSnapshot().errorCount, 1);
+  });
+
+  it("flags a fetch failure after the startup window as an error under Tauri", async () => {
+    win.__TAURI_INTERNALS__ = {};
+    win.fetch = (() =>
+      Promise.reject(new TypeError("Load failed"))) as unknown as typeof fetch;
+    install();
+    // Jump past the grace window so the failure is no longer a startup transient.
+    Date.now = () => realDateNow() + 60_000;
+    await (win.fetch as typeof fetch)("http://ipc.localhost/main").catch(
+      () => {},
+    );
+    const [record] = getDiagnosticsSnapshot().records;
+    assert.equal(record.level, "error");
+    assert.equal(getDiagnosticsSnapshot().errorCount, 1);
+  });
 });
