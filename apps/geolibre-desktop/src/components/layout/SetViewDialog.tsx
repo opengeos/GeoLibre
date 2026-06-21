@@ -98,6 +98,9 @@ export function SetViewDialog({
       lon: decimalToDmsAxis(longitude, "lon"),
       lat: decimalToDmsAxis(latitude, "lat"),
     });
+    // Reopen with a clean slate: everything else is reseeded, so reset the
+    // format too rather than carrying over the last session's DD/DMS choice.
+    setFormat("dd");
     setError(null);
   }, [open, mapControllerRef]);
 
@@ -116,9 +119,13 @@ export function SetViewDialog({
   const changeFormat = (next: CoordFormat) => {
     if (next === format) return;
     if (next === "dms") {
+      // A blank DD field must stay blank in DMS, not become 0 0 0 (Number("")
+      // is 0); decimalToDmsAxis(NaN) returns empty parts.
+      const toNum = (value: string) =>
+        value.trim() === "" ? Number.NaN : Number(value);
       setDms({
-        lon: decimalToDmsAxis(Number(fields.longitude), "lon"),
-        lat: decimalToDmsAxis(Number(fields.latitude), "lat"),
+        lon: decimalToDmsAxis(toNum(fields.longitude), "lon"),
+        lat: decimalToDmsAxis(toNum(fields.latitude), "lat"),
       });
     } else {
       const longitude = dmsAxisToDecimal(dms.lon, "lon");
@@ -167,7 +174,13 @@ export function SetViewDialog({
       pitch < 0 ||
       !finite(bearing)
     ) {
-      setError(t("toolbar.setView.invalid"));
+      setError(
+        t(
+          format === "dms"
+            ? "toolbar.setView.invalidDms"
+            : "toolbar.setView.invalid",
+        ),
+      );
       return;
     }
 
@@ -234,9 +247,11 @@ export function SetViewDialog({
       <div className="space-y-1.5">
         <Label htmlFor={`set-view-${axis}-deg`}>{t(labelKey)}</Label>
         <div className="grid grid-cols-[repeat(3,minmax(0,1fr))_auto] gap-2">
+          {/* Minutes/seconds cap just under 60 to match the [0, 60) the
+              validator accepts, so the spinner can't reach a rejected value. */}
           {part("deg", "toolbar.setView.degrees", degMax, "°")}
-          {part("min", "toolbar.setView.minutes", 59, "′")}
-          {part("sec", "toolbar.setView.seconds", 60, "″")}
+          {part("min", "toolbar.setView.minutes", 59.999, "′")}
+          {part("sec", "toolbar.setView.seconds", 59.999, "″")}
           <Select
             id={`set-view-${axis}-dir`}
             className="w-16"
@@ -281,6 +296,10 @@ export function SetViewDialog({
             <SectionHeading>
               {t("toolbar.setView.sectionCoordinates")}
             </SectionHeading>
+            {/* Native radios (not buttons) so the browser gives the group its
+                roving tabindex and arrow-key navigation for free; each input is
+                absolutely positioned over its label so it stays clickable while
+                the label carries the segmented-control styling. */}
             <div
               role="radiogroup"
               aria-label={t("toolbar.setView.format")}
@@ -292,22 +311,27 @@ export function SetViewDialog({
                   ["dms", "toolbar.setView.formatDmsShort", "toolbar.setView.formatDms"],
                 ] as const
               ).map(([value, shortKey, fullKey]) => (
-                <button
+                <label
                   key={value}
-                  type="button"
-                  role="radio"
-                  aria-checked={format === value}
                   title={t(fullKey)}
-                  onClick={() => changeFormat(value)}
                   className={cn(
-                    "rounded-sm px-3 py-1 text-sm font-medium transition-colors",
+                    "relative cursor-pointer rounded-sm px-3 py-1 text-center text-sm font-medium transition-colors",
+                    "focus-within:outline-none focus-within:ring-2 focus-within:ring-ring",
                     format === value
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-muted",
                   )}
                 >
+                  <input
+                    type="radio"
+                    name="set-view-coord-format"
+                    value={value}
+                    checked={format === value}
+                    onChange={() => changeFormat(value)}
+                    className="absolute inset-0 m-0 cursor-pointer opacity-0"
+                  />
                   {t(shortKey)}
-                </button>
+                </label>
               ))}
             </div>
 

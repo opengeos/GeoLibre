@@ -931,7 +931,8 @@
       "pitch": "Pitch",
       "bearing": "Bearing",
       "go": "Go",
-      "invalid": "Enter a valid longitude (−180 to 180), latitude (−90 to 90), and zoom."
+      "invalid": "Enter a valid longitude (−180 to 180), latitude (−90 to 90), and zoom.",
+      "invalidDms": "Enter valid degrees, minutes (0 to 59), seconds (0 to 59), and zoom."
     },
     "commandGroup": {
       "project": "Project",
