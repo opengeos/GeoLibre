@@ -109,6 +109,9 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
       basemapControlPosition,
     );
     if (!added) {
+      // Tear the listener down too, or it outlives the nulled control: deactivate
+      // bails on `!basemapControl`, so it would never be cleaned up otherwise.
+      cleanupRuntimeEnvListener();
       basemapControl = null;
       return false;
     }

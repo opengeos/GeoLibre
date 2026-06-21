@@ -2073,7 +2073,7 @@ export const cellSectorsTool: ProcessingAlgorithm = {
   id: "cell-sectors",
   name: "Cell-site coverage",
   description:
-    "Build antenna sector/wedge polygons from point sites using azimuth, radius and beamwidth (read from attribute fields or fixed values). Useful for cell-tower coverage, like QGIS Shape Tools.",
+    "Build antenna sector/wedge polygons from point sites using azimuth, radius and beamwidth (read from attribute fields or fixed values). Beamwidth is clamped to 360° (a full circle); the recorded beamwidth reflects the clamped value. Useful for cell-tower coverage, like QGIS Shape Tools.",
   group: "Geometry",
   parameters: [
     {
@@ -2115,15 +2115,15 @@ export const cellSectorsTool: ProcessingAlgorithm = {
       step: 0.1,
     },
     {
-      id: "angleField",
+      id: "beamwidthField",
       label: "Beamwidth field (°)",
       type: "field",
       fieldSource: "layer",
       description:
-        "Angular width of the sector. Falls back to the fixed beamwidth when blank or non-numeric.",
+        "Angular width of the sector, clamped to 360° (a full circle). Falls back to the fixed beamwidth when blank or non-numeric.",
     },
     {
-      id: "angle",
+      id: "beamwidth",
       label: "Beamwidth (fixed, °)",
       type: "number",
       default: 65,
@@ -2150,11 +2150,11 @@ export const cellSectorsTool: ProcessingAlgorithm = {
       (ctx.parameters.azimuthField as string)?.trim() || undefined;
     const radiusField =
       (ctx.parameters.radiusField as string)?.trim() || undefined;
-    const angleField =
-      (ctx.parameters.angleField as string)?.trim() || undefined;
+    const beamwidthField =
+      (ctx.parameters.beamwidthField as string)?.trim() || undefined;
     const azimuthDefault = numberParam(ctx, "azimuth", 0);
     const radiusDefault = numberParam(ctx, "radius", 1);
-    const angleDefault = numberParam(ctx, "angle", 65);
+    const beamwidthDefault = numberParam(ctx, "beamwidth", 65);
     const units = (ctx.parameters.units as string) || "kilometers";
     if (!LINEAR_UNITS.has(units)) {
       ctx.log(`Error: unknown units '${units}'`);
@@ -2171,7 +2171,7 @@ export const cellSectorsTool: ProcessingAlgorithm = {
       const props = point.properties ?? {};
       const azimuth = numberField(props, azimuthField) ?? azimuthDefault;
       const radius = numberField(props, radiusField) ?? radiusDefault;
-      let angle = numberField(props, angleField) ?? angleDefault;
+      let angle = numberField(props, beamwidthField) ?? beamwidthDefault;
       // A non-positive radius or beamwidth has no coverage to draw; skip it.
       if (!(radius > 0) || !(angle > 0)) {
         skipped += 1;
@@ -2180,7 +2180,7 @@ export const cellSectorsTool: ProcessingAlgorithm = {
       // A full turn is undefined for turf's sector (its two bearings coincide
       // after normalization), so draw an omnidirectional site as a circle.
       if (angle > 360) angle = 360;
-      const full = angle >= 360;
+      const full = angle === 360; // only reachable once the clamp above fired
       const wedge = full
         ? circle(point.geometry.coordinates, radius, { units: units as LinearUnit })
         : sector(
@@ -2374,14 +2374,25 @@ export const detectStopsTool: ProcessingAlgorithm = {
     },
     {
       id: "maxDistance",
-      label: "Max distance (m)",
+      label: "Max distance",
       type: "number",
       required: true,
       default: 50,
       min: 0,
       step: 1,
       description:
-        "A fix stays in the current stop while it is within this distance of the stop's first fix. Set it to your GPS scatter radius.",
+        "Every fix in a stop must be within this distance of the stop's first fix (so a stop can span up to twice this value). Set it to your GPS scatter radius.",
+    },
+    {
+      id: "distanceUnits",
+      label: "Distance units",
+      type: "select",
+      default: "meters",
+      options: [
+        { value: "meters", label: "Meters" },
+        { value: "kilometers", label: "Kilometers" },
+        { value: "miles", label: "Miles" },
+      ],
     },
     {
       id: "minDuration",
@@ -2404,6 +2415,11 @@ export const detectStopsTool: ProcessingAlgorithm = {
     }
     const idField = (ctx.parameters.idField as string)?.trim() || undefined;
     const maxDistance = numberParam(ctx, "maxDistance", 50);
+    const distanceUnits = (ctx.parameters.distanceUnits as string) || "meters";
+    if (!LINEAR_UNITS.has(distanceUnits)) {
+      ctx.log(`Error: unknown distance units '${distanceUnits}'`);
+      return;
+    }
     const minDurationMs = numberParam(ctx, "minDuration", 60) * 1000;
     const { groups, skipped, skippedNoId } = collectTimedPoints(
       fc,
@@ -2437,7 +2453,9 @@ export const detectStopsTool: ProcessingAlgorithm = {
         // absorbed into a single stop.
         while (
           j < pts.length &&
-          distance(pts[i].coord, pts[j].coord, { units: "meters" }) <= maxDistance
+          distance(pts[i].coord, pts[j].coord, {
+            units: distanceUnits as LinearUnit,
+          }) <= maxDistance
         ) {
           j += 1;
         }

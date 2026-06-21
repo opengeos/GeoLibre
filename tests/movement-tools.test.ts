@@ -55,7 +55,7 @@ describe("cell-site coverage", () => {
       layer: "sites",
       azimuth: 90,
       radius: 1,
-      angle: 90,
+      beamwidth: 90,
       units: "kilometers",
     });
     assert.ok(result);
@@ -81,7 +81,7 @@ describe("cell-site coverage", () => {
       layer: "sites",
       azimuthField: "az",
       radiusField: "r",
-      angleField: "bw",
+      beamwidthField: "bw",
       units: "kilometers",
     });
     assert.equal(result!.features.length, 1);
@@ -96,7 +96,7 @@ describe("cell-site coverage", () => {
       layer: "sites",
       azimuth: 5,
       radius: 1,
-      angle: 30,
+      beamwidth: 30,
       units: "kilometers",
     });
     assert.equal(result!.features.length, 1);
@@ -115,7 +115,7 @@ describe("cell-site coverage", () => {
       layer: "sites",
       azimuth: 0,
       radius: 1,
-      angle: 400, // > 360 -> clamped, rendered as a full circle
+      beamwidth: 400, // > 360 -> clamped, rendered as a full circle
       units: "kilometers",
     });
     assert.equal(result!.features.length, 1);
