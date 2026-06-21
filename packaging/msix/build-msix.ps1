@@ -14,6 +14,7 @@ param(
   # in Partner Center (e.g. "GeoLibre"), which may differ from the product name.
   [string] $DisplayName = "",
   # Default package language. Required by the Store; every MSIX must declare one.
+  [ValidatePattern('^[a-zA-Z]{2,8}(-[a-zA-Z0-9]{1,8})*$')]
   [string] $Language = "en-us"
 )
 
@@ -68,9 +69,9 @@ $iconsDir = Join-Path $tauriDir "icons"
 
 $config = Get-Content -Raw $configPath | ConvertFrom-Json
 $productName = [string] $config.productName
-if (-not $DisplayName) { $DisplayName = $productName }
+if ([string]::IsNullOrWhiteSpace($DisplayName)) { $DisplayName = $productName }
 $identifier = [string] $config.identifier
-if (-not $Name) { $Name = $identifier }
+if ([string]::IsNullOrWhiteSpace($Name)) { $Name = $identifier }
 $version = ConvertTo-MsixVersion ([string] $config.version)
 
 $cargo = Get-Content -Raw $cargoPath
