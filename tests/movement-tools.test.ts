@@ -187,6 +187,25 @@ describe("detect stops", () => {
     assert.equal(stop.properties?.duration_s, 120);
   });
 
+  it("centres a stop near the antimeridian, not at longitude 0", () => {
+    // Fixes straddling ±180° are ~22 m apart and form one stop; the centroid
+    // must land near ±180, not average to 0 (the Atlantic).
+    const track = pointLayer("track", [
+      [179.9999, 0, { t: 0 }],
+      [-179.9999, 0, { t: 120 }],
+    ]);
+    const { result } = runTool("detect-stops", [track], {
+      layer: "track",
+      timeField: "t",
+      maxDistance: 50,
+      minDuration: 60,
+    });
+    assert.equal(result!.features.length, 1);
+    const lon = (result!.features[0].geometry as { coordinates: number[] })
+      .coordinates[0];
+    assert.ok(Math.abs(lon) > 179, `centroid lon ${lon} should be near ±180`);
+  });
+
   it("detects stops independently per target without merging trajectories", () => {
     // Two targets dwell at separate places; their time windows interleave.
     const track = pointLayer("track", [

@@ -2004,8 +2004,10 @@ function parseTimestamp(value: unknown): number | null {
     const trimmed = value.trim();
     if (trimmed === "") return null;
     // A bare numeric string is an epoch, not a date, so route it through the
-    // numeric branch ("1700000000" → Unix seconds, not "year 1700000000").
-    if (/^[-+]?\d+(?:\.\d+)?$/.test(trimmed)) return parseTimestamp(Number(trimmed));
+    // numeric branch ("1700000000" → Unix seconds, not "year 1700000000"). The
+    // optional exponent also catches scientific notation like "1.7e9".
+    if (/^[-+]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(trimmed))
+      return parseTimestamp(Number(trimmed));
     const parsed = Date.parse(trimmed);
     return Number.isFinite(parsed) ? parsed : null;
   }
@@ -2442,12 +2444,22 @@ export const detectStopsTool: ProcessingAlgorithm = {
         const run = pts.slice(i, j);
         const durationMs = run[run.length - 1].time - run[0].time;
         if (run.length >= 2 && durationMs >= minDurationMs) {
-          let sumLon = 0;
+          // Average longitudes relative to the anchor and unwrap each delta into
+          // [-180, 180] so a stop straddling the antimeridian (e.g. 179.9 and
+          // -179.9) centres near ±180, not 0. The run is within maxDistance of
+          // the anchor, so the deltas are tiny and the unwrap is unambiguous.
+          const anchorLon = run[0].coord[0];
+          let sumLonDelta = 0;
           let sumLat = 0;
           for (const p of run) {
-            sumLon += p.coord[0];
+            let dLon = p.coord[0] - anchorLon;
+            if (dLon > 180) dLon -= 360;
+            else if (dLon < -180) dLon += 360;
+            sumLonDelta += dLon;
             sumLat += p.coord[1];
           }
+          const meanLon =
+            ((anchorLon + sumLonDelta / run.length + 540) % 360) - 180;
           stops.push({
             type: "Feature",
             properties: {
@@ -2459,7 +2471,7 @@ export const detectStopsTool: ProcessingAlgorithm = {
             },
             geometry: {
               type: "Point",
-              coordinates: [sumLon / run.length, sumLat / run.length],
+              coordinates: [meanLon, sumLat / run.length],
             },
           });
           i = j; // a fix belongs to at most one stop
