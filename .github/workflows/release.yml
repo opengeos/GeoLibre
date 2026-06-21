@@ -111,7 +111,7 @@ jobs:
         id: build_msix
         if: runner.os == 'Windows'
         shell: pwsh
-        run: ./scripts/build-msix.ps1
+        run: ./packaging/msix/build-msix.ps1
 
       - name: Upload MSIX release asset
         if: runner.os == 'Windows'

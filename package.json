@@ -32,7 +32,7 @@
     "tauri": "npm run tauri -w geolibre-desktop",
     "tauri:dev": "npm run tauri dev -w geolibre-desktop",
     "tauri:build": "node scripts/tauri-build.mjs",
-    "msix:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/build-msix.ps1"
+    "msix:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/msix/build-msix.ps1"
   },
   "engines": {
     "node": ">=22"

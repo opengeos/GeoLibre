@@ -9,6 +9,10 @@ param(
   # package name from Partner Center (Product Identity) for a Microsoft Store
   # submission.
   [string] $Name = "",
+  # Package display name (Properties/DisplayName). Defaults to the Tauri
+  # productName; for a Microsoft Store submission it must be a name you reserved
+  # in Partner Center (e.g. "GeoLibre"), which may differ from the product name.
+  [string] $DisplayName = "",
   # Default package language. Required by the Store; every MSIX must declare one.
   [string] $Language = "en-us"
 )
@@ -51,7 +55,7 @@ function ConvertTo-XmlText([string] $Value) {
   return [System.Security.SecurityElement]::Escape($Value)
 }
 
-$repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+$repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 $appRoot = Resolve-Path (Join-Path $repoRoot $AppDir)
 $tauriDir = Join-Path $appRoot "src-tauri"
 $targetDir = Join-Path $tauriDir "target\$Configuration"
@@ -64,6 +68,7 @@ $iconsDir = Join-Path $tauriDir "icons"
 
 $config = Get-Content -Raw $configPath | ConvertFrom-Json
 $productName = [string] $config.productName
+if (-not $DisplayName) { $DisplayName = $productName }
 $identifier = [string] $config.identifier
 if (-not $Name) { $Name = $identifier }
 $version = ConvertTo-MsixVersion ([string] $config.version)
@@ -118,7 +123,7 @@ $manifest = @"
     Version="$(ConvertTo-XmlText $version)"
     ProcessorArchitecture="$(ConvertTo-XmlText $Architecture)" />
   <Properties>
-    <DisplayName>$(ConvertTo-XmlText $productName)</DisplayName>
+    <DisplayName>$(ConvertTo-XmlText $DisplayName)</DisplayName>
     <PublisherDisplayName>$(ConvertTo-XmlText $PublisherDisplayName)</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
