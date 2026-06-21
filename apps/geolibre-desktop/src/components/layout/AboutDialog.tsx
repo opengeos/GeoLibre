@@ -307,7 +307,8 @@ export function AboutDialog({
             ))}
           </div>
           <div className="pt-1 text-center text-xs text-muted-foreground">
-            {t("about.projectFormat")} {PROJECT_VERSION}
+            {t("about.projectFormat")}{" "}
+            <span className="font-mono">{PROJECT_VERSION}</span>
           </div>
         </div>
       </DialogContent>
