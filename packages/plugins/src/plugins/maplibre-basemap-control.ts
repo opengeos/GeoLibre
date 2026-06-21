@@ -38,10 +38,11 @@ function getRuntimeEnvironment(): Record<string, string | undefined> {
  * control treats as "no key" (the overlay then surfaces a "Get a … API key"
  * error rather than loading tiles).
  */
-function getBasemapCredentials(): Pick<
-  BasemapControlOptions,
-  "googleMapsApiKey" | "tomtomApiKey" | "hereApiKey"
-> {
+function getBasemapCredentials(): {
+  googleMapsApiKey: string;
+  tomtomApiKey: string;
+  hereApiKey: string;
+} {
   const env = getRuntimeEnvironment();
   return {
     googleMapsApiKey: env.VITE_GOOGLE_MAPS_API_KEY?.trim() || "",
@@ -185,9 +186,9 @@ function addRuntimeEnvListener(): void {
     if (!basemapControl) return;
     const { googleMapsApiKey, tomtomApiKey, hereApiKey } =
       getBasemapCredentials();
-    basemapControl.setGoogleMapsApiKey(googleMapsApiKey ?? "");
-    basemapControl.setTomTomApiKey(tomtomApiKey ?? "");
-    basemapControl.setHereApiKey(hereApiKey ?? "");
+    basemapControl.setGoogleMapsApiKey(googleMapsApiKey);
+    basemapControl.setTomTomApiKey(tomtomApiKey);
+    basemapControl.setHereApiKey(hereApiKey);
   };
 
   window.addEventListener("geolibre:runtime-env-change", handleRuntimeEnvChange);
