@@ -48,3 +48,33 @@ test("submits a fractional zoom the native validator would reject", async ({
   // native tooltip blocked submit and the dialog stayed open.
   await expect(dialog).toBeHidden();
 });
+
+/**
+ * The other half of the contract: disabling native validation must not lose
+ * validation. With `noValidate`, `handleSubmit` is the only thing standing
+ * between bad input and `flyTo`, so out-of-range input must still be rejected
+ * with the dialog's own message and the dialog kept open.
+ */
+test("rejects out-of-range input via the dialog's own validation", async ({
+  page,
+}) => {
+  await waitForMap(page);
+
+  await page.getByRole("button", { name: "View", exact: true }).click();
+  await page.getByRole("menuitem", { name: /Set View/ }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Set View" });
+  await expect(dialog).toBeVisible();
+
+  // Longitude 999 is outside -180..180 — the browser would have caught this
+  // natively; with noValidate, handleSubmit must catch it instead.
+  await dialog.locator("#set-view-longitude").fill("999");
+  await dialog.locator("#set-view-latitude").fill("35.4");
+  await dialog.locator("#set-view-zoom").fill("5");
+
+  await dialog.getByRole("button", { name: "Go" }).click();
+
+  // The dialog stays open and surfaces its own error rather than flying.
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText(/Enter a valid longitude/)).toBeVisible();
+});
