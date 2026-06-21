@@ -148,6 +148,31 @@ describe("detect stops", () => {
     assert.equal(stop.properties?.n_points, 3);
     assert.equal(stop.properties?.duration_s, 120);
   });
+
+  it("detects stops independently per target without merging trajectories", () => {
+    // Two targets dwell at separate places; their time windows interleave.
+    const track = pointLayer("track", [
+      [0, 0, { t: 0, id: "A" }],
+      [5, 5, { t: 30, id: "B" }],
+      [0.0001, 0, { t: 60, id: "A" }],
+      [5.0001, 5, { t: 90, id: "B" }],
+      [0, 0.0001, { t: 120, id: "A" }],
+      [5, 5.0001, { t: 150, id: "B" }],
+    ]);
+    const { result } = runTool("detect-stops", [track], {
+      layer: "track",
+      timeField: "t",
+      idField: "id",
+      maxDistance: 50,
+      minDuration: 60,
+    });
+    assert.equal(result!.features.length, 2);
+    const ids = result!.features.map((f) => f.properties?.id).sort();
+    assert.deepEqual(ids, ["A", "B"]);
+    for (const stop of result!.features) {
+      assert.equal(stop.properties?.n_points, 3);
+    }
+  });
 });
 
 describe("space-time proximity", () => {
@@ -189,5 +214,23 @@ describe("space-time proximity", () => {
       timeUnits: "minutes",
     });
     assert.equal(result!.features.length, 0);
+  });
+
+  it("pairs every nearby point when no id field is set", () => {
+    const points = pointLayer("points", [
+      [0, 0, { t: 0 }],
+      [0.00005, 0, { t: 30 }], // ~5.5 m, 30 s later
+    ]);
+    const { result } = runTool("space-time-proximity", [points], {
+      layer: "points",
+      timeField: "t",
+      maxDistance: 100,
+      distanceUnits: "meters",
+      maxTime: 1,
+      timeUnits: "minutes",
+    });
+    assert.equal(result!.features.length, 1);
+    // Without an id field the result carries no id columns.
+    assert.equal("id_a" in (result!.features[0].properties ?? {}), false);
   });
 });

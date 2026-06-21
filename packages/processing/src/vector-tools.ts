@@ -2015,22 +2015,34 @@ interface TimedPoint {
 /**
  * Collect timed point features grouped by an optional id field (each distinct
  * value is one target/trajectory), sorted by time within each group. Points
- * lacking a parseable timestamp are dropped and counted in `skipped`.
+ * lacking a parseable timestamp are counted in `skipped`; when an id field is
+ * set, points with no id value are counted in `skippedNoId` rather than being
+ * lumped under one anonymous trajectory (which would wrongly connect unrelated
+ * targets). Both kinds are dropped.
  */
 function collectTimedPoints(
   fc: FeatureCollection,
   timeField: string,
   idField: string | undefined,
-): { groups: Map<string, TimedPoint[]>; skipped: number } {
+): { groups: Map<string, TimedPoint[]>; skipped: number; skippedNoId: number } {
   const groups = new Map<string, TimedPoint[]>();
   let skipped = 0;
+  let skippedNoId = 0;
   for (const point of collectPoints(fc)) {
     const time = parseTimestamp(point.properties?.[timeField]);
     if (time === null) {
       skipped += 1;
       continue;
     }
-    const key = idField ? String(point.properties?.[idField] ?? "") : "__all__";
+    let key = "__all__";
+    if (idField) {
+      const rawId = point.properties?.[idField];
+      if (rawId == null) {
+        skippedNoId += 1;
+        continue;
+      }
+      key = String(rawId);
+    }
     const entry: TimedPoint = {
       coord: point.geometry.coordinates,
       time,
@@ -2041,7 +2053,7 @@ function collectTimedPoints(
     else groups.set(key, [entry]);
   }
   for (const bucket of groups.values()) bucket.sort((a, b) => a.time - b.time);
-  return { groups, skipped };
+  return { groups, skipped, skippedNoId };
 }
 
 export const cellSectorsTool: ProcessingAlgorithm = {
@@ -2169,7 +2181,11 @@ export const cellSectorsTool: ProcessingAlgorithm = {
       sectors.push(wedge as Feature<Polygon | MultiPolygon>);
     }
     if (skipped) {
-      ctx.log(`Skipped ${skipped} site(s) with a non-positive radius or beamwidth`);
+      // Covers both skip reasons above: non-positive radius/beamwidth, and a
+      // degenerate geometry returned by turf's sector.
+      ctx.log(
+        `Skipped ${skipped} site(s) with a non-positive radius/beamwidth or degenerate geometry`,
+      );
     }
     ctx.log(
       `Cell-site coverage: built ${sectors.length} sector(s) from ${points.length} site(s)`,
@@ -2243,7 +2259,11 @@ export const trajectorySpeedTool: ProcessingAlgorithm = {
       ctx.log(`Error: unknown speed units '${speedUnits}'`);
       return;
     }
-    const { groups, skipped } = collectTimedPoints(fc, timeField, idField);
+    const { groups, skipped, skippedNoId } = collectTimedPoints(
+      fc,
+      timeField,
+      idField,
+    );
     const segments: Feature<LineString>[] = [];
     for (const [key, pts] of groups) {
       for (let i = 1; i < pts.length; i += 1) {
@@ -2271,6 +2291,8 @@ export const trajectorySpeedTool: ProcessingAlgorithm = {
       }
     }
     if (skipped) ctx.log(`Skipped ${skipped} point(s) with no parseable time`);
+    if (skippedNoId)
+      ctx.log(`Skipped ${skippedNoId} point(s) with no '${idField}' value`);
     if (!segments.length) {
       ctx.log("Error: need at least two timed fixes in a target to build a segment");
       return;
@@ -2346,7 +2368,11 @@ export const detectStopsTool: ProcessingAlgorithm = {
     const idField = (ctx.parameters.idField as string)?.trim() || undefined;
     const maxDistance = numberParam(ctx, "maxDistance", 50);
     const minDurationMs = numberParam(ctx, "minDuration", 60) * 1000;
-    const { groups, skipped } = collectTimedPoints(fc, timeField, idField);
+    const { groups, skipped, skippedNoId } = collectTimedPoints(
+      fc,
+      timeField,
+      idField,
+    );
     const stops: Feature<Point>[] = [];
     for (const [key, pts] of groups) {
       let i = 0;
@@ -2391,6 +2417,8 @@ export const detectStopsTool: ProcessingAlgorithm = {
       }
     }
     if (skipped) ctx.log(`Skipped ${skipped} point(s) with no parseable time`);
+    if (skippedNoId)
+      ctx.log(`Skipped ${skippedNoId} point(s) with no '${idField}' value`);
     ctx.log(
       `Detect stops: found ${stops.length} stop(s) across ${groups.size} target(s)`,
     );
@@ -2505,23 +2533,40 @@ export const spaceTimeProximityTool: ProcessingAlgorithm = {
     const timed: { coord: Position; time: number; id: string | null; props: GeoJsonProperties }[] =
       [];
     let skipped = 0;
+    let skippedNoId = 0;
     for (const point of collectPoints(fc)) {
       const time = parseTimestamp(point.properties?.[timeField]);
       if (time === null) {
         skipped += 1;
         continue;
       }
+      let id: string | null = null;
+      if (idField) {
+        const rawId = point.properties?.[idField];
+        // A missing id would coerce to "" and be treated as one shared target,
+        // which would wrongly exclude unrelated id-less points from pairing.
+        if (rawId == null) {
+          skippedNoId += 1;
+          continue;
+        }
+        id = String(rawId);
+      }
       timed.push({
         coord: point.geometry.coordinates,
         time,
-        id: idField ? String(point.properties?.[idField] ?? "") : null,
+        id,
         props: point.properties ?? {},
       });
     }
     const n = timed.length;
-    if ((n * (n - 1)) / 2 > PROXIMITY_MAX_PAIRS) {
+    const worstCasePairs = (n * (n - 1)) / 2;
+    if (worstCasePairs > PROXIMITY_MAX_PAIRS) {
+      // The cap is a pre-work guard against the worst case (all points within
+      // the time window); an id field can make the real pair count far smaller.
       ctx.log(
-        `Error: ${n} points form too many pairs (> ${PROXIMITY_MAX_PAIRS.toLocaleString()}); filter or split the layer first`,
+        `Error: ${n} points could form up to ${worstCasePairs.toLocaleString()} pairs ` +
+          `(> ${PROXIMITY_MAX_PAIRS.toLocaleString()}); filter or split the layer first` +
+          (idField ? " (a target id field reduces the actual pair count)" : ""),
       );
       return;
     }
@@ -2555,6 +2600,8 @@ export const spaceTimeProximityTool: ProcessingAlgorithm = {
       }
     }
     if (skipped) ctx.log(`Skipped ${skipped} point(s) with no parseable time`);
+    if (skippedNoId)
+      ctx.log(`Skipped ${skippedNoId} point(s) with no '${idField}' value`);
     ctx.log(
       `Space-time proximity: found ${pairs.length} pair(s) within ${maxDistance} ${distanceUnits} and ${maxTimeValue} ${timeUnits}`,
     );
