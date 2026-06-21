@@ -36,11 +36,19 @@ test("submits a fractional zoom the native validator would reject", async ({
   await dialog.locator("#set-view-longitude").fill("-97.5");
   await dialog.locator("#set-view-latitude").fill("35.4");
 
-  // Confirm the value genuinely trips native validation, so the assertion below
-  // proves the dialog submits despite it (rather than the value being benign).
+  // Pitch has step="1", so a fractional value trips the same stepMismatch as
+  // zoom — noValidate covers the whole form, so guard both axes.
+  const pitch = dialog.locator("#set-view-pitch");
+  await pitch.fill("45.3");
+
+  // Confirm both fields genuinely trip native validation, so the assertion
+  // below proves the dialog submits despite it (not that the values are benign).
   expect(await zoom.evaluate((z: HTMLInputElement) => z.validity.stepMismatch)).toBe(
     true,
   );
+  expect(
+    await pitch.evaluate((p: HTMLInputElement) => p.validity.stepMismatch),
+  ).toBe(true);
 
   await dialog.getByRole("button", { name: "Go" }).click();
 
