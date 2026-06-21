@@ -303,9 +303,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     const embeddable = await materializeEmbeddableVectorLayers(state.layers);
     if (embeddable.size === 0) return {};
 
+    // Encode to UTF-8 for an accurate byte count: JSON.stringify().length is
+    // UTF-16 code units, which understates non-ASCII text (place names, etc.).
+    const encoder = new TextEncoder();
     let bytes = 0;
     for (const collection of embeddable.values()) {
-      bytes += JSON.stringify(collection).length;
+      bytes += encoder.encode(JSON.stringify(collection)).length;
     }
     const choice = await askEmbedVectorData(embeddable.size, bytes);
     if (choice === "cancel") return "cancel";

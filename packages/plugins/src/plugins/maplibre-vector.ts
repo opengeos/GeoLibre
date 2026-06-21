@@ -376,11 +376,10 @@ export async function materializeEmbeddableVectorLayers(
     if (!isEmbeddableLocalVectorLayer(layer)) continue;
     try {
       const collection = await control.getLayerGeoJSON(layer.id);
-      if (
-        collection &&
-        Array.isArray(collection.features) &&
-        collection.features.length > 0
-      ) {
+      // Embed any readable collection, including an empty one: a layer the user
+      // loaded from an empty file is still valid project state that would
+      // otherwise be dropped on reopen. null means the data is not held locally.
+      if (collection && Array.isArray(collection.features)) {
         result.set(layer.id, collection);
       }
     } catch (error) {
@@ -475,9 +474,10 @@ function createVectorControl(
   // each layer's source descriptor) that restoreVectorLayers re-reads when a
   // project reopens. Without a host picker the panel keeps its native file
   // input, whose local files have no restorable path.
-  const fileOpener = app.pickVectorFiles
+  const pickVectorFiles = app.pickVectorFiles;
+  const fileOpener = pickVectorFiles
     ? async () => {
-        const selections = await app.pickVectorFiles?.();
+        const selections = await pickVectorFiles();
         return (
           selections?.map((selection) => ({
             file: selection.file,
