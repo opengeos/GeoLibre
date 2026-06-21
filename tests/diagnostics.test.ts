@@ -375,6 +375,8 @@ describe("diagnostics startup transient suppression", () => {
     // it is a benign transient rather than a critical error (issue #657).
     assert.equal(record.level, "warning");
     assert.equal(getDiagnosticsSnapshot().errorCount, 0);
+    // The panel badge reads warningCount, so assert it tracks the downgrade.
+    assert.equal(getDiagnosticsSnapshot().warningCount, 1);
   });
 
   it("keeps a startup fetch failure outside the Tauri runtime as an error", async () => {
