@@ -45,6 +45,12 @@ pwsh ./packaging/msix/build-msix.ps1 `
 The package family name is derived automatically from `-Name` + `-Publisher`, so
 it will match once those are correct.
 
+`-DisplayName` sets only the package display name (`Properties/DisplayName`, used
+for the Store listing). The Start-menu / taskbar name
+(`Applications/.../VisualElements/@DisplayName`) deliberately stays the Tauri
+product name ("GeoLibre Desktop"); the two are allowed to differ, and a Store
+submission with this split passed validation.
+
 ## `runFullTrust`
 
 The manifest declares the `runFullTrust` restricted capability, which a packaged
