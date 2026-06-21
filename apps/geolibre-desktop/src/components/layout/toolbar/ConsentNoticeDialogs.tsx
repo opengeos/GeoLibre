@@ -106,14 +106,19 @@ export function ConsentNoticeDialogs({ consent }: ConsentNoticeDialogsProps) {
                     })}
               </p>
             </div>
-            <div className="rounded-md border bg-muted/40 p-3">
-              <p className="font-medium">
-                {t("toolbar.item.networkNoticePerformanceHeading")}
-              </p>
-              <p className="mt-1 text-muted-foreground">
-                {t("toolbar.item.networkNoticePerformance")}
-              </p>
-            </div>
+            {/* The rate-limit / "run your own server" guidance only applies to
+                the shared public default; a configured endpoint is already the
+                user's own server, so the block is irrelevant there. */}
+            {usingDefaultRouting && (
+              <div className="rounded-md border bg-muted/40 p-3">
+                <p className="font-medium">
+                  {t("toolbar.item.networkNoticePerformanceHeading")}
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  {t("toolbar.item.networkNoticePerformance")}
+                </p>
+              </div>
+            )}
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={consent.dismissRoutingNotice}>
