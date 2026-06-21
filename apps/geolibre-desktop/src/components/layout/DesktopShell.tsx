@@ -720,8 +720,10 @@ export function DesktopShell({
     (importedLayers: ImportedVectorLayer[]) => {
       let lastLayerId: string | null = null;
       for (const layer of importedLayers) {
+        // `||` (not `??`) so an empty-string name falls back to the path, and
+        // matches the name shown in the drop confirmation toast.
         lastLayerId = addGeoJsonLayer(
-          layer.name ?? layerNameFromPath(layer.path),
+          layer.name || layerNameFromPath(layer.path),
           layer.data,
           layer.path,
         );
