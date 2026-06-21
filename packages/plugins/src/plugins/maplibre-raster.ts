@@ -2,6 +2,7 @@ import { useAppStore } from "@geolibre/core";
 import type {
   RasterControl,
   RasterControlEventHandler,
+  RasterSampleDataset,
 } from "maplibre-gl-raster";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
 import { ensureMercatorProjection } from "./map-projection-utils";
@@ -22,16 +23,28 @@ import {
 
 const rasterControlPosition: GeoLibreMapControlPosition = "top-left";
 const RASTER_PANEL_CLASS = "geolibre-raster-panel";
-const DEFAULT_RASTER_URL =
-  "https://data.source.coop/giswqs/opengeos/nlcd_2021_land_cover_30m.tif";
 
-// These types mirror undocumented private members of RasterControl from
-// maplibre-gl-raster (re-verified against v0.6.1). All access is optional (?.)
+// One-click sample COGs shown in the panel's "Load sample data" dropdown.
+// Edit this list to offer different (or more) demonstration rasters; loading
+// is opt-in, so an empty list simply hides the dropdown. URLs must be
+// CORS-enabled and range-request capable (source.coop is both).
+const SAMPLE_RASTER_DATASETS: RasterSampleDataset[] = [
+  {
+    label: "Land cover",
+    url: "https://data.source.coop/giswqs/opengeos/nlcd_2021_land_cover_30m.tif",
+  },
+  {
+    label: "Elevation (DEM)",
+    url: "https://data.source.coop/giswqs/opengeos/dem.tif",
+  },
+];
+
+// This type mirrors undocumented private members of RasterControl from
+// maplibre-gl-raster (re-verified against v0.6.2). All access is optional (?.)
 // so a rename in a future release degrades to a no-op rather than a crash --
 // re-verify these names AND the .mlr-control-close selector in
 // wireRasterCloseButton when bumping the dependency.
 type RasterControlInternals = {
-  _clickOutsideHandler?: ((event: MouseEvent) => void) | null;
   _layerManager?: RasterLayerManagerInternals;
   _panel?: HTMLElement;
 };
@@ -113,11 +126,9 @@ export function openRasterLayerPanel(app: GeoLibreAppAPI): void {
         control.expand();
         // Idempotent (guarded by a dataset flag / null checks): retried on
         // every open so the panel chrome stays wired even if a future
-        // upstream release builds the panel DOM (or registers the
-        // click-outside handler) lazily on first expand.
+        // upstream release builds the panel DOM lazily on first expand.
         wireRasterCloseButton(control);
         applyRasterPanelClass(control);
-        disableRasterClickOutsideCollapse(control);
       } catch (error) {
         console.error(
           "[GeoLibre] Failed to open the raster layer panel",
@@ -391,7 +402,6 @@ async function ensureRasterControl(
     // not its constructor.
     activateRasterClassification(rasterControl);
     hideRasterControl(rasterControl);
-    disableRasterClickOutsideCollapse(rasterControl);
     wireRasterCloseButton(rasterControl);
     applyRasterPanelClass(rasterControl);
   }
@@ -429,7 +439,12 @@ function createRasterControl(
   const control = new RasterControlClass({
     className: "geolibre-raster-control",
     collapsed: true,
-    defaultUrl: DEFAULT_RASTER_URL,
+    // Empty input with a generic placeholder; the sample COGs below are the
+    // explicit, opt-in way to load a demonstration raster.
+    sampleData: SAMPLE_RASTER_DATASETS,
+    // The panel doubles as the Add Raster Layer dialog, so it stays open
+    // until the user closes it; clicking the map must not collapse it.
+    closeOnOutsideClick: false,
     interleaved: rasterControlInterleaved,
     panelWidth: 380,
     title: "Add Raster Layer",
@@ -639,7 +654,6 @@ function applyRestoredRasterPanelState(
       control.expand();
       wireRasterCloseButton(control);
       applyRasterPanelClass(control);
-      disableRasterClickOutsideCollapse(control);
     } catch (error) {
       console.error("[GeoLibre] Failed to restore raster panel state", error);
     }
@@ -657,18 +671,6 @@ function rasterPanelCollapsedFromLayers(
   // Older projects did not persist this UI state. Keep them collapsed so
   // loading a raster project does not unexpectedly open the Add Data panel.
   return typeof panelCollapsed === "boolean" ? panelCollapsed : true;
-}
-
-// The control collapses its panel when the user clicks anywhere else on the
-// page, which fights the panel's role as the Add Raster Layer dialog (e.g.
-// panning the map to inspect a loaded COG would close it). Removing the
-// handler keeps the panel open until the user closes it explicitly.
-function disableRasterClickOutsideCollapse(control: RasterControl): void {
-  const internals = control as unknown as RasterControlInternals;
-  const handler = internals._clickOutsideHandler;
-  if (!handler) return;
-  document.removeEventListener("click", handler);
-  internals._clickOutsideHandler = null;
 }
 
 // The upstream stylesheet themes the panel from prefers-color-scheme (the
