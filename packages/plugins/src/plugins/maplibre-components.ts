@@ -28,8 +28,6 @@ import type {
   ControlGrid,
   ControlGridOptions,
   DefaultControlName,
-  GaussianSplatControl,
-  GaussianSplatLayerAdapter,
   HtmlGuiControl,
   HtmlGuiControlOptions,
   LegendGuiControl,
@@ -63,6 +61,10 @@ import type {
   ZarrLayerEventHandler,
   ZarrLayerInfo,
 } from "maplibre-gl-components";
+import type {
+  GaussianSplatControl,
+  GaussianSplatLayerAdapter,
+} from "maplibre-gl-splat";
 import type {
   LidarControlEventHandler,
   PointCloudInfo,
@@ -116,9 +118,9 @@ type LidarControlConstructor =
 type LidarLayerAdapterConstructor =
   (typeof import("maplibre-gl-components"))["LidarLayerAdapter"];
 type GaussianSplatControlConstructor =
-  (typeof import("maplibre-gl-components"))["GaussianSplatControl"];
+  (typeof import("maplibre-gl-splat"))["GaussianSplatControl"];
 type GaussianSplatLayerAdapterConstructor =
-  (typeof import("maplibre-gl-components"))["GaussianSplatLayerAdapter"];
+  (typeof import("maplibre-gl-splat"))["GaussianSplatLayerAdapter"];
 
 interface SplattingControlVisibilityState {
   _container?: HTMLElement | null;
@@ -629,10 +631,8 @@ const SPLATTING_OPTIONS = {
   defaultLongitude: 148.9819,
   defaultRotation: [-90, 90, 0],
   defaultScale: 0.03,
-  // TODO: switch to an opt-in sampleData dropdown once maplibre-gl-splat
-  // 0.2.3 (which adds it) can be published to npm; its publish workflow
-  // currently fails on an npm trusted-publisher/token configuration issue.
-  defaultUrl: SPLATTING_SAMPLE_URL,
+  // Empty input; the sample asset is the explicit, opt-in way to load one.
+  sampleData: [{ label: "Bicycle", url: SPLATTING_SAMPLE_URL }],
   flyTo: true,
   maxHeight: 520,
   panelWidth: 365,
@@ -1062,16 +1062,21 @@ interface StacCogTextureHelper {
 }
 
 const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
-  componentsConstructorsPromise ??= import("maplibre-gl-components").then(
-    ({
-      AddVectorControl: AddVectorControlClass,
-      BookmarkControl: BookmarkControlClass,
-      CogLayerControl: CogLayerControlClass,
-      ColorbarGuiControl: ColorbarGuiControlClass,
-      ControlGrid: ControlGridClass,
-      GaussianSplatControl: GaussianSplatControlClass,
-      GaussianSplatLayerAdapter: GaussianSplatLayerAdapterClass,
-      HtmlGuiControl: HtmlGuiControlClass,
+  // Load the splatting control from maplibre-gl-splat directly: the copy
+  // re-exported (and bundled) by maplibre-gl-components lags behind, so its
+  // sample-data dropdown would be missing if taken from there.
+  componentsConstructorsPromise ??= Promise.all([
+    import("maplibre-gl-components"),
+    import("maplibre-gl-splat"),
+  ]).then(
+    ([
+      {
+        AddVectorControl: AddVectorControlClass,
+        BookmarkControl: BookmarkControlClass,
+        CogLayerControl: CogLayerControlClass,
+        ColorbarGuiControl: ColorbarGuiControlClass,
+        ControlGrid: ControlGridClass,
+        HtmlGuiControl: HtmlGuiControlClass,
       LegendGuiControl: LegendGuiControlClass,
       LidarControl: LidarControlClass,
       LidarLayerAdapter: LidarLayerAdapterClass,
@@ -1084,7 +1089,12 @@ const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
       StacSearchControl: StacSearchControlClass,
       ViewStateControl: ViewStateControlClass,
       ZarrLayerControl: ZarrLayerControlClass,
-    }) => ({
+      },
+      {
+        GaussianSplatControl: GaussianSplatControlClass,
+        GaussianSplatLayerAdapter: GaussianSplatLayerAdapterClass,
+      },
+    ]) => ({
       AddVectorControl: AddVectorControlClass,
       BookmarkControl: BookmarkControlClass,
       CogLayerControl: CogLayerControlClass,

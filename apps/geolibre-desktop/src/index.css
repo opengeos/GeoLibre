@@ -2292,6 +2292,7 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
 .duckdb-sample-trigger,
 .three-d-tiles-sample-trigger,
 .maplibre-gl-sample-trigger,
+.splat-sample-trigger,
 .lidar-sample-trigger {
   background-color: hsl(var(--background)) !important;
   border-color: hsl(var(--input)) !important;
@@ -2304,6 +2305,8 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
 .three-d-tiles-sample-trigger.open,
 .maplibre-gl-sample-trigger:hover,
 .maplibre-gl-sample-trigger.open,
+.splat-sample-trigger:hover,
+.splat-sample-trigger.open,
 .lidar-sample-trigger:hover,
 .lidar-sample-trigger.open {
   border-color: hsl(var(--ring)) !important;
@@ -2312,6 +2315,7 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
 .duckdb-sample-menu,
 .three-d-tiles-sample-menu,
 .maplibre-gl-sample-menu,
+.splat-sample-menu,
 .lidar-sample-menu {
   background-color: hsl(var(--popover)) !important;
   border-color: hsl(var(--border)) !important;
@@ -2320,6 +2324,7 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
 .duckdb-sample-option,
 .three-d-tiles-sample-option,
 .maplibre-gl-sample-option,
+.splat-sample-option,
 .lidar-sample-option {
   color: hsl(var(--popover-foreground)) !important;
 }
@@ -2330,6 +2335,8 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
 .three-d-tiles-sample-option:focus-visible,
 .maplibre-gl-sample-option:hover,
 .maplibre-gl-sample-option:focus-visible,
+.splat-sample-option:hover,
+.splat-sample-option:focus-visible,
 .lidar-sample-option:hover,
 .lidar-sample-option:focus-visible {
   background-color: hsl(var(--accent)) !important;
