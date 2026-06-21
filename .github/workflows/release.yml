@@ -309,3 +309,32 @@ jobs:
           [[ -n "$srpm" ]] || { echo "::error::rpmbuild produced no SRPM path"; exit 1; }
           echo "Built SRPM: $srpm"
           copr-cli build --nowait "$COPR_PROJECT" "$srpm"
+
+  winget:
+    name: Publish to winget
+    needs: build
+    runs-on: ubuntu-latest
+    # Isolated like the AUR/COPR jobs: only needs build for the release assets,
+    # nothing depends on it, continue-on-error keeps a winget hiccup from
+    # failing the release, and it skips itself when WINGET_TOKEN is unset (forks,
+    # or before the maintainer configures it).
+    continue-on-error: true
+    concurrency:
+      group: winget-publish
+      cancel-in-progress: false
+    # Only publish for full releases, not prereleases.
+    if: ${{ !github.event.release.prerelease }}
+    env:
+      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+    steps:
+      - name: Submit OpenGeos.GeoLibre to winget-pkgs
+        if: ${{ env.WINGET_TOKEN != '' }}
+        # Pinned to a commit SHA (not the mutable v2 tag) because this step
+        # receives a token with access to the winget-pkgs fork. winget-releaser
+        # derives the version from the release tag and uses komac under the hood.
+        uses: vedantmgoyal9/winget-releaser@4ffc7888bffd451b357355dc214d43bb9f23917e # v2
+        with:
+          identifier: OpenGeos.GeoLibre
+          installers-regex: '_x64-setup\.exe$'
+          fork-user: giswqs
+          token: ${{ env.WINGET_TOKEN }}
