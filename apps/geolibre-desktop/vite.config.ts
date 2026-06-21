@@ -610,7 +610,7 @@ function pwaPlugin(): Plugin[] {
       name: "GeoLibre",
       short_name: "GeoLibre",
       description:
-        "A lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data.",
+        "A free and open-source, lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data, running in the browser, on the desktop, on mobile, and inside Jupyter notebooks while keeping your data local and private.",
       theme_color: "#2f8f85",
       background_color: "#ffffff",
       display: "standalone",
