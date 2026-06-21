@@ -49,7 +49,7 @@ const SAMPLE_VECTOR_DATASETS: VectorSampleDataset[] = [
 ];
 
 // This type mirrors an undocumented private member of VectorControl from
-// maplibre-gl-vector (verified against v0.4.1). Access is optional (?.) so a
+// maplibre-gl-vector (verified against v0.5.1). Access is optional (?.) so a
 // rename in a future release degrades to a no-op rather than a crash --
 // re-verify this name AND the .vector-control-close selector in
 // wireVectorCloseButton when bumping the dependency.
@@ -338,7 +338,7 @@ function createVectorControl(
   }
   // syncVectorLayersToStore re-reads getState().collapsed when these fire.
   // Safe: expand()/collapse() delegate to toggle(), which flips
-  // _state.collapsed BEFORE emitting the event (verified against v0.2.0) --
+  // _state.collapsed BEFORE emitting the event (verified against v0.5.1) --
   // re-verify that ordering when bumping the dependency.
   const panelStateSyncHandler: VectorControlEventHandler = () =>
     syncVectorLayersToStore(control);
