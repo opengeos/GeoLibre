@@ -635,7 +635,9 @@ const SPLATTING_OPTIONS = {
   // Empty input; the sample asset is the explicit, opt-in way to load one.
   sampleData: [{ label: "Bicycle", url: SPLATTING_SAMPLE_URL }],
   flyTo: true,
-  maxHeight: 520,
+  // No maxHeight: the panel (maplibre-gl-splat >= 0.2.5) sizes to its content
+  // and grows up to the available vertical space, so a fixed cap is neither
+  // needed nor honored.
   panelWidth: 365,
   title: "Gaussian Splats",
 } satisfies ConstructorParameters<GaussianSplatControlConstructor>[0];

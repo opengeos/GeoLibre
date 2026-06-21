@@ -2330,4 +2330,5 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   .lidar-sample-option
 ):is(:hover, :focus-visible, :active) {
   background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
 }
