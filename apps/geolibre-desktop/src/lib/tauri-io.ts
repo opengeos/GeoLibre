@@ -125,6 +125,7 @@ const NON_VECTOR_SIDECAR_EXTENSIONS = [
   "sbx",
   "qix",
   "qpj",
+  "cst",
   "aih",
   "ain",
   "atx",
@@ -579,17 +580,23 @@ export async function pickVectorFilesWithSidecars(): Promise<PickedVectorFile[]>
   );
   const picked: PickedVectorFile[] = [];
   for (const path of paths) {
-    const file = new File(
-      [toArrayBuffer(await readFile(path))],
-      browserSafeFileName(path),
-    );
-    const companionFiles =
-      fileExtension(path) === "shp"
-        ? (await readShapefileSiblings(path)).map(
-            (sibling) => new File([toArrayBuffer(sibling.data)], sibling.name),
-          )
-        : [];
-    picked.push({ file, companionFiles });
+    // Read each pick independently so one unreadable file (e.g. moved between
+    // pick and read, or an unreadable sidecar) does not abandon the rest.
+    try {
+      const file = new File(
+        [toArrayBuffer(await readFile(path))],
+        browserSafeFileName(path),
+      );
+      const companionFiles =
+        fileExtension(path) === "shp"
+          ? (await readShapefileSiblings(path)).map(
+              (sibling) => new File([toArrayBuffer(sibling.data)], sibling.name),
+            )
+          : [];
+      picked.push({ file, companionFiles });
+    } catch (error) {
+      console.warn(`Could not read the selected file "${path}".`, error);
+    }
   }
   return picked;
 }

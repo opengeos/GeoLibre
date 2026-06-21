@@ -130,7 +130,7 @@ export interface GeoLibreAppAPI {
    * (browsers cannot read sibling files), so its presence doubles as a desktop
    * capability check. Resolves to an empty array when the dialog is cancelled.
    */
-  pickVectorFilesWithSidecars?: () => Promise<GeoLibrePickedVectorFile[] | null>;
+  pickVectorFilesWithSidecars?: () => Promise<GeoLibrePickedVectorFile[]>;
   /**
    * Save text content to a file chosen by the user. The host handles the
    * platform specifics (a native save dialog under Tauri, a browser download

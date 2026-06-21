@@ -56,10 +56,10 @@ describe("addPickedVectorFiles", () => {
     assert.equal(calls[1].companionFiles, undefined);
   });
 
-  it("loads nothing when the dialog was cancelled (null)", async () => {
+  it("loads nothing when the dialog was cancelled (empty list)", async () => {
     const { sink, calls } = createSink();
 
-    await addPickedVectorFiles(sink, null);
+    await addPickedVectorFiles(sink, []);
 
     assert.equal(calls.length, 0);
   });

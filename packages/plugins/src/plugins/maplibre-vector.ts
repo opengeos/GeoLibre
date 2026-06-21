@@ -532,17 +532,16 @@ export type VectorDataSink = Pick<VectorControl, "addData">;
 /**
  * Loads files picked through {@link GeoLibreAppAPI.pickVectorFilesWithSidecars}
  * into a vector control, passing a shapefile's sidecars as `companionFiles` so a
- * loose `.shp` loads as a single layer. Each file is added independently; a
- * `null` pick (cancelled dialog) loads nothing.
+ * loose `.shp` loads as a single layer. Each file is added independently; an
+ * empty list (e.g. a cancelled dialog) loads nothing.
  *
  * @param control - The vector control (or anything with `addData`).
- * @param picked - The picked files, or null when the dialog was cancelled.
+ * @param picked - The picked files (empty when the dialog was cancelled).
  */
 export async function addPickedVectorFiles(
   control: VectorDataSink,
-  picked: GeoLibrePickedVectorFile[] | null,
+  picked: GeoLibrePickedVectorFile[],
 ): Promise<void> {
-  if (!picked) return;
   for (const { file, companionFiles } of picked) {
     await control.addData(
       file,
