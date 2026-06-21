@@ -27,9 +27,8 @@ const VECTOR_URL_PLACEHOLDER = "https://example.com/data.geojson";
 
 // One-click sample datasets shown under the URL input. Edit this list to
 // offer different (or more) demonstration layers; loading is opt-in, so an
-// empty list simply hides the row.
-// URLs must be CORS-enabled to load in the browser build (source.coop and
-// raw.githubusercontent.com both send `Access-Control-Allow-Origin: *`).
+// empty list simply hides the row. URLs must be CORS-enabled to load in the
+// browser build; source.coop sends `Access-Control-Allow-Origin: *`.
 const SAMPLE_VECTOR_DATASETS: VectorSampleDataset[] = [
   {
     label: "Countries",
@@ -37,11 +36,15 @@ const SAMPLE_VECTOR_DATASETS: VectorSampleDataset[] = [
   },
   {
     label: "US cities",
-    url: "https://raw.githubusercontent.com/opengeos/leafmap/master/examples/data/us_cities.geojson",
+    url: "https://data.source.coop/giswqs/opengeos/us_cities.geojson",
   },
   {
     label: "World cities",
-    url: "https://raw.githubusercontent.com/opengeos/leafmap/master/examples/data/world_cities.geojson",
+    url: "https://data.source.coop/giswqs/opengeos/world_cities.geojson",
+  },
+  {
+    label: "Las Vegas buildings",
+    url: "https://data.source.coop/giswqs/opengeos/las-vegas-buildings.geojson",
   },
 ];
 
