@@ -363,6 +363,9 @@ describe("diagnostics startup transient suppression", () => {
     win.fetch = (() =>
       Promise.reject(new TypeError("Load failed"))) as unknown as typeof fetch;
     install();
+    // The URL is illustrative of the real warm-up failure (a call to the Tauri
+    // IPC endpoint); the benign-startup downgrade keys off the error message,
+    // not the URL, so any URL would produce the same result here.
     await (win.fetch as typeof fetch)("http://ipc.localhost/main").catch(
       () => {},
     );
