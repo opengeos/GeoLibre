@@ -193,8 +193,9 @@ function yAxisTitle(text: string) {
 }
 
 function EmptyChart({ message }: { message: string }) {
-  // flex-1 centering matches the Dashboard's own no-data state so chart-level
-  // empty results center in a flexed card; it is a no-op in the Charts dialog.
+  // flex-1 only acts when the element grows (in the Dashboard's flexed card),
+  // where it centers the message like the panel's own no-data state; in the
+  // Charts dialog the <p> is simply a flex box around a single text node.
   return (
     <p className="flex flex-1 items-center justify-center py-10 text-center text-sm text-muted-foreground">
       {message}

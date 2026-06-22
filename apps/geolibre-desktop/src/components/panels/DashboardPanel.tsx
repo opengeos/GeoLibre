@@ -41,9 +41,6 @@ const DEFAULT_DASHBOARD_HEIGHT = 360;
 // scrolls instead of crushing the charts. A single row has no floor, so it
 // fills and resizes with the panel height (issue #728).
 const MIN_DASHBOARD_ROW_HEIGHT = 200;
-// gap-3 = 0.75rem (12px at the default 16px root font); only nudges the
-// scroll-activation threshold, so an approximate px value is fine.
-const DASHBOARD_ROW_GAP = 12;
 
 /** Turn a stored widget into the render-side {@link ChartSpec}. */
 function widgetToSpec(widget: DashboardWidget): ChartSpec {
@@ -175,12 +172,13 @@ export function DashboardPanel() {
   };
 
   // When widgets wrap onto multiple rows, floor the grid height (rows plus the
-  // gaps between them) so it scrolls rather than crushing the charts; a single
-  // row stays unbounded and fills the panel (issue #728).
+  // gap-3 gaps between them) so it scrolls rather than crushing the charts; a
+  // single row stays unbounded and fills the panel (issue #728). calc() lets
+  // the browser resolve 0.75rem so the gap tracks the root font size.
   const rowCount = Math.max(1, Math.ceil(widgets.length / Math.max(1, columns)));
   const gridMinHeight =
     rowCount > 1
-      ? `${rowCount * MIN_DASHBOARD_ROW_HEIGHT + (rowCount - 1) * DASHBOARD_ROW_GAP}px`
+      ? `calc(${rowCount} * ${MIN_DASHBOARD_ROW_HEIGHT}px + ${rowCount - 1} * 0.75rem)`
       : undefined;
 
   return (
@@ -441,9 +439,10 @@ function WidgetCard({
         </div>
       </div>
 
-      {/* The SVG flexes to fill (min-h-0 lets it shrink past its intrinsic
-          aspect-ratio height); preserveAspectRatio letterboxes it (issue #728). */}
-      <div className="flex min-h-0 flex-1 flex-col [&_svg]:min-h-0 [&_svg]:flex-1">
+      {/* The chart SVG (a direct child) flexes to fill (min-h-0 lets it shrink
+          past its intrinsic aspect-ratio height); preserveAspectRatio
+          letterboxes it (issue #728). */}
+      <div className="flex min-h-0 flex-1 flex-col [&>svg]:min-h-0 [&>svg]:flex-1">
         {data.hasData ? (
           <ChartView result={result} color={widget.color} />
         ) : (
