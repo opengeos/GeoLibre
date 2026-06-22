@@ -24,7 +24,7 @@ describe("createExternalNativeStoreLayer", () => {
       source: { type: "geojson" },
       visible: true,
       opacity: 1,
-      style: { ...DEFAULT_LAYER_STYLE, simpleStyleEnabled: false },
+      style: { ...DEFAULT_LAYER_STYLE },
       metadata: {},
     };
 
@@ -59,6 +59,28 @@ describe("createExternalNativeStoreLayer", () => {
     assert.equal(layer.style.strokeWidth, 5);
   });
 
+  it("lets the registration own overlapping style keys over a user edit", () => {
+    // External native layers are plugin-owned: a re-registration's style wins
+    // even over a non-default user value on the same key, not just over defaults.
+    const existing: GeoLibreLayer = {
+      id: "plugin-layer",
+      name: "Plugin Layer",
+      type: "geojson",
+      source: { type: "geojson" },
+      visible: true,
+      opacity: 1,
+      style: { ...DEFAULT_LAYER_STYLE, fillColor: "#abcdef" },
+      metadata: {},
+    };
+
+    const layer = createExternalNativeStoreLayer(
+      baseRegistration({ style: { fillColor: "#ff0000" } }),
+      existing,
+    );
+
+    assert.equal(layer.style.fillColor, "#ff0000");
+  });
+
   it("keeps the registration opacity over an existing default-seeded opacity", () => {
     const existing: GeoLibreLayer = {
       id: "plugin-layer",
@@ -77,6 +99,23 @@ describe("createExternalNativeStoreLayer", () => {
     );
 
     assert.equal(layer.opacity, 0.5);
+  });
+
+  it("falls back to existing opacity when the registration omits opacity", () => {
+    const existing: GeoLibreLayer = {
+      id: "plugin-layer",
+      name: "Plugin Layer",
+      type: "geojson",
+      source: { type: "geojson" },
+      visible: true,
+      opacity: 0.7,
+      style: { ...DEFAULT_LAYER_STYLE },
+      metadata: {},
+    };
+
+    const layer = createExternalNativeStoreLayer(baseRegistration(), existing);
+
+    assert.equal(layer.opacity, 0.7);
   });
 
   it("applies the registration style over defaults for a brand-new layer", () => {
