@@ -93,7 +93,7 @@ export async function fetchProjectFromUrl(
       ? `HTTP ${response.status} ${response.statusText}`
       : `HTTP ${response.status}`;
     throw new Error(
-      `Could not load the project from ${projectUrl}: the server responded ` +
+      `Could not fetch the project from ${projectUrl}: the server responded ` +
         `with ${status}.`,
     );
   }

@@ -48,8 +48,8 @@ describe("fetchProjectFromUrl", () => {
   });
 
   it("wraps a network failure even when no signal is provided", async () => {
-    // Exercises the `options = {}` default branch: the `signal?.aborted`
-    // short-circuit must not fire when `signal` is undefined.
+    // Exercises the `options = {}` default branch, where `signal` is undefined:
+    // a non-abort rejection is still wrapped rather than rethrown.
     const fetchImpl = (async () => {
       throw new TypeError("Failed to fetch");
     }) as unknown as typeof fetch;
