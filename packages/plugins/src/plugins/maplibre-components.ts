@@ -709,6 +709,7 @@ const viewStatePanelListeners = new Set<() => void>();
 let printPanelVisible = false;
 const printPanelListeners = new Set<() => void>();
 let printThemeObserver: MutationObserver | null = null;
+let lidarThemeObserver: MutationObserver | null = null;
 let colorbarPanelVisible = false;
 const colorbarPanelListeners = new Set<() => void>();
 let legendPanelVisible = false;
@@ -1106,21 +1107,15 @@ const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
       ZarrLayerControl: ZarrLayerControlClass,
     } = components;
     // Prefer the dedicated maplibre-gl-splat exports; fall back to the copy
-    // bundled in maplibre-gl-components only if the dedicated import failed.
-    // Guard against both being missing (e.g. a future components release drops
-    // the re-export) so we throw a clear error here instead of a cryptic
-    // `new undefined(...)` the first time the splatting panel opens.
+    // bundled in (and re-exported by) maplibre-gl-components only if the
+    // dedicated import failed. No throw here: this runs inside the memoized
+    // `componentsConstructorsPromise`, so throwing would reject the cached
+    // singleton and break every other component control too. maplibre-gl-components
+    // re-exports GaussianSplatControl, so the fallback is always defined.
     const GaussianSplatControlClass = (splat?.GaussianSplatControl ??
-      components.GaussianSplatControl) as GaussianSplatControlConstructor | undefined;
+      components.GaussianSplatControl) as GaussianSplatControlConstructor;
     const GaussianSplatLayerAdapterClass = (splat?.GaussianSplatLayerAdapter ??
-      components.GaussianSplatLayerAdapter) as
-      | GaussianSplatLayerAdapterConstructor
-      | undefined;
-    if (!GaussianSplatControlClass || !GaussianSplatLayerAdapterClass) {
-      throw new Error(
-        "GaussianSplatControl is unavailable: neither maplibre-gl-splat nor maplibre-gl-components provided it.",
-      );
-    }
+      components.GaussianSplatLayerAdapter) as GaussianSplatLayerAdapterConstructor;
     return {
       AddVectorControl: AddVectorControlClass,
       BookmarkControl: BookmarkControlClass,
@@ -2408,6 +2403,8 @@ async function openStandaloneLidarControl(
     lidarControlMounted = true;
   }
 
+  startLidarThemeSync();
+
   setTimeout(() => {
     showLidarControl(lidarControl);
     lidarControl?.expand();
@@ -2533,7 +2530,13 @@ function createLidarControl(
   LidarControlClass: LidarControlConstructor,
   LidarLayerAdapterClass: LidarLayerAdapterConstructor
 ): LidarControl {
-  const control = new LidarControlClass(LIDAR_OPTIONS);
+  // Force the LiDAR panel to follow the in-app light/dark theme rather than the
+  // system prefers-color-scheme (which can differ), matching how the panel is
+  // kept in sync by startLidarThemeSync below.
+  const control = new LidarControlClass({
+    ...LIDAR_OPTIONS,
+    theme: resolveDocumentTheme(),
+  });
   lidarLayerAdapter = new LidarLayerAdapterClass(control);
   control.on("collapse", () => hideLidarControl(control));
   control.on("load", createLidarLoadHandler());
@@ -2893,6 +2896,36 @@ function stopPrintThemeSync(): void {
   printThemeObserver = null;
 }
 
+/**
+ * Keep the LiDAR panel theme in sync with the in-app light/dark toggle by
+ * observing the `class` attribute of the document element, so the panel follows
+ * the app theme rather than the system prefers-color-scheme.
+ */
+function startLidarThemeSync(): void {
+  if (
+    lidarThemeObserver ||
+    typeof MutationObserver === "undefined" ||
+    typeof document === "undefined"
+  ) {
+    return;
+  }
+  let lastTheme = resolveDocumentTheme();
+  lidarThemeObserver = new MutationObserver(() => {
+    const next = resolveDocumentTheme();
+    if (next === lastTheme) return;
+    lastTheme = next;
+    lidarControl?.setTheme(next);
+  });
+  lidarThemeObserver.observe(document.documentElement, {
+    attributeFilter: ["class"],
+  });
+}
+
+function stopLidarThemeSync(): void {
+  lidarThemeObserver?.disconnect();
+  lidarThemeObserver = null;
+}
+
 function createColorbarControl(
   ColorbarGuiControlClass: ColorbarGuiControlConstructor
 ): ColorbarGuiControl {
@@ -3196,6 +3229,7 @@ function setHtmlPanelVisible(visible: boolean): void {
 }
 
 function teardownLidarControl(app: GeoLibreAppAPI): void {
+  stopLidarThemeSync();
   lidarStoreUnsubscribe?.();
   lidarStoreUnsubscribe = null;
   lidarLayerAdapter?.destroy();
