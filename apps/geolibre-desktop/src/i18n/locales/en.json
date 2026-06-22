@@ -577,6 +577,7 @@
     "goToMap": "Go to map and collaborate",
     "manageSession": "Manage session",
     "sessionStatusTooltip": "Live collaboration session. Click to see who's connected.",
+    "announcements": "Session announcements",
     "participantJoined": "{{name}} joined the session",
     "participantLeft": "{{name}} left the session",
     "leave": "Leave session",

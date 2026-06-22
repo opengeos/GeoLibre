@@ -107,6 +107,19 @@ export function CollaborationStatusBadge() {
     }
   }, [isActive, participants, selfId, t]);
 
+  // Let Escape close the expanded roster, matching the dismissal convention of
+  // dialogs and popovers elsewhere. Click-outside is intentionally not wired up:
+  // the panel floats over the map, which users click constantly, so dismissing
+  // on every map interaction would be more annoying than helpful.
+  useEffect(() => {
+    if (!expanded) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setExpanded(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [expanded]);
+
   if (!isActive) return null;
 
   return (
@@ -120,8 +133,14 @@ export function CollaborationStatusBadge() {
     >
       {/* Transient join/leave announcements, stacked just above the pill. The
           live region stays mounted at all times (even when empty) and only its
-          content changes, so screen readers reliably pick up each insertion. */}
-      <div className="flex flex-col gap-1" role="status" aria-live="polite">
+          content changes, so screen readers reliably pick up each insertion.
+          role="log" (aria-atomic="false") announces only the newly added entry,
+          rather than re-reading the whole region the way role="status" would. */}
+      <div
+        className="flex flex-col gap-1"
+        role="log"
+        aria-label={t("collaborate.announcements")}
+      >
         {announcements.map((a) => (
           <div
             key={a.id}
