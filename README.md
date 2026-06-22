@@ -94,9 +94,9 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 Prebuilt desktop installers for Linux, Windows, and macOS are published on the
 [Releases](https://github.com/opengeos/GeoLibre/releases) page. On Windows you
 can install the signed, auto-updating build from the
-[Microsoft Store](https://apps.microsoft.com/detail/9nwt67rv531x) (or run
-`winget install OpenGeos.GeoLibre`). On macOS you can install and update with
-Homebrew:
+[Microsoft Store](https://apps.microsoft.com/detail/9nwt67rv531x), or the
+unsigned GitHub Release build via `winget install OpenGeos.GeoLibre`. On macOS
+you can install and update with Homebrew:
 
 ```bash
 brew tap opengeos/geolibre
