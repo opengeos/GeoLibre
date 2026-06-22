@@ -274,6 +274,9 @@ export function CollaborateDialog({
                 </Button>
                 <button
                   type="button"
+                  // Keep the prefilled `code` so the join field stays populated
+                  // if the user changes their mind; the full layout shows Start
+                  // as the primary action, so leaving it is non-destructive.
                   onClick={() => setInvited(false)}
                   disabled={busy}
                   className="cursor-pointer text-xs text-muted-foreground underline-offset-2 hover:underline disabled:cursor-default disabled:opacity-50"
