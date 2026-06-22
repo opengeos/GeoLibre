@@ -399,7 +399,7 @@ export function ProcessingDialog({
   const [runtimeMessage, setRuntimeMessage] = useState("");
   const [runtimeAvailable, setRuntimeAvailable] = useState<boolean | null>(null);
   // Cache the desktop check once, matching the sibling processing dialogs
-  // (ConversionDialog, RasterToolsDialog, SegmentationDialog).
+  // (ConversionDialog, RasterToolsDialog).
   const desktop = isTauri();
   // Run tools locally in WebAssembly (no Python sidecar). Default on in the
   // browser, where there is no sidecar; off under Tauri, where the sidecar is
@@ -1110,7 +1110,7 @@ export function ProcessingDialog({
                   tool-run error that has nothing to do with the sidecar). */}
               {!runLocal && runtimeAvailable === false ? (
                 <SidecarHelpBanner
-                  isDesktop={isTauri()}
+                  isDesktop={desktop}
                   error={error}
                   onRunLocally={() => {
                     // Clear the stale sidecar error in the same batch as the
