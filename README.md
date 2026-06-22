@@ -569,6 +569,7 @@ Full documentation, including the User Guide and Tutorials, is published at
   - [UI Profiles](docs/ui-profiles.md)
   - [Python package (Jupyter)](docs/python.md)
   - [Roadmap](docs/roadmap.md)
+  - [How to Cite](docs/citation.md)
 
 ## Acknowledgements
 
@@ -577,6 +578,16 @@ GeoLibre is built on the free and open-source geospatial and web communities —
 - The **Atmosphere Effects** plugin (deep-space backdrop, parallax starfield, comets, and the globe atmosphere halo) adapts the technique and visual design from [Leonel Dias](https://leoneljdias.github.io/)'s article [*Globe atmosphere, halo, and comets*](https://leoneljdias.github.io/posts/globe-atmosphere-halo-comets/) — the layered Canvas 2D approach, the halo gradient and "screen" blend, the limb-sampling that keeps the halo aligned under pitch, and the starfield/comet parameters.
 - **Community contributors** — thanks to [**Ryanphoenix**](https://github.com/Ryanphoenix) for many valued contributions, including issue reports, feedback, and improvements.
 - **Beta testers** — thanks to [**René van der Velde**](https://github.com/renevandervelde) (Netherlands) for early testing, detailed bug reports, and feature requests.
+
+## Citation
+
+If you use GeoLibre in your work, please cite it. GeoLibre is archived on [Zenodo](https://zenodo.org/), which mints a DOI for every release. The concept DOI below always resolves to the latest version.
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20785400.svg)](https://doi.org/10.5281/zenodo.20785400)
+
+> Wu, Q. GeoLibre: A free and open-source, lightweight, cloud-native GIS platform. Zenodo. https://doi.org/10.5281/zenodo.20785400
+
+You can also use GitHub's **"Cite this repository"** button (which reads [`CITATION.cff`](CITATION.cff)) to copy a ready-made APA or BibTeX entry. See the [How to Cite](https://geolibre.app/citation/) page for more formats.
 
 ## License
 
