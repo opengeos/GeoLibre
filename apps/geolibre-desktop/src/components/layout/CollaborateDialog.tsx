@@ -67,7 +67,13 @@ export function CollaborateDialog({
 
   // Seed from a prior session (or a ?collab= deep link) when the dialog opens.
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      // Forget any prior invite context on close. The `?collab=` code is
+      // stripped from the URL on first read, so a later manual reopen has no
+      // invite link and should show the full layout, not the invited view.
+      setInvited(false);
+      return;
+    }
     setError(null);
     setBusy(false);
     setName((prev) => prev || collaboration.selfName);
@@ -250,7 +256,7 @@ export function CollaborateDialog({
                     onChange={(e) => setCode(e.target.value)}
                     placeholder={t("collaborate.sessionCodePlaceholder")}
                     disabled={busy}
-                    className="font-mono uppercase tracking-widest"
+                    className="font-mono uppercase"
                   />
                 </div>
                 <Button
@@ -270,7 +276,7 @@ export function CollaborateDialog({
                   type="button"
                   onClick={() => setInvited(false)}
                   disabled={busy}
-                  className="text-xs text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50"
+                  className="cursor-pointer text-xs text-muted-foreground underline-offset-2 hover:underline disabled:cursor-default disabled:opacity-50"
                 >
                   {t("collaborate.startInstead")}
                 </button>
