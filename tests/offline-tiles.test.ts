@@ -253,6 +253,19 @@ describe("planOfflineZoom", () => {
     assert.equal(plan.maxZoom, 24);
   });
 
+  it("caps maxExtraLevels to 1 when only one level separates base from ceiling", () => {
+    const plan = planOfflineZoom(23, 24, true, 5, HARD_MAX);
+    assert.equal(plan.maxExtraLevels, 1);
+    assert.equal(plan.maxZoom, 24);
+  });
+
+  it("floors a fractional mapMaxZoom", () => {
+    // getMaxZoom() can return a non-integer; floor(24.7) = 24.
+    const plan = planOfflineZoom(10, 24.7, true, 3, HARD_MAX);
+    assert.equal(plan.maxExtraLevels, HARD_MAX);
+    assert.equal(plan.maxZoom, 13);
+  });
+
   it("never produces an inverted range at the map's max zoom (#751)", () => {
     // At zoom 24 of a 24-max map there is nothing deeper to fetch: extra detail
     // is unavailable and the range stays at the base zoom, not a backwards

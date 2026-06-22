@@ -55,10 +55,12 @@ const AVG_TILE_BYTES = 30 * 1024;
 const MAX_EXTRA_LEVELS = 5;
 
 /**
- * Fallback map max zoom when the live map can't be read. Matches MapLibre's
- * default ceiling; the real value comes from the map's `getMaxZoom()`.
+ * Fallback map max zoom for the rare case where the live map can't be read at
+ * dialog-open time. Matches the project's default max zoom (see
+ * `DEFAULT_PROJECT_PREFERENCES.map.maxZoom`) so the degraded path doesn't revert
+ * to the old hard-coded 22 ceiling; the real value comes from `getMaxZoom()`.
  */
-const DEFAULT_MAX_ZOOM = 22;
+const DEFAULT_MAX_ZOOM = 24;
 
 /** Default and bounds for the advanced concurrency control. */
 const DEFAULT_CONCURRENCY = 6;

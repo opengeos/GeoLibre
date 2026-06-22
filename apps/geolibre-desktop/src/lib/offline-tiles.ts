@@ -126,6 +126,7 @@ export interface OfflineZoomPlan {
  *   extraLevels: The extra-levels slider value. Floored to an integer and
  *     treated as at least 1 when `includeExtra` is on.
  *   hardMaxExtraLevels: The slider's absolute upper bound (the dialog's cap).
+ *     Must be `>= 1`; the dialog passes a fixed positive constant.
  *
  * Returns:
  *   The resolved {@link OfflineZoomPlan}.
@@ -142,7 +143,8 @@ export function planOfflineZoom(
   const canIncludeExtra = baseZoom < ceil;
   // 0 when the view is already at the map's max zoom. The slider's `max` is
   // gated behind `canIncludeExtra` in the dialog, so it never receives 0; when
-  // it is shown, `ceil - baseZoom >= 1` guarantees a valid range.
+  // it is shown, `ceil - baseZoom >= 1` together with the `hardMaxExtraLevels
+  // >= 1` precondition guarantees a valid (non-inverted) range.
   const maxExtraLevels = Math.min(hardMaxExtraLevels, ceil - baseZoom);
   const effectiveExtra =
     includeExtra && canIncludeExtra
