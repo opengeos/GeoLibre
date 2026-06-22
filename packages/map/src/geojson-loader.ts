@@ -97,6 +97,16 @@ export function labelLayerId(layerId: string): string {
   return `layer-${layerId}-label`;
 }
 
+/**
+ * Source id for the optional deduplicated label features (see
+ * {@link LabelStyle.dedupe}). Separate from the layer's main source so the
+ * symbol layer can read aggregated one-per-point labels without altering the
+ * data the fill/line/circle layers render.
+ */
+export function labelSourceId(layerId: string): string {
+  return `source-${layerId}-label`;
+}
+
 export function highlightSourceId(): string {
   return "geolibre-highlight-source";
 }

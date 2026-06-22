@@ -181,7 +181,54 @@ export interface LabelStyle {
   maxZoom: number;
   /** Let labels overlap instead of hiding colliding ones. */
   allowOverlap: boolean;
+  /**
+   * Where the label sits relative to its anchor point (MapLibre `text-anchor`),
+   * e.g. `"top"` places the text above the point. Ignored for line placement.
+   */
+  anchor: LabelAnchor;
+  /** Horizontal label offset in ems (MapLibre `text-offset` x). */
+  offsetX: number;
+  /** Vertical label offset in ems (MapLibre `text-offset` y; positive is down). */
+  offsetY: number;
+  /** Label rotation in degrees clockwise (MapLibre `text-rotate`). */
+  rotation: number;
+  /** Maximum line width in ems before the label wraps (MapLibre `text-max-width`). */
+  maxWidth: number;
+  /** Letter-case transform applied to the label text (MapLibre `text-transform`). */
+  transform: LabelTransform;
+  /**
+   * How to handle features that share a label.
+   *
+   * - `"off"`: every feature is labeled (the historical behavior).
+   * - `"unique"`: features stacked at the same point are collapsed to a single
+   *   label, so co-located points (e.g. several antennas at one cell site) do not
+   *   stack overlapping text.
+   * - `"concatenate"`: co-located points are merged into one label that joins
+   *   their distinct {@link field} values, one per line.
+   *
+   * Applies to point layers rendered through the inline GeoJSON path and uses
+   * {@link field} (not {@link expression}) as the label value.
+   */
+  dedupe: LabelDedupe;
 }
+
+/** MapLibre `text-anchor` positions offered for {@link LabelStyle.anchor}. */
+export type LabelAnchor =
+  | "center"
+  | "left"
+  | "right"
+  | "top"
+  | "bottom"
+  | "top-left"
+  | "top-right"
+  | "bottom-left"
+  | "bottom-right";
+
+/** Letter-case transform offered for {@link LabelStyle.transform}. */
+export type LabelTransform = "none" | "uppercase" | "lowercase";
+
+/** Duplicate-label handling offered for {@link LabelStyle.dedupe}. */
+export type LabelDedupe = "off" | "unique" | "concatenate";
 
 export interface LayerStyle {
   minZoom: number;
@@ -308,6 +355,13 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
     minZoom: 0,
     maxZoom: 24,
     allowOverlap: false,
+    anchor: "center",
+    offsetX: 0,
+    offsetY: 0,
+    rotation: 0,
+    maxWidth: 10,
+    transform: "none",
+    dedupe: "off",
   },
   extrusionEnabled: false,
   extrusionColor: "#3b82f6",

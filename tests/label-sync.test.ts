@@ -37,7 +37,7 @@ function makeMap() {
     }),
     once: () => {},
   };
-  return { map, layers };
+  return { map, layers, sources };
 }
 
 type Geom = "point" | "line";
@@ -222,5 +222,100 @@ describe("label sync", () => {
     // (default 0-24), so the tighter 5-12 wins.
     assert.equal(label.minzoom, 5);
     assert.equal(label.maxzoom, 12);
+  });
+
+  it("applies the ArcGIS-style label layout options", () => {
+    const { map, layers } = makeMap();
+    syncLayer(
+      map as never,
+      labeledLayer({
+        enabled: true,
+        field: "name",
+        anchor: "top",
+        offsetX: 1.5,
+        offsetY: -2,
+        rotation: 30,
+        maxWidth: 6,
+        transform: "uppercase",
+      }),
+    );
+
+    const label = layers.get(LABEL_ID) as { layout: Record<string, unknown> };
+    assert.equal(label.layout["text-anchor"], "top");
+    assert.deepEqual(label.layout["text-offset"], [1.5, -2]);
+    assert.equal(label.layout["text-rotate"], 30);
+    assert.equal(label.layout["text-max-width"], 6);
+    assert.equal(label.layout["text-transform"], "uppercase");
+  });
+
+  function colocatedPointLayer(
+    labelPatch: Partial<LabelStyle>,
+  ): GeoLibreLayer {
+    return {
+      id: "lyr",
+      name: "Layer",
+      type: "geojson",
+      source: { type: "geojson" },
+      visible: true,
+      opacity: 1,
+      style: {
+        ...DEFAULT_LAYER_STYLE,
+        labels: { ...DEFAULT_LAYER_STYLE.labels, ...labelPatch },
+      },
+      metadata: {},
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { name: "A" },
+            geometry: { type: "Point", coordinates: [0, 0] },
+          },
+          {
+            type: "Feature",
+            properties: { name: "B" },
+            geometry: { type: "Point", coordinates: [0, 0] },
+          },
+        ],
+      },
+    };
+  }
+
+  const LABEL_SOURCE_ID = "source-lyr-label";
+
+  it("builds a dedicated label source for unique-label mode", () => {
+    const { map, layers, sources } = makeMap();
+    syncLayer(
+      map as never,
+      colocatedPointLayer({ enabled: true, field: "name", dedupe: "unique" }),
+    );
+
+    const label = layers.get(LABEL_ID) as {
+      source: string;
+      layout: Record<string, unknown>;
+    };
+    assert.ok(sources.has(LABEL_SOURCE_ID), "dedup source should exist");
+    assert.equal(label.source, LABEL_SOURCE_ID);
+    assert.deepEqual(label.layout["text-field"], ["get", "__label"]);
+    const data = (sources.get(LABEL_SOURCE_ID) as { data: GeoJSON.FeatureCollection })
+      .data;
+    assert.equal(data.features.length, 1);
+  });
+
+  it("removes the dedup source when dedup is turned back off", () => {
+    const { map, layers, sources } = makeMap();
+    syncLayer(
+      map as never,
+      colocatedPointLayer({ enabled: true, field: "name", dedupe: "unique" }),
+    );
+    assert.ok(sources.has(LABEL_SOURCE_ID));
+
+    syncLayer(
+      map as never,
+      colocatedPointLayer({ enabled: true, field: "name", dedupe: "off" }),
+    );
+    assert.ok(!sources.has(LABEL_SOURCE_ID), "dedup source should be removed");
+    const label = layers.get(LABEL_ID) as { source: string };
+    assert.equal(label.source, "source-lyr");
   });
 });

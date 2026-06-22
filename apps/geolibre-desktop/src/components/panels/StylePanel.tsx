@@ -12,7 +12,6 @@ import {
   type VectorStyleStop,
   createEqualIntervalBreaks,
   createQuantileBreaks,
-  getVectorColorRamp,
   interpolateRampColors,
   parseJsonExpression,
   styleValue,
@@ -21,6 +20,7 @@ import {
 import {
   Button,
   ColorField,
+  ColorRampSelect,
   Input,
   Label,
   ScrollArea,
@@ -1577,8 +1577,6 @@ export function StylePanel({
     (classCount) =>
       draftVectorStyleMode === "categorized" ? true : classCount >= 2,
   );
-  const colorRampPreview =
-    getVectorColorRamp(draftVectorStyleColorRamp).colors;
 
   // --- Rule-based renderer (immediate writes to style.vectorRules) ---
   const currentRules = styleValue(style, "vectorRules");
@@ -1746,27 +1744,12 @@ export function StylePanel({
       {usesAttributeSymbology && (
         <div className="space-y-2">
           <Label htmlFor="vectorStyleColorRamp">Colormap</Label>
-          <Select
+          <ColorRampSelect
             id="vectorStyleColorRamp"
+            aria-label="Colormap"
             value={draftVectorStyleColorRamp}
-            onChange={(event) =>
-              updateDraftVectorStyleColorRamp(event.target.value)
-            }
-          >
-            {VECTOR_COLOR_RAMPS.map((colorRamp) => (
-              <option key={colorRamp.value} value={colorRamp.value}>
-                {colorRamp.label}
-              </option>
-            ))}
-          </Select>
-          <div
-            aria-hidden="true"
-            className="h-2 rounded-sm border"
-            style={{
-              background: `linear-gradient(90deg, ${colorRampPreview.join(
-                ", ",
-              )})`,
-            }}
+            onValueChange={updateDraftVectorStyleColorRamp}
+            ramps={VECTOR_COLOR_RAMPS}
           />
         </div>
       )}
@@ -2381,6 +2364,123 @@ export function StylePanel({
             />
             {t("style.labels.allowOverlap")}
           </label>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="labelAnchor">{t("style.labels.anchor")}</Label>
+              <Select
+                id="labelAnchor"
+                value={labels.anchor}
+                onChange={(event) =>
+                  updateLabels({
+                    anchor: event.target.value as LabelStyle["anchor"],
+                  })
+                }
+              >
+                <option value="center">{t("style.labels.anchorCenter")}</option>
+                <option value="left">{t("style.labels.anchorLeft")}</option>
+                <option value="right">{t("style.labels.anchorRight")}</option>
+                <option value="top">{t("style.labels.anchorTop")}</option>
+                <option value="bottom">{t("style.labels.anchorBottom")}</option>
+                <option value="top-left">
+                  {t("style.labels.anchorTopLeft")}
+                </option>
+                <option value="top-right">
+                  {t("style.labels.anchorTopRight")}
+                </option>
+                <option value="bottom-left">
+                  {t("style.labels.anchorBottomLeft")}
+                </option>
+                <option value="bottom-right">
+                  {t("style.labels.anchorBottomRight")}
+                </option>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="labelTransform">
+                {t("style.labels.transform")}
+              </Label>
+              <Select
+                id="labelTransform"
+                value={labels.transform}
+                onChange={(event) =>
+                  updateLabels({
+                    transform: event.target.value as LabelStyle["transform"],
+                  })
+                }
+              >
+                <option value="none">{t("style.labels.transformNone")}</option>
+                <option value="uppercase">
+                  {t("style.labels.transformUppercase")}
+                </option>
+                <option value="lowercase">
+                  {t("style.labels.transformLowercase")}
+                </option>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <NumericStyleInput
+              id="labelOffsetX"
+              label={t("style.labels.offsetX")}
+              min={-10}
+              max={10}
+              step={0.25}
+              value={labels.offsetX}
+              onChange={(offsetX) => updateLabels({ offsetX })}
+            />
+            <NumericStyleInput
+              id="labelOffsetY"
+              label={t("style.labels.offsetY")}
+              min={-10}
+              max={10}
+              step={0.25}
+              value={labels.offsetY}
+              onChange={(offsetY) => updateLabels({ offsetY })}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <NumericStyleInput
+              id="labelRotation"
+              label={t("style.labels.rotation")}
+              min={-180}
+              max={180}
+              step={5}
+              value={labels.rotation}
+              onChange={(rotation) => updateLabels({ rotation })}
+            />
+            <NumericStyleInput
+              id="labelMaxWidth"
+              label={t("style.labels.maxWidth")}
+              min={1}
+              max={40}
+              step={1}
+              value={labels.maxWidth}
+              onChange={(maxWidth) => updateLabels({ maxWidth })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="labelDedupe">{t("style.labels.dedupe")}</Label>
+            <Select
+              id="labelDedupe"
+              value={labels.dedupe}
+              onChange={(event) =>
+                updateLabels({
+                  dedupe: event.target.value as LabelStyle["dedupe"],
+                })
+              }
+            >
+              <option value="off">{t("style.labels.dedupeOff")}</option>
+              <option value="unique">{t("style.labels.dedupeUnique")}</option>
+              <option value="concatenate">
+                {t("style.labels.dedupeConcatenate")}
+              </option>
+            </Select>
+            {labels.dedupe !== "off" ? (
+              <p className="text-xs text-muted-foreground">
+                {t("style.labels.dedupeHint")}
+              </p>
+            ) : null}
+          </div>
           <div className="space-y-2">
             <Label htmlFor="labelExpression">
               {t("style.labels.expression")}

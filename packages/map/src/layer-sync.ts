@@ -26,11 +26,13 @@ import {
   fillLayerId,
   heatmapLayerId,
   labelLayerId,
+  labelSourceId,
   lineLayerId,
   markerLayerId,
   sourceId,
   textLayerId,
 } from "./geojson-loader";
+import { buildDedupedLabelFeatures } from "./label-dedup";
 import { ensureGeneratedImageHandler } from "./generated-images";
 import { prepareFillPattern } from "./fill-patterns";
 import { prepareMarker } from "./markers";
@@ -1697,11 +1699,23 @@ function applyVectorDataRenderLayers(
     ...DEFAULT_LAYER_STYLE.labels,
     ...styleValue(layer.style, "labels"),
   };
+  // Unique/concatenate labels collapse co-located points into a single label.
+  // Only the inline GeoJSON path (no source-layer) can build the aggregated
+  // source, and dedup keys off the field value rather than the expression.
+  const dedupedLabelFc =
+    labels.enabled &&
+    labels.dedupe !== "off" &&
+    !sourceLayer &&
+    layer.geojson &&
+    labels.field &&
+    profile.hasPoint
+      ? getDedupedLabelFeatures(layer.geojson, labels.field, labels.dedupe)
+      : null;
   if (
     !layer.style.extrusionEnabled &&
     renderer !== "heatmap" &&
     labels.enabled &&
-    (labels.expression.trim() || labels.field)
+    (dedupedLabelFc || labels.expression.trim() || labels.field)
   ) {
     const fieldTextField = (
       labels.field
@@ -1709,26 +1723,35 @@ function applyVectorDataRenderLayers(
         : ""
     ) as unknown as maplibregl.ExpressionSpecification | string;
     let textField: maplibregl.ExpressionSpecification | string;
-    try {
-      if (labels.expression.trim()) {
-        const parsed = JSON.parse(labels.expression);
-        // JSON.parse accepts non-expressions (numbers, objects, null); only an
-        // array is a usable MapLibre expression, so reject anything else and
-        // fall back to the field.
-        if (!Array.isArray(parsed)) throw new Error("not an expression");
-        textField = parsed as maplibregl.ExpressionSpecification;
-      } else {
+    if (dedupedLabelFc) {
+      // The aggregated source carries the resolved label in `__label`.
+      textField = [
+        "get",
+        "__label",
+      ] as unknown as maplibregl.ExpressionSpecification;
+    } else {
+      try {
+        if (labels.expression.trim()) {
+          const parsed = JSON.parse(labels.expression);
+          // JSON.parse accepts non-expressions (numbers, objects, null); only an
+          // array is a usable MapLibre expression, so reject anything else and
+          // fall back to the field.
+          if (!Array.isArray(parsed)) throw new Error("not an expression");
+          textField = parsed as maplibregl.ExpressionSpecification;
+        } else {
+          textField = fieldTextField;
+        }
+      } catch {
+        // A typo'd or non-expression value must not break the whole layer sync.
         textField = fieldTextField;
       }
-    } catch {
-      // A typo'd or non-expression value must not break the whole layer sync.
-      textField = fieldTextField;
     }
     if (textField === "") {
       // An invalid expression with no field falls back to an empty text-field,
       // which would create an invisible label layer that still consumes
       // renderer resources. Remove it instead of adding an empty one.
       removeIfExists(map, labelLayerId(layer.id));
+      removeSourceIfExists(map, labelSourceId(layer.id));
     } else {
       const labelZoom = intersectZoomRange(
         {
@@ -1737,28 +1760,69 @@ function applyVectorDataRenderLayers(
         },
         layer.style,
       );
+      const dedupSourceId = labelSourceId(layer.id);
+      // The aggregated label features live in their own GeoJSON source so the
+      // symbol layer can read one-per-point labels without altering the data the
+      // other render layers draw.
+      if (dedupedLabelFc) {
+        if (map.getSource(dedupSourceId)) {
+          (map.getSource(dedupSourceId) as maplibregl.GeoJSONSource).setData(
+            dedupedLabelFc,
+          );
+        } else {
+          map.addSource(dedupSourceId, {
+            type: "geojson",
+            data: dedupedLabelFc,
+          });
+        }
+      }
+      // A layer's source is immutable, so when the label source switches between
+      // the shared source and the dedup source the layer must be recreated.
+      const targetSource = dedupedLabelFc ? dedupSourceId : src;
+      const existingLabel = map.getLayer(labelLayerId(layer.id)) as
+        | { source?: string }
+        | undefined;
+      if (existingLabel && existingLabel.source !== targetSource) {
+        removeIfExists(map, labelLayerId(layer.id));
+      }
       // Skip geoman text-marker points (they carry their own annotation text),
-      // reusing the same two-property predicate the circle/text layers use.
+      // reusing the same two-property predicate the circle/text layers use. The
+      // dedup source holds only synthetic points, so it needs neither that
+      // filter nor the time filter.
       const nonMarkerFilter = [
         "!",
         textMarkerShapeFilter,
       ] as unknown as maplibregl.FilterSpecification;
+      const sourceRef = dedupedLabelFc
+        ? { source: dedupSourceId }
+        : sourceSpec;
       ensureLayer(
         map,
         labelLayerId(layer.id),
         {
           id: labelLayerId(layer.id),
           type: "symbol",
-          ...sourceSpec,
+          ...sourceRef,
           ...labelZoom,
-          filter: withTimeFilter(layer, nonMarkerFilter),
+          ...(dedupedLabelFc
+            ? {}
+            : { filter: withTimeFilter(layer, nonMarkerFilter) }),
           layout: {
             "text-field": textField,
             "text-font": textFontForMapStyle(map),
             "text-size": Math.max(1, labels.size),
-            "symbol-placement": labels.placement === "line" ? "line" : "point",
+            // The dedup source is points, so it cannot use line placement.
+            "symbol-placement":
+              !dedupedLabelFc && labels.placement === "line"
+                ? "line"
+                : "point",
             "text-allow-overlap": labels.allowOverlap,
             "text-ignore-placement": labels.allowOverlap,
+            "text-anchor": labels.anchor,
+            "text-offset": [labels.offsetX, labels.offsetY],
+            "text-rotate": labels.rotation,
+            "text-max-width": Math.max(1, labels.maxWidth),
+            "text-transform": labels.transform,
             visibility,
           },
           paint: {
@@ -1770,9 +1834,15 @@ function applyVectorDataRenderLayers(
         },
         beforeId,
       );
+      // Drop the dedup source once the label layer no longer references it (it is
+      // recreated on the shared source above before this runs).
+      if (!dedupedLabelFc) {
+        removeSourceIfExists(map, dedupSourceId);
+      }
     }
   } else {
     removeIfExists(map, labelLayerId(layer.id));
+    removeSourceIfExists(map, labelSourceId(layer.id));
   }
 }
 
@@ -1780,6 +1850,35 @@ function applyVectorDataRenderLayers(
 // scan that the tiled path now runs against 50k+ feature collections. Memoize by
 // collection reference — the store replaces the object on every mutation.
 const textMarkerCache = new WeakMap<GeoJSON.FeatureCollection, boolean>();
+
+// Deduplicated label features are also O(n) over the source, so memoize them by
+// collection reference (keyed by the field + mode, since both change the result)
+// to avoid rebuilding on every rapid sync.
+const dedupedLabelCache = new WeakMap<
+  GeoJSON.FeatureCollection,
+  Map<string, GeoJSON.FeatureCollection | null>
+>();
+
+function getDedupedLabelFeatures(
+  collection: GeoJSON.FeatureCollection,
+  field: string,
+  mode: "off" | "unique" | "concatenate",
+): GeoJSON.FeatureCollection | null {
+  let byKey = dedupedLabelCache.get(collection);
+  if (!byKey) {
+    byKey = new Map();
+    dedupedLabelCache.set(collection, byKey);
+  }
+  const key = `${mode}:${field}`;
+  if (byKey.has(key)) return byKey.get(key) ?? null;
+  const result = buildDedupedLabelFeatures(collection, field, mode);
+  byKey.set(key, result);
+  return result;
+}
+
+function removeSourceIfExists(map: maplibregl.Map, id: string): void {
+  if (map.getSource(id)) map.removeSource(id);
+}
 
 // Keep this predicate aligned with textMarkerFilter: any text-marker-shaped
 // point routes to the symbol layer, even with empty text, so features are
@@ -2652,7 +2751,11 @@ export function removeLayerFromMap(
   ]) {
     if (map.getLayer(id)) map.removeLayer(id);
   }
-  for (const src of [...getExternalSourceIds(layer), sourceId(layerId)]) {
+  for (const src of [
+    ...getExternalSourceIds(layer),
+    sourceId(layerId),
+    labelSourceId(layerId),
+  ]) {
     if (src && map.getSource(src)) map.removeSource(src);
   }
   // Free any client-side tile index built for this layer's tiled render path.

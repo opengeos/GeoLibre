@@ -2,6 +2,11 @@ export { cn } from "./lib/utils";
 export { Button, type ButtonProps } from "./components/button";
 export { Input } from "./components/input";
 export { ColorField, type ColorFieldProps } from "./components/color-field";
+export {
+  ColorRampSelect,
+  type ColorRampSelectProps,
+  type ColorRampOption,
+} from "./components/color-ramp-select";
 export { Textarea } from "./components/textarea";
 export { Select } from "./components/select";
 export { Label } from "./components/label";
