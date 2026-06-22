@@ -113,8 +113,11 @@ export async function fetchProjectFromUrl(
   } catch (error) {
     // The fetch succeeded but the body is not a usable project: malformed JSON
     // or a file missing the required GeoLibre fields. Name the URL and the
-    // underlying reason rather than leaking a bare JSON.parse SyntaxError.
-    const detail = error instanceof Error ? error.message : String(error);
+    // underlying reason rather than leaking a bare JSON.parse SyntaxError. Strip
+    // parseProject's own "Invalid GeoLibre project:" prefix so the wrapper does
+    // not repeat the noun it already states.
+    const detail = (error instanceof Error ? error.message : String(error))
+      .replace(/^Invalid GeoLibre project:\s*/i, "");
     throw new Error(
       `The file at ${projectUrl} is not a valid GeoLibre project ` +
         `(.geolibre.json): ${detail}`,

@@ -86,6 +86,27 @@ describe("fetchProjectFromUrl", () => {
     );
   });
 
+  it("propagates an abort that happens during body streaming", async () => {
+    // The signal fires between the 200 response and the finished body read:
+    // text() rejects with AbortError, which must propagate untouched.
+    const fetchImpl = (async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async () => {
+        throw new DOMException("Aborted", "AbortError");
+      },
+    })) as unknown as typeof fetch;
+
+    await assert.rejects(
+      () => fetchProjectFromUrl(PROJECT_URL, { fetchImpl }),
+      (error: Error) => {
+        assert.equal(error.name, "AbortError");
+        return true;
+      },
+    );
+  });
+
   it("omits an empty statusText (HTTP/2) to avoid a dangling period", async () => {
     const fetchImpl = (async () =>
       new Response("Not found", {
@@ -163,6 +184,9 @@ describe("fetchProjectFromUrl", () => {
       (error: Error) => {
         assert.match(error.message, /is not a valid GeoLibre project/);
         assert.match(error.message, /missing required fields/);
+        // parseProject's own "Invalid GeoLibre project:" prefix is stripped so
+        // the wrapper does not repeat the noun.
+        assert.doesNotMatch(error.message, /\): Invalid GeoLibre project:/);
         return true;
       },
     );
