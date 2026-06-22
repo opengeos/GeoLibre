@@ -54,6 +54,12 @@ export function CollaborateDialog({
   const [color, setColor] = useState<string>(DEFAULT_COLOR);
   const [mode, setMode] = useState<CollaborationMode>("co-edit");
   const [code, setCode] = useState("");
+  // True when the dialog was opened from a `?collab=` invite link, which
+  // streamlines the layout to a single Join action (the "Start a session"
+  // controls are irrelevant to an invited participant). Cleared if the user
+  // explicitly chooses to host instead, or after a failed join, so they can
+  // still fall back to the full layout.
+  const [invited, setInvited] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<"code" | "link" | null>(null);
@@ -70,6 +76,7 @@ export function CollaborateDialog({
     const fromUrl = url.searchParams.get("collab");
     if (fromUrl) {
       setCode(fromUrl);
+      setInvited(true);
       // Strip the code from the address bar (and thus history/referrer) once
       // read, so the session code doesn't linger after joining.
       url.searchParams.delete("collab");
@@ -141,6 +148,9 @@ export function CollaborateDialog({
       // diagnostics (collab-client throws human-readable English strings).
       console.error("[GeoLibre] Collaboration error", err);
       setError(t("collaborate.connectFailed"));
+      // The invite link could not connect (e.g. an expired or invalid code), so
+      // reveal the full layout and let the user fix the code or host instead.
+      setInvited(false);
     } finally {
       setBusy(false);
     }
@@ -216,61 +226,118 @@ export function CollaborateDialog({
               </div>
             </div>
 
-            <div className="space-y-2 rounded-md border p-3">
-              <p className="text-sm font-medium">
-                {t("collaborate.startHeading")}
-              </p>
-              <div className="space-y-1.5">
-                <Label htmlFor="collab-mode">{t("collaborate.mode")}</Label>
-                <Select
-                  id="collab-mode"
-                  value={mode}
-                  onChange={(e) => setMode(e.target.value as CollaborationMode)}
-                  disabled={busy}
-                >
-                  <option value="co-edit">{t("collaborate.modeCoEdit")}</option>
-                  <option value="view-only">
-                    {t("collaborate.modeViewOnly")}
-                  </option>
-                </Select>
-              </div>
-              <Button
-                type="button"
-                onClick={() => void handleStart()}
-                disabled={busy || !name.trim()}
-                className="w-full"
-              >
-                {busy ? (
-                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Users className="mr-2 h-3.5 w-3.5" />
-                )}
-                {t("collaborate.start")}
-              </Button>
-            </div>
-
-            <div className="space-y-2 rounded-md border p-3">
-              <p className="text-sm font-medium">
-                {t("collaborate.joinHeading")}
-              </p>
-              <div className="flex gap-2">
-                <Input
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  placeholder={t("collaborate.sessionCodePlaceholder")}
-                  disabled={busy}
-                  className="font-mono uppercase"
-                />
+            {/* An invited participant (arrived via a `?collab=` link) only needs
+                to join, so collapse the layout to a single Join action and hide
+                the "Start a session" controls that are irrelevant to them
+                (#753). They can still fall back to hosting via the link below. */}
+            {invited ? (
+              <div className="space-y-3 rounded-md border p-3">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">
+                    {t("collaborate.invitedHeading")}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {t("collaborate.invitedDescription")}
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="collab-code">
+                    {t("collaborate.sessionCode")}
+                  </Label>
+                  <Input
+                    id="collab-code"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    placeholder={t("collaborate.sessionCodePlaceholder")}
+                    disabled={busy}
+                    className="font-mono uppercase tracking-widest"
+                  />
+                </div>
                 <Button
                   type="button"
-                  variant="secondary"
                   onClick={() => void handleJoin()}
                   disabled={busy || !name.trim() || !code.trim()}
+                  className="w-full"
                 >
-                  {t("collaborate.join")}
+                  {busy ? (
+                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Users className="mr-2 h-3.5 w-3.5" />
+                  )}
+                  {t("collaborate.joinSession")}
                 </Button>
+                <button
+                  type="button"
+                  onClick={() => setInvited(false)}
+                  disabled={busy}
+                  className="text-xs text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50"
+                >
+                  {t("collaborate.startInstead")}
+                </button>
               </div>
-            </div>
+            ) : (
+              <>
+                <div className="space-y-2 rounded-md border p-3">
+                  <p className="text-sm font-medium">
+                    {t("collaborate.startHeading")}
+                  </p>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="collab-mode">{t("collaborate.mode")}</Label>
+                    <Select
+                      id="collab-mode"
+                      value={mode}
+                      onChange={(e) =>
+                        setMode(e.target.value as CollaborationMode)
+                      }
+                      disabled={busy}
+                    >
+                      <option value="co-edit">
+                        {t("collaborate.modeCoEdit")}
+                      </option>
+                      <option value="view-only">
+                        {t("collaborate.modeViewOnly")}
+                      </option>
+                    </Select>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={() => void handleStart()}
+                    disabled={busy || !name.trim()}
+                    className="w-full"
+                  >
+                    {busy ? (
+                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Users className="mr-2 h-3.5 w-3.5" />
+                    )}
+                    {t("collaborate.start")}
+                  </Button>
+                </div>
+
+                <div className="space-y-2 rounded-md border p-3">
+                  <p className="text-sm font-medium">
+                    {t("collaborate.joinHeading")}
+                  </p>
+                  <div className="flex gap-2">
+                    <Input
+                      value={code}
+                      onChange={(e) => setCode(e.target.value)}
+                      placeholder={t("collaborate.sessionCodePlaceholder")}
+                      disabled={busy}
+                      className="font-mono uppercase"
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => void handleJoin()}
+                      disabled={busy || !name.trim() || !code.trim()}
+                    >
+                      {t("collaborate.join")}
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Show local validation errors and connect failures, the latter
                 arriving asynchronously in the store (the WebSocket handshake
