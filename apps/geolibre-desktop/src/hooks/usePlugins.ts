@@ -23,6 +23,12 @@ import {
   maplibreTimeSliderPlugin,
   maplibreUsgsLidarPlugin,
   PluginManager,
+  registerRightPanel,
+  unregisterRightPanel,
+  openRightPanel,
+  collapseRightPanel,
+  closeRightPanel,
+  getActiveRightPanel,
 } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
 import type {
@@ -30,6 +36,7 @@ import type {
   GeoLibreExternalNativeLayerRegistration,
   GeoLibreFileDialogOptions,
   GeoLibreMapControlPosition,
+  GeoLibreRightPanelRegistration,
 } from "@geolibre/plugins";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -587,6 +594,13 @@ export function createAppAPI(
           }),
         ));
     })(),
+    registerRightPanel: (panel: GeoLibreRightPanelRegistration) =>
+      registerRightPanel(panel),
+    unregisterRightPanel: (id: string) => unregisterRightPanel(id),
+    openRightPanel: (id: string) => openRightPanel(id),
+    collapseRightPanel: (id: string) => collapseRightPanel(id),
+    closeRightPanel: (id: string) => closeRightPanel(id),
+    getActiveRightPanel: () => getActiveRightPanel(),
   };
 }
 

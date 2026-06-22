@@ -205,6 +205,70 @@ export interface GeoLibreAppAPI {
    * deck.gl, so plugins should still call it with optional chaining.
    */
   getDeckGL?: () => Promise<GeoLibreDeckGL>;
+  /**
+   * Register a plugin-owned right-sidebar panel that docks beside the built-in
+   * Style panel and behaves like a first-class part of the workspace. Returns
+   * an unregister function (call it from `deactivate`). The panel is not shown
+   * until `openRightPanel(panel.id)` runs. While a plugin panel is the active
+   * right-side workspace the host collapses the Style panel to its rail and
+   * restores it when the plugin panel closes. Typed optional for
+   * forward-compatibility with host variants without a right sidebar, so
+   * plugins should call it with optional chaining.
+   */
+  registerRightPanel?: (panel: GeoLibreRightPanelRegistration) => () => void;
+  /** Remove a previously registered right panel (closing it if active). */
+  unregisterRightPanel?: (id: string) => void;
+  /**
+   * Make the panel the active right-side workspace and expand it. Returns false
+   * if no panel with that id is registered. Re-opening a collapsed panel
+   * expands it.
+   */
+  openRightPanel?: (id: string) => boolean;
+  /** Collapse the active right panel to its rail without closing it. */
+  collapseRightPanel?: (id: string) => void;
+  /** Close the active right panel and restore the Style panel. */
+  closeRightPanel?: (id: string) => void;
+  /** Id of the active right-side workspace panel, or null when none is open. */
+  getActiveRightPanel?: () => string | null;
+}
+
+/**
+ * A plugin-owned right-sidebar panel. The host renders the registered panel in
+ * its own dock beside the Style panel, with a collapsible rail, a header (title
+ * plus collapse/close buttons), and a resize handle. The plugin owns only the
+ * content: `render` is called once with an empty container element the plugin
+ * fills with its own DOM (an external plugin cannot share GeoLibre's React, so
+ * the contract is plain DOM rather than a React node).
+ */
+export interface GeoLibreRightPanelRegistration {
+  /** Stable unique id used to open/collapse/close the panel. */
+  id: string;
+  /** Human-readable title shown in the panel header and collapsed rail. */
+  title: string;
+  /**
+   * Optional icon for the collapsed rail. A URL or `data:` URI is rendered as
+   * an image; any other value is ignored in favor of a default glyph.
+   */
+  icon?: string;
+  /**
+   * Preferred width of the expanded panel in pixels (desktop only; the host
+   * clamps it to a sensible range). Defaults to the host's standard panel
+   * width.
+   */
+  defaultWidth?: number;
+  /**
+   * Populate the panel body. Called once with an empty container when the panel
+   * first becomes active; the plugin appends its own DOM. The container is kept
+   * mounted across collapse so plugin state persists. May return a cleanup
+   * function invoked when the panel is closed or unregistered.
+   */
+  render: (container: HTMLElement) => void | (() => void);
+  /** Called after the panel opens (becomes the active workspace). */
+  onOpen?: () => void;
+  /** Called after the panel collapses to its rail. */
+  onCollapse?: () => void;
+  /** Called after the panel closes (releases the workspace). */
+  onClose?: () => void;
 }
 
 export interface GeoLibrePlugin {

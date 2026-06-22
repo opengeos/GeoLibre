@@ -65,6 +65,7 @@ import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
 import { registerXyzTileProtocol } from "../../lib/xyz-url";
 import { useEmbedBridge } from "../../hooks/useEmbedBridge";
 import { useRasterIdentify } from "../../hooks/useRasterIdentify";
+import { useRightPanelState } from "../../hooks/useRightPanels";
 import { BoundsRestrictionIndicator } from "./BoundsRestrictionIndicator";
 import { MapGrid } from "./MapGrid";
 import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
@@ -76,6 +77,7 @@ import {
 import { SectionErrorBoundary } from "../common/error-boundaries";
 import { AttributeTable } from "../panels/AttributeTable";
 import { LayerPanel } from "../panels/LayerPanel";
+import { PluginRightPanel } from "../panels/PluginRightPanel";
 import { StylePanel } from "../panels/StylePanel";
 import { StoryMapPanel } from "../storymap/StoryMapPanel";
 import { StoryMapPresenter } from "../storymap/StoryMapPresenter";
@@ -416,6 +418,10 @@ export function DesktopShell({
   const pythonConsoleOpen = useAppStore((s) => s.ui.pythonConsoleOpen);
   const notebookOpen = useAppStore((s) => s.ui.notebookOpen);
   const storymapPresenting = useAppStore((s) => s.ui.storymapPresenting);
+  // A plugin-owned right panel claims the right-side workspace, so the Style
+  // panel collapses to its rail while one is active and restores when it closes.
+  const pluginRightPanelActive =
+    useRightPanelState().activeId !== null;
   const assistantOpen = useAppStore((s) => s.ui.assistantOpen);
   const dashboardOpen = useAppStore((s) => s.ui.dashboardOpen);
   const geometryEditLayerId = useSyncExternalStore(
@@ -1365,10 +1371,15 @@ export function DesktopShell({
             <StylePanel
               mapControllerRef={mapControllerRef}
               onResizeStart={startStylePanelResize}
-              autoCollapse={notebookOpen || storymapPresenting}
+              autoCollapse={
+                notebookOpen || storymapPresenting || pluginRightPanelActive
+              }
             />
           </SectionErrorBoundary>
         ) : null}
+        <SectionErrorBoundary label="Plugin panel">
+          <PluginRightPanel />
+        </SectionErrorBoundary>
         {notebookOpen ? (
           <SectionErrorBoundary label="Notebook">
             <Suspense fallback={null}>

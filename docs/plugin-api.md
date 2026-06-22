@@ -84,6 +84,27 @@ export interface GeoLibreAppAPI {
     position: GeoLibreMapControlPosition,
   ) => boolean;
   getDeckGL?: () => Promise<GeoLibreDeckGL>;
+  // Right-sidebar panels (see "Right sidebar panels" below).
+  registerRightPanel?: (panel: GeoLibreRightPanelRegistration) => () => void;
+  unregisterRightPanel?: (id: string) => void;
+  openRightPanel?: (id: string) => boolean;
+  collapseRightPanel?: (id: string) => void;
+  closeRightPanel?: (id: string) => void;
+  getActiveRightPanel?: () => string | null;
+}
+
+export interface GeoLibreRightPanelRegistration {
+  id: string;
+  title: string;
+  /** Optional rail icon: a URL or data: URI rendered as an image. */
+  icon?: string;
+  /** Preferred expanded width in px (desktop only; host-clamped). */
+  defaultWidth?: number;
+  /** Fill the panel body with your own DOM. May return a cleanup function. */
+  render: (container: HTMLElement) => void | (() => void);
+  onOpen?: () => void;
+  onCollapse?: () => void;
+  onClose?: () => void;
 }
 ```
 
@@ -182,6 +203,49 @@ https://viewer.geolibre.app/?url=https://example.com/project.geolibre.json&examp
 ```
 
 A URL parameter activates only an already-registered (installed) plugin that owns it; it never loads a plugin from the URL. For external plugins, include the plugin manifest URL in the project `plugins` state (so the plugin is registered) before relying on its URL handler — the matching parameter then activates and dispatches it even if it is not in the active set.
+
+## Right sidebar panels
+
+A plugin can register a native right-sidebar panel that docks beside the built-in Style panel and behaves like a first-class part of the workspace, instead of emulating one with a fixed overlay. The host renders the panel chrome (a header with collapse and close buttons, a collapsible rail, and a resize handle); the plugin owns only the body.
+
+```typescript
+export const myPlugin: GeoLibrePlugin = {
+  id: "my-workbench",
+  name: "Workbench",
+  version: "0.1.0",
+  activate(app) {
+    // Register once, then open. registerRightPanel returns an unregister fn.
+    this._unregister = app.registerRightPanel?.({
+      id: "my-workbench",
+      title: "Workbench",
+      defaultWidth: 360,
+      render(container) {
+        const button = document.createElement("button");
+        button.textContent = "Run analysis";
+        container.appendChild(button);
+        // Optional cleanup, run when the panel closes or is unregistered.
+        return () => button.remove();
+      },
+      onOpen() {},
+      onCollapse() {},
+      onClose() {},
+    });
+    app.openRightPanel?.("my-workbench");
+  },
+  deactivate(app) {
+    app.closeRightPanel?.("my-workbench");
+    this._unregister?.();
+  },
+} as GeoLibrePlugin & { _unregister?: () => void };
+```
+
+Notes:
+
+- `render(container)` is called once with an empty element you fill with plain DOM. An external plugin cannot share GeoLibre's React instance, so the contract is DOM, not a React node. The container stays mounted across collapse, so any state in your DOM persists; the returned cleanup runs on close or unregister.
+- Only one plugin right panel is the active right-side workspace at a time. While one is active GeoLibre collapses the Style panel to its rail and restores its previous state when the plugin panel closes, so the two never compete for the same space.
+- `openRightPanel(id)` makes the panel active and expanded (it also expands a collapsed panel); `collapseRightPanel(id)` collapses it to its rail without closing; `closeRightPanel(id)` releases the workspace; `getActiveRightPanel()` returns the active id or `null`.
+- The panel is a flex sibling of the map, so opening it shrinks the map view (the map keeps filling the remaining space); no manual map padding is required.
+- These methods are typed optional for forward-compatibility with host variants that have no right sidebar, so call them with optional chaining (`app.registerRightPanel?.(...)`).
 
 ## External plugins
 

@@ -1644,6 +1644,13 @@
       "stepStartServerDesktop": "Click \"Start server\" above to launch it, then wait a few seconds for the model to come online."
     }
   },
+  "pluginPanel": {
+    "expand": "Expand panel",
+    "collapse": "Collapse panel",
+    "close": "Close panel",
+    "resize": "Resize panel",
+    "collapsedLabel": "{{title}} (collapsed)"
+  },
   "style": {
     "labels": {
       "heading": "Labels",

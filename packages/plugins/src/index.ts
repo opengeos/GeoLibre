@@ -1,5 +1,19 @@
 export * from "./types";
 export { PluginManager } from "./plugin-manager";
+export {
+  registerRightPanel,
+  unregisterRightPanel,
+  openRightPanel,
+  collapseRightPanel,
+  closeRightPanel,
+  getActiveRightPanel,
+  isRightPanelCollapsed,
+  getRightPanel,
+  listRightPanels,
+  getRightPanelSnapshot,
+  subscribeRightPanels,
+  type RightPanelSnapshot,
+} from "./right-panel-registry";
 export { maplibreLayerControlPlugin } from "./plugins/layer-control";
 export { osmBasemapPlugin } from "./plugins/osm-basemap";
 export { cartoLightPlugin } from "./plugins/carto-light";
