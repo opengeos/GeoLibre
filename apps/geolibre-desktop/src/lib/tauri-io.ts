@@ -697,12 +697,13 @@ export async function readVectorFileWithSidecars(
 }
 
 export function isAbsoluteLocalPath(path: string): boolean {
-  const trimmed = path.trim();
-  // Accept POSIX paths and Windows drive-letter paths only. UNC paths
-  // (\\server\share) are deliberately rejected: reading one can make Windows
-  // auto-authenticate against a remote host (NTLM hash capture), and a remote
-  // share is not a supported local data source.
-  return trimmed.startsWith("/") || /^[a-z]:[\\/]/i.test(trimmed);
+  // Match the raw path (not a trimmed copy): a whitespace-padded value would
+  // pass a trimmed check but reach `readFile` unchanged and fail there, so
+  // reject it up front instead. Accept POSIX paths and Windows drive-letter
+  // paths only. UNC paths (\\server\share) are deliberately rejected: reading
+  // one can make Windows auto-authenticate against a remote host (NTLM hash
+  // capture), and a remote share is not a supported local data source.
+  return path.startsWith("/") || /^[a-z]:[\\/]/i.test(path);
 }
 
 async function loadTauriVectorFile(

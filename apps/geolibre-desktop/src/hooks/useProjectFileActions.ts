@@ -411,18 +411,32 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     }
 
     // "noembed": on the web this saves without the local data (those layers are
-    // lost on reopen); on desktop it saves file references that reload from
-    // disk, so flag the plain-GeoJSON local layers (prepareLayerForSave then
-    // drops their embedded copy; Add Vector Layer layers already carry a path).
+    // lost on reopen). On desktop it saves file references — but only for layers
+    // that actually have a re-readable path; the rest (e.g. an Add Vector Layer
+    // file restored from an embedded copy on a machine without the original) are
+    // embedded as a fallback, since referencing them would save no data at all.
     if (!isTauri()) return {};
     let changed = false;
     const layers = useAppStore.getState().layers.map((layer) => {
-      if (!isReloadableLocalFileLayer(layer)) return layer;
-      changed = true;
-      return {
-        ...layer,
-        metadata: { ...layer.metadata, localFileReloadable: true },
-      };
+      // Plain GeoJSON with an absolute path → reference (drop the embedded copy).
+      if (isReloadableLocalFileLayer(layer)) {
+        changed = true;
+        return {
+          ...layer,
+          metadata: { ...layer.metadata, localFileReloadable: true },
+        };
+      }
+      // An Add Vector Layer control layer already carrying a path references it
+      // as-is; one without a path can't be referenced, so embed its features.
+      const collection = embeddable.get(layer.id);
+      if (collection && layer.metadata.localFileReloadable !== true) {
+        changed = true;
+        return {
+          ...layer,
+          metadata: { ...layer.metadata, embeddedGeoJSON: collection },
+        };
+      }
+      return layer;
     });
     return changed ? { layers } : {};
   };
