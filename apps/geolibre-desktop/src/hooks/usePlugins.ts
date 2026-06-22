@@ -1,8 +1,4 @@
-import {
-  DEFAULT_LAYER_STYLE,
-  type GeoLibreLayer,
-  useAppStore,
-} from "@geolibre/core";
+import { useAppStore } from "@geolibre/core";
 import {
   maplibreBasemapControlPlugin,
   maplibreComponentsPlugin,
@@ -53,6 +49,7 @@ import {
   type InstalledWebPlugin,
 } from "../lib/external-plugins";
 import { appendDiagnostic } from "../lib/diagnostics";
+import { createExternalNativeStoreLayer } from "../lib/external-native-layer";
 import { mergeStringLists } from "../lib/string-lists";
 import {
   browserSaveFallsBackToDownload,
@@ -125,46 +122,6 @@ manager.registerAll([
   maplibreDeckGlVizPlugin,
   maplibreComponentsPlugin,
 ]);
-
-function createExternalNativeStoreLayer(
-  registration: GeoLibreExternalNativeLayerRegistration,
-  existing?: GeoLibreLayer,
-): GeoLibreLayer {
-  const sourceIds = registration.sourceIds?.length
-    ? registration.sourceIds
-    : registration.sourceId
-      ? [registration.sourceId]
-      : [];
-  const sourceId = registration.sourceId ?? sourceIds[0];
-
-  return {
-    id: registration.id,
-    name: registration.name,
-    type: registration.type ?? "geojson",
-    source: {
-      ...(registration.source ?? { type: "geojson" }),
-      ...(sourceId ? { sourceId } : {}),
-    },
-    visible: existing?.visible ?? true,
-    opacity: existing?.opacity ?? registration.opacity ?? 1,
-    style: {
-      ...DEFAULT_LAYER_STYLE,
-      ...(registration.style ?? {}),
-      ...(existing?.style ?? {}),
-    } as GeoLibreLayer["style"],
-    metadata: {
-      ...(existing?.metadata ?? {}),
-      ...(registration.metadata ?? {}),
-      externalNativeLayer: true,
-      nativeLayerIds: registration.nativeLayerIds,
-      sourceIds,
-      ...(sourceId ? { sourceId } : {}),
-    },
-    beforeId: registration.beforeId ?? existing?.beforeId,
-    geojson: registration.geojson ?? existing?.geojson,
-    sourcePath: registration.sourcePath ?? existing?.sourcePath,
-  };
-}
 
 let externalPluginsLoaded = false;
 let externalPluginsLoadPromise: Promise<void> | null = null;
