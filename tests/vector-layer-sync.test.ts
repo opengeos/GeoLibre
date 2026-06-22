@@ -217,6 +217,44 @@ describe("createVectorStoreLayer", () => {
     assert.equal(layer.source.type, "vector");
   });
 
+  it("exposes attribute field names in metadata for the Style panel", () => {
+    const layer = createVectorStoreLayer(
+      vectorInfo({ fields: ["name", "continent", "pop_est"] }),
+    );
+
+    assert.deepEqual(layer.metadata.fields, ["name", "continent", "pop_est"]);
+  });
+
+  it("omits metadata.fields when the control reports none", () => {
+    const layer = createVectorStoreLayer(vectorInfo({ fields: undefined }));
+    assert.equal("fields" in layer.metadata, false);
+  });
+
+  it("seeds the panel labels from the control's label style", () => {
+    const layer = createVectorStoreLayer(
+      vectorInfo({
+        style: vectorStyle({
+          labelField: "name",
+          labelSize: 18,
+          labelColor: "#ff0000",
+          labelPlacement: "line",
+        }),
+      }),
+    );
+
+    assert.equal(layer.style.labels.enabled, true);
+    assert.equal(layer.style.labels.field, "name");
+    assert.equal(layer.style.labels.size, 18);
+    assert.equal(layer.style.labels.color, "#ff0000");
+    assert.equal(layer.style.labels.placement, "line");
+  });
+
+  it("leaves labels disabled when the control has no label field", () => {
+    const layer = createVectorStoreLayer(vectorInfo());
+    assert.equal(layer.style.labels.enabled, false);
+    assert.equal(layer.style.labels.field, "");
+  });
+
   it("persists the load and style state", () => {
     const layer = createVectorStoreLayer(
       vectorInfo({
@@ -552,6 +590,15 @@ describe("wireVectorStoreSync", () => {
       heatmapIntensity: 1,
       clusterRadius: 50,
       clusterMaxZoom: 14,
+      // Label fields default through from DEFAULT_LAYER_STYLE.labels; labelField
+      // is empty because labels start disabled.
+      labelField: "",
+      labelSize: 13,
+      labelColor: "#111827",
+      labelHaloColor: "#ffffff",
+      labelHaloWidth: 1.5,
+      labelPlacement: "point",
+      labelAllowOverlap: false,
     };
     assert.deepEqual(calls, [
       { method: "setLayerStyle", args: ["vector-1", expectedStyle] },
@@ -644,6 +691,44 @@ describe("wireVectorStoreSync", () => {
     assert.equal(reverted.fillColorExpression, undefined);
     assert.equal(reverted.lineColorExpression, undefined);
     assert.equal(reverted.circleColorExpression, undefined);
+  });
+
+  it("pushes a Show-labels toggle through the control", () => {
+    const { control, calls } = fakeControl([vectorInfo()]);
+    syncVectorLayersToStore(control);
+    wireVectorStoreSync(control);
+
+    useAppStore.getState().setLayerStyle("vector-1", {
+      labels: {
+        ...DEFAULT_LAYER_STYLE.labels,
+        enabled: true,
+        field: "name",
+        size: 18,
+      },
+    });
+
+    assert.equal(calls.length, 1);
+    const pushed = calls[0].args[1] as VectorLayerStyle;
+    assert.equal(pushed.labelField, "name");
+    assert.equal(pushed.labelSize, 18);
+  });
+
+  it("clears the control label field when labels are disabled", () => {
+    const { control, calls } = fakeControl([
+      vectorInfo({ style: vectorStyle({ labelField: "name" }) }),
+    ]);
+    syncVectorLayersToStore(control);
+    wireVectorStoreSync(control);
+
+    // The layer was seeded with labels on; turning the checkbox off must push an
+    // empty labelField so the control removes its symbol layer.
+    useAppStore.getState().setLayerStyle("vector-1", {
+      labels: { ...DEFAULT_LAYER_STYLE.labels, enabled: false, field: "name" },
+    });
+
+    assert.equal(calls.length, 1);
+    const pushed = calls[0].args[1] as VectorLayerStyle;
+    assert.equal(pushed.labelField, "");
   });
 
   it("does not touch the control for GeoLibre-only style fields", () => {
@@ -765,6 +850,47 @@ describe("savedVectorState", () => {
     assert.deepEqual(restored.circleColorExpression, matchExpr);
     // No lineColorExpression was persisted, so none is restored.
     assert.equal("lineColorExpression" in restored, false);
+  });
+
+  it("restores attribute label fields from the persisted style", () => {
+    const layer = createVectorStoreLayer(vectorInfo());
+    (layer.metadata.vectorState as Record<string, unknown>).style = {
+      ...vectorStyle(),
+      labelField: "name",
+      labelSize: 18,
+      labelColor: "#ff0000",
+      labelHaloColor: "#000000",
+      labelHaloWidth: 2,
+      labelPlacement: "line",
+      labelAllowOverlap: true,
+    };
+
+    const restored = savedVectorState(layer).style;
+    assert.ok(restored != null);
+    assert.equal(restored.labelField, "name");
+    assert.equal(restored.labelSize, 18);
+    assert.equal(restored.labelColor, "#ff0000");
+    assert.equal(restored.labelHaloColor, "#000000");
+    assert.equal(restored.labelHaloWidth, 2);
+    assert.equal(restored.labelPlacement, "line");
+    assert.equal(restored.labelAllowOverlap, true);
+  });
+
+  it("drops a malformed label field from a hand-edited project file", () => {
+    const layer = createVectorStoreLayer(vectorInfo());
+    (layer.metadata.vectorState as Record<string, unknown>).style = {
+      fillColor: "#123456",
+      labelField: "x".repeat(201),
+      labelPlacement: "diagonal",
+      labelHaloWidth: -3,
+    };
+
+    const restored = savedVectorState(layer).style;
+    assert.ok(restored != null);
+    assert.equal(restored.fillColor, "#123456");
+    assert.equal("labelField" in restored, false);
+    assert.equal("labelPlacement" in restored, false);
+    assert.equal("labelHaloWidth" in restored, false);
   });
 
   it("drops a malformed color expression without throwing", () => {

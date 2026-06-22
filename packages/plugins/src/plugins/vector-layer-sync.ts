@@ -157,6 +157,12 @@ export function createVectorStoreLayer(
       ...(typeof info.featureCount === "number"
         ? { featureCount: info.featureCount }
         : {}),
+      // Attribute field names, so the Style panel can populate the label field
+      // (and other attribute-driven) dropdowns for a control-managed layer,
+      // which has no layer.geojson to read property keys from.
+      ...(info.fields && info.fields.length > 0
+        ? { fields: [...info.fields] }
+        : {}),
       ...(info.bbox ? { bounds: [...info.bbox] } : {}),
     },
     ...(sourcePath ? { sourcePath } : {}),
@@ -515,6 +521,36 @@ function savedVectorStyle(raw: unknown): Partial<VectorLayerStyle> | null {
     style.circleColorExpression = candidate.circleColorExpression;
   }
 
+  // Attribute labels. The field name is length-capped like the color strings
+  // (a real attribute name is short); the rest reuse the same color/number
+  // guards so a hand-edited project file cannot smuggle blobs into the symbol
+  // layer's paint/layout.
+  if (
+    typeof candidate.labelField === "string" &&
+    candidate.labelField &&
+    candidate.labelField.length <= 200
+  ) {
+    style.labelField = candidate.labelField;
+  }
+  if (positive(candidate.labelSize)) style.labelSize = candidate.labelSize;
+  if (color(candidate.labelColor)) style.labelColor = candidate.labelColor;
+  if (color(candidate.labelHaloColor)) {
+    style.labelHaloColor = candidate.labelHaloColor;
+  }
+  if (
+    typeof candidate.labelHaloWidth === "number" &&
+    Number.isFinite(candidate.labelHaloWidth) &&
+    candidate.labelHaloWidth >= 0
+  ) {
+    style.labelHaloWidth = candidate.labelHaloWidth;
+  }
+  if (candidate.labelPlacement === "point" || candidate.labelPlacement === "line") {
+    style.labelPlacement = candidate.labelPlacement;
+  }
+  if (typeof candidate.labelAllowOverlap === "boolean") {
+    style.labelAllowOverlap = candidate.labelAllowOverlap;
+  }
+
   return Object.keys(style).length > 0 ? style : null;
 }
 
@@ -565,6 +601,20 @@ function layerStyleToVectorStyle(style: LayerStyle): VectorLayerStyle {
     heatmapIntensity: style.heatmapIntensity,
     clusterRadius: style.clusterRadius,
     clusterMaxZoom: style.clusterMaxZoom,
+    // Attribute labels: GeoLibre's LabelStyle maps onto the control's flat
+    // label fields. The control renders the field's value as a symbol layer;
+    // an empty labelField clears it. (The expression-based override is not
+    // mapped — control layers label by field only.)
+    labelField:
+      style.labels.enabled && style.labels.field.trim() !== ""
+        ? style.labels.field
+        : "",
+    labelSize: style.labels.size,
+    labelColor: style.labels.color,
+    labelHaloColor: style.labels.haloColor,
+    labelHaloWidth: style.labels.haloWidth,
+    labelPlacement: style.labels.placement,
+    labelAllowOverlap: style.labels.allowOverlap,
   };
 }
 
@@ -624,6 +674,27 @@ function vectorStyleToLayerStyle(info: VectorLayerInfo): Partial<LayerStyle> {
     seed.clusterMaxZoom = style.clusterMaxZoom;
   }
 
+  // Reflect the control's attribute labels in the panel, so a restored project
+  // (whose label state was seeded into the control via savedVectorState) shows
+  // the Show-labels controls populated rather than reset to the defaults.
+  if (typeof style.labelField === "string" && style.labelField.trim() !== "") {
+    const defaults = DEFAULT_LAYER_STYLE.labels;
+    seed.labels = {
+      ...defaults,
+      enabled: true,
+      field: style.labelField,
+      size: typeof style.labelSize === "number" ? style.labelSize : defaults.size,
+      color: style.labelColor ?? defaults.color,
+      haloColor: style.labelHaloColor ?? defaults.haloColor,
+      haloWidth:
+        typeof style.labelHaloWidth === "number"
+          ? style.labelHaloWidth
+          : defaults.haloWidth,
+      placement: style.labelPlacement === "line" ? "line" : "point",
+      allowOverlap: style.labelAllowOverlap ?? defaults.allowOverlap,
+    };
+  }
+
   return seed;
 }
 
@@ -659,7 +730,17 @@ function vectorStylesEqual(
     left.heatmapRadius === right.heatmapRadius &&
     left.heatmapIntensity === right.heatmapIntensity &&
     left.clusterRadius === right.clusterRadius &&
-    left.clusterMaxZoom === right.clusterMaxZoom
+    left.clusterMaxZoom === right.clusterMaxZoom &&
+    // Label fields: a Show-labels toggle or any label restyle must register as
+    // a change so it is pushed to the control (which adds/updates/removes the
+    // symbol layer).
+    left.labelField === right.labelField &&
+    left.labelSize === right.labelSize &&
+    left.labelColor === right.labelColor &&
+    left.labelHaloColor === right.labelHaloColor &&
+    left.labelHaloWidth === right.labelHaloWidth &&
+    left.labelPlacement === right.labelPlacement &&
+    left.labelAllowOverlap === right.labelAllowOverlap
   );
 }
 
