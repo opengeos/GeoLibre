@@ -30,8 +30,9 @@ describe("fetchProjectFromUrl", () => {
   it("turns a rejected fetch (network/CORS) into a message naming the URL and CORS", async () => {
     // Mimic the bare TypeError a browser throws on a network or CORS failure
     // ("Failed to fetch" / "Load failed") rather than leaking it verbatim.
+    const original = new TypeError("Load failed");
     const fetchImpl = (async () => {
-      throw new TypeError("Load failed");
+      throw original;
     }) as unknown as typeof fetch;
 
     await assert.rejects(
@@ -42,6 +43,8 @@ describe("fetchProjectFromUrl", () => {
         assert.match(error.message, /CORS/);
         // The opaque browser string must not be what the user sees.
         assert.notEqual(error.message, "Load failed");
+        // The original error is preserved as `cause` for diagnostics.
+        assert.equal(error.cause, original);
         return true;
       },
     );
@@ -183,7 +186,9 @@ describe("fetchProjectFromUrl", () => {
         }),
       (error: Error) => {
         assert.match(error.message, /is not a valid GeoLibre project/);
-        assert.match(error.message, /missing required fields/);
+        // Loosely assert the underlying reason carries through, without
+        // hard-coding parseProject's exact wording.
+        assert.match(error.message, /missing.*fields/i);
         // parseProject's own "Invalid GeoLibre project:" prefix is stripped so
         // the wrapper does not repeat the noun.
         assert.doesNotMatch(error.message, /\): Invalid GeoLibre project:/);

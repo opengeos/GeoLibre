@@ -61,12 +61,15 @@ export async function fetchProjectFromUrl(
 
   // Shared message for any rejection that means the bytes never arrived: the
   // initial request or the body stream. A bare browser TypeError ("Failed to
-  // fetch" / "Load failed") is replaced with the URL and the likely causes.
-  const networkError = () =>
+  // fetch" / "Load failed") is replaced with the URL and the likely causes,
+  // while the original error is preserved as `cause` so the stack survives in
+  // DevTools and error-monitoring tools.
+  const networkError = (cause: unknown) =>
     new Error(
       `Could not fetch the project from ${projectUrl}. The host may be ` +
         "unreachable or offline, or it may be blocking cross-origin requests " +
         "(CORS). Check the URL and your connection, then try again.",
+      { cause },
     );
 
   // A caller-initiated abort (dialog close / unmount) surfaces as an
@@ -83,7 +86,7 @@ export async function fetchProjectFromUrl(
     });
   } catch (error) {
     if (isAbort(error)) throw error;
-    throw networkError();
+    throw networkError(error);
   }
 
   if (!response.ok) {
@@ -105,7 +108,7 @@ export async function fetchProjectFromUrl(
     // The connection can still drop while the body is streaming, even after a
     // 200; that rejects with the same opaque TypeError, so treat it the same.
     if (isAbort(error)) throw error;
-    throw networkError();
+    throw networkError(error);
   }
 
   try {
@@ -115,12 +118,14 @@ export async function fetchProjectFromUrl(
     // or a file missing the required GeoLibre fields. Name the URL and the
     // underlying reason rather than leaking a bare JSON.parse SyntaxError. Strip
     // parseProject's own "Invalid GeoLibre project:" prefix so the wrapper does
-    // not repeat the noun it already states.
-    const detail = (error instanceof Error ? error.message : String(error))
-      .replace(/^Invalid GeoLibre project:\s*/i, "");
+    // not repeat the noun it already states, but fall back to the full message
+    // if stripping would leave nothing (so the colon never dangles).
+    const raw = error instanceof Error ? error.message : String(error);
+    const detail = raw.replace(/^Invalid GeoLibre project:\s*/i, "") || raw;
     throw new Error(
       `The file at ${projectUrl} is not a valid GeoLibre project ` +
         `(.geolibre.json): ${detail}`,
+      { cause: error },
     );
   }
 }
