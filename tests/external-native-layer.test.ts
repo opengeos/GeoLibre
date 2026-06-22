@@ -118,6 +118,26 @@ describe("createExternalNativeStoreLayer", () => {
     assert.equal(layer.opacity, 0.7);
   });
 
+  it("lets the registration own opacity over a non-default user-edited value", () => {
+    const existing: GeoLibreLayer = {
+      id: "plugin-layer",
+      name: "Plugin Layer",
+      type: "geojson",
+      source: { type: "geojson" },
+      visible: true,
+      opacity: 0.3, // user-edited
+      style: { ...DEFAULT_LAYER_STYLE },
+      metadata: {},
+    };
+
+    const layer = createExternalNativeStoreLayer(
+      baseRegistration({ opacity: 0.8 }),
+      existing,
+    );
+
+    assert.equal(layer.opacity, 0.8);
+  });
+
   it("applies the registration style over defaults for a brand-new layer", () => {
     const layer = createExternalNativeStoreLayer(
       baseRegistration({ style: { fillColor: "#123456" } }),
