@@ -278,7 +278,10 @@ function normalizeConfig(state: unknown): TimeSliderConfig | null {
   const candidate = state as Partial<TimeSliderConfig>;
   if (
     typeof candidate.startDate !== "string" ||
-    typeof candidate.endDate !== "string" ||
+    // endDate is optional: an "open" range (defaulted to the current date) is
+    // saved without it so reopening re-resolves the end to today. Reject only a
+    // present-but-non-string value.
+    (candidate.endDate !== undefined && typeof candidate.endDate !== "string") ||
     typeof candidate.granularity !== "string" ||
     (candidate.currentDate !== undefined &&
       typeof candidate.currentDate !== "string") ||
@@ -350,7 +353,9 @@ let lastBoundRangeKey: string | null = null;
 // their own range across a bind/unbind cycle.
 let preBindingRange: {
   start: string;
-  end: string;
+  // null when the captured range had an "open" end (auto, defaulting to today);
+  // restored as null so setRange re-opens it instead of pinning the save value.
+  end: string | null;
   granularity: TimeBinding["granularity"];
 } | null = null;
 // Guards our own timeFilter writes from re-entering the store subscription.
@@ -462,7 +467,7 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
         const config = control.getConfig();
         preBindingRange = {
           start: config.startDate,
-          end: config.endDate,
+          end: config.endDate ?? null,
           granularity: config.granularity,
         };
       }
