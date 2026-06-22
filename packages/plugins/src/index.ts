@@ -14,6 +14,27 @@ export {
   subscribeRightPanels,
   type RightPanelSnapshot,
 } from "./right-panel-registry";
+export {
+  registerToolbarMenu,
+  unregisterToolbarMenu,
+  listToolbarMenus,
+  getToolbarMenusSnapshot,
+  subscribeToolbarMenus,
+  type ToolbarMenusSnapshot,
+} from "./toolbar-menu-registry";
+export {
+  registerFloatingPanel,
+  unregisterFloatingPanel,
+  openFloatingPanel,
+  closeFloatingPanel,
+  focusFloatingPanel,
+  isFloatingPanelOpen,
+  getOpenFloatingPanels,
+  getFloatingPanel,
+  getFloatingPanelsSnapshot,
+  subscribeFloatingPanels,
+  type FloatingPanelsSnapshot,
+} from "./floating-panel-registry";
 export { maplibreLayerControlPlugin } from "./plugins/layer-control";
 export { osmBasemapPlugin } from "./plugins/osm-basemap";
 export { cartoLightPlugin } from "./plugins/carto-light";

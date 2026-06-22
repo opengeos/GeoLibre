@@ -91,6 +91,37 @@ export interface GeoLibreAppAPI {
   collapseRightPanel?: (id: string) => void;
   closeRightPanel?: (id: string) => void;
   getActiveRightPanel?: () => string | null;
+  // Top toolbar menus (see "Toolbar menus" below).
+  registerToolbarMenu?: (menu: GeoLibreToolbarMenu) => () => void;
+  unregisterToolbarMenu?: (id: string) => void;
+  // Floating panels (see "Floating panels" below).
+  registerFloatingPanel?: (panel: GeoLibreFloatingPanelRegistration) => () => void;
+  unregisterFloatingPanel?: (id: string) => void;
+  openFloatingPanel?: (id: string) => boolean;
+  closeFloatingPanel?: (id: string) => void;
+  getOpenFloatingPanels?: () => string[];
+}
+
+export interface GeoLibreToolbarMenu {
+  id: string;
+  label: string;
+  icon?: string; // URL or data: URI
+  items: GeoLibreToolbarMenuItem[];
+}
+
+export type GeoLibreToolbarMenuItem =
+  | { type?: "action"; id: string; label: string; icon?: string; disabled?: boolean; onSelect: () => void }
+  | { type: "submenu"; id: string; label: string; icon?: string; items: GeoLibreToolbarMenuItem[] }
+  | { type: "separator"; id?: string };
+
+export interface GeoLibreFloatingPanelRegistration {
+  id: string;
+  title: string;
+  icon?: string; // URL or data: URI
+  defaultWidth?: number;
+  render: (container: HTMLElement) => void | (() => void);
+  onOpen?: () => void;
+  onClose?: () => void;
 }
 
 export interface GeoLibreRightPanelRegistration {
@@ -246,6 +277,56 @@ Notes:
 - `openRightPanel(id)` makes the panel active and expanded (it also expands a collapsed panel); `collapseRightPanel(id)` collapses it to its rail without closing; `closeRightPanel(id)` releases the workspace; `getActiveRightPanel()` returns the active id or `null`.
 - The panel is a flex sibling of the map, so opening it shrinks the map view (the map keeps filling the remaining space); no manual map padding is required.
 - These methods are typed optional for forward-compatibility with host variants that have no right sidebar, so call them with optional chaining (`app.registerRightPanel?.(...)`).
+
+## Toolbar menus
+
+A plugin can add its own top-level menu button to the GeoLibre banner (beside Project / Edit / View / Plugins), with nested submenus and action items. Register the menu in `activate` and unregister it in `deactivate`:
+
+```typescript
+const unregister = app.registerToolbarMenu?.({
+  id: "my-plugin-menu",
+  label: "Workbench",
+  items: [
+    { id: "open", label: "Open workbench", onSelect: () => app.openRightPanel?.("my-workbench") },
+    {
+      type: "submenu",
+      id: "tools",
+      label: "Tools",
+      items: [
+        { id: "qa", label: "Data QA", onSelect: () => app.openFloatingPanel?.("my-qa") },
+      ],
+    },
+    { type: "separator" },
+    { id: "about", label: "About", disabled: false, onSelect: () => {} },
+  ],
+});
+```
+
+Each item is an **action** (`onSelect`, the default when `type` is omitted), a **submenu** (nested `items`), or a **separator**. Items typically open a right panel or a floating panel, but `onSelect` can run anything. Re-registering the same `id` replaces the menu, so you can rebuild it as your plugin's state changes.
+
+## Floating panels
+
+A floating panel is a draggable, closeable card the host overlays on the map's top-left corner. Unlike a right panel (a single docked workspace that collapses the Style panel), several floating panels can be open at once and they do not shrink the map. The render contract is the same plain-DOM `render(container)` as right panels.
+
+```typescript
+const unregister = app.registerFloatingPanel?.({
+  id: "my-qa",
+  title: "Data QA",
+  defaultWidth: 300,
+  render(container) {
+    container.textContent = "Rendered by the plugin via registerFloatingPanel().";
+    return () => {
+      // optional cleanup, run on close/unregister
+    };
+  },
+});
+
+app.openFloatingPanel?.("my-qa");   // open (or bring to front)
+app.closeFloatingPanel?.("my-qa");  // close
+app.getOpenFloatingPanels?.();      // -> string[] of open ids, stacking order
+```
+
+Use a right panel for a primary, persistent workspace and a floating panel for an ancillary tool or dashboard the user positions over the map. As with the other surfaces, call these methods with optional chaining since they are typed optional.
 
 ## External plugins
 

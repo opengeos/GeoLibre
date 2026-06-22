@@ -29,6 +29,13 @@ import {
   collapseRightPanel,
   closeRightPanel,
   getActiveRightPanel,
+  registerToolbarMenu,
+  unregisterToolbarMenu,
+  registerFloatingPanel,
+  unregisterFloatingPanel,
+  openFloatingPanel,
+  closeFloatingPanel,
+  getOpenFloatingPanels,
 } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
 import type {
@@ -599,6 +606,13 @@ export function createAppAPI(
     collapseRightPanel,
     closeRightPanel,
     getActiveRightPanel,
+    registerToolbarMenu,
+    unregisterToolbarMenu,
+    registerFloatingPanel,
+    unregisterFloatingPanel,
+    openFloatingPanel,
+    closeFloatingPanel,
+    getOpenFloatingPanels,
   };
 }
 

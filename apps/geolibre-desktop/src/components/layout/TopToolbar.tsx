@@ -108,6 +108,7 @@ import { ViewMenu } from "./toolbar/ViewMenu";
 import { HelpMenu } from "./toolbar/HelpMenu";
 import { OsmPbfDialogs } from "./toolbar/OsmPbfDialogs";
 import { PluginsMenu } from "./toolbar/PluginsMenu";
+import { PluginToolbarMenus } from "./toolbar/PluginToolbarMenus";
 import { ProcessingMenu } from "./toolbar/ProcessingMenu";
 import { ProjectFileDialogs } from "./toolbar/ProjectFileDialogs";
 import { ProjectMenu } from "./toolbar/ProjectMenu";
@@ -920,6 +921,9 @@ export function TopToolbar({
           hiddenPluginIds={hiddenPluginIds}
         />
       )}
+      {/* Top-level toolbar menus registered by plugins via
+          app.registerToolbarMenu(); renders nothing when none exist. */}
+      <PluginToolbarMenus chrome={chrome} />
       <SettingsDialog
         buttonClassName={toolbarButtonClass}
         buttonSize={toolbarButtonSize}

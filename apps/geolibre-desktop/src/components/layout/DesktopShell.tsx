@@ -77,6 +77,7 @@ import {
 import { SectionErrorBoundary } from "../common/error-boundaries";
 import { AttributeTable } from "../panels/AttributeTable";
 import { LayerPanel } from "../panels/LayerPanel";
+import { FloatingPanels } from "../panels/FloatingPanels";
 import { PluginRightPanel } from "../panels/PluginRightPanel";
 import { StylePanel } from "../panels/StylePanel";
 import { StoryMapPanel } from "../storymap/StoryMapPanel";
@@ -1359,6 +1360,9 @@ export function DesktopShell({
               <RemoteCursorsOverlay mapControllerRef={mapControllerRef} />
               <BoundsRestrictionIndicator />
             </MapGrid>
+          </SectionErrorBoundary>
+          <SectionErrorBoundary label="Plugin floating panels">
+            <FloatingPanels />
           </SectionErrorBoundary>
         </main>
         {/* The notebook claims the workspace's right half, so the Style panel
