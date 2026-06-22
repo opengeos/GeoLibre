@@ -19,7 +19,9 @@ import {
   RefreshCw,
   Server,
 } from "lucide-react";
+import type { TFunction } from "i18next";
 import { type FormEvent, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 interface OpenEODialogProps {
   open: boolean;
@@ -133,38 +135,41 @@ function parseBands(value: string): string[] | undefined {
   return bands.length ? bands : undefined;
 }
 
-function parseNumber(value: string, label: string): number {
+function parseNumber(value: string, label: string, t: TFunction): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
-    throw new Error(`${label} must be a number.`);
+    throw new Error(t("openeo.errors.numberRequired", { label }));
   }
   return parsed;
 }
 
-function buildBoundingBox(values: {
-  west: string;
-  south: string;
-  east: string;
-  north: string;
-}): OpenEOBoundingBox {
+function buildBoundingBox(
+  values: {
+    west: string;
+    south: string;
+    east: string;
+    north: string;
+  },
+  t: TFunction,
+): OpenEOBoundingBox {
   const bbox = {
-    west: parseNumber(values.west, "West"),
-    south: parseNumber(values.south, "South"),
-    east: parseNumber(values.east, "East"),
-    north: parseNumber(values.north, "North"),
+    west: parseNumber(values.west, t("openeo.west"), t),
+    south: parseNumber(values.south, t("openeo.south"), t),
+    east: parseNumber(values.east, t("openeo.east"), t),
+    north: parseNumber(values.north, t("openeo.north"), t),
   };
 
   if (bbox.west >= bbox.east) {
-    throw new Error("West must be less than east.");
+    throw new Error(t("openeo.errors.westLessThanEast"));
   }
   if (bbox.south >= bbox.north) {
-    throw new Error("South must be less than north.");
+    throw new Error(t("openeo.errors.southLessThanNorth"));
   }
   if (bbox.west < -180 || bbox.east > 180) {
-    throw new Error("Longitude must be between -180 and 180.");
+    throw new Error(t("openeo.errors.longitudeRange"));
   }
   if (bbox.south < -90 || bbox.north > 90) {
-    throw new Error("Latitude must be between -90 and 90.");
+    throw new Error(t("openeo.errors.latitudeRange"));
   }
   return bbox;
 }
@@ -183,9 +188,9 @@ function filterByQuery<T extends { id?: string; title?: string; summary?: string
   );
 }
 
-function formatError(error: unknown): string {
+function formatError(error: unknown, t: TFunction): string {
   if (error instanceof Error) return error.message;
-  return "The openEO request failed.";
+  return t("openeo.errors.requestFailed");
 }
 
 function createReducer(reducer: Exclude<Reducer, "none">) {
@@ -200,6 +205,7 @@ function createReducer(reducer: Exclude<Reducer, "none">) {
 }
 
 export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
+  const { t } = useTranslation();
   const [backendUrl, setBackendUrl] = useState(DEFAULT_BACKEND_URL);
   const [authEnabled, setAuthEnabled] = useState(false);
   const [username, setUsername] = useState("");
@@ -225,7 +231,7 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
   const [reducer, setReducer] = useState<Reducer>("mean");
   const [dimension, setDimension] = useState("t");
   const [outputFormat, setOutputFormat] = useState(DEFAULT_OUTPUT_FORMAT);
-  const [jobTitle, setJobTitle] = useState("GeoLibre openEO job");
+  const [jobTitle, setJobTitle] = useState(t("openeo.defaultJobTitle"));
   const [startImmediately, setStartImmediately] = useState(true);
   const [downloadFilename, setDownloadFilename] =
     useState("openeo-result.tif");
@@ -252,47 +258,66 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
     setCollections([]);
     setProcesses([]);
     setJobs([]);
+    // Clear the search filters too, otherwise stale query text keeps filtering
+    // the next backend's (freshly empty) lists and looks like a silent failure.
+    setCollectionQuery("");
+    setProcessQuery("");
   };
 
   const handleConnect = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const url = backendUrl.trim();
     if (!url) {
-      setErrorMessage("Enter an openEO backend URL.");
+      setErrorMessage(t("openeo.errors.enterUrl"));
       return;
     }
     try {
       const parsed = new URL(url);
       if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-        setErrorMessage("Backend URL must use https:// or http://.");
+        setErrorMessage(t("openeo.errors.invalidProtocol"));
+        return;
+      }
+      // Basic auth puts the credentials in an `Authorization` header; over plain
+      // HTTP that is sent in cleartext. Allow it only for loopback dev backends.
+      const isLoopback =
+        parsed.hostname === "localhost" ||
+        parsed.hostname === "127.0.0.1" ||
+        parsed.hostname === "::1";
+      if (authEnabled && parsed.protocol === "http:" && !isLoopback) {
+        setErrorMessage(t("openeo.errors.httpBasicAuth"));
         return;
       }
     } catch {
-      setErrorMessage("Enter a valid openEO backend URL.");
+      setErrorMessage(t("openeo.errors.invalidUrl"));
       return;
     }
     if (authEnabled && (!username.trim() || !password)) {
-      setErrorMessage("Enter the basic authentication username and password.");
+      setErrorMessage(t("openeo.errors.enterCredentials"));
       return;
     }
 
     setBusyAction("connect");
     setErrorMessage(null);
-    setStatusMessage("Connecting to openEO backend...");
+    setStatusMessage(t("openeo.status.connecting"));
     resetConnectionState();
 
     try {
       const nextConnection = (await withTimeout(
         OpenEO.connect(url),
         CONNECT_TIMEOUT_MS,
-        "Connecting to the openEO backend timed out.",
+        t("openeo.errors.connectTimeout"),
       )) as unknown as OpenEOConnection;
       if (authEnabled) {
         await nextConnection.authenticateBasic(username.trim(), password);
+        // Drop the password from state once it has been exchanged for a token;
+        // no need to keep the plaintext credential around for the session.
+        setPassword("");
       }
       const nextCapabilities = nextConnection.capabilities();
       setStatusMessage(
-        `Connected to API ${nextCapabilities.apiVersion() || "unknown"}.`,
+        t("openeo.status.connectedApi", {
+          version: nextCapabilities.apiVersion() || t("openeo.statusUnknown"),
+        }),
       );
 
       const [collectionResponse, processResponse] = await withTimeout(
@@ -301,7 +326,7 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
           nextConnection.listProcesses(),
         ]),
         OPERATION_TIMEOUT_MS,
-        "Loading collections and processes timed out.",
+        t("openeo.errors.loadResourcesTimeout"),
       );
       setConnection(nextConnection);
       setCapabilities(nextCapabilities);
@@ -321,10 +346,13 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
         setSelectedCollection(firstCollectionId);
       }
       setStatusMessage(
-        `Connected. Loaded ${nextCollections.length} collections and ${nextProcesses.length} processes.`,
+        t("openeo.status.connectedLoaded", {
+          collections: nextCollections.length,
+          processes: nextProcesses.length,
+        }),
       );
     } catch (error) {
-      setErrorMessage(formatError(error));
+      setErrorMessage(formatError(error, t));
       setStatusMessage(null);
     } finally {
       setBusyAction(null);
@@ -332,16 +360,18 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
   };
 
   const buildProcess = async (): Promise<unknown> => {
-    if (!connection) throw new Error("Connect to an openEO backend first.");
-    if (!selectedCollection.trim()) throw new Error("Enter a collection ID.");
+    if (!connection) throw new Error(t("openeo.errors.connectFirst"));
+    if (!selectedCollection.trim()) {
+      throw new Error(t("openeo.errors.enterCollectionId"));
+    }
     if (!startDate || !endDate) {
-      throw new Error("Enter start and end dates.");
+      throw new Error(t("openeo.errors.enterDates"));
     }
     if (startDate >= endDate) {
-      throw new Error("Start date must be before end date.");
+      throw new Error(t("openeo.errors.startBeforeEnd"));
     }
 
-    const bbox = buildBoundingBox({ west, south, east, north });
+    const bbox = buildBoundingBox({ west, south, east, north }, t);
     const builder = await connection.buildProcess("geolibre-openeo-job");
     let datacube = builder.load_collection(
       selectedCollection.trim(),
@@ -364,66 +394,71 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
   const handleCreateJob = async () => {
     setBusyAction("job");
     setErrorMessage(null);
-    setStatusMessage("Creating openEO batch job...");
+    setStatusMessage(t("openeo.status.creatingJob"));
 
     let created = false;
     try {
-      if (!connection) throw new Error("Connect to an openEO backend first.");
+      if (!connection) throw new Error(t("openeo.errors.connectFirst"));
       const process = await buildProcess();
       const job = await withTimeout(
-        connection.createJob(process, jobTitle.trim() || "GeoLibre openEO job"),
+        connection.createJob(
+          process,
+          jobTitle.trim() || t("openeo.defaultJobTitle"),
+        ),
         OPERATION_TIMEOUT_MS,
-        "Creating the batch job timed out.",
+        t("openeo.errors.createJobTimeout"),
       );
       if (startImmediately) {
         await withTimeout(
           job.startJob(),
           OPERATION_TIMEOUT_MS,
-          "Starting the batch job timed out.",
+          t("openeo.errors.startJobTimeout"),
         );
       }
       setStatusMessage(
         startImmediately
-          ? `Created and started job ${job.id}.`
-          : `Created job ${job.id}.`,
+          ? t("openeo.status.createdStartedJob", { id: job.id })
+          : t("openeo.status.createdJob", { id: job.id }),
       );
       created = true;
     } catch (error) {
-      setErrorMessage(formatError(error));
+      setErrorMessage(formatError(error, t));
       setStatusMessage(null);
     } finally {
       setBusyAction(null);
     }
     if (created) {
       // Refresh the job list as a best-effort follow-up so a refresh failure
-      // cannot mask the successful job creation.
-      void refreshJobs(connection);
+      // cannot mask the successful job creation. No argument so refreshJobs
+      // reads the current `connection` from its own closure.
+      void refreshJobs();
     }
   };
 
   const handleDownloadResult = async () => {
     setBusyAction("download");
     setErrorMessage(null);
-    setStatusMessage("Running synchronous openEO process...");
+    setStatusMessage(t("openeo.status.runningSync"));
 
     try {
-      if (!connection) throw new Error("Connect to an openEO backend first.");
+      if (!connection) throw new Error(t("openeo.errors.connectFirst"));
       const process = await buildProcess();
       await withTimeout(
         connection.downloadResult(
           process,
-          // Strip path separators so the value is always a bare filename.
+          // The openEO client offers the result as a browser download using
+          // this name; folders are not supported, so strip path separators.
           (downloadFilename.trim() || "openeo-result.tif").replace(
             /[\\/]/g,
             "_",
           ),
         ),
         SYNC_RESULT_TIMEOUT_MS,
-        "The synchronous result request timed out.",
+        t("openeo.errors.syncTimeout"),
       );
-      setStatusMessage("Synchronous result request completed.");
+      setStatusMessage(t("openeo.status.syncCompleted"));
     } catch (error) {
-      setErrorMessage(formatError(error));
+      setErrorMessage(formatError(error, t));
       setStatusMessage(null);
     } finally {
       setBusyAction(null);
@@ -439,11 +474,11 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
         await withTimeout(
           activeConnection.listJobs(),
           OPERATION_TIMEOUT_MS,
-          "Loading jobs timed out.",
+          t("openeo.errors.loadJobsTimeout"),
         ),
       );
     } catch (error) {
-      setErrorMessage(formatError(error));
+      setErrorMessage(formatError(error, t));
     } finally {
       setBusyAction(null);
     }
@@ -455,12 +490,9 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
         <DialogHeader className="border-b px-6 py-4 pr-12">
           <DialogTitle className="flex items-center gap-2">
             <Server className="h-4 w-4" />
-            openEO
+            {t("openeo.title")}
           </DialogTitle>
-          <DialogDescription>
-            Connect to an openEO backend, inspect available resources, and
-            submit a collection processing job.
-          </DialogDescription>
+          <DialogDescription>{t("openeo.description")}</DialogDescription>
         </DialogHeader>
 
         <div className="grid min-h-0 grid-cols-1 md:grid-cols-[320px_minmax(0,1fr)]">
@@ -469,10 +501,15 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
               <div className="space-y-5 p-4">
                 <form className="space-y-3" onSubmit={handleConnect}>
                   <div className="space-y-2">
-                    <Label htmlFor="openeo-backend">Backend URL</Label>
+                    <Label htmlFor="openeo-backend">
+                      {t("openeo.backendUrl")}
+                    </Label>
                     <Input
                       id="openeo-backend"
                       value={backendUrl}
+                      // Lock the URL while a connect is in flight so an edit
+                      // cannot reset state out from under the pending request.
+                      disabled={busyAction === "connect"}
                       onChange={(event) => {
                         setBackendUrl(event.target.value);
                         resetConnectionState();
@@ -487,13 +524,17 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                       type="checkbox"
                       onChange={(event) => setAuthEnabled(event.target.checked)}
                     />
-                    Basic authentication
+                    <Label className="cursor-pointer font-normal">
+                      {t("openeo.basicAuth")}
+                    </Label>
                   </label>
 
                   {authEnabled ? (
                     <div className="grid grid-cols-1 gap-3">
                       <div className="space-y-2">
-                        <Label htmlFor="openeo-username">Username</Label>
+                        <Label htmlFor="openeo-username">
+                          {t("openeo.username")}
+                        </Label>
                         <Input
                           id="openeo-username"
                           value={username}
@@ -501,7 +542,9 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="openeo-password">Password</Label>
+                        <Label htmlFor="openeo-password">
+                          {t("openeo.password")}
+                        </Label>
                         <Input
                           id="openeo-password"
                           type="password"
@@ -518,7 +561,7 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                     ) : (
                       <Server className="h-4 w-4" />
                     )}
-                    Connect
+                    {t("openeo.connect")}
                   </Button>
                 </form>
 
@@ -526,19 +569,23 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                   <div className="space-y-2 rounded-md border p-3 text-sm">
                     <div className="flex items-center gap-2 font-medium">
                       <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                      API {capabilities.apiVersion()}
+                      {t("openeo.apiLabel", {
+                        version: capabilities.apiVersion(),
+                      })}
                     </div>
                     <p className="text-muted-foreground">
-                      {capabilities.description() || "No description provided."}
+                      {capabilities.description() ||
+                        t("openeo.noDescription")}
                     </p>
                     {capabilities.listPlans().length ? (
                       <p className="text-xs text-muted-foreground">
-                        Plans:{" "}
-                        {capabilities
-                          .listPlans()
-                          .map((plan) => plan.name)
-                          .filter(Boolean)
-                          .join(", ")}
+                        {t("openeo.plans", {
+                          plans: capabilities
+                            .listPlans()
+                            .map((plan) => plan.name)
+                            .filter(Boolean)
+                            .join(", "),
+                        })}
                       </p>
                     ) : null}
                   </div>
@@ -564,12 +611,12 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                 <div className="rounded-md border">
                   <div className="border-b p-3">
                     <Label htmlFor="openeo-collection-search">
-                      Collections
+                      {t("openeo.collections")}
                     </Label>
                     <Input
                       id="openeo-collection-search"
                       className="mt-2"
-                      placeholder="Search collection IDs"
+                      placeholder={t("openeo.searchCollections")}
                       value={collectionQuery}
                       onChange={(event) =>
                         setCollectionQuery(event.target.value)
@@ -601,14 +648,16 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                     ) : (
                       <p className="p-3 text-sm text-muted-foreground">
                         {connection
-                          ? "No collections match the search."
-                          : "Connect to a backend to load collections."}
+                          ? t("openeo.noCollectionsMatch")
+                          : t("openeo.connectToLoadCollections")}
                       </p>
                     )}
                     {filteredCollections.length > MAX_LIST_ITEMS ? (
                       <p className="p-3 text-xs text-muted-foreground">
-                        Showing {MAX_LIST_ITEMS} of {filteredCollections.length}{" "}
-                        collections. Refine the search to narrow the list.
+                        {t("openeo.showingCollections", {
+                          shown: MAX_LIST_ITEMS,
+                          total: filteredCollections.length,
+                        })}
                       </p>
                     ) : null}
                   </div>
@@ -616,11 +665,13 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
 
                 <div className="rounded-md border">
                   <div className="border-b p-3">
-                    <Label htmlFor="openeo-process-search">Processes</Label>
+                    <Label htmlFor="openeo-process-search">
+                      {t("openeo.processes")}
+                    </Label>
                     <Input
                       id="openeo-process-search"
                       className="mt-2"
-                      placeholder="Search process IDs"
+                      placeholder={t("openeo.searchProcesses")}
                       value={processQuery}
                       onChange={(event) => setProcessQuery(event.target.value)}
                     />
@@ -643,14 +694,16 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                     ) : (
                       <p className="p-3 text-sm text-muted-foreground">
                         {connection
-                          ? "No processes match the search."
-                          : "Connect to a backend to load processes."}
+                          ? t("openeo.noProcessesMatch")
+                          : t("openeo.connectToLoadProcesses")}
                       </p>
                     )}
                     {filteredProcesses.length > MAX_LIST_ITEMS ? (
                       <p className="p-3 text-xs text-muted-foreground">
-                        Showing {MAX_LIST_ITEMS} of {filteredProcesses.length}{" "}
-                        processes. Refine the search to narrow the list.
+                        {t("openeo.showingProcesses", {
+                          shown: MAX_LIST_ITEMS,
+                          total: filteredProcesses.length,
+                        })}
                       </p>
                     ) : null}
                   </div>
@@ -659,17 +712,18 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
 
               <section className="space-y-4">
                 <div>
-                  <h3 className="text-sm font-semibold">Process Builder</h3>
+                  <h3 className="text-sm font-semibold">
+                    {t("openeo.processBuilder")}
+                  </h3>
                   <p className="text-xs text-muted-foreground">
-                    Uses `load_collection`, optional `reduce_dimension`, and
-                    `save_result` from the openEO JavaScript client.
+                    {t("openeo.processBuilderHint")}
                   </p>
                 </div>
 
                 <div className="grid gap-4 lg:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="openeo-selected-collection">
-                      Collection ID
+                      {t("openeo.collectionId")}
                     </Label>
                     <Input
                       id="openeo-selected-collection"
@@ -680,7 +734,7 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="openeo-bands">Bands</Label>
+                    <Label htmlFor="openeo-bands">{t("openeo.bands")}</Label>
                     <Input
                       id="openeo-bands"
                       placeholder="VV,VH"
@@ -692,7 +746,7 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
 
                 <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                   <div className="space-y-2">
-                    <Label htmlFor="openeo-west">West</Label>
+                    <Label htmlFor="openeo-west">{t("openeo.west")}</Label>
                     <Input
                       id="openeo-west"
                       value={west}
@@ -700,7 +754,7 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="openeo-south">South</Label>
+                    <Label htmlFor="openeo-south">{t("openeo.south")}</Label>
                     <Input
                       id="openeo-south"
                       value={south}
@@ -708,7 +762,7 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="openeo-east">East</Label>
+                    <Label htmlFor="openeo-east">{t("openeo.east")}</Label>
                     <Input
                       id="openeo-east"
                       value={east}
@@ -716,7 +770,7 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="openeo-north">North</Label>
+                    <Label htmlFor="openeo-north">{t("openeo.north")}</Label>
                     <Input
                       id="openeo-north"
                       value={north}
@@ -727,7 +781,9 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
 
                 <div className="grid gap-4 lg:grid-cols-4">
                   <div className="space-y-2">
-                    <Label htmlFor="openeo-start-date">Start date</Label>
+                    <Label htmlFor="openeo-start-date">
+                      {t("openeo.startDate")}
+                    </Label>
                     <Input
                       id="openeo-start-date"
                       type="date"
@@ -736,7 +792,9 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="openeo-end-date">End date</Label>
+                    <Label htmlFor="openeo-end-date">
+                      {t("openeo.endDate")}
+                    </Label>
                     <Input
                       id="openeo-end-date"
                       type="date"
@@ -745,7 +803,9 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="openeo-reducer">Reducer</Label>
+                    <Label htmlFor="openeo-reducer">
+                      {t("openeo.reducer")}
+                    </Label>
                     <Select
                       id="openeo-reducer"
                       value={reducer}
@@ -753,15 +813,19 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                         setReducer(event.target.value as Reducer)
                       }
                     >
-                      <option value="none">None</option>
-                      <option value="mean">Mean</option>
-                      <option value="median">Median</option>
-                      <option value="min">Minimum</option>
-                      <option value="max">Maximum</option>
+                      <option value="none">{t("openeo.reducerNone")}</option>
+                      <option value="mean">{t("openeo.reducerMean")}</option>
+                      <option value="median">
+                        {t("openeo.reducerMedian")}
+                      </option>
+                      <option value="min">{t("openeo.reducerMin")}</option>
+                      <option value="max">{t("openeo.reducerMax")}</option>
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="openeo-dimension">Dimension</Label>
+                    <Label htmlFor="openeo-dimension">
+                      {t("openeo.dimension")}
+                    </Label>
                     <Input
                       id="openeo-dimension"
                       value={dimension}
@@ -772,7 +836,9 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
 
                 <div className="grid gap-4 lg:grid-cols-3">
                   <div className="space-y-2">
-                    <Label htmlFor="openeo-output-format">Output format</Label>
+                    <Label htmlFor="openeo-output-format">
+                      {t("openeo.outputFormat")}
+                    </Label>
                     <Input
                       id="openeo-output-format"
                       value={outputFormat}
@@ -780,7 +846,9 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                     />
                   </div>
                   <div className="space-y-2 lg:col-span-2">
-                    <Label htmlFor="openeo-job-title">Batch job title</Label>
+                    <Label htmlFor="openeo-job-title">
+                      {t("openeo.jobTitle")}
+                    </Label>
                     <Input
                       id="openeo-job-title"
                       value={jobTitle}
@@ -798,7 +866,9 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                       setStartImmediately(event.target.checked)
                     }
                   />
-                  Start batch job immediately
+                  <Label className="cursor-pointer font-normal">
+                    {t("openeo.startImmediately")}
+                  </Label>
                 </label>
 
                 <div className="flex flex-wrap gap-2">
@@ -812,12 +882,12 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                     ) : (
                       <Play className="h-4 w-4" />
                     )}
-                    Create Batch Job
+                    {t("openeo.createBatchJob")}
                   </Button>
                   <div className="flex min-w-64 flex-1 gap-2">
                     <Input
-                      aria-label="Download filename"
-                      title="Suggested file name for the result, saved to the default download location."
+                      aria-label={t("openeo.downloadFilename")}
+                      title={t("openeo.downloadFilenameHint")}
                       value={downloadFilename}
                       onChange={(event) =>
                         setDownloadFilename(event.target.value)
@@ -834,7 +904,7 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                       ) : (
                         <Download className="h-4 w-4" />
                       )}
-                      Run Sync
+                      {t("openeo.runSync")}
                     </Button>
                   </div>
                 </div>
@@ -842,7 +912,7 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
 
               <section className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold">Jobs</h3>
+                  <h3 className="text-sm font-semibold">{t("openeo.jobs")}</h3>
                   <Button
                     disabled={!connection || isBusy}
                     onClick={() => void refreshJobs()}
@@ -855,7 +925,7 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                     ) : (
                       <RefreshCw className="h-3.5 w-3.5" />
                     )}
-                    Refresh
+                    {t("openeo.refresh")}
                   </Button>
                 </div>
                 <div className="rounded-md border">
@@ -869,7 +939,7 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                           {job.title || job.id}
                         </span>
                         <span className="text-muted-foreground">
-                          {job.status || "unknown"}
+                          {job.status || t("openeo.statusUnknown")}
                         </span>
                         <span className="truncate text-xs text-muted-foreground">
                           {job.created || "—"}
@@ -878,12 +948,15 @@ export function OpenEODialog({ open, onOpenChange }: OpenEODialogProps) {
                     ))
                   ) : (
                     <p className="p-3 text-sm text-muted-foreground">
-                      No jobs loaded.
+                      {t("openeo.noJobsLoaded")}
                     </p>
                   )}
                   {jobs.length > MAX_JOB_ITEMS ? (
                     <p className="p-3 text-xs text-muted-foreground">
-                      Showing {MAX_JOB_ITEMS} of {jobs.length} jobs.
+                      {t("openeo.showingJobs", {
+                        shown: MAX_JOB_ITEMS,
+                        total: jobs.length,
+                      })}
                     </p>
                   ) : null}
                 </div>
