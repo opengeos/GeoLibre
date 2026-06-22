@@ -1,5 +1,10 @@
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
-import { isAbsoluteLocalPath, isTauri, loadDroppedVectorPaths } from "./tauri-io";
+import {
+  hasPathTraversal,
+  isAbsoluteLocalPath,
+  isTauri,
+  loadDroppedVectorPaths,
+} from "./tauri-io";
 
 /**
  * Detects a plain GeoJSON layer saved as a re-readable local-file reference
@@ -18,6 +23,8 @@ function needsLocalFileReload(layer: GeoLibreLayer): boolean {
     layer.metadata.localFileReloadable === true &&
     typeof layer.sourcePath === "string" &&
     isAbsoluteLocalPath(layer.sourcePath) &&
+    // Reject a crafted project's `..` traversal before re-reading off disk.
+    !hasPathTraversal(layer.sourcePath) &&
     layer.metadata.externalNativeLayer !== true &&
     layer.metadata.sourceKind == null
   );

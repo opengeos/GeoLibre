@@ -35,6 +35,10 @@ const VECTOR_PANEL_CLASS = "geolibre-vector-panel";
 const RESTORABLE_VECTOR_PATH =
   /\.(geojson|json|gpkg|geoparquet|parquet|fgb|flatgeobuf|csv|tsv|kml|kmz|gml|gpx|dxf|tab|shp|zip)$/i;
 
+// Matches a `..` directory-traversal segment (bounded by separators or the
+// string ends), without rejecting a `..` inside a filename like `v1..2.gpkg`.
+const PATH_TRAVERSAL = /(?:^|[/\\])\.\.(?:[/\\]|$)/;
+
 // Generic, non-loading watermark for the URL input. The real demonstration
 // links live in SAMPLE_VECTOR_DATASETS below, so the input no longer ships
 // prefilled with a live URL (see opengeos/GeoLibre#661).
@@ -250,7 +254,7 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
           // disk. The host's filesystem scope is the real boundary; this is
           // cheap defense-in-depth.
           RESTORABLE_VECTOR_PATH.test(layer.sourcePath) &&
-          !layer.sourcePath.includes("..")
+          !PATH_TRAVERSAL.test(layer.sourcePath)
             ? layer.sourcePath
             : undefined;
         if (localPath && app.readLocalVectorFile) {
@@ -276,6 +280,9 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
                   `[GeoLibre] Failed to restore vector layer "${layer.name}"`,
                   error,
                 );
+                // Consistent with the missing-file case above: drop the layer
+                // rather than leave a zombie panel entry with no map output.
+                useAppStore.getState().removeLayer(layer.id);
               }),
           );
           continue;
@@ -392,20 +399,28 @@ export async function materializeEmbeddableVectorLayers(
   // there is nothing to embed anyway.
   const control = vectorControl;
   if (!control) return result;
-  for (const layer of layers) {
-    if (!isEmbeddableLocalVectorLayer(layer)) continue;
-    try {
-      const collection = await control.getLayerGeoJSON(layer.id);
-      // Embed any readable collection, including an empty one: a layer the user
-      // loaded from an empty file is still valid project state that would
-      // otherwise be dropped on reopen. null means the data is not held locally.
-      if (collection && Array.isArray(collection.features)) {
-        result.set(layer.id, collection);
-      }
-    } catch (error) {
+  // Materialize the layers concurrently: each getLayerGeoJSON may query DuckDB,
+  // so serial awaits would add up for a project with several embeddable layers.
+  const entries = await Promise.allSettled(
+    layers
+      .filter(isEmbeddableLocalVectorLayer)
+      .map(async (layer) => {
+        const collection = await control.getLayerGeoJSON(layer.id);
+        // Embed any readable collection, including an empty one: a layer loaded
+        // from an empty file is still valid project state that would otherwise
+        // be dropped on reopen. null means the data is not held locally.
+        return collection && Array.isArray(collection.features)
+          ? ([layer.id, collection] as const)
+          : null;
+      }),
+  );
+  for (const entry of entries) {
+    if (entry.status === "fulfilled" && entry.value) {
+      result.set(entry.value[0], entry.value[1]);
+    } else if (entry.status === "rejected") {
       console.error(
-        `[GeoLibre] Could not read data for vector layer "${layer.name}" to embed it`,
-        error,
+        "[GeoLibre] Could not read data for a vector layer to embed it",
+        entry.reason,
       );
     }
   }

@@ -11,6 +11,7 @@ import {
 import { unzip } from "fflate";
 import type { FeatureCollection } from "geojson";
 import shp from "shpjs";
+import i18n from "../i18n";
 import {
   DELIMITER_CANDIDATES,
   NO_VALID_COORDINATES_MESSAGE,
@@ -109,30 +110,36 @@ interface SaveTextFileOptions {
 interface SaveBinaryFileOptions extends SaveTextFileOptions {}
 
 const SHAPEFILE_SIDECAR_EXTENSIONS = ["dbf", "shx", "prj", "cpg"];
-const VECTOR_FILE_DIALOG_FILTERS: FileDialogFilter[] = [
-  {
-    name: "Vector data",
-    extensions: [
-      "geojson",
-      "json",
-      "gpkg",
-      "geoparquet",
-      "parquet",
-      "fgb",
-      "flatgeobuf",
-      "csv",
-      "tsv",
-      "kml",
-      "kmz",
-      "gml",
-      "gpx",
-      "dxf",
-      "tab",
-      "shp",
-      "zip",
-    ],
-  },
+const VECTOR_FILE_DIALOG_EXTENSIONS = [
+  "geojson",
+  "json",
+  "gpkg",
+  "geoparquet",
+  "parquet",
+  "fgb",
+  "flatgeobuf",
+  "csv",
+  "tsv",
+  "kml",
+  "kmz",
+  "gml",
+  "gpx",
+  "dxf",
+  "tab",
+  "shp",
+  "zip",
 ];
+
+// Built at call time so the filter-group label shown in the native file dialog
+// is translated (a module-level constant would freeze the English string).
+function vectorFileDialogFilters(): FileDialogFilter[] {
+  return [
+    {
+      name: i18n.t("toolbar.item.vectorDataFilter"),
+      extensions: VECTOR_FILE_DIALOG_EXTENSIONS,
+    },
+  ];
+}
 
 export interface LoadedVectorLayer {
   data: FeatureCollection;
@@ -598,7 +605,7 @@ export interface PickedVectorFile {
  */
 export async function pickVectorFilesWithSidecars(): Promise<PickedVectorFile[]> {
   const selected = await open({
-    filters: VECTOR_FILE_DIALOG_FILTERS,
+    filters: vectorFileDialogFilters(),
     multiple: true,
   });
   if (!selected) return [];
@@ -647,7 +654,7 @@ export async function readVectorFileWithSidecars(
   // (possibly hand-edited) project file, so a traversal must not reach outside
   // wherever Tauri's filesystem scope allows. The scope is the real boundary;
   // this is cheap defense-in-depth.
-  if (!isTauri() || !isAbsoluteLocalPath(path) || path.includes("..")) {
+  if (!isTauri() || !isAbsoluteLocalPath(path) || hasPathTraversal(path)) {
     return null;
   }
   try {
@@ -666,6 +673,21 @@ export async function readVectorFileWithSidecars(
     console.warn(`Could not read local vector file "${path}".`, error);
     return null;
   }
+}
+
+// Matches a `..` directory-traversal segment (bounded by separators or the
+// string ends), without rejecting a `..` inside a filename like `v1..2.gpkg`.
+const PATH_TRAVERSAL = /(?:^|[/\\])\.\.(?:[/\\]|$)/;
+
+/**
+ * Whether a path contains a `..` directory-traversal segment. Used to reject a
+ * crafted project's `sourcePath` before re-reading it off disk.
+ *
+ * @param path - The path to check.
+ * @returns True when the path contains a traversal segment.
+ */
+export function hasPathTraversal(path: string): boolean {
+  return PATH_TRAVERSAL.test(path);
 }
 
 export function isAbsoluteLocalPath(path: string): boolean {
