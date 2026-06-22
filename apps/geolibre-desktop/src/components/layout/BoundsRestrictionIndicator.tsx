@@ -10,7 +10,7 @@ import { useTranslation } from "react-i18next";
  *
  * Anchored to the bottom-left corner: the top-left corner is where most map
  * control plugins (GeoEditor, Basemaps, NASA Earthdata, ...) cluster, so a
- * top-left badge overlapped and hid the first plugin button (#742). The small
+ * top-left badge overlapped and hid the first plugin button. The small
  * bottom offset keeps it clear of the bottom-left scale control when that is
  * enabled.
  */
