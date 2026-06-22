@@ -3,11 +3,16 @@ import type { GeoLibreExternalNativeLayerRegistration } from "@geolibre/plugins"
 
 /**
  * Build the store layer record for an external plugin's native GeoJSON layer.
- * The layer is plugin-owned, so the registration's `style`/`opacity` win over
- * an `existing` layer: `addGeoJsonLayer` seeds the layer with the full
- * `DEFAULT_LAYER_STYLE` and `opacity: 1` before the plugin registers its own,
- * so merging the existing values last would clobber the plugin's choices and
- * reset the rendered layer on the next visibility/layer-control change.
+ *
+ * Merge priority for `style`/`opacity` (highest to lowest):
+ *   registration  - plugin always owns the keys it supplies (even over a user edit)
+ *   existing       - preserves user edits for keys the registration omits
+ *   defaults       - DEFAULT_LAYER_STYLE / opacity 1
+ *
+ * `addGeoJsonLayer` seeds the layer with `DEFAULT_LAYER_STYLE` and `opacity: 1`
+ * before the plugin calls `registerExternalNativeLayer`, so the registration
+ * must merge last or the defaults would win and the rendered layer would reset
+ * on the next visibility/layer-control change.
  */
 export function createExternalNativeStoreLayer(
   registration: GeoLibreExternalNativeLayerRegistration,
@@ -24,6 +29,7 @@ export function createExternalNativeStoreLayer(
     id: registration.id,
     name: registration.name,
     type: registration.type ?? "geojson",
+    // Plugin fully owns its source descriptor; existing.source is not merged.
     source: {
       ...(registration.source ?? { type: "geojson" }),
       ...(sourceId ? { sourceId } : {}),

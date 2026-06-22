@@ -131,4 +131,21 @@ describe("createExternalNativeStoreLayer", () => {
       "plugin-layer-outline",
     ]);
   });
+
+  it("preserves existing visibility when false", () => {
+    const existing: GeoLibreLayer = {
+      id: "plugin-layer",
+      name: "Plugin Layer",
+      type: "geojson",
+      source: { type: "geojson" },
+      visible: false,
+      opacity: 1,
+      style: { ...DEFAULT_LAYER_STYLE },
+      metadata: {},
+    };
+
+    const layer = createExternalNativeStoreLayer(baseRegistration(), existing);
+
+    assert.equal(layer.visible, false);
+  });
 });
