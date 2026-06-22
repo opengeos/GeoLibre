@@ -1430,7 +1430,7 @@
     "widgetCount_one": "{{count}} widget",
     "widgetCount_other": "{{count}} widgets",
     "empty": "No widgets yet. Add a chart to summarize a layer.",
-    "emptyNoLayers": "Add a vector or DuckDB query layer to start building charts.",
+    "emptyNoLayers": "No compatible layers found. Add a vector or DuckDB query layer to your project using the Add Data menu above, then return here to start building charts.",
     "noLayersHint": "Add a vector or DuckDB query layer first.",
     "layerMissing": "Layer unavailable",
     "noData": "This layer has no chartable attributes.",
