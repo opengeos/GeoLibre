@@ -1044,10 +1044,19 @@ function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
   // restorable URL (local-file or in-memory) keep their `geojson` because it is
   // the sole copy GeoLibre's restore path (`ensureExternalGeoJsonNativeLayer`)
   // re-renders from.
+  //
+  // Add Vector Layer (`maplibre-gl-vector`) layers are the exception: they are
+  // restored by the control, not from `geojson` — from the file path on desktop
+  // or embedded `metadata.embeddedGeoJSON` on the web. Their `geojson` is only
+  // the attribute table's copy, so persisting it would silently embed the whole
+  // dataset (bypassing the web embed prompt) instead of saving the path. Strip
+  // it regardless of a restorable URL.
+  const isVectorControlLayer =
+    layer.metadata.sourceKind === "maplibre-gl-vector";
   if (
     layer.metadata.externalNativeLayer === true &&
     layer.geojson &&
-    hasRestorableSourceUrl(layer)
+    (hasRestorableSourceUrl(layer) || isVectorControlLayer)
   ) {
     const { geojson: _geojson, ...rest } = layer;
     layer = rest;

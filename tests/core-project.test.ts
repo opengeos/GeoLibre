@@ -378,6 +378,48 @@ describe("project parsing", () => {
     const reopened = parseProject(serializeProject(project));
     assert.equal(reopened.layers[0].geojson?.features.length, 1);
   });
+
+  it("drops geojson for Add Vector Layer (maplibre-gl-vector) local-file layers", () => {
+    // These layers restore via the control (file path on desktop, embedded
+    // GeoJSON on the web), not from `geojson` — which is only the attribute
+    // table's copy. Persisting it would silently embed the dataset and bypass
+    // the web embed prompt, so it must be stripped even without a source URL.
+    const project = projectFromStore({
+      projectName: "Add Vector Layer file",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [
+        geojsonLayer({
+          id: "vector-file",
+          source: { type: "geojson" },
+          sourcePath: "/home/user/data/buildings.gpkg",
+          metadata: {
+            externalNativeLayer: true,
+            sourceKind: "maplibre-gl-vector",
+            localFileReloadable: true,
+          },
+          geojson: {
+            type: "FeatureCollection",
+            features: [
+              {
+                type: "Feature",
+                properties: {},
+                geometry: { type: "Point", coordinates: [1, 2] },
+              },
+            ],
+          },
+        }),
+      ],
+      preferences: createEmptyProject().preferences,
+      metadata: {},
+    });
+
+    assert.equal(project.layers[0].geojson, undefined);
+    // The reload path is preserved so the layer still restores on reopen.
+    assert.equal(project.layers[0].sourcePath, "/home/user/data/buildings.gpkg");
+  });
 });
 
 describe("multi-map grid persistence", () => {
