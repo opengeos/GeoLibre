@@ -78,7 +78,10 @@ import { SectionErrorBoundary } from "../common/error-boundaries";
 import { AttributeTable } from "../panels/AttributeTable";
 import { LayerPanel } from "../panels/LayerPanel";
 import { FloatingPanels } from "../panels/FloatingPanels";
-import { PluginRightPanel } from "../panels/PluginRightPanel";
+import {
+  PluginRightPanel,
+  PLUGIN_PANEL_DEFAULT_WIDTH,
+} from "../panels/PluginRightPanel";
 import { StylePanel } from "../panels/StylePanel";
 import { StoryMapPanel } from "../storymap/StoryMapPanel";
 import { StoryMapPresenter } from "../storymap/StoryMapPresenter";
@@ -426,6 +429,12 @@ export function DesktopShell({
   const expandedPanelEdge = useExpandedPanelEdge();
   const pluginRightPanelActive = expandedPanelEdge === "right";
   const pluginLeftPanelActive = expandedPanelEdge === "left";
+  // The plugin panel's width is owned here (per app instance) and shared by its
+  // left and right slots, so a user resize survives moving the panel between
+  // edges without a module-level global (which would leak across embeds).
+  const [pluginPanelWidth, setPluginPanelWidth] = useState(
+    PLUGIN_PANEL_DEFAULT_WIDTH,
+  );
   const assistantOpen = useAppStore((s) => s.ui.assistantOpen);
   const dashboardOpen = useAppStore((s) => s.ui.dashboardOpen);
   const geometryEditLayerId = useSyncExternalStore(
@@ -1343,7 +1352,11 @@ export function DesktopShell({
           </SectionErrorBoundary>
         ) : null}
         <SectionErrorBoundary label="Plugin panel (left)">
-          <PluginRightPanel slot="left" />
+          <PluginRightPanel
+            slot="left"
+            width={pluginPanelWidth}
+            onWidthChange={setPluginPanelWidth}
+          />
         </SectionErrorBoundary>
         <main
           // `isolate` creates a stacking context so map-panel z-indexes (up to 10000) stay below body-portaled dialogs. See #451.
@@ -1388,7 +1401,11 @@ export function DesktopShell({
           </SectionErrorBoundary>
         ) : null}
         <SectionErrorBoundary label="Plugin panel (right)">
-          <PluginRightPanel slot="right" />
+          <PluginRightPanel
+            slot="right"
+            width={pluginPanelWidth}
+            onWidthChange={setPluginPanelWidth}
+          />
         </SectionErrorBoundary>
         {notebookOpen ? (
           <SectionErrorBoundary label="Notebook">

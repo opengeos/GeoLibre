@@ -23,25 +23,29 @@ import {
   type PointerEvent as ReactPointerEvent,
   useEffect,
   useRef,
-  useState,
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useRightPanelState } from "../../hooks/useRightPanels";
 import { clamp } from "../../lib/clamp";
 import { isImageSource } from "../../lib/icon-source";
 
-const DEFAULT_WIDTH = 320;
+export const PLUGIN_PANEL_DEFAULT_WIDTH = 320;
 const MIN_WIDTH = 240;
 const MAX_WIDTH = 640;
-
-// The left and right slots are separate component instances, so the active
-// panel's width is shared here. This lets a user's resize survive moving the
-// panel between edges (only one instance is ever the active/matched one).
-let sharedWidth = DEFAULT_WIDTH;
 
 interface PluginRightPanelProps {
   /** Which workspace edge this instance occupies. */
   slot: RightPanelSide;
+  /**
+   * The active panel's width in px. Owned by the shell and shared between the
+   * left and right slot instances so a user's resize survives moving the panel
+   * between edges. Lifting it to the shell (rather than a module-level global)
+   * keeps it per-app-instance, which matters for the multi-instance Jupyter
+   * embed.
+   */
+  width: number;
+  /** Update the shared panel width (clamped by this component). */
+  onWidthChange: (width: number) => void;
 }
 
 /**
@@ -58,11 +62,14 @@ interface PluginRightPanelProps {
  * @param props.slot - The workspace edge ("left" or "right") this instance owns.
  * @returns The plugin panel aside, or null when no panel is docked on this edge.
  */
-export function PluginRightPanel({ slot }: PluginRightPanelProps) {
+export function PluginRightPanel({
+  slot,
+  width,
+  onWidthChange,
+}: PluginRightPanelProps) {
   const { t } = useTranslation();
   const { activeId, collapsed, side } = useRightPanelState();
   const contentRef = useRef<HTMLDivElement | null>(null);
-  const [width, setWidth] = useState(DEFAULT_WIDTH);
 
   const panel = activeId ? getRightPanel(activeId) : undefined;
   const matched = activeId !== null && panel != null && side === slot;
@@ -71,24 +78,17 @@ export function PluginRightPanel({ slot }: PluginRightPanelProps) {
   // Adopt the panel's preferred width when a different panel becomes active.
   // Keyed on activeId only so a user resize survives collapse/expand and any
   // re-registration of the same panel; the width is read fresh from the
-  // registry rather than depending on the panel object's identity.
+  // registry rather than depending on the panel object's identity. Both slot
+  // instances run this with the same value, and the shared (shell-owned) width
+  // means a resize survives moving between edges.
   useEffect(() => {
     if (!activeId) return;
     const current = getRightPanel(activeId);
     if (!current) return;
-    sharedWidth = clamp(
-      current.defaultWidth ?? DEFAULT_WIDTH,
-      MIN_WIDTH,
-      MAX_WIDTH,
+    onWidthChange(
+      clamp(current.defaultWidth ?? PLUGIN_PANEL_DEFAULT_WIDTH, MIN_WIDTH, MAX_WIDTH),
     );
-    setWidth(sharedWidth);
-  }, [activeId]);
-
-  // When this instance takes over the panel (e.g. after a side move), adopt the
-  // width the other instance last had, so a user resize is not lost.
-  useEffect(() => {
-    if (matched) setWidth(sharedWidth);
-  }, [matched]);
+  }, [activeId, onWidthChange]);
 
   // Populate the plugin content container while this instance owns the panel.
   // Keyed on `matched` so moving the panel between edges tears down the old
@@ -132,9 +132,7 @@ export function PluginRightPanel({ slot }: PluginRightPanelProps) {
       // The resizable edge faces the map: dragging it away from the dock side
       // widens the panel.
       const delta = isLeft ? move.clientX - startX : startX - move.clientX;
-      const next = clamp(startWidth + delta, MIN_WIDTH, MAX_WIDTH);
-      sharedWidth = next;
-      setWidth(next);
+      onWidthChange(clamp(startWidth + delta, MIN_WIDTH, MAX_WIDTH));
     };
     const handleEnd = () => {
       if (el.hasPointerCapture(event.pointerId)) {

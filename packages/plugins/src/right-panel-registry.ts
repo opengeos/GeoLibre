@@ -147,14 +147,16 @@ export function openRightPanel(id: string): boolean {
   // A different panel taking the workspace displaces the current owner; release
   // it (onClose) so a plugin can free resources allocated for its panel.
   const displacedId = wasInactive ? activeId : null;
+  // Release the displaced panel first, while it is still the active owner, so
+  // its onClose hook doesn't observe the incoming panel as active.
+  if (displacedId !== null) {
+    runHook(displacedId, "onClose", registry.get(displacedId)?.onClose);
+  }
   // A new panel starts from its own declared side, not the previous user move.
   if (wasInactive) sideOverride = null;
   activeId = id;
   collapsed = false;
   emit();
-  if (displacedId !== null) {
-    runHook(displacedId, "onClose", registry.get(displacedId)?.onClose);
-  }
   if (wasInactive) {
     runHook(id, "onOpen", panel.onOpen);
   }

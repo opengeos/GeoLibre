@@ -29,11 +29,22 @@ function MenuIcon({ icon, className }: { icon?: string; className: string }) {
   return null;
 }
 
+// Cap submenu nesting so a malformed or circular (object-aliased) menu tree
+// from a plugin cannot blow the stack; deeper levels are dropped.
+const MAX_MENU_DEPTH = 8;
+
 /** Render a plugin menu item tree (actions, submenus, separators) recursively. */
 function renderItems(
   items: GeoLibreToolbarMenuItem[],
   menuId: string,
+  depth = 0,
 ): React.ReactNode {
+  if (depth > MAX_MENU_DEPTH) {
+    console.warn(
+      `Toolbar menu "${menuId}" exceeds the maximum submenu depth (${MAX_MENU_DEPTH}); deeper items are not rendered.`,
+    );
+    return null;
+  }
   return items.map((item, index) => {
     if (item.type === "separator") {
       return <DropdownMenuSeparator key={item.id ?? `sep-${menuId}-${index}`} />;
@@ -48,7 +59,7 @@ function renderItems(
             {item.label}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
-            {renderItems(item.items, `${menuId}.${item.id}`)}
+            {renderItems(item.items, `${menuId}.${item.id}`, depth + 1)}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
       );

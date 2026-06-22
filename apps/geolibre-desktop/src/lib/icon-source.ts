@@ -8,7 +8,10 @@
  * @returns True when `icon` should be rendered as an image source.
  */
 export function isImageSource(icon: string): boolean {
-  // Only accept image data URIs (not data:text/html etc.) so a plugin-supplied
-  // icon string is always rendered as an image source, never something else.
-  return /^(https?:|data:image\/|blob:|\/)/.test(icon);
+  // Accept absolute http(s) URLs, image data URIs (not data:text/html etc.),
+  // and object URLs. Bare root-relative ("/...") paths are intentionally not
+  // accepted: a plugin references its bundled assets via an absolute URL from
+  // resolvePluginAssetUrl, and this avoids treating an arbitrary same-origin or
+  // Tauri-asset path as an icon source.
+  return /^(https?:|data:image\/|blob:)/.test(icon);
 }

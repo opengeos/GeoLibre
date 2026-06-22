@@ -236,6 +236,8 @@ export interface GeoLibreAppAPI {
    * user-facing move button so a plugin can reposition its own panel.
    */
   setActiveRightPanelSide?: (side: "left" | "right") => void;
+  /** Which side the active right panel docks on, or null when none is open. */
+  getActiveRightPanelSide?: () => "left" | "right" | null;
   /**
    * Register a plugin-owned top-level toolbar menu shown in the GeoLibre banner
    * beside the built-in menus, with nested submenus and action items. Returns
