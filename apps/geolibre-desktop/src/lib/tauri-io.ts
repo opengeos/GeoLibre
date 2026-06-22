@@ -10,8 +10,8 @@ import {
 } from "@tauri-apps/plugin-fs";
 import { unzip } from "fflate";
 import type { FeatureCollection } from "geojson";
+import i18next from "i18next";
 import shp from "shpjs";
-import i18n from "../i18n";
 import {
   DELIMITER_CANDIDATES,
   NO_VALID_COORDINATES_MESSAGE,
@@ -135,7 +135,7 @@ const VECTOR_FILE_DIALOG_EXTENSIONS = [
 function vectorFileDialogFilters(): FileDialogFilter[] {
   return [
     {
-      name: i18n.t("toolbar.item.vectorDataFilter"),
+      name: i18next.t("toolbar.item.vectorDataFilter"),
       extensions: VECTOR_FILE_DIALOG_EXTENSIONS,
     },
   ];
