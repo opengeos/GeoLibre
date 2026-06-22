@@ -72,9 +72,15 @@ describe("toolbar-menu registry", () => {
     unsubscribe();
   });
 
-  it("rejects menus without an id or label", () => {
+  it("rejects menus without an id, label, or items array", () => {
     assert.throws(() => registerToolbarMenu(testMenu({ id: "" })));
     assert.throws(() => registerToolbarMenu(testMenu({ label: "" })));
+    assert.throws(() =>
+      registerToolbarMenu({
+        id: "x",
+        label: "x",
+      } as unknown as GeoLibreToolbarMenu),
+    );
   });
 
   it("does not let a stale disposer evict a re-registered menu", () => {

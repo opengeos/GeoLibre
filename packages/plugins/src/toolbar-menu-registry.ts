@@ -46,6 +46,9 @@ export function registerToolbarMenu(menu: GeoLibreToolbarMenu): () => void {
   if (typeof menu.label !== "string" || menu.label.length === 0) {
     throw new Error(`Toolbar menu "${menu.id}" must have a non-empty label.`);
   }
+  if (!Array.isArray(menu.items)) {
+    throw new Error(`Toolbar menu "${menu.id}" must have an items array.`);
+  }
   // Re-registering an id replaces the menu. The returned disposer only removes
   // the menu while this exact registration is still current, so a stale disposer
   // cannot evict a newer menu that reused the id.

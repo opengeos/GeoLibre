@@ -68,7 +68,8 @@ function FloatingPanelCard({
     // Ignore drags that start on the close button.
     if ((event.target as HTMLElement).closest("button")) return;
     event.preventDefault();
-    focusFloatingPanel(id);
+    // Focus is already raised by the section's onPointerDownCapture (capture
+    // phase), so no focusFloatingPanel call is needed here.
     const handle = event.currentTarget;
     handle.setPointerCapture(event.pointerId);
     const card = handle.parentElement as HTMLElement;

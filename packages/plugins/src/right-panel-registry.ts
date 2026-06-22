@@ -163,8 +163,10 @@ export function openRightPanel(id: string): boolean {
 
 /**
  * Collapse the active panel to its rail without closing it. The panel keeps
- * ownership of the right-side workspace (the Style panel stays collapsed).
- * No-op unless `id` is the active panel and currently expanded.
+ * ownership of the edge (it stays the active panel), but since the rail leaves
+ * room, the shell restores the built-in Style/Layers panel until the plugin
+ * panel is expanded again. No-op unless `id` is the active panel and currently
+ * expanded.
  */
 export function collapseRightPanel(id: string): void {
   if (activeId !== id || collapsed) return;
