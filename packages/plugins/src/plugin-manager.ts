@@ -3,6 +3,7 @@ import type {
   GeoLibreAppAPI,
   GeoLibreMapControlPosition,
   GeoLibrePlugin,
+  GeoLibreToolbarMenu,
 } from "./types";
 
 export class PluginManager {
@@ -217,6 +218,10 @@ export class PluginManager {
   deactivate(id: string, app: GeoLibreAppAPI): void {
     const plugin = this.plugins.get(id);
     if (!plugin || !this.active.has(id)) return;
+    // Teardown gets the raw `app`, not the scoped one `activate` hands out:
+    // deactivate only ever calls unregisterToolbarMenu (by id), which needs no
+    // owner. If scopeAppToPlugin ever wraps a method that matters at teardown,
+    // scope this call too (and unregister/restoreProjectState's deactivations).
     plugin.deactivate(app);
     this.active.delete(id);
     this.notify();
@@ -443,9 +448,16 @@ function scopeAppToPlugin(
 ): GeoLibreAppAPI {
   const register = app.registerToolbarMenu;
   if (!register) return app;
+  // The public `registerToolbarMenu` is single-arg; the host's concrete impl
+  // accepts an owner id as a second argument (see toolbar-menu-registry). Cast
+  // here so the owner stays a host-side injection that plugins never see.
+  const registerWithOwner = register as (
+    menu: GeoLibreToolbarMenu,
+    ownerPluginId: string,
+  ) => () => void;
   return {
     ...app,
-    registerToolbarMenu: (menu) => register(menu, pluginId),
+    registerToolbarMenu: (menu) => registerWithOwner(menu, pluginId),
   };
 }
 

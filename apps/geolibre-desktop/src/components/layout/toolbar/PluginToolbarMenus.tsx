@@ -144,6 +144,10 @@ export function PluginToolbarMenus({
   // source; menus with no owner (or an unknown one) fall in with the built-ins.
   const visible = entries.filter((entry) => {
     if (entry.menu.items.length === 0) return false;
+    // ownerPluginId by itself doesn't encode "external", so re-check the live
+    // source map. The two stay in sync because unregister always deactivates a
+    // plugin (which removes its menu, re-rendering this list) before dropping
+    // its source map entry, so a menu is never seen with a now-stale owner.
     const external = Boolean(
       entry.ownerPluginId && isExternalPluginId(entry.ownerPluginId),
     );

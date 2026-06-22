@@ -245,14 +245,11 @@ export interface GeoLibreAppAPI {
    * id replaces the menu. Typed optional for forward-compatibility with hosts
    * that have no top toolbar, so call it with optional chaining.
    *
-   * `ownerPluginId` is injected by the host (the PluginManager scopes each
-   * plugin's app API to its id so the toolbar can place the menu by owner, e.g.
-   * external plugin menus after Help). Plugins call this with a single argument.
+   * The host tracks which plugin owns each menu so the toolbar can place it by
+   * owner (e.g. external plugin menus after Help); that is injected internally
+   * by the PluginManager, so plugins never pass an owner here.
    */
-  registerToolbarMenu?: (
-    menu: GeoLibreToolbarMenu,
-    ownerPluginId?: string,
-  ) => () => void;
+  registerToolbarMenu?: (menu: GeoLibreToolbarMenu) => () => void;
   /** Remove a previously registered toolbar menu. */
   unregisterToolbarMenu?: (id: string) => void;
   /**
