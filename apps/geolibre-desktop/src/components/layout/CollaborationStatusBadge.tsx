@@ -39,7 +39,11 @@ export function CollaborationStatusBadge() {
   const restrictBounds = useAppStore((s) => s.preferences.map.restrictBounds);
   const isActive = collaboration.isActive;
   const participants = collaboration.participants;
-  const selfId = collaboration.clientId;
+  // `clientId` is typed `string | null`; fall back to an empty-string sentinel
+  // so the `id !== selfId` self-filtering below never treats a null id as "not
+  // me" and announces the local user joining. Server client ids are UUIDs, so
+  // "" can never collide with a real participant.
+  const selfId = collaboration.clientId ?? "";
 
   const [expanded, setExpanded] = useState(false);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -76,7 +80,13 @@ export function CollaborationStatusBadge() {
     );
     const known = knownRef.current;
     knownRef.current = current;
-    if (known === null) return; // First roster for this session: seed silently.
+    // First roster for this session: seed silently. This also doubles as a
+    // buffer for the live region below, which only mounts while a session is
+    // active: this early return guarantees at least one render with the region
+    // present-but-empty before any announcement text is injected, so assistive
+    // tech (notably JAWS, which registers live regions at mount) has discovered
+    // it first.
+    if (known === null) return;
 
     const fresh: Announcement[] = [];
     for (const [id, name] of current) {
@@ -200,7 +210,12 @@ export function CollaborationStatusBadge() {
               variant="secondary"
               size="sm"
               className="w-full"
-              onClick={() => setCollaborateDialogOpen(true)}
+              onClick={() => {
+                // Collapse the roster as the dialog takes over, so dismissing
+                // the dialog returns to a clean map rather than a stray panel.
+                setCollaborateDialogOpen(true);
+                setExpanded(false);
+              }}
             >
               <Settings2 className="mr-2 h-3.5 w-3.5" />
               {t("collaborate.manageSession")}
