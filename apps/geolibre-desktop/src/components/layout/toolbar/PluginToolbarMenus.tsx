@@ -15,14 +15,11 @@ import {
 } from "@geolibre/ui";
 import { Puzzle } from "lucide-react";
 import { useToolbarMenus } from "../../../hooks/usePluginUiSurfaces";
+import { isImageSource } from "../../../lib/icon-source";
 import type { ToolbarChrome } from "./constants";
 
 interface PluginToolbarMenusProps {
   chrome: ToolbarChrome;
-}
-
-function isImageSource(icon: string): boolean {
-  return /^(https?:|data:|blob:|\/)/.test(icon);
 }
 
 function MenuIcon({ icon, className }: { icon?: string; className: string }) {
@@ -45,7 +42,9 @@ function renderItems(
       return (
         <DropdownMenuSub key={item.id}>
           <DropdownMenuSubTrigger>
-            <MenuIcon icon={item.icon} className="mr-2 h-4 w-4 object-contain" />
+            {/* No mr-2: DropdownMenuSubTrigger already spaces its leading icon
+                (matches the built-in menus' submenu triggers). */}
+            <MenuIcon icon={item.icon} className="h-4 w-4 shrink-0 object-contain" />
             {item.label}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
@@ -70,7 +69,7 @@ function renderItems(
           }
         }}
       >
-        <MenuIcon icon={item.icon} className="mr-2 h-4 w-4 object-contain" />
+        <MenuIcon icon={item.icon} className="mr-2 h-4 w-4 shrink-0 object-contain" />
         {item.label}
       </DropdownMenuItem>
     );

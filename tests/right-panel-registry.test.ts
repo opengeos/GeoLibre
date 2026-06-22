@@ -170,10 +170,38 @@ describe("right-panel registry", () => {
       }),
     );
     assert.throws(() =>
+      registerRightPanel({ id: "x", title: "", render: () => undefined }),
+    );
+    assert.throws(() =>
       registerRightPanel({
         id: "x",
         title: "x",
       } as unknown as GeoLibreRightPanelRegistration),
     );
+  });
+
+  it("re-registers by id, and a stale disposer does not evict the new panel", () => {
+    const disposeFirst = registerRightPanel(testPanel({ title: "First" }));
+    registerRightPanel(testPanel({ title: "Second" }));
+    assert.equal(listRightPanels().length, 1);
+    assert.equal(getRightPanel("workbench")?.title, "Second");
+    // The first registration's disposer must not remove the replacement.
+    disposeFirst();
+    assert.equal(getRightPanel("workbench")?.title, "Second");
+  });
+
+  it("notifies once and fires onClose when unregistering an active panel", () => {
+    const calls: string[] = [];
+    registerRightPanel(testPanel({ onClose: () => calls.push("close") }));
+    openRightPanel("workbench");
+    let notified = 0;
+    const unsubscribe = subscribeRightPanels(() => {
+      notified += 1;
+    });
+    unregisterRightPanel("workbench");
+    assert.equal(notified, 1);
+    assert.equal(getActiveRightPanel(), null);
+    assert.deepEqual(calls, ["close"]);
+    unsubscribe();
   });
 });

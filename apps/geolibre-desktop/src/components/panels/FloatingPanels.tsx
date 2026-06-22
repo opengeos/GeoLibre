@@ -14,6 +14,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useFloatingPanels } from "../../hooks/usePluginUiSurfaces";
+import { isImageSource } from "../../lib/icon-source";
 
 const DEFAULT_WIDTH = 300;
 const MIN_WIDTH = 220;
@@ -23,10 +24,6 @@ const EDGE_MARGIN = 12;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
-}
-
-function isImageSource(icon: string): boolean {
-  return /^(https?:|data:|blob:|\/)/.test(icon);
 }
 
 function FloatingPanelCard({
@@ -78,11 +75,13 @@ function FloatingPanelCard({
     const handle = event.currentTarget;
     handle.setPointerCapture(event.pointerId);
     const card = handle.parentElement as HTMLElement;
-    const bounds = card.parentElement?.getBoundingClientRect();
     const startX = event.clientX;
     const startY = event.clientY;
     const origin = position;
     const handleMove = (move: PointerEvent) => {
+      // Recompute bounds each move so the clamp stays correct if the viewport
+      // (or the map area) resizes mid-drag.
+      const bounds = card.parentElement?.getBoundingClientRect();
       const maxX = bounds
         ? bounds.width - card.offsetWidth - EDGE_MARGIN
         : Number.POSITIVE_INFINITY;

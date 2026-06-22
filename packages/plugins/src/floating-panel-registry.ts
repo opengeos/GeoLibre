@@ -62,6 +62,9 @@ export function registerFloatingPanel(
       "registerFloatingPanel requires a panel with a non-empty id.",
     );
   }
+  if (typeof panel.title !== "string" || panel.title.length === 0) {
+    throw new Error(`Floating panel "${panel.id}" must have a non-empty title.`);
+  }
   if (typeof panel.render !== "function") {
     throw new Error(
       `Floating panel "${panel.id}" must provide a render(container) function.`,
@@ -69,15 +72,22 @@ export function registerFloatingPanel(
   }
   registry.set(panel.id, panel);
   emit();
-  return () => unregisterFloatingPanel(panel.id);
+  return () => {
+    if (registry.get(panel.id) === panel) unregisterFloatingPanel(panel.id);
+  };
 }
 
 /** Remove a floating panel, closing it first (running `onClose`) if open. */
 export function unregisterFloatingPanel(id: string): void {
-  if (!registry.has(id)) return;
-  closeFloatingPanel(id);
+  const panel = registry.get(id);
+  if (!panel) return;
+  // Reset open state inline (without closeFloatingPanel's own emit) so the whole
+  // removal notifies subscribers exactly once.
+  const wasOpen = openIds.includes(id);
+  if (wasOpen) openIds = openIds.filter((openId) => openId !== id);
   registry.delete(id);
   emit();
+  if (wasOpen) runHook(id, "onClose", panel.onClose);
 }
 
 /**

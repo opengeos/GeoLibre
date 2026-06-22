@@ -48,13 +48,13 @@ describe("toolbar-menu registry", () => {
   afterEach(() => __resetToolbarMenuRegistryForTests());
 
   it("registers, replaces, and unregisters menus", () => {
-    const unregister = registerToolbarMenu(testMenu());
+    registerToolbarMenu(testMenu());
     assert.equal(listToolbarMenus().length, 1);
     // Re-registering the same id replaces it rather than duplicating.
-    registerToolbarMenu(testMenu({ label: "Tools 2" }));
+    const unregisterSecond = registerToolbarMenu(testMenu({ label: "Tools 2" }));
     assert.equal(listToolbarMenus().length, 1);
     assert.equal(listToolbarMenus()[0].label, "Tools 2");
-    unregister();
+    unregisterSecond();
     assert.equal(listToolbarMenus().length, 0);
   });
 
@@ -75,6 +75,14 @@ describe("toolbar-menu registry", () => {
   it("rejects menus without an id or label", () => {
     assert.throws(() => registerToolbarMenu(testMenu({ id: "" })));
     assert.throws(() => registerToolbarMenu(testMenu({ label: "" })));
+  });
+
+  it("does not let a stale disposer evict a re-registered menu", () => {
+    const disposeFirst = registerToolbarMenu(testMenu({ label: "First" }));
+    registerToolbarMenu(testMenu({ label: "Second" }));
+    disposeFirst();
+    assert.equal(listToolbarMenus().length, 1);
+    assert.equal(listToolbarMenus()[0].label, "Second");
   });
 });
 
@@ -119,6 +127,21 @@ describe("floating-panel registry", () => {
     unregisterFloatingPanel("card");
     assert.equal(isFloatingPanelOpen("card"), false);
     assert.deepEqual(calls, ["close"]);
+  });
+
+  it("notifies once when unregistering an open panel", () => {
+    const calls: string[] = [];
+    registerFloatingPanel(testPanel({ onClose: () => calls.push("close") }));
+    openFloatingPanel("card");
+    let notified = 0;
+    const unsubscribe = subscribeFloatingPanels(() => {
+      notified += 1;
+    });
+    unregisterFloatingPanel("card");
+    assert.equal(notified, 1);
+    assert.equal(isFloatingPanelOpen("card"), false);
+    assert.deepEqual(calls, ["close"]);
+    unsubscribe();
   });
 
   it("notifies subscribers and keeps a stable snapshot between mutations", () => {

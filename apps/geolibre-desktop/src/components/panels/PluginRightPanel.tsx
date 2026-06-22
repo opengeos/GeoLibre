@@ -27,6 +27,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useRightPanelState } from "../../hooks/useRightPanels";
+import { isImageSource } from "../../lib/icon-source";
 
 const DEFAULT_WIDTH = 320;
 const MIN_WIDTH = 240;
@@ -34,10 +35,6 @@ const MAX_WIDTH = 640;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
-}
-
-function isImageSource(icon: string): boolean {
-  return /^(https?:|data:|blob:|\/)/.test(icon);
 }
 
 interface PluginRightPanelProps {

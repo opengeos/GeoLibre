@@ -92,14 +92,23 @@ export function registerRightPanel(
   if (!panel || typeof panel.id !== "string" || panel.id.length === 0) {
     throw new Error("registerRightPanel requires a panel with a non-empty id.");
   }
+  if (typeof panel.title !== "string" || panel.title.length === 0) {
+    throw new Error(`Right panel "${panel.id}" must have a non-empty title.`);
+  }
   if (typeof panel.render !== "function") {
     throw new Error(
       `Right panel "${panel.id}" must provide a render(container) function.`,
     );
   }
+  // Re-registering an id replaces it (a plugin may rebuild its panel). The
+  // returned disposer only removes the panel while this exact registration is
+  // still the current one, so a stale disposer cannot evict a newer panel that
+  // reused the id.
   registry.set(panel.id, panel);
   emit();
-  return () => unregisterRightPanel(panel.id);
+  return () => {
+    if (registry.get(panel.id) === panel) unregisterRightPanel(panel.id);
+  };
 }
 
 /**
@@ -107,12 +116,19 @@ export function registerRightPanel(
  * `onClose` hook runs) so the shell restores the Style panel.
  */
 export function unregisterRightPanel(id: string): void {
-  if (!registry.has(id)) return;
-  if (activeId === id) {
-    closeRightPanel(id);
+  const panel = registry.get(id);
+  if (!panel) return;
+  // Reset active state inline (without closeRightPanel's own emit) so the whole
+  // removal notifies subscribers exactly once.
+  const wasActive = activeId === id;
+  if (wasActive) {
+    activeId = null;
+    collapsed = false;
+    sideOverride = null;
   }
   registry.delete(id);
   emit();
+  if (wasActive) runHook(id, "onClose", panel.onClose);
 }
 
 /**
