@@ -585,7 +585,7 @@ If you use GeoLibre in your work, please cite it. GeoLibre is archived on [Zenod
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20785400.svg)](https://doi.org/10.5281/zenodo.20785400)
 
-> Wu, Q. GeoLibre: A free and open-source, lightweight, cloud-native GIS platform. Zenodo. https://doi.org/10.5281/zenodo.20785400
+> Wu, Q. (2026). GeoLibre: A free and open-source, lightweight, cloud-native GIS platform. Zenodo. <https://doi.org/10.5281/zenodo.20785400>
 
 You can also use GitHub's **"Cite this repository"** button (which reads [`CITATION.cff`](CITATION.cff)) to copy a ready-made APA or BibTeX entry. See the [How to Cite](https://geolibre.app/citation/) page for more formats.
 

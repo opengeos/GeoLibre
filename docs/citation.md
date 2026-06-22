@@ -15,7 +15,7 @@ DOI shown for that release.
 
 ## Recommended citation
 
-> Wu, Q. GeoLibre: A free and open-source, lightweight, cloud-native GIS
+> Wu, Q. (2026). GeoLibre: A free and open-source, lightweight, cloud-native GIS
 > platform. Zenodo. <https://doi.org/10.5281/zenodo.20785400>
 
 ## BibTeX
@@ -24,6 +24,7 @@ DOI shown for that release.
 @software{wu_geolibre,
   author    = {Wu, Qiusheng},
   title     = {{GeoLibre: A free and open-source, lightweight, cloud-native GIS platform}},
+  year      = {2026},
   publisher = {Zenodo},
   doi       = {10.5281/zenodo.20785400},
   url       = {https://doi.org/10.5281/zenodo.20785400}
@@ -32,7 +33,7 @@ DOI shown for that release.
 
 ## APA
 
-> Wu, Q. GeoLibre: A free and open-source, lightweight, cloud-native GIS
+> Wu, Q. (2026). GeoLibre: A free and open-source, lightweight, cloud-native GIS
 > platform [Computer software]. Zenodo.
 > <https://doi.org/10.5281/zenodo.20785400>
 
