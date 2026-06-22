@@ -41,7 +41,9 @@ const DEFAULT_DASHBOARD_HEIGHT = 360;
 // scrolls instead of crushing the charts. A single row has no floor, so it
 // fills and resizes with the panel height (issue #728).
 const MIN_DASHBOARD_ROW_HEIGHT = 200;
-const DASHBOARD_ROW_GAP = 12; // matches the grid's gap-3 (0.75rem)
+// gap-3 = 0.75rem (12px at the default 16px root font); only nudges the
+// scroll-activation threshold, so an approximate px value is fine.
+const DASHBOARD_ROW_GAP = 12;
 
 /** Turn a stored widget into the render-side {@link ChartSpec}. */
 function widgetToSpec(widget: DashboardWidget): ChartSpec {
