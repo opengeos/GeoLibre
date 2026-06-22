@@ -1,14 +1,12 @@
 import { parseProject, useAppStore } from "@geolibre/core";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { normalizeProjectUrl } from "../lib/urls";
+import { projectUrlFromLocation } from "../lib/project-url";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
 
 export type ProjectUrlLoadState =
   | { error: null; message: null; status: "idle" }
   | { error: null; message: string; status: "loading" | "loaded" }
   | { error: string; message: null; status: "error" };
-
-const PROJECT_URL_PARAMS = ["url", "project", "projectUrl", "project_url"];
 
 export function useProjectUrlLoader(): ProjectUrlLoadState {
   const loadProject = useAppStore((state) => state.loadProject);
@@ -86,31 +84,4 @@ async function loadProjectFromUrl(projectUrl: string, signal: AbortSignal) {
   }
 
   return parseProject(await response.text());
-}
-
-export function projectUrlFromLocation(): string | null {
-  if (typeof window === "undefined") return null;
-
-  const search = window.location.search;
-  const params = new URLSearchParams(search);
-  for (const key of PROJECT_URL_PARAMS) {
-    const value = params.get(key);
-    const url = normalizeProjectUrl(value);
-    if (url) return url;
-  }
-
-  const bareQuery = search.startsWith("?")
-    ? safeDecodeURIComponent(search.slice(1)).trim()
-    : "";
-  return /^https?:\/\//i.test(bareQuery)
-    ? normalizeProjectUrl(bareQuery)
-    : null;
-}
-
-function safeDecodeURIComponent(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
 }
