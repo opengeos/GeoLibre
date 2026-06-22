@@ -210,6 +210,9 @@ async function uploadErrorInfo(
     // The share server returns this on a generic 400 when the account has no
     // username yet. Flag it so the dialog can point the user at the website's
     // account settings (where usernames are set), not the local app settings.
+    // This substring must stay in sync with the server's error text: if the
+    // server rephrases or localizes the message, the code falls back to
+    // undefined and the dialog shows the raw server string instead.
     const code = /username required/i.test(message)
       ? ("username-required" as const)
       : undefined;

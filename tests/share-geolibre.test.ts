@@ -173,7 +173,9 @@ describe("uploadProjectToShare", () => {
     await assert.rejects(
       () => uploadProjectToShare({ ...baseArgs, fetchImpl: fn }),
       (err: ShareUploadError) =>
-        err instanceof ShareUploadError && err.code === "username-required",
+        err instanceof ShareUploadError &&
+        err.code === "username-required" &&
+        /username required/i.test(err.message),
     );
   });
 

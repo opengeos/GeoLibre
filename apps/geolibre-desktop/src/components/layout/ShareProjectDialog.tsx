@@ -40,7 +40,9 @@ interface ShareProjectDialogProps {
   ) => Promise<{ content: string; filename: string }>;
 }
 
-const SETTINGS_TOKEN_URL = `${resolveShareBaseUrl()}/settings`;
+// The website's account settings page, where the user both creates API tokens
+// and sets the username required for sharing.
+const ACCOUNT_SETTINGS_URL = `${resolveShareBaseUrl()}/settings`;
 
 export function ShareProjectDialog({
   open,
@@ -181,7 +183,7 @@ export function ShareProjectDialog({
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => void openExternalLink(SETTINGS_TOKEN_URL)}
+                  onClick={() => void openExternalLink(ACCOUNT_SETTINGS_URL)}
                 >
                   <ExternalLink className="mr-2 h-3.5 w-3.5" />
                   {t("share.getToken")}
@@ -267,20 +269,26 @@ export function ShareProjectDialog({
             </div>
 
             {errorCode === "username-required" ? (
-              <div className="space-y-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              <div
+                role="alert"
+                className="space-y-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive"
+              >
                 <p>{t("share.usernameRequired")}</p>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => void openExternalLink(SETTINGS_TOKEN_URL)}
+                  onClick={() => void openExternalLink(ACCOUNT_SETTINGS_URL)}
                 >
                   <ExternalLink className="mr-2 h-3.5 w-3.5" />
                   {t("share.openAccountSettings")}
                 </Button>
               </div>
             ) : error ? (
-              <p className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">
+              <p
+                role="alert"
+                className="rounded-md bg-destructive/10 p-2 text-sm text-destructive"
+              >
                 {error}
               </p>
             ) : null}
