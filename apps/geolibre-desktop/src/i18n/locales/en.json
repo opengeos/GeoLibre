@@ -1847,6 +1847,7 @@
     "hiddenByGroup": "Hidden because its group is not visible"
   },
   "rasterSymbology": {
+    "colorRampLabel": "Color ramp",
     "reverseRamp": "Reverse ramp",
     "customRamp": "Custom…",
     "customColors": "Custom colors",

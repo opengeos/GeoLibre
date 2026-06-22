@@ -265,6 +265,9 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
       });
     }
     return () => {
+      // Only guards state: in-flight warmColormapColors fetches keep populating
+      // the module-level anchorCache, so a remount picks them up synchronously
+      // via the colormapColors() seed above instead of re-fetching.
       cancelled = true;
     };
   }, []);
@@ -449,6 +452,9 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
     rampOptions.push({
       value: ramp,
       label: ramp,
+      // rampColors only warms names in SORTED_COLORMAPS, so for an
+      // out-of-catalog ramp rampColors[ramp] is always undefined; rampPreview
+      // (seeded by the previewRamp effect above) is the real source here.
       colors: rampColors[ramp] ?? rampPreview,
     });
   }
@@ -498,7 +504,7 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
         <Label htmlFor="rasterRamp">Color ramp</Label>
         <ColorRampSelect
           id="rasterRamp"
-          aria-label="Color ramp"
+          aria-label={t("rasterSymbology.colorRampLabel")}
           value={rampSelectValue}
           reversed={reversed}
           ramps={rampOptions}
