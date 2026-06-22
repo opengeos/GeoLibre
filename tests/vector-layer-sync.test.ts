@@ -106,7 +106,7 @@ describe("isEmbeddableLocalVectorLayer", () => {
     assert.equal(isEmbeddableLocalVectorLayer(layer), false);
   });
 
-  it("excludes a desktop path-backed layer that reloads from disk", () => {
+  it("includes a desktop path-backed layer (so a shared copy keeps its data)", () => {
     const layer = createVectorStoreLayer(
       vectorInfo({
         source: {
@@ -116,7 +116,9 @@ describe("isEmbeddableLocalVectorLayer", () => {
         },
       }),
     );
-    assert.equal(isEmbeddableLocalVectorLayer(layer), false);
+    // It can reload from its path on the same machine, but an embedded/shared
+    // copy still needs its data for a machine that lacks the file.
+    assert.equal(isEmbeddableLocalVectorLayer(layer), true);
   });
 
   it("excludes a non-vector-control layer", () => {

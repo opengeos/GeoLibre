@@ -69,23 +69,19 @@ function hasRestorableVectorUrl(layer: GeoLibreLayer): boolean {
 }
 
 /**
- * Detects an Add Vector Layer layer whose data is local and not otherwise
- * restorable from a saved project: it has no fetchable URL and no desktop file
- * path to re-read (so it is not a desktop {@link createVectorStoreLayer}
- * path-backed layer). Such a layer is lost on reopen unless its data is
- * embedded in the project, which the web Save flow offers via
- * `materializeEmbeddableVectorLayers`. Covers both a freshly browser-picked
- * file and a layer restored from previously embedded GeoJSON.
+ * Detects an Add Vector Layer layer whose data is local (no fetchable URL) and
+ * so *can* be embedded in a saved project — covering a browser-picked file, a
+ * desktop path-backed file, and a layer restored from previously embedded
+ * GeoJSON. Used to materialize features for both the Embed choice and a Share
+ * upload. A desktop path-backed layer is included on purpose: on the same
+ * machine it can reload from its path, but a shared/embedded copy still needs
+ * its data so it survives on a machine that lacks the file.
  *
  * @param layer - A store layer.
- * @returns True when the layer's data should be embedded to survive a reopen.
+ * @returns True when the layer's data can be embedded.
  */
 export function isEmbeddableLocalVectorLayer(layer: GeoLibreLayer): boolean {
-  return (
-    isVectorControlStoreLayer(layer) &&
-    !hasRestorableVectorUrl(layer) &&
-    layer.metadata.localFileReloadable !== true
-  );
+  return isVectorControlStoreLayer(layer) && !hasRestorableVectorUrl(layer);
 }
 
 /**

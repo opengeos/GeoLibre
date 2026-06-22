@@ -60,12 +60,19 @@ export async function restoreLocalFileLayers(): Promise<void> {
           return;
         }
         for (const layer of layers) {
-          // One layer per file is the common case; for a multi-layer file fall
-          // back to matching by the layer's display name, then to the first.
-          const match =
-            loaded.length === 1
-              ? loaded[0]
-              : (loaded.find((entry) => entry.name === layer.name) ?? loaded[0]);
+          // One layer per file is the common case; for a multi-layer file match
+          // by the layer's display name, then fall back to the first entry.
+          let match = loaded[0];
+          if (loaded.length > 1) {
+            const named = loaded.find((entry) => entry.name === layer.name);
+            if (named) {
+              match = named;
+            } else {
+              console.warn(
+                `[GeoLibre] Could not match layer "${layer.name}" to a layer in "${path}" by name; using the first. (Renaming a multi-layer file's layers can break this match.)`,
+              );
+            }
+          }
           useAppStore.getState().updateLayer(layer.id, { geojson: match.data });
         }
       } catch (error) {

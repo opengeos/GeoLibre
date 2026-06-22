@@ -330,8 +330,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   // restores. Used by the save dialog's Embed choice and by Share (always).
   const buildEmbeddedLayers = async (
     layers: GeoLibreLayer[],
+    prebuilt?: Map<string, FeatureCollection>,
   ): Promise<GeoLibreLayer[]> => {
-    const embeddable = await materializeEmbeddableVectorLayers(layers);
+    // Reuse a map the caller already materialized (the Embed save path) so each
+    // layer's features aren't read from the control twice.
+    const embeddable =
+      prebuilt ?? (await materializeEmbeddableVectorLayers(layers));
     return layers.map((layer) => {
       let metadata = layer.metadata;
       const collection = embeddable.get(layer.id);
@@ -386,7 +390,13 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     if (choice === "cancel") return "cancel";
 
     if (choice === "embed") {
-      return { layers: await buildEmbeddedLayers(useAppStore.getState().layers) };
+      // Reuse the map already materialized for the size estimate.
+      return {
+        layers: await buildEmbeddedLayers(
+          useAppStore.getState().layers,
+          embeddable,
+        ),
+      };
     }
 
     // "noembed": on the web this saves without the local data (those layers are
@@ -440,8 +450,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const runSaveProject = async (options?: {
     saveAs?: boolean;
   }): Promise<boolean> => {
-    // Offer to embed local vector data first (web only), so the serialized
-    // content below reflects the user's choice.
+    // Offer to embed local vector data (or, on desktop, save file references)
+    // first, so the serialized content below reflects the user's choice.
     const layersForSave = await resolveLayersForSave();
     if (layersForSave === "cancel") return false;
     const { project, defaultProjectName, content, projectPath } =
