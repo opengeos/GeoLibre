@@ -231,9 +231,9 @@ export interface GeoLibreAppAPI {
   /** Id of the active right-side workspace panel, or null when none is open. */
   getActiveRightPanel?: () => string | null;
   /**
-   * Dock the active panel at a specific position ("far-left", "left-of-style",
-   * or "far-right"), mirroring the user-facing move buttons so a plugin can
-   * reposition its own panel. No-op when no panel is active.
+   * Dock the active panel at a specific position, mirroring the user-facing move
+   * buttons so a plugin can reposition its own panel. No-op when no panel is
+   * active. See {@link GeoLibreRightPanelDock}.
    */
   setActiveRightPanelDock?: (dock: GeoLibreRightPanelDock) => void;
   /** Where the active panel docks, or null when none is open. */
@@ -358,12 +358,17 @@ export interface GeoLibreFloatingPanelRegistration {
 }
 
 /**
- * Where a plugin panel docks, left to right: `far-left` (left of the Layers
- * panel), `left-of-style` (between the map and the Style panel), or `far-right`
- * (right of the Style panel). The built-in Layers and Style panels stay visible
- * in every position.
+ * Where a plugin panel docks, left to right: `left-of-layers` (the far-left
+ * edge), `right-of-layers` (between the Layers panel and the map), `left-of-style`
+ * (between the map and the Style panel), or `right-of-style` (the far-right
+ * edge). The built-in panel on the docked side (Layers on the left, Style on the
+ * right) collapses to its rail while the plugin panel is expanded next to it.
  */
-export type GeoLibreRightPanelDock = "far-left" | "left-of-style" | "far-right";
+export type GeoLibreRightPanelDock =
+  | "left-of-layers"
+  | "right-of-layers"
+  | "left-of-style"
+  | "right-of-style";
 
 /**
  * A plugin-owned dockable side panel. The host renders the registered panel in
@@ -380,14 +385,12 @@ export interface GeoLibreRightPanelRegistration {
   /** Human-readable title shown in the panel header and collapsed rail. */
   title: string;
   /**
-   * Where the panel docks initially:
-   * - `far-right` (default): right of the Style panel.
-   * - `left-of-style`: between the map and the Style panel.
-   * - `far-left`: left of the Layers panel.
-   *
-   * The built-in Layers and Style panels stay visible in every position. The
-   * user can move the panel between positions at runtime with the move buttons
-   * in its header (or a plugin via {@link GeoLibreAppAPI.setActiveRightPanelDock}).
+   * Where the panel docks initially: `left-of-layers`, `right-of-layers`,
+   * `left-of-style`, or `right-of-style` (the default). The built-in panel on
+   * the docked side (Layers on the left, Style on the right) collapses to its
+   * rail while the plugin panel is expanded next to it. The user can move the
+   * panel between positions at runtime with the move buttons in its header (or
+   * a plugin via {@link GeoLibreAppAPI.setActiveRightPanelDock}).
    */
   dock?: GeoLibreRightPanelDock;
   /**

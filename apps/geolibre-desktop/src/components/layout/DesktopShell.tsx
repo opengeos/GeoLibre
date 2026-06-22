@@ -65,6 +65,7 @@ import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
 import { registerXyzTileProtocol } from "../../lib/xyz-url";
 import { useEmbedBridge } from "../../hooks/useEmbedBridge";
 import { useRasterIdentify } from "../../hooks/useRasterIdentify";
+import { useAutoCollapsedPanel } from "../../hooks/useRightPanels";
 import { BoundsRestrictionIndicator } from "./BoundsRestrictionIndicator";
 import { MapGrid } from "./MapGrid";
 import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
@@ -421,12 +422,13 @@ export function DesktopShell({
   const pythonConsoleOpen = useAppStore((s) => s.ui.pythonConsoleOpen);
   const notebookOpen = useAppStore((s) => s.ui.notebookOpen);
   const storymapPresenting = useAppStore((s) => s.ui.storymapPresenting);
-  // A plugin panel docks at one of three positions beside the Layers/Style
-  // panels (far-left, left-of-style, far-right) and the user steps it between
-  // them; the built-in panels stay visible in every position (issue #712). The
-  // panel's width is owned here (per app instance) and shared across the dock
-  // slots, so a user resize survives moving the panel without a module-level
-  // global (which would leak across embeds).
+  // A plugin panel docks at one of four positions beside the Layers/Style
+  // panels and the user steps it between them; the built-in panel on the docked
+  // side collapses to its rail while the plugin panel is expanded next to it
+  // (issue #712). The panel's width is owned here (per app instance) and shared
+  // across the dock slots, so a user resize survives moving the panel without a
+  // module-level global (which would leak across embeds).
+  const autoCollapsedPanel = useAutoCollapsedPanel();
   const [pluginPanelWidth, setPluginPanelWidth] = useState(
     PLUGIN_PANEL_DEFAULT_WIDTH,
   );
@@ -1330,9 +1332,9 @@ export function DesktopShell({
         data-workspace-row=""
         className="relative flex min-h-0 flex-1 flex-col md:flex-row"
       >
-        <SectionErrorBoundary label="Plugin panel (far-left)">
+        <SectionErrorBoundary label="Plugin panel (left of Layers)">
           <PluginRightPanel
-            dock="far-left"
+            dock="left-of-layers"
             width={pluginPanelWidth}
             onWidthChange={setPluginPanelWidth}
           />
@@ -1349,10 +1351,17 @@ export function DesktopShell({
               onOpenRasterStylePanel={() =>
                 openRasterLayerPanel(createAppAPI(mapControllerRef))
               }
-              autoCollapse={storymapPresenting}
+              autoCollapse={storymapPresenting || autoCollapsedPanel === "layers"}
             />
           </SectionErrorBoundary>
         ) : null}
+        <SectionErrorBoundary label="Plugin panel (right of Layers)">
+          <PluginRightPanel
+            dock="right-of-layers"
+            width={pluginPanelWidth}
+            onWidthChange={setPluginPanelWidth}
+          />
+        </SectionErrorBoundary>
         <main
           // `isolate` creates a stacking context so map-panel z-indexes (up to 10000) stay below body-portaled dialogs. See #451.
           className={`relative isolate min-w-0 flex-1 overflow-hidden ${
@@ -1396,13 +1405,17 @@ export function DesktopShell({
             <StylePanel
               mapControllerRef={mapControllerRef}
               onResizeStart={startStylePanelResize}
-              autoCollapse={notebookOpen || storymapPresenting}
+              autoCollapse={
+                notebookOpen ||
+                storymapPresenting ||
+                autoCollapsedPanel === "style"
+              }
             />
           </SectionErrorBoundary>
         ) : null}
-        <SectionErrorBoundary label="Plugin panel (far-right)">
+        <SectionErrorBoundary label="Plugin panel (right of Style)">
           <PluginRightPanel
-            dock="far-right"
+            dock="right-of-style"
             width={pluginPanelWidth}
             onWidthChange={setPluginPanelWidth}
           />

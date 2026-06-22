@@ -110,47 +110,52 @@ describe("right-panel registry", () => {
     assert.deepEqual(calls, ["a:close", "b:open"]);
   });
 
-  it("defaults to far-right and honors a declared dock", () => {
+  it("defaults to right-of-style and honors a declared dock", () => {
     registerRightPanel(testPanel({ id: "r", title: "R" }));
-    registerRightPanel(testPanel({ id: "l", title: "L", dock: "far-left" }));
+    registerRightPanel(
+      testPanel({ id: "l", title: "L", dock: "left-of-layers" }),
+    );
     openRightPanel("r");
-    assert.equal(getActiveRightPanelDock(), "far-right");
-    assert.equal(getRightPanelSnapshot().dock, "far-right");
+    assert.equal(getActiveRightPanelDock(), "right-of-style");
+    assert.equal(getRightPanelSnapshot().dock, "right-of-style");
     openRightPanel("l");
-    assert.equal(getActiveRightPanelDock(), "far-left");
+    assert.equal(getActiveRightPanelDock(), "left-of-layers");
   });
 
   it("sets and steps the dock, resetting on switch and clearing on close", () => {
     registerRightPanel(testPanel({ id: "a", title: "A" }));
     registerRightPanel(testPanel({ id: "b", title: "B" }));
     openRightPanel("a");
-    assert.equal(getActiveRightPanelDock(), "far-right");
+    assert.equal(getActiveRightPanelDock(), "right-of-style");
 
     setActiveRightPanelDock("left-of-style");
     assert.equal(getActiveRightPanelDock(), "left-of-style");
     assert.equal(getRightPanelSnapshot().dock, "left-of-style");
 
-    // Stepping left/right walks the ordered positions and stops at the ends.
+    // Stepping left/right walks the four ordered positions, stopping at the ends.
     moveActiveRightPanelDock("left");
-    assert.equal(getActiveRightPanelDock(), "far-left");
+    assert.equal(getActiveRightPanelDock(), "right-of-layers");
     moveActiveRightPanelDock("left");
-    assert.equal(getActiveRightPanelDock(), "far-left");
+    assert.equal(getActiveRightPanelDock(), "left-of-layers");
+    moveActiveRightPanelDock("left");
+    assert.equal(getActiveRightPanelDock(), "left-of-layers");
     moveActiveRightPanelDock("right");
-    assert.equal(getActiveRightPanelDock(), "left-of-style");
     moveActiveRightPanelDock("right");
     moveActiveRightPanelDock("right");
-    assert.equal(getActiveRightPanelDock(), "far-right");
+    assert.equal(getActiveRightPanelDock(), "right-of-style");
+    moveActiveRightPanelDock("right");
+    assert.equal(getActiveRightPanelDock(), "right-of-style");
 
     // Opening another panel resets to that panel's declared dock.
     openRightPanel("b");
-    assert.equal(getActiveRightPanelDock(), "far-right");
+    assert.equal(getActiveRightPanelDock(), "right-of-style");
     // Closing clears the dock entirely.
     closeRightPanel("b");
     assert.equal(getActiveRightPanelDock(), null);
   });
 
   it("ignores dock changes when no panel is active", () => {
-    setActiveRightPanelDock("far-left");
+    setActiveRightPanelDock("left-of-layers");
     moveActiveRightPanelDock("left");
     assert.equal(getActiveRightPanelDock(), null);
   });

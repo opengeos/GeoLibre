@@ -91,8 +91,8 @@ export interface GeoLibreAppAPI {
   collapseRightPanel?: (id: string) => void;
   closeRightPanel?: (id: string) => void;
   getActiveRightPanel?: () => string | null;
-  setActiveRightPanelDock?: (dock: "far-left" | "left-of-style" | "far-right") => void;
-  getActiveRightPanelDock?: () => "far-left" | "left-of-style" | "far-right" | null;
+  setActiveRightPanelDock?: (dock: GeoLibreRightPanelDock) => void;
+  getActiveRightPanelDock?: () => GeoLibreRightPanelDock | null;
   // Top toolbar menus (see "Toolbar menus" below).
   registerToolbarMenu?: (menu: GeoLibreToolbarMenu) => () => void;
   unregisterToolbarMenu?: (id: string) => void;
@@ -126,11 +126,17 @@ export interface GeoLibreFloatingPanelRegistration {
   onClose?: () => void;
 }
 
+export type GeoLibreRightPanelDock =
+  | "left-of-layers" // left of the Layers panel
+  | "right-of-layers" // between the Layers panel and the map
+  | "left-of-style" // between the map and the Style panel
+  | "right-of-style"; // right of the Style panel (default)
+
 export interface GeoLibreRightPanelRegistration {
   id: string;
   title: string;
-  /** Initial dock: "far-right" (default), "left-of-style", or "far-left". */
-  dock?: "far-left" | "left-of-style" | "far-right";
+  /** Initial dock position; "right-of-style" (default). */
+  dock?: GeoLibreRightPanelDock;
   /** Optional rail icon: a URL or data: URI rendered as an image. */
   icon?: string;
   /** Preferred expanded width in px (desktop only; host-clamped). */
@@ -277,10 +283,10 @@ export const myPlugin: GeoLibrePlugin = {
 Notes:
 
 - `render(container)` is called once with an empty element you fill with plain DOM. An external plugin cannot share GeoLibre's React instance, so the contract is DOM, not a React node. The container stays mounted across collapse, so any state in your DOM persists; the returned cleanup runs on close or unregister.
-- Only one plugin panel is active at a time. The built-in Layers and Style panels stay fully visible in every dock position.
+- Only one plugin panel is active at a time. The built-in panel on the side the plugin panel is docked (Layers on the left, Style on the right) collapses to its rail while the plugin panel is expanded next to it, and restores when the plugin panel moves to the other side, collapses to its own rail, or closes.
 - `openRightPanel(id)` makes the panel active and expanded (it also expands a collapsed panel); `collapseRightPanel(id)` collapses it to its rail without closing; `closeRightPanel(id)` releases the workspace; `getActiveRightPanel()` returns the active id or `null`.
 - The panel is a flex sibling of the map, so opening it shrinks the map view (the map keeps filling the remaining space); no manual map padding is required.
-- **Dock position:** a panel docks at one of three positions (left to right): `far-left` (left of the Layers panel), `left-of-style` (between the map and the Style panel), or `far-right` (right of the Style panel, the default). Set `dock` on the registration to choose the initial position. The user steps the panel between positions at runtime with the two move buttons in the panel header (disabled at the ends), and a plugin can set it directly with `app.setActiveRightPanelDock?.("far-left" | "left-of-style" | "far-right")`. The position resets to the panel's declared `dock` when it closes or another panel opens.
+- **Dock position:** a panel docks at one of four positions (left to right): `left-of-layers`, `right-of-layers` (between Layers and the map), `left-of-style` (between the map and Style), or `right-of-style` (the default). Set `dock` on the registration to choose the initial position. The user steps the panel between positions at runtime with the two move buttons in the panel header (disabled at the ends), and a plugin can set it directly with `app.setActiveRightPanelDock?.(...)`. The position resets to the panel's declared `dock` when it closes or another panel opens.
 - These methods are typed optional for forward-compatibility with host variants that have no right sidebar, so call them with optional chaining (`app.registerRightPanel?.(...)`).
 
 ## Toolbar menus

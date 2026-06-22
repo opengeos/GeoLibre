@@ -11,27 +11,34 @@ import type { GeoLibreRightPanelRegistration } from "./types";
  * `@geolibre/plugins` (rather than the app) lets the host API delegate to it
  * without the app and the plugins package depending on each other.
  *
- * Only one plugin panel is active at a time. It docks at one of three positions
- * and the user can step it between them; the built-in Layers and Style panels
- * stay visible in every position (the panel never collapses them).
+ * Only one plugin panel is active at a time. It docks at one of four positions
+ * and the user can step it between them. The built-in panel on the side the
+ * panel is docked (Layers on the left, Style on the right) collapses to its
+ * rail while the panel is expanded there; the shell handles that.
  */
 
 /**
  * Where a plugin panel docks, left to right:
- * - `far-left`: left of the Layers panel (the far-left edge).
+ * - `left-of-layers`: left of the Layers panel (the far-left edge).
+ * - `right-of-layers`: between the Layers panel and the map.
  * - `left-of-style`: between the map and the Style panel.
- * - `far-right`: right of the Style panel (the far-right edge).
+ * - `right-of-style`: right of the Style panel (the far-right edge).
  */
-export type RightPanelDock = "far-left" | "left-of-style" | "far-right";
+export type RightPanelDock =
+  | "left-of-layers"
+  | "right-of-layers"
+  | "left-of-style"
+  | "right-of-style";
 
 /** Dock positions in left-to-right order, used to step the panel. */
 export const RIGHT_PANEL_DOCKS: RightPanelDock[] = [
-  "far-left",
+  "left-of-layers",
+  "right-of-layers",
   "left-of-style",
-  "far-right",
+  "right-of-style",
 ];
 
-const DEFAULT_DOCK: RightPanelDock = "far-right";
+const DEFAULT_DOCK: RightPanelDock = "right-of-style";
 
 function normalizeDock(dock: unknown): RightPanelDock {
   return RIGHT_PANEL_DOCKS.includes(dock as RightPanelDock)

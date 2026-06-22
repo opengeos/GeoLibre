@@ -51,11 +51,12 @@ interface PluginRightPanelProps {
  * Renders the active plugin-owned dockable panel when it is docked at this
  * instance's `dock` position.
  *
- * One instance is mounted per dock position (`far-left`, `left-of-style`,
- * `far-right`); each renders only when the active panel is docked there, so a
- * user can step the panel between positions with the header's move buttons
- * (issue #712). The built-in Layers and Style panels stay visible in every
- * position. The panel content is owned by the plugin via `render(container)`
+ * One instance is mounted per dock position (`left-of-layers`, `right-of-layers`,
+ * `left-of-style`, `right-of-style`); each renders only when the active panel is
+ * docked there, so a user can step the panel between positions with the header's
+ * move buttons (issue #712). The built-in panel on the docked side (Layers or
+ * Style) collapses while the plugin panel is expanded next to it (the shell
+ * handles that). The panel content is owned by the plugin via `render(container)`
  * (plain DOM); the host provides the dock chrome (header, collapse rail, resize
  * handle, move/collapse/close buttons). Renders nothing when no plugin panel is
  * docked here.
@@ -74,10 +75,10 @@ export function PluginRightPanel({
 
   const panel = activeId ? getRightPanel(activeId) : undefined;
   const matched = activeId !== null && panel != null && activeDock === dock;
-  // The far-left dock sits at the left edge: its border and resize handle face
-  // right (toward the Layers panel). The other two docks face left (toward the
-  // map / Style panel).
-  const isLeftEdge = dock === "far-left";
+  // Layers-side docks sit to the left: their border and resize handle face right
+  // (toward the map). Style-side docks face left (toward the map).
+  const isLayersSide =
+    dock === "left-of-layers" || dock === "right-of-layers";
 
   // Adopt the panel's preferred width when a different panel becomes active.
   // Keyed on activeId only so a user resize survives collapse/expand and any
@@ -135,7 +136,7 @@ export function PluginRightPanel({
     const handleMove = (move: PointerEvent) => {
       // The resizable edge faces away from the dock side: dragging it widens the
       // panel.
-      const delta = isLeftEdge ? move.clientX - startX : startX - move.clientX;
+      const delta = isLayersSide ? move.clientX - startX : startX - move.clientX;
       onWidthChange(clamp(startWidth + delta, MIN_WIDTH, MAX_WIDTH));
     };
     const handleEnd = () => {
@@ -154,15 +155,15 @@ export function PluginRightPanel({
   const railIcon =
     panel.icon && isImageSource(panel.icon) ? (
       <img src={panel.icon} alt="" className="h-4 w-4 object-contain" />
-    ) : isLeftEdge ? (
+    ) : isLayersSide ? (
       <PanelLeft className="h-4 w-4" />
     ) : (
       <PanelRight className="h-4 w-4" />
     );
 
-  const borderSide = isLeftEdge ? "md:border-r" : "md:border-l";
-  const canMoveLeft = activeDock !== "far-left";
-  const canMoveRight = activeDock !== "far-right";
+  const borderSide = isLayersSide ? "md:border-r" : "md:border-l";
+  const canMoveLeft = activeDock !== "left-of-layers";
+  const canMoveRight = activeDock !== "right-of-style";
 
   return (
     <aside
@@ -183,7 +184,7 @@ export function PluginRightPanel({
           role="separator"
           aria-orientation="vertical"
           aria-label={t("pluginPanel.resize")}
-          className={`absolute ${isLeftEdge ? "-right-1 border-r" : "-left-1 border-l"} top-0 z-20 hidden h-full w-2 cursor-col-resize touch-none select-none border-transparent hover:border-primary md:block`}
+          className={`absolute ${isLayersSide ? "-right-1 border-r" : "-left-1 border-l"} top-0 z-20 hidden h-full w-2 cursor-col-resize touch-none select-none border-transparent hover:border-primary md:block`}
           onPointerDown={handleResizeStart}
         />
       ) : null}
@@ -197,7 +198,7 @@ export function PluginRightPanel({
             aria-label={t("pluginPanel.expand")}
             onClick={() => openRightPanel(activeId)}
           >
-            {isLeftEdge ? (
+            {isLayersSide ? (
               <PanelLeftOpen className="h-4 w-4" />
             ) : (
               <PanelRightOpen className="h-4 w-4" />
@@ -244,7 +245,7 @@ export function PluginRightPanel({
               aria-label={t("pluginPanel.collapse")}
               onClick={() => collapseRightPanel(activeId)}
             >
-              {isLeftEdge ? (
+              {isLayersSide ? (
                 <PanelLeftClose className="h-4 w-4" />
               ) : (
                 <PanelRightClose className="h-4 w-4" />
