@@ -27,15 +27,12 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useRightPanelState } from "../../hooks/useRightPanels";
+import { clamp } from "../../lib/clamp";
 import { isImageSource } from "../../lib/icon-source";
 
 const DEFAULT_WIDTH = 320;
 const MIN_WIDTH = 240;
 const MAX_WIDTH = 640;
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
 
 interface PluginRightPanelProps {
   /** Which workspace edge this instance occupies. */
@@ -107,9 +104,10 @@ export function PluginRightPanel({ slot }: PluginRightPanelProps) {
 
   const handleResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
-    // Capture the pointer on the handle itself so the listeners are released
-    // automatically if the panel unmounts mid-drag (e.g. the plugin closes it),
-    // and so a drag past the viewport edge keeps tracking.
+    // Attach the move/end listeners to the handle element (not window) so they
+    // are discarded with it if the panel unmounts mid-drag, and capture the
+    // pointer so a drag past the viewport edge keeps tracking. pointercancel is
+    // handled alongside pointerup so an interrupted drag still cleans up.
     const el = event.currentTarget;
     el.setPointerCapture(event.pointerId);
     const startX = event.clientX;
@@ -120,13 +118,17 @@ export function PluginRightPanel({ slot }: PluginRightPanelProps) {
       const delta = isLeft ? move.clientX - startX : startX - move.clientX;
       setWidth(clamp(startWidth + delta, MIN_WIDTH, MAX_WIDTH));
     };
-    const handleUp = () => {
-      el.releasePointerCapture(event.pointerId);
+    const handleEnd = () => {
+      if (el.hasPointerCapture(event.pointerId)) {
+        el.releasePointerCapture(event.pointerId);
+      }
       el.removeEventListener("pointermove", handleMove);
-      el.removeEventListener("pointerup", handleUp);
+      el.removeEventListener("pointerup", handleEnd);
+      el.removeEventListener("pointercancel", handleEnd);
     };
     el.addEventListener("pointermove", handleMove);
-    el.addEventListener("pointerup", handleUp);
+    el.addEventListener("pointerup", handleEnd);
+    el.addEventListener("pointercancel", handleEnd);
   };
 
   const railIcon =

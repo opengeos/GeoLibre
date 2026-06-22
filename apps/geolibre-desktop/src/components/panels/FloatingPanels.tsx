@@ -14,6 +14,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useFloatingPanels } from "../../hooks/usePluginUiSurfaces";
+import { clamp } from "../../lib/clamp";
 import { isImageSource } from "../../lib/icon-source";
 
 const DEFAULT_WIDTH = 300;
@@ -21,10 +22,6 @@ const MIN_WIDTH = 220;
 const MAX_WIDTH = 560;
 const STAGGER = 24;
 const EDGE_MARGIN = 12;
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
 
 function FloatingPanelCard({
   id,
@@ -93,13 +90,19 @@ function FloatingPanelCard({
         y: clamp(origin.y + (move.clientY - startY), 0, Math.max(0, maxY)),
       });
     };
-    const handleUp = () => {
-      handle.releasePointerCapture(event.pointerId);
+    const handleEnd = () => {
+      if (handle.hasPointerCapture(event.pointerId)) {
+        handle.releasePointerCapture(event.pointerId);
+      }
       handle.removeEventListener("pointermove", handleMove);
-      handle.removeEventListener("pointerup", handleUp);
+      handle.removeEventListener("pointerup", handleEnd);
+      handle.removeEventListener("pointercancel", handleEnd);
     };
     handle.addEventListener("pointermove", handleMove);
-    handle.addEventListener("pointerup", handleUp);
+    handle.addEventListener("pointerup", handleEnd);
+    // pointercancel (system gesture, lock, stylus lift) also ends the drag, so
+    // the listeners do not accumulate on the handle.
+    handle.addEventListener("pointercancel", handleEnd);
   };
 
   return (
