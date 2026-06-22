@@ -178,7 +178,8 @@ export function DashboardPanel() {
   const rowCount = Math.max(1, Math.ceil(widgets.length / Math.max(1, columns)));
   const gridMinHeight =
     rowCount > 1
-      ? `calc(${rowCount} * ${MIN_DASHBOARD_ROW_HEIGHT}px + ${rowCount - 1} * 0.75rem)`
+      ? // 0.75rem is gap-3; keep in sync if the grid's gap class changes.
+        `calc(${rowCount} * ${MIN_DASHBOARD_ROW_HEIGHT}px + ${rowCount - 1} * 0.75rem)`
       : undefined;
 
   return (
@@ -439,9 +440,10 @@ function WidgetCard({
         </div>
       </div>
 
-      {/* The chart SVG (a direct child) flexes to fill (min-h-0 lets it shrink
-          past its intrinsic aspect-ratio height); preserveAspectRatio
-          letterboxes it (issue #728). */}
+      {/* [&>svg] targets ChartView's chart SVG, which is a direct DOM child
+          (React Fragments emit no nodes): it flexes to fill, min-h-0 lets it
+          shrink past its intrinsic aspect-ratio height, and preserveAspectRatio
+          letterboxes it. Update this if a chart ever wraps its SVG (issue #728). */}
       <div className="flex min-h-0 flex-1 flex-col [&>svg]:min-h-0 [&>svg]:flex-1">
         {data.hasData ? (
           <ChartView result={result} color={widget.color} />
