@@ -65,7 +65,7 @@ import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
 import { registerXyzTileProtocol } from "../../lib/xyz-url";
 import { useEmbedBridge } from "../../hooks/useEmbedBridge";
 import { useRasterIdentify } from "../../hooks/useRasterIdentify";
-import { useRightPanelState } from "../../hooks/useRightPanels";
+import { useRightPanelActive } from "../../hooks/useRightPanels";
 import { BoundsRestrictionIndicator } from "./BoundsRestrictionIndicator";
 import { MapGrid } from "./MapGrid";
 import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
@@ -420,8 +420,7 @@ export function DesktopShell({
   const storymapPresenting = useAppStore((s) => s.ui.storymapPresenting);
   // A plugin-owned right panel claims the right-side workspace, so the Style
   // panel collapses to its rail while one is active and restores when it closes.
-  const pluginRightPanelActive =
-    useRightPanelState().activeId !== null;
+  const pluginRightPanelActive = useRightPanelActive();
   const assistantOpen = useAppStore((s) => s.ui.assistantOpen);
   const dashboardOpen = useAppStore((s) => s.ui.dashboardOpen);
   const geometryEditLayerId = useSyncExternalStore(

@@ -111,9 +111,15 @@ export function openRightPanel(id: string): boolean {
   }
   if (activeId === id && !collapsed) return true;
   const wasInactive = activeId !== id;
+  // A different panel taking the workspace displaces the current owner; release
+  // it (onClose) so a plugin can free resources allocated for its panel.
+  const displacedId = wasInactive ? activeId : null;
   activeId = id;
   collapsed = false;
   emit();
+  if (displacedId !== null) {
+    runHook(displacedId, "onClose", registry.get(displacedId)?.onClose);
+  }
   if (wasInactive) {
     runHook(id, "onOpen", panel.onOpen);
   }

@@ -58,12 +58,15 @@ export function PluginRightPanel() {
   const panel = activeId ? getRightPanel(activeId) : undefined;
 
   // Adopt the panel's preferred width when a different panel becomes active.
-  // Keyed on activeId so a user resize survives collapse/expand of the same
-  // panel (activeId is unchanged across those toggles).
+  // Keyed on activeId only so a user resize survives collapse/expand and any
+  // re-registration of the same panel; the width is read fresh from the
+  // registry rather than depending on the panel object's identity.
   useEffect(() => {
-    if (!panel) return;
-    setWidth(clamp(panel.defaultWidth ?? DEFAULT_WIDTH, MIN_WIDTH, MAX_WIDTH));
-  }, [activeId, panel]);
+    if (!activeId) return;
+    const current = getRightPanel(activeId);
+    if (!current) return;
+    setWidth(clamp(current.defaultWidth ?? DEFAULT_WIDTH, MIN_WIDTH, MAX_WIDTH));
+  }, [activeId]);
 
   // Populate the plugin content container once per active panel. The container
   // persists across collapse (it is only hidden), so render is not re-invoked
@@ -93,6 +96,11 @@ export function PluginRightPanel() {
 
   const handleResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
+    // Capture the pointer on the handle itself so the listeners are released
+    // automatically if the panel unmounts mid-drag (e.g. the plugin closes it),
+    // and so a drag past the viewport edge keeps tracking.
+    const el = event.currentTarget;
+    el.setPointerCapture(event.pointerId);
     const startX = event.clientX;
     const startWidth = width;
     const handleMove = (move: PointerEvent) => {
@@ -100,11 +108,12 @@ export function PluginRightPanel() {
       setWidth(clamp(startWidth + (startX - move.clientX), MIN_WIDTH, MAX_WIDTH));
     };
     const handleUp = () => {
-      window.removeEventListener("pointermove", handleMove);
-      window.removeEventListener("pointerup", handleUp);
+      el.releasePointerCapture(event.pointerId);
+      el.removeEventListener("pointermove", handleMove);
+      el.removeEventListener("pointerup", handleUp);
     };
-    window.addEventListener("pointermove", handleMove);
-    window.addEventListener("pointerup", handleUp);
+    el.addEventListener("pointermove", handleMove);
+    el.addEventListener("pointerup", handleUp);
   };
 
   const railIcon =

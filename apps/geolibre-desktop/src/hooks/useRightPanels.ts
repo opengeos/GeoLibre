@@ -21,3 +21,17 @@ export function useRightPanelState(): RightPanelSnapshot {
     getRightPanelSnapshot,
   );
 }
+
+const selectActive = () => getRightPanelSnapshot().activeId !== null;
+
+/**
+ * Subscribe only to whether a plugin right panel is the active workspace.
+ *
+ * Returns a boolean, so consumers (e.g. the shell) re-render only when a panel
+ * opens or closes, not on every collapse/expand toggle of the active panel.
+ *
+ * @returns True when a plugin right panel is open.
+ */
+export function useRightPanelActive(): boolean {
+  return useSyncExternalStore(subscribeRightPanels, selectActive, selectActive);
+}

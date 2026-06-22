@@ -93,6 +93,20 @@ describe("right-panel registry", () => {
     assert.equal(getActiveRightPanel(), "a");
   });
 
+  it("fires onClose for the displaced panel when a new panel takes over", () => {
+    const calls: string[] = [];
+    registerRightPanel(
+      testPanel({ id: "a", title: "A", onClose: () => calls.push("a:close") }),
+    );
+    registerRightPanel(
+      testPanel({ id: "b", title: "B", onOpen: () => calls.push("b:open") }),
+    );
+    openRightPanel("a");
+    openRightPanel("b");
+    assert.equal(getActiveRightPanel(), "b");
+    assert.deepEqual(calls, ["a:close", "b:open"]);
+  });
+
   it("notifies subscribers and exposes a stable snapshot between mutations", () => {
     let notified = 0;
     const unsubscribe = subscribeRightPanels(() => {
