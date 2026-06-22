@@ -155,6 +155,16 @@ export async function loadExternalPlugins(
   };
 }
 
+/**
+ * Whether a plugin id was loaded from an external source (a zip archive, a
+ * manifest URL, a bundled drop-in, or a web "install from file"). Built-in
+ * plugins registered at module load are not tracked here and return false. The
+ * toolbar uses this to render external plugin menus after the Help menu.
+ */
+export function isExternalPluginId(pluginId: string): boolean {
+  return externallyLoadedPluginSources.has(pluginId);
+}
+
 async function loadFilesystemPluginBundles(
   additionalPluginDirectories: string[],
 ): Promise<ExternalPluginBundleLoadResult> {

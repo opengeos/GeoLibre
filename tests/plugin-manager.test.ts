@@ -631,3 +631,73 @@ describe("PluginManager async activation", () => {
     assert.equal(manager.isActive("reactivated-plugin"), true);
   });
 });
+
+describe("PluginManager toolbar menu scoping", () => {
+  it("tags registerToolbarMenu with the activating plugin's id", () => {
+    const manager = new PluginManager();
+    const seen: Array<string | undefined> = [];
+    const scopedApp = {
+      registerToolbarMenu: (
+        _menu: unknown,
+        ownerPluginId?: string,
+      ) => {
+        seen.push(ownerPluginId);
+        return () => undefined;
+      },
+    } as unknown as GeoLibreAppAPI;
+
+    manager.register(
+      testPlugin({
+        id: "menu-plugin",
+        // A plugin registers its menu with a single argument; the host injects
+        // the owner id via the scoped app it was handed.
+        activate: (api) =>
+          void api.registerToolbarMenu?.({
+            id: "menu-plugin-menu",
+            label: "Workbench",
+            items: [],
+          }),
+      }),
+    );
+    manager.activate("menu-plugin", scopedApp);
+
+    assert.deepEqual(seen, ["menu-plugin"]);
+  });
+
+  it("scopes a menu registered asynchronously after activate resolves", async () => {
+    const manager = new PluginManager();
+    const seen: Array<string | undefined> = [];
+    const scopedApp = {
+      registerToolbarMenu: (
+        _menu: unknown,
+        ownerPluginId?: string,
+      ) => {
+        seen.push(ownerPluginId);
+        return () => undefined;
+      },
+    } as unknown as GeoLibreAppAPI;
+
+    let register: (() => void) | undefined;
+    manager.register(
+      testPlugin({
+        id: "async-menu-plugin",
+        activate: (api) => {
+          // The plugin keeps the scoped app and registers its menu later, after
+          // its activation has returned. The owner tag must still be applied.
+          register = () =>
+            api.registerToolbarMenu?.({
+              id: "async-menu",
+              label: "Late",
+              items: [],
+            });
+          return Promise.resolve(true);
+        },
+      }),
+    );
+    manager.activate("async-menu-plugin", scopedApp);
+    await Promise.resolve();
+    register?.();
+
+    assert.deepEqual(seen, ["async-menu-plugin"]);
+  });
+});

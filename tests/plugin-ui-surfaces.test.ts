@@ -90,6 +90,17 @@ describe("toolbar-menu registry", () => {
     assert.equal(listToolbarMenus().length, 1);
     assert.equal(listToolbarMenus()[0].label, "Second");
   });
+
+  it("records the owning plugin id on the snapshot entry", () => {
+    registerToolbarMenu(testMenu({ id: "builtin-menu" }));
+    registerToolbarMenu(testMenu({ id: "external-menu" }), "acme.plugin");
+    const { entries } = getToolbarMenusSnapshot();
+    assert.equal(entries.length, 2);
+    assert.equal(entries[0].menu.id, "builtin-menu");
+    assert.equal(entries[0].ownerPluginId, undefined);
+    assert.equal(entries[1].menu.id, "external-menu");
+    assert.equal(entries[1].ownerPluginId, "acme.plugin");
+  });
 });
 
 describe("floating-panel registry", () => {

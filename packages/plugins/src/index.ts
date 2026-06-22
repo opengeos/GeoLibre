@@ -26,6 +26,7 @@ export {
   getToolbarMenusSnapshot,
   subscribeToolbarMenus,
   type ToolbarMenusSnapshot,
+  type ToolbarMenuEntry,
 } from "./toolbar-menu-registry";
 export {
   registerFloatingPanel,

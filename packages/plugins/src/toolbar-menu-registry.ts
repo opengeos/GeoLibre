@@ -11,24 +11,37 @@ import type { GeoLibreToolbarMenu } from "./types";
  */
 
 /**
- * Reactive snapshot consumed by `useSyncExternalStore`. The `menus` array
- * identity is stable between mutations so React can skip re-renders; `version`
- * is bumped on every change.
+ * A registered toolbar menu paired with the id of the plugin that registered it
+ * (when the host scoped the registration to a plugin). `ownerPluginId` lets the
+ * toolbar place a menu by its owner — e.g. external plugin menus after Help.
+ */
+export interface ToolbarMenuEntry {
+  menu: GeoLibreToolbarMenu;
+  ownerPluginId?: string;
+}
+
+/**
+ * Reactive snapshot consumed by `useSyncExternalStore`. The `menus`/`entries`
+ * array identities are stable between mutations so React can skip re-renders;
+ * `version` is bumped on every change. `menus` is kept for callers that only
+ * need the menus; `entries` additionally carries each menu's owning plugin id.
  */
 export interface ToolbarMenusSnapshot {
   menus: GeoLibreToolbarMenu[];
+  entries: ToolbarMenuEntry[];
   version: number;
 }
 
-const registry = new Map<string, GeoLibreToolbarMenu>();
+const registry = new Map<string, ToolbarMenuEntry>();
 const listeners = new Set<() => void>();
 
 let version = 0;
-let snapshot: ToolbarMenusSnapshot = { menus: [], version: 0 };
+let snapshot: ToolbarMenusSnapshot = { menus: [], entries: [], version: 0 };
 
 function emit(): void {
   version += 1;
-  snapshot = { menus: [...registry.values()], version };
+  const entries = [...registry.values()];
+  snapshot = { menus: entries.map((entry) => entry.menu), entries, version };
   for (const listener of listeners) {
     listener();
   }
@@ -38,8 +51,14 @@ function emit(): void {
  * Register a plugin-owned top toolbar menu. Returns an unregister function (call
  * it from the plugin's `deactivate` hook). Re-registering the same id replaces
  * the menu, so a plugin can rebuild its menu as its state changes.
+ *
+ * `ownerPluginId` is injected by the host (the PluginManager scopes each
+ * plugin's app API to its id); plugins call this with a single argument.
  */
-export function registerToolbarMenu(menu: GeoLibreToolbarMenu): () => void {
+export function registerToolbarMenu(
+  menu: GeoLibreToolbarMenu,
+  ownerPluginId?: string,
+): () => void {
   if (!menu || typeof menu.id !== "string" || menu.id.length === 0) {
     throw new Error("registerToolbarMenu requires a menu with a non-empty id.");
   }
@@ -52,10 +71,11 @@ export function registerToolbarMenu(menu: GeoLibreToolbarMenu): () => void {
   // Re-registering an id replaces the menu. The returned disposer only removes
   // the menu while this exact registration is still current, so a stale disposer
   // cannot evict a newer menu that reused the id.
-  registry.set(menu.id, menu);
+  const entry: ToolbarMenuEntry = { menu, ownerPluginId };
+  registry.set(menu.id, entry);
   emit();
   return () => {
-    if (registry.get(menu.id) === menu) unregisterToolbarMenu(menu.id);
+    if (registry.get(menu.id) === entry) unregisterToolbarMenu(menu.id);
   };
 }
 
@@ -67,7 +87,7 @@ export function unregisterToolbarMenu(id: string): void {
 
 /** All registered toolbar menus, in registration order. */
 export function listToolbarMenus(): GeoLibreToolbarMenu[] {
-  return [...registry.values()];
+  return [...registry.values()].map((entry) => entry.menu);
 }
 
 /** Current reactive snapshot for `useSyncExternalStore`. */
@@ -91,5 +111,5 @@ export function __resetToolbarMenuRegistryForTests(): void {
   registry.clear();
   listeners.clear();
   version = 0;
-  snapshot = { menus: [], version: 0 };
+  snapshot = { menus: [], entries: [], version: 0 };
 }

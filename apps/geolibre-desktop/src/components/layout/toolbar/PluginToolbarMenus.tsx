@@ -15,11 +15,19 @@ import {
 } from "@geolibre/ui";
 import { Puzzle } from "lucide-react";
 import { useToolbarMenus } from "../../../hooks/usePluginUiSurfaces";
+import { isExternalPluginId } from "../../../lib/external-plugins";
 import { isImageSource } from "../../../lib/icon-source";
 import type { ToolbarChrome } from "./constants";
 
 interface PluginToolbarMenusProps {
   chrome: ToolbarChrome;
+  /**
+   * Which menus to render by their owning plugin's origin: `"builtin"` renders
+   * menus from built-in plugins (and any untagged menu) beside the built-in
+   * menus; `"external"` renders menus from externally loaded plugins, placed
+   * after the Help menu. The toolbar renders one instance of each.
+   */
+  placement: "builtin" | "external";
 }
 
 function MenuIcon({ icon, className }: { icon?: string; className: string }) {
@@ -120,19 +128,32 @@ function PluginToolbarMenu({
 
 /**
  * Renders the top-level toolbar menus registered by plugins via
- * `app.registerToolbarMenu()`, one dropdown button per menu, beside the
- * built-in toolbar menus. Renders nothing when no plugin has registered a menu.
+ * `app.registerToolbarMenu()`, one dropdown button per menu. Built-in plugin
+ * menus render beside the built-in menus; external plugin menus render after
+ * the Help menu (selected by `placement`). Renders nothing when no menu in the
+ * requested group has any items.
  */
-export function PluginToolbarMenus({ chrome }: PluginToolbarMenusProps) {
-  const { menus } = useToolbarMenus();
+export function PluginToolbarMenus({
+  chrome,
+  placement,
+}: PluginToolbarMenusProps) {
+  const { entries } = useToolbarMenus();
   // Skip menus with no items so a plugin never shows a button that opens to a
-  // blank dropdown.
-  const nonEmpty = menus.filter((menu) => menu.items.length > 0);
-  if (nonEmpty.length === 0) return null;
+  // blank dropdown, and keep only the menus that belong in this placement. A
+  // menu is "external" when its owning plugin was loaded from an external
+  // source; menus with no owner (or an unknown one) fall in with the built-ins.
+  const visible = entries.filter((entry) => {
+    if (entry.menu.items.length === 0) return false;
+    const external = Boolean(
+      entry.ownerPluginId && isExternalPluginId(entry.ownerPluginId),
+    );
+    return placement === "external" ? external : !external;
+  });
+  if (visible.length === 0) return null;
   return (
     <>
-      {nonEmpty.map((menu) => (
-        <PluginToolbarMenu key={menu.id} menu={menu} chrome={chrome} />
+      {visible.map((entry) => (
+        <PluginToolbarMenu key={entry.menu.id} menu={entry.menu} chrome={chrome} />
       ))}
     </>
   );

@@ -134,12 +134,13 @@ export class PluginManager {
   activate(id: string, app: GeoLibreAppAPI): void {
     const plugin = this.plugins.get(id);
     if (!plugin || this.active.has(id)) return;
-    const activated = plugin.activate(app);
+    const scopedApp = scopeAppToPlugin(app, id);
+    const activated = plugin.activate(scopedApp);
     if (activated === false) return;
     const generation = this.nextActivationGeneration(id);
     this.active.add(id);
     this.notify();
-    this.watchAsyncActivation(id, activated, app, generation);
+    this.watchAsyncActivation(id, activated, scopedApp, generation);
   }
 
   /**
@@ -396,7 +397,8 @@ export class PluginManager {
       if (this.active.has(id)) continue;
       const plugin = this.plugins.get(id);
       if (!plugin) continue;
-      const activated = plugin.activate(app);
+      const scopedApp = scopeAppToPlugin(app, id);
+      const activated = plugin.activate(scopedApp);
       if (activated === false) continue;
       const generation = this.nextActivationGeneration(id);
       this.active.add(id);
@@ -404,7 +406,7 @@ export class PluginManager {
       // Restoring a saved project re-activates plugins the same way the user
       // would, so an async mount that later fails (e.g. a stale chunk after a
       // redeploy) must roll back here too, not just from activate().
-      this.watchAsyncActivation(id, activated, app, generation);
+      this.watchAsyncActivation(id, activated, scopedApp, generation);
     }
 
     if (changed) this.notify();
@@ -425,6 +427,26 @@ export class PluginManager {
     this.activationGenerations.set(id, next);
     return next;
   }
+}
+
+/**
+ * Return an app API scoped to `pluginId`: a shallow copy whose
+ * `registerToolbarMenu` tags each menu with the registering plugin's id so the
+ * toolbar can place it by owner (e.g. external plugin menus after Help). The
+ * plugin keeps this scoped object for the lifetime of its activation, so even a
+ * menu it registers asynchronously (after an `await` in `activate`) is tagged.
+ * Returns the app unchanged when the host exposes no `registerToolbarMenu`.
+ */
+function scopeAppToPlugin(
+  app: GeoLibreAppAPI,
+  pluginId: string,
+): GeoLibreAppAPI {
+  const register = app.registerToolbarMenu;
+  if (!register) return app;
+  return {
+    ...app,
+    registerToolbarMenu: (menu) => register(menu, pluginId),
+  };
 }
 
 // Retaining several recent contexts (rather than only the latest) keeps dedup
