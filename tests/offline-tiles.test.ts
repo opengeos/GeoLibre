@@ -234,6 +234,15 @@ describe("planOfflineZoom", () => {
     const plan = planOfflineZoom(10, 24, true, 3, HARD_MAX);
     assert.equal(plan.baseZoom, 10);
     assert.equal(plan.maxZoom, 13);
+    assert.equal(plan.canIncludeExtra, true);
+    assert.equal(plan.maxExtraLevels, HARD_MAX);
+  });
+
+  it("treats extraLevels below 1 as 1 when includeExtra is on", () => {
+    const plan = planOfflineZoom(10, 24, true, 0, HARD_MAX);
+    assert.equal(plan.baseZoom, 10);
+    assert.equal(plan.maxZoom, 11); // Math.max(1, 0) → 1 extra level applied
+    assert.equal(plan.canIncludeExtra, true);
   });
 
   it("caps the extra range at the map's max zoom rather than a fixed 22", () => {

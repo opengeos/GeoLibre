@@ -123,7 +123,8 @@ export interface OfflineZoomPlan {
  *   viewZoom: The snapshot view's zoom (may be fractional).
  *   mapMaxZoom: The map's configured maximum zoom.
  *   includeExtra: Whether the "include extra detail levels" toggle is on.
- *   extraLevels: The extra-levels slider value.
+ *   extraLevels: The extra-levels slider value. Floored to an integer and
+ *     treated as at least 1 when `includeExtra` is on.
  *   hardMaxExtraLevels: The slider's absolute upper bound (the dialog's cap).
  *
  * Returns:
@@ -145,7 +146,9 @@ export function planOfflineZoom(
   const maxExtraLevels = Math.min(hardMaxExtraLevels, ceil - baseZoom);
   const effectiveExtra =
     includeExtra && canIncludeExtra
-      ? Math.min(Math.max(1, Math.floor(extraLevels)), maxExtraLevels)
+      ? // Sub-1 values are treated as 1 extra level; the dialog's slider enforces
+        // min=1, so this floor only guards out-of-range programmatic callers.
+        Math.min(Math.max(1, Math.floor(extraLevels)), maxExtraLevels)
       : 0;
   return {
     baseZoom,

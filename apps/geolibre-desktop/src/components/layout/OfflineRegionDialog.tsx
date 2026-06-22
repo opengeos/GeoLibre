@@ -405,6 +405,11 @@ export function OfflineRegionDialog({
                 min={1}
                 max={maxExtraLevels}
                 step={1}
+                // Clamp only the displayed value, not the `extraLevels` state:
+                // `maxExtraLevels` is derived from the view + map max zoom
+                // snapshotted at open time and `extraLevels` resets to 1 on open,
+                // so the two can't diverge within a session. planOfflineZoom
+                // clamps again, so the footer stays correct regardless.
                 value={[Math.min(extraLevels, maxExtraLevels)]}
                 onValueChange={(value: number[]) => setExtraLevels(value[0])}
                 disabled={controlsDisabled}
