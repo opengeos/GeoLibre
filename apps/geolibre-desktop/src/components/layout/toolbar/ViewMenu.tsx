@@ -117,10 +117,18 @@ export function ViewMenu({
   const showZoom = show("view.zoomIn") || show("view.zoomOut");
   const showNavigation =
     show("view.previousView") || show("view.nextView");
+  const showResetPitch = show("view.resetPitch");
+  const showResetBearing = show("view.resetNorth");
+  const showResetPitchBearing = show("view.resetPitchBearing");
   const showReset =
-    show("view.resetPitch") ||
-    show("view.resetNorth") ||
-    show("view.resetPitchBearing");
+    showResetPitch || showResetBearing || showResetPitchBearing;
+  // The submenu is a dead end when every item it would show is already at its
+  // baseline, so disable the trigger then rather than open it to all-greyed
+  // items (#720 review). A hidden item can't block, so it counts as "disabled".
+  const allResetDisabled =
+    (!showResetPitch || pitchIsFlat) &&
+    (!showResetBearing || bearingIsNorth) &&
+    (!showResetPitchBearing || (bearingIsNorth && pitchIsFlat));
   const showSetView = show("view.setView");
   const showSplitView = show("view.splitView");
   const paneCount = mapLayout.rows * mapLayout.cols;
@@ -201,14 +209,17 @@ export function ViewMenu({
         )}
         {showReset && (
           <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
+            <DropdownMenuSubTrigger
+              disabled={allResetDisabled}
+              className="data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+            >
               <RotateCcw className="h-3.5 w-3.5 shrink-0" />
               <span className="whitespace-nowrap">
                 {t("toolbar.item.resetOrientation")}
               </span>
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="min-w-48">
-              {show("view.resetPitch") && (
+              {showResetPitch && (
                 <DropdownMenuItem
                   disabled={pitchIsFlat}
                   onSelect={onResetPitch}
@@ -219,7 +230,7 @@ export function ViewMenu({
                   </span>
                 </DropdownMenuItem>
               )}
-              {show("view.resetNorth") && (
+              {showResetBearing && (
                 <DropdownMenuItem
                   disabled={bearingIsNorth}
                   onSelect={onResetNorth}
@@ -230,7 +241,7 @@ export function ViewMenu({
                   </span>
                 </DropdownMenuItem>
               )}
-              {show("view.resetPitchBearing") && (
+              {showResetPitchBearing && (
                 <DropdownMenuItem
                   disabled={bearingIsNorth && pitchIsFlat}
                   onSelect={onResetPitchBearing}

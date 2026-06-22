@@ -488,8 +488,10 @@ export function SettingsDialog({
     const id = window.requestAnimationFrame(() => {
       shareTokenInputRef.current?.focus();
       shareTokenInputRef.current?.select();
-      // Clearing pendingFocus re-runs the nav-focus effect; tell it to skip the
-      // next run so it does not pull focus off the field we just focused.
+      // Set the guard BEFORE clearing pendingFocus: the clear re-runs the
+      // nav-focus effect, and because this write is synchronous and lexically
+      // first, the ref is already true when that run reads it, so it skips and
+      // leaves focus on the field we just focused.
       skipNextNavFocusRef.current = true;
       setPendingFocus(null);
     });

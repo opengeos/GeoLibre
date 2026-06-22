@@ -835,24 +835,24 @@ function DrawToolbar({
 function PickBanner({ onCancel }: { onCancel: () => void }) {
   const { t } = useTranslation();
   return (
-    // role="status" announces placement mode where live regions are read. The
-    // Cancel button additionally takes focus on mount (the dialog that had it
-    // just closed, so focus would otherwise fall to <body>) and is described by
-    // the hint, so keyboard and screen-reader users are told what to do even
-    // when a live region injected on mount is missed (#720 review).
-    <div
-      role="status"
-      className="fixed bottom-6 left-1/2 z-50 flex max-w-[95vw] -translate-x-1/2 flex-col gap-2 rounded-lg border bg-card p-3 shadow-xl"
-    >
-      <div className="flex items-center gap-2 text-sm">
-        <Crosshair className="h-4 w-4 text-primary" />
-        <span className="font-medium">
-          {t("fieldCollection.pickBannerTitle")}
-        </span>
+    <div className="fixed bottom-6 left-1/2 z-50 flex max-w-[95vw] -translate-x-1/2 flex-col gap-2 rounded-lg border bg-card p-3 shadow-xl">
+      {/* Only the non-interactive status text is the live region, with the
+          Cancel button as a sibling, so screen readers don't re-read the button
+          on region mutations (ARIA APG). The button also takes focus on mount
+          (the dialog that held focus just closed) and is described by the hint,
+          so the placement instructions reach keyboard/SR users reliably even
+          where a region injected on mount is missed (#720 review). */}
+      <div role="status" className="flex flex-col gap-2">
+        <div className="flex items-center gap-2 text-sm">
+          <Crosshair className="h-4 w-4 text-primary" />
+          <span className="font-medium">
+            {t("fieldCollection.pickBannerTitle")}
+          </span>
+        </div>
+        <p id="fc-pick-hint" className="text-xs text-muted-foreground">
+          {t("fieldCollection.pickBannerHint")}
+        </p>
       </div>
-      <p id="fc-pick-hint" className="text-xs text-muted-foreground">
-        {t("fieldCollection.pickBannerHint")}
-      </p>
       <div className="flex justify-end">
         <Button
           variant="ghost"
