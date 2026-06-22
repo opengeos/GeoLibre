@@ -37,6 +37,11 @@ const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
 const MIN_DASHBOARD_HEIGHT = 160;
 const MAX_DASHBOARD_HEIGHT = 720;
 const DEFAULT_DASHBOARD_HEIGHT = 360;
+// When widgets wrap onto more than one row, each row is allowed to shrink only
+// down to this height before the panel scrolls vertically instead of crushing
+// the charts to nothing. A single row of widgets has no floor, so it always
+// fills (and resizes with) the panel height (issue #728).
+const MIN_DASHBOARD_ROW_HEIGHT = 200;
 
 /** Turn a stored widget into the render-side {@link ChartSpec}. */
 function widgetToSpec(widget: DashboardWidget): ChartSpec {
@@ -286,9 +291,19 @@ export function DashboardPanel() {
             </div>
           ) : (
             <div
-              className="grid gap-3"
+              className="grid h-full gap-3"
               style={{
                 gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+                // Rows divide the available height equally and shrink with the
+                // panel so charts resize instead of overflowing (issue #728).
+                gridAutoRows: "minmax(0, 1fr)",
+                // Once widgets wrap onto multiple rows, give each row a floor so
+                // they scroll rather than collapse; a single row stays unbounded
+                // and fills the panel.
+                minHeight:
+                  Math.ceil(widgets.length / columns) > 1
+                    ? `${Math.ceil(widgets.length / columns) * MIN_DASHBOARD_ROW_HEIGHT}px`
+                    : undefined,
               }}
             >
               {widgets.map((widget, index) => (
@@ -366,8 +381,8 @@ function WidgetCard({
   const title = widget.title?.trim() || defaultWidgetTitle();
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border bg-background p-3">
-      <div className="flex items-center gap-2">
+    <div className="flex min-h-0 flex-col gap-2 overflow-hidden rounded-md border bg-background p-3">
+      <div className="flex shrink-0 items-center gap-2">
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium" title={title}>
             {title}
@@ -422,13 +437,19 @@ function WidgetCard({
         </div>
       </div>
 
-      {data.hasData ? (
-        <ChartView result={result} color={widget.color} />
-      ) : (
-        <p className="py-8 text-center text-xs text-muted-foreground">
-          {t("dashboard.noData")}
-        </p>
-      )}
+      {/* The chart fills the card's remaining height and scales down with it:
+          the SVG becomes a flex child (min-h-0 lets it shrink past its
+          intrinsic aspect-ratio height) and its preserveAspectRatio letterboxes
+          rather than overflowing the panel (issue #728). */}
+      <div className="flex min-h-0 flex-1 flex-col [&_svg]:min-h-0 [&_svg]:flex-1">
+        {data.hasData ? (
+          <ChartView result={result} color={widget.color} />
+        ) : (
+          <p className="flex flex-1 items-center justify-center py-4 text-center text-xs text-muted-foreground">
+            {t("dashboard.noData")}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
