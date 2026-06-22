@@ -1,4 +1,4 @@
-import { Check, ChevronDown } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import * as React from "react";
 import { cn } from "../lib/utils";
 import {
@@ -32,6 +32,8 @@ export interface ColorRampSelectProps {
 }
 
 function rampGradient(colors: readonly string[], reversed: boolean): string {
+  // An empty ramp would otherwise emit `linear-gradient(90deg, )` (invalid CSS).
+  if (colors.length === 0) return "transparent";
   const ordered = reversed ? [...colors].reverse() : colors;
   // A single stop produces no visible gradient, so duplicate it into both ends.
   const stops = ordered.length >= 2 ? ordered : [...ordered, ...ordered];
@@ -63,7 +65,11 @@ export function ColorRampSelect({
       <DropdownMenuTrigger
         id={id}
         disabled={disabled}
-        aria-label={ariaLabel}
+        // aria-label overrides the button's child text, so fold the selected
+        // ramp name in or a screen reader would never announce the selection.
+        aria-label={
+          ariaLabel ? `${ariaLabel}: ${selected?.label ?? value}` : undefined
+        }
         className={cn(
           "flex h-9 w-full items-center gap-2 rounded-md border border-input bg-background py-1 pl-3 pr-3 text-sm shadow-xs transition-colors focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50",
           className,
@@ -92,12 +98,12 @@ export function ColorRampSelect({
       >
         <DropdownMenuRadioGroup value={value} onValueChange={onValueChange}>
           {ramps.map((ramp) => (
+            // The built-in radio indicator (a dot in the reserved left gutter)
+            // marks the selected ramp; the swatch + label follow it.
             <DropdownMenuRadioItem
               key={ramp.value}
               value={ramp.value}
-              // The default radio indicator slot is replaced by a trailing check
-              // so the leading space holds the gradient swatch instead.
-              className="gap-2 pl-2 pr-2 [&>span:first-child]:hidden"
+              className="gap-2"
             >
               <span
                 aria-hidden="true"
@@ -105,9 +111,6 @@ export function ColorRampSelect({
                 style={{ background: rampGradient(ramp.colors, reversed) }}
               />
               <span className="min-w-0 flex-1 truncate">{ramp.label}</span>
-              {ramp.value === value ? (
-                <Check className="h-4 w-4 shrink-0" />
-              ) : null}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>

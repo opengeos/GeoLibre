@@ -1701,14 +1701,18 @@ function applyVectorDataRenderLayers(
   };
   // Unique/concatenate labels collapse co-located points into a single label.
   // Only the inline GeoJSON path (no source-layer) can build the aggregated
-  // source, and dedup keys off the field value rather than the expression.
+  // source, and dedup keys off the field value rather than the expression. It is
+  // gated to point-only layers: the aggregated source holds just points, so a
+  // mixed-geometry layer would silently lose its line/polygon labels.
   const dedupedLabelFc =
     labels.enabled &&
     labels.dedupe !== "off" &&
     !sourceLayer &&
     layer.geojson &&
     labels.field &&
-    profile.hasPoint
+    profile.hasPoint &&
+    !profile.hasLine &&
+    !profile.hasPolygon
       ? getDedupedLabelFeatures(layer.geojson, labels.field, labels.dedupe)
       : null;
   if (

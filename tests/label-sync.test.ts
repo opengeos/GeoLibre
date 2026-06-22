@@ -302,6 +302,61 @@ describe("label sync", () => {
     assert.equal(data.features.length, 1);
   });
 
+  it("does not dedup a mixed-geometry layer (would drop non-point labels)", () => {
+    const { map, layers, sources } = makeMap();
+    const mixed: GeoLibreLayer = {
+      id: "lyr",
+      name: "Layer",
+      type: "geojson",
+      source: { type: "geojson" },
+      visible: true,
+      opacity: 1,
+      style: {
+        ...DEFAULT_LAYER_STYLE,
+        labels: {
+          ...DEFAULT_LAYER_STYLE.labels,
+          enabled: true,
+          field: "name",
+          dedupe: "unique",
+        },
+      },
+      metadata: {},
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { name: "P" },
+            geometry: { type: "Point", coordinates: [0, 0] },
+          },
+          {
+            type: "Feature",
+            properties: { name: "L" },
+            geometry: {
+              type: "LineString",
+              coordinates: [
+                [0, 0],
+                [1, 1],
+              ],
+            },
+          },
+        ],
+      },
+    };
+    syncLayer(map as never, mixed);
+
+    assert.ok(!sources.has(LABEL_SOURCE_ID), "no dedup source for mixed layer");
+    const label = layers.get(LABEL_ID) as {
+      source: string;
+      layout: Record<string, unknown>;
+    };
+    assert.equal(label.source, "source-lyr");
+    assert.deepEqual(label.layout["text-field"], [
+      "to-string",
+      ["coalesce", ["get", "name"], ""],
+    ]);
+  });
+
   it("removes the dedup source when dedup is turned back off", () => {
     const { map, layers, sources } = makeMap();
     syncLayer(

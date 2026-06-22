@@ -1743,10 +1743,12 @@ export function StylePanel({
       )}
       {usesAttributeSymbology && (
         <div className="space-y-2">
-          <Label htmlFor="vectorStyleColorRamp">Colormap</Label>
+          <Label htmlFor="vectorStyleColorRamp">
+            {t("style.symbology.colormap")}
+          </Label>
           <ColorRampSelect
             id="vectorStyleColorRamp"
-            aria-label="Colormap"
+            aria-label={t("style.symbology.colormap")}
             value={draftVectorStyleColorRamp}
             onValueChange={updateDraftVectorStyleColorRamp}
             ramps={VECTOR_COLOR_RAMPS}

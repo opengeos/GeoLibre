@@ -1689,6 +1689,7 @@
       "expressionInvalid": "Not a valid MapLibre expression (must be a JSON array). This value is ignored."
     },
     "symbology": {
+      "colormap": "Colormap",
       "modeSingle": "Single symbology",
       "modeGraduated": "Graduated",
       "modeCategorized": "Categorized",

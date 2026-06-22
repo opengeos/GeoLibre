@@ -46,7 +46,7 @@ export function buildDedupedLabelFeatures(
   if (mode === "off" || !field) return null;
   const groups = new Map<
     string,
-    { coordinates: [number, number]; values: string[] }
+    { coordinates: [number, number]; values: Set<string> }
   >();
   for (const feature of geojson.features) {
     const point = pointCoordinates(feature.geometry ?? null);
@@ -56,20 +56,18 @@ export function buildDedupedLabelFeatures(
     const key = `${point[0].toFixed(7)},${point[1].toFixed(7)}`;
     let group = groups.get(key);
     if (!group) {
-      group = { coordinates: point, values: [] };
+      group = { coordinates: point, values: new Set() };
       groups.set(key, group);
     }
-    // Keep distinct values in first-seen order; "unique" uses the first and
-    // "concatenate" joins them all.
-    if (value !== "" && !group.values.includes(value)) {
-      group.values.push(value);
-    }
+    // A Set keeps distinct values in first-seen insertion order with O(1) adds;
+    // "unique" uses the first and "concatenate" joins them all.
+    if (value !== "") group.values.add(value);
   }
   const features: GeoJSON.Feature[] = [];
   for (const group of groups.values()) {
-    if (group.values.length === 0) continue;
-    const label =
-      mode === "concatenate" ? group.values.join("\n") : group.values[0];
+    if (group.values.size === 0) continue;
+    const values = [...group.values];
+    const label = mode === "concatenate" ? values.join("\n") : values[0];
     features.push({
       type: "Feature",
       geometry: { type: "Point", coordinates: group.coordinates },
