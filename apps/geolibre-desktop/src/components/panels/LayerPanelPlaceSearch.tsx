@@ -3,6 +3,7 @@ import {
   type RefObject,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -11,6 +12,7 @@ import maplibregl from "maplibre-gl";
 import {
   type GeocodeMatch,
   geocodeForward,
+  geocoderMinIntervalMs,
   resolveGeocoderConfig,
   useAppStore,
 } from "@geolibre/core";
@@ -22,12 +24,14 @@ interface LayerPanelPlaceSearchProps {
   mapControllerRef: RefObject<MapController | null>;
 }
 
-/** Debounce before firing a forward-geocode while the user types. */
+/** Fast-UI minimum debounce before firing a forward-geocode while typing. */
 const DEBOUNCE_MS = 500;
 /** Cap the result list so the dropdown stays compact at the panel foot. */
 const MAX_RESULTS = 6;
 /** Don't search until the query is at least this many characters. */
 const MIN_QUERY_LENGTH = 2;
+/** id linking the input's aria-controls to the result listbox. */
+const RESULTS_ID = "layer-panel-place-search-results";
 
 type SearchStatus = "idle" | "loading" | "error" | "empty";
 
@@ -46,17 +50,30 @@ export function LayerPanelPlaceSearch({
   const [results, setResults] = useState<GeocodeMatch[]>([]);
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<SearchStatus>("idle");
+  const [activeIndex, setActiveIndex] = useState(-1);
   const abortRef = useRef<AbortController | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
+  const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Skip the debounce effect for the one query change caused by selecting a
   // result (which fills the input with the place name); without this the
   // selection would immediately re-trigger a search for that full name.
   const skipNextSearch = useRef(false);
 
+  // Honor the provider's request-spacing policy: the public Nominatim host
+  // requires >=1.1s between requests, so the debounce never drops below that
+  // for throttled endpoints (keyed/self-hosted endpoints keep the fast UI
+  // default). resolveGeocoderConfig is cheap and pure, so memoizing on prefs
+  // keeps this off the typing hot path.
+  const debounceMs = useMemo(() => {
+    const endpoint = resolveGeocoderConfig(geocodingPrefs).forwardEndpoint;
+    return Math.max(DEBOUNCE_MS, geocoderMinIntervalMs(endpoint));
+  }, [geocodingPrefs]);
+
   useEffect(
     () => () => {
       abortRef.current?.abort();
       markerRef.current?.remove();
+      if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
     },
     [],
   );
@@ -67,6 +84,7 @@ export function LayerPanelPlaceSearch({
       const controller = new AbortController();
       abortRef.current = controller;
       setStatus("loading");
+      setActiveIndex(-1);
       setOpen(true);
       try {
         const config = resolveGeocoderConfig(geocodingPrefs);
@@ -96,15 +114,16 @@ export function LayerPanelPlaceSearch({
     if (trimmed.length < MIN_QUERY_LENGTH) {
       abortRef.current?.abort();
       setResults([]);
+      setActiveIndex(-1);
       setStatus("idle");
       setOpen(false);
       return;
     }
     const handle = setTimeout(() => {
       void runSearch(trimmed);
-    }, DEBOUNCE_MS);
+    }, debounceMs);
     return () => clearTimeout(handle);
-  }, [query, runSearch]);
+  }, [query, debounceMs, runSearch]);
 
   const handleSelect = useCallback(
     (match: GeocodeMatch) => {
@@ -122,6 +141,7 @@ export function LayerPanelPlaceSearch({
       skipNextSearch.current = true;
       setQuery(match.displayName);
       setResults([]);
+      setActiveIndex(-1);
       setStatus("idle");
       setOpen(false);
     },
@@ -134,9 +154,12 @@ export function LayerPanelPlaceSearch({
     markerRef.current = null;
     setQuery("");
     setResults([]);
+    setActiveIndex(-1);
     setStatus("idle");
     setOpen(false);
   }, []);
+
+  const showResults = status === "idle" && results.length > 0;
 
   return (
     <div className="relative p-2">
@@ -156,13 +179,22 @@ export function LayerPanelPlaceSearch({
               {t("layers.searchPlacesNoResults")}
             </div>
           ) : (
-            <ul className="max-h-60 overflow-auto py-1">
+            <ul id={RESULTS_ID} role="listbox" className="max-h-60 overflow-auto py-1">
               {results.map((match, index) => (
-                <li key={`${match.lon},${match.lat},${index}`}>
+                <li key={index} role="option" aria-selected={index === activeIndex}>
                   <button
                     type="button"
-                    className="flex w-full items-start gap-2 px-3 py-1.5 text-left text-xs hover:bg-muted"
-                    onClick={() => handleSelect(match)}
+                    id={`${RESULTS_ID}-option-${index}`}
+                    className={`flex w-full items-start gap-2 px-3 py-1.5 text-left text-xs hover:bg-muted ${
+                      index === activeIndex ? "bg-muted" : ""
+                    }`}
+                    // Use mousedown so the selection runs before the input's
+                    // blur handler closes the dropdown.
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      handleSelect(match);
+                    }}
+                    onMouseEnter={() => setActiveIndex(index)}
                   >
                     <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     <span className="line-clamp-2">{match.displayName}</span>
@@ -177,6 +209,15 @@ export function LayerPanelPlaceSearch({
         <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input
           type="text"
+          role="combobox"
+          aria-expanded={open}
+          aria-autocomplete="list"
+          aria-controls={RESULTS_ID}
+          aria-activedescendant={
+            showResults && activeIndex >= 0
+              ? `${RESULTS_ID}-option-${activeIndex}`
+              : undefined
+          }
           value={query}
           placeholder={t("layers.searchPlacesPlaceholder")}
           aria-label={t("layers.searchPlaces")}
@@ -185,10 +226,21 @@ export function LayerPanelPlaceSearch({
           onFocus={() => {
             if (results.length > 0 || status !== "idle") setOpen(true);
           }}
+          onBlur={() => {
+            // Defer so a click/mousedown on a result still resolves first.
+            blurTimerRef.current = setTimeout(() => setOpen(false), 150);
+          }}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && results.length > 0) {
+            if (event.key === "ArrowDown" && showResults) {
               event.preventDefault();
-              handleSelect(results[0]);
+              setOpen(true);
+              setActiveIndex((i) => Math.min(i + 1, results.length - 1));
+            } else if (event.key === "ArrowUp" && showResults) {
+              event.preventDefault();
+              setActiveIndex((i) => Math.max(i - 1, 0));
+            } else if (event.key === "Enter" && showResults) {
+              event.preventDefault();
+              handleSelect(results[activeIndex >= 0 ? activeIndex : 0]);
             } else if (event.key === "Escape") {
               handleClear();
             }
