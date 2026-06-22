@@ -591,6 +591,8 @@ export function drawLayout(
       bodyX + frameInset,
       bodyY + frameInset,
       bodyW - frameInset * 2,
+      // Top shifted down by frameInset; shrink the height to keep the bottom
+      // edge at bodyY + blockH (which sits inside the body, off any frame line).
       blockH - frameInset,
     );
     if (hasTitleText) {

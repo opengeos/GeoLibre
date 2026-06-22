@@ -376,9 +376,10 @@ function strokeRecordingCanvas(): {
 }
 
 describe("drawLayout map frame border (GH #749)", () => {
-  // The body rectangle starts at the page margin (5 units = 5% of the 400px
-  // shorter side with default margins), so the body border stroke begins at
-  // x=20 and spans most of the page width.
+  // These constants follow directly from computeBodyRect on a 400×400 canvas
+  // with the default "normal" margin: unit = min(400,400)/100 = 4, margin =
+  // unit*5 = 20, so bodyX = 20 and bodyW = 400 - 40 = 360 (> 200). If the unit
+  // formula or default margin changes, update these values.
   const isBodyBorder = (s: { x: number; w: number }) => s.x === 20 && s.w > 200;
 
   it("draws the frame in the chosen colour and thickness", () => {

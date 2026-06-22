@@ -479,6 +479,10 @@ export function PrintLayoutDialog({
     const map = mapControllerRef.current?.getMap();
     if (open && !wasOpenRef.current) {
       setError(null);
+      // Clear any out-of-range scale notice from a prior session: the dialog is
+      // hidden (not unmounted) on close, so it would otherwise persist into the
+      // next open even though no scale was just attempted (GH #743).
+      setScaleNotice(null);
       setTitle((prev) => prev || (projectName ?? "").trim());
       setDateText((prev) => prev || new Date().toLocaleDateString());
       // Re-show a previously drawn extent box while composing.
