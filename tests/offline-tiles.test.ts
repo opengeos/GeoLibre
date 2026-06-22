@@ -252,6 +252,7 @@ describe("planOfflineZoom", () => {
     assert.equal(plan.canIncludeExtra, false);
     assert.equal(plan.baseZoom, 24);
     assert.equal(plan.maxZoom, 24);
+    assert.equal(plan.maxExtraLevels, 0);
     assert.ok(plan.maxZoom >= plan.baseZoom);
   });
 
@@ -262,6 +263,7 @@ describe("planOfflineZoom", () => {
     assert.equal(plan.baseZoom, 24);
     assert.equal(plan.maxZoom, 24);
     assert.equal(plan.canIncludeExtra, false);
+    assert.equal(plan.maxExtraLevels, 0); // no room for extra levels at the ceiling
   });
 
   it("respects the hard cap on extra levels below the map's max zoom", () => {
