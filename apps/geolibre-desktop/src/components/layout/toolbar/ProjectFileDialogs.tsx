@@ -232,11 +232,18 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
  * @returns A localized-ish size string with one decimal for MB and above.
  */
 function formatByteSize(bytes: number): string {
+  // One decimal, with the user's locale decimal separator (e.g. "3,4 MB").
+  const oneDecimal = (value: number) =>
+    value.toLocaleString(undefined, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    });
   if (bytes < 1024) return `${bytes} B`;
   const kb = bytes / 1024;
-  if (kb < 1024) return `${Math.round(kb)} KB`;
+  // < 1023.5 so a value that rounds up to 1024 prints "1.0 MB", not "1024 KB".
+  if (kb < 1023.5) return `${Math.round(kb).toLocaleString()} KB`;
   const mb = kb / 1024;
-  if (mb < 1024) return `${mb.toFixed(1)} MB`;
+  if (mb < 1024) return `${oneDecimal(mb)} MB`;
   const gb = mb / 1024;
-  return `${gb.toFixed(1)} GB`;
+  return `${oneDecimal(gb)} GB`;
 }

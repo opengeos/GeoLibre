@@ -35,7 +35,10 @@ const VECTOR_PANEL_CLASS = "geolibre-vector-panel";
 // project file. Generous enough for every format the Add Vector Layer panel
 // loads (the spatial extension's GDAL readers), but a guard so a hand-edited
 // project cannot point `sourcePath` at an arbitrary file on disk. Matched
-// case-insensitively against the end of the path.
+// case-insensitively against the end of the path. Keep this in sync with
+// `VECTOR_FILE_DIALOG_EXTENSIONS` in the desktop app's `tauri-io.ts` (the
+// package boundary prevents sharing the list): a format loadable through the
+// picker but missing here would be dropped on reopen.
 const RESTORABLE_VECTOR_PATH =
   /\.(geojson|json|gpkg|geoparquet|parquet|fgb|flatgeobuf|csv|tsv|kml|kmz|gml|gpx|dxf|tab|shp|zip)$/i;
 
