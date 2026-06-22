@@ -328,15 +328,17 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
 /**
  * Replays one saved Add Vector Layer layer into the control, preserving its
  * id, name, visibility, opacity, and persisted render/style state. The source
- * is a URL (URL-backed layers) or a File re-read from disk (desktop local-file
- * layers); `localPath` is forwarded so the restored layer keeps its absolute
- * path and stays reloadable on the next reopen. Errors are logged, not thrown,
- * so one failed layer never aborts the others.
+ * is a URL (URL-backed layers), a File re-read from disk (desktop local-file
+ * layers), or an embedded FeatureCollection (web). `options.localPath` is
+ * forwarded as `sourcePath` so a re-read file keeps its absolute path and stays
+ * reloadable on the next reopen, and `options.companionFiles` carries a
+ * shapefile's sidecars. Errors are logged, not thrown, so one failed layer
+ * never aborts the others.
  *
  * @param control - The vector control to add the layer to.
  * @param layer - The saved store layer being restored.
- * @param source - The URL or File to load the data from.
- * @param localPath - The absolute path a File source was read from, if any.
+ * @param source - The URL, File, or FeatureCollection to load the data from.
+ * @param options - The shapefile sidecars and/or absolute path of a File source.
  * @returns A promise that settles when the layer has loaded or failed.
  */
 function replayVectorLayer(
@@ -439,7 +441,7 @@ async function ensureVectorControl(
 ): Promise<VectorControl | null> {
   const VectorControlClass = await getVectorControlClass();
 
-  vectorControl ??= createVectorControl(VectorControlClass, app);
+  vectorControl ??= createVectorControl(VectorControlClass);
 
   if (!vectorControlMounted) {
     const added = app.addMapControl(vectorControl, vectorControlPosition);
@@ -479,7 +481,6 @@ function getVectorControlClass(): Promise<VectorControlConstructor> {
 
 function createVectorControl(
   VectorControlClass: VectorControlConstructor,
-  app: GeoLibreAppAPI,
 ): VectorControl {
   const control = new VectorControlClass({
     className: "geolibre-vector-control",
@@ -499,11 +500,6 @@ function createVectorControl(
     // environments when a local extension path is configured.
     spatialExtensionPath: getSpatialExtensionPath(),
   });
-  // On desktop, route the panel's file browse through the host's native picker
-  // so a loose shapefile pulls in its sidecars and each layer keeps the
-  // absolute path it was read from (for restore on reopen). See
-  // wireDesktopFilePicker.
-  void app;
 
   for (const event of ["layeradded", "layerremoved", "layerupdated"] as const) {
     control.on(event, () => syncVectorLayersToStore(control));
