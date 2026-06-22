@@ -68,7 +68,7 @@ export class PluginManager {
     if (!plugin) return;
     if (this.active.has(id)) {
       try {
-        plugin.deactivate(app);
+        plugin.deactivate(scopeAppToPlugin(app, id));
       } catch (error) {
         console.warn(
           `Plugin '${id}' threw while deactivating during unregister.`,
@@ -218,11 +218,7 @@ export class PluginManager {
   deactivate(id: string, app: GeoLibreAppAPI): void {
     const plugin = this.plugins.get(id);
     if (!plugin || !this.active.has(id)) return;
-    // Teardown gets the raw `app`, not the scoped one `activate` hands out:
-    // deactivate only ever calls unregisterToolbarMenu (by id), which needs no
-    // owner. If scopeAppToPlugin ever wraps a method that matters at teardown,
-    // scope this call too (and unregister/restoreProjectState's deactivations).
-    plugin.deactivate(app);
+    plugin.deactivate(scopeAppToPlugin(app, id));
     this.active.delete(id);
     this.notify();
   }
@@ -317,7 +313,10 @@ export class PluginManager {
         }
 
         try {
-          await plugin.handleUrlParameters(app, new URLSearchParams(params));
+          await plugin.handleUrlParameters(
+            scopeAppToPlugin(app, id),
+            new URLSearchParams(params),
+          );
         } catch (error) {
           // Unmark so a later dispatch for the same context retries the
           // plugin instead of silently skipping it after a failure.
@@ -342,7 +341,10 @@ export class PluginManager {
   ): void {
     const plugin = this.plugins.get(id);
     if (!plugin?.setMapControlPosition) return;
-    const updated = plugin.setMapControlPosition(app, position);
+    const updated = plugin.setMapControlPosition(
+      scopeAppToPlugin(app, id),
+      position,
+    );
     if (updated === false) return;
     this.notify();
   }
@@ -364,7 +366,7 @@ export class PluginManager {
       if (targetActive.has(id)) continue;
       const plugin = this.plugins.get(id);
       if (!plugin) continue;
-      plugin.deactivate(app);
+      plugin.deactivate(scopeAppToPlugin(app, id));
       this.active.delete(id);
       changed = true;
     }
@@ -373,12 +375,15 @@ export class PluginManager {
     // are inactive at this point, so applyProjectState only caches their state
     // for the upcoming activate() call rather than doing live DOM work.
     for (const [id, plugin] of this.plugins) {
+      // One scoped app per plugin so any menu it (re)registers from
+      // setMapControlPosition/applyProjectState is owner-tagged correctly.
+      const scopedApp = scopeAppToPlugin(app, id);
       const defaultPosition = this.defaultMapControlPositions.get(id);
       const targetPosition = state?.mapControlPositions[id] ?? defaultPosition;
       if (targetPosition && plugin.setMapControlPosition) {
         const currentPosition = plugin.getMapControlPosition?.();
         if (currentPosition !== targetPosition) {
-          const updated = plugin.setMapControlPosition(app, targetPosition);
+          const updated = plugin.setMapControlPosition(scopedApp, targetPosition);
           if (updated !== false) changed = true;
         }
       }
@@ -391,7 +396,7 @@ export class PluginManager {
         (hasSetting || options.resetMissingSettings)
       ) {
         const updated = plugin.applyProjectState(
-          app,
+          scopedApp,
           hasSetting ? state.settings[id] : undefined,
         );
         if (updated !== false) changed = true;
@@ -437,10 +442,12 @@ export class PluginManager {
 /**
  * Return an app API scoped to `pluginId`: a shallow copy whose
  * `registerToolbarMenu` tags each menu with the registering plugin's id so the
- * toolbar can place it by owner (e.g. external plugin menus after Help). The
- * plugin keeps this scoped object for the lifetime of its activation, so even a
- * menu it registers asynchronously (after an `await` in `activate`) is tagged.
- * Returns the app unchanged when the host exposes no `registerToolbarMenu`.
+ * toolbar can place it by owner (e.g. external plugin menus after Help). Every
+ * lifecycle callback that hands a plugin the app (activate, deactivate,
+ * handleUrlParameters, setMapControlPosition, applyProjectState) passes a scoped
+ * app, so a menu the plugin (re)registers from any of them is tagged correctly,
+ * including one registered asynchronously after the callback returns. Returns
+ * the app unchanged when the host exposes no `registerToolbarMenu`.
  */
 function scopeAppToPlugin(
   app: GeoLibreAppAPI,

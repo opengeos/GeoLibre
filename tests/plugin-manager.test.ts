@@ -700,4 +700,43 @@ describe("PluginManager toolbar menu scoping", () => {
 
     assert.deepEqual(seen, ["async-menu-plugin"]);
   });
+
+  it("tags a menu (re)registered from applyProjectState, not just activate", () => {
+    const manager = new PluginManager();
+    const seen: Array<string | undefined> = [];
+    const scopedApp = {
+      registerToolbarMenu: (
+        _menu: unknown,
+        ownerPluginId?: string,
+      ) => {
+        seen.push(ownerPluginId);
+        return () => undefined;
+      },
+    } as unknown as GeoLibreAppAPI;
+
+    manager.register(
+      testPlugin({
+        id: "settings-menu-plugin",
+        // Plugins rebuild their menu as state changes; that can happen from
+        // applyProjectState during a project load, not only from activate.
+        applyProjectState: (api) =>
+          void api.registerToolbarMenu?.({
+            id: "settings-menu",
+            label: "Workbench",
+            items: [],
+          }),
+      }),
+    );
+    manager.restoreProjectState(
+      {
+        manifestUrls: [],
+        activePluginIds: [],
+        mapControlPositions: {},
+        settings: { "settings-menu-plugin": {} },
+      },
+      scopedApp,
+    );
+
+    assert.deepEqual(seen, ["settings-menu-plugin"]);
+  });
 });
