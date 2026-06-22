@@ -632,8 +632,8 @@
     "unit": "Unit",
     "titlePlacement": "Title placement",
     "placement": {
-      "outside": "Outside map frame",
-      "inside": "Inside map frame"
+      "outside": "Outside frame",
+      "inside": "Inside frame"
     },
     "alignment": "Alignment",
     "align": {
@@ -721,11 +721,14 @@
     },
     "borderColor": "Border color",
     "borderWidth": "Border width",
+    "mapBorderColor": "Map frame color",
+    "mapBorderWidth": "Map frame width",
     "errors": {
       "mapNotReady": "Map is not ready yet. Try again in a moment.",
       "captureFailed": "Could not capture the map image.",
       "captureFirst": "Capture the map before exporting.",
-      "exportFailed": "Failed to export {{format}}."
+      "exportFailed": "Failed to export {{format}}.",
+      "scaleOutOfRange": "This scale is outside the range the current view can reach; showing the closest available scale."
     },
     "legend": {
       "section": "Legend",

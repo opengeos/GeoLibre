@@ -330,3 +330,76 @@ describe("computeScaleRatio", () => {
     assert.ok(Math.abs(b / a - 2) < 1e-9, "doubling mpp doubles the ratio");
   });
 });
+
+/**
+ * A recording context that captures every `strokeRect` with the stroke style and
+ * line width in effect at the moment of the draw, so tests can assert how the
+ * map frame border (GH #749) is rendered.
+ */
+function strokeRecordingCanvas(): {
+  canvas: HTMLCanvasElement;
+  strokes: { x: number; w: number; strokeStyle: string; lineWidth: number }[];
+} {
+  const strokes: {
+    x: number;
+    w: number;
+    strokeStyle: string;
+    lineWidth: number;
+  }[] = [];
+  const state: Record<string, unknown> = { strokeStyle: "", lineWidth: 0 };
+  const ctx = new Proxy(state, {
+    get(target, prop) {
+      if (prop === "measureText") return () => ({ width: 10 });
+      if (prop === "strokeRect") {
+        return (x: number, _y: number, w: number) =>
+          strokes.push({
+            x,
+            w,
+            strokeStyle: String(target.strokeStyle),
+            lineWidth: Number(target.lineWidth),
+          });
+      }
+      if (prop in target) return target[prop as string];
+      return () => {};
+    },
+    set(target, prop, value) {
+      target[prop as string] = value;
+      return true;
+    },
+  });
+  const canvas = {
+    width: 400,
+    height: 400,
+    getContext: () => ctx,
+  } as unknown as HTMLCanvasElement;
+  return { canvas, strokes };
+}
+
+describe("drawLayout map frame border (GH #749)", () => {
+  // The body rectangle starts at the page margin (5 units = 5% of the 400px
+  // shorter side with default margins), so the body border stroke begins at
+  // x=20 and spans most of the page width.
+  const isBodyBorder = (s: { x: number; w: number }) => s.x === 20 && s.w > 200;
+
+  it("draws the frame in the chosen colour and thickness", () => {
+    const { canvas, strokes } = strokeRecordingCanvas();
+    drawLayout(
+      canvas,
+      baseOptions({ mapBorderColor: "#123456", mapBorderWidth: 5 }),
+    );
+    const frame = strokes.find(
+      (s) => isBodyBorder(s) && s.strokeStyle === "#123456",
+    );
+    assert.ok(frame, "expected the map frame to use the custom colour");
+    assert.ok(frame.lineWidth > 1, "expected a thicker frame for width 5");
+  });
+
+  it("hides the frame when the thickness is 0", () => {
+    const { canvas, strokes } = strokeRecordingCanvas();
+    drawLayout(canvas, baseOptions({ mapBorderWidth: 0 }));
+    assert.ok(
+      !strokes.some(isBodyBorder),
+      "expected no map frame stroke when width is 0",
+    );
+  });
+});

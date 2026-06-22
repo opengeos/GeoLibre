@@ -206,6 +206,16 @@ export interface LayoutOptions {
   /** Page border thickness on a 1–10 scale (relative to page size). */
   pageBorderWidth?: number;
   /**
+   * Colour of the map frame (the border drawn around the map body). Defaults to
+   * a neutral grey when omitted. GH #749.
+   */
+  mapBorderColor?: string;
+  /**
+   * Map frame thickness on a 0–10 scale (relative to page size); 0 hides the
+   * frame. Defaults to 1 (the original hairline). GH #749.
+   */
+  mapBorderWidth?: number;
+  /**
    * Fill colour drawn behind the map image. Shows through wherever the capture
    * is transparent (most visibly the area around the sphere in globe
    * projection). Defaults to a light grey.
@@ -534,10 +544,17 @@ export function drawLayout(
   }
   ctx.restore();
 
-  // Body border.
-  ctx.strokeStyle = BORDER;
-  ctx.lineWidth = Math.max(1, unit * 0.2);
-  ctx.strokeRect(bodyX, bodyY, bodyW, bodyH);
+  // Body border (the map frame). Colour and thickness are user-customizable; a
+  // thickness of 0 hides the frame entirely (GH #749). The thickness is a 0–10
+  // scale relative to the page so it reads the same at any export resolution.
+  const mapBorderScale = Math.max(0, Math.min(10, opts.mapBorderWidth ?? 1));
+  const mapBorderWidth =
+    mapBorderScale > 0 ? Math.max(1, unit * 0.2 * mapBorderScale) : 0;
+  if (mapBorderWidth > 0) {
+    ctx.strokeStyle = opts.mapBorderColor ?? BORDER;
+    ctx.lineWidth = mapBorderWidth;
+    ctx.strokeRect(bodyX, bodyY, bodyW, bodyH);
+  }
 
   // --- Title block (inside the map) --------------------------------------
   // Overlaid at the top of the map body with a translucent backing for legibility.
@@ -564,8 +581,18 @@ export function drawLayout(
       padY * 2 +
       (hasTitleText ? titleSize : 0) +
       (hasSubtitleText ? (hasTitleText ? subtitleSize * 1.6 : subtitleSize * 1.2) : 0);
+    // Keep the translucent backing clear of the map frame so it does not wash
+    // out the dark border line at the top/left/right edges (GH #748). The body
+    // border is centred on the body edge, so its inner half lies inside this
+    // fill; inset by the full border width to leave the frame line crisp.
+    const frameInset = mapBorderWidth;
     ctx.fillStyle = "rgba(255,255,255,0.7)";
-    ctx.fillRect(bodyX, bodyY, bodyW, blockH);
+    ctx.fillRect(
+      bodyX + frameInset,
+      bodyY + frameInset,
+      bodyW - frameInset * 2,
+      blockH - frameInset,
+    );
     if (hasTitleText) {
       ctx.fillStyle = INK;
       ctx.font = `600 ${titleSize}px system-ui, -apple-system, sans-serif`;

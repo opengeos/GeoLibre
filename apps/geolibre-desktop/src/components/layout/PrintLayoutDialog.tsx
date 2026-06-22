@@ -158,6 +158,10 @@ export function PrintLayoutDialog({
   const [showPageBorder, setShowPageBorder] = useState(false);
   const [pageBorderColor, setPageBorderColor] = useState("#111827");
   const [pageBorderWidth, setPageBorderWidth] = useState(2);
+  // Map frame (the border around the map body). Width is a 0–10 scale; 0 hides
+  // the frame. Defaults match the original hardcoded hairline (GH #749).
+  const [mapBorderColor, setMapBorderColor] = useState("#9ca3af");
+  const [mapBorderWidth, setMapBorderWidth] = useState(1);
   const [mapBackground, setMapBackground] = useState("#e5e7eb");
   // Draft for the free-form hex field; only complete #RGB / #RRGGBB values are
   // committed to mapBackground (which also drives <input type="color"> and the
@@ -261,6 +265,13 @@ export function PrintLayoutDialog({
   // what the user is typing.
   const scaleFocusedRef = useRef(false);
   const [scaleDraft, setScaleDraft] = useState("");
+  // Inline notice shown when a requested scale can't be reached at the map's
+  // zoom limits, so a clamped result is never silently swallowed (GH #743).
+  const [scaleNotice, setScaleNotice] = useState<string | null>(null);
+  // Fallback timer that forces a recapture if the map's "idle" event is delayed
+  // or never fires (e.g. WebKit throttling the occluded map canvas behind the
+  // dialog), so a scale change is never silently dropped (GH #743).
+  const idleFallbackRef = useRef<number | null>(null);
   // Width of the left controls column; dragged via the splitter handle.
   const [controlsWidth, setControlsWidth] = useState(CONTROLS_DEFAULT_WIDTH);
   // Mirror of controlsWidth so the resize handler can read the latest start
@@ -433,6 +444,10 @@ export function PrintLayoutDialog({
         map.off("idle", idleRecaptureRef.current);
         idleRecaptureRef.current = null;
       }
+      if (idleFallbackRef.current !== null) {
+        window.clearTimeout(idleFallbackRef.current);
+        idleFallbackRef.current = null;
+      }
       // An explicit override wins (used right after drawing, before state has
       // settled); otherwise clip to the stored extent only in extent mode.
       const clip =
@@ -484,6 +499,10 @@ export function PrintLayoutDialog({
       drawAbortRef.current?.abort();
       // Tear down an in-progress resize drag so its window listeners don't leak.
       resizeCleanupRef.current?.();
+      if (idleFallbackRef.current !== null) {
+        window.clearTimeout(idleFallbackRef.current);
+        idleFallbackRef.current = null;
+      }
       const map = mapControllerRef.current?.getMap();
       if (map) {
         if (idleRecaptureRef.current) {
@@ -528,6 +547,8 @@ export function PrintLayoutDialog({
       showPageBorder,
       pageBorderColor,
       pageBorderWidth,
+      mapBorderColor,
+      mapBorderWidth,
       mapBackground,
       colorbar: showColorbar
         ? {
@@ -596,6 +617,8 @@ export function PrintLayoutDialog({
       showPageBorder,
       pageBorderColor,
       pageBorderWidth,
+      mapBorderColor,
+      mapBorderWidth,
       mapBackground,
       showColorbar,
       colorbarRamp,
@@ -653,12 +676,28 @@ export function PrintLayoutDialog({
         return;
       }
       const newZoom = map.getZoom() + Math.log2(currentRatio / targetRatio);
-      const clampedZoom = Math.max(0, Math.min(24, newZoom));
-      // Drop a still-pending idle handler from a prior applyScale before
-      // registering a new one, so two quick scale changes don't both fire.
+      // Clamp to the map's own zoom limits (not a fixed 0–24) so the out-of-range
+      // notice reflects what this map can actually reach.
+      const minZoom = map.getMinZoom();
+      const maxZoom = map.getMaxZoom();
+      const clampedZoom = Math.max(minZoom, Math.min(maxZoom, newZoom));
+      // The requested scale needs a zoom past the map's limits, so it can only be
+      // applied partially: surface that instead of letting the value snap back
+      // with no explanation (GH #743). A reachable scale clears the notice.
+      setScaleNotice(
+        Math.abs(clampedZoom - newZoom) > 1e-3
+          ? t("printLayout.errors.scaleOutOfRange")
+          : null,
+      );
+      // Drop a still-pending idle handler / fallback timer from a prior applyScale
+      // before registering new ones, so two quick scale changes don't both fire.
       if (idleRecaptureRef.current) {
         map.off("idle", idleRecaptureRef.current);
         idleRecaptureRef.current = null;
+      }
+      if (idleFallbackRef.current !== null) {
+        window.clearTimeout(idleFallbackRef.current);
+        idleFallbackRef.current = null;
       }
       // No effective zoom change (already at target, or clamped): MapLibre won't
       // emit an "idle", so recapture directly rather than registering a handler
@@ -677,12 +716,28 @@ export function PrintLayoutDialog({
       const handler = () => {
         map.off("idle", handler);
         idleRecaptureRef.current = null;
+        if (idleFallbackRef.current !== null) {
+          window.clearTimeout(idleFallbackRef.current);
+          idleFallbackRef.current = null;
+        }
         recapture(null);
       };
       idleRecaptureRef.current = handler;
       map.on("idle", handler);
+      // Fallback: if "idle" is delayed or never arrives (some browsers throttle
+      // the occluded map canvas behind this dialog, so the zoom never settles and
+      // the scale would appear to silently do nothing), force the recapture after
+      // a short grace period. GH #743.
+      idleFallbackRef.current = window.setTimeout(() => {
+        idleFallbackRef.current = null;
+        if (idleRecaptureRef.current) {
+          map.off("idle", idleRecaptureRef.current);
+          idleRecaptureRef.current = null;
+          recapture(null);
+        }
+      }, 1500);
     },
-    [mapControllerRef, captureMode, currentRatio, recapture],
+    [mapControllerRef, captureMode, currentRatio, recapture, t],
   );
 
   // Hide the dialog so the map is interactive, let the user drag an extent box,
@@ -735,6 +790,9 @@ export function PrintLayoutDialog({
   const setMode = useCallback(
     (mode: "viewport" | "extent") => {
       if (mode === captureMode) return;
+      // The scale control is disabled in extent mode, so a stale out-of-range
+      // notice from a viewport scale attempt must not linger (GH #743).
+      if (mode === "extent") setScaleNotice(null);
       setCaptureMode(mode);
       recapture(mode === "extent" ? extentBbox : null);
     },
@@ -1082,6 +1140,39 @@ export function PrintLayoutDialog({
               </div>
             </div>
 
+            {/* Map frame border (color + thickness; 0 hides it). GH #749. */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="layout-map-border-color">
+                  {t("printLayout.mapBorderColor")}
+                </Label>
+                <input
+                  id="layout-map-border-color"
+                  type="color"
+                  className="h-9 w-full cursor-pointer rounded-md border border-input bg-background"
+                  value={mapBorderColor}
+                  onChange={(e) => setMapBorderColor(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="layout-map-border-width">
+                  {t("printLayout.mapBorderWidth")}
+                </Label>
+                <Input
+                  id="layout-map-border-width"
+                  type="number"
+                  min={0}
+                  max={10}
+                  value={mapBorderWidth}
+                  onChange={(e) =>
+                    setMapBorderWidth(
+                      Math.max(0, Math.min(10, Number(e.target.value) || 0)),
+                    )
+                  }
+                />
+              </div>
+            </div>
+
             {isMmPage && (
               <div className="space-y-1.5">
                 <Label htmlFor="layout-scale">
@@ -1135,6 +1226,9 @@ export function PrintLayoutDialog({
                     ))}
                   </Select>
                 </div>
+                {scaleNotice && (
+                  <p className="text-xs text-destructive">{scaleNotice}</p>
+                )}
               </div>
             )}
 
