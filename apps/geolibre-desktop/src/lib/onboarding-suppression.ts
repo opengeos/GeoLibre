@@ -1,4 +1,4 @@
-import { projectUrlFromLocation } from "./project-url";
+import { PROJECT_URL_PARAMS, projectUrlFromLocation } from "./project-url";
 
 // Values of `?welcome=` that turn the first-launch wizard off.
 const WELCOME_DISABLED_VALUES = new Set(["0", "false", "off", "no"]);
@@ -6,15 +6,31 @@ const WELCOME_DISABLED_VALUES = new Set(["0", "false", "off", "no"]);
 /**
  * Whether to suppress the first-launch onboarding wizard because the app is
  * opened as an embed/deep link, where the modal would just cover the map:
- *   - a `?url=` deep link (e.g. viewer.geolibre.app) opens straight into a
- *     shared project, or
+ *   - a project deep link (e.g. viewer.geolibre.app `?url=`) opens straight
+ *     into a shared project, or
  *   - an explicit `?welcome=0` (also `false`/`off`/`no`) opts out, for embeds
  *     that don't load a project URL but still want a clean first paint.
  *
  * @returns True when the onboarding wizard should not be shown.
  */
 export function shouldSuppressOnboarding(): boolean {
-  return projectUrlFromLocation() !== null || welcomeDisabledByParam();
+  return hasProjectDeepLinkIntent() || welcomeDisabledByParam();
+}
+
+/**
+ * Whether the URL signals an intent to open a project deep link. A recognized
+ * project-URL param key (`?url=`, `?project=`, ...) counts even when its value
+ * fails to resolve, so the onboarding modal never layers on top of the load
+ * error `useProjectUrlLoader` shows for a bad link; otherwise a valid bare
+ * `?https://...` project URL also counts.
+ *
+ * @returns True when a project deep link was requested.
+ */
+function hasProjectDeepLinkIntent(): boolean {
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  if (PROJECT_URL_PARAMS.some((key) => params.has(key))) return true;
+  return projectUrlFromLocation() !== null;
 }
 
 /**

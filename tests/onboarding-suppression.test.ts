@@ -37,6 +37,21 @@ describe("shouldSuppressOnboarding", () => {
     assert.equal(shouldSuppressOnboarding(), true);
   });
 
+  it("suppresses the wizard when a deep-link param key holds an invalid URL", () => {
+    // The intent to open a project (a recognized key is present) suppresses
+    // onboarding even if the value does not resolve, so the wizard never layers
+    // on top of the load error useProjectUrlLoader shows for a bad link.
+    for (const search of ["?url=not-a-valid-url", "?project=", "?projectUrl=ftp://x"]) {
+      withSearch(search);
+      assert.equal(shouldSuppressOnboarding(), true, search);
+    }
+  });
+
+  it("keeps the wizard for an invalid bare query with no recognized key", () => {
+    withSearch("?not-a-url");
+    assert.equal(shouldSuppressOnboarding(), false);
+  });
+
   it("suppresses the wizard for falsy welcome values", () => {
     for (const value of ["0", "false", "off", "no", "FALSE", " off "]) {
       withSearch(`?welcome=${encodeURIComponent(value)}`);
