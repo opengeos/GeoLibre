@@ -835,8 +835,11 @@ function DrawToolbar({
 function PickBanner({ onCancel }: { onCancel: () => void }) {
   const { t } = useTranslation();
   return (
-    // role="status" so screen readers announce placement mode when the banner
-    // mounts; it is the only cue once the dialog closes (#720 review).
+    // role="status" announces placement mode where live regions are read. The
+    // Cancel button additionally takes focus on mount (the dialog that had it
+    // just closed, so focus would otherwise fall to <body>) and is described by
+    // the hint, so keyboard and screen-reader users are told what to do even
+    // when a live region injected on mount is missed (#720 review).
     <div
       role="status"
       className="fixed bottom-6 left-1/2 z-50 flex max-w-[95vw] -translate-x-1/2 flex-col gap-2 rounded-lg border bg-card p-3 shadow-xl"
@@ -847,11 +850,17 @@ function PickBanner({ onCancel }: { onCancel: () => void }) {
           {t("fieldCollection.pickBannerTitle")}
         </span>
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p id="fc-pick-hint" className="text-xs text-muted-foreground">
         {t("fieldCollection.pickBannerHint")}
       </p>
       <div className="flex justify-end">
-        <Button variant="ghost" size="sm" onClick={onCancel}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onCancel}
+          autoFocus
+          aria-describedby="fc-pick-hint"
+        >
           {t("common.cancel")}
         </Button>
       </div>
