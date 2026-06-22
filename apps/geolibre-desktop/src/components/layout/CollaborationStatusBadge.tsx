@@ -164,7 +164,10 @@ export function CollaborationStatusBadge() {
 
       {/* Expanded roster: who is connected, plus a way back to the dialog. */}
       {expanded && (
-        <div className="pointer-events-auto rounded-md border bg-background/95 shadow-md backdrop-blur-sm">
+        <div
+          id="collab-roster-panel"
+          className="pointer-events-auto rounded-md border bg-background/95 shadow-md backdrop-blur-sm"
+        >
           <div className="flex items-center justify-between border-b px-2.5 py-1.5">
             <span className="text-xs font-medium">
               {t("collaborate.participants", {
@@ -229,6 +232,7 @@ export function CollaborationStatusBadge() {
         type="button"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
+        aria-controls="collab-roster-panel"
         aria-label={t("collaborate.sessionStatusTooltip")}
         title={t("collaborate.sessionStatusTooltip")}
         className="pointer-events-auto flex items-center gap-1.5 self-start rounded-full border bg-background/95 px-2.5 py-1 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm transition hover:bg-accent"
@@ -245,9 +249,11 @@ export function CollaborationStatusBadge() {
         </span>
         <Users className="h-3.5 w-3.5" aria-hidden="true" />
         <span>{participants.length}</span>
+        {/* The roster grows upward above the pill: point up when collapsed
+            ("reveal above"), down when expanded ("collapse"). */}
         <ChevronUp
           className={`h-3 w-3 transition-transform ${
-            expanded ? "" : "rotate-180"
+            expanded ? "rotate-180" : ""
           }`}
           aria-hidden="true"
         />
