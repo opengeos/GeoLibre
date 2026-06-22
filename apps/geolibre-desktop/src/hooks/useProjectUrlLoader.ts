@@ -1,6 +1,6 @@
-import { parseProject, useAppStore } from "@geolibre/core";
+import { useAppStore } from "@geolibre/core";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { projectUrlFromLocation } from "../lib/project-url";
+import { fetchProjectFromUrl, projectUrlFromLocation } from "../lib/project-url";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
 
 export type ProjectUrlLoadState =
@@ -28,7 +28,7 @@ export function useProjectUrlLoader(): ProjectUrlLoadState {
       status: "loading",
     });
 
-    void loadProjectFromUrl(projectUrl, abortController.signal)
+    void fetchProjectFromUrl(projectUrl, { signal: abortController.signal })
       .then((project) =>
         resolveProjectXyzLayers(project, abortController.signal),
       )
@@ -69,19 +69,4 @@ export function useProjectUrlLoader(): ProjectUrlLoadState {
   }, [loadProject, projectUrl]);
 
   return state;
-}
-
-async function loadProjectFromUrl(projectUrl: string, signal: AbortSignal) {
-  const response = await fetch(projectUrl, {
-    headers: { Accept: "application/json, text/plain;q=0.9, */*;q=0.8" },
-    signal,
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      `Could not load project URL: HTTP ${response.status} ${response.statusText}`,
-    );
-  }
-
-  return parseProject(await response.text());
 }
