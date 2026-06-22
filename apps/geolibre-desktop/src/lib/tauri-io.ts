@@ -668,7 +668,7 @@ export async function readVectorFileWithSidecars(
   }
 }
 
-function isAbsoluteLocalPath(path: string): boolean {
+export function isAbsoluteLocalPath(path: string): boolean {
   const trimmed = path.trim();
   return (
     trimmed.startsWith("/") ||

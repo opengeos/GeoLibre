@@ -6,12 +6,14 @@ import {
   type GeoLibreLayer,
 } from "@geolibre/core";
 import { materializeEmbeddableVectorLayers } from "@geolibre/plugins";
+import type { FeatureCollection } from "geojson";
 import { type FormEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getPluginManager } from "./usePlugins";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
 import {
   browserSaveFallsBackToDownload,
+  isAbsoluteLocalPath,
   isHttpUrl,
   isTauri,
   openProjectFile,
@@ -41,7 +43,13 @@ export interface EmbedVectorDataPrompt {
   count: number;
   /** Total embedded size in bytes, for the size warning. */
   bytes: number;
-  resolve: (choice: "embed" | "skip" | "cancel") => void;
+  /**
+   * Desktop hosts can save the layers as file references (reloaded from disk on
+   * reopen) instead of embedding, so the "don't embed" choice is labelled and
+   * described differently than on the web (where it discards the data).
+   */
+  desktop: boolean;
+  resolve: (choice: "embed" | "noembed" | "cancel") => void;
 }
 
 /**
@@ -66,6 +74,27 @@ function ensureProjectFileName(name: string): string {
   return /\.(geolibre\.json|geolibre|json)$/i.test(trimmed)
     ? trimmed
     : `${trimmed}.geolibre.json`;
+}
+
+/**
+ * Detects a plain GeoJSON layer that a desktop drag-drop or Add Data import
+ * embedded from a local file whose absolute path was captured, so its data can
+ * be re-read from disk on reopen rather than embedded in the project. Excludes
+ * Add Vector Layer control layers (restored by their own path) and other
+ * external-native/plugin layers, and any layer whose `sourcePath` is a URL.
+ *
+ * @param layer - A store layer.
+ * @returns True when the layer's features should be saved as a path, not embedded.
+ */
+function isReloadableLocalFileLayer(layer: GeoLibreLayer): boolean {
+  return (
+    layer.type === "geojson" &&
+    Boolean(layer.geojson) &&
+    typeof layer.sourcePath === "string" &&
+    isAbsoluteLocalPath(layer.sourcePath) &&
+    layer.metadata.externalNativeLayer !== true &&
+    layer.metadata.sourceKind == null
+  );
 }
 
 /**
@@ -280,53 +309,110 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
 
   // Ask whether to embed local vector layers' data in the saved file. Resolves
   // when the user picks an option in the dialog.
-  const askEmbedVectorData = (count: number, bytes: number) =>
-    new Promise<"embed" | "skip" | "cancel">((resolve) => {
-      setEmbedVectorDataPrompt({ count, bytes, resolve });
+  const askEmbedVectorData = (count: number, bytes: number, desktop: boolean) =>
+    new Promise<"embed" | "noembed" | "cancel">((resolve) => {
+      setEmbedVectorDataPrompt({ count, bytes, desktop, resolve });
     });
 
-  const resolveEmbedVectorDataPrompt = (choice: "embed" | "skip" | "cancel") => {
+  const resolveEmbedVectorDataPrompt = (
+    choice: "embed" | "noembed" | "cancel",
+  ) => {
     embedVectorDataPrompt?.resolve(choice);
     setEmbedVectorDataPrompt(null);
   };
 
-  // Web only: local-file Add Vector Layer layers have no path to re-read on
-  // reopen (the browser hides it), so offer to embed their features in the
-  // saved file. Returns the layers to serialize (with data embedded), an empty
-  // result to save unchanged, or "cancel" to abort the save. Desktop layers
-  // reload from their stored path, so nothing is embedded there.
-  const resolveLayersForSave = async (): Promise<
-    { layers?: GeoLibreLayer[] } | "cancel"
-  > => {
-    if (isTauri()) return {};
-    const state = useAppStore.getState();
-    const embeddable = await materializeEmbeddableVectorLayers(state.layers);
-    if (embeddable.size === 0) return {};
+  // Builds the embed-mode layers: every local vector layer carries its own
+  // features so the project is self-contained (portable to another machine or
+  // share.geolibre.app). Add Vector Layer control layers get their features
+  // materialized into `metadata.embeddedGeoJSON`; plain GeoJSON layers already
+  // hold their `geojson`. The `localFileReloadable` flag is cleared so the
+  // embedded data — not a file path that may not exist elsewhere — is what
+  // restores. Used by the save dialog's Embed choice and by Share (always).
+  const buildEmbeddedLayers = async (
+    layers: GeoLibreLayer[],
+  ): Promise<GeoLibreLayer[]> => {
+    const embeddable = await materializeEmbeddableVectorLayers(layers);
+    return layers.map((layer) => {
+      let metadata = layer.metadata;
+      const collection = embeddable.get(layer.id);
+      if (collection) metadata = { ...metadata, embeddedGeoJSON: collection };
+      if (metadata.localFileReloadable === true) {
+        const { localFileReloadable: _drop, ...rest } = metadata;
+        metadata = rest;
+      }
+      return metadata === layer.metadata ? layer : { ...layer, metadata };
+    });
+  };
 
-    // Encode to UTF-8 for an accurate byte count: JSON.stringify().length is
-    // UTF-16 code units, which understates non-ASCII text (place names, etc.).
+  // Sums the UTF-8 byte size of every local layer's features, for the embed
+  // prompt's size warning. Vector control layers are materialized; plain
+  // GeoJSON layers use their `geojson`.
+  const estimateEmbedBytes = (
+    layers: GeoLibreLayer[],
+    embeddable: Map<string, FeatureCollection>,
+  ): number => {
     const encoder = new TextEncoder();
     let bytes = 0;
     for (const collection of embeddable.values()) {
       bytes += encoder.encode(JSON.stringify(collection)).length;
     }
-    const choice = await askEmbedVectorData(embeddable.size, bytes);
-    if (choice === "cancel") return "cancel";
-    if (choice === "skip") return {};
+    for (const layer of layers) {
+      if (isReloadableLocalFileLayer(layer) && layer.geojson) {
+        bytes += encoder.encode(JSON.stringify(layer.geojson)).length;
+      }
+    }
+    return bytes;
+  };
 
-    // Re-read the layers after the modal: the store may have changed while the
-    // prompt was open (layers added/removed/reordered). Embedded layer ids
-    // still present get their data; any that vanished are simply skipped.
+  // Decides how a save serializes local vector layers. On the web they can only
+  // be embedded (no filesystem path), so the prompt offers Embed or Save
+  // without data. On desktop they can also be saved as file references that
+  // reload from disk on reopen, so the prompt offers Embed or Save file
+  // references. Returns the layers override to serialize, an empty result to use
+  // the live layers as-is, or "cancel" to abort the save.
+  const resolveLayersForSave = async (): Promise<
+    { layers?: GeoLibreLayer[] } | "cancel"
+  > => {
+    const state = useAppStore.getState();
+    const embeddable = await materializeEmbeddableVectorLayers(state.layers);
+    const localFileLayers = isTauri()
+      ? state.layers.filter(isReloadableLocalFileLayer)
+      : [];
+    if (embeddable.size === 0 && localFileLayers.length === 0) return {};
+
+    const count = embeddable.size + localFileLayers.length;
+    const bytes = estimateEmbedBytes(state.layers, embeddable);
+    const choice = await askEmbedVectorData(count, bytes, isTauri());
+    if (choice === "cancel") return "cancel";
+
+    if (choice === "embed") {
+      return { layers: await buildEmbeddedLayers(useAppStore.getState().layers) };
+    }
+
+    // "noembed": on the web this saves without the local data (those layers are
+    // lost on reopen); on desktop it saves file references that reload from
+    // disk, so flag the plain-GeoJSON local layers (prepareLayerForSave then
+    // drops their embedded copy; Add Vector Layer layers already carry a path).
+    if (!isTauri()) return {};
+    let changed = false;
     const layers = useAppStore.getState().layers.map((layer) => {
-      const collection = embeddable.get(layer.id);
-      return collection
-        ? {
-            ...layer,
-            metadata: { ...layer.metadata, embeddedGeoJSON: collection },
-          }
-        : layer;
+      if (!isReloadableLocalFileLayer(layer)) return layer;
+      changed = true;
+      return {
+        ...layer,
+        metadata: { ...layer.metadata, localFileReloadable: true },
+      };
     });
-    return { layers };
+    return changed ? { layers } : {};
+  };
+
+  // Builds the current project with all local vector data embedded, for sharing.
+  // A shared project is opened on another machine (or in the browser) where the
+  // original files do not exist, so it must be self-contained — never file
+  // references. Used by the Share dialog.
+  const buildEmbeddedProject = async (nameOverride?: string) => {
+    const layers = await buildEmbeddedLayers(useAppStore.getState().layers);
+    return buildCurrentProject(nameOverride, layers);
   };
 
   // Ask the user to name the project file. Used only when saving falls back to
@@ -475,6 +561,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     handleOpenFromUrl,
     handleOpenRecent,
     buildCurrentProject,
+    buildEmbeddedProject,
     handleSave,
     handleSaveAs,
   };

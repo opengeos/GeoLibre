@@ -1062,6 +1062,16 @@ function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
     layer = rest;
   }
 
+  // A local-file layer the desktop host can re-read from its absolute path on
+  // reopen (a drag-dropped or Add Data vector file) does not embed its features
+  // either: the path is saved and the data is reloaded from disk. The flag is
+  // only set when a real path was captured (desktop), so a web project — which
+  // cannot re-read a path — never sets it and keeps the embedded copy.
+  if (layer.geojson && layer.metadata.localFileReloadable === true) {
+    const { geojson: _geojson, ...rest } = layer;
+    layer = rest;
+  }
+
   if (layer.type !== "xyz") return layer;
 
   const originalUrl =

@@ -54,6 +54,7 @@ import {
   OsmPbfTooLargeError,
   OSM_PBF_SIZE_WARN_BYTES,
 } from "../../lib/osm-pbf-loader";
+import { restoreLocalFileLayers } from "../../lib/restore-local-layers";
 import {
   createAppAPI,
   getPluginManager,
@@ -647,6 +648,9 @@ export function DesktopShell({
     restoreThreeDTilesLayers(appAPI);
     restoreRasterLayers(appAPI);
     restoreVectorLayers(appAPI);
+    // Re-read drag-dropped / Add Data local-file GeoJSON layers from disk
+    // (their data was saved as a path, not embedded).
+    void restoreLocalFileLayers();
     // Let layer-sync push the store-derived beforeId into the raster control so
     // deck.gl COG rasters interleave with vector layers instead of always
     // drawing on top.

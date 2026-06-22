@@ -420,6 +420,42 @@ describe("project parsing", () => {
     // The reload path is preserved so the layer still restores on reopen.
     assert.equal(project.layers[0].sourcePath, "/home/user/data/buildings.gpkg");
   });
+
+  it("drops geojson for a plain local-file layer flagged localFileReloadable", () => {
+    // A drag-dropped or Add Data desktop layer whose absolute path was captured:
+    // the data is re-read from disk on reopen, so it must not be embedded.
+    const project = projectFromStore({
+      projectName: "Dropped file",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [
+        geojsonLayer({
+          id: "dropped",
+          source: { type: "geojson" },
+          sourcePath: "/home/user/data/cities.geojson",
+          metadata: { localFileReloadable: true },
+          geojson: {
+            type: "FeatureCollection",
+            features: [
+              {
+                type: "Feature",
+                properties: {},
+                geometry: { type: "Point", coordinates: [1, 2] },
+              },
+            ],
+          },
+        }),
+      ],
+      preferences: createEmptyProject().preferences,
+      metadata: {},
+    });
+
+    assert.equal(project.layers[0].geojson, undefined);
+    assert.equal(project.layers[0].sourcePath, "/home/user/data/cities.geojson");
+    assert.equal(project.layers[0].metadata.localFileReloadable, true);
+  });
 });
 
 describe("multi-map grid persistence", () => {

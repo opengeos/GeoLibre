@@ -967,9 +967,11 @@ export function TopToolbar({
         open={shareDialogOpen}
         onOpenChange={setShareDialogOpen}
         currentTitle={projectName}
-        getProject={(title) => {
+        getProject={async (title) => {
+          // Shared projects are opened on another machine where the local files
+          // don't exist, so always embed the vector data (never file references).
           const { content, defaultProjectName } =
-            projectFiles.buildCurrentProject(title);
+            await projectFiles.buildEmbeddedProject(title);
           // Strip path separators, control chars, and other characters that are
           // illegal in filenames so the server gets a predictable name.
           const safeName = defaultProjectName.replace(

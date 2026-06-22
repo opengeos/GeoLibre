@@ -178,12 +178,17 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
           <DialogHeader>
             <DialogTitle>{t("toolbar.item.embedVectorTitle")}</DialogTitle>
             <DialogDescription>
-              {t("toolbar.item.embedVectorDesc", {
-                count: projectFiles.embedVectorDataPrompt?.count ?? 0,
-                size: formatByteSize(
-                  projectFiles.embedVectorDataPrompt?.bytes ?? 0,
-                ),
-              })}
+              {t(
+                projectFiles.embedVectorDataPrompt?.desktop
+                  ? "toolbar.item.embedVectorDescDesktop"
+                  : "toolbar.item.embedVectorDesc",
+                {
+                  count: projectFiles.embedVectorDataPrompt?.count ?? 0,
+                  size: formatByteSize(
+                    projectFiles.embedVectorDataPrompt?.bytes ?? 0,
+                  ),
+                },
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2">
@@ -197,9 +202,15 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
             </Button>
             <Button
               variant="outline"
-              onClick={() => projectFiles.resolveEmbedVectorDataPrompt("skip")}
+              onClick={() =>
+                projectFiles.resolveEmbedVectorDataPrompt("noembed")
+              }
             >
-              {t("toolbar.item.embedVectorSkipButton")}
+              {t(
+                projectFiles.embedVectorDataPrompt?.desktop
+                  ? "toolbar.item.embedVectorReferenceButton"
+                  : "toolbar.item.embedVectorSkipButton",
+              )}
             </Button>
             <Button
               onClick={() => projectFiles.resolveEmbedVectorDataPrompt("embed")}

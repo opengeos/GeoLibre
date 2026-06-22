@@ -33,7 +33,9 @@ interface ShareProjectDialogProps {
    * Lazily serialize the current project (under the given title) when the user
    * confirms the upload.
    */
-  getProject: (title: string) => { content: string; filename: string };
+  getProject: (
+    title: string,
+  ) => Promise<{ content: string; filename: string }>;
 }
 
 const SETTINGS_TOKEN_URL = `${resolveShareBaseUrl()}/settings`;
@@ -95,7 +97,7 @@ export function ShareProjectDialog({
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const { content, filename } = getProject(title.trim());
+      const { content, filename } = await getProject(title.trim());
       const uploaded = await uploadProjectToShare({
         token: shareToken,
         filename,
