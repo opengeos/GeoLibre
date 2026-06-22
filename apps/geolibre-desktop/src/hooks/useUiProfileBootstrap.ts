@@ -46,10 +46,17 @@ export function useUiProfileBootstrap(): {
     (state) => state.desktopSettings.uiProfile,
   );
 
-  // A `?url=` deep link (e.g. the viewer.geolibre.app embed) opens straight into
-  // a shared project, so the first-launch onboarding wizard would just get in
-  // the way. Computed once: the location does not change during a session.
-  const hasProjectDeepLink = useMemo(() => projectUrlFromLocation() !== null, []);
+  // Suppress the first-launch onboarding wizard when the app is opened as an
+  // embed/deep link, where the modal would just cover the map:
+  //   - a `?url=` deep link (e.g. viewer.geolibre.app) opens straight into a
+  //     shared project, or
+  //   - an explicit `?welcome=0` (also `false`/`off`/`no`) opts out, for embeds
+  //     that don't load a project URL but still want a clean first paint.
+  // Computed once: the location does not change during a session.
+  const suppressOnboarding = useMemo(
+    () => projectUrlFromLocation() !== null || welcomeDisabledByParam(),
+    [],
+  );
 
   // One-time admin-profile check. Built-in plugins are registered synchronously
   // at module load, so they are all present here; externally-loaded plugins are
@@ -124,7 +131,7 @@ export function useUiProfileBootstrap(): {
     adminChecked &&
     !uiProfile.onboarded &&
     !uiProfile.locked &&
-    !hasProjectDeepLink;
+    !suppressOnboarding;
 
   // Marks onboarding complete when the wizard is dismissed without a choice
   // (Escape/overlay). The wizard's own buttons set `onboarded` first, so this is
@@ -139,4 +146,20 @@ export function useUiProfileBootstrap(): {
   }, []);
 
   return { showOnboarding, dismissOnboarding };
+}
+
+// Values of `?welcome=` that turn the first-launch wizard off.
+const WELCOME_DISABLED_VALUES = new Set(["0", "false", "off", "no"]);
+
+/**
+ * Whether the URL explicitly opts out of the first-launch onboarding wizard via
+ * `?welcome=0` (also `false`, `off`, or `no`). Lets an embed suppress the modal
+ * without depending on a `?url=` project deep link.
+ *
+ * @returns True when a falsy `welcome` query parameter is present.
+ */
+function welcomeDisabledByParam(): boolean {
+  if (typeof window === "undefined") return false;
+  const value = new URLSearchParams(window.location.search).get("welcome");
+  return value !== null && WELCOME_DISABLED_VALUES.has(value.trim().toLowerCase());
 }

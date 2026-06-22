@@ -28,6 +28,7 @@ A chrome-free `maponly` embed shows only the map, as in this shared 3D Tiles pro
 | `panels` | `panels=none` | Hides the Layers, Style, and Attribute table panels. `hidden`, `hide`, and `off` are aliases. |
 | `hidePanels` | `hidePanels=true` | Alternative way to hide those panels. |
 | `maponly` | `maponly` | Hides all chrome (toolbar, panels, and status bar), leaving only the map. The bare flag or `true`, `1`, `yes`, `on` enable it. |
+| `welcome` | `welcome=0` | Hides the first-launch welcome wizard. Accepts `0`, `false`, `off`, or `no`. A `url=` deep link already suppresses it automatically. |
 | `theme` | `theme=dark` | Sets the initial color theme, overriding the OS preference. Accepts `dark` or `light`; the in-app toggle still works afterward. |
 
 Parameters combine. For a narrow, chrome-free, dark embed of a shared project:
