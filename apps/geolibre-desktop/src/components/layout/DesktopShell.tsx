@@ -65,7 +65,6 @@ import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
 import { registerXyzTileProtocol } from "../../lib/xyz-url";
 import { useEmbedBridge } from "../../hooks/useEmbedBridge";
 import { useRasterIdentify } from "../../hooks/useRasterIdentify";
-import { useExpandedPanelEdge } from "../../hooks/useRightPanels";
 import { BoundsRestrictionIndicator } from "./BoundsRestrictionIndicator";
 import { MapGrid } from "./MapGrid";
 import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
@@ -422,16 +421,12 @@ export function DesktopShell({
   const pythonConsoleOpen = useAppStore((s) => s.ui.pythonConsoleOpen);
   const notebookOpen = useAppStore((s) => s.ui.notebookOpen);
   const storymapPresenting = useAppStore((s) => s.ui.storymapPresenting);
-  // An *expanded* plugin panel claims one workspace edge: a right-docked one
-  // collapses the Style panel, a left-docked one collapses the Layers panel,
-  // each restoring when the plugin panel closes, moves to the other edge, or is
-  // itself collapsed to its rail (issue #712).
-  const expandedPanelEdge = useExpandedPanelEdge();
-  const pluginRightPanelActive = expandedPanelEdge === "right";
-  const pluginLeftPanelActive = expandedPanelEdge === "left";
-  // The plugin panel's width is owned here (per app instance) and shared by its
-  // left and right slots, so a user resize survives moving the panel between
-  // edges without a module-level global (which would leak across embeds).
+  // A plugin panel docks at one of three positions beside the Layers/Style
+  // panels (far-left, left-of-style, far-right) and the user steps it between
+  // them; the built-in panels stay visible in every position (issue #712). The
+  // panel's width is owned here (per app instance) and shared across the dock
+  // slots, so a user resize survives moving the panel without a module-level
+  // global (which would leak across embeds).
   const [pluginPanelWidth, setPluginPanelWidth] = useState(
     PLUGIN_PANEL_DEFAULT_WIDTH,
   );
@@ -1335,6 +1330,13 @@ export function DesktopShell({
         data-workspace-row=""
         className="relative flex min-h-0 flex-1 flex-col md:flex-row"
       >
+        <SectionErrorBoundary label="Plugin panel (far-left)">
+          <PluginRightPanel
+            dock="far-left"
+            width={pluginPanelWidth}
+            onWidthChange={setPluginPanelWidth}
+          />
+        </SectionErrorBoundary>
         {layoutOptions.layerPanelVisible ? (
           <SectionErrorBoundary label="Layer panel">
             <LayerPanel
@@ -1347,17 +1349,10 @@ export function DesktopShell({
               onOpenRasterStylePanel={() =>
                 openRasterLayerPanel(createAppAPI(mapControllerRef))
               }
-              autoCollapse={storymapPresenting || pluginLeftPanelActive}
+              autoCollapse={storymapPresenting}
             />
           </SectionErrorBoundary>
         ) : null}
-        <SectionErrorBoundary label="Plugin panel (left)">
-          <PluginRightPanel
-            slot="left"
-            width={pluginPanelWidth}
-            onWidthChange={setPluginPanelWidth}
-          />
-        </SectionErrorBoundary>
         <main
           // `isolate` creates a stacking context so map-panel z-indexes (up to 10000) stay below body-portaled dialogs. See #451.
           className={`relative isolate min-w-0 flex-1 overflow-hidden ${
@@ -1385,6 +1380,13 @@ export function DesktopShell({
             <FloatingPanels />
           </SectionErrorBoundary>
         </main>
+        <SectionErrorBoundary label="Plugin panel (left of Style)">
+          <PluginRightPanel
+            dock="left-of-style"
+            width={pluginPanelWidth}
+            onWidthChange={setPluginPanelWidth}
+          />
+        </SectionErrorBoundary>
         {/* The notebook claims the workspace's right half, so the Style panel
             collapses to its rail while the notebook is open (Processing →
             Jupyter Notebook) rather than unmounting; the user can re-expand it.
@@ -1394,15 +1396,13 @@ export function DesktopShell({
             <StylePanel
               mapControllerRef={mapControllerRef}
               onResizeStart={startStylePanelResize}
-              autoCollapse={
-                notebookOpen || storymapPresenting || pluginRightPanelActive
-              }
+              autoCollapse={notebookOpen || storymapPresenting}
             />
           </SectionErrorBoundary>
         ) : null}
-        <SectionErrorBoundary label="Plugin panel (right)">
+        <SectionErrorBoundary label="Plugin panel (far-right)">
           <PluginRightPanel
-            slot="right"
+            dock="far-right"
             width={pluginPanelWidth}
             onWidthChange={setPluginPanelWidth}
           />

@@ -91,7 +91,8 @@ export interface GeoLibreAppAPI {
   collapseRightPanel?: (id: string) => void;
   closeRightPanel?: (id: string) => void;
   getActiveRightPanel?: () => string | null;
-  setActiveRightPanelSide?: (side: "left" | "right") => void;
+  setActiveRightPanelDock?: (dock: "far-left" | "left-of-style" | "far-right") => void;
+  getActiveRightPanelDock?: () => "far-left" | "left-of-style" | "far-right" | null;
   // Top toolbar menus (see "Toolbar menus" below).
   registerToolbarMenu?: (menu: GeoLibreToolbarMenu) => () => void;
   unregisterToolbarMenu?: (id: string) => void;
@@ -128,8 +129,8 @@ export interface GeoLibreFloatingPanelRegistration {
 export interface GeoLibreRightPanelRegistration {
   id: string;
   title: string;
-  /** Dock side: "right" (default, collapses Style) or "left" (collapses Layers). */
-  side?: "left" | "right";
+  /** Initial dock: "far-right" (default), "left-of-style", or "far-left". */
+  dock?: "far-left" | "left-of-style" | "far-right";
   /** Optional rail icon: a URL or data: URI rendered as an image. */
   icon?: string;
   /** Preferred expanded width in px (desktop only; host-clamped). */
@@ -276,10 +277,10 @@ export const myPlugin: GeoLibrePlugin = {
 Notes:
 
 - `render(container)` is called once with an empty element you fill with plain DOM. An external plugin cannot share GeoLibre's React instance, so the contract is DOM, not a React node. The container stays mounted across collapse, so any state in your DOM persists; the returned cleanup runs on close or unregister.
-- Only one plugin right panel is the active right-side workspace at a time. While one is active GeoLibre collapses the Style panel to its rail and restores its previous state when the plugin panel closes, so the two never compete for the same space.
+- Only one plugin panel is active at a time. The built-in Layers and Style panels stay fully visible in every dock position.
 - `openRightPanel(id)` makes the panel active and expanded (it also expands a collapsed panel); `collapseRightPanel(id)` collapses it to its rail without closing; `closeRightPanel(id)` releases the workspace; `getActiveRightPanel()` returns the active id or `null`.
 - The panel is a flex sibling of the map, so opening it shrinks the map view (the map keeps filling the remaining space); no manual map padding is required.
-- **Docking side:** set `side: "left"` to dock at the far left (collapsing the Layers panel) instead of the default far right (collapsing the Style panel). The user can move the panel between edges at runtime with the move button in the panel header, and a plugin can do the same with `app.setActiveRightPanelSide?.("left" | "right")`. The chosen side resets to the panel's declared `side` when it closes or another panel opens.
+- **Dock position:** a panel docks at one of three positions (left to right): `far-left` (left of the Layers panel), `left-of-style` (between the map and the Style panel), or `far-right` (right of the Style panel, the default). Set `dock` on the registration to choose the initial position. The user steps the panel between positions at runtime with the two move buttons in the panel header (disabled at the ends), and a plugin can set it directly with `app.setActiveRightPanelDock?.("far-left" | "left-of-style" | "far-right")`. The position resets to the panel's declared `dock` when it closes or another panel opens.
 - These methods are typed optional for forward-compatibility with host variants that have no right sidebar, so call them with optional chaining (`app.registerRightPanel?.(...)`).
 
 ## Toolbar menus
@@ -310,7 +311,7 @@ Each item is an **action** (`onSelect`, the default when `type` is omitted), a *
 
 ## Floating panels
 
-A floating panel is a draggable, closeable card the host overlays on the map's top-left corner. Unlike a right panel (a single docked workspace that collapses the Style panel), several floating panels can be open at once and they do not shrink the map. The render contract is the same plain-DOM `render(container)` as right panels.
+A floating panel is a draggable, closeable card the host overlays on the map's top-left corner. Unlike a dockable right panel (one active panel docked at a fixed position), several floating panels can be open at once and they do not shrink the map. The render contract is the same plain-DOM `render(container)` as right panels.
 
 ```typescript
 const unregister = app.registerFloatingPanel?.({

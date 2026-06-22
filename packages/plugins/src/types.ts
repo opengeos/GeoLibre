@@ -231,13 +231,13 @@ export interface GeoLibreAppAPI {
   /** Id of the active right-side workspace panel, or null when none is open. */
   getActiveRightPanel?: () => string | null;
   /**
-   * Move the active right panel to the given side ("left" or "right") of the
-   * workspace, overriding its declared `side` until it closes. Mirrors the
-   * user-facing move button so a plugin can reposition its own panel.
+   * Dock the active panel at a specific position ("far-left", "left-of-style",
+   * or "far-right"), mirroring the user-facing move buttons so a plugin can
+   * reposition its own panel. No-op when no panel is active.
    */
-  setActiveRightPanelSide?: (side: "left" | "right") => void;
-  /** Which side the active right panel docks on, or null when none is open. */
-  getActiveRightPanelSide?: () => "left" | "right" | null;
+  setActiveRightPanelDock?: (dock: GeoLibreRightPanelDock) => void;
+  /** Where the active panel docks, or null when none is open. */
+  getActiveRightPanelDock?: () => GeoLibreRightPanelDock | null;
   /**
    * Register a plugin-owned top-level toolbar menu shown in the GeoLibre banner
    * beside the built-in menus, with nested submenus and action items. Returns
@@ -358,12 +358,21 @@ export interface GeoLibreFloatingPanelRegistration {
 }
 
 /**
- * A plugin-owned right-sidebar panel. The host renders the registered panel in
- * its own dock beside the Style panel, with a collapsible rail, a header (title
- * plus collapse/close buttons), and a resize handle. The plugin owns only the
- * content: `render` is called once with an empty container element the plugin
- * fills with its own DOM (an external plugin cannot share GeoLibre's React, so
- * the contract is plain DOM rather than a React node).
+ * Where a plugin panel docks, left to right: `far-left` (left of the Layers
+ * panel), `left-of-style` (between the map and the Style panel), or `far-right`
+ * (right of the Style panel). The built-in Layers and Style panels stay visible
+ * in every position.
+ */
+export type GeoLibreRightPanelDock = "far-left" | "left-of-style" | "far-right";
+
+/**
+ * A plugin-owned dockable side panel. The host renders the registered panel in
+ * its own dock (one of three positions beside the Layers/Style panels), with a
+ * collapsible rail, a header (title plus move/collapse/close buttons), and a
+ * resize handle. The plugin owns only the content: `render` is called once with
+ * an empty container element the plugin fills with its own DOM (an external
+ * plugin cannot share GeoLibre's React, so the contract is plain DOM rather
+ * than a React node).
  */
 export interface GeoLibreRightPanelRegistration {
   /** Stable unique id used to open/collapse/close the panel. */
@@ -371,12 +380,16 @@ export interface GeoLibreRightPanelRegistration {
   /** Human-readable title shown in the panel header and collapsed rail. */
   title: string;
   /**
-   * Which side of the workspace the panel docks on. "right" (default) docks at
-   * the far right and collapses the Style panel; "left" docks at the far left
-   * and collapses the Layers panel. The user can move it at runtime with the
-   * panel's move button (or {@link GeoLibreAppAPI.setActiveRightPanelSide}).
+   * Where the panel docks initially:
+   * - `far-right` (default): right of the Style panel.
+   * - `left-of-style`: between the map and the Style panel.
+   * - `far-left`: left of the Layers panel.
+   *
+   * The built-in Layers and Style panels stay visible in every position. The
+   * user can move the panel between positions at runtime with the move buttons
+   * in its header (or a plugin via {@link GeoLibreAppAPI.setActiveRightPanelDock}).
    */
-  side?: "left" | "right";
+  dock?: GeoLibreRightPanelDock;
   /**
    * Optional icon for the collapsed rail. A URL or `data:` URI is rendered as
    * an image; any other value is ignored in favor of a default glyph.

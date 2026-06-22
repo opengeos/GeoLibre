@@ -2,9 +2,9 @@ import {
   closeRightPanel,
   collapseRightPanel,
   getRightPanel,
+  moveActiveRightPanelDock,
   openRightPanel,
-  setActiveRightPanelSide,
-  type RightPanelSide,
+  type RightPanelDock,
 } from "@geolibre/plugins";
 import { Button } from "@geolibre/ui";
 import {
@@ -34,14 +34,13 @@ const MIN_WIDTH = 240;
 const MAX_WIDTH = 640;
 
 interface PluginRightPanelProps {
-  /** Which workspace edge this instance occupies. */
-  slot: RightPanelSide;
+  /** Which dock position this instance renders. */
+  dock: RightPanelDock;
   /**
    * The active panel's width in px. Owned by the shell and shared between the
-   * left and right slot instances so a user's resize survives moving the panel
-   * between edges. Lifting it to the shell (rather than a module-level global)
-   * keeps it per-app-instance, which matters for the multi-instance Jupyter
-   * embed.
+   * dock-slot instances so a user's resize survives moving the panel between
+   * positions. Lifting it to the shell (rather than a module-level global) keeps
+   * it per-app-instance, which matters for the multi-instance Jupyter embed.
    */
   width: number;
   /** Update the shared panel width (clamped by this component). */
@@ -49,38 +48,43 @@ interface PluginRightPanelProps {
 }
 
 /**
- * Renders the active plugin-owned dockable panel on the workspace edge given by
- * `slot`, beside the Style panel (right) or the Layers panel (left).
+ * Renders the active plugin-owned dockable panel when it is docked at this
+ * instance's `dock` position.
  *
- * Two instances are mounted (one per edge); each renders only when the active
- * panel's side matches its `slot`, so a user can move the panel between edges
- * with the header's move button (issue #712). The panel content is owned by the
- * plugin via `render(container)` (plain DOM); the host provides the dock chrome
- * (header, collapse rail, resize handle, move/close buttons). Renders nothing
- * when no plugin panel is docked on this edge.
+ * One instance is mounted per dock position (`far-left`, `left-of-style`,
+ * `far-right`); each renders only when the active panel is docked there, so a
+ * user can step the panel between positions with the header's move buttons
+ * (issue #712). The built-in Layers and Style panels stay visible in every
+ * position. The panel content is owned by the plugin via `render(container)`
+ * (plain DOM); the host provides the dock chrome (header, collapse rail, resize
+ * handle, move/collapse/close buttons). Renders nothing when no plugin panel is
+ * docked here.
  *
- * @param props.slot - The workspace edge ("left" or "right") this instance owns.
- * @returns The plugin panel aside, or null when no panel is docked on this edge.
+ * @param props.dock - The dock position this instance renders.
+ * @returns The plugin panel aside, or null when no panel is docked here.
  */
 export function PluginRightPanel({
-  slot,
+  dock,
   width,
   onWidthChange,
 }: PluginRightPanelProps) {
   const { t } = useTranslation();
-  const { activeId, collapsed, side } = useRightPanelState();
+  const { activeId, collapsed, dock: activeDock } = useRightPanelState();
   const contentRef = useRef<HTMLDivElement | null>(null);
 
   const panel = activeId ? getRightPanel(activeId) : undefined;
-  const matched = activeId !== null && panel != null && side === slot;
-  const isLeft = slot === "left";
+  const matched = activeId !== null && panel != null && activeDock === dock;
+  // The far-left dock sits at the left edge: its border and resize handle face
+  // right (toward the Layers panel). The other two docks face left (toward the
+  // map / Style panel).
+  const isLeftEdge = dock === "far-left";
 
   // Adopt the panel's preferred width when a different panel becomes active.
   // Keyed on activeId only so a user resize survives collapse/expand and any
   // re-registration of the same panel; the width is read fresh from the
-  // registry rather than depending on the panel object's identity. Both slot
-  // instances run this with the same value, and the shared (shell-owned) width
-  // means a resize survives moving between edges.
+  // registry rather than depending on the panel object's identity. Every slot
+  // instance runs this with the same value, and the shared (shell-owned) width
+  // means a resize survives moving between positions.
   useEffect(() => {
     if (!activeId) return;
     const current = getRightPanel(activeId);
@@ -91,8 +95,8 @@ export function PluginRightPanel({
   }, [activeId, onWidthChange]);
 
   // Populate the plugin content container while this instance owns the panel.
-  // Keyed on `matched` so moving the panel between edges tears down the old
-  // edge's container and renders into the new one, and on the `panel` object so
+  // Keyed on `matched` so moving the panel between positions tears down the old
+  // slot's container and renders into the new one, and on the `panel` object so
   // re-registering the same id (a new render function) refreshes the content.
   // (The width effect above is deliberately not keyed on `panel`, so a user
   // resize survives re-registration.)
@@ -129,9 +133,9 @@ export function PluginRightPanel({
     const startX = event.clientX;
     const startWidth = width;
     const handleMove = (move: PointerEvent) => {
-      // The resizable edge faces the map: dragging it away from the dock side
-      // widens the panel.
-      const delta = isLeft ? move.clientX - startX : startX - move.clientX;
+      // The resizable edge faces away from the dock side: dragging it widens the
+      // panel.
+      const delta = isLeftEdge ? move.clientX - startX : startX - move.clientX;
       onWidthChange(clamp(startWidth + delta, MIN_WIDTH, MAX_WIDTH));
     };
     const handleEnd = () => {
@@ -150,13 +154,15 @@ export function PluginRightPanel({
   const railIcon =
     panel.icon && isImageSource(panel.icon) ? (
       <img src={panel.icon} alt="" className="h-4 w-4 object-contain" />
-    ) : isLeft ? (
+    ) : isLeftEdge ? (
       <PanelLeft className="h-4 w-4" />
     ) : (
       <PanelRight className="h-4 w-4" />
     );
 
-  const borderSide = isLeft ? "md:border-r" : "md:border-l";
+  const borderSide = isLeftEdge ? "md:border-r" : "md:border-l";
+  const canMoveLeft = activeDock !== "far-left";
+  const canMoveRight = activeDock !== "far-right";
 
   return (
     <aside
@@ -177,7 +183,7 @@ export function PluginRightPanel({
           role="separator"
           aria-orientation="vertical"
           aria-label={t("pluginPanel.resize")}
-          className={`absolute ${isLeft ? "-right-1 border-r" : "-left-1 border-l"} top-0 z-20 hidden h-full w-2 cursor-col-resize touch-none select-none border-transparent hover:border-primary md:block`}
+          className={`absolute ${isLeftEdge ? "-right-1 border-r" : "-left-1 border-l"} top-0 z-20 hidden h-full w-2 cursor-col-resize touch-none select-none border-transparent hover:border-primary md:block`}
           onPointerDown={handleResizeStart}
         />
       ) : null}
@@ -191,7 +197,7 @@ export function PluginRightPanel({
             aria-label={t("pluginPanel.expand")}
             onClick={() => openRightPanel(activeId)}
           >
-            {isLeft ? (
+            {isLeftEdge ? (
               <PanelLeftOpen className="h-4 w-4" />
             ) : (
               <PanelRightOpen className="h-4 w-4" />
@@ -212,17 +218,23 @@ export function PluginRightPanel({
               variant="ghost"
               size="icon"
               className="h-7 w-7"
-              title={isLeft ? t("pluginPanel.moveRight") : t("pluginPanel.moveLeft")}
-              aria-label={
-                isLeft ? t("pluginPanel.moveRight") : t("pluginPanel.moveLeft")
-              }
-              onClick={() => setActiveRightPanelSide(isLeft ? "right" : "left")}
+              title={t("pluginPanel.moveLeft")}
+              aria-label={t("pluginPanel.moveLeft")}
+              disabled={!canMoveLeft}
+              onClick={() => moveActiveRightPanelDock("left")}
             >
-              {isLeft ? (
-                <ArrowRightToLine className="h-4 w-4" />
-              ) : (
-                <ArrowLeftToLine className="h-4 w-4" />
-              )}
+              <ArrowLeftToLine className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              title={t("pluginPanel.moveRight")}
+              aria-label={t("pluginPanel.moveRight")}
+              disabled={!canMoveRight}
+              onClick={() => moveActiveRightPanelDock("right")}
+            >
+              <ArrowRightToLine className="h-4 w-4" />
             </Button>
             <Button
               variant="ghost"
@@ -232,7 +244,7 @@ export function PluginRightPanel({
               aria-label={t("pluginPanel.collapse")}
               onClick={() => collapseRightPanel(activeId)}
             >
-              {isLeft ? (
+              {isLeftEdge ? (
                 <PanelLeftClose className="h-4 w-4" />
               ) : (
                 <PanelRightClose className="h-4 w-4" />

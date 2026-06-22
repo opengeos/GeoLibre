@@ -5,14 +5,15 @@ import {
   closeRightPanel,
   collapseRightPanel,
   getActiveRightPanel,
-  getActiveRightPanelSide,
+  getActiveRightPanelDock,
   getRightPanel,
   getRightPanelSnapshot,
   isRightPanelCollapsed,
   listRightPanels,
+  moveActiveRightPanelDock,
   openRightPanel,
   registerRightPanel,
-  setActiveRightPanelSide,
+  setActiveRightPanelDock,
   subscribeRightPanels,
   unregisterRightPanel,
 } from "../packages/plugins/src/right-panel-registry";
@@ -109,35 +110,49 @@ describe("right-panel registry", () => {
     assert.deepEqual(calls, ["a:close", "b:open"]);
   });
 
-  it("defaults to the right side and honors a declared side", () => {
+  it("defaults to far-right and honors a declared dock", () => {
     registerRightPanel(testPanel({ id: "r", title: "R" }));
-    registerRightPanel(testPanel({ id: "l", title: "L", side: "left" }));
+    registerRightPanel(testPanel({ id: "l", title: "L", dock: "far-left" }));
     openRightPanel("r");
-    assert.equal(getActiveRightPanelSide(), "right");
-    assert.equal(getRightPanelSnapshot().side, "right");
+    assert.equal(getActiveRightPanelDock(), "far-right");
+    assert.equal(getRightPanelSnapshot().dock, "far-right");
     openRightPanel("l");
-    assert.equal(getActiveRightPanelSide(), "left");
+    assert.equal(getActiveRightPanelDock(), "far-left");
   });
 
-  it("lets the active panel be moved to the other side, resetting on switch", () => {
+  it("sets and steps the dock, resetting on switch and clearing on close", () => {
     registerRightPanel(testPanel({ id: "a", title: "A" }));
     registerRightPanel(testPanel({ id: "b", title: "B" }));
     openRightPanel("a");
-    assert.equal(getActiveRightPanelSide(), "right");
-    setActiveRightPanelSide("left");
-    assert.equal(getActiveRightPanelSide(), "left");
-    assert.equal(getRightPanelSnapshot().side, "left");
-    // Opening another panel resets to that panel's declared side.
+    assert.equal(getActiveRightPanelDock(), "far-right");
+
+    setActiveRightPanelDock("left-of-style");
+    assert.equal(getActiveRightPanelDock(), "left-of-style");
+    assert.equal(getRightPanelSnapshot().dock, "left-of-style");
+
+    // Stepping left/right walks the ordered positions and stops at the ends.
+    moveActiveRightPanelDock("left");
+    assert.equal(getActiveRightPanelDock(), "far-left");
+    moveActiveRightPanelDock("left");
+    assert.equal(getActiveRightPanelDock(), "far-left");
+    moveActiveRightPanelDock("right");
+    assert.equal(getActiveRightPanelDock(), "left-of-style");
+    moveActiveRightPanelDock("right");
+    moveActiveRightPanelDock("right");
+    assert.equal(getActiveRightPanelDock(), "far-right");
+
+    // Opening another panel resets to that panel's declared dock.
     openRightPanel("b");
-    assert.equal(getActiveRightPanelSide(), "right");
-    // Closing clears the side entirely.
+    assert.equal(getActiveRightPanelDock(), "far-right");
+    // Closing clears the dock entirely.
     closeRightPanel("b");
-    assert.equal(getActiveRightPanelSide(), null);
+    assert.equal(getActiveRightPanelDock(), null);
   });
 
-  it("ignores a side move when no panel is active", () => {
-    setActiveRightPanelSide("left");
-    assert.equal(getActiveRightPanelSide(), null);
+  it("ignores dock changes when no panel is active", () => {
+    setActiveRightPanelDock("far-left");
+    moveActiveRightPanelDock("left");
+    assert.equal(getActiveRightPanelDock(), null);
   });
 
   it("notifies subscribers and exposes a stable snapshot between mutations", () => {
