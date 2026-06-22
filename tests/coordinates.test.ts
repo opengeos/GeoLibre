@@ -90,4 +90,8 @@ describe("parseLatLon — rejection", () => {
   it("returns null for a leading minus that contradicts the hemisphere", () => {
     assert.equal(parseLatLon("-51.5N, 0.1W"), null);
   });
+
+  it("returns null for decimal degrees with trailing minutes/seconds", () => {
+    assert.equal(parseLatLon(`51.5 30 26N, 0 7 39W`), null);
+  });
 });

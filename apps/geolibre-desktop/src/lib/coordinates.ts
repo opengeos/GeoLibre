@@ -46,6 +46,9 @@ function parseComponent(raw: string): Component | null {
   // Numbers in order are degrees, then optional minutes, then optional seconds.
   const numbers = text.match(/\d+(?:\.\d+)?/g);
   if (!numbers || numbers.length === 0 || numbers.length > 3) return null;
+  // Real DMS/DDM always has a whole-number degrees field; only DD (a single
+  // number) legitimately carries a fractional degree. Reject e.g. "51.5 30 26N".
+  if (numbers.length > 1 && !Number.isInteger(Number(numbers[0]))) return null;
   const [deg, min = "0", sec = "0"] = numbers;
   const minutes = Number(min);
   const seconds = Number(sec);

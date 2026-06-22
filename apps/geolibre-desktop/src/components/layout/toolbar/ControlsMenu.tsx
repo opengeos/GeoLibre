@@ -89,9 +89,10 @@ export function ControlsMenu({
   };
   const confirmSpinGlobe = () => {
     setSpinGlobeNoticeOpen(false);
-    // The toggle is always correct even if bounds were unlocked while the dialog
-    // was open; only the warning the user just read could be momentarily stale.
-    panels.spinGlobe.toggle();
+    // The dialog opens solely to enable spinning, so only toggle when it is off.
+    // Guarding on `visible` keeps a concurrent enable from inverting into a
+    // turn-off, and an unlock of bounds meanwhile does not affect correctness.
+    if (!panels.spinGlobe.visible) panels.spinGlobe.toggle();
   };
   // Whether the first group (built-in controls + atmosphere/routing toggles) has
   // any visible item, so the separator below it isn't left orphaned.
