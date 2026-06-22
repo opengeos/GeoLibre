@@ -524,7 +524,9 @@ function savedVectorStyle(raw: unknown): Partial<VectorLayerStyle> | null {
   // Attribute labels. The field name is length-capped like the color strings
   // (a real attribute name is short); the rest reuse the same color/number
   // guards so a hand-edited project file cannot smuggle blobs into the symbol
-  // layer's paint/layout.
+  // layer's paint/layout. Only the field-based label fields are persisted —
+  // LabelStyle.expression/.minZoom/.maxZoom are not mapped to the control (see
+  // layerStyleToVectorStyle), so persisting them here would have no effect.
   if (
     typeof candidate.labelField === "string" &&
     candidate.labelField &&
@@ -603,8 +605,15 @@ function layerStyleToVectorStyle(style: LayerStyle): VectorLayerStyle {
     clusterMaxZoom: style.clusterMaxZoom,
     // Attribute labels: GeoLibre's LabelStyle maps onto the control's flat
     // label fields. The control renders the field's value as a symbol layer;
-    // an empty labelField clears it. (The expression-based override is not
-    // mapped — control layers label by field only.)
+    // an empty labelField clears it.
+    //
+    // Only field-based labeling is wired here. LabelStyle.expression,
+    // .minZoom, and .maxZoom have no maplibre-gl-vector@0.7.0 equivalent, so
+    // they are intentionally left out of this mapping, out of vectorStylesEqual,
+    // and out of savedVectorStyle. The shared Style panel still shows those
+    // controls, but for a control-managed layer they are no-ops; adding them
+    // here later means also wiring the equality check, persistence, and the
+    // upstream control option.
     labelField:
       style.labels.enabled && style.labels.field.trim() !== ""
         ? style.labels.field
@@ -683,7 +692,13 @@ function vectorStyleToLayerStyle(info: VectorLayerInfo): Partial<LayerStyle> {
       ...defaults,
       enabled: true,
       field: style.labelField,
-      size: typeof style.labelSize === "number" ? style.labelSize : defaults.size,
+      // Guard with > 0 to match savedVectorStyle's positive() check, so a
+      // (never expected) labelSize of 0 from the control does not round-trip
+      // to an invisible-then-reset size.
+      size:
+        typeof style.labelSize === "number" && style.labelSize > 0
+          ? style.labelSize
+          : defaults.size,
       color: style.labelColor ?? defaults.color,
       haloColor: style.labelHaloColor ?? defaults.haloColor,
       haloWidth:
