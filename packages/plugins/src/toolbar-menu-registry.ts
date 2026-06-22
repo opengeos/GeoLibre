@@ -23,8 +23,12 @@ export interface ToolbarMenuEntry {
 /**
  * Reactive snapshot consumed by `useSyncExternalStore`. The `menus`/`entries`
  * array identities are stable between mutations so React can skip re-renders;
- * `version` is bumped on every change. `menus` is kept for callers that only
- * need the menus; `entries` additionally carries each menu's owning plugin id.
+ * `version` is bumped on every change.
+ *
+ * `menus` predates ownership tracking and is retained for snapshot-shape
+ * backward compatibility (external consumers may read it); `entries` is the
+ * richer form that additionally carries each menu's owning plugin id, and is
+ * what in-repo consumers use.
  */
 export interface ToolbarMenusSnapshot {
   menus: GeoLibreToolbarMenu[];

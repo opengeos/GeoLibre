@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
 import { PluginManager } from "../packages/plugins/src/plugin-manager";
+import {
+  __resetToolbarMenuRegistryForTests,
+  getToolbarMenusSnapshot,
+  registerToolbarMenu,
+} from "../packages/plugins/src/toolbar-menu-registry";
 import type {
   GeoLibreAppAPI,
   GeoLibrePlugin,
@@ -633,10 +638,14 @@ describe("PluginManager async activation", () => {
 });
 
 describe("PluginManager toolbar menu scoping", () => {
+  afterEach(() => __resetToolbarMenuRegistryForTests());
+
   it("tags registerToolbarMenu with the activating plugin's id", () => {
     const manager = new PluginManager();
     const seen: Array<string | undefined> = [];
-    const scopedApp = {
+    // The raw mock app handed to activate(); the manager scopes it internally
+    // via scopeAppToPlugin before the plugin ever sees it.
+    const mockApp = {
       registerToolbarMenu: (
         _menu: unknown,
         ownerPluginId?: string,
@@ -659,15 +668,42 @@ describe("PluginManager toolbar menu scoping", () => {
           }),
       }),
     );
-    manager.activate("menu-plugin", scopedApp);
+    manager.activate("menu-plugin", mockApp);
 
     assert.deepEqual(seen, ["menu-plugin"]);
+  });
+
+  it("records the owner on the real registry when wired through activate", () => {
+    // Guards the TypeScript-invisible contract between scopeAppToPlugin's cast
+    // and the real registry's optional second parameter: drive the genuine
+    // registerToolbarMenu (not a mock) through activate and assert the snapshot
+    // carries the owner. Breaks if the registry ever drops the owner argument.
+    const manager = new PluginManager();
+    const realApp = { registerToolbarMenu } as unknown as GeoLibreAppAPI;
+
+    manager.register(
+      testPlugin({
+        id: "real-menu-plugin",
+        activate: (api) =>
+          void api.registerToolbarMenu?.({
+            id: "real-menu",
+            label: "Workbench",
+            items: [{ id: "open", label: "Open", onSelect: () => undefined }],
+          }),
+      }),
+    );
+    manager.activate("real-menu-plugin", realApp);
+
+    const { entries } = getToolbarMenusSnapshot();
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].menu.id, "real-menu");
+    assert.equal(entries[0].ownerPluginId, "real-menu-plugin");
   });
 
   it("scopes a menu registered asynchronously after activate resolves", async () => {
     const manager = new PluginManager();
     const seen: Array<string | undefined> = [];
-    const scopedApp = {
+    const mockApp = {
       registerToolbarMenu: (
         _menu: unknown,
         ownerPluginId?: string,
@@ -694,7 +730,7 @@ describe("PluginManager toolbar menu scoping", () => {
         },
       }),
     );
-    manager.activate("async-menu-plugin", scopedApp);
+    manager.activate("async-menu-plugin", mockApp);
     await Promise.resolve();
     register?.();
 
@@ -704,7 +740,7 @@ describe("PluginManager toolbar menu scoping", () => {
   it("tags a menu (re)registered from applyProjectState, not just activate", () => {
     const manager = new PluginManager();
     const seen: Array<string | undefined> = [];
-    const scopedApp = {
+    const mockApp = {
       registerToolbarMenu: (
         _menu: unknown,
         ownerPluginId?: string,
@@ -734,7 +770,7 @@ describe("PluginManager toolbar menu scoping", () => {
         mapControlPositions: {},
         settings: { "settings-menu-plugin": {} },
       },
-      scopedApp,
+      mockApp,
     );
 
     assert.deepEqual(seen, ["settings-menu-plugin"]);
