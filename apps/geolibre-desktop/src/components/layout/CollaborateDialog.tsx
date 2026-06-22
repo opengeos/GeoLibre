@@ -173,7 +173,10 @@ export function CollaborateDialog({
           />
         ) : (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            {/* Name and color feed both actions below, so group them in a
+                shaded panel above the cards to read as shared profile inputs
+                rather than belonging to either Start or Join (#706). */}
+            <div className="space-y-3 rounded-md border bg-muted/40 p-3">
               <div className="space-y-1.5">
                 <Label htmlFor="collab-name">{t("collaborate.displayName")}</Label>
                 <Input
@@ -188,7 +191,9 @@ export function CollaborateDialog({
               </div>
               <div className="space-y-1.5">
                 <Label>{t("collaborate.color")}</Label>
-                <div className="flex flex-wrap gap-1.5 pt-1">
+                {/* Full panel width keeps every swatch on one row instead of
+                    wrapping a lone dot to a second line (#706). */}
+                <div className="flex flex-wrap gap-2 pt-1">
                   {COLOR_PALETTE.map((c) => (
                     <button
                       key={c.hex}
@@ -232,7 +237,7 @@ export function CollaborateDialog({
               <Button
                 type="button"
                 onClick={() => void handleStart()}
-                disabled={busy}
+                disabled={busy || !name.trim()}
                 className="w-full"
               >
                 {busy ? (
@@ -260,7 +265,7 @@ export function CollaborateDialog({
                   type="button"
                   variant="secondary"
                   onClick={() => void handleJoin()}
-                  disabled={busy}
+                  disabled={busy || !name.trim() || !code.trim()}
                 >
                   {t("collaborate.join")}
                 </Button>

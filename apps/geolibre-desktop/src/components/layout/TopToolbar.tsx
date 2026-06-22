@@ -853,7 +853,19 @@ export function TopToolbar({
         <ViewMenu
           chrome={chrome}
           history={viewportHistory}
+          getCamera={() => {
+            const map = mapControllerRef.current?.getMap();
+            if (!map) return null;
+            return {
+              zoom: map.getZoom(),
+              bearing: map.getBearing(),
+              pitch: map.getPitch(),
+              minZoom: map.getMinZoom(),
+              maxZoom: map.getMaxZoom(),
+            };
+          }}
           onResetNorth={() => mapControllerRef.current?.resetNorth()}
+          onResetPitch={() => mapControllerRef.current?.resetPitch()}
           onResetPitchBearing={() =>
             mapControllerRef.current?.resetNorthPitch()
           }
@@ -928,6 +940,8 @@ export function TopToolbar({
         showLabels={showLabels}
         onOpenManagePlugins={() => setManagePluginsOpen(true)}
         profilePlugins={profilePlugins}
+        themeMode={themeMode}
+        onToggleThemeMode={onToggleThemeMode}
       />
       <ManagePluginsDialog
         open={managePluginsOpen}

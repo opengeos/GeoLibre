@@ -23,9 +23,11 @@ import {
   LayoutGrid,
   Link2,
   Mountain,
+  RotateCcw,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ParseKeys } from "i18next";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
@@ -47,11 +49,28 @@ const SPLIT_VIEW_PRESETS: ReadonlyArray<{
   { rows: 3, cols: 3, labelKey: "toolbar.item.splitViewGrid3x3" },
 ];
 
+/** A snapshot of the active map's camera, read when the menu opens. */
+export interface ViewMenuCamera {
+  zoom: number;
+  bearing: number;
+  pitch: number;
+  minZoom: number;
+  maxZoom: number;
+}
+
 interface ViewMenuProps {
   chrome: ToolbarChrome;
   history: ViewportHistory;
-  /** Animate the map back to north-up (bearing 0). */
+  /**
+   * Read the active map's current camera, called each time the menu opens so
+   * the zoom/orientation items can disable themselves when already at their
+   * limit. Returns null when no map is ready yet (items stay enabled).
+   */
+  getCamera: () => ViewMenuCamera | null;
+  /** Animate the map back to north-up (bearing 0), leaving pitch untouched. */
   onResetNorth: () => void;
+  /** Animate the map back to flat (pitch 0), leaving bearing untouched. */
+  onResetPitch: () => void;
   /** Animate the map back to north-up and flat (bearing 0, pitch 0). */
   onResetPitchBearing: () => void;
   /** Open the dialog for typing an exact camera (center/zoom/pitch/bearing). */
@@ -71,7 +90,9 @@ interface ViewMenuProps {
 export function ViewMenu({
   chrome,
   history,
+  getCamera,
   onResetNorth,
+  onResetPitch,
   onResetPitchBearing,
   onSetView,
   onZoomIn,
@@ -82,11 +103,24 @@ export function ViewMenu({
   const mapLayout = useAppStore((s) => s.mapLayout);
   const setMapGrid = useAppStore((s) => s.setMapGrid);
   const setSyncView = useAppStore((s) => s.setSyncView);
+  // Camera snapshot taken when the menu opens. The dropdown blocks map
+  // interaction while open, so a single read on open stays accurate for the
+  // life of the menu and lets items grey out at their limit (#708, #710).
+  const [camera, setCamera] = useState<ViewMenuCamera | null>(null);
+  // Tolerances absorb the float drift left by easeTo so an item that just did
+  // its job (e.g. bearing animated to ~0) reads as "already there".
+  const atMinZoom = camera != null && camera.zoom <= camera.minZoom + 1e-3;
+  const atMaxZoom = camera != null && camera.zoom >= camera.maxZoom - 1e-3;
+  const bearingIsNorth = camera != null && Math.abs(camera.bearing) < 1e-2;
+  const pitchIsFlat = camera != null && Math.abs(camera.pitch) < 1e-2;
   const show = (id: string) => isMenuItemVisible(uiProfile, id);
   const showZoom = show("view.zoomIn") || show("view.zoomOut");
   const showNavigation =
     show("view.previousView") || show("view.nextView");
-  const showReset = show("view.resetNorth") || show("view.resetPitchBearing");
+  const showReset =
+    show("view.resetPitch") ||
+    show("view.resetNorth") ||
+    show("view.resetPitchBearing");
   const showSetView = show("view.setView");
   const showSplitView = show("view.splitView");
   const paneCount = mapLayout.rows * mapLayout.cols;
@@ -104,7 +138,11 @@ export function ViewMenu({
     return null;
 
   return (
-    <DropdownMenu>
+    <DropdownMenu
+      onOpenChange={(open: boolean) => {
+        if (open) setCamera(getCamera());
+      }}
+    >
       <DropdownMenuTrigger asChild>
         <Button
           className={chrome.secondaryButtonClass}
@@ -120,7 +158,7 @@ export function ViewMenu({
         <DropdownMenuLabel>{t("toolbar.menu.view")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {show("view.zoomIn") && (
-          <DropdownMenuItem onSelect={onZoomIn}>
+          <DropdownMenuItem disabled={atMaxZoom} onSelect={onZoomIn}>
             <ZoomIn className="mr-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">
               {t("toolbar.item.zoomIn")}
@@ -128,7 +166,7 @@ export function ViewMenu({
           </DropdownMenuItem>
         )}
         {show("view.zoomOut") && (
-          <DropdownMenuItem onSelect={onZoomOut}>
+          <DropdownMenuItem disabled={atMinZoom} onSelect={onZoomOut}>
             <ZoomOut className="mr-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">
               {t("toolbar.item.zoomOut")}
@@ -161,21 +199,50 @@ export function ViewMenu({
         {(showZoom || showNavigation) && showReset && (
           <DropdownMenuSeparator />
         )}
-        {show("view.resetNorth") && (
-          <DropdownMenuItem onSelect={onResetNorth}>
-            <Compass className="mr-2 h-3.5 w-3.5 shrink-0" />
-            <span className="whitespace-nowrap">
-              {t("toolbar.item.resetNorth")}
-            </span>
-          </DropdownMenuItem>
-        )}
-        {show("view.resetPitchBearing") && (
-          <DropdownMenuItem onSelect={onResetPitchBearing}>
-            <Mountain className="mr-2 h-3.5 w-3.5 shrink-0" />
-            <span className="whitespace-nowrap">
-              {t("toolbar.item.resetPitchBearing")}
-            </span>
-          </DropdownMenuItem>
+        {showReset && (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <RotateCcw className="h-3.5 w-3.5 shrink-0" />
+              <span className="whitespace-nowrap">
+                {t("toolbar.item.resetOrientation")}
+              </span>
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="min-w-48">
+              {show("view.resetPitch") && (
+                <DropdownMenuItem
+                  disabled={pitchIsFlat}
+                  onSelect={onResetPitch}
+                >
+                  <Mountain className="mr-2 h-3.5 w-3.5 shrink-0" />
+                  <span className="whitespace-nowrap">
+                    {t("toolbar.item.resetPitch")}
+                  </span>
+                </DropdownMenuItem>
+              )}
+              {show("view.resetNorth") && (
+                <DropdownMenuItem
+                  disabled={bearingIsNorth}
+                  onSelect={onResetNorth}
+                >
+                  <Compass className="mr-2 h-3.5 w-3.5 shrink-0" />
+                  <span className="whitespace-nowrap">
+                    {t("toolbar.item.resetBearing")}
+                  </span>
+                </DropdownMenuItem>
+              )}
+              {show("view.resetPitchBearing") && (
+                <DropdownMenuItem
+                  disabled={bearingIsNorth && pitchIsFlat}
+                  onSelect={onResetPitchBearing}
+                >
+                  <Compass className="mr-2 h-3.5 w-3.5 shrink-0" />
+                  <span className="whitespace-nowrap">
+                    {t("toolbar.item.resetPitchBearing")}
+                  </span>
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
         )}
         {(showZoom || showNavigation || showReset) && showSetView && (
           <DropdownMenuSeparator />
