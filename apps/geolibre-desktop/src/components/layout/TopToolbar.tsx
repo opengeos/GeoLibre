@@ -182,6 +182,12 @@ export function TopToolbar({
   const projectPath = useAppStore((s) => s.projectPath);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
   const setProjectName = useAppStore((s) => s.setProjectName);
+  // The Collaborate dialog's visibility lives in the store so the on-canvas
+  // session-status badge can reopen it from outside this component tree (#754).
+  const collaborateDialogOpen = useAppStore((s) => s.ui.collaborateDialogOpen);
+  const setCollaborateDialogOpen = useAppStore(
+    (s) => s.setCollaborateDialogOpen,
+  );
 
   const {
     plugins,
@@ -269,7 +275,6 @@ export function TopToolbar({
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
   const [managePluginsOpen, setManagePluginsOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
-  const [collaborateDialogOpen, setCollaborateDialogOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [printLayoutOpen, setPrintLayoutOpen] = useState(false);
   const [offlineRegionOpen, setOfflineRegionOpen] = useState(false);

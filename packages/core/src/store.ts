@@ -192,6 +192,10 @@ export interface AppState {
     storymapPresenting: boolean;
     modelBuilderOpen: boolean;
     zoomToSelectedFeature: boolean;
+    // Live-collaboration dialog visibility. Lifted into the store (rather than
+    // local toolbar state) so the on-canvas session-status badge can reopen the
+    // Collaborate dialog from outside the toolbar's component tree (#754).
+    collaborateDialogOpen: boolean;
   };
 
   setPointerCoords: (coords: [number, number] | null) => void;
@@ -262,6 +266,7 @@ export interface AppState {
   setStorymapPanelOpen: (open: boolean) => void;
   setStorymapPresenting: (presenting: boolean) => void;
   setModelBuilderOpen: (open: boolean) => void;
+  setCollaborateDialogOpen: (open: boolean) => void;
   setZoomToSelectedFeature: (enabled: boolean) => void;
 
   /** Insert a new model or replace an existing one matching by `id`. */
@@ -552,6 +557,7 @@ export const useAppStore = create<AppState>()(
         storymapPresenting: false,
         modelBuilderOpen: false,
         zoomToSelectedFeature: false,
+        collaborateDialogOpen: false,
       },
 
       setPointerCoords: (coords) => set({ pointerCoords: coords }),
@@ -732,6 +738,8 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ ui: { ...s.ui, storymapPresenting: presenting } })),
       setModelBuilderOpen: (open) =>
         set((s) => ({ ui: { ...s.ui, modelBuilderOpen: open } })),
+      setCollaborateDialogOpen: (open) =>
+        set((s) => ({ ui: { ...s.ui, collaborateDialogOpen: open } })),
       setZoomToSelectedFeature: (enabled) =>
         set((s) => ({ ui: { ...s.ui, zoomToSelectedFeature: enabled } })),
 

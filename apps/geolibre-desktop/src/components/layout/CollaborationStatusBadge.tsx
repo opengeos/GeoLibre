@@ -1,0 +1,206 @@
+import { useAppStore } from "@geolibre/core";
+import { Button } from "@geolibre/ui";
+import { ChevronUp, Settings2, Users, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+
+interface Announcement {
+  id: number;
+  text: string;
+}
+
+// How long a join/leave announcement stays on screen before auto-dismissing.
+const ANNOUNCEMENT_TTL_MS = 5000;
+
+/**
+ * Persistent on-canvas badge that surfaces a live collaboration session outside
+ * the Collaborate dialog (#754). It shows only while a session is active and:
+ *
+ * - displays a pulsing "live" dot plus the connected-participant count, so the
+ *   host knows the session is still running after dismissing the dialog;
+ * - expands into a roster of connected clients with a shortcut back to the full
+ *   Collaborate dialog (reopened via the store so this badge can drive it from
+ *   outside the toolbar tree);
+ * - briefly announces when someone joins or leaves.
+ *
+ * Anchored bottom-left (top-left is where map-control plugins cluster); the
+ * roster and announcements grow upward from the collapsed pill.
+ */
+export function CollaborationStatusBadge() {
+  const { t } = useTranslation();
+  const collaboration = useAppStore((s) => s.collaboration);
+  const setCollaborateDialogOpen = useAppStore(
+    (s) => s.setCollaborateDialogOpen,
+  );
+  const isActive = collaboration.isActive;
+  const participants = collaboration.participants;
+  const selfId = collaboration.clientId;
+
+  const [expanded, setExpanded] = useState(false);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  // The participant set from the previous update, so we can diff join/leave.
+  // Seeded on first activation so existing members (and self) aren't announced
+  // as fresh arrivals when the dialog first connects.
+  const knownRef = useRef<Map<string, string> | null>(null);
+  const announceIdRef = useRef(0);
+  const timersRef = useRef<number[]>([]);
+
+  // Clear any pending auto-dismiss timers on unmount.
+  useEffect(
+    () => () => {
+      for (const id of timersRef.current) window.clearTimeout(id);
+      timersRef.current = [];
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!isActive) {
+      // Session ended: reset so the next session starts clean (and we don't
+      // announce its initial roster against a stale previous one).
+      knownRef.current = null;
+      setExpanded(false);
+      setAnnouncements([]);
+      return;
+    }
+    const current = new Map(
+      participants.map((p) => [p.clientId, p.displayName]),
+    );
+    const known = knownRef.current;
+    knownRef.current = current;
+    if (known === null) return; // First roster for this session: seed silently.
+
+    const fresh: Announcement[] = [];
+    for (const [id, name] of current) {
+      if (id !== selfId && !known.has(id)) {
+        fresh.push({
+          id: announceIdRef.current++,
+          text: t("collaborate.participantJoined", { name }),
+        });
+      }
+    }
+    for (const [id, name] of known) {
+      if (id !== selfId && !current.has(id)) {
+        fresh.push({
+          id: announceIdRef.current++,
+          text: t("collaborate.participantLeft", { name }),
+        });
+      }
+    }
+    if (fresh.length === 0) return;
+    setAnnouncements((prev) => [...prev, ...fresh]);
+    for (const a of fresh) {
+      const timer = window.setTimeout(() => {
+        setAnnouncements((prev) => prev.filter((x) => x.id !== a.id));
+      }, ANNOUNCEMENT_TTL_MS);
+      timersRef.current.push(timer);
+    }
+  }, [isActive, participants, selfId, t]);
+
+  if (!isActive) return null;
+
+  return (
+    <div className="pointer-events-none absolute bottom-2 left-2 z-10 flex w-60 max-w-[calc(100%-1rem)] flex-col gap-1.5">
+      {/* Transient join/leave announcements, stacked just above the pill. The
+          live region lets assistive tech read them out as they appear. */}
+      {announcements.length > 0 && (
+        <div className="flex flex-col gap-1" role="status" aria-live="polite">
+          {announcements.map((a) => (
+            <div
+              key={a.id}
+              className="pointer-events-auto flex items-center gap-1.5 rounded-md border bg-background/95 px-2 py-1 text-xs text-foreground shadow-sm backdrop-blur-sm"
+            >
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-green-500" />
+              <span className="truncate">{a.text}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Expanded roster: who is connected, plus a way back to the dialog. */}
+      {expanded && (
+        <div className="pointer-events-auto rounded-md border bg-background/95 shadow-md backdrop-blur-sm">
+          <div className="flex items-center justify-between border-b px-2.5 py-1.5">
+            <span className="text-xs font-medium">
+              {t("collaborate.participants", {
+                count: participants.length,
+              })}
+            </span>
+            <button
+              type="button"
+              aria-label={t("common.close")}
+              onClick={() => setExpanded(false)}
+              className="rounded-sm p-0.5 text-muted-foreground transition hover:bg-accent hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <ul className="max-h-48 space-y-1 overflow-y-auto p-2">
+            {participants.map((p) => (
+              <li
+                key={p.clientId}
+                className="flex items-center gap-2 text-xs"
+              >
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: p.color }}
+                />
+                <span className="truncate">{p.displayName}</span>
+                {p.clientId === selfId && (
+                  <span className="text-muted-foreground">
+                    ({t("collaborate.you")})
+                  </span>
+                )}
+                {p.role === "host" && (
+                  <span className="rounded bg-muted px-1 py-0.5 text-[10px]">
+                    {t("collaborate.host")}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+          <div className="border-t p-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="w-full"
+              onClick={() => setCollaborateDialogOpen(true)}
+            >
+              <Settings2 className="mr-2 h-3.5 w-3.5" />
+              {t("collaborate.manageSession")}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Collapsed pill, always visible while the session is live. */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        title={t("collaborate.sessionStatusTooltip")}
+        className="pointer-events-auto flex items-center gap-1.5 self-start rounded-full border bg-background/95 px-2.5 py-1 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm transition hover:bg-accent"
+      >
+        <span className="relative flex h-2 w-2" aria-hidden="true">
+          {!collaboration.connecting && (
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-500 opacity-60" />
+          )}
+          <span
+            className={`relative inline-flex h-2 w-2 rounded-full ${
+              collaboration.connecting ? "bg-amber-500" : "bg-green-500"
+            }`}
+          />
+        </span>
+        <Users className="h-3.5 w-3.5" aria-hidden="true" />
+        <span>{participants.length}</span>
+        <ChevronUp
+          className={`h-3 w-3 transition-transform ${
+            expanded ? "" : "rotate-180"
+          }`}
+          aria-hidden="true"
+        />
+      </button>
+    </div>
+  );
+}
