@@ -1193,22 +1193,6 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
         className="pointer-events-none fixed left-0 right-0 z-50 hidden h-px bg-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.25)]"
       />
       <div className="flex flex-wrap items-center gap-2 border-b px-3 py-1.5 md:flex-nowrap">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          title={collapsed ? "Expand attribute table" : "Collapse attribute table"}
-          aria-label={
-            collapsed ? "Expand attribute table" : "Collapse attribute table"
-          }
-          onClick={() => setCollapsed((value) => !value)}
-        >
-          {collapsed ? (
-            <PanelBottomOpen className="h-4 w-4" />
-          ) : (
-            <PanelBottomClose className="h-4 w-4" />
-          )}
-        </Button>
         <TableProperties className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-semibold">Attribute table</span>
         {layer ? (
@@ -1492,6 +1476,22 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           onClick={() => selectFeature(null)}
         >
           <MousePointerSquareDashed className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          title={collapsed ? "Expand attribute table" : "Collapse attribute table"}
+          aria-label={
+            collapsed ? "Expand attribute table" : "Collapse attribute table"
+          }
+          onClick={() => setCollapsed((value) => !value)}
+        >
+          {collapsed ? (
+            <PanelBottomOpen className="h-4 w-4" />
+          ) : (
+            <PanelBottomClose className="h-4 w-4" />
+          )}
         </Button>
         <Button
           variant="ghost"
