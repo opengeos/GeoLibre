@@ -28,9 +28,7 @@ import {
 import type { MapController } from "@geolibre/map";
 import { isPlaceholderLayer, placeholderMessage } from "@geolibre/map";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
-import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
 import { createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
-import { showsAdvancedNotices } from "../../lib/ui-profile";
 import {
   Button,
   Dialog,
@@ -103,6 +101,7 @@ import {
   type VectorExportFormat,
 } from "../../lib/vector-export";
 import { BasemapPickerDialog } from "./BasemapPickerDialog";
+import { LayerPanelPlaceSearch } from "./LayerPanelPlaceSearch";
 
 interface LayerPanelProps {
   mapControllerRef: RefObject<MapController | null>;
@@ -201,7 +200,6 @@ export function LayerPanel({
   autoCollapse = false,
 }: LayerPanelProps) {
   const { t } = useTranslation();
-  const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   const layers = useAppStore((s) => s.layers);
   const layerGroups = useAppStore((s) => s.layerGroups);
   const addLayerGroup = useAppStore((s) => s.addLayerGroup);
@@ -1930,11 +1928,7 @@ export function LayerPanel({
         </div>
       </ScrollArea>
       <Separator />
-      {showsAdvancedNotices(uiProfile) ? (
-        <p className="p-2 text-[10px] text-muted-foreground">
-          {t("layers.advancedFormatsNote")}
-        </p>
-      ) : null}
+      <LayerPanelPlaceSearch mapControllerRef={mapControllerRef} />
       <BasemapPickerDialog
         open={basemapPickerOpen}
         onOpenChange={setBasemapPickerOpen}
