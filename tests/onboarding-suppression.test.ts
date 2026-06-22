@@ -44,10 +44,12 @@ describe("shouldSuppressOnboarding", () => {
     }
   });
 
-  it("keeps the wizard for truthy or absent welcome values", () => {
-    for (const value of ["1", "true", "on", "yes"]) {
-      withSearch(`?welcome=${value}`);
-      assert.equal(shouldSuppressOnboarding(), false, `welcome=${value}`);
+  it("keeps the wizard for truthy, empty, or bare welcome values", () => {
+    // An empty `?welcome=` or a bare `?welcome` flag is a no-op (unlike
+    // `?maponly`), so the wizard still shows.
+    for (const search of ["?welcome=1", "?welcome=true", "?welcome=on", "?welcome=yes", "?welcome=", "?welcome"]) {
+      withSearch(search);
+      assert.equal(shouldSuppressOnboarding(), false, search);
     }
   });
 
