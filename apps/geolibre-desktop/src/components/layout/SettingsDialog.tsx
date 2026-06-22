@@ -104,7 +104,7 @@ export type SettingsSection =
   | "updates";
 
 /** A field a deep-link can ask Settings to focus once the section renders. */
-export type SettingsFocusTarget = "shareToken";
+export type SettingsFocusTarget = "shareToken" | "accentColor";
 
 /** Window event letting any panel open Settings at a given section (no prop-drilling). */
 export const OPEN_SETTINGS_EVENT = "geolibre:open-settings";
@@ -370,6 +370,10 @@ export function SettingsDialog({
     null,
   );
   const shareTokenInputRef = useRef<HTMLInputElement>(null);
+  // The native color input in the Appearance pane. The accent-color dropdown's
+  // "Custom" entry deep-links here so picking a custom color is reachable
+  // without a third-level menu (#718).
+  const customColorInputRef = useRef<HTMLInputElement>(null);
   // The nav button for the active section. Focus follows the active section so
   // the focus ring never strands on a different item than the visible pane
   // (Safari keeps focus on the previously focused button after a mouse click,
@@ -492,6 +496,29 @@ export function SettingsDialog({
       // nav-focus effect, and because this write is synchronous and lexically
       // first, the ref is already true when that run reads it, so it skips and
       // leaves focus on the field we just focused.
+      skipNextNavFocusRef.current = true;
+      setPendingFocus(null);
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [open, pendingFocus, effectiveSection]);
+
+  // Focus (and try to open) the custom-color picker when the accent-color
+  // dropdown deep-links into the Appearance pane. The input only mounts while
+  // the custom scheme is active, so wait for the section to settle first (#718).
+  useEffect(() => {
+    if (!open || pendingFocus !== "accentColor") return;
+    if (effectiveSection !== "appearance") return;
+    const id = window.requestAnimationFrame(() => {
+      const input = customColorInputRef.current;
+      input?.focus();
+      // Pop the native picker straight away when the browser allows it; if the
+      // user gesture has lapsed it throws, leaving the focused input as the
+      // fallback rather than a dead end.
+      try {
+        input?.showPicker();
+      } catch {
+        // No transient user activation; the focused input is enough.
+      }
       skipNextNavFocusRef.current = true;
       setPendingFocus(null);
     });
@@ -1040,7 +1067,15 @@ export function SettingsDialog({
                 ))}
                 <DropdownMenuRadioItem
                   value="custom"
-                  onSelect={(event: Event) => event.preventDefault()}
+                  onSelect={() => {
+                    // Selecting "Custom" from the menu would otherwise be a dead
+                    // end, so open the Appearance pane and jump to its color
+                    // picker instead of nesting a third-level menu (#718).
+                    updateSavedThemeScheme("custom");
+                    setSection("appearance");
+                    setOpen(true);
+                    setPendingFocus("accentColor");
+                  }}
                 >
                   <span
                     aria-hidden
@@ -1527,6 +1562,7 @@ export function SettingsDialog({
                     {desktopSettings.theme.scheme === "custom" ? (
                       <label className="flex items-center gap-3 rounded-md border p-3 text-sm">
                         <input
+                          ref={customColorInputRef}
                           type="color"
                           className="h-8 w-12 shrink-0 cursor-pointer rounded border bg-transparent p-0.5"
                           value={desktopSettings.theme.customColor}
