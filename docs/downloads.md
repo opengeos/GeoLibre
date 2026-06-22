@@ -64,9 +64,10 @@ by Apple, so Gatekeeper allows them to open without any extra steps:
 
 ## Linux installation
 
-The native packages (AUR, COPR) auto-update through your system package manager.
-The direct `.deb` / `.rpm` / AppImage downloads are updated by re-downloading the
-new release.
+GeoLibre offers several Linux install options. The AUR, COPR, and Flatpak
+packages auto-update (through your system package manager or `flatpak update`);
+the direct `.deb`, `.rpm`, and AppImage downloads are updated by re-downloading
+the new release.
 
 ### Arch Linux / Manjaro (AUR)
 
@@ -88,6 +89,15 @@ sudo dnf install geolibre
 On RHEL and derivatives, enable the COPR plugin first with
 `sudo dnf install dnf-plugins-core`.
 
+### Flatpak (via [FlatPark](https://flatpark.org/apps/app.geolibre.GeoLibre/))
+
+Works on any distribution with Flatpak. Add the remote once, then install:
+
+```bash
+flatpak remote-add --if-not-exists flatpark https://dl.flatpark.org/flatpark.flatpakrepo
+flatpak install flatpark app.geolibre.GeoLibre
+```
+
 ### Debian / Ubuntu (.deb)
 
 Download the `.deb` from the latest release and install it (apt resolves the
@@ -97,20 +107,27 @@ dependencies):
 sudo apt install ./GeoLibre.Desktop_<version>_amd64.deb
 ```
 
-### Other distributions (.rpm / AppImage)
+### Other RPM distributions (.rpm)
 
-- RPM-based distros: `sudo dnf install ./GeoLibre.Desktop-<version>-1.x86_64.rpm`
-  (use `yum` on older RHEL/CentOS, or `sudo zypper install --allow-unsigned-rpm ./...rpm` on openSUSE)
-- AppImage (any distro): download it, mark it executable, and run it:
+```bash
+sudo dnf install ./GeoLibre.Desktop-<version>-1.x86_64.rpm
+```
 
-  ```bash
-  chmod +x GeoLibre.Desktop_<version>_amd64.AppImage
-  ./GeoLibre.Desktop_<version>_amd64.AppImage
-  ```
+Use `yum` on older RHEL/CentOS, or `sudo zypper install --allow-unsigned-rpm ./...rpm`
+on openSUSE.
 
-  AppImages need FUSE. On distros that no longer ship it by default, install
-  `libfuse2` (for example `sudo apt install libfuse2`) or run with
-  `--appimage-extract-and-run`.
+### AppImage (any distribution)
+
+Download it, mark it executable, and run it:
+
+```bash
+chmod +x GeoLibre.Desktop_<version>_amd64.AppImage
+./GeoLibre.Desktop_<version>_amd64.AppImage
+```
+
+AppImages need FUSE. On distros that no longer ship it by default, install
+`libfuse2` (for example `sudo apt install libfuse2`) or run with
+`--appimage-extract-and-run`.
 
 ## Build from source
 
