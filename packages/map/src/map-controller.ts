@@ -914,7 +914,9 @@ export class MapController {
    * heading and tilt can be reset independently.
    */
   resetPitch(): void {
-    this.map?.easeTo({ pitch: 0 });
+    // Match MapLibre's native resetNorth/resetNorthPitch 1s animation so the
+    // sibling orientation resets feel consistent (easeTo defaults to 300ms).
+    this.map?.easeTo({ pitch: 0, duration: 1000 });
   }
 
   /**

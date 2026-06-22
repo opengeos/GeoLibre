@@ -1018,7 +1018,7 @@
       "toggleViewState": "Toggle View State",
       "previousView": "Previous View",
       "nextView": "Next View",
-      "resetNorth": "Reset North",
+      "resetNorth": "Reset Bearing",
       "resetPitchBearing": "Reset Pitch & Bearing",
       "setView": "Set View",
       "zoomIn": "Zoom In",

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import maplibregl from "maplibre-gl";
 import type { MapController } from "@geolibre/map";
@@ -834,6 +834,9 @@ function DrawToolbar({
  */
 function PickBanner({ onCancel }: { onCancel: () => void }) {
   const { t } = useTranslation();
+  // Instance-scoped so the aria-describedby link holds even if more than one
+  // banner is ever mounted at once (#720 review).
+  const hintId = useId();
   return (
     <div className="fixed bottom-6 left-1/2 z-50 flex max-w-[95vw] -translate-x-1/2 flex-col gap-2 rounded-lg border bg-card p-3 shadow-xl">
       {/* Only the non-interactive status text is the live region, with the
@@ -849,7 +852,7 @@ function PickBanner({ onCancel }: { onCancel: () => void }) {
             {t("fieldCollection.pickBannerTitle")}
           </span>
         </div>
-        <p id="fc-pick-hint" className="text-xs text-muted-foreground">
+        <p id={hintId} className="text-xs text-muted-foreground">
           {t("fieldCollection.pickBannerHint")}
         </p>
       </div>
@@ -859,7 +862,7 @@ function PickBanner({ onCancel }: { onCancel: () => void }) {
           size="sm"
           onClick={onCancel}
           autoFocus
-          aria-describedby="fc-pick-hint"
+          aria-describedby={hintId}
         >
           {t("common.cancel")}
         </Button>

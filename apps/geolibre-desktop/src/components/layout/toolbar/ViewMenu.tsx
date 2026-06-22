@@ -246,7 +246,7 @@ export function ViewMenu({
                   disabled={bearingIsNorth && pitchIsFlat}
                   onSelect={onResetPitchBearing}
                 >
-                  <Compass className="mr-2 h-3.5 w-3.5 shrink-0" />
+                  <RotateCcw className="mr-2 h-3.5 w-3.5 shrink-0" />
                   <span className="whitespace-nowrap">
                     {t("toolbar.item.resetPitchBearing")}
                   </span>
