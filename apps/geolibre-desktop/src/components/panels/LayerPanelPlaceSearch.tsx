@@ -3,6 +3,7 @@ import {
   type RefObject,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -30,8 +31,6 @@ const DEBOUNCE_MS = 500;
 const MAX_RESULTS = 6;
 /** Don't search until the query is at least this many characters. */
 const MIN_QUERY_LENGTH = 2;
-/** id linking the input's aria-controls to the result listbox. */
-const RESULTS_ID = "layer-panel-place-search-results";
 
 type SearchStatus = "idle" | "loading" | "error" | "empty";
 
@@ -45,6 +44,8 @@ export function LayerPanelPlaceSearch({
   mapControllerRef,
 }: LayerPanelPlaceSearchProps): ReactElement {
   const { t } = useTranslation();
+  // Per-instance id so multiple mounts never collide on the aria-controls link.
+  const resultsId = `${useId()}-results`;
   const geocodingPrefs = useAppStore((s) => s.preferences.geocoding);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GeocodeMatch[]>([]);
@@ -128,12 +129,15 @@ export function LayerPanelPlaceSearch({
   const handleSelect = useCallback(
     (match: GeocodeMatch) => {
       const map = mapControllerRef.current?.getMap();
+      // Drop the previous marker unconditionally so it is never orphaned when
+      // the map is briefly unavailable (mount/teardown/headless).
+      markerRef.current?.remove();
+      markerRef.current = null;
       if (map) {
         map.flyTo({
           center: [match.lon, match.lat],
           zoom: Math.max(map.getZoom(), 12),
         });
-        markerRef.current?.remove();
         markerRef.current = new maplibregl.Marker({ color: "#ef4444" })
           .setLngLat([match.lon, match.lat])
           .addTo(map);
@@ -179,12 +183,14 @@ export function LayerPanelPlaceSearch({
               {t("layers.searchPlacesNoResults")}
             </div>
           ) : (
-            <ul id={RESULTS_ID} role="listbox" className="max-h-60 overflow-auto py-1">
+            <ul id={resultsId} role="listbox" className="max-h-60 overflow-auto py-1">
               {results.map((match, index) => (
-                <li key={index} role="option" aria-selected={index === activeIndex}>
+                <li key={index}>
                   <button
                     type="button"
-                    id={`${RESULTS_ID}-option-${index}`}
+                    role="option"
+                    aria-selected={index === activeIndex}
+                    id={`${resultsId}-option-${index}`}
                     className={`flex w-full items-start gap-2 px-3 py-1.5 text-left text-xs hover:bg-muted ${
                       index === activeIndex ? "bg-muted" : ""
                     }`}
@@ -212,10 +218,10 @@ export function LayerPanelPlaceSearch({
           role="combobox"
           aria-expanded={open}
           aria-autocomplete="list"
-          aria-controls={RESULTS_ID}
+          aria-controls={showResults ? resultsId : undefined}
           aria-activedescendant={
             showResults && activeIndex >= 0
-              ? `${RESULTS_ID}-option-${activeIndex}`
+              ? `${resultsId}-option-${activeIndex}`
               : undefined
           }
           value={query}
@@ -228,6 +234,8 @@ export function LayerPanelPlaceSearch({
           }}
           onBlur={() => {
             // Defer so a click/mousedown on a result still resolves first.
+            // Clear any pending timer so rapid focus/blur cycles don't leak.
+            if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
             blurTimerRef.current = setTimeout(() => setOpen(false), 150);
           }}
           onKeyDown={(event) => {
