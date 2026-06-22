@@ -23,8 +23,9 @@ const ANNOUNCEMENT_TTL_MS = 5000;
  *   outside the toolbar tree);
  * - briefly announces when someone joins or leaves.
  *
- * Anchored bottom-left (top-left is where map-control plugins cluster); the
- * roster and announcements grow upward from the collapsed pill.
+ * Anchored bottom-left (top-left is where map-control plugins cluster), lifted
+ * above the MapLibre scale control (and the bounds-restriction badge when it is
+ * showing); the roster and announcements grow upward from the collapsed pill.
  */
 export function CollaborationStatusBadge() {
   const { t } = useTranslation();
@@ -32,6 +33,10 @@ export function CollaborationStatusBadge() {
   const setCollaborateDialogOpen = useAppStore(
     (s) => s.setCollaborateDialogOpen,
   );
+  // Shares the bottom-left corner with the MapLibre scale control and the
+  // bounds-restriction badge, so lift the badge above whichever of those is
+  // showing (see the positioning note below).
+  const restrictBounds = useAppStore((s) => s.preferences.map.restrictBounds);
   const isActive = collaboration.isActive;
   const participants = collaboration.participants;
   const selfId = collaboration.clientId;
@@ -105,7 +110,14 @@ export function CollaborationStatusBadge() {
   if (!isActive) return null;
 
   return (
-    <div className="pointer-events-none absolute bottom-2 left-2 z-10 flex w-60 max-w-[calc(100%-1rem)] flex-col gap-1.5">
+    <div
+      className={`pointer-events-none absolute left-2 z-10 flex w-60 max-w-[calc(100%-1rem)] flex-col gap-1.5 ${
+        // Clear the bottom-left scale control (~32px tall); when the
+        // bounds-restriction badge (bottom-12) is also showing, sit above it
+        // instead of overlapping. The roster/announcements grow upward.
+        restrictBounds ? "bottom-20" : "bottom-10"
+      }`}
+    >
       {/* Transient join/leave announcements, stacked just above the pill. The
           live region stays mounted at all times (even when empty) and only its
           content changes, so screen readers reliably pick up each insertion. */}
