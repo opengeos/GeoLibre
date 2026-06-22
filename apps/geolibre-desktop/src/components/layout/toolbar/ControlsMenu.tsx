@@ -1,3 +1,4 @@
+import { useAppStore } from "@geolibre/core";
 import {
   DEFAULT_EFFECTS_SETTINGS,
   type EffectsSettings,
@@ -9,6 +10,11 @@ import {
 import {
   Button,
   ColorField,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -69,6 +75,22 @@ export function ControlsMenu({
   const { t } = useTranslation();
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   const show = (id: string) => isMenuItemVisible(uiProfile, id);
+  const restrictBounds = useAppStore((s) => s.preferences.map.restrictBounds);
+  // Spinning the globe continuously moves the camera, which a locked bounding
+  // box fights against, so enabling it while bounds are locked is gated behind a
+  // warning the user can override (#723).
+  const [spinGlobeNoticeOpen, setSpinGlobeNoticeOpen] = useState(false);
+  const handleSpinGlobe = () => {
+    if (!panels.spinGlobe.visible && restrictBounds) {
+      setSpinGlobeNoticeOpen(true);
+      return;
+    }
+    panels.spinGlobe.toggle();
+  };
+  const confirmSpinGlobe = () => {
+    setSpinGlobeNoticeOpen(false);
+    panels.spinGlobe.toggle();
+  };
   // Whether the first group (built-in controls + atmosphere/routing toggles) has
   // any visible item, so the separator below it isn't left orphaned.
   const anyTopControls =
@@ -81,125 +103,160 @@ export function ControlsMenu({
     show("controls.reverseGeocode");
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          className={chrome.buttonClass}
-          variant="ghost"
-          size={chrome.buttonSize}
-          aria-label={t("toolbar.menu.controls")}
-        >
-          <SlidersHorizontal className={chrome.iconClassName} />
-          {chrome.renderLabel(t("toolbar.menu.controls"))}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
-        <DropdownMenuLabel>{t("toolbar.item.mapControls")}</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {MAP_CONTROL_ITEMS.filter((control) =>
-          show(`controls.mapControl.${control.id}`),
-        ).map((control) => (
-          <DropdownMenuItem
-            key={control.id}
-            onClick={() => onToggleMapControl(control.id)}
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            className={chrome.buttonClass}
+            variant="ghost"
+            size={chrome.buttonSize}
+            aria-label={t("toolbar.menu.controls")}
           >
-            {t(control.labelKey)}
-            {controlsVisible[control.id] ? " ✓" : ""}
-          </DropdownMenuItem>
-        ))}
-        {show("controls.atmosphereEffects") && (
-          <AtmosphereEffectsSubmenu
-            active={effectsActive}
-            onToggle={onToggleEffects}
-            getSettings={getEffectsSettings}
-            onPreview={onPreviewEffectsSettings}
-            onCommit={onCommitEffectsSettings}
-          />
-        )}
-        {show("controls.spinGlobe") && (
-          <DropdownMenuItem onSelect={panels.spinGlobe.toggle}>
-            {t("toolbar.item.spinGlobe")}
-            {panels.spinGlobe.visible ? " ✓" : ""}
-          </DropdownMenuItem>
-        )}
-        {show("controls.directions") && (
-          <DropdownMenuItem
-            title={t("toolbar.item.directionsTooltip")}
-            onClick={onToggleDirections}
-          >
-            {t("toolbar.item.directions")}
-            {directionsActive ? " ✓" : ""}
-          </DropdownMenuItem>
-        )}
-        {show("controls.reverseGeocode") && (
-          <DropdownMenuItem
-            title={t("toolbar.item.reverseGeocodeTooltip")}
-            onClick={onToggleReverseGeocode}
-          >
-            {t("toolbar.item.reverseGeocode")}
-            {reverseGeocodeActive ? " ✓" : ""}
-          </DropdownMenuItem>
-        )}
-        {anyTopControls && <DropdownMenuSeparator />}
-        {show("controls.search") && (
-          <DropdownMenuItem onSelect={panels.searchPlaces.toggle}>
-            {t("toolbar.item.search")}
-            {panels.searchPlaces.visible ? " ✓" : ""}
-          </DropdownMenuItem>
-        )}
-        {show("controls.colorbar") && (
-          <DropdownMenuItem onSelect={panels.colorbar.toggle}>
-            {t("toolbar.item.colorbar")}
-            {panels.colorbar.visible ? " ✓" : ""}
-          </DropdownMenuItem>
-        )}
-        {show("controls.legend") && (
-          <DropdownMenuItem onSelect={panels.legend.toggle}>
-            {t("toolbar.item.legend")}
-            {panels.legend.visible ? " ✓" : ""}
-          </DropdownMenuItem>
-        )}
-        {show("controls.html") && (
-          <DropdownMenuItem onSelect={panels.html.toggle}>
-            {t("toolbar.item.html")}
-            {panels.html.visible ? " ✓" : ""}
-          </DropdownMenuItem>
-        )}
-        {show("controls.measure") && (
-          <DropdownMenuItem onSelect={panels.measure.toggle}>
-            {t("toolbar.item.measure")}
-            {panels.measure.visible ? " ✓" : ""}
-          </DropdownMenuItem>
-        )}
-        {show("controls.bookmark") && (
-          <DropdownMenuItem onSelect={panels.bookmark.toggle}>
-            {t("toolbar.item.bookmark")}
-            {panels.bookmark.visible ? " ✓" : ""}
-          </DropdownMenuItem>
-        )}
-        {show("controls.minimap") && (
-          <DropdownMenuItem onSelect={panels.minimap.toggle}>
-            {t("toolbar.item.minimap")}
-            {panels.minimap.visible ? " ✓" : ""}
-          </DropdownMenuItem>
-        )}
-        {show("controls.viewState") && (
-          <DropdownMenuItem onSelect={panels.viewState.toggle}>
-            {t("toolbar.item.viewState")}
-            {panels.viewState.visible ? " ✓" : ""}
-          </DropdownMenuItem>
-        )}
-        {show("controls.fieldCollection") && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={onOpenFieldCollection}>
-              <ClipboardList className="mr-2 h-3.5 w-3.5" />
-              {t("toolbar.item.fieldCollection")}
+            <SlidersHorizontal className={chrome.iconClassName} />
+            {chrome.renderLabel(t("toolbar.menu.controls"))}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuLabel>{t("toolbar.item.mapControls")}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {MAP_CONTROL_ITEMS.filter((control) =>
+            show(`controls.mapControl.${control.id}`),
+          ).map((control) => (
+            <DropdownMenuItem
+              key={control.id}
+              onClick={() => onToggleMapControl(control.id)}
+            >
+              {t(control.labelKey)}
+              {controlsVisible[control.id] ? " ✓" : ""}
             </DropdownMenuItem>
-          </>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+          ))}
+          {show("controls.atmosphereEffects") && (
+            <AtmosphereEffectsSubmenu
+              active={effectsActive}
+              onToggle={onToggleEffects}
+              getSettings={getEffectsSettings}
+              onPreview={onPreviewEffectsSettings}
+              onCommit={onCommitEffectsSettings}
+            />
+          )}
+          {show("controls.spinGlobe") && (
+            <DropdownMenuItem onSelect={handleSpinGlobe}>
+              {t("toolbar.item.spinGlobe")}
+              {panels.spinGlobe.visible ? " ✓" : ""}
+            </DropdownMenuItem>
+          )}
+          {show("controls.directions") && (
+            <DropdownMenuItem
+              title={t("toolbar.item.directionsTooltip")}
+              onClick={onToggleDirections}
+            >
+              {t("toolbar.item.directions")}
+              {directionsActive ? " ✓" : ""}
+            </DropdownMenuItem>
+          )}
+          {show("controls.reverseGeocode") && (
+            <DropdownMenuItem
+              title={t("toolbar.item.reverseGeocodeTooltip")}
+              onClick={onToggleReverseGeocode}
+            >
+              {t("toolbar.item.reverseGeocode")}
+              {reverseGeocodeActive ? " ✓" : ""}
+            </DropdownMenuItem>
+          )}
+          {anyTopControls && <DropdownMenuSeparator />}
+          {show("controls.search") && (
+            <DropdownMenuItem onSelect={panels.searchPlaces.toggle}>
+              {t("toolbar.item.search")}
+              {panels.searchPlaces.visible ? " ✓" : ""}
+            </DropdownMenuItem>
+          )}
+          {show("controls.colorbar") && (
+            <DropdownMenuItem onSelect={panels.colorbar.toggle}>
+              {t("toolbar.item.colorbar")}
+              {panels.colorbar.visible ? " ✓" : ""}
+            </DropdownMenuItem>
+          )}
+          {show("controls.legend") && (
+            <DropdownMenuItem onSelect={panels.legend.toggle}>
+              {t("toolbar.item.legend")}
+              {panels.legend.visible ? " ✓" : ""}
+            </DropdownMenuItem>
+          )}
+          {show("controls.html") && (
+            <DropdownMenuItem onSelect={panels.html.toggle}>
+              {t("toolbar.item.html")}
+              {panels.html.visible ? " ✓" : ""}
+            </DropdownMenuItem>
+          )}
+          {show("controls.measure") && (
+            <DropdownMenuItem onSelect={panels.measure.toggle}>
+              {t("toolbar.item.measure")}
+              {panels.measure.visible ? " ✓" : ""}
+            </DropdownMenuItem>
+          )}
+          {show("controls.bookmark") && (
+            <DropdownMenuItem onSelect={panels.bookmark.toggle}>
+              {t("toolbar.item.bookmark")}
+              {panels.bookmark.visible ? " ✓" : ""}
+            </DropdownMenuItem>
+          )}
+          {show("controls.minimap") && (
+            <DropdownMenuItem onSelect={panels.minimap.toggle}>
+              {t("toolbar.item.minimap")}
+              {panels.minimap.visible ? " ✓" : ""}
+            </DropdownMenuItem>
+          )}
+          {show("controls.viewState") && (
+            <DropdownMenuItem onSelect={panels.viewState.toggle}>
+              {t("toolbar.item.viewState")}
+              {panels.viewState.visible ? " ✓" : ""}
+            </DropdownMenuItem>
+          )}
+          {show("controls.fieldCollection") && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={onOpenFieldCollection}>
+                <ClipboardList className="mr-2 h-3.5 w-3.5" />
+                {t("toolbar.item.fieldCollection")}
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <Dialog
+        open={spinGlobeNoticeOpen}
+        onOpenChange={(open: boolean) => {
+          // Opened programmatically (no trigger), so onOpenChange only fires to
+          // close it (Escape/overlay) — treat that as cancel.
+          if (!open) setSpinGlobeNoticeOpen(false);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("toolbar.item.spinGlobeBoundsTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("toolbar.item.spinGlobeBoundsDesc")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+            <p className="text-muted-foreground">
+              {t("toolbar.item.spinGlobeBoundsHint")}
+            </p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setSpinGlobeNoticeOpen(false)}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button onClick={confirmSpinGlobe}>
+              {t("toolbar.item.continue")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
