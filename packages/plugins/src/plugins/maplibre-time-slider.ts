@@ -311,7 +311,10 @@ function normalizeConfig(state: unknown): TimeSliderConfig | null {
   ) {
     return null;
   }
-  return candidate as TimeSliderConfig;
+  // Normalize an open end to `undefined` (never `null`) so the open-end sentinel
+  // the library expects (`endDate?: string`) is honored even if a hand-edited
+  // project carried `"endDate": null`, rather than leaking null past the cast.
+  return { ...candidate, endDate: candidate.endDate ?? undefined } as TimeSliderConfig;
 }
 
 // Only sourceadd/sourceremove change the store's layer set. statechange also
