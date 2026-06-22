@@ -12,7 +12,8 @@ import { useTranslation } from "react-i18next";
  * control plugins (GeoEditor, Basemaps, NASA Earthdata, ...) cluster, so a
  * top-left badge overlapped and hid the first plugin button. The small
  * bottom offset keeps it clear of the bottom-left scale control when that is
- * enabled.
+ * enabled. It assumes the scale is the only bottom-left control; if more are
+ * stacked there (e.g. the logo control), revisit the offset.
  */
 export function BoundsRestrictionIndicator() {
   const { t } = useTranslation();
