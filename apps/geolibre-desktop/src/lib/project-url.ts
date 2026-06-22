@@ -1,5 +1,4 @@
-import { parseProject } from "@geolibre/core";
-import type { GeoLibreProject } from "@geolibre/core";
+import { parseProject, type GeoLibreProject } from "@geolibre/core";
 import { normalizeProjectUrl } from "./urls";
 
 // Query parameters that carry a `.geolibre.json` project URL deep link. A bare
@@ -60,6 +59,22 @@ export async function fetchProjectFromUrl(
   const fetchImpl = options.fetchImpl ?? fetch;
   const signal = options.signal;
 
+  // Shared message for any rejection that means the bytes never arrived: the
+  // initial request or the body stream. A bare browser TypeError ("Failed to
+  // fetch" / "Load failed") is replaced with the URL and the likely causes.
+  const networkError = () =>
+    new Error(
+      `Could not fetch the project from ${projectUrl}. The host may be ` +
+        "unreachable or offline, or it may be blocking cross-origin requests " +
+        "(CORS). Check the URL and your connection, then try again.",
+    );
+
+  // A caller-initiated abort (dialog close / unmount) surfaces as an
+  // `AbortError`; let it propagate untouched so the caller can ignore it,
+  // matching the abort handling in `share-geolibre.ts`.
+  const isAbort = (error: unknown) =>
+    error instanceof DOMException && error.name === "AbortError";
+
   let response: Response;
   try {
     response = await fetchImpl(projectUrl, {
@@ -67,26 +82,32 @@ export async function fetchProjectFromUrl(
       signal,
     });
   } catch (error) {
-    // A rejected fetch (as opposed to a non-2xx response) means the request
-    // never completed: the host is unreachable, the browser is offline, or the
-    // server blocked the cross-origin request. Let a caller-initiated abort
-    // (dialog close / unmount) propagate untouched so the caller can ignore it.
-    if (signal?.aborted) throw error;
-    throw new Error(
-      `Could not fetch the project from ${projectUrl}. The host may be ` +
-        "unreachable or offline, or it may be blocking cross-origin requests " +
-        "(CORS). Check the URL and your connection, then try again.",
-    );
+    if (isAbort(error)) throw error;
+    throw networkError();
   }
 
   if (!response.ok) {
+    // HTTP/2 drops reason phrases, so `statusText` is often empty; only append
+    // it when present to avoid a stray "HTTP 404 ." with a dangling period.
+    const status = response.statusText
+      ? `HTTP ${response.status} ${response.statusText}`
+      : `HTTP ${response.status}`;
     throw new Error(
       `Could not load the project from ${projectUrl}: the server responded ` +
-        `with HTTP ${response.status} ${response.statusText}.`,
+        `with ${status}.`,
     );
   }
 
-  const text = await response.text();
+  let text: string;
+  try {
+    text = await response.text();
+  } catch (error) {
+    // The connection can still drop while the body is streaming, even after a
+    // 200; that rejects with the same opaque TypeError, so treat it the same.
+    if (isAbort(error)) throw error;
+    throw networkError();
+  }
+
   try {
     return parseProject(text);
   } catch (error) {
