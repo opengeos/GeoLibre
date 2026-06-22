@@ -14,7 +14,7 @@ import type { MapController } from "@geolibre/map";
 import type { ParseKeys } from "i18next";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { parseLatLon } from "../../lib/coordinates";
+import { type LatLon, parseLatLon } from "../../lib/coordinates";
 import {
   type DmsAxis,
   decimalToDmsAxis,
@@ -82,7 +82,10 @@ export function SetViewDialog({
   const [error, setError] = useState<string | null>(null);
   // The smart-paste box: a full coordinate string in DD/DMS/DDM that, when it
   // parses, fills the precise fields below so users need not split it by hand.
+  // The parse result is held alongside it so the failed-hint check and the fill
+  // share one parse rather than re-running it on every render.
   const [paste, setPaste] = useState("");
+  const [parsedCoord, setParsedCoord] = useState<LatLon | null>(null);
 
   // Seed both coordinate representations from the live camera whenever the
   // dialog opens, so switching DD<->DMS shows the same point either way.
@@ -107,6 +110,7 @@ export function SetViewDialog({
     setFormat("dd");
     setError(null);
     setPaste("");
+    setParsedCoord(null);
   }, [open, mapControllerRef]);
 
   const update = (key: keyof ViewFields) => (value: string) =>
@@ -151,6 +155,7 @@ export function SetViewDialog({
   const handlePaste = (value: string) => {
     setPaste(value);
     const parsed = parseLatLon(value);
+    setParsedCoord(parsed);
     if (!parsed) return;
     setFields((current) => ({
       ...current,
@@ -166,7 +171,7 @@ export function SetViewDialog({
 
   // True only when there is text that failed to parse, so the hint can switch
   // from neutral guidance to an error without flagging an empty box.
-  const pasteFailed = paste.trim() !== "" && parseLatLon(paste) === null;
+  const pasteFailed = paste.trim() !== "" && parsedCoord === null;
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();

@@ -82,4 +82,12 @@ describe("parseLatLon — rejection", () => {
   it("returns null for malformed minutes >= 60", () => {
     assert.equal(parseLatLon(`51°75'00"N, 0°00'00"W`), null);
   });
+
+  it("returns null for malformed seconds >= 60", () => {
+    assert.equal(parseLatLon(`51°30'75"N, 0°00'00"W`), null);
+  });
+
+  it("returns null for a leading minus that contradicts the hemisphere", () => {
+    assert.equal(parseLatLon("-51.5N, 0.1W"), null);
+  });
 });

@@ -53,7 +53,11 @@ function parseComponent(raw: string): Component | null {
   if (minutes >= 60 || seconds >= 60) return null;
   const magnitude = Number(deg) + minutes / 60 + seconds / 3600;
   if (!Number.isFinite(magnitude)) return null;
-  const sign = negative || (hemi && HEMISPHERE[hemi].sign === -1) ? -1 : 1;
+  // A leading "-" and a positive hemisphere (N/E) contradict each other (e.g.
+  // "-51.5N"), so reject rather than silently letting the sign win.
+  const signFromHemi = hemi ? HEMISPHERE[hemi].sign : null;
+  if (negative && signFromHemi === 1) return null;
+  const sign = negative || signFromHemi === -1 ? -1 : 1;
   return { value: sign * magnitude, axis: hemi ? HEMISPHERE[hemi].axis : null };
 }
 
@@ -62,9 +66,10 @@ function parseComponent(raw: string): Component | null {
  * DD, DMS, or DDM. Returns null when the text is not two valid, in-range axes.
  *
  * When hemisphere letters are present each half is assigned to its axis by the
- * letter, so order does not matter. For a bare decimal pair (no letters) the
- * order is assumed to be `lat, lon` (the Google Maps convention); if the first
- * value cannot be a latitude (|value| > 90) the two are swapped.
+ * letter, so order does not matter. Only suffix notation (`51.5N`) is handled,
+ * not prefix notation (`N51.5`). For a bare decimal pair (no letters) the order
+ * is assumed to be `lat, lon` (the Google Maps convention); if the first value
+ * cannot be a latitude (|value| > 90) the two are swapped.
  *
  * @param input Raw text such as `51°30'26"N, 0°07'39"W` or `51.5074, -0.1278`.
  * @returns The decoded coordinate, or null if it cannot be parsed.
@@ -74,6 +79,8 @@ export function parseLatLon(input: string): LatLon | null {
   if (!text) return null;
 
   const hasHemisphere = /[NSEW]/i.test(text);
+  // Only hemisphere-suffix notation (e.g. `51.5N`) is recognized; prefix
+  // notation (e.g. `N51.5`) splits into 3+ parts below and returns null.
   const parts = hasHemisphere
     ? // Split after each hemisphere letter so each axis is its own token.
       text

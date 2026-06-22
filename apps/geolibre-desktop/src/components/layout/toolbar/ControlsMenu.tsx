@@ -89,6 +89,8 @@ export function ControlsMenu({
   };
   const confirmSpinGlobe = () => {
     setSpinGlobeNoticeOpen(false);
+    // The toggle is always correct even if bounds were unlocked while the dialog
+    // was open; only the warning the user just read could be momentarily stale.
     panels.spinGlobe.toggle();
   };
   // Whether the first group (built-in controls + atmosphere/routing toggles) has
