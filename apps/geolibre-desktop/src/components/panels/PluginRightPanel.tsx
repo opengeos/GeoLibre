@@ -78,17 +78,18 @@ export function PluginRightPanel({ slot }: PluginRightPanelProps) {
   }, [activeId]);
 
   // Populate the plugin content container while this instance owns the panel.
-  // Keyed on `matched` too, so moving the panel between edges tears down the old
-  // edge's container and renders into the new one.
+  // Keyed on `matched` so moving the panel between edges tears down the old
+  // edge's container and renders into the new one, and on the `panel` object so
+  // re-registering the same id (a new render function) refreshes the content.
+  // (The width effect above is deliberately not keyed on `panel`, so a user
+  // resize survives re-registration.)
   useEffect(() => {
     if (!matched) return;
     const container = contentRef.current;
-    if (!activeId || !container) return;
-    const current = getRightPanel(activeId);
-    if (!current) return;
+    if (!activeId || !panel || !container) return;
     let cleanup: void | (() => void);
     try {
-      cleanup = current.render(container);
+      cleanup = panel.render(container);
     } catch (error) {
       console.error(`Right panel "${activeId}" render() threw.`, error);
     }
@@ -100,7 +101,7 @@ export function PluginRightPanel({ slot }: PluginRightPanelProps) {
       }
       container.replaceChildren();
     };
-  }, [activeId, matched]);
+  }, [activeId, matched, panel]);
 
   if (!matched || !panel) return null;
 
