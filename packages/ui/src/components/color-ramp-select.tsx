@@ -59,7 +59,10 @@ export function ColorRampSelect({
   className,
   "aria-label": ariaLabel,
 }: ColorRampSelectProps) {
-  const selected = ramps.find((ramp) => ramp.value === value) ?? ramps[0];
+  // No ramps[0] fallback: an unknown value (e.g. a stale project referencing a
+  // removed colormap) leaves `selected` undefined so the trigger shows the raw
+  // value with no swatch, rather than masquerading as a different ramp.
+  const selected = ramps.find((ramp) => ramp.value === value);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger

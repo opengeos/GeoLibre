@@ -296,10 +296,30 @@ describe("label sync", () => {
     };
     assert.ok(sources.has(LABEL_SOURCE_ID), "dedup source should exist");
     assert.equal(label.source, LABEL_SOURCE_ID);
-    assert.deepEqual(label.layout["text-field"], ["get", "__label"]);
+    assert.deepEqual(label.layout["text-field"], ["get", "__geolibre_label"]);
     const data = (sources.get(LABEL_SOURCE_ID) as { data: GeoJSON.FeatureCollection })
       .data;
     assert.equal(data.features.length, 1);
+  });
+
+  it("does not dedup while a time filter is active", () => {
+    const { map, layers, sources } = makeMap();
+    const layer = colocatedPointLayer({
+      enabled: true,
+      field: "name",
+      dedupe: "unique",
+    });
+    // A time-bound layer carries a MapLibre filter expression; the dedup source
+    // is unfiltered, so dedup is skipped to avoid showing time-excluded labels.
+    layer.timeFilter = ["<=", ["get", "t"], 5] as unknown[];
+    syncLayer(map as never, layer);
+
+    assert.ok(
+      !sources.has(LABEL_SOURCE_ID),
+      "no dedup source while time-filtered",
+    );
+    const label = layers.get(LABEL_ID) as { source: string };
+    assert.equal(label.source, "source-lyr");
   });
 
   it("does not dedup a mixed-geometry layer (would drop non-point labels)", () => {

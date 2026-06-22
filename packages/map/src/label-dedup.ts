@@ -13,6 +13,8 @@ function pointCoordinates(
     return typeof x === "number" && typeof y === "number" ? [x, y] : null;
   }
   if (geometry.type === "MultiPoint") {
+    // Group a MultiPoint by its first sub-point; the remaining sub-points are
+    // not separate label anchors here (dedup targets single co-located points).
     const first = geometry.coordinates[0];
     if (!Array.isArray(first)) return null;
     const [x, y] = first;
@@ -22,7 +24,7 @@ function pointCoordinates(
 }
 
 /**
- * Build a point FeatureCollection carrying one aggregated `__label` per location
+ * Build a point FeatureCollection carrying one aggregated `__geolibre_label` per location
  * for the unique/concatenate label modes (see {@link LabelDedupe}).
  *
  * Point features are grouped by their coordinate (rounded to 7 decimals, ~1 cm).
@@ -71,7 +73,8 @@ export function buildDedupedLabelFeatures(
     features.push({
       type: "Feature",
       geometry: { type: "Point", coordinates: group.coordinates },
-      properties: { __label: label },
+      // A namespaced key avoids clobbering a real source field named "label".
+      properties: { __geolibre_label: label },
     });
   }
   if (features.length === 0) return null;

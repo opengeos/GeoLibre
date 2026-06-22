@@ -1703,11 +1703,17 @@ function applyVectorDataRenderLayers(
   // Only the inline GeoJSON path (no source-layer) can build the aggregated
   // source, and dedup keys off the field value rather than the expression. It is
   // gated to point-only layers: the aggregated source holds just points, so a
-  // mixed-geometry layer would silently lose its line/polygon labels.
+  // mixed-geometry layer would silently lose its line/polygon labels. It is also
+  // skipped while a Time Slider filter is active: the aggregated source is built
+  // from the raw features (no MapLibre filter applies to it), so dedup labels
+  // would otherwise ignore the time window and disagree with the visible data.
+  const hasTimeFilter =
+    Array.isArray(layer.timeFilter) && layer.timeFilter.length > 0;
   const dedupedLabelFc =
     labels.enabled &&
     labels.dedupe !== "off" &&
     !sourceLayer &&
+    !hasTimeFilter &&
     layer.geojson &&
     labels.field &&
     profile.hasPoint &&
@@ -1728,10 +1734,10 @@ function applyVectorDataRenderLayers(
     ) as unknown as maplibregl.ExpressionSpecification | string;
     let textField: maplibregl.ExpressionSpecification | string;
     if (dedupedLabelFc) {
-      // The aggregated source carries the resolved label in `__label`.
+      // The aggregated source carries the resolved label in `__geolibre_label`.
       textField = [
         "get",
-        "__label",
+        "__geolibre_label",
       ] as unknown as maplibregl.ExpressionSpecification;
     } else {
       try {
