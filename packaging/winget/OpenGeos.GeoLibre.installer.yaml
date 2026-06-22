@@ -1,4 +1,7 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
+# Reference copy. CI (winget-releaser in .github/workflows/release.yml) regenerates
+# and submits the per-version manifests to microsoft/winget-pkgs on every release,
+# so PackageVersion here may lag the published package. See README.md.
 PackageIdentifier: OpenGeos.GeoLibre
 PackageVersion: 1.5.0
 InstallerType: nullsoft
