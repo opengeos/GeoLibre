@@ -76,9 +76,9 @@ export function ControlsMenu({
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   const show = (id: string) => isMenuItemVisible(uiProfile, id);
   const restrictBounds = useAppStore((s) => s.preferences.map.restrictBounds);
-  // Spinning the globe continuously moves the camera, which a locked bounding
-  // box fights against, so enabling it while bounds are locked is gated behind a
-  // warning the user can override (#723).
+  const setPreferences = useAppStore((s) => s.setPreferences);
+  // The globe cannot spin while the map bounds are locked, so enabling spin
+  // while they are locked opens a dialog that unlocks the bounds first (#723).
   const [spinGlobeNoticeOpen, setSpinGlobeNoticeOpen] = useState(false);
   const handleSpinGlobe = () => {
     if (!panels.spinGlobe.visible && restrictBounds) {
@@ -89,9 +89,15 @@ export function ControlsMenu({
   };
   const confirmSpinGlobe = () => {
     setSpinGlobeNoticeOpen(false);
-    // The dialog opens solely to enable spinning, so only toggle when it is off.
-    // Guarding on `visible` keeps a concurrent enable from inverting into a
-    // turn-off, and an unlock of bounds meanwhile does not affect correctness.
+    // Unlock the bounds so the globe can actually spin, then start spinning.
+    // Read live state at click time so a concurrent change isn't clobbered.
+    const { preferences } = useAppStore.getState();
+    if (preferences.map.restrictBounds) {
+      setPreferences({
+        ...preferences,
+        map: { ...preferences.map, restrictBounds: false },
+      });
+    }
     if (!panels.spinGlobe.visible) panels.spinGlobe.toggle();
   };
   // Whether the first group (built-in controls + atmosphere/routing toggles) has
@@ -254,7 +260,7 @@ export function ControlsMenu({
               {t("common.cancel")}
             </Button>
             <Button onClick={confirmSpinGlobe}>
-              {t("toolbar.item.continue")}
+              {t("toolbar.item.spinGlobeBoundsUnlock")}
             </Button>
           </div>
         </DialogContent>
