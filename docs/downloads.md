@@ -14,7 +14,37 @@ Release builds are produced for:
 - macOS Apple Silicon: Developer ID signed and notarized DMG and app bundle (v1.4.1+)
 - macOS Intel: Developer ID signed and notarized DMG and app bundle (v1.4.1+)
 
-The Windows build is unsigned and may require a platform-specific trust prompt. Check each release note for the exact assets and platform guidance.
+The Windows GitHub Release build is unsigned and may require a platform-specific
+trust prompt; the [Microsoft Store](#windows-installation) build is signed and
+auto-updating. Check each release note for the exact assets and platform
+guidance.
+
+## Windows installation
+
+### Microsoft Store (recommended)
+
+GeoLibre is available on the
+[Microsoft Store](https://apps.microsoft.com/detail/9nwt67rv531x). The Store
+build is signed and updates automatically, so it installs and launches without
+a trust prompt:
+
+[Get GeoLibre from the Microsoft Store](https://apps.microsoft.com/detail/9nwt67rv531x){ .md-button .md-button--primary }
+
+### winget
+
+The [Windows Package Manager](https://learn.microsoft.com/windows/package-manager/)
+distributes GeoLibre as `OpenGeos.GeoLibre` (the GitHub Release build):
+
+```powershell
+winget install OpenGeos.GeoLibre
+```
+
+### Manual installation
+
+Download the Windows installer (`.msi` or `.exe`) from the latest
+[release](https://github.com/opengeos/GeoLibre/releases) and run it. This build
+is unsigned, so Windows SmartScreen may warn you; choose **More info → Run
+anyway** to proceed.
 
 ## macOS installation
 

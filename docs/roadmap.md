@@ -244,6 +244,7 @@
 - [x] Guided update workflow with a startup update check, update preferences, and clearer status colors
 - [x] Time Slider defaults an unspecified end date to the current date
 - [x] Windows Package Manager (winget) packaging as `OpenGeos.GeoLibre`, so the app can be installed and updated through winget
+- [x] [Microsoft Store](https://apps.microsoft.com/detail/9nwt67rv531x) listing, so Windows users can install the signed, auto-updating build directly from the Store (see [Downloads](downloads.md))
 
 ## Plugin marketplace and registry (design)
 
