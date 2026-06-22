@@ -29,7 +29,18 @@ const ANNOUNCEMENT_TTL_MS = 5000;
  */
 export function CollaborationStatusBadge() {
   const { t } = useTranslation();
-  const collaboration = useAppStore((s) => s.collaboration);
+  // Narrow selectors rather than the whole `collaboration` slice: remote cursor
+  // presence updates that slice many times per second, and subscribing to the
+  // whole object would re-render this badge on every pointer move even though it
+  // never renders presence.
+  const isActive = useAppStore((s) => s.collaboration.isActive);
+  const connecting = useAppStore((s) => s.collaboration.connecting);
+  const participants = useAppStore((s) => s.collaboration.participants);
+  // `clientId` is typed `string | null`; fall back to an empty-string sentinel
+  // so the `id !== selfId` self-filtering below never treats a null id as "not
+  // me" and announces the local user joining. Server client ids are UUIDs, so
+  // "" can never collide with a real participant.
+  const selfId = useAppStore((s) => s.collaboration.clientId) ?? "";
   const setCollaborateDialogOpen = useAppStore(
     (s) => s.setCollaborateDialogOpen,
   );
@@ -37,13 +48,6 @@ export function CollaborationStatusBadge() {
   // bounds-restriction badge, so lift the badge above whichever of those is
   // showing (see the positioning note below).
   const restrictBounds = useAppStore((s) => s.preferences.map.restrictBounds);
-  const isActive = collaboration.isActive;
-  const participants = collaboration.participants;
-  // `clientId` is typed `string | null`; fall back to an empty-string sentinel
-  // so the `id !== selfId` self-filtering below never treats a null id as "not
-  // me" and announces the local user joining. Server client ids are UUIDs, so
-  // "" can never collide with a real participant.
-  const selfId = collaboration.clientId ?? "";
 
   const [expanded, setExpanded] = useState(false);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -53,6 +57,10 @@ export function CollaborationStatusBadge() {
   const knownRef = useRef<Map<string, string> | null>(null);
   const announceIdRef = useRef(0);
   const timersRef = useRef<number[]>([]);
+  // The previous render's selfId. A transparent reconnect can rotate clientId
+  // while isActive stays true; without remembering the old id, the diff below
+  // would see the old self-id drop out of the roster and announce "you left".
+  const prevSelfIdRef = useRef(selfId);
 
   // Clear any pending auto-dismiss timers on unmount.
   useEffect(
@@ -80,6 +88,8 @@ export function CollaborationStatusBadge() {
     );
     const known = knownRef.current;
     knownRef.current = current;
+    const prevSelfId = prevSelfIdRef.current;
+    prevSelfIdRef.current = selfId;
     // First roster for this session: seed silently. This also doubles as a
     // buffer for the live region below, which only mounts while a session is
     // active: this early return guarantees at least one render with the region
@@ -98,7 +108,10 @@ export function CollaborationStatusBadge() {
       }
     }
     for (const [id, name] of known) {
-      if (id !== selfId && !current.has(id)) {
+      // Skip both the current and previous self-id so a clientId rotation
+      // during a transparent reconnect doesn't announce "you left".
+      if (id === selfId || id === prevSelfId) continue;
+      if (!current.has(id)) {
         fresh.push({
           id: announceIdRef.current++,
           text: t("collaborate.participantLeft", { name }),
@@ -232,18 +245,29 @@ export function CollaborationStatusBadge() {
         type="button"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
-        aria-controls="collab-roster-panel"
-        aria-label={t("collaborate.sessionStatusTooltip")}
-        title={t("collaborate.sessionStatusTooltip")}
+        // Only reference the roster while it is mounted (it is conditionally
+        // rendered when collapsed), so the id target always exists.
+        aria-controls={expanded ? "collab-roster-panel" : undefined}
+        // Describe the action the click performs, which flips with state.
+        aria-label={
+          expanded
+            ? t("collaborate.collapseRoster")
+            : t("collaborate.sessionStatusTooltip")
+        }
+        title={
+          expanded
+            ? t("collaborate.collapseRoster")
+            : t("collaborate.sessionStatusTooltip")
+        }
         className="pointer-events-auto flex items-center gap-1.5 self-start rounded-full border bg-background/95 px-2.5 py-1 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm transition hover:bg-accent"
       >
         <span className="relative flex h-2 w-2" aria-hidden="true">
-          {!collaboration.connecting && (
+          {!connecting && (
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-500 opacity-60" />
           )}
           <span
             className={`relative inline-flex h-2 w-2 rounded-full ${
-              collaboration.connecting ? "bg-amber-500" : "bg-green-500"
+              connecting ? "bg-amber-500" : "bg-green-500"
             }`}
           />
         </span>

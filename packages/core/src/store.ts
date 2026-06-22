@@ -577,7 +577,13 @@ export const useAppStore = create<AppState>()(
           return { collaboration: { ...s.collaboration, presence: next } };
         }),
       resetCollaboration: () =>
-        set({ collaboration: DEFAULT_COLLABORATION_STATE }),
+        // Also close the Collaborate dialog: an unexpected disconnect resets the
+        // slice without a user-initiated leave(), and leaving the dialog open
+        // would drop the user onto the start/join form with no context.
+        set((s) => ({
+          collaboration: DEFAULT_COLLABORATION_STATE,
+          ui: { ...s.ui, collaborateDialogOpen: false },
+        })),
       setMapView: (view, markDirty = false) =>
         set((s) => ({
           mapView: { ...s.mapView, ...view },

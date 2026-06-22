@@ -514,7 +514,11 @@ function ActiveSession({
           live, so the host isn't tempted to use the "X" (which they fear ends
           the session) to get back to the map (#754). */}
       <Button type="button" className="w-full" onClick={onDismiss}>
-        {t("collaborate.goToMap")}
+        {/* A view-only guest cannot edit, so "collaborate" would mislead; offer
+            "watch" wording for that case. */}
+        {isHost || collaboration.mode === "co-edit"
+          ? t("collaborate.goToMap")
+          : t("collaborate.goToMapViewOnly")}
         <ArrowRight className="ml-2 h-3.5 w-3.5" />
       </Button>
 
