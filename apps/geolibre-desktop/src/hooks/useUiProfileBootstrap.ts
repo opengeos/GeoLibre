@@ -1,8 +1,9 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { create } from "zustand";
 import { loadAdminProfile } from "../lib/admin-profile";
 import { presetHiddenSets, toggleablePluginIds } from "../lib/ui-profile";
 import { usePluginRegistry } from "./usePlugins";
+import { projectUrlFromLocation } from "./useProjectUrlLoader";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
 
 // Whether the one-time admin-profile check has finished. Kept in its own store
@@ -44,6 +45,11 @@ export function useUiProfileBootstrap(): {
   const uiProfile = useDesktopSettingsStore(
     (state) => state.desktopSettings.uiProfile,
   );
+
+  // A `?url=` deep link (e.g. the viewer.geolibre.app embed) opens straight into
+  // a shared project, so the first-launch onboarding wizard would just get in
+  // the way. Computed once: the location does not change during a session.
+  const hasProjectDeepLink = useMemo(() => projectUrlFromLocation() !== null, []);
 
   // One-time admin-profile check. Built-in plugins are registered synchronously
   // at module load, so they are all present here; externally-loaded plugins are
@@ -115,7 +121,10 @@ export function useUiProfileBootstrap(): {
   // Derived from store state so completing/dismissing onboarding (which sets
   // `onboarded`) hides the wizard without extra local state.
   const showOnboarding =
-    adminChecked && !uiProfile.onboarded && !uiProfile.locked;
+    adminChecked &&
+    !uiProfile.onboarded &&
+    !uiProfile.locked &&
+    !hasProjectDeepLink;
 
   // Marks onboarding complete when the wizard is dismissed without a choice
   // (Escape/overlay). The wizard's own buttons set `onboarded` first, so this is

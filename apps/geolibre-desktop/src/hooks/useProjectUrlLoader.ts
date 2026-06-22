@@ -88,7 +88,7 @@ async function loadProjectFromUrl(projectUrl: string, signal: AbortSignal) {
   return parseProject(await response.text());
 }
 
-function projectUrlFromLocation(): string | null {
+export function projectUrlFromLocation(): string | null {
   if (typeof window === "undefined") return null;
 
   const search = window.location.search;
