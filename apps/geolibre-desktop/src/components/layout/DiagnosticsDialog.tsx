@@ -103,6 +103,10 @@ export function DiagnosticsDialog({
       ).length,
     [diagnostics.records],
   );
+  // When request logging is off, the network filter surfaces only errors, so it
+  // should share the red "error" styling of the Errors button. With logging on
+  // it tallies all requests (not just errors), so it stays neutral.
+  const networkAsError = !diagnostics.captureNetworkInfo;
 
   useEffect(
     () => () => {
@@ -191,8 +195,17 @@ export function DiagnosticsDialog({
               type="button"
               aria-pressed={activeFilter === "network"}
               className={cn(
-                "rounded border px-2 py-1 hover:bg-accent hover:text-accent-foreground",
-                activeFilter === "network" && "bg-accent text-accent-foreground",
+                "rounded border px-2 py-1",
+                networkAsError
+                  ? "hover:bg-destructive/10 hover:text-destructive dark:hover:text-red-200"
+                  : "hover:bg-accent hover:text-accent-foreground",
+                networkAsError &&
+                  networkErrorCount > 0 &&
+                  "border-destructive/50 text-destructive dark:border-red-400/60 dark:text-red-300",
+                activeFilter === "network" &&
+                  (networkAsError
+                    ? "border-destructive bg-destructive text-destructive-foreground hover:bg-destructive hover:text-destructive-foreground dark:border-red-500 dark:bg-red-600 dark:text-white dark:hover:bg-red-600 dark:hover:text-white"
+                    : "bg-accent text-accent-foreground"),
               )}
               onClick={() => setActiveFilter("network")}
             >
