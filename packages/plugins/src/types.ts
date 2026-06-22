@@ -231,6 +231,12 @@ export interface GeoLibreAppAPI {
   /** Id of the active right-side workspace panel, or null when none is open. */
   getActiveRightPanel?: () => string | null;
   /**
+   * Move the active right panel to the given side ("left" or "right") of the
+   * workspace, overriding its declared `side` until it closes. Mirrors the
+   * user-facing move button so a plugin can reposition its own panel.
+   */
+  setActiveRightPanelSide?: (side: "left" | "right") => void;
+  /**
    * Register a plugin-owned top-level toolbar menu shown in the GeoLibre banner
    * beside the built-in menus, with nested submenus and action items. Returns
    * an unregister function (call it from `deactivate`). Re-registering the same
@@ -362,6 +368,13 @@ export interface GeoLibreRightPanelRegistration {
   id: string;
   /** Human-readable title shown in the panel header and collapsed rail. */
   title: string;
+  /**
+   * Which side of the workspace the panel docks on. "right" (default) docks at
+   * the far right and collapses the Style panel; "left" docks at the far left
+   * and collapses the Layers panel. The user can move it at runtime with the
+   * panel's move button (or {@link GeoLibreAppAPI.setActiveRightPanelSide}).
+   */
+  side?: "left" | "right";
   /**
    * Optional icon for the collapsed rail. A URL or `data:` URI is rendered as
    * an image; any other value is ignored in favor of a default glyph.

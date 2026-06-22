@@ -7,12 +7,15 @@ export {
   collapseRightPanel,
   closeRightPanel,
   getActiveRightPanel,
+  setActiveRightPanelSide,
+  getActiveRightPanelSide,
   isRightPanelCollapsed,
   getRightPanel,
   listRightPanels,
   getRightPanelSnapshot,
   subscribeRightPanels,
   type RightPanelSnapshot,
+  type RightPanelSide,
 } from "./right-panel-registry";
 export {
   registerToolbarMenu,

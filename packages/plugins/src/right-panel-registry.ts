@@ -21,11 +21,19 @@ import type { GeoLibreRightPanelRegistration } from "./types";
  * stable between mutations so React can skip re-renders; `version` is bumped on
  * every change (including registration list changes) so subscribers re-read.
  */
+export type RightPanelSide = "left" | "right";
+
 export interface RightPanelSnapshot {
   /** Id of the active right-side workspace panel, or null when none is open. */
   activeId: string | null;
   /** Whether the active panel is collapsed to its rail. */
   collapsed: boolean;
+  /**
+   * Which side of the workspace the active panel docks on, or null when none is
+   * open. Defaults to the panel's declared `side` ("right"), overridable at
+   * runtime via {@link setActiveRightPanelSide} so a user can move it.
+   */
+  side: RightPanelSide | null;
   /** Monotonic counter bumped on every registry mutation. */
   version: number;
 }
@@ -35,16 +43,25 @@ const listeners = new Set<() => void>();
 
 let activeId: string | null = null;
 let collapsed = false;
+// User override of the active panel's docking side; reset when the active panel
+// changes so each panel starts from its own declared `side`.
+let sideOverride: RightPanelSide | null = null;
 let version = 0;
 let snapshot: RightPanelSnapshot = {
   activeId: null,
   collapsed: false,
+  side: null,
   version: 0,
 };
 
+function currentSide(): RightPanelSide | null {
+  if (activeId === null) return null;
+  return sideOverride ?? registry.get(activeId)?.side ?? "right";
+}
+
 function emit(): void {
   version += 1;
-  snapshot = { activeId, collapsed, version };
+  snapshot = { activeId, collapsed, side: currentSide(), version };
   for (const listener of listeners) {
     listener();
   }
@@ -114,6 +131,8 @@ export function openRightPanel(id: string): boolean {
   // A different panel taking the workspace displaces the current owner; release
   // it (onClose) so a plugin can free resources allocated for its panel.
   const displacedId = wasInactive ? activeId : null;
+  // A new panel starts from its own declared side, not the previous user move.
+  if (wasInactive) sideOverride = null;
   activeId = id;
   collapsed = false;
   emit();
@@ -146,8 +165,26 @@ export function closeRightPanel(id: string): void {
   if (activeId !== id) return;
   activeId = null;
   collapsed = false;
+  sideOverride = null;
   emit();
   runHook(id, "onClose", registry.get(id)?.onClose);
+}
+
+/**
+ * Move the active panel to the given side of the workspace ("left" or "right"),
+ * overriding the panel's declared `side` until it closes or another panel
+ * opens. Lets a user dock the plugin panel left or right of the Style panel.
+ * No-op when no panel is active.
+ */
+export function setActiveRightPanelSide(side: RightPanelSide): void {
+  if (activeId === null || currentSide() === side) return;
+  sideOverride = side;
+  emit();
+}
+
+/** Which side the active panel docks on, or null when none is open. */
+export function getActiveRightPanelSide(): RightPanelSide | null {
+  return currentSide();
 }
 
 /** Id of the active right-side workspace panel, or null when none is open. */
@@ -194,6 +231,7 @@ export function __resetRightPanelRegistryForTests(): void {
   listeners.clear();
   activeId = null;
   collapsed = false;
+  sideOverride = null;
   version = 0;
-  snapshot = { activeId: null, collapsed: false, version: 0 };
+  snapshot = { activeId: null, collapsed: false, side: null, version: 0 };
 }

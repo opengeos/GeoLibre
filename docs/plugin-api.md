@@ -91,6 +91,7 @@ export interface GeoLibreAppAPI {
   collapseRightPanel?: (id: string) => void;
   closeRightPanel?: (id: string) => void;
   getActiveRightPanel?: () => string | null;
+  setActiveRightPanelSide?: (side: "left" | "right") => void;
   // Top toolbar menus (see "Toolbar menus" below).
   registerToolbarMenu?: (menu: GeoLibreToolbarMenu) => () => void;
   unregisterToolbarMenu?: (id: string) => void;
@@ -127,6 +128,8 @@ export interface GeoLibreFloatingPanelRegistration {
 export interface GeoLibreRightPanelRegistration {
   id: string;
   title: string;
+  /** Dock side: "right" (default, collapses Style) or "left" (collapses Layers). */
+  side?: "left" | "right";
   /** Optional rail icon: a URL or data: URI rendered as an image. */
   icon?: string;
   /** Preferred expanded width in px (desktop only; host-clamped). */
@@ -276,6 +279,7 @@ Notes:
 - Only one plugin right panel is the active right-side workspace at a time. While one is active GeoLibre collapses the Style panel to its rail and restores its previous state when the plugin panel closes, so the two never compete for the same space.
 - `openRightPanel(id)` makes the panel active and expanded (it also expands a collapsed panel); `collapseRightPanel(id)` collapses it to its rail without closing; `closeRightPanel(id)` releases the workspace; `getActiveRightPanel()` returns the active id or `null`.
 - The panel is a flex sibling of the map, so opening it shrinks the map view (the map keeps filling the remaining space); no manual map padding is required.
+- **Docking side:** set `side: "left"` to dock at the far left (collapsing the Layers panel) instead of the default far right (collapsing the Style panel). The user can move the panel between edges at runtime with the move button in the panel header, and a plugin can do the same with `app.setActiveRightPanelSide?.("left" | "right")`. The chosen side resets to the panel's declared `side` when it closes or another panel opens.
 - These methods are typed optional for forward-compatibility with host variants that have no right sidebar, so call them with optional chaining (`app.registerRightPanel?.(...)`).
 
 ## Toolbar menus

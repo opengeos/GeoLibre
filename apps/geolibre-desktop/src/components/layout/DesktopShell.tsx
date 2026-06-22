@@ -65,7 +65,7 @@ import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
 import { registerXyzTileProtocol } from "../../lib/xyz-url";
 import { useEmbedBridge } from "../../hooks/useEmbedBridge";
 import { useRasterIdentify } from "../../hooks/useRasterIdentify";
-import { useRightPanelActive } from "../../hooks/useRightPanels";
+import { useActiveRightPanelSide } from "../../hooks/useRightPanels";
 import { BoundsRestrictionIndicator } from "./BoundsRestrictionIndicator";
 import { MapGrid } from "./MapGrid";
 import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
@@ -419,9 +419,13 @@ export function DesktopShell({
   const pythonConsoleOpen = useAppStore((s) => s.ui.pythonConsoleOpen);
   const notebookOpen = useAppStore((s) => s.ui.notebookOpen);
   const storymapPresenting = useAppStore((s) => s.ui.storymapPresenting);
-  // A plugin-owned right panel claims the right-side workspace, so the Style
-  // panel collapses to its rail while one is active and restores when it closes.
-  const pluginRightPanelActive = useRightPanelActive();
+  // A plugin-owned dockable panel claims one workspace edge: a right-docked
+  // panel collapses the Style panel, a left-docked one collapses the Layers
+  // panel, each restoring when the plugin panel closes or moves to the other
+  // edge (issue #712).
+  const activeRightPanelSide = useActiveRightPanelSide();
+  const pluginRightPanelActive = activeRightPanelSide === "right";
+  const pluginLeftPanelActive = activeRightPanelSide === "left";
   const assistantOpen = useAppStore((s) => s.ui.assistantOpen);
   const dashboardOpen = useAppStore((s) => s.ui.dashboardOpen);
   const geometryEditLayerId = useSyncExternalStore(
@@ -1334,10 +1338,13 @@ export function DesktopShell({
               onOpenRasterStylePanel={() =>
                 openRasterLayerPanel(createAppAPI(mapControllerRef))
               }
-              autoCollapse={storymapPresenting}
+              autoCollapse={storymapPresenting || pluginLeftPanelActive}
             />
           </SectionErrorBoundary>
         ) : null}
+        <SectionErrorBoundary label="Plugin panel (left)">
+          <PluginRightPanel slot="left" />
+        </SectionErrorBoundary>
         <main
           // `isolate` creates a stacking context so map-panel z-indexes (up to 10000) stay below body-portaled dialogs. See #451.
           className={`relative isolate min-w-0 flex-1 overflow-hidden ${
@@ -1380,8 +1387,8 @@ export function DesktopShell({
             />
           </SectionErrorBoundary>
         ) : null}
-        <SectionErrorBoundary label="Plugin panel">
-          <PluginRightPanel />
+        <SectionErrorBoundary label="Plugin panel (right)">
+          <PluginRightPanel slot="right" />
         </SectionErrorBoundary>
         {notebookOpen ? (
           <SectionErrorBoundary label="Notebook">

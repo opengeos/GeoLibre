@@ -1649,6 +1649,8 @@
     "collapse": "Collapse panel",
     "close": "Close panel",
     "resize": "Resize panel",
+    "moveLeft": "Move panel to the left",
+    "moveRight": "Move panel to the right",
     "collapsedLabel": "{{title}} (collapsed)"
   },
   "style": {

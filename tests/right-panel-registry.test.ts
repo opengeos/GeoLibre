@@ -5,12 +5,14 @@ import {
   closeRightPanel,
   collapseRightPanel,
   getActiveRightPanel,
+  getActiveRightPanelSide,
   getRightPanel,
   getRightPanelSnapshot,
   isRightPanelCollapsed,
   listRightPanels,
   openRightPanel,
   registerRightPanel,
+  setActiveRightPanelSide,
   subscribeRightPanels,
   unregisterRightPanel,
 } from "../packages/plugins/src/right-panel-registry";
@@ -105,6 +107,37 @@ describe("right-panel registry", () => {
     openRightPanel("b");
     assert.equal(getActiveRightPanel(), "b");
     assert.deepEqual(calls, ["a:close", "b:open"]);
+  });
+
+  it("defaults to the right side and honors a declared side", () => {
+    registerRightPanel(testPanel({ id: "r", title: "R" }));
+    registerRightPanel(testPanel({ id: "l", title: "L", side: "left" }));
+    openRightPanel("r");
+    assert.equal(getActiveRightPanelSide(), "right");
+    assert.equal(getRightPanelSnapshot().side, "right");
+    openRightPanel("l");
+    assert.equal(getActiveRightPanelSide(), "left");
+  });
+
+  it("lets the active panel be moved to the other side, resetting on switch", () => {
+    registerRightPanel(testPanel({ id: "a", title: "A" }));
+    registerRightPanel(testPanel({ id: "b", title: "B" }));
+    openRightPanel("a");
+    assert.equal(getActiveRightPanelSide(), "right");
+    setActiveRightPanelSide("left");
+    assert.equal(getActiveRightPanelSide(), "left");
+    assert.equal(getRightPanelSnapshot().side, "left");
+    // Opening another panel resets to that panel's declared side.
+    openRightPanel("b");
+    assert.equal(getActiveRightPanelSide(), "right");
+    // Closing clears the side entirely.
+    closeRightPanel("b");
+    assert.equal(getActiveRightPanelSide(), null);
+  });
+
+  it("ignores a side move when no panel is active", () => {
+    setActiveRightPanelSide("left");
+    assert.equal(getActiveRightPanelSide(), null);
   });
 
   it("notifies subscribers and exposes a stable snapshot between mutations", () => {

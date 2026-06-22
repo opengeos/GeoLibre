@@ -1,6 +1,7 @@
 import {
   getRightPanelSnapshot,
   subscribeRightPanels,
+  type RightPanelSide,
   type RightPanelSnapshot,
 } from "@geolibre/plugins";
 import { useSyncExternalStore } from "react";
@@ -22,16 +23,17 @@ export function useRightPanelState(): RightPanelSnapshot {
   );
 }
 
-const selectActive = () => getRightPanelSnapshot().activeId !== null;
+const selectSide = () => getRightPanelSnapshot().side;
 
 /**
- * Subscribe only to whether a plugin right panel is the active workspace.
+ * Subscribe only to which side the active plugin right panel docks on.
  *
- * Returns a boolean, so consumers (e.g. the shell) re-render only when a panel
- * opens or closes, not on every collapse/expand toggle of the active panel.
+ * Returns "left", "right", or null (no panel open) — a primitive, so consumers
+ * (e.g. the shell) re-render only when a panel opens, closes, or moves sides,
+ * not on every collapse/expand toggle.
  *
- * @returns True when a plugin right panel is open.
+ * @returns The active panel's side, or null when none is open.
  */
-export function useRightPanelActive(): boolean {
-  return useSyncExternalStore(subscribeRightPanels, selectActive, selectActive);
+export function useActiveRightPanelSide(): RightPanelSide | null {
+  return useSyncExternalStore(subscribeRightPanels, selectSide, selectSide);
 }
