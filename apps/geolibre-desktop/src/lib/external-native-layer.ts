@@ -3,18 +3,11 @@ import type { GeoLibreExternalNativeLayerRegistration } from "@geolibre/plugins"
 
 /**
  * Build the store layer record for an external plugin's native GeoJSON layer.
- *
- * Plugins typically create the rendered layer first with `addGeoJsonLayer`
- * (which seeds it with `DEFAULT_LAYER_STYLE`) and then call
- * `registerExternalNativeLayer` to attach their own style and metadata. The
- * registration's style must therefore win over the existing layer's style:
- * `existing.style` already carries the full default style, so merging it last
- * would silently clobber the plugin's colors with GeoLibre's default blue and
- * reset the rendered paint on the next visibility/layer-control change.
- *
- * @param registration - The plugin-supplied native layer registration.
- * @param existing - The current store layer for this id, if one already exists.
- * @returns The reconciled `GeoLibreLayer` record to add to or update in the store.
+ * The layer is plugin-owned, so the registration's `style`/`opacity` win over
+ * an `existing` layer: `addGeoJsonLayer` seeds the layer with the full
+ * `DEFAULT_LAYER_STYLE` and `opacity: 1` before the plugin registers its own,
+ * so merging the existing values last would clobber the plugin's choices and
+ * reset the rendered layer on the next visibility/layer-control change.
  */
 export function createExternalNativeStoreLayer(
   registration: GeoLibreExternalNativeLayerRegistration,
@@ -36,7 +29,7 @@ export function createExternalNativeStoreLayer(
       ...(sourceId ? { sourceId } : {}),
     },
     visible: existing?.visible ?? true,
-    opacity: existing?.opacity ?? registration.opacity ?? 1,
+    opacity: registration.opacity ?? existing?.opacity ?? 1,
     style: {
       ...DEFAULT_LAYER_STYLE,
       ...(existing?.style ?? {}),
