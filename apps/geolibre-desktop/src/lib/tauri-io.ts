@@ -643,7 +643,13 @@ export async function pickVectorFilesWithSidecars(): Promise<PickedVectorFile[]>
 export async function readVectorFileWithSidecars(
   path: string,
 ): Promise<{ file: File; companionFiles: File[] } | null> {
-  if (!isTauri() || !isAbsoluteLocalPath(path)) return null;
+  // Reject `..` segments as well as relative paths: the path comes from a
+  // (possibly hand-edited) project file, so a traversal must not reach outside
+  // wherever Tauri's filesystem scope allows. The scope is the real boundary;
+  // this is cheap defense-in-depth.
+  if (!isTauri() || !isAbsoluteLocalPath(path) || path.includes("..")) {
+    return null;
+  }
   try {
     const file = new File(
       [toArrayBuffer(await readFile(path))],

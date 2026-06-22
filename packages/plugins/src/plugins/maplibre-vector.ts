@@ -244,10 +244,13 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
           typeof layer.sourcePath === "string" &&
           layer.sourcePath.trim() &&
           // The path comes from the (possibly hand-edited) project file, so
-          // only re-read recognized vector extensions: a crafted project must
-          // not coax the desktop app into reading an arbitrary file (e.g.
-          // /etc/passwd, ~/.ssh/id_rsa) off disk.
-          RESTORABLE_VECTOR_PATH.test(layer.sourcePath)
+          // only re-read recognized vector extensions, and reject `..`
+          // traversal: a crafted project must not coax the desktop app into
+          // reading an arbitrary file (e.g. /etc/passwd, ~/.ssh/id_rsa) off
+          // disk. The host's filesystem scope is the real boundary; this is
+          // cheap defense-in-depth.
+          RESTORABLE_VECTOR_PATH.test(layer.sourcePath) &&
+          !layer.sourcePath.includes("..")
             ? layer.sourcePath
             : undefined;
         if (localPath && app.readLocalVectorFile) {
@@ -383,6 +386,10 @@ export async function materializeEmbeddableVectorLayers(
   layers: GeoLibreLayer[],
 ): Promise<Map<string, FeatureCollection>> {
   const result = new Map<string, FeatureCollection>();
+  // The control is created on project load (restoreVectorLayers) and on first
+  // panel open, so it exists whenever embeddable layers do; the null guard is
+  // just for a save issued before any vector layer has been touched, where
+  // there is nothing to embed anyway.
   const control = vectorControl;
   if (!control) return result;
   for (const layer of layers) {

@@ -203,27 +203,22 @@ export function syncVectorLayersToStore(control: VectorSyncableControl): void {
         continue;
       }
 
-      const nextMetadata =
-        existing.metadata.embeddedGeoJSON &&
-        isEmbeddableLocalVectorLayer(layer)
-          ? {
-              ...layer.metadata,
-              embeddedGeoJSON: existing.metadata.embeddedGeoJSON,
-            }
-          : layer.metadata;
-
       if (
         existing.type !== layer.type ||
         existing.visible !== layer.visible ||
         existing.opacity !== layer.opacity ||
         existing.sourcePath !== layer.sourcePath ||
         !recordsEqual(existing.source, layer.source) ||
-        !recordsEqual(existing.metadata, nextMetadata)
+        !recordsEqual(existing.metadata, layer.metadata)
       ) {
         useAppStore.getState().updateLayer(layer.id, {
-          // Replace metadata wholesale so stale keys (bounds, featureCount)
-          // cannot survive a layer being swapped out under the same id.
-          metadata: nextMetadata,
+          // Replace metadata wholesale so stale keys (bounds, featureCount,
+          // and any embeddedGeoJSON loaded from the project) cannot survive a
+          // layer being swapped out under the same id. embeddedGeoJSON is not
+          // kept live: the web Save flow re-materializes it fresh from the
+          // control (getLayerGeoJSON), so a reopened layer drops its loaded
+          // blob here and re-embeds current data on the next save.
+          metadata: layer.metadata,
           opacity: layer.opacity,
           source: layer.source,
           sourcePath: layer.sourcePath,

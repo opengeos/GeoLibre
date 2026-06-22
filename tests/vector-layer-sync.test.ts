@@ -442,28 +442,28 @@ describe("syncVectorLayersToStore", () => {
     assert.equal(useAppStore.getState().layers[0], before);
   });
 
-  it("preserves embedded GeoJSON that is not present in control snapshots", () => {
+  it("drops a loaded embeddedGeoJSON blob on sync (re-materialized at save)", () => {
+    // embeddedGeoJSON is not kept live in the store: a project loads it, restore
+    // replays it into the control, and this sync then replaces the layer's
+    // metadata without it. The web Save flow re-materializes it from the control
+    // (getLayerGeoJSON), so the stale loaded blob must not survive here.
     const info = vectorInfo({
       source: { kind: "file", fileName: "local.geojson" },
     });
     const { control } = fakeControl([info]);
     syncVectorLayersToStore(control);
-    const embedded = {
-      type: "FeatureCollection" as const,
-      features: [],
-    };
     useAppStore.getState().updateLayer("vector-1", {
       metadata: {
         ...useAppStore.getState().layers[0].metadata,
-        embeddedGeoJSON: embedded,
+        embeddedGeoJSON: { type: "FeatureCollection" as const, features: [] },
       },
     });
 
     syncVectorLayersToStore(fakeControl([info]).control);
 
     assert.equal(
-      useAppStore.getState().layers[0].metadata.embeddedGeoJSON,
-      embedded,
+      "embeddedGeoJSON" in useAppStore.getState().layers[0].metadata,
+      false,
     );
   });
 
