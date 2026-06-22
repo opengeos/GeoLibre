@@ -56,8 +56,11 @@ export function CollaborationStatusBadge() {
 
   useEffect(() => {
     if (!isActive) {
-      // Session ended: reset so the next session starts clean (and we don't
-      // announce its initial roster against a stale previous one).
+      // Session ended: cancel any pending auto-dismiss timers from the previous
+      // session and reset so the next one starts clean (and we don't announce
+      // its initial roster against a stale previous one).
+      for (const id of timersRef.current) window.clearTimeout(id);
+      timersRef.current = [];
       knownRef.current = null;
       setExpanded(false);
       setAnnouncements([]);
@@ -92,6 +95,8 @@ export function CollaborationStatusBadge() {
     for (const a of fresh) {
       const timer = window.setTimeout(() => {
         setAnnouncements((prev) => prev.filter((x) => x.id !== a.id));
+        // Drop the fired timer so the array stays bounded over a long session.
+        timersRef.current = timersRef.current.filter((id) => id !== timer);
       }, ANNOUNCEMENT_TTL_MS);
       timersRef.current.push(timer);
     }
@@ -102,20 +107,19 @@ export function CollaborationStatusBadge() {
   return (
     <div className="pointer-events-none absolute bottom-2 left-2 z-10 flex w-60 max-w-[calc(100%-1rem)] flex-col gap-1.5">
       {/* Transient join/leave announcements, stacked just above the pill. The
-          live region lets assistive tech read them out as they appear. */}
-      {announcements.length > 0 && (
-        <div className="flex flex-col gap-1" role="status" aria-live="polite">
-          {announcements.map((a) => (
-            <div
-              key={a.id}
-              className="pointer-events-auto flex items-center gap-1.5 rounded-md border bg-background/95 px-2 py-1 text-xs text-foreground shadow-sm backdrop-blur-sm"
-            >
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-green-500" />
-              <span className="truncate">{a.text}</span>
-            </div>
-          ))}
-        </div>
-      )}
+          live region stays mounted at all times (even when empty) and only its
+          content changes, so screen readers reliably pick up each insertion. */}
+      <div className="flex flex-col gap-1" role="status" aria-live="polite">
+        {announcements.map((a) => (
+          <div
+            key={a.id}
+            className="pointer-events-auto flex items-center gap-1.5 rounded-md border bg-background/95 px-2 py-1 text-xs text-foreground shadow-sm backdrop-blur-sm"
+          >
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-green-500" />
+            <span className="truncate">{a.text}</span>
+          </div>
+        ))}
+      </div>
 
       {/* Expanded roster: who is connected, plus a way back to the dialog. */}
       {expanded && (
@@ -179,6 +183,7 @@ export function CollaborationStatusBadge() {
         type="button"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
+        aria-label={t("collaborate.sessionStatusTooltip")}
         title={t("collaborate.sessionStatusTooltip")}
         className="pointer-events-auto flex items-center gap-1.5 self-start rounded-full border bg-background/95 px-2.5 py-1 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm transition hover:bg-accent"
       >
