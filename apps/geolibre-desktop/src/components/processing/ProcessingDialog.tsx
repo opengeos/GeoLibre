@@ -913,7 +913,11 @@ export function ProcessingDialog({
               </Button>
             </div>
 
-            {runtimeAvailable !== true && (
+            {/* The processing server is a local Python process that only the
+                desktop app can spawn or stop. In the browser these buttons
+                would always fail, and a same-origin sidecar (when deployed) is
+                auto-detected without them, so gate both on the desktop build. */}
+            {isTauri() && runtimeAvailable !== true && (
               <Button
                 type="button"
                 variant="outline"
@@ -929,7 +933,7 @@ export function ProcessingDialog({
               </Button>
             )}
 
-            {runtimeAvailable === true && (
+            {isTauri() && runtimeAvailable === true && (
               <Button
                 type="button"
                 variant="outline"
