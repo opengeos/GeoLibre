@@ -582,10 +582,11 @@ export function drawLayout(
       (hasTitleText ? titleSize : 0) +
       (hasSubtitleText ? (hasTitleText ? subtitleSize * 1.6 : subtitleSize * 1.2) : 0);
     // Keep the translucent backing clear of the map frame so it does not wash
-    // out the dark border line at the top/left/right edges (GH #748). The body
-    // border is centred on the body edge, so its inner half lies inside this
-    // fill; inset by the full border width to leave the frame line crisp.
-    const frameInset = mapBorderWidth;
+    // out the dark border line at the top/left/right edges (GH #748). strokeRect
+    // centres the stroke on the body edge, so only its inner half (lineWidth/2)
+    // intrudes into the body; inset the fill by exactly that so it starts at the
+    // frame's inner edge with no gap and no overlap.
+    const frameInset = mapBorderWidth / 2;
     ctx.fillStyle = "rgba(255,255,255,0.7)";
     ctx.fillRect(
       bodyX + frameInset,
