@@ -1,7 +1,11 @@
-import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import {
   hasPathTraversal,
+  useAppStore,
+  type GeoLibreLayer,
+} from "@geolibre/core";
+import {
   isAbsoluteLocalPath,
+  isRestorableVectorPath,
   isTauri,
   loadDroppedVectorPaths,
 } from "./tauri-io";
@@ -23,8 +27,10 @@ function needsLocalFileReload(layer: GeoLibreLayer): boolean {
     layer.metadata.localFileReloadable === true &&
     typeof layer.sourcePath === "string" &&
     isAbsoluteLocalPath(layer.sourcePath) &&
-    // Reject a crafted project's `..` traversal before re-reading off disk.
+    // Reject a crafted project's `..` traversal or a non-vector extension
+    // before re-reading off disk (mirrors restoreVectorLayers' guard).
     !hasPathTraversal(layer.sourcePath) &&
+    isRestorableVectorPath(layer.sourcePath) &&
     layer.metadata.externalNativeLayer !== true &&
     layer.metadata.sourceKind == null
   );

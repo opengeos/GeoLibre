@@ -1,4 +1,8 @@
-import { getSpatialExtensionPath, useAppStore } from "@geolibre/core";
+import {
+  getSpatialExtensionPath,
+  hasPathTraversal,
+  useAppStore,
+} from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 import type {
   VectorControl,
@@ -34,10 +38,6 @@ const VECTOR_PANEL_CLASS = "geolibre-vector-panel";
 // case-insensitively against the end of the path.
 const RESTORABLE_VECTOR_PATH =
   /\.(geojson|json|gpkg|geoparquet|parquet|fgb|flatgeobuf|csv|tsv|kml|kmz|gml|gpx|dxf|tab|shp|zip)$/i;
-
-// Matches a `..` directory-traversal segment (bounded by separators or the
-// string ends), without rejecting a `..` inside a filename like `v1..2.gpkg`.
-const PATH_TRAVERSAL = /(?:^|[/\\])\.\.(?:[/\\]|$)/;
 
 // Generic, non-loading watermark for the URL input. The real demonstration
 // links live in SAMPLE_VECTOR_DATASETS below, so the input no longer ships
@@ -254,7 +254,7 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
           // disk. The host's filesystem scope is the real boundary; this is
           // cheap defense-in-depth.
           RESTORABLE_VECTOR_PATH.test(layer.sourcePath) &&
-          !PATH_TRAVERSAL.test(layer.sourcePath)
+          !hasPathTraversal(layer.sourcePath)
             ? layer.sourcePath
             : undefined;
         if (localPath && app.readLocalVectorFile) {

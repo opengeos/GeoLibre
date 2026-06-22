@@ -333,9 +333,20 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     prebuilt?: Map<string, FeatureCollection>,
   ): Promise<GeoLibreLayer[]> => {
     // Reuse a map the caller already materialized (the Embed save path) so each
-    // layer's features aren't read from the control twice.
-    const embeddable =
-      prebuilt ?? (await materializeEmbeddableVectorLayers(layers));
+    // layer's features aren't read from the control twice, but materialize any
+    // layer it doesn't cover — e.g. one added while the save dialog was open —
+    // so a late addition still gets its data instead of being dropped.
+    const embeddable = new Map(prebuilt);
+    const uncovered = prebuilt
+      ? layers.filter((layer) => !prebuilt.has(layer.id))
+      : layers;
+    if (uncovered.length > 0) {
+      for (const [id, collection] of await materializeEmbeddableVectorLayers(
+        uncovered,
+      )) {
+        embeddable.set(id, collection);
+      }
+    }
     return layers.map((layer) => {
       let metadata = layer.metadata;
       const collection = embeddable.get(layer.id);

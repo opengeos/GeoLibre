@@ -1,4 +1,8 @@
-import { parseProject, type GeoLibreProject } from "@geolibre/core";
+import {
+  hasPathTraversal,
+  parseProject,
+  type GeoLibreProject,
+} from "@geolibre/core";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
@@ -129,6 +133,23 @@ const VECTOR_FILE_DIALOG_EXTENSIONS = [
   "shp",
   "zip",
 ];
+
+const RESTORABLE_VECTOR_PATH = new RegExp(
+  `\\.(${VECTOR_FILE_DIALOG_EXTENSIONS.join("|")})$`,
+  "i",
+);
+
+/**
+ * Whether a path ends in a recognized vector extension. Used as a whitelist
+ * guard before re-reading a project's `sourcePath` off disk, so a crafted path
+ * pointing at a non-vector file is rejected.
+ *
+ * @param path - The path to check.
+ * @returns True when the extension is a loadable vector format.
+ */
+export function isRestorableVectorPath(path: string): boolean {
+  return RESTORABLE_VECTOR_PATH.test(path);
+}
 
 // Built at call time so the filter-group label shown in the native file dialog
 // is translated (a module-level constant would freeze the English string).
@@ -675,28 +696,13 @@ export async function readVectorFileWithSidecars(
   }
 }
 
-// Matches a `..` directory-traversal segment (bounded by separators or the
-// string ends), without rejecting a `..` inside a filename like `v1..2.gpkg`.
-const PATH_TRAVERSAL = /(?:^|[/\\])\.\.(?:[/\\]|$)/;
-
-/**
- * Whether a path contains a `..` directory-traversal segment. Used to reject a
- * crafted project's `sourcePath` before re-reading it off disk.
- *
- * @param path - The path to check.
- * @returns True when the path contains a traversal segment.
- */
-export function hasPathTraversal(path: string): boolean {
-  return PATH_TRAVERSAL.test(path);
-}
-
 export function isAbsoluteLocalPath(path: string): boolean {
   const trimmed = path.trim();
-  return (
-    trimmed.startsWith("/") ||
-    trimmed.startsWith("\\\\") ||
-    /^[a-z]:[\\/]/i.test(trimmed)
-  );
+  // Accept POSIX paths and Windows drive-letter paths only. UNC paths
+  // (\\server\share) are deliberately rejected: reading one can make Windows
+  // auto-authenticate against a remote host (NTLM hash capture), and a remote
+  // share is not a supported local data source.
+  return trimmed.startsWith("/") || /^[a-z]:[\\/]/i.test(trimmed);
 }
 
 async function loadTauriVectorFile(

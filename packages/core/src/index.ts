@@ -1,5 +1,6 @@
 export * from "./types";
 export * from "./color-ramp";
+export * from "./paths";
 export * from "./routing";
 export * from "./vector-color";
 export * from "./project";
