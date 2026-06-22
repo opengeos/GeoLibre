@@ -12,6 +12,7 @@ import {
   endLayerGeometryEdit,
   getGeometryEditTargetLayerId,
   openRasterLayerPanel,
+  getRightPanel,
   restoreDeckViz,
   restoreDirections,
   restoreReverseGeocode,
@@ -65,7 +66,10 @@ import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
 import { registerXyzTileProtocol } from "../../lib/xyz-url";
 import { useEmbedBridge } from "../../hooks/useEmbedBridge";
 import { useRasterIdentify } from "../../hooks/useRasterIdentify";
-import { useAutoCollapsedPanel } from "../../hooks/useRightPanels";
+import {
+  useAutoCollapsedPanel,
+  useRightPanelState,
+} from "../../hooks/useRightPanels";
 import { BoundsRestrictionIndicator } from "./BoundsRestrictionIndicator";
 import { MapGrid } from "./MapGrid";
 import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
@@ -81,6 +85,7 @@ import { FloatingPanels } from "../panels/FloatingPanels";
 import {
   PluginRightPanel,
   PLUGIN_PANEL_DEFAULT_WIDTH,
+  clampPluginPanelWidth,
 } from "../panels/PluginRightPanel";
 import { StylePanel } from "../panels/StylePanel";
 import { StoryMapPanel } from "../storymap/StoryMapPanel";
@@ -432,6 +437,47 @@ export function DesktopShell({
   const [pluginPanelWidth, setPluginPanelWidth] = useState(
     PLUGIN_PANEL_DEFAULT_WIDTH,
   );
+  // The active plugin panel's content lives in this one host element (created
+  // once per app instance). The active dock slot adopts it via appendChild, so
+  // moving the panel between docks relocates the same DOM and preserves the
+  // plugin's state. `contents` keeps it transparent to layout.
+  const [pluginContentEl] = useState(() => {
+    const el = document.createElement("div");
+    el.className = "contents";
+    return el;
+  });
+  const activePanelId = useRightPanelState().activeId;
+  const activePanel = activePanelId ? getRightPanel(activePanelId) : undefined;
+  // Render the active panel into the shared host once; re-run when its
+  // registration is replaced (re-registration refresh) but not on dock/collapse
+  // changes.
+  useEffect(() => {
+    const host = pluginContentEl;
+    if (!activePanelId || !activePanel) return;
+    let cleanup: void | (() => void);
+    try {
+      cleanup = activePanel.render(host);
+    } catch (error) {
+      console.error(`Right panel "${activePanelId}" render() threw.`, error);
+    }
+    return () => {
+      try {
+        cleanup?.();
+      } catch (error) {
+        console.error(`Right panel "${activePanelId}" cleanup threw.`, error);
+      }
+      host.replaceChildren();
+    };
+  }, [activePanelId, activePanel, pluginContentEl]);
+  // Reset the shared width to the panel's default when a new panel activates
+  // (keyed on activePanelId only, so a user resize survives re-registration).
+  useEffect(() => {
+    if (!activePanel) return;
+    setPluginPanelWidth(
+      clampPluginPanelWidth(activePanel.defaultWidth ?? PLUGIN_PANEL_DEFAULT_WIDTH),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePanelId]);
   const assistantOpen = useAppStore((s) => s.ui.assistantOpen);
   const dashboardOpen = useAppStore((s) => s.ui.dashboardOpen);
   const geometryEditLayerId = useSyncExternalStore(
@@ -1335,6 +1381,7 @@ export function DesktopShell({
         <SectionErrorBoundary label="Plugin panel (left of Layers)">
           <PluginRightPanel
             dock="left-of-layers"
+            contentEl={pluginContentEl}
             width={pluginPanelWidth}
             onWidthChange={setPluginPanelWidth}
           />
@@ -1358,6 +1405,7 @@ export function DesktopShell({
         <SectionErrorBoundary label="Plugin panel (right of Layers)">
           <PluginRightPanel
             dock="right-of-layers"
+            contentEl={pluginContentEl}
             width={pluginPanelWidth}
             onWidthChange={setPluginPanelWidth}
           />
@@ -1392,6 +1440,7 @@ export function DesktopShell({
         <SectionErrorBoundary label="Plugin panel (left of Style)">
           <PluginRightPanel
             dock="left-of-style"
+            contentEl={pluginContentEl}
             width={pluginPanelWidth}
             onWidthChange={setPluginPanelWidth}
           />
@@ -1416,6 +1465,7 @@ export function DesktopShell({
         <SectionErrorBoundary label="Plugin panel (right of Style)">
           <PluginRightPanel
             dock="right-of-style"
+            contentEl={pluginContentEl}
             width={pluginPanelWidth}
             onWidthChange={setPluginPanelWidth}
           />

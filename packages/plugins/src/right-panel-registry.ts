@@ -1,4 +1,7 @@
-import type { GeoLibreRightPanelRegistration } from "./types";
+import type {
+  GeoLibreRightPanelDock,
+  GeoLibreRightPanelRegistration,
+} from "./types";
 
 /**
  * Imperative registry for plugin-owned dockable side panels.
@@ -18,25 +21,21 @@ import type { GeoLibreRightPanelRegistration } from "./types";
  */
 
 /**
- * Where a plugin panel docks, left to right:
- * - `left-of-layers`: left of the Layers panel (the far-left edge).
- * - `right-of-layers`: between the Layers panel and the map.
- * - `left-of-style`: between the map and the Style panel.
- * - `right-of-style`: right of the Style panel (the far-right edge).
+ * Where a plugin panel docks. Re-exported from the public {@link
+ * GeoLibreRightPanelDock} so the two never diverge.
  */
-export type RightPanelDock =
-  | "left-of-layers"
-  | "right-of-layers"
-  | "left-of-style"
-  | "right-of-style";
+export type RightPanelDock = GeoLibreRightPanelDock;
 
-/** Dock positions in left-to-right order, used to step the panel. */
-export const RIGHT_PANEL_DOCKS: RightPanelDock[] = [
+/**
+ * Dock positions in left-to-right order, used to step the panel. Frozen so a
+ * consumer cannot mutate the validation/order list.
+ */
+export const RIGHT_PANEL_DOCKS: readonly RightPanelDock[] = Object.freeze([
   "left-of-layers",
   "right-of-layers",
   "left-of-style",
   "right-of-style",
-];
+] as const);
 
 const DEFAULT_DOCK: RightPanelDock = "right-of-style";
 

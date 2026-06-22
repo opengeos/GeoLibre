@@ -33,9 +33,21 @@ export const PLUGIN_PANEL_DEFAULT_WIDTH = 320;
 const MIN_WIDTH = 240;
 const MAX_WIDTH = 640;
 
+/** Clamp a plugin-panel width to the allowed range. Shared with the shell. */
+export function clampPluginPanelWidth(width: number): number {
+  return clamp(width, MIN_WIDTH, MAX_WIDTH);
+}
+
 interface PluginRightPanelProps {
   /** Which dock position this instance renders. */
   dock: RightPanelDock;
+  /**
+   * The active panel's content host element, created and rendered into once by
+   * the shell. The matched slot adopts it via `appendChild`, so moving the panel
+   * between docks relocates the same DOM (preserving the plugin's state) instead
+   * of tearing it down and re-rendering.
+   */
+  contentEl: HTMLElement;
   /**
    * The active panel's width in px. Owned by the shell and shared between the
    * dock-slot instances so a user's resize survives moving the panel between
@@ -66,6 +78,7 @@ interface PluginRightPanelProps {
  */
 export function PluginRightPanel({
   dock,
+  contentEl,
   width,
   onWidthChange,
 }: PluginRightPanelProps) {
@@ -80,46 +93,16 @@ export function PluginRightPanel({
   const isLayersSide =
     dock === "left-of-layers" || dock === "right-of-layers";
 
-  // Adopt the panel's preferred width when a different panel becomes active.
-  // Keyed on activeId only so a user resize survives collapse/expand and any
-  // re-registration of the same panel; the width is read fresh from the
-  // registry rather than depending on the panel object's identity. Every slot
-  // instance runs this with the same value, and the shared (shell-owned) width
-  // means a resize survives moving between positions.
-  useEffect(() => {
-    if (!activeId) return;
-    const current = getRightPanel(activeId);
-    if (!current) return;
-    onWidthChange(
-      clamp(current.defaultWidth ?? PLUGIN_PANEL_DEFAULT_WIDTH, MIN_WIDTH, MAX_WIDTH),
-    );
-  }, [activeId, onWidthChange]);
-
-  // Populate the plugin content container while this instance owns the panel.
-  // Keyed on `matched` so moving the panel between positions tears down the old
-  // slot's container and renders into the new one, and on the `panel` object so
-  // re-registering the same id (a new render function) refreshes the content.
-  // (The width effect above is deliberately not keyed on `panel`, so a user
-  // resize survives re-registration.)
+  // Adopt the shared content host (rendered once by the shell) into this slot
+  // while it owns the panel. appendChild moves the element, so stepping the
+  // panel between docks relocates the same DOM and preserves the plugin's state
+  // rather than re-rendering it.
   useEffect(() => {
     if (!matched) return;
-    const container = contentRef.current;
-    if (!activeId || !panel || !container) return;
-    let cleanup: void | (() => void);
-    try {
-      cleanup = panel.render(container);
-    } catch (error) {
-      console.error(`Right panel "${activeId}" render() threw.`, error);
-    }
-    return () => {
-      try {
-        cleanup?.();
-      } catch (error) {
-        console.error(`Right panel "${activeId}" cleanup threw.`, error);
-      }
-      container.replaceChildren();
-    };
-  }, [activeId, matched, panel]);
+    const wrapper = contentRef.current;
+    if (!wrapper) return;
+    wrapper.appendChild(contentEl);
+  }, [matched, contentEl]);
 
   if (!matched || !panel) return null;
 

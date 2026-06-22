@@ -125,10 +125,13 @@ function PluginToolbarMenu({
  */
 export function PluginToolbarMenus({ chrome }: PluginToolbarMenusProps) {
   const { menus } = useToolbarMenus();
-  if (menus.length === 0) return null;
+  // Skip menus with no items so a plugin never shows a button that opens to a
+  // blank dropdown.
+  const nonEmpty = menus.filter((menu) => menu.items.length > 0);
+  if (nonEmpty.length === 0) return null;
   return (
     <>
-      {menus.map((menu) => (
+      {nonEmpty.map((menu) => (
         <PluginToolbarMenu key={menu.id} menu={menu} chrome={chrome} />
       ))}
     </>
