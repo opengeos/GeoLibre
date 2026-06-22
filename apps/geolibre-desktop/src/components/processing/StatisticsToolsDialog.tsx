@@ -310,7 +310,9 @@ export function StatisticsToolsDialog({
 
             {requiredParams.some(isParamVisible) ? (
               <p className="text-xs text-muted-foreground">
-                <span className="text-destructive">*</span>{" "}
+                <span className="text-destructive" aria-hidden="true">
+                  *
+                </span>{" "}
                 {t("statistics.requiredFieldLegend")}
               </p>
             ) : null}
