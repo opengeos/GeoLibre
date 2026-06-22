@@ -442,6 +442,31 @@ describe("syncVectorLayersToStore", () => {
     assert.equal(useAppStore.getState().layers[0], before);
   });
 
+  it("preserves embedded GeoJSON that is not present in control snapshots", () => {
+    const info = vectorInfo({
+      source: { kind: "file", fileName: "local.geojson" },
+    });
+    const { control } = fakeControl([info]);
+    syncVectorLayersToStore(control);
+    const embedded = {
+      type: "FeatureCollection" as const,
+      features: [],
+    };
+    useAppStore.getState().updateLayer("vector-1", {
+      metadata: {
+        ...useAppStore.getState().layers[0].metadata,
+        embeddedGeoJSON: embedded,
+      },
+    });
+
+    syncVectorLayersToStore(fakeControl([info]).control);
+
+    assert.equal(
+      useAppStore.getState().layers[0].metadata.embeddedGeoJSON,
+      embedded,
+    );
+  });
+
   it("does nothing while sync is suspended", () => {
     const { control } = fakeControl([vectorInfo()]);
     runWithVectorStoreSyncSuspended(() => {

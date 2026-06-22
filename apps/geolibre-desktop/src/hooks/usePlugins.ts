@@ -34,7 +34,6 @@ import type {
   GeoLibreExternalNativeLayerRegistration,
   GeoLibreFileDialogOptions,
   GeoLibreMapControlPosition,
-  GeoLibreVectorFileSelection,
 } from "@geolibre/plugins";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -58,6 +57,8 @@ import { mergeStringLists } from "../lib/string-lists";
 import {
   browserSaveFallsBackToDownload,
   openLocalDataFileWithFallback,
+  pickVectorFilesWithSidecars,
+  readVectorFileWithSidecars,
   saveTextFileWithFallback,
 } from "../lib/tauri-io";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
@@ -510,8 +511,13 @@ export function createAppAPI(
       mapControllerRef?.current?.fitBounds(bounds),
     getMap: () => mapControllerRef?.current?.getMap() ?? null,
     pickLocalDirectoryFiles,
-    pickVectorFiles,
-    readLocalVectorFile,
+    // Present only on desktop (filesystem access); the Vector panel keys off its
+    // presence to auto-discover shapefile sidecars instead of forcing the user
+    // to select every component, and to capture the file's path for restore.
+    pickVectorFilesWithSidecars: isTauriRuntime()
+      ? pickVectorFilesWithSidecars
+      : undefined,
+    readLocalVectorFile: readVectorFileWithSidecars,
     exportTextFile: (
       filename: string,
       content: string,
@@ -664,72 +670,6 @@ async function pickLocalDirectoryFiles(): Promise<File[] | null> {
   });
   if (typeof selected !== "string") return null;
   return readTauriDirectoryFiles(selected);
-}
-
-/**
- * Opens a vector-file picker for the Add Vector Layer panel. Under Tauri the
- * native dialog returns absolute paths, each read into a File alongside the
- * `sourcePath` it came from so the layer can be re-read on project reopen. In
- * the browser an `<input type="file">` returns Files with no path (a local
- * file is restorable only by embedding it in the project).
- *
- * @returns The chosen files, or null when the user cancels.
- */
-async function pickVectorFiles(): Promise<GeoLibreVectorFileSelection[] | null> {
-  if (isTauriRuntime()) {
-    const selected = await open({ multiple: true });
-    const paths =
-      typeof selected === "string"
-        ? [selected]
-        : Array.isArray(selected)
-          ? selected
-          : null;
-    if (!paths || paths.length === 0) return null;
-    const selections: GeoLibreVectorFileSelection[] = [];
-    for (const path of paths) {
-      const bytes = await readFile(path);
-      const file = new File([bytes], localNameFromPath(path) || "dataset");
-      selections.push({ file, sourcePath: path });
-    }
-    return selections;
-  }
-
-  return new Promise((resolve, reject) => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.multiple = true;
-    input.onchange = () => {
-      const files = input.files ? Array.from(input.files) : [];
-      // No filesystem path on the web: the layer is restorable only by
-      // embedding its data in the saved project.
-      resolve(files.length > 0 ? files.map((file) => ({ file })) : null);
-    };
-    // `change` does not fire when the user cancels the OS dialog; without this
-    // the promise (and the panel's whole fileOpener) would hang until reload.
-    // `cancel` is supported in evergreen browsers (Chrome 113+, Firefox).
-    input.oncancel = () => resolve(null);
-    input.onerror = () => reject(new Error("Could not open files"));
-    input.click();
-  });
-}
-
-/**
- * Reads a local vector file back into a File from the absolute path persisted
- * on a layer's `sourcePath`, so the Add Vector Layer restore can reload a
- * desktop local-file layer when a project reopens.
- *
- * @param path - The absolute filesystem path persisted on the layer.
- * @returns The file, or null off the desktop host or when it cannot be read.
- */
-async function readLocalVectorFile(path: string): Promise<File | null> {
-  if (!isTauriRuntime() || !path.trim()) return null;
-  try {
-    const bytes = await readFile(path);
-    return new File([bytes], localNameFromPath(path) || "dataset");
-  } catch (error) {
-    console.warn(`Could not read local vector file "${path}".`, error);
-    return null;
-  }
 }
 
 async function readTauriDirectoryFiles(rootPath: string): Promise<File[]> {

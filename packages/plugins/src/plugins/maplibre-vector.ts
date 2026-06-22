@@ -6,7 +6,11 @@ import type {
   VectorLayerInfo,
   VectorSampleDataset,
 } from "maplibre-gl-vector";
-import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
+import type {
+  GeoLibreAppAPI,
+  GeoLibreMapControlPosition,
+  GeoLibrePickedVectorFile,
+} from "../types";
 import {
   isEmbeddableLocalVectorLayer,
   isVectorControlStoreLayer,
@@ -60,7 +64,7 @@ const SAMPLE_VECTOR_DATASETS: VectorSampleDataset[] = [
 ];
 
 // This type mirrors an undocumented private member of VectorControl from
-// maplibre-gl-vector (verified against v0.4.1). Access is optional (?.) so a
+// maplibre-gl-vector (verified against v0.5.1). Access is optional (?.) so a
 // rename in a future release degrades to a no-op rather than a crash --
 // re-verify this name AND the .vector-control-close selector in
 // wireVectorCloseButton when bumping the dependency.
@@ -108,6 +112,7 @@ export function openVectorLayerPanel(app: GeoLibreAppAPI): void {
         // upstream release builds the panel DOM lazily on first expand.
         wireVectorCloseButton(control);
         applyVectorPanelClass(control);
+        wireDesktopFilePicker(control, app);
       } catch (error) {
         console.error(
           "[GeoLibre] Failed to open the vector layer panel",
@@ -258,7 +263,10 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
                   useAppStore.getState().removeLayer(layer.id);
                   return undefined;
                 }
-                return replayVectorLayer(control, layer, file, localPath);
+                return replayVectorLayer(control, layer, file.file, {
+                  companionFiles: file.companionFiles,
+                  localPath,
+                });
               })
               .catch((error) => {
                 console.error(
@@ -335,12 +343,15 @@ function replayVectorLayer(
   control: VectorControl,
   layer: GeoLibreLayer,
   source: string | File | FeatureCollection,
-  localPath?: string,
+  options: { companionFiles?: File[]; localPath?: string } = {},
 ): Promise<unknown> {
   return control
     .addData(source, {
       ...savedVectorState(layer),
-      ...(localPath ? { sourcePath: localPath } : {}),
+      ...(options.companionFiles?.length
+        ? { companionFiles: options.companionFiles }
+        : {}),
+      ...(options.localPath ? { sourcePath: options.localPath } : {}),
       fitBounds: false,
       id: layer.id,
       name: layer.name,
@@ -443,6 +454,7 @@ async function ensureVectorControl(
     hideVectorControl(vectorControl);
     wireVectorCloseButton(vectorControl);
     applyVectorPanelClass(vectorControl);
+    wireDesktopFilePicker(vectorControl, app);
   }
 
   return vectorControl;
@@ -469,26 +481,6 @@ function createVectorControl(
   VectorControlClass: VectorControlConstructor,
   app: GeoLibreAppAPI,
 ): VectorControl {
-  // Route the panel's "click to browse" through the host picker when one is
-  // available, so a desktop host can return real filesystem paths (echoed on
-  // each layer's source descriptor) that restoreVectorLayers re-reads when a
-  // project reopens. Without a host picker the panel keeps its native file
-  // input, whose local files have no restorable path.
-  const pickVectorFiles = app.pickVectorFiles;
-  const fileOpener = pickVectorFiles
-    ? async () => {
-        const selections = await pickVectorFiles();
-        return (
-          selections?.map((selection) => ({
-            file: selection.file,
-            ...(selection.sourcePath
-              ? { sourcePath: selection.sourcePath }
-              : {}),
-          })) ?? null
-        );
-      }
-    : undefined;
-
   const control = new VectorControlClass({
     className: "geolibre-vector-control",
     collapsed: true,
@@ -506,16 +498,19 @@ function createVectorControl(
     // Skip the remote spatial-extension install in offline/sandboxed
     // environments when a local extension path is configured.
     spatialExtensionPath: getSpatialExtensionPath(),
-    // Capture the absolute path of locally picked files on desktop hosts.
-    ...(fileOpener ? { fileOpener } : {}),
   });
+  // On desktop, route the panel's file browse through the host's native picker
+  // so a loose shapefile pulls in its sidecars and each layer keeps the
+  // absolute path it was read from (for restore on reopen). See
+  // wireDesktopFilePicker.
+  void app;
 
   for (const event of ["layeradded", "layerremoved", "layerupdated"] as const) {
     control.on(event, () => syncVectorLayersToStore(control));
   }
   // syncVectorLayersToStore re-reads getState().collapsed when these fire.
   // Safe: expand()/collapse() delegate to toggle(), which flips
-  // _state.collapsed BEFORE emitting the event (verified against v0.2.0) --
+  // _state.collapsed BEFORE emitting the event (verified against v0.5.1) --
   // re-verify that ordering when bumping the dependency.
   const panelStateSyncHandler: VectorControlEventHandler = () =>
     syncVectorLayersToStore(control);
@@ -655,4 +650,68 @@ function wireVectorCloseButton(control: VectorControl): void {
   }
   closeButton.dataset.geolibreCloseWired = "true";
   closeButton.addEventListener("click", () => hideVectorControl(control));
+}
+
+// On desktop the host can read a chosen `.shp`'s sidecar files from the same
+// directory, so a loose `.shp` loads without the user selecting every component
+// (.shx, .dbf, .prj, ...). The upstream panel's file input yields sandboxed File
+// objects with no filesystem path, so intercept its click and route through the
+// host's native picker (which returns the sidecars via companionFiles), then
+// hand the result back to the panel so the layer stays panel-managed. No-op on
+// the web, where `pickVectorFilesWithSidecars` is absent and the native input is
+// the only way to read files. The selector mirrors the upstream panel's file
+// input (verified against v0.5.1) -- re-verify when bumping the dependency.
+function wireDesktopFilePicker(
+  control: VectorControl,
+  app: GeoLibreAppAPI,
+): void {
+  const pickFiles = app.pickVectorFilesWithSidecars;
+  if (!pickFiles) return;
+  const panel = (control as unknown as VectorControlInternals)._panel;
+  const fileInput = panel?.querySelector<HTMLInputElement>(
+    'input[type="file"]',
+  );
+  if (!fileInput || fileInput.dataset.geolibreDesktopPickerWired === "true") {
+    return;
+  }
+  fileInput.dataset.geolibreDesktopPickerWired = "true";
+  fileInput.addEventListener("click", (event) => {
+    // Suppress the sandboxed picker (no path) in favor of the host dialog. Also
+    // covers the "click to browse" drop zone, which delegates to this input.
+    event.preventDefault();
+    void (async () => {
+      try {
+        await addPickedVectorFiles(control, await pickFiles());
+      } catch (error) {
+        console.error(
+          "[GeoLibre] Failed to load vector files from the desktop picker",
+          error,
+        );
+      }
+    })();
+  });
+}
+
+/** The subset of VectorControl used to load picked files (eases testing). */
+export type VectorDataSink = Pick<VectorControl, "addData">;
+
+/**
+ * Loads files picked through {@link GeoLibreAppAPI.pickVectorFilesWithSidecars}
+ * into a vector control, passing a shapefile's sidecars as `companionFiles` so a
+ * loose `.shp` loads as a single layer. Each file is added independently; an
+ * empty list (e.g. a cancelled dialog) loads nothing.
+ *
+ * @param control - The vector control (or anything with `addData`).
+ * @param picked - The picked files (empty when the dialog was cancelled).
+ */
+export async function addPickedVectorFiles(
+  control: VectorDataSink,
+  picked: GeoLibrePickedVectorFile[],
+): Promise<void> {
+  for (const { file, companionFiles, sourcePath } of picked) {
+    await control.addData(file, {
+      ...(companionFiles.length > 0 ? { companionFiles } : {}),
+      ...(sourcePath ? { sourcePath } : {}),
+    });
+  }
 }

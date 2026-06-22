@@ -203,18 +203,27 @@ export function syncVectorLayersToStore(control: VectorSyncableControl): void {
         continue;
       }
 
+      const nextMetadata =
+        existing.metadata.embeddedGeoJSON &&
+        isEmbeddableLocalVectorLayer(layer)
+          ? {
+              ...layer.metadata,
+              embeddedGeoJSON: existing.metadata.embeddedGeoJSON,
+            }
+          : layer.metadata;
+
       if (
         existing.type !== layer.type ||
         existing.visible !== layer.visible ||
         existing.opacity !== layer.opacity ||
         existing.sourcePath !== layer.sourcePath ||
         !recordsEqual(existing.source, layer.source) ||
-        !recordsEqual(existing.metadata, layer.metadata)
+        !recordsEqual(existing.metadata, nextMetadata)
       ) {
         useAppStore.getState().updateLayer(layer.id, {
           // Replace metadata wholesale so stale keys (bounds, featureCount)
           // cannot survive a layer being swapped out under the same id.
-          metadata: layer.metadata,
+          metadata: nextMetadata,
           opacity: layer.opacity,
           source: layer.source,
           sourcePath: layer.sourcePath,
