@@ -835,7 +835,12 @@ function DrawToolbar({
 function PickBanner({ onCancel }: { onCancel: () => void }) {
   const { t } = useTranslation();
   return (
-    <div className="fixed bottom-6 left-1/2 z-50 flex max-w-[95vw] -translate-x-1/2 flex-col gap-2 rounded-lg border bg-card p-3 shadow-xl">
+    // role="status" so screen readers announce placement mode when the banner
+    // mounts; it is the only cue once the dialog closes (#720 review).
+    <div
+      role="status"
+      className="fixed bottom-6 left-1/2 z-50 flex max-w-[95vw] -translate-x-1/2 flex-col gap-2 rounded-lg border bg-card p-3 shadow-xl"
+    >
       <div className="flex items-center gap-2 text-sm">
         <Crosshair className="h-4 w-4 text-primary" />
         <span className="font-medium">

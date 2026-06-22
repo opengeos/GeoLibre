@@ -375,6 +375,11 @@ export function SettingsDialog({
   // (Safari keeps focus on the previously focused button after a mouse click,
   // so the ring would otherwise stay on the first item, see #713).
   const activeSectionButtonRef = useRef<HTMLButtonElement>(null);
+  // After the deep-link effect focuses its target field and clears
+  // `pendingFocus`, the nav-focus effect re-runs (pendingFocus is in its deps)
+  // and would steal focus back. This guards exactly that one re-run so the
+  // deep-linked field keeps focus (#720 review).
+  const skipNextNavFocusRef = useRef(false);
   // A gated section is dropped from the nav, but `section` can still point at one
   // (its initial value is "map"), so render the first visible section instead to
   // never expose gated content to a restricted profile.
@@ -483,6 +488,9 @@ export function SettingsDialog({
     const id = window.requestAnimationFrame(() => {
       shareTokenInputRef.current?.focus();
       shareTokenInputRef.current?.select();
+      // Clearing pendingFocus re-runs the nav-focus effect; tell it to skip the
+      // next run so it does not pull focus off the field we just focused.
+      skipNextNavFocusRef.current = true;
       setPendingFocus(null);
     });
     return () => window.cancelAnimationFrame(id);
@@ -495,6 +503,10 @@ export function SettingsDialog({
   // pending so it does not steal focus from the field that request targets.
   useEffect(() => {
     if (!open || pendingFocus) return;
+    if (skipNextNavFocusRef.current) {
+      skipNextNavFocusRef.current = false;
+      return;
+    }
     const id = window.requestAnimationFrame(() => {
       activeSectionButtonRef.current?.focus();
     });
