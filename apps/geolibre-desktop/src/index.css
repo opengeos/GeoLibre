@@ -340,10 +340,6 @@ body,
   top: 10px !important;
 }
 
-.duckdb-control-content {
-  max-height: min(560px, calc(100vh - 220px));
-}
-
 .duckdb-control-header {
   background-color: hsl(var(--card)) !important;
   border-bottom-color: hsl(var(--border)) !important;
@@ -1013,6 +1009,26 @@ body,
   border-bottom-color: hsl(var(--border)) !important;
 }
 
+/* The FlatGeobuf form has the most fields of any Add Data panel; tighten its
+   vertical rhythm so it fits the panel (the Add Layer button stays visible)
+   instead of overflowing into a scrollbar on common window heights. */
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-form-group {
+  margin-bottom: 6px;
+}
+
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-form-group > label {
+  margin-bottom: 2px;
+}
+
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-input-mode,
+.geolibre-flatgeobuf-control .maplibre-gl-sample-dropdown {
+  margin-bottom: 6px;
+}
+
+.geolibre-flatgeobuf-control .maplibre-gl-add-vector-buttons {
+  margin-top: 8px;
+}
+
 .geolibre-flatgeobuf-control .maplibre-gl-add-vector-title,
 .geolibre-flatgeobuf-control .maplibre-gl-add-vector-form-group label,
 .geolibre-flatgeobuf-control .maplibre-gl-add-vector-checkbox-label,
@@ -1406,7 +1422,14 @@ body,
     0 10px 15px -3px rgb(0 0 0 / 0.18),
     0 4px 6px -4px rgb(0 0 0 / 0.18) !important;
   color: hsl(var(--popover-foreground)) !important;
-  color-scheme: light dark;
+  /* Follow the in-app theme, not the OS: `light dark` let native controls
+     (e.g. the number-input spinner) render dark when the OS is dark even though
+     the app is light. */
+  color-scheme: light;
+}
+
+.dark .geolibre-3d-tiles-panel {
+  color-scheme: dark;
 }
 
 .geolibre-3d-tiles-panel .three-d-tiles-control-header {
@@ -1661,12 +1684,6 @@ body,
     left: 10px !important;
     right: auto !important;
     width: calc(100vw - 20px) !important;
-  }
-
-  .duckdb-control-content {
-    /* 170px = the 96px panel offset above plus the panel header height */
-    max-height: calc(100vh - 170px);
-    max-height: calc(100dvh - 170px);
   }
 
   .geolibre-identify-popup .maplibregl-popup-content {
@@ -2282,4 +2299,63 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
 
 [data-map-fullscreen] [data-workspace-row] > *:not(main) {
   display: none !important;
+}
+
+/* Sample-data dropdowns in the Add Data panels (3D Tiles, LiDAR, DuckDB,
+   FlatGeobuf, PMTiles, Zarr, Splatting). The upstream packages style these classes with
+   their own light / prefers-color-scheme colors, which do not match
+   GeoLibre's class-based theming (the app forces color-scheme: light), so map
+   them onto the app's design tokens here so the dropdown follows the panel. */
+:is(
+  .duckdb-sample-trigger,
+  .three-d-tiles-sample-trigger,
+  .maplibre-gl-sample-trigger,
+  .splat-sample-trigger,
+  .lidar-sample-trigger
+) {
+  background-color: hsl(var(--background)) !important;
+  border-color: hsl(var(--input)) !important;
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+:is(
+  .duckdb-sample-trigger,
+  .three-d-tiles-sample-trigger,
+  .maplibre-gl-sample-trigger,
+  .splat-sample-trigger,
+  .lidar-sample-trigger
+):is(:hover, .open, :focus-visible, :active) {
+  border-color: hsl(var(--ring)) !important;
+}
+
+:is(
+  .duckdb-sample-menu,
+  .three-d-tiles-sample-menu,
+  .maplibre-gl-sample-menu,
+  .splat-sample-menu,
+  .lidar-sample-menu
+) {
+  background-color: hsl(var(--popover)) !important;
+  border-color: hsl(var(--border)) !important;
+}
+
+:is(
+  .duckdb-sample-option,
+  .three-d-tiles-sample-option,
+  .maplibre-gl-sample-option,
+  .splat-sample-option,
+  .lidar-sample-option
+) {
+  color: hsl(var(--popover-foreground)) !important;
+}
+
+:is(
+  .duckdb-sample-option,
+  .three-d-tiles-sample-option,
+  .maplibre-gl-sample-option,
+  .splat-sample-option,
+  .lidar-sample-option
+):is(:hover, :focus-visible, :active) {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
 }

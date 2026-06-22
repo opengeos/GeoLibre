@@ -20,6 +20,19 @@ const LIDAR_PANEL_LAYOUT_FIX = `
   overflow: hidden;
 }
 
+/* The default drop zone is quite tall; trim its padding (and the icon) so the
+   upload box does not dominate the top of the panel. */
+.lidar-control-panel .lidar-file-input-label {
+  padding: 10px 12px;
+  min-height: 0;
+  gap: 4px;
+}
+
+.lidar-control-panel .lidar-file-input-label svg {
+  width: 20px;
+  height: 20px;
+}
+
 .lidar-control-panel .lidar-control-content {
   max-height: inherit;
   padding-bottom: 16px;
