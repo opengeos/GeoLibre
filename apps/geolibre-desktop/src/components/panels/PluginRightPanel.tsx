@@ -34,6 +34,11 @@ const DEFAULT_WIDTH = 320;
 const MIN_WIDTH = 240;
 const MAX_WIDTH = 640;
 
+// The left and right slots are separate component instances, so the active
+// panel's width is shared here. This lets a user's resize survive moving the
+// panel between edges (only one instance is ever the active/matched one).
+let sharedWidth = DEFAULT_WIDTH;
+
 interface PluginRightPanelProps {
   /** Which workspace edge this instance occupies. */
   slot: RightPanelSide;
@@ -71,8 +76,19 @@ export function PluginRightPanel({ slot }: PluginRightPanelProps) {
     if (!activeId) return;
     const current = getRightPanel(activeId);
     if (!current) return;
-    setWidth(clamp(current.defaultWidth ?? DEFAULT_WIDTH, MIN_WIDTH, MAX_WIDTH));
+    sharedWidth = clamp(
+      current.defaultWidth ?? DEFAULT_WIDTH,
+      MIN_WIDTH,
+      MAX_WIDTH,
+    );
+    setWidth(sharedWidth);
   }, [activeId]);
+
+  // When this instance takes over the panel (e.g. after a side move), adopt the
+  // width the other instance last had, so a user resize is not lost.
+  useEffect(() => {
+    if (matched) setWidth(sharedWidth);
+  }, [matched]);
 
   // Populate the plugin content container while this instance owns the panel.
   // Keyed on `matched` so moving the panel between edges tears down the old
@@ -116,7 +132,9 @@ export function PluginRightPanel({ slot }: PluginRightPanelProps) {
       // The resizable edge faces the map: dragging it away from the dock side
       // widens the panel.
       const delta = isLeft ? move.clientX - startX : startX - move.clientX;
-      setWidth(clamp(startWidth + delta, MIN_WIDTH, MAX_WIDTH));
+      const next = clamp(startWidth + delta, MIN_WIDTH, MAX_WIDTH);
+      sharedWidth = next;
+      setWidth(next);
     };
     const handleEnd = () => {
       if (el.hasPointerCapture(event.pointerId)) {

@@ -65,7 +65,7 @@ import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
 import { registerXyzTileProtocol } from "../../lib/xyz-url";
 import { useEmbedBridge } from "../../hooks/useEmbedBridge";
 import { useRasterIdentify } from "../../hooks/useRasterIdentify";
-import { useActiveRightPanelSide } from "../../hooks/useRightPanels";
+import { useExpandedPanelEdge } from "../../hooks/useRightPanels";
 import { BoundsRestrictionIndicator } from "./BoundsRestrictionIndicator";
 import { MapGrid } from "./MapGrid";
 import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
@@ -419,13 +419,13 @@ export function DesktopShell({
   const pythonConsoleOpen = useAppStore((s) => s.ui.pythonConsoleOpen);
   const notebookOpen = useAppStore((s) => s.ui.notebookOpen);
   const storymapPresenting = useAppStore((s) => s.ui.storymapPresenting);
-  // A plugin-owned dockable panel claims one workspace edge: a right-docked
-  // panel collapses the Style panel, a left-docked one collapses the Layers
-  // panel, each restoring when the plugin panel closes or moves to the other
-  // edge (issue #712).
-  const activeRightPanelSide = useActiveRightPanelSide();
-  const pluginRightPanelActive = activeRightPanelSide === "right";
-  const pluginLeftPanelActive = activeRightPanelSide === "left";
+  // An *expanded* plugin panel claims one workspace edge: a right-docked one
+  // collapses the Style panel, a left-docked one collapses the Layers panel,
+  // each restoring when the plugin panel closes, moves to the other edge, or is
+  // itself collapsed to its rail (issue #712).
+  const expandedPanelEdge = useExpandedPanelEdge();
+  const pluginRightPanelActive = expandedPanelEdge === "right";
+  const pluginLeftPanelActive = expandedPanelEdge === "left";
   const assistantOpen = useAppStore((s) => s.ui.assistantOpen);
   const dashboardOpen = useAppStore((s) => s.ui.dashboardOpen);
   const geometryEditLayerId = useSyncExternalStore(

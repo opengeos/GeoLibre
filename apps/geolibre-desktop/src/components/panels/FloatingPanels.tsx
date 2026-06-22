@@ -41,14 +41,14 @@ function FloatingPanelCard({
 
   // Populate the plugin content container once per card. The container persists
   // while the card is open, so render is not re-invoked on drag/focus.
+  // Keyed on the panel object too, so re-registering the same id (a new render
+  // function) while the card is open refreshes its content.
   useEffect(() => {
     const container = contentRef.current;
-    if (!container) return;
-    const current = getFloatingPanel(id);
-    if (!current) return;
+    if (!container || !panel) return;
     let cleanup: void | (() => void);
     try {
-      cleanup = current.render(container);
+      cleanup = panel.render(container);
     } catch (error) {
       console.error(`Floating panel "${id}" render() threw.`, error);
     }
@@ -60,7 +60,7 @@ function FloatingPanelCard({
       }
       container.replaceChildren();
     };
-  }, [id]);
+  }, [id, panel]);
 
   if (!panel) return null;
 
@@ -83,7 +83,7 @@ function FloatingPanelCard({
         ? bounds.width - card.offsetWidth - EDGE_MARGIN
         : Number.POSITIVE_INFINITY;
       const maxY = bounds
-        ? bounds.height - EDGE_MARGIN
+        ? bounds.height - card.offsetHeight - EDGE_MARGIN
         : Number.POSITIVE_INFINITY;
       setPosition({
         x: clamp(origin.x + (move.clientX - startX), 0, Math.max(0, maxX)),

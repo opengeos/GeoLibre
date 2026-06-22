@@ -23,17 +23,30 @@ export function useRightPanelState(): RightPanelSnapshot {
   );
 }
 
-const selectSide = () => getRightPanelSnapshot().side;
+/** Which workspace edge holds an *expanded* plugin panel, or null. */
+export type DockedPanelEdge = RightPanelSide | null;
+
+const selectExpandedEdge = (): DockedPanelEdge => {
+  const snapshot = getRightPanelSnapshot();
+  // Only an expanded panel claims the edge; a panel collapsed to its rail
+  // leaves room, so the built-in Style/Layers panel can restore.
+  return snapshot.side !== null && !snapshot.collapsed ? snapshot.side : null;
+};
 
 /**
- * Subscribe only to which side the active plugin right panel docks on.
+ * Subscribe to which workspace edge currently holds an *expanded* plugin panel.
  *
- * Returns "left", "right", or null (no panel open) — a primitive, so consumers
- * (e.g. the shell) re-render only when a panel opens, closes, or moves sides,
- * not on every collapse/expand toggle.
+ * Returns "left", "right", or null — a primitive, so the shell re-renders only
+ * when that changes (a panel opens, closes, moves sides, or collapses/expands),
+ * which is exactly when the built-in Style/Layers panel must collapse or
+ * restore.
  *
- * @returns The active panel's side, or null when none is open.
+ * @returns The edge with an expanded plugin panel, or null.
  */
-export function useActiveRightPanelSide(): RightPanelSide | null {
-  return useSyncExternalStore(subscribeRightPanels, selectSide, selectSide);
+export function useExpandedPanelEdge(): DockedPanelEdge {
+  return useSyncExternalStore(
+    subscribeRightPanels,
+    selectExpandedEdge,
+    selectExpandedEdge,
+  );
 }

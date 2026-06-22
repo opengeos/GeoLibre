@@ -8,5 +8,7 @@
  * @returns True when `icon` should be rendered as an image source.
  */
 export function isImageSource(icon: string): boolean {
-  return /^(https?:|data:|blob:|\/)/.test(icon);
+  // Only accept image data URIs (not data:text/html etc.) so a plugin-supplied
+  // icon string is always rendered as an image source, never something else.
+  return /^(https?:|data:image\/|blob:|\/)/.test(icon);
 }
