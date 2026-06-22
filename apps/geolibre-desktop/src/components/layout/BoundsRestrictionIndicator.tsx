@@ -26,7 +26,7 @@ export function BoundsRestrictionIndicator() {
 
   return (
     <div
-      className="pointer-events-auto absolute bottom-8 left-2 z-10 flex items-center gap-1 rounded-md border bg-background/90 px-2 py-1 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm"
+      className="pointer-events-auto absolute bottom-12 left-2 z-10 flex items-center gap-1 rounded-md border bg-background/90 px-2 py-1 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm"
       role="status"
       title={tooltip}
       data-testid="bounds-restriction-indicator"
