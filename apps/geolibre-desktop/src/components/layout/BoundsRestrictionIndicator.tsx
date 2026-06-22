@@ -7,6 +7,12 @@ import { useTranslation } from "react-i18next";
  * "Restrict map bounds" preference is enabled. It gives users a visible cue
  * that panning/zooming is intentionally constrained (rather than the app being
  * frozen), with a tooltip pointing them back to Settings to change it.
+ *
+ * Anchored to the bottom-left corner: the top-left corner is where most map
+ * control plugins (GeoEditor, Basemaps, NASA Earthdata, ...) cluster, so a
+ * top-left badge overlapped and hid the first plugin button (#742). The small
+ * bottom offset keeps it clear of the bottom-left scale control when that is
+ * enabled.
  */
 export function BoundsRestrictionIndicator() {
   const { t } = useTranslation();
@@ -20,7 +26,7 @@ export function BoundsRestrictionIndicator() {
 
   return (
     <div
-      className="pointer-events-auto absolute left-2 top-2 z-10 flex items-center gap-1 rounded-md border bg-background/90 px-2 py-1 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm"
+      className="pointer-events-auto absolute bottom-8 left-2 z-10 flex items-center gap-1 rounded-md border bg-background/90 px-2 py-1 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm"
       role="status"
       title={tooltip}
       data-testid="bounds-restriction-indicator"
