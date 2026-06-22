@@ -1105,10 +1105,22 @@ const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
       ViewStateControl: ViewStateControlClass,
       ZarrLayerControl: ZarrLayerControlClass,
     } = components;
+    // Prefer the dedicated maplibre-gl-splat exports; fall back to the copy
+    // bundled in maplibre-gl-components only if the dedicated import failed.
+    // Guard against both being missing (e.g. a future components release drops
+    // the re-export) so we throw a clear error here instead of a cryptic
+    // `new undefined(...)` the first time the splatting panel opens.
     const GaussianSplatControlClass = (splat?.GaussianSplatControl ??
-      components.GaussianSplatControl) as GaussianSplatControlConstructor;
+      components.GaussianSplatControl) as GaussianSplatControlConstructor | undefined;
     const GaussianSplatLayerAdapterClass = (splat?.GaussianSplatLayerAdapter ??
-      components.GaussianSplatLayerAdapter) as GaussianSplatLayerAdapterConstructor;
+      components.GaussianSplatLayerAdapter) as
+      | GaussianSplatLayerAdapterConstructor
+      | undefined;
+    if (!GaussianSplatControlClass || !GaussianSplatLayerAdapterClass) {
+      throw new Error(
+        "GaussianSplatControl is unavailable: neither maplibre-gl-splat nor maplibre-gl-components provided it.",
+      );
+    }
     return {
       AddVectorControl: AddVectorControlClass,
       BookmarkControl: BookmarkControlClass,
