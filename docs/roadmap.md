@@ -208,7 +208,7 @@
 - [x] Field Collection tool (Controls menu) for capturing point, line, and polygon observations with a per-layer custom form (text/number/date/choice fields and an optional inline photo), placed by device GPS or by tapping the map, with a floating quick-open control; captures are written to a tagged GeoJSON layer that flows into the attribute table, export, and offline use
 - [x] Runtime overrides for `VITE_PYODIDE_INDEX_URL` and `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` through the existing runtime-environment system, so air-gapped or corporate deployments can point Pyodide and the DuckDB Spatial extension at internal mirrors without rebuilding the app
 
-## v1.5: Dashboards, in-browser Whitebox, map navigation history, and signed macOS installers (current)
+## v1.5: Dashboards, in-browser Whitebox, map navigation history, and signed macOS installers
 
 - [x] Dashboard panel of chart widgets that summarizes the loaded layers at a glance, with configurable charts and a collapsible layout that docks alongside the map
 - [x] Whitebox toolbox now runs entirely in the browser through a WebAssembly runtime with raster I/O, so its tools (and GeoLibre's own WASM raster tools, now surfaced in the same toolbox) work with no Python sidecar
@@ -226,6 +226,24 @@
 - [x] Notebook panel can split the workspace 50/50 with the map and auto-collapse the Style panel for more room, and the attribute table gains a column explorer for finding and toggling fields in wide tables
 - [x] USGS LiDAR plugin replaces the previous LiDAR Viewer for browsing and loading USGS 3DEP point-cloud data, imported KML and KMZ layers honor their embedded symbology, and vector strokes can be sized in scale-proportional meters
 - [x] macOS desktop installers are now signed with an Apple Developer ID certificate and notarized by Apple, so they open without a Gatekeeper workaround, with a generator for submitting GeoLibre to the official Homebrew cask (see [Downloads](downloads.md))
+
+## v1.6: Multi-map layouts, advanced symbology and labeling, and plugin zip install (current)
+
+- [x] Multi-map grid that splits the workspace into a grid of map views with synchronized camera movement, so you can compare basemaps, layers, or time steps side by side
+- [x] Advanced vector symbology with a rule-based renderer (filter-driven style rules), proportional symbols, fill patterns, and a built-in marker library for richer point and polygon styling
+- [x] Label engine that labels vector features by any attribute, with placement and styling controls
+- [x] Install external plugins from an uploaded zip on both desktop and web, alongside the existing manifest-URL and bundled drop-in paths, with the Manage Plugins list now sorted alphabetically
+- [x] New vector analysis tools under Processing → Vector for movement, space-time, and cell-coverage analysis
+- [x] Sample-data dropdowns standardized across every Add Data dialog, so each upstream-backed panel offers ready-to-load example datasets
+- [x] Search places box in the Layers panel footer for geocoding to a location without leaving the panel
+- [x] Accent color schemes beyond light and dark, so the UI theme can be tinted to a chosen accent color
+- [x] Swap the core basemap by double-clicking it in the layer panel
+- [x] Story map presenter gained a Reset button and auto-collapses the side panels while presenting for a cleaner full-screen story
+- [x] Progressive Share setup that separates the website and local token steps for a clearer first-time configuration
+- [x] Interactive sidecar help banners for the Whitebox toolbox and AI Segmentation that guide you when the Python sidecar is not running or fails to start
+- [x] Guided update workflow with a startup update check, update preferences, and clearer status colors
+- [x] Time Slider defaults an unspecified end date to the current date
+- [x] Windows Package Manager (winget) packaging as `OpenGeos.GeoLibre`, so the app can be installed and updated through winget
 
 ## Plugin marketplace and registry (design)
 
