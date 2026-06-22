@@ -37,11 +37,11 @@ const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
 const MIN_DASHBOARD_HEIGHT = 160;
 const MAX_DASHBOARD_HEIGHT = 720;
 const DEFAULT_DASHBOARD_HEIGHT = 360;
-// When widgets wrap onto more than one row, each row is allowed to shrink only
-// down to this height before the panel scrolls vertically instead of crushing
-// the charts to nothing. A single row of widgets has no floor, so it always
-// fills (and resizes with) the panel height (issue #728).
+// Per-row floor once widgets wrap onto multiple rows; below it the panel
+// scrolls instead of crushing the charts. A single row has no floor, so it
+// fills and resizes with the panel height (issue #728).
 const MIN_DASHBOARD_ROW_HEIGHT = 200;
+const DASHBOARD_ROW_GAP = 12; // matches the grid's gap-3 (0.75rem)
 
 /** Turn a stored widget into the render-side {@link ChartSpec}. */
 function widgetToSpec(widget: DashboardWidget): ChartSpec {
@@ -172,6 +172,15 @@ export function DashboardPanel() {
     }
   };
 
+  // When widgets wrap onto multiple rows, floor the grid height (rows plus the
+  // gaps between them) so it scrolls rather than crushing the charts; a single
+  // row stays unbounded and fills the panel (issue #728).
+  const rowCount = Math.max(1, Math.ceil(widgets.length / Math.max(1, columns)));
+  const gridMinHeight =
+    rowCount > 1
+      ? `${rowCount * MIN_DASHBOARD_ROW_HEIGHT + (rowCount - 1) * DASHBOARD_ROW_GAP}px`
+      : undefined;
+
   return (
     <section
       ref={sectionRef}
@@ -294,16 +303,9 @@ export function DashboardPanel() {
               className="grid h-full gap-3"
               style={{
                 gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-                // Rows divide the available height equally and shrink with the
-                // panel so charts resize instead of overflowing (issue #728).
+                // Equal-height rows that shrink with the panel (issue #728).
                 gridAutoRows: "minmax(0, 1fr)",
-                // Once widgets wrap onto multiple rows, give each row a floor so
-                // they scroll rather than collapse; a single row stays unbounded
-                // and fills the panel.
-                minHeight:
-                  Math.ceil(widgets.length / columns) > 1
-                    ? `${Math.ceil(widgets.length / columns) * MIN_DASHBOARD_ROW_HEIGHT}px`
-                    : undefined,
+                minHeight: gridMinHeight,
               }}
             >
               {widgets.map((widget, index) => (
@@ -437,10 +439,8 @@ function WidgetCard({
         </div>
       </div>
 
-      {/* The chart fills the card's remaining height and scales down with it:
-          the SVG becomes a flex child (min-h-0 lets it shrink past its
-          intrinsic aspect-ratio height) and its preserveAspectRatio letterboxes
-          rather than overflowing the panel (issue #728). */}
+      {/* The SVG flexes to fill (min-h-0 lets it shrink past its intrinsic
+          aspect-ratio height); preserveAspectRatio letterboxes it (issue #728). */}
       <div className="flex min-h-0 flex-1 flex-col [&_svg]:min-h-0 [&_svg]:flex-1">
         {data.hasData ? (
           <ChartView result={result} color={widget.color} />

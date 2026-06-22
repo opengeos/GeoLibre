@@ -199,8 +199,12 @@ function EmptyChart({ message }: { message: string }) {
 }
 
 function Caption({ children }: { children: ReactNode }) {
+  // shrink-0 keeps the caption legible when the Dashboard flexes the chart SVG
+  // to fill a short panel; it is a no-op in the non-flex Charts dialog.
   return (
-    <p className="mt-1 text-center text-xs text-muted-foreground">{children}</p>
+    <p className="mt-1 shrink-0 text-center text-xs text-muted-foreground">
+      {children}
+    </p>
   );
 }
 
