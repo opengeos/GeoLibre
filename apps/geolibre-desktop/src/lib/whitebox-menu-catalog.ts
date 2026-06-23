@@ -31,7 +31,7 @@ export interface WhiteboxMenuCategory {
   subcategories: WhiteboxMenuSubcategory[];
 }
 
-/** 747 tools across 9 categories. */
+/** 746 tools across 9 categories. */
 export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
   {
     key: "conversion",
@@ -377,7 +377,6 @@ export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
           { id: "georeference_raster_from_control_points", name: "Georeference Raster From Control Points" },
           { id: "orthorectification", name: "Orthorectification" },
           { id: "reproject_lidar", name: "Reproject Lidar" },
-          { id: "reproject_raster", name: "Reproject Raster" },
           { id: "reproject_vector", name: "Reproject Vector" },
         ],
       },

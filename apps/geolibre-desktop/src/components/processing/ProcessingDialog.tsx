@@ -162,7 +162,9 @@ function downloadBytes(bytes: Uint8Array, filename: string): void {
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(url);
+  // Defer revoke so the browser can fetch the blob first (Firefox races and
+  // silently drops the download if the URL is revoked synchronously).
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 function isDataInputParameter(param: WhiteboxToolParameter): boolean {

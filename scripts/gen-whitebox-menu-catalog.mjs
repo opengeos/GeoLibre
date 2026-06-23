@@ -139,10 +139,15 @@ async function main() {
     )} KB).`,
   );
 
-  // Only free tools: locked/"pro"-tier Whitebox tools cannot run, so omit them
-  // from the menu entirely (the dialog hides them too).
-  const free = tools.filter((t) => !t.locked);
   const geolibre = await loadGeolibreWasmTools();
+  const geolibreIds = new Set(geolibre.map((t) => t.id));
+
+  // Only free tools: locked/"pro"-tier Whitebox tools cannot run, so omit them
+  // from the menu entirely (the dialog hides them too). Also drop any snapshot
+  // tool whose id is a GeoLibre WASM tool: the dialog replaces the snapshot
+  // entry with the GeoLibre one on an id collision, so listing both would point
+  // two menu leaves at the same loaded tool.
+  const free = tools.filter((t) => !t.locked && !geolibreIds.has(t.id));
 
   const cats = [];
   let total = 0;

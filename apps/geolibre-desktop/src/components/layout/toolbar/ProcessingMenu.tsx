@@ -71,6 +71,29 @@ export function ProcessingMenu({
     setProcessingOpen(true);
   };
 
+  // Section visibility, so dividers never render with nothing on one side when a
+  // UI profile (or mobile) hides whole sections. `showGeolibreTools` are the
+  // client tool submenus; `showGeolibreActions` are geocode/model-builder/
+  // segmentation below the in-submenu divider.
+  const showGeolibreTools =
+    (!mobile && show("processing.conversion")) ||
+    show("processing.vector") ||
+    show("processing.network") ||
+    show("processing.statistics") ||
+    (!mobile && show("processing.raster"));
+  const showGeolibreActions =
+    show("processing.geocode") ||
+    show("processing.modelBuilder") ||
+    (!mobile && show("processing.segmentation"));
+  const showGeolibre = showGeolibreTools || showGeolibreActions;
+  const showWorkspacesOrServices =
+    show("processing.sqlWorkspace") ||
+    show("processing.pythonConsole") ||
+    show("processing.notebook") ||
+    show("processing.dashboard") ||
+    show("processing.planetaryComputer") ||
+    show("processing.earthEngine");
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -145,14 +168,7 @@ export function ProcessingMenu({
             submenu so their category names don't collide with the Whitebox
             category submenus above. Each child keeps its own visibility gate;
             the parent shows when any child does. */}
-        {((!mobile && show("processing.conversion")) ||
-          show("processing.vector") ||
-          show("processing.network") ||
-          show("processing.statistics") ||
-          (!mobile && show("processing.raster")) ||
-          show("processing.geocode") ||
-          show("processing.modelBuilder") ||
-          (!mobile && show("processing.segmentation"))) && (
+        {showGeolibre && (
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             {t("toolbar.item.geolibre")}
@@ -470,7 +486,7 @@ export function ProcessingMenu({
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         )}
-        <DropdownMenuSeparator />
+        {showGeolibreTools && showGeolibreActions && <DropdownMenuSeparator />}
         {show("processing.geocode") && (
           <DropdownMenuItem onSelect={() => setGeocodeOpen(true)}>
             {t("toolbar.item.geocode")}
@@ -490,8 +506,9 @@ export function ProcessingMenu({
         </DropdownMenuSub>
         )}
         {/* Divide the tool-category submenus (Whitebox, GeoLibre) from the
-            workspaces and consoles below. */}
-        <DropdownMenuSeparator />
+            workspaces and consoles below. Only when both sides are present. */}
+        {((!mobile && show("processing.whitebox")) || showGeolibre) &&
+          showWorkspacesOrServices && <DropdownMenuSeparator />}
         {show("processing.sqlWorkspace") && (
           <DropdownMenuItem onSelect={() => setSqlWorkspaceOpen(true)}>
             {t("toolbar.command.sqlWorkspace")}
