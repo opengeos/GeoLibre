@@ -82,9 +82,15 @@ export const DEFAULT_GRATICULE_LABELS: GraticuleLabels = {
 
 let labels: GraticuleLabels = { ...DEFAULT_GRATICULE_LABELS };
 
-/** Replace the user-facing strings (the host calls this with translations). */
+/**
+ * Replace the user-facing strings (the host calls this with translations on
+ * every language change). Pushes the new strings into the live control tooltip
+ * and, if the settings panel is open, rebuilds its body so labels stay current.
+ */
 export function setGraticuleLabels(next: Partial<GraticuleLabels>): void {
   labels = { ...labels, ...next };
+  control?.updateLabels();
+  if (panelContainer) buildPanelBody(panelContainer);
 }
 
 /** How coordinate labels are formatted. */
@@ -140,6 +146,8 @@ let unregisterPanel: (() => void) | null = null;
 let moveHandler: (() => void) | null = null;
 /** Re-reads the current settings into the open settings panel inputs. */
 let syncPanel: (() => void) | null = null;
+/** The mounted settings-panel container, so its strings can be rebuilt on a language change. */
+let panelContainer: HTMLElement | null = null;
 
 export function getGraticuleSettings(): GraticuleSettings {
   return { ...settings };
@@ -512,24 +520,33 @@ function teardownLayers(activeMap: MapLibreMap): void {
 
 class GraticuleControl implements IControl {
   private container: HTMLElement | null = null;
+  private button: HTMLButtonElement | null = null;
 
   onAdd(): HTMLElement {
     const container = document.createElement("div");
     container.className = "maplibregl-ctrl maplibregl-ctrl-group";
     const button = document.createElement("button");
     button.type = "button";
-    button.title = labels.controlTitle;
-    button.setAttribute("aria-label", labels.controlTitle);
     button.innerHTML = GRID_ICON_SVG;
     button.addEventListener("click", () => appRef?.openRightPanel?.(PANEL_ID));
     container.appendChild(button);
     this.container = container;
+    this.button = button;
+    this.updateLabels();
     return container;
+  }
+
+  /** Refresh the tooltip/aria-label so they follow a language change. */
+  updateLabels(): void {
+    if (!this.button) return;
+    this.button.title = labels.controlTitle;
+    this.button.setAttribute("aria-label", labels.controlTitle);
   }
 
   onRemove(): void {
     this.container?.parentNode?.removeChild(this.container);
     this.container = null;
+    this.button = null;
   }
 }
 
@@ -539,7 +556,24 @@ const GRID_ICON_SVG = `<svg width="18" height="18" viewBox="0 0 18 18" fill="non
 // Settings panel (plain DOM, per the plugin contract)
 // ---------------------------------------------------------------------------
 
+/**
+ * Host entry point: track the container so a language change can rebuild it, fill
+ * it, and return a cleanup that only clears state if it still owns the panel
+ * (guards against a second render landing before the first cleanup fires).
+ */
 function renderPanel(container: HTMLElement): () => void {
+  panelContainer = container;
+  buildPanelBody(container);
+  return () => {
+    if (panelContainer === container) {
+      panelContainer = null;
+      syncPanel = null;
+    }
+  };
+}
+
+/** (Re)build the panel's controls into `container` using the current strings. */
+function buildPanelBody(container: HTMLElement): void {
   container.innerHTML = "";
   container.style.padding = "12px";
   container.style.display = "flex";
@@ -697,9 +731,6 @@ function renderPanel(container: HTMLElement): () => void {
   syncPanel = () => {
     for (const sync of controls) sync();
   };
-  return () => {
-    if (syncPanel) syncPanel = null;
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -818,6 +849,7 @@ export const maplibreGraticulePlugin: GeoLibrePlugin = {
     unregisterPanel?.();
     unregisterPanel = null;
     syncPanel = null;
+    panelContainer = null;
     if (map) teardownLayers(map);
     map = null;
     appRef = null;
