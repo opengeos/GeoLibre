@@ -16,9 +16,11 @@ export type AddDataKind =
   | "deckgl-viz"
   | "video";
 
+/** A data source loadable either from a remote URL or a local file. */
+export type FeedMode = "url" | "file";
 export type GpxMode = "url" | "file";
 export type GpxLayerKind = "waypoints" | "tracks" | "routes";
-export type GeoRssMode = "url" | "file";
+export type GeoRssMode = FeedMode;
 export type DelimitedTextMode = "url" | "file";
 export type DelimitedTextDelimiter =
   | "comma"

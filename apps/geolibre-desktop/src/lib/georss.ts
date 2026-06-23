@@ -116,7 +116,7 @@ function geometryFromItem(item: Element): Geometry | null {
   const point = directChildren(item, "point")[0];
   if (point) {
     const nestedLat = childText(point, "lat");
-    const nestedLong = childText(point, "long");
+    const nestedLong = childText(point, "long") ?? childText(point, "lon");
     if (nestedLat && nestedLong) {
       const coordinate = coordinate2d(nestedLong, nestedLat);
       if (coordinate) return { type: "Point", coordinates: coordinate };
@@ -148,9 +148,10 @@ function geometryFromItem(item: Element): Geometry | null {
     if (geometry) return geometry;
   }
 
-  // 3. W3C Geo (point only): flat geo:lat / geo:long children.
+  // 3. W3C Geo (point only): flat geo:lat / geo:long children (also the
+  //    common geo:lon abbreviation).
   const lat = childText(item, "lat");
-  const long = childText(item, "long");
+  const long = childText(item, "long") ?? childText(item, "lon");
   if (lat && long) {
     const coordinate = coordinate2d(long, lat);
     if (coordinate) return { type: "Point", coordinates: coordinate };
@@ -319,8 +320,10 @@ function itemProperties(item: Element): GeoJsonProperties {
     childText(item, "content");
   if (description) properties.description = description;
 
+  // Keep only http(s) links; a feed could carry a javascript:/data: href that
+  // would become an XSS vector if the UI ever makes the link clickable.
   const link = itemLink(item);
-  if (link) properties.link = link;
+  if (link && /^https?:/i.test(link)) properties.link = link;
 
   // RSS: <pubDate>; Atom: <updated>/<published>; RSS 1.0: <dc:date>.
   const published =
