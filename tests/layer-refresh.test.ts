@@ -122,4 +122,26 @@ describe("isVectorControlRefreshLayer / isRefreshableLayer", () => {
     assert.equal(isRefreshableLayer(layer), true);
     assert.equal(isVectorControlRefreshLayer(layer), false);
   });
+
+  it("treats a URL-backed GeoRSS layer as refreshable", () => {
+    const layer = makeLayer({
+      type: "geojson",
+      source: { type: "geojson", url: "https://example.com/feed.atom" },
+      sourcePath: "https://example.com/feed.atom",
+      metadata: { sourceKind: "georss" },
+    });
+
+    assert.equal(isRefreshableLayer(layer), true);
+  });
+
+  it("does not refresh a GeoRSS layer loaded from a local file", () => {
+    const layer = makeLayer({
+      type: "geojson",
+      source: { type: "geojson", url: "/home/user/feed.xml" },
+      sourcePath: "/home/user/feed.xml",
+      metadata: { sourceKind: "georss" },
+    });
+
+    assert.equal(isRefreshableLayer(layer), false);
+  });
 });

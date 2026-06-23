@@ -1,13 +1,19 @@
 import type { FeatureCollection } from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
+import { parseGeoRssLayer } from "./georss";
 
-// Keep in sync with WFS_PROXY_PATH in vite.config.ts (the dev proxy binds it there).
+// Keep in sync with WFS_PROXY_PATH / GPX_PROXY_PATH in vite.config.ts (the dev
+// proxy binds them there). The GPX path is a generic feed CORS proxy reused for
+// GeoRSS refreshes; the name is historical.
 const WFS_PROXY_PATH = "/__geolibre_wfs_proxy";
+const GPX_PROXY_PATH = "/__geolibre_gpx_proxy";
 const FETCH_TIMEOUT_MS = 30_000;
 export const MIN_REFRESH_INTERVAL_MS = 1_000;
+const GEORSS_SOURCE_KIND = "georss";
 const REFRESHABLE_GEOJSON_SOURCE_KINDS = new Set([
   "wfs-getfeature",
   "geojson-url",
+  GEORSS_SOURCE_KIND,
 ]);
 
 // Add Vector Layer (maplibre-gl-vector) tags its store layers with this
@@ -93,6 +99,12 @@ export async function refreshGeoJsonLayer(
     throw new Error("This layer does not have a refreshable GeoJSON URL.");
   }
 
+  // GeoRSS feeds are XML, so re-fetch and re-parse them instead of routing
+  // through the GeoJSON fetch path (which would reject the XML response).
+  if (isGeoRssLayer(layer)) {
+    return refreshGeoRssLayer(sourceUrl);
+  }
+
   const data = await fetchGeoJsonFeatureCollection(sourceUrl, {
     useWfsProxy: isWfsLayer(layer),
   });
@@ -101,6 +113,27 @@ export async function refreshGeoJsonLayer(
     geojson: data,
     featureCount: data.features.length,
   };
+}
+
+async function refreshGeoRssLayer(
+  url: string,
+): Promise<{ geojson: FeatureCollection; featureCount: number }> {
+  let response: Response;
+  try {
+    response = await fetch(proxyFeedRequestUrl(url), {
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      throw new Error("The request timed out.");
+    }
+    throw error;
+  }
+  if (!response.ok) {
+    throw new Error(`Request failed with status ${response.status}`);
+  }
+  const result = parseGeoRssLayer(await response.text());
+  return { geojson: result.features, featureCount: result.featureCount };
 }
 
 /**
@@ -239,6 +272,10 @@ function isWfsLayer(layer: GeoLibreLayer): boolean {
   );
 }
 
+function isGeoRssLayer(layer: GeoLibreLayer): boolean {
+  return layer.metadata.sourceKind === GEORSS_SOURCE_KIND;
+}
+
 function isViteDevServer(): boolean {
   return Boolean(
     (
@@ -252,6 +289,12 @@ function isViteDevServer(): boolean {
 function proxyWfsRequestUrl(url: string): string {
   return isViteDevServer()
     ? `${WFS_PROXY_PATH}?url=${encodeURIComponent(url)}`
+    : url;
+}
+
+function proxyFeedRequestUrl(url: string): string {
+  return isViteDevServer()
+    ? `${GPX_PROXY_PATH}?url=${encodeURIComponent(url)}`
     : url;
 }
 
