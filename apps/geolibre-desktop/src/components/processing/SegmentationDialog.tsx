@@ -20,6 +20,7 @@ import {
 import {
   AlertCircle,
   CheckCircle2,
+  Download,
   FolderOpen,
   Info,
   Loader2,
@@ -38,6 +39,7 @@ import { useTranslation } from "react-i18next";
 import { isTauri, openLocalDataFileWithFallback } from "../../lib/tauri-io";
 import { reprojectFeatureCollectionToWgs84 } from "../../lib/duckdb-vector-loader";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
+import { UPDATE_URL } from "../../lib/updates";
 import {
   SidecarHelpBanner,
   SIDECAR_PORT,
@@ -231,6 +233,13 @@ export function SegmentationDialog({
   ]);
 
   const available = status?.available === true;
+  // In the browser build segmentation can never run (it needs the desktop
+  // sidecar + segment-geospatial). Rather than render a full configuration form
+  // whose inputs do nothing and a permanently disabled Segment button (issue
+  // #777), collapse the dialog to just the explanatory banner plus a link to
+  // the desktop download. The desktop build keeps the full form even when the
+  // server is not running yet, since the user can start it from here.
+  const webUnavailable = !isTauri() && status !== null && !available;
 
   return (
     <Dialog
@@ -263,7 +272,7 @@ export function SegmentationDialog({
               </p>
               {/* Launching the sidecar is a desktop-only (Tauri) capability;
                   hide the action in the browser build where it cannot work. */}
-              {isTauri() && (
+              {isTauri() ? (
                 <Button
                   type="button"
                   variant="outline"
@@ -278,10 +287,25 @@ export function SegmentationDialog({
                   )}
                   {t("segmentation.startServer")}
                 </Button>
+              ) : (
+                // Browser users cannot run segmentation here, so point them at
+                // the desktop download instead of the unusable "Start server"
+                // action (issue #777).
+                <Button asChild type="button" variant="outline" className="gap-2">
+                  <a href={UPDATE_URL} target="_blank" rel="noreferrer">
+                    <Download className="h-4 w-4" />
+                    {t("segmentation.downloadDesktop")}
+                  </a>
+                </Button>
               )}
             </div>
           )}
 
+          {/* The configuration form and Segment button only make sense where
+              segmentation can actually run. In the browser they are hidden so
+              the dialog shows just the banner + desktop download link. */}
+          {!webUnavailable && (
+            <>
           {/* Image source */}
           <div className="grid gap-1.5">
             <Label htmlFor="seg-image" className="text-xs">
@@ -381,6 +405,8 @@ export function SegmentationDialog({
               {t("segmentation.segment")}
             </Button>
           </div>
+            </>
+          )}
 
           {/* A failed "Start server" attempt becomes an interactive
               troubleshooting banner (issue #594). Segmentation has no WASM

@@ -1724,6 +1724,7 @@
     "title": "AI Segmentation",
     "description": "Turn imagery into vector features with SAM3 (segment-geospatial). Choose a GeoTIFF, describe what to segment, and get polygons back as a new layer.",
     "startServer": "Start server",
+    "downloadDesktop": "Download desktop app",
     "imageLabel": "Image (GeoTIFF)",
     "imagePlaceholder": "Choose a GeoTIFF…",
     "chooseImage": "Choose image",
