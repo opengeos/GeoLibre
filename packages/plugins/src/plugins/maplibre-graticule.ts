@@ -609,6 +609,9 @@ function renderPanel(container: HTMLElement): () => void {
 /** (Re)build the panel's controls into `container` using the current strings. */
 function buildPanelBody(container: HTMLElement): void {
   container.innerHTML = "";
+  // Tag the panel so the host can theme its native form controls (the host
+  // applies `color-scheme: dark` to these in dark mode; see index.css).
+  container.classList.add("geolibre-graticule-panel");
   container.style.padding = "12px";
   container.style.display = "flex";
   container.style.flexDirection = "column";
