@@ -4,7 +4,6 @@ import type {
   GeoJsonProperties,
   Geometry,
   LineString,
-  Point,
   Polygon,
   Position,
 } from "geojson";
@@ -209,11 +208,18 @@ function gmlPosText(element: Element): string {
   if (posList?.textContent) return posList.textContent;
   const coordinates = directChildren(element, "coordinates")[0];
   if (coordinates?.textContent) {
-    // GML 2 uses "lon,lat lon,lat"; normalize the commas to spaces. The
-    // lat/lon swap is handled downstream because GML 2 coordinates are
-    // lon,lat ordered, the reverse of GML 3 pos. Most GeoRSS uses GML 3, so
-    // this branch is a best-effort fallback.
-    return coordinates.textContent.replace(/,/g, " ");
+    // GML 2 <coordinates> is "lon,lat lon,lat" (x,y), the reverse of GML 3
+    // pos. Re-order each pair to "lat lon" so the lat-first parseLatLonList
+    // below produces correct [lon, lat] GeoJSON positions.
+    return coordinates.textContent
+      .trim()
+      .split(/\s+/)
+      .map((pair) => {
+        const [lon, lat] = pair.split(",");
+        return lat && lon ? `${lat} ${lon}` : "";
+      })
+      .filter(Boolean)
+      .join(" ");
   }
   const positions = directChildren(element, "pos");
   if (positions.length > 0) {
