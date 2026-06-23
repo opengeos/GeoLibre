@@ -113,8 +113,16 @@ export function removeLastDirectionsWaypoint(): void {
     .removeWaypoint(count - 1)
     .catch((error: unknown) => {
       // An AbortError means clearDirectionsWaypoints() intentionally cancelled
-      // this refetch; that is expected, not a failure, so don't log it.
-      if (error instanceof DOMException && error.name === "AbortError") return;
+      // this refetch; that is expected, not a failure, so don't log it. Match on
+      // the name rather than the DOMException type so a library that re-wraps the
+      // native abort in a plain Error is still recognized.
+      if (
+        error != null &&
+        typeof error === "object" &&
+        (error as { name?: unknown }).name === "AbortError"
+      ) {
+        return;
+      }
       console.error("Directions: removeWaypoint failed", error);
     })
     .finally(() => {
