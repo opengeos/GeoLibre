@@ -100,7 +100,7 @@ export function MapModeBanner({ mapControllerRef }: MapModeBannerProps) {
               type="button"
               size="sm"
               variant="ghost"
-              disabled={waypointCount === 0}
+              disabled={waypointCount === 0 || removalInFlight}
               onClick={clearDirectionsWaypoints}
             >
               <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />

@@ -123,6 +123,9 @@ export function clearDirectionsWaypoints(): void {
   if (!directions) return;
   // clear() does not emit a waypoint event, so notify listeners directly.
   directions.clear();
+  // Clearing supersedes any in-flight removal: drop the flag so the post-clear
+  // state is consistent (the pending promise's .finally re-runs this harmlessly).
+  removalInFlight = false;
   notifyDirectionsState();
 }
 
