@@ -268,21 +268,29 @@ class AnnotationToolbarControl implements maplibregl.IControl {
     this.applyLabel(color, () => labels.color);
     container.appendChild(color);
 
-    const width = document.createElement("select");
+    // A cycling button (thin → medium → thick) rather than a native <select>:
+    // the icon uses currentColor so it themes with the other tools, and there is
+    // no native dropdown popup to theme (which is unreliable in a dark, narrow
+    // toolbar). The line in the icon thickens with the selected width.
+    const width = document.createElement("button");
+    width.type = "button";
     width.className = "geolibre-annotations-width";
-    for (const value of WIDTH_VALUES) {
-      const opt = document.createElement("option");
-      opt.value = String(value);
-      if (value === strokeWidth) opt.selected = true;
-      this.relabelers.push(() => {
-        opt.textContent = widthOptionLabel(value);
-      });
-      width.appendChild(opt);
-    }
-    width.addEventListener("change", () => {
-      strokeWidth = Number(width.value) || DEFAULT_WIDTH;
+    const renderWidth = () => {
+      const display = strokeWidth <= 2 ? 2 : strokeWidth >= 5 ? 6 : 4;
+      width.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="${display}" stroke-linecap="round"><line x1="4" y1="12" x2="20" y2="12"/></svg>`;
+    };
+    width.addEventListener("click", () => {
+      const values = WIDTH_VALUES as readonly number[];
+      const next = values[(values.indexOf(strokeWidth) + 1) % values.length];
+      strokeWidth = next ?? DEFAULT_WIDTH;
+      renderWidth();
+      this.relabel();
     });
-    this.applyLabel(width, () => labels.width);
+    renderWidth();
+    this.applyLabel(
+      width,
+      () => `${labels.width}: ${widthOptionLabel(strokeWidth)}`,
+    );
     container.appendChild(width);
 
     const deleteLast = this.makeActionButton(
