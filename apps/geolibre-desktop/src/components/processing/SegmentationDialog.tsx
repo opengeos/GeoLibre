@@ -271,7 +271,10 @@ export function SegmentationDialog({
 
         <div className="flex flex-col gap-3">
           {checking && (
-            <div className="grid gap-2">
+            // Same panel framing as the resolved-unavailable banner below, so
+            // the download CTA keeps its frame instead of jumping when the
+            // probe settles.
+            <div className="grid gap-2 rounded-md border border-border bg-muted/40 p-3">
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 {t("segmentation.status.checking")}
