@@ -812,6 +812,72 @@ body,
 }
 
 /*
+ * Annotation tools control. Built as a plain `.maplibregl-ctrl-group`, so it
+ * inherits MapLibre's default control chrome; these rules map it onto the app's
+ * design tokens (so it tracks the in-app `.dark` toggle) and style the tool
+ * buttons, the active-tool highlight, and the inline color/width inputs.
+ */
+.geolibre-annotations-control {
+  background-color: hsl(var(--background)) !important;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.geolibre-annotations-control button {
+  align-items: center;
+  background: transparent;
+  border: none;
+  color: hsl(var(--foreground));
+  cursor: pointer;
+  display: flex;
+  height: 29px;
+  justify-content: center;
+  padding: 0;
+  width: 29px;
+}
+
+.geolibre-annotations-control button:hover {
+  background-color: hsl(var(--accent));
+}
+
+.geolibre-annotations-control button.is-active {
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+
+.geolibre-annotations-control .geolibre-annotations-color {
+  border: none;
+  cursor: pointer;
+  height: 24px;
+  margin: 2px auto;
+  padding: 0;
+  width: 24px;
+}
+
+.geolibre-annotations-control .geolibre-annotations-width {
+  background-color: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  border-radius: 4px;
+  color: hsl(var(--foreground));
+  cursor: pointer;
+  font-size: 11px;
+  margin: 2px;
+  width: 25px;
+}
+
+.geolibre-annotation-text-input {
+  background-color: hsl(var(--background));
+  border: 1px solid hsl(var(--primary));
+  border-radius: 4px;
+  color: hsl(var(--foreground));
+  font-size: 13px;
+  outline: none;
+  padding: 2px 6px;
+  transform: translate(-2px, -2px);
+}
+
+/*
  * The Measure, Bookmark and View State controls theme themselves purely via
  * `@media (prefers-color-scheme)`, so they follow the OS preference instead of
  * GeoLibre's in-app light/dark toggle (the `.dark` class on <html>). When the

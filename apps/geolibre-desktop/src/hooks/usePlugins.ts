@@ -1,5 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import {
+  maplibreAnnotationsPlugin,
   maplibreBasemapControlPlugin,
   maplibreComponentsPlugin,
   maplibreDeckGlVizPlugin,
@@ -117,6 +118,7 @@ const manager = new PluginManager();
 manager.registerAll([
   maplibreLayerControlPlugin,
   maplibreGeoEditorPlugin,
+  maplibreAnnotationsPlugin,
   maplibreBasemapControlPlugin,
   // The four web service plugins are grouped into the "Web Services"
   // submenu, rendered where the first of them appears in this order.

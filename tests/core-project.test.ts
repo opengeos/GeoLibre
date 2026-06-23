@@ -1006,3 +1006,77 @@ describe("story map import/export", () => {
     assert.equal(state.mapLayout.rows * state.mapLayout.cols, 3);
   });
 });
+
+describe("annotation layer persistence", () => {
+  // The Annotations plugin stores decoration as a tagged in-memory GeoJSON
+  // layer (a text marker, an arrow shaft line, and its filled arrowhead). It
+  // has no source URL, so the embedded geojson is the only copy and must survive
+  // the on-disk round-trip, along with the `annotation` sourceKind and the
+  // forced `simpleStyleEnabled` that makes per-feature stroke/fill render.
+  it("round-trips annotation features, sourceKind, and simpleStyleEnabled", () => {
+    const project = projectFromStore({
+      projectName: "Annotations",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [
+        geojsonLayer({
+          id: "annotation-layer",
+          name: "Annotations",
+          metadata: { sourceKind: "annotation" },
+          sourcePath: "annotations://layer",
+          style: { ...DEFAULT_LAYER_STYLE, simpleStyleEnabled: true },
+          geojson: {
+            type: "FeatureCollection",
+            features: [
+              {
+                type: "Feature",
+                properties: { __annotation: "text", shape: "text_marker", text: "Study Area" },
+                geometry: { type: "Point", coordinates: [1, 2] },
+              },
+              {
+                type: "Feature",
+                properties: {
+                  __annotation: "line",
+                  annotationId: "a1",
+                  stroke: "#ef4444",
+                  "stroke-width": 3,
+                },
+                geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] },
+              },
+              {
+                type: "Feature",
+                properties: {
+                  __annotation: "arrowhead",
+                  annotationId: "a1",
+                  fill: "#ef4444",
+                  "fill-opacity": 1,
+                },
+                geometry: {
+                  type: "Polygon",
+                  coordinates: [[[1, 1], [0.9, 1.1], [1.1, 0.9], [1, 1]]],
+                },
+              },
+            ],
+          },
+        }),
+      ],
+      preferences: createEmptyProject().preferences,
+      metadata: {},
+    });
+
+    // The source-less annotation layer keeps its embedded geojson on save.
+    assert.equal(project.layers[0].geojson?.features.length, 3);
+
+    const reopened = parseProject(serializeProject(project));
+    assert.equal(reopened.layers[0].geojson?.features.length, 3);
+    assert.equal(reopened.layers[0].metadata.sourceKind, "annotation");
+    assert.equal(reopened.styles["annotation-layer"]?.simpleStyleEnabled, true);
+    // The arrow shaft and its head stay grouped so they delete together.
+    const head = reopened.layers[0].geojson?.features.find(
+      (feature) => feature.properties?.__annotation === "arrowhead",
+    );
+    assert.equal(head?.properties?.annotationId, "a1");
+  });
+});
