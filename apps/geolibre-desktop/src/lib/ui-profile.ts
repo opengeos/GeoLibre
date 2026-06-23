@@ -220,21 +220,25 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   { id: "view.resetPitchBearing", menuId: "view", labelKey: "toolbar.item.resetPitchBearing", tier: "basic" },
   { id: "view.setView", menuId: "view", labelKey: "toolbar.item.setView", tier: "intermediate" },
   { id: "view.splitView", menuId: "view", labelKey: "toolbar.item.splitView", tier: "intermediate" },
-  // Processing
+  // Processing — ordered to mirror the Processing menu. The Whitebox toggle
+  // also governs the per-category Whitebox submenus, so those categories have no
+  // separate entries here. The conversion/vector/network/statistics/raster,
+  // geocode, model-builder, and segmentation toggles drive GeoLibre's own
+  // client-side tools (grouped under the "GeoLibre" submenu).
   { id: "processing.assistant", menuId: "processing", labelKey: "toolbar.command.assistant", tier: "intermediate" },
   { id: "processing.whitebox", menuId: "processing", labelKey: "toolbar.item.whitebox", tier: "advanced" },
-  { id: "processing.sqlWorkspace", menuId: "processing", labelKey: "toolbar.command.sqlWorkspace", tier: "intermediate" },
-  { id: "processing.pythonConsole", menuId: "processing", labelKey: "toolbar.command.pythonConsole", tier: "advanced" },
-  { id: "processing.notebook", menuId: "processing", labelKey: "toolbar.command.notebook", tier: "advanced" },
-  { id: "processing.dashboard", menuId: "processing", labelKey: "toolbar.command.dashboard", tier: "intermediate" },
-  { id: "processing.geocode", menuId: "processing", labelKey: "toolbar.item.geocode", tier: "intermediate" },
-  { id: "processing.modelBuilder", menuId: "processing", labelKey: "toolbar.item.modelBuilder", tier: "advanced" },
   { id: "processing.conversion", menuId: "processing", labelKey: "toolbar.item.conversion", tier: "intermediate" },
   { id: "processing.vector", menuId: "processing", labelKey: "toolbar.item.vector", tier: "intermediate" },
   { id: "processing.network", menuId: "processing", labelKey: "toolbar.item.network", tier: "advanced" },
   { id: "processing.statistics", menuId: "processing", labelKey: "toolbar.item.statistics", tier: "advanced" },
   { id: "processing.raster", menuId: "processing", labelKey: "toolbar.item.raster", tier: "advanced" },
+  { id: "processing.geocode", menuId: "processing", labelKey: "toolbar.item.geocode", tier: "intermediate" },
+  { id: "processing.modelBuilder", menuId: "processing", labelKey: "toolbar.item.modelBuilder", tier: "advanced" },
   { id: "processing.segmentation", menuId: "processing", labelKey: "toolbar.command.segmentation", tier: "advanced" },
+  { id: "processing.sqlWorkspace", menuId: "processing", labelKey: "toolbar.command.sqlWorkspace", tier: "intermediate" },
+  { id: "processing.pythonConsole", menuId: "processing", labelKey: "toolbar.command.pythonConsole", tier: "advanced" },
+  { id: "processing.notebook", menuId: "processing", labelKey: "toolbar.command.notebook", tier: "advanced" },
+  { id: "processing.dashboard", menuId: "processing", labelKey: "toolbar.command.dashboard", tier: "intermediate" },
   { id: "processing.planetaryComputer", menuId: "processing", labelKey: "toolbar.command.planetaryComputer", tier: "advanced" },
   { id: "processing.earthEngine", menuId: "processing", labelKey: "toolbar.command.earthEngine", tier: "advanced" },
   // Controls — built-in map controls
