@@ -879,11 +879,22 @@ body,
   background-color: hsl(var(--background));
   border: 1px solid hsl(var(--border));
   border-radius: 4px;
+  /* Render the native dropdown popup (and its options) in the active theme, so
+   * the Thin/Medium/Thick text is not black-on-dark in dark mode. */
+  color-scheme: light dark;
   color: hsl(var(--foreground));
   cursor: pointer;
   font-size: 11px;
   margin: 2px 1px;
   max-width: 27px;
+}
+
+/* Explicitly theme the option popup too: some browsers ignore the select's
+ * colors for the open dropdown and fall back to black-on-white (or black on the
+ * inherited dark background, i.e. invisible) without this. */
+.geolibre-annotations-control .geolibre-annotations-width option {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
 }
 
 .geolibre-annotation-text-input {
