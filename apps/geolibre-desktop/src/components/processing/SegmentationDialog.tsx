@@ -240,6 +240,20 @@ export function SegmentationDialog({
   // the rare web deployment where segmentation is actually usable.
   const webUnavailable = !isTauri() && !available;
 
+  // Browser users cannot run segmentation here, so point them at the desktop
+  // download instead of the unusable "Start server" action (issue #777). This
+  // is rendered both in the resolved "unavailable" banner and while the status
+  // probe is still in flight, so a slow or hanging probe (e.g. a silent packet
+  // drop with no explicit fetch timeout) never leaves them without an action.
+  const downloadDesktopButton = (
+    <Button asChild variant="outline" className="gap-2">
+      <a href={UPDATE_URL} target="_blank" rel="noreferrer">
+        <Download className="h-4 w-4" />
+        {t("segmentation.downloadDesktop")}
+      </a>
+    </Button>
+  );
+
   return (
     <Dialog
       open={open}
@@ -257,10 +271,15 @@ export function SegmentationDialog({
 
         <div className="flex flex-col gap-3">
           {checking && (
-            <p className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              {t("segmentation.status.checking")}
-            </p>
+            <div className="grid gap-2">
+              <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {t("segmentation.status.checking")}
+              </p>
+              {/* Keep a download CTA visible while the probe runs so browser
+                  users always have an action, even if it never settles. */}
+              {!isTauri() && downloadDesktopButton}
+            </div>
           )}
 
           {!checking && status && !available && (
@@ -270,7 +289,8 @@ export function SegmentationDialog({
                 {status.message}
               </p>
               {/* Launching the sidecar is a desktop-only (Tauri) capability;
-                  hide the action in the browser build where it cannot work. */}
+                  in the browser build it cannot work, so offer the desktop
+                  download instead. */}
               {isTauri() ? (
                 <Button
                   type="button"
@@ -287,15 +307,7 @@ export function SegmentationDialog({
                   {t("segmentation.startServer")}
                 </Button>
               ) : (
-                // Browser users cannot run segmentation here, so point them at
-                // the desktop download instead of the unusable "Start server"
-                // action (issue #777).
-                <Button asChild variant="outline" className="gap-2">
-                  <a href={UPDATE_URL} target="_blank" rel="noreferrer">
-                    <Download className="h-4 w-4" />
-                    {t("segmentation.downloadDesktop")}
-                  </a>
-                </Button>
+                downloadDesktopButton
               )}
             </div>
           )}
