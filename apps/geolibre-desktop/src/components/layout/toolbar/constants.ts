@@ -39,6 +39,7 @@ export interface AddLayerHandlers {
   splatting: () => void;
   threeDTiles: () => void;
   duckdb: () => void;
+  kml: () => void;
 }
 
 /** Shared styling/affordances passed to each toolbar menu's trigger button. */

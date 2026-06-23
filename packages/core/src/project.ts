@@ -140,7 +140,9 @@ export function parseProject(json: string): GeoLibreProject {
 /**
  * Coerce an untrusted (possibly hand-edited) `layerGroups` array into valid
  * {@link LayerGroup} records, dropping entries without a usable id and
- * de-duplicating by id. Always returns an array (empty when absent).
+ * de-duplicating by id. Validates `parentGroupId` references exist and are
+ * cycle-free; dangling or cyclic parent references are dropped to `undefined`.
+ * Always returns an array (empty when absent).
  *
  * @param value Raw `layerGroups` value from the project JSON.
  * @returns Normalized, de-duplicated group definitions.
@@ -159,15 +161,52 @@ function normalizeLayerGroups(value: unknown): LayerGroup[] {
       typeof candidate.opacity === "number" && Number.isFinite(candidate.opacity)
         ? Math.min(Math.max(candidate.opacity, 0), 1)
         : DEFAULT_LAYER_GROUP_OPACITY;
+    let parentGroupId: string | undefined;
+    if (typeof candidate.parentGroupId === "string" && candidate.parentGroupId.trim()) {
+      parentGroupId = candidate.parentGroupId.trim();
+    }
     groups.push({
       id,
       name: typeof candidate.name === "string" ? candidate.name : id,
       collapsed: candidate.collapsed === true,
       visible: candidate.visible !== false,
       opacity,
+      ...(parentGroupId ? { parentGroupId } : {}),
     });
   }
-  return groups;
+
+  // Build id set for reference validation.
+  const validIds = new Set(groups.map((g) => g.id));
+
+  // Drop dangling parentGroupIds (pointing to non-existent groups).
+  const result = groups.map((g) => {
+    if (g.parentGroupId && !validIds.has(g.parentGroupId)) {
+      const { parentGroupId: _pid, ...rest } = g;
+      return rest as LayerGroup;
+    }
+    return g;
+  });
+
+  // Detect and break cycles in parentGroupId chains.
+  const groupById = new Map(result.map((g) => [g.id, g]));
+  for (const g of result) {
+    if (!g.parentGroupId) continue;
+    const visited = new Set<string>();
+    let current: string | undefined = g.parentGroupId;
+    while (current) {
+      if (current === g.id || visited.has(current)) {
+        // Cycle detected — drop parentGroupId.
+        const { parentGroupId: _pid, ...rest } = g;
+        Object.assign(g, rest);
+        (g as { parentGroupId?: string }).parentGroupId = undefined;
+        break;
+      }
+      visited.add(current);
+      current = groupById.get(current)?.parentGroupId;
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -1139,6 +1178,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
         ? { ...layer, groupId: undefined }
         : layer,
     ),
+    layerGroups,
   );
   const basemapStyleUrl = project.basemapStyleUrl;
   const basemapVisible = project.basemapVisible ?? true;

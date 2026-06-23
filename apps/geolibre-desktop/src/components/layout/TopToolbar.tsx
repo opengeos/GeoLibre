@@ -87,6 +87,7 @@ import { useViewportHistory } from "../../hooks/useViewportHistory";
 import type { Command } from "../../lib/commands";
 import { AddDataDialog, type AddDataKind } from "./AddDataDialog";
 import { AddNetcdfDialog } from "./AddNetcdfDialog";
+import { KmlImportDialog } from "./KmlImportDialog";
 import { AboutDialog } from "./AboutDialog";
 import { NewProjectDialog } from "./NewProjectDialog";
 import { ManagePluginsDialog } from "./ManagePluginsDialog";
@@ -138,6 +139,10 @@ interface TopToolbarProps {
   themeMode: ThemeMode;
   onOpenDiagnostics: () => void;
   onToggleThemeMode: () => void;
+  kmlDialogOpen: boolean;
+  kmlInitialData?: { fileName: string; rawData: string; isKmz: boolean; binaryData?: ArrayBuffer }[];
+  onOpenKmlDialog: (data?: { fileName: string; rawData: string; isKmz: boolean; binaryData?: ArrayBuffer }[]) => void;
+  onCloseKmlDialog: () => void;
 }
 
 export function TopToolbar({
@@ -150,6 +155,10 @@ export function TopToolbar({
   themeMode,
   onOpenDiagnostics,
   onToggleThemeMode,
+  kmlDialogOpen,
+  kmlInitialData,
+  onOpenKmlDialog,
+  onCloseKmlDialog,
 }: TopToolbarProps) {
   const { t } = useTranslation();
   // The reverse-geocode plugin lives in the framework-agnostic plugins package
@@ -324,6 +333,7 @@ export function TopToolbar({
     splatting: () => openSplattingLayerPanel(appApi),
     threeDTiles: () => openThreeDTilesLayerPanel(appApi),
     duckdb: () => openDuckDBLayerPanel(appApi),
+    kml: () => onOpenKmlDialog(),
   };
   const handleOpenPlanetaryComputer = () => openPlanetaryComputerPanel(appApi);
 
@@ -1047,6 +1057,15 @@ export function TopToolbar({
         open={netcdfDialogOpen}
         appApi={appApi}
         onOpenChange={setNetcdfDialogOpen}
+      />
+      <KmlImportDialog
+        open={kmlDialogOpen}
+        onOpenChange={(next) => {
+          if (!next) onCloseKmlDialog();
+          else onOpenKmlDialog(kmlInitialData);
+        }}
+        mapControllerRef={mapControllerRef}
+        initialData={kmlInitialData}
       />
       <ProjectFileDialogs projectFiles={projectFiles} />
       <ConsentNoticeDialogs consent={consent} />

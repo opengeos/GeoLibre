@@ -60,6 +60,7 @@ export function AddDataMenu({
     raster: { onSelect: addLayer.raster },
     "delimited-text": { onSelect: () => onSetAddDataKind("delimited-text") },
     gpx: { onSelect: () => onSetAddDataKind("gpx") },
+    kml: { onSelect: addLayer.kml },
     mbtiles: { onSelect: () => onSetAddDataKind("mbtiles") },
     "osm-pbf": { onSelect: onOpenOsmPbfDialog, disabled: osmPbfBusy },
     xyz: { onSelect: () => onSetAddDataKind("xyz") },

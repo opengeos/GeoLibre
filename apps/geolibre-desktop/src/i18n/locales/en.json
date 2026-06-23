@@ -107,6 +107,10 @@
         "label": "Add GPX Layer",
         "description": "Add GPX waypoints, routes, and tracks as one or more vector layers."
       },
+      "kml": {
+        "label": "Add KML/KMZ Layer",
+        "description": "Import KML/KMZ files with folder structure. Select which folders and placemarks to import as vector layers."
+      },
       "delimitedText": {
         "label": "Add Delimited Text Layer",
         "description": "Add a delimited text file or URL as a point layer using longitude and latitude fields."
@@ -252,6 +256,25 @@
       "file": "GPX file",
       "urlPlaceholder": "https://example.com/route.gpx",
       "layerTypes": "Layer types"
+    },
+    "kml": {
+      "defaultName": "KML Layer",
+      "chooseFile": "Choose KML/KMZ file...",
+      "noFileSelected": "No file selected",
+      "readError": "Could not read the KML file.",
+      "notXml": "The file is not valid XML.",
+      "notKml": "The file does not contain a KML document.",
+      "noPlacemarks": "No readable placemarks found in this KML file.",
+      "kmzNoDocKml": "The KMZ archive does not contain a doc.kml file.",
+      "selectAll": "Select All",
+      "deselectAll": "Deselect All",
+      "unnamedPlacemark": "Unnamed Placemark",
+      "renameRoot": "Rename root",
+      "renameFolder": "Rename folder",
+      "features_one": "{{count}} feature",
+      "features_other": "{{count}} features",
+      "fileNameLabel": "File: {{name}}",
+      "description": "Select folders and placemarks to import. Each selected folder becomes its own layer group."
     },
     "delimitedText": {
       "defaultName": "Delimited Text Layer",
@@ -1057,6 +1080,7 @@
     "layerType": {
       "delimitedText": "Delimited Text Layer",
       "gpx": "GPX Layer",
+      "kml": "KML/KMZ Layer",
       "mbtiles": "MBTiles Layer",
       "xyz": "XYZ Layer",
       "wms": "WMS Layer",

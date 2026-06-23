@@ -377,6 +377,19 @@ function toDuckDbVectorData(data: Uint8Array): Uint8Array<ArrayBuffer> {
   return new Uint8Array(data);
 }
 
+export async function extractDocKmlFromKmz(
+  data: ArrayBuffer | Uint8Array,
+): Promise<string> {
+  const entries = await unzipArchive(data);
+  const docEntry = Object.entries(entries).find(
+    ([name]) => name.toLowerCase() === "doc.kml",
+  );
+  if (!docEntry) {
+    throw new Error("The KMZ archive does not contain a doc.kml file.");
+  }
+  return new TextDecoder("utf-8").decode(docEntry[1]);
+}
+
 async function readKmzKmlFiles(
   data: ArrayBuffer | Uint8Array,
 ): Promise<DuckDbVectorFile[]> {

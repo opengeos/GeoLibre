@@ -481,7 +481,7 @@ export interface GeoLibreLayer {
 
 /**
  * A named, collapsible folder in the layer panel that organizes a contiguous
- * run of layers (single-level nesting; groups never contain other groups).
+ * run of layers. Groups can nest via `parentGroupId`.
  *
  * The group's `visible` flag and `opacity` multiplier are folded into each
  * child layer's effective render state by `applyGroupEffects` before the map
@@ -496,6 +496,8 @@ export interface LayerGroup {
   visible: boolean;
   /** Group-level opacity in [0, 1]; multiplied into each child's opacity. */
   opacity: number;
+  /** Id of the parent group for nesting. `undefined` means top-level. */
+  parentGroupId?: string;
 }
 
 /**

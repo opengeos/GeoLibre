@@ -313,6 +313,13 @@ export function LayerPanel({
   const refreshTimersRef = useRef(new Map<string, LayerRefreshTimer>());
   const refreshStatusTimersRef = useRef(new Map<string, number>());
   const visibleLayers = useMemo(() => [...layers].reverse(), [layers]);
+  // Display index (0 = top of panel) for each layer, needed for drag-drop
+  // positioning. Computed from the flat reversed array.
+  const displayIndexByLayerId = useMemo(() => {
+    const map = new Map<string, number>();
+    visibleLayers.forEach((l, i) => map.set(l.id, i));
+    return map;
+  }, [visibleLayers]);
   // Group lookup + the top-most member of each group in display order. Members
   // are kept contiguous in `layers`, so the first occurrence walking the
   // reversed list is where the group's header is drawn inline. Memoized so they
@@ -331,9 +338,10 @@ export function LayerPanel({
     return map;
   }, [visibleLayers]);
   // Empty folders have no member to anchor them, so they render pinned at the
-  // top of the panel where they are easy to drop layers into.
+  // top of the panel where they are easy to drop layers into. Only top-level
+  // empty groups; nested empty sub-groups appear inside their parent's tree.
   const emptyGroups = useMemo(
-    () => layerGroups.filter((g) => !firstMemberIdByGroup.has(g.id)),
+    () => layerGroups.filter((g) => !g.parentGroupId && !firstMemberIdByGroup.has(g.id)),
     [layerGroups, firstMemberIdByGroup],
   );
   const refreshSettingsLayer = refreshSettingsLayerId
@@ -981,17 +989,83 @@ export function LayerPanel({
     resetDragState();
   };
 
-  const renderGroupHeader = (group: LayerGroup) => {
+  /** Returns true if any ancestor group of the given groupId is hidden. */
+  const groupAncestorHidden = (groupId: string | undefined): boolean => {
+    if (!groupId) return false;
+    let gid: string | undefined = groupId;
+    while (gid) {
+      const g = groupById.get(gid);
+      if (!g) break;
+      if (!g.visible) return true;
+      gid = g.parentGroupId;
+    }
+    return false;
+  };
+
+  /** Returns true if any ancestor group of the given groupId is collapsed. */
+  const groupAncestorCollapsed = (groupId: string | undefined): boolean => {
+    if (!groupId) return false;
+    let gid: string | undefined = groupId;
+    while (gid) {
+      const g = groupById.get(gid);
+      if (!g) break;
+      if (g.collapsed) return true;
+      gid = g.parentGroupId;
+    }
+    return false;
+  };
+
+  /** Render the "Move to group" menu tree with nested sub-menus for sub-groups. */
+  const renderMoveToGroupMenu = useCallback(
+    (layer: GeoLibreLayer, parentId?: string): React.ReactNode[] => {
+      const siblings = layerGroups.filter((g) => g.parentGroupId === parentId);
+      return siblings.map((g) => {
+        const children = layerGroups.filter((cg) => cg.parentGroupId === g.id);
+        if (children.length > 0) {
+          return (
+            <DropdownMenuSub key={g.id}>
+              <DropdownMenuSubTrigger
+                disabled={layer.groupId === g.id}
+                onSelect={(e: Event) => {
+                  e.preventDefault();
+                  moveLayerToGroup(layer.id, g.id);
+                }}
+              >
+                {g.name}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                {renderMoveToGroupMenu(layer, g.id)}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          );
+        }
+        return (
+          <DropdownMenuItem
+            key={g.id}
+            disabled={layer.groupId === g.id}
+            onSelect={(e: Event) => {
+              e.preventDefault();
+              moveLayerToGroup(layer.id, g.id);
+            }}
+          >
+            {g.name}
+          </DropdownMenuItem>
+        );
+      });
+    },
+    [layerGroups, moveLayerToGroup],
+  );
+
+  const renderGroupHeader = (group: LayerGroup, depth = 0) => {
     const isDropTarget = dropTargetGroupId === group.id;
-    // Empty folders have no members in the flat `layers` array, so
-    // reorderLayerGroup cannot move them; disable the reorder actions for them.
     const canReorderGroup = firstMemberIdByGroup.has(group.id);
     return (
       <div
-        data-group-header=""
-        data-testid="layer-group-header"
-        data-group-name={group.name}
-        className={`rounded-md border p-2 transition-colors ${
+          data-group-header=""
+          data-testid="layer-group-header"
+          data-group-name={group.name}
+          style={{ marginLeft: depth * 16 }}
+          className={`rounded-md border p-2 transition-colors ${
           isDropTarget
             ? "border-primary bg-primary/10"
             : "border-border bg-muted/30 hover:border-muted-foreground/40"
@@ -1269,13 +1343,25 @@ export function LayerPanel({
             const isFirstOfGroup = group
               ? firstMemberIdByGroup.get(group.id) === layer.id
               : false;
-            const groupCollapsed = group?.collapsed ?? false;
-            // When the parent group is hidden, a layer whose own visibility
-            // toggle is still on is not rendered — a surprising state. Grey its
-            // name out as a cue that the group-level setting is what's hiding
-            // it (issue #430). If the layer's own toggle is also off, the
-            // EyeOff icon already explains it, so skip the group cue then.
-            const groupHidden = group ? !group.visible && layer.visible : false;
+            const groupCollapsed = groupAncestorCollapsed(layer.groupId);
+            // When a parent/ancestor group is hidden, a layer whose own
+            // visibility toggle is still on is not rendered — a surprising
+            // state. Grey its name out as a cue that the group-level setting
+            // is what's hiding it (issue #430). If the layer's own toggle is
+            // also off, the EyeOff icon already explains it, so skip the
+            // group cue then.
+            const groupHidden = groupAncestorHidden(layer.groupId) && layer.visible;
+            const layerDepth = group
+              ? (() => {
+                  let d = 1;
+                  let gid = group.parentGroupId;
+                  while (gid) {
+                    d++;
+                    gid = groupById.get(gid)?.parentGroupId;
+                  }
+                  return d;
+                })()
+              : 0;
             const canIdentify =
               layer.type === "geojson" ||
               isDuckDBQueryLayer(layer) ||
@@ -1350,9 +1436,8 @@ export function LayerPanel({
                   selectedLayerId === layer.id
                     ? "border-primary bg-primary/5"
                     : "border-border bg-background hover:border-muted-foreground/40 hover:bg-muted/20"
-                } ${draggedLayerId === layer.id ? "opacity-50" : ""} ${
-                  group ? "ml-4" : ""
-                }`}
+                } ${draggedLayerId === layer.id ? "opacity-50" : ""}`}
+                style={layerDepth > 0 ? { marginLeft: layerDepth * 16 } : undefined}
                 onDragOver={(e) => handleLayerDragOver(e, layer.id)}
                 onDrop={(e) => handleLayerDrop(e, layer.id, displayIndex)}
                 onDragEnd={resetDragState}
@@ -1629,17 +1714,7 @@ export function LayerPanel({
                             {t("layers.moveToGroup")}
                           </DropdownMenuSubTrigger>
                           <DropdownMenuSubContent>
-                            {layerGroups.map((g) => (
-                              <DropdownMenuItem
-                                key={g.id}
-                                disabled={layer.groupId === g.id}
-                                onSelect={() => {
-                                  moveLayerToGroup(layer.id, g.id);
-                                }}
-                              >
-                                {g.name}
-                              </DropdownMenuItem>
-                            ))}
+                            {renderMoveToGroupMenu(layer)}
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
                       )}

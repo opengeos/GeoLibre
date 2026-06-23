@@ -330,7 +330,7 @@ export interface AppState {
     beforeLayerId?: string | null
   ) => string;
 
-  addLayerGroup: (name?: string, layerIds?: string[]) => string;
+  addLayerGroup: (name?: string, layerIds?: string[], parentGroupId?: string) => string;
   removeLayerGroup: (id: string, options?: { removeChildren?: boolean }) => void;
   renameLayerGroup: (id: string, name: string) => void;
   setLayerGroupVisibility: (id: string, visible: boolean) => void;
@@ -411,6 +411,24 @@ function nextDefaultGroupName(groups: LayerGroup[]): string {
 }
 
 /**
+ * Returns true when `descendantId` is a descendant of `ancestorId` by
+ * walking parentGroupId links.
+ */
+function isDescendantGroup(
+  descendantId: string,
+  ancestorId: string,
+  groups: LayerGroup[],
+): boolean {
+  const groupById = new Map(groups.map((g) => [g.id, g]));
+  let current = groupById.get(descendantId);
+  while (current?.parentGroupId) {
+    if (current.parentGroupId === ancestorId) return true;
+    current = groupById.get(current.parentGroupId);
+  }
+  return false;
+}
+
+/**
  * Compare two `layerGroups` arrays for undo-history purposes, ignoring the
  * `collapsed` flag so expand/collapse (a UI-panel preference) never records a
  * history entry. Every other field — order, name, visibility, opacity — is
@@ -429,7 +447,8 @@ function layerGroupsEqualForHistory(
       x.id !== y.id ||
       x.name !== y.name ||
       x.visible !== y.visible ||
-      x.opacity !== y.opacity
+      x.opacity !== y.opacity ||
+      x.parentGroupId !== y.parentGroupId
     ) {
       return false;
     }
@@ -1009,15 +1028,19 @@ export const useAppStore = create<AppState>()(
         return id;
       },
 
-      addLayerGroup: (name, layerIds) => {
+      addLayerGroup: (name, layerIds, parentGroupId) => {
         const id = uuidv4();
         set((s) => {
+          if (parentGroupId && !s.layerGroups.some((g) => g.id === parentGroupId)) {
+            return s;
+          }
           const group: LayerGroup = {
             id,
             name: name?.trim() || nextDefaultGroupName(s.layerGroups),
             collapsed: false,
             visible: true,
             opacity: DEFAULT_LAYER_GROUP_OPACITY,
+            ...(parentGroupId ? { parentGroupId } : {}),
           };
           const ids = new Set(layerIds ?? []);
           const layers =
@@ -1025,7 +1048,8 @@ export const useAppStore = create<AppState>()(
               ? normalizeGroupContiguity(
                   s.layers.map((l) =>
                     ids.has(l.id) ? { ...l, groupId: id } : l
-                  )
+                  ),
+                  [...s.layerGroups, group],
                 )
               : s.layers;
           return {
@@ -1048,13 +1072,22 @@ export const useAppStore = create<AppState>()(
             : s.layers.map((l) =>
                 l.groupId === id ? { ...l, groupId: undefined } : l
               );
+          // Promote child sub-groups to top-level (their parentGroupId becomes
+          // undefined) unless cascading deletion.
+          const layerGroups = removeChildren
+            ? s.layerGroups.filter((g) => g.id !== id && !isDescendantGroup(g.id, id, s.layerGroups))
+            : s.layerGroups.map((g) =>
+                g.parentGroupId === id
+                  ? { ...g, parentGroupId: undefined }
+                  : g
+              ).filter((g) => g.id !== id);
           const selectionRemoved =
             removeChildren &&
             s.selectedLayerId !== null &&
             removedIds.has(s.selectedLayerId);
           return {
             layers,
-            layerGroups: s.layerGroups.filter((g) => g.id !== id),
+            layerGroups,
             selectedLayerId: selectionRemoved
               ? layers[layers.length - 1]?.id ?? null
               : s.selectedLayerId,
@@ -1109,6 +1142,16 @@ export const useAppStore = create<AppState>()(
           const current = s.layers.find((l) => l.id === layerId);
           if (!current) return s;
           if (groupId && !s.layerGroups.some((g) => g.id === groupId)) return s;
+          // Prevent cycles: if the layer is currently in a group, the target
+          // must not be a descendant of that group.
+          if (groupId && current.groupId) {
+            const groupById = new Map(s.layerGroups.map((g) => [g.id, g]));
+            let ancestor: string | undefined = groupId;
+            while (ancestor) {
+              if (ancestor === current.groupId) return s; // would create a cycle
+              ancestor = groupById.get(ancestor)?.parentGroupId;
+            }
+          }
           const updated = { ...current, groupId: groupId ?? undefined };
           const without = s.layers.filter((l) => l.id !== layerId);
           let index: number;
@@ -1116,8 +1159,6 @@ export const useAppStore = create<AppState>()(
             const at = without.findIndex((l) => l.id === beforeLayerId);
             index = at < 0 ? without.length : at;
           } else if (groupId) {
-            // Append to the end of the target group's block (top of the group
-            // in the panel); fall back to the array end for an empty group.
             let last = -1;
             without.forEach((l, i) => {
               if (l.groupId === groupId) last = i;
@@ -1128,7 +1169,7 @@ export const useAppStore = create<AppState>()(
           }
           const next = [...without];
           next.splice(index, 0, updated);
-          const normalized = normalizeGroupContiguity(next);
+          const normalized = normalizeGroupContiguity(next, s.layerGroups);
           const unchanged = normalized.every(
             (l, i) =>
               l.id === s.layers[i]?.id && l.groupId === s.layers[i]?.groupId
@@ -1139,23 +1180,96 @@ export const useAppStore = create<AppState>()(
 
       reorderLayerGroup: (id, direction) =>
         set((s) => {
-          // Build the top-level units in store (render) order: each ungrouped
-          // layer is its own unit, and a group's contiguous members form one
-          // unit. Reordering swaps the whole group block past its neighbor.
+          const targetGroup = s.layerGroups.find((g) => g.id === id);
+          if (!targetGroup) return s;
+
+          const parentId = targetGroup.parentGroupId;
+
+          if (parentId === undefined) {
+            // Top-level group: all layers are siblings. Use the original
+            // flat-array unit-building approach, unchanged behavior.
+            const units: { key: string; layers: GeoLibreLayer[] }[] = [];
+            for (const layer of s.layers) {
+              const key = layer.groupId ?? `layer:${layer.id}`;
+              const last = units[units.length - 1];
+              if (last && last.key === key) last.layers.push(layer);
+              else units.push({ key, layers: [layer] });
+            }
+            const unitIndex = units.findIndex((u) => u.key === id);
+            if (unitIndex < 0) return s;
+            const target = direction === "up" ? unitIndex + 1 : unitIndex - 1;
+            if (target < 0 || target >= units.length) return s;
+            const [unit] = units.splice(unitIndex, 1);
+            units.splice(target, 0, unit);
+            return { layers: units.flatMap((u) => u.layers), isDirty: true };
+          }
+
+          // Nested group: scope sibling swap within the parent's block.
+          // Collect all layer IDs that are descendants of the parent group.
+          const descendantIds = new Set<string>();
+          const stack = [parentId];
+          while (stack.length > 0) {
+            const currentId = stack.pop()!;
+            for (const layer of s.layers) {
+              if (layer.groupId === currentId) descendantIds.add(layer.id);
+            }
+            for (const g of s.layerGroups) {
+              if (g.parentGroupId === currentId) stack.push(g.id);
+            }
+          }
+
+          // Find the contiguous range of descendant layers in s.layers.
+          let rangeStart = -1;
+          let rangeEnd = -1;
+          for (let i = 0; i < s.layers.length; i++) {
+            if (descendantIds.has(s.layers[i].id)) {
+              if (rangeStart < 0) rangeStart = i;
+              rangeEnd = i + 1;
+            }
+          }
+
+          if (rangeStart < 0) return s; // empty parent block
+
+          const block = s.layers.slice(rangeStart, rangeEnd);
+
+          // Build sibling units within the parent's block.
+          const siblingGroupIds = new Set(
+            s.layerGroups
+              .filter(
+                (g) =>
+                  g.parentGroupId === parentId &&
+                  g.id !== id,
+              )
+              .map((g) => g.id),
+          );
+
           const units: { key: string; layers: GeoLibreLayer[] }[] = [];
-          for (const layer of s.layers) {
-            const key = layer.groupId ?? `layer:${layer.id}`;
+          for (const layer of block) {
+            const gid = layer.groupId;
+            const isSibling =
+              gid === id ||
+              gid === parentId ||
+              (gid !== undefined && siblingGroupIds.has(gid));
+            const key = isSibling ? (gid ?? `layer:${layer.id}`) : `layer:${layer.id}`;
             const last = units[units.length - 1];
             if (last && last.key === key) last.layers.push(layer);
             else units.push({ key, layers: [layer] });
           }
+
           const unitIndex = units.findIndex((u) => u.key === id);
-          if (unitIndex < 0) return s; // empty group: nothing to move
+          if (unitIndex < 0) return s;
           const target = direction === "up" ? unitIndex + 1 : unitIndex - 1;
           if (target < 0 || target >= units.length) return s;
           const [unit] = units.splice(unitIndex, 1);
           units.splice(target, 0, unit);
-          return { layers: units.flatMap((u) => u.layers), isDirty: true };
+
+          const reorderedBlock = units.flatMap((u) => u.layers);
+          const result = [
+            ...s.layers.slice(0, rangeStart),
+            ...reorderedBlock,
+            ...s.layers.slice(rangeEnd),
+          ];
+          return { layers: result, isDirty: true };
         }),
 
       newProject: (options = {}) => {

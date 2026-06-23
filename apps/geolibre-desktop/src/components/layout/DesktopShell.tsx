@@ -490,6 +490,10 @@ export function DesktopShell({
   const [dropMessage, setDropMessage] = useState<string | null>(null);
   const [dropError, setDropError] = useState<string | null>(null);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [kmlDialogOpen, setKmlDialogOpen] = useState(false);
+  const [kmlInitialData, setKmlInitialData] = useState<
+    { fileName: string; rawData: string; isKmz: boolean; binaryData?: ArrayBuffer }[]
+  >();
   const diagnostics = useDiagnosticsSnapshot();
   const externalPluginsReady = useExternalPluginsReady(mapControllerRef);
   // Sync the project with an embedding host (the GeoLibre Jupyter widget) over
@@ -542,6 +546,24 @@ export function DesktopShell({
     "--style-panel-width": `${stylePanelWidth}px`,
     "--notebook-panel-width": `${notebookPanelWidth}px`,
   };
+
+  const handleOpenKmlDialog = useCallback(
+    (data?: { fileName: string; rawData: string; isKmz: boolean; binaryData?: ArrayBuffer }[]) => {
+      setKmlInitialData(data);
+      setKmlDialogOpen(true);
+    },
+    [],
+  );
+
+  const handleCloseKmlDialog = useCallback(() => {
+    setKmlDialogOpen(false);
+    setKmlInitialData(undefined);
+  }, []);
+
+  function isKmlFileName(name: string): boolean {
+    const ext = name.toLowerCase().split(".").pop();
+    return ext === "kml" || ext === "kmz";
+  }
 
   const clearDropMessageLater = useCallback(() => {
     if (dropMessageTimeoutRef.current !== null) {
@@ -898,9 +920,38 @@ export function DesktopShell({
             // single-FeatureCollection pipeline (which would otherwise route a
             // .pbf to DuckDB ST_Read and merge it).
             const pbfPaths = paths.filter((path) => isOsmPbfFileName(path));
-            const otherPaths = paths.filter(
-              (path) => !isOsmPbfFileName(path),
+            const kmlPaths = paths.filter(
+              (path) => !isOsmPbfFileName(path) && isKmlFileName(path),
             );
+            const otherPaths = paths.filter(
+              (path) => !isOsmPbfFileName(path) && !isKmlFileName(path),
+            );
+
+            if (kmlPaths.length > 0) {
+              const { readFile, readTextFile } = await import("@tauri-apps/plugin-fs");
+              const data: { fileName: string; rawData: string; isKmz: boolean; binaryData?: ArrayBuffer }[] = [];
+              for (const path of kmlPaths) {
+                const isKmz = path.toLowerCase().endsWith(".kmz");
+                const name = path.split(/[/\\]/).pop() || path;
+                try {
+                  if (isKmz) {
+                    const bytes = await readFile(path);
+                    data.push({ fileName: name, rawData: "", isKmz: true, binaryData: bytes.buffer as ArrayBuffer });
+                  } else {
+                    const text = await readTextFile(path);
+                    data.push({ fileName: name, rawData: text, isKmz: false });
+                  }
+                } catch {
+                  // Skip files that can't be read
+                }
+              }
+              if (data.length > 0) {
+                handleOpenKmlDialog(data);
+              }
+              if (otherPaths.length === 0 && pbfPaths.length === 0) {
+                setDropMessage(null);
+              }
+            }
 
             if (pbfPaths.length > 0) {
               const { readFile, stat } = await import("@tauri-apps/plugin-fs");
@@ -1046,9 +1097,27 @@ export function DesktopShell({
         // finishDrop throws on an empty list, so only call it when non-PBF
         // files were dropped.
         const pbfFiles = allFiles.filter((file) => isOsmPbfFileName(file.name));
-        const otherFiles = allFiles.filter(
-          (file) => !isOsmPbfFileName(file.name),
+        const kmlFiles = allFiles.filter(
+          (file) => !isOsmPbfFileName(file.name) && isKmlFileName(file.name),
         );
+        const otherFiles = allFiles.filter(
+          (file) => !isOsmPbfFileName(file.name) && !isKmlFileName(file.name),
+        );
+
+        let hadKml = false;
+        if (kmlFiles.length > 0) {
+          const data: { fileName: string; rawData: string; isKmz: boolean; binaryData?: ArrayBuffer }[] = [];
+          for (const file of kmlFiles) {
+            const isKmz = file.name.toLowerCase().endsWith(".kmz");
+            const rawData = isKmz ? "" : await file.text();
+            const binaryData = isKmz ? await file.arrayBuffer() : undefined;
+            data.push({ fileName: file.name, rawData, isKmz, binaryData });
+          }
+          handleOpenKmlDialog(data);
+          if (otherFiles.length === 0 && pbfFiles.length === 0) {
+            setDropMessage(null);
+          }
+        }
 
         for (const file of pbfFiles) {
           // Mirror the file-picker path's large-file guard (parsing a huge
@@ -1372,6 +1441,10 @@ export function DesktopShell({
             themeMode={themeMode}
             onOpenDiagnostics={() => setDiagnosticsOpen(true)}
             onToggleThemeMode={onToggleThemeMode}
+            kmlDialogOpen={kmlDialogOpen}
+            kmlInitialData={kmlInitialData}
+            onOpenKmlDialog={handleOpenKmlDialog}
+            onCloseKmlDialog={handleCloseKmlDialog}
           />
         </SectionErrorBoundary>
       ) : null}
