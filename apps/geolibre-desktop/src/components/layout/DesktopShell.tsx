@@ -1455,6 +1455,12 @@ export function DesktopShell({
               pluginWidth={pluginPanelWidth}
               onPluginWidthChange={setPluginPanelWidth}
               stylePanelVisible={layoutOptions.stylePanelVisible}
+              // Mirror the standalone Style panel's autoCollapse triggers so the
+              // notebook / story-map presentation collapses Style here too.
+              // `autoCollapsedPanel` is omitted because it is always null in
+              // replace-style mode (the replace-style panel is the sole active
+              // panel, so no positional plugin can push Style aside).
+              forceStyleCollapsed={notebookOpen || storymapPresenting}
               mapControllerRef={mapControllerRef}
               onStyleResizeStart={startStylePanelResize}
             />

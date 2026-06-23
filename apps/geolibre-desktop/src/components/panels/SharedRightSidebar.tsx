@@ -29,6 +29,13 @@ interface SharedRightSidebarProps {
   onPluginWidthChange: (width: number) => void;
   /** Whether the built-in Style panel is part of this layout. */
   stylePanelVisible: boolean;
+  /**
+   * Force Style collapsed regardless of the user's opt-in, mirroring the
+   * standalone Style panel's `autoCollapse` triggers (the notebook or a story-map
+   * presentation claiming the right half of the workspace). Style restores to its
+   * opted-in state when this clears, matching the standalone panel's behavior.
+   */
+  forceStyleCollapsed: boolean;
   mapControllerRef: RefObject<MapController | null>;
   /** Begin a Style-panel resize drag. */
   onStyleResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -65,6 +72,7 @@ export function SharedRightSidebar({
   pluginWidth,
   onPluginWidthChange,
   stylePanelVisible,
+  forceStyleCollapsed,
   mapControllerRef,
   onStyleResizeStart,
 }: SharedRightSidebarProps) {
@@ -78,9 +86,20 @@ export function SharedRightSidebar({
   const pluginExpanded = activeId === pluginId && !collapsed;
   // The plugin displaces Style: while the workbench is expanded, Style cannot
   // also be expanded (one shared surface, one expanded panel at a time).
-  const styleExpanded = stylePanelVisible && !pluginExpanded && styleOptedIn;
+  // `forceStyleCollapsed` gates this too so the notebook/story-map triggers
+  // collapse Style here just as `autoCollapse` does for the standalone panel;
+  // because it only gates (never clears `styleOptedIn`), Style restores when the
+  // trigger lifts, matching the standalone panel's restore-on-clear behavior.
+  const styleExpanded =
+    stylePanelVisible && !pluginExpanded && styleOptedIn && !forceStyleCollapsed;
 
-  const expandPlugin = () => openRightPanel(pluginId);
+  // Switching back to the workbench forgets the Style opt-in, so a later collapse
+  // of the workbench lands on the shared rail (both collapsed) rather than
+  // surprising the user by auto-expanding Style.
+  const expandPlugin = () => {
+    setStyleOptedIn(false);
+    openRightPanel(pluginId);
+  };
   const collapsePlugin = () => collapseRightPanel(pluginId);
   const expandStyle = () => {
     setStyleOptedIn(true);
