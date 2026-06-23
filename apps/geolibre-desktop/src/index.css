@@ -1204,8 +1204,26 @@ body,
 }
 
 /* The graticule settings panel is plain DOM (the plugin contract), so its native
-   select/number/color inputs need `color-scheme: dark` to render legibly on the
-   dark panel instead of with the browser's default light chrome. */
+   select/number inputs would otherwise render with the browser's default light
+   chrome -- a white dropdown with invisible text on the dark panel. `color-scheme`
+   alone is unreliable across webviews, so set the background/text/border
+   explicitly from the design tokens (which switch with `.dark`), and theme the
+   `<option>` popup too. `color-scheme` still covers the native spinner/color/
+   checkbox chrome. */
+.geolibre-graticule-panel select,
+.geolibre-graticule-panel input[type="number"] {
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  border-radius: 4px;
+  color: hsl(var(--foreground));
+  padding: 2px 4px;
+}
+
+.geolibre-graticule-panel select option {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
 .dark .geolibre-graticule-panel select,
 .dark .geolibre-graticule-panel input {
   color-scheme: dark;
