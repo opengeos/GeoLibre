@@ -17,7 +17,11 @@ import type {
  * Only one plugin panel is active at a time. It docks at one of four positions
  * and the user can step it between them. The built-in panel on the side the
  * panel is docked (Layers on the left, Style on the right) collapses to its
- * rail while the panel is expanded there; the shell handles that.
+ * rail while the panel is expanded there; the shell handles that. Two further
+ * docks, `replace-style` and `replace-layers`, are non-positional shared-rail
+ * modes in which the panel shares the Style (right) or Layers (left) sidebar's
+ * single rail rather than sitting beside it; they are not part of the steppable
+ * position order.
  */
 
 /**
@@ -27,8 +31,10 @@ import type {
 export type RightPanelDock = GeoLibreRightPanelDock;
 
 /**
- * Dock positions in left-to-right order, used to step the panel. Frozen so a
- * consumer cannot mutate the validation/order list.
+ * Steppable dock positions in left-to-right order, used to move the panel
+ * between positions. Frozen so a consumer cannot mutate the validation/order
+ * list. The non-positional `replace-style` mode is intentionally excluded: it
+ * shares the Style rail and is not part of the move sequence.
  */
 export const RIGHT_PANEL_DOCKS: readonly RightPanelDock[] = Object.freeze([
   "left-of-layers",
@@ -37,10 +43,22 @@ export const RIGHT_PANEL_DOCKS: readonly RightPanelDock[] = Object.freeze([
   "right-of-style",
 ] as const);
 
+/**
+ * Every accepted dock value, including the non-positional `replace-style` and
+ * `replace-layers` shared-rail modes. Used to validate a panel's declared dock;
+ * the shared-rail modes are valid to register with and settable at runtime but
+ * are not steppable (they are absent from {@link RIGHT_PANEL_DOCKS}).
+ */
+const ALL_DOCKS: readonly RightPanelDock[] = Object.freeze([
+  ...RIGHT_PANEL_DOCKS,
+  "replace-style",
+  "replace-layers",
+] as const);
+
 const DEFAULT_DOCK: RightPanelDock = "right-of-style";
 
 function normalizeDock(dock: unknown): RightPanelDock {
-  return RIGHT_PANEL_DOCKS.includes(dock as RightPanelDock)
+  return ALL_DOCKS.includes(dock as RightPanelDock)
     ? (dock as RightPanelDock)
     : DEFAULT_DOCK;
 }
@@ -210,13 +228,16 @@ export function closeRightPanel(id: string): void {
 }
 
 /**
- * Dock the active panel at a specific position. No-op when no panel is active
- * or the panel is already there.
+ * Dock the active panel at a specific dock. Accepts any valid dock, including
+ * the non-positional `replace-style` shared-rail mode, so a panel can switch
+ * between a movable positional panel and the shared Style rail at runtime (the
+ * host's merge/detach buttons use this). No-op when no panel is active, the dock
+ * is unknown, or the panel is already there.
  */
 export function setActiveRightPanelDock(dock: RightPanelDock): void {
   if (
     activeId === null ||
-    !RIGHT_PANEL_DOCKS.includes(dock) ||
+    !ALL_DOCKS.includes(dock) ||
     activeDock === dock
   ) {
     return;
@@ -232,6 +253,9 @@ export function setActiveRightPanelDock(dock: RightPanelDock): void {
 export function moveActiveRightPanelDock(direction: "left" | "right"): void {
   if (activeId === null || activeDock === null) return;
   const index = RIGHT_PANEL_DOCKS.indexOf(activeDock);
+  // The non-positional `replace-style` mode is not in the step order, so it
+  // cannot be moved between positions.
+  if (index === -1) return;
   const nextIndex = direction === "left" ? index - 1 : index + 1;
   if (nextIndex < 0 || nextIndex >= RIGHT_PANEL_DOCKS.length) return;
   activeDock = RIGHT_PANEL_DOCKS[nextIndex];

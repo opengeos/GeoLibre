@@ -5,11 +5,14 @@ import {
   moveActiveRightPanelDock,
   openRightPanel,
   type RightPanelDock,
+  setActiveRightPanelDock,
 } from "@geolibre/plugins";
 import { Button } from "@geolibre/ui";
 import {
   ArrowLeftToLine,
   ArrowRightToLine,
+  Columns2,
+  Combine,
   PanelLeft,
   PanelLeftClose,
   PanelLeftOpen,
@@ -89,22 +92,37 @@ export function PluginRightPanel({
   const panel = activeId ? getRightPanel(activeId) : undefined;
   const matched = activeId !== null && panel != null && activeDock === dock;
   // Layers-side docks sit to the left: their border and resize handle face right
-  // (toward the map). Style-side docks face left (toward the map).
+  // (toward the map). Style-side docks face left (toward the map). The
+  // `replace-layers` shared-rail mode is a layers-side dock too.
   const isLayersSide =
-    dock === "left-of-layers" || dock === "right-of-layers";
+    dock === "left-of-layers" ||
+    dock === "right-of-layers" ||
+    dock === "replace-layers";
+  // The shared-rail modes: the panel shares the Style (replace-style) or Layers
+  // (replace-layers) rail (rendered by the host's SharedSidebar), so it has no
+  // move buttons and no rail of its own; its collapsed entry lives in that single
+  // shared rail instead.
+  const isSharedRail = dock === "replace-style" || dock === "replace-layers";
 
   // Adopt the shared content host (rendered once by the shell) into this slot
   // while it owns the panel. appendChild moves the element, so stepping the
   // panel between docks relocates the same DOM and preserves the plugin's state
-  // rather than re-rendering it.
+  // rather than re-rendering it. `collapsed` is a dependency because the
+  // shared-rail mode unmounts the content wrapper while collapsed (it renders
+  // nothing), so the host must be re-adopted into the fresh wrapper when the
+  // panel expands again; for the positional docks the wrapper merely hides, so
+  // re-adopting the already-attached host is a harmless no-op.
   useEffect(() => {
     if (!matched) return;
     const wrapper = contentRef.current;
     if (!wrapper) return;
     wrapper.appendChild(contentEl);
-  }, [matched, contentEl]);
+  }, [matched, contentEl, collapsed]);
 
   if (!matched || !panel) return null;
+  // When collapsed in shared-rail mode the host's single shared rail shows this
+  // panel's entry, so render nothing here (no second rail beside Style).
+  if (isSharedRail && collapsed) return null;
 
   const handleResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -198,28 +216,76 @@ export function PluginRightPanel({
         <div className="flex items-center justify-between border-b px-3 py-1.5">
           <span className="truncate text-sm font-semibold">{panel.title}</span>
           <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              title={t("pluginPanel.moveLeft")}
-              aria-label={t("pluginPanel.moveLeft")}
-              disabled={!canMoveLeft}
-              onClick={() => moveActiveRightPanelDock("left")}
-            >
-              <ArrowLeftToLine className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              title={t("pluginPanel.moveRight")}
-              aria-label={t("pluginPanel.moveRight")}
-              disabled={!canMoveRight}
-              onClick={() => moveActiveRightPanelDock("right")}
-            >
-              <ArrowRightToLine className="h-4 w-4" />
-            </Button>
+            {!isSharedRail ? (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  title={t("pluginPanel.moveLeft")}
+                  aria-label={t("pluginPanel.moveLeft")}
+                  disabled={!canMoveLeft}
+                  onClick={() => moveActiveRightPanelDock("left")}
+                >
+                  <ArrowLeftToLine className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  title={t("pluginPanel.moveRight")}
+                  aria-label={t("pluginPanel.moveRight")}
+                  disabled={!canMoveRight}
+                  onClick={() => moveActiveRightPanelDock("right")}
+                >
+                  <ArrowRightToLine className="h-4 w-4" />
+                </Button>
+              </>
+            ) : null}
+            {isSharedRail ? (
+              // Pop the panel out of the shared rail back to a movable positional
+              // panel on the same side (where the move buttons return).
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                title={t("pluginPanel.detach")}
+                aria-label={t("pluginPanel.detach")}
+                onClick={() =>
+                  setActiveRightPanelDock(
+                    isLayersSide ? "right-of-layers" : "right-of-style",
+                  )
+                }
+              >
+                <Columns2 className="h-4 w-4" />
+              </Button>
+            ) : (
+              // Merge the movable panel into the shared rail on its current side:
+              // a layers-side panel joins the Layers rail, a style-side panel the
+              // Style rail.
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                title={
+                  isLayersSide
+                    ? t("pluginPanel.mergeIntoLayersRail")
+                    : t("pluginPanel.mergeIntoStyleRail")
+                }
+                aria-label={
+                  isLayersSide
+                    ? t("pluginPanel.mergeIntoLayersRail")
+                    : t("pluginPanel.mergeIntoStyleRail")
+                }
+                onClick={() =>
+                  setActiveRightPanelDock(
+                    isLayersSide ? "replace-layers" : "replace-style",
+                  )
+                }
+              >
+                <Combine className="h-4 w-4" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"

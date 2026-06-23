@@ -231,9 +231,11 @@ export interface GeoLibreAppAPI {
   /** Id of the active right-side workspace panel, or null when none is open. */
   getActiveRightPanel?: () => string | null;
   /**
-   * Dock the active panel at a specific position, mirroring the user-facing move
-   * buttons so a plugin can reposition its own panel. No-op when no panel is
-   * active. See {@link GeoLibreRightPanelDock}.
+   * Dock the active panel at any dock, mirroring the user-facing controls so a
+   * plugin can reposition its own panel. The four positional docks behave like
+   * the move buttons; `replace-style` switches the panel into the shared Style
+   * rail (the inverse of detaching it back to a positional dock). No-op when no
+   * panel is active. See {@link GeoLibreRightPanelDock}.
    */
   setActiveRightPanelDock?: (dock: GeoLibreRightPanelDock) => void;
   /** Where the active panel docks, or null when none is open. */
@@ -362,17 +364,29 @@ export interface GeoLibreFloatingPanelRegistration {
 }
 
 /**
- * Where a plugin panel docks, left to right: `left-of-layers` (the far-left
- * edge), `right-of-layers` (between the Layers panel and the map), `left-of-style`
- * (between the map and the Style panel), or `right-of-style` (the far-right
- * edge). The built-in panel on the docked side (Layers on the left, Style on the
- * right) collapses to its rail while the plugin panel is expanded next to it.
+ * Where a plugin panel docks. Four are positional, left to right: `left-of-layers`
+ * (the far-left edge), `right-of-layers` (between the Layers panel and the map),
+ * `left-of-style` (between the map and the Style panel), or `right-of-style` (the
+ * far-right edge). The built-in panel on the docked side (Layers on the left,
+ * Style on the right) collapses to its rail while the plugin panel is expanded
+ * next to it.
+ *
+ * `replace-style` and `replace-layers` are non-positional **shared-rail** modes:
+ * the panel shares the Style (right) or Layers (left) panel's sidebar surface
+ * instead of sitting beside it as a separate rail. The host shows a single rail
+ * on that edge listing both the plugin panel and the built-in panel; selecting
+ * one expands it while the other stays as a rail entry, so a workbench-style
+ * plugin feels like a first-class sidebar workspace rather than a second rail.
+ * Unlike the positional docks, these modes are not part of the move-button step
+ * sequence; the host's merge/detach buttons switch a panel in and out of them.
  */
 export type GeoLibreRightPanelDock =
   | "left-of-layers"
   | "right-of-layers"
   | "left-of-style"
-  | "right-of-style";
+  | "right-of-style"
+  | "replace-style"
+  | "replace-layers";
 
 /**
  * A plugin-owned dockable side panel. The host renders the registered panel in
@@ -389,12 +403,16 @@ export interface GeoLibreRightPanelRegistration {
   /** Human-readable title shown in the panel header and collapsed rail. */
   title: string;
   /**
-   * Where the panel docks initially: `left-of-layers`, `right-of-layers`,
-   * `left-of-style`, or `right-of-style` (the default). The built-in panel on
-   * the docked side (Layers on the left, Style on the right) collapses to its
-   * rail while the plugin panel is expanded next to it. The user can move the
-   * panel between positions at runtime with the move buttons in its header (or
-   * a plugin via {@link GeoLibreAppAPI.setActiveRightPanelDock}).
+   * Where the panel docks initially: one of the four positional docks
+   * (`left-of-layers`, `right-of-layers`, `left-of-style`, or `right-of-style`,
+   * the default), or a shared-rail mode (`replace-style` / `replace-layers`).
+   * With a positional dock the built-in panel on the docked side (Layers on the
+   * left, Style on the right) collapses to its rail while the plugin panel is
+   * expanded next to it, and the user can move the panel between positions at
+   * runtime with the move buttons in its header (or a plugin via
+   * {@link GeoLibreAppAPI.setActiveRightPanelDock}). With a shared-rail mode the
+   * panel shares the Style or Layers sidebar's single rail instead and is not
+   * steppable (the header's merge/detach buttons switch it in and out).
    */
   dock?: GeoLibreRightPanelDock;
   /**

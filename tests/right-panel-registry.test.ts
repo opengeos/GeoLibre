@@ -154,6 +154,59 @@ describe("right-panel registry", () => {
     assert.equal(getActiveRightPanelDock(), null);
   });
 
+  it("honors replace-style: settable at runtime but not part of the step order", () => {
+    registerRightPanel(testPanel({ dock: "replace-style" }));
+    openRightPanel("workbench");
+    // A declared replace-style dock survives normalization.
+    assert.equal(getActiveRightPanelDock(), "replace-style");
+    assert.equal(getRightPanelSnapshot().dock, "replace-style");
+
+    // It is not part of the steppable position order, so the move arrows are a
+    // no-op while it is in the shared rail.
+    moveActiveRightPanelDock("left");
+    assert.equal(getActiveRightPanelDock(), "replace-style");
+    moveActiveRightPanelDock("right");
+    assert.equal(getActiveRightPanelDock(), "replace-style");
+
+    // setActiveRightPanelDock can detach it to a positional dock (the move
+    // arrows then work)...
+    setActiveRightPanelDock("right-of-style");
+    assert.equal(getActiveRightPanelDock(), "right-of-style");
+    moveActiveRightPanelDock("left");
+    assert.equal(getActiveRightPanelDock(), "left-of-style");
+
+    // ...and can merge it back into the shared rail at runtime.
+    setActiveRightPanelDock("replace-style");
+    assert.equal(getActiveRightPanelDock(), "replace-style");
+  });
+
+  it("supports replace-layers as a runtime shared-rail mode, like replace-style", () => {
+    registerRightPanel(testPanel({ dock: "right-of-layers" }));
+    openRightPanel("workbench");
+    assert.equal(getActiveRightPanelDock(), "right-of-layers");
+
+    // Merge a layers-side panel into the shared Layers rail at runtime.
+    setActiveRightPanelDock("replace-layers");
+    assert.equal(getActiveRightPanelDock(), "replace-layers");
+    // It is not steppable while in the shared rail.
+    moveActiveRightPanelDock("left");
+    assert.equal(getActiveRightPanelDock(), "replace-layers");
+
+    // Detach it back to a movable layers-side dock.
+    setActiveRightPanelDock("right-of-layers");
+    assert.equal(getActiveRightPanelDock(), "right-of-layers");
+  });
+
+  it("falls back to right-of-style for an unknown declared dock", () => {
+    registerRightPanel(
+      testPanel({
+        dock: "nonsense" as unknown as GeoLibreRightPanelRegistration["dock"],
+      }),
+    );
+    openRightPanel("workbench");
+    assert.equal(getActiveRightPanelDock(), "right-of-style");
+  });
+
   it("ignores dock changes when no panel is active", () => {
     setActiveRightPanelDock("left-of-layers");
     moveActiveRightPanelDock("left");

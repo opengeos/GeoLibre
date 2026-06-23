@@ -31,6 +31,12 @@ const selectAutoCollapsed = (): AutoCollapsedPanel => {
   // Only an expanded panel collapses its neighbor; a panel collapsed to its own
   // rail leaves room, so the built-in panel can restore.
   if (snapshot.dock === null || snapshot.collapsed) return null;
+  // The shared-rail modes (`replace-style`/`replace-layers`) do not push a
+  // neighbor aside: they share the Style/Layers sidebar surface, and
+  // SharedSidebar coordinates that panel's collapse itself.
+  if (snapshot.dock === "replace-style" || snapshot.dock === "replace-layers") {
+    return null;
+  }
   return snapshot.dock === "left-of-layers" ||
     snapshot.dock === "right-of-layers"
     ? "layers"
@@ -52,5 +58,51 @@ export function useAutoCollapsedPanel(): AutoCollapsedPanel {
     subscribeRightPanels,
     selectAutoCollapsed,
     selectAutoCollapsed,
+  );
+}
+
+const selectReplaceStylePanelId = (): string | null => {
+  const snapshot = getRightPanelSnapshot();
+  return snapshot.dock === "replace-style" ? snapshot.activeId : null;
+};
+
+/**
+ * Subscribe to the id of the active plugin panel docked in the shared Style rail
+ * (`replace-style`) mode, or null when no such panel is active.
+ *
+ * When non-null, the shell renders the {@link SharedSidebar} in place of the
+ * Style-slot panels so the plugin shares the Style rail instead of docking
+ * beside it.
+ *
+ * @returns The active replace-style panel id, or null.
+ */
+export function useReplaceStylePanelId(): string | null {
+  return useSyncExternalStore(
+    subscribeRightPanels,
+    selectReplaceStylePanelId,
+    selectReplaceStylePanelId,
+  );
+}
+
+const selectReplaceLayersPanelId = (): string | null => {
+  const snapshot = getRightPanelSnapshot();
+  return snapshot.dock === "replace-layers" ? snapshot.activeId : null;
+};
+
+/**
+ * Subscribe to the id of the active plugin panel docked in the shared Layers rail
+ * (`replace-layers`) mode, or null when no such panel is active.
+ *
+ * When non-null, the shell renders the {@link SharedSidebar} in place of the
+ * Layers-slot panels so the plugin shares the Layers rail instead of docking
+ * beside it.
+ *
+ * @returns The active replace-layers panel id, or null.
+ */
+export function useReplaceLayersPanelId(): string | null {
+  return useSyncExternalStore(
+    subscribeRightPanels,
+    selectReplaceLayersPanelId,
+    selectReplaceLayersPanelId,
   );
 }

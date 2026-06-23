@@ -45,6 +45,7 @@ import {
 import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -61,6 +62,22 @@ interface StylePanelProps {
    * user can still expand it again.
    */
   autoCollapse?: boolean;
+  /**
+   * Controlled collapse state for the shared right-sidebar (`replace-style`)
+   * mode. When defined, the panel's own collapse state is ignored and the
+   * parent fully owns expand/collapse: the collapse/expand buttons call
+   * {@link onCollapsedChange} instead of toggling internal state, and
+   * `autoCollapse` no longer applies. Leave undefined for the standalone panel.
+   */
+  collapsed?: boolean;
+  /** Notify the parent of a collapse/expand request in controlled mode. */
+  onCollapsedChange?: (collapsed: boolean) => void;
+  /**
+   * In the shared right-sidebar mode, suppress the panel's own collapsed rail:
+   * when collapsed the panel renders nothing because a single shared rail (owned
+   * by the host) lists the Style entry instead of two adjacent rails.
+   */
+  hideOwnRail?: boolean;
 }
 
 function isRasterPaintLayer(type: LayerType): boolean {
@@ -915,6 +932,9 @@ export function StylePanel({
   mapControllerRef,
   onResizeStart,
   autoCollapse = false,
+  collapsed: controlledCollapsed,
+  onCollapsedChange,
+  hideOwnRail = false,
 }: StylePanelProps) {
   const { t } = useTranslation();
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
@@ -923,7 +943,19 @@ export function StylePanel({
   const setLayerStyle = useAppStore((s) => s.setLayerStyle);
   const updateLayer = useAppStore((s) => s.updateLayer);
   const moveLayer = useAppStore((s) => s.moveLayer);
-  const [isCollapsed, setIsCollapsed] = useState(getIsMobileViewport);
+  const [internalCollapsed, setInternalCollapsed] = useState(getIsMobileViewport);
+  // In the shared right-sidebar mode the parent owns collapse (controlled);
+  // otherwise the panel manages it locally. `setIsCollapsed` routes to whichever
+  // owner applies so every existing call site keeps working.
+  const isControlled = controlledCollapsed !== undefined;
+  const isCollapsed = isControlled ? controlledCollapsed : internalCollapsed;
+  const setIsCollapsed = useCallback(
+    (value: boolean) => {
+      if (isControlled) onCollapsedChange?.(value);
+      else setInternalCollapsed(value);
+    },
+    [isControlled, onCollapsedChange],
+  );
   // Collapse to the rail when `autoCollapse` flips on (e.g. the notebook opens),
   // and restore the prior expand/collapse state when it flips back off (notebook
   // closes). Both act only on the transition so the user can still toggle the
@@ -931,19 +963,22 @@ export function StylePanel({
   // only to keep the captured value fresh; the guards make pure `isCollapsed`
   // changes a no-op while `autoCollapse` is stable. The ref starts as null (not
   // `autoCollapse`) so a mount with `autoCollapse` already true reads as a
-  // null→true transition and still collapses.
+  // null→true transition and still collapses. Skipped entirely in controlled
+  // mode, where the parent (shared rail) owns collapse and never passes
+  // `autoCollapse`.
   const prevAutoCollapse = useRef<boolean | null>(null);
   const collapsedBeforeAuto = useRef(isCollapsed);
   useEffect(() => {
+    if (isControlled) return;
     const wasAuto = prevAutoCollapse.current;
     prevAutoCollapse.current = autoCollapse;
     if (autoCollapse && !wasAuto) {
-      collapsedBeforeAuto.current = isCollapsed;
-      setIsCollapsed(true);
+      collapsedBeforeAuto.current = internalCollapsed;
+      setInternalCollapsed(true);
     } else if (!autoCollapse && wasAuto) {
-      setIsCollapsed(collapsedBeforeAuto.current);
+      setInternalCollapsed(collapsedBeforeAuto.current);
     }
-  }, [autoCollapse, isCollapsed]);
+  }, [autoCollapse, internalCollapsed, isControlled]);
   const [draftBeforeId, setDraftBeforeId] = useState("");
   const [draftColorExpression, setDraftColorExpression] = useState("");
   const [draftHeightExpression, setDraftHeightExpression] = useState("");
@@ -1115,6 +1150,10 @@ export function StylePanel({
   );
 
   if (isCollapsed) {
+    // In the shared right-sidebar mode the host renders a single rail listing
+    // Style alongside the plugin panel, so the panel shows nothing of its own
+    // when collapsed (avoids two adjacent rails).
+    if (hideOwnRail) return null;
     return (
       <aside
         aria-label="Layer style (collapsed)"

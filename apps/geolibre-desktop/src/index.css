@@ -311,6 +311,19 @@ body,
   color: #1f2a37;
 }
 
+/* The graticule control button: flex-center its inline SVG icon (MapLibre's
+   default `.maplibregl-ctrl-group button { display: block }` would otherwise
+   left-align it), and pin the stroke="currentColor" icon to a fixed dark color
+   so it stays legible on the always-white control button in both themes (same
+   approach as the spin-globe control above). The two-class selector out-ranks
+   MapLibre's single-class rule regardless of stylesheet order. */
+.geolibre-graticule-ctrl .geolibre-graticule-button {
+  align-items: center;
+  color: #1f2a37;
+  display: flex;
+  justify-content: center;
+}
+
 .geolibre-duckdb-control {
   background-color: transparent !important;
   box-shadow: none !important;
@@ -1263,6 +1276,32 @@ body,
 .dark .geolibre-html-control .html-gui-input,
 .dark .geolibre-html-control .html-gui-select,
 .dark .geolibre-html-control .html-gui-textarea {
+  color-scheme: dark;
+}
+
+/* The graticule settings panel is plain DOM (the plugin contract), so its native
+   select/number inputs would otherwise render with the browser's default light
+   chrome -- a white dropdown with invisible text on the dark panel. `color-scheme`
+   alone is unreliable across webviews, so set the background/text/border
+   explicitly from the design tokens (which switch with `.dark`), and theme the
+   `<option>` popup too. `color-scheme` still covers the native spinner/color/
+   checkbox chrome. */
+.geolibre-graticule-panel select,
+.geolibre-graticule-panel input[type="number"] {
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  border-radius: 4px;
+  color: hsl(var(--foreground));
+  padding: 2px 4px;
+}
+
+.geolibre-graticule-panel select option {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+.dark .geolibre-graticule-panel select,
+.dark .geolibre-graticule-panel input {
   color-scheme: dark;
 }
 

@@ -45,6 +45,7 @@ interface ControlsMenuProps {
   effectsActive: boolean;
   directionsActive: boolean;
   reverseGeocodeActive: boolean;
+  graticuleActive: boolean;
   onToggleMapControl: (control: ToolbarMapControl) => void;
   onToggleEffects: () => void;
   getEffectsSettings: () => EffectsSettings;
@@ -52,6 +53,7 @@ interface ControlsMenuProps {
   onCommitEffectsSettings: () => void;
   onToggleDirections: () => void;
   onToggleReverseGeocode: () => void;
+  onToggleGraticule: () => void;
   onOpenFieldCollection: () => void;
 }
 
@@ -63,6 +65,7 @@ export function ControlsMenu({
   effectsActive,
   directionsActive,
   reverseGeocodeActive,
+  graticuleActive,
   onToggleMapControl,
   onToggleEffects,
   getEffectsSettings,
@@ -70,6 +73,7 @@ export function ControlsMenu({
   onCommitEffectsSettings,
   onToggleDirections,
   onToggleReverseGeocode,
+  onToggleGraticule,
   onOpenFieldCollection,
 }: ControlsMenuProps) {
   const { t } = useTranslation();
@@ -108,6 +112,7 @@ export function ControlsMenu({
     ) ||
     show("controls.atmosphereEffects") ||
     show("controls.spinGlobe") ||
+    show("controls.graticule") ||
     show("controls.directions") ||
     show("controls.reverseGeocode");
 
@@ -152,6 +157,12 @@ export function ControlsMenu({
             <DropdownMenuItem onSelect={handleSpinGlobe}>
               {t("toolbar.item.spinGlobe")}
               {panels.spinGlobe.visible ? " ✓" : ""}
+            </DropdownMenuItem>
+          )}
+          {show("controls.graticule") && (
+            <DropdownMenuItem onClick={onToggleGraticule}>
+              {t("toolbar.item.graticule")}
+              {graticuleActive ? " ✓" : ""}
             </DropdownMenuItem>
           )}
           {show("controls.directions") && (

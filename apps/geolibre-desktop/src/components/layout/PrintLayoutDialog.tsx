@@ -7,6 +7,7 @@ import {
   VECTOR_COLOR_RAMPS,
 } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
+import { GRATICULE_LABEL_LAYER_ID } from "@geolibre/plugins";
 import {
   Button,
   Dialog,
@@ -245,6 +246,9 @@ export function PrintLayoutDialog({
   const [extentBbox, setExtentBbox] = useState<PrintExtent | null>(null);
   const [drawingExtent, setDrawingExtent] = useState(false);
   const [captured, setCaptured] = useState<CapturedMap | null>(null);
+  // "contain" when a graticule is active, so its edge labels are not trimmed by
+  // the default "cover" crop; "cover" (fill the frame) otherwise.
+  const [mapFit, setMapFit] = useState<"cover" | "contain">("cover");
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const previewRef = useRef<HTMLCanvasElement | null>(null);
@@ -456,6 +460,9 @@ export function PrintLayoutDialog({
           : captureMode === "extent"
             ? extentBbox
             : null;
+      // An active graticule draws coordinate labels at the map edges; fit the
+      // captured map with "contain" so the page crop does not trim them.
+      setMapFit(map.getLayer(GRATICULE_LABEL_LAYER_ID) ? "contain" : "cover");
       // Hide the extent box while reading the drawing buffer so its outline is
       // never baked into the captured image.
       setPrintExtentVisible(map, false);
@@ -597,6 +604,7 @@ export function PrintLayoutDialog({
       mapImage: captured?.image ?? null,
       mapImageWidth: captured?.width ?? 0,
       mapImageHeight: captured?.height ?? 0,
+      mapFit,
     }),
     [
       title,
@@ -644,6 +652,7 @@ export function PrintLayoutDialog({
       legend,
       legendConfig,
       captured,
+      mapFit,
       t,
     ],
   );

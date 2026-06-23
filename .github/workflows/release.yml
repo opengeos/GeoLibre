@@ -123,7 +123,25 @@ jobs:
           if (-not (Test-Path $msix)) {
             throw "No MSIX package was created at '$msix'."
           }
-          gh release upload "${{ github.event.release.tag_name }}" $msix --clobber
+          gh release upload "${{ github.event.release.tag_name }}" "$msix" --clobber
+
+      - name: Build portable zip
+        id: build_portable
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./packaging/portable/build-portable.ps1
+
+      - name: Upload portable zip release asset
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $portable = "${{ steps.build_portable.outputs.portable_path }}"
+          if (-not (Test-Path $portable)) {
+            throw "No portable zip was created at '$portable'."
+          }
+          gh release upload "${{ github.event.release.tag_name }}" "$portable" --clobber
 
   homebrew:
     name: Update Homebrew cask

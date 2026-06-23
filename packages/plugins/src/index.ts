@@ -260,6 +260,21 @@ export { maplibreOvertureMapsPlugin } from "./plugins/maplibre-overture-maps";
 export { maplibreStreetViewPlugin } from "./plugins/maplibre-streetview";
 export { maplibreSwipePlugin } from "./plugins/maplibre-swipe";
 export {
+  maplibreGraticulePlugin,
+  GRATICULE_PLUGIN_ID,
+  GRATICULE_LABEL_LAYER_ID,
+  DEFAULT_GRATICULE_SETTINGS,
+  DEFAULT_GRATICULE_LABELS,
+  getGraticuleSettings,
+  setGraticuleSettings,
+  setGraticuleLabels,
+  normalizeGraticuleSettings,
+  type GraticuleSettings,
+  type GraticuleLabels,
+  type GraticuleLabelFormat,
+  type GraticuleLabelEdges,
+} from "./plugins/maplibre-graticule";
+export {
   maplibreTimeSliderPlugin,
   TIME_SLIDER_PLUGIN_ID,
   getLayerTimeBinding,
