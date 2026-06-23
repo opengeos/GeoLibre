@@ -1,4 +1,8 @@
-import { type GeoLibreLayer, useAppStore } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  type GeoLibreLayer,
+  useAppStore,
+} from "@geolibre/core";
 import type { Feature, FeatureCollection, Position } from "geojson";
 import type maplibregl from "maplibre-gl";
 import type {
@@ -51,6 +55,11 @@ type AnnotationTool =
   | "ellipse"
   | "freehand";
 
+// State is module-scope, so this plugin is a single-instance singleton (one
+// shared toolbar/editor across the app), matching the GeoEditor plugin. That is
+// fine for the single-map desktop/web/embed builds; it would need per-instance
+// state to support several independent maps on one page (e.g. a multi-cell
+// notebook), which is not a target for this first version.
 let annotationsPosition: GeoLibreMapControlPosition = "top-left";
 let toolbarControl: AnnotationToolbarControl | null = null;
 let appApi: GeoLibreAppAPI | null = null;
@@ -99,6 +108,9 @@ export const maplibreAnnotationsPlugin: GeoLibrePlugin = {
       app.removeMapControl(toolbarControl);
       toolbarControl = null;
     }
+    // Drop the tracked layer id so a later activation (e.g. after opening a new
+    // project) re-discovers from scratch rather than trusting a stale id.
+    annotationLayerId = null;
     pluginActive = false;
     appApi = null;
   },
@@ -118,7 +130,12 @@ export const maplibreAnnotationsPlugin: GeoLibrePlugin = {
     // Re-adding at the new corner failed; restore the previous position so the
     // toolbar does not vanish and the stored position stays consistent.
     annotationsPosition = previousPosition;
-    app.addMapControl(toolbarControl, previousPosition);
+    if (!app.addMapControl(toolbarControl, previousPosition)) {
+      // Both re-adds failed: the control is no longer on the map, so drop the
+      // reference and deactivate so the plugin's state matches reality.
+      toolbarControl = null;
+      pluginActive = false;
+    }
     return false;
   },
 };
@@ -139,14 +156,6 @@ const TOOL_ICONS: Record<AnnotationTool, string> = {
     '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c3-6 6-9 9-9s2 5 4 5 2-3 5-3"/></svg>',
 };
 
-const TOOL_LABELS: Record<AnnotationTool, string> = {
-  text: "Text",
-  arrow: "Arrow",
-  rectangle: "Rectangle highlight",
-  ellipse: "Ellipse highlight",
-  freehand: "Freehand highlight",
-};
-
 const TOOL_ORDER: AnnotationTool[] = [
   "text",
   "arrow",
@@ -155,11 +164,53 @@ const TOOL_ORDER: AnnotationTool[] = [
   "freehand",
 ];
 
-const WIDTH_OPTIONS: { label: string; value: number }[] = [
-  { label: "Thin", value: 2 },
-  { label: "Medium", value: 3 },
-  { label: "Thick", value: 5 },
-];
+const WIDTH_VALUES = [2, 3, 5] as const;
+
+/**
+ * User-facing strings the toolbar cannot translate itself. Defaults are
+ * English; the desktop shell pushes translated values via
+ * {@link setAnnotationLabels}, mirroring the other framework-agnostic plugins
+ * (e.g. {@link setBasemapControlLabels}) since this package has no direct
+ * access to react-i18next.
+ */
+export interface AnnotationLabels {
+  toolbar: string;
+  tools: Record<AnnotationTool, string>;
+  color: string;
+  width: string;
+  widthOptions: { thin: string; medium: string; thick: string };
+  deleteLast: string;
+  clearAll: string;
+  textPlaceholder: string;
+}
+
+let labels: AnnotationLabels = {
+  toolbar: "Annotation tools",
+  tools: {
+    text: "Text",
+    arrow: "Arrow",
+    rectangle: "Rectangle highlight",
+    ellipse: "Ellipse highlight",
+    freehand: "Freehand highlight",
+  },
+  color: "Annotation color",
+  width: "Line width",
+  widthOptions: { thin: "Thin", medium: "Medium", thick: "Thick" },
+  deleteLast: "Delete last annotation",
+  clearAll: "Clear all annotations",
+  textPlaceholder: "Type label, Enter to place",
+};
+
+/** Override the toolbar strings (called from the app layer with translated text). */
+export function setAnnotationLabels(next: Partial<AnnotationLabels>): void {
+  labels = { ...labels, ...next };
+}
+
+function widthOptionLabel(value: number): string {
+  if (value <= 2) return labels.widthOptions.thin;
+  if (value >= 5) return labels.widthOptions.thick;
+  return labels.widthOptions.medium;
+}
 
 /** A plain-DOM MapLibre control hosting the annotation tools and style inputs. */
 class AnnotationToolbarControl implements maplibregl.IControl {
@@ -170,14 +221,14 @@ class AnnotationToolbarControl implements maplibregl.IControl {
     const container = document.createElement("div");
     container.className =
       "maplibregl-ctrl maplibregl-ctrl-group geolibre-annotations-control";
-    container.setAttribute("aria-label", "Annotation tools");
+    container.setAttribute("aria-label", labels.toolbar);
 
     for (const tool of TOOL_ORDER) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "geolibre-annotations-tool";
-      button.title = TOOL_LABELS[tool];
-      button.setAttribute("aria-label", TOOL_LABELS[tool]);
+      button.title = labels.tools[tool];
+      button.setAttribute("aria-label", labels.tools[tool]);
       button.innerHTML = TOOL_ICONS[tool];
       button.addEventListener("click", () => {
         setActiveTool(activeTool === tool ? null : tool);
@@ -190,8 +241,8 @@ class AnnotationToolbarControl implements maplibregl.IControl {
     color.type = "color";
     color.className = "geolibre-annotations-color";
     color.value = strokeColor;
-    color.title = "Annotation color";
-    color.setAttribute("aria-label", "Annotation color");
+    color.title = labels.color;
+    color.setAttribute("aria-label", labels.color);
     color.addEventListener("input", () => {
       strokeColor = color.value;
     });
@@ -199,13 +250,13 @@ class AnnotationToolbarControl implements maplibregl.IControl {
 
     const width = document.createElement("select");
     width.className = "geolibre-annotations-width";
-    width.title = "Line width";
-    width.setAttribute("aria-label", "Line width");
-    for (const option of WIDTH_OPTIONS) {
+    width.title = labels.width;
+    width.setAttribute("aria-label", labels.width);
+    for (const value of WIDTH_VALUES) {
       const opt = document.createElement("option");
-      opt.value = String(option.value);
-      opt.textContent = option.label;
-      if (option.value === strokeWidth) opt.selected = true;
+      opt.value = String(value);
+      opt.textContent = widthOptionLabel(value);
+      if (value === strokeWidth) opt.selected = true;
       width.appendChild(opt);
     }
     width.addEventListener("change", () => {
@@ -214,14 +265,14 @@ class AnnotationToolbarControl implements maplibregl.IControl {
     container.appendChild(width);
 
     const deleteLast = this.makeActionButton(
-      "Delete last annotation",
+      labels.deleteLast,
       '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/></svg>',
       () => deleteLastAnnotation(),
     );
     container.appendChild(deleteLast);
 
     const clearAll = this.makeActionButton(
-      "Clear all annotations",
+      labels.clearAll,
       '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg>',
       () => clearAllAnnotations(),
     );
@@ -447,7 +498,7 @@ function openTextInput(event: maplibregl.MapMouseEvent): void {
   const input = document.createElement("input");
   input.type = "text";
   input.className = "geolibre-annotation-text-input";
-  input.placeholder = "Type label, Enter to place";
+  input.placeholder = labels.textPlaceholder;
   input.style.position = "absolute";
   input.style.left = `${event.point.x}px`;
   input.style.top = `${event.point.y}px`;
@@ -455,7 +506,9 @@ function openTextInput(event: maplibregl.MapMouseEvent): void {
 
   // Enter/blur commit and Escape discards; each removes the input, which fires
   // `blur` again, so route everything through one idempotent finisher that adds
-  // the feature (or not) and removes the node exactly once.
+  // the feature (or not) and removes the node exactly once. Committing on blur
+  // (rather than discarding) is deliberate: a click elsewhere on the map places
+  // the typed label instead of silently losing it; an empty input adds nothing.
   let done = false;
   const onBlur = () => finish(true);
   const finish = (save: boolean) => {
@@ -686,6 +739,11 @@ function setPreview(map: maplibregl.Map, data: FeatureCollection): void {
     | undefined;
   if (existing) {
     existing.setData(data);
+    // Repaint too, so changing the color/width between an arrow's two clicks is
+    // reflected in the live preview rather than only in the committed feature.
+    map.setPaintProperty(PREVIEW_FILL_LAYER_ID, "fill-color", strokeColor);
+    map.setPaintProperty(PREVIEW_LINE_LAYER_ID, "line-color", strokeColor);
+    map.setPaintProperty(PREVIEW_LINE_LAYER_ID, "line-width", strokeWidth);
     return;
   }
   map.addSource(PREVIEW_SOURCE_ID, { type: "geojson", data });
@@ -727,7 +785,10 @@ function findAnnotationLayer(
 ): GeoLibreLayer | undefined {
   if (annotationLayerId) {
     const tracked = layers.find((layer) => layer.id === annotationLayerId);
-    if (tracked) return tracked;
+    // Verify the tracked layer is still an annotation layer: after a project
+    // reload `annotationLayerId` may be stale and (however unlikely) collide
+    // with an unrelated layer's id until `rediscoverAnnotationLayer` runs.
+    if (tracked && isAnnotationLayer(tracked)) return tracked;
   }
   return layers.find(isAnnotationLayer);
 }
@@ -742,6 +803,11 @@ function appendAnnotationFeatures(features: Feature[]): void {
   if (!features.length) return;
   const store = useAppStore.getState();
   const existing = findAnnotationLayer(store.layers);
+  const hasText = features.some(
+    (feature) =>
+      (feature.properties as Record<string, unknown> | null)?.shape ===
+      TEXT_MARKER_SHAPE,
+  );
 
   if (existing) {
     annotationLayerId = existing.id;
@@ -750,26 +816,38 @@ function appendAnnotationFeatures(features: Feature[]): void {
       features: [...(existing.geojson?.features ?? []), ...features],
     };
     store.updateLayer(existing.id, { geojson: next });
+    // Label color is layer-level (the text_marker symbol layer reads
+    // layer.style.textColor, not a per-feature property), so apply the toolbar
+    // color whenever text is placed. Shapes/arrows carry per-feature color; text
+    // shares one layer color, latest-wins (per-label color is a follow-up).
+    if (hasText) store.setLayerStyle(existing.id, { textColor: strokeColor });
     return;
   }
 
-  const collection: FeatureCollection = {
-    type: "FeatureCollection",
-    features,
+  // Build the layer fully and add it in a single store mutation, so it never
+  // appears with `sourceKind`/`simpleStyleEnabled` unset (which would briefly
+  // render the first annotation without its per-feature colors).
+  const id = crypto.randomUUID();
+  const layer: GeoLibreLayer = {
+    id,
+    name: ANNOTATIONS_LAYER_NAME,
+    type: "geojson",
+    source: { type: "geojson" },
+    visible: true,
+    opacity: 1,
+    style: {
+      ...DEFAULT_LAYER_STYLE,
+      // Force the simplestyle path on so per-feature stroke/fill always apply,
+      // even when the first annotation is text (which carries no simplestyle).
+      simpleStyleEnabled: true,
+      ...(hasText ? { textColor: strokeColor } : {}),
+    },
+    metadata: { sourceKind: ANNOTATIONS_SOURCE_KIND },
+    geojson: { type: "FeatureCollection", features },
+    sourcePath: ANNOTATIONS_SOURCE_PATH,
   };
-  const id = store.addGeoJsonLayer(
-    ANNOTATIONS_LAYER_NAME,
-    collection,
-    ANNOTATIONS_SOURCE_PATH,
-  );
+  store.addLayer(layer);
   annotationLayerId = id;
-  const created = useAppStore.getState().layers.find((layer) => layer.id === id);
-  store.updateLayer(id, {
-    metadata: { ...created?.metadata, sourceKind: ANNOTATIONS_SOURCE_KIND },
-  });
-  // Force the simplestyle path on so per-feature stroke/fill always apply, even
-  // when the first annotation was text (which carries no simplestyle keys).
-  store.setLayerStyle(id, { simpleStyleEnabled: true });
 }
 
 /** Remove the most recently added annotation (and its arrowhead, if any). */

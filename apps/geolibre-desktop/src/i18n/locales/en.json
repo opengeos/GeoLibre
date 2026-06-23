@@ -1417,6 +1417,26 @@
     "confirmStyleReplace_one": "Switching to \"{{name}}\" replaces the whole map style and will remove the stacked basemap you added. Continue?",
     "confirmStyleReplace_other": "Switching to \"{{name}}\" replaces the whole map style and will remove the {{count}} stacked basemaps you added. Continue?"
   },
+  "annotations": {
+    "toolbar": "Annotation tools",
+    "tools": {
+      "text": "Text",
+      "arrow": "Arrow",
+      "rectangle": "Rectangle highlight",
+      "ellipse": "Ellipse highlight",
+      "freehand": "Freehand highlight"
+    },
+    "color": "Annotation color",
+    "width": "Line width",
+    "widthOptions": {
+      "thin": "Thin",
+      "medium": "Medium",
+      "thick": "Thick"
+    },
+    "deleteLast": "Delete last annotation",
+    "clearAll": "Clear all annotations",
+    "textPlaceholder": "Type label, Enter to place"
+  },
   "pythonConsole": {
     "title": "Python Console",
     "resize": "Resize Python console",

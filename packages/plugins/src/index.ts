@@ -237,6 +237,8 @@ export {
 export {
   maplibreAnnotationsPlugin,
   ANNOTATIONS_SOURCE_KIND,
+  setAnnotationLabels,
+  type AnnotationLabels,
 } from "./plugins/maplibre-annotations";
 export { maplibreEnviroAtlasPlugin } from "./plugins/maplibre-enviroatlas";
 export { maplibreEsriWaybackPlugin } from "./plugins/maplibre-esri-wayback";
