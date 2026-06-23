@@ -256,6 +256,7 @@ export { maplibreSwipePlugin } from "./plugins/maplibre-swipe";
 export {
   maplibreGraticulePlugin,
   GRATICULE_PLUGIN_ID,
+  GRATICULE_LABEL_LAYER_ID,
   DEFAULT_GRATICULE_SETTINGS,
   DEFAULT_GRATICULE_LABELS,
   getGraticuleSettings,

@@ -1263,6 +1263,7 @@
       "atmosphereEffects": "Atmospheric Effects",
       "atmosphereEnabled": "Enabled",
       "spinGlobe": "Spinning Globe",
+      "graticule": "Graticule",
       "spinGlobeBoundsTitle": "Bounds are locked",
       "spinGlobeBoundsDesc": "The globe can't spin while the map bounds are locked.",
       "spinGlobeBoundsHint": "Unlocking the bounds lets the globe spin freely. You can re-lock them anytime in Settings.",

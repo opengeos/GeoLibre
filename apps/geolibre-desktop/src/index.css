@@ -311,6 +311,19 @@ body,
   color: #1f2a37;
 }
 
+/* The graticule control button: flex-center its inline SVG icon (MapLibre's
+   default `.maplibregl-ctrl-group button { display: block }` would otherwise
+   left-align it), and pin the stroke="currentColor" icon to a fixed dark color
+   so it stays legible on the always-white control button in both themes (same
+   approach as the spin-globe control above). The two-class selector out-ranks
+   MapLibre's single-class rule regardless of stylesheet order. */
+.geolibre-graticule-ctrl .geolibre-graticule-button {
+  align-items: center;
+  color: #1f2a37;
+  display: flex;
+  justify-content: center;
+}
+
 .geolibre-duckdb-control {
   background-color: transparent !important;
   box-shadow: none !important;

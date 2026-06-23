@@ -24,10 +24,17 @@ import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
 export const GRATICULE_PLUGIN_ID = "maplibre-gl-graticule";
 
+/**
+ * Stable id of the graticule label symbol layer. Exported so the Print Layout
+ * can detect an active graticule and fit the captured map without cropping
+ * (the default crop would trim these edge labels).
+ */
+export const GRATICULE_LABEL_LAYER_ID = "geolibre-graticule-labels-layer";
+
 const LINE_SOURCE_ID = "geolibre-graticule-lines-source";
 const LABEL_SOURCE_ID = "geolibre-graticule-labels-source";
 const LINE_LAYER_ID = "geolibre-graticule-lines-layer";
-const LABEL_LAYER_ID = "geolibre-graticule-labels-layer";
+const LABEL_LAYER_ID = GRATICULE_LABEL_LAYER_ID;
 const PANEL_ID = "geolibre-graticule-panel";
 
 /**
@@ -362,12 +369,19 @@ function labelFeature(
 // MapLibre layer management
 // ---------------------------------------------------------------------------
 
+/** Cached result of {@link pickTextFont}; invalidated on basemap change. */
+let cachedTextFont: string[] | null = null;
+
 /**
  * Reuse a font that the active basemap style already ships so the label glyphs
  * are guaranteed to load (basemaps bundle different fonts, so a hard-coded name
- * would 404 on some of them).
+ * would 404 on some of them). The result is cached because the font is stable
+ * until the basemap changes, and `applyStyleProps` runs on every settings tweak
+ * (e.g. dragging the colour picker), which would otherwise rescan every style
+ * layer hundreds of times.
  */
 function pickTextFont(activeMap: MapLibreMap): string[] {
+  if (cachedTextFont) return cachedTextFont;
   let fallback: string[] | null = null;
   try {
     const styleLayers = activeMap.getStyle()?.layers ?? [];
@@ -386,7 +400,8 @@ function pickTextFont(activeMap: MapLibreMap): string[] {
   } catch {
     // getStyle can throw before the style is ready; fall through to the default.
   }
-  return fallback ?? ["Open Sans Regular", "Arial Unicode MS Regular"];
+  cachedTextFont = fallback ?? ["Open Sans Regular", "Arial Unicode MS Regular"];
+  return cachedTextFont;
 }
 
 function ensureLayers(activeMap: MapLibreMap): void {
@@ -541,9 +556,11 @@ class GraticuleControl implements IControl {
 
   onAdd(): HTMLElement {
     const container = document.createElement("div");
-    container.className = "maplibregl-ctrl maplibregl-ctrl-group";
+    container.className =
+      "maplibregl-ctrl maplibregl-ctrl-group geolibre-graticule-ctrl";
     const button = document.createElement("button");
     button.type = "button";
+    button.className = "geolibre-graticule-button";
     button.innerHTML = GRID_ICON_SVG;
     button.addEventListener("click", () => appRef?.openRightPanel?.(PANEL_ID));
     container.appendChild(button);
@@ -796,21 +813,24 @@ export function normalizeGraticuleSettings(value: unknown): GraticuleSettings {
  * which would silently break if a field were added to one object but not the
  * other, or if property order diverged).
  */
-function isDefaultSettings(value: GraticuleSettings): boolean {
-  const d = DEFAULT_GRATICULE_SETTINGS;
+function settingsEqual(a: GraticuleSettings, b: GraticuleSettings): boolean {
   return (
-    value.spacingMode === d.spacingMode &&
-    value.spacingDegrees === d.spacingDegrees &&
-    value.lineColor === d.lineColor &&
-    value.lineWidth === d.lineWidth &&
-    value.lineOpacity === d.lineOpacity &&
-    value.lineDashed === d.lineDashed &&
-    value.showLabels === d.showLabels &&
-    value.labelFormat === d.labelFormat &&
-    value.labelEdges === d.labelEdges &&
-    value.labelColor === d.labelColor &&
-    value.labelSize === d.labelSize
+    a.spacingMode === b.spacingMode &&
+    a.spacingDegrees === b.spacingDegrees &&
+    a.lineColor === b.lineColor &&
+    a.lineWidth === b.lineWidth &&
+    a.lineOpacity === b.lineOpacity &&
+    a.lineDashed === b.lineDashed &&
+    a.showLabels === b.showLabels &&
+    a.labelFormat === b.labelFormat &&
+    a.labelEdges === b.labelEdges &&
+    a.labelColor === b.labelColor &&
+    a.labelSize === b.labelSize
   );
+}
+
+function isDefaultSettings(value: GraticuleSettings): boolean {
+  return settingsEqual(value, DEFAULT_GRATICULE_SETTINGS);
 }
 
 // ---------------------------------------------------------------------------
@@ -834,8 +854,10 @@ export const maplibreGraticulePlugin: GeoLibrePlugin = {
     activeMap.on("moveend", moveHandler);
 
     // setStyle (basemap change) drops our sources/layers, so rebuild afterward.
+    // The new basemap may ship different fonts, so drop the cached one.
     unsubscribeBasemap = app.onBasemapChange(() => {
       if (!map) return;
+      cachedTextFont = null;
       map.once("idle", () => update());
     });
 
@@ -870,13 +892,18 @@ export const maplibreGraticulePlugin: GeoLibrePlugin = {
     // Clear any pending idle flag so a rapid re-activation can queue its own
     // deferred draw instead of waiting on the previous run's stale listener.
     idlePending = false;
+    cachedTextFont = null;
     if (map) teardownLayers(map);
     map = null;
     appRef = null;
   },
   getProjectState: () => (isDefaultSettings(settings) ? undefined : { ...settings }),
   applyProjectState: (_app: GeoLibreAppAPI, state: unknown) => {
-    settings = normalizeGraticuleSettings(state);
+    const next = normalizeGraticuleSettings(state);
+    // Skip the redraw when nothing changed (e.g. the host resets a fresh project
+    // to defaults that already match what is in memory).
+    if (settingsEqual(settings, next)) return false;
+    settings = next;
     update();
     syncPanel?.();
   },

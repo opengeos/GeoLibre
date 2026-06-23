@@ -267,6 +267,13 @@ export interface LayoutOptions {
   mapImageWidth: number;
   /** Intrinsic height of {@link mapImage} in pixels. */
   mapImageHeight: number;
+  /**
+   * How the captured map fills the body. "cover" (default) scales to fill and
+   * crops the overflow; "contain" fits the whole image inside the body without
+   * cropping, leaving {@link mapBackground} margins on the shorter axis. Used so
+   * an active graticule's edge labels are not trimmed by the cover crop.
+   */
+  mapFit?: "cover" | "contain";
 }
 
 const PAGE_BACKGROUND = "#ffffff";
@@ -372,9 +379,14 @@ function coverScaleFor(
   bodyH: number,
   imgW: number,
   imgH: number,
+  fit: "cover" | "contain" = "cover",
 ): number {
   if (imgW <= 0 || imgH <= 0) return 1;
-  return Math.max(bodyW / imgW, bodyH / imgH);
+  // "cover" scales to the larger ratio (fills, crops overflow); "contain" scales
+  // to the smaller ratio (fits entirely, no crop).
+  return fit === "contain"
+    ? Math.min(bodyW / imgW, bodyH / imgH)
+    : Math.max(bodyW / imgW, bodyH / imgH);
 }
 
 /**
@@ -409,6 +421,7 @@ export function computeScaleRatio(opts: LayoutOptions): number {
     rect.bodyH,
     opts.mapImageWidth,
     opts.mapImageHeight,
+    opts.mapFit ?? "cover",
   );
   const outputMpp = opts.metersPerPixel / (coverScale || 1);
   const mmPerPx = pageMm(page).widthMm / W;
@@ -520,7 +533,9 @@ export function drawLayout(
   ctx.fillStyle = opts.mapBackground ?? "#e5e7eb";
   ctx.fillRect(bodyX, bodyY, bodyW, bodyH);
 
-  // Draw the map image with "cover" scaling (fill the body, crop overflow).
+  // Draw the map image. "cover" (default) fills the body and crops the overflow;
+  // "contain" fits the whole image without cropping (used for a graticule so its
+  // edge labels are not trimmed), leaving background margins on the shorter axis.
   // Guard the draw: a tainted/broken capture must not abort the whole layout,
   // otherwise a single bad basemap (e.g. cross-origin OpenTopo tiles) would wipe
   // out every cartographic element too, not just the map image.
@@ -531,6 +546,7 @@ export function drawLayout(
       bodyH,
       opts.mapImageWidth,
       opts.mapImageHeight,
+      opts.mapFit ?? "cover",
     );
     const drawW = opts.mapImageWidth * coverScale;
     const drawH = opts.mapImageHeight * coverScale;
