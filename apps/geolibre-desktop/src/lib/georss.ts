@@ -208,9 +208,7 @@ function gmlPosText(element: Element): string {
   if (posList?.textContent) return posList.textContent;
   const coordinates = directChildren(element, "coordinates")[0];
   if (coordinates?.textContent) {
-    // GML 2 <coordinates> is "lon,lat lon,lat" (x,y), the reverse of GML 3
-    // pos. Re-order each pair to "lat lon" so the lat-first parseLatLonList
-    // below produces correct [lon, lat] GeoJSON positions.
+    // GML 2 <coordinates> is lon,lat order; swap each pair so the lat-first parseLatLonList holds.
     return coordinates.textContent
       .trim()
       .split(/\s+/)
@@ -313,7 +311,10 @@ function itemProperties(item: Element): GeoJsonProperties {
   const title = childText(item, "title");
   if (title) properties.title = title;
 
-  // RSS: <description>; Atom: <summary> or <content>.
+  // RSS: <description>; Atom: <summary> or <content>. Stored as raw text (RSS
+  // descriptions often hold CDATA-wrapped HTML); GeoLibre renders all property
+  // values as text nodes (identify popup setDOMContent + textContent, attribute
+  // table React children), so the markup is never parsed and needs no sanitizing.
   const description =
     childText(item, "description") ??
     childText(item, "summary") ??

@@ -125,6 +125,7 @@ export function GeoRssSource() {
       onSubmit={handleSubmit}
       error={source.error}
       submitDisabled={source.isSubmitting}
+      // Globe icon, unlike GpxSource: GeoRSS lives under Web services and is primarily a live feed.
       useServiceIcon
     >
       <div className="space-y-3">
