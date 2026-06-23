@@ -7,7 +7,7 @@ import {
   subscribeDirectionsState,
 } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
-import { MapPin, Navigation, Undo2, X } from "lucide-react";
+import { MapPin, Navigation, Trash2, Undo2, X } from "lucide-react";
 import { type RefObject, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@geolibre/ui";
@@ -95,6 +95,7 @@ export function MapModeBanner({ mapControllerRef }: MapModeBannerProps) {
               disabled={waypointCount === 0}
               onClick={clearDirectionsWaypoints}
             >
+              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
               {t("map.directionsMode.clear")}
             </Button>
             <Button
