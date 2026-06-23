@@ -2,6 +2,7 @@ import {
   clearDirectionsWaypoints,
   DIRECTIONS_PLUGIN_ID,
   getDirectionsWaypointCount,
+  isDirectionsRemovalInFlight,
   removeLastDirectionsWaypoint,
   REVERSE_GEOCODE_PLUGIN_ID,
   subscribeDirectionsState,
@@ -39,6 +40,13 @@ export function MapModeBanner({ mapControllerRef }: MapModeBannerProps) {
     subscribeDirectionsState,
     getDirectionsWaypointCount,
     getDirectionsWaypointCount,
+  );
+  // Disable "Remove last" while a removal awaits its route refetch, so rapid
+  // clicks can't queue concurrent calls against a stale waypoint count.
+  const removalInFlight = useSyncExternalStore(
+    subscribeDirectionsState,
+    isDirectionsRemovalInFlight,
+    isDirectionsRemovalInFlight,
   );
 
   const directionsActive = isActive(DIRECTIONS_PLUGIN_ID);
@@ -82,7 +90,7 @@ export function MapModeBanner({ mapControllerRef }: MapModeBannerProps) {
               type="button"
               size="sm"
               variant="ghost"
-              disabled={waypointCount === 0}
+              disabled={waypointCount === 0 || removalInFlight}
               onClick={removeLastDirectionsWaypoint}
             >
               <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />

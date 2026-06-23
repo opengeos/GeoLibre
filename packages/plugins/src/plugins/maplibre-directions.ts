@@ -38,6 +38,12 @@ let loadToken = 0;
 type DirectionsStateListener = () => void;
 const directionsStateListeners = new Set<DirectionsStateListener>();
 
+// True while a removeLastDirectionsWaypoint() call is mid route-refetch. Exposed
+// so the banner can disable its "remove last" button until the async call
+// settles, which closes the rapid-click window where two clicks would both read
+// the same pre-removal count and target an index the first call already removed.
+let removalInFlight = false;
+
 function notifyDirectionsState(): void {
   // Isolate subscriber failures so one throwing listener does not block the
   // rest from receiving the update.
@@ -76,19 +82,37 @@ export function getDirectionsWaypointCount(): number {
 }
 
 /**
+ * Whether a waypoint removal is currently awaiting its route refetch.
+ *
+ * @returns True between the removeWaypoint call and its settlement.
+ */
+export function isDirectionsRemovalInFlight(): boolean {
+  return removalInFlight;
+}
+
+/**
  * Remove the most recently placed waypoint and re-fetch the route. No-op when
- * the tool is inactive or no waypoints have been placed.
+ * the tool is inactive, no waypoints have been placed, or a removal is already
+ * in flight (so rapid clicks cannot queue concurrent calls on a stale count).
  */
 export function removeLastDirectionsWaypoint(): void {
-  if (!directions) return;
+  if (!directions || removalInFlight) return;
   const count = directions.waypoints.length;
   if (count === 0) return;
+  removalInFlight = true;
+  notifyDirectionsState();
   // removeWaypoint re-fetches the route, which can reject (network/OSRM error).
   // Log rather than let it surface as an unhandled rejection, mirroring how
-  // attach() handles its load failure.
-  void directions.removeWaypoint(count - 1).catch((error: unknown) => {
-    console.error("Directions: removeWaypoint failed", error);
-  });
+  // attach() handles its load failure; clear the in-flight flag either way.
+  void directions
+    .removeWaypoint(count - 1)
+    .catch((error: unknown) => {
+      console.error("Directions: removeWaypoint failed", error);
+    })
+    .finally(() => {
+      removalInFlight = false;
+      notifyDirectionsState();
+    });
 }
 
 /**
@@ -150,6 +174,9 @@ function teardown(app: GeoLibreAppAPI): void {
   directions?.destroy();
   directions = null;
   directionsMap = null;
+  // A removal can't be pending once the instance is gone; clear the flag so a
+  // teardown mid-refetch doesn't leave the next session's button disabled.
+  removalInFlight = false;
   // Reset the count subscribers see to 0 now the session is gone.
   notifyDirectionsState();
 }

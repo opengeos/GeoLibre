@@ -187,6 +187,7 @@ export {
   clearDirectionsWaypoints,
   DIRECTIONS_PLUGIN_ID,
   getDirectionsWaypointCount,
+  isDirectionsRemovalInFlight,
   maplibreDirectionsPlugin,
   removeLastDirectionsWaypoint,
   restoreDirections,

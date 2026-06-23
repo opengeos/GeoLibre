@@ -4,6 +4,7 @@ import {
   clearDirectionsWaypoints,
   DIRECTIONS_PLUGIN_ID,
   getDirectionsWaypointCount,
+  isDirectionsRemovalInFlight,
   maplibreDirectionsPlugin,
   removeLastDirectionsWaypoint,
   subscribeDirectionsState,
@@ -30,6 +31,8 @@ describe("directions control surface (inactive)", () => {
     assert.doesNotThrow(() => removeLastDirectionsWaypoint());
     assert.doesNotThrow(() => clearDirectionsWaypoints());
     assert.equal(getDirectionsWaypointCount(), 0);
+    // A no-op removal must not leave the in-flight flag stuck on.
+    assert.equal(isDirectionsRemovalInFlight(), false);
   });
 
   it("returns an idempotent unsubscribe from subscribeDirectionsState", () => {
