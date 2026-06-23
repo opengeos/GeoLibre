@@ -39,7 +39,15 @@ type DirectionsStateListener = () => void;
 const directionsStateListeners = new Set<DirectionsStateListener>();
 
 function notifyDirectionsState(): void {
-  for (const listener of directionsStateListeners) listener();
+  // Isolate subscriber failures so one throwing listener does not block the
+  // rest from receiving the update.
+  for (const listener of directionsStateListeners) {
+    try {
+      listener();
+    } catch (error) {
+      console.error("Directions: state listener threw.", error);
+    }
+  }
 }
 
 /**
