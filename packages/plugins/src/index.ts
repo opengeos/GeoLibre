@@ -257,10 +257,13 @@ export {
   maplibreGraticulePlugin,
   GRATICULE_PLUGIN_ID,
   DEFAULT_GRATICULE_SETTINGS,
+  DEFAULT_GRATICULE_LABELS,
   getGraticuleSettings,
   setGraticuleSettings,
+  setGraticuleLabels,
   normalizeGraticuleSettings,
   type GraticuleSettings,
+  type GraticuleLabels,
   type GraticuleLabelFormat,
   type GraticuleLabelEdges,
 } from "./plugins/maplibre-graticule";

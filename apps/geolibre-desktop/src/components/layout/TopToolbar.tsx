@@ -23,6 +23,7 @@ import {
   openVectorLayerPanel,
   openZarrLayerPanel,
   setBasemapControlLabels,
+  setGraticuleLabels,
   setReverseGeocodeLabels,
   DECK_VIZ_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
@@ -165,6 +166,27 @@ export function TopToolbar({
     setBasemapControlLabels({
       confirmStyleReplace: (name, count) =>
         t("basemaps.confirmStyleReplace", { name, count }),
+    });
+    setGraticuleLabels({
+      title: t("graticule.title"),
+      controlTitle: t("graticule.controlTitle"),
+      spacing: t("graticule.spacing"),
+      spacingAuto: t("graticule.spacingAuto"),
+      spacingFixed: t("graticule.spacingFixed"),
+      interval: t("graticule.interval"),
+      lineColor: t("graticule.lineColor"),
+      lineWidth: t("graticule.lineWidth"),
+      lineOpacity: t("graticule.lineOpacity"),
+      dashedLines: t("graticule.dashedLines"),
+      showLabels: t("graticule.showLabels"),
+      labelFormat: t("graticule.labelFormat"),
+      formatDecimal: t("graticule.formatDecimal"),
+      formatDms: t("graticule.formatDms"),
+      labelEdges: t("graticule.labelEdges"),
+      edgesLeftBottom: t("graticule.edgesLeftBottom"),
+      edgesAll: t("graticule.edgesAll"),
+      labelColor: t("graticule.labelColor"),
+      labelSize: t("graticule.labelSize"),
     });
   }, [t]);
 

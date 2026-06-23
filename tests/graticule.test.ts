@@ -66,13 +66,23 @@ describe("normalizeGraticuleSettings", () => {
     assert.equal(result.labelColor, DEFAULT_GRATICULE_SETTINGS.labelColor);
   });
 
-  it("accepts valid hex colors", () => {
+  it("rejects malformed-length and alpha hex colors", () => {
     const result = normalizeGraticuleSettings({
-      lineColor: "#ff0000",
+      lineColor: "#12345", // 5 digits
+      labelColor: "#11223344", // rrggbbaa, not displayable by the color input
+    });
+    assert.equal(result.lineColor, DEFAULT_GRATICULE_SETTINGS.lineColor);
+    assert.equal(result.labelColor, DEFAULT_GRATICULE_SETTINGS.labelColor);
+  });
+
+  it("canonicalizes valid hex colors to lowercase #rrggbb", () => {
+    const result = normalizeGraticuleSettings({
+      lineColor: "#FF0000",
       labelColor: "#0a0",
     });
     assert.equal(result.lineColor, "#ff0000");
-    assert.equal(result.labelColor, "#0a0");
+    // Shorthand expands so the native color input can display it.
+    assert.equal(result.labelColor, "#00aa00");
   });
 });
 

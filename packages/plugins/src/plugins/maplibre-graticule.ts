@@ -24,11 +24,68 @@ import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
 export const GRATICULE_PLUGIN_ID = "maplibre-gl-graticule";
 
-const LINE_SOURCE_ID = "geolibre-graticule-lines";
-const LABEL_SOURCE_ID = "geolibre-graticule-labels";
-const LINE_LAYER_ID = "geolibre-graticule-lines";
-const LABEL_LAYER_ID = "geolibre-graticule-labels";
+const LINE_SOURCE_ID = "geolibre-graticule-lines-source";
+const LABEL_SOURCE_ID = "geolibre-graticule-labels-source";
+const LINE_LAYER_ID = "geolibre-graticule-lines-layer";
+const LABEL_LAYER_ID = "geolibre-graticule-labels-layer";
 const PANEL_ID = "geolibre-graticule-panel";
+
+/**
+ * User-facing strings for the settings panel and on-map control. This package
+ * is framework-agnostic and cannot call react-i18next's `t()` directly, so the
+ * host pushes translated values via {@link setGraticuleLabels} (see the pattern
+ * used by `maplibre-reverse-geocode`). Defaults are English.
+ */
+export interface GraticuleLabels {
+  title: string;
+  controlTitle: string;
+  spacing: string;
+  spacingAuto: string;
+  spacingFixed: string;
+  interval: string;
+  lineColor: string;
+  lineWidth: string;
+  lineOpacity: string;
+  dashedLines: string;
+  showLabels: string;
+  labelFormat: string;
+  formatDecimal: string;
+  formatDms: string;
+  labelEdges: string;
+  edgesLeftBottom: string;
+  edgesAll: string;
+  labelColor: string;
+  labelSize: string;
+}
+
+export const DEFAULT_GRATICULE_LABELS: GraticuleLabels = {
+  title: "Graticule",
+  controlTitle: "Graticule settings",
+  spacing: "Spacing",
+  spacingAuto: "Auto (by zoom)",
+  spacingFixed: "Fixed interval",
+  interval: "Interval (°)",
+  lineColor: "Line color",
+  lineWidth: "Line width",
+  lineOpacity: "Line opacity",
+  dashedLines: "Dashed lines",
+  showLabels: "Show labels",
+  labelFormat: "Label format",
+  formatDecimal: "Decimal degrees",
+  formatDms: "Deg/Min/Sec",
+  labelEdges: "Label edges",
+  edgesLeftBottom: "Left + bottom",
+  edgesAll: "All sides",
+  labelColor: "Label color",
+  labelSize: "Label size",
+};
+
+let labels: GraticuleLabels = { ...DEFAULT_GRATICULE_LABELS };
+
+/** Replace the user-facing strings (the host calls this with translations). */
+export function setGraticuleLabels(next: Partial<GraticuleLabels>): void {
+  labels = { ...labels, ...next };
+}
 
 /** How coordinate labels are formatted. */
 export type GraticuleLabelFormat = "dd" | "dms";
@@ -102,11 +159,26 @@ export function setGraticuleSettings(patch: Partial<GraticuleSettings>): void {
 // Geometry generation
 // ---------------------------------------------------------------------------
 
+/**
+ * Longitude range of the viewport, unwrapped so a view crossing the
+ * antimeridian (where `getEast() < getWest()`) yields an increasing range
+ * (e.g. west=170, east=190) that the meridian/parallel loops can iterate.
+ */
+function unwrappedLongitudeRange(bounds: LngLatBounds): {
+  west: number;
+  east: number;
+} {
+  const west = bounds.getWest();
+  let east = bounds.getEast();
+  if (east < west) east += 360;
+  return { west, east };
+}
+
 /** Pick an auto interval that draws roughly 4-12 meridians across the view. */
-function autoStep(bounds: LngLatBounds): number {
-  const lonSpan = Math.abs(bounds.getEast() - bounds.getWest()) || 0.001;
+function autoStep(lonSpan: number): number {
+  const span = Math.abs(lonSpan) || 0.001;
   for (const step of NICE_STEPS) {
-    if (lonSpan / step >= 4) return step;
+    if (span / step >= 4) return step;
   }
   return NICE_STEPS[NICE_STEPS.length - 1];
 }
@@ -189,36 +261,35 @@ interface GraticuleGeometry {
 /** Build the grid lines and edge labels for the current viewport. */
 function buildGeometry(activeMap: MapLibreMap): GraticuleGeometry {
   const bounds = activeMap.getBounds();
+  const { west, east } = unwrappedLongitudeRange(bounds);
   const step =
     settings.spacingMode === "fixed"
       ? Math.max(0.0001, settings.spacingDegrees)
-      : autoStep(bounds);
+      : autoStep(east - west);
 
-  const west = bounds.getWest();
-  const east = bounds.getEast();
   // Mercator cannot show the poles; clamp parallels to the renderable range.
   const south = Math.max(bounds.getSouth(), -85);
   const north = Math.min(bounds.getNorth(), 85);
 
-  const lines: Feature<LineString>[] = [];
-  const labels: Feature<Point>[] = [];
+  const lineFeatures: Feature<LineString>[] = [];
+  const labelFeatures: Feature<Point>[] = [];
   const showAllEdges = settings.labelEdges === "all";
 
-  // Meridians (constant longitude). Iterate raw lon range so a wrapped view
-  // (east < west or values beyond +/-180) still fills the screen.
+  // Meridians (constant longitude). The longitude range is unwrapped above so a
+  // view crossing the antimeridian still fills the screen.
   const firstLon = Math.ceil(west / step) * step;
   const maxLines = 2000; // hard cap so a tiny fixed step cannot freeze the UI
   let count = 0;
   for (let lon = firstLon; lon <= east && count < maxLines; lon += step) {
-    lines.push({
+    lineFeatures.push({
       type: "Feature",
       properties: {},
       geometry: { type: "LineString", coordinates: densifyLine(lon, south, north, "lon") },
     });
     if (settings.showLabels) {
-      labels.push(labelFeature(lon, south, formatLon(lon, step, settings.labelFormat), "bottom"));
+      labelFeatures.push(labelFeature(lon, south, formatLon(lon, step, settings.labelFormat), "bottom"));
       if (showAllEdges) {
-        labels.push(labelFeature(lon, north, formatLon(lon, step, settings.labelFormat), "top"));
+        labelFeatures.push(labelFeature(lon, north, formatLon(lon, step, settings.labelFormat), "top"));
       }
     }
     count += 1;
@@ -228,23 +299,23 @@ function buildGeometry(activeMap: MapLibreMap): GraticuleGeometry {
   const firstLat = Math.ceil(south / step) * step;
   count = 0;
   for (let lat = firstLat; lat <= north && count < maxLines; lat += step) {
-    lines.push({
+    lineFeatures.push({
       type: "Feature",
       properties: {},
       geometry: { type: "LineString", coordinates: densifyLine(lat, west, east, "lat") },
     });
     if (settings.showLabels) {
-      labels.push(labelFeature(west, lat, formatLat(lat, step, settings.labelFormat), "left"));
+      labelFeatures.push(labelFeature(west, lat, formatLat(lat, step, settings.labelFormat), "left"));
       if (showAllEdges) {
-        labels.push(labelFeature(east, lat, formatLat(lat, step, settings.labelFormat), "right"));
+        labelFeatures.push(labelFeature(east, lat, formatLat(lat, step, settings.labelFormat), "right"));
       }
     }
     count += 1;
   }
 
   return {
-    lines: { type: "FeatureCollection", features: lines },
-    labels: { type: "FeatureCollection", features: labels },
+    lines: { type: "FeatureCollection", features: lineFeatures },
+    labels: { type: "FeatureCollection", features: labelFeatures },
     step,
   };
 }
@@ -360,18 +431,52 @@ function applyStyleProps(activeMap: MapLibreMap): void {
     ["literal", [0, 0]],
   ]);
   activeMap.setPaintProperty(LABEL_LAYER_ID, "text-color", settings.labelColor);
-  activeMap.setPaintProperty(LABEL_LAYER_ID, "text-halo-color", "#ffffff");
+  // Derive the halo from the label colour's luminance so labels stay legible on
+  // both light and dark basemaps (a fixed white halo rings dark text awkwardly).
+  activeMap.setPaintProperty(
+    LABEL_LAYER_ID,
+    "text-halo-color",
+    contrastingHalo(settings.labelColor),
+  );
   activeMap.setPaintProperty(LABEL_LAYER_ID, "text-halo-width", 1.2);
 }
 
-/** Recompute geometry and re-apply styling. Safe to call repeatedly. */
-function update(): void {
+/** Return a dark or light halo that contrasts with the given `#rrggbb` colour. */
+function contrastingHalo(hex: string): string {
+  const match = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!match) return "#ffffff";
+  const value = Number.parseInt(match[1], 16);
+  const r = (value >> 16) & 255;
+  const g = (value >> 8) & 255;
+  const b = value & 255;
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.5 ? "#1f2937" : "#ffffff";
+}
+
+let idlePending = false;
+
+/**
+ * Ensure the style is ready before drawing. When it is still loading, queue a
+ * single full {@link update} for the next `idle` event rather than one per call,
+ * so rapid setting changes during load do not stack up redundant redraws.
+ */
+function whenStyleReady(activeMap: MapLibreMap): boolean {
+  if (activeMap.isStyleLoaded()) return true;
+  if (!idlePending) {
+    idlePending = true;
+    activeMap.once("idle", () => {
+      idlePending = false;
+      update();
+    });
+  }
+  return false;
+}
+
+/** Rebuild the grid geometry from the current viewport (no style changes). */
+function refreshGeometry(): void {
   if (!map) return;
   const activeMap = map;
-  if (!activeMap.isStyleLoaded()) {
-    activeMap.once("idle", () => update());
-    return;
-  }
+  if (!whenStyleReady(activeMap)) return;
   ensureLayers(activeMap);
   const geometry = buildGeometry(activeMap);
   (activeMap.getSource(LINE_SOURCE_ID) as GeoJSONSource | undefined)?.setData(
@@ -380,7 +485,18 @@ function update(): void {
   (activeMap.getSource(LABEL_SOURCE_ID) as GeoJSONSource | undefined)?.setData(
     geometry.labels,
   );
-  applyStyleProps(activeMap);
+}
+
+/**
+ * Recompute geometry and re-apply styling. Use after a settings or basemap
+ * change; plain pan/zoom should call {@link refreshGeometry} so the style
+ * properties (colours, widths, fonts) are not needlessly re-diffed on the GPU.
+ */
+function update(): void {
+  if (!map) return;
+  if (!whenStyleReady(map)) return;
+  refreshGeometry();
+  applyStyleProps(map);
 }
 
 function teardownLayers(activeMap: MapLibreMap): void {
@@ -402,8 +518,8 @@ class GraticuleControl implements IControl {
     container.className = "maplibregl-ctrl maplibregl-ctrl-group";
     const button = document.createElement("button");
     button.type = "button";
-    button.title = "Graticule settings";
-    button.setAttribute("aria-label", "Graticule settings");
+    button.title = labels.controlTitle;
+    button.setAttribute("aria-label", labels.controlTitle);
     button.innerHTML = GRID_ICON_SVG;
     button.addEventListener("click", () => appRef?.openRightPanel?.(PANEL_ID));
     container.appendChild(button);
@@ -521,56 +637,58 @@ function renderPanel(container: HTMLElement): () => void {
   };
 
   select(
-    "Spacing",
+    labels.spacing,
     [
-      { value: "auto", label: "Auto (by zoom)" },
-      { value: "fixed", label: "Fixed interval" },
+      { value: "auto", label: labels.spacingAuto },
+      { value: "fixed", label: labels.spacingFixed },
     ],
     () => settings.spacingMode,
     (v) => setGraticuleSettings({ spacingMode: v as GraticuleSettings["spacingMode"] }),
   );
   number(
-    "Interval (°)",
-    { min: 0.001, max: 45, step: 0.5 },
+    labels.interval,
+    // A fine step keeps clamped/default values (e.g. 10, 0.25) valid for the
+    // native number input rather than reading as step mismatches.
+    { min: 0.001, max: 45, step: 0.001 },
     () => settings.spacingDegrees,
     (v) => setGraticuleSettings({ spacingDegrees: v }),
   );
-  color("Line color", () => settings.lineColor, (v) => setGraticuleSettings({ lineColor: v }));
+  color(labels.lineColor, () => settings.lineColor, (v) => setGraticuleSettings({ lineColor: v }));
   number(
-    "Line width",
+    labels.lineWidth,
     { min: 0.1, max: 6, step: 0.1 },
     () => settings.lineWidth,
     (v) => setGraticuleSettings({ lineWidth: v }),
   );
   number(
-    "Line opacity",
+    labels.lineOpacity,
     { min: 0, max: 1, step: 0.05 },
     () => settings.lineOpacity,
     (v) => setGraticuleSettings({ lineOpacity: v }),
   );
-  checkbox("Dashed lines", () => settings.lineDashed, (v) => setGraticuleSettings({ lineDashed: v }));
-  checkbox("Show labels", () => settings.showLabels, (v) => setGraticuleSettings({ showLabels: v }));
+  checkbox(labels.dashedLines, () => settings.lineDashed, (v) => setGraticuleSettings({ lineDashed: v }));
+  checkbox(labels.showLabels, () => settings.showLabels, (v) => setGraticuleSettings({ showLabels: v }));
   select(
-    "Label format",
+    labels.labelFormat,
     [
-      { value: "dd", label: "Decimal degrees" },
-      { value: "dms", label: "Deg/Min/Sec" },
+      { value: "dd", label: labels.formatDecimal },
+      { value: "dms", label: labels.formatDms },
     ],
     () => settings.labelFormat,
     (v) => setGraticuleSettings({ labelFormat: v as GraticuleLabelFormat }),
   );
   select(
-    "Label edges",
+    labels.labelEdges,
     [
-      { value: "left-bottom", label: "Left + bottom" },
-      { value: "all", label: "All sides" },
+      { value: "left-bottom", label: labels.edgesLeftBottom },
+      { value: "all", label: labels.edgesAll },
     ],
     () => settings.labelEdges,
     (v) => setGraticuleSettings({ labelEdges: v as GraticuleLabelEdges }),
   );
-  color("Label color", () => settings.labelColor, (v) => setGraticuleSettings({ labelColor: v }));
+  color(labels.labelColor, () => settings.labelColor, (v) => setGraticuleSettings({ labelColor: v }));
   number(
-    "Label size",
+    labels.labelSize,
     { min: 6, max: 28, step: 1 },
     () => settings.labelSize,
     (v) => setGraticuleSettings({ labelSize: v }),
@@ -594,8 +712,17 @@ function clampNumber(value: unknown, min: number, max: number, fallback: number)
   return Math.min(max, Math.max(min, n));
 }
 
-function isHexColor(value: unknown): value is string {
-  return typeof value === "string" && /^#[0-9a-fA-F]{3,8}$/.test(value);
+/**
+ * Canonicalize a color string to lowercase `#rrggbb`, expanding the `#rgb`
+ * shorthand. Returns null for anything else (including 5/7-digit values and
+ * `#rrggbbaa` alpha, which the native color input cannot display).
+ */
+function normalizeHexColor(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const color = value.trim().toLowerCase();
+  const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/.exec(color);
+  if (short) return `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`;
+  return /^#[0-9a-f]{6}$/.test(color) ? color : null;
 }
 
 export function normalizeGraticuleSettings(value: unknown): GraticuleSettings {
@@ -604,21 +731,37 @@ export function normalizeGraticuleSettings(value: unknown): GraticuleSettings {
   return {
     spacingMode: v.spacingMode === "fixed" ? "fixed" : "auto",
     spacingDegrees: clampNumber(v.spacingDegrees, 0.001, 45, d.spacingDegrees),
-    lineColor: isHexColor(v.lineColor) ? v.lineColor : d.lineColor,
+    lineColor: normalizeHexColor(v.lineColor) ?? d.lineColor,
     lineWidth: clampNumber(v.lineWidth, 0.1, 6, d.lineWidth),
     lineOpacity: clampNumber(v.lineOpacity, 0, 1, d.lineOpacity),
     lineDashed: typeof v.lineDashed === "boolean" ? v.lineDashed : d.lineDashed,
     showLabels: typeof v.showLabels === "boolean" ? v.showLabels : d.showLabels,
     labelFormat: v.labelFormat === "dms" ? "dms" : "dd",
     labelEdges: v.labelEdges === "all" ? "all" : "left-bottom",
-    labelColor: isHexColor(v.labelColor) ? v.labelColor : d.labelColor,
+    labelColor: normalizeHexColor(v.labelColor) ?? d.labelColor,
     labelSize: clampNumber(v.labelSize, 6, 28, d.labelSize),
   };
 }
 
+/**
+ * Field-by-field comparison against the defaults (rather than `JSON.stringify`,
+ * which would silently break if a field were added to one object but not the
+ * other, or if property order diverged).
+ */
 function isDefaultSettings(value: GraticuleSettings): boolean {
+  const d = DEFAULT_GRATICULE_SETTINGS;
   return (
-    JSON.stringify(value) === JSON.stringify(DEFAULT_GRATICULE_SETTINGS)
+    value.spacingMode === d.spacingMode &&
+    value.spacingDegrees === d.spacingDegrees &&
+    value.lineColor === d.lineColor &&
+    value.lineWidth === d.lineWidth &&
+    value.lineOpacity === d.lineOpacity &&
+    value.lineDashed === d.lineDashed &&
+    value.showLabels === d.showLabels &&
+    value.labelFormat === d.labelFormat &&
+    value.labelEdges === d.labelEdges &&
+    value.labelColor === d.labelColor &&
+    value.labelSize === d.labelSize
   );
 }
 
@@ -638,7 +781,8 @@ export const maplibreGraticulePlugin: GeoLibrePlugin = {
 
     update();
 
-    moveHandler = () => update();
+    // Plain pan/zoom only needs new geometry, not a full style re-apply.
+    moveHandler = () => refreshGeometry();
     activeMap.on("moveend", moveHandler);
 
     // setStyle (basemap change) drops our sources/layers, so rebuild afterward.
@@ -650,13 +794,16 @@ export const maplibreGraticulePlugin: GeoLibrePlugin = {
     unregisterPanel =
       app.registerRightPanel?.({
         id: PANEL_ID,
-        title: "Graticule",
+        title: labels.title,
         dock: "right-of-style",
         render: (container) => renderPanel(container),
       }) ?? null;
 
     control = new GraticuleControl();
-    app.addMapControl(control, "top-right");
+    const added = app.addMapControl(control, "top-right");
+    if (!added) {
+      control = null;
+    }
     app.openRightPanel?.(PANEL_ID);
   },
   deactivate: (app: GeoLibreAppAPI) => {

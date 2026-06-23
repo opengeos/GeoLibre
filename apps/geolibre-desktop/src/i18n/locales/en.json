@@ -1413,6 +1413,27 @@
     "reverseCopyAddress": "Copy address",
     "reverseFailed": "Reverse geocoding failed."
   },
+  "graticule": {
+    "title": "Graticule",
+    "controlTitle": "Graticule settings",
+    "spacing": "Spacing",
+    "spacingAuto": "Auto (by zoom)",
+    "spacingFixed": "Fixed interval",
+    "interval": "Interval (°)",
+    "lineColor": "Line color",
+    "lineWidth": "Line width",
+    "lineOpacity": "Line opacity",
+    "dashedLines": "Dashed lines",
+    "showLabels": "Show labels",
+    "labelFormat": "Label format",
+    "formatDecimal": "Decimal degrees",
+    "formatDms": "Deg/Min/Sec",
+    "labelEdges": "Label edges",
+    "edgesLeftBottom": "Left + bottom",
+    "edgesAll": "All sides",
+    "labelColor": "Label color",
+    "labelSize": "Label size"
+  },
   "basemaps": {
     "confirmStyleReplace_one": "Switching to \"{{name}}\" replaces the whole map style and will remove the stacked basemap you added. Continue?",
     "confirmStyleReplace_other": "Switching to \"{{name}}\" replaces the whole map style and will remove the {{count}} stacked basemaps you added. Continue?"
