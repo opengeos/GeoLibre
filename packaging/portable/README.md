@@ -33,7 +33,7 @@ resolves to the executable's own directory for an unbundled run, so the sidecar
 must sit at `backend\geolibre_server\` next to the exe, the first location
 `sidecar_project_dir()` checks (`apps/geolibre-desktop/src-tauri/src/lib.rs`).
 
-```
+```text
 geolibre-desktop-<version>-x64/
   geolibre-desktop.exe
   *.dll                       # e.g. WebView2Loader, if the build emits it

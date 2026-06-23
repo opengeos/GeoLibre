@@ -56,6 +56,12 @@ Copy-Item -Force (Join-Path $targetDir "*.dll") $payloadDir -ErrorAction Silentl
 Copy-Item -Recurse -Force (Join-Path $backendDir "*") $backendPackageDir
 Get-ChildItem -Recurse -Path $backendPackageDir -Include "__pycache__", "*.pyc", "*.pyo", "tests", "test_*.py" |
   Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+# Strip developer-only artifacts so a locally built zip can never leak secrets
+# or balloon with a checked-out venv. None of these exist in a clean CI
+# checkout; the risk surface is `npm run portable:build` on a dev machine.
+$devArtifacts = @(".env", ".env.*", "venv", ".venv", "env", "*.egg-info", "dist", "build")
+Get-ChildItem -Recurse -Force -Path $backendPackageDir -Include $devArtifacts |
+  Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
 # Drop a short note alongside the binary so the zip is self-documenting.
 $readme = @"
