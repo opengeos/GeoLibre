@@ -204,7 +204,19 @@ async function loadPluginUrlBundle(
   manifestUrl: string,
   signal?: AbortSignal,
 ): Promise<ExternalPluginBundle> {
-  const manifestResponse = await fetch(manifestUrl, { signal });
+  // Revalidate every request (manifest, entry, style) instead of serving from
+  // the HTTP cache. A static host can hand the manifest and the entry very
+  // different cache lifetimes (e.g. GitHub Pages / Fastly cache JSON for ~10
+  // minutes but JS for hours), so after a version bump the loader can otherwise
+  // read a fresh plugin.json against a stale, still-cached entry and reject the
+  // pair with "Exported plugin version does not match plugin.json." Forcing
+  // revalidation keeps the manifest and entry version-consistent. `no-cache`
+  // still allows a cheap 304 when nothing changed, so this is not a full
+  // re-download on every load.
+  const manifestResponse = await fetch(manifestUrl, {
+    cache: "no-cache",
+    signal,
+  });
   if (!manifestResponse.ok) {
     throw new Error(
       `Could not fetch plugin manifest: HTTP ${manifestResponse.status}`,
@@ -240,7 +252,10 @@ async function fetchPluginText(
   label: string,
   signal?: AbortSignal,
 ): Promise<string> {
-  const response = await fetch(url, { signal });
+  // `no-cache` revalidates so the entry/style stay in sync with the manifest
+  // version even when a static host caches them for much longer than the
+  // manifest (see loadPluginUrlBundle).
+  const response = await fetch(url, { cache: "no-cache", signal });
   if (!response.ok) {
     throw new Error(`Could not fetch ${label}: HTTP ${response.status}`);
   }
