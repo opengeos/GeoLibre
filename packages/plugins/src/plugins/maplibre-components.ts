@@ -468,7 +468,10 @@ const HTML_OPTIONS = {
   className: "geolibre-html-control",
   collapsed: false,
   fontColor: "hsl(var(--popover-foreground))",
-  maxHeight: 520,
+  // Omit maxHeight so the control auto-fits the available viewport height
+  // (maplibre-gl-components >= 0.20.6); see COLORBAR_OPTIONS above. A fixed cap
+  // forced an internal scrollbar even when the HTML content was short and there
+  // was ample empty space below the panel.
   panelWidth: 340,
   position: htmlControlPosition,
 } satisfies HtmlGuiControlOptions;
