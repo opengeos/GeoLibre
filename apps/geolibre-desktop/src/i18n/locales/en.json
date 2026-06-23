@@ -835,6 +835,7 @@
       "appearance": "Appearance",
       "interface": "Interface",
       "geocoding": "Geocoding",
+      "ai": "AI Providers",
       "environment": "Environment",
       "updates": "Updates"
     },
@@ -844,6 +845,7 @@
       "appearanceSettings": "Appearance Settings",
       "interfaceSettings": "Interface Settings",
       "geocoding": "Geocoding",
+      "ai": "AI Providers",
       "environmentVariables": "Environment Variables",
       "updates": "Update Settings",
       "managePlugins": "Manage Plugins",
@@ -969,6 +971,42 @@
       "emailHint": "Sent to identify the client to Nominatim, per its usage policy.",
       "secretsWarning": "Keys are stored in plain text in the project file and may be exposed when the project is shared. They are also sent as query parameters, so they appear in geocoding request URLs visible in browser DevTools and any proxy logs.",
       "corsNote": "Google does not officially allow browser requests to its Geocoding API, so requests may be blocked unless served through a same-origin proxy."
+    },
+    "ai": {
+      "title": "AI Assistant providers",
+      "description": "Configure credentials for the AI Assistant. Choose a provider, fill in the fields it needs, then Save. Only one configured provider is required to start chatting.",
+      "providerLabel": "Provider",
+      "providerHint": "Choose a provider to reveal the exact fields it needs.",
+      "configuredMark": "(configured)",
+      "optionalMark": "(optional)",
+      "statusReady": "{{provider}} is configured and ready to use.",
+      "statusIncomplete": "Fill in the required fields below to enable {{provider}}.",
+      "getCredentials": "Where to get {{provider}} credentials",
+      "showValue": "Show {{name}}",
+      "hideValue": "Hide {{name}}",
+      "field": {
+        "apiKey": "API key",
+        "baseUrl": "Base URL",
+        "model": "Model",
+        "region": "Region",
+        "accessKeyId": "Access Key ID",
+        "secretAccessKey": "Secret Access Key",
+        "sessionToken": "Session token"
+      },
+      "placeholder": {
+        "geminiKey": "AIza…",
+        "anthropicKey": "sk-ant-…",
+        "openaiKey": "sk-…",
+        "ollamaBaseUrl": "http://localhost:11434",
+        "ollamaModel": "llama3.2",
+        "awsAccessKey": "AKIA…",
+        "awsSecretKey": "wJalrXUtnFEMI…",
+        "awsRegion": "us-east-1",
+        "awsSessionToken": "FwoGZXIvYXdz… (if using temporary credentials)",
+        "customBaseUrl": "https://api.example.com/v1",
+        "customModel": "model-id",
+        "customApiKey": "sk-… (if required)"
+      }
     }
   },
   "toolbar": {
@@ -1611,7 +1649,7 @@
     "setupTitle": "Set up the AI Assistant",
     "setupStatus": "The assistant needs an AI provider to do the thinking. Add credentials for any one provider below and the panel switches to chat mode as soon as you save.",
     "setupProviders": "Add credentials for any one provider",
-    "setupOpenSettings": "Open Settings → Environment Variables",
+    "setupOpenSettings": "Open Settings → AI Providers",
     "thinking": "Working…",
     "toolError": "failed",
     "provider": "LLM provider",

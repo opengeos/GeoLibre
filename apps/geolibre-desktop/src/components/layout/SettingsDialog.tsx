@@ -35,10 +35,12 @@ import {
 } from "@geolibre/ui";
 import type { MapController } from "@geolibre/map";
 import {
+  Bot,
   Braces,
   Check,
   Crosshair,
   DownloadCloud,
+  ExternalLink,
   Eye,
   EyeOff,
   FolderCog,
@@ -93,6 +95,16 @@ import {
   presetHiddenSets,
   showsAdvancedNotices,
 } from "../../lib/ui-profile";
+import {
+  ASSISTANT_PROVIDER_IDS,
+  PROVIDER_LABELS,
+  availableProviders,
+  type AssistantProviderId,
+} from "../../lib/assistant/provider";
+import {
+  PROVIDER_DOCS_URL,
+  PROVIDER_FIELDS,
+} from "../../lib/assistant/provider-fields";
 
 export type SettingsSection =
   | "map"
@@ -100,6 +112,7 @@ export type SettingsSection =
   | "appearance"
   | "interface"
   | "geocoding"
+  | "ai"
   | "environment"
   | "updates";
 
@@ -165,6 +178,7 @@ const SECTION_ITEMS: Array<{
     icon: SlidersHorizontal,
   },
   { id: "geocoding", labelKey: "settings.section.geocoding", icon: Locate },
+  { id: "ai", labelKey: "settings.section.ai", icon: Bot },
   {
     id: "environment",
     labelKey: "settings.section.environment",
@@ -422,6 +436,25 @@ export function SettingsDialog({
       ).length,
     [draftPreferences.environmentVariables],
   );
+  // The AI provider whose credential template is shown in the AI section. Seeded
+  // to the first already-configured provider when the dialog opens (below), so a
+  // returning user lands on the provider they set up.
+  const [aiProvider, setAiProvider] = useState<AssistantProviderId>("google");
+  // The draft env vars as a plain name→value map (enabled, named only), matching
+  // what the live runtime env will hold after Save. Drives the per-provider
+  // "configured" status without re-implementing provider.ts resolution.
+  const draftEnv = useMemo(() => {
+    const env: Record<string, string> = {};
+    for (const variable of draftPreferences.environmentVariables) {
+      const key = variable.key.trim();
+      if (variable.enabled && key) env[key] = variable.value;
+    }
+    return env;
+  }, [draftPreferences.environmentVariables]);
+  const configuredProviders = useMemo(
+    () => new Set(availableProviders(draftEnv)),
+    [draftEnv],
+  );
 
   // Seed the draft from the store only when the dialog opens. Depending on
   // preferences would reset in-progress edits if the store changed while the
@@ -437,17 +470,28 @@ export function SettingsDialog({
       setPendingFocus(null);
       return;
     }
-    setDraftPreferences(clonePreferences(useAppStore.getState().preferences));
+    const seededPreferences = clonePreferences(
+      useAppStore.getState().preferences,
+    );
+    setDraftPreferences(seededPreferences);
     setDraftDesktopSettings(
       cloneDesktopSettings(useDesktopSettingsStore.getState().desktopSettings),
     );
+    // Land the AI section on a provider the user already configured, so editing
+    // existing credentials needs no extra click.
+    const seededEnv: Record<string, string> = {};
+    for (const variable of seededPreferences.environmentVariables) {
+      const key = variable.key.trim();
+      if (variable.enabled && key) seededEnv[key] = variable.value;
+    }
+    setAiProvider(availableProviders(seededEnv)[0] ?? "google");
     setRevealedValueIds(new Set());
     setError(null);
     setLiveProjection(mapControllerRef.current?.readProjection() ?? null);
   }, [open, mapControllerRef]);
 
   // Let other panels deep-link into a specific Settings section (e.g. the AI
-  // Assistant onboarding card opens Environment Variables to add a provider key).
+  // Assistant onboarding card opens the AI Providers section to add credentials).
   useEffect(() => {
     const onOpenSettings = (event: Event) => {
       const detail = (
@@ -552,6 +596,41 @@ export function SettingsDialog({
       }
       return next;
     });
+  };
+
+  // The value of an env-var-backed AI provider field, or "" when unset.
+  const getProviderField = (envKey: string): string =>
+    draftPreferences.environmentVariables.find(
+      (variable) => variable.key === envKey,
+    )?.value ?? "";
+
+  // Write an AI provider field through to its backing env var. Upserts an
+  // enabled row (so provider.ts picks it up) and removes the row when cleared so
+  // the generic Environment variables list never accrues empty entries.
+  const setProviderField = (envKey: string, value: string) => {
+    setDraftPreferences((current) => {
+      const index = current.environmentVariables.findIndex(
+        (variable) => variable.key === envKey,
+      );
+      if (index === -1) {
+        if (value === "") return current;
+        return {
+          ...current,
+          environmentVariables: [
+            ...current.environmentVariables,
+            { id: createDraftId(), key: envKey, value, enabled: true },
+          ],
+        };
+      }
+      const next = current.environmentVariables.slice();
+      if (value === "") {
+        next.splice(index, 1);
+      } else {
+        next[index] = { ...next[index], value, enabled: true };
+      }
+      return { ...current, environmentVariables: next };
+    });
+    setError(null);
   };
 
   const updateMapPreferences = (patch: Partial<MapPreferences>) => {
@@ -1156,6 +1235,15 @@ export function SettingsDialog({
               {t("settings.menu.geocoding")}
             </DropdownMenuItem>
           )}
+          <DropdownMenuItem
+            onSelect={() => {
+              setSection("ai");
+              setOpen(true);
+            }}
+          >
+            <Bot className="mr-2 h-3.5 w-3.5" />
+            {t("settings.menu.ai")}
+          </DropdownMenuItem>
           {showSettingsItem("settings.environment") && (
             <DropdownMenuItem
               onSelect={() => {
@@ -1948,6 +2036,141 @@ export function SettingsDialog({
                       </div>
                     );
                   })()}
+                </div>
+              ) : null}
+              {effectiveSection === "ai" ? (
+                <div className="space-y-5">
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-semibold">
+                      {t("settings.ai.title")}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.ai.description")}
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs" htmlFor="settings-ai-provider">
+                      {t("settings.ai.providerLabel")}
+                    </Label>
+                    <Select
+                      id="settings-ai-provider"
+                      value={aiProvider}
+                      onChange={(event) =>
+                        setAiProvider(
+                          event.target.value as AssistantProviderId,
+                        )
+                      }
+                    >
+                      {ASSISTANT_PROVIDER_IDS.map((id) => (
+                        <option key={id} value={id}>
+                          {configuredProviders.has(id)
+                            ? `${PROVIDER_LABELS[id]} ${t("settings.ai.configuredMark")}`
+                            : PROVIDER_LABELS[id]}
+                        </option>
+                      ))}
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.ai.providerHint")}
+                    </p>
+                  </div>
+                  {configuredProviders.has(aiProvider) ? (
+                    <div className="flex items-center gap-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+                      <Check className="h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        {t("settings.ai.statusReady", {
+                          provider: PROVIDER_LABELS[aiProvider],
+                        })}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                      {t("settings.ai.statusIncomplete", {
+                        provider: PROVIDER_LABELS[aiProvider],
+                      })}
+                    </div>
+                  )}
+                  <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+                    <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{t("settings.env.secretsWarning")}</span>
+                  </div>
+                  <div className="space-y-4">
+                    {PROVIDER_FIELDS[aiProvider].map((field) => {
+                      const revealed = revealedValueIds.has(field.envKey);
+                      return (
+                        <div key={field.envKey} className="space-y-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <Label
+                              className="text-xs"
+                              htmlFor={`settings-ai-${field.envKey}`}
+                            >
+                              {t(field.labelKey)}
+                              {field.required ? null : (
+                                <span className="ml-1 font-normal text-muted-foreground">
+                                  {t("settings.ai.optionalMark")}
+                                </span>
+                              )}
+                            </Label>
+                            <code className="font-mono text-[11px] text-muted-foreground">
+                              {field.envKey}
+                            </code>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Input
+                              id={`settings-ai-${field.envKey}`}
+                              type={
+                                field.secret && !revealed ? "password" : "text"
+                              }
+                              autoComplete="off"
+                              spellCheck={false}
+                              value={getProviderField(field.envKey)}
+                              onChange={(event) =>
+                                setProviderField(field.envKey, event.target.value)
+                              }
+                              placeholder={t(field.placeholderKey)}
+                            />
+                            {field.secret ? (
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                onClick={() =>
+                                  toggleValueVisibility(field.envKey)
+                                }
+                                aria-label={
+                                  revealed
+                                    ? t("settings.ai.hideValue", {
+                                        name: t(field.labelKey),
+                                      })
+                                    : t("settings.ai.showValue", {
+                                        name: t(field.labelKey),
+                                      })
+                                }
+                              >
+                                {revealed ? (
+                                  <EyeOff className="h-3.5 w-3.5" />
+                                ) : (
+                                  <Eye className="h-3.5 w-3.5" />
+                                )}
+                              </Button>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {PROVIDER_DOCS_URL[aiProvider] ? (
+                    <a
+                      className="inline-flex items-center gap-1 text-xs text-primary underline"
+                      href={PROVIDER_DOCS_URL[aiProvider]}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      {t("settings.ai.getCredentials", {
+                        provider: PROVIDER_LABELS[aiProvider],
+                      })}
+                    </a>
+                  ) : null}
                 </div>
               ) : null}
               {effectiveSection === "environment" ? (

@@ -605,7 +605,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
           <Button
             size="sm"
             className="w-full"
-            onClick={() => openSettingsSection("environment")}
+            onClick={() => openSettingsSection("ai")}
           >
             <Settings className="mr-1 h-4 w-4" />
             {t("assistant.setupOpenSettings")}

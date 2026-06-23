@@ -1,0 +1,107 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import {
+  ASSISTANT_PROVIDER_IDS,
+  availableProviders,
+  type AssistantProviderId,
+  type RuntimeEnv,
+} from "../apps/geolibre-desktop/src/lib/assistant/provider";
+import {
+  PROVIDER_DOCS_URL,
+  PROVIDER_FIELDS,
+} from "../apps/geolibre-desktop/src/lib/assistant/provider-fields";
+
+// Build a runtime env that fills exactly the chosen fields of a provider with
+// plausible dummy values. URL-shaped fields need a real-looking URL so the
+// provider resolver (which normalizes/validates them) accepts them.
+function envFrom(
+  provider: AssistantProviderId,
+  envKeys: readonly string[],
+): RuntimeEnv {
+  const env: Record<string, string> = {};
+  for (const field of PROVIDER_FIELDS[provider]) {
+    if (!envKeys.includes(field.envKey)) continue;
+    env[field.envKey] = /URL$/.test(field.envKey)
+      ? "https://example.com/v1"
+      : `${field.envKey.toLowerCase()}-value`;
+  }
+  return env;
+}
+
+describe("PROVIDER_FIELDS", () => {
+  it("defines at least one field for every provider", () => {
+    for (const provider of ASSISTANT_PROVIDER_IDS) {
+      assert.ok(
+        PROVIDER_FIELDS[provider].length > 0,
+        `${provider} has no fields`,
+      );
+    }
+  });
+
+  it("uses non-empty, unique env keys within each provider", () => {
+    for (const provider of ASSISTANT_PROVIDER_IDS) {
+      const keys = PROVIDER_FIELDS[provider].map((field) => field.envKey);
+      for (const key of keys) {
+        assert.ok(key.trim().length > 0, `${provider} has a blank env key`);
+      }
+      assert.equal(
+        new Set(keys).size,
+        keys.length,
+        `${provider} repeats an env key`,
+      );
+    }
+  });
+
+  it("populates label and placeholder i18n keys for every field", () => {
+    for (const provider of ASSISTANT_PROVIDER_IDS) {
+      for (const field of PROVIDER_FIELDS[provider]) {
+        assert.ok(
+          field.labelKey.startsWith("settings.ai.field."),
+          `${field.envKey} has an unexpected labelKey`,
+        );
+        assert.ok(
+          field.placeholderKey.startsWith("settings.ai.placeholder."),
+          `${field.envKey} has an unexpected placeholderKey`,
+        );
+      }
+    }
+  });
+
+  it("marks a provider configured once all its required fields are filled", () => {
+    for (const provider of ASSISTANT_PROVIDER_IDS) {
+      const required = PROVIDER_FIELDS[provider]
+        .filter((field) => field.required)
+        .map((field) => field.envKey);
+      const env = envFrom(provider, required);
+      assert.ok(
+        availableProviders(env).includes(provider),
+        `${provider} not configured after filling required fields`,
+      );
+    }
+  });
+
+  it("leaves a provider unconfigured when any required field is missing", () => {
+    for (const provider of ASSISTANT_PROVIDER_IDS) {
+      const required = PROVIDER_FIELDS[provider]
+        .filter((field) => field.required)
+        .map((field) => field.envKey);
+      // Drop one required field at a time; the provider must not resolve.
+      for (const omitted of required) {
+        const env = envFrom(
+          provider,
+          required.filter((key) => key !== omitted),
+        );
+        assert.ok(
+          !availableProviders(env).includes(provider),
+          `${provider} resolved without required field ${omitted}`,
+        );
+      }
+    }
+  });
+
+  it("only links docs URLs over https", () => {
+    for (const url of Object.values(PROVIDER_DOCS_URL)) {
+      assert.match(url, /^https:\/\//);
+    }
+  });
+});
