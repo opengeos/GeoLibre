@@ -41,7 +41,8 @@ export interface GeoRssLayerResult {
  * @param text - The raw feed XML.
  * @returns The parsed features plus counts and the feed title.
  * @throws If the text is not valid XML, is not a recognized feed, or contains
- *   no geolocated items.
+ *   no geolocated items. Messages are English-only (as in the GPX parser); the
+ *   UI surfaces them verbatim, so a caller needing i18n must catch and translate.
  */
 export function parseGeoRssLayer(text: string): GeoRssLayerResult {
   const document = new DOMParser().parseFromString(text, "application/xml");
@@ -185,6 +186,7 @@ function gmlGeometry(where: Element): Geometry | null {
       : directChildren(geometryElement, "LinearRing")[0];
     if (!linearRing) return null;
     const ring = closeRing(parseLatLonList(gmlPosText(linearRing)));
+    // Interior rings (holes) are intentionally omitted; vanishingly rare in GeoRSS.
     if (ring.length >= 4) return { type: "Polygon", coordinates: [ring] };
     return null;
   }
@@ -226,7 +228,6 @@ function gmlPosText(element: Element): string {
   return "";
 }
 
-/** Builds a rectangular Polygon from a `[corner1, corner2]` coordinate pair. */
 function polygonFromBox(corners: Position[]): Polygon | null {
   if (corners.length < 2) return null;
   const [first, second] = corners;
@@ -267,7 +268,6 @@ function parseLatLonList(text: string | null | undefined): Position[] {
   return positions;
 }
 
-/** Parses a `(lon, lat)` string pair into a validated GeoJSON position. */
 function coordinate2d(
   longitude: string,
   latitude: string,
@@ -275,7 +275,6 @@ function coordinate2d(
   return makeCoordinate(Number(longitude), Number(latitude));
 }
 
-/** Validates a `(lon, lat)` pair and returns it as a GeoJSON position. */
 function makeCoordinate(longitude: number, latitude: number): Position | null {
   if (
     !Number.isFinite(longitude) ||
@@ -290,7 +289,6 @@ function makeCoordinate(longitude: number, latitude: number): Position | null {
   return [longitude, latitude];
 }
 
-/** Closes a polygon ring by repeating its first vertex when needed. */
 function closeRing(ring: Position[]): Position[] {
   if (ring.length < 3) return ring;
   const first = ring[0];
