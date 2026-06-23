@@ -30,6 +30,65 @@ let loadingControl: IControl | null = null;
 // it doesn't attach a directions instance to a tool that is no longer active.
 let loadToken = 0;
 
+// Listeners notified whenever the waypoint set changes (add/remove/clear) or the
+// instance is attached/torn down. The desktop shell's mode banner subscribes via
+// useSyncExternalStore so it can mirror the live waypoint count and enable or
+// disable its "remove last"/"clear" actions. Kept here (not in the app) so the
+// plugin stays the single owner of the directions instance.
+type DirectionsStateListener = () => void;
+const directionsStateListeners = new Set<DirectionsStateListener>();
+
+function notifyDirectionsState(): void {
+  for (const listener of directionsStateListeners) listener();
+}
+
+/**
+ * Subscribe to directions waypoint-set changes. The listener fires after every
+ * add, remove, clear, and on attach/teardown.
+ *
+ * @param listener Callback invoked on each change.
+ * @returns An unsubscribe function.
+ */
+export function subscribeDirectionsState(
+  listener: DirectionsStateListener,
+): () => void {
+  directionsStateListeners.add(listener);
+  return () => {
+    directionsStateListeners.delete(listener);
+  };
+}
+
+/**
+ * The number of waypoints currently placed in the active directions session.
+ *
+ * @returns The waypoint count, or 0 when the tool is inactive or still loading.
+ */
+export function getDirectionsWaypointCount(): number {
+  return directions ? directions.waypoints.length : 0;
+}
+
+/**
+ * Remove the most recently placed waypoint and re-fetch the route. No-op when
+ * the tool is inactive or no waypoints have been placed.
+ */
+export function removeLastDirectionsWaypoint(): void {
+  if (!directions) return;
+  const count = directions.waypoints.length;
+  if (count === 0) return;
+  void directions.removeWaypoint(count - 1);
+}
+
+/**
+ * Clear all waypoints and the rendered route from the active directions
+ * session. No-op when the tool is inactive.
+ */
+export function clearDirectionsWaypoints(): void {
+  if (!directions) return;
+  // clear() does not emit a waypoint event, so notify listeners directly.
+  directions.clear();
+  notifyDirectionsState();
+}
+
 function attach(app: GeoLibreAppAPI): void {
   const map = app.getMap?.();
   if (!map) return;
@@ -48,8 +107,17 @@ function attach(app: GeoLibreAppAPI): void {
       // this library version (it's absent from MapLibreGlDirectionsConfiguration).
       directions.interactive = true;
       directionsMap = currentMap;
+      // Mirror the live waypoint count to any subscribed UI (the mode banner).
+      // These events fire after the change is drawn, so the waypoints getter
+      // already reflects the new state when notifyDirectionsState reads it.
+      directions.on("addwaypoint", notifyDirectionsState);
+      directions.on("removewaypoint", notifyDirectionsState);
+      directions.on("setwaypoints", notifyDirectionsState);
       loadingControl = new LoadingIndicatorControl(directions);
       app.addMapControl(loadingControl, "top-right");
+      // The instance now exists; nudge subscribers so a banner that mounted
+      // before the lazy import resolved reads the (zeroed) count.
+      notifyDirectionsState();
     })
     .catch((error) => {
       console.error(
@@ -69,6 +137,8 @@ function teardown(app: GeoLibreAppAPI): void {
   directions?.destroy();
   directions = null;
   directionsMap = null;
+  // Reset the count subscribers see to 0 now the session is gone.
+  notifyDirectionsState();
 }
 
 /**

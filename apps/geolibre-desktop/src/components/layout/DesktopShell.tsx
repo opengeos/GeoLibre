@@ -76,6 +76,7 @@ import {
 } from "../../hooks/useRightPanels";
 import { BoundsRestrictionIndicator } from "./BoundsRestrictionIndicator";
 import { CollaborationStatusBadge } from "./CollaborationStatusBadge";
+import { MapModeBanner } from "./MapModeBanner";
 import { MapGrid } from "./MapGrid";
 import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
 import { useCommandBridge } from "../../hooks/useCommandBridge";
@@ -1530,6 +1531,7 @@ export function DesktopShell({
               <RemoteCursorsOverlay mapControllerRef={mapControllerRef} />
               <BoundsRestrictionIndicator />
               <CollaborationStatusBadge />
+              <MapModeBanner mapControllerRef={mapControllerRef} />
             </MapGrid>
           </SectionErrorBoundary>
           <SectionErrorBoundary label="Plugin floating panels">

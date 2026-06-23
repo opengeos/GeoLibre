@@ -184,9 +184,13 @@ export {
 // re-exported: the app drives the panels through the functions above, and
 // the tests import the sync helpers from the module paths directly.
 export {
+  clearDirectionsWaypoints,
   DIRECTIONS_PLUGIN_ID,
+  getDirectionsWaypointCount,
   maplibreDirectionsPlugin,
+  removeLastDirectionsWaypoint,
   restoreDirections,
+  subscribeDirectionsState,
 } from "./plugins/maplibre-directions";
 export {
   REVERSE_GEOCODE_PLUGIN_ID,

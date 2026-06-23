@@ -777,7 +777,19 @@
   },
   "map": {
     "boundsRestricted": "Bounds locked",
-    "boundsRestrictedTooltip": "Map bounds are restricted. You can change this in Settings."
+    "boundsRestrictedTooltip": "Map bounds are restricted. You can change this in Settings.",
+    "directionsMode": {
+      "title": "Directions mode active",
+      "hint": "Click the map to add waypoints. Drag a waypoint to move it, or click it to remove it. Routes update automatically.",
+      "removeLast": "Remove last",
+      "clear": "Clear",
+      "exit": "Exit"
+    },
+    "reverseGeocodeMode": {
+      "title": "Reverse Geocode mode active",
+      "hint": "Click anywhere on the map to look up the address at that point.",
+      "exit": "Exit"
+    }
   },
   "mapGrid": {
     "layers": "Layers",
