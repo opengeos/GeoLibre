@@ -19,10 +19,12 @@ export const DropdownMenuSubTrigger = React.forwardRef<
   <DropdownMenuPrimitive.SubTrigger
     ref={ref}
     className={cn(
-      // Grey out when disabled, like DropdownMenuItem. Intentionally NOT
+      // Grey out when disabled, like DropdownMenuItem, but intentionally NOT
       // `data-[disabled]:pointer-events-none`: pointer events must stay active
       // so a disabled trigger's native `title` tooltip still fires on hover
-      // (Radix already blocks the submenu from opening while disabled).
+      // (Radix already blocks the submenu from opening while disabled). Unlike
+      // DropdownMenuItem, a disabled SubTrigger therefore still receives pointer
+      // events; callers that need clicks suppressed must handle that themselves.
       "flex min-w-0 cursor-default select-none items-center gap-2 overflow-hidden rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent data-[disabled]:opacity-50 data-[state=open]:bg-accent",
       inset && "pl-8",
       className,
