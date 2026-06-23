@@ -854,29 +854,34 @@ function setPreview(map: maplibregl.Map, data: FeatureCollection): void {
     | maplibregl.GeoJSONSource
     | undefined;
   if (existing) {
+    // The preview paint is data-driven (below), so the regenerated features —
+    // which carry the current color/width — update the appearance on their own;
+    // no per-property repaint is needed when color/width changes mid-draw.
     existing.setData(data);
-    // Repaint too, so changing the color/width between an arrow's two clicks is
-    // reflected in the live preview rather than only in the committed feature.
-    map.setPaintProperty(PREVIEW_FILL_LAYER_ID, "fill-color", strokeColor);
-    map.setPaintProperty(PREVIEW_LINE_LAYER_ID, "line-color", strokeColor);
-    map.setPaintProperty(PREVIEW_LINE_LAYER_ID, "line-width", strokeWidth);
     return;
   }
   map.addSource(PREVIEW_SOURCE_ID, { type: "geojson", data });
+  // Read the same per-feature simplestyle the committed features carry, so the
+  // preview matches the result — in particular the arrowhead previews as a solid
+  // fill with a thin outline rather than the faint, thickly-outlined polygon a
+  // flat preview style produced.
   map.addLayer({
     id: PREVIEW_FILL_LAYER_ID,
     type: "fill",
     source: PREVIEW_SOURCE_ID,
     filter: ["==", ["geometry-type"], "Polygon"],
-    paint: { "fill-color": strokeColor, "fill-opacity": FILL_OPACITY },
+    paint: {
+      "fill-color": ["coalesce", ["get", "fill"], strokeColor],
+      "fill-opacity": ["coalesce", ["get", "fill-opacity"], FILL_OPACITY],
+    },
   });
   map.addLayer({
     id: PREVIEW_LINE_LAYER_ID,
     type: "line",
     source: PREVIEW_SOURCE_ID,
     paint: {
-      "line-color": strokeColor,
-      "line-width": strokeWidth,
+      "line-color": ["coalesce", ["get", "stroke"], strokeColor],
+      "line-width": ["coalesce", ["get", "stroke-width"], strokeWidth],
       "line-dasharray": [2, 1],
     },
   });
