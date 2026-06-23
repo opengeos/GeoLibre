@@ -271,10 +271,17 @@ export function SegmentationDialog({
 
         <div className="flex flex-col gap-3">
           {checking && (
-            // Same panel framing as the resolved-unavailable banner below, so
-            // the download CTA keeps its frame instead of jumping when the
-            // probe settles.
-            <div className="grid gap-2 rounded-md border border-border bg-muted/40 p-3">
+            // For browser users the spinner shares the resolved banner's panel
+            // framing so the download CTA below it keeps its frame instead of
+            // jumping when the probe settles. Desktop has no CTA here, so it
+            // keeps the plain inline spinner it had before.
+            <div
+              className={
+                webUnavailable
+                  ? "grid gap-2 rounded-md border border-border bg-muted/40 p-3"
+                  : "grid gap-2"
+              }
+            >
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 {t("segmentation.status.checking")}
