@@ -122,6 +122,22 @@ interface LayerPanelProps {
    * still expand it again, and the prior state is restored when it flips off.
    */
   autoCollapse?: boolean;
+  /**
+   * Controlled collapse state for the shared left-sidebar (`replace-layers`)
+   * mode. When defined, the panel's own collapse state is ignored and the parent
+   * fully owns expand/collapse (the buttons call {@link onCollapsedChange} and
+   * `autoCollapse` no longer applies). Mirrors StylePanel. Leave undefined for
+   * the standalone panel.
+   */
+  collapsed?: boolean;
+  /** Notify the parent of a collapse/expand request in controlled mode. */
+  onCollapsedChange?: (collapsed: boolean) => void;
+  /**
+   * In the shared left-sidebar mode, suppress the panel's own collapsed rail:
+   * when collapsed the panel renders nothing because a single shared rail (owned
+   * by the host) lists the Layers entry instead of two adjacent rails.
+   */
+  hideOwnRail?: boolean;
 }
 
 const BACKGROUND_SELECTION_ID = "__geolibre-background__";
@@ -198,6 +214,9 @@ export function LayerPanel({
   onMaterializeDuckDBLayer,
   onOpenRasterStylePanel,
   autoCollapse = false,
+  collapsed: controlledCollapsed,
+  onCollapsedChange,
+  hideOwnRail = false,
 }: LayerPanelProps) {
   const { t } = useTranslation();
   const layers = useAppStore((s) => s.layers);
@@ -269,27 +288,41 @@ export function LayerPanel({
   const bindRequestRef = useRef(0);
   const { isActive: isPluginActive, toggle: togglePlugin } =
     usePluginRegistry();
-  const [isCollapsed, setIsCollapsed] = useState(getIsMobileViewport);
+  const [internalCollapsed, setInternalCollapsed] = useState(getIsMobileViewport);
+  // In the shared left-sidebar mode the parent owns collapse (controlled);
+  // otherwise the panel manages it locally. `setIsCollapsed` routes to whichever
+  // owner applies so every existing call site keeps working.
+  const isControlled = controlledCollapsed !== undefined;
+  const isCollapsed = isControlled ? controlledCollapsed : internalCollapsed;
+  const setIsCollapsed = useCallback(
+    (value: boolean) => {
+      if (isControlled) onCollapsedChange?.(value);
+      else setInternalCollapsed(value);
+    },
+    [isControlled, onCollapsedChange],
+  );
   // Collapse to the rail when `autoCollapse` flips on (a story map starts
   // presenting), and restore the prior expand/collapse state when it flips back
   // off. Both act only on the transition so the user can still toggle the panel
-  // manually while `autoCollapse` stays on. `isCollapsed` is in the deps only to
-  // keep the captured value fresh; the guards make pure `isCollapsed` changes a
-  // no-op while `autoCollapse` is stable. Mirrors StylePanel's behavior. The
+  // manually while `autoCollapse` stays on. `internalCollapsed` is in the deps
+  // only to keep the captured value fresh; the guards make pure collapse changes
+  // a no-op while `autoCollapse` is stable. Mirrors StylePanel's behavior. The
   // ref starts as null (not `autoCollapse`) so a mount with `autoCollapse`
-  // already true reads as a null→true transition and still collapses.
+  // already true reads as a null→true transition and still collapses. Skipped in
+  // controlled mode, where the parent (shared rail) owns collapse.
   const prevAutoCollapse = useRef<boolean | null>(null);
-  const collapsedBeforeAuto = useRef(isCollapsed);
+  const collapsedBeforeAuto = useRef(internalCollapsed);
   useEffect(() => {
+    if (isControlled) return;
     const wasAuto = prevAutoCollapse.current;
     prevAutoCollapse.current = autoCollapse;
     if (autoCollapse && !wasAuto) {
-      collapsedBeforeAuto.current = isCollapsed;
-      setIsCollapsed(true);
+      collapsedBeforeAuto.current = internalCollapsed;
+      setInternalCollapsed(true);
     } else if (!autoCollapse && wasAuto) {
-      setIsCollapsed(collapsedBeforeAuto.current);
+      setInternalCollapsed(collapsedBeforeAuto.current);
     }
-  }, [autoCollapse, isCollapsed]);
+  }, [autoCollapse, internalCollapsed, isControlled]);
   const [draggedLayerId, setDraggedLayerId] = useState<string | null>(null);
   const [dropTargetLayerId, setDropTargetLayerId] = useState<string | null>(
     null,
@@ -1174,6 +1207,10 @@ export function LayerPanel({
   };
 
   if (isCollapsed) {
+    // In the shared left-sidebar mode the host renders a single rail listing
+    // Layers alongside the plugin panel, so the panel shows nothing of its own
+    // when collapsed (avoids two adjacent rails).
+    if (hideOwnRail) return null;
     return (
       <aside
         aria-label="Layers (collapsed)"

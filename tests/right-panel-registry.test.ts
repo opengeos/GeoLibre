@@ -180,6 +180,23 @@ describe("right-panel registry", () => {
     assert.equal(getActiveRightPanelDock(), "replace-style");
   });
 
+  it("supports replace-layers as a runtime shared-rail mode, like replace-style", () => {
+    registerRightPanel(testPanel({ dock: "right-of-layers" }));
+    openRightPanel("workbench");
+    assert.equal(getActiveRightPanelDock(), "right-of-layers");
+
+    // Merge a layers-side panel into the shared Layers rail at runtime.
+    setActiveRightPanelDock("replace-layers");
+    assert.equal(getActiveRightPanelDock(), "replace-layers");
+    // It is not steppable while in the shared rail.
+    moveActiveRightPanelDock("left");
+    assert.equal(getActiveRightPanelDock(), "replace-layers");
+
+    // Detach it back to a movable layers-side dock.
+    setActiveRightPanelDock("right-of-layers");
+    assert.equal(getActiveRightPanelDock(), "right-of-layers");
+  });
+
   it("falls back to right-of-style for an unknown declared dock", () => {
     registerRightPanel(
       testPanel({

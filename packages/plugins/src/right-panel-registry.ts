@@ -17,10 +17,11 @@ import type {
  * Only one plugin panel is active at a time. It docks at one of four positions
  * and the user can step it between them. The built-in panel on the side the
  * panel is docked (Layers on the left, Style on the right) collapses to its
- * rail while the panel is expanded there; the shell handles that. A fifth dock,
- * `replace-style`, is a non-positional shared-rail mode in which the panel
- * shares the Style sidebar's single rail rather than sitting beside it; it is
- * not part of the steppable position order.
+ * rail while the panel is expanded there; the shell handles that. Two further
+ * docks, `replace-style` and `replace-layers`, are non-positional shared-rail
+ * modes in which the panel shares the Style (right) or Layers (left) sidebar's
+ * single rail rather than sitting beside it; they are not part of the steppable
+ * position order.
  */
 
 /**
@@ -43,13 +44,15 @@ export const RIGHT_PANEL_DOCKS: readonly RightPanelDock[] = Object.freeze([
 ] as const);
 
 /**
- * Every accepted dock value, including the non-positional `replace-style` mode.
- * Used to validate a panel's declared dock; `replace-style` is valid to register
- * with but is not steppable (it is absent from {@link RIGHT_PANEL_DOCKS}).
+ * Every accepted dock value, including the non-positional `replace-style` and
+ * `replace-layers` shared-rail modes. Used to validate a panel's declared dock;
+ * the shared-rail modes are valid to register with and settable at runtime but
+ * are not steppable (they are absent from {@link RIGHT_PANEL_DOCKS}).
  */
 const ALL_DOCKS: readonly RightPanelDock[] = Object.freeze([
   ...RIGHT_PANEL_DOCKS,
   "replace-style",
+  "replace-layers",
 ] as const);
 
 const DEFAULT_DOCK: RightPanelDock = "right-of-style";

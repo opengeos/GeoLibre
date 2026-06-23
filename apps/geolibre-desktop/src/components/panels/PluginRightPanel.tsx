@@ -92,13 +92,17 @@ export function PluginRightPanel({
   const panel = activeId ? getRightPanel(activeId) : undefined;
   const matched = activeId !== null && panel != null && activeDock === dock;
   // Layers-side docks sit to the left: their border and resize handle face right
-  // (toward the map). Style-side docks face left (toward the map).
+  // (toward the map). Style-side docks face left (toward the map). The
+  // `replace-layers` shared-rail mode is a layers-side dock too.
   const isLayersSide =
-    dock === "left-of-layers" || dock === "right-of-layers";
-  // The shared right-sidebar mode: the panel shares the Style rail (rendered by
-  // the host's SharedRightSidebar), so it has no move buttons and no rail of its
-  // own; its collapsed entry lives in that single shared rail instead.
-  const isSharedRail = dock === "replace-style";
+    dock === "left-of-layers" ||
+    dock === "right-of-layers" ||
+    dock === "replace-layers";
+  // The shared-rail modes: the panel shares the Style (replace-style) or Layers
+  // (replace-layers) rail (rendered by the host's SharedSidebar), so it has no
+  // move buttons and no rail of its own; its collapsed entry lives in that single
+  // shared rail instead.
+  const isSharedRail = dock === "replace-style" || dock === "replace-layers";
 
   // Adopt the shared content host (rendered once by the shell) into this slot
   // while it owns the panel. appendChild moves the element, so stepping the
@@ -239,27 +243,45 @@ export function PluginRightPanel({
               </>
             ) : null}
             {isSharedRail ? (
-              // Pop the panel out of the shared Style rail back to a movable
-              // positional panel (where the move buttons return).
+              // Pop the panel out of the shared rail back to a movable positional
+              // panel on the same side (where the move buttons return).
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7"
                 title={t("pluginPanel.detach")}
                 aria-label={t("pluginPanel.detach")}
-                onClick={() => setActiveRightPanelDock("right-of-style")}
+                onClick={() =>
+                  setActiveRightPanelDock(
+                    isLayersSide ? "right-of-layers" : "right-of-style",
+                  )
+                }
               >
                 <Columns2 className="h-4 w-4" />
               </Button>
             ) : (
-              // Merge the movable panel into the shared Style rail.
+              // Merge the movable panel into the shared rail on its current side:
+              // a layers-side panel joins the Layers rail, a style-side panel the
+              // Style rail.
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7"
-                title={t("pluginPanel.mergeIntoStyleRail")}
-                aria-label={t("pluginPanel.mergeIntoStyleRail")}
-                onClick={() => setActiveRightPanelDock("replace-style")}
+                title={
+                  isLayersSide
+                    ? t("pluginPanel.mergeIntoLayersRail")
+                    : t("pluginPanel.mergeIntoStyleRail")
+                }
+                aria-label={
+                  isLayersSide
+                    ? t("pluginPanel.mergeIntoLayersRail")
+                    : t("pluginPanel.mergeIntoStyleRail")
+                }
+                onClick={() =>
+                  setActiveRightPanelDock(
+                    isLayersSide ? "replace-layers" : "replace-style",
+                  )
+                }
               >
                 <Combine className="h-4 w-4" />
               </Button>

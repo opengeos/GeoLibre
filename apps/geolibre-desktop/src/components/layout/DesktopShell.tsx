@@ -68,6 +68,7 @@ import { useEmbedBridge } from "../../hooks/useEmbedBridge";
 import { useRasterIdentify } from "../../hooks/useRasterIdentify";
 import {
   useAutoCollapsedPanel,
+  useReplaceLayersPanelId,
   useReplaceStylePanelId,
   useRightPanelState,
 } from "../../hooks/useRightPanels";
@@ -90,7 +91,8 @@ import {
   clampPluginPanelWidth,
 } from "../panels/PluginRightPanel";
 import { StylePanel } from "../panels/StylePanel";
-import { SharedRightSidebar } from "../panels/SharedRightSidebar";
+import { SharedSidebar } from "../panels/SharedSidebar";
+import { Layers, SlidersHorizontal } from "lucide-react";
 import { StoryMapPanel } from "../storymap/StoryMapPanel";
 import { StoryMapPresenter } from "../storymap/StoryMapPresenter";
 import { DiagnosticsDialog } from "./DiagnosticsDialog";
@@ -437,9 +439,10 @@ export function DesktopShell({
   // across the dock slots, so a user resize survives moving the panel without a
   // module-level global (which would leak across embeds).
   const autoCollapsedPanel = useAutoCollapsedPanel();
-  // When set, a plugin panel is docked in the shared-rail (`replace-style`) mode
-  // and takes over the Style sidebar surface (issue #765).
+  // When set, a plugin panel is docked in a shared-rail mode and takes over the
+  // Style (right) or Layers (left) sidebar surface (issue #765).
   const replaceStylePanelId = useReplaceStylePanelId();
+  const replaceLayersPanelId = useReplaceLayersPanelId();
   const [pluginPanelWidth, setPluginPanelWidth] = useState(
     PLUGIN_PANEL_DEFAULT_WIDTH,
   );
@@ -1384,38 +1387,80 @@ export function DesktopShell({
         data-workspace-row=""
         className="relative flex min-h-0 flex-1 flex-col md:flex-row"
       >
-        <SectionErrorBoundary label="Plugin panel (left of Layers)">
-          <PluginRightPanel
-            dock="left-of-layers"
-            contentEl={pluginContentEl}
-            width={pluginPanelWidth}
-            onWidthChange={setPluginPanelWidth}
-          />
-        </SectionErrorBoundary>
-        {layoutOptions.layerPanelVisible ? (
-          <SectionErrorBoundary label="Layer panel">
-            <LayerPanel
-              mapControllerRef={mapControllerRef}
-              onResizeStart={startLayerPanelResize}
-              geometryEditLayerId={geometryEditLayerId}
-              onToggleGeometryEdit={handleToggleGeometryEdit}
-              onCancelGeometryEdit={handleCancelGeometryEdit}
-              onMaterializeDuckDBLayer={handleMaterializeDuckDBLayer}
-              onOpenRasterStylePanel={() =>
-                openRasterLayerPanel(createAppAPI(mapControllerRef))
-              }
-              autoCollapse={storymapPresenting || autoCollapsedPanel === "layers"}
+        {replaceLayersPanelId ? (
+          // Shared-rail mode on the Layers (left) side: the plugin panel shares
+          // the Layers sidebar surface, so a single rail lists both the workbench
+          // and Layers instead of the two positional plugin slots flanking it.
+          <SectionErrorBoundary label="Shared left sidebar">
+            <SharedSidebar
+              key={replaceLayersPanelId}
+              side="layers"
+              pluginId={replaceLayersPanelId}
+              pluginContentEl={pluginContentEl}
+              pluginWidth={pluginPanelWidth}
+              onPluginWidthChange={setPluginPanelWidth}
+              builtinVisible={layoutOptions.layerPanelVisible}
+              builtinTitle={t("sharedRail.layers")}
+              builtinIcon={<Layers className="h-4 w-4" />}
+              // The story-map presentation is the only standalone Layers
+              // autoCollapse trigger (the notebook collapses Style, not Layers).
+              forceBuiltinCollapsed={storymapPresenting}
+              renderBuiltin={({ collapsed, onCollapsedChange }) => (
+                <LayerPanel
+                  mapControllerRef={mapControllerRef}
+                  onResizeStart={startLayerPanelResize}
+                  geometryEditLayerId={geometryEditLayerId}
+                  onToggleGeometryEdit={handleToggleGeometryEdit}
+                  onCancelGeometryEdit={handleCancelGeometryEdit}
+                  onMaterializeDuckDBLayer={handleMaterializeDuckDBLayer}
+                  onOpenRasterStylePanel={() =>
+                    openRasterLayerPanel(createAppAPI(mapControllerRef))
+                  }
+                  collapsed={collapsed}
+                  onCollapsedChange={onCollapsedChange}
+                  hideOwnRail
+                />
+              )}
             />
           </SectionErrorBoundary>
-        ) : null}
-        <SectionErrorBoundary label="Plugin panel (right of Layers)">
-          <PluginRightPanel
-            dock="right-of-layers"
-            contentEl={pluginContentEl}
-            width={pluginPanelWidth}
-            onWidthChange={setPluginPanelWidth}
-          />
-        </SectionErrorBoundary>
+        ) : (
+          <>
+            <SectionErrorBoundary label="Plugin panel (left of Layers)">
+              <PluginRightPanel
+                dock="left-of-layers"
+                contentEl={pluginContentEl}
+                width={pluginPanelWidth}
+                onWidthChange={setPluginPanelWidth}
+              />
+            </SectionErrorBoundary>
+            {layoutOptions.layerPanelVisible ? (
+              <SectionErrorBoundary label="Layer panel">
+                <LayerPanel
+                  mapControllerRef={mapControllerRef}
+                  onResizeStart={startLayerPanelResize}
+                  geometryEditLayerId={geometryEditLayerId}
+                  onToggleGeometryEdit={handleToggleGeometryEdit}
+                  onCancelGeometryEdit={handleCancelGeometryEdit}
+                  onMaterializeDuckDBLayer={handleMaterializeDuckDBLayer}
+                  onOpenRasterStylePanel={() =>
+                    openRasterLayerPanel(createAppAPI(mapControllerRef))
+                  }
+                  autoCollapse={
+                    storymapPresenting || autoCollapsedPanel === "layers"
+                  }
+                />
+              </SectionErrorBoundary>
+            ) : null}
+            <SectionErrorBoundary label="Plugin panel (right of Layers)">
+              <PluginRightPanel
+                dock="right-of-layers"
+                contentEl={pluginContentEl}
+                width={pluginPanelWidth}
+                onWidthChange={setPluginPanelWidth}
+              />
+            </SectionErrorBoundary>
+          </>
+        )}
         <main
           // `isolate` creates a stacking context so map-panel z-indexes (up to 10000) stay below body-portaled dialogs. See #451.
           className={`relative isolate min-w-0 flex-1 overflow-hidden ${
@@ -1449,25 +1494,33 @@ export function DesktopShell({
           // sidebar surface, so a single rail lists both the workbench and Style
           // instead of the two positional plugin slots flanking the Style panel.
           <SectionErrorBoundary label="Shared right sidebar">
-            <SharedRightSidebar
-              // Key by the active panel id so switching between two
-              // replace-style plugins remounts the sidebar, resetting its
-              // per-panel local state (the Style opt-in) rather than carrying
-              // the previous plugin's session over.
+            <SharedSidebar
+              // Key by the active panel id so switching between two replace-style
+              // plugins remounts the sidebar, resetting its per-panel local state
+              // (the Style opt-in) rather than carrying the previous plugin over.
               key={replaceStylePanelId}
+              side="style"
               pluginId={replaceStylePanelId}
               pluginContentEl={pluginContentEl}
               pluginWidth={pluginPanelWidth}
               onPluginWidthChange={setPluginPanelWidth}
-              stylePanelVisible={layoutOptions.stylePanelVisible}
+              builtinVisible={layoutOptions.stylePanelVisible}
+              builtinTitle={t("sharedRail.style")}
+              builtinIcon={<SlidersHorizontal className="h-4 w-4" />}
               // Mirror the standalone Style panel's autoCollapse triggers so the
               // notebook / story-map presentation collapses Style here too.
-              // `autoCollapsedPanel` is omitted because it is always null in
-              // replace-style mode (the replace-style panel is the sole active
-              // panel, so no positional plugin can push Style aside).
-              forceStyleCollapsed={notebookOpen || storymapPresenting}
-              mapControllerRef={mapControllerRef}
-              onStyleResizeStart={startStylePanelResize}
+              // `autoCollapsedPanel` is omitted because it is always null in a
+              // shared-rail mode (the panel is the sole active one).
+              forceBuiltinCollapsed={notebookOpen || storymapPresenting}
+              renderBuiltin={({ collapsed, onCollapsedChange }) => (
+                <StylePanel
+                  mapControllerRef={mapControllerRef}
+                  onResizeStart={startStylePanelResize}
+                  collapsed={collapsed}
+                  onCollapsedChange={onCollapsedChange}
+                  hideOwnRail
+                />
+              )}
             />
           </SectionErrorBoundary>
         ) : (
