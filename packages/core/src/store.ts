@@ -175,6 +175,12 @@ export interface AppState {
   collaboration: CollaborationState;
   ui: {
     processingOpen: boolean;
+    /**
+     * Tool id to preselect when the Whitebox toolbox dialog opens, set when the
+     * user picks a specific tool from the Processing menu's category submenus.
+     * Consumed and cleared by ProcessingDialog. Null means "no preselection".
+     */
+    processingInitialTool: string | null;
     conversionOpen: ConversionToolKind | null;
     vectorToolOpen: VectorToolKind | null;
     networkToolOpen: NetworkToolKind | null;
@@ -250,6 +256,7 @@ export interface AppState {
   setIdentifyLayer: (id: string | null) => void;
   setAttributeFilter: (filter: string) => void;
   setProcessingOpen: (open: boolean) => void;
+  setProcessingInitialTool: (toolId: string | null) => void;
   setConversionOpen: (kind: ConversionToolKind | null) => void;
   setVectorToolOpen: (kind: VectorToolKind | null) => void;
   setNetworkToolOpen: (kind: NetworkToolKind | null) => void;
@@ -540,6 +547,7 @@ export const useAppStore = create<AppState>()(
       collaboration: DEFAULT_COLLABORATION_STATE,
       ui: {
         processingOpen: false,
+        processingInitialTool: null,
         conversionOpen: null,
         vectorToolOpen: null,
         networkToolOpen: null,
@@ -712,6 +720,8 @@ export const useAppStore = create<AppState>()(
       setAttributeFilter: (filter) => set({ attributeFilter: filter }),
       setProcessingOpen: (open) =>
         set((s) => ({ ui: { ...s.ui, processingOpen: open } })),
+      setProcessingInitialTool: (toolId) =>
+        set((s) => ({ ui: { ...s.ui, processingInitialTool: toolId } })),
       setConversionOpen: (kind) =>
         set((s) => ({ ui: { ...s.ui, conversionOpen: kind } })),
       setVectorToolOpen: (kind) =>

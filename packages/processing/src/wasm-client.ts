@@ -230,6 +230,25 @@ function job(
 }
 
 /**
+ * Descriptive base name for an output file, e.g. `fill_depressions_output`
+ * instead of a generic `output`. Keeps each tool's outputs distinct in the
+ * in-memory `/work` filesystem (and in the path the tool echoes to stdout) so
+ * running several tools does not reuse `/work/output.tif`.
+ *
+ * Combines the tool id with the output parameter name so the filename humanizes
+ * to the same words as the imported layer (e.g. `<tool>_output` ->
+ * "<Tool> Output"), keeping the panel path and the layer name consistent.
+ *
+ * @param toolId - The tool being run (already filesystem-safe snake_case).
+ * @param paramName - The output parameter name.
+ * @returns A sanitized base name without extension.
+ */
+export function outputBaseName(toolId: string, paramName: string): string {
+  const safe = (text: string) => text.replace(/[^A-Za-z0-9_-]+/g, "_");
+  return `${safe(toolId)}_${safe(paramName)}`;
+}
+
+/**
  * Run a Whitebox tool in the browser via WASM. Mirrors `runWhiteboxTool` but
  * executes locally and returns an already-completed {@link WhiteboxJob}. Output
  * values are inline: a `FeatureCollection` for `vector_out`, or a `Uint8Array`
@@ -285,14 +304,14 @@ export async function runWhiteboxToolWasm(
       input[file] = bytes;
       args.push(`--${name}=/work/${file}`);
     } else if (kind === "vector_out") {
-      const file = `${name}.geojson`;
+      const file = `${outputBaseName(request.tool_id, name)}.geojson`;
       outputs.push({ name, file, raster: false });
       args.push(`--${name}=/work/${file}`);
     } else if (kind === "raster_out" || kind === "file_out") {
       // file_out is treated as an opaque binary output (no GeoJSON parsing),
       // mirroring how raster outputs are returned as raw bytes.
       const ext = kind === "file_out" ? "dat" : "tif";
-      const file = `${name}.${ext}`;
+      const file = `${outputBaseName(request.tool_id, name)}.${ext}`;
       outputs.push({ name, file, raster: true });
       args.push(`--${name}=/work/${file}`);
     } else {

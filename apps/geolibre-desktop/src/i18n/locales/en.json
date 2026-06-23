@@ -1240,6 +1240,12 @@
       "network": "Network",
       "statistics": "Spatial Statistics",
       "raster": "Raster",
+      "hydrology": "Hydrology",
+      "lidar": "LiDAR",
+      "terrain": "Terrain",
+      "remoteSensing": "Remote Sensing",
+      "projection": "Projection",
+      "geolibre": "GeoLibre",
       "subGroupGeometry": "Geometry",
       "subGroupOverlay": "Overlay",
       "subGroupJoin": "Join",
@@ -1622,6 +1628,8 @@
       "selectLayerFirst": "Select a layer first"
     },
     "whitebox": {
+      "run": "Run",
+      "running": "Running…",
       "runLocal": "Run locally (WASM)",
       "runLocalHint": "Run locally in WebAssembly (no Python sidecar)",
       "runningLocally": "Running locally with WebAssembly. No sidecar required.",

@@ -140,4 +140,5 @@ export {
   whiteboxWasmAvailable,
   listWhiteboxWasmTools,
   listGeolibreWasmTools,
+  outputBaseName,
 } from "./wasm-client";
