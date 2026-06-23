@@ -546,10 +546,16 @@ async function proxyBinaryRequest(
   res.setHeader("access-control-allow-origin", "*");
   res.setHeader("cache-control", "public, max-age=3600");
   res.setHeader("content-type", contentType);
-  for (const header of ["accept-ranges", "content-length", "content-range"]) {
+  for (const header of ["accept-ranges", "content-range"]) {
     const value = response.headers.get(header);
     if (value) res.setHeader(header, value);
   }
+  // Derive content-length from the buffered body, never the upstream header:
+  // fetch() transparently decompresses gzip/br responses, so the upstream
+  // content-length (the compressed size) would be smaller than the body we
+  // send and truncate it in the browser. The buffer length is correct for both
+  // full (200) and partial (206 + content-range) responses.
+  res.setHeader("content-length", String(body.byteLength));
   res.end(body);
 }
 

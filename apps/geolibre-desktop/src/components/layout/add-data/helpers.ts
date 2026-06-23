@@ -189,7 +189,13 @@ function isViteDevServer(): boolean {
   );
 }
 
-export function proxyGpxRequestUrl(url: string): string {
+/**
+ * Routes a feed request through the dev-server CORS proxy when running under
+ * Vite (so a `fetch()` for a remote GPX/GeoRSS file is not blocked by the
+ * feed host's missing CORS headers). In production builds the URL is returned
+ * unchanged. The proxy is generic; the `GPX_PROXY_PATH` name is historical.
+ */
+export function proxyFeedRequestUrl(url: string): string {
   return isViteDevServer()
     ? `${GPX_PROXY_PATH}?url=${encodeURIComponent(url)}`
     : url;

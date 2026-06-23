@@ -107,6 +107,10 @@
         "label": "Add GPX Layer",
         "description": "Add GPX waypoints, routes, and tracks as one or more vector layers."
       },
+      "georss": {
+        "label": "Add GeoRSS Layer",
+        "description": "Add a GeoRSS feed (RSS, Atom, or RDF) from a URL or file as a vector layer."
+      },
       "delimitedText": {
         "label": "Add Delimited Text Layer",
         "description": "Add a delimited text file or URL as a point layer using longitude and latitude fields."
@@ -252,6 +256,17 @@
       "file": "GPX file",
       "urlPlaceholder": "https://example.com/route.gpx",
       "layerTypes": "Layer types"
+    },
+    "georss": {
+      "defaultName": "GeoRSS Layer",
+      "sampleLabel": "USGS earthquakes (past day)",
+      "errorFileMissing": "GeoRSS file data is missing.",
+      "readError": "Could not read GeoRSS file.",
+      "errorChooseFile": "Choose a GeoRSS file.",
+      "errorUrl": "Enter a GeoRSS URL.",
+      "url": "GeoRSS URL",
+      "file": "GeoRSS file",
+      "urlPlaceholder": "https://example.com/feed.atom"
     },
     "delimitedText": {
       "defaultName": "Delimited Text Layer",
@@ -1063,6 +1078,7 @@
       "wfs": "WFS Layer",
       "wmts": "WMTS Layer",
       "arcgis": "ArcGIS Layer",
+      "georss": "GeoRSS Layer",
       "video": "Video Layer",
       "deckglViz": "Deck.gl Layer",
       "gltfModel": "3D Model (glTF)",

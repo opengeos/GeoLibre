@@ -15,6 +15,7 @@ import { KIND_I18N_KEY } from "./add-data/constants";
 import { ArcGISSource } from "./add-data/sources/ArcGISSource";
 import { DeckVizSource } from "./add-data/sources/DeckVizSource";
 import { DelimitedTextSource } from "./add-data/sources/DelimitedTextSource";
+import { GeoRssSource } from "./add-data/sources/GeoRssSource";
 import { GpxSource } from "./add-data/sources/GpxSource";
 import { MbtilesSource } from "./add-data/sources/MbtilesSource";
 import { PostgresSource } from "./add-data/sources/PostgresSource";
@@ -59,6 +60,8 @@ function renderSource(
       return <WmtsSource />;
     case "gpx":
       return <GpxSource />;
+    case "georss":
+      return <GeoRssSource />;
     case "delimited-text":
       return <DelimitedTextSource />;
     case "mbtiles":

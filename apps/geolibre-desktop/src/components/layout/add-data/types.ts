@@ -8,6 +8,7 @@ export type AddDataKind =
   | "wfs"
   | "wmts"
   | "gpx"
+  | "georss"
   | "delimited-text"
   | "mbtiles"
   | "arcgis"
@@ -17,6 +18,7 @@ export type AddDataKind =
 
 export type GpxMode = "url" | "file";
 export type GpxLayerKind = "waypoints" | "tracks" | "routes";
+export type GeoRssMode = "url" | "file";
 export type DelimitedTextMode = "url" | "file";
 export type DelimitedTextDelimiter =
   | "comma"

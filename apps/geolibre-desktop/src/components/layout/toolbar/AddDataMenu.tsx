@@ -67,6 +67,7 @@ export function AddDataMenu({
     wfs: { onSelect: () => onSetAddDataKind("wfs") },
     wmts: { onSelect: () => onSetAddDataKind("wmts") },
     arcgis: { onSelect: () => onSetAddDataKind("arcgis") },
+    georss: { onSelect: () => onSetAddDataKind("georss") },
     stac: { onSelect: addLayer.stac },
     video: { onSelect: () => onSetAddDataKind("video") },
     "deckgl-viz": { onSelect: () => onSetAddDataKind("deckgl-viz") },

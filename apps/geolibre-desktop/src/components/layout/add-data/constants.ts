@@ -20,6 +20,7 @@ export type KindI18nKey =
   | "wfs"
   | "wmts"
   | "gpx"
+  | "georss"
   | "delimitedText"
   | "mbtiles"
   | "arcgis"
@@ -38,6 +39,7 @@ export const KIND_I18N_KEY: Record<AddDataKind, KindI18nKey> = {
   wfs: "wfs",
   wmts: "wmts",
   gpx: "gpx",
+  georss: "georss",
   "delimited-text": "delimitedText",
   mbtiles: "mbtiles",
   arcgis: "arcgis",
@@ -57,6 +59,10 @@ export const DEFAULT_WMTS_URL =
   "https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/119/{z}/{y}/{x}";
 export const DEFAULT_GPX_URL =
   "https://data.source.coop/giswqs/opengeos/fells_loop.gpx";
+// USGS "Magnitude 2.5+ Earthquakes, Past Day" Atom feed: a live GeoRSS feed
+// using the Simple encoding (georss:point), refreshed continuously by USGS.
+export const DEFAULT_GEORSS_URL =
+  "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.atom";
 export const DEFAULT_DELIMITED_TEXT_URL =
   "https://data.source.coop/giswqs/opengeos/us_cities.csv";
 export const DEFAULT_DELIMITED_TEXT_LATITUDE_FIELD = "latitude";

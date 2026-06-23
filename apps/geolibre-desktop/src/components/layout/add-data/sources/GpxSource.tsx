@@ -12,7 +12,7 @@ import {
   errorMessage,
   fileNameFromPath,
   layerNameFromPath,
-  proxyGpxRequestUrl,
+  proxyFeedRequestUrl,
 } from "../helpers";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 import type { GpxLayerKind, GpxMode } from "../types";
@@ -100,7 +100,7 @@ export function GpxSource() {
     const sourcePath = gpxUrl.trim();
     if (!sourcePath) throw new Error(t("addData.gpx.errorUrl"));
 
-    const response = await fetch(proxyGpxRequestUrl(sourcePath));
+    const response = await fetch(proxyFeedRequestUrl(sourcePath));
     if (!response.ok) {
       throw new Error(
         t("addData.common.requestFailed", { status: response.status }),
