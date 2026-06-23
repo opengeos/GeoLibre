@@ -36,24 +36,31 @@ export const DropdownMenuSubContent = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.SubContent>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>
 >(({ className, style, ...props }, ref) => (
-  <DropdownMenuPrimitive.SubContent
-    ref={ref}
-    className={cn(
-      "z-50 max-w-[calc(100vw-1rem)] min-w-[8rem] overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-lg",
-      className,
-    )}
-    style={{
-      // Cap to the visible viewport on mobile: dvh tracks the dynamic viewport
-      // and subtracting the safe-area insets keeps the menu (and its scrollable
-      // overflow) within the area not covered by the system status/navigation
-      // bars, so long menus scroll instead of clipping under them. On desktop/web
-      // dvh == vh and the insets are 0, so behavior is unchanged.
-      maxHeight:
-        "min(var(--radix-dropdown-menu-content-available-height, 100dvh), calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1rem))",
-      ...style,
-    }}
-    {...props}
-  />
+  // Portal to the body so a nested submenu is not a DOM descendant of its parent
+  // submenu's scroll box. Without this, the parent's `overflow-y-auto` becomes a
+  // clipping ancestor and Radix's collision detection treats the parent's narrow
+  // width as the available space, flipping a 3rd-level submenu to the left (over
+  // its grandparent) even when there is room on the right.
+  <DropdownMenuPrimitive.Portal>
+    <DropdownMenuPrimitive.SubContent
+      ref={ref}
+      className={cn(
+        "z-50 max-w-[calc(100vw-1rem)] min-w-[8rem] overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-lg",
+        className,
+      )}
+      style={{
+        // Cap to the visible viewport on mobile: dvh tracks the dynamic viewport
+        // and subtracting the safe-area insets keeps the menu (and its scrollable
+        // overflow) within the area not covered by the system status/navigation
+        // bars, so long menus scroll instead of clipping under them. On desktop/web
+        // dvh == vh and the insets are 0, so behavior is unchanged.
+        maxHeight:
+          "min(var(--radix-dropdown-menu-content-available-height, 100dvh), calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1rem))",
+        ...style,
+      }}
+      {...props}
+    />
+  </DropdownMenuPrimitive.Portal>
 ));
 DropdownMenuSubContent.displayName =
   DropdownMenuPrimitive.SubContent.displayName;

@@ -18,6 +18,7 @@ import type { ToolbarPanel } from "../../../hooks/useToolbarPanels";
 import { isMobile } from "../../../lib/is-mobile";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import { isMenuItemVisible } from "../../../lib/ui-profile";
+import { WHITEBOX_MENU_CATALOG } from "../../../lib/whitebox-menu-catalog";
 import type { ToolbarChrome } from "./constants";
 
 interface ProcessingMenuProps {
@@ -40,6 +41,9 @@ export function ProcessingMenu({
 }: ProcessingMenuProps) {
   const { t } = useTranslation();
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
+  const setProcessingInitialTool = useAppStore(
+    (s) => s.setProcessingInitialTool,
+  );
   const setConversionOpen = useAppStore((s) => s.setConversionOpen);
   const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
   const setStatisticsToolOpen = useAppStore((s) => s.setStatisticsToolOpen);
@@ -61,6 +65,36 @@ export function ProcessingMenu({
   const mobile = useMemo(() => isMobile(), []);
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   const show = (id: string) => isMenuItemVisible(uiProfile, id);
+
+  // Open the Whitebox toolbox dialog preselected to a specific tool, used by the
+  // per-category submenus below. Two store writes: queue the tool, then open.
+  const openWhiteboxTool = (toolId: string) => {
+    setProcessingInitialTool(toolId);
+    setProcessingOpen(true);
+  };
+
+  // Section visibility, so dividers never render with nothing on one side when a
+  // UI profile (or mobile) hides whole sections. `showGeolibreTools` are the
+  // client tool submenus; `showGeolibreActions` are geocode/model-builder/
+  // segmentation below the in-submenu divider.
+  const showGeolibreTools =
+    (!mobile && show("processing.conversion")) ||
+    show("processing.vector") ||
+    show("processing.network") ||
+    show("processing.statistics") ||
+    (!mobile && show("processing.raster"));
+  const showGeolibreActions =
+    show("processing.geocode") ||
+    show("processing.modelBuilder") ||
+    (!mobile && show("processing.segmentation"));
+  const showGeolibre = showGeolibreTools || showGeolibreActions;
+  const showWorkspacesOrServices =
+    show("processing.sqlWorkspace") ||
+    show("processing.pythonConsole") ||
+    show("processing.notebook") ||
+    show("processing.dashboard") ||
+    show("processing.planetaryComputer") ||
+    show("processing.earthEngine");
 
   return (
     <DropdownMenu>
@@ -91,36 +125,57 @@ export function ProcessingMenu({
             {t("toolbar.item.whitebox")}
           </DropdownMenuItem>
         )}
-        {show("processing.sqlWorkspace") && (
-          <DropdownMenuItem onSelect={() => setSqlWorkspaceOpen(true)}>
-            {t("toolbar.command.sqlWorkspace")}
-          </DropdownMenuItem>
-        )}
-        {show("processing.pythonConsole") && (
-          <DropdownMenuItem onSelect={() => setPythonConsoleOpen(true)}>
-            {t("toolbar.command.pythonConsole")}
-          </DropdownMenuItem>
-        )}
-        {show("processing.notebook") && (
-          <DropdownMenuItem onSelect={() => setNotebookOpen(true)}>
-            {t("toolbar.command.notebook")}
-          </DropdownMenuItem>
-        )}
-        {show("processing.dashboard") && (
-          <DropdownMenuItem onSelect={() => setDashboardOpen(true)}>
-            {t("toolbar.command.dashboard")}
-          </DropdownMenuItem>
-        )}
-        {show("processing.geocode") && (
-          <DropdownMenuItem onSelect={() => setGeocodeOpen(true)}>
-            {t("toolbar.item.geocode")}
-          </DropdownMenuItem>
-        )}
-        {show("processing.modelBuilder") && (
-          <DropdownMenuItem onSelect={() => setModelBuilderOpen(true)}>
-            {t("toolbar.item.modelBuilder")}
-          </DropdownMenuItem>
-        )}
+        {/* Whitebox tools grouped by category/subcategory. Each leaf opens the
+            Whitebox toolbox dialog preselected to that tool. Catalog data lives
+            in lib/whitebox-menu-catalog.ts; gated with the Whitebox item since
+            they share the same sidecar/WASM backend (hidden on mobile). */}
+        {!mobile &&
+          show("processing.whitebox") &&
+          WHITEBOX_MENU_CATALOG.map((cat) => (
+            <DropdownMenuSub key={cat.key}>
+              <DropdownMenuSubTrigger>{t(cat.labelKey)}</DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                {cat.subcategories.length === 1
+                  ? cat.subcategories[0].tools.map((tool) => (
+                      <DropdownMenuItem
+                        key={tool.id}
+                        onSelect={() => openWhiteboxTool(tool.id)}
+                      >
+                        {tool.name}
+                      </DropdownMenuItem>
+                    ))
+                  : cat.subcategories.map((sub) => (
+                      <DropdownMenuSub key={sub.label}>
+                        <DropdownMenuSubTrigger>
+                          {sub.label}
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                          {sub.tools.map((tool) => (
+                            <DropdownMenuItem
+                              key={tool.id}
+                              onSelect={() => openWhiteboxTool(tool.id)}
+                            >
+                              {tool.name}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                    ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          ))}
+        {/* GeoLibre's own tools (Turf vector, rasterio raster, format
+            conversion, routing, spatial statistics) plus geocoding, batch &
+            models, and AI segmentation. Grouped under a single "GeoLibre"
+            submenu so their category names don't collide with the Whitebox
+            category submenus above. Each child keeps its own visibility gate;
+            the parent shows when any child does. */}
+        {showGeolibre && (
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            {t("toolbar.item.geolibre")}
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
         {!mobile && show("processing.conversion") && (
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
@@ -433,9 +488,47 @@ export function ProcessingMenu({
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         )}
+        {showGeolibreTools && showGeolibreActions && <DropdownMenuSeparator />}
+        {show("processing.geocode") && (
+          <DropdownMenuItem onSelect={() => setGeocodeOpen(true)}>
+            {t("toolbar.item.geocode")}
+          </DropdownMenuItem>
+        )}
+        {show("processing.modelBuilder") && (
+          <DropdownMenuItem onSelect={() => setModelBuilderOpen(true)}>
+            {t("toolbar.item.modelBuilder")}
+          </DropdownMenuItem>
+        )}
         {!mobile && show("processing.segmentation") && (
           <DropdownMenuItem onSelect={() => setSegmentationOpen(true)}>
             {t("toolbar.command.segmentation")}
+          </DropdownMenuItem>
+        )}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        )}
+        {/* Divide the tool-category submenus (Whitebox, GeoLibre) from the
+            workspaces and consoles below. Only when both sides are present. */}
+        {((!mobile && show("processing.whitebox")) || showGeolibre) &&
+          showWorkspacesOrServices && <DropdownMenuSeparator />}
+        {show("processing.sqlWorkspace") && (
+          <DropdownMenuItem onSelect={() => setSqlWorkspaceOpen(true)}>
+            {t("toolbar.command.sqlWorkspace")}
+          </DropdownMenuItem>
+        )}
+        {show("processing.pythonConsole") && (
+          <DropdownMenuItem onSelect={() => setPythonConsoleOpen(true)}>
+            {t("toolbar.command.pythonConsole")}
+          </DropdownMenuItem>
+        )}
+        {show("processing.notebook") && (
+          <DropdownMenuItem onSelect={() => setNotebookOpen(true)}>
+            {t("toolbar.command.notebook")}
+          </DropdownMenuItem>
+        )}
+        {show("processing.dashboard") && (
+          <DropdownMenuItem onSelect={() => setDashboardOpen(true)}>
+            {t("toolbar.command.dashboard")}
           </DropdownMenuItem>
         )}
         {show("processing.planetaryComputer") && (

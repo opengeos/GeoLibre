@@ -10,7 +10,7 @@ import {
   Label,
   Select,
 } from "@geolibre/ui";
-import { Check, Copy, Loader2, LogOut, Users } from "lucide-react";
+import { ArrowRight, Check, Copy, Loader2, LogOut, Users } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -184,6 +184,7 @@ export function CollaborateDialog({
             copied={copied}
             onCopy={handleCopy}
             onLeave={handleLeave}
+            onDismiss={() => onOpenChange(false)}
             onSetMode={api.setMode}
             onSetFollowHost={api.setFollowHost}
           />
@@ -368,6 +369,7 @@ function ActiveSession({
   copied,
   onCopy,
   onLeave,
+  onDismiss,
   onSetMode,
   onSetFollowHost,
 }: {
@@ -375,6 +377,7 @@ function ActiveSession({
   copied: "code" | "link" | null;
   onCopy: (kind: "code" | "link", value: string) => void;
   onLeave: () => void;
+  onDismiss: () => void;
   onSetMode: (mode: CollaborationMode) => void;
   onSetFollowHost: (enabled: boolean) => void;
 }) {
@@ -506,6 +509,18 @@ function ActiveSession({
           {collaboration.error}
         </p>
       )}
+
+      {/* Primary way out of the dialog: dismiss it while keeping the session
+          live, so the host isn't tempted to use the "X" (which they fear ends
+          the session) to get back to the map (#754). */}
+      <Button type="button" className="w-full" onClick={onDismiss}>
+        {/* A view-only guest cannot edit, so "collaborate" would mislead; offer
+            "watch" wording for that case. */}
+        {isHost || collaboration.mode === "co-edit"
+          ? t("collaborate.goToMap")
+          : t("collaborate.goToMapViewOnly")}
+        <ArrowRight className="ml-2 h-3.5 w-3.5" />
+      </Button>
 
       <div className="flex justify-between gap-2">
         {isHost ? (

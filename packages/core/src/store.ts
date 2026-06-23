@@ -175,6 +175,12 @@ export interface AppState {
   collaboration: CollaborationState;
   ui: {
     processingOpen: boolean;
+    /**
+     * Tool id to preselect when the Whitebox toolbox dialog opens, set when the
+     * user picks a specific tool from the Processing menu's category submenus.
+     * Consumed and cleared by ProcessingDialog. Null means "no preselection".
+     */
+    processingInitialTool: string | null;
     conversionOpen: ConversionToolKind | null;
     vectorToolOpen: VectorToolKind | null;
     networkToolOpen: NetworkToolKind | null;
@@ -192,6 +198,10 @@ export interface AppState {
     storymapPresenting: boolean;
     modelBuilderOpen: boolean;
     zoomToSelectedFeature: boolean;
+    // Live-collaboration dialog visibility. Lifted into the store (rather than
+    // local toolbar state) so the on-canvas session-status badge can reopen the
+    // Collaborate dialog from outside the toolbar's component tree (#754).
+    collaborateDialogOpen: boolean;
   };
 
   setPointerCoords: (coords: [number, number] | null) => void;
@@ -246,6 +256,7 @@ export interface AppState {
   setIdentifyLayer: (id: string | null) => void;
   setAttributeFilter: (filter: string) => void;
   setProcessingOpen: (open: boolean) => void;
+  setProcessingInitialTool: (toolId: string | null) => void;
   setConversionOpen: (kind: ConversionToolKind | null) => void;
   setVectorToolOpen: (kind: VectorToolKind | null) => void;
   setNetworkToolOpen: (kind: NetworkToolKind | null) => void;
@@ -262,6 +273,7 @@ export interface AppState {
   setStorymapPanelOpen: (open: boolean) => void;
   setStorymapPresenting: (presenting: boolean) => void;
   setModelBuilderOpen: (open: boolean) => void;
+  setCollaborateDialogOpen: (open: boolean) => void;
   setZoomToSelectedFeature: (enabled: boolean) => void;
 
   /** Insert a new model or replace an existing one matching by `id`. */
@@ -535,6 +547,7 @@ export const useAppStore = create<AppState>()(
       collaboration: DEFAULT_COLLABORATION_STATE,
       ui: {
         processingOpen: false,
+        processingInitialTool: null,
         conversionOpen: null,
         vectorToolOpen: null,
         networkToolOpen: null,
@@ -552,6 +565,7 @@ export const useAppStore = create<AppState>()(
         storymapPresenting: false,
         modelBuilderOpen: false,
         zoomToSelectedFeature: false,
+        collaborateDialogOpen: false,
       },
 
       setPointerCoords: (coords) => set({ pointerCoords: coords }),
@@ -571,7 +585,13 @@ export const useAppStore = create<AppState>()(
           return { collaboration: { ...s.collaboration, presence: next } };
         }),
       resetCollaboration: () =>
-        set({ collaboration: DEFAULT_COLLABORATION_STATE }),
+        // Also close the Collaborate dialog: an unexpected disconnect resets the
+        // slice without a user-initiated leave(), and leaving the dialog open
+        // would drop the user onto the start/join form with no context.
+        set((s) => ({
+          collaboration: DEFAULT_COLLABORATION_STATE,
+          ui: { ...s.ui, collaborateDialogOpen: false },
+        })),
       setMapView: (view, markDirty = false) =>
         set((s) => ({
           mapView: { ...s.mapView, ...view },
@@ -700,6 +720,8 @@ export const useAppStore = create<AppState>()(
       setAttributeFilter: (filter) => set({ attributeFilter: filter }),
       setProcessingOpen: (open) =>
         set((s) => ({ ui: { ...s.ui, processingOpen: open } })),
+      setProcessingInitialTool: (toolId) =>
+        set((s) => ({ ui: { ...s.ui, processingInitialTool: toolId } })),
       setConversionOpen: (kind) =>
         set((s) => ({ ui: { ...s.ui, conversionOpen: kind } })),
       setVectorToolOpen: (kind) =>
@@ -732,6 +754,8 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ ui: { ...s.ui, storymapPresenting: presenting } })),
       setModelBuilderOpen: (open) =>
         set((s) => ({ ui: { ...s.ui, modelBuilderOpen: open } })),
+      setCollaborateDialogOpen: (open) =>
+        set((s) => ({ ui: { ...s.ui, collaborateDialogOpen: open } })),
       setZoomToSelectedFeature: (enabled) =>
         set((s) => ({ ui: { ...s.ui, zoomToSelectedFeature: enabled } })),
 

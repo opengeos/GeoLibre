@@ -209,25 +209,57 @@ export async function fetchWhiteboxTools(
   return data.tools ?? [];
 }
 
-export async function fetchRemoteWhiteboxCatalogSnapshot(
-  url = WHITEBOX_CATALOG_SNAPSHOT_URL,
-): Promise<WhiteboxTool[]> {
-  remoteWhiteboxCatalogPromise ??= fetch(url, {
-    headers: { accept: "application/json" },
-  })
-    .then(async (response) => {
+// File name of the snapshot bundled into the app's static assets
+// (apps/geolibre-desktop/public/, written by scripts/gen-whitebox-menu-catalog.mjs).
+const BUNDLED_CATALOG_SNAPSHOT_FILE = "whitebox-catalog-snapshot.json";
+
+/**
+ * URL of the app-bundled catalog snapshot, resolved against the document base so
+ * it works under any deploy base path (web, Tauri, Jupyter embed). Returns null
+ * outside a browser (e.g. unit tests), where only the remote URL applies.
+ */
+function bundledCatalogSnapshotUrl(): string | null {
+  if (typeof document === "undefined" || !document.baseURI) return null;
+  try {
+    return new URL(BUNDLED_CATALOG_SNAPSHOT_FILE, document.baseURI).href;
+  } catch {
+    return null;
+  }
+}
+
+async function loadCatalogSnapshot(remoteUrl: string): Promise<WhiteboxTool[]> {
+  // Prefer the app-bundled copy so restricted/offline environments never depend
+  // on GitHub; fall back to the upstream URL only if the bundled file is absent.
+  const sources = [bundledCatalogSnapshotUrl(), remoteUrl].filter(
+    (value): value is string => Boolean(value),
+  );
+  let lastError: unknown = new Error("No catalog snapshot source available");
+  for (const source of sources) {
+    try {
+      const response = await fetch(source, {
+        headers: { accept: "application/json" },
+      });
       if (!response.ok) {
-        throw new Error(
-          `Could not load Whitebox catalog snapshot: HTTP ${response.status}`,
-        );
+        throw new Error(`HTTP ${response.status}`);
       }
       const data = (await response.json()) as WhiteboxCatalogSnapshot;
       return data.tools ?? [];
-    })
-    .catch((error) => {
-      remoteWhiteboxCatalogPromise = null; // allow retry on next call
-      throw error;
-    });
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  remoteWhiteboxCatalogPromise = null; // allow retry on next call
+  throw new Error(
+    `Could not load Whitebox catalog snapshot: ${
+      lastError instanceof Error ? lastError.message : String(lastError)
+    }`,
+  );
+}
+
+export async function fetchRemoteWhiteboxCatalogSnapshot(
+  url = WHITEBOX_CATALOG_SNAPSHOT_URL,
+): Promise<WhiteboxTool[]> {
+  remoteWhiteboxCatalogPromise ??= loadCatalogSnapshot(url);
   return remoteWhiteboxCatalogPromise;
 }
 

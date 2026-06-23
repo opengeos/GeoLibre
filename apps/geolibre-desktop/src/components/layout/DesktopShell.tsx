@@ -71,6 +71,7 @@ import {
   useRightPanelState,
 } from "../../hooks/useRightPanels";
 import { BoundsRestrictionIndicator } from "./BoundsRestrictionIndicator";
+import { CollaborationStatusBadge } from "./CollaborationStatusBadge";
 import { MapGrid } from "./MapGrid";
 import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
 import { useCommandBridge } from "../../hooks/useCommandBridge";
@@ -1449,6 +1450,7 @@ export function DesktopShell({
               />
               <RemoteCursorsOverlay mapControllerRef={mapControllerRef} />
               <BoundsRestrictionIndicator />
+              <CollaborationStatusBadge />
             </MapGrid>
           </SectionErrorBoundary>
           <SectionErrorBoundary label="Plugin floating panels">
@@ -1547,12 +1549,17 @@ export function DesktopShell({
       <Suspense fallback={null}>
         <ProcessingDialog
           mapControllerRef={mapControllerRef}
-          onAddRaster={async (bytes, name) => {
+          onAddRaster={async (bytes, name, fileName) => {
             // Cast required: TS types Uint8Array as Uint8Array<ArrayBufferLike>,
             // which is not directly assignable to BlobPart under this lib.
-            const file = new File([bytes as BlobPart], `${name}.tif`, {
-              type: "image/tiff",
-            });
+            // `fileName` (when given) becomes the layer's sourcePath while `name`
+            // stays the human-readable display name; the control keeps them
+            // separate (info.source.fileName vs info.name).
+            const file = new File(
+              [bytes as BlobPart],
+              fileName ?? `${name}.tif`,
+              { type: "image/tiff" },
+            );
             await addRasterToMap(createAppAPI(mapControllerRef), file, { name });
           }}
         />

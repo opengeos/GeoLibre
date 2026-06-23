@@ -165,17 +165,23 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
   // the cache + the manager's per-layer AbortController. Stats are cleared
   // first so a band/method switch shows "Computing data range…" rather than
   // the previous band's values.
+  // Locally-produced (file-backed) rasters expose only a session blob URL; pass
+  // it so stats can be read directly when the control has no source URL.
+  const localBytesUrl =
+    typeof layer.metadata?.localBytesUrl === "string"
+      ? layer.metadata.localBytesUrl
+      : null;
   useEffect(() => {
     setStats(null);
     let cancelled = false;
     if (!symbology?.classified || symbology.method === "manual") return;
-    void getRasterBandStats(layer.id, band).then((result) => {
+    void getRasterBandStats(layer.id, band, localBytesUrl).then((result) => {
       if (!cancelled && result) setStats(result);
     });
     return () => {
       cancelled = true;
     };
-  }, [layer.id, band, symbology?.classified, symbology?.method]);
+  }, [layer.id, band, symbology?.classified, symbology?.method, localBytesUrl]);
 
   // Classification can be enabled before stats arrive (breaks fall back to the
   // [0, …, 1] default range), and switching bands while classified leaves the

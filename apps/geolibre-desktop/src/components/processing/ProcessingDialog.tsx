@@ -10,6 +10,7 @@ import {
   listGeolibreWasmTools,
   runWhiteboxTool,
   runWhiteboxToolWasm,
+  outputBaseName,
   type WhiteboxJob,
   type WhiteboxLayerInput,
   type WhiteboxTool,
@@ -68,7 +69,11 @@ interface ProcessingDialogProps {
   // Renders a raster tool output (a Cloud Optimized GeoTIFF, from the WASM
   // runner) as a new map layer. Wired by the desktop shell, which owns the
   // raster control / app API.
-  onAddRaster?: (bytes: Uint8Array, name: string) => Promise<void> | void;
+  onAddRaster?: (
+    bytes: Uint8Array,
+    name: string,
+    fileName?: string,
+  ) => Promise<void> | void;
 }
 
 type ParameterValues = Record<string, unknown>;
@@ -157,7 +162,9 @@ function downloadBytes(bytes: Uint8Array, filename: string): void {
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(url);
+  // Defer revoke so the browser can fetch the blob first (Firefox races and
+  // silently drops the download if the URL is revoked synchronously).
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 function isDataInputParameter(param: WhiteboxToolParameter): boolean {
@@ -384,6 +391,10 @@ export function ProcessingDialog({
   const { t } = useTranslation();
   const open = useAppStore((s) => s.ui.processingOpen);
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
+  const processingInitialTool = useAppStore((s) => s.ui.processingInitialTool);
+  const setProcessingInitialTool = useAppStore(
+    (s) => s.setProcessingInitialTool,
+  );
   const layers = useAppStore((s) => s.layers);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
 
@@ -414,6 +425,14 @@ export function ProcessingDialog({
   // button would stay enabled mid-execution and allow concurrent runs.
   const [runningLocal, setRunningLocal] = useState(false);
   const importedJobIdRef = useRef<string | null>(null);
+  // The selected tool's row in the left list, so a preselection arriving from the
+  // Processing menu can be scrolled into view (it may sit far down the catalog).
+  const selectedButtonRef = useRef<HTMLButtonElement>(null);
+  // A tool id queued from the Processing menu, applied once the catalog finishes
+  // loading (see the apply effect below). `wasLoadingRef` tracks whether a load
+  // has actually started, so the apply only fires on a true -> false transition.
+  const pendingInitialToolRef = useRef<string | null>(null);
+  const wasLoadingRef = useRef(false);
   // Bytes of input files the user browsed from disk (web build, where the
   // browser cannot expose a real path). Keyed by parameter name; consumed by
   // the in-browser WASM runner. GeoJSON files are parsed up front so vector
@@ -422,10 +441,18 @@ export function ProcessingDialog({
     Map<string, { name: string; bytes: Uint8Array; geojson?: FeatureCollection }>
   >(new Map());
 
-  const selectedTool = useMemo(
-    () => tools.find((tool) => tool.id === selectedToolId) ?? tools[0] ?? null,
-    [selectedToolId, tools],
-  );
+  const selectedTool = useMemo(() => {
+    const tool =
+      tools.find((item) => item.id === selectedToolId) ?? tools[0] ?? null;
+    // Drop `*args`/`**kwargs` params defensively: some upstream tools expose
+    // Python varargs that render as unusable inputs. The bundled catalog already
+    // strips these, but the live sidecar catalog may not.
+    if (!tool?.params?.some((param) => param.name?.startsWith("*"))) return tool;
+    return {
+      ...tool,
+      params: tool.params.filter((param) => !param.name?.startsWith("*")),
+    };
+  }, [selectedToolId, tools]);
 
   // Whether any GeoLibre-authored tools are present (WASM mode), gating the
   // source filter — pointless when every tool is from Whitebox.
@@ -510,7 +537,11 @@ export function ProcessingDialog({
       available: boolean,
     ) => {
       try {
-        const snapshotTools = await fetchRemoteWhiteboxCatalogSnapshot();
+        // Hide locked ("pro"-tier) tools: they cannot run, so omit them from the
+        // catalog entirely rather than show them as disabled rows.
+        const snapshotTools = (await fetchRemoteWhiteboxCatalogSnapshot()).filter(
+          (tool) => !tool.locked,
+        );
         setRuntimeAvailable(available);
         setRuntimeMessage(message);
         setTools(snapshotTools);
@@ -605,11 +636,13 @@ export function ProcessingDialog({
       } catch {
         // Keep the live catalog when the optional parameter fallback is unavailable.
       }
-      setTools(nextTools);
+      // Hide locked ("pro"-tier) tools: they cannot run, so omit them entirely.
+      const freeTools = nextTools.filter((tool) => !tool.locked);
+      setTools(freeTools);
       setSelectedToolId((current) =>
-        nextTools.some((tool) => tool.id === current)
+        freeTools.some((tool) => tool.id === current)
           ? current
-          : nextTools[0]?.id ?? "",
+          : freeTools[0]?.id ?? "",
       );
     } catch (err) {
       setRuntimeAvailable(false);
@@ -628,6 +661,48 @@ export function ProcessingDialog({
     if (!open) return;
     void loadWhitebox();
   }, [loadWhitebox, open]);
+
+  // When the dialog is opened from a Processing-menu category submenu, the store
+  // carries the chosen tool id. Stash it in a ref and clear the filters that
+  // could hide it; the apply effect below selects it once the catalog is loaded.
+  // We can't select eagerly here: the catalog loads async, and a GeoLibre WASM
+  // tool is appended only after the Whitebox snapshot, whose loader resets the
+  // selection to its first tool whenever the pending id is not (yet) present.
+  useEffect(() => {
+    if (!open || !processingInitialTool) return;
+    pendingInitialToolRef.current = processingInitialTool;
+    setProcessingInitialTool(null);
+    setCategory("All");
+    setSource("All");
+    setQuery("");
+  }, [open, processingInitialTool, setProcessingInitialTool]);
+
+  // Apply the pending preselection once a catalog load completes (loadingTools
+  // goes true -> false), when `tools` is final and includes the async GeoLibre
+  // WASM tools. Keying on the transition avoids firing on the first render, when
+  // loadingTools is still false only because the load has not started yet.
+  useEffect(() => {
+    if (loadingTools) {
+      wasLoadingRef.current = true;
+      return;
+    }
+    if (!wasLoadingRef.current) return;
+    wasLoadingRef.current = false;
+    const pending = pendingInitialToolRef.current;
+    if (!pending) return;
+    pendingInitialToolRef.current = null;
+    if (tools.some((tool) => tool.id === pending)) {
+      setSelectedToolId(pending);
+    }
+  }, [loadingTools, tools]);
+
+  // Keep the highlighted row visible: when the selection changes (e.g. a tool
+  // preselected from the menu lands deep in the catalog), scroll its list row
+  // into view. "nearest" leaves an already-visible row untouched.
+  useEffect(() => {
+    if (loadingTools) return;
+    selectedButtonRef.current?.scrollIntoView({ block: "nearest" });
+  }, [selectedToolId, loadingTools, filteredTools]);
 
   useEffect(() => {
     setValues(createDefaultValues(selectedTool));
@@ -739,7 +814,14 @@ export function ProcessingDialog({
           const label = `${jobToolLabel} ${humanize(name)}`.replace(/\s+/g, "_");
           downloadBytes(value, `${label}.${fileOutputExtension(value)}`);
         } else if (onAddRaster) {
-          await onAddRaster(value, `${jobToolLabel} ${humanize(name)}`);
+          // Display name stays human-readable; the file name matches the actual
+          // WASM output path (e.g. fill_depressions_wang_and_liu_output.tif), so
+          // the layer's sourcePath lines up with the path shown in the panel.
+          await onAddRaster(
+            value,
+            `${jobToolLabel} ${humanize(name)}`,
+            `${outputBaseName(nextJob.tool_id, name)}.tif`,
+          );
         }
       }
     },
@@ -759,6 +841,10 @@ export function ProcessingDialog({
     if (!selectedTool || selectedTool.locked) return;
     setError(null);
     importedJobIdRef.current = null;
+    // Flag "running" before any prep so the Run button shows its busy state
+    // immediately (input fetching can take a moment, and the local WASM run then
+    // blocks the main thread).
+    setRunningLocal(true);
     const parameters: Record<string, unknown> = {};
     const layerInputs: Record<string, WhiteboxLayerInput> = {};
 
@@ -770,6 +856,7 @@ export function ProcessingDialog({
         (value === undefined || value === null || value === "")
       ) {
         setError(`Missing required parameter: ${parameterLabel(param)}`);
+        setRunningLocal(false);
         return;
       }
 
@@ -816,7 +903,6 @@ export function ProcessingDialog({
     }
 
     try {
-      setRunningLocal(true);
       const request = {
         tool_id: selectedTool.id,
         parameters,
@@ -825,6 +911,14 @@ export function ProcessingDialog({
         include_pro: false,
         tier: "open",
       };
+      // The local WASM runner executes synchronously on the main thread, so yield
+      // twice to the browser first: this lets React commit and paint the Run
+      // button's busy state before the run blocks rendering.
+      if (runLocal) {
+        await new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve)),
+        );
+      }
       setJob(
         await (runLocal ? runWhiteboxToolWasm(request) : runWhiteboxTool(request)),
       );
@@ -1001,6 +1095,11 @@ export function ProcessingDialog({
                     <button
                       key={tool.id}
                       type="button"
+                      ref={
+                        selectedTool?.id === tool.id
+                          ? selectedButtonRef
+                          : undefined
+                      }
                       className={cn(
                         "block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-accent",
                         selectedTool?.id === tool.id && "bg-accent",
@@ -1063,7 +1162,9 @@ export function ProcessingDialog({
                   ) : (
                     <Play className="h-4 w-4" />
                   )}
-                  Run
+                  {running
+                    ? t("processing.whitebox.running")
+                    : t("processing.whitebox.run")}
                 </Button>
               </div>
               {selectedTool?.summary && (

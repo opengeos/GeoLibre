@@ -407,17 +407,21 @@ function bandStatsFromAuto(stats: AutoStats, band: number): RasterBandStats | nu
 /**
  * Fetches (and caches) a band's min/max/histogram for classification breaks,
  * reading the GeoTIFF via the same loader the control uses. Aborts any prior
- * in-flight request for the layer. File-backed rasters use the session blob
- * URL and are unavailable after a project reload (no URL persisted).
+ * in-flight request for the layer.
  *
- * @param control - The mounted raster control.
+ * For a locally-produced (file-backed) raster the control's source snapshot may
+ * not expose a URL, so callers can pass `fallbackUrl` (the layer's session blob
+ * URL, `metadata.localBytesUrl`) to read the bytes directly.
+ *
  * @param layerId - The layer id.
  * @param band - The 1-indexed band to summarize.
+ * @param fallbackUrl - A blob/URL to read when the control has no source URL.
  * @returns The band statistics, or null when the source is unavailable.
  */
 export async function getRasterBandStats(
   layerId: string,
   band: number,
+  fallbackUrl?: string | null,
 ): Promise<RasterBandStats | null> {
   const cached = statsCache.get(layerId);
   if (cached) return bandStatsFromAuto(cached, band);
@@ -425,7 +429,7 @@ export async function getRasterBandStats(
   const info = (currentControl as ControlWithManager | null)?.getRaster?.(
     layerId,
   );
-  const url = sourceUrl(info);
+  const url = sourceUrl(info) ?? fallbackUrl ?? null;
   if (!url) return null;
 
   statsInflight.get(layerId)?.abort();

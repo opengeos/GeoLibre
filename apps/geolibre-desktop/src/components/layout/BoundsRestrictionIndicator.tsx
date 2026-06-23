@@ -12,8 +12,10 @@ import { useTranslation } from "react-i18next";
  * control plugins (GeoEditor, Basemaps, NASA Earthdata, ...) cluster, so a
  * top-left badge overlapped and hid the first plugin button. The small
  * bottom offset keeps it clear of the bottom-left scale control when that is
- * enabled. It assumes the scale is the only bottom-left control; if more are
- * stacked there (e.g. the logo control), revisit the offset.
+ * enabled. The other bottom-left occupant, the collaboration status badge
+ * (CollaborationStatusBadge), already accounts for this badge: it lifts itself
+ * to `bottom-20` (above this `bottom-12`) when a session is active and bounds
+ * are restricted. If yet another bottom-left control is added, revisit both.
  */
 export function BoundsRestrictionIndicator() {
   const { t } = useTranslation();
