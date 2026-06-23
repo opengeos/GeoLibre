@@ -641,6 +641,8 @@
     "resizeControls": "Resize controls panel",
     "resizeDialog": "Resize dialog",
     "recapture": "Recapture map",
+    "copyToClipboard": "Copy to Clipboard",
+    "copied": "Copied",
     "exportPng": "Export PNG",
     "exportPdf": "Export PDF",
     "titleLabel": "Title",
@@ -757,6 +759,7 @@
       "captureFailed": "Could not capture the map image.",
       "captureFirst": "Capture the map before exporting.",
       "exportFailed": "Failed to export {{format}}.",
+      "clipboardFailed": "Could not copy the layout to the clipboard.",
       "scaleOutOfRange": "This scale is outside the range the current view can reach; showing the closest available scale."
     },
     "legend": {

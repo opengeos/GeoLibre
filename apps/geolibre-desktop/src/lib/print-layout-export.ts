@@ -282,6 +282,40 @@ export async function exportLayoutPng(
 }
 
 /**
+ * Render the layout and copy it to the system clipboard as a PNG image
+ * (GH #773), so users can paste it straight into a document without saving a
+ * file first.
+ *
+ * Uses the async Clipboard API (`navigator.clipboard.write`) with a
+ * `ClipboardItem`. The PNG blob is supplied as a promise so the write is
+ * initiated synchronously inside the originating user gesture, which Safari
+ * requires; Chromium-based browsers and Tauri webviews accept it too.
+ *
+ * @throws If the Clipboard image API is unavailable (e.g. an insecure context
+ *   or an older browser) or the browser denies the write, so the dialog can
+ *   surface an error instead of silently doing nothing.
+ */
+export async function copyLayoutToClipboard(
+  opts: LayoutOptions,
+  dpi = 150,
+): Promise<void> {
+  if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) {
+    throw new Error("Clipboard image copy is not supported in this browser");
+  }
+  // Build the PNG blob inside a promise handed to ClipboardItem so the
+  // clipboard write stays within the user gesture (required by Safari).
+  const blob = (async () => {
+    const canvas = renderToCanvas(opts, dpi);
+    const png = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob((b) => resolve(b), "image/png"),
+    );
+    if (!png) throw new Error("Failed to render PNG for the clipboard");
+    return png;
+  })();
+  await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+}
+
+/**
  * Export the layout as a PDF file at the given DPI (default 150).
  *
  * Generates the PDF bytes with jsPDF and saves them through

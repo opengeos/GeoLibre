@@ -25,6 +25,8 @@ import {
 import {
   ArrowDown,
   ArrowUp,
+  Check,
+  ClipboardCopy,
   Crop,
   Eye,
   EyeOff,
@@ -57,6 +59,7 @@ import {
   applyLegendConfig,
   buildLegend,
   captureMapImage,
+  copyLayoutToClipboard,
   exportLayoutPdf,
   exportLayoutPng,
   legendEditorRows,
@@ -250,6 +253,9 @@ export function PrintLayoutDialog({
   // the default "cover" crop; "cover" (fill the frame) otherwise.
   const [mapFit, setMapFit] = useState<"cover" | "contain">("cover");
   const [exporting, setExporting] = useState(false);
+  // Brief "Copied" confirmation on the clipboard button (GH #773).
+  const [copied, setCopied] = useState(false);
+  const copiedTimeoutRef = useRef<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const previewRef = useRef<HTMLCanvasElement | null>(null);
   const previewBoxRef = useRef<HTMLDivElement | null>(null);
@@ -513,6 +519,10 @@ export function PrintLayoutDialog({
       if (idleFallbackRef.current !== null) {
         window.clearTimeout(idleFallbackRef.current);
         idleFallbackRef.current = null;
+      }
+      if (copiedTimeoutRef.current !== null) {
+        window.clearTimeout(copiedTimeoutRef.current);
+        copiedTimeoutRef.current = null;
       }
       const map = mapControllerRef.current?.getMap();
       if (map) {
@@ -869,6 +879,32 @@ export function PrintLayoutDialog({
       observer?.disconnect();
     };
   }, [open, options]);
+
+  // Copy the composed layout to the clipboard as a PNG, so it can be pasted
+  // straight into a document without saving a file first (GH #773).
+  const handleCopy = async () => {
+    if (!captured) {
+      setError(t("printLayout.errors.captureFirst"));
+      return;
+    }
+    setExporting(true);
+    setError(null);
+    try {
+      await copyLayoutToClipboard(options);
+      setCopied(true);
+      if (copiedTimeoutRef.current !== null) {
+        window.clearTimeout(copiedTimeoutRef.current);
+      }
+      copiedTimeoutRef.current = window.setTimeout(() => {
+        setCopied(false);
+        copiedTimeoutRef.current = null;
+      }, 2000);
+    } catch {
+      setError(t("printLayout.errors.clipboardFailed"));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const handleExport = async (kind: "png" | "pdf") => {
     if (!captured) {
@@ -1949,6 +1985,21 @@ export function PrintLayoutDialog({
         <div className="flex items-center justify-end gap-2 pt-2">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             {t("common.close")}
+          </Button>
+          {/* Copy the composed layout straight to the clipboard (GH #773). */}
+          <Button
+            variant="outline"
+            disabled={exporting || !captured}
+            onClick={() => void handleCopy()}
+          >
+            {copied ? (
+              <Check className="mr-2 h-4 w-4" />
+            ) : (
+              <ClipboardCopy className="mr-2 h-4 w-4" />
+            )}
+            {copied
+              ? t("printLayout.copied")
+              : t("printLayout.copyToClipboard")}
           </Button>
           {/* Equal-weight export buttons: neither format is the "primary" one
               (GH #520). */}
