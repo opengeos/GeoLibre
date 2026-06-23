@@ -127,7 +127,9 @@ export function SharedRightSidebar({
   ];
   if (stylePanelVisible) {
     entries.push({
-      id: "__style__",
+      // Namespaced so the built-in Style entry's React key cannot collide with a
+      // plugin id (plugin ids are arbitrary strings).
+      id: "__builtin:style__",
       title: t("sharedRail.style"),
       icon: <SlidersHorizontal className="h-4 w-4" />,
       active: styleExpanded,

@@ -1450,6 +1450,11 @@ export function DesktopShell({
           // instead of the two positional plugin slots flanking the Style panel.
           <SectionErrorBoundary label="Shared right sidebar">
             <SharedRightSidebar
+              // Key by the active panel id so switching between two
+              // replace-style plugins remounts the sidebar, resetting its
+              // per-panel local state (the Style opt-in) rather than carrying
+              // the previous plugin's session over.
+              key={replaceStylePanelId}
               pluginId={replaceStylePanelId}
               pluginContentEl={pluginContentEl}
               pluginWidth={pluginPanelWidth}

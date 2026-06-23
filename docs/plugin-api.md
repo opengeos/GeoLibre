@@ -91,7 +91,9 @@ export interface GeoLibreAppAPI {
   collapseRightPanel?: (id: string) => void;
   closeRightPanel?: (id: string) => void;
   getActiveRightPanel?: () => string | null;
-  setActiveRightPanelDock?: (dock: GeoLibreRightPanelDock) => void;
+  setActiveRightPanelDock?: (
+    dock: Exclude<GeoLibreRightPanelDock, "replace-style">, // shared-rail mode is not steppable
+  ) => void;
   getActiveRightPanelDock?: () => GeoLibreRightPanelDock | null;
   // Top toolbar menus (see "Toolbar menus" below).
   registerToolbarMenu?: (menu: GeoLibreToolbarMenu) => () => void;
