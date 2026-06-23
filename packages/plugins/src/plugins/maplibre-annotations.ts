@@ -346,7 +346,10 @@ function bindMap(map: maplibregl.Map): void {
   map.on("mousedown", handleMouseDown);
   map.on("mousemove", handleMouseMove);
   map.on("mouseup", handleMouseUp);
-  document.addEventListener("keydown", handleKeyDown);
+  // Scope Escape to the map canvas (capture, ahead of MapLibre's own handler)
+  // rather than the document, so pressing Escape in an unrelated input (layer
+  // name field, search box, attribute cell) cannot cancel an annotation tool.
+  map.getCanvas().addEventListener("keydown", handleKeyDown, { capture: true });
 }
 
 function unbindMap(): void {
@@ -356,7 +359,9 @@ function unbindMap(): void {
   map.off("mousedown", handleMouseDown);
   map.off("mousemove", handleMouseMove);
   map.off("mouseup", handleMouseUp);
-  document.removeEventListener("keydown", handleKeyDown);
+  map.getCanvas().removeEventListener("keydown", handleKeyDown, {
+    capture: true,
+  });
   map.dragPan.enable();
   map.getCanvas().style.cursor = "";
   clearPreview(map);
