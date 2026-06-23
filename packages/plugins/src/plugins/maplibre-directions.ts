@@ -121,10 +121,16 @@ export function removeLastDirectionsWaypoint(): void {
  */
 export function clearDirectionsWaypoints(): void {
   if (!directions) return;
+  // Abort any in-flight route refetch (e.g. from a pending removal) so its
+  // response can't redraw a route onto the map after we clear; clear() alone
+  // does not cancel the request. abortController only exists while a request is
+  // ongoing. This keeps clear() honoring its contract (always clears) rather
+  // than bailing out and silently no-op'ing when a removal is in flight.
+  directions.abortController?.abort();
   // clear() does not emit a waypoint event, so notify listeners directly.
   directions.clear();
   // Clearing supersedes any in-flight removal: drop the flag so the post-clear
-  // state is consistent (the pending promise's .finally re-runs this harmlessly).
+  // state is consistent (the aborted removal's .finally re-runs this harmlessly).
   removalInFlight = false;
   notifyDirectionsState();
 }
