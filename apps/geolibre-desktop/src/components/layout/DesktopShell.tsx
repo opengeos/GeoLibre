@@ -21,7 +21,7 @@ import {
   restoreRasterLayers,
   restoreThreeDTilesLayers,
   restoreVectorLayers,
-  setBookmarkCaptureLabel,
+  setBookmarkLabels,
   setNonTiledRasterHandler,
   startLayerGeometryEdit,
   subscribeGeometryEdit,
@@ -394,12 +394,18 @@ export function DesktopShell({
   const { t } = useTranslation();
   const shellRef = useRef<HTMLDivElement>(null);
   const verticalResizeGuideRef = useRef<HTMLDivElement>(null);
-  // Push the translated bookmark capture-checkbox label into the
-  // framework-agnostic plugins package (which can't call t() itself). Done here
-  // rather than in TopToolbar so it still applies when the toolbar is hidden
-  // (e.g. `?maponly`), where the BookmarkControl overlay is still present.
+  // Push the translated bookmark labels into the framework-agnostic plugins
+  // package (which can't call t() itself). Done here rather than in TopToolbar
+  // so it still applies when the toolbar is hidden (e.g. `?maponly`), where the
+  // BookmarkControl overlay is still present.
   useEffect(() => {
-    setBookmarkCaptureLabel(t("bookmark.captureStateLabel"));
+    setBookmarkLabels({
+      captureStateLabel: t("bookmark.captureStateLabel"),
+      captureStateTooltip: t("bookmark.captureStateTooltip"),
+      exportLabel: t("bookmark.export"),
+      exportSelectedLabel: t("bookmark.exportSelected"),
+      exportAllLabel: t("bookmark.exportAll"),
+    });
   }, [t]);
   // The map's Fullscreen control maximizes the map *canvas* (it calls
   // requestFullscreen on the map container). Chromium promotes that element to

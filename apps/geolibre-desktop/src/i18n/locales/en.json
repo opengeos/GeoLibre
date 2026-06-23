@@ -53,11 +53,15 @@
     }
   },
   "bookmark": {
-    "captureStateLabel": "Include visible layers"
+    "captureStateLabel": "Include complete layer state (active, inactive, and layer order)",
+    "captureStateTooltip": "Applies to the bookmark you save next, not as a global setting. Leave it on to restore exactly this layer arrangement later.",
+    "export": "Export",
+    "exportSelected": "Export Selected",
+    "exportAll": "Export All"
   },
   "fileNamePrompt": {
     "title": "Save file as",
-    "description": "Choose a file name. The file downloads to your browser's downloads folder.",
+    "description": "Enter a file name. The file downloads to your browser's downloads folder.",
     "label": "File name"
   },
   "newProject": {
