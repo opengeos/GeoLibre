@@ -315,7 +315,10 @@ export function setBookmarkLabels(
   labels: Partial<typeof bookmarkLabels>
 ): void {
   for (const [key, value] of Object.entries(labels)) {
-    if (value) bookmarkLabels[key as keyof typeof bookmarkLabels] = value;
+    // Only overwrite when the caller actually supplied the key; an omitted key
+    // keeps the English default rather than being blanked out.
+    if (value !== undefined)
+      bookmarkLabels[key as keyof typeof bookmarkLabels] = value;
   }
 }
 
@@ -2768,7 +2771,10 @@ function routeBookmarkFileIoThroughHost(
   // of BookmarkControl as of maplibre-gl-components@0.21.0. If a future version
   // renames them, the overrides below silently stop being called and file I/O
   // regresses to the WebView-incompatible Blob/file-input path — so warn loudly
-  // to flag it when bumping the dependency.
+  // to flag it when bumping the dependency. The public `exportBookmarks(mode?)`
+  // signature is load-bearing too (added in 0.22.6): if a future version drops
+  // the `mode` arg, "Export Selected" would silently export everything, since
+  // the extra argument becomes a no-op. Re-verify both when bumping.
   const io = control as unknown as {
     _exportToFile?: (mode?: BookmarkExportMode) => void;
     _importFromFile?: () => void;
