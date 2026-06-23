@@ -496,6 +496,14 @@ export function PrintLayoutDialog({
       // hidden (not unmounted) on close, so it would otherwise persist into the
       // next open even though no scale was just attempted (GH #743).
       setScaleNotice(null);
+      // Same reasoning for the clipboard "Copied" flag: a copy made just before
+      // the dialog was closed (within the 2s window) would otherwise re-open
+      // still showing the confirmation (GH #773).
+      if (copiedTimeoutRef.current !== null) {
+        window.clearTimeout(copiedTimeoutRef.current);
+        copiedTimeoutRef.current = null;
+      }
+      setCopied(false);
       setTitle((prev) => prev || (projectName ?? "").trim());
       setDateText((prev) => prev || new Date().toLocaleDateString());
       // Re-show a previously drawn extent box while composing.
