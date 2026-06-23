@@ -46,6 +46,21 @@ Download the Windows installer (`.msi` or `.exe`) from the latest
 is unsigned, so Windows SmartScreen may warn you; choose **More info → Run
 anyway** to proceed.
 
+### Portable (no install)
+
+Prefer not to install? Download the `*-x64-portable.zip` asset from the latest
+[release](https://github.com/opengeos/GeoLibre/releases), unzip it anywhere
+(including a USB drive), and run `geolibre-desktop.exe`. No installer, admin
+rights, or registry changes are involved, and the build does not auto-update, so
+download a newer zip to upgrade.
+
+The portable build relies on the Microsoft Edge WebView2 Runtime, which is
+preinstalled on Windows 11 and current Windows 10. If the app does not start,
+install the
+[Evergreen runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
+The optional Python sidecar tools (Whitebox, raster, conversion) need Python
+available just as in the installed build; everything else runs without it.
+
 ## macOS installation
 
 Signing and notarization apply to **v1.4.1 and later**. For v1.4.0 and earlier
