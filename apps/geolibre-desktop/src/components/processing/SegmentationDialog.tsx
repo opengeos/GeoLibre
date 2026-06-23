@@ -239,7 +239,13 @@ export function SegmentationDialog({
   // #777), collapse the dialog to just the explanatory banner plus a link to
   // the desktop download. The desktop build keeps the full form even when the
   // server is not running yet, since the user can start it from here.
-  const webUnavailable = !isTauri() && status !== null && !available;
+  //
+  // We treat the form as hidden whenever the browser hasn't *confirmed*
+  // availability (status null mid-probe, or unavailable), so the form never
+  // flashes in on open before the async status probe resolves. On the rare web
+  // deployment where the proxied sidecar is reachable, `available` becomes true
+  // and the full form appears.
+  const webUnavailable = !isTauri() && !available;
 
   return (
     <Dialog
@@ -306,105 +312,105 @@ export function SegmentationDialog({
               the dialog shows just the banner + desktop download link. */}
           {!webUnavailable && (
             <>
-          {/* Image source */}
-          <div className="grid gap-1.5">
-            <Label htmlFor="seg-image" className="text-xs">
-              {t("segmentation.imageLabel")}
-              <span className="text-destructive"> *</span>
-            </Label>
-            <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2">
-              <Input
-                id="seg-image"
-                readOnly
-                value={imageName}
-                placeholder={t("segmentation.imagePlaceholder")}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                title={t("segmentation.chooseImage")}
-                onClick={() => void pickImage()}
+            {/* Image source */}
+            <div className="grid gap-1.5">
+              <Label htmlFor="seg-image" className="text-xs">
+                {t("segmentation.imageLabel")}
+                <span className="text-destructive"> *</span>
+              </Label>
+              <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2">
+                <Input
+                  id="seg-image"
+                  readOnly
+                  value={imageName}
+                  placeholder={t("segmentation.imagePlaceholder")}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  title={t("segmentation.chooseImage")}
+                  onClick={() => void pickImage()}
+                >
+                  <FolderOpen className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Mode */}
+            <div className="grid gap-1.5">
+              <Label htmlFor="seg-mode" className="text-xs">
+                {t("segmentation.modeLabel")}
+              </Label>
+              <Select
+                id="seg-mode"
+                value={mode}
+                onChange={(e) =>
+                  setMode(e.target.value as "text" | "automatic")
+                }
               >
-                <FolderOpen className="h-4 w-4" />
+                <option value="text">{t("segmentation.modeText")}</option>
+                <option value="automatic">
+                  {t("segmentation.modeAutomatic")}
+                </option>
+              </Select>
+            </div>
+
+            {mode === "text" && (
+              <>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="seg-prompt" className="text-xs">
+                    {t("segmentation.promptLabel")}
+                    <span className="text-destructive"> *</span>
+                  </Label>
+                  <Input
+                    id="seg-prompt"
+                    value={prompt}
+                    placeholder={t("segmentation.promptPlaceholder")}
+                    onChange={(e) => setPrompt(e.target.value)}
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="seg-confidence" className="text-xs">
+                    {t("segmentation.confidenceLabel")}
+                  </Label>
+                  <Input
+                    id="seg-confidence"
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={String(confidence)}
+                    onChange={(e) => {
+                      if (e.target.value === "") {
+                        setConfidence(0.4);
+                        return;
+                      }
+                      const parsed = Number(e.target.value);
+                      // Ignore non-numeric input and clamp to [0, 1] so a NaN or
+                      // out-of-range confidence is never sent to the backend.
+                      if (!Number.isFinite(parsed)) return;
+                      setConfidence(Math.min(1, Math.max(0, parsed)));
+                    }}
+                  />
+                </div>
+              </>
+            )}
+
+            <div>
+              <Button
+                onClick={() => void handleRun()}
+                disabled={running || !available || !imageBytes}
+                className="gap-2"
+              >
+                {running ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
+                {t("segmentation.segment")}
               </Button>
             </div>
-          </div>
-
-          {/* Mode */}
-          <div className="grid gap-1.5">
-            <Label htmlFor="seg-mode" className="text-xs">
-              {t("segmentation.modeLabel")}
-            </Label>
-            <Select
-              id="seg-mode"
-              value={mode}
-              onChange={(e) =>
-                setMode(e.target.value as "text" | "automatic")
-              }
-            >
-              <option value="text">{t("segmentation.modeText")}</option>
-              <option value="automatic">
-                {t("segmentation.modeAutomatic")}
-              </option>
-            </Select>
-          </div>
-
-          {mode === "text" && (
-            <>
-              <div className="grid gap-1.5">
-                <Label htmlFor="seg-prompt" className="text-xs">
-                  {t("segmentation.promptLabel")}
-                  <span className="text-destructive"> *</span>
-                </Label>
-                <Input
-                  id="seg-prompt"
-                  value={prompt}
-                  placeholder={t("segmentation.promptPlaceholder")}
-                  onChange={(e) => setPrompt(e.target.value)}
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="seg-confidence" className="text-xs">
-                  {t("segmentation.confidenceLabel")}
-                </Label>
-                <Input
-                  id="seg-confidence"
-                  type="number"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={String(confidence)}
-                  onChange={(e) => {
-                    if (e.target.value === "") {
-                      setConfidence(0.4);
-                      return;
-                    }
-                    const parsed = Number(e.target.value);
-                    // Ignore non-numeric input and clamp to [0, 1] so a NaN or
-                    // out-of-range confidence is never sent to the backend.
-                    if (!Number.isFinite(parsed)) return;
-                    setConfidence(Math.min(1, Math.max(0, parsed)));
-                  }}
-                />
-              </div>
-            </>
-          )}
-
-          <div>
-            <Button
-              onClick={() => void handleRun()}
-              disabled={running || !available || !imageBytes}
-              className="gap-2"
-            >
-              {running ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Play className="h-4 w-4" />
-              )}
-              {t("segmentation.segment")}
-            </Button>
-          </div>
             </>
           )}
 
