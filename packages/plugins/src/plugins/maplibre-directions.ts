@@ -101,6 +101,11 @@ export function removeLastDirectionsWaypoint(): void {
   if (count === 0) return;
   removalInFlight = true;
   notifyDirectionsState();
+  // Snapshot the session token: teardown()/attach() bump loadToken, so if the
+  // user exits (or exits and re-enters) before this settles, a stale token means
+  // we must not touch the now-current session's in-flight state or notify its
+  // subscribers (teardown already reset the flag for the session we belonged to).
+  const callToken = loadToken;
   // removeWaypoint re-fetches the route, which can reject (network/OSRM error).
   // Log rather than let it surface as an unhandled rejection, mirroring how
   // attach() handles its load failure; clear the in-flight flag either way.
@@ -110,6 +115,7 @@ export function removeLastDirectionsWaypoint(): void {
       console.error("Directions: removeWaypoint failed", error);
     })
     .finally(() => {
+      if (callToken !== loadToken) return;
       removalInFlight = false;
       notifyDirectionsState();
     });
