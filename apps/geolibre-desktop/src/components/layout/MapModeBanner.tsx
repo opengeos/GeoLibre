@@ -100,7 +100,11 @@ export function MapModeBanner({ mapControllerRef }: MapModeBannerProps) {
               type="button"
               size="sm"
               variant="ghost"
-              disabled={waypointCount === 0 || removalInFlight}
+              // Unlike Remove last, Clear stays enabled during an in-flight
+              // removal: clearDirectionsWaypoints() aborts the pending refetch
+              // before clearing, so it is safe and lets the user dump waypoints
+              // immediately rather than waiting for a route load to finish.
+              disabled={waypointCount === 0}
               onClick={clearDirectionsWaypoints}
             >
               <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />

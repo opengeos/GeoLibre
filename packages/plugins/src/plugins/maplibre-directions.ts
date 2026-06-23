@@ -112,6 +112,9 @@ export function removeLastDirectionsWaypoint(): void {
   void directions
     .removeWaypoint(count - 1)
     .catch((error: unknown) => {
+      // An AbortError means clearDirectionsWaypoints() intentionally cancelled
+      // this refetch; that is expected, not a failure, so don't log it.
+      if (error instanceof DOMException && error.name === "AbortError") return;
       console.error("Directions: removeWaypoint failed", error);
     })
     .finally(() => {
