@@ -154,25 +154,30 @@ describe("right-panel registry", () => {
     assert.equal(getActiveRightPanelDock(), null);
   });
 
-  it("honors the non-positional replace-style dock and keeps it unsteppable", () => {
+  it("honors replace-style: settable at runtime but not part of the step order", () => {
     registerRightPanel(testPanel({ dock: "replace-style" }));
     openRightPanel("workbench");
     // A declared replace-style dock survives normalization.
     assert.equal(getActiveRightPanelDock(), "replace-style");
     assert.equal(getRightPanelSnapshot().dock, "replace-style");
 
-    // It is not part of the steppable position order, so moving is a no-op.
+    // It is not part of the steppable position order, so the move arrows are a
+    // no-op while it is in the shared rail.
     moveActiveRightPanelDock("left");
     assert.equal(getActiveRightPanelDock(), "replace-style");
     moveActiveRightPanelDock("right");
     assert.equal(getActiveRightPanelDock(), "replace-style");
 
-    // setActiveRightPanelDock only accepts the four positional docks; switching
-    // to a position works, but switching to replace-style is rejected.
-    setActiveRightPanelDock("left-of-style");
+    // setActiveRightPanelDock can detach it to a positional dock (the move
+    // arrows then work)...
+    setActiveRightPanelDock("right-of-style");
+    assert.equal(getActiveRightPanelDock(), "right-of-style");
+    moveActiveRightPanelDock("left");
     assert.equal(getActiveRightPanelDock(), "left-of-style");
+
+    // ...and can merge it back into the shared rail at runtime.
     setActiveRightPanelDock("replace-style");
-    assert.equal(getActiveRightPanelDock(), "left-of-style");
+    assert.equal(getActiveRightPanelDock(), "replace-style");
   });
 
   it("falls back to right-of-style for an unknown declared dock", () => {

@@ -1697,6 +1697,8 @@
     "resize": "Resize panel",
     "moveLeft": "Move panel to the left",
     "moveRight": "Move panel to the right",
+    "mergeIntoStyleRail": "Merge into the Style rail",
+    "detach": "Detach as a movable panel",
     "collapsedLabel": "{{title}} (collapsed)"
   },
   "sharedRail": {

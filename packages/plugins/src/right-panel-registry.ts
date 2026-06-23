@@ -225,13 +225,16 @@ export function closeRightPanel(id: string): void {
 }
 
 /**
- * Dock the active panel at a specific position. No-op when no panel is active
- * or the panel is already there.
+ * Dock the active panel at a specific dock. Accepts any valid dock, including
+ * the non-positional `replace-style` shared-rail mode, so a panel can switch
+ * between a movable positional panel and the shared Style rail at runtime (the
+ * host's merge/detach buttons use this). No-op when no panel is active, the dock
+ * is unknown, or the panel is already there.
  */
 export function setActiveRightPanelDock(dock: RightPanelDock): void {
   if (
     activeId === null ||
-    !RIGHT_PANEL_DOCKS.includes(dock) ||
+    !ALL_DOCKS.includes(dock) ||
     activeDock === dock
   ) {
     return;

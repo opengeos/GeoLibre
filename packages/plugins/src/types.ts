@@ -231,16 +231,13 @@ export interface GeoLibreAppAPI {
   /** Id of the active right-side workspace panel, or null when none is open. */
   getActiveRightPanel?: () => string | null;
   /**
-   * Dock the active panel at one of the four positional docks, mirroring the
-   * user-facing move buttons so a plugin can reposition its own panel. No-op when
-   * no panel is active. The non-positional `replace-style` shared-rail mode is
-   * set at registration time and is not steppable, so it is excluded from the
-   * parameter type (passing it is a compile error rather than a silent no-op).
-   * See {@link GeoLibreRightPanelDock}.
+   * Dock the active panel at any dock, mirroring the user-facing controls so a
+   * plugin can reposition its own panel. The four positional docks behave like
+   * the move buttons; `replace-style` switches the panel into the shared Style
+   * rail (the inverse of detaching it back to a positional dock). No-op when no
+   * panel is active. See {@link GeoLibreRightPanelDock}.
    */
-  setActiveRightPanelDock?: (
-    dock: Exclude<GeoLibreRightPanelDock, "replace-style">,
-  ) => void;
+  setActiveRightPanelDock?: (dock: GeoLibreRightPanelDock) => void;
   /** Where the active panel docks, or null when none is open. */
   getActiveRightPanelDock?: () => GeoLibreRightPanelDock | null;
   /**

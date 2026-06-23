@@ -5,11 +5,14 @@ import {
   moveActiveRightPanelDock,
   openRightPanel,
   type RightPanelDock,
+  setActiveRightPanelDock,
 } from "@geolibre/plugins";
 import { Button } from "@geolibre/ui";
 import {
   ArrowLeftToLine,
   ArrowRightToLine,
+  Columns2,
+  Combine,
   PanelLeft,
   PanelLeftClose,
   PanelLeftOpen,
@@ -235,6 +238,32 @@ export function PluginRightPanel({
                 </Button>
               </>
             ) : null}
+            {isSharedRail ? (
+              // Pop the panel out of the shared Style rail back to a movable
+              // positional panel (where the move buttons return).
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                title={t("pluginPanel.detach")}
+                aria-label={t("pluginPanel.detach")}
+                onClick={() => setActiveRightPanelDock("right-of-style")}
+              >
+                <Columns2 className="h-4 w-4" />
+              </Button>
+            ) : (
+              // Merge the movable panel into the shared Style rail.
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                title={t("pluginPanel.mergeIntoStyleRail")}
+                aria-label={t("pluginPanel.mergeIntoStyleRail")}
+                onClick={() => setActiveRightPanelDock("replace-style")}
+              >
+                <Combine className="h-4 w-4" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"
