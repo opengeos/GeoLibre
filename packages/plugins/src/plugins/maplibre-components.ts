@@ -469,9 +469,10 @@ const HTML_OPTIONS = {
   collapsed: false,
   fontColor: "hsl(var(--popover-foreground))",
   // Omit maxHeight so the control auto-fits the available viewport height
-  // (maplibre-gl-components >= 0.20.6); see COLORBAR_OPTIONS above. A fixed cap
-  // forced an internal scrollbar even when the HTML content was short and there
-  // was ample empty space below the panel.
+  // (HtmlGuiControl gained this in maplibre-gl-components >= 0.22.8; the
+  // colorbar/legend panels got it earlier in 0.20.6). See COLORBAR_OPTIONS
+  // above. A fixed cap forced an internal scrollbar even when the HTML content
+  // was short and there was ample empty space below the panel.
   panelWidth: 340,
   position: htmlControlPosition,
 } satisfies HtmlGuiControlOptions;
