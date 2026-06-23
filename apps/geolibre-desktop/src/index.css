@@ -819,31 +819,51 @@ body,
  */
 .geolibre-annotations-control {
   background-color: hsl(var(--background)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
+/* `display: flex !important` overrides MapLibre's `.maplibregl-ctrl button`
+ * (which is `display: block`), so the icon centers in the 29px cell instead of
+ * sitting at the top-left. */
 .geolibre-annotations-control button {
   align-items: center;
   background: transparent;
   border: none;
   color: hsl(var(--foreground));
   cursor: pointer;
-  display: flex;
+  display: flex !important;
   height: 29px;
   justify-content: center;
   padding: 0;
   width: 29px;
 }
 
-.geolibre-annotations-control button:hover {
+.geolibre-annotations-control button > svg {
+  display: block;
+  flex: 0 0 auto;
+  margin: 0 auto;
+}
+
+.geolibre-annotations-control button:not(.is-active):hover {
   background-color: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
 }
 
 .geolibre-annotations-control button.is-active {
   background-color: hsl(var(--primary));
   color: hsl(var(--primary-foreground));
+}
+
+/* Separators between the icon buttons, tinted for the active theme. */
+.geolibre-annotations-control button + button,
+.geolibre-annotations-control .geolibre-annotations-width,
+.geolibre-annotations-control .geolibre-annotations-color {
+  border-top: 1px solid hsl(var(--border));
 }
 
 .geolibre-annotations-control .geolibre-annotations-color {

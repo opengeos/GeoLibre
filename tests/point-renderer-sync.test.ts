@@ -163,4 +163,62 @@ describe("point renderer sync", () => {
     assert.ok(layers.has("layer-pts-circle"));
     assert.ok(!layers.has("layer-pts-heatmap"));
   });
+
+  // MapLibre's addLayer silently drops a layer whose paint carries an explicit
+  // null (null is only valid as a setPaintProperty reset), so the fill layer's
+  // `fill-pattern: null` (the "no pattern" default) must be stripped before the
+  // first add — otherwise polygon fills never appear (regression: annotation
+  // arrowheads and highlight shapes rendered as outline-only).
+  it("never passes a null paint value to addLayer for a polygon fill", () => {
+    const { map, layers, calls } = makeMap();
+    const polygon: GeoLibreLayer = {
+      id: "poly",
+      name: "Polygon",
+      type: "geojson",
+      source: { type: "geojson" },
+      visible: true,
+      opacity: 1,
+      style: { ...DEFAULT_LAYER_STYLE },
+      metadata: {},
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: {},
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [0, 0],
+                  [1, 0],
+                  [1, 1],
+                  [0, 1],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+    };
+    syncLayer(map as never, polygon);
+
+    assert.ok(layers.has("layer-poly-fill"), "fill layer is created");
+    for (const call of calls) {
+      if (call.method !== "addLayer") continue;
+      const spec = call.args[0] as {
+        id?: string;
+        paint?: Record<string, unknown>;
+      };
+      const nullKeys = Object.entries(spec.paint ?? {})
+        .filter(([, value]) => value === null)
+        .map(([key]) => key);
+      assert.deepEqual(
+        nullKeys,
+        [],
+        `addLayer spec for ${spec.id} carries null paint: ${nullKeys.join(", ")}`,
+      );
+    }
+  });
 });

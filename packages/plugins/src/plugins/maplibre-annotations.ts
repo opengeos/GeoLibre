@@ -540,14 +540,22 @@ function handleMouseUp(event: maplibregl.MapMouseEvent): void {
     return;
   }
 
+  if (activeTool === "freehand") {
+    // Freehand is an open line (a pen stroke), not a closed/filled shape.
+    freehandPath.push([event.lngLat.lng, event.lngLat.lat]);
+    const path = freehandPath;
+    dragStart = null;
+    freehandPath = [];
+    clearPreview(map);
+    if (path.length >= 2) appendAnnotationFeatures([lineFeature(path)]);
+    return;
+  }
+
   let ring: Position[] | null = null;
   if (activeTool === "rectangle") {
     ring = rectangleRing(dragStart, event.lngLat);
   } else if (activeTool === "ellipse") {
     ring = ellipseRing(dragStart, event.lngLat);
-  } else if (activeTool === "freehand") {
-    freehandPath.push([event.lngLat.lng, event.lngLat.lat]);
-    ring = closeRing(freehandPath);
   }
 
   dragStart = null;
@@ -788,14 +796,6 @@ function ellipseRing(a: maplibregl.LngLat, b: maplibregl.LngLat): Position[] {
     ring.push([cx + rx * Math.cos(angle), cy + ry * Math.sin(angle)]);
   }
   return ring;
-}
-
-function closeRing(path: Position[]): Position[] {
-  if (path.length < 3) return path;
-  const first = path[0];
-  const last = path[path.length - 1];
-  if (first[0] === last[0] && first[1] === last[1]) return path;
-  return [...path, first];
 }
 
 /**

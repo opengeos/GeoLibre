@@ -2642,7 +2642,22 @@ function ensureLayer(
   }
   const validBeforeId =
     beforeId && map.getLayer(beforeId) ? beforeId : undefined;
-  map.addLayer(spec, validBeforeId);
+  // MapLibre's addLayer rejects (and silently drops, without throwing) a layer
+  // whose paint carries an explicit `null`. `null` is only valid as a
+  // setPaintProperty reset, which the update branch above uses; on first add it
+  // must be stripped so e.g. `fill-pattern: null` (the "no pattern" reset) does
+  // not blank the whole fill layer. Properties simply absent default correctly.
+  const addSpec =
+    spec.paint &&
+    Object.values(spec.paint).some((value) => value === null)
+      ? {
+          ...spec,
+          paint: Object.fromEntries(
+            Object.entries(spec.paint).filter(([, value]) => value !== null),
+          ),
+        }
+      : spec;
+  map.addLayer(addSpec, validBeforeId);
 }
 
 function setLayerZoomRange(
