@@ -233,18 +233,11 @@ export function SegmentationDialog({
   ]);
 
   const available = status?.available === true;
-  // In the browser build segmentation can never run (it needs the desktop
-  // sidecar + segment-geospatial). Rather than render a full configuration form
-  // whose inputs do nothing and a permanently disabled Segment button (issue
-  // #777), collapse the dialog to just the explanatory banner plus a link to
-  // the desktop download. The desktop build keeps the full form even when the
-  // server is not running yet, since the user can start it from here.
-  //
-  // We treat the form as hidden whenever the browser hasn't *confirmed*
-  // availability (status null mid-probe, or unavailable), so the form never
-  // flashes in on open before the async status probe resolves. On the rare web
-  // deployment where the proxied sidecar is reachable, `available` becomes true
-  // and the full form appears.
+  // Hide the form in the browser unless a proxied sidecar confirms
+  // availability. Gating on `available` (not on `status !== null`) prevents the
+  // form from flashing in during the async probe (issue #777); `available`
+  // becomes true only when a proxied sidecar is reachable, which also covers
+  // the rare web deployment where segmentation is actually usable.
   const webUnavailable = !isTauri() && !available;
 
   return (
