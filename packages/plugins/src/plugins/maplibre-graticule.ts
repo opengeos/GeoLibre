@@ -86,6 +86,11 @@ let labels: GraticuleLabels = { ...DEFAULT_GRATICULE_LABELS };
  * Replace the user-facing strings (the host calls this with translations on
  * every language change). Pushes the new strings into the live control tooltip
  * and, if the settings panel is open, rebuilds its body so labels stay current.
+ *
+ * Note: the panel's header title is passed once to `registerRightPanel` at
+ * activation and the host exposes no API to update it afterward, so the title
+ * (unlike the body and control tooltip) only re-localizes when the panel is
+ * reopened.
  */
 export function setGraticuleLabels(next: Partial<GraticuleLabels>): void {
   labels = { ...labels, ...next };
@@ -182,9 +187,13 @@ function unwrappedLongitudeRange(bounds: LngLatBounds): {
   return { west, east };
 }
 
-/** Pick an auto interval that draws roughly 4-12 meridians across the view. */
-function autoStep(lonSpan: number): number {
-  const span = Math.abs(lonSpan) || 0.001;
+/**
+ * Pick an auto interval that draws roughly 4-12 grid lines across the view.
+ * Uses the larger of the longitude/latitude spans so a tall (e.g. polar) view
+ * does not end up with far more parallels than meridians.
+ */
+function autoStep(lonSpan: number, latSpan: number): number {
+  const span = Math.max(Math.abs(lonSpan), Math.abs(latSpan)) || 0.001;
   for (const step of NICE_STEPS) {
     if (span / step >= 4) return step;
   }
@@ -198,6 +207,10 @@ function autoStep(lonSpan: number): number {
  */
 function decimalsForStep(step: number): number {
   const text = String(step);
+  // Values JS serialises in scientific notation (e.g. "1e-7") have no ".", which
+  // would wrongly read as 0 decimals. Such steps are below our 0.001 floor, so
+  // cap at the maximum precision instead.
+  if (text.includes("e") || text.includes("E")) return 4;
   const dot = text.indexOf(".");
   if (dot === -1) return 0;
   return Math.min(4, text.length - dot - 1);
@@ -270,18 +283,22 @@ interface GraticuleGeometry {
 function buildGeometry(activeMap: MapLibreMap): GraticuleGeometry {
   const bounds = activeMap.getBounds();
   const { west, east } = unwrappedLongitudeRange(bounds);
-  const step =
-    settings.spacingMode === "fixed"
-      ? Math.max(0.0001, settings.spacingDegrees)
-      : autoStep(east - west);
-
   // Mercator cannot show the poles; clamp parallels to the renderable range.
   const south = Math.max(bounds.getSouth(), -85);
   const north = Math.min(bounds.getNorth(), 85);
+  const step =
+    settings.spacingMode === "fixed"
+      ? Math.max(0.0001, settings.spacingDegrees)
+      : autoStep(east - west, north - south);
 
   const lineFeatures: Feature<LineString>[] = [];
   const labelFeatures: Feature<Point>[] = [];
   const showAllEdges = settings.labelEdges === "all";
+
+  // Note: edge labels are positioned at the (possibly unwrapped) viewport bounds,
+  // so for an antimeridian-crossing view their longitudes can exceed [-180, 180].
+  // MapLibre renders these correctly in the continuous world; only a consumer of
+  // the raw FeatureCollection (e.g. a future GeoJSON export) would need to wrap.
 
   // Meridians (constant longitude). The longitude range is unwrapped above so a
   // view crossing the antimeridian still fills the screen.
@@ -850,6 +867,9 @@ export const maplibreGraticulePlugin: GeoLibrePlugin = {
     unregisterPanel = null;
     syncPanel = null;
     panelContainer = null;
+    // Clear any pending idle flag so a rapid re-activation can queue its own
+    // deferred draw instead of waiting on the previous run's stale listener.
+    idlePending = false;
     if (map) teardownLayers(map);
     map = null;
     appRef = null;
