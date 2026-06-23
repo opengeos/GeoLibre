@@ -43,6 +43,10 @@ const directionsStateListeners = new Set<DirectionsStateListener>();
 // settles, which closes the rapid-click window where two clicks would both read
 // the same pre-removal count and target an index the first call already removed.
 let removalInFlight = false;
+// Bumped on every removal start and on clear. A removal's finalizer compares its
+// captured value against this so a superseded removal (aborted by clear, then
+// replaced by a new removal) can't flip the flag back for the newer request.
+let removalToken = 0;
 
 function notifyDirectionsState(): void {
   // Isolate subscriber failures so one throwing listener does not block the
@@ -100,12 +104,15 @@ export function removeLastDirectionsWaypoint(): void {
   const count = directions.waypoints.length;
   if (count === 0) return;
   removalInFlight = true;
-  notifyDirectionsState();
   // Snapshot the session token: teardown()/attach() bump loadToken, so if the
   // user exits (or exits and re-enters) before this settles, a stale token means
   // we must not touch the now-current session's in-flight state or notify its
   // subscribers (teardown already reset the flag for the session we belonged to).
   const callToken = loadToken;
+  // Snapshot the removal token too: a clear (or a newer removal) bumps it, so a
+  // superseded finalizer can't reset removalInFlight for a later in-flight call.
+  const callRemovalToken = ++removalToken;
+  notifyDirectionsState();
   // removeWaypoint re-fetches the route, which can reject (network/OSRM error).
   // Log rather than let it surface as an unhandled rejection, mirroring how
   // attach() handles its load failure; clear the in-flight flag either way.
@@ -126,7 +133,9 @@ export function removeLastDirectionsWaypoint(): void {
       console.error("Directions: removeWaypoint failed", error);
     })
     .finally(() => {
-      if (callToken !== loadToken) return;
+      // Skip if the session changed or this removal was superseded (e.g. by a
+      // clear or a newer removal); that newer owner manages the flag itself.
+      if (callToken !== loadToken || callRemovalToken !== removalToken) return;
       removalInFlight = false;
       notifyDirectionsState();
     });
@@ -138,6 +147,8 @@ export function removeLastDirectionsWaypoint(): void {
  */
 export function clearDirectionsWaypoints(): void {
   if (!directions) return;
+  // Supersede any in-flight removal's finalizer so it can't later reset the flag.
+  ++removalToken;
   // Abort any in-flight route refetch (e.g. from a pending removal) so its
   // response can't redraw a route onto the map after we clear; clear() alone
   // does not cancel the request. abortController only exists while a request is
