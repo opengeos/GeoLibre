@@ -297,7 +297,7 @@ export function SegmentationDialog({
                 // Browser users cannot run segmentation here, so point them at
                 // the desktop download instead of the unusable "Start server"
                 // action (issue #777).
-                <Button asChild type="button" variant="outline" className="gap-2">
+                <Button asChild variant="outline" className="gap-2">
                   <a href={UPDATE_URL} target="_blank" rel="noreferrer">
                     <Download className="h-4 w-4" />
                     {t("segmentation.downloadDesktop")}
