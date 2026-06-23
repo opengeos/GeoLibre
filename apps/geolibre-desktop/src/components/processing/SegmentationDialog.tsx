@@ -247,7 +247,7 @@ export function SegmentationDialog({
   // drop with no explicit fetch timeout) never leaves them without an action.
   const downloadDesktopButton = (
     <Button asChild variant="outline" className="gap-2">
-      <a href={UPDATE_URL} target="_blank" rel="noreferrer">
+      <a href={UPDATE_URL} target="_blank" rel="noopener noreferrer">
         <Download className="h-4 w-4" />
         {t("segmentation.downloadDesktop")}
       </a>
@@ -277,8 +277,9 @@ export function SegmentationDialog({
                 {t("segmentation.status.checking")}
               </p>
               {/* Keep a download CTA visible while the probe runs so browser
-                  users always have an action, even if it never settles. */}
-              {!isTauri() && downloadDesktopButton}
+                  users always have an action, even if it never settles. During
+                  the probe `webUnavailable` reduces to `!isTauri()`. */}
+              {webUnavailable && downloadDesktopButton}
             </div>
           )}
 
