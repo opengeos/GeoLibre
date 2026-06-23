@@ -39,12 +39,19 @@ export interface GeoRssLayerResult {
  * output is `[longitude, latitude]`.
  *
  * @param text - The raw feed XML.
+ * @param options - `allowEmpty` returns an empty layer instead of throwing when
+ *   the feed has no geolocated items (used on auto-refresh, where a feed can
+ *   transiently empty out and should not raise a recurring error).
  * @returns The parsed features plus counts and the feed title.
- * @throws If the text is not valid XML, is not a recognized feed, or contains
- *   no geolocated items. Messages are English-only (as in the GPX parser); the
- *   UI surfaces them verbatim, so a caller needing i18n must catch and translate.
+ * @throws If the text is not valid XML, is not a recognized feed, or (unless
+ *   `allowEmpty`) contains no geolocated items. Messages are English-only (as in
+ *   the GPX parser); the UI surfaces them verbatim, so an i18n caller must catch
+ *   and translate.
  */
-export function parseGeoRssLayer(text: string): GeoRssLayerResult {
+export function parseGeoRssLayer(
+  text: string,
+  options: { allowEmpty?: boolean } = {},
+): GeoRssLayerResult {
   const document = new DOMParser().parseFromString(text, "application/xml");
   if (document.querySelector("parsererror")) {
     throw new Error("The GeoRSS feed is not valid XML.");
@@ -87,7 +94,7 @@ export function parseGeoRssLayer(text: string): GeoRssLayerResult {
     });
   }
 
-  if (features.length === 0) {
+  if (features.length === 0 && !options.allowEmpty) {
     throw new Error("No geolocated entries were found in the GeoRSS feed.");
   }
 

@@ -132,7 +132,9 @@ async function refreshGeoRssLayer(
   if (!response.ok) {
     throw new Error(`Request failed with status ${response.status}`);
   }
-  const result = parseGeoRssLayer(await response.text());
+  // allowEmpty: a live feed can transiently have no geolocated items, and a
+  // refresh should clear the layer rather than raise a recurring error.
+  const result = parseGeoRssLayer(await response.text(), { allowEmpty: true });
   return { geojson: result.features, featureCount: result.featureCount };
 }
 
