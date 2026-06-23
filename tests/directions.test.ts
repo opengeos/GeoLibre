@@ -21,7 +21,9 @@ describe("maplibreDirectionsPlugin", () => {
 
 // The mode banner reads these without knowing whether the lazy-loaded library
 // has attached yet, so the inactive-state contract must be safe: a zero count
-// and no-op mutators that never throw.
+// and no-op mutators that never throw. The active path where removalInFlight is
+// set true and then cleared by the removeWaypoint .finally needs a live routing
+// instance, so it is covered by the Playwright verification rather than here.
 describe("directions control surface (inactive)", () => {
   it("reports zero waypoints when the tool is inactive", () => {
     assert.equal(getDirectionsWaypointCount(), 0);
