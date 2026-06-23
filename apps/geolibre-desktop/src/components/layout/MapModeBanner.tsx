@@ -82,6 +82,9 @@ export function MapModeBanner({ mapControllerRef }: MapModeBannerProps) {
           {/* Visually-hidden live region so screen readers are told when the
               waypoint controls become available (0 → 1) or empty again, since
               the only visual cue is the buttons' disabled state. */}
+          {/* count: 0 resolves to the waypointCount_zero catalog key ("No
+              waypoints placed yet"); i18next honours _zero for count === 0
+              before falling through to _other, so that key is intentional. */}
           <span className="sr-only" aria-live="polite">
             {t("map.directionsMode.waypointCount", { count: waypointCount })}
           </span>
