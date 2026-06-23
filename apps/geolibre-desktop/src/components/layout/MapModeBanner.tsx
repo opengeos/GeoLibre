@@ -71,6 +71,12 @@ export function MapModeBanner({ mapControllerRef }: MapModeBannerProps) {
               </p>
             </div>
           </div>
+          {/* Visually-hidden live region so screen readers are told when the
+              waypoint controls become available (0 → 1) or empty again, since
+              the only visual cue is the buttons' disabled state. */}
+          <span className="sr-only" aria-live="polite">
+            {t("map.directionsMode.waypointCount", { count: waypointCount })}
+          </span>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Button
               type="button"

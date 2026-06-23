@@ -783,7 +783,9 @@
       "hint": "Click the map to add waypoints. Drag a waypoint to move it, or click it to remove it. Routes update automatically.",
       "removeLast": "Remove last",
       "clear": "Clear",
-      "exit": "Exit"
+      "exit": "Exit",
+      "waypointCount_one": "{{count}} waypoint placed",
+      "waypointCount_other": "{{count}} waypoints placed"
     },
     "reverseGeocodeMode": {
       "title": "Reverse Geocode mode active",

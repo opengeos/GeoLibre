@@ -32,17 +32,17 @@ describe("directions control surface (inactive)", () => {
     assert.equal(getDirectionsWaypointCount(), 0);
   });
 
-  it("returns a working unsubscribe from subscribeDirectionsState", () => {
-    let calls = 0;
-    const unsubscribe = subscribeDirectionsState(() => {
-      calls += 1;
-    });
+  it("returns an idempotent unsubscribe from subscribeDirectionsState", () => {
+    // The notify path needs a live routing instance (created by the lazy
+    // import on activate), which the Playwright verification exercises end to
+    // end. Here we only assert the subscribe contract that is reachable without
+    // one: unsubscribe is a function and can be called repeatedly without
+    // throwing, so a teardown that double-unsubscribes is safe.
+    const unsubscribe = subscribeDirectionsState(() => {});
     assert.equal(typeof unsubscribe, "function");
-    // clear() while inactive does not notify, so the count stays untouched and
-    // the listener is not called; the test asserts unsubscribe is callable and
-    // leaves no dangling subscription behind.
-    clearDirectionsWaypoints();
-    unsubscribe();
-    assert.equal(calls, 0);
+    assert.doesNotThrow(() => {
+      unsubscribe();
+      unsubscribe();
+    });
   });
 });
