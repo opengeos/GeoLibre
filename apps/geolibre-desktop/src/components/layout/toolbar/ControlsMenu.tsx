@@ -339,15 +339,17 @@ function AtmosphereEffectsSubmenu({
       }}
     >
       <DropdownMenuSubTrigger
-        // Off the globe the effects render nothing, so the controls would be
-        // busywork: disable opening the submenu and explain why on hover (#783).
-        // DropdownMenuSubTrigger greys out disabled state and keeps pointer
-        // events active, so the native title tooltip still fires.
+        // Off the globe the effects render nothing, so disable the submenu and
+        // explain why on hover. The trigger keeps pointer-events active (see
+        // dropdown-menu.tsx) so the native title tooltip still fires (#783).
         disabled={disabled}
         title={disabled ? t("toolbar.atmosphere.globeOnly") : undefined}
       >
         {t("toolbar.item.atmosphereEffects")}
-        {active ? " ✓" : ""}
+        {/* Suppress the check on a disabled (Mercator) row: a ✓ on a greyed,
+            non-interactive entry reads ambiguously. The active state is kept and
+            the mark returns when globe view re-enables the row. */}
+        {!disabled && active ? " ✓" : ""}
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className="w-64">
         <DropdownMenuItem
