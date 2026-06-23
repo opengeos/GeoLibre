@@ -75,7 +75,12 @@ export function removeLastDirectionsWaypoint(): void {
   if (!directions) return;
   const count = directions.waypoints.length;
   if (count === 0) return;
-  void directions.removeWaypoint(count - 1);
+  // removeWaypoint re-fetches the route, which can reject (network/OSRM error).
+  // Log rather than let it surface as an unhandled rejection, mirroring how
+  // attach() handles its load failure.
+  void directions.removeWaypoint(count - 1).catch((error: unknown) => {
+    console.error("Directions: removeWaypoint failed", error);
+  });
 }
 
 /**
