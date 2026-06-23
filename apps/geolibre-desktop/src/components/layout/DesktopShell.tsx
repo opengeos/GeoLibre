@@ -447,6 +447,7 @@ export function DesktopShell({
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
   const pythonConsoleOpen = useAppStore((s) => s.ui.pythonConsoleOpen);
+  const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
   const notebookOpen = useAppStore((s) => s.ui.notebookOpen);
   const storymapPresenting = useAppStore((s) => s.ui.storymapPresenting);
   // A plugin panel docks at one of four positions beside the Layers/Style
@@ -1640,7 +1641,10 @@ export function DesktopShell({
         </SectionErrorBoundary>
       ) : null}
       {pythonConsoleOpen ? (
-        <SectionErrorBoundary label="Python console">
+        <SectionErrorBoundary
+          label="Python console"
+          onClose={() => setPythonConsoleOpen(false)}
+        >
           <Suspense fallback={null}>
             <PythonConsolePanel mapControllerRef={mapControllerRef} />
           </Suspense>
