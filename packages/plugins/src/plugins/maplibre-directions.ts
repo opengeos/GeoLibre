@@ -171,6 +171,11 @@ function teardown(app: GeoLibreAppAPI): void {
     app.removeMapControl(loadingControl);
     loadingControl = null;
   }
+  // Detach our listeners before destroy() so teardown is self-contained and
+  // does not rely on the library's destroy() also tearing down its emitter.
+  directions?.off("addwaypoint", notifyDirectionsState);
+  directions?.off("removewaypoint", notifyDirectionsState);
+  directions?.off("setwaypoints", notifyDirectionsState);
   directions?.destroy();
   directions = null;
   directionsMap = null;
