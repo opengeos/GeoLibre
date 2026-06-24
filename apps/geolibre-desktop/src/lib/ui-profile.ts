@@ -200,6 +200,7 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   { id: "project.save", menuId: "project", labelKey: "common.save", tier: "basic" },
   { id: "project.saveAs", menuId: "project", labelKey: "toolbar.item.saveAsEllipsis", tier: "basic" },
   { id: "project.share", menuId: "project", labelKey: "toolbar.item.shareEllipsis", tier: "intermediate" },
+  { id: "project.exportHtml", menuId: "project", labelKey: "toolbar.item.exportHtmlEllipsis", tier: "intermediate" },
   { id: "project.collaborate", menuId: "project", labelKey: "toolbar.item.collaborateEllipsis", tier: "advanced" },
   { id: "project.print", menuId: "project", labelKey: "toolbar.item.printEllipsis", tier: "intermediate" },
   // Print Layout is the primary way any user turns a map into a shareable PDF/PNG

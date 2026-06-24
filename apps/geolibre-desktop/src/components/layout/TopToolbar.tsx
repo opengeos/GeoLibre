@@ -887,6 +887,7 @@ export function TopToolbar({
           onSave={() => void projectFiles.handleSave()}
           onSaveAs={() => void projectFiles.handleSaveAs()}
           onShare={() => setShareDialogOpen(true)}
+          onExportHtml={() => void projectFiles.handleExportHtml()}
           onCollaborate={() => setCollaborateDialogOpen(true)}
           onPrintLayout={() => setPrintLayoutOpen(true)}
           onDownloadOffline={() => setOfflineRegionOpen(true)}

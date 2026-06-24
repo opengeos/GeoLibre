@@ -21,7 +21,9 @@ import {
   RecentProjectGoneError,
   saveProjectFile,
   saveProjectFileToPath,
+  saveTextFileWithFallback,
 } from "../lib/tauri-io";
+import { buildProjectHtml, resolveViewerBaseUrl } from "../lib/html-export";
 import { mergeStringLists } from "../lib/string-lists";
 import { normalizeProjectUrl } from "../lib/urls";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
@@ -559,6 +561,54 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const handleSave = () => saveProject();
   const handleSaveAs = () => saveProject({ saveAs: true });
 
+  // Export the current project as a standalone interactive HTML page (issue
+  // #821), the in-app counterpart of the Python widget's `to_html()`. The file
+  // frames the hosted GeoLibre viewer and replays the inlined project into it
+  // over the embed bridge, so it renders interactively without a kernel or a
+  // share.geolibre.app upload.
+  const handleExportHtml = async (): Promise<boolean> => {
+    try {
+      // Embed all local vector data so the export is self-contained when opened
+      // on another machine (same guarantee Share gives), then strip environment
+      // variables: they are runtime secrets (e.g. API keys) that serve no
+      // purpose in a static viewer and must never ship inside a shareable file.
+      const { project, defaultProjectName } = await buildEmbeddedProject();
+      const safeProject = {
+        ...project,
+        preferences: { ...project.preferences, environmentVariables: [] },
+      };
+      const html = buildProjectHtml({
+        project: safeProject,
+        title: defaultProjectName,
+        appUrl: resolveViewerBaseUrl(),
+      });
+      const slug =
+        defaultProjectName
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "") || "geolibre-map";
+      await saveTextFileWithFallback(html, {
+        defaultName: `${slug}.html`,
+        filters: [{ name: t("toolbar.item.htmlFile"), extensions: ["html"] }],
+        browserTypes: [
+          {
+            description: t("toolbar.item.htmlFile"),
+            accept: { "text/html": [".html"] },
+          },
+        ],
+        mimeType: "text/html",
+      });
+      return true;
+    } catch (error) {
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : t("toolbar.error.couldNotExportHtml"),
+      );
+      return false;
+    }
+  };
+
   // Open-change handler for the Open-from-URL dialog; aborts an in-flight fetch
   // and resets the form when the dialog closes.
   const handleProjectUrlDialogOpenChange = (open: boolean) => {
@@ -599,5 +649,6 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     buildEmbeddedProject,
     handleSave,
     handleSaveAs,
+    handleExportHtml,
   };
 }
