@@ -546,9 +546,14 @@ function savedVectorStyle(raw: unknown): Partial<VectorLayerStyle> | null {
   ) {
     style.extrusionBase = candidate.extrusionBase;
   }
+  // Height is in meters and has no meaningful negative value; MapLibre silently
+  // clamps a negative fill-extrusion-height to 0, so reject negatives here
+  // (matching the >= 0 dimension guards) rather than restoring a value that
+  // renders flat.
   if (
     typeof candidate.extrusionHeight === "number" &&
-    Number.isFinite(candidate.extrusionHeight)
+    Number.isFinite(candidate.extrusionHeight) &&
+    candidate.extrusionHeight >= 0
   ) {
     style.extrusionHeight = candidate.extrusionHeight;
   } else if (colorExpression(candidate.extrusionHeight)) {
@@ -659,7 +664,7 @@ function layerStyleToVectorStyle(style: LayerStyle): VectorLayerStyle {
     // an empty labelField clears it.
     //
     // Only field-based labeling is wired here. LabelStyle.expression,
-    // .minZoom, and .maxZoom have no maplibre-gl-vector@0.7.0 equivalent, so
+    // .minZoom, and .maxZoom have no maplibre-gl-vector@0.8.0 equivalent, so
     // they are intentionally left out of this mapping, out of vectorStylesEqual,
     // and out of savedVectorStyle. The shared Style panel still shows those
     // controls, but for a control-managed layer they are no-ops; adding them
