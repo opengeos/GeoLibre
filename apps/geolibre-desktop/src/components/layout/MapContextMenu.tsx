@@ -1,4 +1,3 @@
-import { useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import {
   DropdownMenu,
@@ -78,7 +77,10 @@ export function MapContextMenu({
   mapReadyGeneration: number;
 }) {
   const { t } = useTranslation();
+  // `menu` keeps the last anchor/coordinate even while closing, so the exit
+  // animation plays from the right spot; `open` drives visibility separately.
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
+  const [open, setOpen] = useState(false);
   const seqRef = useRef(0);
 
   useEffect(() => {
@@ -94,6 +96,7 @@ export function MapContextMenu({
         x: event.originalEvent.clientX,
         y: event.originalEvent.clientY,
       });
+      setOpen(true);
     };
 
     map.on("contextmenu", handleContextMenu);
@@ -101,8 +104,6 @@ export function MapContextMenu({
       map.off("contextmenu", handleContextMenu);
     };
   }, [mapControllerRef, mapReadyGeneration]);
-
-  const close = useCallback(() => setMenu(null), []);
 
   const copyCoords = useCallback(() => {
     if (!menu) return;
@@ -126,20 +127,25 @@ export function MapContextMenu({
 
   const zoomInHere = useCallback(() => {
     if (!menu) return;
-    const currentZoom = mapControllerRef.current?.getMap()?.getZoom() ?? 0;
+    // Read the live zoom; if the map was torn down between right-click and
+    // selection, omit zoom so the move still recenters instead of snapping to
+    // zoom 1. MapLibre clamps the +1 to the configured maxZoom on its own.
+    const currentZoom = mapControllerRef.current?.getMap()?.getZoom();
     mapControllerRef.current?.flyTo({
       center: [menu.lng, menu.lat],
-      zoom: currentZoom + 1,
+      ...(currentZoom !== undefined ? { zoom: currentZoom + 1 } : {}),
     });
   }, [menu, mapControllerRef]);
 
   return (
+    // Keyed by the right-click id so each new right-click remounts the menu with
+    // a fresh anchor at the cursor. The key is tied to `menu` (not `open`), so a
+    // normal close leaves the key stable and Radix can play its exit animation;
+    // only the next right-click forces the remount that repositions the popup.
     <DropdownMenu
-      key={menu?.id ?? "closed"}
-      open={menu !== null}
-      onOpenChange={(open: boolean) => {
-        if (!open) close();
-      }}
+      key={menu?.id ?? "init"}
+      open={open}
+      onOpenChange={setOpen}
     >
       <DropdownMenuTrigger asChild>
         <span
