@@ -540,16 +540,16 @@ function savedVectorStyle(raw: unknown): Partial<VectorLayerStyle> | null {
   if (fraction(candidate.extrusionOpacity)) {
     style.extrusionOpacity = candidate.extrusionOpacity;
   }
+  // Height and base are meters; MapLibre clamps a negative
+  // fill-extrusion-height/base to 0, so reject negatives here (matching the
+  // >= 0 dimension guards) rather than restoring a value that renders flat.
   if (
     typeof candidate.extrusionBase === "number" &&
-    Number.isFinite(candidate.extrusionBase)
+    Number.isFinite(candidate.extrusionBase) &&
+    candidate.extrusionBase >= 0
   ) {
     style.extrusionBase = candidate.extrusionBase;
   }
-  // Height is in meters and has no meaningful negative value; MapLibre silently
-  // clamps a negative fill-extrusion-height to 0, so reject negatives here
-  // (matching the >= 0 dimension guards) rather than restoring a value that
-  // renders flat.
   if (
     typeof candidate.extrusionHeight === "number" &&
     Number.isFinite(candidate.extrusionHeight) &&
