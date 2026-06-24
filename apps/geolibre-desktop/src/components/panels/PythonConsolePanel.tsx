@@ -139,11 +139,14 @@ export function PythonConsolePanel({
     };
   }, [deps, t]);
 
-  // Keep the latest output in view.
+  // Keep the latest output in view. Skip while collapsed: the output lives in a
+  // `display: none` subtree where `scrollHeight` reads 0, which would otherwise
+  // reset the scroll to the top. Re-running on uncollapse scrolls to the bottom.
   useEffect(() => {
+    if (collapsed) return;
     const el = outputRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [history]);
+  }, [history, collapsed]);
 
   // Apply a queued caret position after a history recall changes `code`.
   useEffect(() => {
@@ -321,6 +324,10 @@ export function PythonConsolePanel({
     event.stopPropagation();
     const container = splitContainerRef.current;
     if (!container) return;
+    // The container does not resize during a horizontal drag, so capture its
+    // geometry once instead of forcing a layout read on every mousemove.
+    const rect = container.getBoundingClientRect();
+    if (rect.width === 0) return;
     let nextFraction = editorFraction;
     let frame: number | null = null;
     const prevCursor = document.body.style.cursor;
@@ -329,8 +336,6 @@ export function PythonConsolePanel({
     document.body.style.userSelect = "none";
 
     const onMove = (moveEvent: MouseEvent) => {
-      const rect = container.getBoundingClientRect();
-      if (rect.width === 0) return;
       // Editor is the right pane: its width is the gap between the cursor and
       // the container's right edge.
       const raw = (rect.right - moveEvent.clientX) / rect.width;
@@ -442,6 +447,7 @@ export function PythonConsolePanel({
                 : t("pythonConsole.collapse")
             }
             aria-expanded={!collapsed}
+            aria-controls="python-console-body"
             onClick={() => setCollapsed((v) => !v)}
           >
             {collapsed ? (
@@ -463,6 +469,7 @@ export function PythonConsolePanel({
       </div>
 
       <div
+        id="python-console-body"
         ref={splitContainerRef}
         // `hidden` (not unmount) keeps the runtime, scrollback, and editor
         // buffer intact while the panel is collapsed to its header.
@@ -534,7 +541,7 @@ export function PythonConsolePanel({
             />
             <div
               ref={editorPaneRef}
-              className="flex min-w-0 shrink-0 grow-0 flex-col border-l"
+              className="flex shrink-0 grow-0 flex-col border-l"
               style={{ flexBasis: `${editorFraction * 100}%` }}
             >
               <PythonEditorPane

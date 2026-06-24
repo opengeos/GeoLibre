@@ -5,6 +5,7 @@ import {
 } from "@geolibre/ui";
 import { AlertTriangle, RefreshCw, X } from "lucide-react";
 import type { ErrorInfo, ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 import { appendDiagnostic } from "../../lib/diagnostics";
 
@@ -136,6 +137,7 @@ function SectionErrorFallback({
   className?: string;
   onClose?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       role="alert"
@@ -150,12 +152,12 @@ function SectionErrorFallback({
       <div className="flex items-center gap-2">
         <Button variant="outline" size="sm" onClick={reset}>
           <RefreshCw className="h-4 w-4" />
-          Retry
+          {t("common.retry")}
         </Button>
         {onClose ? (
           <Button variant="ghost" size="sm" onClick={onClose}>
             <X className="h-4 w-4" />
-            Close
+            {t("common.close")}
           </Button>
         ) : null}
       </div>
