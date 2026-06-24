@@ -232,24 +232,31 @@ export function bandOptionsFromResults(
  *
  * @param tasks - Thunks producing each result.
  * @param limit - Maximum concurrent tasks.
+ * @param signal - Optional abort signal; when aborted, workers stop pulling new
+ *   tasks so the queue drains immediately instead of running every remaining
+ *   no-op task. Already-started tasks still settle.
  * @returns The results in the same order as `tasks`; failed tasks are `undefined`.
  */
 async function runWithConcurrency<T>(
   tasks: Array<() => Promise<T>>,
   limit: number,
+  signal?: AbortSignal,
 ): Promise<(T | undefined)[]> {
   const results = new Array<T | undefined>(tasks.length);
   let next = 0;
   async function worker(): Promise<void> {
     while (next < tasks.length) {
+      if (signal?.aborted) return;
       const index = next++;
       try {
         results[index] = await tasks[index]();
-      } catch {
+      } catch (err) {
         // A rejecting task must not kill its worker (which would leave later
-        // tasks unprocessed and the results array half-filled). Callers are
-        // expected to handle their own task errors; swallow here so the worker
-        // keeps draining the queue.
+        // tasks unprocessed and the results array half-filled). Tasks are
+        // expected to record their own failure state, so swallow Error
+        // rejections only; re-throw non-Error throws so unusual misuse still
+        // surfaces rather than vanishing silently.
+        if (!(err instanceof Error)) throw err;
       }
     }
   }
@@ -332,6 +339,10 @@ export async function queryPixelTimeSeries(
         bandNames: readBandNames(tiff),
       });
     })();
+    // Evict on rejection so a transient failure (network/CORS/404) for a URL
+    // does not poison every later task that resolves to the same URL within
+    // this query — exactly the static-source case the dedup cache targets.
+    promise.catch(() => readingCache.delete(url));
     readingCache.set(url, promise);
     return promise;
   };
@@ -373,7 +384,7 @@ export async function queryPixelTimeSeries(
       });
     });
   });
-  await runWithConcurrency(tasks, READ_CONCURRENCY);
+  await runWithConcurrency(tasks, READ_CONCURRENCY, signal);
 
   const series = sources.map((source, si) => ({
     // Index-based fallbacks so multiple unnamed COG sources still get distinct

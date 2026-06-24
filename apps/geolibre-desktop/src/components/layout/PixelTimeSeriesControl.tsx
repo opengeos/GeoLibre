@@ -233,6 +233,34 @@ export function PixelTimeSeriesControl({
     [loadedResults],
   );
 
+  // One chart line per (point, source) for the selected band. Single-source
+  // stacks (the common case) show one line per point; the legend disambiguates
+  // by source name only when a point has more than one source. Memoized because
+  // onProgress re-renders rapidly during a query and this scales with
+  // points × sources × steps.
+  const chartSeries = useMemo<ChartSeries[]>(
+    () =>
+      selectedBand == null
+        ? []
+        : points.flatMap((point) => {
+            if (!point.result) return [];
+            const multiSource = point.result.series.length > 1;
+            return point.result.series.map((series, si) => ({
+              key: `${point.id}:${series.sourceId}`,
+              label: multiSource
+                ? `${point.label} · ${series.sourceName}`
+                : point.label,
+              color: SERIES_COLORS[point.colorIndex],
+              dash: si > 0 ? "4 3" : undefined,
+              points: series.points.map((pt) => ({
+                date: pt.date,
+                value: valueAtBand(pt, selectedBand),
+              })),
+            }));
+          }),
+    [points, selectedBand],
+  );
+
   // Keep the selected band valid as points come and go.
   useEffect(() => {
     if (bandOptions.length === 0) return;
@@ -278,29 +306,6 @@ export function PixelTimeSeriesControl({
   // Block export while any point is still querying, since handleExport only
   // includes points that already resolved and would silently omit the rest.
   const hasLoading = points.some((p) => p.loading);
-  // One chart line per (point, source) for the selected band. Single-source
-  // stacks (the common case) show one line per point; the legend disambiguates
-  // by source name only when a point has more than one source.
-  const chartSeries =
-    selectedBand == null
-      ? []
-      : points.flatMap((point) => {
-          if (!point.result) return [];
-          const multiSource = point.result.series.length > 1;
-          return point.result.series.map((series, si) => ({
-            key: `${point.id}:${series.sourceId}`,
-            label: multiSource
-              ? `${point.label} · ${series.sourceName}`
-              : point.label,
-            color: SERIES_COLORS[point.colorIndex % SERIES_COLORS.length],
-            dash: si > 0 ? "4 3" : undefined,
-            points: series.points.map((pt) => ({
-              date: pt.date,
-              value: valueAtBand(pt, selectedBand),
-            })),
-          }));
-        });
-
   return (
     <>
       <div className="pointer-events-none absolute left-1/2 top-3 z-20 flex -translate-x-1/2 flex-col items-center gap-2">
@@ -423,8 +428,7 @@ export function PixelTimeSeriesControl({
                     <span
                       className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
                       style={{
-                        backgroundColor:
-                          SERIES_COLORS[point.colorIndex % SERIES_COLORS.length],
+                        backgroundColor: SERIES_COLORS[point.colorIndex],
                       }}
                       aria-hidden="true"
                     />
