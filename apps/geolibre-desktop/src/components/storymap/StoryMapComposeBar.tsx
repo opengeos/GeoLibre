@@ -1,4 +1,4 @@
-import { type RefObject, useCallback } from "react";
+import { type RefObject, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
@@ -40,18 +40,40 @@ export function StoryMapComposeBar({
   const handleSave = useCallback(() => {
     if (!composingId) return;
     const view = mapControllerRef.current?.readView();
-    if (view) {
-      updateChapter(composingId, {
-        location: {
-          center: view.center,
-          zoom: view.zoom,
-          pitch: view.pitch,
-          bearing: view.bearing,
-        },
-      });
-    }
+    // If the controller is somehow not ready there is nothing to capture; keep
+    // the bar open rather than silently returning to the editor unchanged.
+    if (!view) return;
+    updateChapter(composingId, {
+      location: {
+        center: view.center,
+        zoom: view.zoom,
+        pitch: view.pitch,
+        bearing: view.bearing,
+      },
+    });
     finish();
   }, [composingId, finish, mapControllerRef, updateChapter]);
+
+  // If the chapter being composed disappears (e.g. a collaborator deletes it),
+  // leave compose mode and restore the editor so the bar can't strand the user
+  // on the map with no Save/Cancel target.
+  useEffect(() => {
+    if (composingId && !chapter) {
+      setComposing(null);
+      setOpen(true);
+    }
+  }, [chapter, composingId, setComposing, setOpen]);
+
+  // Escape exits compose mode, mirroring how the presenter handles Escape, so
+  // keyboard-only users can dismiss the bar without clicking Cancel.
+  useEffect(() => {
+    if (!composingId) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") finish();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [composingId, finish]);
 
   // Bail out if compose mode is off, or if the chapter vanished (e.g. a project
   // load cleared the story) so the bar can't strand the user on the map.

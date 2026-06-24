@@ -755,7 +755,16 @@ export const useAppStore = create<AppState>()(
       setDashboardOpen: (open) =>
         set((s) => ({ ui: { ...s.ui, dashboardOpen: open } })),
       setStorymapPanelOpen: (open) =>
-        set((s) => ({ ui: { ...s.ui, storymapPanelOpen: open } })),
+        set((s) => ({
+          ui: {
+            ...s.ui,
+            storymapPanelOpen: open,
+            // Opening the editor must leave compose mode, or the menu item could
+            // re-open the dialog while the compose bar is still active over a
+            // now-hidden map (#775). Closing (entering compose) leaves it as-is.
+            ...(open ? { storymapComposingId: null } : {}),
+          },
+        })),
       setStorymapPresenting: (presenting) =>
         set((s) => ({ ui: { ...s.ui, storymapPresenting: presenting } })),
       setStorymapComposing: (chapterId) =>
