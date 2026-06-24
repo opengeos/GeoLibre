@@ -2,6 +2,8 @@ import { useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import { Button, Textarea } from "@geolibre/ui";
 import {
+  ChevronDown,
+  ChevronUp,
   Eraser,
   Loader2,
   PanelRight,
@@ -86,6 +88,7 @@ export function PythonConsolePanel({
   const historyIndexRef = useRef<number | null>(null);
   const historyDraftRef = useRef("");
   const [height, setHeight] = useState(DEFAULT_CONSOLE_HEIGHT);
+  const [collapsed, setCollapsed] = useState(false);
   const [editorVisible, setEditorVisible] = useState(false);
   const [editorFraction, setEditorFraction] = useState(DEFAULT_EDITOR_FRACTION);
   const [code, setCode] = useState("");
@@ -378,15 +381,18 @@ export function PythonConsolePanel({
       ref={sectionRef}
       aria-label={t("pythonConsole.title")}
       className="relative flex shrink-0 flex-col border-t bg-card"
-      style={{ height }}
+      // Collapsed: drop the fixed height so the panel hugs its header.
+      style={collapsed ? undefined : { height }}
     >
-      <div
-        role="separator"
-        aria-orientation="horizontal"
-        aria-label={t("pythonConsole.resize")}
-        className="absolute -top-1 left-0 right-0 z-20 h-2 cursor-row-resize select-none border-t border-transparent hover:border-primary"
-        onMouseDown={startResize}
-      />
+      {collapsed ? null : (
+        <div
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label={t("pythonConsole.resize")}
+          className="absolute -top-1 left-0 right-0 z-20 h-2 cursor-row-resize select-none border-t border-transparent hover:border-primary"
+          onMouseDown={startResize}
+        />
+      )}
       <div className="flex items-center gap-2 border-b px-3 py-1.5">
         <Terminal className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-semibold">{t("pythonConsole.title")}</span>
@@ -430,6 +436,24 @@ export function PythonConsolePanel({
             variant="ghost"
             size="icon"
             className="h-8 w-8"
+            title={
+              collapsed
+                ? t("pythonConsole.expand")
+                : t("pythonConsole.collapse")
+            }
+            aria-expanded={!collapsed}
+            onClick={() => setCollapsed((v) => !v)}
+          >
+            {collapsed ? (
+              <ChevronUp className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4" />
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
             title={t("pythonConsole.close")}
             onClick={() => setPythonConsoleOpen(false)}
           >
@@ -438,7 +462,12 @@ export function PythonConsolePanel({
         </div>
       </div>
 
-      <div ref={splitContainerRef} className="flex min-h-0 flex-1">
+      <div
+        ref={splitContainerRef}
+        // `hidden` (not unmount) keeps the runtime, scrollback, and editor
+        // buffer intact while the panel is collapsed to its header.
+        className={`flex min-h-0 flex-1 ${collapsed ? "hidden" : ""}`}
+      >
         <div className="flex min-w-0 flex-1 flex-col">
           <div
             ref={outputRef}

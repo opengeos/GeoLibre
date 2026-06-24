@@ -1503,6 +1503,8 @@
     "title": "Python Console",
     "resize": "Resize Python console",
     "clear": "Clear output",
+    "collapse": "Collapse Python console",
+    "expand": "Expand Python console",
     "close": "Close Python console",
     "run": "Run",
     "runHint": "Run (Ctrl/Cmd+Enter)",
