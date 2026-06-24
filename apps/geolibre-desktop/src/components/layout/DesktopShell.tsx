@@ -96,6 +96,7 @@ import {
 import { StylePanel } from "../panels/StylePanel";
 import { SharedSidebar } from "../panels/SharedSidebar";
 import { Layers, SlidersHorizontal } from "lucide-react";
+import { StoryMapComposeBar } from "../storymap/StoryMapComposeBar";
 import { StoryMapPanel } from "../storymap/StoryMapPanel";
 import { StoryMapPresenter } from "../storymap/StoryMapPresenter";
 import { DiagnosticsDialog } from "./DiagnosticsDialog";
@@ -1539,6 +1540,7 @@ export function DesktopShell({
               <BoundsRestrictionIndicator />
               <CollaborationStatusBadge />
               <MapModeBanner mapControllerRef={mapControllerRef} />
+              <StoryMapComposeBar mapControllerRef={mapControllerRef} />
             </MapGrid>
           </SectionErrorBoundary>
           <SectionErrorBoundary label="Plugin floating panels">

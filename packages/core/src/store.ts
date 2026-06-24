@@ -196,6 +196,10 @@ export interface AppState {
     dashboardOpen: boolean;
     storymapPanelOpen: boolean;
     storymapPresenting: boolean;
+    // Id of the chapter currently being composed on the live map. When set, the
+    // Story Map dialog is hidden so the user can pan/zoom/tilt the real map and
+    // save the resulting camera back into this chapter (issue #775).
+    storymapComposingId: string | null;
     modelBuilderOpen: boolean;
     zoomToSelectedFeature: boolean;
     // Live-collaboration dialog visibility. Lifted into the store (rather than
@@ -272,6 +276,7 @@ export interface AppState {
   setDashboardOpen: (open: boolean) => void;
   setStorymapPanelOpen: (open: boolean) => void;
   setStorymapPresenting: (presenting: boolean) => void;
+  setStorymapComposing: (chapterId: string | null) => void;
   setModelBuilderOpen: (open: boolean) => void;
   setCollaborateDialogOpen: (open: boolean) => void;
   setZoomToSelectedFeature: (enabled: boolean) => void;
@@ -563,6 +568,7 @@ export const useAppStore = create<AppState>()(
         dashboardOpen: false,
         storymapPanelOpen: false,
         storymapPresenting: false,
+        storymapComposingId: null,
         modelBuilderOpen: false,
         zoomToSelectedFeature: false,
         collaborateDialogOpen: false,
@@ -752,6 +758,8 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ ui: { ...s.ui, storymapPanelOpen: open } })),
       setStorymapPresenting: (presenting) =>
         set((s) => ({ ui: { ...s.ui, storymapPresenting: presenting } })),
+      setStorymapComposing: (chapterId) =>
+        set((s) => ({ ui: { ...s.ui, storymapComposingId: chapterId } })),
       setModelBuilderOpen: (open) =>
         set((s) => ({ ui: { ...s.ui, modelBuilderOpen: open } })),
       setCollaborateDialogOpen: (open) =>
@@ -1172,7 +1180,12 @@ export const useAppStore = create<AppState>()(
           pointerCoords: null,
           attributeFilter: "",
           // Don't carry an active story presentation into a different project.
-          ui: { ...s.ui, storymapPresenting: false, storymapPanelOpen: false },
+          ui: {
+            ...s.ui,
+            storymapPresenting: false,
+            storymapPanelOpen: false,
+            storymapComposingId: null,
+          },
         }));
         clearHistory();
       },
@@ -1199,6 +1212,7 @@ export const useAppStore = create<AppState>()(
             ...s.ui,
             storymapPresenting: presentStory,
             storymapPanelOpen: false,
+            storymapComposingId: null,
           },
         }));
         clearHistory();

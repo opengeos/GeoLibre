@@ -43,6 +43,7 @@ import {
   ChevronUp,
   Crosshair,
   Download,
+  Frame,
   MapPin,
   Play,
   Plus,
@@ -77,6 +78,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
   const open = useAppStore((s) => s.ui.storymapPanelOpen);
   const setOpen = useAppStore((s) => s.setStorymapPanelOpen);
   const setPresenting = useAppStore((s) => s.setStorymapPresenting);
+  const setComposing = useAppStore((s) => s.setStorymapComposing);
   const storymap = useAppStore((s) => s.storymap);
   const layers = useAppStore((s) => s.layers);
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
@@ -166,6 +168,19 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
       mapControllerRef.current?.flyToView(chapter.location);
     },
     [mapControllerRef],
+  );
+
+  const handleCompose = useCallback(
+    (chapter: StoryChapter) => {
+      // Reveal the live map by closing the dialog (its full-screen overlay
+      // otherwise hides the map), fly to the chapter's saved view so composing
+      // starts from where the slide currently sits, then enter compose mode.
+      // The floating compose bar takes over from here to save or cancel.
+      mapControllerRef.current?.flyToView(chapter.location);
+      setComposing(chapter.id);
+      setOpen(false);
+    },
+    [mapControllerRef, setComposing, setOpen],
   );
 
   const handlePresent = useCallback(() => {
@@ -305,7 +320,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="sm" variant="outline">
-                    <Upload className="mr-1 h-4 w-4" />
+                    <Download className="mr-1 h-4 w-4" />
                     {t("storymap.import")}
                   </Button>
                 </DropdownMenuTrigger>
@@ -321,7 +336,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="sm" variant="outline" disabled={chapters.length === 0}>
-                    <Download className="mr-1 h-4 w-4" />
+                    <Upload className="mr-1 h-4 w-4" />
                     {t("storymap.exportData")}
                   </Button>
                 </DropdownMenuTrigger>
@@ -385,6 +400,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
                   }
                   onCaptureView={() => handleCaptureView(chapter.id)}
                   onPreview={() => handlePreview(chapter)}
+                  onCompose={() => handleCompose(chapter)}
                 />
               ))}
             </div>
@@ -402,7 +418,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
               disabled={chapters.length === 0}
               onClick={() => void handleExport()}
             >
-              <Download className="mr-1 h-4 w-4" />
+              <Upload className="mr-1 h-4 w-4" />
               {t("storymap.exportHtml")}
             </Button>
             <Button
@@ -536,6 +552,7 @@ interface ChapterCardProps {
   onMove: (direction: "up" | "down") => void;
   onCaptureView: () => void;
   onPreview: () => void;
+  onCompose: () => void;
 }
 
 function ChapterCard({
@@ -551,6 +568,7 @@ function ChapterCard({
   onMove,
   onCaptureView,
   onPreview,
+  onCompose,
 }: ChapterCardProps) {
   const { center, zoom, pitch, bearing } = chapter.location;
   return (
@@ -568,6 +586,15 @@ function ChapterCard({
             {chapter.title || t("storymap.untitledChapter")}
           </span>
         </button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          title={t("storymap.composeOnMap")}
+          onClick={onCompose}
+        >
+          <Frame className="h-4 w-4" />
+        </Button>
         <Button
           variant="ghost"
           size="icon"
@@ -692,15 +719,26 @@ function ChapterCard({
                 {center[0].toFixed(4)}, {center[1].toFixed(4)} · z
                 {zoom.toFixed(1)} · p{pitch.toFixed(0)} · b{bearing.toFixed(0)}
               </span>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7"
-                onClick={onCaptureView}
-              >
-                <Crosshair className="mr-1 h-3.5 w-3.5" />
-                {t("storymap.captureView")}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7"
+                  onClick={onCaptureView}
+                >
+                  <Crosshair className="mr-1 h-3.5 w-3.5" />
+                  {t("storymap.captureView")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7"
+                  onClick={onCompose}
+                >
+                  <Frame className="mr-1 h-3.5 w-3.5" />
+                  {t("storymap.composeOnMap")}
+                </Button>
+              </div>
             </div>
           </div>
 

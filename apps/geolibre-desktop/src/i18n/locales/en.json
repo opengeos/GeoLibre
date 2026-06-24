@@ -1671,6 +1671,13 @@
     "exitPresentation": "Exit",
     "preview": "Fly to this chapter",
     "captureView": "Set to current view",
+    "composeOnMap": "Compose on map",
+    "composeMode": {
+      "title": "Composing chapter",
+      "hint": "Pan, zoom, and tilt the map, then save the view to this chapter.",
+      "save": "Save view and return to Story Map",
+      "cancel": "Cancel"
+    },
     "moveUp": "Move up",
     "moveDown": "Move down",
     "onEnter": "On enter",
