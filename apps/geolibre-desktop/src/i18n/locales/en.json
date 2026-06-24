@@ -1953,6 +1953,13 @@
     "collapse": "Collapse {{title}}"
   },
   "style": {
+    "raster": {
+      "greyscale": "Greyscale",
+      "greyscaleHint": "Toggle a greyscale basemap (drives saturation to its minimum)",
+      "reset": "Reset",
+      "resetHint": "Reset adjustments to their default values",
+      "exactValueHint": "Double-click to enter an exact value"
+    },
     "labels": {
       "heading": "Labels",
       "show": "Show labels",

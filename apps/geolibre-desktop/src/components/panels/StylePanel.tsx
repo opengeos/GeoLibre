@@ -909,19 +909,35 @@ function RasterStyleSlider({
   // Double-clicking the value label (or the slider track) swaps the read-only
   // value for an inline numeric input, so users can type an exact value instead
   // of dragging to it (#832). Enter/blur commits the clamped value, Escape cancels.
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const precision = stepPrecision(step);
+  // Guard so each edit session commits (or cancels) at most once: Enter and
+  // Escape both tear down the input, and React still fires onBlur on the
+  // unmounting element. Without this, blur would re-commit after Enter or
+  // commit a cancelled draft after Escape.
+  const handledRef = useRef(false);
 
   const commit = (raw: string) => {
+    if (handledRef.current) return;
+    handledRef.current = true;
     const parsed = Number(raw);
-    if (Number.isFinite(parsed)) {
+    // Treat an empty/whitespace entry like Escape: cancel rather than commit 0
+    // (Number("") === 0 would otherwise silently reset the slider to its min).
+    if (raw.trim() !== "" && Number.isFinite(parsed)) {
       onChange(Number(clampNumber(parsed, min, max).toFixed(precision)));
     }
     setEditing(false);
   };
 
+  const cancel = () => {
+    handledRef.current = true;
+    setEditing(false);
+  };
+
   const startEditing = () => {
+    handledRef.current = false;
     setDraft(String(value));
     setEditing(true);
   };
@@ -948,7 +964,7 @@ function RasterStyleSlider({
                 commit((event.target as HTMLInputElement).value);
               } else if (event.key === "Escape") {
                 event.preventDefault();
-                setEditing(false);
+                cancel();
               }
             }}
           />
@@ -956,7 +972,7 @@ function RasterStyleSlider({
           <button
             type="button"
             className="shrink-0 cursor-text font-mono text-xs text-muted-foreground hover:text-foreground"
-            title="Double-click to enter an exact value"
+            title={t("style.raster.exactValueHint")}
             aria-label={`Edit ${label} value`}
             onDoubleClick={startEditing}
           >
@@ -2987,7 +3003,7 @@ export function StylePanel({
                   }
                   className="w-full"
                   aria-pressed={styleValue(style, "rasterSaturation") <= -1}
-                  title="Toggle a greyscale basemap (drives saturation to its minimum)"
+                  title={t("style.raster.greyscaleHint")}
                   onClick={() =>
                     setLayerStyle(layer.id, {
                       rasterSaturation:
@@ -2997,7 +3013,7 @@ export function StylePanel({
                     })
                   }
                 >
-                  Greyscale
+                  {t("style.raster.greyscale")}
                 </Button>
                 <RasterStyleSlider
                   label="Contrast"
@@ -3031,7 +3047,7 @@ export function StylePanel({
               size="sm"
               variant="outline"
               className="w-full"
-              title="Reset every adjustment slider to its default value"
+              title={t("style.raster.resetHint")}
               onClick={() => {
                 setLayerOpacity(layer.id, 1);
                 if (!isDeckRasterLayer) {
@@ -3047,7 +3063,7 @@ export function StylePanel({
                 }
               }}
             >
-              Reset
+              {t("style.raster.reset")}
             </Button>
           </div>
         </ScrollArea>
