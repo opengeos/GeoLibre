@@ -418,6 +418,7 @@ const VIEW_STATE_OPTIONS = {
   maxHeight: 520,
   panelWidth: 280,
   position: viewStateControlPosition,
+  title: "Info",
 } satisfies ViewStateControlOptions;
 
 const PRINT_OPTIONS = {
