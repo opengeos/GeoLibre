@@ -16,11 +16,11 @@ import type { GeoLibreProject } from "@geolibre/core";
 // and portable (it loads the app over the network rather than inlining a build).
 export const DEFAULT_VIEWER_BASE_URL = "https://viewer.geolibre.app/";
 
-// A CSS length/percentage value (e.g. "100%", "800px", "calc(100% - 2rem)").
-// The allowed set deliberately excludes the structural CSS characters ("{};:")
-// so a width/height cannot close the <style> rule and inject CSS. Mirrors the
-// Python export's `_CSS_DIMENSION_RE`.
-const CSS_DIMENSION_RE = /^[\w%.+\-\s()]+$/;
+// A CSS length/percentage value (e.g. "100%", "800px", "calc(100% / 2)"). The
+// allowed set deliberately excludes the structural CSS characters ("{};:") so a
+// width/height cannot close the <style> rule and inject CSS; "/" is allowed so
+// `calc()` divisions pass, since it cannot close a rule on its own.
+const CSS_DIMENSION_RE = /^[\w%.+\-/\s()]+$/;
 
 /**
  * Resolve the hosted-viewer base URL from the Vite env, falling back to the
@@ -149,9 +149,12 @@ export function buildProjectHtml(options: BuildProjectHtmlOptions): string {
   function load() {
     if (loaded || !frame.contentWindow) return;
     loaded = true;
+    // Scope the post to the iframe's own origin (not "*") so the project is
+    // only ever delivered to the viewer it was meant for, even if the frame
+    // navigated elsewhere before this ran.
     frame.contentWindow.postMessage(
       { type: "geolibre:load-project", project: project, seq: 1 },
-      "*"
+      new URL(frame.src).origin
     );
   }
   // The app posts "geolibre:ready" once mounted; reply with the project. Guard

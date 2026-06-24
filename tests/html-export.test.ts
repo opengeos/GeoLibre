@@ -83,6 +83,16 @@ describe("buildProjectHtml", () => {
     assert.match(html, /src="https:\/\/example\.com\/app\?embed=1#\/view"/);
   });
 
+  it("accepts calc() dimensions with division", () => {
+    const html = buildProjectHtml({
+      project: PROJECT,
+      title: "T",
+      width: "calc(100% / 2)",
+      height: "calc(100vh - 2rem)",
+    });
+    assert.match(html, /width: calc\(100% \/ 2\); height: calc\(100vh - 2rem\)/);
+  });
+
   it("rejects unsafe CSS width/height values", () => {
     assert.throws(
       () => buildProjectHtml({ project: PROJECT, title: "T", width: "100%;}" }),
