@@ -39,7 +39,10 @@ yet (the report is informational, so a low number never fails CI). The frontend
 report only counts files a test actually imports, so a module with no test does
 not appear at all rather than as 0%. The backend coverage run (and `npm run ci`,
 which calls the `:coverage` variants) needs `pytest-cov` from the backend `dev`
-extra: `pip install -e "backend/geolibre_server[dev]"`.
+extra. Install the **`test`** extra to run the *full* backend suite — without
+the optional engines (geopandas/rasterio/sedona/httpx) the vector/raster/SQL/ML
+tests skip themselves and CI is green but hollow:
+`pip install -e "backend/geolibre_server[test]"`.
 
 `npm run test:e2e` builds the web app, serves it with `vite preview`, and drives
 it with Playwright (`@playwright/test`). First run: `npx playwright install

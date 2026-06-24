@@ -150,24 +150,14 @@ jobs:
         run: npm ci
 
       - name: Install backend test dependencies
-        run: python -m pip install -e "backend/geolibre_server[dev]"
+        # The full test suite needs the optional engines; without them the
+        # vector/raster/SQL/ML tests skip themselves and CI is green but hollow.
+        run: python -m pip install -e "backend/geolibre_server[test]"
 
-      - name: Lint
-        run: npm run lint
-
-      - name: Build web app
-        run: npm run build
+      # Drive the documented `npm run ci` gate directly (lint -> build ->
+      # frontend+worker+backend coverage -> rust) so this workflow cannot drift
+      # from the script in package.json.
+      - name: Run CI gate (lint, build, frontend/worker/backend tests, rust)
+        run: npm run ci
         env:
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
-
-      - name: Run frontend tests (with coverage summary)
-        run: npm run test:frontend:coverage
-
-      - name: Typecheck viewer worker
-        run: npm run test:worker
-
-      - name: Run backend tests (with coverage summary)
-        run: npm run test:backend:coverage
-
-      - name: Check Tauri Rust code
-        run: npm run check:rust

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 import re
 import shutil
@@ -33,12 +34,31 @@ from .runtime import (
     _venv_python,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/whitebox", tags=["whitebox"])
 WHITEBOX_RUNTIME_PACKAGE = os.environ.get(
     "GEOLIBRE_WHITEBOX_PACKAGE",
     "whitebox-workflows>=2.0.2",
 )
 WHITEBOX_PYTHON_VERSION = os.environ.get("GEOLIBRE_WHITEBOX_PYTHON_VERSION", "3.12")
+
+
+def _whitebox_run_timeout_secs() -> int:
+    """Return the wall-clock timeout for a single Whitebox tool run.
+
+    Reads ``GEOLIBRE_WHITEBOX_RUN_TIMEOUT_SECS`` so deployments can tune the
+    cap for unusually long jobs; falls back to one hour when unset or invalid.
+    """
+    raw = os.environ.get("GEOLIBRE_WHITEBOX_RUN_TIMEOUT_SECS")
+    if raw:
+        try:
+            value = int(raw)
+            if value > 0:
+                return value
+        except ValueError:
+            pass
+    return 3600
 
 
 class WhiteboxRunRequest(BaseModel):
@@ -333,6 +353,8 @@ class ExternalRuntimeSession:
         )
         completed_result = ""
         errors: list[str] = []
+        timeout = _whitebox_run_timeout_secs()
+        timed_out = threading.Event()
         process = subprocess.Popen(
             [self.python_executable, "-c", runner, json.dumps(payload)],
             stdout=subprocess.PIPE,
@@ -345,36 +367,63 @@ class ExternalRuntimeSession:
             bufsize=1,
             **_subprocess_startup_kwargs(),
         )
-        if process.stdout is None:
-            raise RuntimeBootstrapError(
-                "Whitebox subprocess stdout is unexpectedly None"
-            )
-        for line in process.stdout:
-            line = line.rstrip("\r\n")
-            if line.startswith("__WBW_EVENT__"):
-                if callback:
-                    callback(
-                        base64.b64decode(line[len("__WBW_EVENT__") :]).decode(
-                            "utf-8", "replace"
-                        )
-                    )
-            elif line.startswith("__WBW_RESULT__"):
-                completed_result = base64.b64decode(
-                    line[len("__WBW_RESULT__") :]
-                ).decode("utf-8", "replace")
-            elif line.startswith("__WBW_ERROR__"):
-                errors.append(
-                    base64.b64decode(line[len("__WBW_ERROR__") :]).decode(
-                        "utf-8", "replace"
-                    )
+        try:
+            if process.stdout is None:
+                raise RuntimeBootstrapError(
+                    "Whitebox subprocess stdout is unexpectedly None"
                 )
-        stderr = process.stderr.read().strip() if process.stderr else ""
-        rc = process.wait()
-        if rc != 0 or errors:
-            raise RuntimeBootstrapError(
-                "\n".join(errors) or stderr or "Whitebox runtime execution failed"
+            # A watchdog kills the subprocess if it exceeds the deadline.
+            # ``for line in process.stdout`` blocks until the pipe closes, so a
+            # Whitebox tool that hangs without emitting further output would
+            # otherwise tie up this worker thread (and leak a child process)
+            # indefinitely; process.wait()'s own timeout cannot fire because the
+            # loop has already drained stdout.
+            watchdog = threading.Timer(
+                timeout,
+                lambda: (timed_out.set(), process.kill()),
             )
-        return completed_result or "{}"
+            watchdog.daemon = True
+            watchdog.start()
+            try:
+                for line in process.stdout:
+                    line = line.rstrip("\r\n")
+                    if line.startswith("__WBW_EVENT__"):
+                        if callback:
+                            callback(
+                                base64.b64decode(
+                                    line[len("__WBW_EVENT__") :]
+                                ).decode("utf-8", "replace")
+                            )
+                    elif line.startswith("__WBW_RESULT__"):
+                        completed_result = base64.b64decode(
+                            line[len("__WBW_RESULT__") :]
+                        ).decode("utf-8", "replace")
+                    elif line.startswith("__WBW_ERROR__"):
+                        errors.append(
+                            base64.b64decode(
+                                line[len("__WBW_ERROR__") :]
+                            ).decode("utf-8", "replace")
+                        )
+                stderr = process.stderr.read().strip() if process.stderr else ""
+                rc = process.wait()
+            finally:
+                watchdog.cancel()
+            if timed_out.is_set():
+                raise RuntimeBootstrapError(
+                    f"Whitebox tool run timed out after {timeout} seconds"
+                )
+            if rc != 0 or errors:
+                raise RuntimeBootstrapError(
+                    "\n".join(errors)
+                    or stderr
+                    or "Whitebox runtime execution failed"
+                )
+            return completed_result or "{}"
+        finally:
+            # Guard against leaking a still-running subprocess if an exception
+            # is raised before it exits (e.g. a callback error mid-stream).
+            if process.poll() is None:
+                process.kill()
 
 
 def create_runtime_session(include_pro: bool = False, tier: str = "open"):
@@ -779,10 +828,11 @@ def whitebox_status():
             "capabilities": None,
             "python": python,
         }
-    except Exception as exc:
+    except Exception:
+        logger.warning("Whitebox runtime unavailable", exc_info=True)
         return {
             "available": False,
-            "message": str(exc),
+            "message": "Whitebox runtime is unavailable",
             "capabilities": None,
             "python": None,
         }
@@ -794,7 +844,10 @@ def whitebox_tools(include_pro: bool = False, tier: str = "open"):
     try:
         tools = _load_catalog(include_pro=include_pro, tier=tier)
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        logger.warning("Failed to load Whitebox tool catalog", exc_info=True)
+        raise HTTPException(
+            status_code=503, detail="Whitebox tool catalog is unavailable"
+        ) from exc
     return {"tools": tools, "tool_count": len(tools)}
 
 
@@ -805,7 +858,12 @@ def whitebox_tool(tool_id: str, include_pro: bool = False, tier: str = "open"):
         session = create_runtime_session(include_pro=include_pro, tier=tier)
         metadata = _parse_json_maybe(session.get_tool_metadata_json(tool_id))
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        logger.warning(
+            "Failed to load metadata for Whitebox tool %s", tool_id, exc_info=True
+        )
+        raise HTTPException(
+            status_code=503, detail="Whitebox tool metadata is unavailable"
+        ) from exc
     return metadata
 
 
