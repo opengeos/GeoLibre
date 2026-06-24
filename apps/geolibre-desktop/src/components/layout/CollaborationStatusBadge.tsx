@@ -20,6 +20,10 @@ interface CollaborationStatusBadgeProps {
 
 // How long a join/leave announcement stays on screen before auto-dismissing.
 const ANNOUNCEMENT_TTL_MS = 5000;
+// Client-side chat send floor, matching the relay's per-socket limit, so a
+// rapid second send is refused locally (keeping its draft) rather than sent and
+// silently dropped by the relay.
+const MIN_CHAT_SEND_INTERVAL_MS = 250;
 
 /**
  * Persistent on-canvas badge that surfaces a live collaboration session outside
@@ -76,6 +80,8 @@ export function CollaborationStatusBadge({
   // (#754, Part 4). The pin captures the center at send time, not toggle time.
   const [draft, setDraft] = useState("");
   const [attachLocation, setAttachLocation] = useState(false);
+  // Epoch-ms of the last accepted local send, for the client-side floor above.
+  const lastSentAtRef = useRef(0);
   // The scroll viewport for the message list, so new messages pin to the bottom.
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   // Unread chat count while the roster is collapsed, surfaced on the pill so a
@@ -230,6 +236,13 @@ export function CollaborationStatusBadge({
     // Drop sends while reconnecting: api.sendChat silently no-ops when the
     // socket isn't open, so clearing the draft here would lose the typed text.
     if (!text || connecting) return;
+    // Mirror the relay's per-socket chat floor client-side: if two sends land
+    // within the window the relay would silently drop the second, so refuse it
+    // here WITHOUT clearing the draft, rather than clearing optimistically and
+    // losing the text. (Human-paced typing never hits this; double-Enter does.)
+    const now = Date.now();
+    if (now - lastSentAtRef.current < MIN_CHAT_SEND_INTERVAL_MS) return;
+    lastSentAtRef.current = now;
     // Capture the live map center only when the pin is active, at send time.
     const center =
       attachLocation && mapControllerRef.current

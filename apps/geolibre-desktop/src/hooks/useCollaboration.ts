@@ -119,7 +119,7 @@ export function useCollaboration(
     // A host-set per-participant override wins over the session mode (#754);
     // fall back to the mode when there is no override for us.
     const self = c.participants.find((p) => p.clientId === c.clientId);
-    return self?.editOverride ?? c.mode === "co-edit";
+    return self?.editOverride ?? (c.mode === "co-edit");
   };
 
   const sendSnapshot = (): void => {

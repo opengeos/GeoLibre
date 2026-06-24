@@ -495,6 +495,9 @@ export class CollabSession extends DurableObject<Env> {
     // (and any other host socket) is always an editor, so refuse to override one
     // — that keeps `editOverride` meaningful only for guests.
     const target = this.socketByClientId(message.clientId);
+    // Target disconnected between the host's click and this frame: the
+    // disconnect already broadcasts an updated roster, so the host's view (and
+    // the now-absent toggle) reconciles on its own; no error frame needed.
     if (!target) return;
     const targetAttachment =
       target.deserializeAttachment() as SocketAttachment | null;
@@ -552,16 +555,17 @@ export class CollabSession extends DurableObject<Env> {
     log.push(chatMessage);
     // Bound by count AND serialized bytes: 50 messages can still exceed the
     // ~128 KiB per-value storage cap when they hold long multi-byte (e.g. CJK)
-    // text, so drop the oldest until the JSON fits a safe budget.
+    // text, so drop the oldest until the JSON fits a safe budget. Track the byte
+    // length incrementally (encode once, then subtract each evicted entry plus
+    // its comma separator) so the loop stays O(n) rather than re-encoding the
+    // whole array each iteration.
     let trimmed = log.slice(-CHAT_HISTORY_LIMIT);
-    let serialized = JSON.stringify(trimmed);
-    while (
-      trimmed.length > 1 &&
-      ENCODER.encode(serialized).length > MAX_CHAT_STORAGE_BYTES
-    ) {
+    let byteLen = ENCODER.encode(JSON.stringify(trimmed)).length;
+    while (trimmed.length > 1 && byteLen > MAX_CHAT_STORAGE_BYTES) {
+      byteLen -= ENCODER.encode(JSON.stringify(trimmed[0])).length + 1;
       trimmed = trimmed.slice(1);
-      serialized = JSON.stringify(trimmed);
     }
+    const serialized = JSON.stringify(trimmed);
     try {
       await this.ctx.storage.put("chat", serialized);
     } catch {
