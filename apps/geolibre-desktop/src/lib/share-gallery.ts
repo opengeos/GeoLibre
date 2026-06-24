@@ -2,10 +2,10 @@
 // endpoint so the Project Gallery can browse and open them. This is the read
 // counterpart to share-geolibre.ts (which uploads via `POST /api/projects`).
 //
-// The listing endpoint is public (no API token) and returns only `public`
-// projects. It supports `limit` + `offset` pagination; it does NOT honor
-// server-side `search`/`sort` parameters, so the dialog filters the loaded page
-// set client-side.
+// `fetchSharedProjects` reads the public listing (`GET /api/projects`, no
+// token) with `limit` + `offset` pagination. `fetchMyProjects` authenticates
+// with a personal API token to also return the signed-in user's `unlisted` and
+// `private` projects.
 
 import { resolveShareBaseUrl } from "./share-geolibre";
 
@@ -200,4 +200,124 @@ export async function fetchSharedProjects(
     options.limit != null && rawProjects.length >= options.limit;
 
   return { projects, hasMore };
+}
+
+export interface FetchMyProjectsOptions {
+  /** Personal API token from Settings; authenticates as the owner. */
+  token: string;
+  baseUrl?: string;
+  signal?: AbortSignal;
+  fetchImpl?: typeof fetch;
+}
+
+/**
+ * Wrap a fetch so requests to the share host carry the personal API token. The
+ * `Authorization` header is attached only for same-origin-as-`base` URLs so the
+ * token is never leaked to a third-party host (e.g. an external tile server
+ * referenced by a project).
+ */
+export function shareAuthorizedFetch(token: string, base: string): typeof fetch {
+  let baseOrigin: string | null = null;
+  try {
+    baseOrigin = new URL(base).origin;
+  } catch {
+    baseOrigin = null;
+  }
+  return (input: RequestInfo | URL, init: RequestInit = {}) => {
+    const href =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url;
+    let sameHost = false;
+    try {
+      sameHost = baseOrigin != null && new URL(href).origin === baseOrigin;
+    } catch {
+      sameHost = false;
+    }
+    if (!sameHost) return fetch(input, init);
+    const headers = new Headers(init.headers);
+    headers.set("Authorization", `Bearer ${token}`);
+    return fetch(input, { ...init, headers });
+  };
+}
+
+/**
+ * List the signed-in user's own projects, including their `unlisted` and
+ * `private` ones, by authenticating with a personal API token. Resolves the
+ * caller's username via `/api/users/me`, then fetches
+ * `/api/users/{username}/projects` (which returns every project the owner can
+ * see). This endpoint is not paginated, so the full set is returned at once.
+ *
+ * @throws {Error} When the token is rejected, the account has no username yet,
+ *   or the network/host fails. A caller-initiated abort propagates as
+ *   `AbortError`.
+ */
+export async function fetchMyProjects(
+  options: FetchMyProjectsOptions,
+): Promise<SharedProject[]> {
+  const base = (options.baseUrl ?? resolveShareBaseUrl()).replace(/\/+$/, "");
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const authFetch = shareAuthorizedFetch(options.token, base);
+
+  const timeout = AbortSignal.timeout(LISTING_TIMEOUT_MS);
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, timeout])
+    : timeout;
+
+  const request = async (path: string): Promise<unknown> => {
+    let response: Response;
+    try {
+      response = await (options.fetchImpl
+        ? fetchImpl(`${base}${path}`, {
+            headers: {
+              Accept: "application/json",
+              Authorization: `Bearer ${options.token}`,
+            },
+            signal,
+          })
+        : authFetch(`${base}${path}`, {
+            headers: { Accept: "application/json" },
+            signal,
+          }));
+    } catch (error) {
+      if (error instanceof DOMException) {
+        if (error.name === "AbortError") throw error;
+        if (error.name === "TimeoutError") {
+          throw new Error("Loading your projects timed out. Please try again.");
+        }
+      }
+      throw new Error(
+        "Could not reach share.geolibre.app. Check your internet connection.",
+      );
+    }
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(
+        "Your share.geolibre.app API token is invalid or expired. Update it in Settings.",
+      );
+    }
+    if (!response.ok) {
+      throw new Error(`Could not load your projects (HTTP ${response.status}).`);
+    }
+    return response.json().catch(() => null);
+  };
+
+  const me = (await request("/api/users/me")) as {
+    user?: { username?: string | null };
+  } | null;
+  const username = me?.user?.username;
+  if (!username) {
+    throw new Error(
+      "Set a username on your share.geolibre.app account before loading your projects.",
+    );
+  }
+
+  const payload = (await request(
+    `/api/users/${encodeURIComponent(username)}/projects`,
+  )) as { projects?: RawSharedProject[] } | null;
+  const rawProjects = Array.isArray(payload?.projects) ? payload.projects : [];
+  return rawProjects
+    .map((raw) => normalizeProject(raw, base))
+    .filter((p): p is SharedProject => p !== null);
 }

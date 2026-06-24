@@ -23,6 +23,9 @@ import {
   saveProjectFileToPath,
 } from "../lib/tauri-io";
 import { mergeStringLists } from "../lib/string-lists";
+import { fetchProjectFromUrl } from "../lib/project-url";
+import { resolveShareBaseUrl } from "../lib/share-geolibre";
+import { shareAuthorizedFetch } from "../lib/share-gallery";
 import { normalizeProjectUrl } from "../lib/urls";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
@@ -203,7 +206,18 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   // fetch → resolve → loadProject flow but takes the URL as an argument and
   // rethrows on failure so the caller (the gallery dialog) can show the error
   // inline next to the card it came from.
-  const openProjectFromShareUrl = async (url: string): Promise<void> => {
+  //
+  // When `authToken` is set (the user has a share.geolibre.app API token), the
+  // request to the share host carries it as a Bearer token so the owner's
+  // unlisted and private projects load too. The token is attached only for the
+  // share host (see shareAuthorizedFetch), never to third-party hosts a project
+  // might reference. Token-authenticated opens are not remembered as recent
+  // (path = null), since reopening a private URL on restart would 403 without
+  // the header.
+  const openProjectFromShareUrl = async (
+    url: string,
+    options: { authToken?: string } = {},
+  ): Promise<void> => {
     const normalizedUrl = normalizeProjectUrl(url);
     if (!normalizedUrl) {
       throw new Error(t("toolbar.error.invalidProjectUrl"));
@@ -214,6 +228,23 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     projectUrlAbortRef.current = controller;
 
     try {
+      if (options.authToken) {
+        const fetched = await fetchProjectFromUrl(normalizedUrl, {
+          signal: controller.signal,
+          fetchImpl: shareAuthorizedFetch(
+            options.authToken,
+            resolveShareBaseUrl(),
+          ),
+        });
+        const project = await resolveProjectXyzLayers(
+          fetched,
+          controller.signal,
+        );
+        if (controller.signal.aborted) return;
+        loadProject(project, null);
+        return;
+      }
+
       const result = await openRecentProjectFile(
         normalizedUrl,
         controller.signal,

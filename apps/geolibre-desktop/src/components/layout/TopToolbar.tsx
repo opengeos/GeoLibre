@@ -1055,7 +1055,9 @@ export function TopToolbar({
       <ProjectGalleryDialog
         open={galleryDialogOpen}
         onOpenChange={setGalleryDialogOpen}
-        onOpenProject={(url) => projectFiles.openProjectFromShareUrl(url)}
+        onOpenProject={(url, authToken) =>
+          projectFiles.openProjectFromShareUrl(url, { authToken })
+        }
       />
       {isMenuVisible(uiProfile, "help") && (
         <HelpMenu

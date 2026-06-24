@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  fetchMyProjects,
   fetchSharedProjects,
   resolveThumbnailUrl,
+  shareAuthorizedFetch,
 } from "../apps/geolibre-desktop/src/lib/share-gallery";
 
 const BASE = "https://share.geolibre.app";
@@ -157,5 +159,95 @@ describe("fetchSharedProjects", () => {
       () => fetchSharedProjects({ baseUrl: BASE, fetchImpl: fn }),
       /HTTP 500/,
     );
+  });
+});
+
+// A routing fake: maps a URL path to a {status, body} response and records the
+// Authorization header each call carried.
+function routedFetch(
+  routes: Record<string, { status: number; body: unknown }>,
+): { fn: typeof fetch; auth: (string | null)[] } {
+  const auth: (string | null)[] = [];
+  const fn = (async (url: string, init: RequestInit = {}) => {
+    const path = new URL(url).pathname;
+    const headers = new Headers(init.headers);
+    auth.push(headers.get("Authorization"));
+    const route = routes[path] ?? { status: 404, body: null };
+    return {
+      ok: route.status >= 200 && route.status < 300,
+      status: route.status,
+      json: async () => route.body,
+    } as Response;
+  }) as unknown as typeof fetch;
+  return { fn, auth };
+}
+
+describe("fetchMyProjects", () => {
+  it("resolves the username then lists the owner's projects with the token", async () => {
+    const { fn, auth } = routedFetch({
+      "/api/users/me": { status: 200, body: { user: { username: "giswqs" } } },
+      "/api/users/giswqs/projects": {
+        status: 200,
+        body: {
+          projects: [
+            rawProject({ id: "p1", visibility: "private", slug: "secret" }),
+            rawProject({ id: "p2", visibility: "unlisted", slug: "draft" }),
+          ],
+        },
+      },
+    });
+    const projects = await fetchMyProjects({
+      token: "glb_tok",
+      baseUrl: BASE,
+      fetchImpl: fn,
+    });
+    assert.equal(projects.length, 2);
+    assert.deepEqual(
+      projects.map((p) => p.visibility),
+      ["private", "unlisted"],
+    );
+    // Every request carried the bearer token.
+    assert.ok(auth.every((a) => a === "Bearer glb_tok"));
+  });
+
+  it("throws when the account has no username", async () => {
+    const { fn } = routedFetch({
+      "/api/users/me": { status: 200, body: { user: { username: null } } },
+    });
+    await assert.rejects(
+      () => fetchMyProjects({ token: "glb_tok", baseUrl: BASE, fetchImpl: fn }),
+      /username/i,
+    );
+  });
+
+  it("throws a clear error when the token is rejected", async () => {
+    const { fn } = routedFetch({
+      "/api/users/me": { status: 401, body: { error: "Unauthorized" } },
+    });
+    await assert.rejects(
+      () => fetchMyProjects({ token: "bad", baseUrl: BASE, fetchImpl: fn }),
+      /invalid or expired/i,
+    );
+  });
+});
+
+describe("shareAuthorizedFetch", () => {
+  it("attaches the token only for the share host, never third parties", async () => {
+    const seen: { url: string; auth: string | null }[] = [];
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
+      const url = typeof input === "string" ? input : String(input);
+      seen.push({ url, auth: new Headers(init.headers).get("Authorization") });
+      return { ok: true, status: 200 } as Response;
+    }) as unknown as typeof fetch;
+    try {
+      const authed = shareAuthorizedFetch("glb_tok", BASE);
+      await authed(`${BASE}/giswqs/secret.geolibre.json`);
+      await authed("https://tiles.example.com/data.json");
+      assert.equal(seen[0].auth, "Bearer glb_tok");
+      assert.equal(seen[1].auth, null);
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 });

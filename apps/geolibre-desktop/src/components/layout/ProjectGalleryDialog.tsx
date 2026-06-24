@@ -11,27 +11,44 @@ import {
 import {
   AlertCircle,
   Eye,
+  EyeOff,
   ExternalLink,
+  Globe2,
   ImageOff,
   Loader2,
+  Lock,
   Search,
+  User,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
+import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
 import { openExternalLink } from "../../lib/open-external";
 import {
+  fetchMyProjects,
   fetchSharedProjects,
   type SharedProject,
 } from "../../lib/share-gallery";
+
+type GalleryScope = "public" | "mine";
 
 interface ProjectGalleryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /**
-   * Load a project from its raw `.geolibre.json` URL into the app. Resolves on
-   * success and rejects with a descriptive error the dialog surfaces inline.
+   * Load a project from its raw `.geolibre.json` URL into the app. `authToken`
+   * is passed for the user's own (unlisted/private) projects so the share host
+   * authorizes the fetch. Resolves on success and rejects with a descriptive
+   * error the dialog surfaces inline.
    */
-  onOpenProject: (rawJsonUrl: string) => Promise<void>;
+  onOpenProject: (rawJsonUrl: string, authToken?: string) => Promise<void>;
 }
 
 // Page size for each listing request. The endpoint paginates by limit + offset.
@@ -57,6 +74,11 @@ export function ProjectGalleryDialog({
   onOpenProject,
 }: ProjectGalleryDialogProps) {
   const { t } = useTranslation();
+  const trimmedToken = (
+    useDesktopSettingsStore((s) => s.desktopSettings.shareToken) ?? ""
+  ).trim();
+  const hasToken = trimmedToken.length > 0;
+  const [scope, setScope] = useState<GalleryScope>("public");
   const [projects, setProjects] = useState<SharedProject[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "loadingMore">(
     "idle",
@@ -67,6 +89,81 @@ export function ProjectGalleryDialog({
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // A signed-out user (no token) can only ever see the public scope.
+  const effectiveScope: GalleryScope = hasToken ? scope : "public";
+
+  // Explicit dialog size once the user drags the corner grip (null = the
+  // default responsive size). `dialogRef` reads the live element size at the
+  // start of a drag; `resizeCleanupRef` tears down listeners on unmount.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const [dialogSize, setDialogSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => resizeCleanupRef.current?.(), []);
+
+  // Resize the whole dialog from its bottom-right grip. The dialog is centred
+  // via a -50% transform, so each edge moves by half the size change; growing
+  // by 2x the pointer delta keeps the grip under the cursor (mirrors the Print
+  // Layout dialog's resize idiom).
+  const startDialogResize = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      const el = dialogRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const startW = rect.width;
+      const startH = rect.height;
+      let next = { width: startW, height: startH };
+      let frame: number | null = null;
+      const prevCursor = document.body.style.cursor;
+      const prevSelect = document.body.style.userSelect;
+      document.body.style.cursor = "nwse-resize";
+      document.body.style.userSelect = "none";
+
+      const onMove = (e: PointerEvent) => {
+        next = {
+          width: Math.max(
+            480,
+            Math.min(window.innerWidth - 16, startW + (e.clientX - startX) * 2),
+          ),
+          height: Math.max(
+            360,
+            Math.min(window.innerHeight - 16, startH + (e.clientY - startY) * 2),
+          ),
+        };
+        if (frame !== null) return;
+        frame = window.requestAnimationFrame(() => {
+          frame = null;
+          setDialogSize(next);
+        });
+      };
+      const cleanup = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+        if (frame !== null) window.cancelAnimationFrame(frame);
+        document.body.style.cursor = prevCursor;
+        document.body.style.userSelect = prevSelect;
+        resizeCleanupRef.current = null;
+      };
+      const onUp = () => {
+        cleanup();
+        setDialogSize(next);
+      };
+      resizeCleanupRef.current = cleanup;
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
+    },
+    [],
+  );
 
   // Fetch a page. `offset === 0` is the initial load (replaces the list);
   // anything else appends. Each call supersedes a prior in-flight fetch.
@@ -79,16 +176,28 @@ export function ProjectGalleryDialog({
       setStatus(offset === 0 ? "loading" : "loadingMore");
       setError(null);
       try {
-        const result = await fetchSharedProjects({
-          limit: PAGE_SIZE,
-          offset,
-          signal: controller.signal,
-        });
-        if (controller.signal.aborted) return;
-        setProjects((prev) =>
-          offset === 0 ? result.projects : [...prev, ...result.projects],
-        );
-        setHasMore(result.hasMore);
+        if (effectiveScope === "mine") {
+          // "My projects" returns the full set (no pagination) and includes the
+          // owner's unlisted/private projects via the API token.
+          const mine = await fetchMyProjects({
+            token: trimmedToken,
+            signal: controller.signal,
+          });
+          if (controller.signal.aborted) return;
+          setProjects(mine);
+          setHasMore(false);
+        } else {
+          const result = await fetchSharedProjects({
+            limit: PAGE_SIZE,
+            offset,
+            signal: controller.signal,
+          });
+          if (controller.signal.aborted) return;
+          setProjects((prev) =>
+            offset === 0 ? result.projects : [...prev, ...result.projects],
+          );
+          setHasMore(result.hasMore);
+        }
       } catch (err) {
         if (controller.signal.aborted) return;
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -101,11 +210,12 @@ export function ProjectGalleryDialog({
         if (!controller.signal.aborted) setStatus("idle");
       }
     },
-    [t],
+    [t, effectiveScope, trimmedToken],
   );
 
-  // Load the first page when the dialog opens; reset transient state and abort
-  // any in-flight request when it closes.
+  // Reload from the first page when the dialog opens or the scope changes (the
+  // `loadPage` identity changes with scope); reset transient state and abort any
+  // in-flight request when it closes.
   useEffect(() => {
     if (open) {
       setProjects([]);
@@ -124,7 +234,12 @@ export function ProjectGalleryDialog({
     setOpeningId(project.id);
     setOpenError(null);
     try {
-      await onOpenProject(project.rawJsonUrl);
+      // Send the token for the user's own scope so unlisted/private content is
+      // authorized; public-scope opens need no auth.
+      await onOpenProject(
+        project.rawJsonUrl,
+        effectiveScope === "mine" ? trimmedToken : undefined,
+      );
       onOpenChange(false);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
@@ -146,11 +261,60 @@ export function ProjectGalleryDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85vh] max-w-4xl flex-col">
+      <DialogContent
+        ref={dialogRef}
+        className="max-h-[85vh] max-w-4xl"
+        style={
+          dialogSize
+            ? {
+                width: dialogSize.width,
+                height: dialogSize.height,
+                maxWidth: "none",
+                maxHeight: "none",
+              }
+            : undefined
+        }
+        bodyClassName="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4 sm:p-6"
+        resizeHandle={
+          <div
+            role="separator"
+            aria-label={t("gallery.resizeDialog")}
+            title={t("gallery.resizeDialog")}
+            onPointerDown={startDialogResize}
+            className="absolute bottom-0 right-0 z-10 hidden h-5 w-5 cursor-nwse-resize touch-none select-none text-muted-foreground hover:text-foreground md:block"
+          >
+            <svg viewBox="0 0 16 16" className="h-full w-full" aria-hidden="true">
+              <path
+                d="M11 15L15 11M6 15L15 6"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+          </div>
+        }
+      >
         <DialogHeader>
           <DialogTitle>{t("gallery.title")}</DialogTitle>
           <DialogDescription>{t("gallery.description")}</DialogDescription>
         </DialogHeader>
+
+        {hasToken ? (
+          <div className="flex w-full gap-1 rounded-md bg-muted p-1 sm:w-auto sm:self-start">
+            <ScopeTab
+              active={effectiveScope === "public"}
+              onClick={() => setScope("public")}
+              icon={<Globe2 className="h-3.5 w-3.5" />}
+              label={t("gallery.scopePublic")}
+            />
+            <ScopeTab
+              active={effectiveScope === "mine"}
+              onClick={() => setScope("mine")}
+              icon={<User className="h-3.5 w-3.5" />}
+              label={t("gallery.scopeMine")}
+            />
+          </div>
+        ) : null}
 
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -162,6 +326,12 @@ export function ProjectGalleryDialog({
             disabled={projects.length === 0 && status !== "idle"}
           />
         </div>
+
+        {!hasToken ? (
+          <p className="text-xs text-muted-foreground">
+            {t("gallery.signedOutHint")}
+          </p>
+        ) : null}
 
         {openError ? (
           <p className="flex items-start gap-1.5 text-sm text-destructive">
@@ -188,7 +358,11 @@ export function ProjectGalleryDialog({
             </div>
           ) : showEmpty ? (
             <p className="py-16 text-center text-sm text-muted-foreground">
-              {trimmedQuery ? t("gallery.noMatches") : t("gallery.empty")}
+              {trimmedQuery
+                ? t("gallery.noMatches")
+                : effectiveScope === "mine"
+                  ? t("gallery.emptyMine")
+                  : t("gallery.empty")}
             </p>
           ) : (
             <>
@@ -227,6 +401,53 @@ export function ProjectGalleryDialog({
         </ScrollArea>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ScopeTab({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={`flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1 text-sm font-medium transition-colors sm:flex-none ${
+        active
+          ? "bg-background text-foreground shadow-sm"
+          : "text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+/** A small badge marking unlisted/private projects; public renders nothing. */
+function VisibilityBadge({ visibility }: { visibility: string }) {
+  const { t } = useTranslation();
+  if (visibility !== "unlisted" && visibility !== "private") return null;
+  const isPrivate = visibility === "private";
+  return (
+    <span className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded bg-background/85 px-1.5 py-0.5 text-[10px] font-medium text-foreground shadow-sm">
+      {isPrivate ? (
+        <Lock className="h-2.5 w-2.5" />
+      ) : (
+        <EyeOff className="h-2.5 w-2.5" />
+      )}
+      {isPrivate
+        ? t("gallery.visibilityPrivate")
+        : t("gallery.visibilityUnlisted")}
+    </span>
   );
 }
 
@@ -269,6 +490,7 @@ function GalleryCard({ project, opening, disabled, onOpen }: GalleryCardProps) {
             <Loader2 className="h-5 w-5 animate-spin" />
           </span>
         ) : null}
+        <VisibilityBadge visibility={project.visibility} />
       </button>
 
       <div className="flex flex-1 flex-col gap-1 p-3">

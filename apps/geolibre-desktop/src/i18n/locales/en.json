@@ -673,7 +673,14 @@
     "views_one": "{{count}} view",
     "views_other": "{{count}} views",
     "untitled": "Untitled Project",
-    "noThumbnail": "No preview"
+    "noThumbnail": "No preview",
+    "resizeDialog": "Resize gallery",
+    "scopePublic": "Public gallery",
+    "scopeMine": "My projects",
+    "signedOutHint": "Add a share.geolibre.app API token in Settings to see your own unlisted and private projects.",
+    "emptyMine": "You have not shared any projects yet.",
+    "visibilityUnlisted": "Unlisted",
+    "visibilityPrivate": "Private"
   },
   "language": {
     "label": "Language",
