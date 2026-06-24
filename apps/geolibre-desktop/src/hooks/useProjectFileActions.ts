@@ -23,7 +23,7 @@ import {
   saveProjectFileToPath,
   saveTextFileWithFallback,
 } from "../lib/tauri-io";
-import { buildProjectHtml, resolveViewerBaseUrl } from "../lib/html-export";
+import { buildProjectHtml } from "../lib/html-export";
 import { mergeStringLists } from "../lib/string-lists";
 import { normalizeProjectUrl } from "../lib/urls";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
@@ -562,7 +562,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const handleSaveAs = () => saveProject({ saveAs: true });
 
   // Export the current project as a standalone interactive HTML page (#821).
+  // Shares saveProject's guard so a double-click can't open two save dialogs.
   const handleExportHtml = async (): Promise<boolean> => {
+    if (isSavingRef.current) return false;
+    isSavingRef.current = true;
     try {
       // Embed local vector data (self-contained, like Share), then strip env
       // vars: secrets that serve no purpose in a static, shareable viewer.
@@ -574,7 +577,6 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       const html = buildProjectHtml({
         project: safeProject,
         title: defaultProjectName,
-        appUrl: resolveViewerBaseUrl(),
       });
       const slug =
         defaultProjectName
@@ -602,6 +604,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           : t("toolbar.error.couldNotExportHtml"),
       );
       return false;
+    } finally {
+      isSavingRef.current = false;
     }
   };
 

@@ -76,6 +76,37 @@ describe("buildProjectHtml", () => {
     assert.match(html, /src="https:\/\/example\.com\/app\?lang=fr&amp;embed=1"/);
   });
 
+  it("falls back to the default viewer for an unsafe appUrl", () => {
+    const html = buildProjectHtml({
+      project: PROJECT,
+      title: "T",
+      // eslint-disable-next-line no-script-url
+      appUrl: "javascript:alert(1)",
+    });
+    assert.ok(!html.includes("javascript:alert(1)"));
+    assert.match(html, /src="https:\/\/viewer\.geolibre\.app\/\?embed=1"/);
+  });
+
+  it("does not append embed=1 twice when the app URL already has it", () => {
+    const html = buildProjectHtml({
+      project: PROJECT,
+      title: "T",
+      appUrl: "https://viewer.geolibre.app/?embed=1",
+    });
+    assert.match(html, /src="https:\/\/viewer\.geolibre\.app\/\?embed=1"/);
+    assert.ok(!html.includes("embed=1&amp;embed=1"));
+  });
+
+  it("leaves a standalone '>' in the inlined JSON unescaped", () => {
+    const project = {
+      version: "1.0.0",
+      name: "a > b",
+      layers: [],
+    } as unknown as GeoLibreProject;
+    const html = buildProjectHtml({ project, title: "T" });
+    assert.match(html, /"name":"a > b"/);
+  });
+
   it("inserts embed=1 before a URL fragment", () => {
     const html = buildProjectHtml({
       project: PROJECT,

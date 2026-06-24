@@ -7,7 +7,8 @@ import type { GeoLibreProject } from "@geolibre/core";
 export const DEFAULT_VIEWER_BASE_URL = "https://viewer.geolibre.app/";
 
 // Excludes the structural CSS chars ("{};:") so a width/height can't close the
-// <style> rule and inject CSS; "/" is allowed so calc() divisions still pass.
+// <style> rule and inject CSS; "/" is allowed so calc() divisions pass (extends
+// the Python _CSS_DIMENSION_RE, which does not allow "/").
 const CSS_DIMENSION_RE = /^[\w%.+\-/\s()]+$/;
 
 // Resolve the viewer URL from the env, accepting only HTTPS (or loopback HTTP)
@@ -48,6 +49,8 @@ function withEmbedFlag(baseUrl: string): string {
   const hashIndex = baseUrl.indexOf("#");
   const base = hashIndex === -1 ? baseUrl : baseUrl.slice(0, hashIndex);
   const fragment = hashIndex === -1 ? "" : baseUrl.slice(hashIndex);
+  // Don't double up the flag if the configured URL already carries it.
+  if (/[?&]embed=(1|true)(&|$)/.test(base)) return `${base}${fragment}`;
   const separator = base.includes("?") ? "&" : "?";
   return `${base}${separator}embed=1${fragment}`;
 }
@@ -57,7 +60,8 @@ export interface BuildProjectHtmlOptions {
   project: GeoLibreProject;
   /** The exported page's `<title>`. */
   title: string;
-  /** Base URL of the GeoLibre app to embed (defaults to the hosted viewer). */
+  /** Base URL of the GeoLibre app to embed; validated and defaulted to the
+   * env/hosted viewer via resolveViewerBaseUrl. */
   appUrl?: string;
   /** CSS width of the embedded map (default `"100%"`). */
   width?: string;
@@ -70,10 +74,13 @@ export interface BuildProjectHtmlOptions {
 // width/height. Mirrors the Python widget's to_html().
 export function buildProjectHtml(options: BuildProjectHtmlOptions): string {
   const { project, title } = options;
-  const appUrl = options.appUrl ?? DEFAULT_VIEWER_BASE_URL;
+  // Resolve (and validate) here so an unsafe appUrl - e.g. a "javascript:" URI -
+  // can never reach the iframe src; falls back to the env/default viewer.
+  const appUrl = resolveViewerBaseUrl(options.appUrl);
   const width = options.width ?? "100%";
   const height = options.height ?? "100vh";
-  // width/height land inside a <style> rule, which escapeHtml does not protect.
+  // The regex below is the guard that keeps width/height from closing the
+  // <style> rule; HTML-escaping them would be a no-op (the regex rejects & < > " ').
   if (!CSS_DIMENSION_RE.test(width)) {
     throw new Error(`Invalid CSS width value: ${width}`);
   }
@@ -92,7 +99,7 @@ export function buildProjectHtml(options: BuildProjectHtmlOptions): string {
 <title>${escapeHtml(title)}</title>
 <style>
   html, body { margin: 0; padding: 0; height: 100%; }
-  #geolibre-frame { border: 0; display: block; width: ${escapeHtml(width)}; height: ${escapeHtml(height)}; }
+  #geolibre-frame { border: 0; display: block; width: ${width}; height: ${height}; }
 </style>
 </head>
 <body>
