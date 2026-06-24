@@ -18,6 +18,7 @@ import { DelimitedTextSource } from "./add-data/sources/DelimitedTextSource";
 import { GeoRssSource } from "./add-data/sources/GeoRssSource";
 import { GpxSource } from "./add-data/sources/GpxSource";
 import { MbtilesSource } from "./add-data/sources/MbtilesSource";
+import { PhotosSource } from "./add-data/sources/PhotosSource";
 import { PostgresSource } from "./add-data/sources/PostgresSource";
 import { VideoSource } from "./add-data/sources/VideoSource";
 import { WfsSource } from "./add-data/sources/WfsSource";
@@ -64,6 +65,8 @@ function renderSource(
       return <GeoRssSource />;
     case "delimited-text":
       return <DelimitedTextSource />;
+    case "photos":
+      return <PhotosSource />;
     case "mbtiles":
       return <MbtilesSource />;
     case "arcgis":

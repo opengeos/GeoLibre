@@ -26,6 +26,12 @@ import {
 } from "./delimited-text";
 import type { DuckDbVectorFile } from "./duckdb-vector-loader";
 import type { DuckDbVectorLoadOptions } from "./duckdb-vector-guard";
+import type { GeotaggedPhotoResult } from "./geotagged-photos";
+import {
+  PHOTO_IMAGE_EXTENSIONS,
+  isPhotoDropFileName,
+  isPhotoFileName,
+} from "./geotagged-photos";
 import { parseGpxLayer } from "./gpx";
 import { isTauri } from "./is-tauri";
 import { parseKmlText } from "./kml";
@@ -1424,6 +1430,94 @@ export async function loadDroppedRasterPaths(
     });
   }
   return rasters;
+}
+
+/**
+ * Open a multi-select image picker and read each pick into a browser `File`, so
+ * the geotagged-photo importer reads EXIF and renders thumbnails the same way on
+ * desktop (Tauri) and in the browser. Resolves to an empty array when the dialog
+ * is cancelled.
+ */
+export async function pickImageFilesWithFallback(): Promise<File[]> {
+  if (isTauri()) {
+    const selected = await open({
+      multiple: true,
+      filters: [{ name: "Images", extensions: [...PHOTO_IMAGE_EXTENSIONS] }],
+    });
+    if (!selected) return [];
+    const paths = (Array.isArray(selected) ? selected : [selected]).filter(
+      isPhotoFileName,
+    );
+    const files: File[] = [];
+    for (const path of paths) {
+      // Read each pick independently so one unreadable file does not abandon the
+      // rest of the selection.
+      try {
+        files.push(
+          new File(
+            [toArrayBuffer(await readFile(path))],
+            browserSafeFileName(path),
+          ),
+        );
+      } catch (error) {
+        console.warn(`Could not read the selected image "${path}".`, error);
+      }
+    }
+    return files;
+  }
+
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.multiple = true;
+    input.accept = "image/*";
+    input.onchange = () => {
+      resolve(input.files ? Array.from(input.files) : []);
+    };
+    input.click();
+  });
+}
+
+/**
+ * Parse dropped browser `File`s that look like geotagged photos into a point
+ * layer. Returns null when the drop contained no auto-importable image (so the
+ * caller can fall through to the vector/raster pipeline). TIFF is intentionally
+ * excluded here and handled as a raster instead.
+ */
+export async function loadDroppedPhotoFiles(
+  droppedFiles: FileList | File[],
+): Promise<GeotaggedPhotoResult | null> {
+  const photos = Array.from(droppedFiles).filter((file) =>
+    isPhotoDropFileName(file.name),
+  );
+  if (!photos.length) return null;
+  const { loadGeotaggedPhotos } = await import("./geotagged-photos");
+  return loadGeotaggedPhotos(photos);
+}
+
+/**
+ * Read dropped image file paths (Tauri) into `File`s and parse them into a point
+ * layer from their EXIF GPS. Returns null when no auto-importable image was
+ * dropped (TIFF is excluded and loaded as a raster instead).
+ */
+export async function loadDroppedPhotoPaths(
+  paths: string[],
+): Promise<GeotaggedPhotoResult | null> {
+  const photoPaths = paths.filter(isPhotoDropFileName);
+  if (!photoPaths.length) return null;
+  const files: File[] = [];
+  for (const path of photoPaths) {
+    try {
+      files.push(
+        new File([toArrayBuffer(await readFile(path))], browserSafeFileName(path)),
+      );
+    } catch (error) {
+      console.warn(`Could not read dropped image "${path}".`, error);
+    }
+  }
+  if (!files.length) return null;
+  const { loadGeotaggedPhotos } = await import("./geotagged-photos");
+  return loadGeotaggedPhotos(files);
 }
 
 export async function loadDroppedVectorPaths(

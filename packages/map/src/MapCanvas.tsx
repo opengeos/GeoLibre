@@ -104,7 +104,18 @@ function createIdentifyPopupElement(
 
     const valueCell = document.createElement("div");
     valueCell.className = "break-words text-foreground";
-    valueCell.textContent = stringifyIdentifyValue(value);
+    // Render inline image data URLs (e.g. a geotagged-photo or field-collection
+    // thumbnail) as an actual thumbnail rather than a multi-kilobyte string.
+    if (typeof value === "string" && value.startsWith("data:image/")) {
+      const image = document.createElement("img");
+      image.src = value;
+      image.alt = key;
+      image.loading = "lazy";
+      image.className = "max-h-40 max-w-full rounded";
+      valueCell.appendChild(image);
+    } else {
+      valueCell.textContent = stringifyIdentifyValue(value);
+    }
 
     row.append(keyCell, valueCell);
     rows.appendChild(row);

@@ -92,6 +92,7 @@
     "remove": "Remove",
     "add": "Add",
     "ok": "OK",
+    "done": "Done",
     "openWebApp": "Open the GeoLibre web app"
   },
   "addData": {
@@ -124,6 +125,10 @@
       "delimitedText": {
         "label": "Add Delimited Text Layer",
         "description": "Add a delimited text file or URL as a point layer using longitude and latitude fields."
+      },
+      "photos": {
+        "label": "Add Geotagged Photos",
+        "description": "Import JPEG/HEIC photos as a point layer, placing each one from its EXIF GPS location."
       },
       "mbtiles": {
         "label": "Add MBTiles Layer",
@@ -303,6 +308,24 @@
       "customDelimiter": "Custom delimiter",
       "longitudeField": "Longitude field",
       "latitudeField": "Latitude field"
+    },
+    "photos": {
+      "defaultName": "Photos",
+      "chooseLabel": "Photos",
+      "choosePhotos": "Choose photos",
+      "hint": "Select JPEG, PNG, TIFF, or HEIC photos. Each one is placed from its EXIF GPS location. HEIC photos are located but shown without a thumbnail.",
+      "readError": "Could not read the selected photos.",
+      "errorChooseFiles": "Choose one or more photos.",
+      "selectedCount_one": "{{count}} photo selected",
+      "selectedCount_other": "{{count}} photos selected",
+      "errorNoGps_one": "No GPS location was found in the selected photo.",
+      "errorNoGps_other": "No GPS location was found in the {{count}} selected photos.",
+      "addedSummary_one": "Added {{count}} geotagged photo.",
+      "addedSummary_other": "Added {{count}} geotagged photos.",
+      "skippedNote_one": "{{count}} photo was skipped (no GPS location).",
+      "skippedNote_other": "{{count}} photos were skipped (no GPS location).",
+      "noThumbnailNote_one": "{{count}} photo has no thumbnail (HEIC or unsupported format).",
+      "noThumbnailNote_other": "{{count}} photos have no thumbnail (HEIC or unsupported format)."
     },
     "mbtiles": {
       "defaultName": "MBTiles Layer",
@@ -1152,6 +1175,7 @@
     },
     "layerType": {
       "delimitedText": "Delimited Text Layer",
+      "photos": "Geotagged Photos",
       "gpx": "GPX Layer",
       "mbtiles": "MBTiles Layer",
       "xyz": "XYZ Layer",
