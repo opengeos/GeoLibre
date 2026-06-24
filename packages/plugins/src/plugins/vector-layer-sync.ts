@@ -1,5 +1,7 @@
 import {
   DEFAULT_LAYER_STYLE,
+  extrusionColorValue,
+  extrusionHeightValue,
   isVectorColorExpression,
   vectorCircleColorValue,
   vectorFillColorValue,
@@ -521,6 +523,42 @@ function savedVectorStyle(raw: unknown): Partial<VectorLayerStyle> | null {
     style.circleColorExpression = candidate.circleColorExpression;
   }
 
+  // 3D extrusion. Restored so a saved extruded polygon layer renders as an
+  // extrusion immediately on reopen (the control is seeded from this style),
+  // before the store sync re-pushes. The height can be a flat number or a
+  // MapLibre expression array, validated with the same bounded checks as the
+  // color expressions so a hand-edited project file cannot smuggle a blob in.
+  if (typeof candidate.extrusionEnabled === "boolean") {
+    style.extrusionEnabled = candidate.extrusionEnabled;
+  }
+  if (color(candidate.extrusionColor)) {
+    style.extrusionColor = candidate.extrusionColor;
+  }
+  if (colorExpression(candidate.extrusionColorExpression)) {
+    style.extrusionColorExpression = candidate.extrusionColorExpression;
+  }
+  if (fraction(candidate.extrusionOpacity)) {
+    style.extrusionOpacity = candidate.extrusionOpacity;
+  }
+  if (
+    typeof candidate.extrusionBase === "number" &&
+    Number.isFinite(candidate.extrusionBase)
+  ) {
+    style.extrusionBase = candidate.extrusionBase;
+  }
+  if (
+    typeof candidate.extrusionHeight === "number" &&
+    Number.isFinite(candidate.extrusionHeight)
+  ) {
+    style.extrusionHeight = candidate.extrusionHeight;
+  } else if (colorExpression(candidate.extrusionHeight)) {
+    // colorExpression only enforces "a small, well-formed JSON array", which is
+    // exactly the bound wanted for a height expression too; the name refers to
+    // its first use, not a color-only constraint.
+    style.extrusionHeight =
+      candidate.extrusionHeight as VectorLayerStyle["extrusionHeight"];
+  }
+
   // Attribute labels. The field name is length-capped like the color strings
   // (a real attribute name is short); the rest reuse the same color/number
   // guards so a hand-edited project file cannot smuggle blobs into the symbol
@@ -594,6 +632,19 @@ function layerStyleToVectorStyle(style: LayerStyle): VectorLayerStyle {
     fillColorExpression: colorExpressionField(vectorFillColorValue(style)),
     lineColorExpression: colorExpressionField(vectorLineColorValue(style)),
     circleColorExpression: colorExpressionField(vectorCircleColorValue(style)),
+    // 3D extrusion. The control renders a fill-extrusion layer for polygons
+    // when extrusionEnabled; height and color reuse GeoLibre's shared resolvers
+    // so a control-managed layer extrudes identically to the core fill-extrusion
+    // path. extrusionColorExpression carries the data-driven color (the flat
+    // extrusionColor is the fallback), matching the fill color contract above.
+    extrusionEnabled: style.extrusionEnabled,
+    extrusionColor: style.extrusionColor,
+    extrusionColorExpression: colorExpressionField(extrusionColorValue(style)),
+    extrusionOpacity: style.extrusionOpacity,
+    extrusionHeight: extrusionHeightValue(
+      style,
+    ) as VectorLayerStyle["extrusionHeight"],
+    extrusionBase: style.extrusionBase,
     // Point renderer: GeoLibre's "single" maps to the control's "circle".
     pointMode:
       (style.pointRenderer ?? "single") === "single"
@@ -739,6 +790,15 @@ function vectorStylesEqual(
     valuesEqual(left.fillColorExpression, right.fillColorExpression) &&
     valuesEqual(left.lineColorExpression, right.lineColorExpression) &&
     valuesEqual(left.circleColorExpression, right.circleColorExpression) &&
+    // Extrusion: a toggle, an opacity/base change, or a height/color change
+    // (the height is an array expression, so compare it deeply) must register
+    // so it is pushed to the control, which rebuilds or repaints accordingly.
+    left.extrusionEnabled === right.extrusionEnabled &&
+    left.extrusionColor === right.extrusionColor &&
+    left.extrusionOpacity === right.extrusionOpacity &&
+    left.extrusionBase === right.extrusionBase &&
+    valuesEqual(left.extrusionHeight, right.extrusionHeight) &&
+    valuesEqual(left.extrusionColorExpression, right.extrusionColorExpression) &&
     // Point renderer fields: a pointMode/heatmap/cluster change must register so
     // it is pushed to the control (which rebuilds the layers structurally).
     left.pointMode === right.pointMode &&

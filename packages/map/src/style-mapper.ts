@@ -1,11 +1,11 @@
 import {
   DEFAULT_LAYER_STYLE,
   circleRadiusValue,
+  extrusionColorValue,
+  extrusionHeightValue,
   lineWidthValue,
-  parseJsonExpression,
   simpleStyleNumberValue,
   vectorCircleColorValue,
-  vectorColorExpression,
   vectorFillColorValue,
   vectorLineColorValue,
   type LayerStyle,
@@ -53,36 +53,15 @@ export function fillPaint(style: LayerStyle, opacity: number) {
 function extrusionHeightPaintValue(
   style: LayerStyle,
 ): PropertyValueSpecification<number> {
-  const advancedExpression = parseJsonExpression(
-    styleValue(style, "extrusionAdvancedStyleEnabled")
-      ? styleValue(style, "extrusionHeightExpression")
-      : "",
-  ) as PropertyValueSpecification<number> | null;
-  if (advancedExpression) return advancedExpression;
-
-  const property = styleValue(style, "extrusionHeightProperty").trim();
-  const scale = styleValue(style, "extrusionHeightScale");
-  if (!property) return 0;
-  return ["*", ["to-number", ["get", property], 0], scale];
+  // Shared with the Add Vector Layer control mapping (vector-layer-sync) so
+  // both render-paths extrude to the same height.
+  return extrusionHeightValue(style) as PropertyValueSpecification<number>;
 }
 
 function extrusionColorPaintValue(
   style: LayerStyle,
 ): PropertyValueSpecification<string> {
-  const vectorExpression = vectorColorExpression(
-    style,
-    styleValue(style, "extrusionColor"),
-  ) as PropertyValueSpecification<string>;
-  if (vectorExpression !== styleValue(style, "extrusionColor")) {
-    return vectorExpression;
-  }
-
-  const advancedExpression = parseJsonExpression(
-    styleValue(style, "extrusionAdvancedStyleEnabled")
-      ? styleValue(style, "extrusionColorExpression")
-      : "",
-  ) as PropertyValueSpecification<string> | null;
-  return advancedExpression ?? styleValue(style, "extrusionColor");
+  return extrusionColorValue(style) as PropertyValueSpecification<string>;
 }
 
 export function fillExtrusionPaint(style: LayerStyle, opacity: number) {

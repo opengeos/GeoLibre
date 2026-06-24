@@ -599,6 +599,15 @@ describe("wireVectorStoreSync", () => {
       labelHaloWidth: 1.5,
       labelPlacement: "point",
       labelAllowOverlap: false,
+      // Extrusion fields default through from DEFAULT_LAYER_STYLE; the height is
+      // the chosen property scaled (default property "height", scale 1) and the
+      // color resolves to a flat value so its expression field is undefined.
+      extrusionEnabled: false,
+      extrusionColor: "#3b82f6",
+      extrusionColorExpression: undefined,
+      extrusionOpacity: 0.8,
+      extrusionHeight: ["*", ["to-number", ["get", "height"], 0], 1],
+      extrusionBase: 0,
     };
     assert.deepEqual(calls, [
       { method: "setLayerStyle", args: ["vector-1", expectedStyle] },

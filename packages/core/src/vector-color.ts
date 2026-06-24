@@ -445,3 +445,50 @@ export function vectorLineColorValue(style: LayerStyle): VectorColorValue {
           ];
   return withSimpleStyleColor(style, "stroke", resolved);
 }
+
+/**
+ * Resolves the 3D-extrusion height for a layer style into a MapLibre value: a
+ * plain meters number, or a data-driven expression. In advanced mode a valid
+ * `extrusionHeightExpression` wins; otherwise the height is the chosen property
+ * scaled by `extrusionHeightScale` (`["*", ["to-number", ["get", prop], 0],
+ * scale]`), or a flat `0` when no property is set (so the layer renders flat
+ * rather than erroring). Shared by the map's fill-extrusion paint and the
+ * Add Vector Layer control's extrusion mapping so both extrude identically.
+ *
+ * @param style - The layer style.
+ * @returns The extrusion height as a number or a MapLibre expression array.
+ */
+export function extrusionHeightValue(style: LayerStyle): number | unknown[] {
+  const advancedExpression = parseJsonExpression(
+    styleValue(style, "extrusionAdvancedStyleEnabled")
+      ? styleValue(style, "extrusionHeightExpression")
+      : "",
+  );
+  if (advancedExpression) return advancedExpression;
+  const property = styleValue(style, "extrusionHeightProperty").trim();
+  if (!property) return 0;
+  const scale = styleValue(style, "extrusionHeightScale");
+  return ["*", ["to-number", ["get", property], 0], scale];
+}
+
+/**
+ * Resolves the 3D-extrusion color for a layer style: a data-driven expression
+ * when the layer's symbology mode produces one (categorized/graduated/rule/
+ * expression) or an advanced `extrusionColorExpression` is set, otherwise the
+ * flat `extrusionColor`. Mirrors the fill-color contract so an extruded layer
+ * honors the same attribute-driven styling.
+ *
+ * @param style - The layer style.
+ * @returns A flat color string or a MapLibre color expression array.
+ */
+export function extrusionColorValue(style: LayerStyle): VectorColorValue {
+  const flat = styleValue(style, "extrusionColor");
+  const vectorExpression = vectorColorExpression(style, flat);
+  if (vectorExpression !== flat) return vectorExpression;
+  const advancedExpression = parseJsonExpression(
+    styleValue(style, "extrusionAdvancedStyleEnabled")
+      ? styleValue(style, "extrusionColorExpression")
+      : "",
+  );
+  return (advancedExpression as VectorColorValue | null) ?? flat;
+}
