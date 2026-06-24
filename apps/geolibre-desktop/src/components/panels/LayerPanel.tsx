@@ -80,6 +80,7 @@ import {
   Trash2,
   ZoomIn,
 } from "lucide-react";
+import { clamp } from "../../lib/clamp";
 import {
   getLayerRefreshConfig,
   isRefreshableLayer,
@@ -176,10 +177,6 @@ function layerTypeLabel(
   return layer.type;
 }
 
-function clampNumber(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
 interface LayerOpacitySliderProps {
   label: string;
   ariaLabel: string;
@@ -217,7 +214,7 @@ function LayerOpacitySlider({
     // Treat an empty/whitespace entry like Escape: cancel rather than commit 0
     // (Number("") === 0 would otherwise silently reset the slider to its min).
     if (raw.trim() !== "" && Number.isFinite(parsed)) {
-      onChange(Number(clampNumber(parsed, min, max).toFixed(2)));
+      onChange(Number(clamp(parsed, min, max).toFixed(2)));
     }
     setEditing(false);
   };
@@ -228,6 +225,10 @@ function LayerOpacitySlider({
   };
 
   const startEditing = () => {
+    // The slider stays mounted while editing, so a second double-click on its
+    // track must not re-enter and clobber the in-progress draft (the value
+    // button is unmounted while editing, so it cannot re-trigger this).
+    if (editing) return;
     handledRef.current = false;
     setDraft(value.toFixed(2));
     setEditing(true);

@@ -52,6 +52,7 @@ import {
   useState,
 } from "react";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
+import { clamp } from "../../lib/clamp";
 
 interface StylePanelProps {
   mapControllerRef: RefObject<MapController | null>;
@@ -740,10 +741,6 @@ function removeTrailingJsonCommas(value: string): string {
   return result;
 }
 
-function clampNumber(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
 // Shared shell classes for every expanded StylePanel return branch. On phones
 // (max-md) it overlays the map as a bottom sheet instead of squeezing it.
 const STYLE_PANEL_ASIDE_CLASS =
@@ -777,7 +774,7 @@ function NumericStyleInput({
   onChange,
 }: NumericStyleInputProps) {
   const normalize = (next: number) =>
-    Number(clampNumber(next, min, max).toFixed(stepPrecision(step)));
+    Number(clamp(next, min, max).toFixed(stepPrecision(step)));
 
   const stepValue = (direction: 1 | -1) => {
     onChange(normalize(value + direction * step));
@@ -926,7 +923,7 @@ function RasterStyleSlider({
     // Treat an empty/whitespace entry like Escape: cancel rather than commit 0
     // (Number("") === 0 would otherwise silently reset the slider to its min).
     if (raw.trim() !== "" && Number.isFinite(parsed)) {
-      onChange(Number(clampNumber(parsed, min, max).toFixed(precision)));
+      onChange(Number(clamp(parsed, min, max).toFixed(precision)));
     }
     setEditing(false);
   };
@@ -1637,14 +1634,14 @@ export function StylePanel({
   const minZoom = styleValue(style, "minZoom");
   const maxZoom = styleValue(style, "maxZoom");
   const setMinZoom = (value: number) => {
-    const next = clampNumber(value, MIN_LAYER_ZOOM, MAX_LAYER_ZOOM);
+    const next = clamp(value, MIN_LAYER_ZOOM, MAX_LAYER_ZOOM);
     setLayerStyle(layer.id, {
       minZoom: next,
       maxZoom: Math.max(next, maxZoom),
     });
   };
   const setMaxZoom = (value: number) => {
-    const next = clampNumber(value, MIN_LAYER_ZOOM, MAX_LAYER_ZOOM);
+    const next = clamp(value, MIN_LAYER_ZOOM, MAX_LAYER_ZOOM);
     setLayerStyle(layer.id, {
       minZoom: Math.min(next, minZoom),
       maxZoom: next,
