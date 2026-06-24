@@ -1672,6 +1672,7 @@
     "preview": "Fly to this chapter",
     "captureView": "Set to current view",
     "composeOnMap": "Compose on map",
+    "resizeDialog": "Resize dialog",
     "composeMode": {
       "title": "Composing chapter",
       "hint": "Pan, zoom, and tilt the map, then save the view to this chapter.",

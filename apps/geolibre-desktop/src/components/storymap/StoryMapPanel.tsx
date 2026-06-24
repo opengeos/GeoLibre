@@ -1,4 +1,11 @@
-import { type RefObject, useCallback, useMemo, useRef, useState } from "react";
+import {
+  type RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import {
@@ -94,6 +101,80 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
   const [exportError, setExportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importFormatRef = useRef<"json" | "csv">("json");
+
+  // Explicit dialog size once the user drags the bottom-right grip (null = the
+  // default responsive size). The dialog element is read for its live size.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const [dialogSize, setDialogSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+  // Tears down an in-progress resize drag (removes the window listeners and
+  // cancels the pending RAF) so it can't leak if the dialog unmounts mid-drag.
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
+
+  // Resize the whole dialog from its bottom-right grip. The dialog is centred
+  // via a -50% transform, so the right/bottom edges move by half the size
+  // change; growing by 2x the pointer delta keeps the grip under the cursor.
+  const startDialogResize = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      const el = dialogRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const startW = rect.width;
+      const startH = rect.height;
+      let next = { width: startW, height: startH };
+      let frame: number | null = null;
+      const prevCursor = document.body.style.cursor;
+      const prevSelect = document.body.style.userSelect;
+      document.body.style.cursor = "nwse-resize";
+      document.body.style.userSelect = "none";
+
+      const onMove = (e: PointerEvent) => {
+        next = {
+          width: Math.max(
+            360,
+            Math.min(window.innerWidth - 16, startW + (e.clientX - startX) * 2),
+          ),
+          height: Math.max(
+            320,
+            Math.min(window.innerHeight - 16, startH + (e.clientY - startY) * 2),
+          ),
+        };
+        if (frame !== null) return;
+        frame = window.requestAnimationFrame(() => {
+          frame = null;
+          setDialogSize(next);
+        });
+      };
+      const cleanup = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+        if (frame !== null) window.cancelAnimationFrame(frame);
+        document.body.style.cursor = prevCursor;
+        document.body.style.userSelect = prevSelect;
+        resizeCleanupRef.current = null;
+      };
+      const onUp = () => {
+        cleanup();
+        setDialogSize(next);
+      };
+      resizeCleanupRef.current = cleanup;
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
+    },
+    [],
+  );
+
+  // Tear down an in-progress resize drag if the dialog unmounts mid-drag.
+  useEffect(() => () => resizeCleanupRef.current?.(), []);
 
   const story: StoryMap = storymap ?? DEFAULT_STORY_MAP;
   const chapters = story.chapters;
@@ -290,7 +371,39 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="flex max-h-[88vh] w-[min(92vw,46rem)] flex-col gap-0 p-0">
+      <DialogContent
+        ref={dialogRef}
+        className="flex max-h-[88vh] w-[min(92vw,46rem)] flex-col gap-0 p-0"
+        style={
+          dialogSize
+            ? {
+                width: dialogSize.width,
+                height: dialogSize.height,
+                maxWidth: "none",
+                maxHeight: "none",
+              }
+            : undefined
+        }
+        bodyClassName="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden p-0"
+        resizeHandle={
+          <div
+            role="separator"
+            aria-label={t("storymap.resizeDialog")}
+            title={t("storymap.resizeDialog")}
+            onPointerDown={startDialogResize}
+            className="absolute bottom-0 right-0 z-10 hidden h-5 w-5 cursor-nwse-resize touch-none select-none text-muted-foreground hover:text-foreground md:block"
+          >
+            <svg viewBox="0 0 16 16" className="h-full w-full" aria-hidden="true">
+              <path
+                d="M11 15L15 11M6 15L15 6"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+          </div>
+        }
+      >
         <DialogHeader className="border-b px-5 py-4">
           <DialogTitle className="flex items-center gap-2">
             <MapPin className="h-4 w-4" />
