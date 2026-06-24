@@ -373,7 +373,11 @@ export function RecordTourDialog({
       {recording && (
         <div className="pointer-events-none fixed inset-x-0 bottom-6 z-[60] flex justify-center">
           <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-border bg-background/95 px-4 py-2 shadow-lg backdrop-blur">
-            <Circle className="h-3 w-3 animate-pulse fill-red-500 text-red-500" />
+            {status === "recording" ? (
+              <Circle className="h-3 w-3 animate-pulse fill-red-500 text-red-500" />
+            ) : (
+              <span className="h-3 w-3 animate-spin rounded-full border-2 border-muted border-t-foreground" />
+            )}
             <span className="text-sm font-medium">
               {status === "saving"
                 ? t("recordTour.savingStatus")

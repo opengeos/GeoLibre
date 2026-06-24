@@ -456,7 +456,7 @@
     "description": "Build an animated camera tour from a sequence of map views, then record it to a video file. Pan and zoom the map, add each view as a keyframe, and set how long the camera takes to move between them.",
     "unsupported": "This browser cannot record the map canvas. Try a recent version of Chrome, Edge, or Firefox.",
     "addView": "Add current view",
-    "keyframeCount": "{{count}} keyframe",
+    "keyframeCount_one": "{{count}} keyframe",
     "keyframeCount_other": "{{count}} keyframes",
     "empty": "Pan and zoom the map to a starting view, then add it as the first keyframe. Add at least two keyframes to record a tour.",
     "flyToKeyframe": "Fly to this view",
