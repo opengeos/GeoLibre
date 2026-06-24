@@ -470,6 +470,7 @@
     "fps": "Frames per second",
     "estimatedLength": "About {{seconds}}s",
     "record": "Record",
+    "videoFileType": "WebM Video",
     "recordingStatus": "Recording… {{percent}}%",
     "savingStatus": "Saving video…",
     "stop": "Stop",

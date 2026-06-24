@@ -108,14 +108,14 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
       resolve();
       return;
     }
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    }, ms);
     const onAbort = () => {
       clearTimeout(timer);
       resolve();
     };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
     signal?.addEventListener("abort", onAbort, { once: true });
   });
 }
@@ -230,11 +230,12 @@ export async function recordTour({
   let recorder: MediaRecorder;
   try {
     recorder = new MediaRecorder(stream, { mimeType });
-  } catch (err) {
+  } catch {
     // The constructor can still reject a codec that isTypeSupported accepted;
-    // stop the capture so it isn't leaked when we never reach the finally below.
+    // stop the capture so it isn't leaked when we never reach the finally below,
+    // and report it as unsupported so the dialog shows the right message.
     for (const track of stream.getTracks()) track.stop();
-    throw err;
+    throw new TourRecordingUnsupportedError();
   }
 
   // Aborting interrupts the in-flight camera move so the tour stops promptly
@@ -310,11 +311,12 @@ export async function recordTour({
       bearing: first.bearing,
     });
 
-    rafId = requestAnimationFrame(pump);
-    startedAt = performance.now();
     // Flush encoded chunks every second so memory stays flat over long tours
-    // instead of buffering the whole video until stop().
+    // instead of buffering the whole video until stop(). Start the recorder
+    // before the progress pump so the elapsed clock tracks actual capture.
     recorder.start(1000);
+    startedAt = performance.now();
+    rafId = requestAnimationFrame(pump);
     await delay(START_HOLD_MS, signal);
 
     for (let i = 1; i < keyframes.length; i++) {

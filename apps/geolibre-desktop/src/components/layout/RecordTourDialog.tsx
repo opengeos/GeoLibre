@@ -49,6 +49,12 @@ function round(value: number, digits: number): number {
   return Number(value.toFixed(digits));
 }
 
+/** Clamp a number into a range, returning the fallback when not finite. */
+function clamp(value: number, min: number, max: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
+}
+
 // Codec support is a static browser capability, so probe it once at module load
 // rather than re-running the MediaRecorder.isTypeSupported() checks per render.
 const RECORDING_SUPPORTED = isTourRecordingSupported();
@@ -73,6 +79,9 @@ export function RecordTourDialog({
   const { t } = useTranslation();
   const [keyframes, setKeyframes] = useState<TourKeyframe[]>([]);
   const [fps, setFps] = useState(DEFAULT_FPS);
+  // Mirror the FPS as editable text so the field can be cleared and retyped;
+  // a bare controlled number input snaps an empty value to the min instead.
+  const [fpsText, setFpsText] = useState(String(DEFAULT_FPS));
   const [status, setStatus] = useState<Status>("idle");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -112,6 +121,8 @@ export function RecordTourDialog({
     setPos({ x, y });
   };
 
+  // Also clears on pointercancel (e.g. an OS/browser gesture interrupts the
+  // drag) so a stale offset can't snap the panel on the next move.
   const onDragEnd = (event: React.PointerEvent) => {
     dragOffset.current = null;
     event.currentTarget.releasePointerCapture?.(event.pointerId);
@@ -122,6 +133,7 @@ export function RecordTourDialog({
     if (!view) return;
     setSavedName(null);
     setSaveCancelled(false);
+    setError(null);
     setKeyframes((current) => [
       ...current,
       {
@@ -181,19 +193,20 @@ export function RecordTourDialog({
         signal: controller.signal,
         onProgress: setProgress,
       });
-      // Stopping during the opening hold can yield an empty clip; treat that as
-      // a cancel rather than saving a zero-length file. A non-empty partial tour
-      // (stopped midway) is still worth saving.
-      if (controller.signal.aborted && blob.size === 0) {
+      // An empty clip (a stop during the opening hold, or a degenerate
+      // zero-byte encode) is treated as a cancel rather than saving an unusable
+      // file; a non-empty partial tour (stopped midway) is still worth saving.
+      if (blob.size === 0) {
         setSaveCancelled(true);
       } else {
         setStatus("saving");
         const bytes = new Uint8Array(await blob.arrayBuffer());
+        const fileType = t("recordTour.videoFileType");
         const name = await saveBinaryFileWithFallback(bytes, {
           defaultName: "map-tour.webm",
-          filters: [{ name: "WebM Video", extensions: ["webm"] }],
+          filters: [{ name: fileType, extensions: ["webm"] }],
           browserTypes: [
-            { description: "WebM Video", accept: { "video/webm": [".webm"] } },
+            { description: fileType, accept: { "video/webm": [".webm"] } },
           ],
           mimeType: "video/webm",
         });
@@ -239,6 +252,7 @@ export function RecordTourDialog({
         onPointerDown={onDragStart}
         onPointerMove={onDragMove}
         onPointerUp={onDragEnd}
+        onPointerCancel={onDragEnd}
         className="flex cursor-move touch-none select-none items-center gap-2 border-b px-3 py-2"
       >
         <GripHorizontal className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -248,8 +262,11 @@ export function RecordTourDialog({
         <button
           type="button"
           aria-label={t("common.close")}
+          // Closing while recording would hide the only Stop/progress control,
+          // so block it until the recording finishes.
+          disabled={recording}
           onClick={() => onOpenChange(false)}
-          className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
+          className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-30"
         >
           <X className="h-4 w-4" />
         </button>
@@ -289,95 +306,19 @@ export function RecordTourDialog({
           <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1">
             <ol className="space-y-2">
               {keyframes.map((kf, index) => (
-                <li
+                <KeyframeRow
                   key={kf.id}
-                  className="flex items-center gap-2 rounded-md border border-input p-2 text-xs"
-                >
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted font-medium tabular-nums">
-                    {index + 1}
-                  </span>
-                  <button
-                    type="button"
-                    className="flex min-w-0 flex-1 items-center gap-1.5 text-left hover:text-foreground"
-                    title={t("recordTour.flyToKeyframe")}
-                    onClick={() => previewKeyframe(kf)}
-                  >
-                    <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    <span className="truncate tabular-nums text-muted-foreground">
-                      {kf.center[1].toFixed(4)}, {kf.center[0].toFixed(4)} · z
-                      {kf.zoom.toFixed(1)}
-                    </span>
-                  </button>
-                  {index === 0 ? (
-                    <span className="shrink-0 text-muted-foreground">
-                      {t("recordTour.start")}
-                    </span>
-                  ) : (
-                    <label className="flex shrink-0 items-center gap-1">
-                      <Input
-                        type="number"
-                        inputMode="decimal"
-                        aria-label={t("recordTour.segmentSeconds")}
-                        className="h-7 w-14"
-                        min={MIN_SEGMENT_SECONDS}
-                        max={MAX_SEGMENT_SECONDS}
-                        step="0.5"
-                        disabled={recording}
-                        value={kf.durationMs / 1000}
-                        onChange={(event) => {
-                          const seconds = Number(event.target.value);
-                          if (Number.isFinite(seconds)) {
-                            setSegmentSeconds(
-                              kf.id,
-                              Math.min(
-                                MAX_SEGMENT_SECONDS,
-                                Math.max(MIN_SEGMENT_SECONDS, seconds),
-                              ),
-                            );
-                          }
-                        }}
-                      />
-                      <span className="text-muted-foreground">
-                        {t("recordTour.secondsUnit")}
-                      </span>
-                    </label>
-                  )}
-                  <div className="flex shrink-0 items-center">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      aria-label={t("recordTour.moveUp")}
-                      disabled={index === 0 || recording}
-                      onClick={() => move(index, -1)}
-                    >
-                      <ArrowUp className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      aria-label={t("recordTour.moveDown")}
-                      disabled={index === keyframes.length - 1 || recording}
-                      onClick={() => move(index, 1)}
-                    >
-                      <ArrowDown className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-destructive"
-                      aria-label={t("recordTour.removeKeyframe")}
-                      disabled={recording}
-                      onClick={() => removeKeyframe(kf.id)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </li>
+                  keyframe={kf}
+                  index={index}
+                  isLast={index === keyframes.length - 1}
+                  recording={recording}
+                  onPreview={() => previewKeyframe(kf)}
+                  onMove={(delta) => move(index, delta)}
+                  onRemove={() => removeKeyframe(kf.id)}
+                  onDurationSeconds={(seconds) =>
+                    setSegmentSeconds(kf.id, seconds)
+                  }
+                />
               ))}
             </ol>
           </div>
@@ -398,12 +339,19 @@ export function RecordTourDialog({
               max={MAX_FPS}
               step="1"
               disabled={recording}
-              value={fps}
+              value={fpsText}
               onChange={(event) => {
-                const next = Number(event.target.value);
-                if (Number.isFinite(next)) {
-                  setFps(Math.min(MAX_FPS, Math.max(MIN_FPS, Math.round(next))));
+                const text = event.target.value;
+                setFpsText(text);
+                const next = Number(text);
+                if (Number.isFinite(next) && next >= MIN_FPS && next <= MAX_FPS) {
+                  setFps(Math.round(next));
                 }
+              }}
+              onBlur={() => {
+                const next = clamp(Number(fpsText), MIN_FPS, MAX_FPS, fps);
+                setFps(Math.round(next));
+                setFpsText(String(Math.round(next)));
               }}
             />
           </div>
@@ -429,7 +377,11 @@ export function RecordTourDialog({
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         {recording ? (
-          <div className="flex items-center gap-3">
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex items-center gap-3"
+          >
             {status === "recording" ? (
               <Circle className="h-3 w-3 shrink-0 animate-pulse fill-red-500 text-red-500" />
             ) : (
@@ -466,5 +418,137 @@ export function RecordTourDialog({
         )}
       </div>
     </div>
+  );
+}
+
+interface KeyframeRowProps {
+  keyframe: TourKeyframe;
+  index: number;
+  isLast: boolean;
+  recording: boolean;
+  onPreview: () => void;
+  onMove: (delta: number) => void;
+  onRemove: () => void;
+  onDurationSeconds: (seconds: number) => void;
+}
+
+/**
+ * One keyframe in the tour list. The segment-duration field keeps local text
+ * state so it can be cleared and retyped (a controlled number input would snap
+ * an empty value straight to the minimum); the parsed value commits to the
+ * store only while in range, and the text normalizes to the committed value on
+ * blur.
+ */
+function KeyframeRow({
+  keyframe,
+  index,
+  isLast,
+  recording,
+  onPreview,
+  onMove,
+  onRemove,
+  onDurationSeconds,
+}: KeyframeRowProps) {
+  const { t } = useTranslation();
+  const [text, setText] = useState(String(keyframe.durationMs / 1000));
+  const isFirst = index === 0;
+
+  return (
+    <li className="flex items-center gap-2 rounded-md border border-input p-2 text-xs">
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted font-medium tabular-nums">
+        {index + 1}
+      </span>
+      <button
+        type="button"
+        className="flex min-w-0 flex-1 items-center gap-1.5 text-left hover:text-foreground disabled:hover:text-current"
+        title={t("recordTour.flyToKeyframe")}
+        disabled={recording}
+        onClick={onPreview}
+      >
+        <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <span className="truncate tabular-nums text-muted-foreground">
+          {keyframe.center[1].toFixed(4)}, {keyframe.center[0].toFixed(4)} · z
+          {keyframe.zoom.toFixed(1)}
+        </span>
+      </button>
+      {isFirst ? (
+        <span className="shrink-0 text-muted-foreground">
+          {t("recordTour.start")}
+        </span>
+      ) : (
+        <label className="flex shrink-0 items-center gap-1">
+          <Input
+            type="number"
+            inputMode="decimal"
+            aria-label={t("recordTour.segmentSeconds")}
+            className="h-7 w-14"
+            min={MIN_SEGMENT_SECONDS}
+            max={MAX_SEGMENT_SECONDS}
+            step="0.5"
+            disabled={recording}
+            value={text}
+            onChange={(event) => {
+              setText(event.target.value);
+              const seconds = Number(event.target.value);
+              if (
+                Number.isFinite(seconds) &&
+                seconds >= MIN_SEGMENT_SECONDS &&
+                seconds <= MAX_SEGMENT_SECONDS
+              ) {
+                onDurationSeconds(seconds);
+              }
+            }}
+            onBlur={() => {
+              const seconds = clamp(
+                Number(text),
+                MIN_SEGMENT_SECONDS,
+                MAX_SEGMENT_SECONDS,
+                keyframe.durationMs / 1000,
+              );
+              onDurationSeconds(seconds);
+              setText(String(seconds));
+            }}
+          />
+          <span className="text-muted-foreground">
+            {t("recordTour.secondsUnit")}
+          </span>
+        </label>
+      )}
+      <div className="flex shrink-0 items-center">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          aria-label={t("recordTour.moveUp")}
+          disabled={isFirst || recording}
+          onClick={() => onMove(-1)}
+        >
+          <ArrowUp className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          aria-label={t("recordTour.moveDown")}
+          disabled={isLast || recording}
+          onClick={() => onMove(1)}
+        >
+          <ArrowDown className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-destructive"
+          aria-label={t("recordTour.removeKeyframe")}
+          disabled={recording}
+          onClick={onRemove}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </li>
   );
 }
