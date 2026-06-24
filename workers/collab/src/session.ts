@@ -15,6 +15,10 @@ function finite(n: unknown): n is number {
   return typeof n === "number" && Number.isFinite(n);
 }
 
+// Accepted participant color: a 3- or 6-digit hex. Shared by the join path and
+// the stored-chat validator so both enforce the same shape.
+const HEX_COLOR_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
 /** Accept a cursor only when both coordinates are finite numbers, so a crafted
  *  frame can't push NaN/strings into peers' `marker.setLngLat`. */
 function sanitizeCursor(c: unknown): CollabCursor | null {
@@ -132,9 +136,13 @@ function isValidChatMessage(m: unknown): m is CollabChatMessage {
     typeof o.id === "string" &&
     typeof o.clientId === "string" &&
     typeof o.displayName === "string" &&
+    // Match the write path's guarantees: a hex color and non-empty text, so a
+    // corrupt record can't reach clients with a hostile color or blank body.
     typeof o.color === "string" &&
+    HEX_COLOR_RE.test(o.color) &&
     typeof o.text === "string" &&
-    typeof o.ts === "number" &&
+    o.text !== "" &&
+    finite(o.ts) &&
     coordOk
   );
 }
@@ -359,9 +367,7 @@ export class CollabSession extends DurableObject<Env> {
           .slice(0, 60) || "Guest",
       // Only accept a hex color; fall back to neutral grey so a hostile value
       // never reaches peers (defense-in-depth with the client's DOM rendering).
-      color: /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(message.color)
-        ? message.color
-        : "#888888",
+      color: HEX_COLOR_RE.test(message.color) ? message.color : "#888888",
       role,
     };
     ws.serializeAttachment(attachment);
