@@ -80,7 +80,11 @@ export function CollaborationStatusBadge({
   // the last-seen message id (not the array length): the store keeps a bounded
   // tail, so once it is full new messages arrive without changing the length.
   const [unread, setUnread] = useState(0);
-  const lastSeenChatIdRef = useRef<string | null>(null);
+  // `undefined` = not yet initialised for this session; `null` = initialised
+  // against an empty chat. These must be distinct so the very first message in
+  // an empty session is still counted as unread (a single `null` sentinel would
+  // re-seed on that first message and swallow it).
+  const lastSeenChatIdRef = useRef<string | null | undefined>(undefined);
   // The participant set from the previous update, so we can diff join/leave.
   // Seeded on first activation so existing members (and self) aren't announced
   // as fresh arrivals when the dialog first connects.
@@ -115,7 +119,7 @@ export function CollaborationStatusBadge({
       setDraft("");
       setAttachLocation(false);
       setUnread(0);
-      lastSeenChatIdRef.current = null;
+      lastSeenChatIdRef.current = undefined;
       return;
     }
     const current = new Map(
@@ -188,7 +192,7 @@ export function CollaborationStatusBadge({
   // render of a session seeds the baseline so welcome history isn't unread.
   useEffect(() => {
     if (!isActive) return;
-    if (expanded || lastSeenChatIdRef.current === null) {
+    if (expanded || lastSeenChatIdRef.current === undefined) {
       lastSeenChatIdRef.current = lastMessageId;
       setUnread(0);
       return;

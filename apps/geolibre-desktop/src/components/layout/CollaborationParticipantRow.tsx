@@ -72,7 +72,10 @@ export function CollaborationParticipantRow({
           <button
             type="button"
             onClick={() => onSetParticipantMode(p.clientId, !editable)}
-            aria-pressed={editable}
+            // A binary "can edit" vs "view-only" setting reads as a switch to
+            // assistive tech, rather than a momentary press (aria-pressed).
+            role="switch"
+            aria-checked={editable}
             title={
               editable
                 ? t("collaborate.setViewOnly")

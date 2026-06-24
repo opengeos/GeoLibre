@@ -80,6 +80,9 @@ const MAX_CHAT_TEXT_LENGTH = 2000;
 // How many recent chat messages to retain so a late joiner sees recent history.
 // Persisted (not in-memory) so it survives a hibernation between messages.
 const CHAT_HISTORY_LIMIT = 50;
+// Hard byte budget for the persisted chat log, comfortably under Cloudflare's
+// ~128 KiB per-value storage cap (multi-byte text can blow the count limit).
+const MAX_CHAT_STORAGE_BYTES = 100_000;
 // Minimum gap between a socket's chat frames. Each chat costs a storage
 // read+write and a fan-out, so silently drop bursts faster than this floor to
 // keep one client from exhausting the session's storage-op budget. Generous
@@ -451,7 +454,23 @@ export class CollabSession extends DurableObject<Env> {
     }
     const next: CollaborationMode = mode === "view-only" ? "view-only" : "co-edit";
     await this.ctx.storage.put("mode", next);
+    // A session-wide mode change is authoritative: clear any per-participant
+    // overrides so the new mode applies to everyone. Without this, a guest the
+    // host previously pinned to can-edit would keep editing through a later
+    // switch to view-only (a "sticky override" footgun), and there is otherwise
+    // no path to reset an override back to "follow the session mode".
+    let clearedAny = false;
+    for (const socket of this.ctx.getWebSockets()) {
+      const a = socket.deserializeAttachment() as SocketAttachment | null;
+      if (a && a.editOverride !== undefined) {
+        a.editOverride = undefined;
+        socket.serializeAttachment(a);
+        clearedAny = true;
+      }
+    }
     this.broadcast({ type: "mode", mode: next });
+    // Re-broadcast the roster so clients drop the now-cleared `editOverride`s.
+    if (clearedAny) this.broadcastParticipants();
   }
 
   private handleSetParticipantMode(
@@ -467,6 +486,9 @@ export class CollabSession extends DurableObject<Env> {
       });
       return;
     }
+    // `message` is untrusted JSON, so guard the lookup key's type (mirrors the
+    // strict-boolean coercion below) before matching it against attachments.
+    if (typeof message.clientId !== "string") return;
     // Find the addressed participant's socket and pin its override. The host
     // (and any other host socket) is always an editor, so refuse to override one
     // — that keeps `editOverride` meaningful only for guests.
@@ -526,8 +548,25 @@ export class CollabSession extends DurableObject<Env> {
     // processes one message at a time and input-gates across the await.
     const log = parseStoredChat(await this.ctx.storage.get<string>("chat"));
     log.push(chatMessage);
-    const trimmed = log.slice(-CHAT_HISTORY_LIMIT);
-    await this.ctx.storage.put("chat", JSON.stringify(trimmed));
+    // Bound by count AND serialized bytes: 50 messages can still exceed the
+    // ~128 KiB per-value storage cap when they hold long multi-byte (e.g. CJK)
+    // text, so drop the oldest until the JSON fits a safe budget.
+    let trimmed = log.slice(-CHAT_HISTORY_LIMIT);
+    let serialized = JSON.stringify(trimmed);
+    while (
+      trimmed.length > 1 &&
+      ENCODER.encode(serialized).length > MAX_CHAT_STORAGE_BYTES
+    ) {
+      trimmed = trimmed.slice(1);
+      serialized = JSON.stringify(trimmed);
+    }
+    try {
+      await this.ctx.storage.put("chat", serialized);
+    } catch {
+      // Persisting failed (e.g. the single message still exceeds the value cap).
+      // Don't let it propagate and close the socket; the message is still fanned
+      // out below, it just won't join the late-joiner history.
+    }
     // Broadcast to everyone including the sender so the server's ordering is the
     // single source of truth (the sender renders from this echo, not optimistically).
     this.broadcast({ type: "chat", message: chatMessage });
