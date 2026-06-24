@@ -22,8 +22,8 @@ import {
   restoreThreeDTilesLayers,
   restoreVectorLayers,
   setBookmarkLabels,
-  setViewStateLabels,
   setNonTiledRasterHandler,
+  setViewStateLabels,
   startLayerGeometryEdit,
   subscribeGeometryEdit,
 } from "@geolibre/plugins";
