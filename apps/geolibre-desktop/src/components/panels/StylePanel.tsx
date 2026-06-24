@@ -36,6 +36,7 @@ import { RasterSymbologySection } from "./RasterSymbologySection";
 import {
   ChevronDown,
   ChevronUp,
+  Info,
   PanelRightClose,
   PanelRightOpen,
   Plus,
@@ -765,6 +766,12 @@ interface NumericStyleInputProps {
   max: number;
   step: number;
   onChange: (value: number) => void;
+  /**
+   * Optional explanatory text shown on hover/focus via an inline info icon next
+   * to the label. Helps novice users understand technical parameters such as
+   * the layer zoom-visibility range.
+   */
+  tooltip?: string;
 }
 
 function NumericStyleInput({
@@ -775,6 +782,7 @@ function NumericStyleInput({
   max,
   step,
   onChange,
+  tooltip,
 }: NumericStyleInputProps) {
   const normalize = (next: number) =>
     Number(clampNumber(next, min, max).toFixed(stepPrecision(step)));
@@ -785,7 +793,20 @@ function NumericStyleInput({
 
   return (
     <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
+      <div className="flex items-center gap-1.5">
+        <Label htmlFor={id}>{label}</Label>
+        {tooltip ? (
+          <span
+            role="img"
+            tabIndex={0}
+            aria-label={tooltip}
+            title={tooltip}
+            className="inline-flex cursor-help text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:text-foreground"
+          >
+            <Info className="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
+        ) : null}
+      </div>
       <div className="relative">
         <Input
           id={id}
@@ -1654,7 +1675,8 @@ export function StylePanel({
     <div className="grid grid-cols-2 gap-3">
       <NumericStyleInput
         id={`${layer.id}-minZoom`}
-        label="Min zoom"
+        label={t("style.visibility.minZoom")}
+        tooltip={t("style.visibility.zoomTooltip")}
         min={MIN_LAYER_ZOOM}
         max={maxZoom}
         step={1}
@@ -1663,7 +1685,8 @@ export function StylePanel({
       />
       <NumericStyleInput
         id={`${layer.id}-maxZoom`}
-        label="Max zoom"
+        label={t("style.visibility.maxZoom")}
+        tooltip={t("style.visibility.zoomTooltip")}
         min={minZoom}
         max={MAX_LAYER_ZOOM}
         step={1}

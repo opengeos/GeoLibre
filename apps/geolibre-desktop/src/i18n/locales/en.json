@@ -1960,6 +1960,11 @@
       "resetHint": "Reset adjustments to their default values",
       "exactValueHint": "Double-click to enter an exact value"
     },
+    "visibility": {
+      "minZoom": "Min zoom",
+      "maxZoom": "Max zoom",
+      "zoomTooltip": "Set the minimum and maximum zoom levels at which this layer remains visible on the map."
+    },
     "labels": {
       "heading": "Labels",
       "show": "Show labels",
