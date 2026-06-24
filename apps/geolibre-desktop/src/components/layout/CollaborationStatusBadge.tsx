@@ -1,21 +1,12 @@
 import { useAppStore } from "@geolibre/core";
 import { Button, Input } from "@geolibre/ui";
 import type { MapController } from "@geolibre/map";
-import {
-  ChevronUp,
-  Eye,
-  MapPin,
-  Pencil,
-  Send,
-  Settings2,
-  Users,
-  X,
-} from "lucide-react";
+import { ChevronUp, MapPin, Send, Settings2, Users, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { RefObject } from "react";
 import type { CollaborationApi } from "../../hooks/useCollaboration";
-import { participantCanEdit } from "../../lib/collab-protocol";
+import { CollaborationParticipantRow } from "./CollaborationParticipantRow";
 
 interface Announcement {
   id: number;
@@ -209,10 +200,22 @@ export function CollaborationStatusBadge({
   }, [isActive, expanded, lastMessageId, chat]);
 
   // Keep the message list pinned to the latest message while the panel is open.
+  // On open, always jump to the bottom (show the latest). For a message that
+  // arrives while it is already open, only auto-scroll when the user is at (or
+  // near) the bottom — otherwise a new message would yank them away from history
+  // they scrolled up to read.
+  const prevExpandedRef = useRef(false);
   useEffect(() => {
-    if (!expanded) return;
+    if (!expanded) {
+      prevExpandedRef.current = false;
+      return;
+    }
     const el = chatScrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    const justOpened = !prevExpandedRef.current;
+    prevExpandedRef.current = true;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+    if (justOpened || nearBottom) el.scrollTop = el.scrollHeight;
   }, [expanded, lastMessageId]);
 
   const handleSendChat = () => {
@@ -293,70 +296,17 @@ export function CollaborationStatusBadge({
             </button>
           </div>
           <ul className="max-h-40 space-y-1 overflow-y-auto p-2">
-            {participants.map((p) => {
-              const editable = participantCanEdit(p, mode);
-              // The host can pin any guest (not themselves) to view-only / edit.
-              const showToggle = isHost && p.role !== "host";
-              return (
-                <li
-                  key={p.clientId}
-                  className="flex items-center gap-2 text-xs"
-                >
-                  <span
-                    className="h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: p.color }}
-                  />
-                  <span className="truncate">{p.displayName}</span>
-                  {p.clientId === selfId && (
-                    <span className="text-muted-foreground">
-                      ({t("collaborate.you")})
-                    </span>
-                  )}
-                  {p.role === "host" && (
-                    <span className="rounded bg-muted px-1 py-0.5 text-[10px]">
-                      {t("collaborate.host")}
-                    </span>
-                  )}
-                  {showToggle ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        api.setParticipantMode(p.clientId, !editable)
-                      }
-                      aria-pressed={editable}
-                      title={
-                        editable
-                          ? t("collaborate.setViewOnly")
-                          : t("collaborate.allowEdit")
-                      }
-                      className="ml-auto flex shrink-0 items-center gap-1 rounded border px-1 py-0.5 text-[10px] text-muted-foreground transition hover:bg-accent hover:text-foreground"
-                    >
-                      {editable ? (
-                        <Pencil className="h-3 w-3" aria-hidden="true" />
-                      ) : (
-                        <Eye className="h-3 w-3" aria-hidden="true" />
-                      )}
-                      {editable
-                        ? t("collaborate.canEdit")
-                        : t("collaborate.viewOnly")}
-                    </button>
-                  ) : (
-                    p.role !== "host" && (
-                      <span className="ml-auto flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground">
-                        {editable ? (
-                          <Pencil className="h-3 w-3" aria-hidden="true" />
-                        ) : (
-                          <Eye className="h-3 w-3" aria-hidden="true" />
-                        )}
-                        {editable
-                          ? t("collaborate.canEdit")
-                          : t("collaborate.viewOnly")}
-                      </span>
-                    )
-                  )}
-                </li>
-              );
-            })}
+            {participants.map((p) => (
+              <CollaborationParticipantRow
+                key={p.clientId}
+                participant={p}
+                mode={mode}
+                isSelf={p.clientId === selfId}
+                canManage={isHost}
+                onSetParticipantMode={api.setParticipantMode}
+                compact
+              />
+            ))}
           </ul>
 
           {/* Chat drawer (#754, Part 4): a lightweight text channel with an
