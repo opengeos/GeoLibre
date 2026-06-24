@@ -145,21 +145,23 @@ export function buildProjectHtml(options: BuildProjectHtmlOptions): string {
   var project = JSON.parse(
     document.getElementById("geolibre-project").textContent
   );
+  // The src attribute is fixed, so this stays the viewer's origin even if the
+  // frame later navigates. Both the inbound "ready" check and the outbound post
+  // are pinned to it, so the project is only ever exchanged with the viewer.
+  var viewerOrigin = new URL(frame.src).origin;
   var loaded = false;
   function load() {
     if (loaded || !frame.contentWindow) return;
     loaded = true;
-    // Scope the post to the iframe's own origin (not "*") so the project is
-    // only ever delivered to the viewer it was meant for, even if the frame
-    // navigated elsewhere before this ran.
     frame.contentWindow.postMessage(
       { type: "geolibre:load-project", project: project, seq: 1 },
-      new URL(frame.src).origin
+      viewerOrigin
     );
   }
   // The app posts "geolibre:ready" once mounted; reply with the project. Guard
-  // on the frame as the source so an unrelated message cannot trigger the load.
+  // on both the origin and the frame so an unrelated window cannot trigger it.
   window.addEventListener("message", function (event) {
+    if (event.origin !== viewerOrigin) return;
     if (event.source !== frame.contentWindow) return;
     var data = event.data;
     if (data && data.type === "geolibre:ready") load();

@@ -35,7 +35,9 @@ describe("buildProjectHtml", () => {
       /<script type="application\/json" id="geolibre-project">([\s\S]*?)<\/script>/,
     );
     assert.ok(json);
-    assert.deepEqual(JSON.parse(json[1].replace(/\\u003c/g, "<")), PROJECT);
+    // JSON.parse decodes the < escapes natively, so the parsed object
+    // round-trips back to the original project.
+    assert.deepEqual(JSON.parse(json[1]), PROJECT);
   });
 
   it("defaults the app URL to the hosted viewer", () => {

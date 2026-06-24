@@ -587,7 +587,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, "-")
           .replace(/^-+|-+$/g, "") || "geolibre-map";
-      await saveTextFileWithFallback(html, {
+      // Returns null when the user cancels the save dialog; report that as a
+      // no-op rather than a successful export.
+      const savedPath = await saveTextFileWithFallback(html, {
         defaultName: `${slug}.html`,
         filters: [{ name: t("toolbar.item.htmlFile"), extensions: ["html"] }],
         browserTypes: [
@@ -598,7 +600,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         ],
         mimeType: "text/html",
       });
-      return true;
+      return savedPath !== null;
     } catch (error) {
       setActionError(
         error instanceof Error
