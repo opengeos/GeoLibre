@@ -586,6 +586,9 @@ export function createAppAPI(
         url,
         name,
         ...(options?.bands !== undefined ? { bands: options.bands } : {}),
+        // The public option is a loose `string` (so JS plugins need not import
+        // the renderer's colormap union); the renderer validates the name and
+        // falls back to its default for anything it doesn't recognize.
         ...(options?.colormap !== undefined
           ? {
               colormap:

@@ -92,7 +92,13 @@ export interface GeoLibreWmsLayerOptions extends GeoLibreTileLayerOptions {
 export interface GeoLibreCogLayerOptions {
   /** Band selection, e.g. `"1"` (single band) or `"1,2,3"` (RGB). */
   bands?: string;
-  /** Named colormap applied to a single-band COG (e.g. `"terrain"`). */
+  /**
+   * Named colormap applied to a single-band COG (e.g. `"terrain"`,
+   * `"viridis"`). Deliberately typed as a loose `string` so external JS
+   * plugins are not forced to import the renderer's internal colormap union;
+   * an unrecognized name falls back to the renderer default rather than
+   * erroring.
+   */
   colormap?: string;
   /** Lower bound of the value range mapped to the colormap/contrast stretch. */
   rescaleMin?: number;
