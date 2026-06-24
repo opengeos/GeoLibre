@@ -198,8 +198,16 @@ export async function recordTour({
 
   const finished = new Promise<Blob>((resolve, reject) => {
     recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
-    recorder.onerror = () =>
-      reject(new Error("Recording failed while capturing the map."));
+    recorder.onerror = (event) => {
+      // Surface the browser's own diagnosis (e.g. SecurityError) rather than a
+      // generic message, so a field failure is debuggable.
+      const cause = (event as Event & { error?: DOMException }).error;
+      reject(
+        new Error(`Recording failed: ${cause?.message ?? "unknown error"}`, {
+          cause,
+        }),
+      );
+    };
   });
 
   // Pump repaints for the whole recording so the captured stream keeps getting
@@ -222,7 +230,9 @@ export async function recordTour({
     });
 
     rafId = requestAnimationFrame(pump);
-    recorder.start();
+    // Flush encoded chunks every second so memory stays flat over long tours
+    // instead of buffering the whole video until stop().
+    recorder.start(1000);
     await delay(START_HOLD_MS, signal);
 
     const segments = keyframes.length - 1;
