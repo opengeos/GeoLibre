@@ -375,8 +375,11 @@ export function ProjectGalleryDialog({
         {/* Native overflow scroll (not the Radix ScrollArea) so the area
             reliably scrolls on touch devices: a percentage-height ScrollArea
             viewport does not resolve against this flex-sized parent and would
-            grow to its content height instead of scrolling. */}
-        <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1">
+            grow to its content height instead of scrolling.
+            `touch-pan-y` + `overscroll-contain` keep the vertical gesture on
+            this element on iOS Safari, where the dialog's scroll-lock
+            (react-remove-scroll) otherwise swallows the touchmove. */}
+        <div className="-mx-1 min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-1 [-webkit-overflow-scrolling:touch]">
           {showInitialSpinner ? (
             <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
