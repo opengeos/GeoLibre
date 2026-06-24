@@ -126,18 +126,18 @@ function canEdit(attachment: SocketAttachment, mode: CollaborationMode): boolean
 function isValidChatMessage(m: unknown): m is CollabChatMessage {
   if (!m || typeof m !== "object") return false;
   const o = m as Record<string, unknown>;
+  const coord = o.coordinate as Record<string, unknown> | null | undefined;
   const coordOk =
-    o.coordinate === null ||
-    o.coordinate === undefined ||
-    (typeof o.coordinate === "object" &&
-      finite((o.coordinate as Record<string, unknown>).lng) &&
-      finite((o.coordinate as Record<string, unknown>).lat));
+    coord === null ||
+    coord === undefined ||
+    (typeof coord === "object" && finite(coord.lng) && finite(coord.lat));
   return (
     typeof o.id === "string" &&
     typeof o.clientId === "string" &&
     typeof o.displayName === "string" &&
-    // Match the write path's guarantees: a hex color and non-empty text, so a
-    // corrupt record can't reach clients with a hostile color or blank body.
+    // Reject records whose field types/shapes would crash or mislead a client:
+    // a non-hex color, a blank body, a non-finite timestamp, or a bad coordinate
+    // (which would crash `coordinate.lat.toFixed`). Not a full write-path mirror.
     typeof o.color === "string" &&
     HEX_COLOR_RE.test(o.color) &&
     typeof o.text === "string" &&
@@ -367,7 +367,12 @@ export class CollabSession extends DurableObject<Env> {
           .slice(0, 60) || "Guest",
       // Only accept a hex color; fall back to neutral grey so a hostile value
       // never reaches peers (defense-in-depth with the client's DOM rendering).
-      color: HEX_COLOR_RE.test(message.color) ? message.color : "#888888",
+      // Guard the type first: `.test()` coerces a non-string (number/array) to a
+      // string, which could spuriously pass and store a non-string color.
+      color:
+        typeof message.color === "string" && HEX_COLOR_RE.test(message.color)
+          ? message.color
+          : "#888888",
       role,
     };
     ws.serializeAttachment(attachment);
