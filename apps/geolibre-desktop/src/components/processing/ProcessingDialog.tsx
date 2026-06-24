@@ -283,8 +283,9 @@ function layerPath(layer: GeoLibreLayer): string {
 async function fetchLayerBytes(layer: GeoLibreLayer): Promise<Uint8Array | null> {
   const src = layer.source as Record<string, unknown>;
   const tiles = Array.isArray(src.tiles) ? src.tiles : [];
-  // localBytesUrl is a blob URL retaining a File-loaded raster's bytes (see
-  // addRasterToMap); prefer it so locally dropped rasters are WASM-runnable.
+  // localBytesUrl is a blob URL retaining a File-loaded raster's bytes (the
+  // raster control's source.objectUrl, surfaced by the raster store sync);
+  // prefer it so locally loaded rasters are WASM-runnable.
   const candidates = [
     layer.metadata.localBytesUrl,
     src.url,

@@ -69,6 +69,14 @@ export function createRasterStoreLayer(
 ): GeoLibreLayer {
   const interleaved = options.interleaved ?? true;
   const url = info.source.kind === "url" ? info.source.url : undefined;
+  // The control retains a File-backed raster's original bytes behind a blob
+  // URL (source.objectUrl). Surface it as metadata.localBytesUrl so in-browser
+  // tools (the WASM Whitebox runner, the symbology stats reader, raster export)
+  // can read the bytes back. This covers every File-add path - drag-and-drop,
+  // the Add Data > Raster Layer panel's own drop zone, and tool outputs - since
+  // they all funnel through the control's addRaster.
+  const localBytesUrl =
+    info.source.kind === "file" ? info.source.objectUrl : undefined;
   const sourcePath =
     url ?? (info.source.kind === "file" ? info.source.fileName : info.id);
   return {
@@ -106,6 +114,7 @@ export function createRasterStoreLayer(
       bandNames: serializeBandNames(info.bandNames),
       sourceIds: [],
       sourceKind: RASTER_SOURCE_KIND,
+      ...(localBytesUrl ? { localBytesUrl } : {}),
       ...(info.bounds
         ? {
             bounds: [

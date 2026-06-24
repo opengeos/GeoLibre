@@ -111,6 +111,8 @@ describe("createRasterStoreLayer", () => {
     assert.deepEqual(layer.metadata.nativeLayerIds, ["raster-1"]);
     // fitLayer falls back to metadata.bounds for zoom-to-layer.
     assert.deepEqual(layer.metadata.bounds, [-10, -5, 10, 5]);
+    // A URL raster is fetchable directly, so no retained-bytes blob is set.
+    assert.equal("localBytesUrl" in layer.metadata, false);
     assert.ok(isRasterControlStoreLayer(layer));
   });
 
@@ -125,6 +127,9 @@ describe("createRasterStoreLayer", () => {
     assert.equal(layer.sourcePath, "local.tif");
     assert.equal(layer.metadata.rasterSource, "file");
     assert.equal("bounds" in layer.metadata, false);
+    // The control's retained-bytes blob URL is surfaced so in-browser tools
+    // (the WASM Whitebox runner) can read a locally loaded raster back.
+    assert.equal(layer.metadata.localBytesUrl, "blob:x");
   });
 
   it("persists the visualization state and surfaces load errors", () => {
