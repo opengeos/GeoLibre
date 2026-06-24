@@ -204,11 +204,19 @@ export class CollabConnection {
     this.reconnectTimer = setTimeout(() => this.open(), jittered);
   }
 
-  /** Send a client message if the socket is open; silently drops otherwise. */
-  send(message: ClientMessage): void {
+  /**
+   * Send a client message if the socket is open.
+   *
+   * @param message - The message to send.
+   * @returns True if it was written to an open socket; false if it was dropped
+   *   (no socket / not open), so callers can avoid discarding unsent state.
+   */
+  send(message: ClientMessage): boolean {
     if (this.ws && this.ws.readyState === this.WebSocketImpl.OPEN) {
       this.ws.send(JSON.stringify(message));
+      return true;
     }
+    return false;
   }
 
   /** Permanently close the connection and stop reconnecting. */

@@ -46,8 +46,15 @@ export interface CollaborationApi {
   setParticipantMode: (clientId: string, canEdit: boolean) => void;
   /** Toggle whether this participant's camera follows the host's viewport. */
   setFollowHost: (enabled: boolean) => void;
-  /** Send a chat message to the session, optionally attaching a coordinate (#754). */
-  sendChat: (text: string, coordinate?: { lng: number; lat: number } | null) => void;
+  /**
+   * Send a chat message to the session, optionally attaching a coordinate
+   * (#754). Returns true if it reached an open socket, so the caller can keep
+   * the draft when a send is dropped (socket not open).
+   */
+  sendChat: (
+    text: string,
+    coordinate?: { lng: number; lat: number } | null,
+  ) => boolean;
 }
 
 /**
@@ -482,8 +489,11 @@ export function useCollaboration(
   const sendChat = useCallback(
     (text: string, coordinate?: { lng: number; lat: number } | null) => {
       const trimmed = text.trim();
-      if (!trimmed) return;
-      connRef.current?.send({ type: "chat", text: trimmed, coordinate });
+      if (!trimmed) return false;
+      return (
+        connRef.current?.send({ type: "chat", text: trimmed, coordinate }) ??
+        false
+      );
     },
     [],
   );

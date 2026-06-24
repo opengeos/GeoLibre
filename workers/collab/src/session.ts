@@ -117,13 +117,36 @@ function canEdit(attachment: SocketAttachment, mode: CollaborationMode): boolean
   return mode === "co-edit";
 }
 
+/** Validate a single stored chat entry's field types so a corrupt record can't
+ *  reach clients (where it would, e.g., crash `coordinate.lat.toFixed`). */
+function isValidChatMessage(m: unknown): m is CollabChatMessage {
+  if (!m || typeof m !== "object") return false;
+  const o = m as Record<string, unknown>;
+  const coordOk =
+    o.coordinate === null ||
+    o.coordinate === undefined ||
+    (typeof o.coordinate === "object" &&
+      finite((o.coordinate as Record<string, unknown>).lng) &&
+      finite((o.coordinate as Record<string, unknown>).lat));
+  return (
+    typeof o.id === "string" &&
+    typeof o.clientId === "string" &&
+    typeof o.displayName === "string" &&
+    typeof o.color === "string" &&
+    typeof o.text === "string" &&
+    typeof o.ts === "number" &&
+    coordOk
+  );
+}
+
 /** Parse the stored chat log defensively; a corrupt value yields an empty log
- *  rather than throwing (which would lock joiners out of the welcome). */
+ *  (rather than throwing, which would lock joiners out of the welcome) and any
+ *  malformed individual entries are dropped. */
 function parseStoredChat(raw: string | undefined): CollabChatMessage[] {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as CollabChatMessage[]) : [];
+    return Array.isArray(parsed) ? parsed.filter(isValidChatMessage) : [];
   } catch {
     return [];
   }

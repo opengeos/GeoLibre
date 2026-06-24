@@ -242,16 +242,20 @@ export function CollaborationStatusBadge({
     // losing the text. (Human-paced typing never hits this; double-Enter does.)
     const now = Date.now();
     if (now - lastSentAtRef.current < MIN_CHAT_SEND_INTERVAL_MS) return;
-    lastSentAtRef.current = now;
     // Capture the live map center only when the pin is active, at send time.
     const center =
       attachLocation && mapControllerRef.current
         ? mapControllerRef.current.getMap()?.getCenter()
         : null;
-    api.sendChat(
+    const sent = api.sendChat(
       text,
       center ? { lng: center.lng, lat: center.lat } : null,
     );
+    // Only clear the composer (and stamp the floor) when the message actually
+    // reached an open socket; otherwise keep the draft so a transient
+    // disconnect doesn't lose it.
+    if (!sent) return;
+    lastSentAtRef.current = now;
     setDraft("");
     setAttachLocation(false);
   };
