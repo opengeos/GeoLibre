@@ -21,15 +21,15 @@ import { getActiveTimeSliderControl } from "./maplibre-time-slider";
  * GeoTIFF per timeline date. Stepping the timeline therefore walks a temporal
  * stack of COGs. This module clicks a single pixel through that stack: for every
  * timeline step it resolves the source URL, HTTP-range-reads just the tile under
- * the click, and records the band value, producing a value-over-time series that
- * the UI charts and can export.
+ * the click, and records *every* band value, producing a value-over-time series
+ * the UI charts (for a user-chosen band) and can export.
  *
  * It reuses `maplibre-gl-raster`'s `loadGeoTIFF`/`readPixelValues`, the same
  * client-side reader the single-COG Identify tool uses, so no Python sidecar or
  * full-file download is involved.
  */
 
-/** A single timestep's value for one source. */
+/** A single timestep's reading for one source. */
 export interface PixelSeriesPoint {
   /** ISO date (`YYYY-MM-DD`) of the timeline step. */
   date: string;
@@ -38,13 +38,11 @@ export interface PixelSeriesPoint {
   /** Concrete COG URL the source template resolved to for this date. */
   url: string;
   /**
-   * Raw band value, or null when the pixel falls outside the image, the COG
-   * failed to load, or the value is the source's nodata. Null points render as
-   * gaps in the chart.
+   * Every band's reading at the clicked pixel for this step. Empty when the
+   * pixel falls outside the image or the COG failed to load (renders as a gap).
+   * All bands are kept so the chart can switch bands without re-querying.
    */
-  value: number | null;
-  /** Whether {@link value} was flagged as the source's nodata. */
-  isNodata: boolean;
+  bands: BandReading[];
 }
 
 /** One source's value-over-time series. */
@@ -53,24 +51,44 @@ export interface PixelSeries {
   sourceId: string;
   /** Human-readable source name. */
   sourceName: string;
-  /** 1-based band index that was read. */
-  bandIndex: number;
-  /** Band name from the COG metadata, when known. */
-  bandName: string | null;
-  /** Ordered timestep points. */
+  /** Ordered timestep points, each carrying all band readings. */
   points: PixelSeriesPoint[];
 }
 
-/** Result of a pixel time-series query. */
+/** A band available to chart, derived from the COG metadata. */
+export interface BandOption {
+  /** 1-based band index. */
+  index: number;
+  /** Band name from the COG metadata, when known. */
+  name: string | null;
+}
+
+/** Result of a pixel time-series query at one clicked location. */
 export interface PixelTimeSeriesResult {
   /** The clicked location, `[lng, lat]` in WGS84. */
   lngLat: [number, number];
   /** One series per COG source in the stack. */
   series: PixelSeries[];
+  /** Bands seen across the stack (union by index, ascending), for the picker. */
+  bands: BandOption[];
+  /**
+   * The band to chart by default: the first source's first configured band
+   * (`bidx`) when present in the data, otherwise the first available band. Null
+   * when no bands were read at all.
+   */
+  defaultBandIndex: number | null;
   /** Number of timeline steps queried per source. */
   stepCount: number;
   /** True when the timeline had more steps than the cap and was downsampled. */
   truncated: boolean;
+}
+
+/** A query result paired with the display label the UI assigns it. */
+export interface LabeledPixelTimeSeries {
+  /** Short label for the clicked location (e.g. "Point 1"). */
+  label: string;
+  /** The query result. */
+  result: PixelTimeSeriesResult;
 }
 
 /** Options for {@link queryPixelTimeSeries}. */
@@ -163,26 +181,43 @@ function getTimeSliderSteps(maxSteps: number): {
 }
 
 /**
- * Picks the band reading to chart for a source: its first configured band index
- * (`bidx`) when set, otherwise the first band.
+ * Reads one band's chartable value from a timestep point.
  *
- * @param reading - The pixel reading for one COG.
- * @param bidx - The source's 1-based band indexes, if any.
- * @returns The chosen band reading, or null when the reading has no bands or a
- *   configured `bidx` is absent from the COG. Returning null (rather than
- *   falling back to band 1) makes a COG/spec mismatch render as a gap instead of
- *   silently plotting the wrong band.
+ * @param point - The timestep point, carrying all band readings.
+ * @param bandIndex - The 1-based band index to read.
+ * @returns The raw band value, or null when the band is missing for this step
+ *   (failed read) or its value is the source's nodata. Null renders as a gap.
  */
-export function pickBand(
-  reading: PixelReading,
-  bidx: number[] | undefined,
-): BandReading | null {
-  if (reading.bands.length === 0) return null;
-  const wanted = bidx && bidx.length > 0 ? bidx[0] : undefined;
-  if (wanted !== undefined) {
-    return reading.bands.find((band) => band.index === wanted) ?? null;
+export function valueAtBand(
+  point: PixelSeriesPoint,
+  bandIndex: number,
+): number | null {
+  const band = point.bands.find((entry) => entry.index === bandIndex);
+  if (!band || band.isNodata) return null;
+  return band.value;
+}
+
+/**
+ * The union of bands seen across a set of results, ascending by index, keeping
+ * the first known name for each index. Lets a band picker offer every band any
+ * loaded point exposes even if an individual COG read failed.
+ *
+ * @param results - The loaded query results.
+ * @returns Band options sorted by index.
+ */
+export function bandOptionsFromResults(
+  results: PixelTimeSeriesResult[],
+): BandOption[] {
+  const byIndex = new Map<number, BandOption>();
+  for (const result of results) {
+    for (const band of result.bands) {
+      const existing = byIndex.get(band.index);
+      if (!existing) byIndex.set(band.index, band);
+      else if (existing.name == null && band.name != null)
+        byIndex.set(band.index, band);
+    }
   }
-  return reading.bands[0];
+  return [...byIndex.values()].sort((a, b) => a.index - b.index);
 }
 
 /**
@@ -201,7 +236,14 @@ async function runWithConcurrency<T>(
   async function worker(): Promise<void> {
     while (next < tasks.length) {
       const index = next++;
-      results[index] = await tasks[index]();
+      try {
+        results[index] = await tasks[index]();
+      } catch {
+        // A rejecting task must not kill its worker (which would leave later
+        // tasks unprocessed and the results array half-filled). Callers are
+        // expected to handle their own task errors; swallow here so the worker
+        // keeps draining the queue.
+      }
     }
   }
   const workers = Array.from({ length: Math.min(limit, tasks.length) }, () =>
@@ -212,18 +254,35 @@ async function runWithConcurrency<T>(
 }
 
 /**
+ * Picks the default band index for a result: the first source's first
+ * configured band (`bidx`) when that band was actually read, otherwise the first
+ * available band. Returns null when nothing was read.
+ */
+function pickDefaultBandIndex(
+  sources: CogSourceSpec[],
+  bands: BandOption[],
+): number | null {
+  if (bands.length === 0) return null;
+  const configured = sources[0]?.bidx?.[0];
+  if (configured !== undefined && bands.some((b) => b.index === configured))
+    return configured;
+  return bands[0].index;
+}
+
+/**
  * Queries a single pixel's value across the Time Slider's raster stack and
- * timeline, returning one value-over-time series per COG source.
+ * timeline, returning one value-over-time series per COG source. Every band is
+ * read and retained so the UI can switch the charted band without re-querying.
  *
  * For every (source, step) pair the source URL template is resolved to the
- * step's date, the COG is opened, and the band value at the click is read via an
- * HTTP range read. Reads share a per-URL cache so a static (non-templated)
- * source is fetched once. Failed reads become null points (charted as gaps)
+ * step's date, the COG is opened, and all band values at the click are read via
+ * an HTTP range read. Reads share a per-URL cache so a static (non-templated)
+ * source is fetched once. Failed reads become empty points (charted as gaps)
  * rather than aborting the whole query.
  *
  * @param lngLat - The clicked location, `[lng, lat]` in WGS84.
  * @param options - Progress, abort, and step-cap controls.
- * @returns The assembled series.
+ * @returns The assembled result.
  * @throws When the Time Slider has no COG sources or no timeline steps.
  */
 export async function queryPixelTimeSeries(
@@ -248,6 +307,9 @@ export async function queryPixelTimeSeries(
     if (cached) return cached;
     const promise = (async () => {
       const tiff = await loadGeoTIFF(url);
+      // loadGeoTIFF does not accept the abort signal, so once its header fetch
+      // resolves, skip the pixel read if the query was cancelled meanwhile.
+      if (signal?.aborted) return null;
       return readPixelValues(tiff, lngLat, {
         signal,
         bandNames: readBandNames(tiff),
@@ -260,12 +322,9 @@ export async function queryPixelTimeSeries(
   const total = sources.length * steps.length;
   let completed = 0;
 
-  // Per-source result slots, filled by index so order is preserved regardless
-  // of which task finishes first. Each task records the band it read so the
-  // series band metadata can be derived from the first successful step (by step
-  // order) rather than a non-deterministic last-writer-wins mutation.
+  // Per-source result slots, filled by index so order is preserved regardless of
+  // which task finishes first.
   const points = sources.map(() => new Array<PixelSeriesPoint>(steps.length));
-  const bands = sources.map(() => new Array<BandReading | null>(steps.length));
 
   // Flatten every (source, step) into one task list so READ_CONCURRENCY bounds
   // the reads across the whole query. Running runWithConcurrency per source
@@ -279,47 +338,55 @@ export async function queryPixelTimeSeries(
           date: isoDate(date),
           timestamp: date.getTime(),
           url: "",
-          value: null,
-          isNodata: false,
+          bands: [],
         };
-        let band: BandReading | null = null;
         try {
           if (signal?.aborted) throw new Error("aborted");
           const url = await resolveUrl(source.url, date);
           point.url = url;
           const reading = await readAt(url);
-          band = reading ? pickBand(reading, source.bidx) : null;
-          if (band) {
-            point.isNodata = band.isNodata;
-            point.value = band.isNodata ? null : band.value;
-          }
+          if (reading) point.bands = reading.bands;
         } catch {
-          // Leave the point null: one missing/late COG should not fail the rest.
+          // Leave bands empty: one missing/late COG should not fail the rest.
         } finally {
           completed += 1;
           onProgress?.(completed, total);
         }
         points[si][di] = point;
-        bands[si][di] = band;
       });
     });
   });
   await runWithConcurrency(tasks, READ_CONCURRENCY);
 
-  const series = sources.map((source, si) => {
-    const firstBand = bands[si].find((band) => band) ?? null;
-    return {
-      sourceId: source.id ?? source.name ?? "cog",
-      sourceName: source.name ?? source.id ?? "COG",
-      bandIndex:
-        firstBand?.index ??
-        (source.bidx && source.bidx.length > 0 ? source.bidx[0] : 1),
-      bandName: firstBand?.name ?? null,
-      points: points[si],
-    } satisfies PixelSeries;
-  });
+  const series = sources.map((source, si) => ({
+    // Index-based fallbacks so multiple unnamed COG sources still get distinct
+    // ids (React keys / export rows) rather than all collapsing to "cog".
+    sourceId: source.id ?? source.name ?? `cog-${si}`,
+    sourceName: source.name ?? source.id ?? `COG ${si + 1}`,
+    points: points[si],
+  }));
 
-  return { lngLat, series, stepCount: steps.length, truncated };
+  // Union of bands actually read, so the picker matches the data even when a
+  // source's configured bidx differs from what the COG exposes.
+  const bandByIndex = new Map<number, BandOption>();
+  for (const sourcePoints of points) {
+    for (const point of sourcePoints) {
+      for (const band of point.bands) {
+        if (!bandByIndex.has(band.index))
+          bandByIndex.set(band.index, { index: band.index, name: band.name });
+      }
+    }
+  }
+  const bands = [...bandByIndex.values()].sort((a, b) => a.index - b.index);
+
+  return {
+    lngLat,
+    series,
+    bands,
+    defaultBandIndex: pickDefaultBandIndex(sources, bands),
+    stepCount: steps.length,
+    truncated,
+  };
 }
 
 /**
@@ -331,35 +398,52 @@ function isoDate(date: Date): string {
 }
 
 /**
- * Flattens a pixel time-series result into a point FeatureCollection for export.
- * Every (source, timestep) becomes a Point feature at the clicked location with
- * the date, source, band, and value as attributes, so the existing vector
- * exporters write it straight to CSV or GeoParquet.
+ * Flattens labeled pixel time-series results into a long-format point
+ * FeatureCollection for export. Every (location, source, timestep, band) becomes
+ * a Point feature at the clicked location with the label, date, source, band,
+ * and value as attributes, so the existing vector exporters write it straight to
+ * CSV or GeoParquet. Long format keeps every band regardless of which one the
+ * chart currently shows.
  *
- * @param result - The query result.
- * @returns A FeatureCollection of one point per (source, timestep).
+ * @param items - The labeled results to export (one per clicked location).
+ * @returns A FeatureCollection of one point per (location, source, step, band).
  */
 export function seriesToFeatureCollection(
-  result: PixelTimeSeriesResult,
+  items: LabeledPixelTimeSeries[],
 ): FeatureCollection<Point> {
-  const [lng, lat] = result.lngLat;
   const features: Feature<Point>[] = [];
   let id = 0;
-  for (const series of result.series) {
-    for (const point of series.points) {
-      features.push({
-        type: "Feature",
-        id: id++,
-        geometry: { type: "Point", coordinates: [lng, lat] },
-        properties: {
-          date: point.date,
-          source: series.sourceName,
-          band: series.bandIndex,
-          band_name: series.bandName,
-          value: point.value,
-          is_nodata: point.isNodata,
-        },
-      });
+  for (const { label, result } of items) {
+    const [lng, lat] = result.lngLat;
+    for (const series of result.series) {
+      for (const point of series.points) {
+        // Emit a row per band so band selection in the chart never loses data
+        // from the export. A failed read (no bands) still emits one row so the
+        // timestep is represented.
+        const bands: BandReading[] =
+          point.bands.length > 0
+            ? point.bands
+            : [{ index: 0, name: null, value: NaN, isNodata: false }];
+        for (const band of bands) {
+          const read = point.bands.length > 0;
+          features.push({
+            type: "Feature",
+            id: id++,
+            geometry: { type: "Point", coordinates: [lng, lat] },
+            properties: {
+              point: label,
+              lng,
+              lat,
+              date: point.date,
+              source: series.sourceName,
+              band: read ? band.index : null,
+              band_name: read ? band.name : null,
+              value: read && !band.isNodata ? band.value : null,
+              is_nodata: read ? band.isNodata : false,
+            },
+          });
+        }
+      }
     }
   }
   return { type: "FeatureCollection", features };

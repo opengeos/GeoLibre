@@ -820,16 +820,24 @@
     "pixelTimeSeriesMode": {
       "start": "Pixel time series",
       "title": "Pixel time series mode active",
-      "hint": "Click a pixel on the time-enabled raster stack to chart its value over time.",
-      "exit": "Exit"
+      "hint": "Click pixels on the raster stack to add them to the chart. Esc to stop.",
+      "exit": "Stop"
     }
   },
   "pixelTimeSeries": {
     "title": "Pixel time series",
-    "subtitle": "Value over time at {{lat}}, {{lng}}",
+    "empty": "Click a pixel on the map to plot its value over time. Add more pixels to compare.",
+    "band": "Band",
+    "bandOption": "Band {{index}}",
+    "pointLabel": "Point {{number}}",
+    "pickPoints": "Pick points",
+    "stopPicking": "Stop picking",
+    "clearAll": "Clear all",
+    "removePoint": "Remove {{label}}",
+    "close": "Close",
     "querying": "Reading pixel values across the timeline...",
     "progress": "Reading timestep {{done}} of {{total}}...",
-    "noValues": "No values at this location (the pixel falls outside the raster or all timesteps are nodata).",
+    "noValues": "No values for the selected band at these locations (outside the raster or all timesteps are nodata).",
     "truncated": "Timeline downsampled to {{count}} steps to limit the number of reads.",
     "chartAria": "Line chart of pixel value over time",
     "exportCsv": "Export CSV",

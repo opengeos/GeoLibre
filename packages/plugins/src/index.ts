@@ -289,12 +289,15 @@ export {
   getLayerTimeBinding,
 } from "./plugins/maplibre-time-slider";
 export {
+  bandOptionsFromResults,
   downsampleSteps,
   getTimeSliderCogSources,
   hasTimeSliderRasterStack,
-  pickBand,
   queryPixelTimeSeries,
   seriesToFeatureCollection,
+  valueAtBand,
+  type BandOption,
+  type LabeledPixelTimeSeries,
   type PixelSeries,
   type PixelSeriesPoint,
   type PixelTimeSeriesOptions,

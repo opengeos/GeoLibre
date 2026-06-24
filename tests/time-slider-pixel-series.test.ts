@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  bandOptionsFromResults,
   downsampleSteps,
-  pickBand,
   type PixelTimeSeriesResult,
   seriesToFeatureCollection,
+  valueAtBand,
 } from "../packages/plugins/src/plugins/time-slider-pixel-series";
 
 describe("downsampleSteps", () => {
@@ -41,85 +42,137 @@ describe("downsampleSteps", () => {
   });
 });
 
-describe("pickBand", () => {
-  const reading = {
-    lngLat: [0, 0] as [number, number],
-    col: 1,
-    row: 1,
+describe("valueAtBand", () => {
+  const point = {
+    date: "2000-01-01",
+    timestamp: 946684800000,
+    url: "https://x/2000.tif",
     bands: [
       { index: 1, name: "red", value: 10, isNodata: false },
       { index: 2, name: "nir", value: 20, isNodata: false },
+      { index: 3, name: "qa", value: -9999, isNodata: true },
     ],
   };
 
-  it("selects the first configured band index", () => {
-    assert.equal(pickBand(reading, [2])?.value, 20);
+  it("returns the value for the requested band", () => {
+    assert.equal(valueAtBand(point, 2), 20);
   });
 
-  it("falls back to the first band when bidx is missing", () => {
-    assert.equal(pickBand(reading, undefined)?.value, 10);
+  it("returns null for a nodata band so it charts as a gap", () => {
+    assert.equal(valueAtBand(point, 3), null);
   });
 
-  it("returns null when a configured bidx is absent from the COG", () => {
-    assert.equal(pickBand(reading, [9]), null);
+  it("returns null when the band is missing (failed read)", () => {
+    assert.equal(valueAtBand({ ...point, bands: [] }, 1), null);
+    assert.equal(valueAtBand(point, 9), null);
+  });
+});
+
+describe("bandOptionsFromResults", () => {
+  const make = (bands: { index: number; name: string | null }[]) =>
+    ({
+      lngLat: [0, 0],
+      series: [],
+      bands,
+      defaultBandIndex: bands[0]?.index ?? null,
+      stepCount: 0,
+      truncated: false,
+    }) as PixelTimeSeriesResult;
+
+  it("unions bands across results, ascending by index, filling names", () => {
+    const options = bandOptionsFromResults([
+      make([{ index: 2, name: null }]),
+      make([
+        { index: 1, name: "red" },
+        { index: 2, name: "nir" },
+      ]),
+    ]);
+    assert.deepEqual(options, [
+      { index: 1, name: "red" },
+      { index: 2, name: "nir" },
+    ]);
   });
 
-  it("returns null when there are no bands", () => {
-    assert.equal(pickBand({ ...reading, bands: [] }, [1]), null);
+  it("returns an empty list with no results", () => {
+    assert.deepEqual(bandOptionsFromResults([]), []);
   });
 });
 
 describe("seriesToFeatureCollection", () => {
   const result: PixelTimeSeriesResult = {
     lngLat: [-122.5, 45.5],
+    bands: [
+      { index: 1, name: "red" },
+      { index: 2, name: "nir" },
+    ],
+    defaultBandIndex: 1,
     stepCount: 2,
     truncated: false,
     series: [
       {
         sourceId: "landsat",
         sourceName: "Landsat",
-        bandIndex: 1,
-        bandName: "ndvi",
         points: [
           {
             date: "2000-01-01",
             timestamp: 946684800000,
             url: "https://x/2000.tif",
-            value: 0.42,
-            isNodata: false,
+            bands: [
+              { index: 1, name: "red", value: 10, isNodata: false },
+              { index: 2, name: "nir", value: 20, isNodata: false },
+            ],
           },
           {
             date: "2001-01-01",
             timestamp: 978307200000,
             url: "https://x/2001.tif",
-            value: null,
-            isNodata: true,
+            bands: [],
           },
         ],
       },
     ],
   };
 
-  it("emits one point feature per (source, timestep) at the clicked location", () => {
-    const collection = seriesToFeatureCollection(result);
-    assert.equal(collection.features.length, 2);
+  it("emits one feature per (location, source, step, band) in long format", () => {
+    const collection = seriesToFeatureCollection([
+      { label: "Point 1", result },
+    ]);
+    // 2 bands for step 1, plus a single placeholder row for the empty step 2.
+    assert.equal(collection.features.length, 3);
     for (const feature of collection.features) {
       assert.equal(feature.geometry.type, "Point");
       assert.deepEqual(feature.geometry.coordinates, [-122.5, 45.5]);
     }
   });
 
-  it("carries the date, source, band, value, and nodata flag as attributes", () => {
-    const collection = seriesToFeatureCollection(result);
+  it("carries the label, date, source, band, value, and nodata flag", () => {
+    const collection = seriesToFeatureCollection([
+      { label: "Point 1", result },
+    ]);
     assert.deepEqual(collection.features[0].properties, {
+      point: "Point 1",
+      lng: -122.5,
+      lat: 45.5,
       date: "2000-01-01",
       source: "Landsat",
       band: 1,
-      band_name: "ndvi",
-      value: 0.42,
+      band_name: "red",
+      value: 10,
       is_nodata: false,
     });
-    assert.equal(collection.features[1].properties?.value, null);
-    assert.equal(collection.features[1].properties?.is_nodata, true);
+    // The empty (failed) step still emits a row with null band/value.
+    const last = collection.features[2].properties;
+    assert.equal(last?.date, "2001-01-01");
+    assert.equal(last?.band, null);
+    assert.equal(last?.value, null);
+  });
+
+  it("emits features for every labeled location", () => {
+    const collection = seriesToFeatureCollection([
+      { label: "Point 1", result },
+      { label: "Point 2", result },
+    ]);
+    assert.equal(collection.features.length, 6);
+    assert.equal(collection.features[3].properties?.point, "Point 2");
   });
 });

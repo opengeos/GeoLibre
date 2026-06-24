@@ -1,21 +1,17 @@
 import { useAppStore } from "@geolibre/core";
 import {
+  bandOptionsFromResults,
   hasTimeSliderRasterStack,
+  type LabeledPixelTimeSeries,
   type PixelTimeSeriesResult,
   queryPixelTimeSeries,
   seriesToFeatureCollection,
   TIME_SLIDER_PLUGIN_ID,
+  valueAtBand,
 } from "@geolibre/plugins";
-import {
-  Button,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@geolibre/ui";
-import { Crosshair, Download, LineChart, Loader2, X } from "lucide-react";
-import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import { Button, Select } from "@geolibre/ui";
+import { Crosshair, Download, LineChart, Loader2, Trash2, X } from "lucide-react";
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { MapController } from "@geolibre/map";
 import { usePluginRegistry } from "../../hooks/usePlugins";
@@ -25,12 +21,34 @@ interface PixelTimeSeriesControlProps {
   mapControllerRef: RefObject<MapController | null>;
 }
 
+/** A single clicked location and the state of its time-series query. */
+interface ClickedPoint {
+  /** Stable id, also used as the "Point N" label number. */
+  id: number;
+  /** Display label, e.g. "Point 1". */
+  label: string;
+  /** Clicked location, `[lng, lat]` in WGS84. */
+  lngLat: [number, number];
+  /** Index into the color palette for this point's chart line and swatch. */
+  colorIndex: number;
+  /** The query result once it resolves. */
+  result: PixelTimeSeriesResult | null;
+  /** Query error message, if the read failed. */
+  error: string | null;
+  /** Whether the query is still running. */
+  loading: boolean;
+  /** In-flight read progress. */
+  progress: { done: number; total: number } | null;
+}
+
 /**
- * Lets users click a single pixel on the Time Slider's raster stack and chart
- * its value over time (e.g. an annual Landsat COG series). Surfaces a trigger
- * button whenever the Time Slider is active with a raster source, drives a
- * pick-a-pixel map mode, then opens a dialog with the value-over-time line chart
- * and CSV / GeoParquet export of the underlying table.
+ * Lets users click pixels on the Time Slider's raster stack and chart their
+ * values over time (e.g. an annual Landsat COG series). Surfaces a trigger
+ * button whenever the Time Slider is active with a COG stack, drives a
+ * pick-a-pixel map mode, and opens a *non-blocking* floating panel so the map
+ * stays interactive: each click adds another point to the same chart, a band
+ * picker switches which band is plotted across every point, and the underlying
+ * table exports to CSV / GeoParquet.
  *
  * The pixel reads happen client-side via HTTP range reads (the same reader as
  * the single-COG Identify tool), so no Python sidecar is required.
@@ -57,59 +75,82 @@ export function PixelTimeSeriesControl({
 
   const [picking, setPicking] = useState(false);
   const [open, setOpen] = useState(false);
-  const [result, setResult] = useState<PixelTimeSeriesResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [progress, setProgress] = useState<{
-    done: number;
-    total: number;
-  } | null>(null);
+  const [points, setPoints] = useState<ClickedPoint[]>([]);
+  const [selectedBand, setSelectedBand] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
   // Export failures are kept separate from query errors so a failed export
   // shows an inline message beside the buttons instead of replacing the chart.
   const [exportError, setExportError] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
 
-  // Abort any in-flight query when the component unmounts so it cannot call
-  // setState afterwards.
-  useEffect(() => () => abortRef.current?.abort(), []);
+  // One AbortController per in-flight point query, so removing or re-querying a
+  // single point cancels just that read. A monotonic counter gives each point a
+  // stable id/label; it resets when the panel is emptied so labels restart at 1.
+  const abortControllers = useRef<Map<number, AbortController>>(new Map());
+  const idCounter = useRef(0);
 
-  // Leaving the time-slider stack (dock closed or stack removed) cancels an
-  // in-progress pick so the crosshair cursor and click handler do not linger.
-  useEffect(() => {
-    if (!timeSliderActive || !hasRasterStack) setPicking(false);
-  }, [timeSliderActive, hasRasterStack]);
-
-  const runQuery = useCallback(async (lngLat: [number, number]) => {
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
-    setError(null);
-    setExportError(null);
-    setResult(null);
-    setProgress({ done: 0, total: 0 });
-    setOpen(true);
-    try {
-      const res = await queryPixelTimeSeries(lngLat, {
-        signal: ac.signal,
-        onProgress: (done, total) => {
-          // Ignore late progress from a query that a newer pick superseded, so
-          // stale counters never flash in the new dialog.
-          if (abortRef.current !== ac || ac.signal.aborted) return;
-          setProgress({ done, total });
-        },
-      });
-      if (ac.signal.aborted) return;
-      setResult(res);
-    } catch (err) {
-      if (ac.signal.aborted) return;
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      if (abortRef.current === ac) setProgress(null);
-    }
+  const abortAll = useCallback(() => {
+    for (const ac of abortControllers.current.values()) ac.abort();
+    abortControllers.current.clear();
   }, []);
 
-  // While picking, swap the cursor to a crosshair and capture the next map click
-  // as the query location. Esc cancels.
+  // Abort every in-flight query when the component unmounts so none can call
+  // setState afterwards.
+  useEffect(() => () => abortAll(), [abortAll]);
+
+  const runQueryForPoint = useCallback(
+    (id: number, lngLat: [number, number]) => {
+      abortControllers.current.get(id)?.abort();
+      const ac = new AbortController();
+      abortControllers.current.set(id, ac);
+      queryPixelTimeSeries(lngLat, {
+        signal: ac.signal,
+        onProgress: (done, total) => {
+          if (ac.signal.aborted) return;
+          setPoints((prev) =>
+            prev.map((p) =>
+              p.id === id ? { ...p, progress: { done, total } } : p,
+            ),
+          );
+        },
+      })
+        .then((res) => {
+          if (ac.signal.aborted) return;
+          setPoints((prev) =>
+            prev.map((p) =>
+              p.id === id
+                ? { ...p, result: res, loading: false, progress: null }
+                : p,
+            ),
+          );
+          // First loaded point seeds the charted band; later points keep it.
+          setSelectedBand((prev) => (prev == null ? res.defaultBandIndex : prev));
+        })
+        .catch((err) => {
+          if (ac.signal.aborted) return;
+          setPoints((prev) =>
+            prev.map((p) =>
+              p.id === id
+                ? {
+                    ...p,
+                    error: err instanceof Error ? err.message : String(err),
+                    loading: false,
+                    progress: null,
+                  }
+                : p,
+            ),
+          );
+        })
+        .finally(() => {
+          if (abortControllers.current.get(id) === ac)
+            abortControllers.current.delete(id);
+        });
+    },
+    [],
+  );
+
+  // While picking, swap the cursor to a crosshair and capture each map click as
+  // another point (the mode stays active so consecutive clicks accumulate).
+  // Esc stops picking.
   useEffect(() => {
     if (!picking) return;
     const map = mapControllerRef.current?.getMap();
@@ -121,8 +162,22 @@ export function PixelTimeSeriesControl({
     const prevCursor = canvas.style.cursor;
     canvas.style.cursor = "crosshair";
     const onClick = (event: { lngLat: { lng: number; lat: number } }) => {
-      setPicking(false);
-      void runQuery([event.lngLat.lng, event.lngLat.lat]);
+      const id = (idCounter.current += 1);
+      const lngLat: [number, number] = [event.lngLat.lng, event.lngLat.lat];
+      setPoints((prev) => [
+        ...prev,
+        {
+          id,
+          label: t("pixelTimeSeries.pointLabel", { number: id }),
+          lngLat,
+          colorIndex: (id - 1) % SERIES_COLORS.length,
+          result: null,
+          error: null,
+          loading: true,
+          progress: { done: 0, total: 0 },
+        },
+      ]);
+      runQueryForPoint(id, lngLat);
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setPicking(false);
@@ -134,17 +189,74 @@ export function PixelTimeSeriesControl({
       window.removeEventListener("keydown", onKey);
       canvas.style.cursor = prevCursor;
     };
-  }, [picking, runQuery, mapControllerRef]);
+  }, [picking, runQueryForPoint, mapControllerRef, t]);
+
+  // Leaving the time-slider stack (dock closed or stack removed) tears the tool
+  // down so the crosshair, panel, and click handler do not linger.
+  const reset = useCallback(() => {
+    abortAll();
+    setPoints([]);
+    setSelectedBand(null);
+    setExportError(null);
+    setPicking(false);
+    setOpen(false);
+    idCounter.current = 0;
+  }, [abortAll]);
+
+  useEffect(() => {
+    if (!timeSliderActive || !hasRasterStack) reset();
+  }, [timeSliderActive, hasRasterStack, reset]);
+
+  const removePoint = useCallback((id: number) => {
+    abortControllers.current.get(id)?.abort();
+    abortControllers.current.delete(id);
+    setPoints((prev) => prev.filter((p) => p.id !== id));
+  }, []);
+
+  const clearAll = useCallback(() => {
+    abortAll();
+    setPoints([]);
+    setSelectedBand(null);
+    setExportError(null);
+    idCounter.current = 0;
+  }, [abortAll]);
+
+  const loadedResults = useMemo(
+    () =>
+      points
+        .map((p) => p.result)
+        .filter((r): r is PixelTimeSeriesResult => r != null),
+    [points],
+  );
+  const bandOptions = useMemo(
+    () => bandOptionsFromResults(loadedResults),
+    [loadedResults],
+  );
+
+  // Keep the selected band valid as points come and go.
+  useEffect(() => {
+    if (bandOptions.length === 0) return;
+    if (selectedBand == null || !bandOptions.some((b) => b.index === selectedBand))
+      setSelectedBand(bandOptions[0].index);
+  }, [bandOptions, selectedBand]);
+
+  const truncated = loadedResults.some((r) => r.truncated);
+  const truncatedSteps = loadedResults.find((r) => r.truncated)?.stepCount;
 
   const handleExport = useCallback(
     async (format: "csv" | "geoparquet") => {
-      if (!result) return;
+      const items: LabeledPixelTimeSeries[] = points
+        .filter((p) => p.result)
+        .map((p) => ({ label: p.label, result: p.result as PixelTimeSeriesResult }));
+      if (items.length === 0) return;
       setExporting(true);
       setExportError(null);
       try {
-        const collection = seriesToFeatureCollection(result);
-        const [lng, lat] = result.lngLat;
-        const baseName = `pixel-time-series_${lat.toFixed(4)}_${lng.toFixed(4)}`;
+        const collection = seriesToFeatureCollection(items);
+        const baseName =
+          items.length === 1
+            ? `pixel-time-series_${items[0].result.lngLat[1].toFixed(4)}_${items[0].result.lngLat[0].toFixed(4)}`
+            : `pixel-time-series_${items.length}-points`;
         await exportVectorLayer(collection, format, baseName);
       } catch (err) {
         setExportError(err instanceof Error ? err.message : String(err));
@@ -152,20 +264,56 @@ export function PixelTimeSeriesControl({
         setExporting(false);
       }
     },
-    [result],
+    [points],
   );
 
-  const handleOpenChange = useCallback((next: boolean) => {
-    setOpen(next);
-    if (!next) abortRef.current?.abort();
+  const startPicking = useCallback(() => {
+    setOpen(true);
+    setPicking(true);
   }, []);
 
   if (!timeSliderActive || !hasRasterStack) return null;
 
+  const hasLoaded = loadedResults.length > 0;
+  // One chart line per (point, source) for the selected band. Single-source
+  // stacks (the common case) show one line per point; the legend disambiguates
+  // by source name only when a point has more than one source.
+  const chartSeries =
+    selectedBand == null
+      ? []
+      : points.flatMap((point) => {
+          if (!point.result) return [];
+          const multiSource = point.result.series.length > 1;
+          return point.result.series.map((series, si) => ({
+            key: `${point.id}:${series.sourceId}`,
+            label: multiSource
+              ? `${point.label} · ${series.sourceName}`
+              : point.label,
+            color: SERIES_COLORS[point.colorIndex % SERIES_COLORS.length],
+            dash: si > 0 ? "4 3" : undefined,
+            points: series.points.map((pt) => ({
+              date: pt.date,
+              value: valueAtBand(pt, selectedBand),
+            })),
+          }));
+        });
+
   return (
     <>
       <div className="pointer-events-none absolute left-1/2 top-3 z-20 flex -translate-x-1/2 flex-col items-center gap-2">
-        {picking ? (
+        {!open ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="pointer-events-auto shadow-lg"
+            onClick={startPicking}
+            data-testid="pixel-time-series-trigger"
+          >
+            <LineChart className="h-3.5 w-3.5" aria-hidden="true" />
+            {t("map.pixelTimeSeriesMode.start")}
+          </Button>
+        ) : picking ? (
           <div
             className="pointer-events-auto flex items-center gap-2 rounded-md border bg-background/95 px-3 py-2 text-sm shadow-lg backdrop-blur-sm"
             role="region"
@@ -192,94 +340,184 @@ export function PixelTimeSeriesControl({
               {t("map.pixelTimeSeriesMode.exit")}
             </Button>
           </div>
-        ) : (
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            className="pointer-events-auto shadow-lg"
-            onClick={() => setPicking(true)}
-            data-testid="pixel-time-series-trigger"
-          >
-            <LineChart className="h-3.5 w-3.5" aria-hidden="true" />
-            {t("map.pixelTimeSeriesMode.start")}
-          </Button>
-        )}
+        ) : null}
       </div>
 
-      <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{t("pixelTimeSeries.title")}</DialogTitle>
-            <DialogDescription>
-              {result
-                ? t("pixelTimeSeries.subtitle", {
-                    lat: result.lngLat[1].toFixed(5),
-                    lng: result.lngLat[0].toFixed(5),
-                  })
-                : t("pixelTimeSeries.querying")}
-            </DialogDescription>
-          </DialogHeader>
-
-          {error ? (
-            <p
-              className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-              role="alert"
+      {open ? (
+        <div
+          className="pointer-events-auto absolute bottom-8 right-3 z-20 flex max-h-[calc(100%-5rem)] w-[min(28rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
+          role="region"
+          aria-label={t("pixelTimeSeries.title")}
+          data-testid="pixel-time-series-panel"
+        >
+          <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <LineChart className="h-4 w-4 text-primary" aria-hidden="true" />
+              {t("pixelTimeSeries.title")}
+            </div>
+            <button
+              type="button"
+              className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
+              onClick={reset}
+              aria-label={t("pixelTimeSeries.close")}
             >
-              {error}
-            </p>
-          ) : !result ? (
-            <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              {progress && progress.total > 0
-                ? t("pixelTimeSeries.progress", {
-                    done: progress.done,
-                    total: progress.total,
-                  })
-                : t("pixelTimeSeries.querying")}
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              <PixelTimeSeriesChart result={result} />
-              {result.truncated ? (
-                <p className="text-xs text-muted-foreground">
-                  {t("pixelTimeSeries.truncated", { count: result.stepCount })}
-                </p>
-              ) : null}
-              <div className="flex items-center justify-end gap-2">
-                {exportError ? (
-                  <p
-                    className="mr-auto text-xs text-destructive"
-                    role="alert"
-                  >
-                    {exportError}
-                  </p>
-                ) : null}
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={exporting}
-                  onClick={() => handleExport("csv")}
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3">
+            {bandOptions.length > 0 ? (
+              <label className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">
+                  {t("pixelTimeSeries.band")}
+                </span>
+                <Select
+                  className="w-44"
+                  value={selectedBand ?? ""}
+                  onChange={(e) => setSelectedBand(Number(e.target.value))}
                 >
-                  <Download className="h-3.5 w-3.5" aria-hidden="true" />
-                  {t("pixelTimeSeries.exportCsv")}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={exporting}
-                  onClick={() => handleExport("geoparquet")}
-                >
-                  <Download className="h-3.5 w-3.5" aria-hidden="true" />
-                  {t("pixelTimeSeries.exportGeoParquet")}
-                </Button>
+                  {bandOptions.map((band) => (
+                    <option key={band.index} value={band.index}>
+                      {band.name ??
+                        t("pixelTimeSeries.bandOption", { index: band.index })}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+            ) : null}
+
+            {hasLoaded ? (
+              <PixelTimeSeriesChart series={chartSeries} />
+            ) : (
+              <div className="flex items-center gap-2 rounded-md border border-dashed px-3 py-8 text-sm text-muted-foreground">
+                {points.some((p) => p.loading) ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    {t("pixelTimeSeries.querying")}
+                  </>
+                ) : (
+                  <>
+                    <Crosshair className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    {t("pixelTimeSeries.empty")}
+                  </>
+                )}
               </div>
+            )}
+
+            {truncated ? (
+              <p className="text-xs text-muted-foreground">
+                {t("pixelTimeSeries.truncated", { count: truncatedSteps })}
+              </p>
+            ) : null}
+
+            {points.length > 0 ? (
+              <ul className="flex flex-col gap-1" data-testid="pixel-time-series-points">
+                {points.map((point) => (
+                  <li
+                    key={point.id}
+                    className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm"
+                  >
+                    <span
+                      className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
+                      style={{
+                        backgroundColor:
+                          SERIES_COLORS[point.colorIndex % SERIES_COLORS.length],
+                      }}
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="font-medium">{point.label}</span>{" "}
+                      <span className="text-xs text-muted-foreground">
+                        {point.lngLat[1].toFixed(4)}, {point.lngLat[0].toFixed(4)}
+                      </span>
+                      {point.loading ? (
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Loader2
+                            className="h-3 w-3 animate-spin"
+                            aria-hidden="true"
+                          />
+                          {point.progress && point.progress.total > 0
+                            ? t("pixelTimeSeries.progress", {
+                                done: point.progress.done,
+                                total: point.progress.total,
+                              })
+                            : t("pixelTimeSeries.querying")}
+                        </span>
+                      ) : point.error ? (
+                        <span className="block text-xs text-destructive">
+                          {point.error}
+                        </span>
+                      ) : null}
+                    </span>
+                    <button
+                      type="button"
+                      className="rounded-sm p-1 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
+                      onClick={() => removePoint(point.id)}
+                      aria-label={t("pixelTimeSeries.removePoint", {
+                        label: point.label,
+                      })}
+                    >
+                      <X className="h-3.5 w-3.5" aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 border-t px-3 py-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={picking ? "secondary" : "default"}
+              onClick={() => setPicking((p) => !p)}
+            >
+              <Crosshair className="h-3.5 w-3.5" aria-hidden="true" />
+              {picking
+                ? t("pixelTimeSeries.stopPicking")
+                : t("pixelTimeSeries.pickPoints")}
+            </Button>
+            {points.length > 0 ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={clearAll}
+              >
+                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                {t("pixelTimeSeries.clearAll")}
+              </Button>
+            ) : null}
+            {exportError ? (
+              <p className="w-full text-xs text-destructive" role="alert">
+                {exportError}
+              </p>
+            ) : null}
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!hasLoaded || exporting}
+                onClick={() => handleExport("csv")}
+              >
+                <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                {t("pixelTimeSeries.exportCsv")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!hasLoaded || exporting}
+                onClick={() => handleExport("geoparquet")}
+              >
+                <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                {t("pixelTimeSeries.exportGeoParquet")}
+              </Button>
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }
@@ -292,7 +530,7 @@ const INNER_W = CHART_W - MARGIN.left - MARGIN.right;
 const INNER_H = CHART_H - MARGIN.top - MARGIN.bottom;
 const AXIS = "hsl(var(--border))";
 const TICK = "hsl(var(--muted-foreground))";
-// Theme primary first, then a small fixed palette for additional sources.
+// Theme primary first, then a small fixed palette for additional points.
 const SERIES_COLORS = [
   "hsl(var(--primary))",
   "hsl(12 76% 61%)",
@@ -301,11 +539,21 @@ const SERIES_COLORS = [
   "hsl(43 74% 49%)",
 ];
 
+/** A single chartable line: a point's value-over-time for the selected band. */
+interface ChartSeries {
+  key: string;
+  label: string;
+  color: string;
+  /** SVG dash pattern, for distinguishing extra sources of the same point. */
+  dash?: string;
+  points: { date: string; value: number | null }[];
+}
+
 /** Format an axis value compactly, dropping noise digits on large magnitudes. */
 function formatValue(value: number): string {
   if (!Number.isFinite(value)) return "";
   const abs = Math.abs(value);
-  if (abs !== 0 && (abs >= 1e6 || abs < 1e-3)) return value.toExponential(1);
+  if (abs !== 0 && (abs >= 1e6 || abs <= 1e-3)) return value.toExponential(1);
   return Number(value.toFixed(abs >= 100 ? 0 : 2)).toString();
 }
 
@@ -316,23 +564,18 @@ function axisDateLabel(date: string, annual: boolean): string {
 
 /**
  * Dependency-free SVG line chart of pixel value over time, one polyline per
- * source. Matches the attribute-table Charts panel's look (CSS-variable colors,
- * gap-on-missing lines) but labels the x-axis with timeline dates rather than
- * feature order.
+ * clicked point (for the selected band). Matches the attribute-table Charts
+ * panel's look (CSS-variable colors, gap-on-missing lines) but labels the
+ * x-axis with timeline dates rather than feature order.
  */
-function PixelTimeSeriesChart({ result }: { result: PixelTimeSeriesResult }) {
+function PixelTimeSeriesChart({ series }: { series: ChartSeries[] }) {
   const { t } = useTranslation();
-  // All series share the same timeline, so the first series' points drive the
-  // count, annual-date detection, and x-axis labels.
-  const firstPoints = result.series[0]?.points ?? [];
-  const length = firstPoints.length;
 
   const values: number[] = [];
-  for (const series of result.series) {
-    for (const point of series.points) {
+  for (const line of series)
+    for (const point of line.points)
       if (point.value != null) values.push(point.value);
-    }
-  }
+
   if (values.length === 0) {
     return (
       <div className="flex h-40 items-center justify-center rounded-md border text-sm text-muted-foreground">
@@ -349,7 +592,16 @@ function PixelTimeSeriesChart({ result }: { result: PixelTimeSeriesResult }) {
     max += 1;
   }
 
-  const annual = firstPoints.every((point) => point.date.endsWith("-01-01"));
+  // All lines share the timeline, so the longest one drives the x-axis labels.
+  const reference = series.reduce(
+    (longest, line) =>
+      line.points.length > longest.points.length ? line : longest,
+    series[0],
+  );
+  const refPoints = reference.points;
+  const length = refPoints.length;
+  const annual = refPoints.every((point) => point.date.endsWith("-01-01"));
+
   const scaleX = (index: number) =>
     MARGIN.left + (length > 1 ? index / (length - 1) : 0.5) * INNER_W;
   const scaleY = (value: number) =>
@@ -357,11 +609,7 @@ function PixelTimeSeriesChart({ result }: { result: PixelTimeSeriesResult }) {
 
   // First, middle, and last x-axis ticks, deduped for short series.
   const tickIndexes = Array.from(
-    new Set(
-      length <= 1
-        ? [0]
-        : [0, Math.floor((length - 1) / 2), length - 1],
-    ),
+    new Set(length <= 1 ? [0] : [0, Math.floor((length - 1) / 2), length - 1]),
   );
 
   return (
@@ -420,15 +668,14 @@ function PixelTimeSeriesChart({ result }: { result: PixelTimeSeriesResult }) {
             fontSize={10}
             fill={TICK}
           >
-            {axisDateLabel(firstPoints[index]?.date ?? "", annual)}
+            {axisDateLabel(refPoints[index]?.date ?? "", annual)}
           </text>
         ))}
-        {/* One polyline per source, breaking on missing values. */}
-        {result.series.map((series, seriesIndex) => {
-          const color = SERIES_COLORS[seriesIndex % SERIES_COLORS.length];
+        {/* One polyline per point, breaking on missing values. */}
+        {series.map((line) => {
           let path = "";
           let penDown = false;
-          series.points.forEach((point, index) => {
+          line.points.forEach((point, index) => {
             if (point.value == null) {
               penDown = false;
               return;
@@ -438,17 +685,23 @@ function PixelTimeSeriesChart({ result }: { result: PixelTimeSeriesResult }) {
             penDown = true;
           });
           return (
-            <g key={series.sourceId}>
-              <path d={path.trim()} fill="none" stroke={color} strokeWidth={1.5} />
+            <g key={line.key}>
+              <path
+                d={path.trim()}
+                fill="none"
+                stroke={line.color}
+                strokeWidth={1.5}
+                strokeDasharray={line.dash}
+              />
               {length <= 60
-                ? series.points.map((point, index) =>
+                ? line.points.map((point, index) =>
                     point.value == null ? null : (
                       <circle
                         key={index}
                         cx={scaleX(index)}
                         cy={scaleY(point.value)}
                         r={2.5}
-                        fill={color}
+                        fill={line.color}
                       >
                         <title>{`${point.date}: ${formatValue(point.value)}`}</title>
                       </circle>
@@ -459,19 +712,16 @@ function PixelTimeSeriesChart({ result }: { result: PixelTimeSeriesResult }) {
           );
         })}
       </svg>
-      {result.series.length > 1 ? (
+      {series.length > 1 ? (
         <figcaption className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-          {result.series.map((series, seriesIndex) => (
-            <span key={series.sourceId} className="flex items-center gap-1.5">
+          {series.map((line) => (
+            <span key={line.key} className="flex items-center gap-1.5">
               <span
                 className="inline-block h-2.5 w-2.5 rounded-sm"
-                style={{
-                  backgroundColor:
-                    SERIES_COLORS[seriesIndex % SERIES_COLORS.length],
-                }}
+                style={{ backgroundColor: line.color }}
                 aria-hidden="true"
               />
-              {series.sourceName}
+              {line.label}
             </span>
           ))}
         </figcaption>
