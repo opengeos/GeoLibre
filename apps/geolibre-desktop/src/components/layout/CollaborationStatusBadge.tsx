@@ -85,9 +85,11 @@ export function CollaborationStatusBadge({
   // The scroll viewport for the message list, so new messages pin to the bottom.
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   // Unread chat count while the roster is collapsed, surfaced on the pill so a
-  // working host notices new messages without keeping the panel open.
+  // working host notices new messages without keeping the panel open. Tracked by
+  // the last-seen message id (not the array length): the store keeps a bounded
+  // tail, so once it is full new messages arrive without changing the length.
   const [unread, setUnread] = useState(0);
-  const lastSeenChatRef = useRef(0);
+  const lastSeenChatIdRef = useRef<string | null>(null);
   // The participant set from the previous update, so we can diff join/leave.
   // Seeded on first activation so existing members (and self) aren't announced
   // as fresh arrivals when the dialog first connects.
@@ -122,7 +124,7 @@ export function CollaborationStatusBadge({
       setDraft("");
       setAttachLocation(false);
       setUnread(0);
-      lastSeenChatRef.current = 0;
+      lastSeenChatIdRef.current = null;
       return;
     }
     const current = new Map(
@@ -185,29 +187,39 @@ export function CollaborationStatusBadge({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [expanded]);
 
+  // The latest message's id; effects key on this (not chat.length) so a full,
+  // bounded tail still notices new arrivals.
+  const lastMessageId = chat.length ? chat[chat.length - 1].id : null;
+
   // Track unread chat while the panel is collapsed; clear it (and remember the
-  // current length) whenever the panel is open, so the badge counts only
-  // messages that arrived while the host wasn't looking.
+  // latest message id) whenever the panel is open, so the badge counts only
+  // messages that arrived while the host wasn't looking. The first collapsed
+  // render of a session seeds the baseline so welcome history isn't unread.
   useEffect(() => {
     if (!isActive) return;
-    if (expanded) {
-      lastSeenChatRef.current = chat.length;
+    if (expanded || lastSeenChatIdRef.current === null) {
+      lastSeenChatIdRef.current = lastMessageId;
       setUnread(0);
       return;
     }
-    setUnread(Math.max(0, chat.length - lastSeenChatRef.current));
-  }, [isActive, expanded, chat.length]);
+    const seenIdx = chat.findIndex((m) => m.id === lastSeenChatIdRef.current);
+    // If the last-seen message has aged out of the tail, every retained message
+    // is newer than it.
+    setUnread(seenIdx === -1 ? chat.length : chat.length - seenIdx - 1);
+  }, [isActive, expanded, lastMessageId, chat]);
 
   // Keep the message list pinned to the latest message while the panel is open.
   useEffect(() => {
     if (!expanded) return;
     const el = chatScrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [expanded, chat.length]);
+  }, [expanded, lastMessageId]);
 
   const handleSendChat = () => {
     const text = draft.trim();
-    if (!text) return;
+    // Drop sends while reconnecting: api.sendChat silently no-ops when the
+    // socket isn't open, so clearing the draft here would lose the typed text.
+    if (!text || connecting) return;
     // Capture the live map center only when the pin is active, at send time.
     const center =
       attachLocation && mapControllerRef.current
@@ -428,7 +440,7 @@ export function CollaborationStatusBadge({
                 type="button"
                 size="sm"
                 className="h-8 shrink-0 px-2"
-                disabled={!draft.trim()}
+                disabled={connecting || !draft.trim()}
                 onClick={handleSendChat}
                 aria-label={t("collaborate.chatSend")}
               >

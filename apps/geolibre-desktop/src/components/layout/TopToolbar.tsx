@@ -94,7 +94,6 @@ import { AboutDialog } from "./AboutDialog";
 import { NewProjectDialog } from "./NewProjectDialog";
 import { ManagePluginsDialog } from "./ManagePluginsDialog";
 import { ShareProjectDialog } from "./ShareProjectDialog";
-import { CollaborateDialog } from "./CollaborateDialog";
 import type { CollaborationApi } from "../../hooks/useCollaboration";
 import { SettingsDialog } from "./SettingsDialog";
 import { SetViewDialog } from "./SetViewDialog";
@@ -233,7 +232,8 @@ export function TopToolbar({
   const setProjectName = useAppStore((s) => s.setProjectName);
   // The Collaborate dialog's visibility lives in the store so the on-canvas
   // session-status badge can reopen it from outside this component tree (#754).
-  const collaborateDialogOpen = useAppStore((s) => s.ui.collaborateDialogOpen);
+  // The dialog itself is rendered by DesktopShell (not here) so it survives
+  // toolbar-hidden layouts; the toolbar only triggers it via this setter.
   const setCollaborateDialogOpen = useAppStore(
     (s) => s.setCollaborateDialogOpen,
   );
@@ -287,16 +287,6 @@ export function TopToolbar({
     mapReadyGeneration,
     projectGeneration,
   );
-
-  // When opened via a `?collab=<code>` share link, auto-open the Collaborate
-  // dialog (which prefills the code) so the recipient only picks a name and
-  // joins, instead of having to find the Project menu first.
-  useEffect(() => {
-    if (!collaboration.enabled) return;
-    if (new URLSearchParams(window.location.search).get("collab")) {
-      setCollaborateDialogOpen(true);
-    }
-  }, [collaboration.enabled]);
 
   // Tracks an active IME composition so pressing Enter to confirm a CJK
   // candidate doesn't blur the project-name field mid-composition.
@@ -1059,13 +1049,6 @@ export function TopToolbar({
           return { content, filename: `${safeName}.geolibre.json` };
         }}
       />
-      {collaboration.enabled && (
-        <CollaborateDialog
-          open={collaborateDialogOpen}
-          onOpenChange={setCollaborateDialogOpen}
-          api={collaboration}
-        />
-      )}
       {isMenuVisible(uiProfile, "help") && (
         <HelpMenu
           chrome={chrome}

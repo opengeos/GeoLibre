@@ -76,6 +76,7 @@ import {
 } from "../../hooks/useRightPanels";
 import { BoundsRestrictionIndicator } from "./BoundsRestrictionIndicator";
 import { CollaborationStatusBadge } from "./CollaborationStatusBadge";
+import { CollaborateDialog } from "./CollaborateDialog";
 import { useCollaboration } from "../../hooks/useCollaboration";
 import { MapModeBanner } from "./MapModeBanner";
 import { MapGrid } from "./MapGrid";
@@ -520,8 +521,22 @@ export function DesktopShell({
   const diagnostics = useDiagnosticsSnapshot();
   const externalPluginsReady = useExternalPluginsReady(mapControllerRef);
   // Live-collaboration session. Owned here (rather than in TopToolbar) so both
-  // the Collaborate dialog and the on-canvas status badge share one socket.
+  // the Collaborate dialog and the on-canvas status badge share one socket, and
+  // so the dialog stays mounted in toolbar-hidden layouts.
   const collaboration = useCollaboration(mapControllerRef);
+  const collaborateDialogOpen = useAppStore((s) => s.ui.collaborateDialogOpen);
+  const setCollaborateDialogOpen = useAppStore(
+    (s) => s.setCollaborateDialogOpen,
+  );
+  // When opened via a `?collab=<code>` share link, auto-open the Collaborate
+  // dialog (which prefills the code) so the recipient only picks a name and
+  // joins, instead of having to find the Project menu first.
+  useEffect(() => {
+    if (!collaboration.enabled) return;
+    if (new URLSearchParams(window.location.search).get("collab")) {
+      setCollaborateDialogOpen(true);
+    }
+  }, [collaboration.enabled, setCollaborateDialogOpen]);
   // Sync the project with an embedding host (the GeoLibre Jupyter widget) over
   // postMessage. Inert when the app is not embedded.
   useEmbedBridge(mapControllerRef);
@@ -1552,6 +1567,15 @@ export function DesktopShell({
           <SectionErrorBoundary label="Plugin floating panels">
             <FloatingPanels />
           </SectionErrorBoundary>
+          {/* Rendered here (not in TopToolbar) so the dialog the status badge
+              reopens stays mounted even in toolbar-hidden layouts (#754). */}
+          {collaboration.enabled && (
+            <CollaborateDialog
+              open={collaborateDialogOpen}
+              onOpenChange={setCollaborateDialogOpen}
+              api={collaboration}
+            />
+          )}
         </main>
         {replaceStylePanelId ? (
           // Shared-rail mode (issue #765): the plugin panel shares the Style
