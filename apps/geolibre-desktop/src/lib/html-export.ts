@@ -1,38 +1,17 @@
-// Standalone "Export as interactive HTML" builder.
-//
-// This is the in-app counterpart of the Python widget's `Map.to_html()`
-// (`python/src/geolibre/geolibre.py`): it produces a single, self-contained
-// HTML page that frames the hosted GeoLibre app and replays the current
-// `.geolibre.json` project into it over the same `postMessage` bridge the
-// embed/Jupyter host speaks (`geolibre:ready` -> `geolibre:load-project`, see
-// `useEmbedBridge`/`embedHost`). The page needs no Python kernel and no
-// share.geolibre.app upload; it loads the app over the network and renders the
-// project interactively (pan/zoom, layer toggles) once opened.
+// Standalone "Export as interactive HTML" builder; the in-app counterpart of the
+// Python widget's `Map.to_html()`. See `docs/python.md` and `embedHost.ts`.
 
 import type { GeoLibreProject } from "@geolibre/core";
 
-// Hosted GeoLibre viewer used as the default embed target, matching the Python
-// widget's `_DEFAULT_HTML_APP_URL`. A hosted URL keeps the exported file small
-// and portable (it loads the app over the network rather than inlining a build).
+// Hosted viewer used as the default embed target (matches Python's default).
 export const DEFAULT_VIEWER_BASE_URL = "https://viewer.geolibre.app/";
 
-// A CSS length/percentage value (e.g. "100%", "800px", "calc(100% / 2)"). The
-// allowed set deliberately excludes the structural CSS characters ("{};:") so a
-// width/height cannot close the <style> rule and inject CSS; "/" is allowed so
-// `calc()` divisions pass, since it cannot close a rule on its own.
+// Excludes the structural CSS chars ("{};:") so a width/height can't close the
+// <style> rule and inject CSS; "/" is allowed so calc() divisions still pass.
 const CSS_DIMENSION_RE = /^[\w%.+\-/\s()]+$/;
 
-/**
- * Resolve the hosted-viewer base URL from the Vite env, falling back to the
- * production default. Only HTTPS (or HTTP on loopback for local dev) is
- * accepted, and the hostname is matched exactly so a value like
- * `http://localhost.evil.com` cannot slip through. Mirrors
- * {@link resolveShareBaseUrl} in `share-geolibre.ts`.
- *
- * @param configured - The raw env value; read from `VITE_GEOLIBRE_VIEWER_URL`
- *   by default but injectable for tests.
- * @returns A trusted viewer base URL.
- */
+// Resolve the viewer URL from the env, accepting only HTTPS (or loopback HTTP)
+// and matching the hostname exactly; mirrors resolveShareBaseUrl.
 export function resolveViewerBaseUrl(
   configured: unknown = import.meta.env?.VITE_GEOLIBRE_VIEWER_URL,
 ): string {
@@ -54,7 +33,6 @@ export function resolveViewerBaseUrl(
   return DEFAULT_VIEWER_BASE_URL;
 }
 
-/** Escape a string for safe interpolation into HTML text/attribute context. */
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -64,14 +42,8 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-/**
- * Append `embed=1` to the viewer URL's query string, before any `#fragment`.
- *
- * A trailing `#...` fragment would otherwise swallow a `?embed=1` suffix
- * (browsers read it as part of the fragment), so the flag is inserted into the
- * query and the fragment is reattached. Mirrors the Python export's fragment
- * handling.
- */
+// Insert embed=1 into the query before any "#fragment" (a fragment would
+// otherwise swallow a trailing "?embed=1"); mirrors the Python export.
 function withEmbedFlag(baseUrl: string): string {
   const hashIndex = baseUrl.indexOf("#");
   const base = hashIndex === -1 ? baseUrl : baseUrl.slice(0, hashIndex);
@@ -93,26 +65,15 @@ export interface BuildProjectHtmlOptions {
   height?: string;
 }
 
-/**
- * Build a standalone interactive HTML page for a GeoLibre project.
- *
- * The page embeds the GeoLibre app in an `<iframe>` (with `?embed=1` to force
- * the bridge on) and posts the inlined project to it once the app announces
- * `geolibre:ready`, exactly mirroring the Python widget's `to_html()` so the two
- * exports stay byte-compatible in approach.
- *
- * @param options - See {@link BuildProjectHtmlOptions}.
- * @returns The complete HTML document as a string.
- * @throws If `width` or `height` is not a safe CSS dimension.
- */
+// Build a self-contained HTML page that frames the viewer (with ?embed=1) and
+// posts the inlined project to it on "geolibre:ready"; throws on an unsafe
+// width/height. Mirrors the Python widget's to_html().
 export function buildProjectHtml(options: BuildProjectHtmlOptions): string {
   const { project, title } = options;
   const appUrl = options.appUrl ?? DEFAULT_VIEWER_BASE_URL;
   const width = options.width ?? "100%";
   const height = options.height ?? "100vh";
-  // width/height land inside a <style> rule; escapeHtml does not neutralise CSS
-  // metacharacters like "}" or ";", so validate them as plain CSS dimensions to
-  // keep a stray value from closing the rule and injecting CSS.
+  // width/height land inside a <style> rule, which escapeHtml does not protect.
   if (!CSS_DIMENSION_RE.test(width)) {
     throw new Error(`Invalid CSS width value: ${width}`);
   }
@@ -120,9 +81,7 @@ export function buildProjectHtml(options: BuildProjectHtmlOptions): string {
     throw new Error(`Invalid CSS height value: ${height}`);
   }
   const iframeSrc = withEmbedFlag(appUrl);
-  // Inline the project inside a JSON <script> block and escape "<" so a property
-  // value can never break out of the script element; "<" is valid JSON that
-  // JSON.parse restores to "<".
+  // Escape "<" so a property value can't break out of the JSON <script> block.
   const projectJson = JSON.stringify(project).replace(/</g, "\\u003c");
 
   return `<!doctype html>
@@ -145,9 +104,8 @@ export function buildProjectHtml(options: BuildProjectHtmlOptions): string {
   var project = JSON.parse(
     document.getElementById("geolibre-project").textContent
   );
-  // The src attribute is fixed, so this stays the viewer's origin even if the
-  // frame later navigates. Both the inbound "ready" check and the outbound post
-  // are pinned to it, so the project is only ever exchanged with the viewer.
+  // The src attribute is fixed, so this pins to the viewer origin: both the
+  // inbound "ready" check and the outbound post are scoped to it.
   var viewerOrigin = new URL(frame.src).origin;
   var loaded = false;
   function load() {
@@ -158,8 +116,6 @@ export function buildProjectHtml(options: BuildProjectHtmlOptions): string {
       viewerOrigin
     );
   }
-  // The app posts "geolibre:ready" once mounted; reply with the project. Guard
-  // on both the origin and the frame so an unrelated window cannot trigger it.
   window.addEventListener("message", function (event) {
     if (event.origin !== viewerOrigin) return;
     if (event.source !== frame.contentWindow) return;
