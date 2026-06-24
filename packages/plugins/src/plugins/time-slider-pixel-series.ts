@@ -463,7 +463,12 @@ export function seriesToFeatureCollection(
               ...base,
               band: band.index,
               band_name: band.name,
-              value: band.isNodata ? null : band.value,
+              // Mirror valueAtBand: a non-finite value exports as null so CSV /
+              // GeoParquet output stays consistent with the chart's semantics.
+              value:
+                band.isNodata || !Number.isFinite(band.value)
+                  ? null
+                  : band.value,
               is_nodata: band.isNodata,
             });
           }
