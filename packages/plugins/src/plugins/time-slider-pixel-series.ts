@@ -258,59 +258,64 @@ export async function queryPixelTimeSeries(
   const total = sources.length * steps.length;
   let completed = 0;
 
-  const series = await Promise.all(
-    sources.map(async (source) => {
-      // Each task returns its point plus the band it read; the band metadata is
-      // then taken from the first successful step (by step order) rather than
-      // mutating a shared closure under concurrency, where last-writer-wins
-      // would make bandIndex/bandName non-deterministic.
-      const tasks = steps.map(
-        (date) =>
-          async (): Promise<{
-            point: PixelSeriesPoint;
-            band: BandReading | null;
-          }> => {
-            const point: PixelSeriesPoint = {
-              date: isoDate(date),
-              timestamp: date.getTime(),
-              url: "",
-              value: null,
-              isNodata: false,
-            };
-            let band: BandReading | null = null;
-            try {
-              if (signal?.aborted) throw new Error("aborted");
-              const url = await resolveUrl(source.url, date);
-              point.url = url;
-              const reading = await readAt(url);
-              band = reading ? pickBand(reading, source.bidx) : null;
-              if (band) {
-                point.isNodata = band.isNodata;
-                point.value = band.isNodata ? null : band.value;
-              }
-            } catch {
-              // Leave the point null: one missing/late COG should not fail the rest.
-            } finally {
-              completed += 1;
-              onProgress?.(completed, total);
-            }
-            return { point, band };
-          },
-      );
-      const results = await runWithConcurrency(tasks, READ_CONCURRENCY);
-      const points = results.map((result) => result.point);
-      const firstBand = results.find((result) => result.band)?.band ?? null;
-      return {
-        sourceId: source.id ?? source.name ?? "cog",
-        sourceName: source.name ?? source.id ?? "COG",
-        bandIndex:
-          firstBand?.index ??
-          (source.bidx && source.bidx.length > 0 ? source.bidx[0] : 1),
-        bandName: firstBand?.name ?? null,
-        points,
-      } satisfies PixelSeries;
-    }),
-  );
+  // Per-source result slots, filled by index so order is preserved regardless
+  // of which task finishes first. Each task records the band it read so the
+  // series band metadata can be derived from the first successful step (by step
+  // order) rather than a non-deterministic last-writer-wins mutation.
+  const points = sources.map(() => new Array<PixelSeriesPoint>(steps.length));
+  const bands = sources.map(() => new Array<BandReading | null>(steps.length));
+
+  // Flatten every (source, step) into one task list so READ_CONCURRENCY bounds
+  // the reads across the whole query. Running runWithConcurrency per source
+  // inside Promise.all would instead allow sources.length * READ_CONCURRENCY
+  // concurrent reads and flood remote range endpoints.
+  const tasks: Array<() => Promise<void>> = [];
+  sources.forEach((source, si) => {
+    steps.forEach((date, di) => {
+      tasks.push(async () => {
+        const point: PixelSeriesPoint = {
+          date: isoDate(date),
+          timestamp: date.getTime(),
+          url: "",
+          value: null,
+          isNodata: false,
+        };
+        let band: BandReading | null = null;
+        try {
+          if (signal?.aborted) throw new Error("aborted");
+          const url = await resolveUrl(source.url, date);
+          point.url = url;
+          const reading = await readAt(url);
+          band = reading ? pickBand(reading, source.bidx) : null;
+          if (band) {
+            point.isNodata = band.isNodata;
+            point.value = band.isNodata ? null : band.value;
+          }
+        } catch {
+          // Leave the point null: one missing/late COG should not fail the rest.
+        } finally {
+          completed += 1;
+          onProgress?.(completed, total);
+        }
+        points[si][di] = point;
+        bands[si][di] = band;
+      });
+    });
+  });
+  await runWithConcurrency(tasks, READ_CONCURRENCY);
+
+  const series = sources.map((source, si) => {
+    const firstBand = bands[si].find((band) => band) ?? null;
+    return {
+      sourceId: source.id ?? source.name ?? "cog",
+      sourceName: source.name ?? source.id ?? "COG",
+      bandIndex:
+        firstBand?.index ??
+        (source.bidx && source.bidx.length > 0 ? source.bidx[0] : 1),
+      bandName: firstBand?.name ?? null,
+      points: points[si],
+    } satisfies PixelSeries;
+  });
 
   return { lngLat, series, stepCount: steps.length, truncated };
 }

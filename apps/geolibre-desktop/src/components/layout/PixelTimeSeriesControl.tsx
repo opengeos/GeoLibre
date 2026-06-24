@@ -1,5 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import {
+  hasTimeSliderRasterStack,
   type PixelTimeSeriesResult,
   queryPixelTimeSeries,
   seriesToFeatureCollection,
@@ -41,13 +42,18 @@ export function PixelTimeSeriesControl({
   const { isActive } = usePluginRegistry();
   const timeSliderActive = isActive(TIME_SLIDER_PLUGIN_ID);
   // The Time Slider mirrors each raster source into a store layer, so this
-  // reacts when a COG stack is added or removed without polling the control.
-  const hasRasterStack = useAppStore((s) =>
+  // reacts when a source is added or removed without polling the control. The
+  // mirror cannot tell COG from XYZ/WMS, so it only re-renders this component;
+  // hasTimeSliderRasterStack() (read live below) is what gates the trigger on a
+  // pixel-readable COG stack, since the query engine only supports COG sources.
+  const hasTimeSliderRasterMirror = useAppStore((s) =>
     s.layers.some(
       (layer) =>
         layer.metadata.sourceKind === "time-slider" && layer.type === "raster",
     ),
   );
+  const hasRasterStack =
+    hasTimeSliderRasterMirror && hasTimeSliderRasterStack();
 
   const [picking, setPicking] = useState(false);
   const [open, setOpen] = useState(false);
@@ -81,7 +87,12 @@ export function PixelTimeSeriesControl({
     try {
       const res = await queryPixelTimeSeries(lngLat, {
         signal: ac.signal,
-        onProgress: (done, total) => setProgress({ done, total }),
+        onProgress: (done, total) => {
+          // Ignore late progress from a query that a newer pick superseded, so
+          // stale counters never flash in the new dialog.
+          if (abortRef.current !== ac || ac.signal.aborted) return;
+          setProgress({ done, total });
+        },
       });
       if (ac.signal.aborted) return;
       setResult(res);
