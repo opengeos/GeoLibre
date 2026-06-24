@@ -1074,6 +1074,18 @@ export const useAppStore = create<AppState>()(
             "addTileLayer requires at least one non-empty tile URL template."
           );
         }
+        // MapLibre's addSource throws synchronously when maxzoom < minzoom, and
+        // syncRasterTileLayer does not catch it, which would strand a layer in
+        // the store with no rendered source. Reject the bad range up front.
+        if (
+          options.minzoom !== undefined &&
+          options.maxzoom !== undefined &&
+          options.minzoom > options.maxzoom
+        ) {
+          throw new Error(
+            `addTileLayer: minzoom (${options.minzoom}) must be <= maxzoom (${options.maxzoom}).`
+          );
+        }
         const layer: GeoLibreLayer = {
           id,
           name,

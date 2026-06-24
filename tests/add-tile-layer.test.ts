@@ -108,6 +108,19 @@ describe("store.addTileLayer", () => {
     assert.equal(useAppStore.getState().layers.length, 0);
   });
 
+  it("rejects an inverted minzoom/maxzoom range", () => {
+    assert.throws(
+      () =>
+        useAppStore.getState().addTileLayer("Inverted", {
+          tiles: ["https://tiles.example.com/{z}/{x}/{y}.png"],
+          minzoom: 12,
+          maxzoom: 4,
+        }),
+      /minzoom \(12\) must be <= maxzoom \(4\)/,
+    );
+    assert.equal(useAppStore.getState().layers.length, 0);
+  });
+
   it("merges extra source fields under the required raster descriptor", () => {
     const id = useAppStore.getState().addTileLayer("Coverage", {
       type: "wms",
