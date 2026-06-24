@@ -66,6 +66,14 @@ describe("valueAtBand", () => {
     assert.equal(valueAtBand({ ...point, bands: [] }, 1), null);
     assert.equal(valueAtBand(point, 9), null);
   });
+
+  it("returns null for a non-finite value so it never blanks the chart", () => {
+    const nan = {
+      ...point,
+      bands: [{ index: 1, name: "red", value: NaN, isNodata: false }],
+    };
+    assert.equal(valueAtBand(nan, 1), null);
+  });
 });
 
 describe("bandOptionsFromResults", () => {

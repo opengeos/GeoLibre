@@ -143,7 +143,8 @@ export function downsampleSteps(
   maxSteps: number,
 ): { steps: Date[]; truncated: boolean } {
   const cap = Math.max(1, Math.floor(maxSteps));
-  if (steps.length <= cap) return { steps, truncated: false };
+  // Return a copy so callers cannot mutate the source array via the result.
+  if (steps.length <= cap) return { steps: steps.slice(), truncated: false };
   // A cap of 1 keeps only the first step; the even-spacing formula below would
   // divide by `cap - 1 === 0` and yield a NaN index (so `steps[NaN]` would be
   // undefined), so handle it explicitly.
@@ -186,14 +187,16 @@ function getTimeSliderSteps(maxSteps: number): {
  * @param point - The timestep point, carrying all band readings.
  * @param bandIndex - The 1-based band index to read.
  * @returns The raw band value, or null when the band is missing for this step
- *   (failed read) or its value is the source's nodata. Null renders as a gap.
+ *   (failed read), its value is the source's nodata, or the value is non-finite
+ *   (a stray NaN/Infinity would otherwise blank the whole chart via scaleY).
+ *   Null renders as a gap.
  */
 export function valueAtBand(
   point: PixelSeriesPoint,
   bandIndex: number,
 ): number | null {
   const band = point.bands.find((entry) => entry.index === bandIndex);
-  if (!band || band.isNodata) return null;
+  if (!band || band.isNodata || !Number.isFinite(band.value)) return null;
   return band.value;
 }
 
@@ -430,34 +433,49 @@ export function seriesToFeatureCollection(
 ): FeatureCollection<Point> {
   const features: Feature<Point>[] = [];
   let id = 0;
+  const push = (
+    lng: number,
+    lat: number,
+    properties: Record<string, unknown>,
+  ) =>
+    features.push({
+      type: "Feature",
+      id: id++,
+      geometry: { type: "Point", coordinates: [lng, lat] },
+      properties,
+    });
   for (const { label, result } of items) {
     const [lng, lat] = result.lngLat;
     for (const series of result.series) {
       for (const point of series.points) {
-        // Emit a row per band so band selection in the chart never loses data
-        // from the export. A failed read (no bands) still emits one row so the
-        // timestep is represented.
-        const bands: BandReading[] =
-          point.bands.length > 0
-            ? point.bands
-            : [{ index: 0, name: null, value: NaN, isNodata: false }];
-        for (const band of bands) {
-          const read = point.bands.length > 0;
-          features.push({
-            type: "Feature",
-            id: id++,
-            geometry: { type: "Point", coordinates: [lng, lat] },
-            properties: {
-              point: label,
-              lng,
-              lat,
-              date: point.date,
-              source: series.sourceName,
-              band: read ? band.index : null,
-              band_name: read ? band.name : null,
-              value: read && !band.isNodata ? band.value : null,
-              is_nodata: read ? band.isNodata : false,
-            },
+        const base = {
+          point: label,
+          lng,
+          lat,
+          date: point.date,
+          source: series.sourceName,
+        };
+        if (point.bands.length > 0) {
+          // Emit a row per band so band selection in the chart never loses data
+          // from the export.
+          for (const band of point.bands) {
+            push(lng, lat, {
+              ...base,
+              band: band.index,
+              band_name: band.name,
+              value: band.isNodata ? null : band.value,
+              is_nodata: band.isNodata,
+            });
+          }
+        } else {
+          // A failed read still emits one placeholder row so the timestep is
+          // represented in the export.
+          push(lng, lat, {
+            ...base,
+            band: null,
+            band_name: null,
+            value: null,
+            is_nodata: false,
           });
         }
       }
