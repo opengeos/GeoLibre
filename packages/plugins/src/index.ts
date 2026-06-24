@@ -99,6 +99,7 @@ export {
   addCloudNetcdfLayer,
   type CloudNetcdfLayerOptions,
   setBookmarkLabels,
+  setViewStateLabels,
   subscribeBookmarkPanel,
   subscribeColorbarPanel,
   subscribeHtmlPanel,

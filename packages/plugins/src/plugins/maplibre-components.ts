@@ -418,8 +418,30 @@ const VIEW_STATE_OPTIONS = {
   maxHeight: 520,
   panelWidth: 280,
   position: viewStateControlPosition,
-  title: "Info",
+  // The panel title is applied per-instance in createViewStateControl so it
+  // picks up the translated string pushed via setViewStateLabels.
 } satisfies ViewStateControlOptions;
+
+/**
+ * User-facing strings for the ViewStateControl. The default is English; the
+ * desktop shell pushes a translated value via {@link setViewStateLabels} since
+ * this package is framework-agnostic and has no react-i18next access.
+ */
+const viewStateLabels = {
+  title: "Info",
+};
+
+/** Override the ViewStateControl labels with translated text. */
+export function setViewStateLabels(
+  labels: Partial<typeof viewStateLabels>
+): void {
+  for (const [key, value] of Object.entries(labels)) {
+    // Only overwrite when the caller actually supplied the key; an omitted key
+    // keeps the English default rather than being blanked out.
+    if (value !== undefined)
+      viewStateLabels[key as keyof typeof viewStateLabels] = value;
+  }
+}
 
 const PRINT_OPTIONS = {
   backgroundColor: "hsl(var(--popover))",
@@ -2877,7 +2899,10 @@ function createMinimapControl(
 function createViewStateControl(
   ViewStateControlClass: ViewStateControlConstructor
 ): ViewStateControl {
-  const control = new ViewStateControlClass(VIEW_STATE_OPTIONS);
+  const control = new ViewStateControlClass({
+    ...VIEW_STATE_OPTIONS,
+    title: viewStateLabels.title,
+  });
   return control;
 }
 

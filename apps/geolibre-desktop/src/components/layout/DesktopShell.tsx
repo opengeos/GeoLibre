@@ -22,6 +22,7 @@ import {
   restoreThreeDTilesLayers,
   restoreVectorLayers,
   setBookmarkLabels,
+  setViewStateLabels,
   setNonTiledRasterHandler,
   startLayerGeometryEdit,
   subscribeGeometryEdit,
@@ -415,6 +416,7 @@ export function DesktopShell({
       newFolderLabel: t("bookmark.newFolder"),
       defaultFolderName: t("bookmark.defaultFolderName"),
     });
+    setViewStateLabels({ title: t("viewState.panelTitle") });
   }, [t]);
   // The map's Fullscreen control maximizes the map *canvas* (it calls
   // requestFullscreen on the map container). Chromium promotes that element to

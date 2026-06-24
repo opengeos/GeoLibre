@@ -61,6 +61,9 @@
     "newFolder": "New Folder",
     "defaultFolderName": "Folder"
   },
+  "viewState": {
+    "panelTitle": "Info"
+  },
   "fileNamePrompt": {
     "title": "Save file as",
     "description": "Enter a file name. The file downloads to your browser's downloads folder.",
