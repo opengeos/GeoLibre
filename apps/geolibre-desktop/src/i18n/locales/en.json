@@ -57,7 +57,9 @@
     "captureStateTooltip": "Applies to the bookmark you save next, not as a global setting. Leave it on to restore exactly this layer arrangement later.",
     "export": "Export",
     "exportSelected": "Export Selected",
-    "exportAll": "Export All"
+    "exportAll": "Export All",
+    "newFolder": "New Folder",
+    "defaultFolderName": "Folder"
   },
   "fileNamePrompt": {
     "title": "Save file as",

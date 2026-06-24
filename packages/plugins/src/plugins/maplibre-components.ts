@@ -308,6 +308,8 @@ const bookmarkLabels = {
   exportLabel: "Export",
   exportSelectedLabel: "Export Selected",
   exportAllLabel: "Export All",
+  newFolderLabel: "New Folder",
+  defaultFolderName: "Folder",
 };
 
 /** Override the BookmarkControl labels with translated text. */
@@ -388,6 +390,11 @@ const BOOKMARK_OPTIONS = {
   // (issue #794), and drop the low-value zoom/date metadata from each card.
   showExportAll: true,
   showMetadata: false,
+  // Let users organize bookmarks into folders, mirroring the Layers panel's
+  // groups: create a folder, drag bookmarks in/out, expand/collapse (issue
+  // #794). Folder labels are applied per-instance in createBookmarkControl so
+  // they pick up the translated strings.
+  groupable: true,
   captureState: captureVisibleLayers,
   restoreState: restoreVisibleLayers,
 } satisfies BookmarkControlOptions;
@@ -2752,6 +2759,8 @@ function createBookmarkControl(
     exportLabel: bookmarkLabels.exportLabel,
     exportSelectedLabel: bookmarkLabels.exportSelectedLabel,
     exportAllLabel: bookmarkLabels.exportAllLabel,
+    newFolderLabel: bookmarkLabels.newFolderLabel,
+    defaultFolderName: bookmarkLabels.defaultFolderName,
   });
   routeBookmarkFileIoThroughHost(control, app);
   return control;

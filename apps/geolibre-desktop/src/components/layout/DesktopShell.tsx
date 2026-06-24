@@ -406,6 +406,8 @@ export function DesktopShell({
       exportLabel: t("bookmark.export"),
       exportSelectedLabel: t("bookmark.exportSelected"),
       exportAllLabel: t("bookmark.exportAll"),
+      newFolderLabel: t("bookmark.newFolder"),
+      defaultFolderName: t("bookmark.defaultFolderName"),
     });
   }, [t]);
   // The map's Fullscreen control maximizes the map *canvas* (it calls
