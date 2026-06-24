@@ -327,35 +327,39 @@ export function CollaborationStatusBadge({
                   {t("collaborate.chatEmpty")}
                 </p>
               ) : (
-                chat.map((m) => (
-                  <div key={m.id} className="flex flex-col gap-0.5 text-xs">
-                    <div className="flex items-baseline gap-1.5">
-                      <span
-                        className="truncate font-medium"
-                        style={{ color: m.color }}
-                      >
-                        {m.clientId === selfId
-                          ? t("collaborate.you")
-                          : m.displayName}
-                      </span>
+                chat.map((m) => {
+                  // Bind to a const so the narrowing survives into the onClick
+                  // closure (a non-null assertion would otherwise be needed).
+                  const coord = m.coordinate;
+                  return (
+                    <div key={m.id} className="flex flex-col gap-0.5 text-xs">
+                      <div className="flex items-baseline gap-1.5">
+                        <span
+                          className="truncate font-medium"
+                          style={{ color: m.color }}
+                        >
+                          {m.clientId === selfId
+                            ? t("collaborate.you")
+                            : m.displayName}
+                        </span>
+                      </div>
+                      <p className="whitespace-pre-wrap break-words text-foreground">
+                        {m.text}
+                      </p>
+                      {coord && (
+                        <button
+                          type="button"
+                          onClick={() => flyToCoordinate(coord)}
+                          className="flex w-fit items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground transition hover:bg-accent hover:text-foreground"
+                          title={t("collaborate.chatGoToLocation")}
+                        >
+                          <MapPin className="h-3 w-3" aria-hidden="true" />
+                          {coord.lat.toFixed(4)}, {coord.lng.toFixed(4)}
+                        </button>
+                      )}
                     </div>
-                    <p className="whitespace-pre-wrap break-words text-foreground">
-                      {m.text}
-                    </p>
-                    {m.coordinate && (
-                      <button
-                        type="button"
-                        onClick={() => flyToCoordinate(m.coordinate!)}
-                        className="flex w-fit items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground transition hover:bg-accent hover:text-foreground"
-                        title={t("collaborate.chatGoToLocation")}
-                      >
-                        <MapPin className="h-3 w-3" aria-hidden="true" />
-                        {m.coordinate.lat.toFixed(4)},{" "}
-                        {m.coordinate.lng.toFixed(4)}
-                      </button>
-                    )}
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
             <div className="flex items-center gap-1 border-t p-1.5">
@@ -383,6 +387,10 @@ export function CollaborationStatusBadge({
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     handleSendChat();
+                  } else if (e.key === "Escape") {
+                    // Don't let Escape bubble to the window listener that
+                    // collapses the panel — while typing it should stay open.
+                    e.stopPropagation();
                   }
                 }}
                 placeholder={t("collaborate.chatPlaceholder")}

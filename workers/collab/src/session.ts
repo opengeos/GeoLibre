@@ -468,9 +468,11 @@ export class CollabSession extends DurableObject<Env> {
         clearedAny = true;
       }
     }
-    this.broadcast({ type: "mode", mode: next });
-    // Re-broadcast the roster so clients drop the now-cleared `editOverride`s.
+    // Broadcast the cleared roster first, then the new mode, so clients have
+    // dropped the stale `editOverride`s by the time they apply the mode change
+    // (the two frames are sent back-to-back with no await between them).
     if (clearedAny) this.broadcastParticipants();
+    this.broadcast({ type: "mode", mode: next });
   }
 
   private handleSetParticipantMode(
