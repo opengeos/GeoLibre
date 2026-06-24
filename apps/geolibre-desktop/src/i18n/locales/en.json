@@ -911,6 +911,13 @@
     "labelLabel": "Label for map {{number}}",
     "removePane": "Remove map {{number}}"
   },
+  "mapContextMenu": {
+    "copyCoordinatesHint": "Copy coordinates to clipboard",
+    "quickActions": "Quick actions",
+    "copyGeoJson": "Copy as GeoJSON",
+    "centerHere": "Center map here",
+    "zoomInHere": "Zoom in here"
+  },
   "onboarding": {
     "title": "Welcome to GeoLibre",
     "description": "Choose your experience level to tailor the interface. You can change this any time in Settings → Interface.",

@@ -86,6 +86,7 @@ import { CollaborationStatusBadge } from "./CollaborationStatusBadge";
 import { CollaborateDialog } from "./CollaborateDialog";
 import { useCollaboration } from "../../hooks/useCollaboration";
 import { MapModeBanner } from "./MapModeBanner";
+import { MapContextMenu } from "./MapContextMenu";
 import { MapGrid } from "./MapGrid";
 import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
 import { useCommandBridge } from "../../hooks/useCommandBridge";
@@ -1642,6 +1643,10 @@ export function DesktopShell({
                 onControllerReady={handleMapControllerReady}
               />
               <RemoteCursorsOverlay mapControllerRef={mapControllerRef} />
+              <MapContextMenu
+                mapControllerRef={mapControllerRef}
+                mapReadyGeneration={mapReadyGeneration}
+              />
               <BoundsRestrictionIndicator />
               {/* Isolate the collaboration badge in its own boundary: it renders
                   over the map, so a fault here must never take down the map
