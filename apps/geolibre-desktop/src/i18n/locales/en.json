@@ -816,7 +816,24 @@
       "title": "Reverse Geocode mode active",
       "hint": "Click anywhere on the map to look up the address at that point.",
       "exit": "Exit"
+    },
+    "pixelTimeSeriesMode": {
+      "start": "Pixel time series",
+      "title": "Pixel time series mode active",
+      "hint": "Click a pixel on the time-enabled raster stack to chart its value over time.",
+      "exit": "Exit"
     }
+  },
+  "pixelTimeSeries": {
+    "title": "Pixel time series",
+    "subtitle": "Value over time at {{lat}}, {{lng}}",
+    "querying": "Reading pixel values across the timeline...",
+    "progress": "Reading timestep {{done}} of {{total}}...",
+    "noValues": "No values at this location (the pixel falls outside the raster or all timesteps are nodata).",
+    "truncated": "Timeline downsampled to {{count}} steps to limit the number of reads.",
+    "chartAria": "Line chart of pixel value over time",
+    "exportCsv": "Export CSV",
+    "exportGeoParquet": "Export GeoParquet"
   },
   "mapGrid": {
     "layers": "Layers",

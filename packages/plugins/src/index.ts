@@ -285,8 +285,21 @@ export {
 export {
   maplibreTimeSliderPlugin,
   TIME_SLIDER_PLUGIN_ID,
+  getActiveTimeSliderControl,
   getLayerTimeBinding,
 } from "./plugins/maplibre-time-slider";
+export {
+  downsampleSteps,
+  getTimeSliderCogSources,
+  hasTimeSliderRasterStack,
+  pickBand,
+  queryPixelTimeSeries,
+  seriesToFeatureCollection,
+  type PixelSeries,
+  type PixelSeriesPoint,
+  type PixelTimeSeriesOptions,
+  type PixelTimeSeriesResult,
+} from "./plugins/time-slider-pixel-series";
 export {
   buildTimeBinding,
   buildTimeFilter,

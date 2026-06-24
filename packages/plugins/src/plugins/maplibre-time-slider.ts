@@ -122,6 +122,18 @@ let detachStoreSync: (() => void) | null = null;
 /** Stable id of this plugin, exported so the UI can activate/query it. */
 export const TIME_SLIDER_PLUGIN_ID = "maplibre-gl-time-slider";
 
+/**
+ * Returns the live {@link TimeSliderControl} instance while the plugin is
+ * active, or null. Exposes the otherwise module-private singleton so features
+ * such as the pixel time-series chart can read the configured raster sources and
+ * the timeline range without going through the lossy serialized project state.
+ *
+ * @returns The active control, or null when the dock is not open.
+ */
+export function getActiveTimeSliderControl(): TimeSliderControl | null {
+  return timeSliderControl;
+}
+
 export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-time-slider",
   name: "Time Slider",

@@ -80,6 +80,7 @@ import { CollaborationStatusBadge } from "./CollaborationStatusBadge";
 import { CollaborateDialog } from "./CollaborateDialog";
 import { useCollaboration } from "../../hooks/useCollaboration";
 import { MapModeBanner } from "./MapModeBanner";
+import { PixelTimeSeriesControl } from "./PixelTimeSeriesControl";
 import { MapGrid } from "./MapGrid";
 import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
 import { useCommandBridge } from "../../hooks/useCommandBridge";
@@ -1575,6 +1576,7 @@ export function DesktopShell({
                 />
               </SilentErrorBoundary>
               <MapModeBanner mapControllerRef={mapControllerRef} />
+              <PixelTimeSeriesControl mapControllerRef={mapControllerRef} />
               <StoryMapComposeBar mapControllerRef={mapControllerRef} />
             </MapGrid>
           </SectionErrorBoundary>
