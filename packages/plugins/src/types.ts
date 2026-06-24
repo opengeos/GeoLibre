@@ -83,6 +83,30 @@ export interface GeoLibreWmsLayerOptions extends GeoLibreTileLayerOptions {
 }
 
 /**
+ * Options for {@link GeoLibreAppAPI.addCogLayer}: a native Cloud-Optimized
+ * GeoTIFF layer read directly from a URL and rendered client-side, with band
+ * selection, rescale, colormap, and nodata handling exposed in the Style/raster
+ * panel. All fields are optional; the renderer infers sensible defaults from
+ * the GeoTIFF when they are omitted.
+ */
+export interface GeoLibreCogLayerOptions {
+  /** Band selection, e.g. `"1"` (single band) or `"1,2,3"` (RGB). */
+  bands?: string;
+  /** Named colormap applied to a single-band COG (e.g. `"terrain"`). */
+  colormap?: string;
+  /** Lower bound of the value range mapped to the colormap/contrast stretch. */
+  rescaleMin?: number;
+  /** Upper bound of the value range mapped to the colormap/contrast stretch. */
+  rescaleMax?: number;
+  /** Pixel value rendered as transparent (overrides the file's NoData tag). */
+  nodata?: number;
+  /** Initial opacity in [0, 1] (default 1). */
+  opacity?: number;
+  /** Insert the new layer directly beneath the layer with this id. */
+  beforeLayerId?: string;
+}
+
+/**
  * Describes the file-type filter shown by the host's save/open dialog so
  * plugins can label exports/imports (e.g. JSON, GeoJSON, CSV) without knowing
  * whether they run under Tauri or in a browser.
@@ -187,6 +211,21 @@ export interface GeoLibreAppAPI {
    * forward-compatibility, so call it with optional chaining.
    */
   addWmsLayer?: (name: string, options: GeoLibreWmsLayerOptions) => string;
+  /**
+   * Add a native Cloud-Optimized GeoTIFF (COG) layer read directly from a URL
+   * and rendered client-side, returning a promise for the new layer's id.
+   * Unlike {@link addTileLayer} (which expects pre-rendered XYZ tiles), this
+   * loads the GeoTIFF itself and exposes band/rescale/colormap/nodata controls,
+   * matching the host's own COG raster layers. The layer appears in the Layers
+   * panel and persists with the project. Resolves once the layer is registered;
+   * rejects if the COG cannot be loaded. Typed optional for
+   * forward-compatibility, so call it with optional chaining.
+   */
+  addCogLayer?: (
+    name: string,
+    url: string,
+    options?: GeoLibreCogLayerOptions,
+  ) => Promise<string>;
   getActiveBasemap: () => string;
   onBasemapChange: (callback: (styleUrl: string) => void) => () => void;
   fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;

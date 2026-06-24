@@ -76,6 +76,14 @@ export interface GeoLibreAppAPI {
     options?: GeoLibreTileLayerOptions,
   ) => string;
   addWmsLayer?: (name: string, options: GeoLibreWmsLayerOptions) => string;
+  // Native client-side COG (reads the GeoTIFF directly; band/rescale/colormap/
+  // nodata controls). Resolves with the new layer's id (see "Raster and tile
+  // layers" below).
+  addCogLayer?: (
+    name: string,
+    url: string,
+    options?: GeoLibreCogLayerOptions,
+  ) => Promise<string>;
   getActiveBasemap: () => string;
   onBasemapChange: (callback: (styleUrl: string) => void) => () => void;
   fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;
@@ -285,6 +293,16 @@ export interface GeoLibreWmsLayerOptions extends GeoLibreTileLayerOptions {
   format?: string; // default "image/png"
   transparent?: boolean; // default true
 }
+
+export interface GeoLibreCogLayerOptions {
+  bands?: string; // "1" (single band) or "1,2,3" (RGB)
+  colormap?: string; // named colormap for a single-band COG, e.g. "terrain"
+  rescaleMin?: number;
+  rescaleMax?: number;
+  nodata?: number; // pixel value rendered transparent
+  opacity?: number; // default 1
+  beforeLayerId?: string;
+}
 ```
 
 ```typescript
@@ -304,7 +322,16 @@ app.addWmsLayer?.("LINZ Coverage", {
   layers: "coverage",
   transparent: true,
 });
+
+// COG — read the GeoTIFF directly (client-side), with raster controls.
+const cogId = await app.addCogLayer?.(
+  "LINZ DEM",
+  "https://cog.example.nz/dem.tif",
+  { colormap: "terrain", nodata: -9999 },
+);
 ```
+
+`addTileLayer`/`addWmtsLayer`/`addWmsLayer` expect **pre-rendered tiles** (e.g. a COG already served through a tiler such as titiler as an XYZ endpoint). `addCogLayer` is different: it loads the **GeoTIFF itself** and renders it client-side, exposing band selection, rescale, colormap, and nodata in the raster panel. It is async (it fetches the file's header), so it returns a `Promise<string>` and rejects if the COG cannot be read.
 
 The helpers are typed optional for forward-compatibility with host variants, so call them with optional chaining (`app.addTileLayer?.(...)`).
 

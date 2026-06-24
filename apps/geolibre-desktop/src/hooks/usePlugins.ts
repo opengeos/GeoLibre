@@ -1,5 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import {
+  addCogRasterLayer,
   maplibreAnnotationsPlugin,
   maplibreBasemapControlPlugin,
   maplibreComponentsPlugin,
@@ -43,6 +44,7 @@ import {
 } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
 import type {
+  GeoLibreCogLayerOptions,
   GeoLibreDeckGL,
   GeoLibreExternalNativeLayerRegistration,
   GeoLibreFileDialogOptions,
@@ -480,7 +482,10 @@ export function createAppAPI(
   mapControllerRef?: RefObject<MapController | null>,
 ) {
   const store = useAppStore.getState();
-  return {
+  // Captured so methods that delegate to plugin helpers taking the AppAPI
+  // itself (e.g. addCogLayer -> addCogRasterLayer) can pass `api`. Only read
+  // when those methods are called, which is always after assignment.
+  const api = {
     setBasemap: (url: string) => store.setBasemapStyleUrl(url),
     addGeoJsonLayer: (
       name: string,
@@ -555,6 +560,38 @@ export function createAppAPI(
         beforeLayerId ?? null,
       );
     },
+    // Unlike the tile helpers above, a COG is read client-side by the maplibre
+    // raster control (band/rescale/colormap/nodata), so it delegates to the
+    // components plugin's addCogRasterLayer rather than building a store layer
+    // here. It takes the AppAPI itself (to mount the control on demand), so we
+    // hand it the captured `api`.
+    addCogLayer: (
+      name: string,
+      url: string,
+      options?: GeoLibreCogLayerOptions,
+    ) =>
+      addCogRasterLayer(api, {
+        url,
+        name,
+        ...(options?.bands !== undefined ? { bands: options.bands } : {}),
+        ...(options?.colormap !== undefined
+          ? {
+              colormap:
+                options.colormap as Parameters<
+                  typeof addCogRasterLayer
+                >[1]["colormap"],
+            }
+          : {}),
+        ...(options?.rescaleMin !== undefined
+          ? { rescaleMin: options.rescaleMin }
+          : {}),
+        ...(options?.rescaleMax !== undefined
+          ? { rescaleMax: options.rescaleMax }
+          : {}),
+        ...(options?.nodata !== undefined ? { nodata: options.nodata } : {}),
+        ...(options?.opacity !== undefined ? { opacity: options.opacity } : {}),
+        beforeLayerId: options?.beforeLayerId ?? null,
+      }),
     getActiveBasemap: () => useAppStore.getState().basemapStyleUrl,
     onBasemapChange: (callback: (styleUrl: string) => void) =>
       useAppStore.subscribe((state, prev) => {
@@ -703,6 +740,7 @@ export function createAppAPI(
     closeFloatingPanel,
     getOpenFloatingPanels,
   };
+  return api;
 }
 
 async function fetchRemoteArrayBuffer(url: string): Promise<ArrayBuffer> {
