@@ -1079,9 +1079,15 @@ export function DesktopShell({
             // Geotagged photos become their own point layer; TIFF stays on the
             // raster path. Handle them before the vector/raster pipeline so a
             // dropped .jpg isn't routed to the DuckDB vector loader.
-            const photoCount = addDroppedPhotos(
-              await loadDroppedPhotoPaths(otherPaths),
-            );
+            const photoResult = await loadDroppedPhotoPaths(otherPaths);
+            const photoCount = addDroppedPhotos(photoResult);
+            // Surface a clear message when every dropped photo lacked GPS, so
+            // the drop doesn't complete silently.
+            if (photoResult && photoCount === 0 && photoResult.total > 0) {
+              setDropError(
+                t("addData.photos.errorNoGps", { count: photoResult.total }),
+              );
+            }
             const restPaths = otherPaths.filter(
               (path) => !isPhotoDropFileName(path),
             );
@@ -1225,9 +1231,15 @@ export function DesktopShell({
         // their own; TIFF is left to the raster path. Handle them before the
         // vector/raster pipeline so a .jpg isn't sent to the DuckDB vector
         // loader (which would fail).
-        const photoCount = addDroppedPhotos(
-          await loadDroppedPhotoFiles(otherFiles),
-        );
+        const photoResult = await loadDroppedPhotoFiles(otherFiles);
+        const photoCount = addDroppedPhotos(photoResult);
+        // Surface a clear message when every dropped photo lacked GPS, so the
+        // drop doesn't complete silently.
+        if (photoResult && photoCount === 0 && photoResult.total > 0) {
+          setDropError(
+            t("addData.photos.errorNoGps", { count: photoResult.total }),
+          );
+        }
         const restFiles = otherFiles.filter(
           (file) => !isPhotoDropFileName(file.name),
         );

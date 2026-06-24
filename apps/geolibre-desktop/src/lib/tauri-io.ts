@@ -1474,6 +1474,8 @@ export async function pickImageFilesWithFallback(): Promise<File[]> {
     input.onchange = () => {
       resolve(input.files ? Array.from(input.files) : []);
     };
+    // Resolve (rather than hang) when the dialog is dismissed without a pick.
+    input.addEventListener("cancel", () => resolve([]));
     input.click();
   });
 }

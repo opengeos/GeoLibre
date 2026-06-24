@@ -106,7 +106,12 @@ function createIdentifyPopupElement(
     valueCell.className = "break-words text-foreground";
     // Render inline image data URLs (e.g. a geotagged-photo or field-collection
     // thumbnail) as an actual thumbnail rather than a multi-kilobyte string.
-    if (typeof value === "string" && value.startsWith("data:image/")) {
+    // Match base64 raster images only, excluding SVG (which can carry scripts)
+    // so an untrusted GeoJSON value can't smuggle one in.
+    if (
+      typeof value === "string" &&
+      /^data:image\/(?!svg)[\w.+-]+;base64,/.test(value)
+    ) {
       const image = document.createElement("img");
       image.src = value;
       image.alt = key;

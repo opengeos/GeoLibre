@@ -152,9 +152,9 @@ export function buildPhotoProperties(
   if (direction !== undefined) properties.direction = direction;
 
   const camera = [exif.Make, exif.Model]
-    .filter((part): part is string => typeof part === "string" && !!part.trim())
-    .join(" ")
-    .trim();
+    .map((part) => (typeof part === "string" ? part.trim() : ""))
+    .filter(Boolean)
+    .join(" ");
   if (camera) properties.camera = camera;
 
   return properties;
@@ -264,7 +264,7 @@ export async function loadGeotaggedPhotos(
       type: "Feature",
       geometry: {
         type: "Point",
-        coordinates: [exif.longitude as number, exif.latitude as number],
+        coordinates: [exif.longitude, exif.latitude as number],
       },
       properties: buildPhotoProperties(fileName, exif, thumbnail),
     });

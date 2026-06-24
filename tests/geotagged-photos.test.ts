@@ -97,4 +97,13 @@ describe("buildPhotoProperties", () => {
     assert.equal(props.timestamp, "2026:01:02 03:04:05");
     assert.equal(props.camera, "Sony");
   });
+
+  it("collapses internal whitespace in the camera string", () => {
+    const props = buildPhotoProperties(
+      "c.jpg",
+      { latitude: 1, longitude: 2, Make: "Canon ", Model: " EOS R5" },
+      null,
+    );
+    assert.equal(props.camera, "Canon EOS R5");
+  });
 });
