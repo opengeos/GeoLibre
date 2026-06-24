@@ -89,6 +89,25 @@ describe("store.addTileLayer", () => {
     assert.ok(!("bounds" in layer.source));
   });
 
+  it("trims surrounding whitespace on tile templates", () => {
+    const id = useAppStore.getState().addTileLayer("Spaced", {
+      tiles: ["  https://tiles.example.com/{z}/{x}/{y}.png  "],
+    });
+    const layer = useAppStore.getState().layers.find((l) => l.id === id);
+    assert.ok(layer);
+    assert.deepEqual(layer.source.tiles, [
+      "https://tiles.example.com/{z}/{x}/{y}.png",
+    ]);
+  });
+
+  it("rejects a registration that sanitizes down to no tiles", () => {
+    assert.throws(
+      () => useAppStore.getState().addTileLayer("Empty", { tiles: ["", "  "] }),
+      /at least one non-empty tile URL template/,
+    );
+    assert.equal(useAppStore.getState().layers.length, 0);
+  });
+
   it("merges extra source fields under the required raster descriptor", () => {
     const id = useAppStore.getState().addTileLayer("Coverage", {
       type: "wms",

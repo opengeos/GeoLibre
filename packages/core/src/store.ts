@@ -1061,9 +1061,19 @@ export const useAppStore = create<AppState>()(
 
       addTileLayer: (name, options, beforeLayerId = null) => {
         const id = uuidv4();
-        const tiles = options.tiles.filter(
-          (tile) => typeof tile === "string" && tile.trim() !== ""
-        );
+        // Trim each template and drop blanks, then reject a registration that
+        // sanitizes down to nothing: syncRasterTileLayer returns early on an
+        // empty tile list, so without this the store would persist and select a
+        // layer that can never render.
+        const tiles = options.tiles
+          .filter((tile): tile is string => typeof tile === "string")
+          .map((tile) => tile.trim())
+          .filter((tile) => tile !== "");
+        if (tiles.length === 0) {
+          throw new Error(
+            "addTileLayer requires at least one non-empty tile URL template."
+          );
+        }
         const layer: GeoLibreLayer = {
           id,
           name,

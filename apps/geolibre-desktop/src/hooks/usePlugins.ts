@@ -99,11 +99,13 @@ function ensureFileExtension(name: string, extensions: string[]): string {
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
 
 /**
- * Translate the public {@link GeoLibreTileLayerOptions} into the store's
- * `addTileLayer` source/render options, dropping `beforeLayerId` (which the
- * store takes as a separate positional argument).
+ * Translate the public {@link GeoLibreTileLayerOptions} into the option bag
+ * passed straight to `store.addTileLayer(name, opts, ...)`, dropping
+ * `beforeLayerId` (which the store takes as a separate positional argument).
+ * The remaining keys mix source-level fields (tileSize, bounds, ...) and
+ * layer-level ones (visible, opacity); the store reads each by name.
  */
-function tileLayerSourceOptions(options?: GeoLibreTileLayerOptions) {
+function tileLayerStoreOptions(options?: GeoLibreTileLayerOptions) {
   if (!options) return {};
   const { beforeLayerId: _beforeLayerId, ...rest } = options;
   return rest;
@@ -495,9 +497,13 @@ export function createAppAPI(
     ) =>
       store.addTileLayer(
         name,
-        { type: "xyz", tiles: [url], url, ...tileLayerSourceOptions(options) },
+        { type: "xyz", tiles: [url], url, ...tileLayerStoreOptions(options) },
         options?.beforeLayerId ?? null,
       ),
+    // Intentionally identical to addTileLayer except for the layer `type`.
+    // XYZ and WMTS tile templates render through the same syncRasterTileLayer
+    // path; the distinct type only changes how the layer is labelled/stored,
+    // so the two helpers share an implementation by design (not a copy-paste).
     addWmtsLayer: (
       name: string,
       url: string,
@@ -505,7 +511,7 @@ export function createAppAPI(
     ) =>
       store.addTileLayer(
         name,
-        { type: "wmts", tiles: [url], url, ...tileLayerSourceOptions(options) },
+        { type: "wmts", tiles: [url], url, ...tileLayerStoreOptions(options) },
         options?.beforeLayerId ?? null,
       ),
     addWmsLayer: (name: string, options: GeoLibreWmsLayerOptions) => {
