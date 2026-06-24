@@ -468,7 +468,9 @@ const HTML_OPTIONS = {
   className: "geolibre-html-control",
   collapsed: false,
   fontColor: "hsl(var(--popover-foreground))",
-  maxHeight: 520,
+  // Omit maxHeight so the control auto-fits the available viewport height
+  // (HtmlGuiControl gained this in maplibre-gl-components >= 0.22.8); see
+  // COLORBAR_OPTIONS above for the full rationale.
   panelWidth: 340,
   position: htmlControlPosition,
 } satisfies HtmlGuiControlOptions;
