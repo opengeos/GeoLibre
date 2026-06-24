@@ -6,7 +6,6 @@ import {
   DialogHeader,
   DialogTitle,
   Input,
-  ScrollArea,
 } from "@geolibre/ui";
 import {
   AlertCircle,
@@ -373,7 +372,11 @@ export function ProjectGalleryDialog({
           </p>
         ) : null}
 
-        <ScrollArea className="-mx-1 flex-1 px-1">
+        {/* Native overflow scroll (not the Radix ScrollArea) so the area
+            reliably scrolls on touch devices: a percentage-height ScrollArea
+            viewport does not resolve against this flex-sized parent and would
+            grow to its content height instead of scrolling. */}
+        <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1">
           {showInitialSpinner ? (
             <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -431,7 +434,7 @@ export function ProjectGalleryDialog({
               ) : null}
             </>
           )}
-        </ScrollArea>
+        </div>
       </DialogContent>
     </Dialog>
   );
