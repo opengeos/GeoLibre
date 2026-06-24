@@ -32,7 +32,7 @@
     "@turf/tin": "^7.3.5",
     "@turf/union": "^7.3.5",
     "@turf/voronoi": "^7.3.5",
-    "geolibre-wasm": "^0.4.4",
+    "geolibre-wasm": "^0.5.0",
     "geotiff": "^3.0.5"
   },
   "devDependencies": {
