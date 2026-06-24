@@ -132,6 +132,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const [saveNameInput, setSaveNameInput] = useState("");
   const projectUrlAbortRef = useRef<AbortController | null>(null);
   const recentAbortRef = useRef<AbortController | null>(null);
+  // Separate from projectUrlAbortRef so a gallery open and an Open-from-URL
+  // submit can't abort each other's in-flight fetch.
+  const shareUrlAbortRef = useRef<AbortController | null>(null);
   // Guards against overlapping saves: a second save started while a prompt
   // dialog is open would overwrite the pending prompt and strand the first
   // call's unresolved promise.
@@ -223,9 +226,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       throw new Error(t("toolbar.error.invalidProjectUrl"));
     }
 
-    projectUrlAbortRef.current?.abort();
+    shareUrlAbortRef.current?.abort();
     const controller = new AbortController();
-    projectUrlAbortRef.current = controller;
+    shareUrlAbortRef.current = controller;
 
     try {
       if (options.authToken) {
@@ -256,8 +259,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       if (controller.signal.aborted) return;
       loadProject(project, result.path);
     } finally {
-      if (projectUrlAbortRef.current === controller) {
-        projectUrlAbortRef.current = null;
+      if (shareUrlAbortRef.current === controller) {
+        shareUrlAbortRef.current = null;
       }
     }
   };

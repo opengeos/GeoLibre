@@ -34,8 +34,10 @@ import { openExternalLink } from "../../lib/open-external";
 import {
   fetchMyProjects,
   fetchSharedProjects,
+  GalleryError,
   type SharedProject,
 } from "../../lib/share-gallery";
+import type { TFunction } from "i18next";
 
 type GalleryScope = "public" | "mine";
 
@@ -62,6 +64,31 @@ function searchHaystack(project: SharedProject): string {
 }
 
 /**
+ * Translate a fetch error into a localized message. The gallery library throws
+ * coded {@link GalleryError}s (it can't call `t()`); the UI maps each code to a
+ * catalog string here.
+ */
+function galleryErrorMessage(error: unknown, t: TFunction): string {
+  if (error instanceof GalleryError) {
+    switch (error.code) {
+      case "timeout":
+        return t("gallery.errorTimeout");
+      case "network":
+        return t("gallery.errorNetwork");
+      case "invalid-response":
+        return t("gallery.errorInvalidResponse");
+      case "unauthorized":
+        return t("gallery.errorUnauthorized");
+      case "username-required":
+        return t("gallery.errorUsernameRequired");
+      case "http":
+        return t("gallery.errorHttp", { status: error.status ?? 0 });
+    }
+  }
+  return error instanceof Error ? error.message : t("gallery.errorFallback");
+}
+
+/**
  * Browse public projects shared on share.geolibre.app and open one in GeoLibre.
  *
  * The listing endpoint only paginates (no server-side search), so this loads
@@ -85,6 +112,10 @@ export function ProjectGalleryDialog({
   );
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
+  // Next-page offset tracked from the server's raw record count, not the
+  // filtered `projects.length` (normalizeProject may drop records, which would
+  // otherwise undershoot the offset and re-deliver already-seen entries).
+  const [rawOffset, setRawOffset] = useState(0);
   const [query, setQuery] = useState("");
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
@@ -197,14 +228,15 @@ export function ProjectGalleryDialog({
             offset === 0 ? result.projects : [...prev, ...result.projects],
           );
           setHasMore(result.hasMore);
+          // Advance by the server's raw count so dropped records can't skew the
+          // next offset.
+          setRawOffset(offset + result.rawCount);
         }
       } catch (err) {
         if (controller.signal.aborted) return;
         if (err instanceof DOMException && err.name === "AbortError") return;
         console.error("Failed to load project gallery", err);
-        setError(
-          err instanceof Error ? err.message : t("gallery.errorFallback"),
-        );
+        setError(galleryErrorMessage(err, t));
       } finally {
         if (abortRef.current === controller) abortRef.current = null;
         if (!controller.signal.aborted) setStatus("idle");
@@ -223,6 +255,7 @@ export function ProjectGalleryDialog({
       setOpeningId(null);
       setOpenError(null);
       setHasMore(false);
+      setRawOffset(0);
       void loadPage(0);
     } else {
       abortRef.current?.abort();
@@ -383,7 +416,7 @@ export function ProjectGalleryDialog({
                     variant="outline"
                     size="sm"
                     disabled={status === "loadingMore"}
-                    onClick={() => loadPage(projects.length)}
+                    onClick={() => loadPage(rawOffset)}
                   >
                     {status === "loadingMore" ? (
                       <>
@@ -494,8 +527,11 @@ function GalleryCard({ project, opening, disabled, onOpen }: GalleryCardProps) {
       </button>
 
       <div className="flex flex-1 flex-col gap-1 p-3">
-        <p className="truncate text-sm font-medium" title={project.title}>
-          {project.title}
+        <p
+          className="truncate text-sm font-medium"
+          title={project.title || t("gallery.untitled")}
+        >
+          {project.title || t("gallery.untitled")}
         </p>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           {project.username ? (

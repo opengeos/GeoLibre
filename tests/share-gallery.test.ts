@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   fetchMyProjects,
   fetchSharedProjects,
+  GalleryError,
   resolveThumbnailUrl,
   shareAuthorizedFetch,
 } from "../apps/geolibre-desktop/src/lib/share-gallery";
@@ -153,12 +154,48 @@ describe("fetchSharedProjects", () => {
     assert.deepEqual(projects, []);
   });
 
-  it("throws a descriptive error on a non-2xx response", async () => {
+  it("throws a coded GalleryError on a non-2xx response", async () => {
     const { fn } = fakeFetch(500, null);
     await assert.rejects(
       () => fetchSharedProjects({ baseUrl: BASE, fetchImpl: fn }),
-      /HTTP 500/,
+      (err: unknown) =>
+        err instanceof GalleryError &&
+        err.code === "http" &&
+        err.status === 500,
     );
+  });
+
+  it("throws an 'invalid-response' GalleryError when the body is not JSON", async () => {
+    // A 200 whose json() rejects (e.g. an HTML error page) must surface as a
+    // retryable error, not an empty gallery.
+    const fn = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw new SyntaxError("Unexpected token < in JSON");
+        },
+      }) as Response) as unknown as typeof fetch;
+    await assert.rejects(
+      () => fetchSharedProjects({ baseUrl: BASE, fetchImpl: fn }),
+      (err: unknown) =>
+        err instanceof GalleryError && err.code === "invalid-response",
+    );
+  });
+
+  it("reports rawCount alongside the normalized projects", async () => {
+    const { fn } = fakeFetch(200, {
+      projects: [rawProject(), rawProject({ id: "", slug: "dropped" })],
+    });
+    const result = await fetchSharedProjects({
+      baseUrl: BASE,
+      limit: 24,
+      fetchImpl: fn,
+    });
+    // One record was dropped by normalization, but rawCount reflects the two
+    // the server actually returned (so the next offset stays correct).
+    assert.equal(result.projects.length, 1);
+    assert.equal(result.rawCount, 2);
   });
 });
 
@@ -210,23 +247,25 @@ describe("fetchMyProjects", () => {
     assert.ok(auth.every((a) => a === "Bearer glb_tok"));
   });
 
-  it("throws when the account has no username", async () => {
+  it("throws a 'username-required' GalleryError when the account has no username", async () => {
     const { fn } = routedFetch({
       "/api/users/me": { status: 200, body: { user: { username: null } } },
     });
     await assert.rejects(
       () => fetchMyProjects({ token: "glb_tok", baseUrl: BASE, fetchImpl: fn }),
-      /username/i,
+      (err: unknown) =>
+        err instanceof GalleryError && err.code === "username-required",
     );
   });
 
-  it("throws a clear error when the token is rejected", async () => {
+  it("throws an 'unauthorized' GalleryError when the token is rejected", async () => {
     const { fn } = routedFetch({
       "/api/users/me": { status: 401, body: { error: "Unauthorized" } },
     });
     await assert.rejects(
       () => fetchMyProjects({ token: "bad", baseUrl: BASE, fetchImpl: fn }),
-      /invalid or expired/i,
+      (err: unknown) =>
+        err instanceof GalleryError && err.code === "unauthorized",
     );
   });
 });

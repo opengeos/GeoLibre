@@ -9,6 +9,36 @@
 
 import { resolveShareBaseUrl } from "./share-geolibre";
 
+/**
+ * Machine-readable cause for a gallery fetch failure. This module is a non-React
+ * library and cannot call `t()`, so it throws a coded error and lets the UI
+ * layer translate it (per the i18n rule in CLAUDE.md).
+ */
+export type GalleryErrorCode =
+  | "timeout"
+  | "network"
+  | "http"
+  | "invalid-response"
+  | "unauthorized"
+  | "username-required";
+
+/** Error thrown by the gallery fetchers, carrying a translatable {@link GalleryErrorCode}. */
+export class GalleryError extends Error {
+  readonly code: GalleryErrorCode;
+  /** HTTP status, when `code` is `"http"`. */
+  readonly status?: number;
+
+  constructor(code: GalleryErrorCode, status?: number) {
+    super(code);
+    // Preserve the prototype chain so `instanceof GalleryError` holds even when
+    // transpiled to a target where `extends Error` would otherwise lose it.
+    Object.setPrototypeOf(this, new.target.prototype);
+    this.name = "GalleryError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
 /** A public project as returned by share.geolibre.app's listing endpoint. */
 export interface SharedProject {
   id: string;
@@ -50,6 +80,13 @@ export interface FetchSharedProjectsResult {
   projects: SharedProject[];
   /** True when the page came back full, so another page likely exists. */
   hasMore: boolean;
+  /**
+   * Number of records the server returned before normalization dropped any.
+   * Callers must advance their pagination offset by this (not by
+   * `projects.length`), or a dropped record would shift the next page and
+   * re-deliver already-seen entries.
+   */
+  rawCount: number;
 }
 
 // Bound the request so a hung server can't leave the gallery spinning forever.
@@ -101,8 +138,8 @@ export function resolveThumbnailUrl(
 /**
  * Normalize one raw record from the API into a {@link SharedProject}. Returns
  * `null` when the record lacks the fields the gallery needs to render or open it
- * (a usable id, title, and raw JSON URL), so a single malformed entry can't
- * break the whole page.
+ * (a usable id and raw JSON URL), so a single malformed entry can't break the
+ * whole page. `title` may be empty; the UI substitutes a translated placeholder.
  */
 function normalizeProject(
   raw: RawSharedProject,
@@ -116,7 +153,7 @@ function normalizeProject(
     id,
     username: asString(raw.username),
     slug: asString(raw.slug),
-    title: asString(raw.title) || "Untitled Project",
+    title: asString(raw.title),
     description: asString(raw.description),
     visibility: asString(raw.visibility),
     thumbnailUrl: resolveThumbnailUrl(raw.thumbnailUrl, base),
@@ -140,11 +177,12 @@ function normalizeProject(
  *
  * @param options - Pagination (`limit`/`offset`), an optional host override, an
  *   abort `signal`, and an injectable `fetchImpl` for testing.
- * @returns The normalized projects plus a `hasMore` hint (true when the page was
- *   returned full at the requested `limit`).
- * @throws {Error} With a descriptive message on a network failure, a timeout, a
- *   non-2xx response, or an unparseable body. A caller-initiated abort
- *   propagates as the original `AbortError`.
+ * @returns The normalized projects, a `hasMore` hint (true when the page was
+ *   returned full at the requested `limit`), and `rawCount` (the pre-filter
+ *   record count, for advancing the next-page offset).
+ * @throws {GalleryError} On a network failure, timeout, non-2xx response, or
+ *   unparseable body. A caller-initiated abort propagates as the original
+ *   `AbortError`.
  */
 export async function fetchSharedProjects(
   options: FetchSharedProjectsOptions = {},
@@ -173,22 +211,23 @@ export async function fetchSharedProjects(
   } catch (error) {
     if (error instanceof DOMException) {
       if (error.name === "AbortError") throw error;
-      if (error.name === "TimeoutError") {
-        throw new Error("The project gallery timed out. Please try again.");
-      }
+      if (error.name === "TimeoutError") throw new GalleryError("timeout");
     }
-    throw new Error(
-      "Could not reach share.geolibre.app. Check your internet connection.",
-    );
+    throw new GalleryError("network");
   }
 
   if (!response.ok) {
-    throw new Error(`Could not load the gallery (HTTP ${response.status}).`);
+    throw new GalleryError("http", response.status);
   }
 
-  const payload = (await response.json().catch(() => null)) as {
-    projects?: RawSharedProject[];
-  } | null;
+  // A malformed/HTML 200 body must surface as a retryable error, not an empty
+  // gallery, so let a JSON parse failure throw rather than swallowing it.
+  let payload: { projects?: RawSharedProject[] } | null;
+  try {
+    payload = (await response.json()) as { projects?: RawSharedProject[] } | null;
+  } catch {
+    throw new GalleryError("invalid-response");
+  }
   const rawProjects = Array.isArray(payload?.projects) ? payload.projects : [];
   const projects = rawProjects
     .map((raw) => normalizeProject(raw, base))
@@ -199,7 +238,7 @@ export async function fetchSharedProjects(
   const hasMore =
     options.limit != null && rawProjects.length >= options.limit;
 
-  return { projects, hasMore };
+  return { projects, hasMore, rawCount: rawProjects.length };
 }
 
 export interface FetchMyProjectsOptions {
@@ -215,8 +254,16 @@ export interface FetchMyProjectsOptions {
  * `Authorization` header is attached only for same-origin-as-`base` URLs so the
  * token is never leaked to a third-party host (e.g. an external tile server
  * referenced by a project).
+ *
+ * @param baseFetch - The underlying fetch to wrap; defaults to the global
+ *   `fetch`. Tests inject a stub here so production and test exercise the same
+ *   same-origin gating logic.
  */
-export function shareAuthorizedFetch(token: string, base: string): typeof fetch {
+export function shareAuthorizedFetch(
+  token: string,
+  base: string,
+  baseFetch: typeof fetch = fetch,
+): typeof fetch {
   let baseOrigin: string | null = null;
   try {
     baseOrigin = new URL(base).origin;
@@ -236,10 +283,10 @@ export function shareAuthorizedFetch(token: string, base: string): typeof fetch 
     } catch {
       sameHost = false;
     }
-    if (!sameHost) return fetch(input, init);
+    if (!sameHost) return baseFetch(input, init);
     const headers = new Headers(init.headers);
     headers.set("Authorization", `Bearer ${token}`);
-    return fetch(input, { ...init, headers });
+    return baseFetch(input, { ...init, headers });
   };
 }
 
@@ -250,16 +297,17 @@ export function shareAuthorizedFetch(token: string, base: string): typeof fetch 
  * `/api/users/{username}/projects` (which returns every project the owner can
  * see). This endpoint is not paginated, so the full set is returned at once.
  *
- * @throws {Error} When the token is rejected, the account has no username yet,
- *   or the network/host fails. A caller-initiated abort propagates as
- *   `AbortError`.
+ * @throws {GalleryError} When the token is rejected (`unauthorized`), the
+ *   account has no username (`username-required`), or the network/host fails. A
+ *   caller-initiated abort propagates as `AbortError`.
  */
 export async function fetchMyProjects(
   options: FetchMyProjectsOptions,
 ): Promise<SharedProject[]> {
   const base = (options.baseUrl ?? resolveShareBaseUrl()).replace(/\/+$/, "");
-  const fetchImpl = options.fetchImpl ?? fetch;
-  const authFetch = shareAuthorizedFetch(options.token, base);
+  // One auth path for both production and tests: the injected fetch (if any)
+  // flows through the same same-origin gating as the global fetch.
+  const authFetch = shareAuthorizedFetch(options.token, base, options.fetchImpl);
 
   const timeout = AbortSignal.timeout(LISTING_TIMEOUT_MS);
   const signal = options.signal
@@ -269,38 +317,28 @@ export async function fetchMyProjects(
   const request = async (path: string): Promise<unknown> => {
     let response: Response;
     try {
-      response = await (options.fetchImpl
-        ? fetchImpl(`${base}${path}`, {
-            headers: {
-              Accept: "application/json",
-              Authorization: `Bearer ${options.token}`,
-            },
-            signal,
-          })
-        : authFetch(`${base}${path}`, {
-            headers: { Accept: "application/json" },
-            signal,
-          }));
+      response = await authFetch(`${base}${path}`, {
+        headers: { Accept: "application/json" },
+        signal,
+      });
     } catch (error) {
       if (error instanceof DOMException) {
         if (error.name === "AbortError") throw error;
-        if (error.name === "TimeoutError") {
-          throw new Error("Loading your projects timed out. Please try again.");
-        }
+        if (error.name === "TimeoutError") throw new GalleryError("timeout");
       }
-      throw new Error(
-        "Could not reach share.geolibre.app. Check your internet connection.",
-      );
+      throw new GalleryError("network");
     }
     if (response.status === 401 || response.status === 403) {
-      throw new Error(
-        "Your share.geolibre.app API token is invalid or expired. Update it in Settings.",
-      );
+      throw new GalleryError("unauthorized");
     }
     if (!response.ok) {
-      throw new Error(`Could not load your projects (HTTP ${response.status}).`);
+      throw new GalleryError("http", response.status);
     }
-    return response.json().catch(() => null);
+    try {
+      return (await response.json()) as unknown;
+    } catch {
+      throw new GalleryError("invalid-response");
+    }
   };
 
   const me = (await request("/api/users/me")) as {
@@ -308,9 +346,7 @@ export async function fetchMyProjects(
   } | null;
   const username = me?.user?.username;
   if (!username) {
-    throw new Error(
-      "Set a username on your share.geolibre.app account before loading your projects.",
-    );
+    throw new GalleryError("username-required");
   }
 
   const payload = (await request(
