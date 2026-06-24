@@ -1,23 +1,15 @@
 import type { MapController } from "@geolibre/map";
-import {
-  Button,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  Input,
-  Label,
-  ScrollArea,
-} from "@geolibre/ui";
+import { Button, cn, Input, Label } from "@geolibre/ui";
 import {
   ArrowDown,
   ArrowUp,
   Circle,
+  GripHorizontal,
   MapPin,
   Plus,
   Trash2,
   Video,
+  X,
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -64,14 +56,14 @@ const RECORDING_SUPPORTED = isTourRecordingSupported();
 /**
  * Builds an animated camera "tour" from a sequence of keyframes captured from
  * the live map and records it to a WebM video by capturing the MapLibre canvas
- * (see {@link recordTour}). The setup UI lives in a modal dialog; while
- * recording, the dialog closes so the map is fully visible and a small floating
- * panel shows progress with a Stop button.
+ * (see {@link recordTour}).
  *
- * Keyframe state is kept on this always-mounted component (not on the modal
- * content, which unmounts when closed), so a tour survives closing and
- * reopening the dialog and the recording overlay can render while the modal is
- * hidden.
+ * Renders as a non-modal, draggable floating panel rather than a modal dialog:
+ * the map stays fully interactive while the panel is open, so the user pans and
+ * zooms and clicks "Add current view" repeatedly without ever closing it. HTML
+ * overlays aren't part of the captured canvas, so the panel can stay open while
+ * recording too. Keyframe state lives on this always-mounted component, so a
+ * tour survives toggling the panel.
  */
 export function RecordTourDialog({
   open,
@@ -88,7 +80,42 @@ export function RecordTourDialog({
   const [saveCancelled, setSaveCancelled] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
+  // Drag-to-reposition. `pos` is null until first dragged, when the default
+  // corner placement (CSS class) applies; afterwards it pins to explicit coords.
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const dragOffset = useRef<{ x: number; y: number } | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
   const recording = status !== "idle";
+
+  const onDragStart = (event: React.PointerEvent) => {
+    const rect = panelRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    dragOffset.current = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    setPos({ x: rect.left, y: rect.top });
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const onDragMove = (event: React.PointerEvent) => {
+    if (!dragOffset.current) return;
+    const width = panelRef.current?.offsetWidth ?? 0;
+    const height = panelRef.current?.offsetHeight ?? 0;
+    // Keep the panel within the viewport so it can't be dragged off-screen.
+    const x = Math.max(
+      0,
+      Math.min(event.clientX - dragOffset.current.x, window.innerWidth - width),
+    );
+    const y = Math.max(
+      0,
+      Math.min(event.clientY - dragOffset.current.y, window.innerHeight - height),
+    );
+    setPos({ x, y });
+  };
+
+  const onDragEnd = (event: React.PointerEvent) => {
+    dragOffset.current = null;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+  };
 
   const addCurrentView = () => {
     const view = mapControllerRef.current?.readView();
@@ -143,9 +170,6 @@ export function RecordTourDialog({
     setSaveCancelled(false);
     setProgress(0);
     setStatus("recording");
-    // Close the modal so the map (the canvas being recorded) is fully visible;
-    // the floating overlay below stays because this component stays mounted.
-    onOpenChange(false);
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -189,8 +213,6 @@ export function RecordTourDialog({
       abortRef.current = null;
       setStatus("idle");
       setProgress(0);
-      // Reopen the setup dialog so the user sees the saved/error result.
-      onOpenChange(true);
     }
   };
 
@@ -199,204 +221,221 @@ export function RecordTourDialog({
   const totalSeconds = estimateTourDurationMs(keyframes) / 1000;
   const canRecord = keyframes.length >= 2 && RECORDING_SUPPORTED && !recording;
 
+  if (!open) return null;
+
   return (
-    <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{t("recordTour.title")}</DialogTitle>
-            <DialogDescription>
-              {t("recordTour.description")}
-            </DialogDescription>
-          </DialogHeader>
+    <div
+      ref={panelRef}
+      role="dialog"
+      aria-label={t("recordTour.title")}
+      style={pos ? { left: pos.x, top: pos.y } : undefined}
+      className={cn(
+        "fixed z-40 flex max-h-[calc(100dvh-6rem)] w-96 max-w-[95vw] flex-col rounded-lg border bg-card text-card-foreground shadow-xl",
+        pos ? "" : "left-4 top-16",
+      )}
+    >
+      {/* Drag handle / title bar. */}
+      <div
+        onPointerDown={onDragStart}
+        onPointerMove={onDragMove}
+        onPointerUp={onDragEnd}
+        className="flex cursor-move touch-none select-none items-center gap-2 border-b px-3 py-2"
+      >
+        <GripHorizontal className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="flex-1 text-sm font-semibold">
+          {t("recordTour.title")}
+        </span>
+        <button
+          type="button"
+          aria-label={t("common.close")}
+          onClick={() => onOpenChange(false)}
+          className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
 
-          {!RECORDING_SUPPORTED && (
-            <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-muted-foreground">
-              {t("recordTour.unsupported")}
-            </p>
-          )}
+      {/* Scrollable body: hint, add-view, and the keyframe list. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3">
+        <p className="text-xs text-muted-foreground">{t("recordTour.hint")}</p>
 
-          <div className="flex items-center justify-between gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={addCurrentView}
-            >
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              {t("recordTour.addView")}
-            </Button>
-            <span className="text-xs text-muted-foreground">
-              {t("recordTour.keyframeCount", { count: keyframes.length })}
-            </span>
-          </div>
+        {!RECORDING_SUPPORTED && (
+          <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-muted-foreground">
+            {t("recordTour.unsupported")}
+          </p>
+        )}
 
-          {keyframes.length === 0 ? (
-            <p className="rounded-md border border-dashed border-input p-4 text-center text-sm text-muted-foreground">
-              {t("recordTour.empty")}
-            </p>
-          ) : (
-            <ScrollArea className="max-h-64 pr-2">
-              <ol className="space-y-2">
-                {keyframes.map((kf, index) => (
-                  <li
-                    key={kf.id}
-                    className="flex items-center gap-2 rounded-md border border-input p-2 text-xs"
+        <div className="flex items-center justify-between gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={recording}
+            onClick={addCurrentView}
+          >
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            {t("recordTour.addView")}
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            {t("recordTour.keyframeCount", { count: keyframes.length })}
+          </span>
+        </div>
+
+        {keyframes.length === 0 ? (
+          <p className="rounded-md border border-dashed border-input p-4 text-center text-sm text-muted-foreground">
+            {t("recordTour.empty")}
+          </p>
+        ) : (
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1">
+            <ol className="space-y-2">
+              {keyframes.map((kf, index) => (
+                <li
+                  key={kf.id}
+                  className="flex items-center gap-2 rounded-md border border-input p-2 text-xs"
+                >
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted font-medium tabular-nums">
+                    {index + 1}
+                  </span>
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-1.5 text-left hover:text-foreground"
+                    title={t("recordTour.flyToKeyframe")}
+                    onClick={() => previewKeyframe(kf)}
                   >
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted font-medium tabular-nums">
-                      {index + 1}
+                    <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="truncate tabular-nums text-muted-foreground">
+                      {kf.center[1].toFixed(4)}, {kf.center[0].toFixed(4)} · z
+                      {kf.zoom.toFixed(1)}
                     </span>
-                    <button
+                  </button>
+                  {index === 0 ? (
+                    <span className="shrink-0 text-muted-foreground">
+                      {t("recordTour.start")}
+                    </span>
+                  ) : (
+                    <label className="flex shrink-0 items-center gap-1">
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        aria-label={t("recordTour.segmentSeconds")}
+                        className="h-7 w-14"
+                        min={MIN_SEGMENT_SECONDS}
+                        max={MAX_SEGMENT_SECONDS}
+                        step="0.5"
+                        disabled={recording}
+                        value={kf.durationMs / 1000}
+                        onChange={(event) => {
+                          const seconds = Number(event.target.value);
+                          if (Number.isFinite(seconds)) {
+                            setSegmentSeconds(
+                              kf.id,
+                              Math.min(
+                                MAX_SEGMENT_SECONDS,
+                                Math.max(MIN_SEGMENT_SECONDS, seconds),
+                              ),
+                            );
+                          }
+                        }}
+                      />
+                      <span className="text-muted-foreground">
+                        {t("recordTour.secondsUnit")}
+                      </span>
+                    </label>
+                  )}
+                  <div className="flex shrink-0 items-center">
+                    <Button
                       type="button"
-                      className="flex min-w-0 flex-1 items-center gap-1.5 text-left hover:text-foreground"
-                      title={t("recordTour.flyToKeyframe")}
-                      onClick={() => previewKeyframe(kf)}
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      aria-label={t("recordTour.moveUp")}
+                      disabled={index === 0 || recording}
+                      onClick={() => move(index, -1)}
                     >
-                      <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      <span className="truncate tabular-nums text-muted-foreground">
-                        {kf.center[1].toFixed(4)}, {kf.center[0].toFixed(4)} · z
-                        {kf.zoom.toFixed(1)}
-                      </span>
-                    </button>
-                    {index === 0 ? (
-                      <span className="shrink-0 text-muted-foreground">
-                        {t("recordTour.start")}
-                      </span>
-                    ) : (
-                      <label className="flex shrink-0 items-center gap-1">
-                        <Input
-                          type="number"
-                          inputMode="decimal"
-                          aria-label={t("recordTour.segmentSeconds")}
-                          className="h-7 w-16"
-                          min={MIN_SEGMENT_SECONDS}
-                          max={MAX_SEGMENT_SECONDS}
-                          step="0.5"
-                          value={kf.durationMs / 1000}
-                          onChange={(event) => {
-                            const seconds = Number(event.target.value);
-                            if (Number.isFinite(seconds)) {
-                              setSegmentSeconds(
-                                kf.id,
-                                Math.min(
-                                  MAX_SEGMENT_SECONDS,
-                                  Math.max(MIN_SEGMENT_SECONDS, seconds),
-                                ),
-                              );
-                            }
-                          }}
-                        />
-                        <span className="text-muted-foreground">
-                          {t("recordTour.secondsUnit")}
-                        </span>
-                      </label>
-                    )}
-                    <div className="flex shrink-0 items-center">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        aria-label={t("recordTour.moveUp")}
-                        disabled={index === 0}
-                        onClick={() => move(index, -1)}
-                      >
-                        <ArrowUp className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        aria-label={t("recordTour.moveDown")}
-                        disabled={index === keyframes.length - 1}
-                        onClick={() => move(index, 1)}
-                      >
-                        <ArrowDown className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-destructive"
-                        aria-label={t("recordTour.removeKeyframe")}
-                        onClick={() => removeKeyframe(kf.id)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </ScrollArea>
-          )}
-
-          <div className="flex items-end justify-between gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="record-tour-fps">{t("recordTour.fps")}</Label>
-              <Input
-                id="record-tour-fps"
-                type="number"
-                inputMode="numeric"
-                className="h-8 w-24"
-                min={MIN_FPS}
-                max={MAX_FPS}
-                step="1"
-                value={fps}
-                onChange={(event) => {
-                  const next = Number(event.target.value);
-                  if (Number.isFinite(next)) {
-                    setFps(Math.min(MAX_FPS, Math.max(MIN_FPS, Math.round(next))));
-                  }
-                }}
-              />
-            </div>
-            {keyframes.length >= 2 && (
-              <p className="pb-1.5 text-xs text-muted-foreground">
-                {t("recordTour.estimatedLength", {
-                  seconds: totalSeconds.toFixed(1),
-                })}
-              </p>
-            )}
+                      <ArrowUp className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      aria-label={t("recordTour.moveDown")}
+                      disabled={index === keyframes.length - 1 || recording}
+                      onClick={() => move(index, 1)}
+                    >
+                      <ArrowDown className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-destructive"
+                      aria-label={t("recordTour.removeKeyframe")}
+                      disabled={recording}
+                      onClick={() => removeKeyframe(kf.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ol>
           </div>
+        )}
+      </div>
 
-          {savedName && (
-            <p className="text-sm text-emerald-600 dark:text-emerald-400">
-              {t("recordTour.saved", { name: savedName })}
+      {/* Footer: FPS, estimated length, result messages, and the action row. */}
+      <div className="space-y-3 border-t p-3">
+        <div className="flex items-end justify-between gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="record-tour-fps">{t("recordTour.fps")}</Label>
+            <Input
+              id="record-tour-fps"
+              type="number"
+              inputMode="numeric"
+              className="h-8 w-24"
+              min={MIN_FPS}
+              max={MAX_FPS}
+              step="1"
+              disabled={recording}
+              value={fps}
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                if (Number.isFinite(next)) {
+                  setFps(Math.min(MAX_FPS, Math.max(MIN_FPS, Math.round(next))));
+                }
+              }}
+            />
+          </div>
+          {keyframes.length >= 2 && (
+            <p className="pb-1.5 text-xs text-muted-foreground">
+              {t("recordTour.estimatedLength", {
+                seconds: totalSeconds.toFixed(1),
+              })}
             </p>
           )}
-          {saveCancelled && (
-            <p className="text-sm text-muted-foreground">
-              {t("recordTour.saveCancelled")}
-            </p>
-          )}
-          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
 
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              {t("common.close")}
-            </Button>
-            <Button type="button" disabled={!canRecord} onClick={handleRecord}>
-              <Video className="mr-1.5 h-4 w-4" />
-              {t("recordTour.record")}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+        {savedName && (
+          <p className="text-sm text-emerald-600 dark:text-emerald-400">
+            {t("recordTour.saved", { name: savedName })}
+          </p>
+        )}
+        {saveCancelled && (
+          <p className="text-sm text-muted-foreground">
+            {t("recordTour.saveCancelled")}
+          </p>
+        )}
+        {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {recording && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-[60] flex justify-center">
-          <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-border bg-background/95 px-4 py-2 shadow-lg backdrop-blur">
+        {recording ? (
+          <div className="flex items-center gap-3">
             {status === "recording" ? (
-              <Circle className="h-3 w-3 animate-pulse fill-red-500 text-red-500" />
+              <Circle className="h-3 w-3 shrink-0 animate-pulse fill-red-500 text-red-500" />
             ) : (
-              <span className="h-3 w-3 animate-spin rounded-full border-2 border-muted border-t-foreground" />
+              <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-muted border-t-foreground" />
             )}
-            <span className="text-sm font-medium">
+            <span className="flex-1 text-sm font-medium">
               {status === "saving"
                 ? t("recordTour.savingStatus")
                 : t("recordTour.recordingStatus", {
@@ -414,8 +453,18 @@ export function RecordTourDialog({
               </Button>
             )}
           </div>
-        </div>
-      )}
-    </>
+        ) : (
+          <Button
+            type="button"
+            className="w-full"
+            disabled={!canRecord}
+            onClick={handleRecord}
+          >
+            <Video className="mr-1.5 h-4 w-4" />
+            {t("recordTour.record")}
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
