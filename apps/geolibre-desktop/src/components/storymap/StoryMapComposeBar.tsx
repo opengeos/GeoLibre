@@ -1,4 +1,4 @@
-import { type RefObject, useCallback, useEffect } from "react";
+import { type RefObject, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
@@ -32,6 +32,11 @@ export function StoryMapComposeBar({
     ? storymap?.chapters.find((c) => c.id === composingId)
     : undefined;
 
+  // Disable Save while the camera is in motion. Entering compose flies to the
+  // chapter's saved view, and capturing a mid-flight camera would overwrite the
+  // intended location with an in-transit one; Save re-enables on `moveend`.
+  const [mapMoving, setMapMoving] = useState(false);
+
   const finish = useCallback(() => {
     setComposing(null);
     setOpen(true);
@@ -40,9 +45,13 @@ export function StoryMapComposeBar({
   const handleSave = useCallback(() => {
     if (!composingId) return;
     const view = mapControllerRef.current?.readView();
-    // If the controller is somehow not ready there is nothing to capture; keep
-    // the bar open rather than silently returning to the editor unchanged.
-    if (!view) return;
+    // The controller is always initialized while the bar is visible, so this is
+    // an unreachable guard; surface it in dev rather than silently no-op if the
+    // invariant ever breaks (the bar stays open so the user can retry).
+    if (!view) {
+      console.warn("[storymap] compose: map view unavailable, skipping save");
+      return;
+    }
     updateChapter(composingId, {
       location: {
         center: view.center,
@@ -58,11 +67,24 @@ export function StoryMapComposeBar({
   // leave compose mode and restore the editor so the bar can't strand the user
   // on the map with no Save/Cancel target.
   useEffect(() => {
-    if (composingId && !chapter) {
-      setComposing(null);
-      setOpen(true);
-    }
-  }, [chapter, composingId, setComposing, setOpen]);
+    if (composingId && !chapter) finish();
+  }, [chapter, composingId, finish]);
+
+  // Track camera motion so Save can disable itself mid-flight (see mapMoving).
+  useEffect(() => {
+    if (!composingId) return;
+    const map = mapControllerRef.current?.getMap();
+    if (!map) return;
+    setMapMoving(map.isMoving());
+    const onStart = () => setMapMoving(true);
+    const onEnd = () => setMapMoving(false);
+    map.on("movestart", onStart);
+    map.on("moveend", onEnd);
+    return () => {
+      map.off("movestart", onStart);
+      map.off("moveend", onEnd);
+    };
+  }, [composingId, mapControllerRef]);
 
   // Escape exits compose mode, mirroring how the presenter handles Escape, so
   // keyboard-only users can dismiss the bar without clicking Cancel.
@@ -110,7 +132,13 @@ export function StoryMapComposeBar({
             <X className="h-3.5 w-3.5" aria-hidden="true" />
             {t("storymap.composeMode.cancel")}
           </Button>
-          <Button type="button" size="sm" onClick={handleSave}>
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleSave}
+            disabled={mapMoving}
+            title={mapMoving ? t("storymap.composeMode.waiting") : undefined}
+          >
             <Check className="h-3.5 w-3.5" aria-hidden="true" />
             {t("storymap.composeMode.save")}
           </Button>

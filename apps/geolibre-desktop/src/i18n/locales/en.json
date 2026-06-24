@@ -1676,7 +1676,8 @@
       "title": "Composing chapter",
       "hint": "Pan, zoom, and tilt the map, then save the view to this chapter.",
       "save": "Save view and return to Story Map",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "waiting": "Wait for the map to finish moving"
     },
     "moveUp": "Move up",
     "moveDown": "Move down",
