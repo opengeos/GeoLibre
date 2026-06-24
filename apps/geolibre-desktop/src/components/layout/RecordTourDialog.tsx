@@ -19,7 +19,7 @@ import {
   Trash2,
   Video,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
 import {
@@ -85,7 +85,9 @@ export function RecordTourDialog({
   const abortRef = useRef<AbortController | null>(null);
 
   const recording = status !== "idle";
-  const supported = isTourRecordingSupported();
+  // Constant for the component's lifetime; computed once to avoid re-running the
+  // MediaRecorder.isTypeSupported() DOM checks on every render (e.g. FPS slider).
+  const supported = useMemo(() => isTourRecordingSupported(), []);
 
   const addCurrentView = () => {
     const view = mapControllerRef.current?.readView();

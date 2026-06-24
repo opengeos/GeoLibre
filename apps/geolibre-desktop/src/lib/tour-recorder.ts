@@ -31,6 +31,8 @@ export interface TourKeyframe {
 export const START_HOLD_MS = 400;
 /** A short still hold at the end so the closing frame is not cut off abruptly. */
 export const END_HOLD_MS = 600;
+/** How long to wait for the encoder's final `onstop` before giving up. */
+export const STOP_TIMEOUT_MS = 10_000;
 
 /** WebM codecs tried in order; the first the browser supports is used. */
 export const TOUR_MIME_CANDIDATES = [
@@ -129,6 +131,13 @@ function flyToKeyframe(
   signal?: AbortSignal,
 ): Promise<void> {
   return new Promise((resolve) => {
+    // Already aborted on entry (a stop between the loop's check and here): the
+    // map.stop() moveend has already fired, so resolve now rather than waiting
+    // out the timeout fallback.
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
     let settled = false;
     const finish = () => {
       if (settled) return;
@@ -138,9 +147,12 @@ function flyToKeyframe(
       signal?.removeEventListener("abort", finish);
       resolve();
     };
-    // moveend can fail to fire if the move is interrupted; the timeout (a little
-    // past the requested duration) guarantees the segment always completes.
-    const timer = setTimeout(finish, Math.max(0, kf.durationMs) + 500);
+    // moveend can fail to fire if the move is interrupted; the timeout
+    // guarantees the segment always completes. The buffer scales with the
+    // duration so a throttled tab whose move settles slightly late doesn't trip
+    // the fallback before moveend fires (which would blend two animations).
+    const duration = Math.max(0, kf.durationMs);
+    const timer = setTimeout(finish, duration + Math.max(500, duration * 0.25));
     map.once("moveend", finish);
     signal?.addEventListener("abort", finish, { once: true });
     map.flyTo({
@@ -199,12 +211,18 @@ export async function recordTour({
     if (event.data && event.data.size > 0) chunks.push(event.data);
   };
 
+  // Set when the recorder errors mid-tour so the animation loop breaks early
+  // instead of flying through the rest of the keyframes after the recording has
+  // already failed.
+  let recorderFailed = false;
   const finished = new Promise<Blob>((resolve, reject) => {
     recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
     recorder.onerror = (event) => {
       // Surface the browser's own diagnosis (e.g. SecurityError) rather than a
       // generic message, so a field failure is debuggable.
       const cause = (event as Event & { error?: DOMException }).error;
+      recorderFailed = true;
+      map.stop(); // halt the in-flight move so the loop stops promptly
       reject(
         new Error(`Recording failed: ${cause?.message ?? "unknown error"}`, {
           cause,
@@ -240,12 +258,17 @@ export async function recordTour({
 
     const segments = keyframes.length - 1;
     for (let i = 1; i < keyframes.length; i++) {
-      if (signal?.aborted) break;
+      if (signal?.aborted || recorderFailed) break;
       await flyToKeyframe(map, keyframes[i], signal);
-      onProgress?.(i / segments);
+      // Hold the final 100% until the end-hold finishes below, so the overlay
+      // doesn't read "100%" while the recorder is still capturing.
+      if (i < segments) onProgress?.(i / segments);
     }
 
-    if (!signal?.aborted) await delay(END_HOLD_MS, signal);
+    if (!signal?.aborted && !recorderFailed) {
+      await delay(END_HOLD_MS, signal);
+      onProgress?.(1);
+    }
   } finally {
     cancelAnimationFrame(rafId);
     if (recorder.state !== "inactive") recorder.stop();
@@ -255,5 +278,17 @@ export async function recordTour({
     for (const track of stream.getTracks()) track.stop();
   }
 
-  return finished;
+  // Guard against a browser that never fires onstop (a page-unload race, a
+  // torn-down stream) leaving this await hung and the dialog stuck "saving".
+  const timeout = new Promise<never>((_, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error("Recording timed out waiting for the encoder.")),
+      STOP_TIMEOUT_MS,
+    );
+    void finished.then(
+      () => clearTimeout(timer),
+      () => clearTimeout(timer),
+    );
+  });
+  return await Promise.race([finished, timeout]);
 }
